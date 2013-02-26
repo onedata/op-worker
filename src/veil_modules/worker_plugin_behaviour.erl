@@ -6,8 +6,8 @@
 
 behaviour_info(callbacks) ->
     [{init,1},
-     {handle, 3},
-     {cleanUp, 1}];
+     {handle, 2},
+     {cleanUp, 0}];
 behaviour_info(_Other) ->
     undefined.
 
@@ -17,18 +17,18 @@ behaviour_info(_Other) ->
 
 %% init/1
 %% ====================================================================
-%% Function: init(Args) -> {ok, State} | {error,Error}
+%% Function: init(Args) -> ok | {error,Error}
 %% Description: Initialize module
 %% ====================================================================
 
-%% handle/1
+%% handle/2
 %% ====================================================================
-%% Function: handle(ProtocolVersion, Request, State) -> {ok, NewState} | {error,Error}
+%% Function: handle(ProtocolVersion, Request) -> {ok, Ans} | {error,Error}
 %% Description: Do your work.
 %% ====================================================================
 
-%% cleanUp/1
+%% cleanUp/0
 %% ====================================================================
-%% Function: cleanUp(State) -> ok | {error,Error}
+%% Function: cleanUp() -> ok | {error,Error}
 %% Description: The module will not be used anymore. Clean up!
 %% ====================================================================

@@ -1,5 +1,6 @@
+%% @author Michal Wrzeszcz
 
--module(veilFS_cluster_node_sup).
+-module(veil_cluster_node_sup).
 
 -behaviour(supervisor).
 

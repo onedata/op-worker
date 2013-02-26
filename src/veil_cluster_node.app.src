@@ -1,4 +1,6 @@
-{application, veilFS_cluster_node,
+%% @author Michal Wrzeszcz
+
+{application, veil_cluster_node,
  [
   {description, "Application starts node of VeilFS central cluster"},
   {vsn, "0"},
@@ -7,6 +9,6 @@
                   kernel,
                   stdlib
                  ]},
-  {mod, { veilFS_cluster_node_app, []}},
+  {mod, { veil_cluster_node_app, []}},
   {env, [{nodeType, worker}]}
  ]}.

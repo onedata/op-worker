@@ -1,4 +1,6 @@
--module(veilFS_cluster_node_app).
+%% @author Michal Wrzeszcz
+
+-module(veil_cluster_node_app).
 
 -behaviour(application).
 
@@ -10,8 +12,8 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-	{ok, NodeType} = application:get_env(veilFS_cluster_node, nodeType),
-    veilFS_cluster_node_sup:start_link(NodeType).
+	{ok, NodeType} = application:get_env(veil_cluster_node, nodeType),
+    veil_cluster_node_sup:start_link(NodeType).
 
 stop(_State) ->
     ok.
