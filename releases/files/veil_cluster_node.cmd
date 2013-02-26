@@ -1,6 +1,6 @@
 @setlocal
 
-@set node_name=veilFS_cluster_node
+@set node_name=veil_cluster_node
 
 @rem Get the absolute path to the parent directory,
 @rem which is assumed to be the node root.
