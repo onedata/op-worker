@@ -24,6 +24,7 @@ The 'veil_modules' includes directories that contain code of 'proper' modules of
 Tests should be put in 'test' directory. It should contain the same subdirectories as 'src'. Each test name should be constructed as follows: 'name of tested file'_tests.erl, e.g., 'node_manager_tests.erl' should contain functions that test code from 'node_manager.erl' file.
 
 Eunit is used during tests so each test file should:
+
 * include "eunit/include/eunit.hrl",
 * use proper functions names (name of each test function must end with '_test'),
 * use compilation control macros (code between '-ifdef(TEST).' and '-endif.').
