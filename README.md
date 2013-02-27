@@ -37,6 +37,12 @@ Release handling is done using 'releases' directory and 'reltool.config' file. T
 * 'rebar compile eunit' - compilation & execution of unit tests
 * 'rebar compile generate' - compilation & creation of release
 
+Note:
+
+* in Linux you should use './rebar' instead of 'rebar'
+* rebar is built with Erlang/OTP R16B - if you have other Erlang version installed, it may not work properly (in this case download rebar sources and rebuilt rebar)
+
+
 Support
 -------
 For more information visit project Confluence or write to 'wrzeszcz@agh.edu.pl'.
