@@ -19,7 +19,3 @@ test:
 
 generate:
 	./rebar generate
-
-upgrade:
-	./rebar generate-appups previous_release=${PREV}
-	./rebar generate-upgrade previous_release=${PREV}
