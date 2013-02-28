@@ -4,6 +4,9 @@
 ## Cookie for distributed erlang
 -setcookie veil_cluster_node
 
+## Node type (worker or ccm)
+-veil_cluster_node nodeType {{node_type}}
+
 ## Heartbeat management; auto-restarts VM if it dies or becomes unresponsive
 ## (Disabled by default..use with caution!)
 ##-heart
