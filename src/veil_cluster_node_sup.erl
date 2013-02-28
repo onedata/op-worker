@@ -1,12 +1,13 @@
 %% ===================================================================
 %% @author Michal Wrzeszcz
-%% Copyright (C): 2013 ACK CYFRONET AGH
+%% @copyright (C): 2013 ACK CYFRONET AGH
 %% This software is released under the MIT license 
 %% cited in 'LICENSE.txt'.
-%%
+%% @end
 %% ===================================================================
-%% Description: It is the main supervisor. It starts node manager
+%% @doc: It is the main supervisor. It starts node manager
 %% which initializes node.
+%% @end
 %% ===================================================================
 
 -module(veil_cluster_node_sup).

@@ -1,13 +1,14 @@
 %% ===================================================================
 %% @author Michal Wrzeszcz
-%% Copyright (C): 2013 ACK CYFRONET AGH
+%% @copyright (C): 2013 ACK CYFRONET AGH
 %% This software is released under the MIT license 
 %% cited in 'LICENSE.txt'.
-%%
+%% @end
 %% ===================================================================
-%% Description: This module is a gen_server that coordinates the 
+%% @doc: This module is a gen_server that coordinates the 
 %% life cycle of node. It starts/stops appropriate services (according
 %% to node type) and communicates with ccm (if node works as worker).
+%% @end
 %% ===================================================================
 
 -module(node_manager).
@@ -29,8 +30,14 @@
 
 %% start_link/1
 %% ====================================================================
-%% Function: start_link(Type) -> {ok,Pid} | ignore | {error,Error}
-%% Description: Starts the server
+%% @doc Description: Starts the server
+-spec start_link(Type) -> Result when
+	Type :: worker | ccm,
+	Result ::  {ok,Pid} 
+			| ignore 
+			| {error,Error},
+	Pid :: pid(),
+	Error :: {already_started,Pid} | term().
 %% ====================================================================
 start_link(Type) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [Type], []).

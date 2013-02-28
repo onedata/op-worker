@@ -1,12 +1,13 @@
 %% ===================================================================
 %% @author Michal Wrzeszcz
-%% Copyright (C): 2013 ACK CYFRONET AGH
+%% @copyright (C): 2013 ACK CYFRONET AGH
 %% This software is released under the MIT license 
 %% cited in 'LICENSE.txt'.
-%%
+%% @end
 %% ===================================================================
-%% Description: It is the main module of application. It lunches 
+%% @doc: It is the main module of application. It lunches 
 %% supervisor which then initializes appropriate components of node.
+%% @end
 %% ===================================================================
 
 -module(veil_cluster_node_app).
