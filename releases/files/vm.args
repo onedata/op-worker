@@ -1,5 +1,5 @@
 ## Name of the node
--name veil_cluster_node@127.0.0.1
+-name {{node}}
 
 ## Cookie for distributed erlang
 -setcookie veil_cluster_node
@@ -12,8 +12,11 @@
 ##+K true
 ##+A 5
 
+## Treat error_logger warnings as warnings
++W w
+
 ## Increase number of concurrent ports/sockets
-##-env ERL_MAX_PORTS 4096
+-env ERL_MAX_PORTS 4096
 
 ## Tweak GC to run more often
 ##-env ERL_FULLSWEEP_AFTER 10
