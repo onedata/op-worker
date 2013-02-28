@@ -1,4 +1,13 @@
+%% ===================================================================
 %% @author Michal Wrzeszcz
+%% Copyright (C): 2013 ACK CYFRONET AGH
+%% This software is released under the MIT license 
+%% cited in 'LICENSE.txt'.
+%%
+%% ===================================================================
+%% Description: This module tests the functionality of 
+%% veil_cluster_node_app. It contains unit tests that base on eunit.
+%% ===================================================================
 
 -module(veil_cluster_node_app_tests).
 

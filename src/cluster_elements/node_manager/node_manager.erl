@@ -1,4 +1,14 @@
+%% ===================================================================
 %% @author Michal Wrzeszcz
+%% Copyright (C): 2013 ACK CYFRONET AGH
+%% This software is released under the MIT license 
+%% cited in 'LICENSE.txt'.
+%%
+%% ===================================================================
+%% Description: This module is a gen_server that coordinates the 
+%% life cycle of node. It starts/stops appropriate services (according
+%% to node type) and communicates with ccm (if node works as worker).
+%% ===================================================================
 
 -module(node_manager).
 -behaviour(gen_server).

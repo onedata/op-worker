@@ -1,4 +1,13 @@
+%% ===================================================================
 %% @author Michal Wrzeszcz
+%% Copyright (C): 2013 ACK CYFRONET AGH
+%% This software is released under the MIT license 
+%% cited in 'LICENSE.txt'.
+%%
+%% ===================================================================
+%% Description: This module tests the functionality of node_manager.
+%% It contains unit tests that base on eunit.
+%% ===================================================================
 
 -module(node_manager_tests).
 
