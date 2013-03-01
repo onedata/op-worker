@@ -37,19 +37,19 @@ Documentation is generated automatically using edoc so it should use tags define
 
 #### Useful commands:
 * standard compilation:
-   * 'rebar compile'
-   * 'make compile'
+    * 'rebar compile'
+    * 'make compile'
 * compilation & execution of unit tests
-   * 'rebar compile eunit'
-   * 'make test'
+    * 'rebar compile eunit'
+    * 'make test'
 * compilation & creation of release
-   * 'rebar compile generate'
-   * 'make generate'
+    * 'rebar compile generate'
+    * 'make generate'
 * generates documentation
-   * 'rebar doc'
-   * 'make docs'
+    * 'rebar doc'
+    * 'make docs'
 * generation of package for hot code swapping
-   * 'make PREV="name of directory with previous release" upgrade'
+    * 'make PREV="name of directory with previous release" upgrade'
 
 Note:
 
