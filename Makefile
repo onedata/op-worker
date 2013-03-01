@@ -1,6 +1,6 @@
-.PHONY: rel deps test
+.PHONY: releases deps test
 
-all: deps compile generate
+all: deps compile generate docs
 
 compile:
 	./rebar compile
@@ -19,3 +19,6 @@ test:
 
 generate:
 	./rebar generate
+
+docs:
+	./rebar doc
