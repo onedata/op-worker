@@ -21,9 +21,26 @@
 %% Application callbacks
 %% ===================================================================
 
+%% start/1
+%% ====================================================================
+%% @doc Starts application by supervisor initialization.
+-spec start(_StartType :: any(), _StartArgs :: any()) -> Result when
+	Result ::  {ok, pid()}
+                | ignore
+                | {error, Error},
+	Error :: {already_started, pid()}
+                | {shutdown, term()}
+                | term().
+%% ====================================================================
 start(_StartType, _StartArgs) ->
 	{ok, NodeType} = application:get_env(veil_cluster_node, nodeType),
     veil_cluster_node_sup:start_link(NodeType).
 
+%% stop/1
+%% ====================================================================
+%% @doc Stops application.
+-spec stop(_State :: any()) -> Result when
+	Result ::  ok.
+%% ====================================================================
 stop(_State) ->
     ok.

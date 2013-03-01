@@ -32,10 +32,14 @@ Eunit is used during tests so each test file should:
 #### Releases
 Release handling is done using 'releases' directory and 'reltool.config' file. To create new release, version must be changed in both 'src/veil_cluster_node.app.src' and 'releases/reltool.conf'.
 
+#### Documentation
+Documentation is generated automatically using edoc so it should use tags defined by it.
+
 #### Useful commands:
 * 'rebar compile' - standard compilation
 * 'rebar compile eunit' - compilation & execution of unit tests
 * 'rebar compile generate' - compilation & creation of release
+* 'rebar doc' - generates documentation
 
 Note:
 

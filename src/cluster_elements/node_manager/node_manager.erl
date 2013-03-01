@@ -30,7 +30,7 @@
 
 %% start_link/1
 %% ====================================================================
-%% @doc Description: Starts the server
+%% @doc Starts the server
 -spec start_link(Type) -> Result when
 	Type :: worker | ccm,
 	Result ::  {ok,Pid} 
