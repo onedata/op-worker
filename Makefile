@@ -1,6 +1,6 @@
 .PHONY: releases deps test
 
-all: deps compile generate docs
+all: deps generate docs
 
 compile:
 	./rebar compile
@@ -17,7 +17,7 @@ distclean: clean
 test:
 	./rebar compile eunit
 
-generate:
+generate: compile
 	./rebar generate
 
 docs:
