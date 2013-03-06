@@ -3,6 +3,6 @@
 -author("lopiola").
 -compile(export_all).
 
-% testowanie Gita w IntelliJ          ---
+% testowanie Gita w IntelliJ          ---hggdh
 %% API
 -export([]).
