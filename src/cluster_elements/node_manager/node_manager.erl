@@ -8,11 +8,18 @@
 %% @doc: This module is a gen_server that coordinates the 
 %% life cycle of node. It starts/stops appropriate services (according
 %% to node type) and communicates with ccm (if node works as worker).
+%%
+%% Node can be only ccm or worker. Node manager cannot work for both.
+%% However, second node of ccm will be usually unused (it works only
+%% when first node is down). To avoid wasting CPU cycles, two Erlang
+%% virtual machines should work at secondary ccm physical machine - 
+%% one for ccm and one for worker node.
 %% @end
 %% ===================================================================
 
 -module(node_manager).
 -behaviour(gen_server).
+-include("registered_names.hrl").
 
 %% ====================================================================
 %% API
@@ -39,6 +46,16 @@
 	Pid :: pid(),
 	Error :: {already_started,Pid} | term().
 %% ====================================================================
+
+start_link(Type) when Type =:= ccm ->
+    Ans = gen_server:start_link(?MODULE, [Type], []),
+	case Ans of
+		{ok, Pid} -> global:re_register_name(?CCM, Pid);
+		_A -> error
+	end,
+	Ans;
+		
+
 start_link(Type) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [Type], []).
 
@@ -55,7 +72,8 @@ start_link(Type) ->
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 init([Type]) when Type =:= worker ; Type =:= ccm ->
-    {ok, Type};
+	Module = get_plugin_name(Type),
+    {ok, {Type, Module, Module:init()}};
 
 init([_Type]) ->
 	{stop, wrong_type}.
@@ -77,13 +95,17 @@ init([_Type]) ->
 	Timeout :: non_neg_integer() | infinity,
 	Reason :: term().
 %% ====================================================================
-handle_call(getNodeType, _From, State) ->
-    Reply = State,
+handle_call(getNodeType, _From, {Type, Module, State}) ->
+    Reply = Type,
+    {reply, Reply, {Type, Module, State}};
+
+handle_call(getNode, _From, State) ->
+    Reply = node(),
     {reply, Reply, State};
 
-handle_call(_Request, _From, State) ->
-    Reply = ok,
-    {reply, Reply, State}.
+handle_call(Request, _From, {Type, Module, State}) ->
+    {Reply, NewState} = Module:handle(Request, State),
+    {reply, Reply, {Type, Module, NewState}}.
 
 
 %% handle_cast/2
@@ -97,8 +119,9 @@ handle_call(_Request, _From, State) ->
 	NewState :: term(),
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+handle_cast(Msg, {Type, Module, State}) ->
+	{_Reply, NewState} = Module:handle(Msg, State),
+    {noreply, {Type, Module, NewState}}.
 
 
 %% handle_info/2
@@ -112,8 +135,9 @@ handle_cast(_Msg, State) ->
 	NewState :: term(),
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_info(_Info, State) ->
-    {noreply, State}.
+handle_info(Info, {Type, Module, State}) ->
+	{_Reply, NewState} = Module:handle(Info, State),
+    {noreply, {Type, Module, NewState}}.
 
 
 %% terminate/2
@@ -145,4 +169,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %% ====================================================================
 
-
+get_plugin_name(ccm) ->
+	cluster_manager;
+get_plugin_name(worker) ->
+	modules_manager.

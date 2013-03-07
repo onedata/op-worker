@@ -1,0 +1,2 @@
+-define(APP_Name, veil_cluster_node).
+-define(CCM, central_cluster_manager).

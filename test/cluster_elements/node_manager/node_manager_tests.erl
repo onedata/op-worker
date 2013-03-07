@@ -11,8 +11,7 @@
 %% ===================================================================
 
 -module(node_manager_tests).
-
--define(APP_Name, veil_cluster_node).
+-include("registered_names.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -22,8 +21,13 @@
 
 type_test() -> 
 	ok = application:start(?APP_Name),
-	NodeType = gen_server:call(node_manager, getNodeType),
-	{ok, NodeType2} = application:get_env(?APP_Name, nodeType),
+	{ok, NodeType} = application:get_env(?APP_Name, nodeType),
+	
+	NodeType2 = case NodeType of
+		ccm -> gen_server:call({global, ?CCM}, getNodeType);
+		_Other -> gen_server:call(node_manager, getNodeType)
+	end,
+	
 	?assert(NodeType =:= NodeType2),
 	ok = application:stop(?APP_Name).
 
