@@ -20,6 +20,9 @@ test:
 generate: compile
 	./rebar generate
 
+generate_ccm: compile
+	./rebar generate overlay_vars=vars/ccm_node_vars.config
+
 docs:
 	./rebar doc
 
