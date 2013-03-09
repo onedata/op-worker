@@ -17,13 +17,16 @@
 
 -ifdef(TEST).
 
-init_test() ->
+main_test_() ->
+    {inorder, [fun init/0, fun handle/0, fun cleanUp/0]}.
+
+init() ->
     ?assert(dao:init([]) =:= ok).
 
-handle_test() ->
-    {ok, _Resp} = dao:handle(1, []).
+handle() ->
+    {error, _Resp} = dao:handle(1, {test, []}).
 
-cleanUp_test() ->
+cleanUp() ->
     ok = dao:cleanUp().
 
 -endif.

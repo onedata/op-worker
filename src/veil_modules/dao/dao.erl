@@ -11,9 +11,13 @@
 -module(dao).
 -behaviour(worker_plugin_behaviour).
 
+-ifdef(TEST).
+-compile([export_all]).
+-endif.
+
 %% API
 -export([]).
--include_lib("eunit/include/eunit.hrl").
+
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/2, cleanUp/0]).
 
@@ -39,20 +43,29 @@ init(_Args) ->
 %% init/1
 %% ====================================================================
 %% @doc worker_plugin_behaviour callback init/1
--spec handle(ProtocolVersion :: term(), Request :: term()) -> Result when
-      Result :: {ok, Response} | {error, Error},
-      Response :: term(),
-      Error :: term().
+-spec handle(ProtocolVersion :: term(), Request) -> Result when
+    Request :: {Method, Args},
+    Method :: atom(),
+    Args :: list(),
+    Result :: {ok, Response} | {error, Error},
+    Response :: term(),
+    Error :: term().
 %% ====================================================================
+handle(_ProtocolVersion, {Method, Args}) when is_atom(Method), is_list(Args) ->
+    try apply(dao_helper, Method, Args) of
+        Response -> {ok, Response}
+    catch
+        Type:Error -> {error, {Type, Error}}
+    end;
 handle(_ProtocolVersion, _Request) ->
-    {ok, done}.
+    {error, wrong_args}.
 
 %% cleanUp/0
 %% ====================================================================
 %% @doc worker_plugin_behaviour callback cleanUp/0
 -spec cleanUp() -> Result when
-      Result :: ok | {error, Error},
-      Error :: term().
+    Result :: ok | {error, Error},
+    Error :: timeout | term().
 %% ====================================================================
 cleanUp() ->
     Pid = whereis(db_host_store_proc),
