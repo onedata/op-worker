@@ -13,7 +13,7 @@
 -behaviour(supervisor).
 
 %% Helper macro for declaring children of supervisor
--define(CHILD(I, Type), {I, {I, start_link, []}, permanent, 5000, Type, [I]}).
+-define(CHILD(I, Type), {I, {I, start_link, [[]]}, transient, 5000, Type, [I]}).
 -define(DAO_DB_HOSTS_REFRESH_INTERVAL, 60*60*1000). % 1h
 
 
@@ -22,7 +22,6 @@
 
 %% supervisor callbacks
 -export([init/1]).
-
 %% ===================================================================
 %% API functions
 %% ===================================================================
@@ -39,7 +38,7 @@
     | term().
 %% ====================================================================
 start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+    supervisor:start_link({local, dao_hosts_sup},?MODULE, []).
 
 %% start_link/1
 %% ====================================================================
@@ -54,6 +53,7 @@ start_link() ->
 %% ====================================================================
 start_link(_Args) ->
     Pid = spawn_link(fun() -> init() end),
+    register(db_host_store_proc, Pid),
     {ok, Pid}.
 
 
@@ -105,22 +105,27 @@ init() ->
     NewState :: erlang:timestamp().
 %% ====================================================================
 store_loop(State) ->
-    NewState = update_hosts(timer:now_diff(State, erlang:now())),
     receive
+        {From, force_update} ->
+            From ! {self(), ok};
+        {From, shutdown} ->
+            exit(normal)
     after ?DAO_DB_HOSTS_REFRESH_INTERVAL ->
         ok
     end,
-    store_loop(NewState).
+    store_loop(update_hosts(State, timer:now_diff(State, erlang:now()))).
 
 
 %% update_hosts/1
 %% ====================================================================
-%% @doc Updates host list when it's old
--spec update_hosts(TimeDiff) -> NewTimeDiff when
+%% @doc Update host list when it's old
+-spec update_hosts(State, TimeDiff) -> NewState when
+    State :: erlang:timestamp(),
     TimeDiff :: integer(),
-    NewTimeDiff :: integer().
+    NewState :: erlang:timestamp().
 %% ====================================================================
-update_hosts(TimeDiff) when TimeDiff > ?DAO_DB_HOSTS_REFRESH_INTERVAL ->
+update_hosts(_State, TimeDiff) when TimeDiff > ?DAO_DB_HOSTS_REFRESH_INTERVAL ->
+    ets:insert(db_host_store, 'bc@RoXeon-Laptop.lan'),
     erlang:now();
-update_hosts(TimeDiff) ->
-    TimeDiff.
+update_hosts(State, _TimeDiff) ->
+    State.

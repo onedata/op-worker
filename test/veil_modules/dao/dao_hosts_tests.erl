@@ -17,7 +17,16 @@
 
 -ifdef(TEST).
 
-simple_test() ->
-    ?assert(true).
+main_test_() ->
+    {setup, fun start_link/0, fun cleanUp/1, []}.
+
+start_link() ->
+    {ok, Pid} = dao_hosts:start_link([]),
+    Pid.
+
+cleanUp(Pid) ->
+    monitor(process, Pid),
+    Pid ! {self(), shutdown},
+    receive {'DOWN', _Ref, process, Pid, normal} -> ok after 1000 -> error(timeout) end.
 
 -endif.

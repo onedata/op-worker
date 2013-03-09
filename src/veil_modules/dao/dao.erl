@@ -13,7 +13,7 @@
 
 %% API
 -export([]).
-
+-include_lib("eunit/include/eunit.hrl").
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/2, cleanUp/0]).
 
@@ -29,7 +29,12 @@
       Error :: term().
 %% ====================================================================
 init(_Args) ->
-    ok.
+    case dao_hosts:start_link() of
+        {ok, _Pid} -> ok;
+        {error, {already_started, _Pid}} -> ok;
+        ignore -> {error, supervisor_ignore};
+        {error, _Err}=Ret -> Ret
+    end.
 
 %% init/1
 %% ====================================================================
@@ -50,7 +55,10 @@ handle(_ProtocolVersion, _Request) ->
       Error :: term().
 %% ====================================================================
 cleanUp() ->
-    ok.
+    Pid = whereis(db_host_store_proc),
+    monitor(process, Pid),
+    Pid ! {self(), shutdown},
+    receive {'DOWN', _Ref, process, Pid, normal} -> ok after 1000 -> {error, timeout} end.
 
 %% ===================================================================
 %% API functions

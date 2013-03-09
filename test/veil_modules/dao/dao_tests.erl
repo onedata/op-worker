@@ -17,7 +17,13 @@
 
 -ifdef(TEST).
 
-simple_test() ->
-    ?assert(true).
+init_test() ->
+    ?assert(dao:init([]) =:= ok).
+
+handle_test() ->
+    {ok, _Resp} = dao:handle(1, []).
+
+cleanUp_test() ->
+    ok = dao:cleanUp().
 
 -endif.
