@@ -37,7 +37,7 @@ init(_Args) ->
         {ok, _Pid} -> ok;
         {error, {already_started, _Pid}} -> ok;
         ignore -> {error, supervisor_ignore};
-        {error, _Err}=Ret -> Ret
+        {error, _Err} = Ret -> Ret
     end.
 
 %% init/1

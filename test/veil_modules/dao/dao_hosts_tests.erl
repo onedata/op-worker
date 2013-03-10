@@ -72,10 +72,10 @@ get_host() ->
     Db1 = dao_hosts:get_host(),
     dao_hosts:ban(Db1),
     Db2 = dao_hosts:get_host(),
-    ?assertNot( Db1 =:= Db2 ),
+    ?assertNot(Db1 =:= Db2),
     dao_hosts:ban(Db2),
     Db3 = dao_hosts:get_host(),
-    ?assertNot( Db1 =:= Db3 orelse Db2 =:= Db3 ),
+    ?assertNot(Db1 =:= Db3 orelse Db2 =:= Db3),
     dao_hosts:ban(Db3),
     case dao_hosts:get_random() of
         'test@host1.lan' -> ok;

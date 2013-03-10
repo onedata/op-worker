@@ -71,9 +71,9 @@ list_dbs(Prefix) ->
 %% ====================================================================
 get_doc_count(DbName) ->
     case call(get_doc_count, [DbName]) of
-        {ok, Count}=Ret when is_integer(Count) ->
+        {ok, Count} = Ret when is_integer(Count) ->
             Ret;
-        {_, {'EXIT', {database_does_not_exist, _}}}->
+        {_, {'EXIT', {database_does_not_exist, _}}} ->
             {error, database_does_not_exist};
         {error, Error} -> {error, Error};
         Other -> {error, Other}
@@ -83,21 +83,21 @@ get_doc_count(DbName) ->
 %% ====================================================================
 %% @doc Returns db info for the given DbName
 -spec get_db_info(DbName :: string()) ->
-                         {ok, [
-                               {instance_start_time, binary()} |
-                               {doc_count, non_neg_integer()} |
-                               {doc_del_count, non_neg_integer()} |
-                               {purge_seq, non_neg_integer()} |
-                               {compact_running, boolean()} |
-                               {disk_size, non_neg_integer()} |
-                               {disk_format_version, pos_integer()}
-                              ]} | {error, database_does_not_exist} | {error, term()}.
+			 {ok, [
+			       {instance_start_time, binary()} |
+			       {doc_count, non_neg_integer()} |
+			       {doc_del_count, non_neg_integer()} |
+			       {purge_seq, non_neg_integer()} |
+			       {compact_running, boolean()} |
+			       {disk_size, non_neg_integer()} |
+			       {disk_format_version, pos_integer()}
+			      ]} | {error, database_does_not_exist} | {error, term()}.
 %% ====================================================================
 get_db_info(DbName) ->
     case call(get_db_info, [name(DbName)]) of
-        {ok, Info}=Ret when is_list(Info) ->
+        {ok, Info} = Ret when is_list(Info) ->
             Ret;
-        {_, {'EXIT', {database_does_not_exist, _}}}->
+        {_, {'EXIT', {database_does_not_exist, _}}} ->
             {error, database_does_not_exist};
         {error, Error} -> {error, Error};
         Other -> {error, Other}
@@ -142,7 +142,7 @@ delete_db(DbName) ->
 delete_db(DbName, Opts) ->
     case call(delete_db, [name(DbName), Opts]) of
         ok -> ok;
-        {_, {'EXIT', {database_does_not_exist, _}}}->
+        {_, {'EXIT', {database_does_not_exist, _}}} ->
             {error, database_does_not_exist};
         {error, Error} -> {error, Error};
         Other -> {error, Other}

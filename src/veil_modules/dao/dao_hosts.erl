@@ -18,9 +18,9 @@
 -endif.
 
 %% Config
--define(DAO_DB_HOSTS_REFRESH_INTERVAL, 60*60*1000). % 1h
+-define(DAO_DB_HOSTS_REFRESH_INTERVAL, 60 * 60 * 1000). % 1h
 -define(RPC_MAX_RETRIES, 5).
--define(DEFAULT_BAN_TIME, 5*60*1000). % 5min
+-define(DEFAULT_BAN_TIME, 5 * 60 * 1000). % 5min
 
 
 %% API
@@ -37,26 +37,26 @@
 %% ====================================================================
 %% @doc Starts application supervisor for host store master process
 -spec start_link() -> Result when
-      Result ::  {ok, pid()}
-               | ignore
-               | {error, Error},
+      Result :: {ok, pid()}
+	      | ignore
+	      | {error, Error},
       Error :: {already_started, pid()}
-             | {shutdown, term()}
-             | term().
+	     | {shutdown, term()}
+	     | term().
 %% ====================================================================
 start_link() ->
-    supervisor:start_link({local, dao_hosts_sup},?MODULE, []).
+    supervisor:start_link({local, dao_hosts_sup}, ?MODULE, []).
 
 %% start_link/1
 %% ====================================================================
 %% @doc Starts the hosts store master process (called by supervisor)
 -spec start_link(Args) -> Result when
       Args :: term(),
-      Result ::  {ok,Pid}
-               | ignore
-               | {error,Error},
+      Result :: {ok, Pid}
+	      | ignore
+	      | {error, Error},
       Pid :: pid(),
-      Error :: {already_started,Pid} | term().
+      Error :: {already_started, Pid} | term().
 %% ====================================================================
 start_link(_Args) ->
     Pid = spawn_link(fun() -> init() end),
@@ -150,14 +150,14 @@ call(Module, Method, Args) ->
       Result :: {ok, {SupervisionPolicy, [ChildSpec]}} | ignore,
       SupervisionPolicy :: {RestartStrategy, MaxR :: non_neg_integer(), MaxT :: pos_integer()},
       RestartStrategy :: one_for_all
-                       | one_for_one
-                       | rest_for_one
-                       | simple_one_for_one,
+		       | one_for_one
+		       | rest_for_one
+		       | simple_one_for_one,
       ChildSpec :: {Id :: term(), StartFunc, RestartPolicy, Type :: worker | supervisor, Modules},
       StartFunc :: {M :: module(), F :: atom(), A :: [term()] | undefined},
       RestartPolicy :: permanent
-                     | transient
-                     | temporary,
+		     | transient
+		     | temporary,
       Modules :: [module()] | dynamic.
 %% ====================================================================
 init([]) ->
@@ -171,7 +171,7 @@ init([]) ->
 %% ====================================================================
 %% @doc Initializes the hosts store
 -spec init() -> Result when
-      Result ::  ok | {error, Error},
+      Result :: ok | {error, Error},
       Error :: term().
 %% ====================================================================
 init() ->
@@ -219,12 +219,12 @@ store_loop(State) ->
         {_From, shutdown} ->
             exit(normal)
     after ?DAO_DB_HOSTS_REFRESH_INTERVAL ->
-            ok
+	    ok
     end,
     store_loop(NewState).
 
 
-                                                % registered/1
+%% registered/1
 %% ====================================================================
 %% @doc Checks if Host was inserted to store
 -spec registered(Host :: atom()) -> true | false.
@@ -289,7 +289,7 @@ get_host() ->
             Host = get_random(),
             if is_atom(Host) -> put(db_host, Host); true -> ok end,
             Host;
-        R ->    R
+        R -> R
     end.
 
 
@@ -320,7 +320,7 @@ call(Module, Method, Args, Attempt) when Attempt < ?RPC_MAX_RETRIES ->
     case rpc:call(Host, Module, Method, Args) of
         {badrpc, nodedown} ->
             ban(Host),
-            call(Module, Method, Args, Attempt+1);
+            call(Module, Method, Args, Attempt + 1);
         {badrpc, Error} ->
             {error, Error};
         Other ->
