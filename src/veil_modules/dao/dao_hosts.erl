@@ -129,10 +129,15 @@ call(Method, Args) ->
 %% call/3
 %% ====================================================================
 %% @doc Same as call/2, but with custom Module
--spec call(Module :: atom(), Method :: atom(), Args :: [Arg :: term()]) -> term() | {error, rpc_retry_limit_exceeded}.
+-spec call(Module :: atom(), Method :: atom(), Args :: [Arg :: term()]) -> term() | Error when
+    Error :: {error, rpc_retry_limit_exceeded} | {error, term()}.
 %% ====================================================================
 call(Module, Method, Args) ->
-    call(Module, Method, Args, 0).
+    case get_host() of
+        H when is_atom(H) ->
+            call(Module, Method, Args, 0);
+        {error, Err} -> {error, Err}
+    end.
 
 %% ===================================================================
 %% Behaviour callback functions
@@ -182,6 +187,7 @@ init() ->
     NewState :: erlang:timestamp().
 %% ====================================================================
 store_loop(State) ->
+    NewState = update_hosts(State, timer:now_diff(erlang:now(), State)),
     receive
         {From, force_update} ->
             From ! {self(), ok};
@@ -215,7 +221,7 @@ store_loop(State) ->
     after ?DAO_DB_HOSTS_REFRESH_INTERVAL ->
         ok
     end,
-    store_loop(update_hosts(State, timer:now_diff(State, erlang:now()))).
+    store_loop(NewState).
 
 
 % registered/1
@@ -280,10 +286,11 @@ get_random(Hosts, _Banned) when is_list(Hosts) ->
 get_host() ->
     case get(db_host) of
         undefined ->
-            put(db_host, get_random());
-            _ ->    ok
-    end,
-    get(db_host).
+            Host = get_random(),
+            if is_atom(Host) -> put(db_host, Host); true -> ok end,
+            Host;
+            R ->    R
+    end.
 
 
 %% store_exec/1

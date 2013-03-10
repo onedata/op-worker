@@ -51,9 +51,17 @@ init(_Args) ->
     Response :: term(),
     Error :: term().
 %% ====================================================================
-handle(_ProtocolVersion, {Method, Args}) when is_atom(Method), is_list(Args) ->
+handle(_ProtocolVersion, {helper, Method, Args}) when is_atom(Method), is_list(Args) ->
     try apply(dao_helper, Method, Args) of
-        Response -> {ok, Response}
+        {error, Err} -> {error, Err};
+        {ok, Response} -> {ok, Response}
+    catch
+        Type:Error -> {error, {Type, Error}}
+    end;
+handle(_ProtocolVersion, {Method, Args}) when is_atom(Method), is_list(Args) ->
+    try apply(dao, Method, Args) of
+        {error, Err} -> {error, Err};
+        {ok, Response} -> {ok, Response}
     catch
         Type:Error -> {error, {Type, Error}}
     end;

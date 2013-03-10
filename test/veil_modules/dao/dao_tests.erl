@@ -24,6 +24,7 @@ init() ->
     ?assert(dao:init([]) =:= ok).
 
 handle() ->
+    {error, _Resp} = dao:handle(1, {helper, test, []}),
     {error, _Resp} = dao:handle(1, {test, []}).
 
 cleanUp() ->
