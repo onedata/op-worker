@@ -22,31 +22,88 @@
 
 -ifdef(TEST).
 
-main_test_() ->
+host_management_test_() ->
+    {setup, local, fun start_link/0, fun cleanUp/1,
+                [fun insert_hosts/0, fun get_host/0, fun delete_hosts/0, fun ban_host/0, fun reactivate_host/0]}.
+
+call_test_() ->
     case node() of
         nonode@nohost ->
             {ok, _Pid} = net_kernel:start([master, shortnames]);
         _ -> ok
     end,
-    {setup, local, fun start_link/0, fun cleanUp/1, [fun insert_hosts/0, fun get_host/0, fun call/0]}.
+    {setup, local, fun start_link/0, fun cleanUp/1,
+        [fun call/0]}.
 
 insert_hosts() ->
     ok = dao_hosts:insert('test@host1'),
     ok = dao_hosts:insert('test@host2'),
-    ok = dao_hosts:insert('test@host3').
+    ok = dao_hosts:insert('test@host3'),
+    ok = dao_hosts:insert('test@host3'),
+    3 = length(ets:lookup(db_host_store, host)).
+
+delete_hosts() ->
+    ok = dao_hosts:delete('test@host1'),
+    ok = dao_hosts:delete('test@host2'),
+    ok = dao_hosts:delete('test@host3'),
+    delete_host(dao_hosts:get_host()).
+
+delete_host({error, no_db_host_found}) ->
+    ok;
+delete_host(Host) ->
+    dao_hosts:delete(Host),
+    delete_host(dao_hosts:get_host()).
 
 get_host() ->
-    {error, no_db_host_found} = dao_hosts:get_random(),
-    Self = node(),
-    ok = dao_hosts:insert(Self),
-    Self = dao_hosts:get_random(),
-    lists:foreach(fun(X) -> ok = dao_hosts:insert(start_node(list_to_atom("test" ++ integer_to_list(X)))) end, lists:seq(1,3)),
-    Db = dao_hosts:get_host(),
-    Db = dao_hosts:get_host(),
-    Db = dao_hosts:get_host().
+    case dao_hosts:get_random() of
+        'test@host1' -> ok;
+        'test@host2' -> ok;
+        'test@host3' -> ok
+    end,
+    Db1 = dao_hosts:get_host(),
+    Db1 = dao_hosts:get_host(),
+    Db1 = dao_hosts:get_host(),
+    dao_hosts:ban(Db1),
+    Db2 = dao_hosts:get_host(),
+    ?assertNot( Db1 =:= Db2 ),
+    dao_hosts:ban(Db2),
+    Db3 = dao_hosts:get_host(),
+    ?assertNot( Db1 =:= Db3 orelse Db2 =:= Db3 ),
+    dao_hosts:ban(Db3),
+    case dao_hosts:get_random() of
+        'test@host1' -> ok;
+        'test@host2' -> ok;
+        'test@host3' -> ok
+    end,
+    dao_hosts:reactivate(Db2),
+    Db2 = dao_hosts:get_host().
 
 call() ->
+    ok = dao_hosts:insert('test@host1'),
+    ok = dao_hosts:insert('test@host2'),
+    ok = dao_hosts:insert('test@host3'),
+    {error, rpc_retry_limit_exceeded} = dao_hosts:call(?MODULE, call_resp, []),
+    dao_hosts:insert(start_node(test)),
     ok = dao_hosts:call(?MODULE, call_resp, []).
+
+ban_host() ->
+    {error, no_host} = dao_hosts:ban('test@host1'),
+    ok = dao_hosts:insert('test@host1'),
+    ok = dao_hosts:insert('test@host2'),
+    ok = dao_hosts:ban('test@host1'),
+    ok = dao_hosts:ban('test@host2', 10),
+    ok = dao_hosts:ban('test@host2', 10),
+    receive
+    after 20 ->
+        'test@host2' = dao_hosts:get_host()
+    end.
+
+reactivate_host() ->
+    {error, no_host} = dao_hosts:ban('test@host3'),
+    dao_hosts:ban('test@host2'),
+    dao_hosts:ban('test@host2'),
+    dao_hosts:reactivate('test@host1'),
+    'test@host1' = dao_hosts:get_host().
 
 call_resp() ->
     ok.

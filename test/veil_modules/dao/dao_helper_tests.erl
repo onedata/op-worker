@@ -17,7 +17,8 @@
 
 -ifdef(TEST).
 
-simple_test() ->
-    ?assert(true).
+name_test() ->
+    <<"test">> = dao_helper:name("test"),
+    <<"test">> = dao_helper:name(<<"test">>).
 
 -endif.
