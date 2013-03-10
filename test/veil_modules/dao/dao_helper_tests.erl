@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Rafal Slota
 %% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license 
+%% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -19,7 +19,7 @@
 
 main_test_() ->
     {setup, local, fun init/0, fun cleanUp/1, [fun list_dbs/0, fun get_doc_count/0, fun get_db_info/0,
-    fun create_db1/0, fun create_db2/0, fun delete_db/0]}.
+					       fun create_db1/0, fun create_db2/0, fun delete_db/0]}.
 
 name_test() ->
     <<"test">> = dao_helper:name("test"),

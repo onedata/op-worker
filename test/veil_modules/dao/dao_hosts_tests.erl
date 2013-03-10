@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Rafal Slota
 %% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license 
+%% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -31,7 +31,7 @@ init_test() ->
 
 host_management_test_() ->
     {setup, local, fun start_link/0, fun cleanUp/1,
-                [fun delete_hosts/0, fun insert_hosts/0, fun get_host/0, fun delete_hosts/0, fun ban_host/0, fun reactivate_host/0]}.
+     [fun delete_hosts/0, fun insert_hosts/0, fun get_host/0, fun delete_hosts/0, fun ban_host/0, fun reactivate_host/0]}.
 
 call_test_() ->
     case node() of
@@ -40,7 +40,7 @@ call_test_() ->
         _ -> ok
     end,
     {setup, local, fun start_link/0, fun cleanUp/1,
-        [fun call/0]}.
+     [fun call/0]}.
 
 insert_hosts() ->
     ok = dao_hosts:insert('test@host1.lan'),
@@ -101,7 +101,7 @@ ban_host() ->
     ok = dao_hosts:ban('test@host2.lan', 10),
     receive
     after 20 ->
-        'test@host2.lan' = dao_hosts:get_host()
+	    'test@host2.lan' = dao_hosts:get_host()
     end.
 
 reactivate_host() ->

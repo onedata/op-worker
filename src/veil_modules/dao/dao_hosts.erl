@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Rafal Slota
 %% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license 
+%% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -37,12 +37,12 @@
 %% ====================================================================
 %% @doc Starts application supervisor for host store master process
 -spec start_link() -> Result when
-    Result ::  {ok, pid()}
-    | ignore
-    | {error, Error},
-    Error :: {already_started, pid()}
-    | {shutdown, term()}
-    | term().
+      Result ::  {ok, pid()}
+               | ignore
+               | {error, Error},
+      Error :: {already_started, pid()}
+             | {shutdown, term()}
+             | term().
 %% ====================================================================
 start_link() ->
     supervisor:start_link({local, dao_hosts_sup},?MODULE, []).
@@ -51,12 +51,12 @@ start_link() ->
 %% ====================================================================
 %% @doc Starts the hosts store master process (called by supervisor)
 -spec start_link(Args) -> Result when
-    Args :: term(),
-    Result ::  {ok,Pid}
-    | ignore
-    | {error,Error},
-    Pid :: pid(),
-    Error :: {already_started,Pid} | term().
+      Args :: term(),
+      Result ::  {ok,Pid}
+               | ignore
+               | {error,Error},
+      Pid :: pid(),
+      Error :: {already_started,Pid} | term().
 %% ====================================================================
 start_link(_Args) ->
     Pid = spawn_link(fun() -> init() end),
@@ -130,7 +130,7 @@ call(Method, Args) ->
 %% ====================================================================
 %% @doc Same as call/2, but with custom Module
 -spec call(Module :: atom(), Method :: atom(), Args :: [Arg :: term()]) -> term() | Error when
-    Error :: {error, rpc_retry_limit_exceeded} | {error, term()}.
+      Error :: {error, rpc_retry_limit_exceeded} | {error, term()}.
 %% ====================================================================
 call(Module, Method, Args) ->
     case get_host() of
@@ -147,18 +147,18 @@ call(Module, Method, Args) ->
 %% ====================================================================
 %% @doc <a href="http://www.erlang.org/doc/man/supervisor.html#Module:init-1">supervisor:init/1</a>
 -spec init(Args :: term()) -> Result when
-    Result :: {ok, {SupervisionPolicy, [ChildSpec]}} | ignore,
-    SupervisionPolicy :: {RestartStrategy, MaxR :: non_neg_integer(), MaxT :: pos_integer()},
-    RestartStrategy :: one_for_all
-    | one_for_one
-    | rest_for_one
-    | simple_one_for_one,
-    ChildSpec :: {Id :: term(), StartFunc, RestartPolicy, Type :: worker | supervisor, Modules},
-    StartFunc :: {M :: module(), F :: atom(), A :: [term()] | undefined},
-    RestartPolicy :: permanent
-    | transient
-    | temporary,
-    Modules :: [module()] | dynamic.
+      Result :: {ok, {SupervisionPolicy, [ChildSpec]}} | ignore,
+      SupervisionPolicy :: {RestartStrategy, MaxR :: non_neg_integer(), MaxT :: pos_integer()},
+      RestartStrategy :: one_for_all
+                       | one_for_one
+                       | rest_for_one
+                       | simple_one_for_one,
+      ChildSpec :: {Id :: term(), StartFunc, RestartPolicy, Type :: worker | supervisor, Modules},
+      StartFunc :: {M :: module(), F :: atom(), A :: [term()] | undefined},
+      RestartPolicy :: permanent
+                     | transient
+                     | temporary,
+      Modules :: [module()] | dynamic.
 %% ====================================================================
 init([]) ->
     {ok, {{one_for_one, 5, 10}, [?CHILD(?MODULE, worker)]}}.
@@ -171,8 +171,8 @@ init([]) ->
 %% ====================================================================
 %% @doc Initializes the hosts store
 -spec init() -> Result when
-    Result ::  ok | {error, Error},
-    Error :: term().
+      Result ::  ok | {error, Error},
+      Error :: term().
 %% ====================================================================
 init() ->
     ets:new(db_host_store, [named_table, protected, bag]),
@@ -183,8 +183,8 @@ init() ->
 %% ====================================================================
 %% @doc Host store main loop
 -spec store_loop(State) -> NewState when
-    State :: erlang:timestamp(),
-    NewState :: erlang:timestamp().
+      State :: erlang:timestamp(),
+      NewState :: erlang:timestamp().
 %% ====================================================================
 store_loop(State) ->
     NewState = update_hosts(State, timer:now_diff(erlang:now(), State)),
@@ -219,12 +219,12 @@ store_loop(State) ->
         {_From, shutdown} ->
             exit(normal)
     after ?DAO_DB_HOSTS_REFRESH_INTERVAL ->
-        ok
+            ok
     end,
     store_loop(NewState).
 
 
-% registered/1
+                                                % registered/1
 %% ====================================================================
 %% @doc Checks if Host was inserted to store
 -spec registered(Host :: atom()) -> true | false.
@@ -240,9 +240,9 @@ registered(Host) ->
 %% ====================================================================
 %% @doc Update host list when it's old
 -spec update_hosts(State, TimeDiff) -> NewState when
-    State :: erlang:timestamp(),
-    TimeDiff :: integer(),
-    NewState :: erlang:timestamp().
+      State :: erlang:timestamp(),
+      TimeDiff :: integer(),
+      NewState :: erlang:timestamp().
 %% ====================================================================
 update_hosts(_State, TimeDiff) when TimeDiff > ?DAO_DB_HOSTS_REFRESH_INTERVAL ->
     ets:delete_all_objects(db_host_store),
@@ -256,7 +256,7 @@ update_hosts(State, _TimeDiff) ->
 %% ====================================================================
 %% @doc Returns first random and alive DB node from host store
 -spec get_random() -> DbNode when
-    DbNode :: atom() | {error, no_db_host_found}.
+      DbNode :: atom() | {error, no_db_host_found}.
 %% ====================================================================
 get_random() ->
     ?SEED,
@@ -267,7 +267,7 @@ get_random() ->
 %% ====================================================================
 %% @doc Returns first random and alive DB node from Hosts list. Should not be called directly, use get_random/1 instead
 -spec get_random([Host :: atom()], [BannedHost :: atom()]) -> DbNode when
-    DbNode :: atom() | {error, no_db_host_found}.
+      DbNode :: atom() | {error, no_db_host_found}.
 %% ====================================================================
 get_random([], []) ->
     {error, no_db_host_found};
@@ -281,7 +281,7 @@ get_random(Hosts, _Banned) when is_list(Hosts) ->
 %% ====================================================================
 %% @doc Returns DB node assigned to current process or randomize one if none (i.e this is first get_host/0 call)
 -spec get_host() -> DbNode when
-    DbNode :: atom() | {error, no_db_host_found}.
+      DbNode :: atom() | {error, no_db_host_found}.
 %% ====================================================================
 get_host() ->
     case get(db_host) of
@@ -289,7 +289,7 @@ get_host() ->
             Host = get_random(),
             if is_atom(Host) -> put(db_host, Host); true -> ok end,
             Host;
-            R ->    R
+        R ->    R
     end.
 
 
@@ -297,7 +297,7 @@ get_host() ->
 %% ====================================================================
 %% @doc Sends Msg to host store master process and waits for replay
 -spec store_exec(Msg :: term()) -> ok | {error, Err} | {error, timeout} when
-    Err :: term().
+      Err :: term().
 %% ====================================================================
 store_exec(Msg) ->
     Pid = whereis(db_host_store_proc),
@@ -306,7 +306,7 @@ store_exec(Msg) ->
         {Pid, ok} -> ok;
         {Pid, {error, Err}} -> {error, Err}
     after 100 ->
-        {error, timeout}
+	    {error, timeout}
     end.
 
 

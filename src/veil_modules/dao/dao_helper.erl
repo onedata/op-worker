@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Rafal Slota
 %% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license 
+%% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -83,15 +83,15 @@ get_doc_count(DbName) ->
 %% ====================================================================
 %% @doc Returns db info for the given DbName
 -spec get_db_info(DbName :: string()) ->
-    {ok, [
-    {instance_start_time, binary()} |
-    {doc_count, non_neg_integer()} |
-    {doc_del_count, non_neg_integer()} |
-    {purge_seq, non_neg_integer()} |
-    {compact_running, boolean()} |
-    {disk_size, non_neg_integer()} |
-    {disk_format_version, pos_integer()}
-    ]} | {error, database_does_not_exist} | {error, term()}.
+                         {ok, [
+                               {instance_start_time, binary()} |
+                               {doc_count, non_neg_integer()} |
+                               {doc_del_count, non_neg_integer()} |
+                               {purge_seq, non_neg_integer()} |
+                               {compact_running, boolean()} |
+                               {disk_size, non_neg_integer()} |
+                               {disk_format_version, pos_integer()}
+                              ]} | {error, database_does_not_exist} | {error, term()}.
 %% ====================================================================
 get_db_info(DbName) ->
     case call(get_db_info, [name(DbName)]) of
@@ -120,7 +120,7 @@ create_db(DbName) ->
 %% and how many nodes each doc is copied to respectively.
 %% @end
 -spec create_db(DbName :: string(), Opts :: [Option]) -> ok | {error, term()} when
-    Option :: atom() | {atom(), term()}.
+      Option :: atom() | {atom(), term()}.
 %% ====================================================================
 create_db(DbName, Opts) ->
     call(create_db, [name(DbName), Opts]).
@@ -137,7 +137,7 @@ delete_db(DbName) ->
 %% ====================================================================
 %% @doc Deletes db named DbName
 -spec delete_db(DbName :: string(), Opts :: [Option]) -> ok | {error, database_does_not_exist} | {error, term()} when
-    Option :: atom() | {atom(), term()}.
+      Option :: atom() | {atom(), term()}.
 %% ====================================================================
 delete_db(DbName, Opts) ->
     case call(delete_db, [name(DbName), Opts]) of
