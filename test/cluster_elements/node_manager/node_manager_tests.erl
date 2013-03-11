@@ -21,7 +21,7 @@
 
 type_test() -> 
 	ok = application:start(?APP_Name),
-	{ok, NodeType} = application:get_env(?APP_Name, nodeType),
+	{ok, NodeType} = application:get_env(?APP_Name, node_type),
 	
 	NodeType2 = case NodeType of
 		ccm -> gen_server:call({global, ?CCM}, getNodeType);

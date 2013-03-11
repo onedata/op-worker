@@ -33,7 +33,7 @@
                 | term().
 %% ====================================================================
 start(_StartType, _StartArgs) ->
-	{ok, NodeType} = application:get_env(veil_cluster_node, nodeType),
+	{ok, NodeType} = application:get_env(veil_cluster_node, node_type),
     veil_cluster_node_sup:start_link(NodeType).
 
 %% stop/1

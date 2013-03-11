@@ -19,5 +19,8 @@
                   stdlib
                  ]},
   {mod, {veil_cluster_node_app, []}},
-  {env, [{nodeType, worker}]}
+  {env, [{node_type, worker},
+  		{initialization_time, 300},
+  		{worker_sleep_time, 60},
+  		{ccm_nodes, ['node1@127.0.0.1']}]}
  ]}.

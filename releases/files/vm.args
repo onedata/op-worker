@@ -6,7 +6,19 @@
 
 ## Node type (worker or ccm)
 ## application:get_env(veil_cluster_node, nodeType) should return this
--veil_cluster_node nodeType {{node_type}}
+-veil_cluster_node node_type {{node_type}}
+
+## How long (in sec) should worker sleep before next connection try (when it cannot connect to ccm)
+## application:get_env(veil_cluster_node, worker_sleep_time) should return this
+-veil_cluster_node worker_sleep_time {{worker_sleep_time}}
+
+## List of ccm possible ccm nodes
+## application:get_env(veil_cluster_node, ccm_nodes) should return this
+-veil_cluster_node ccm_nodes {{ccm_nodes}}
+
+## How long should ccm wait for workers before it initializes cluster
+## application:get_env(veil_cluster_node, initialization_time) should return this
+-veil_cluster_node initialization_time {{initialization_time}}
 
 ## Heartbeat management; auto-restarts VM if it dies or becomes unresponsive
 ## (Disabled by default..use with caution!)
