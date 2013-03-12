@@ -16,13 +16,33 @@
 -record(node_state, {ccm_con_status = not_connected, dispatchers = [], workers = []}).
 
 %% ====================================================================
-%% API functions
+%% API
 %% ====================================================================
 -export([init/0, handle/2]).
 
+%% ====================================================================
+%% API functions
+%% ====================================================================
+
+%% init/0
+%% ====================================================================
+%% @doc Tries to register node in ccm (if registration fails, it will try
+%% again after worker_sleep_time (environment variable)). Afterwards,
+%% it is waiting for orders from ccm.
+-spec init() -> State when
+	State :: tuple().
+%% ====================================================================
 init() ->
 	#node_state{ccm_con_status = init_connection(not_connected)}.
 
+%% handle/2
+%% ====================================================================
+%% @doc Handles requests from ccm
+-spec handle(Request :: term(), State :: term()) -> Result when
+	Result :: {Reply, NewState},
+	Reply :: term(),
+	NewState :: term().
+%% ====================================================================
 handle(init_ccm_connection, State) ->
 	{ok, State#node_state{ccm_con_status = init_connection(State#node_state.ccm_con_status)}};
 
@@ -46,16 +66,20 @@ init_connection(Conn_status) ->
 			Ans = init_net_connection(CCM_Nodes),
 			case Ans of
 				ok -> connected;
-				error -> {ok, Interval} = application:get_env(veil_cluster_node, worker_sleep_time),
-					timer:apply_after(Interval * 1000, gen_server, call, [node_manager, init_ccm_connection]),
-					not_connected
+				error -> not_connected
 			end;
 		Other -> Other
 	end,
-	case New_conn_status of
+	New_conn_status2 = case New_conn_status of
 		connected -> register();
-		Other2 -> Other2
-	end.
+		_Other2 -> New_conn_status
+	end,
+	case New_conn_status2 of
+		registered -> ok;
+		_Other3 -> {ok, Interval} = application:get_env(veil_cluster_node, worker_sleep_time),
+			timer:apply_after(Interval * 1000, gen_server, call, [node_manager, init_ccm_connection])
+	end,
+	New_conn_status2.
 
 init_net_connection([]) ->
 	error;

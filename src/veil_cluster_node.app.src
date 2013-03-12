@@ -19,8 +19,14 @@
                   stdlib
                  ]},
   {mod, {veil_cluster_node_app, []}},
-  {env, [{node_type, worker},
+  {env, [
+  		%% Node type (worker or ccm)
+  		{node_type, worker},
+  		%% How long should ccm wait for workers before it initializes cluster
   		{initialization_time, 300},
+  		%% How long (in sec) should worker sleep before next connection try (when it cannot connect to ccm)
   		{worker_sleep_time, 60},
-  		{ccm_nodes, ['node1@127.0.0.1']}]}
+  		%% List of ccm possible ccm nodes
+  		{ccm_nodes, ['node1@127.0.0.1']}
+  		]}
  ]}.

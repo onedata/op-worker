@@ -45,6 +45,9 @@ Documentation is generated automatically using edoc so it should use tags define
 * compilation & creation of release
     * 'rebar compile generate'
     * 'make generate'
+* compilation & creation of release for ccm
+    * 'rebar compile generate overlay_vars=vars/ccm_node_vars.config'
+    * 'make generate_ccm'
 * generates documentation
     * 'rebar doc'
     * 'make docs'
