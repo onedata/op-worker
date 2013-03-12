@@ -5,12 +5,12 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module tests the functionality of node_manager.
+%% @doc: This module tests the functionality of cluster_manager.
 %% It contains unit tests that base on eunit.
 %% @end
 %% ===================================================================
 
--module(node_manager_tests).
+-module(cluster_manager_tests).
 -include("registered_names.hrl").
 
 -ifdef(TEST).
@@ -19,21 +19,19 @@
 
 -ifdef(TEST).
 
-type1_test() -> 
-	{ok, _NodeType} = application:get_env(?APP_Name, node_type).
+env_test() ->
+	{ok, _InitTime} = application:get_env(?APP_Name, initialization_time).
 
-type2_test() ->
-	application:set_env(?APP_Name, node_type, worker), 
-	ok = application:start(?APP_Name),
-	NodeType = gen_server:call(node_manager, getNodeType),
-	?assert(NodeType =:= worker),
-	ok = application:stop(?APP_Name).
-
-type3_test() -> 
+nodes_counting_test() ->
 	application:set_env(?APP_Name, node_type, ccm), 
 	ok = application:start(?APP_Name),
-	NodeType = gen_server:call({global, ?CCM}, getNodeType),
-	?assert(NodeType =:= ccm),
+
+	Nodes = [n1, n2, n3],
+	lists:foreach(fun(Node) -> gen_server:call({global, ?CCM}, {node_is_up, Node}) end, Nodes),
+	Nodes2 = gen_server:call({global, ?CCM}, getNodes),
+	?assert(length(Nodes) == length(Nodes2)),
+	lists:foreach(fun(Node) -> ?assert(lists:member(Node, Nodes2)) end, Nodes),
+
 	ok = application:stop(?APP_Name).
 
 -endif.
