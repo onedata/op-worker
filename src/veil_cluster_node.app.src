@@ -27,6 +27,6 @@
   		%% How long (in sec) should worker sleep before next connection try (when it cannot connect to ccm)
   		{worker_sleep_time, 60},
   		%% List of ccm possible ccm nodes
-  		{ccm_nodes, ['node1@127.0.0.1']}
+  		{ccm_nodes, [node1@localhost]}
   		]}
  ]}.

@@ -85,10 +85,14 @@ init_net_connection([]) ->
 	error;
 
 init_net_connection([Node | Nodes]) ->
-	Ans = net_adm:ping(Node),
-	case Ans of
-		pong -> ok;
-		pang -> init_net_connection(Nodes)
+	try
+		Ans = net_adm:ping(Node),
+		case Ans of
+			pong -> ok;
+			pang -> init_net_connection(Nodes)
+		end
+	catch
+		_:_ -> error
 	end.
 
 register() ->
