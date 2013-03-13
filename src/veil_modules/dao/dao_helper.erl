@@ -19,6 +19,7 @@
 -import(dao_hosts, [call/2]).
 
 %% API
+-export([name/1]).
 -export([list_dbs/0, list_dbs/1, get_db_info/1, get_doc_count/1, create_db/1, create_db/2]).
 -export([delete_db/1, delete_db/2, open_doc/2, open_doc/3, insert_doc/2, insert_doc/3, delete_doc/2, delete_docs/2]).
 -export([insert_docs/2, insert_docs/3]).
@@ -114,7 +115,10 @@ create_db(DbName) ->
       Option :: atom() | {atom(), term()}.
 %% ====================================================================
 create_db(DbName, Opts) ->
-    normalize_return_term(call(create_db, [name(DbName), Opts])).
+    case normalize_return_term(call(create_db, [name(DbName), Opts])) of
+        {error, file_exists} -> ok;
+        Other -> Other
+    end.
 
 %% delete_db/1
 %% ====================================================================
@@ -219,19 +223,23 @@ delete_docs(DbName, DocIDs) ->
     [delete_doc(DbName, X) || X <- DocIDs].
 
 
-%% ===================================================================
-%% Internal functions
-%% ===================================================================
-
 name(Name) when is_list(Name) ->
     ?l2b(Name);
 name(Name) when is_binary(Name) ->
     Name.
 
+
+%% ===================================================================
+%% Internal functions
+%% ===================================================================
+
+
 normalize_return_term(Term) ->
     case Term of
         ok -> ok;
+        accepted -> ok;
         {ok, Response} -> {ok, Response};
+        {accepted, Response} -> {ok, Response};
         {_,{'EXIT',{Error2, _}}} -> {error, {exit_error, Error2}};
         {_,{'EXIT',Error1}} -> {error, {exit, Error1}};
         {error, Error3} -> {error, Error3};

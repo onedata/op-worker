@@ -13,6 +13,7 @@
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("veil_modules/dao/dao.hrl").
 -endif.
 
 -ifdef(TEST).
@@ -24,8 +25,14 @@ init() ->
     ?assert(dao:init([]) =:= ok).
 
 handle() ->
-    {error, _Resp} = dao:handle(1, {helper, test, []}),
-    {error, _Resp} = dao:handle(1, {test, []}).
+    ?assertNot({error, wrong_args} =:= dao:handle(1, {helper, test, []})),
+    ?assertNot({error, wrong_args} =:= dao:handle(1, {hosts, test, []})),
+    ?assertNot({error, wrong_args} =:= dao:handle(1, {test, []})),
+    ?assert({error, wrong_args} =:= dao:handle(1, {wrong, test, []})).
+
+save_record_test() ->
+    ?assertException(throw, unsupported_record, dao:save_record(whatever, {a, b, c})),
+    ?assertException(throw, invalid_record, dao:save_record(whatever, {some_record, a, c})).
 
 cleanUp() ->
     ok = dao:cleanUp().
