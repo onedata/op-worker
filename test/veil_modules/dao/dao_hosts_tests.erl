@@ -40,7 +40,11 @@ call_test_() ->
         _ -> ok
     end,
     {setup, local, fun start_link/0, fun cleanUp/1,
-     [fun call/0]}.
+     [fun call/0, fun ping/0]}.
+
+ping() ->
+    pang = dao_hosts:ping('test@host1.lan', 50),
+    pong = dao_hosts:ping(node(), 50).
 
 insert_hosts() ->
     ok = dao_hosts:insert('test@host1.lan'),
@@ -86,6 +90,7 @@ get_host() ->
     Db2 = dao_hosts:get_host().
 
 call() ->
+    delete_hosts(),
     ok = dao_hosts:insert('test@host1.lan'),
     ok = dao_hosts:insert('test@host2.lan'),
     {error, rpc_retry_limit_exceeded} = dao_hosts:call(?MODULE, call_resp, []),

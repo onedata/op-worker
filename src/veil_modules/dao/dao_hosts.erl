@@ -12,16 +12,11 @@
 -behaviour(supervisor).
 
 -include_lib("veil_modules/dao/common.hrl").
+-include_lib("veil_modules/dao/dao_hosts.hrl").
 
 -ifdef(TEST).
 -compile([export_all]).
 -endif.
-
-%% Config
--define(DAO_DB_HOSTS_REFRESH_INTERVAL, 60 * 60 * 1000). % 1h
--define(RPC_MAX_RETRIES, 5).
--define(DEFAULT_BAN_TIME, 5 * 60 * 1000). % 5min
-
 
 %% API
 -export([start_link/0, start_link/1, insert/1, delete/1, ban/1, ban/2, reactivate/1, call/2, call/3]).
@@ -246,7 +241,9 @@ registered(Host) ->
 %% ====================================================================
 update_hosts(_State, TimeDiff) when TimeDiff > ?DAO_DB_HOSTS_REFRESH_INTERVAL ->
     ets:delete_all_objects(db_host_store),
-    ets:insert(db_host_store, {host, 'bc@RoXeon-Laptop.lan'}),
+    ets:insert(db_host_store, {host, 'bc@ubuntu-1.lan'}),
+    ets:insert(db_host_store, {host, 'bc@ubuntu-2.lan'}),
+    ets:insert(db_host_store, {host, 'bc@ubuntu-3.lan'}),
     erlang:now();
 update_hosts(State, _TimeDiff) ->
     State.
@@ -317,14 +314,33 @@ store_exec(Msg) ->
 %% ====================================================================
 call(Module, Method, Args, Attempt) when Attempt < ?RPC_MAX_RETRIES ->
     Host = get_host(),
-    case rpc:call(Host, Module, Method, Args) of
-        {badrpc, nodedown} ->
-            ban(Host),
-            call(Module, Method, Args, Attempt + 1);
-        {badrpc, Error} ->
-            {error, Error};
-        Other ->
-            Other
+    case ping(Host, ?NODE_DOWN_TIMEOUT) of
+        pang -> ban(Host), call(Module, Method, Args, Attempt + 1);
+        pong ->
+            case rpc:call(Host, Module, Method, Args) of
+                {badrpc, nodedown} ->
+                    ban(Host),
+                    call(Module, Method, Args, Attempt + 1);
+                {badrpc, Error} ->
+                    {error, Error};
+                Other ->
+                    Other
+            end
     end;
 call(_Module, _Method, _Args, _Attempt) ->
     {error, rpc_retry_limit_exceeded}.
+
+
+%% ping/2
+%% ====================================================================
+%% @doc Same as net_adm:ping/1, but with Timeout
+-spec ping(Host :: atom(), Timeout :: non_neg_integer()) -> pong | pang.
+%% ====================================================================
+ping(Host, Timeout) ->
+    Me = self(),
+    Pid = spawn(fun() -> Me ! {self(), {ping_res, net_adm:ping(Host)}} end ),
+    receive
+        {Pid, {ping_res, Res}} -> Res
+    after Timeout ->
+        pang
+    end.

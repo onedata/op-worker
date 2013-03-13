@@ -9,9 +9,9 @@
 %% @end
 %% ===================================================================
 
+%% Macros
 -define(SEED, random:seed(erlang:now())).
 -define(RND(N), random:uniform(N)).
-
 -define(CHILD(I, Type), {I, {I, start_link, [[]]}, transient, 5000, Type, [I]}).
 
 -ifdef(TEST).

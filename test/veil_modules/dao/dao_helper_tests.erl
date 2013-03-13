@@ -25,7 +25,22 @@ name_test() ->
     <<"test">> = dao_helper:name("test"),
     <<"test">> = dao_helper:name(<<"test">>).
 
-init() ->
+normalizer_test() ->
+    case node() of
+        nonode@nohost ->
+            {ok, _Pid} = net_kernel:start([master, longnames]);
+        _ -> ok
+    end,
+    ok = dao_helper:normalize_return_term(ok),
+    {error, err} = dao_helper:normalize_return_term(err),
+    {error, err} = dao_helper:normalize_return_term({error, err}),
+    {ok, "ret"} = dao_helper:normalize_return_term({ok, "ret"}),
+    {error, {exit, ret}} = dao_helper:normalize_return_term(rpc:call(node(), erlang, exit, [ret])),
+    {error, {exit_error, ret}} = dao_helper:normalize_return_term(rpc:call(node(), erlang, error, [ret])),
+    net_kernel:stop().
+
+
+    init() ->
     put(db_host, undefined),
     Pid = spawn(dao_hosts, init, []),
     register(db_host_store_proc, Pid),
