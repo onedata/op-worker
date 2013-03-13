@@ -61,11 +61,11 @@ handle(_ProtocolVersion, {Target, Method, Args}) when
       is_atom(Method), is_list(Args), Target == helper;
       is_atom(Method), is_list(Args), Target == hosts ->
     Module =
-    case Target of
-        dao -> dao;
-        helper -> dao_helper;
-        hosts -> dao_hosts
-    end,
+        case Target of
+            dao -> dao;
+            helper -> dao_helper;
+            hosts -> dao_hosts
+        end,
     try apply(Module, Method, Args) of
         {error, Err} -> {error, Err};
         {ok, Response} -> {ok, Response}
@@ -99,35 +99,36 @@ cleanUp() ->
 %% ====================================================================
 %% @doc Saves record Rec to db with ID = Id. Should not be used directly, use handle/2 instead.
 -spec save_record(Id :: atom(), Rec :: tuple()) ->
-    ok |
-    no_return(). % erlang:error(any()) | throw(any())
+			 ok |
+			 no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 save_record(Id, Rec) when is_tuple(Rec), is_atom(Id) ->
     Size = tuple_size(Rec),
     RecName = atom_to_list(element(1, Rec)),
     Fields =
-    case ?dao_record_info(element(1, Rec)) of
-        {RecSize, Flds} when RecSize =:= Size, is_list(Flds) -> Flds;
-        {error, E} -> throw(E);
-        _ -> throw(invalid_record)
-    end,
+        case ?dao_record_info(element(1, Rec)) of
+            {RecSize, Flds} when RecSize =:= Size, is_list(Flds) -> Flds;
+            {error, E} -> throw(E);
+            _ -> throw(invalid_record)
+        end,
     ensure_db_exists(?SYSTEM_DB_NAME),
     DocName = ?RECORD_INSTANCES_DOC_PREFIX ++ RecName,
     RecData =
-    case dao_helper:open_doc(?SYSTEM_DB_NAME, DocName) of
-        {ok, Doc} -> Doc;
-        {error, {not_found, _}} ->
-            NewDoc = #doc{id = name(DocName), body = {[{<<"instances">>, []}]}},
-            {ok, _Rev} = dao_helper:insert_doc(?SYSTEM_DB_NAME, NewDoc),
-            {ok, Doc} = dao_helper:open_doc(?SYSTEM_DB_NAME, DocName),
-            Doc;
-        {error, E1} -> throw(E1)
-    end,
-    {[{<<"instances">>, Instances} | DocFields]} = RecData#doc.body,  % <<"instances">> field has to be first field in document !
+        case dao_helper:open_doc(?SYSTEM_DB_NAME, DocName) of
+            {ok, Doc} -> Doc;
+            {error, {not_found, _}} ->
+                NewDoc = #doc{id = name(DocName), body = {[{<<"instances">>, []}]}},
+                {ok, _Rev} = dao_helper:insert_doc(?SYSTEM_DB_NAME, NewDoc),
+                {ok, Doc} = dao_helper:open_doc(?SYSTEM_DB_NAME, DocName),
+                Doc;
+            {error, E1} -> throw(E1)
+        end,
+    {[{<<"instances">>, Instances} | DocFields]} = RecData#doc.body, % <<"instances">> field has to be first field in document !
     [_ | FValues] = tuple_to_list(Rec),
     RecFields = [{list_to_binary(atom_to_list(X)), term_to_binary(Y)} || {X, Y} <- lists:zip(Fields, FValues)],
     Instance = {[{<<"ID">>, list_to_binary(atom_to_list(Id))}, {<<"fields">>, {RecFields}}]},
-    NewDoc1 = RecData#doc{body = {[{<<"instances">>, [Instance | Instances]} | DocFields]}},
+    NewInstances = [{X} || {X} <- Instances, list_to_binary(atom_to_list(Id)) =/= element(2, lists:nth(1, X))],
+    NewDoc1 = RecData#doc{body = {[{<<"instances">>, [Instance | NewInstances]} | DocFields]}},
     {ok, _Rev1} = dao_helper:insert_doc(?SYSTEM_DB_NAME, NewDoc1),
     ok.
 
@@ -140,8 +141,8 @@ save_record(Id, Rec) when is_tuple(Rec), is_atom(Id) ->
 %% ====================================================================
 %% @doc Creates DbName if not exists
 -spec ensure_db_exists(DbName :: string()) ->
-    ok |
-    no_return(). % erlang:error({badmatch, any()})
+			      ok |
+			      no_return(). % erlang:error({badmatch, any()})
 %% ====================================================================
 ensure_db_exists(DbName) ->
     ok = dao_helper:create_db(DbName).
