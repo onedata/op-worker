@@ -123,7 +123,7 @@ save_record(Id, Rec) when is_tuple(Rec), is_atom(Id) ->
                 Doc;
             {error, E1} -> throw(E1)
         end,
-    Instances = [ X || X <- dao_json:get_field(RecData, "instances"), is_binary(dao_json:get_field(X, "_ID_")) ,dao_json:mk_str(dao_json:get_field(X, "_ID_")) =/= dao_json:mk_str(Id)],
+    Instances = [X || X <- dao_json:get_field(RecData, "instances"), is_binary(dao_json:get_field(X, "_ID_")), dao_json:mk_str(dao_json:get_field(X, "_ID_")) =/= dao_json:mk_str(Id)],
     [_ | FValues] = [dao_json:mk_bin(X) || X <- tuple_to_list(Rec)],
     NewInstance = dao_json:mk_fields(dao_json:mk_obj(), ["_ID_" | Fields], [dao_json:mk_str(Id) | FValues]),
     NewInstances = [NewInstance | Instances],

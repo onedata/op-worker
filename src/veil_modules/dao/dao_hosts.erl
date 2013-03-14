@@ -338,9 +338,9 @@ call(_Module, _Method, _Args, _Attempt) ->
 %% ====================================================================
 ping(Host, Timeout) ->
     Me = self(),
-    Pid = spawn(fun() -> Me ! {self(), {ping_res, net_adm:ping(Host)}} end ),
+    Pid = spawn(fun() -> Me ! {self(), {ping_res, net_adm:ping(Host)}} end),
     receive
         {Pid, {ping_res, Res}} -> Res
     after Timeout ->
-        pang
+	    pang
     end.

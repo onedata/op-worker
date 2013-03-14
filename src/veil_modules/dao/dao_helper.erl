@@ -79,15 +79,15 @@ get_doc_count(DbName) ->
 %% ====================================================================
 %% @doc Returns db info for the given DbName
 -spec get_db_info(DbName :: string()) ->
-                         {ok, [
-                               {instance_start_time, binary()} |
-                               {doc_count, non_neg_integer()} |
-                               {doc_del_count, non_neg_integer()} |
-                               {purge_seq, non_neg_integer()} |
-                               {compact_running, boolean()} |
-                               {disk_size, non_neg_integer()} |
-                               {disk_format_version, pos_integer()}
-                              ]} | {error, database_does_not_exist} | {error, term()}.
+			 {ok, [
+			       {instance_start_time, binary()} |
+			       {doc_count, non_neg_integer()} |
+			       {doc_del_count, non_neg_integer()} |
+			       {purge_seq, non_neg_integer()} |
+			       {compact_running, boolean()} |
+			       {disk_size, non_neg_integer()} |
+			       {disk_format_version, pos_integer()}
+			      ]} | {error, database_does_not_exist} | {error, term()}.
 %% ====================================================================
 get_db_info(DbName) ->
     case normalize_return_term(call(get_db_info, [name(DbName)])) of
@@ -172,7 +172,7 @@ insert_doc(DbName, Doc) ->
 %% ====================================================================
 %% @doc Inserts doc to db
 -spec insert_doc(DbName :: string(), Doc :: #doc{}, Opts :: [Option]) -> {ok, {RevNum :: non_neg_integer(), RevBin :: binary()}} | {error, conflict} | {error, term()} when
-    Option :: atom() | {atom(), term()}.
+      Option :: atom() | {atom(), term()}.
 %% ====================================================================
 insert_doc(DbName, Doc, Opts) ->
     normalize_return_term(call(update_doc, [name(DbName), Doc, Opts])).
@@ -190,7 +190,7 @@ insert_docs(DbName, Docs) ->
 %% ====================================================================
 %% @doc Inserts list of docs to db
 -spec insert_docs(DbName :: string(), [Doc :: #doc{}], Opts :: [Option]) -> {ok, term()} | {error, term()} when
-    Option :: atom() | {atom(), term()}.
+      Option :: atom() | {atom(), term()}.
 %% ====================================================================
 insert_docs(DbName, Docs, Opts) ->
     normalize_return_term(call(update_docs, [name(DbName), Docs, Opts])).
@@ -214,7 +214,7 @@ delete_doc(DbName, DocID) ->
     end.
 
 
-%% delete_docs
+%% delete_docs/2
 %% ====================================================================
 %% @doc Deletes list of docs from db
 -spec delete_docs(DbName :: string(), [DocID :: string()]) -> [ok | {error, term()}].
@@ -222,6 +222,12 @@ delete_doc(DbName, DocID) ->
 delete_docs(DbName, DocIDs) ->
     [delete_doc(DbName, X) || X <- DocIDs].
 
+
+%% name/1
+%% ====================================================================
+%% @doc Converts string/atom to binary
+-spec name(Name :: string() | atom()) -> binary().
+%% ====================================================================
 name(Name) when is_atom(Name) ->
     name(atom_to_list(Name));
 name(Name) when is_list(Name) ->
@@ -241,8 +247,8 @@ normalize_return_term(Term) ->
         accepted -> ok;
         {ok, Response} -> {ok, Response};
         {accepted, Response} -> {ok, Response};
-        {_,{'EXIT',{Error2, _}}} -> {error, {exit_error, Error2}};
-        {_,{'EXIT',Error1}} -> {error, {exit, Error1}};
+        {_, {'EXIT', {Error2, _}}} -> {error, {exit_error, Error2}};
+        {_, {'EXIT', Error1}} -> {error, {exit, Error1}};
         {error, Error3} -> {error, Error3};
         Other -> {error, Other}
     end.
