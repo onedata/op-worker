@@ -36,7 +36,7 @@ mk_doc(Id) ->
 %% mk_str/1
 %% ====================================================================
 %% @doc Converts given string to binary form used by BigCouch/CouchDB
--spec mk_str(Str :: string()) -> binary().
+-spec mk_str(Str :: string() | atom()) -> binary().
 %% ====================================================================
 mk_str(Str) ->
     name(Str).

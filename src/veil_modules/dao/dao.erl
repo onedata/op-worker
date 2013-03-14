@@ -117,18 +117,17 @@ save_record(Id, Rec) when is_tuple(Rec), is_atom(Id) ->
         case dao_helper:open_doc(?SYSTEM_DB_NAME, DocName) of
             {ok, Doc} -> Doc;
             {error, {not_found, _}} ->
-                NewDoc = #doc{id = name(DocName), body = {[{<<"instances">>, []}]}},
+                NewDoc = dao_json:mk_field(dao_json:mk_doc(DocName), "instances", []),
                 {ok, _Rev} = dao_helper:insert_doc(?SYSTEM_DB_NAME, NewDoc),
                 {ok, Doc} = dao_helper:open_doc(?SYSTEM_DB_NAME, DocName),
                 Doc;
             {error, E1} -> throw(E1)
         end,
-    {[{<<"instances">>, Instances} | DocFields]} = RecData#doc.body, % <<"instances">> field has to be first field in document !
-    [_ | FValues] = tuple_to_list(Rec),
-    RecFields = [{list_to_binary(atom_to_list(X)), term_to_binary(Y)} || {X, Y} <- lists:zip(Fields, FValues)],
-    Instance = {[{<<"ID">>, list_to_binary(atom_to_list(Id))}, {<<"fields">>, {RecFields}}]},
-    NewInstances = [{X} || {X} <- Instances, list_to_binary(atom_to_list(Id)) =/= element(2, lists:nth(1, X))],
-    NewDoc1 = RecData#doc{body = {[{<<"instances">>, [Instance | NewInstances]} | DocFields]}},
+    Instances = [ X || X <- dao_json:get_field(RecData, "instances"), is_binary(dao_json:get_field(X, "_ID_")) ,dao_json:mk_str(dao_json:get_field(X, "_ID_")) =/= dao_json:mk_str(Id)],
+    [_ | FValues] = [dao_json:mk_bin(X) || X <- tuple_to_list(Rec)],
+    NewInstance = dao_json:mk_fields(dao_json:mk_obj(), ["_ID_" | Fields], [dao_json:mk_str(Id) | FValues]),
+    NewInstances = [NewInstance | Instances],
+    NewDoc1 = dao_json:mk_field(RecData, "instances", NewInstances),
     {ok, _Rev1} = dao_helper:insert_doc(?SYSTEM_DB_NAME, NewDoc1),
     {ok, saved}.
 

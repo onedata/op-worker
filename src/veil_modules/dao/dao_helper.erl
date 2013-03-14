@@ -222,7 +222,8 @@ delete_doc(DbName, DocID) ->
 delete_docs(DbName, DocIDs) ->
     [delete_doc(DbName, X) || X <- DocIDs].
 
-
+name(Name) when is_atom(Name) ->
+    name(atom_to_list(Name));
 name(Name) when is_list(Name) ->
     ?l2b(Name);
 name(Name) when is_binary(Name) ->

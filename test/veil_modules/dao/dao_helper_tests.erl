@@ -23,7 +23,8 @@ main_test_() ->
 
 name_test() ->
     <<"test">> = dao_helper:name("test"),
-    <<"test">> = dao_helper:name(<<"test">>).
+    <<"test">> = dao_helper:name(<<"test">>),
+    <<"test">> = dao_helper:name(test).
 
 normalizer_test() ->
     case node() of

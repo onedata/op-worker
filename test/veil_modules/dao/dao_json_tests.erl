@@ -27,7 +27,8 @@ mk_obj_test() ->
     {[]} = dao_json:mk_obj().
 
 mk_str_test() ->
-    <<"test">> = dao_json:mk_str("test").
+    <<"test">> = dao_json:mk_str("test"),
+    <<"test">> = dao_json:mk_str(test).
 
 mk_bin_test() ->
     T = dao_json:mk_bin({test, 1, ["test", 2.0]}),
