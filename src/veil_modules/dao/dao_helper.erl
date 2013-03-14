@@ -12,6 +12,8 @@
 
 -include_lib("veil_modules/dao/couch_db.hrl").
 
+-define(ADMIN_USER_CTX, {user_ctx, #user_ctx{roles = [<<"_admin">>]}}).
+
 -ifdef(TEST).
 -compile([export_all]).
 -endif.
@@ -22,9 +24,9 @@
 -export([name/1]).
 -export([list_dbs/0, list_dbs/1, get_db_info/1, get_doc_count/1, create_db/1, create_db/2]).
 -export([delete_db/1, delete_db/2, open_doc/2, open_doc/3, insert_doc/2, insert_doc/3, delete_doc/2, delete_docs/2]).
--export([insert_docs/2, insert_docs/3]).
+-export([insert_docs/2, insert_docs/3, create_view/5]).
 
-%% TODO:
+%% TODO ?
 %% % DBs
 %% -export([set_revs_limit/3,
 %%     set_security/3, get_revs_limit/1, get_security/1, get_security/2]).
@@ -37,11 +39,14 @@
 %%     get_view_group_info/2]).
 %%
 %% % miscellany
-%% -export([design_docs/1, reset_validation_funs/1, cleanup_index_files/0,
-%%     cleanup_index_files/1]).
+%% -export([design_docs/1]).
 
 %% ===================================================================
 %% API functions
+%% ===================================================================
+
+%% ===================================================================
+%% DB Management
 %% ===================================================================
 
 %% list_dbs/0
@@ -141,6 +146,10 @@ delete_db(DbName, Opts) ->
     end.
 
 
+%% ===================================================================
+%% Documents Management
+%% ===================================================================
+
 %% open_doc/2
 %% ====================================================================
 %% @doc Returns document with a given DocID
@@ -221,6 +230,41 @@ delete_doc(DbName, DocID) ->
 %% ====================================================================
 delete_docs(DbName, DocIDs) ->
     [delete_doc(DbName, X) || X <- DocIDs].
+
+
+%% ===================================================================
+%% Views Management
+%% ===================================================================
+
+%% create_view/5
+%% ====================================================================
+%% @doc Creates view with given Map and Reduce function. When Reduce = "", reduce function won't be created
+-spec create_view(DbName :: string(), DesignName :: string(), ViewName :: string(), Map :: string(), Reduce :: string()) -> [ok | {error, term()}].
+%% ====================================================================
+create_view(DbName, Doc = #doc{}, ViewName, Map, Reduce) ->
+    {MapRd, MapRdValue} =
+        case Reduce of
+            "" -> {["map"], [dao_json:mk_str(Map)]};
+            _ -> {["map", "reduce"], [dao_json:mk_str(Map), dao_json:mk_str(Reduce)]}
+        end,
+    Doc1 = dao_json:mk_field(Doc, "language", dao_json:mk_str("javascript")),
+    Views =
+        case dao_json:get_field(Doc1, "views") of
+            {error, not_found} -> dao_json:mk_obj();
+            Other -> Other
+        end,
+    VField = dao_json:mk_field(Views, ViewName, dao_json:mk_fields(dao_json:mk_obj(), MapRd, MapRdValue)),
+    NewDoc = dao_json:mk_field(Doc1, "views", VField),
+    {ok, _} = insert_doc(DbName, NewDoc, [?ADMIN_USER_CTX]),
+    ok;
+create_view(DbName, DesignName, ViewName, Map, Reduce) ->
+    DsgName = ?DESIGN_DOC_PREFIX ++ DesignName,
+    case open_doc(DbName, DsgName) of
+        {error, {not_found, _}} ->
+            dao_json:mk_doc(DsgName);
+        {ok, Doc} -> create_view(DbName, Doc, ViewName, Map, Reduce);
+        Other -> Other
+    end.
 
 
 %% name/1
