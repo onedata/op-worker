@@ -130,7 +130,7 @@ save_record(Id, Rec) when is_tuple(Rec), is_atom(Id) ->
     NewInstances = [{X} || {X} <- Instances, list_to_binary(atom_to_list(Id)) =/= element(2, lists:nth(1, X))],
     NewDoc1 = RecData#doc{body = {[{<<"instances">>, [Instance | NewInstances]} | DocFields]}},
     {ok, _Rev1} = dao_helper:insert_doc(?SYSTEM_DB_NAME, NewDoc1),
-    ok.
+    {ok, saved}.
 
 %% ===================================================================
 %% Internal functions
