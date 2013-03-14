@@ -19,7 +19,7 @@
 -type json_field() :: {Name :: binary(), Value :: any()}.
 
 %% API
--export([mk_doc/1, mk_str/1, mk_obj/0, mk_bin/1, mk_field/3, mk_fields/3, rm_field/2, rm_fields/2, get_field/2]).
+-export([mk_doc/1, mk_str/1, mk_obj/0, mk_bin/1, mk_field/3, mk_fields/3, rm_field/2, rm_fields/2, get_field/2, get_fields/1]).
 
 %% ===================================================================
 %% API functions
@@ -123,6 +123,17 @@ get_field({Fields}, Name) ->
         [V] -> V;
         _ -> {error, invalid_object}
     end.
+
+%% get_fields/2
+%% ====================================================================
+%% @doc Returns field's values from given document or JSON object
+-spec get_fields(DocOrObj) -> [{FieldName :: string(), FieldValue :: any()}] | {error, not_found} | {error, invalid_object} when
+    DocOrObj :: #doc{} | json_object().
+%% ====================================================================
+get_fields(_Doc = #doc{body = Body}) ->
+    get_fields(Body);
+get_fields({Fields}) ->
+    [{binary_to_list(X), Value} || {X, Value} <- Fields].
 
 
 %% ===================================================================
