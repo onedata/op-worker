@@ -24,22 +24,7 @@
 -export([name/1]).
 -export([list_dbs/0, list_dbs/1, get_db_info/1, get_doc_count/1, create_db/1, create_db/2]).
 -export([delete_db/1, delete_db/2, open_doc/2, open_doc/3, insert_doc/2, insert_doc/3, delete_doc/2, delete_docs/2]).
--export([insert_docs/2, insert_docs/3, create_view/5]).
-
-%% TODO ?
-%% % DBs
-%% -export([set_revs_limit/3,
-%%     set_security/3, get_revs_limit/1, get_security/1, get_security/2]).
-%%
-%% % Documents
-%% -export([open_revs/4, get_missing_revs/2, get_missing_revs/3, att_receiver/2]).
-%%
-%% % Views
-%% -export([all_docs/4, changes/4, query_view/3, query_view/4, query_view/6,
-%%     get_view_group_info/2]).
-%%
-%% % miscellany
-%% -export([design_docs/1]).
+-export([insert_docs/2, insert_docs/3, create_view/5, query_view/3, query_view/4]).
 
 %% ===================================================================
 %% API functions
@@ -75,7 +60,7 @@ list_dbs(Prefix) ->
 -spec get_doc_count(DbName :: string()) -> {ok, non_neg_integer()} | {error, database_does_not_exist} | {error, term()}.
 %% ====================================================================
 get_doc_count(DbName) ->
-    case normalize_return_term(call(get_doc_count, [DbName])) of
+    case normalize_return_term(call(get_doc_count, [name(DbName)])) of
         {error, {exit_error, database_does_not_exist}} -> {error, database_does_not_exist};
         Other -> Other
     end.
@@ -84,15 +69,15 @@ get_doc_count(DbName) ->
 %% ====================================================================
 %% @doc Returns db info for the given DbName
 -spec get_db_info(DbName :: string()) ->
-			 {ok, [
-			       {instance_start_time, binary()} |
-			       {doc_count, non_neg_integer()} |
-			       {doc_del_count, non_neg_integer()} |
-			       {purge_seq, non_neg_integer()} |
-			       {compact_running, boolean()} |
-			       {disk_size, non_neg_integer()} |
-			       {disk_format_version, pos_integer()}
-			      ]} | {error, database_does_not_exist} | {error, term()}.
+    {ok, [
+    {instance_start_time, binary()} |
+    {doc_count, non_neg_integer()} |
+    {doc_del_count, non_neg_integer()} |
+    {purge_seq, non_neg_integer()} |
+    {compact_running, boolean()} |
+    {disk_size, non_neg_integer()} |
+    {disk_format_version, pos_integer()}
+    ]} | {error, database_does_not_exist} | {error, term()}.
 %% ====================================================================
 get_db_info(DbName) ->
     case normalize_return_term(call(get_db_info, [name(DbName)])) of
@@ -117,7 +102,7 @@ create_db(DbName) ->
 %% and how many nodes each doc is copied to respectively.
 %% @end
 -spec create_db(DbName :: string(), Opts :: [Option]) -> ok | {error, term()} when
-      Option :: atom() | {atom(), term()}.
+    Option :: atom() | {atom(), term()}.
 %% ====================================================================
 create_db(DbName, Opts) ->
     case normalize_return_term(call(create_db, [name(DbName), Opts])) of
@@ -137,7 +122,7 @@ delete_db(DbName) ->
 %% ====================================================================
 %% @doc Deletes db named DbName
 -spec delete_db(DbName :: string(), Opts :: [Option]) -> ok | {error, database_does_not_exist} | {error, term()} when
-      Option :: atom() | {atom(), term()}.
+    Option :: atom() | {atom(), term()}.
 %% ====================================================================
 delete_db(DbName, Opts) ->
     case normalize_return_term(call(delete_db, [name(DbName), Opts])) of
@@ -163,7 +148,7 @@ open_doc(DbName, DocID) ->
 %% ====================================================================
 %% @doc Returns document with a given DocID
 -spec open_doc(DbName :: string(), DocID :: string(), Opts :: [Option]) -> {ok, #doc{}} | {error, {not_found, missing | deleted}} | {error, term()} when
-      Option :: atom() | {atom(), term()}.
+    Option :: atom() | {atom(), term()}.
 %% ====================================================================
 open_doc(DbName, DocID, Opts) ->
     normalize_return_term(call(open_doc, [name(DbName), name(DocID), Opts])).
@@ -181,7 +166,7 @@ insert_doc(DbName, Doc) ->
 %% ====================================================================
 %% @doc Inserts doc to db
 -spec insert_doc(DbName :: string(), Doc :: #doc{}, Opts :: [Option]) -> {ok, {RevNum :: non_neg_integer(), RevBin :: binary()}} | {error, conflict} | {error, term()} when
-      Option :: atom() | {atom(), term()}.
+    Option :: atom() | {atom(), term()}.
 %% ====================================================================
 insert_doc(DbName, Doc, Opts) ->
     normalize_return_term(call(update_doc, [name(DbName), Doc, Opts])).
@@ -199,7 +184,7 @@ insert_docs(DbName, Docs) ->
 %% ====================================================================
 %% @doc Inserts list of docs to db
 -spec insert_docs(DbName :: string(), [Doc :: #doc{}], Opts :: [Option]) -> {ok, term()} | {error, term()} when
-      Option :: atom() | {atom(), term()}.
+    Option :: atom() | {atom(), term()}.
 %% ====================================================================
 insert_docs(DbName, Docs, Opts) ->
     normalize_return_term(call(update_docs, [name(DbName), Docs, Opts])).
@@ -208,7 +193,7 @@ insert_docs(DbName, Docs, Opts) ->
 %% delete_doc/2
 %% ====================================================================
 %% @doc Deletes doc from db
--spec delete_doc(DbName :: string(), DocID :: string()) -> ok | {error, term()}.
+-spec delete_doc(DbName :: string(), DocID :: string()) -> ok | {error, missing} | {error, deleted} | {error, term()}.
 %% ====================================================================
 delete_doc(DbName, DocID) ->
     case open_doc(DbName, DocID) of
@@ -255,17 +240,49 @@ create_view(DbName, Doc = #doc{}, ViewName, Map, Reduce) ->
         end,
     VField = dao_json:mk_field(Views, ViewName, dao_json:mk_fields(dao_json:mk_obj(), MapRd, MapRdValue)),
     NewDoc = dao_json:mk_field(Doc1, "views", VField),
-    {ok, _} = insert_doc(DbName, NewDoc, [?ADMIN_USER_CTX]),
-    ok;
+    case insert_doc(DbName, NewDoc, [?ADMIN_USER_CTX]) of
+        ok -> ok;
+        {ok, _} -> ok;
+        Other1 -> Other1
+    end;
 create_view(DbName, DesignName, ViewName, Map, Reduce) ->
     DsgName = ?DESIGN_DOC_PREFIX ++ DesignName,
     case open_doc(DbName, DsgName) of
         {error, {not_found, _}} ->
-            dao_json:mk_doc(DsgName);
+            create_view(DbName, dao_json:mk_doc(DsgName), ViewName, Map, Reduce);
         {ok, Doc} -> create_view(DbName, Doc, ViewName, Map, Reduce);
         Other -> Other
     end.
 
+
+%% query_view/3
+%% ====================================================================
+%% @doc Execute a given view with default set of arguments.
+%%      Check record #view_query_args for details.
+%% @end
+-spec query_view(DbName :: string(), DesignName :: string(), ViewName :: string()) -> {ok, QueryResult :: term()} | {error, term()}.
+%% ====================================================================
+query_view(DbName, DesignName, ViewName) ->
+    query_view(DbName, DesignName, ViewName, #view_query_args{view_type = map}).
+
+%% query_view/4
+%% ====================================================================
+%% @doc Execute a given view.
+%%      There are many additional query args that can be passed to a view,
+%%      see <a href="http://wiki.apache.org/couchdb/HTTP_view_API#Querying_Options">
+%%      query args</a> for details.
+%% @end
+-spec query_view(DbName :: string(), DesignName :: string(), ViewName :: string(), QueryArgs :: #view_query_args{}) ->
+    {ok, QueryResult :: term()} | {error, term()}.
+%% ====================================================================
+query_view(DbName, DesignName, ViewName, QueryArgs = #view_query_args{view_type = Type}) ->
+    QueryArgs1 =
+        case Type of
+            map -> QueryArgs;
+            reduce -> QueryArgs;
+            _ -> QueryArgs#view_query_args{view_type = map}
+        end,
+    normalize_return_term(call(query_view, [name(DbName), name(DesignName), name(ViewName), QueryArgs1])).
 
 %% name/1
 %% ====================================================================
@@ -284,7 +301,15 @@ name(Name) when is_binary(Name) ->
 %% Internal functions
 %% ===================================================================
 
-
+%% normalize_return_term/1
+%% ====================================================================
+%% @doc Normalizes BigCouch response Term to more readable format
+-spec normalize_return_term(Term :: term()) -> OK_Result | ErrorResult when
+    OK_Result :: ok | {ok, Response},
+    ErrorResult :: {error, Error} | {error, {exit, Error}} | {error, {exit_error, Error}},
+    Response :: term(),
+    Error :: term().
+%% ====================================================================
 normalize_return_term(Term) ->
     case Term of
         ok -> ok;

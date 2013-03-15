@@ -60,7 +60,7 @@ get_field_test() ->
     4 = dao_json:get_field(#doc{body = {[{<<"test">>, 1}, {<<"test2">>, 2}, {<<"test2">>, 3}, {<<"test3">>, 4}]}}, "test3").
 
 get_fields_test() ->
-    [{"test",1}, {"test2", 2}, {"test3", 4}] = dao_json:get_fields(#doc{body = {[{<<"test">>, 1}, {<<"test2">>, 2}, {<<"test3">>, 4}]}}).
+    [{"test", 1}, {"test2", 2}, {"test3", 4}] = dao_json:get_fields(#doc{body = {[{<<"test">>, 1}, {<<"test2">>, 2}, {<<"test3">>, 4}]}}).
 
 
 -endif.

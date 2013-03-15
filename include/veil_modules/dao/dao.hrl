@@ -10,7 +10,7 @@
 %% ===================================================================
 
 %% record definition used in record registration example
--record(some_record, {field1="", field2="", field3=""}).
+-record(some_record, {field1 = "", field2 = "", field3 = ""}).
 
 -define(record_info_gen(X), {record_info(size, X), record_info(fields, X)}).
 

@@ -5,7 +5,8 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module gives high level API for VeilFS database
+%% @doc: This module gives high level API for VeilFS database and
+%% worker_plugin_behaviour callbacks
 %% @end
 %% ===================================================================
 -module(dao).
@@ -34,8 +35,8 @@
 %% ====================================================================
 %% @doc worker_plugin_behaviour callback init/1
 -spec init(Args :: term()) -> Result when
-      Result :: ok | {error, Error},
-      Error :: term().
+    Result :: ok | {error, Error},
+    Error :: term().
 %% ====================================================================
 init(_Args) ->
     case dao_hosts:start_link() of
@@ -45,21 +46,24 @@ init(_Args) ->
         {error, _Err} = Ret -> Ret
     end.
 
-%% init/1
+%% handle/1
 %% ====================================================================
-%% @doc worker_plugin_behaviour callback init/1
+%% @doc worker_plugin_behaviour callback handle/1
+%% All {helper, Method, Args} requests executes Method in dao_helper module (low lvl DB API)
+%% All {hosts, Method, Args} requests executes Method in dao_hosts module (host management module)
+%% @end
 -spec handle(ProtocolVersion :: term(), Request) -> Result when
-      Request :: {Method, Args},
-      Method :: atom(),
-      Args :: list(),
-      Result :: {ok, Response} | {error, Error},
-      Response :: term(),
-      Error :: term().
+    Request :: {Method, Args} | {helper, Method, Args} | {hosts, Method, Args},
+    Method :: atom(),
+    Args :: list(),
+    Result :: {ok, Response} | {error, Error},
+    Response :: term(),
+    Error :: term().
 %% ====================================================================
 handle(_ProtocolVersion, {Target, Method, Args}) when
-      is_atom(Method), is_list(Args), Target == dao;
-      is_atom(Method), is_list(Args), Target == helper;
-      is_atom(Method), is_list(Args), Target == hosts ->
+    is_atom(Method), is_list(Args), Target == dao;
+    is_atom(Method), is_list(Args), Target == helper;
+    is_atom(Method), is_list(Args), Target == hosts ->
     Module =
         case Target of
             dao -> dao;
@@ -82,8 +86,8 @@ handle(_ProtocolVersion, _Request) ->
 %% ====================================================================
 %% @doc worker_plugin_behaviour callback cleanUp/0
 -spec cleanUp() -> Result when
-      Result :: ok | {error, Error},
-      Error :: timeout | term().
+    Result :: ok | {error, Error},
+    Error :: timeout | term().
 %% ====================================================================
 cleanUp() ->
     Pid = whereis(db_host_store_proc),
@@ -97,10 +101,10 @@ cleanUp() ->
 
 %% save_record/2
 %% ====================================================================
-%% @doc Saves record Rec to db with ID = Id. Should not be used directly, use handle/2 instead.
+%% @doc Saves record Rec to DB with ID = Id. Should not be used directly, use handle/2 instead.
 -spec save_record(Id :: atom(), Rec :: tuple()) ->
-			 ok |
-			 no_return(). % erlang:error(any()) | throw(any())
+    ok |
+    no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 save_record(Id, Rec) when is_tuple(Rec), is_atom(Id) ->
     Size = tuple_size(Rec),
@@ -140,8 +144,8 @@ save_record(Id, Rec) when is_tuple(Rec), is_atom(Id) ->
 %% after last record save, will get same value as in given record instance
 %% @end
 -spec get_record(Id :: atom(), RecordNameOrRecordTemplate :: atom() | tuple()) ->
-			Record :: tuple() |
-				  no_return(). % erlang:error(any()) | throw(any())
+    Record :: tuple() |
+    no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 get_record(Id, NewRecord) when is_atom(NewRecord) ->
     {RecSize, _Fields} =
@@ -177,7 +181,7 @@ get_record(Id, EmptyRecord) when is_tuple(EmptyRecord) ->
             _ -> throw(invalid_data)
         end,
     lists:foldl(fun({Name, Value}, Acc) ->
-			case string:str(SFields, [Name]) of 0 -> Acc; Poz -> setelement(1 + Poz, Acc, binary_to_term(Value)) end end, EmptyRecord, SavedFields).
+        case string:str(SFields, [Name]) of 0 -> Acc; Poz -> setelement(1 + Poz, Acc, binary_to_term(Value)) end end, EmptyRecord, SavedFields).
 
 
 %% remove_record/2
@@ -185,8 +189,8 @@ get_record(Id, EmptyRecord) when is_tuple(EmptyRecord) ->
 %% @doc Removes record with given Id an RecordName from DB
 %% @end
 -spec remove_record(Id :: atom(), RecordName :: atom()) ->
-			   ok |
-			   no_return(). % erlang:error(any()) | throw(any())
+    ok |
+    no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 remove_record(Id, RecName) when is_atom(RecName) ->
     ensure_db_exists(?SYSTEM_DB_NAME),
@@ -210,8 +214,8 @@ remove_record(Id, RecName) when is_atom(RecName) ->
 %% ====================================================================
 %% @doc Creates DbName if not exists
 -spec ensure_db_exists(DbName :: string()) ->
-			      ok |
-			      no_return(). % erlang:error({badmatch, any()})
+    ok |
+    no_return(). % erlang:error({badmatch, any()})
 %% ====================================================================
 ensure_db_exists(DbName) ->
     ok = dao_helper:create_db(DbName).

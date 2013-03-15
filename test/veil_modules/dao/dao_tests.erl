@@ -30,11 +30,22 @@ handle() ->
     ?assertNot({error, wrong_args} =:= dao:handle(1, {test, []})),
     ?assert({error, wrong_args} =:= dao:handle(1, {wrong, test, []})).
 
+cleanUp() ->
+    ok = dao:cleanUp().
+
 save_record_test() ->
     ?assertException(throw, unsupported_record, dao:save_record(whatever, {a, b, c})),
     ?assertException(throw, invalid_record, dao:save_record(whatever, {some_record, a, c})).
 
-cleanUp() ->
-    ok = dao:cleanUp().
+get_record_test() ->
+    ?assertException(throw, unsupported_record, dao:get_record(test, whatever)),
+    ?assertException(throw, unsupported_record, dao:get_record(test, {whatever, a, c})).
+
+ensure_db_exists_test() ->
+    meck:new(dao_helper),
+    meck:expect(dao_helper, create_db, fun(DbName) when DbName =:= "Name" -> ok; (_DbName) -> meck:exception(error, wrong_db_name) end),
+    dao:ensure_db_exists("Name"),
+    ?assert(meck:validate(dao_helper)),
+    meck:unload(dao_helper).
 
 -endif.

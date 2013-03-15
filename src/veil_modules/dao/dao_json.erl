@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: BigCouch document management module
+%% @doc: BigCouch document management module (very simple - BigCouch specific - JSON creator)
 %% @end
 %% ===================================================================
 -module(dao_json).
@@ -62,7 +62,7 @@ mk_bin(Term) ->
 %% ====================================================================
 %% @doc Inserts new field into given document or JSON object
 -spec mk_field(DocOrObj, Name :: string(), Value :: term()) -> DocOrObj when
-      DocOrObj :: #doc{} | json_object().
+    DocOrObj :: #doc{} | json_object().
 %% ====================================================================
 mk_field(Doc = #doc{body = Body}, Name, Value) ->
     Doc#doc{body = mk_field(Body, Name, Value)};
@@ -75,7 +75,7 @@ mk_field({Fields}, Name, Value) ->
 %% ====================================================================
 %% @doc Inserts new fields into given document or JSON object
 -spec mk_fields(DocOrObj, [Names :: string()], [Values :: term()]) -> DocOrObj when
-      DocOrObj :: #doc{} | json_object().
+    DocOrObj :: #doc{} | json_object().
 %% ====================================================================
 mk_fields(Doc = #doc{body = Body}, Names, Values) when is_list(Names), is_list(Values) ->
     Doc#doc{body = mk_fields(Body, Names, Values)};
@@ -88,7 +88,7 @@ mk_fields({Fields}, Names, Values) when is_list(Names), is_list(Values) ->
 %% ====================================================================
 %% @doc Removes field from given document or JSON object
 -spec rm_field(DocOrObj, Name :: string()) -> DocOrObj when
-      DocOrObj :: #doc{} | json_object().
+    DocOrObj :: #doc{} | json_object().
 %% ====================================================================
 rm_field(Doc = #doc{body = Body}, Name) ->
     Doc#doc{body = rm_field(Body, Name)};
@@ -100,7 +100,7 @@ rm_field({Fields}, Name) ->
 %% ====================================================================
 %% @doc Removes fields from given document or JSON object
 -spec rm_fields(DocOrObj, [Name :: string()]) -> DocOrObj when
-      DocOrObj :: #doc{} | json_object().
+    DocOrObj :: #doc{} | json_object().
 %% ====================================================================
 rm_fields(Doc = #doc{body = Body}, Names) when is_list(Names) ->
     Doc#doc{body = rm_fields(Body, Names)};
@@ -113,7 +113,7 @@ rm_fields({Fields}, Names) when is_list(Names) ->
 %% ====================================================================
 %% @doc Returns field's value from given document or JSON object
 -spec get_field(DocOrObj, Name :: string()) -> any() | {error, not_found} | {error, invalid_object} when
-      DocOrObj :: #doc{} | json_object().
+    DocOrObj :: #doc{} | json_object().
 %% ====================================================================
 get_field(_Doc = #doc{body = Body}, Name) ->
     get_field(Body, Name);
