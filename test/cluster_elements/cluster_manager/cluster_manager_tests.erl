@@ -20,18 +20,31 @@
 -ifdef(TEST).
 
 env_test() ->
-	{ok, _InitTime} = application:get_env(?APP_Name, initialization_time).
+	ok = application:start(?APP_Name),
+	{ok, _InitTime} = application:get_env(?APP_Name, initialization_time),
+	ok = application:stop(?APP_Name).
 
 nodes_counting_test() ->
+	net_kernel:start([node1, shortnames]),
+
 	application:set_env(?APP_Name, node_type, ccm), 
+	application:set_env(?APP_Name, ccm_nodes, [node()]), 
+
 	ok = application:start(?APP_Name),
 
 	Nodes = [n1, n2, n3],
 	lists:foreach(fun(Node) -> gen_server:call({global, ?CCM}, {node_is_up, Node}) end, Nodes),
 	Nodes2 = gen_server:call({global, ?CCM}, getNodes),
-	?assert(length(Nodes) == length(Nodes2)),
+	?assert(length(Nodes) + 1 == length(Nodes2)),
 	lists:foreach(fun(Node) -> ?assert(lists:member(Node, Nodes2)) end, Nodes),
-
-	ok = application:stop(?APP_Name).
+	?assert(lists:member(node(), Nodes2)),
+	
+	gen_server:call({global, ?CCM}, {node_is_up, n2}),
+	gen_server:call({global, ?CCM}, {node_is_up, n1}),
+	Nodes3 = gen_server:call({global, ?CCM}, getNodes),
+	?assert(length(Nodes) + 1 == length(Nodes3)),
+	
+	ok = application:stop(?APP_Name),
+	net_kernel:stop().
 
 -endif.

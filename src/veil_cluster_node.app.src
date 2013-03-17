@@ -12,7 +12,7 @@
 {application, veil_cluster_node,
  [
   {description, "Application starts node of VeilFS central cluster"},
-  {vsn, "0.0.1.vfs30"},
+  {vsn, "0.0.1.vfs14.48.50"},
   {registered, []},
   {applications, [
                   kernel,

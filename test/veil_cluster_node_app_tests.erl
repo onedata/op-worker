@@ -20,7 +20,19 @@
 
 -ifdef(TEST).
 
-type_test() -> 
+env_test() ->
+	ok = application:start(?APP_Name),
+	{ok, _Type} = application:get_env(?APP_Name, node_type),
+	ok = application:stop(?APP_Name).
+
+worker_test() -> 
+	application:set_env(?APP_Name, node_type, worker), 
+	ok = application:start(?APP_Name),
+    ?assertNot(undefined == whereis(veil_cluster_node_sup)),
+	ok = application:stop(?APP_Name).
+
+ccm_test() -> 
+	application:set_env(?APP_Name, node_type, ccm), 
 	ok = application:start(?APP_Name),
     ?assertNot(undefined == whereis(veil_cluster_node_sup)),
 	ok = application:stop(?APP_Name).
