@@ -12,7 +12,7 @@
 
 -module(veil_cluster_node_app_tests).
 
--define(APP_Name, veil_cluster_node).
+-include("registered_names.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -28,13 +28,13 @@ env_test() ->
 worker_test() -> 
 	application:set_env(?APP_Name, node_type, worker), 
 	ok = application:start(?APP_Name),
-    ?assertNot(undefined == whereis(veil_cluster_node_sup)),
+    ?assertNot(undefined == whereis(?Supervisor_Name)),
 	ok = application:stop(?APP_Name).
 
 ccm_test() -> 
 	application:set_env(?APP_Name, node_type, ccm), 
 	ok = application:start(?APP_Name),
-    ?assertNot(undefined == whereis(veil_cluster_node_sup)),
+    ?assertNot(undefined == whereis(?Supervisor_Name)),
 	ok = application:stop(?APP_Name).
 
 -endif.

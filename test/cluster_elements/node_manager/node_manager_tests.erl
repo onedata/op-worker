@@ -28,7 +28,7 @@ env_test() ->
 node_type_test() ->
 	{ok, NodeType} = application:get_env(?APP_Name, node_type),
 	ok = application:start(?APP_Name),
-	NodeType2 = gen_server:call(node_manager, getNodeType),
+	NodeType2 = gen_server:call(?Node_Manager_Name, getNodeType),
 	?assert(NodeType =:= NodeType2),
 	ok = application:stop(?APP_Name).
 
@@ -40,12 +40,12 @@ registration_test() ->
 
 	ok = application:start(?APP_Name),
 
-	Ccm_status = gen_server:call(node_manager, get_ccm_connection_status),
+	Ccm_status = gen_server:call(?Node_Manager_Name, get_ccm_connection_status),
 	?assert(Ccm_status =:= connected),
 	
 	application:set_env(?APP_Name, ccm_nodes, [not_existing_node]), 
-	ok = gen_server:cast(node_manager, reset_ccm_connection),
-	Ccm_status2 = gen_server:call(node_manager, get_ccm_connection_status),
+	ok = gen_server:cast(?Node_Manager_Name, reset_ccm_connection),
+	Ccm_status2 = gen_server:call(?Node_Manager_Name, get_ccm_connection_status),
 	?assert(Ccm_status2 =:= not_connected),
 
 	ok = application:stop(?APP_Name),

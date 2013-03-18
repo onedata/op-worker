@@ -13,6 +13,7 @@
 -behaviour(gen_server).
 -include("registered_names.hrl").
 -include("records.hrl").
+-include("supervision_macros.hrl").
 
 %% ====================================================================
 %% API
@@ -23,6 +24,13 @@
 %% gen_server callbacks
 %% ====================================================================
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
+
+%% ====================================================================
+%% Test API
+%% ====================================================================
+%%-ifdef(TEST).
+-export([start_worker/4, stop_worker/3]).
+%%-endif.
 
 %% ====================================================================
 %% API functions
@@ -90,8 +98,11 @@ handle_call({node_is_up, Node}, _From, State) ->
 handle_call(get_nodes, _From, State) ->
 	{reply, State#cm_state.nodes, State};
 
+handle_call(get_state, _From, State) ->
+	{reply, State, State};
+
 handle_call(_Request, _From, State) ->
-    {reply, wrong_type, State}.
+    {reply, wrong_request, State}.
 
 
 %% handle_cast/2
@@ -195,4 +206,38 @@ check_cluster_state(State) ->
 %% ====================================================================
 plan_next_cluster_state_check() ->
 	{ok, Interval} = application:get_env(veil_cluster_node, cluster_clontrol_period),
-	timer:apply_after(Interval * 1000, gen_server, cast, [node_manager, check_cluster_state]).
+	timer:apply_after(Interval * 1000, gen_server, cast, [{global, ?CCM}, check_cluster_state]).
+
+start_worker(Node, Module, WorkerArgs, State) ->
+	try
+		{ok, LoadMemorySize} = application:get_env(veil_cluster_node, worker_load_memory_size),
+		{ok, ChildPid} = supervisor:start_child({?Supervisor_Name, Node}, ?Sup_Child(Module, worker_host, transient, [Module, WorkerArgs, LoadMemorySize])),
+		Workers = State#cm_state.workers,
+		{ok, State#cm_state{workers = [{Node, Module, ChildPid} | Workers]}}
+	catch
+		_:_ -> {error, State}
+	end.
+
+stop_worker(Node, Module, State) ->
+	CreateNewWorkersList = fun({N, M, Child}, {Workers, ChosenChild}) ->
+		case {N, M} of
+			{Node, Module} -> {Workers, {N, Child}};
+			{_N2, _M2} -> {[{N, M, Child} | Workers], ChosenChild}
+		end
+	end,
+	Workers = State#cm_state.workers,
+	{NewWorkers, ChosenChild} = lists:foldl(CreateNewWorkersList, {[], non}, Workers),
+	Ans = case ChosenChild of
+		non -> child_does_not_exist;
+		{ChildNode, ChildId} -> 
+			Ans2 = supervisor:terminate_child({?Supervisor_Name, ChildNode}, Module),
+			case Ans2 of
+				ok -> Ans3 = supervisor:delete_child({?Supervisor_Name, ChildNode}, Module),
+					case Ans3 of
+						ok -> ok;
+						{error, _Error} -> delete_error
+					end;
+				{error, _Error} -> termination_error
+			end
+	end,
+	{Ans, State#cm_state{workers = NewWorkers}}.

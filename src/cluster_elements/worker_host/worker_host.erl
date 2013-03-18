@@ -87,7 +87,7 @@ handle_call(clearLoadInfo, _From, State) ->
     {reply, Reply, State#host_state{load_info = {[], [], 0, Max}}};
 
 handle_call(_Request, _From, State) ->
-    {reply, wrong_type, State}.
+    {reply, wrong_request, State}.
 
 %% handle_cast/2
 %% ====================================================================

@@ -12,6 +12,7 @@
 
 -module(cluster_manager_tests).
 -include("registered_names.hrl").
+-include("records.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -45,6 +46,27 @@ nodes_counting_test() ->
 	Nodes3 = gen_server:call({global, ?CCM}, get_nodes),
 	?assert(length(Nodes) + 1 == length(Nodes3)),
 	
+	ok = application:stop(?APP_Name),
+	net_kernel:stop().
+
+worker_start_stop_test() ->
+	net_kernel:start([node1, shortnames]),
+
+	application:set_env(?APP_Name, node_type, ccm), 
+	application:set_env(?APP_Name, ccm_nodes, [node()]), 
+
+	ok = application:start(?APP_Name),
+
+	State = gen_server:call({global, ?CCM}, get_state),
+	?assert(length(State#cm_state.workers) == 0),
+
+	Module = sample_plug_in,
+	{ok, NewState} = cluster_manager:start_worker(node(), Module, [], State),
+	?assert(length(NewState#cm_state.workers) == 1),
+
+	{ok, NewState2} = cluster_manager:stop_worker(node(), Module, NewState),
+	?assert(length(NewState2#cm_state.workers) == 0),
+
 	ok = application:stop(?APP_Name),
 	net_kernel:stop().
 

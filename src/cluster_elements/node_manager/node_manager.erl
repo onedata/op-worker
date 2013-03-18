@@ -49,7 +49,7 @@
 %% ====================================================================
 
 start_link(Type) ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [Type], []).
+    gen_server:start_link({local, ?Node_Manager_Name}, ?MODULE, [Type], []).
 
 %% init/1
 %% ====================================================================
@@ -189,7 +189,7 @@ init_connection(Conn_status) ->
 	case New_conn_status2 of
 		registered -> ok;
 		_Other3 -> {ok, Interval} = application:get_env(veil_cluster_node, worker_sleep_time),
-			timer:apply_after(Interval * 1000, gen_server, cast, [node_manager, init_ccm_connection])
+			timer:apply_after(Interval * 1000, gen_server, cast, [?Node_Manager_Name, init_ccm_connection])
 	end,
 	New_conn_status2.
 
