@@ -61,7 +61,7 @@ start_link(Type) ->
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 init([Type]) when Type =:= worker ; Type =:= ccm ->
-    {ok, #node_state{node_type = Type, ccm_con_status = init_connection(not_connected)}};
+    {ok, #node_state{node_type = Type, ccm_con_status = heart_beat(not_connected)}};
 
 init([_Type]) ->
 	{stop, wrong_type}.
@@ -108,11 +108,11 @@ handle_call(_Request, _From, State) ->
 	NewState :: term(),
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_cast(init_ccm_connection, State) ->
-	{noreply, State#node_state{ccm_con_status = init_connection(State#node_state.ccm_con_status)}};
+handle_cast(do_heart_beat, State) ->
+	{noreply, State#node_state{ccm_con_status = heart_beat(State#node_state.ccm_con_status)}};
 
 handle_cast(reset_ccm_connection, State) ->
-	{noreply, State#node_state{ccm_con_status = init_connection(not_connected)}};
+	{noreply, State#node_state{ccm_con_status = heart_beat(not_connected)}};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -161,14 +161,14 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %% ====================================================================
 
-%% init_connection/1
+%% heart_beat/1
 %% ====================================================================
-%% @doc Initializes connection with ccm. First it establishes network
-%% connection, next registers node in ccm.
--spec init_connection(Conn_status :: atom()) -> New_conn_status when
+%% @doc Connects with ccm and tells that the node is alive.
+%% First it establishes network connection, next sends message to ccm.
+-spec heart_beat(Conn_status :: atom()) -> New_conn_status when
 	New_conn_status ::  atom(). 
 %% ====================================================================
-init_connection(Conn_status) ->
+heart_beat(Conn_status) ->
 	New_conn_status = case Conn_status of
 		not_connected ->
 			{ok, CCM_Nodes} = application:get_env(veil_cluster_node, ccm_nodes),
@@ -179,16 +179,19 @@ init_connection(Conn_status) ->
 			end;
 		Other -> Other
 	end,
+
 	New_conn_status2 = case New_conn_status of
-		connected -> register();
-		_Other2 -> New_conn_status
+		connected -> heart_beat();
+		Other2 -> Other2
 	end,
+
+	{ok, Interval} = application:get_env(veil_cluster_node, heart_beat),
 	case New_conn_status2 of
-		registered -> ok;
-		_Other3 -> {ok, Interval} = application:get_env(veil_cluster_node, worker_sleep_time),
-			timer:apply_after(Interval * 1000, gen_server, cast, [?Node_Manager_Name, init_ccm_connection])
+		ok -> timer:apply_after(Interval * 1000, gen_server, cast, [?Node_Manager_Name, do_heart_beat]);
+		_Other3 -> timer:apply_after(Interval * 1000, gen_server, cast, [?Node_Manager_Name, reset_ccm_connection])
 	end,
-	New_conn_status2.
+
+	New_conn_status.
 
 %% init_net_connection/1
 %% ====================================================================
@@ -211,16 +214,16 @@ init_net_connection([Node | Nodes]) ->
 		_:_ -> error
 	end.
 
-%% register/0
+%% heart_beat/0
 %% ====================================================================
-%% @doc Registers node in ccm.
--spec register() -> Result when
+%% @doc Tells ccm that node is alive.
+-spec heart_beat() -> Result when
 	Result ::  atom(). 
 %% ====================================================================
-register() ->
+heart_beat() ->
 	case send_to_ccm({node_is_up, node()}) of
-		ok -> registered;
-		_Other -> connected
+		ok -> ok;
+		_Other -> heart_beat_error
 	end.
 
 %% send_to_ccm/1

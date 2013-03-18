@@ -21,7 +21,7 @@
 
 env_test() -> 
 	ok = application:start(?APP_Name),
-	{ok, _Time} = application:get_env(?APP_Name, worker_sleep_time),
+	{ok, _Time} = application:get_env(?APP_Name, heart_beat),
 	{ok, _Nodes} = application:get_env(?APP_Name, ccm_nodes),
 	ok = application:stop(?APP_Name).
 
@@ -32,7 +32,7 @@ node_type_test() ->
 	?assert(NodeType =:= NodeType2),
 	ok = application:stop(?APP_Name).
 
-registration_test() ->
+heart_beat_test() ->
 	net_kernel:start([node1, shortnames]),
 
 	application:set_env(?APP_Name, node_type, worker),
