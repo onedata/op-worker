@@ -9,11 +9,8 @@
 %% life cycle of node. It starts/stops appropriate services (according
 %% to node type) and communicates with ccm (if node works as worker).
 %%
-%% Node can be only ccm or worker. Node manager cannot work for both.
-%% However, second node of ccm will be usually unused (it works only
-%% when first node is down). To avoid wasting CPU cycles, two Erlang
-%% virtual machines should work at secondary ccm physical machine - 
-%% one for ccm and one for worker node.
+%% Node can be ccm or worker. However, worker_hosts can be also
+%% started at ccm nodes.
 %% @end
 %% ===================================================================
 

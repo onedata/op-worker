@@ -35,12 +35,12 @@ Release handling is done using 'releases' directory and 'reltool.config' file. T
 #### Documentation
 Documentation is generated automatically using edoc so it should use tags defined by it.
 
-#### Useful commands:
+#### Useful commands (they are alternatives - you can use rebar or make):
 * standard compilation:
     * 'rebar compile'
     * 'make compile'
 * compilation & execution of unit tests
-    * 'rebar compile eunit'
+    * 'rebar compile eunit ct skip_deps=true'
     * 'make test'
 * compilation & creation of release
     * 'rebar compile generate'

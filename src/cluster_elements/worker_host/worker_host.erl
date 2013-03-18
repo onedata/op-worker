@@ -81,6 +81,9 @@ handle_call(getLoadInfo, _From, State) ->
     Reply = loadInfo(State#host_state.load_info),
     {reply, Reply, State};
 
+handle_call(getFullLoadInfo, _From, State) ->
+    {reply, State#host_state.load_info, State};
+
 handle_call(clearLoadInfo, _From, State) ->
 	{_New, _Old, _NewListSize, Max} = State#host_state.load_info,
     Reply = ok,
@@ -185,8 +188,13 @@ procRequest(PlugIn, ProtocolVersion, Msg, MsgId, ReplyDisp) ->
 	
 	{Megaseconds2,Seconds2,Microseconds2} = os:timestamp(),
 	Time = 1000000*1000000*(Megaseconds2-Megaseconds) + 1000000*(Seconds2-Seconds) + Microseconds2-Microseconds,
-	gen_server:cast({local, PlugIn}, {progress_report, {{Megaseconds,Seconds,Microseconds}, Time}}),
-	ok.
+
+	try
+		gen_server:cast(PlugIn, {progress_report, {{Megaseconds,Seconds,Microseconds}, Time}}),
+		ok
+	catch
+		_:_ -> worker_host_error
+	end.
 
 %% saveProgress/2
 %% ====================================================================
@@ -213,9 +221,10 @@ loadInfo({New, Old, NewListSize, Max}) ->
 	Load = lists:sum(lists:map(fun({_Time, Load}) -> Load end, New)) + lists:sum(lists:map(fun({_Time, Load}) -> Load end, lists:sublist(Old, Max-NewListSize))),
 	{Time, _Load} = case {New, Old} of
 		{[], []} -> {os:timestamp(), []};
-		{[], _O} -> [H | _R] = Old,
-			H;
-		_L -> [H | _R] = New,
-			H
+		{_O, []} -> lists:last(New);
+		_L -> case NewListSize of
+			Max -> lists:last(New);
+			_S -> lists:nth(Max-NewListSize, Old)
+		end	
 	end,
 	{Time, Load}.
