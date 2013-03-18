@@ -131,16 +131,4 @@ cleanUp(Pid) ->
     Pid ! {self(), shutdown},
     receive {'DOWN', _Ref, process, Pid, normal} -> ok after 1000 -> error(timeout) end.
 
-
-%% start_node(Name) ->
-%%     [_, HostStr] = string:tokens(atom_to_list(node()), "@"),
-%%     Host = list_to_atom(HostStr),
-%%     Node =
-%%     case slave:start_link(Host, Name) of
-%%         {ok, N} -> N;
-%%         {error, {already_running, N}} -> N
-%%     end,
-%%     ?LOAD_TEST_NODE(Node),
-%%     Node.
-
 -endif.
