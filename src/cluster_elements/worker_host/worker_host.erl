@@ -163,6 +163,14 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %% ====================================================================
 
+%% procRequest/5
+%% ====================================================================
+%% @doc Processes client request using PlugIn:handle function. Afterwards,
+%% it sends the answer to dispatcher and logs info about processing time.
+-spec procRequest(PlugIn :: atom(), ProtocolVersion :: integer(), Msg :: term(), MsgId :: integer(), ReplyDisp :: term()) -> Result when
+	Result ::  atom(). 
+%% ====================================================================
+
 procRequest(PlugIn, ProtocolVersion, Msg, MsgId, ReplyDisp) ->
 	{Megaseconds,Seconds,Microseconds} = os:timestamp(),
 	Response = 	try
@@ -178,8 +186,16 @@ procRequest(PlugIn, ProtocolVersion, Msg, MsgId, ReplyDisp) ->
 	
 	{Megaseconds2,Seconds2,Microseconds2} = os:timestamp(),
 	Time = 1000000*1000000*(Megaseconds2-Megaseconds) + 1000000*(Seconds2-Seconds) + Microseconds2-Microseconds,
-	gen_server:cast({local, PlugIn}, {progress_report, {{Megaseconds,Seconds,Microseconds}, Time}}).
+	gen_server:cast({local, PlugIn}, {progress_report, {{Megaseconds,Seconds,Microseconds}, Time}}),
+	ok.
 
+%% saveProgress/2
+%% ====================================================================
+%% @doc Adds information about ended request to host memory (ccm uses
+%% it to control cluster load).
+-spec saveProgress(Report :: term(), LoadInfo :: term()) -> NewLoadInfo when
+	NewLoadInfo ::  term(). 
+%% ====================================================================
 saveProgress(Report, {New, Old, NewListSize, Max}) ->
 	case NewListSize + 1 of
 		Max ->
@@ -188,6 +204,12 @@ saveProgress(Report, {New, Old, NewListSize, Max}) ->
 			{[Report | New], Old, S, Max}
 	end.
 
+%% loadInfo/1
+%% ====================================================================
+%% @doc Provides averaged information about last requests.
+-spec loadInfo(LoadInfo :: term()) -> Result when
+	Result ::  term(). 
+%% ====================================================================
 loadInfo({New, Old, NewListSize, Max}) ->
 	Load = lists:sum(lists:map(fun({_Time, Load}) -> Load end, New)) + lists:sum(lists:map(fun({_Time, Load}) -> Load end, lists:sublist(Old, Max-NewListSize))),
 	{Time, _Load} = case {New, Old} of

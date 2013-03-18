@@ -164,6 +164,13 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %% ====================================================================
 
+%% init_connection/1
+%% ====================================================================
+%% @doc Initializes connection with ccm. First it establishes network
+%% connection, next registers node in ccm.
+-spec init_connection(Conn_status :: atom()) -> New_conn_status when
+	New_conn_status ::  atom(). 
+%% ====================================================================
 init_connection(Conn_status) ->
 	New_conn_status = case Conn_status of
 		not_connected ->
@@ -186,6 +193,13 @@ init_connection(Conn_status) ->
 	end,
 	New_conn_status2.
 
+%% init_net_connection/1
+%% ====================================================================
+%% @doc Initializes network connection with cluster that contains nodes
+%% given in argument.
+-spec init_net_connection(Nodes :: list()) -> Result when
+	Result ::  atom(). 
+%% ====================================================================
 init_net_connection([]) ->
 	error;
 
@@ -200,15 +214,28 @@ init_net_connection([Node | Nodes]) ->
 		_:_ -> error
 	end.
 
+%% register/0
+%% ====================================================================
+%% @doc Registers node in ccm.
+-spec register() -> Result when
+	Result ::  atom(). 
+%% ====================================================================
 register() ->
 	case send_to_ccm({node_is_up, node()}) of
 		ok -> registered;
 		_Other -> connected
 	end.
 
+%% send_to_ccm/1
+%% ====================================================================
+%% @doc Sends message to ccm.
+-spec send_to_ccm(Message :: term()) -> Result when
+	Result ::  atom(). 
+%% ====================================================================
 send_to_ccm(Message) ->
 	try
-		gen_server:call({global, ?CCM}, Message)
+		gen_server:call({global, ?CCM}, Message),
+		ok
 	catch
 		_:_ -> connection_error
 	end.

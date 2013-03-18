@@ -37,6 +37,7 @@ registration_test() ->
 
 	application:set_env(?APP_Name, node_type, worker),
 	application:set_env(?APP_Name, ccm_nodes, [not_existing_node, node()]), 
+
 	ok = application:start(?APP_Name),
 
 	Ccm_status = gen_server:call(node_manager, get_ccm_connection_status),

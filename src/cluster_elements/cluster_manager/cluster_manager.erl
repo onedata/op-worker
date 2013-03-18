@@ -60,7 +60,7 @@ start_link() ->
 %% ====================================================================
 init([]) ->
 	{ok, Interval} = application:get_env(veil_cluster_node, initialization_time),
-	timer:apply_after(Interval * 1000, gen_server, cast, [{global, ?CCM}, initCluster]),
+	timer:apply_after(Interval * 1000, gen_server, cast, [{global, ?CCM}, init_cluster]),
 	{ok, #cm_state{}}.
 
 %% handle_call/3
@@ -87,7 +87,7 @@ handle_call({node_is_up, Node}, _From, State) ->
 		false -> {reply, ok, State#cm_state{nodes = [Node | Nodes]}}
 	end;
 
-handle_call(getNodes, _From, State) ->
+handle_call(get_nodes, _From, State) ->
 	{reply, State#cm_state.nodes, State};
 
 handle_call(_Request, _From, State) ->
@@ -105,8 +105,12 @@ handle_call(_Request, _From, State) ->
 	NewState :: term(),
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_cast(initCluster, State) ->
-	NewState = initCluster(State),
+handle_cast(init_cluster, State) ->
+	NewState = init_cluster(State),
+	{noreply, NewState};
+
+handle_cast(check_cluster_state, State) ->
+	NewState = check_cluster_state(State),
 	{noreply, NewState};
 
 handle_cast(_Msg, State) ->
@@ -124,8 +128,8 @@ handle_cast(_Msg, State) ->
 	NewState :: term(),
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_info(_Info, FullState) ->
-    {noreply, FullState}.
+handle_info(_Info, State) ->
+    {noreply, State}.
 
 
 %% terminate/2
@@ -157,5 +161,38 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %% ====================================================================
 
-initCluster(State) ->
+%% init_cluster/1
+%% ====================================================================
+%% @doc Initializes cluster - decides at which nodes components should
+%% be started (and starts them). Additionally, it sets timer that
+%% initiates checking of cluster state.
+-spec init_cluster(State :: term()) -> NewState when
+	NewState ::  term(). 
+%% ====================================================================
+init_cluster(State) ->
+	plan_next_cluster_state_check(),
 	State.
+
+%% check_cluster_state/1
+%% ====================================================================
+%% @doc Checks cluster state and decides if any new component should
+%% be started (currently running ones are overloaded) or stopped.
+-spec check_cluster_state(State :: term()) -> NewState when
+	NewState ::  term(). 
+%% ====================================================================
+check_cluster_state(State) ->
+	plan_next_cluster_state_check(),
+	State.
+
+%% plan_next_cluster_state_check/0
+%% ====================================================================
+%% @doc Decides when cluster state should be checked next time and sets
+%% the timer (cluster_clontrol_period environment variable is used).
+-spec plan_next_cluster_state_check() -> Result when
+	Result :: {ok, TRef} | {error, Reason},
+	TRef :: term(),
+	Reason :: term().
+%% ====================================================================
+plan_next_cluster_state_check() ->
+	{ok, Interval} = application:get_env(veil_cluster_node, cluster_clontrol_period),
+	timer:apply_after(Interval * 1000, gen_server, cast, [node_manager, check_cluster_state]).

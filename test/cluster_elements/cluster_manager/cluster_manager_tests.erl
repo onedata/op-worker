@@ -22,6 +22,7 @@
 env_test() ->
 	ok = application:start(?APP_Name),
 	{ok, _InitTime} = application:get_env(?APP_Name, initialization_time),
+	{ok, _Period} = application:get_env(?APP_Name, cluster_clontrol_period),
 	ok = application:stop(?APP_Name).
 
 nodes_counting_test() ->
@@ -34,14 +35,14 @@ nodes_counting_test() ->
 
 	Nodes = [n1, n2, n3],
 	lists:foreach(fun(Node) -> gen_server:call({global, ?CCM}, {node_is_up, Node}) end, Nodes),
-	Nodes2 = gen_server:call({global, ?CCM}, getNodes),
+	Nodes2 = gen_server:call({global, ?CCM}, get_nodes),
 	?assert(length(Nodes) + 1 == length(Nodes2)),
 	lists:foreach(fun(Node) -> ?assert(lists:member(Node, Nodes2)) end, Nodes),
 	?assert(lists:member(node(), Nodes2)),
 	
 	gen_server:call({global, ?CCM}, {node_is_up, n2}),
 	gen_server:call({global, ?CCM}, {node_is_up, n1}),
-	Nodes3 = gen_server:call({global, ?CCM}, getNodes),
+	Nodes3 = gen_server:call({global, ?CCM}, get_nodes),
 	?assert(length(Nodes) + 1 == length(Nodes3)),
 	
 	ok = application:stop(?APP_Name),

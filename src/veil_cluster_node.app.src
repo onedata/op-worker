@@ -22,8 +22,10 @@
   {env, [
   		%% Node type (worker or ccm)
   		{node_type, worker},
-  		%% How long should ccm wait for workers before it initializes cluster
+  		%% How long (in sec) should ccm wait for workers before it initializes cluster
   		{initialization_time, 300},
+  		%% How long (in sec) should ccm wait between successive checks of cluster status
+  		{cluster_clontrol_period, 300},  		
   		%% How long (in sec) should worker sleep before next connection try (when it cannot connect to ccm)
   		{worker_sleep_time, 60},
   		%% List of ccm possible ccm nodes
