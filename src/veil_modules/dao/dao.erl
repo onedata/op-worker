@@ -7,6 +7,8 @@
 %% ===================================================================
 %% @doc: This module gives high level API for VeilFS database and
 %% worker_plugin_behaviour callbacks
+%% All DAO API functions should not be called directly. Call dao:handle(_, {MethodName, ListOfArgs) instead, when
+%% MethodName :: atom() is the method name and ListOfArgs :: [term()] is list of argument for the method.
 %% @end
 %% ===================================================================
 -module(dao).
@@ -21,8 +23,10 @@
 -compile([export_all]).
 -endif.
 
-%% API
+%% API - record management
 -export([save_record/2, get_record/2, remove_record/2]).
+%% API - File system management
+-export([vfs_del_file/2, vfs_list_dir/2, vfs_lock_file/3, vfs_rename_file/3, vfs_unlock_file/3]).
 
 %% worker_plugin_behaviour callbacks
 -export([init/1, handle/2, cleanUp/0]).
@@ -49,8 +53,11 @@ init(_Args) ->
 %% handle/1
 %% ====================================================================
 %% @doc worker_plugin_behaviour callback handle/1
-%% All {helper, Method, Args} requests executes Method in dao_helper module (low lvl DB API)
-%% All {hosts, Method, Args} requests executes Method in dao_hosts module (host management module)
+%% All {helper, Method, Args} requests, executes Method in dao_helper module (low lvl DB API)
+%% All {hosts, Method, Args} requests, executes Method in dao_hosts module (host management module)
+%% All {Method, Args} requests, executes Method in dao module (high lvl DB API)
+%% Additionally all exceptions from called API method will be caught and converted into {error, Exception} tuple
+%% E.g. calling handle(_, {save_record, [Id, Rec]}) will execute dao:save_record/2 and normalize return value
 %% @end
 -spec handle(ProtocolVersion :: term(), Request) -> Result when
     Request :: {Method, Args} | {helper, Method, Args} | {hosts, Method, Args},
@@ -97,11 +104,12 @@ cleanUp() ->
 
 %% ===================================================================
 %% API functions
+%% Here we have all DAO API functions which should be called through dao:handle(_, {MethodName, ListOfArgs})
 %% ===================================================================
 
 %% save_record/2
 %% ====================================================================
-%% @doc Saves record Rec to DB with ID = Id. Should not be used directly, use handle/2 instead.
+%% @doc Saves record Rec to DB with ID = Id. Should not be used directly, use handle/2 instead (See handle/2 for more details).
 -spec save_record(Id :: atom(), Rec :: tuple()) ->
     ok |
     no_return(). % erlang:error(any()) | throw(any())
@@ -142,6 +150,7 @@ save_record(Id, Rec) when is_tuple(Rec), is_atom(Id) ->
 %% after last record save, will get value 'undefined'.
 %% If second argument is an record instance, every field that was added
 %% after last record save, will get same value as in given record instance
+%% Should not be used directly, use handle/2 instead (See handle/2 for more details).
 %% @end
 -spec get_record(Id :: atom(), RecordNameOrRecordTemplate :: atom() | tuple()) ->
     Record :: tuple() |
@@ -187,6 +196,7 @@ get_record(Id, EmptyRecord) when is_tuple(EmptyRecord) ->
 %% remove_record/2
 %% ====================================================================
 %% @doc Removes record with given Id an RecordName from DB
+%% Should not be used directly, use handle/2 instead (See handle/2 for more details).
 %% @end
 -spec remove_record(Id :: atom(), RecordName :: atom()) ->
     ok |
@@ -204,6 +214,67 @@ remove_record(Id, RecName) when is_atom(RecName) ->
         {error, {not_found, _}} -> ok;
         {error, E1} -> throw(E1)
     end.
+
+%% ===================================================================
+%% Unimplemented API functions
+%% ===================================================================
+
+%% vfs_list_dir/2
+%% ====================================================================
+%% @doc Lists all files from specified directory owned by specified user.
+%% Should not be used directly, use handle/2 instead (See handle/2 for more details).
+%% Not yet implemented. This is placeholder/template method only!
+%% @end
+-spec vfs_list_dir(UserID :: string(), DirID :: string()) -> not_yet_implemented.
+%% ====================================================================
+vfs_list_dir(_UserID, _DirID) ->
+    not_yet_implemented.
+
+%% vfs_lock_file/3
+%% ====================================================================
+%% @doc Puts a read/write lock on specified file owned by specified user.
+%% Should not be used directly, use handle/2 instead (See handle/2 for more details).
+%% Not yet implemented. This is placeholder/template method only!
+%% @end
+-spec vfs_lock_file(UserID :: string(), FileID :: string(), Mode :: write | read) -> not_yet_implemented.
+%% ====================================================================
+vfs_lock_file(_UserID, _FileID, _Mode) ->
+    not_yet_implemented.
+
+%% vfs_unlock_file/3
+%% ====================================================================
+%% @doc Takes off a read/write lock on specified file owned by specified user.
+%% Should not be used directly, use handle/2 instead (See handle/2 for more details).
+%% Not yet implemented. This is placeholder/template method only!
+%% @end
+-spec vfs_unlock_file(UserID :: string(), FileID :: string(), Mode :: write | read) -> not_yet_implemented.
+%% ====================================================================
+vfs_unlock_file(_UserID, _FileID, _Mode) ->
+    not_yet_implemented.
+
+
+%% vfs_rename_file/3
+%% ====================================================================
+%% @doc Renames specified file owned by specified user to NewName.
+%% Should not be used directly, use handle/2 instead (See handle/2 for more details).
+%% Not yet implemented. This is placeholder/template method only!
+%% @end
+-spec vfs_rename_file(UserID :: string(), FileID :: string(), _NewName :: string()) -> not_yet_implemented.
+%% ====================================================================
+vfs_rename_file(_UserID, _FileID, _NewName) ->
+    not_yet_implemented.
+
+%% vfs_del_file/2
+%% ====================================================================
+%% @doc Deletes specified file owned by specified user.
+%% Should not be used directly, use handle/2 instead (See handle/2 for more details).
+%% Not yet implemented. This is placeholder/template method only!
+%% @end
+-spec vfs_del_file(UserID :: string(), FileID :: string()) -> not_yet_implemented.
+%% ====================================================================
+vfs_del_file(_UserID, _FileID) ->
+    not_yet_implemented.
+
 
 %% ===================================================================
 %% Internal functions

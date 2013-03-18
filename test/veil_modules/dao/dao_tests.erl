@@ -41,6 +41,21 @@ get_record_test() ->
     ?assertException(throw, unsupported_record, dao:get_record(test, whatever)),
     ?assertException(throw, unsupported_record, dao:get_record(test, {whatever, a, c})).
 
+vfs_list_dir_test() ->
+    not_yet_implemented = dao:vfs_list_dir("test", "test").
+
+vfs_lock_file_test() ->
+    not_yet_implemented = dao:vfs_lock_file("test", "test", write).
+
+vfs_unlock_file_test() ->
+    not_yet_implemented = dao:vfs_unlock_file("test", "test", write).
+
+vfs_del_file_test() ->
+    not_yet_implemented = dao:vfs_del_file("test", "test").
+
+vfs_rename_file_test() ->
+    not_yet_implemented = dao:vfs_rename_file("test", "test", "name").
+
 ensure_db_exists_test() ->
     meck:new(dao_helper),
     meck:expect(dao_helper, create_db, fun(DbName) when DbName =:= "Name" -> ok; (_DbName) -> meck:exception(error, wrong_db_name) end),
