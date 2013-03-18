@@ -12,10 +12,13 @@
 %% record definition used in record registration example
 -record(some_record, {field1 = "", field2 = "", field3 = ""}).
 
+%% Helper macro. See macro ?dao_record_info/1 for more details.
 -define(record_info_gen(X), {record_info(size, X), record_info(fields, X)}).
 
-%% every record that will be saved to DB have to be "registered" with this define
-%% 'some_record' is an example
+%% Every record that will be saved to DB have to be "registered" with this define.
+%% Each registered record should be listed in defined below 'case' block as fallow:
+%% record_name -> ?record_info_gen(record_name);
+%% when 'record_name' is name of the record. 'some_record' is an example.
 -define(dao_record_info(R),
     case R of
         some_record -> ?record_info_gen(some_record);
