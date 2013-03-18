@@ -36,6 +36,7 @@ host_management_test_() ->
 call_test_() ->
     case node() of
         nonode@nohost ->
+            os:cmd("epmd -daemon"),
             {ok, _Pid} = net_kernel:start([master, longnames]);
         _ -> ok
     end,

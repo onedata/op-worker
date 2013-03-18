@@ -26,6 +26,7 @@ name_test() ->
 normalizer_test() ->
     case node() of
         nonode@nohost ->
+            os:cmd("epmd -daemon"),
             {ok, _Pid} = net_kernel:start([master, longnames]);
         _ -> ok
     end,
