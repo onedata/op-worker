@@ -208,6 +208,15 @@ plan_next_cluster_state_check() ->
 	{ok, Interval} = application:get_env(veil_cluster_node, cluster_clontrol_period),
 	timer:apply_after(Interval * 1000, gen_server, cast, [{global, ?CCM}, check_cluster_state]).
 
+%% start_worker/4
+%% ====================================================================
+%% @doc Processes client request using PlugIn:handle function. Afterwards,
+%% it sends the answer to dispatcher and logs info about processing time.
+-spec start_worker(Node :: atom(), Module :: atom(), WorkerArgs :: term(), State :: term()) -> Result when
+	Result :: {Answer, NewState},
+	Answer :: ok | error,
+	NewState :: term().
+%% ====================================================================
 start_worker(Node, Module, WorkerArgs, State) ->
 	try
 		{ok, LoadMemorySize} = application:get_env(veil_cluster_node, worker_load_memory_size),
@@ -218,6 +227,15 @@ start_worker(Node, Module, WorkerArgs, State) ->
 		_:_ -> {error, State}
 	end.
 
+%% stop_worker/3
+%% ====================================================================
+%% @doc Processes client request using PlugIn:handle function. Afterwards,
+%% it sends the answer to dispatcher and logs info about processing time.
+-spec stop_worker(Node :: atom(), Module :: atom(), State :: term()) -> Result when
+	Result :: {Answer, NewState},
+	Answer :: ok | child_does_not_exist | delete_error | termination_error,
+	NewState :: term().
+%% ====================================================================
 stop_worker(Node, Module, State) ->
 	CreateNewWorkersList = fun({N, M, Child}, {Workers, ChosenChild}) ->
 		case {N, M} of
@@ -229,7 +247,7 @@ stop_worker(Node, Module, State) ->
 	{NewWorkers, ChosenChild} = lists:foldl(CreateNewWorkersList, {[], non}, Workers),
 	Ans = case ChosenChild of
 		non -> child_does_not_exist;
-		{ChildNode, ChildId} -> 
+		{ChildNode, _ChildPid} -> 
 			Ans2 = supervisor:terminate_child({?Supervisor_Name, ChildNode}, Module),
 			case Ans2 of
 				ok -> Ans3 = supervisor:delete_child({?Supervisor_Name, ChildNode}, Module),

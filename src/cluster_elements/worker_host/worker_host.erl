@@ -170,7 +170,6 @@ code_change(_OldVsn, State, _Extra) ->
 -spec procRequest(PlugIn :: atom(), ProtocolVersion :: integer(), Msg :: term(), MsgId :: integer(), ReplyDisp :: term()) -> Result when
 	Result ::  atom(). 
 %% ====================================================================
-
 procRequest(PlugIn, ProtocolVersion, Msg, MsgId, ReplyDisp) ->
 	{Megaseconds,Seconds,Microseconds} = os:timestamp(),
 	Response = 	try
