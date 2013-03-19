@@ -4,3 +4,6 @@ releases/veil_cluster_node
 deps/*
 .eunit
 doc
+logs
+.git
+.idea
