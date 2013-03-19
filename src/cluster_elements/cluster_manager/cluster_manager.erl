@@ -69,7 +69,7 @@ start_link() ->
 init([]) ->
 	{ok, Interval} = application:get_env(veil_cluster_node, initialization_time),
 	timer:apply_after(Interval * 1000, gen_server, cast, [{global, ?CCM}, init_cluster]),
-	{ok, #cm_state{}}.
+	{ok, #cm_state{monitor_process = spawn(fun() -> monitoring_loop(on) end)}}.
 
 %% handle_call/3
 %% ====================================================================
@@ -92,7 +92,9 @@ handle_call({node_is_up, Node}, _From, State) ->
 	Nodes = State#cm_state.nodes,
 	case lists:member(Node, Nodes) of
 		true -> {reply, ok, State};
-		false -> {reply, ok, State#cm_state{nodes = [Node | Nodes]}}
+		false -> State#cm_state.monitor_process ! {monitor_node, Node},
+			NewState = checkNode(Node, State),
+			{reply, ok, NewState#cm_state{nodes = [Node | Nodes]}}
 	end;
 
 handle_call(get_nodes, _From, State) ->
@@ -123,6 +125,14 @@ handle_cast(init_cluster, State) ->
 handle_cast(check_cluster_state, State) ->
 	NewState = check_cluster_state(State),
 	{noreply, NewState};
+
+handle_cast({node_down, Node}, State) ->
+	NewState = node_down(Node, State),
+	{noreply, NewState};
+
+handle_cast({set_monitoring, Flag}, State) ->
+	State#cm_state.monitor_process ! {Flag, State#cm_state.nodes},
+	{noreply, State};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -259,3 +269,76 @@ stop_worker(Node, Module, State) ->
 			end
 	end,
 	{Ans, State#cm_state{workers = NewWorkers}}.
+
+checkNode(Node, State) ->
+	try
+		Children = supervisor:which_children({?Supervisor_Name, Node}),
+		Workers = State#cm_state.workers,
+		NewWorkers = addChildren(Node, Children, Workers),
+		State#cm_state{workers = NewWorkers}
+	catch
+		_:_ -> State
+	end.
+
+addChildren(_Node, [], Workers) ->
+	Workers;
+
+addChildren(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
+	case Id of 
+		node_manager -> addChildren(Node, Children, Workers);
+		cluster_manager -> addChildren(Node, Children, Workers);
+		_Other -> [{Node, Id, ChildPid} | addChildren(Node, Children, Workers)]
+	end.
+
+monitoring_loop(Flag) ->
+	case Flag of
+    	on -> 
+			receive
+				{nodedown, Node} ->
+					erlang:monitor_node(Node, false),
+					gen_server:cast({global, ?CCM}, {node_down, Node}),
+				    monitoring_loop(Flag);
+				{monitor_node, Node} ->
+					erlang:monitor_node(Node, true),
+				    monitoring_loop(Flag);
+				{off, Nodes} ->
+					change_monitoring(Nodes, false),
+					monitoring_loop(off);
+				exit -> ok
+		    end;
+		off ->
+			receive
+				{on, Nodes} ->
+					change_monitoring(Nodes, true),
+					monitoring_loop(on);
+				exit -> ok
+		    end
+	end.
+
+change_monitoring([], _Flag) ->
+	ok;
+
+change_monitoring([Node | Nodes], Flag) ->
+	erlang:monitor_node(Node, Flag),
+	change_monitoring(Nodes, Flag).
+
+node_down(Node, State) ->
+	CreateNewWorkersList = fun({N, M, Child}, Workers) ->
+		case N of
+			Node -> Workers;
+			_N2 -> [{N, M, Child} | Workers]
+		end
+	end,
+	Workers = State#cm_state.workers,
+	NewWorkers = lists:foldl(CreateNewWorkersList, [], Workers),
+
+	CreateNewNodesList = fun(N, Nodes) ->
+		case N of
+			Node -> Nodes;
+			_N2 -> [N | Nodes]
+		end
+	end,
+	Nodes = State#cm_state.nodes,
+	NewNodes = lists:foldl(CreateNewNodesList, [], Nodes),
+
+	State#cm_state{workers = NewWorkers, nodes = NewNodes}.
