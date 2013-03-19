@@ -20,6 +20,11 @@
 
 -ifdef(TEST).
 
+%% ====================================================================
+%% Test functions
+%% ====================================================================
+
+%% This test checks if worker_host is resistant to incorrect requests.
 wrong_request_test() ->
 	application:set_env(?APP_Name, node_type, worker), 
 	ok = application:start(?APP_Name),
@@ -32,7 +37,11 @@ wrong_request_test() ->
 
 	ok = application:stop(?APP_Name).
 
-worker_start_stop_test() ->
+%% This test checks if worker properly stores information about time used by
+%% plug-in (veil module) to process requests. The tests checks not only if this
+%% information is stored but also verifies if old information is correctly deleted
+%% (to provide only latest data to ccm).
+load_info_storing_test() ->
 	ClientsNum = 50,
 	application:set_env(?APP_Name, node_type, worker), 
 	ok = application:start(?APP_Name),
@@ -73,8 +82,21 @@ worker_start_stop_test() ->
 	?assert(length(Old3) == 2* ClientsNum),
 	{ReqTime3, _T3} = lists:nth(ClientsNum, Old3),
 	?assert(Time3 =:= ReqTime3),
+	
+	ok = gen_server:call(Module, clearLoadInfo)
+	{_Time4, Load4} = gen_server:call(Module, getLoadInfo),
+	?assert(Load4 == 0),
+	{New4, Old4, NewListSize4, Max4} = gen_server:call(Module, getFullLoadInfo),
+	?assert(NewListSize4 == 0),
+	?assert(Max4 == 2* ClientsNum),
+	?assert(New4 =:= []),
+	?assert(Old4 =:= []),
 
 	ok = application:stop(?APP_Name).
+
+%% ====================================================================
+%% Helper functions
+%% ====================================================================
 
 startClients(ProcNum, Module) ->
 	for(1, ProcNum, fun() -> spawn(fun() -> gen_server:cast(Module, {asynch, 1, sample_message}) end) end).

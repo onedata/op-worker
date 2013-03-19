@@ -20,12 +20,18 @@
 
 -ifdef(TEST).
 
+%% ====================================================================
+%% Test functions
+%% ====================================================================
+
+%% This test checks if all environment variables needed by ccm are defined.
 env_test() ->
 	ok = application:start(?APP_Name),
 	{ok, _InitTime} = application:get_env(?APP_Name, initialization_time),
 	{ok, _Period} = application:get_env(?APP_Name, cluster_clontrol_period),
 	ok = application:stop(?APP_Name).
 
+%% This test checks if ccm is resistant to incorrect requests.
 wrong_request_test() ->
 	net_kernel:start([node1, shortnames]),
 
@@ -41,6 +47,8 @@ wrong_request_test() ->
 	ok = application:stop(?APP_Name),
 	net_kernel:stop().
 
+%% This test checks if ccm properly registers nodes in cluster.
+%% Furthermore, it checks if it properly monitors state of these nodes.
 nodes_counting_and_monitoring_test() ->
 	net_kernel:start([node1, shortnames]),
 
@@ -71,6 +79,7 @@ nodes_counting_and_monitoring_test() ->
 	ok = application:stop(?APP_Name),
 	net_kernel:stop().
 
+%% This test checks if ccm is able to start and stop workers.
 worker_start_stop_test() ->
 	net_kernel:start([node1, shortnames]),
 
