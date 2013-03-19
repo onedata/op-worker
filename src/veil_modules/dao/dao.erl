@@ -54,8 +54,10 @@ init(_Args) ->
 %% handle/1
 %% ====================================================================
 %% @doc worker_plugin_behaviour callback handle/1
-%% All {Module, Method, Args} requests (second argument), executes Method with Args in 'dao_Module' module.
+%% All {Module, Method, Args} requests (second argument), executes Method with Args in 'dao_Module' module, but with one exception:
+%% If Module = utils, then dao module will be used.
 %% E.g calling dao:handle(_, {vfs, some_method, [some_arg]}) will call dao_vfs:some_method(some_arg)
+%% but calling dao:handle(_, {utils, some_method, [some_arg]}) will call dao:some_method(some_arg)
 %% You can omit Module atom in order to use default module which is dao_cluster.
 %% E.g calling dao:handle(_, {some_method, [some_arg]}) will call dao_cluster:some_method(some_arg)
 %% Additionally all exceptions from called API method will be caught and converted into {error, Exception} tuple
