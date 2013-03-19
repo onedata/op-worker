@@ -18,12 +18,14 @@
 
 -ifdef(TEST).
 
-save_record_test() ->
-    ?assertException(throw, unsupported_record, dao_cluster:save_record(whatever, {a, b, c})),
-    ?assertException(throw, invalid_record, dao_cluster:save_record(whatever, {some_record, a, c})).
+save_state_test() ->
+    ?assertException(throw, unsupported_record, dao_cluster:save_state(whatever, {a, b, c})),
+    ?assertException(throw, invalid_record, dao_cluster:save_state(whatever, {some_record, a, c})).
 
-get_record_test() ->
-    ?assertException(throw, unsupported_record, dao_cluster:get_record(test, whatever)),
-    ?assertException(throw, unsupported_record, dao_cluster:get_record(test, {whatever, a, c})).
+get_state_test() ->
+    not_yet_implemented = dao_cluster:get_state(id).
+
+clear_state_test() ->
+    not_yet_implemented = dao_cluster:clear_state(id).
 
 -endif.

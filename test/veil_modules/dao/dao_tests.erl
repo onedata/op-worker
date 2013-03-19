@@ -38,4 +38,13 @@ handle() ->
 cleanUp() ->
     ok = dao:cleanUp().
 
+
+save_record_test() ->
+    ?assertException(throw, unsupported_record, dao:save_record(whatever, {a, b, c})),
+    ?assertException(throw, invalid_record, dao:save_record(whatever, {some_record, a, c})).
+
+get_record_test() ->
+    ?assertException(throw, unsupported_record, dao:get_record(test, whatever)),
+    ?assertException(throw, unsupported_record, dao:get_record(test, {whatever, a, c})).
+
 -endif.
