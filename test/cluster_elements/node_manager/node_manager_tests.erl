@@ -25,6 +25,16 @@ env_test() ->
 	{ok, _Nodes} = application:get_env(?APP_Name, ccm_nodes),
 	ok = application:stop(?APP_Name).
 
+wrong_request_test() ->
+	application:set_env(?APP_Name, node_type, worker), 
+	ok = application:start(?APP_Name),
+
+	gen_server:cast(?Node_Manager_Name, abc),
+	Reply = gen_server:call(?Node_Manager_Name, abc),
+	?assert(Reply =:= wrong_request),
+	
+	ok = application:stop(?APP_Name).
+
 node_type_test() ->
 	{ok, NodeType} = application:get_env(?APP_Name, node_type),
 	ok = application:start(?APP_Name),

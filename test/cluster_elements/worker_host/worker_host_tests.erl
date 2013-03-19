@@ -20,6 +20,18 @@
 
 -ifdef(TEST).
 
+wrong_request_test() ->
+	application:set_env(?APP_Name, node_type, worker), 
+	ok = application:start(?APP_Name),
+
+	Module = sample_plug_in,
+	{ok, _ChildPid} = supervisor:start_child(?Supervisor_Name, ?Sup_Child(Module, worker_host, transient, [sample_plug_in, [], 10])),
+	gen_server:cast(Module, abc),
+	Reply = gen_server:call(Module, abc),
+	?assert(Reply =:= wrong_request),
+
+	ok = application:stop(?APP_Name).
+
 worker_start_stop_test() ->
 	ClientsNum = 50,
 	application:set_env(?APP_Name, node_type, worker), 

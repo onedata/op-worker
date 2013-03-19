@@ -26,6 +26,21 @@ env_test() ->
 	{ok, _Period} = application:get_env(?APP_Name, cluster_clontrol_period),
 	ok = application:stop(?APP_Name).
 
+wrong_request_test() ->
+	net_kernel:start([node1, shortnames]),
+
+	application:set_env(?APP_Name, node_type, ccm), 
+	application:set_env(?APP_Name, ccm_nodes, [node()]), 
+
+	ok = application:start(?APP_Name),
+
+	gen_server:cast({global, ?CCM}, abc),
+	Reply = gen_server:call({global, ?CCM}, abc),
+	?assert(Reply =:= wrong_request),
+	
+	ok = application:stop(?APP_Name),
+	net_kernel:stop().
+
 nodes_counting_and_monitoring_test() ->
 	net_kernel:start([node1, shortnames]),
 
