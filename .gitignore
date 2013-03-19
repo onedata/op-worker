@@ -5,3 +5,5 @@ deps/*
 .eunit
 doc
 logs
+.git
+.idea

@@ -14,8 +14,8 @@ clean:
 distclean: clean
 	./rebar delete-deps
 
-test:
-	./rebar compile eunit ct skip_deps=true
+test: deps compile
+	./rebar eunit ct skip_deps=true
 
 generate: compile
 	./rebar generate
