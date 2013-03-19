@@ -29,8 +29,7 @@ normalizer_test() ->
     {error, err} = dao_helper:normalize_return_term({error, err}),
     {ok, "ret"} = dao_helper:normalize_return_term({ok, "ret"}),
     {error, {exit_error, ret}} = dao_helper:normalize_return_term({badrpc, {'EXIT', {ret, moar_details}}}),
-    {error, {exit, ret}} = dao_helper:normalize_return_term({badrpc, {'EXIT', ret}}),
-    net_kernel:stop().
+    {error, {exit, ret}} = dao_helper:normalize_return_term({badrpc, {'EXIT', ret}}).
 
 
 %% Fixtures
@@ -40,9 +39,9 @@ main_test_() ->
         fun create_view/0, fun query_view/0]}.
 
 setup() ->
-    meck:new(dao_hosts, [unstick, passthrough]),
     put(db_host, undefined),
-    Pid = spawn(dao_hosts, init, []),
+    Pid = spawn(dao_hosts, init, []),           %% <-- DON NOT swap these lines unless you understand exactly how meck works
+    meck:new(dao_hosts, [unstick, passthrough]),%% <-- And even if you do understand, then you know that you shouldn't do it
     register(db_host_store_proc, Pid),
     receive after 20 -> Pid end.
 
