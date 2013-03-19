@@ -83,7 +83,7 @@ load_info_storing_test() ->
 	{ReqTime3, _T3} = lists:nth(ClientsNum, Old3),
 	?assert(Time3 =:= ReqTime3),
 	
-	ok = gen_server:call(Module, clearLoadInfo)
+	ok = gen_server:call(Module, clearLoadInfo),
 	{_Time4, Load4} = gen_server:call(Module, getLoadInfo),
 	?assert(Load4 == 0),
 	{New4, Old4, NewListSize4, Max4} = gen_server:call(Module, getFullLoadInfo),
