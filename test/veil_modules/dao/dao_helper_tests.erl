@@ -24,18 +24,12 @@ name_test() ->
     <<"test">> = dao_helper:name(test).
 
 normalizer_test() ->
-    case node() of
-        nonode@nohost ->
-            os:cmd("epmd -daemon"),
-            {ok, _Pid} = net_kernel:start([master, longnames]);
-        _ -> ok
-    end,
     ok = dao_helper:normalize_return_term(ok),
     {error, err} = dao_helper:normalize_return_term(err),
     {error, err} = dao_helper:normalize_return_term({error, err}),
     {ok, "ret"} = dao_helper:normalize_return_term({ok, "ret"}),
-    {error, {exit, ret}} = dao_helper:normalize_return_term(rpc:call(node(), erlang, exit, [ret])),
-    {error, {exit_error, ret}} = dao_helper:normalize_return_term(rpc:call(node(), erlang, error, [ret])),
+    {error, {exit_error, ret}} = dao_helper:normalize_return_term({badrpc, {'EXIT', {ret, moar_details}}}),
+    {error, {exit, ret}} = dao_helper:normalize_return_term({badrpc, {'EXIT', ret}}),
     net_kernel:stop().
 
 
