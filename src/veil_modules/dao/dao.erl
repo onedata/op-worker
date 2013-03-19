@@ -61,7 +61,7 @@ init(_Args) ->
     Request :: {Method, Args} | {Mod :: tuple(), Method, Args},
     Method :: atom(),
     Args :: list(),
-    Result :: {ok, Response} | {error, Error},
+    Result :: ok | {ok, Response} | {error, Error},
     Response :: term(),
     Error :: term().
 %% ====================================================================
@@ -69,7 +69,9 @@ handle(_ProtocolVersion, {Target, Method, Args}) when is_atom(Target), is_atom(M
     Module = list_to_atom("dao_" ++ atom_to_list(Target)),
     try apply(Module, Method, Args) of
         {error, Err} -> {error, Err};
-        {ok, Response} -> {ok, Response}
+        {ok, Response} -> {ok, Response};
+        ok -> ok;
+        Other -> {error, Other}
     catch
         error:{badmatch, {error, Err}} -> {error, Err};
         _:Error -> {error, Error}
