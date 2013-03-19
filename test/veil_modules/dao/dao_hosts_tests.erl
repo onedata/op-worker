@@ -16,7 +16,6 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("veil_modules/dao/common.hrl").
--export([call_resp/0]).
 
 -endif.
 
@@ -30,21 +29,18 @@ init_test() ->
     ?assert(is_list(Info)).
 
 host_management_test_() ->
-    {setup, local, fun start_link/0, fun cleanUp/1,
+    {setup, local, fun start_link/0, fun teardown/1,
         [fun delete_hosts/0, fun insert_hosts/0, fun get_host/0, fun delete_hosts/0, fun ban_host/0, fun reactivate_host/0]}.
 
 call_test_() ->
-    case node() of
-        nonode@nohost ->
-            {ok, _Pid} = net_kernel:start([master, longnames]);
-        _ -> ok
-    end,
-    {setup, local, fun start_link/0, fun cleanUp/1,
+    {setup, local, fun start_link/0, fun teardown/1,
         [fun call/0, fun ping/0]}.
 
 ping() ->
+    meck:expect(net_adm, ping, fun('test@host1.lan') -> receive after 10000 -> pang end;
+        ('real@host.lan') -> pong end),
     pang = dao_hosts:ping('test@host1.lan', 50),
-    pong = dao_hosts:ping(node(), 50).
+    pong = dao_hosts:ping('real@host.lan', 50).
 
 insert_hosts() ->
     ok = dao_hosts:insert('test@host1.lan'),
@@ -93,8 +89,12 @@ call() ->
     delete_hosts(),
     ok = dao_hosts:insert('test@host1.lan'),
     ok = dao_hosts:insert('test@host2.lan'),
+    meck:expect(net_adm, ping, fun('real@host.lan') -> pong;
+        (_) -> pang end),
+    meck:expect(rpc, call, fun('real@host.lan', ?MODULE, call_resp, []) -> ok;
+        (_, ?MODULE, call_resp, []) -> {badrpc, nodedown} end),
     {error, rpc_retry_limit_exceeded} = dao_hosts:call(?MODULE, call_resp, []),
-    dao_hosts:insert(node()),
+    dao_hosts:insert('real@host.lan'),
     ok = dao_hosts:call(?MODULE, call_resp, []).
 
 ban_host() ->
@@ -116,17 +116,19 @@ reactivate_host() ->
     dao_hosts:reactivate('test@host1.lan'),
     'test@host1.lan' = dao_hosts:get_host().
 
-call_resp() ->
-    ok.
-
 
 start_link() ->
+    meck:new(rpc, [unstick, passthrough]),
+    meck:new(net_adm, [unstick, passthrough]),
     put(db_host, undefined),
     {ok, Pid} = dao_hosts:start_link([]),
     Pid.
 
-cleanUp(Pid) ->
-    net_kernel:stop(),
+teardown(Pid) ->
+    ?assert(meck:validate(rpc)),
+    meck:unload(rpc),
+    ?assert(meck:validate(net_adm)),
+    meck:unload(net_adm),
     monitor(process, Pid),
     Pid ! {self(), shutdown},
     receive {'DOWN', _Ref, process, Pid, normal} -> ok after 1000 -> error(timeout) end.
