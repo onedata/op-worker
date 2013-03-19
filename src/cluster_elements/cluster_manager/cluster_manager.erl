@@ -270,6 +270,12 @@ stop_worker(Node, Module, State) ->
 	end,
 	{Ans, State#cm_state{workers = NewWorkers}}.
 
+%% checkNode/2
+%% ====================================================================
+%% @doc Checks if any workers are running on node.
+-spec checkNode(Node :: atom(), State :: term()) -> NewState when
+	NewState :: term().
+%% ====================================================================
 checkNode(Node, State) ->
 	try
 		Children = supervisor:which_children({?Supervisor_Name, Node}),
@@ -280,6 +286,12 @@ checkNode(Node, State) ->
 		_:_ -> State
 	end.
 
+%% addChildren/3
+%% ====================================================================
+%% @doc Add workers that run on node to workers list.
+-spec addChildren(Node :: atom(), Childern :: list(), Workers :: term()) -> NewWorkersList when
+	NewWorkersList :: list().
+%% ====================================================================
 addChildren(_Node, [], Workers) ->
 	Workers;
 
@@ -290,6 +302,12 @@ addChildren(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
 		_Other -> [{Node, Id, ChildPid} | addChildren(Node, Children, Workers)]
 	end.
 
+%% monitoring_loop/1
+%% ====================================================================
+%% @doc Loop that monitors if nodes are alive.
+-spec monitoring_loop(Flag) -> ok when
+	Flag :: on | off.
+%% ====================================================================
 monitoring_loop(Flag) ->
 	case Flag of
     	on -> 
@@ -315,6 +333,13 @@ monitoring_loop(Flag) ->
 		    end
 	end.
 
+%% change_monitoring/2
+%% ====================================================================
+%% @doc Starts or stops monitoring of nodes.
+-spec change_monitoring(Nodes, Flag) -> ok when
+	Nodes :: list(),
+	Flag :: boolean().
+%% ====================================================================
 change_monitoring([], _Flag) ->
 	ok;
 
@@ -322,6 +347,12 @@ change_monitoring([Node | Nodes], Flag) ->
 	erlang:monitor_node(Node, Flag),
 	change_monitoring(Nodes, Flag).
 
+%% node_down/2
+%% ====================================================================
+%% @doc Clears information about workers on node that is down.
+-spec node_down(Node :: atom(), State :: term()) -> NewState when
+	NewState :: term().
+%% ====================================================================
 node_down(Node, State) ->
 	CreateNewWorkersList = fun({N, M, Child}, Workers) ->
 		case N of
