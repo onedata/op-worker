@@ -50,6 +50,13 @@ teardown(Pid) ->
     meck:unload(dao_hosts),
     Pid ! {self(), shutdown}.
 
+ensure_db_exists_test() ->
+    meck:new(dao_hosts, [unstick, passthrough]),
+    meck:expect(dao_hosts, call, fun(_, [<<"Name">>, []]) -> ok end),
+    dao_helper:ensure_db_exists("Name"),
+    ?assert(meck:validate(dao_hosts)),
+    meck:unload(dao_hosts).
+
 list_dbs() ->
     case dao_helper:list_dbs() of
         {ok, List} when is_list(List) -> ok;

@@ -28,39 +28,10 @@ handle() ->
     ?assertNot({error, wrong_args} =:= dao:handle(1, {helper, test, []})),
     ?assertNot({error, wrong_args} =:= dao:handle(1, {hosts, test, []})),
     ?assertNot({error, wrong_args} =:= dao:handle(1, {test, []})),
-    ?assert({error, wrong_args} =:= dao:handle(1, {wrong, test, []})).
+    ?assert({error, wrong_args} =:= dao:handle(1, {"wrong", test, []})),
+    ?assert({error,undef} =:= dao:handle(1, {wrong, test, []})).
 
 cleanUp() ->
     ok = dao:cleanUp().
-
-save_record_test() ->
-    ?assertException(throw, unsupported_record, dao:save_record(whatever, {a, b, c})),
-    ?assertException(throw, invalid_record, dao:save_record(whatever, {some_record, a, c})).
-
-get_record_test() ->
-    ?assertException(throw, unsupported_record, dao:get_record(test, whatever)),
-    ?assertException(throw, unsupported_record, dao:get_record(test, {whatever, a, c})).
-
-vfs_list_dir_test() ->
-    not_yet_implemented = dao:vfs_list_dir("test", "test").
-
-vfs_lock_file_test() ->
-    not_yet_implemented = dao:vfs_lock_file("test", "test", write).
-
-vfs_unlock_file_test() ->
-    not_yet_implemented = dao:vfs_unlock_file("test", "test", write).
-
-vfs_del_file_test() ->
-    not_yet_implemented = dao:vfs_del_file("test", "test").
-
-vfs_rename_file_test() ->
-    not_yet_implemented = dao:vfs_rename_file("test", "test", "name").
-
-ensure_db_exists_test() ->
-    meck:new(dao_helper),
-    meck:expect(dao_helper, create_db, fun(DbName) when DbName =:= "Name" -> ok; (_DbName) -> meck:exception(error, wrong_db_name) end),
-    dao:ensure_db_exists("Name"),
-    ?assert(meck:validate(dao_helper)),
-    meck:unload(dao_helper).
 
 -endif.
