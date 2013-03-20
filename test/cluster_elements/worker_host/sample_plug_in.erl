@@ -16,7 +16,7 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([init/1, handle/2, cleanUp/0]).
+-export([init/1, handle/2, cleanup/0]).
 
 init(_Args) ->
 	[].
@@ -24,5 +24,5 @@ init(_Args) ->
 handle(_ProtocolVersion, _Msg) ->
 	ok.
 
-cleanUp() ->
+cleanup() ->
 	ok.

@@ -19,7 +19,7 @@
 -ifdef(TEST).
 
 main_test_() ->
-    {inorder, [fun init/0, fun handle/0, fun cleanUp/0]}.
+    {inorder, [fun init/0, fun handle/0, fun cleanup/0]}.
 
 init() ->
     ?assert(dao:init([]) =:= ok).
@@ -35,8 +35,8 @@ handle() ->
     ok = dao:handle(1, {vfs, list_dir,  ["", test]}),
     meck:unload(dao_vfs).
 
-cleanUp() ->
-    ok = dao:cleanUp().
+cleanup() ->
+    ok = dao:cleanup().
 
 
 save_record_test() ->
