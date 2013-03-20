@@ -15,10 +15,13 @@ distclean: clean
 	./rebar delete-deps
 
 test: deps compile
-	./rebar eunit skip_deps=true
+	./rebar eunit ct skip_deps=true
 
 generate: compile
 	./rebar generate
+
+generate_ccm: compile
+	./rebar generate overlay_vars=vars/ccm_node_vars.config
 
 docs:
 	./rebar doc

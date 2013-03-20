@@ -1,11 +1,24 @@
 ## Name of the node
--name {{node}}
+-sname {{node}}
 
 ## Cookie for distributed erlang
 -setcookie veil_cluster_node
 
 ## Node type (worker or ccm)
--veil_cluster_node nodeType {{node_type}}
+## application:get_env(veil_cluster_node, nodeType) should return this
+-veil_cluster_node node_type {{node_type}}
+
+## How long (in sec) should worker sleep before next connection try (when it cannot connect to ccm)
+## application:get_env(veil_cluster_node, heart_beat) should return this
+-veil_cluster_node heart_beat {{heart_beat}}
+
+## List of ccm possible ccm nodes
+## application:get_env(veil_cluster_node, ccm_nodes) should return this
+-veil_cluster_node ccm_nodes {{ccm_nodes}}
+
+## How long should ccm wait for workers before it initializes cluster
+## application:get_env(veil_cluster_node, initialization_time) should return this
+-veil_cluster_node initialization_time {{initialization_time}}
 
 ## Heartbeat management; auto-restarts VM if it dies or becomes unresponsive
 ## (Disabled by default..use with caution!)

@@ -1,28 +1,14 @@
-%% ===================================================================
-%% @author Michal Wrzeszcz
-%% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license 
-%% cited in 'LICENSE.txt'.
-%% @end
-%% ===================================================================
-%% @doc: This module is a gen_server that coordinates the 
-%% life cycle of node. It starts/stops appropriate services (according
-%% to node type) and communicates with ccm (if node works as worker).
-%%
-%% Node can be ccm or worker. However, worker_hosts can be also
-%% started at ccm nodes.
-%% @end
-%% ===================================================================
+%% @author Michal
+%% @doc @todo Add description to worker_host.
 
--module(node_manager).
+-module(worker_host).
 -behaviour(gen_server).
--include("registered_names.hrl").
 -include("records.hrl").
 
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_link/1]).
+-export([start_link/3]).
 
 %% ====================================================================
 %% gen_server callbacks
@@ -33,20 +19,21 @@
 %% API functions
 %% ====================================================================
 
-%% start_link/1
+%% start_link/3
 %% ====================================================================
-%% @doc Starts the server
--spec start_link(Type) -> Result when
-	Type :: worker | ccm,
+%% @doc Starts host with apropriate plug-in
+-spec start_link(PlugIn, PlugInArgs, LoadMemorySize) -> Result when
+	PlugIn :: atom(),
+	PlugInArgs :: any(),
+	LoadMemorySize :: integer(),
 	Result ::  {ok,Pid} 
 			| ignore 
 			| {error,Error},
 	Pid :: pid(),
 	Error :: {already_started,Pid} | term().
 %% ====================================================================
-
-start_link(Type) ->
-    gen_server:start_link({local, ?Node_Manager_Name}, ?MODULE, [Type], []).
+start_link(PlugIn, PlugInArgs, LoadMemorySize) ->
+    gen_server:start_link({local, PlugIn}, ?MODULE, [PlugIn, PlugInArgs, LoadMemorySize], []).
 
 %% init/1
 %% ====================================================================
@@ -60,12 +47,8 @@ start_link(Type) ->
 	State :: term(),
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-init([Type]) when Type =:= worker ; Type =:= ccm ->
-	timer:apply_after(10, gen_server, cast, [?Node_Manager_Name, do_heart_beat]),
-    {ok, #node_state{node_type = Type, ccm_con_status = not_connected}};
-
-init([_Type]) ->
-	{stop, wrong_type}.
+init([PlugIn, PlugInArgs, LoadMemorySize]) ->
+    {ok, #host_state{plug_in = PlugIn, plug_in_state = PlugIn:init(PlugInArgs), load_info = {[], [], 0, LoadMemorySize}}}.
 
 %% handle_call/3
 %% ====================================================================
@@ -84,19 +67,30 @@ init([_Type]) ->
 	Timeout :: non_neg_integer() | infinity,
 	Reason :: term().
 %% ====================================================================
-handle_call(getNodeType, _From, State) ->
-    Reply = State#node_state.node_type,
+handle_call(getPlugIn, _From, State) ->
+    Reply = State#host_state.plug_in,
     {reply, Reply, State};
 
-handle_call(getNode, _From, State) ->
-    Reply = node(),
+handle_call({updatePlugInState, NewPlugInState}, _From, State) ->
+    {reply, ok, State#host_state{plug_in_state = NewPlugInState}};
+
+handle_call(getPlugInState, _From, State) ->
+    {reply, State#host_state.plug_in_state, State};
+
+handle_call(getLoadInfo, _From, State) ->
+    Reply = loadInfo(State#host_state.load_info),
     {reply, Reply, State};
 
-handle_call(get_ccm_connection_status, _From, State) ->
-	{reply, State#node_state.ccm_con_status, State};
+handle_call(getFullLoadInfo, _From, State) ->
+    {reply, State#host_state.load_info, State};
+
+handle_call(clearLoadInfo, _From, State) ->
+	{_New, _Old, _NewListSize, Max} = State#host_state.load_info,
+    Reply = ok,
+    {reply, Reply, State#host_state{load_info = {[], [], 0, Max}}};
 
 handle_call(_Request, _From, State) ->
-	{reply, wrong_request, State}.
+    {reply, wrong_request, State}.
 
 %% handle_cast/2
 %% ====================================================================
@@ -109,14 +103,23 @@ handle_call(_Request, _From, State) ->
 	NewState :: term(),
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_cast(do_heart_beat, State) ->
-	{noreply, State#node_state{ccm_con_status = heart_beat(State#node_state.ccm_con_status)}};
+handle_cast({synch, ProtocolVersion, Msg, MsgId, ReplyDisp}, State) ->
+	PlugIn = State#host_state.plug_in,
+	spawn(fun() -> procRequest(PlugIn, ProtocolVersion, Msg, MsgId, ReplyDisp) end),	
+	{noreply, State};
 
-handle_cast(reset_ccm_connection, State) ->
-	{noreply, State#node_state{ccm_con_status = heart_beat(not_connected)}};
+handle_cast({asynch, ProtocolVersion, Msg}, State) ->
+	PlugIn = State#host_state.plug_in,
+	spawn(fun() -> procRequest(PlugIn, ProtocolVersion, Msg, non, non) end),	
+	{noreply, State};
+
+handle_cast({progress_report, Report}, State) ->
+	NewLoadInfo = saveProgress(Report, State#host_state.load_info),
+    {noreply, State#host_state{load_info = NewLoadInfo}};
 
 handle_cast(_Msg, State) ->
-    {noreply, State}.
+	{noreply, State}.
+
 
 %% handle_info/2
 %% ====================================================================
@@ -129,8 +132,10 @@ handle_cast(_Msg, State) ->
 	NewState :: term(),
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_info(_Info, State) ->
-    {noreply, State}.
+handle_info(Info, {PlugIn, State}) ->
+	PlugIn = State#host_state.plug_in,
+    {_Reply, NewPlugInState} = PlugIn:handle(Info, State#host_state.plug_in_state),
+    {noreply, State#host_state{plug_in_state = NewPlugInState}}.
 
 
 %% terminate/2
@@ -157,86 +162,69 @@ terminate(_Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
 
-%% heart_beat/1
+%% procRequest/5
 %% ====================================================================
-%% @doc Connects with ccm and tells that the node is alive.
-%% First it establishes network connection, next sends message to ccm.
--spec heart_beat(Conn_status :: atom()) -> New_conn_status when
-	New_conn_status ::  atom(). 
-%% ====================================================================
-heart_beat(Conn_status) ->
-	New_conn_status = case Conn_status of
-		not_connected ->
-			{ok, CCM_Nodes} = application:get_env(veil_cluster_node, ccm_nodes),
-			Ans = init_net_connection(CCM_Nodes),
-			case Ans of
-				ok -> connected;
-				error -> not_connected
-			end;
-		Other -> Other
-	end,
-
-	New_conn_status2 = case New_conn_status of
-		connected -> heart_beat();
-		Other2 -> Other2
-	end,
-
-	{ok, Interval} = application:get_env(veil_cluster_node, heart_beat),
-	case New_conn_status2 of
-		ok -> timer:apply_after(Interval * 1000, gen_server, cast, [?Node_Manager_Name, do_heart_beat]);
-		_Other3 -> timer:apply_after(Interval * 1000, gen_server, cast, [?Node_Manager_Name, reset_ccm_connection])
-	end,
-
-	New_conn_status.
-
-%% init_net_connection/1
-%% ====================================================================
-%% @doc Initializes network connection with cluster that contains nodes
-%% given in argument.
--spec init_net_connection(Nodes :: list()) -> Result when
+%% @doc Processes client request using PlugIn:handle function. Afterwards,
+%% it sends the answer to dispatcher and logs info about processing time.
+-spec procRequest(PlugIn :: atom(), ProtocolVersion :: integer(), Msg :: term(), MsgId :: integer(), ReplyDisp :: term()) -> Result when
 	Result ::  atom(). 
 %% ====================================================================
-init_net_connection([]) ->
-	error;
-
-init_net_connection([Node | Nodes]) ->
-	try
-		Ans = net_adm:ping(Node),
-		case Ans of
-			pong -> ok;
-			pang -> init_net_connection(Nodes)
-		end
+procRequest(PlugIn, ProtocolVersion, Msg, MsgId, ReplyDisp) ->
+	{Megaseconds,Seconds,Microseconds} = os:timestamp(),
+	Response = 	try
+		PlugIn:handle(ProtocolVersion, Msg)
 	catch
-		_:_ -> error
-	end.
+		_:_ -> wrongTask
+	end,
+	
+	case ReplyDisp of
+		non -> ok;
+		Disp -> gen_server:cast(Disp, {worker_answer, MsgId, Response})
+	end,
+	
+	{Megaseconds2,Seconds2,Microseconds2} = os:timestamp(),
+	Time = 1000000*1000000*(Megaseconds2-Megaseconds) + 1000000*(Seconds2-Seconds) + Microseconds2-Microseconds,
 
-%% heart_beat/0
-%% ====================================================================
-%% @doc Tells ccm that node is alive.
--spec heart_beat() -> Result when
-	Result ::  atom(). 
-%% ====================================================================
-heart_beat() ->
-	case send_to_ccm({node_is_up, node()}) of
-		ok -> ok;
-		_Other -> heart_beat_error
-	end.
-
-%% send_to_ccm/1
-%% ====================================================================
-%% @doc Sends message to ccm.
--spec send_to_ccm(Message :: term()) -> Result when
-	Result ::  atom(). 
-%% ====================================================================
-send_to_ccm(Message) ->
 	try
-		gen_server:call({global, ?CCM}, Message),
+		gen_server:cast(PlugIn, {progress_report, {{Megaseconds,Seconds,Microseconds}, Time}}),
 		ok
 	catch
-		_:_ -> connection_error
+		_:_ -> worker_host_error
 	end.
+
+%% saveProgress/2
+%% ====================================================================
+%% @doc Adds information about ended request to host memory (ccm uses
+%% it to control cluster load).
+-spec saveProgress(Report :: term(), LoadInfo :: term()) -> NewLoadInfo when
+	NewLoadInfo ::  term(). 
+%% ====================================================================
+saveProgress(Report, {New, Old, NewListSize, Max}) ->
+	case NewListSize + 1 of
+		Max ->
+			{[], [Report | New], 0, Max};
+		S ->
+			{[Report | New], Old, S, Max}
+	end.
+
+%% loadInfo/1
+%% ====================================================================
+%% @doc Provides averaged information about last requests.
+-spec loadInfo(LoadInfo :: term()) -> Result when
+	Result ::  term(). 
+%% ====================================================================
+loadInfo({New, Old, NewListSize, Max}) ->
+	Load = lists:sum(lists:map(fun({_Time, Load}) -> Load end, New)) + lists:sum(lists:map(fun({_Time, Load}) -> Load end, lists:sublist(Old, Max-NewListSize))),
+	{Time, _Load} = case {New, Old} of
+		{[], []} -> {os:timestamp(), []};
+		{_O, []} -> lists:last(New);
+		_L -> case NewListSize of
+			Max -> lists:last(New);
+			_S -> lists:nth(Max-NewListSize, Old)
+		end	
+	end,
+	{Time, Load}.

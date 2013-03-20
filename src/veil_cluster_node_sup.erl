@@ -11,7 +11,8 @@
 %% ===================================================================
 
 -module(veil_cluster_node_sup).
-
+-include("registered_names.hrl").
+-include("supervision_macros.hrl").
 -behaviour(supervisor).
 
 %% API
@@ -19,9 +20,6 @@
 
 %% Supervisor callbacks
 -export([init/1]).
-
-%% Helper macro for declaring children of supervisor
--define(CHILD(I, Type, Args), {I, {I, start_link, [Args]}, permanent, 5000, Type, [I]}).
 
 %% ===================================================================
 %% API functions
@@ -39,7 +37,7 @@
                 | term().
 %% ====================================================================
 start_link(NodeType) ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, [NodeType]).
+    supervisor:start_link({local, ?Supervisor_Name}, ?MODULE, [NodeType]).
 
 %% ===================================================================
 %% Supervisor callbacks
@@ -62,5 +60,8 @@ start_link(NodeType) ->
 				   | temporary,
 	Modules :: [module()] | dynamic.
 %% ====================================================================
-init([NodeType]) ->
-    {ok, { {one_for_one, 5, 10}, [?CHILD(node_manager, worker, NodeType)]} }.
+init([NodeType]) when NodeType =:= worker ->
+    {ok, { {one_for_one, 5, 10}, [?Sup_Child(node_manager, node_manager, permanent, [NodeType])]} };
+
+init([NodeType]) when NodeType =:= ccm ->
+    {ok, { {one_for_one, 5, 10}, [?Sup_Child(cluster_manager, cluster_manager, permanent, []), ?Sup_Child(node_manager, node_manager, permanent, [NodeType])]} }.
