@@ -93,7 +93,7 @@ handle_call({node_is_up, Node}, _From, State) ->
 	case lists:member(Node, Nodes) of
 		true -> {reply, ok, State};
 		false -> State#cm_state.monitor_process ! {monitor_node, Node},
-			NewState = checkNode(Node, State),
+			NewState = check_node(Node, State),
 			{reply, ok, NewState#cm_state{nodes = [Node | Nodes]}}
 	end;
 
@@ -270,36 +270,36 @@ stop_worker(Node, Module, State) ->
 	end,
 	{Ans, State#cm_state{workers = NewWorkers}}.
 
-%% checkNode/2
+%% check_node/2
 %% ====================================================================
 %% @doc Checks if any workers are running on node.
--spec checkNode(Node :: atom(), State :: term()) -> NewState when
+-spec check_node(Node :: atom(), State :: term()) -> NewState when
 	NewState :: term().
 %% ====================================================================
-checkNode(Node, State) ->
+check_node(Node, State) ->
 	try
 		Children = supervisor:which_children({?Supervisor_Name, Node}),
 		Workers = State#cm_state.workers,
-		NewWorkers = addChildren(Node, Children, Workers),
+		NewWorkers = add_children(Node, Children, Workers),
 		State#cm_state{workers = NewWorkers}
 	catch
 		_:_ -> State
 	end.
 
-%% addChildren/3
+%% add_children/3
 %% ====================================================================
 %% @doc Add workers that run on node to workers list.
--spec addChildren(Node :: atom(), Childern :: list(), Workers :: term()) -> NewWorkersList when
+-spec add_children(Node :: atom(), Childern :: list(), Workers :: term()) -> NewWorkersList when
 	NewWorkersList :: list().
 %% ====================================================================
-addChildren(_Node, [], Workers) ->
+add_children(_Node, [], Workers) ->
 	Workers;
 
-addChildren(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
+add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
 	case Id of 
-		node_manager -> addChildren(Node, Children, Workers);
-		cluster_manager -> addChildren(Node, Children, Workers);
-		_Other -> [{Node, Id, ChildPid} | addChildren(Node, Children, Workers)]
+		node_manager -> add_children(Node, Children, Workers);
+		cluster_manager -> add_children(Node, Children, Workers);
+		_Other -> [{Node, Id, ChildPid} | add_children(Node, Children, Workers)]
 	end.
 
 %% monitoring_loop/1

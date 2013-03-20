@@ -78,7 +78,7 @@ handle_call(getPlugInState, _From, State) ->
     {reply, State#host_state.plug_in_state, State};
 
 handle_call(getLoadInfo, _From, State) ->
-    Reply = loadInfo(State#host_state.load_info),
+    Reply = load_info(State#host_state.load_info),
     {reply, Reply, State};
 
 handle_call(getFullLoadInfo, _From, State) ->
@@ -105,16 +105,16 @@ handle_call(_Request, _From, State) ->
 %% ====================================================================
 handle_cast({synch, ProtocolVersion, Msg, MsgId, ReplyDisp}, State) ->
 	PlugIn = State#host_state.plug_in,
-	spawn(fun() -> procRequest(PlugIn, ProtocolVersion, Msg, MsgId, ReplyDisp) end),	
+	spawn(fun() -> proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyDisp) end),	
 	{noreply, State};
 
 handle_cast({asynch, ProtocolVersion, Msg}, State) ->
 	PlugIn = State#host_state.plug_in,
-	spawn(fun() -> procRequest(PlugIn, ProtocolVersion, Msg, non, non) end),	
+	spawn(fun() -> proc_request(PlugIn, ProtocolVersion, Msg, non, non) end),	
 	{noreply, State};
 
 handle_cast({progress_report, Report}, State) ->
-	NewLoadInfo = saveProgress(Report, State#host_state.load_info),
+	NewLoadInfo = save_progress(Report, State#host_state.load_info),
     {noreply, State#host_state{load_info = NewLoadInfo}};
 
 handle_cast(_Msg, State) ->
@@ -166,14 +166,14 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %% ====================================================================
 
-%% procRequest/5
+%% proc_request/5
 %% ====================================================================
 %% @doc Processes client request using PlugIn:handle function. Afterwards,
 %% it sends the answer to dispatcher and logs info about processing time.
--spec procRequest(PlugIn :: atom(), ProtocolVersion :: integer(), Msg :: term(), MsgId :: integer(), ReplyDisp :: term()) -> Result when
+-spec proc_request(PlugIn :: atom(), ProtocolVersion :: integer(), Msg :: term(), MsgId :: integer(), ReplyDisp :: term()) -> Result when
 	Result ::  atom(). 
 %% ====================================================================
-procRequest(PlugIn, ProtocolVersion, Msg, MsgId, ReplyDisp) ->
+proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyDisp) ->
 	{Megaseconds,Seconds,Microseconds} = os:timestamp(),
 	Response = 	try
 		PlugIn:handle(ProtocolVersion, Msg)
@@ -196,14 +196,14 @@ procRequest(PlugIn, ProtocolVersion, Msg, MsgId, ReplyDisp) ->
 		_:_ -> worker_host_error
 	end.
 
-%% saveProgress/2
+%% save_progress/2
 %% ====================================================================
 %% @doc Adds information about ended request to host memory (ccm uses
 %% it to control cluster load).
--spec saveProgress(Report :: term(), LoadInfo :: term()) -> NewLoadInfo when
+-spec save_progress(Report :: term(), LoadInfo :: term()) -> NewLoadInfo when
 	NewLoadInfo ::  term(). 
 %% ====================================================================
-saveProgress(Report, {New, Old, NewListSize, Max}) ->
+save_progress(Report, {New, Old, NewListSize, Max}) ->
 	case NewListSize + 1 of
 		Max ->
 			{[], [Report | New], 0, Max};
@@ -211,13 +211,13 @@ saveProgress(Report, {New, Old, NewListSize, Max}) ->
 			{[Report | New], Old, S, Max}
 	end.
 
-%% loadInfo/1
+%% load_info/1
 %% ====================================================================
 %% @doc Provides averaged information about last requests.
--spec loadInfo(LoadInfo :: term()) -> Result when
+-spec load_info(LoadInfo :: term()) -> Result when
 	Result ::  term(). 
 %% ====================================================================
-loadInfo({New, Old, NewListSize, Max}) ->
+load_info({New, Old, NewListSize, Max}) ->
 	Load = lists:sum(lists:map(fun({_Time, Load}) -> Load end, New)) + lists:sum(lists:map(fun({_Time, Load}) -> Load end, lists:sublist(Old, Max-NewListSize))),
 	{Time, _Load} = case {New, Old} of
 		{[], []} -> {os:timestamp(), []};
