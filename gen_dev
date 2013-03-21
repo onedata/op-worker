@@ -2,15 +2,17 @@
 
 # Simple validation of arguments
 if [ $# -lt 4 ] || [ $1 != "-name" ] || [ $3 != "-main_ccm" ]; then
-	echo "Usage: $0 -name <node_name@host> -main_ccm <main_ccm_node@host> [-opt_ccm <opt_ccm_node1@host opt_ccm_node2@host ...>]"
+	echo "Usage: $0 -name node_name@host -main_ccm main_ccm_node@host [-opt_ccm opt_ccm_node1@host opt_ccm_node2@host ...]"
 	exit 1
 fi
 
 # Variables with node name and main CCM name, initially this node is not a CCM node, string with CCM nodes initialized with main CCM
 NODE_NAME=$2
+AT_INDEX=`expr index "$2" @`
+NODE_NAME_WITHOUT_HOSTNAME=${NODE_NAME:0:(($AT_INDEX - 1))}
 MAIN_CCM_NAME=$4
 IS_THIS_CCM=0
-CCM_LIST="['$MAIN_CCM_NAME'"
+CCM_LIST="[\\\\\"\\\\\\\\'$MAIN_CCM_NAME\\\\\\\\'\\\\\""
 
 # Check if this node is the main CCM node
 if [ $NODE_NAME == $MAIN_CCM_NAME ]; then
@@ -21,7 +23,7 @@ fi
 if [ $# -gt 5 ]; then
 	for (( INDEX=6; INDEX<=$#; INDEX++ ))
 	do
-		CCM_LIST="$CCM_LIST,'${!INDEX}'"
+		CCM_LIST="$CCM_LIST,\\\\\"\\\\\\\\'${!INDEX}\\\\\\\\'\\\\\""
 		if [ $NODE_NAME == ${!INDEX} ]; then
 			IS_THIS_CCM=1
 		fi
@@ -32,22 +34,10 @@ CCM_LIST="$CCM_LIST]"
 case $IS_THIS_CCM in
 	# This node is a worker
 	0)
-		# produce a proper vars.config file
-		echo -e	"%%
-%% etc/vm.args
-%%
-
-%% Node name
-{node, \"$NODE_NAME\"}.
-
-%% Node type (worker or ccm)
-{node_type, \"worker\"}.
-
-%% How long (in sec) should node wait before next heart beat
-{heart_beat, 60}.
-
-%% List of ccm possible ccm nodes
-{ccm_nodes, \"$CCM_LIST\"}." > vars.config
+		# produce a proper vars.config file from template
+		sed "s/\$CCM_LIST/$CCM_LIST/g; 
+			s/\$NODE_NAME/$NODE_NAME/g; 
+			/%%%/d" "releases/vars/worker_vars.config" > releases/vars.config
 		;;
 
 
@@ -84,48 +74,15 @@ case $IS_THIS_CCM in
 		fi
 		SYNC_CCM_LIST="$SYNC_CCM_LIST]"
 
-		# produce a proper vars.config file in vars directory
-		echo "%%
-%% etc/sys.config
-%%
-
-%% Config for ccm distributed application
-{ccm_dist_config, \"{kernel,
-  [{distributed, [{veil_cluster_node, 5000, $CCM_HIERARCHY_LIST}]},
-   {sync_nodes_mandatory, $SYNC_CCM_LIST},
-   {sync_nodes_timeout, 60000}
-  ]
- },\"
-}.
-
-
-%%
-%% etc/vm.args
-%%
-
-%% Node name
-{node, \"$NODE_NAME\"}.
-
-%% Node type (worker or ccm)
-{node_type, \"ccm\"}.
-
-%% How long should ccm wait for workers before it initializes cluster
-{initialization_time, 300}.
-
-%% How long (in sec) should ccm wait between successive checks of cluster status
-{cluster_clontrol_period, 300}.
-
-%% Memory size which stores information about worker load
-{worker_load_memory_size, 1000}.
-
-%% List of ccm possible ccm nodes
-{ccm_nodes, \"$CCM_LIST\"}.
-
-%% How long (in sec) should node wait before next heart beat
-{heart_beat, 60}." > vars/ccm_node_vars.config
+		# produce a proper vars.config file from template
+		sed "s/\$CCM_HIERARCHY_LIST/$CCM_HIERARCHY_LIST/g; 
+			s/\$SYNC_CCM_LIST/$SYNC_CCM_LIST/g; 
+			s/\$CCM_LIST/$CCM_LIST/g; 
+			s/\$NODE_NAME/$NODE_NAME/g; 
+			/%%%/d" "releases/vars/ccm_vars.config" > releases/vars.config
 		;;
-
-
 esac
+
+sed -i "s/{target_dir,.*\\./{target_dir, \"$NODE_NAME_WITHOUT_HOSTNAME\"}./g" "releases/reltool.config"
 
 exit 0
