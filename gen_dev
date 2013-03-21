@@ -66,8 +66,12 @@ case $IS_THIS_CCM in
 			do
 				if [ ${!INDEX} != $NODE_NAME ]; then
 					SYNC_CCM_LIST="$SYNC_CCM_LIST'${!INDEX}'"
+
+					NEXT=$((INDEX + 1))
 					if [ $INDEX -ne $# ]; then
-						SYNC_CCM_LIST="$SYNC_CCM_LIST, "
+						if [ ${!NEXT} != $NODE_NAME ] || [ $NEXT -ne $# ]; then
+							SYNC_CCM_LIST="$SYNC_CCM_LIST, "
+						fi
 					fi
 				fi
 			done
