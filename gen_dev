@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if [ $1 == "-clean_up" ]; then
+if [ $# -eq 1 ] && [ $1 == "-clean_up" ]; then
 	mv releases/old_reltool.config releases/reltool.config 2>/dev/null
 	exit 0
 fi
@@ -17,11 +17,13 @@ if [ $# -lt 4 ] || [ $1 != "-name" ] || [ $3 != "-main_ccm" ]; then
 	
 	# Invalid arguments or absence of .args file
 	else
-		echo "Usage: "
+		echo "Usage:"
 		echo "	$0 -name node_name@host -main_ccm main_ccm_node@host [-opt_ccm opt_ccm_node1@host opt_ccm_node2@host ...]"
-		echo "or"
+		echo " "
+		echo "or:"
 		echo "	$0 (file 'gen_dev.args' containing arguments present in script directory)"
-		echo "after rebar ./generate"
+		echo " "
+		echo "after rebar ./generate:"
 		echo "	$0 -clean_up (restores reltool.config to the original state)"
 		exit 1
 	fi

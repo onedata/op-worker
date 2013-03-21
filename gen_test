@@ -2,20 +2,29 @@
 
 function bad_args_error
 {
-	echo "Usage: "
-	echo "	$0 -worker worker1@host worker2@host ... -main_ccm main_ccm_node@host [-opt_ccm opt_ccm_node1@host opt_ccm_node2@host ...]"
-	echo "or"
-	echo "	$0 (file 'gen_test.args' containing arguments present in script directory)"
+	echo "Usage:" 
+	echo "	$0 -worker worker1@host worker2@host ... -main_ccm main_ccm_node@host [-opt_ccm opt_ccm_node1@host opt_ccm_node2@host ...] [-start]"
+	echo " "
+	echo "or:"
+	echo "	$0 [-start] (file 'gen_test.args' containing arguments present in script directory)"
+	echo " "
+	echo "adding option -start will cause the script to start test environment according to arguments, skipping release generation"
 	exit 1	
 }
 
 if [ $# -lt 4 ] || [ $1 != "-worker" ]; then
 
 	# Check for .args file
-	if [ $# -eq 0 ] && [ -f gen_dev.args ]; then
+	if [ $# -lt 2 ] && [ -f gen_dev.args ]; then
 		ARGS=`cat gen_test.args`
 		echo 'Using arguments from gen_test.args'
-		./gen_test $ARGS
+		if [ $# -eq 1 ] && [ $1 == "-start" ]; then
+			./gen_test $ARGS -start
+		elif [ $# -eq 0 ]; then
+			./gen_test $ARGS
+		else
+			bad_args_error
+		fi
 		exit 0
 	fi
 
@@ -51,28 +60,49 @@ if [ $# -gt $NEXT_LOOP_INDEX ] && [ ${!NEXT_LOOP_INDEX} != "-opt_ccm" ]; then
 	bad_args_error
 fi
 
+DO_START=0
 for (( INDEX=$((NEXT_LOOP_INDEX + 1)); INDEX<=$#; INDEX++ ))
 do
-	OPT_CCM_LIST="$OPT_CCM_LIST ${!INDEX}"
-	NODE_LIST[(( INDEX - 4))]=${!INDEX}
+	if [ ${!INDEX} == "-start" ]; then
+		DO_START=1
+	else
+		OPT_CCM_LIST="$OPT_CCM_LIST ${!INDEX}"
+		NODE_LIST[(( INDEX - 4))]=${!INDEX}
+	fi
 done
 
+if [ $DO_START -eq 0 ]; then
+	for NODE in "${NODE_LIST[@]}"
+	do
+		AT_INDEX=`expr index "$NODE" @`
+		NODE_NAME_WITHOUT_HOSTNAME=${NODE:0:(($AT_INDEX - 1))}
+		echo " "
+		echo "--------------------------------------------"
+		echo "generating release for $NODE in   releases/$NODE_NAME_WITHOUT_HOSTNAME"
+		echo " "
+		make release_config args="-name $NODE -main_ccm $MAIN_CCM_NAME -opt_ccm $OPT_CCM_LIST"
+		echo " "
+		echo "done!"
+	done	
 
-for NODE in "${NODE_LIST[@]}"
-do
-	AT_INDEX=`expr index "$NODE" @`
-	NODE_NAME_WITHOUT_HOSTNAME=${NODE:0:(($AT_INDEX - 1))}
+	echo " "
+	echo "Test environment successfully set up!" 
+
+else
 	echo " "
 	echo "--------------------------------------------"
-	echo "generating release for $NODE in   releases/$NODE_NAME_WITHOUT_HOSTNAME"
 	echo " "
-	make start_config ARGS="-name $NODE -main_ccm $MAIN_CCM_NAME -opt_ccm $OPT_CCM_LIST"
+	for NODE in "${NODE_LIST[@]}"
+	do
+		AT_INDEX=`expr index "$NODE" @`
+		NODE_NAME_WITHOUT_HOSTNAME=${NODE:0:(($AT_INDEX - 1))}
+		echo "starting $NODE in   releases/$NODE_NAME_WITHOUT_HOSTNAME"
+		make start_config node="$NODE_NAME_WITHOUT_HOSTNAME"
+	done
 	echo " "
-	echo "done!"
-done	
+	echo "Test environment successfully started!" 
+fi
 
-echo " "
-echo "Test environment successfully set up!" 
 
 exit 0
 

@@ -21,19 +21,38 @@ generate: compile
 	./rebar generate
 
 gen_config:
-	./gen_dev $(ARGS)
+	./gen_dev $(args)
 
 gen_config_from_file:
 	./gen_dev
 
-start_config: gen_config generate
+gen_config_cleanup:
 	./gen_dev -clean_up
 
-start_config_from_file: gen_config_from_file generate
-	./gen_dev -clean_up
+release_config: gen_config generate gen_config_cleanup
 
-generate_ccm: compile
-	./rebar generate overlay_vars=vars/ccm_node_vars.config
+release_config_from_file: gen_config_from_file generate gen_config_cleanup
+
+start_config:
+	./releases/$(node)/bin/veil_cluster_node start
+
+node_attach:
+	./releases/$(node)/bin/veil_cluster_node attach
+
+start_config_console:
+	./releases/$(node)/bin/veil_cluster_node console
+
+gen_test_env:
+	./gen_test $(args)
+
+gen_test_env_from_file:
+	./gen_test
+
+start_test_env:
+	./gen_test $(args) -start
+
+start_test_env_from_file:
+	./gen_test -start
 
 docs:
 	./rebar doc
