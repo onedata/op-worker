@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if [ $1 == "-clean_up" ]; then
+	mv releases/old_reltool.config releases/reltool.config 2>/dev/null
+	exit 0
+fi
+
 # Simple validation of arguments
 if [ $# -lt 4 ] || [ $1 != "-name" ] || [ $3 != "-main_ccm" ]; then
 
@@ -16,6 +21,8 @@ if [ $# -lt 4 ] || [ $1 != "-name" ] || [ $3 != "-main_ccm" ]; then
 		echo "	$0 -name node_name@host -main_ccm main_ccm_node@host [-opt_ccm opt_ccm_node1@host opt_ccm_node2@host ...]"
 		echo "or"
 		echo "	$0 (file 'gen_dev.args' containing arguments present in script directory)"
+		echo "after rebar ./generate"
+		echo "	$0 -clean_up (restores reltool.config to the original state)"
 		exit 1
 	fi
 fi
@@ -101,6 +108,8 @@ case $IS_THIS_CCM in
 			/%%%/d" "releases/vars/ccm_vars.config" > releases/vars.config
 		;;
 esac
+
+cp releases/reltool.config releases/old_reltool.config
 
 sed -i "s/{target_dir,.*\\./{target_dir, \"$NODE_NAME_WITHOUT_HOSTNAME\"}./g" "releases/reltool.config"
 

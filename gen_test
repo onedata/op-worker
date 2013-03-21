@@ -57,6 +57,7 @@ do
 	NODE_LIST[(( INDEX - 4))]=${!INDEX}
 done
 
+
 for NODE in "${NODE_LIST[@]}"
 do
 	AT_INDEX=`expr index "$NODE" @`

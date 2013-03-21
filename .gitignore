@@ -1,6 +1,7 @@
 ebin
 .settings
 releases/veil_cluster_node
+releases/vars.config
 deps/*
 .eunit
 doc

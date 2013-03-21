@@ -27,8 +27,10 @@ gen_config_from_file:
 	./gen_dev
 
 start_config: gen_config generate
+	./gen_dev -clean_up
 
 start_config_from_file: gen_config_from_file generate
+	./gen_dev -clean_up
 
 generate_ccm: compile
 	./rebar generate overlay_vars=vars/ccm_node_vars.config
