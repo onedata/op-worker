@@ -34,7 +34,6 @@
 %% ====================================================================
 start(_StartType, _StartArgs) ->
 	{ok, NodeType} = application:get_env(veil_cluster_node, node_type),
-	lager:info("Application started!"),
     veil_cluster_node_sup:start_link(NodeType).
 
 %% stop/1

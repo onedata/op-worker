@@ -192,6 +192,8 @@ heart_beat(Conn_status) ->
 		_Other3 -> timer:apply_after(Interval * 1000, gen_server, cast, [?Node_Manager_Name, reset_ccm_connection])
 	end,
 
+	lager:info("Haert beat on node: ~s: ~s", [node(), New_conn_status2]),
+	
 	New_conn_status.
 
 %% init_net_connection/1
