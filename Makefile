@@ -20,6 +20,16 @@ test: deps compile
 generate: compile
 	./rebar generate
 
+gen_config:
+	./gen_dev $(ARGS)
+
+gen_config_from_file:
+	./gen_dev
+
+start_config: gen_config generate
+
+start_config_from_file: gen_config_from_file generate
+
 generate_ccm: compile
 	./rebar generate overlay_vars=vars/ccm_node_vars.config
 

@@ -2,9 +2,24 @@
 
 # Simple validation of arguments
 if [ $# -lt 4 ] || [ $1 != "-name" ] || [ $3 != "-main_ccm" ]; then
-	echo "Usage: $0 -name node_name@host -main_ccm main_ccm_node@host [-opt_ccm opt_ccm_node1@host opt_ccm_node2@host ...]"
-	exit 1
+
+	# Check for .args file
+	if [ $# -eq 0 ] && [ -f gen_dev.args ]; then
+		ARGS=`cat gen_dev.args`
+		echo 'Using arguments from gen_dev.args'
+		./gen_dev $ARGS
+		exit 0
+	
+	# Invalid arguments or absence of .args file
+	else
+		echo "Usage: "
+		echo "	$0 -name node_name@host -main_ccm main_ccm_node@host [-opt_ccm opt_ccm_node1@host opt_ccm_node2@host ...]"
+		echo "or"
+		echo "	$0 (file 'gen_dev.args' containing arguments present in script directory)"
+		exit 1
+	fi
 fi
+
 
 # Variables with node name and main CCM name, initially this node is not a CCM node, string with CCM nodes initialized with main CCM
 NODE_NAME=$2
