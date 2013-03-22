@@ -1,6 +1,6 @@
 %% vim: ts=4 sw=4 et
 
--module(control_panel_cowboy_handler).
+-module(cp_cowboy_handler).
 -include_lib("nitrogen_core/include/wf.hrl").
 
 -export([init/3, handle/2, terminate/2]).

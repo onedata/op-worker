@@ -1,0 +1,1 @@
+Git cannot add empty directories. Remove this file when any file appears. A name of test file should be 'name of tested file'_tests.erl.

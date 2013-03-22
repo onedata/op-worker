@@ -8,7 +8,7 @@
 %% API functions
 %% ===================================================================
 
-init(_) ->
+init([{CCM_process_name, CCM_node_name}, {DAO_process_name, DAO_node_name}]) ->
     %% Start the Process Registry...
     application:start(nprocreg),
 
@@ -27,6 +27,10 @@ init(_) ->
     %% {ok, ServerName} = application:get_env(server_name),
     %% {ok, DocRoot} = application:get_env(document_root),
     %% {ok, StaticPaths} = application:get_env(static_paths),
+
+    application:set_env(veil_cluster_node, ccm_address, {CCM_process_name, CCM_node_name}),
+    application:set_env(veil_cluster_node, dao_address, {DAO_process_name, DAO_node_name}),
+
 
     BindAddress = "0.0.0.0",
     Port = 8000,
@@ -49,7 +53,7 @@ init(_) ->
     end,StaticPaths),
 
     %% HandlerModule will end up calling HandlerModule:handle(Req,HandlerOpts)
-    HandlerModule = control_panel_cowboy_handler,
+    HandlerModule = cp_cowboy_handler,
     HandlerOpts = [],
 
     %% Start Cowboy...
