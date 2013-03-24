@@ -94,6 +94,28 @@ Using Makefile to generate releases and test environments of veil cluster nodes
 ~$  make start_config_console node="node_name"       -> combines the two above
 
 
+    ================
+    To produce a vars.config file without generation one can use:
+
+~$  make gen_config args="-name node_name@host -main_ccm main_ccm_node@host -opt_ccm opt_ccm_node1@host opt_ccm_node2@host"
+
+~$  make gen_config_from_file
+
+    NOTE - this will change reltool.config accordingly to arguments and save the old version in old_reltool.config.
+    After generation the old file should be restored, either manually or by using:
+
+~$  make gen_config_cleanup
+
+
+    ================
+    Another files that take part in vars.config creation are
+     - vars/ccm_vars.config
+     - vars/worker_vars.config
+
+    Those are strongly connected with the script itself. The script swaps strings starting with "$" with ones calculated
+    from script arguments and thus creates the vars.config file. For a broader description consult these files.
+
+
 
 2. GENERATING A LOCAL TEST ENVIRONMENT
    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -124,6 +146,7 @@ Using Makefile to generate releases and test environments of veil cluster nodes
     to know which release packages need to be started.
 
     Every node can be started independently with use of 'start_config', 'node_attach' and 'start_config_console' make targets.
+
 
 
 
