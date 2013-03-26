@@ -74,9 +74,9 @@ a node it is required to specify the following set of arguments:
 
 -name node_name@host -main_ccm main_ccm_node@host [-opt_ccm opt_ccm_node1@host opt_ccm_node2@host ...]
 
-The expression after -name specifies the node for which the release will be generated. It can be one of CCMs listed later on.
-The expression after -main_ccm specifies the node name of the main CCM.
-The expression after -opt_ccm specifies the list of optional CCMs. These arguments are not mandatory.
+ - The expression after -name specifies the node for which the release will be generated. It can be one of CCMs listed later on.
+ - The expression after -main_ccm specifies the node name of the main CCM.
+ - The expression after -opt_ccm specifies the list of optional CCMs. These arguments are not mandatory.
 
 The above argument string can be either placed in file 'gen_dev.args' located in the root directory or passed to Makefile.
 
@@ -128,9 +128,9 @@ To generate a testing environment proper arguments must be passed to the script:
 
 -worker worker1@host worker2@host ... -main_ccm main_ccm_node@host [-opt_ccm opt_ccm_node1@host opt_ccm_node2@host ...]
 
-The expression after -worker specifies the list of workers in the cluster.
-The expression after -main_ccm specifies the node name of the main CCM.
-The expression after -opt_ccm specifies the list of optional CCMs in the cluster (not mandatory).
+ - The expression after -worker specifies the list of workers in the cluster.
+ - The expression after -main_ccm specifies the node name of the main CCM.
+ - The expression after -opt_ccm specifies the list of optional CCMs in the cluster (not mandatory).
 
 Again, these arguments can be obtained from 'gen_test.args' or passed via args to Makefile.
 
