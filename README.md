@@ -82,19 +82,19 @@ The above argument string can be either placed in file 'gen_dev.args' located in
 
 #### Generating a release:
 
-~$  make release_config args="-name node_name@host -main_ccm main_ccm_node@host -opt_ccm opt_ccm_node1@host opt_ccm_node2@host"
+    ~$  make release_config args="-name node_name@host -main_ccm main_ccm_node@host -opt_ccm opt_ccm_node1@host opt_ccm_node2@host"
 
-~$  make release_config_from_file
+    ~$  make release_config_from_file
 
 After either of these operations, the release will be placed in releases/node_name, with all the environment variables set up.
 
 #### Starting and managing generated packages:
 
-~$  make start_config node="node_name"               -> starts the node called 'node_name' as a daemon
+    ~$  make start_config node="node_name"               -> starts the node called 'node_name' as a daemon
 
-~$  make node_attach node="node_name"                -> attaches to the running node called 'node_name' with an erlang shell
+    ~$  make node_attach node="node_name"                -> attaches to the running node called 'node_name' with an erlang shell
 
-~$  make start_config_console node="node_name"       -> combines the two above
+    ~$  make start_config_console node="node_name"       -> combines the two above
 
 
 
