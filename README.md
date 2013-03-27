@@ -100,14 +100,14 @@ After either of these operations, the release will be placed in releases/node_na
 
 #### To produce a vars.config file without generation one can use:
 
-~$  make gen_config args="-name node_name@host -main_ccm main_ccm_node@host -opt_ccm opt_ccm_node1@host opt_ccm_node2@host"
+    ~$  make gen_config args="-name node_name@host -main_ccm main_ccm_node@host -opt_ccm opt_ccm_node1@host opt_ccm_node2@host"
 
-~$  make gen_config_from_file
+    ~$  make gen_config_from_file
 
 NOTE - this will change reltool.config accordingly to arguments and save the old version in old_reltool.config.
 After generation the old file should be restored, either manually or by using:
 
-~$  make gen_config_cleanup
+    ~$  make gen_config_cleanup
 
 
 
@@ -136,17 +136,17 @@ Again, these arguments can be obtained from 'gen_test.args' or passed via args t
 
 ####Possible usages:
 
-~$  make gen_test_env args="-worker worker1@host -main_ccm main_ccm_node@host -opt_ccm opt_ccm_node1@host opt_ccm_node2@host"
+    ~$  make gen_test_env args="-worker worker1@host -main_ccm main_ccm_node@host -opt_ccm opt_ccm_node1@host opt_ccm_node2@host"
 
-~$  make gen_test_env_from_file
+    ~$  make gen_test_env_from_file
 
 Both of these commands produce a release for each node in corresponding directories.
 
 #### Starting the whole cluster:
 
-~$  make start_test_env args="-worker worker1@host -main_ccm main_ccm_node@host -opt_ccm opt_ccm_node1@host opt_ccm_node2@host"       -
+    ~$  make start_test_env args="-worker worker1@host -main_ccm main_ccm_node@host -opt_ccm opt_ccm_node1@host opt_ccm_node2@host"       -
 
-~$  make start_test_env_from_file
+    ~$  make start_test_env_from_file
 
 It is important that the same args are passed to Makefile or remain it the .args file. This is the way for the script
 to know which release packages need to be started.
