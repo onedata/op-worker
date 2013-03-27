@@ -27,7 +27,7 @@
 behaviour_info(callbacks) ->
     [{init,1},
      {handle, 2},
-     {cleanUp, 0}];
+     {cleanup, 0}];
 behaviour_info(_Other) ->
     undefined.
 
@@ -47,8 +47,8 @@ behaviour_info(_Other) ->
 %% Description: Do your work.
 %% ====================================================================
 
-%% cleanUp/0
+%% cleanup/0
 %% ====================================================================
-%% Function: cleanUp() -> ok | {error,Error}
+%% Function: cleanup() -> ok | {error,Error}
 %% Description: The module will not be used anymore. Clean up!
 %% ====================================================================

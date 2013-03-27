@@ -27,7 +27,7 @@
 -endif.
 
 %% worker_plugin_behaviour callbacks
--export([init/1, handle/2, cleanUp/0]).
+-export([init/1, handle/2, cleanup/0]).
 
 %% API
 -export([save_record/2, get_record/2, remove_record/2]).
@@ -91,14 +91,14 @@ handle(ProtocolVersion, {Method, Args}) when is_atom(Method), is_list(Args) ->
 handle(_ProtocolVersion, _Request) ->
     {error, wrong_args}.
 
-%% cleanUp/0
+%% cleanup/0
 %% ====================================================================
-%% @doc worker_plugin_behaviour callback cleanUp/0
--spec cleanUp() -> Result when
+%% @doc worker_plugin_behaviour callback cleanup/0
+-spec cleanup() -> Result when
     Result :: ok | {error, Error},
     Error :: timeout | term().
 %% ====================================================================
-cleanUp() ->
+cleanup() ->
     Pid = whereis(db_host_store_proc),
     monitor(process, Pid),
     Pid ! {self(), shutdown},
