@@ -38,22 +38,19 @@ Documentation is generated automatically using edoc so it should use tags define
 #### Useful commands:
 
 standard compilation:
-
     ~$  rebar compile
     ~$  make compile
 
-compilation & execution of unit tests
+compilation & execution of unit tests:
 
     ~$  rebar compile eunit
     ~$  make test
 
-compilation & creation of release
-
+compilation & creation of release:
     ~$  rebar compile generate
     ~$  make generate
 
-generates documentation
-
+generates documentation:
     ~$  rebar doc
     ~$  make docs
 
