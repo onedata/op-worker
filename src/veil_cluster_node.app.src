@@ -16,8 +16,7 @@
   {registered, []},
   {applications, [
                   kernel,
-                  stdlib,
-                  lager
+                  stdlib
                  ]},
   {mod, {veil_cluster_node_app, []}},
   {env, [
