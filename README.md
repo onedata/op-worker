@@ -25,9 +25,9 @@ Tests should be put in 'test' directory. It should contain the same subdirectori
 
 Eunit is used during tests so each test file should:
 
-* include "eunit/include/eunit.hrl",
-* use proper functions names (name of each test function must end with '_test'),
-* use compilation control macros (code between '-ifdef(TEST).' and '-endif.').
+    * include "eunit/include/eunit.hrl",
+    * use proper functions names (name of each test function must end with '_test'),
+    * use compilation control macros (code between '-ifdef(TEST).' and '-endif.').
 
 #### Releases
 Release handling is done using 'releases' directory and 'reltool.config' file. To create new release, version must be changed in both 'src/veil_cluster_node.app.src' and 'releases/reltool.conf'.
