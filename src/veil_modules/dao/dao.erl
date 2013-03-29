@@ -30,7 +30,7 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% API
--export([save_record/2, get_record/2, remove_record/2]).
+-export([save_record/2, get_record/2, remove_record/2, term_to_doc/1]).
 
 %% ===================================================================
 %% Behaviour callback functions
@@ -221,4 +221,49 @@ remove_record(Id, RecName) when is_atom(RecName) ->
 %% Internal functions
 %% ===================================================================
 
+is_valid_record(Record) when not is_tuple(Record); not is_atom(element(1, Record)) ->
+    false;
+is_valid_record(Record) ->
+    case ?dao_record_info(element(1, Record)) of
+        {Size, Fields, _} when is_list(Fields), tuple_size(Record) =:= Size ->
+            true;
+        _ -> false
+    end.
 
+
+term_to_doc(Field) when is_number(Field) ->
+    Field;
+term_to_doc(Field) when is_boolean(Field); Field =:= null ->
+    Field;
+term_to_doc(Field) when is_binary(Field) ->
+    Field;
+term_to_doc(Field) when is_list(Field) ->
+    case io_lib:printable_list(Field) of
+        true -> dao_helper:name(Field);
+        false -> [term_to_doc(X) || X <- Field]
+    end;
+term_to_doc(Field) when is_atom(Field) ->
+    term_to_doc("__atom__: " ++ atom_to_list(Field));
+term_to_doc(Field) when is_tuple(Field) ->
+    IsRec = is_valid_record(Field),
+
+    {InitObj, LField, RecName} =
+        case IsRec of
+            true ->
+                [RecName1 | Res] = tuple_to_list(Field),
+                {dao_json:mk_field(dao_json:mk_obj(), "_record", dao_json:mk_str(atom_to_list(RecName1))), Res, RecName1};
+            false ->
+                {dao_json:mk_obj(), tuple_to_list(Field), none}
+        end,
+    FoldFun = fun(Elem, {Poz, AccIn}) ->
+            case IsRec of
+                true ->
+                    {_, Fields, _} = ?dao_record_info(RecName),
+                    {Poz + 1, dao_json:mk_field(AccIn, atom_to_list(lists:nth(Poz, Fields)), term_to_doc(Elem))};
+                false ->
+                    {Poz + 1, dao_json:mk_field(AccIn, "tuple_field_" ++ integer_to_list(Poz), term_to_doc(Elem))}
+            end
+        end,
+    {_, {Ret}} = lists:foldl(FoldFun, {1, InitObj}, LField),
+    {lists:reverse(Ret)}.
+    

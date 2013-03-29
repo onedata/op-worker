@@ -13,7 +13,7 @@
 -record(some_record, {field1 = "", field2 = "", field3 = ""}).
 
 %% Helper macro. See macro ?dao_record_info/1 for more details.
--define(record_info_gen(X), {record_info(size, X), record_info(fields, X)}).
+-define(record_info_gen(X), {record_info(size, X), record_info(fields, X), #X{}}).
 
 %% Every record that will be saved to DB have to be "registered" with this define.
 %% Each registered record should be listed in defined below 'case' block as fallow:
