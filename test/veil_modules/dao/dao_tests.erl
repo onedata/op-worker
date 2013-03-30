@@ -14,6 +14,7 @@
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
+-include_lib("veil_modules/dao/couch_db.hrl").
 -endif.
 
 -ifdef(TEST).
@@ -41,7 +42,38 @@ cleanup() ->
 
 save_record_test() ->
     ?assertException(throw, unsupported_record, dao:save_record({a, b, c})),
-    ?assertException(throw, unsupported_record, dao:save_record({some_record, a, c})).
+    ?assertException(throw, unsupported_record, dao:save_record({some_record, a, c})),
+    ToInsert = {some_record, a, b, c},
+    DbObj = dao:term_to_doc(ToInsert),
+    meck:new(dao_helper),
+    meck:expect(dao_helper, ensure_db_exists, fun(?SYSTEM_DB_NAME) -> ok end),
+    meck:expect(dao_helper, insert_doc, fun(?SYSTEM_DB_NAME, #doc{id = Id, body = DbObj}) -> {ok, Id} end),
+    meck:expect(dao_helper, name, fun(Arg) -> meck:passthrough([Arg]) end),
+    {ok, "test_id"} = dao:save_record(ToInsert, "test_id"),
+    true = meck:validate(dao_helper),
+    meck:unload(dao_helper),
+    pass.
+
+get_record_test() ->
+    DbObj = {[{<<"_record">>, <<"some_record">>}, {<<"field1">>, 1}, {<<"field3">>, true}]},
+    meck:new(dao_helper),
+    meck:expect(dao_helper, ensure_db_exists, fun(?SYSTEM_DB_NAME) -> ok end),
+    meck:expect(dao_helper, open_doc, fun(?SYSTEM_DB_NAME, "test_id") -> {ok, #doc{body = DbObj}} end),
+    meck:expect(dao_helper, name, fun(Arg) -> meck:passthrough([Arg]) end),
+    #some_record{field1 = 1, field3 = true} = dao:get_record("test_id"),
+    true = meck:validate(dao_helper),
+    meck:unload(dao_helper),
+    pass.
+
+remove_record_test() ->
+    meck:new(dao_helper),
+    meck:expect(dao_helper, ensure_db_exists, fun(?SYSTEM_DB_NAME) -> ok end),
+    meck:expect(dao_helper, delete_doc, fun(?SYSTEM_DB_NAME, "test_id") -> ok end),
+    meck:expect(dao_helper, name, fun(Arg) -> meck:passthrough([Arg]) end),
+    ok = dao:remove_record("test_id"),
+    true = meck:validate(dao_helper),
+    meck:unload(dao_helper),
+    pass.
 
 
 is_valid_record_test() ->
