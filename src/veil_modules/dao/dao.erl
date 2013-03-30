@@ -236,7 +236,7 @@ term_to_doc(Field) when is_number(Field) ->
 term_to_doc(Field) when is_boolean(Field); Field =:= null ->
     Field;
 term_to_doc(Field) when is_binary(Field) ->
-    Field;
+    <<<<"__bin__: ">>/binary, Field/binary>>;
 term_to_doc(Field) when is_list(Field) ->
     case io_lib:printable_list(Field) of
         true -> dao_helper:name(Field);
@@ -267,3 +267,42 @@ term_to_doc(Field) when is_tuple(Field) ->
     {_, {Ret}} = lists:foldl(FoldFun, {1, InitObj}, LField),
     {lists:reverse(Ret)}.
     
+doc_to_term(Field) when is_number(Field); is_atom(Field) ->
+    Field;
+doc_to_term(Field) when is_binary(Field) ->
+    case binary_to_list(Field) of
+        ["__bin__: " | Bin] -> list_to_binary(Bin);
+        ["__atom__: " | Atom] -> list_to_atom(Atom);
+        String -> String
+    end;
+doc_to_term(Field) when is_list(Field) ->
+    [doc_to_term(X) || X <- Field];
+doc_to_term({Fields}) when is_list(Fields) ->
+    Fields1 = [{binary_to_list(X), Y} || {X, Y} <- Fields],
+    {IsRec, FieldsTmp, RecName} =
+        case lists:keyfind("_record", 1, Fields1) of
+            {_, RecName1} ->
+                {case is_valid_record(binary_to_list(RecName1)) of true -> true; _ -> partial end,
+                    lists:keydelete("_record", 1, Fields1), binary_to_list(RecName1)};
+            _ -> {false, [{list_to_integer(Num -- "tuple_field_"), Data} || {Num, Data} <- Fields1], none}
+        end,
+    Fields2 = lists:sort(fun({A, _}, {B, _}) -> A < B end, FieldsTmp),
+    case IsRec of
+        false ->
+            list_to_tuple([doc_to_term(Data) || {_, Data} <- Fields2]);
+        partial ->
+            list_to_tuple([list_to_atom(RecName) | [doc_to_term(Data) || {_, Data} <- Fields2]]);
+        true ->
+            {_, FNames, InitRec} = ?dao_record_info(RecName),
+            FoldFun = fun(Elem, {Poz, AccIn}) ->
+                    case lists:keyfind(atom_to_list(Elem), 1, Fields2) of
+                        {_, Data} ->
+                            {Poz + 1, setelement(Poz, AccIn, doc_to_term(Data))};
+                        _ ->
+                            {Poz + 1, AccIn}
+                    end
+                end,
+            lists:foldl(FoldFun, {2, InitRec}, FNames)
+    end;
+doc_to_term(_) ->
+    throw(invalid_document).

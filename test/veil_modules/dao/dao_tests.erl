@@ -74,4 +74,25 @@ term_to_doc_test() ->
                 [1, 0, <<"test">>]]}]},
     Ans = dao:term_to_doc(#some_record{field1 = {"rec1", #some_record{field1 = true, field2 = 5}}, field2 = "test string", field3 = [1, {6.53, [true, {"test1", false}]}, 5.4, false, [1, 0, "test"]]}).
 
+doc_to_term_test() ->
+    Ans = {[{<<"_record">>, <<"some_record">>},
+        {<<"field1">>,
+            {[{<<"tuple_field_1">>, <<"rec1">>},
+                {<<"tuple_field_2">>,
+                    {[{<<"_record">>, <<"some_record">>},
+                        {<<"field1">>, true},
+                        {<<"field2">>, 5},
+                        {<<"field3">>, <<>>}]}}]}},
+        {<<"field2">>, <<"test string">>},
+        {<<"field3">>,
+            [1,
+                {[{<<"tuple_field_1">>, 6.53},
+                    {<<"tuple_field_2">>,
+                        [true,
+                            {[{<<"tuple_field_1">>, <<"test1">>}, {<<"tuple_field_2">>, false}]}]}]},
+                5.4, false,
+                [1, 0, <<"test">>]]}]},
+    {some_record, {"rec1", {some_record, true, 5, []}},
+        "test string", [1, {6.53, [true, {"test1", false}]}, 5.4, false, [1, 0, "test"]]} = dao:doc_to_term(Ans).
+
 -endif.
