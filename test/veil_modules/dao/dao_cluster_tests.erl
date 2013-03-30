@@ -18,14 +18,5 @@
 
 -ifdef(TEST).
 
-save_state_test() ->
-    ?assertException(throw, unsupported_record, dao_cluster:save_state(whatever, {a, b, c})),
-    ?assertException(throw, invalid_record, dao_cluster:save_state(whatever, {some_record, a, c})).
-
-get_state_test() ->
-    not_yet_implemented = dao_cluster:get_state(id).
-
-clear_state_test() ->
-    not_yet_implemented = dao_cluster:clear_state(id).
 
 -endif.

@@ -173,5 +173,7 @@ query_view() ->
     TmpRes = dao_helper:query_view("Name", "des", "view", #view_query_args{}),
     ?assert(meck:validate(dao_hosts)).
 
+gen_uuid_test() ->
+    32 = length(dao_helper:gen_uuid()).
 
 -endif.

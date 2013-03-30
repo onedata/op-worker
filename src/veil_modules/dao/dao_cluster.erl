@@ -16,7 +16,7 @@
 -include_lib("veil_modules/dao/couch_db.hrl").
 
 %% API
--export([save_state/2, get_state/1, clear_state/1]).
+-export([save_state/2, save_state/1, get_state/1, get_state/0, clear_state/1, clear_state/0]).
 
 -ifdef(TEST).
 -compile([export_all]).
@@ -26,30 +26,67 @@
 %% API functions
 %% ===================================================================
 
+%% save_state/1
+%% ====================================================================
+%% @doc Saves cluster state Rec to DB with ID = cluster_state.
+%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
+%% @end
+-spec save_state(Rec :: tuple()) ->
+    {ok, Id :: string()} |
+    no_return(). % erlang:error(any()) | throw(any())
+%% ====================================================================
+save_state(Rec) when is_tuple(Rec) ->
+    save_state(Rec, cluster_state).
+
 %% save_state/2
 %% ====================================================================
 %% @doc Saves cluster state Rec to DB with ID = Id.
 %% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
 %% @end
 -spec save_state(Id :: atom(), Rec :: tuple()) ->
-    ok |
+    {ok, Id :: string()} |
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 save_state(Id, Rec) when is_tuple(Rec), is_atom(Id) ->
-    dao:save_record(Id, Rec).
+    save_state(Rec, atom_to_list(Id));
+save_state(Id, Rec) when is_list(Id) ->
+    dao:remove_record(Id),
+    dao:save_record(Rec, Id).
 
-%% get_state/2
+
+%% get_state/0
 %% ====================================================================
-%% @doc Retrieves cluster state with ID = Id from DB.
+%% @doc Retrieves cluster state with ID = cluster_state from DB.
+%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
+%% @end
+-spec get_state() -> term().
+%% ====================================================================
+get_state() ->
+    get_state(cluster_state).
+
+
+%% get_state/1
+%% ====================================================================
+%% @doc Retrieves cluster state with UUID = Id from DB.
 %% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
 %% @end
 -spec get_state(Id :: atom()) -> not_yet_implemented.
 %% ====================================================================
-get_state(_Id) ->
-    %% Below we have full implementation of this method except of record initialization (see TODO)
-    %% StateRecord = #some_record{}, %% TODO: This record should be replaced with a real cluster state record (which at this moment is not implemented)
-    %% dao:get_record(Id, StateRecord).
-    not_yet_implemented.
+get_state(Id) ->
+    dao:get_record(Id).
+
+
+%% clear_state/0
+%% ====================================================================
+%% @doc Removes cluster state with Id = cluster_state
+%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
+%% @end
+-spec clear_state() ->
+    ok |
+    no_return(). % erlang:error(any()) | throw(any())
+%% ====================================================================
+clear_state()->
+    clear_state(cluster_state).
 
 
 %% clear_state/2
@@ -61,11 +98,8 @@ get_state(_Id) ->
     ok |
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
-clear_state(_Id) ->
-    %% Below we have full implementation of this method except of record initialization (see TODO)
-    %% RecName = element(1, #some_record{}), %% TODO: This record should be replaced with a real cluster state record (which at this moment is not implemented)
-    %% dao:remove_record(Id, RecName).
-    not_yet_implemented.
+clear_state(Id) ->
+    dao:remove_record(Id).
 
 
 %% ===================================================================

@@ -242,7 +242,7 @@ registered(Host) ->
 update_hosts(_State, TimeDiff) when TimeDiff > ?DAO_DB_HOSTS_REFRESH_INTERVAL ->
 %% ets:delete_all_objects(db_host_store),
 %% TODO:
-%% Here we (don't) have loading DB host list (e.g. from file)
+%% Here we (don't) have code that loads DB host list (e.g. from file)
 %% Currently unimplemented, but hosts can still be managed manually
 %% through API methods
     erlang:now();
