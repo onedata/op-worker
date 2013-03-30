@@ -12,7 +12,7 @@
 {application, veil_cluster_node,
  [
   {description, "Application starts node of VeilFS central cluster"},
-  {vsn, "0.0.3"},
+  {vsn, "0.0.3_VFS-61"},
   {registered, []},
   {applications, [
                   kernel,
@@ -31,6 +31,8 @@
   		%% How long (in sec) should node wait before next heart beat
   		{heart_beat, 60},
   		%% List of ccm possible ccm nodes
-  		{ccm_nodes, [node1@localhost]}
+  		{ccm_nodes, [node1@localhost]},
+        %% List of all DBMS nodes
+        {ccm_nodes, [db1@localhost]}
   		]}
  ]}.
