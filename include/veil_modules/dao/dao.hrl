@@ -38,4 +38,4 @@
 -define(RECORD_FIELD_BINARY_PREFIX, "__bin__: ").
 -define(RECORD_FIELD_ATOM_PREFIX, "__atom__: ").
 -define(RECORD_TUPLE_FIELD_NAME_PREFIX, "tuple_field_").
--define(RECORD_META_FIELD_NAME, "_record").
+-define(RECORD_META_FIELD_NAME, "record__").

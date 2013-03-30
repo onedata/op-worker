@@ -30,7 +30,7 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% API
--export([save_record/2, save_record/1, get_record/1, remove_record/1]).
+-export([save_record/3, save_record/2, save_record/1, get_record/1, remove_record/1]).
 
 %% ===================================================================
 %% Behaviour callback functions
@@ -108,23 +108,52 @@ cleanup() ->
 %% API functions
 %% ===================================================================
 
+
 %% save_record/2
 %% ====================================================================
-%% @doc Saves record Rec to DB as document with UUID = Id. Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
+%% @doc Same as save_record/3 but with Mode = insert
+%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
+%% @end
 -spec save_record(Rec :: tuple(), Id :: atom() | string()) ->
     {ok, DocId :: string()} |
+    {error, conflict} |
+    no_return(). % erlang:error(any()) | throw(any())
+save_record(Rec, Id) ->
+    save_record(Rec, Id, insert).
+
+%% save_record/3
+%% ====================================================================
+%% @doc Saves record Rec to DB as document with UUID = Id.
+%% If Mode == update then the document with given UUID will be overridden
+%% By default however saving to existing document will fail with {error, conflict}
+%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
+%% @end
+-spec save_record(Rec :: tuple(), Id :: atom() | string(), Mode :: update | insert) ->
+    {ok, DocId :: string()} |
+    {error, conflict} |
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
-save_record(Rec, Id) when is_tuple(Rec), is_atom(Id) ->
-    save_record(Rec, atom_to_list(Id));
-save_record(Rec, Id) when is_tuple(Rec), is_list(Id)->
+save_record(Rec, Id, Mode) when is_tuple(Rec), is_atom(Id) ->
+    save_record(Rec, atom_to_list(Id), Mode);
+save_record(Rec, Id, Mode) when is_tuple(Rec), is_list(Id)->
     Valid = is_valid_record(Rec),
     if
         Valid -> ok;
         true -> throw(unsupported_record)
     end,
     dao_helper:ensure_db_exists(?SYSTEM_DB_NAME),
-    case dao_helper:insert_doc(?SYSTEM_DB_NAME, #doc{id = dao_helper:name(Id), body = term_to_doc(Rec)}) of
+    Revs =
+        if
+            Mode =:= update ->
+                case dao_helper:open_doc(?SYSTEM_DB_NAME, dao_helper:name(Id)) of
+                    {ok, #doc{revs = RevDef}} -> RevDef;
+                    _ -> #doc{revs = RevDef} = #doc{}, RevDef
+                end;
+            true ->
+                #doc{revs = RevDef} = #doc{},
+                RevDef
+        end,
+    case dao_helper:insert_doc(?SYSTEM_DB_NAME, #doc{id = dao_helper:name(Id), revs = Revs, body = term_to_doc(Rec)}) of
         {ok, _} -> {ok, Id};
         {error, Err} -> Err
     end.
@@ -138,7 +167,7 @@ save_record(Rec, Id) when is_tuple(Rec), is_list(Id)->
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 save_record(Rec) when is_tuple(Rec) ->
-    save_record(Rec, dao_helper:gen_uuid()).
+    save_record(Rec, dao_helper:gen_uuid(), insert).
 
 
 %% get_record/1
@@ -148,6 +177,7 @@ save_record(Rec) when is_tuple(Rec) ->
 %% @end
 -spec get_record(Id :: atom() | string()) ->
     Record :: tuple() |
+    {error, Error :: term()} |
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 get_record(Id) when is_atom(Id) ->
@@ -156,7 +186,11 @@ get_record(Id) when is_list(Id) ->
     dao_helper:ensure_db_exists(?SYSTEM_DB_NAME),
     case dao_helper:open_doc(?SYSTEM_DB_NAME, Id) of
         {ok, #doc{body = Body}} ->
-            doc_to_term(Body);
+            try doc_to_term(Body) of
+                Term -> Term
+            catch
+                _:Err -> {error, {invalid_document, Err}}
+            end;
             {error, Error} -> Error
     end.
 
@@ -277,7 +311,7 @@ doc_to_term({Fields}) when is_list(Fields) ->
             {_, RecName1} ->
                 {case is_valid_record(binary_to_list(RecName1)) of true -> true; _ -> partial end,
                     lists:keydelete(?RECORD_META_FIELD_NAME, 1, Fields1), list_to_atom(binary_to_list(RecName1))};
-            _ -> {false, [{list_to_integer(Num -- ?RECORD_TUPLE_FIELD_NAME_PREFIX), Data} || {Num, Data} <- Fields1], none}
+            _ -> {false, [{list_to_integer(lists:filter(fun(E) -> (E >= $0) andalso (E =< $9) end, Num)), Data} || {Num, Data} <- Fields1], none}
         end,
     Fields2 = lists:sort(fun({A, _}, {B, _}) -> A < B end, FieldsTmp),
     case IsRec of

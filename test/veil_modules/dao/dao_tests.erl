@@ -55,7 +55,7 @@ save_record_test() ->
     pass.
 
 get_record_test() ->
-    DbObj = {[{<<"_record">>, <<"some_record">>}, {<<"field1">>, 1}, {<<"field3">>, true}]},
+    DbObj = {[{<<?RECORD_META_FIELD_NAME>>, <<"some_record">>}, {<<"field1">>, 1}, {<<"field3">>, true}]},
     meck:new(dao_helper),
     meck:expect(dao_helper, ensure_db_exists, fun(?SYSTEM_DB_NAME) -> ok end),
     meck:expect(dao_helper, open_doc, fun(?SYSTEM_DB_NAME, "test_id") -> {ok, #doc{body = DbObj}} end),
@@ -91,11 +91,11 @@ term_to_doc_test() ->
     AtomRes = dao:term_to_doc(test_atom),
     null = dao:term_to_doc(null),
     <<"test:test2 ]test4{test 5=+ 6">> = dao:term_to_doc("test:test2 ]test4{test 5=+ 6"),
-    Ans = {[{<<"_record">>, <<"some_record">>},
+    Ans = {[{<<?RECORD_META_FIELD_NAME>>, <<"some_record">>},
         {<<"field1">>,
             {[{<<"tuple_field_1">>, <<"rec1">>},
                 {<<"tuple_field_2">>,
-                    {[{<<"_record">>, <<"some_record">>},
+                    {[{<<?RECORD_META_FIELD_NAME>>, <<"some_record">>},
                         {<<"field1">>, list_to_binary(string:concat(?RECORD_FIELD_ATOM_PREFIX, "test_atom"))},
                         {<<"field2">>, 5},
                         {<<"field3">>, <<>>}]}}]}},
@@ -112,11 +112,11 @@ term_to_doc_test() ->
 
 doc_to_term_test() ->
     test_atom = dao:doc_to_term(list_to_binary(string:concat(?RECORD_FIELD_ATOM_PREFIX, "test_atom"))),
-    Ans = {[{<<"_record">>, <<"some_record">>},
+    Ans = {[{<<?RECORD_META_FIELD_NAME>>, <<"some_record">>},
         {<<"field1">>,
             {[{<<"tuple_field_1">>, <<"rec1">>},
                 {<<"tuple_field_2">>,
-                    {[{<<"_record">>, <<"some_record">>},
+                    {[{<<?RECORD_META_FIELD_NAME>>, <<"some_record">>},
                         {<<"field1">>, list_to_binary(string:concat(?RECORD_FIELD_ATOM_PREFIX, "test_atom"))},
                         {<<"field2">>, 5},
                         {<<"field4">>, <<"tt">>}]}}]}},
@@ -126,7 +126,7 @@ doc_to_term_test() ->
                 {[{<<"tuple_field_1">>, 6.53},
                     {<<"tuple_field_2">>,
                         [true,
-                            {[{<<"tuple_field_1">>, <<"test1">>}, {<<"tuple_field_2">>, false}]}]}]},
+                            {[{<<"tuple_field_2">>, false}, {<<"tuple_field_1">>, <<"test1">>}]}]}]},
                 5.4, <<<<?RECORD_FIELD_BINARY_PREFIX>>/binary, <<1,2,3>>/binary>>,
                 [1, 0, <<"test">>]]}]},
     {some_record, {"rec1", {some_record, test_atom, 5, []}},
