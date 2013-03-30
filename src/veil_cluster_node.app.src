@@ -33,6 +33,6 @@
   		%% List of ccm possible ccm nodes
   		{ccm_nodes, [node1@localhost]},
         %% List of all DBMS nodes
-        {ccm_nodes, [db1@localhost]}
+        {db_nodes, [db1@localhost]}
   		]}
  ]}.
