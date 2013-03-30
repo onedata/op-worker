@@ -36,7 +36,7 @@
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 save_state(Rec) when is_tuple(Rec) ->
-    save_state(Rec, cluster_state).
+    save_state(cluster_state, Rec).
 
 %% save_state/2
 %% ====================================================================
@@ -48,10 +48,9 @@ save_state(Rec) when is_tuple(Rec) ->
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 save_state(Id, Rec) when is_tuple(Rec), is_atom(Id) ->
-    save_state(Rec, atom_to_list(Id));
+    save_state(atom_to_list(Id), Rec);
 save_state(Id, Rec) when is_list(Id) ->
-    dao:remove_record(Id),
-    dao:save_record(Rec, Id).
+    dao:save_record(Rec, Id, update).
 
 
 %% get_state/0

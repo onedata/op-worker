@@ -145,7 +145,7 @@ save_record(Rec, Id, Mode) when is_tuple(Rec), is_list(Id)->
     Revs =
         if
             Mode =:= update ->
-                case dao_helper:open_doc(?SYSTEM_DB_NAME, dao_helper:name(Id)) of
+                case dao_helper:open_doc(?SYSTEM_DB_NAME, Id) of
                     {ok, #doc{revs = RevDef}} -> RevDef;
                     _ -> #doc{revs = RevDef} = #doc{}, RevDef
                 end;

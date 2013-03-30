@@ -240,11 +240,14 @@ registered(Host) ->
     NewState :: erlang:timestamp().
 %% ====================================================================
 update_hosts(_State, TimeDiff) when TimeDiff > ?DAO_DB_HOSTS_REFRESH_INTERVAL ->
-%% ets:delete_all_objects(db_host_store),
-%% TODO:
-%% Here we (don't) have code that loads DB host list (e.g. from file)
-%% Currently unimplemented, but hosts can still be managed manually
-%% through API methods
+%% ets:delete_all_objects(db_host_store), %% Uncomment if hard reset is needed
+%% Here we have code that loads DB host list (from file application env variable)
+    case application:get_env(veil_cluster_node, db_nodes) of
+        {ok, Nodes} when is_list(Nodes) ->
+            [insert(Node) || Node <- Nodes, is_atom(Node)];
+        _ -> ok
+    end,
+
     erlang:now();
 update_hosts(State, _TimeDiff) ->
     State.
