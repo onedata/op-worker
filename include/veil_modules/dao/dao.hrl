@@ -9,6 +9,8 @@
 %% @end
 %% ===================================================================
 
+-include_lib("records.hrl").
+
 %% record definition used in record registration example
 -record(some_record, {field1 = "", field2 = "", field3 = ""}).
 
@@ -22,6 +24,9 @@
 -define(dao_record_info(R),
     case R of
         some_record -> ?record_info_gen(some_record);
+        cm_state -> ?record_info_gen(cm_state);
+        host_state -> ?record_info_gen(host_state);
+        node_state -> ?record_info_gen(node_state);
         %next_record -> ?record_info_gen(next_record);
         _ -> {error, unsupported_record}
     end).
