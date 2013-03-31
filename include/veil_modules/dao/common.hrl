@@ -19,7 +19,7 @@
                         {A_SEED, B_SEED, C_SEED} = now(),
                         L_SEED = atom_to_list(node()),
                         {_, Sum_SEED} =  lists:foldl(fun(Elem_SEED, {N_SEED, Acc_SEED}) ->
-                            {N_SEED * 31, Acc_SEED + Elem_SEED * N_SEED} end, {1, 0}, L_SEED),
+                            {N_SEED * 137, Acc_SEED + Elem_SEED * N_SEED} end, {1, 0}, L_SEED),
                         random:seed(Sum_SEED*10000 + A_SEED, B_SEED, C_SEED);
                     true -> already_seeded
                 end
