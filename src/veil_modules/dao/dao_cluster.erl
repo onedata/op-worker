@@ -7,7 +7,7 @@
 %% ===================================================================
 %% @doc: This module gives high level DB API which contain veil cluster specific utility methods.
 %% All DAO API functions should not be called directly. Call dao:handle(_, {cluster, MethodName, ListOfArgs) instead.
-%% See dao:handle/2 for more details.
+%% See {@link dao:handle/2} for more details.
 %% @end
 %% ===================================================================
 -module(dao_cluster).
@@ -29,7 +29,7 @@
 %% save_state/1
 %% ====================================================================
 %% @doc Saves cluster state Rec to DB with ID = cluster_state.
-%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec save_state(Rec :: tuple()) ->
     {ok, Id :: string()} |
@@ -41,7 +41,7 @@ save_state(Rec) when is_tuple(Rec) ->
 %% save_state/2
 %% ====================================================================
 %% @doc Saves cluster state Rec to DB with ID = Id.
-%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec save_state(Id :: atom(), Rec :: tuple()) ->
     {ok, Id :: string()} |
@@ -54,7 +54,7 @@ save_state(Id, Rec) when is_tuple(Rec), is_atom(Id) ->
 %% get_state/0
 %% ====================================================================
 %% @doc Retrieves cluster state with ID = cluster_state from DB.
-%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec get_state() -> term().
 %% ====================================================================
@@ -65,7 +65,7 @@ get_state() ->
 %% get_state/1
 %% ====================================================================
 %% @doc Retrieves cluster state with UUID = Id from DB.
-%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec get_state(Id :: atom()) -> term().
 %% ====================================================================
@@ -76,7 +76,7 @@ get_state(Id) ->
 %% clear_state/0
 %% ====================================================================
 %% @doc Removes cluster state with Id = cluster_state
-%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec clear_state() ->
     ok |
@@ -89,7 +89,7 @@ clear_state()->
 %% clear_state/2
 %% ====================================================================
 %% @doc Removes cluster state with given Id
-%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec clear_state(Id :: atom()) ->
     ok |

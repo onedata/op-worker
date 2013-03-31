@@ -10,7 +10,9 @@
 %% ===================================================================
 
 %% Macros
-%% Seeds pseudo-random number generator with current time. See random:seed/1 and erlang:now/0 for more details
+
+%% Seeds pseudo-random number generator with current time and hashed node name. <br/>
+%% See {@link random:seed/3} and {@link erlang:now/0} for more details
 -define(SEED, begin
                 IsSeeded = get(proc_seeded),
                 if
