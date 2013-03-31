@@ -308,23 +308,24 @@ doc_to_term(Field) when is_list(Field) ->
     [doc_to_term(X) || X <- Field];
 doc_to_term({Fields}) when is_list(Fields) -> %% Object stores tuple which can be an erlang record
     Fields1 = [{binary_to_list(X), Y} || {X, Y} <- Fields],
-    {IsRec, FieldsTmp, RecName} =
+    {IsRec, FieldsInit, RecName} =
         case lists:keyfind(?RECORD_META_FIELD_NAME, 1, Fields1) of  %% Search for record meta field
             {_, RecName1} -> %% Meta field found. Check if it is valid record name. Either way - prepare initial working structures
                 {case is_valid_record(binary_to_list(RecName1)) of true -> true; _ -> partial end,
                     lists:keydelete(?RECORD_META_FIELD_NAME, 1, Fields1), list_to_atom(binary_to_list(RecName1))};
-            _ -> {false, [{list_to_integer(lists:filter(fun(E) -> (E >= $0) andalso (E =< $9) end, Num)), Data} || {Num, Data} <- Fields1], none}
+            _ ->
+                DataTmp = [{list_to_integer(lists:filter(fun(E) -> (E >= $0) andalso (E =< $9) end, Num)), Data} || {Num, Data} <- Fields1],
+                {false, lists:sort(fun({A, _}, {B, _}) -> A < B end, DataTmp), none}
         end,
-    Fields2 = lists:sort(fun({A, _}, {B, _}) -> A < B end, FieldsTmp),
     case IsRec of
         false -> %% Object is an tuple. Simply create tuple from successive fields
-            list_to_tuple([doc_to_term(Data) || {_, Data} <- Fields2]);
+            list_to_tuple([doc_to_term(Data) || {_, Data} <- FieldsInit]);
         partial -> %% Object is an unsupported record. We are gonna build record based only on current structure from DB
-            list_to_tuple([RecName | [doc_to_term(Data) || {_, Data} <- Fields2]]);
+            list_to_tuple([RecName | [doc_to_term(Data) || {_, Data} <- FieldsInit]]);
         true -> %% Object is an supported record. We are gonna build record based on current erlang record structure (new fields will get default values)
             {_, FNames, InitRec} = ?dao_record_info(RecName),
             FoldFun = fun(Elem, {Poz, AccIn}) ->
-                    case lists:keyfind(atom_to_list(Elem), 1, Fields2) of
+                    case lists:keyfind(atom_to_list(Elem), 1, FieldsInit) of
                         {_, Data} ->
                             {Poz + 1, setelement(Poz, AccIn, doc_to_term(Data))};
                         _ ->

@@ -130,11 +130,11 @@ doc_to_term_test() ->
             [1,
                 {[{<<"tuple_field_1">>, 6.53},
                     {<<"tuple_field_2">>,
-                        [true,
+                        [{[{<<?RECORD_META_FIELD_NAME>>, <<"unknown_record">>}, {<<"f2">>, 1}, {<<"f1">>, 5}]},
                             {[{<<"tuple_field_2">>, false}, {<<"tuple_field_1">>, <<"test1">>}]}]}]},
                 5.4, <<<<?RECORD_FIELD_BINARY_PREFIX>>/binary, <<1,2,3>>/binary>>,
                 [1, 0, <<"test">>]]}]},
     {some_record, {"rec1", {some_record, test_atom, 5, []}},
-        "test string", [1, {6.53, [true, {"test1", false}]}, 5.4, <<1,2,3>>, [1, 0, "test"]]} = dao:doc_to_term(Ans).
+        "test string", [1, {6.53, [{unknown_record, 1, 5}, {"test1", false}]}, 5.4, <<1,2,3>>, [1, 0, "test"]]} = dao:doc_to_term(Ans).
 
 -endif.
