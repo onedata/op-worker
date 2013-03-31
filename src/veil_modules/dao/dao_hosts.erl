@@ -55,7 +55,6 @@ start_link() ->
 %% ====================================================================
 start_link(_Args) ->
     Pid = spawn_link(fun() -> init() end),
-    register(db_host_store_proc, Pid),
     {ok, Pid}.
 
 %% insert/1
@@ -171,6 +170,7 @@ init([]) ->
 %% ====================================================================
 init() ->
     ets:new(db_host_store, [named_table, protected, bag]),
+    register(db_host_store_proc, self()),
     store_loop({0, 0, 0}).
 
 
@@ -247,7 +247,6 @@ update_hosts(_State, TimeDiff) when TimeDiff > ?DAO_DB_HOSTS_REFRESH_INTERVAL ->
             [insert(Node) || Node <- Nodes, is_atom(Node)];
         _ -> ok
     end,
-
     erlang:now();
 update_hosts(State, _TimeDiff) ->
     State.

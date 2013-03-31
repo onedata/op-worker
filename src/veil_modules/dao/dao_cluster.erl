@@ -48,8 +48,6 @@ save_state(Rec) when is_tuple(Rec) ->
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 save_state(Id, Rec) when is_tuple(Rec), is_atom(Id) ->
-    save_state(atom_to_list(Id), Rec);
-save_state(Id, Rec) when is_list(Id) ->
     dao:save_record(Rec, Id, update).
 
 
@@ -69,7 +67,7 @@ get_state() ->
 %% @doc Retrieves cluster state with UUID = Id from DB.
 %% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
 %% @end
--spec get_state(Id :: atom()) -> not_yet_implemented.
+-spec get_state(Id :: atom()) -> term().
 %% ====================================================================
 get_state(Id) ->
     dao:get_record(Id).

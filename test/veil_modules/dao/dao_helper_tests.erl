@@ -42,7 +42,6 @@ setup() ->
     put(db_host, undefined),
     Pid = spawn(dao_hosts, init, []),           %% <-- DON NOT swap these lines unless you understand exactly how meck works
     meck:new(dao_hosts, [unstick, passthrough]),%% <-- And even if you do understand, then you know that you shouldn't do it
-    register(db_host_store_proc, Pid),
     receive after 20 -> Pid end.
 
 teardown(Pid) ->

@@ -122,6 +122,7 @@ start_link() ->
     meck:new(net_adm, [unstick, passthrough]),
     put(db_host, undefined),
     {ok, Pid} = dao_hosts:start_link([]),
+    receive after 20 -> ok end,
     Pid.
 
 teardown(Pid) ->
