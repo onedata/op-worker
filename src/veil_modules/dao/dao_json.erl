@@ -19,7 +19,7 @@
 -type json_field() :: {Name :: binary(), Value :: any()}.
 
 %% API
--export([mk_doc/1, mk_str/1, mk_obj/0, mk_bin/1, mk_field/3, mk_fields/3, rm_field/2, rm_fields/2, get_field/2, get_fields/1]).
+-export([mk_doc/1, mk_str/1, mk_obj/0, mk_bin/1, mk_field/3, mk_fields/3, rm_field/2, rm_fields/2, get_field/2, get_fields/1, reverse_fields/1]).
 
 %% ===================================================================
 %% API functions
@@ -82,6 +82,17 @@ mk_fields(Doc = #doc{body = Body}, Names, Values) when is_list(Names), is_list(V
 mk_fields({Fields}, Names, Values) when is_list(Names), is_list(Values) ->
     {NewFields} = rm_fields({Fields}, Names),
     {[{name(X), Y} || {X, Y} <- lists:zip(Names, Values)] ++ NewFields}.
+
+%% reverse_fields/1
+%% ====================================================================
+%% @doc Reverses fields in given document or JSON object
+-spec reverse_fields(DocOrObj) -> DocOrObj when
+    DocOrObj :: #doc{} | json_object().
+%% ====================================================================
+reverse_fields(Doc = #doc{body = Body}) ->
+    Doc#doc{body = reverse_fields(Body)};
+reverse_fields({Fields}) ->
+    {lists:reverse(Fields)}.
 
 
 %% rm_field/2

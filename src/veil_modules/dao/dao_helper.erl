@@ -11,6 +11,7 @@
 -module(dao_helper).
 
 -include_lib("veil_modules/dao/couch_db.hrl").
+-include_lib("veil_modules/dao/common.hrl").
 
 -define(ADMIN_USER_CTX, {user_ctx, #user_ctx{roles = [<<"_admin">>]}}).
 
@@ -21,8 +22,8 @@
 -import(dao_hosts, [call/2]).
 
 %% API
--export([name/1]).
--export([list_dbs/0, list_dbs/1, get_db_info/1, get_doc_count/1, create_db/1, create_db/2, ensure_db_exists/1]).
+-export([name/1, gen_uuid/0]).
+-export([list_dbs/0, list_dbs/1, get_db_info/1, get_doc_count/1, create_db/1, create_db/2]).
 -export([delete_db/1, delete_db/2, open_doc/2, open_doc/3, insert_doc/2, insert_doc/3, delete_doc/2, delete_docs/2]).
 -export([insert_docs/2, insert_docs/3, create_view/5, query_view/3, query_view/4]).
 
@@ -33,17 +34,6 @@
 %% ===================================================================
 %% DB Management
 %% ===================================================================
-
-
-%% ensure_db_exists/1
-%% ====================================================================
-%% @doc Creates DbName if not exists, throws error if failed
--spec ensure_db_exists(DbName :: string()) ->
-    ok |
-    no_return(). % erlang:error({badmatch, any()})
-%% ====================================================================
-ensure_db_exists(DbName) ->
-    ok = create_db(DbName).
 
 %% list_dbs/0
 %% ====================================================================
@@ -180,7 +170,13 @@ insert_doc(DbName, Doc) ->
     Option :: atom() | {atom(), term()}.
 %% ====================================================================
 insert_doc(DbName, Doc, Opts) ->
-    normalize_return_term(call(update_doc, [name(DbName), Doc, Opts])).
+    Go = fun() -> normalize_return_term(call(update_doc, [name(DbName), Doc, Opts])) end,
+    case Go() of
+        {error, {_, database_does_not_exist}} ->
+            create_db(DbName),
+            Go();
+        Other -> Other
+    end.
 
 
 %% insert_docs/2
@@ -306,6 +302,19 @@ name(Name) when is_list(Name) ->
     ?l2b(Name);
 name(Name) when is_binary(Name) ->
     Name.
+
+%% gen_uuid/0
+%% ====================================================================
+%% @doc Generates UUID with CouchDBs 'utc_random' algorithm
+-spec gen_uuid() -> string().
+%% ====================================================================
+gen_uuid() ->
+    {M, S, N} = now(),
+    Time = M * 1000000000000 + S * 1000000 + N,
+    TimeHex = string:right(integer_to_list(Time, 16), 14, $0),
+    ?SEED,
+    Rand = [lists:nth(1, integer_to_list(?RND(16)-1, 16)) || _<- lists:seq(1, 18)],
+    string:to_lower(string:concat(TimeHex, Rand)).
 
 
 %% ===================================================================

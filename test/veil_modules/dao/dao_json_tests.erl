@@ -62,5 +62,7 @@ get_field_test() ->
 get_fields_test() ->
     [{"test", 1}, {"test2", 2}, {"test3", 4}] = dao_json:get_fields(#doc{body = {[{<<"test">>, 1}, {<<"test2">>, 2}, {<<"test3">>, 4}]}}).
 
+reverse_fields_test() ->
+    #doc{body = {[{<<"f1">>, 5}, {<<"f2">>, 5}]}} = dao_json:reverse_fields(#doc{body = {[{<<"f2">>, 5}, {<<"f1">>, 5}]}}).
 
 -endif.

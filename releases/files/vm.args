@@ -20,6 +20,10 @@
 ## application:get_env(veil_cluster_node, initialization_time) should return this
 -veil_cluster_node initialization_time {{initialization_time}}
 
+## List of all DBMS nodes
+## application:get_env(veil_cluster_node, db_nodes) should return this
+-veil_cluster_node db_nodes {{db_nodes}}
+
 ## Heartbeat management; auto-restarts VM if it dies or becomes unresponsive
 ## (Disabled by default..use with caution!)
 ##-heart

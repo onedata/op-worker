@@ -5,13 +5,13 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module implements worker_plugin_behaviour callbacks and contains utility API methods
-%% DAO API functions are implemented in DAO sub-modules like: dao_cluster, dao_vfs
-%% All DAO API functions should not be called directly. Call dao:handle(_, {Module, MethodName, ListOfArgs) instead, when
+%% @doc: This module implements {@link worker_plugin_behaviour} callbacks and contains utility API methods. <br/>
+%% DAO API functions are implemented in DAO sub-modules like: {@link dao_cluster}, {@link dao_vfs}. <br/>
+%% All DAO API functions Should not be used directly, use {@link dao:handle/2} instead.
 %% Module :: atom() is module suffix (prefix is 'dao_'), MethodName :: atom() is the method name
-%% and ListOfArgs :: [term()] is list of argument for the method.
+%% and ListOfArgs :: [term()] is list of argument for the method. <br/>
 %% If you want to call utility methods from this module - use Module = utils
-%% See handle/2 for more details.
+%% See {@link handle/2} for more details.
 %% @end
 %% ===================================================================
 -module(dao).
@@ -30,7 +30,7 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% API
--export([save_record/2, get_record/2, remove_record/2]).
+-export([save_record/3, save_record/2, save_record/1, get_record/1, remove_record/1]).
 
 %% ===================================================================
 %% Behaviour callback functions
@@ -38,7 +38,7 @@
 
 %% init/1
 %% ====================================================================
-%% @doc worker_plugin_behaviour callback init/1
+%% @doc {@link worker_plugin_behaviour} callback init/1
 -spec init(Args :: term()) -> Result when
     Result :: ok | {error, Error},
     Error :: term().
@@ -53,18 +53,18 @@ init(_Args) ->
 
 %% handle/1
 %% ====================================================================
-%% @doc worker_plugin_behaviour callback handle/1
-%% All {Module, Method, Args} requests (second argument), executes Method with Args in 'dao_Module' module, but with one exception:
-%% If Module = utils, then dao module will be used.
-%% E.g calling dao:handle(_, {vfs, some_method, [some_arg]}) will call dao_vfs:some_method(some_arg)
-%% but calling dao:handle(_, {utils, some_method, [some_arg]}) will call dao:some_method(some_arg)
-%% You can omit Module atom in order to use default module which is dao_cluster.
-%% E.g calling dao:handle(_, {some_method, [some_arg]}) will call dao_cluster:some_method(some_arg)
-%% Additionally all exceptions from called API method will be caught and converted into {error, Exception} tuple
-%% E.g. calling handle(_, {save_record, [Id, Rec]}) will execute dao_cluster:save_record(Id, Rec) and normalize return value
+%% @doc {@link worker_plugin_behaviour} callback handle/1. <br/>
+%% All {Module, Method, Args} requests (second argument), executes Method with Args in {@type dao_Module} module, but with one exception:
+%% If Module = utils, then dao module will be used. <br/>
+%% E.g calling dao:handle(_, {vfs, some_method, [some_arg]}) will call dao_vfs:some_method(some_arg) <br/>
+%% but calling dao:handle(_, {utils, some_method, [some_arg]}) will call dao:some_method(some_arg) <br/>
+%% You can omit Module atom in order to use default module which is dao_cluster. <br/>
+%% E.g calling dao:handle(_, {some_method, [some_arg]}) will call dao_cluster:some_method(some_arg) <br/>
+%% Additionally all exceptions from called API method will be caught and converted into {error, Exception} tuple. <br/>
+%% E.g. calling handle(_, {save_record, [Id, Rec]}) will execute dao_cluster:save_record(Id, Rec) and normalize return value.
 %% @end
 -spec handle(ProtocolVersion :: term(), Request) -> Result when
-    Request :: {Method, Args} | {Mod :: tuple(), Method, Args},
+    Request :: {Method, Args} | {Mod :: atom(), Method, Args},
     Method :: atom(),
     Args :: list(),
     Result :: ok | {ok, Response} | {error, Error},
@@ -93,7 +93,7 @@ handle(_ProtocolVersion, _Request) ->
 
 %% cleanup/0
 %% ====================================================================
-%% @doc worker_plugin_behaviour callback cleanup/0
+%% @doc {@link worker_plugin_behaviour} callback cleanup/0
 -spec cleanup() -> Result when
     Result :: ok | {error, Error},
     Error :: timeout | term().
@@ -108,117 +108,229 @@ cleanup() ->
 %% API functions
 %% ===================================================================
 
+
 %% save_record/2
 %% ====================================================================
-%% @doc Saves record Rec to DB with ID = Id. Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
--spec save_record(Id :: atom(), Rec :: tuple()) ->
-    ok |
-    no_return(). % erlang:error(any()) | throw(any())
-%% ====================================================================
-save_record(Id, Rec) when is_tuple(Rec), is_atom(Id) ->
-    Size = tuple_size(Rec),
-    RecName = atom_to_list(element(1, Rec)),
-    Fields =
-        case ?dao_record_info(element(1, Rec)) of
-            {RecSize, Flds} when RecSize =:= Size, is_list(Flds) -> Flds;
-            {error, E} -> throw(E);
-            _ -> throw(invalid_record)
-        end,
-    dao_helper:ensure_db_exists(?SYSTEM_DB_NAME),
-    DocName = ?RECORD_INSTANCES_DOC_PREFIX ++ RecName,
-    RecData =
-        case dao_helper:open_doc(?SYSTEM_DB_NAME, DocName) of
-            {ok, Doc} -> Doc;
-            {error, {not_found, _}} ->
-                NewDoc = dao_json:mk_field(dao_json:mk_doc(DocName), "instances", []),
-                {ok, _Rev} = dao_helper:insert_doc(?SYSTEM_DB_NAME, NewDoc),
-                {ok, Doc} = dao_helper:open_doc(?SYSTEM_DB_NAME, DocName),
-                Doc;
-            {error, E1} -> throw(E1)
-        end,
-    Instances = [X || X <- dao_json:get_field(RecData, "instances"), is_binary(dao_json:get_field(X, "_ID_")), dao_json:mk_str(dao_json:get_field(X, "_ID_")) =/= dao_json:mk_str(Id)],
-    [_ | FValues] = [dao_json:mk_bin(X) || X <- tuple_to_list(Rec)],
-    NewInstance = dao_json:mk_fields(dao_json:mk_obj(), ["_ID_" | Fields], [dao_json:mk_str(Id) | FValues]),
-    NewInstances = [NewInstance | Instances],
-    NewDoc1 = dao_json:mk_field(RecData, "instances", NewInstances),
-    {ok, _Rev1} = dao_helper:insert_doc(?SYSTEM_DB_NAME, NewDoc1),
-    {ok, saved}.
-
-%% get_record/2
-%% ====================================================================
-%% @doc Retrieves record with ID = Id from DB.
-%% If second argument is an atom - record name - every field that was added
-%% after last record save, will get value 'undefined'.
-%% If second argument is an record instance, every field that was added
-%% after last record save, will get same value as in given record instance
-%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
+%% @doc Same as save_record/3 but with Mode = insert
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
--spec get_record(Id :: atom(), RecordNameOrRecordTemplate :: atom() | tuple()) ->
-    Record :: tuple() |
+-spec save_record(Rec :: tuple(), Id :: atom() | string()) ->
+    {ok, DocId :: string()} |
+    {error, conflict} |
     no_return(). % erlang:error(any()) | throw(any())
-%% ====================================================================
-get_record(Id, NewRecord) when is_atom(NewRecord) ->
-    {RecSize, _Fields} =
-        case ?dao_record_info(NewRecord) of
-            {_, Flds} = R when is_list(Flds) -> R;
-            {error, E} -> throw(E);
-            _ -> throw(invalid_record)
-        end,
-    EmptyRecord = [NewRecord | [undefined || _ <- lists:seq(1, RecSize - 1)]],
-    get_record(Id, list_to_tuple(EmptyRecord));
-get_record(Id, EmptyRecord) when is_tuple(EmptyRecord) ->
-    RecName = atom_to_list(element(1, EmptyRecord)),
-    {_RecSize, Fields} =
-        case ?dao_record_info(element(1, EmptyRecord)) of
-            {_, Flds} = R when is_list(Flds) -> R;
-            {error, E} -> throw(E);
-            _ -> throw(invalid_record)
-        end,
-    SFields = [atom_to_list(X) || X <- Fields],
-    dao_helper:ensure_db_exists(?SYSTEM_DB_NAME),
-    DocName = ?RECORD_INSTANCES_DOC_PREFIX ++ RecName,
-    RecData =
-        case dao_helper:open_doc(?SYSTEM_DB_NAME, DocName) of
-            {ok, Doc} -> Doc;
-            {error, {not_found, _}} -> throw(record_data_not_found);
-            {error, E1} -> throw(E1)
-        end,
-    Instance = [X || X <- dao_json:get_field(RecData, "instances"), is_binary(dao_json:get_field(X, "_ID_")), dao_json:mk_str(dao_json:get_field(X, "_ID_")) =:= dao_json:mk_str(Id)],
-    [_ | SavedFields] =
-        case Instance of
-            [] -> throw(record_data_not_found);
-            [Inst] -> dao_json:get_fields(Inst);
-            _ -> throw(invalid_data)
-        end,
-    lists:foldl(fun({Name, Value}, Acc) ->
-        case string:str(SFields, [Name]) of 0 -> Acc; Poz -> setelement(1 + Poz, Acc, binary_to_term(Value)) end end, EmptyRecord, SavedFields).
+save_record(Rec, Id) ->
+    save_record(Rec, Id, insert).
 
-
-%% remove_record/2
+%% save_record/3
 %% ====================================================================
-%% @doc Removes record with given Id an RecordName from DB
-%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
+%% @doc Saves record Rec to DB as document with UUID = Id.<br/>
+%% If Mode == update then the document with given UUID will be overridden.
+%% By default however saving to existing document will fail with {error, conflict}.<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
--spec remove_record(Id :: atom(), RecordName :: atom()) ->
-    ok |
+-spec save_record(Rec :: tuple(), Id :: atom() | string(), Mode :: update | insert) ->
+    {ok, DocId :: string()} |
+    {error, conflict} |
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
-remove_record(Id, RecName) when is_atom(RecName) ->
-    dao_helper:ensure_db_exists(?SYSTEM_DB_NAME),
-    DocName = ?RECORD_INSTANCES_DOC_PREFIX ++ atom_to_list(RecName),
-    case dao_helper:open_doc(?SYSTEM_DB_NAME, DocName) of
-        {ok, Doc} ->
-            Instances = [X || X <- dao_json:get_field(Doc, "instances"), is_binary(dao_json:get_field(X, "_ID_")), dao_json:mk_str(dao_json:get_field(X, "_ID_")) =/= dao_json:mk_str(Id)],
-            NewDoc1 = dao_json:mk_field(Doc, "instances", Instances),
-            {ok, _Rev} = dao_helper:insert_doc(?SYSTEM_DB_NAME, NewDoc1),
-            ok;
-        {error, {not_found, _}} -> ok;
-        {error, E1} -> throw(E1)
+save_record(Rec, Id, Mode) when is_tuple(Rec), is_atom(Id) ->
+    save_record(Rec, atom_to_list(Id), Mode);
+save_record(Rec, Id, Mode) when is_tuple(Rec), is_list(Id)->
+    Valid = is_valid_record(Rec),
+    if
+        Valid -> ok;
+        true -> throw(unsupported_record)
+    end,
+    Revs =
+        if
+            Mode =:= update -> %% If Mode == update, we need to open existing doc in order to get revs
+                case dao_helper:open_doc(?SYSTEM_DB_NAME, Id) of
+                    {ok, #doc{revs = RevDef}} -> RevDef;
+                    _ -> #doc{revs = RevDef} = #doc{}, RevDef
+                end;
+            true ->
+                #doc{revs = RevDef} = #doc{},
+                RevDef
+        end,
+    case dao_helper:insert_doc(?SYSTEM_DB_NAME, #doc{id = dao_helper:name(Id), revs = Revs, body = term_to_doc(Rec)}) of
+        {ok, _} -> {ok, Id};
+        {error, Err} -> {error, Err}
     end.
+
+
+%% save_record/1
+%% ====================================================================
+%% @doc Saves record Rec to DB as document with random UUID.
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec save_record(Rec :: tuple()) ->
+    {ok, DocId :: string()} |
+    no_return(). % erlang:error(any()) | throw(any())
+%% ====================================================================
+save_record(Rec) when is_tuple(Rec) ->
+    save_record(Rec, dao_helper:gen_uuid(), insert).
+
+
+%% get_record/1
+%% ====================================================================
+%% @doc Retrieves record with UUID = Id from DB.
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec get_record(Id :: atom() | string()) ->
+    Record :: tuple() |
+    {error, Error :: term()} |
+    no_return(). % erlang:error(any()) | throw(any())
+%% ====================================================================
+get_record(Id) when is_atom(Id) ->
+    get_record(atom_to_list(Id));
+get_record(Id) when is_list(Id) ->
+    case dao_helper:open_doc(?SYSTEM_DB_NAME, Id) of
+        {ok, #doc{body = Body}} ->
+            try doc_to_term(Body) of
+                Term -> Term
+            catch
+                _:Err -> {error, {invalid_document, Err}}
+            end;
+        {error, Error} -> Error
+    end.
+
+
+%% remove_record/1
+%% ====================================================================
+%% @doc Removes record with given UUID from DB
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec remove_record(Id :: atom()) ->
+    ok |
+    {error, Error :: term()}.
+%% ====================================================================
+remove_record(Id) when is_atom(Id) ->
+    remove_record(atom_to_list(Id));
+remove_record(Id) when is_list(Id) ->
+    dao_helper:delete_doc(?SYSTEM_DB_NAME, Id).
 
 
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
 
+%% is_valid_record/1
+%% ====================================================================
+%% @doc Checks if given record/record name is supported and existing record
+%% @end
+-spec is_valid_record(Record :: atom() | string() | tuple()) -> boolean().
+%% ====================================================================
+is_valid_record(Record) when is_list(Record) ->
+    is_valid_record(list_to_atom(Record));
+is_valid_record(Record) when is_atom(Record) ->
+    case ?dao_record_info(Record) of
+        {_Size, _Fields, _} -> true;    %% When checking only name of record, we omit size check
+        _ -> false
+    end;
+is_valid_record(Record) when not is_tuple(Record); not is_atom(element(1, Record)) ->
+    false;
+is_valid_record(Record) ->
+    case ?dao_record_info(element(1, Record)) of
+        {Size, Fields, _} when is_list(Fields), tuple_size(Record) =:= Size ->
+            true;
+        _ -> false
+    end.
 
+
+
+%% term_to_doc/1
+%% ====================================================================
+%% @doc Converts given erlang term() into valid BigCouch document body. Given term should be a record. <br/>
+%% All erlang data types are allowed, although using binary() is not recommended (because JSON will treat it like a string and will fail to read it)
+%% @end
+-spec term_to_doc(Field :: term()) -> term().
+%% ====================================================================
+term_to_doc(Field) when is_number(Field) ->
+    Field;
+term_to_doc(Field) when is_boolean(Field); Field =:= null ->
+    Field;
+term_to_doc(Field) when is_binary(Field) ->
+    <<<<?RECORD_FIELD_BINARY_PREFIX>>/binary, Field/binary>>;   %% Binary is saved as string, so we add a prefix
+term_to_doc(Field) when is_list(Field) ->
+    case io_lib:printable_list(Field) of
+        true -> dao_helper:name(Field);
+        false -> [term_to_doc(X) || X <- Field]
+    end;
+term_to_doc(Field) when is_atom(Field) ->
+    term_to_doc(?RECORD_FIELD_ATOM_PREFIX ++ atom_to_list(Field));  %% Atom is saved as string, so we add a prefix
+term_to_doc(Field) when is_tuple(Field) ->
+    IsRec = is_valid_record(Field),
+
+    {InitObj, LField, RecName} =  %% Prepare initial structure for record or simple tuple
+        case IsRec of
+            true ->
+                [RecName1 | Res] = tuple_to_list(Field),
+                {dao_json:mk_field(dao_json:mk_obj(), ?RECORD_META_FIELD_NAME, dao_json:mk_str(atom_to_list(RecName1))), Res, RecName1};
+            false ->
+                {dao_json:mk_obj(), tuple_to_list(Field), none}
+        end,
+    FoldFun = fun(Elem, {Poz, AccIn}) ->  %% Function used in lists:foldl/3. It parses given record/tuple field
+            case IsRec of                 %% and adds to Accumulator object
+                true ->
+                    {_, Fields, _} = ?dao_record_info(RecName),
+                    {Poz + 1, dao_json:mk_field(AccIn, atom_to_list(lists:nth(Poz, Fields)), term_to_doc(Elem))};
+                false ->
+                    {Poz + 1, dao_json:mk_field(AccIn, ?RECORD_TUPLE_FIELD_NAME_PREFIX ++ integer_to_list(Poz), term_to_doc(Elem))}
+            end
+        end,
+    {_, {Ret}} = lists:foldl(FoldFun, {1, InitObj}, LField),
+    {lists:reverse(Ret)}.
+
+
+%% doc_to_term/1
+%% ====================================================================
+%% @doc Converts given valid BigCouch document body into erlang term().
+%% If document contains saved record which is a valid record (see is_valid_record/1),
+%% then structure of the returned record will be updated
+%% @end
+-spec doc_to_term(Field :: term()) -> term().
+%% ====================================================================
+doc_to_term(Field) when is_number(Field); is_atom(Field) ->
+    Field;
+doc_to_term(Field) when is_binary(Field) -> %% Binary type means that it is atom, string or binary.
+    SField = binary_to_list(Field),         %% Prefix tells us which type is it
+    BinPref = string:str(SField, ?RECORD_FIELD_BINARY_PREFIX),
+    AtomPref = string:str(SField, ?RECORD_FIELD_ATOM_PREFIX),
+    if
+        BinPref == 1 -> list_to_binary(string:sub_string(SField, length(?RECORD_FIELD_BINARY_PREFIX) + 1));
+        AtomPref == 1 -> list_to_atom(string:sub_string(SField, length(?RECORD_FIELD_ATOM_PREFIX) + 1));
+        true -> SField
+    end;
+doc_to_term(Field) when is_list(Field) ->
+    [doc_to_term(X) || X <- Field];
+doc_to_term({Fields}) when is_list(Fields) -> %% Object stores tuple which can be an erlang record
+    Fields1 = [{binary_to_list(X), Y} || {X, Y} <- Fields],
+    {IsRec, FieldsInit, RecName} =
+        case lists:keyfind(?RECORD_META_FIELD_NAME, 1, Fields1) of  %% Search for record meta field
+            {_, RecName1} -> %% Meta field found. Check if it is valid record name. Either way - prepare initial working structures
+                {case is_valid_record(binary_to_list(RecName1)) of true -> true; _ -> partial end,
+                    lists:keydelete(?RECORD_META_FIELD_NAME, 1, Fields1), list_to_atom(binary_to_list(RecName1))};
+            _ ->
+                DataTmp = [{list_to_integer(lists:filter(fun(E) -> (E >= $0) andalso (E =< $9) end, Num)), Data} || {Num, Data} <- Fields1],
+                {false, lists:sort(fun({A, _}, {B, _}) -> A < B end, DataTmp), none}
+        end,
+    case IsRec of
+        false -> %% Object is an tuple. Simply create tuple from successive fields
+            list_to_tuple([doc_to_term(Data) || {_, Data} <- FieldsInit]);
+        partial -> %% Object is an unsupported record. We are gonna build record based only on current structure from DB
+            list_to_tuple([RecName | [doc_to_term(Data) || {_, Data} <- FieldsInit]]);
+        true -> %% Object is an supported record. We are gonna build record based on current erlang record structure (new fields will get default values)
+            {_, FNames, InitRec} = ?dao_record_info(RecName),
+            FoldFun = fun(Elem, {Poz, AccIn}) ->
+                    case lists:keyfind(atom_to_list(Elem), 1, FieldsInit) of
+                        {_, Data} ->
+                            {Poz + 1, setelement(Poz, AccIn, doc_to_term(Data))};
+                        _ ->
+                            {Poz + 1, AccIn}
+                    end
+                end,
+            {_, Ret} = lists:foldl(FoldFun, {2, InitRec}, FNames),
+            Ret
+    end;
+doc_to_term(_) ->
+    throw(invalid_document).

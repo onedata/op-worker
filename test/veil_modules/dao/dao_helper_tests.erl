@@ -42,19 +42,11 @@ setup() ->
     put(db_host, undefined),
     Pid = spawn(dao_hosts, init, []),           %% <-- DON NOT swap these lines unless you understand exactly how meck works
     meck:new(dao_hosts, [unstick, passthrough]),%% <-- And even if you do understand, then you know that you shouldn't do it
-    register(db_host_store_proc, Pid),
     receive after 20 -> Pid end.
 
 teardown(Pid) ->
     meck:unload(dao_hosts),
     Pid ! {self(), shutdown}.
-
-ensure_db_exists_test() ->
-    meck:new(dao_hosts, [unstick, passthrough]),
-    meck:expect(dao_hosts, call, fun(_, [<<"Name">>, []]) -> ok end),
-    dao_helper:ensure_db_exists("Name"),
-    ?assert(meck:validate(dao_hosts)),
-    meck:unload(dao_hosts).
 
 list_dbs() ->
     case dao_helper:list_dbs() of
@@ -173,5 +165,7 @@ query_view() ->
     TmpRes = dao_helper:query_view("Name", "des", "view", #view_query_args{}),
     ?assert(meck:validate(dao_hosts)).
 
+gen_uuid_test() ->
+    32 = length(dao_helper:gen_uuid()).
 
 -endif.
