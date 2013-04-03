@@ -46,7 +46,6 @@ save_record_test() ->
     ToInsert = {some_record, a, b, c},
     DbObj = dao:term_to_doc(ToInsert),
     meck:new(dao_helper),
-    meck:expect(dao_helper, ensure_db_exists, fun(?SYSTEM_DB_NAME) -> ok end),
     meck:expect(dao_helper, open_doc, fun(?SYSTEM_DB_NAME, "test_id") -> {error, not_found} end),
     meck:expect(dao_helper, insert_doc, fun(?SYSTEM_DB_NAME, #doc{id = Id, body = DbObj1}) -> DbObj1 = DbObj, {ok, Id} end),
     meck:expect(dao_helper, name, fun(Arg) -> meck:passthrough([Arg]) end),
@@ -63,7 +62,6 @@ save_record_test() ->
 get_record_test() ->
     DbObj = {[{<<?RECORD_META_FIELD_NAME>>, <<"some_record">>}, {<<"field1">>, 1}, {<<"field3">>, true}]},
     meck:new(dao_helper),
-    meck:expect(dao_helper, ensure_db_exists, fun(?SYSTEM_DB_NAME) -> ok end),
     meck:expect(dao_helper, open_doc, fun(?SYSTEM_DB_NAME, "test_id") -> {ok, #doc{body = DbObj}} end),
     meck:expect(dao_helper, name, fun(Arg) -> meck:passthrough([Arg]) end),
     #some_record{field1 = 1, field3 = true} = dao:get_record("test_id"),
@@ -73,7 +71,6 @@ get_record_test() ->
 
 remove_record_test() ->
     meck:new(dao_helper),
-    meck:expect(dao_helper, ensure_db_exists, fun(?SYSTEM_DB_NAME) -> ok end),
     meck:expect(dao_helper, delete_doc, fun(?SYSTEM_DB_NAME, "test_id") -> ok end),
     meck:expect(dao_helper, name, fun(Arg) -> meck:passthrough([Arg]) end),
     ok = dao:remove_record("test_id"),

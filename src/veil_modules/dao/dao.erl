@@ -141,7 +141,6 @@ save_record(Rec, Id, Mode) when is_tuple(Rec), is_list(Id)->
         Valid -> ok;
         true -> throw(unsupported_record)
     end,
-    dao_helper:ensure_db_exists(?SYSTEM_DB_NAME),
     Revs =
         if
             Mode =:= update -> %% If Mode == update, we need to open existing doc in order to get revs
@@ -155,7 +154,7 @@ save_record(Rec, Id, Mode) when is_tuple(Rec), is_list(Id)->
         end,
     case dao_helper:insert_doc(?SYSTEM_DB_NAME, #doc{id = dao_helper:name(Id), revs = Revs, body = term_to_doc(Rec)}) of
         {ok, _} -> {ok, Id};
-        {error, Err} -> Err
+        {error, Err} -> {error, Err}
     end.
 
 
@@ -185,7 +184,6 @@ save_record(Rec) when is_tuple(Rec) ->
 get_record(Id) when is_atom(Id) ->
     get_record(atom_to_list(Id));
 get_record(Id) when is_list(Id) ->
-    dao_helper:ensure_db_exists(?SYSTEM_DB_NAME),
     case dao_helper:open_doc(?SYSTEM_DB_NAME, Id) of
         {ok, #doc{body = Body}} ->
             try doc_to_term(Body) of
@@ -193,7 +191,7 @@ get_record(Id) when is_list(Id) ->
             catch
                 _:Err -> {error, {invalid_document, Err}}
             end;
-            {error, Error} -> Error
+        {error, Error} -> Error
     end.
 
 
@@ -209,7 +207,6 @@ get_record(Id) when is_list(Id) ->
 remove_record(Id) when is_atom(Id) ->
     remove_record(atom_to_list(Id));
 remove_record(Id) when is_list(Id) ->
-    dao_helper:ensure_db_exists(?SYSTEM_DB_NAME),
     dao_helper:delete_doc(?SYSTEM_DB_NAME, Id).
 
 
