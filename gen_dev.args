@@ -1,1 +1,1 @@
--name ccm1@vfs1.net -main_ccm ccm1@vfs1.net -opt_ccm ccm2@vfs2.net ccm3@vfs3.net
+-name w1@vfs2.net -main_ccm ccm1@vfs1.net -opt_ccm ccm2@vfs2.net ccm3@vfs3.net -db_nodes db1@vfs1.net db2@vfs2.net db3@vfs3.net

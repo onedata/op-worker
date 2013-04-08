@@ -1,1 +1,1 @@
--worker w1@vfs1.net w2@vfs2.net w3@vfs3.net -main_ccm ccm1@vfs4.net -opt_ccm ccm2@vfs5.net ccm3@vfs6.net
+-worker w1@vfs1.net -main_ccm ccm1@vfs4.net -opt_ccm ccm2@vfs5.net -db_nodes db1@vfs1.net db2@vfs2.net

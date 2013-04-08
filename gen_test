@@ -3,7 +3,7 @@
 function bad_args_error
 {
 	echo "Usage:" 
-	echo "	$0 -worker worker1@host worker2@host ... -main_ccm main_ccm_node@host [-opt_ccm opt_ccm_node1@host opt_ccm_node2@host ...] [-start]"
+	echo "	$0 -worker worker1@host worker2@host ... -main_ccm main_ccm_node@host [-opt_ccm opt_ccm_node1@host opt_ccm_node2@host ...] -db_nodes dbnode1@host dbnode2@host ... [-start]"
 	echo " "
 	echo "or:"
 	echo "	$0 [-start] (file 'gen_test.args' containing arguments present in script directory)"
@@ -61,14 +61,23 @@ if [ $# -gt $NEXT_LOOP_INDEX ] && [ ${!NEXT_LOOP_INDEX} != "-opt_ccm" ]; then
 fi
 
 DO_START=0
+if [ ${!#} == "-start" ]; then
+	DO_START=1
+fi
+
 for (( INDEX=$((NEXT_LOOP_INDEX + 1)); INDEX<=$#; INDEX++ ))
 do
-	if [ ${!INDEX} == "-start" ]; then
-		DO_START=1
-	else
-		OPT_CCM_LIST="$OPT_CCM_LIST ${!INDEX}"
-		NODE_LIST[(( INDEX - 4))]=${!INDEX}
+	if [ ${!INDEX} == '-db_nodes' ]; then		
+		NEXT_LOOP_INDEX=$((INDEX + 1))
+		break;
 	fi
+	OPT_CCM_LIST="$OPT_CCM_LIST ${!INDEX}"
+	NODE_LIST[(( INDEX - 4))]=${!INDEX}
+done
+
+for (( INDEX=$NEXT_LOOP_INDEX; INDEX<=$#; INDEX++ ))
+do
+	DB_NODES_LIST="$DB_NODES_LIST ${!INDEX}"
 done
 
 if [ $DO_START -eq 0 ]; then
@@ -80,7 +89,7 @@ if [ $DO_START -eq 0 ]; then
 		echo "--------------------------------------------"
 		echo "generating release for $NODE in   releases/$NODE_NAME_WITHOUT_HOSTNAME"
 		echo " "
-		make release_config args="-name $NODE -main_ccm $MAIN_CCM_NAME -opt_ccm $OPT_CCM_LIST"
+		make release_config args="-name $NODE -main_ccm $MAIN_CCM_NAME -opt_ccm $OPT_CCM_LIST -db_nodes $DB_NODES_LIST"
 		echo " "
 		echo "done!"
 	done	
