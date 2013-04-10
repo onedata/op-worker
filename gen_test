@@ -15,7 +15,7 @@ function bad_args_error
 if [ $# -lt 4 ] || [ $1 != "-worker" ]; then
 
 	# Check for .args file
-	if [ $# -lt 2 ] && [ -f gen_dev.args ]; then
+	if [ $# -lt 2 ] && [ -f gen_test.args ]; then
 		ARGS=`cat gen_test.args`
 		echo 'Using arguments from gen_test.args'
 		if [ $# -eq 1 ] && [ $1 == "-start" ]; then
@@ -55,11 +55,6 @@ do
 	NODE_LIST[(( INDEX - 2))]=${!INDEX}
 done
 
-# If there are more arguments, but the next isn't -opt_ccm then arguments are incorrect
-if [ $# -gt $NEXT_LOOP_INDEX ] && [ ${!NEXT_LOOP_INDEX} != "-opt_ccm" ]; then
-	bad_args_error
-fi
-
 DO_START=0
 if [ ${!#} == "-start" ]; then
 	DO_START=1
@@ -90,6 +85,13 @@ if [ $DO_START -eq 0 ]; then
 		echo "generating release for $NODE in   releases/$NODE_NAME_WITHOUT_HOSTNAME"
 		echo " "
 		make release_config args="-name $NODE -main_ccm $MAIN_CCM_NAME -opt_ccm $OPT_CCM_LIST -db_nodes $DB_NODES_LIST"
+
+        if [ $? -ne 0 ]; then
+            echo ""
+            echo "Error during generation of a release. Make sure all dependencies are present in project directory."
+            exit
+        fi
+
 		echo " "
 		echo "done!"
 	done	
@@ -107,6 +109,12 @@ else
 		NODE_NAME_WITHOUT_HOSTNAME=${NODE:0:(($AT_INDEX - 1))}
 		echo "starting $NODE in   releases/$NODE_NAME_WITHOUT_HOSTNAME"
 		make start_config node="$NODE_NAME_WITHOUT_HOSTNAME"
+
+        if [ $? -ne 0 ]; then
+            echo ""
+            echo "Error during start of a node. Is the test environment ready?"
+            exit
+        fi
 	done
 	echo " "
 	echo "Test environment successfully started!" 
