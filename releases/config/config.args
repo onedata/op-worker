@@ -19,4 +19,4 @@ opt_ccms: ccm2@vfs2.net ccm3@vfs3.net
 db_nodes: dbnode1@vfs1.net dbnode2@vfs2.net
 
 
-%% NOTE: if the type is ccm, name must reoccur in main_ccm or opt_ccms.
+%% NOTE: if the type is ccm, name must reoccur in main_ccm or opt_ccms
