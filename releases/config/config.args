@@ -1,0 +1,22 @@
+%% This file contains parameters for veil cluster node configuration. 
+%% It is used by 'apply_config' script to set up environment before starting a cluster node.
+%% Every node must be configured individually before starting.
+
+
+%% name of the node
+name: ccm1@vfs1.net
+
+%% type of the node ( worker | ccm )
+type: ccm
+
+%% main ccm of the cluster
+main_ccm: ccm1@vfs1.net
+
+%% optional ccms in the cluster (list delimited with spaces)
+opt_ccms: ccm2@vfs2.net ccm3@vfs3.net
+
+%% DBMS nodes in the cluster (list delimited with spaces)
+db_nodes: dbnode1@vfs1.net dbnode2@vfs2.net
+
+
+%% NOTE: if the type is ccm, name must reoccur in main_ccm or opt_ccms.

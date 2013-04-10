@@ -1,0 +1,113 @@
+#!/bin/bash
+
+# Ensure config file exists
+if [ ! -f config.args ]; then
+	echo "Error: configuration file 'config.args' not found in current directory."
+fi
+
+# Retrieve node name from config file, trim spaces
+NODE_NAME=`grep 'name:' config.args`
+NODE_NAME=${NODE_NAME:5:${#NODE_NAME}}
+NODE_NAME=$(echo $NODE_NAME | tr -d ' ')
+
+# Retrieve node type from config file, trim spaces
+NODE_TYPE=`grep 'type:' config.args`
+NODE_TYPE=${NODE_TYPE:5:${#NODE_TYPE}}
+NODE_TYPE=$(echo $NODE_TYPE | tr -d ' ')
+
+# Retrieve main_ccm name from config file, trim spaces
+MAIN_CCM=`grep 'main_ccm:' config.args`
+MAIN_CCM=${MAIN_CCM:9:${#MAIN_CCM}}
+MAIN_CCM=$(echo $MAIN_CCM | tr -d ' ')
+
+# Retrieve opt_ccms from config file
+OPT_CCMS=`grep 'opt_ccms:' config.args`
+OPT_CCMS=${OPT_CCMS:9:${#OPT_CCMS}}
+
+# And turn them into a formatted list, along with main ccm
+OPT_CCMS_ARRAY=$(echo $OPT_CCMS | tr " " "\n")
+CCMS_LIST="[\"\\\'$MAIN_CCM\\\'\","
+for OPT_CCM in $OPT_CCMS_ARRAY
+do
+    CCMS_LIST="$CCMS_LIST\"\\\'$OPT_CCM\\\'\","
+done
+CCMS_LIST="${CCMS_LIST%?}]"
+
+# Retrieve db_nodes from config file
+DB_NODES=`grep 'db_nodes:' config.args`
+DB_NODES=${DB_NODES:9:${#DB_NODES}}
+
+# And turn them into a formatted list
+DB_NODES_ARRAY=$(echo $DB_NODES | tr " " "\n")
+DB_NODES_LIST="["
+for DB_NODE in $DB_NODES_ARRAY
+do
+    DB_NODES_LIST="$DB_NODES_LIST\"\\\'$DB_NODE\\\'\","
+done
+DB_NODES_LIST="${DB_NODES_LIST%?}]"
+
+# Get application version
+START_ERL=`cat ../releases/start_erl.data`
+APP_VSN=${START_ERL#* }
+
+# Replace node name
+sed -i "s/-name.*/-name $NODE_NAME/g" ../releases/$APP_VSN/vm.args
+
+# Replace node type
+sed -i "s/-veil_cluster_node node_type.*/-veil_cluster_node node_type $NODE_TYPE/g" ../releases/$APP_VSN/vm.args
+
+# Replace ccm nodes
+sed -i "s/-veil_cluster_node ccm_nodes.*/-veil_cluster_node ccm_nodes $CCMS_LIST/g" ../releases/$APP_VSN/vm.args
+
+# Replace DBMS nodes
+sed -i "s/-veil_cluster_node db_nodes.*/-veil_cluster_node db_nodes $DB_NODES_LIST/g" ../releases/$APP_VSN/vm.args
+
+# Remove config for distributed application from sys.config
+sed -n -i '1h;1!H;${;g;s/\[.*%% SASL/\n %% SASL/g;p;}' ../releases/$APP_VSN/sys.config
+
+# If this node is a ccm, create a proper entry
+if [ $NODE_TYPE == 'ccm' ]; then
+
+	# Produce list of ccms: [main_ccm, {opt_ccm1, opt_ccm2...}]
+	CCM_HIERARCHY_LIST="['$MAIN_CCM', {"
+	for OPT_CCM in $OPT_CCMS_ARRAY
+	do
+	    CCM_HIERARCHY_LIST="$CCM_HIERARCHY_LIST'$OPT_CCM',"
+	done
+	CCM_HIERARCHY_LIST="${CCM_HIERARCHY_LIST%?}}]"
+
+	# Produce list of mandatory sync ccms (skip self)
+	CCM_SYNC_LIST="["
+	if [ $NODE_NAME != $MAIN_CCM ]; then
+		CCM_SYNC_LIST="['$MAIN_CCM', "
+	fi
+	for OPT_CCM in $OPT_CCMS_ARRAY
+	do
+		if [ $NODE_NAME != $OPT_CCM ]; then
+	    	CCM_SYNC_LIST="$CCM_SYNC_LIST'$OPT_CCM', "
+	    fi
+	done
+	CCM_SYNC_LIST="${CCM_SYNC_LIST:0:((${#CCM_SYNC_LIST} - 2))}]"
+
+	# Produce proper config entry
+	DIST_APP_CFG="[
+ %% kernel config for ccm distributed application
+ {kernel,
+  [{distributed, [{veil_cluster_node, 5000, $CCM_HIERARCHY_LIST}]},
+   {sync_nodes_mandatory, $CCM_SYNC_LIST},
+   {sync_nodes_timeout, 60000}
+  ]
+ },
+ "
+
+# If this node is a worker, add only '[' that has been removed by sed
+else
+	DIST_APP_CFG="["
+fi
+
+# Merge all into one string
+SYS_CFG=`cat ../releases/$APP_VSN/sys.config`
+SYS_CFG="$DIST_APP_CFG$SYS_CFG"
+
+# And overwrite the old sys.config
+echo "$SYS_CFG" > ../releases/$APP_VSN/sys.config
