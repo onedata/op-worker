@@ -17,8 +17,22 @@ distclean: clean
 test: deps compile
 	./rebar eunit ct skip_deps=true
 
+generate: TARGET_DIR = $(shell grep 'target_dir,' releases/reltool.config | cut -f2 -d'"')
 generate: compile
 	./rebar generate
+	cp -R releases/config releases/$(TARGET_DIR)/
+
+docs:
+	./rebar doc
+
+upgrade:
+	./rebar generate-appups previous_release=${PREV}
+	./rebar generate-upgrade previous_release=${PREV}
+
+
+##############################
+## TARGETS USED FOR TESTING ##
+##############################
 
 gen_config:
 	./gen_dev $(args)
@@ -53,10 +67,3 @@ start_test_env:
 
 start_test_env_from_file:
 	./gen_test -start
-
-docs:
-	./rebar doc
-
-upgrade:
-	./rebar generate-appups previous_release=${PREV}
-	./rebar generate-upgrade previous_release=${PREV}
