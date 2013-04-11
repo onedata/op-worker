@@ -110,7 +110,12 @@ handle_call(_Request, _From, State) ->
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 handle_cast(do_heart_beat, State) ->
-	{noreply, State#node_state{ccm_con_status = heart_beat(State#node_state.ccm_con_status)}};
+  {New_conn_status, New_state_num} = heart_beat(State#node_state.ccm_con_status),
+  NewState = case New_conn_status of
+    ok -> State#node_state{ccm_con_status = New_conn_status, state_num = New_state_num};
+    _Other -> State#node_state{ccm_con_status = New_conn_status}
+  end,
+	{noreply, NewState};
 
 handle_cast(reset_ccm_connection, State) ->
 	{noreply, State#node_state{ccm_con_status = heart_beat(not_connected)}};
@@ -187,14 +192,18 @@ heart_beat(Conn_status) ->
 	end,
 
 	{ok, Interval} = application:get_env(veil_cluster_node, heart_beat),
-	case New_conn_status2 of
-		ok -> timer:apply_after(Interval * 1000, gen_server, cast, [?Node_Manager_Name, do_heart_beat]);
-		_Other3 -> timer:apply_after(Interval * 1000, gen_server, cast, [?Node_Manager_Name, reset_ccm_connection])
+  {New_conn_status3, New_state_num} = case New_conn_status2 of
+    {ok, Num} ->
+      timer:apply_after(Interval * 1000, gen_server, cast, [?Node_Manager_Name, do_heart_beat]),
+      {ok, Num};
+		_Other3 ->
+      timer:apply_after(Interval * 1000, gen_server, cast, [?Node_Manager_Name, reset_ccm_connection]),
+      {New_conn_status2, 0}
 	end,
 
-	lager:info([{mod, ?MODULE}], "Haert beat on node: ~s: ~s", [node(), New_conn_status2]),
+	lager:info([{mod, ?MODULE}], "Haert beat on node: ~s: ~s, new state_num: ~b", [node(), New_conn_status3, New_state_num]),
 	
-	New_conn_status.
+  {New_conn_status, New_state_num}.
 
 %% init_net_connection/1
 %% ====================================================================
@@ -225,7 +234,7 @@ init_net_connection([Node | Nodes]) ->
 %% ====================================================================
 heart_beat() ->
 	case send_to_ccm({node_is_up, node()}) of
-		ok -> ok;
+    {ok, Num} when is_number(Num) -> {ok, Num};
 		_Other -> heart_beat_error
 	end.
 
@@ -237,8 +246,7 @@ heart_beat() ->
 %% ====================================================================
 send_to_ccm(Message) ->
 	try
-		gen_server:call({global, ?CCM}, Message),
-		ok
+    {ok, gen_server:call({global, ?CCM}, Message)}
 	catch
 		_:_ -> connection_error
 	end.
