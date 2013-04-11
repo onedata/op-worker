@@ -55,7 +55,8 @@ start_link() ->
 %% ====================================================================
 start_link(_Args) ->
     Pid = spawn_link(fun() -> init() end),
-    {ok, Pid}.
+    Pid ! {self(), force_update},
+    receive {Pid, ok} -> {ok, Pid} after 2000 -> {error, proc_timeout} end.
 
 %% insert/1
 %% ====================================================================
