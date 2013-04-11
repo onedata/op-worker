@@ -110,8 +110,8 @@ term_to_doc_test() ->
                         [true,
                             {[{<<"tuple_field_1">>, <<"test1">>}, {<<"tuple_field_2">>, false}]}]}]},
                 5.4, <<<<?RECORD_FIELD_BINARY_PREFIX>>/binary, <<1,2,3>>/binary>>,
-                [1, 0, <<"test">>]]}]},
-    Ans = dao:term_to_doc(#some_record{field1 = {"rec1", #some_record{field1 = test_atom, field2 = 5}}, field2 = "test string", field3 = [1, {6.53, [true, {"test1", false}]}, 5.4, <<1,2,3>>, [1, 0, "test"]]}).
+                [1, list_to_binary(?RECORD_FIELD_PID_PREFIX ++ pid_to_list(self())), <<"test">>]]}]},
+    Ans = dao:term_to_doc(#some_record{field1 = {"rec1", #some_record{field1 = test_atom, field2 = 5}}, field2 = "test string", field3 = [1, {6.53, [true, {"test1", false}]}, 5.4, <<1,2,3>>, [1, self(), "test"]]}).
 
 doc_to_term_test() ->
     test_atom = dao:doc_to_term(list_to_binary(string:concat(?RECORD_FIELD_ATOM_PREFIX, "test_atom"))),
@@ -131,8 +131,9 @@ doc_to_term_test() ->
                         [{[{<<?RECORD_META_FIELD_NAME>>, <<"unknown_record">>}, {<<"f2">>, 1}, {<<"f1">>, 5}]},
                             {[{<<"tuple_field_2">>, false}, {<<"tuple_field_1">>, <<"test1">>}]}]}]},
                 5.4, <<<<?RECORD_FIELD_BINARY_PREFIX>>/binary, <<1,2,3>>/binary>>,
-                [1, 0, <<"test">>]]}]},
+                [1, list_to_binary(?RECORD_FIELD_PID_PREFIX ++ pid_to_list(self())), <<"test">>]]}]},
+    SPid = self(),
     {some_record, {"rec1", {some_record, test_atom, 5, []}},
-        "test string", [1, {6.53, [{unknown_record, 1, 5}, {"test1", false}]}, 5.4, <<1,2,3>>, [1, 0, "test"]]} = dao:doc_to_term(Ans).
+        "test string", [1, {6.53, [{unknown_record, 1, 5}, {"test1", false}]}, 5.4, <<1,2,3>>, [1, SPid, "test"]]} = dao:doc_to_term(Ans).
 
 -endif.
