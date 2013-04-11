@@ -1,5 +1,15 @@
-%% @author Michal
-%% @doc @todo Add description to worker_host.
+%% ===================================================================
+%% @author Michal Wrzeszcz
+%% @copyright (C): 2013 ACK CYFRONET AGH
+%% This software is released under the MIT license
+%% cited in 'LICENSE.txt'.
+%% @end
+%% ===================================================================
+%% @doc: This module hosts all VeilFS modules (fslogic, cluster_rengin etc.).
+%% It makes it easy to manage modules and provides some basic functionality
+%% for its plug-ins (VeilFS modules) e.g. requests management.
+%% @end
+%% ===================================================================
 
 -module(worker_host).
 -behaviour(gen_server).
