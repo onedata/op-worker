@@ -96,7 +96,9 @@ handle_call({node_is_up, Node}, _From, State) ->
     true -> {reply, Reply, State};
     false -> State#cm_state.monitor_process ! {monitor_node, Node},
       NewState = check_node(Node, State),
-      {reply, Reply, NewState#cm_state{nodes = [Node | Nodes]}}
+      NewState2 = NewState#cm_state{nodes = [Node | Nodes]},
+      save_state(NewState2),
+      {reply, Reply, NewState2}
   end;
 
 handle_call(get_nodes, _From, State) ->
@@ -134,6 +136,7 @@ handle_cast(check_cluster_state, State) ->
 
 handle_cast({node_down, Node}, State) ->
   NewState = node_down(Node, State),
+  save_state(NewState),
   {noreply, NewState};
 
 handle_cast({set_monitoring, Flag}, State) ->
@@ -398,3 +401,6 @@ get_state_from_db(State) ->
     error -> error
   end,
   NewState.
+
+save_state(State) ->
+  gen_server:cast(dao, {asynch, 1, {save_state, [State]}}).

@@ -190,7 +190,7 @@ proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyDisp) ->
 	catch
 		_:_ -> wrongTask
 	end,
-	
+
 	case ReplyDisp of
 		non -> ok;
 		Disp -> gen_server:cast(Disp, {worker_answer, MsgId, Response})
@@ -198,13 +198,7 @@ proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyDisp) ->
 	
 	{Megaseconds2,Seconds2,Microseconds2} = os:timestamp(),
 	Time = 1000000*1000000*(Megaseconds2-Megaseconds) + 1000000*(Seconds2-Seconds) + Microseconds2-Microseconds,
-
-	try
-		gen_server:cast(PlugIn, {progress_report, {{Megaseconds,Seconds,Microseconds}, Time}}),
-		ok
-	catch
-		_:_ -> worker_host_error
-	end.
+	gen_server:cast(PlugIn, {progress_report, {{Megaseconds,Seconds,Microseconds}, Time}}).
 
 %% save_progress/2
 %% ====================================================================
