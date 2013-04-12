@@ -56,7 +56,7 @@ save_state(Id, Rec) when is_tuple(Rec), is_atom(Id) ->
 %% @doc Retrieves cluster state with ID = cluster_state from DB.
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
--spec get_state() -> term().
+-spec get_state() -> {ok, term()} | {error, any()}.
 %% ====================================================================
 get_state() ->
     get_state(cluster_state).
@@ -67,7 +67,7 @@ get_state() ->
 %% @doc Retrieves cluster state with UUID = Id from DB.
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
--spec get_state(Id :: atom()) -> term().
+-spec get_state(Id :: atom()) -> {ok, term()} | {error, any()}.
 %% ====================================================================
 get_state(Id) ->
     dao:get_record(Id).
