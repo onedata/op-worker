@@ -144,11 +144,15 @@ handle_cast({set_monitoring, Flag}, State) ->
   {noreply, State};
 
 handle_cast({worker_answer, cluster_state, Response}, State) ->
-  case Response of
-    {ok, SavedState} -> lager:info([{mod, ?MODULE}], "State read from DB");
-    {error, Error} -> lager:info([{mod, ?MODULE}], "State cannot be read from DB: ~s", [Error]) %% info logging level because state may not be present in db and it's not an error
+  NewState = case Response of
+    {ok, SavedState} ->
+      lager:info([{mod, ?MODULE}], "State read from DB"),
+      merge_state(State, SavedState);
+    {error, Error} ->
+      lager:info([{mod, ?MODULE}], "State cannot be read from DB: ~s", [Error]), %% info logging level because state may not be present in db and it's not an error
+      State
   end,
-  {noreply, State};
+  {noreply, NewState};
 
 handle_cast(_Msg, State) ->
   {noreply, State}.
@@ -404,3 +408,7 @@ get_state_from_db(State) ->
 
 save_state(State) ->
   gen_server:cast(dao, {asynch, 1, {save_state, [State]}}).
+
+merge_state(State, SavedState) ->
+  save_state(State),
+  State.
