@@ -177,7 +177,7 @@ save_record(Rec) when is_tuple(Rec) ->
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec get_record(Id :: atom() | string()) ->
-    Record :: tuple() |
+    {ok, Record :: tuple()} |
     {error, Error :: term()} |
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
@@ -187,7 +187,7 @@ get_record(Id) when is_list(Id) ->
     case dao_helper:open_doc(?SYSTEM_DB_NAME, Id) of
         {ok, #doc{body = Body}} ->
             try doc_to_term(Body) of
-                Term -> Term
+                Term -> {ok, Term}
             catch
                 _:Err -> {error, {invalid_document, Err}}
             end;
