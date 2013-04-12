@@ -2,6 +2,7 @@
 
 if [ $# -eq 1 ] && [ $1 == "-clean_up" ]; then
 	mv releases/old_reltool.config releases/reltool.config 2>/dev/null
+	mv releases/old_vars.config releases/vars.config 2>/dev/null
 	exit 0
 fi
 
@@ -38,6 +39,12 @@ MAIN_CCM_NAME=$4
 IS_THIS_CCM=0
 CCM_LIST="[\\\\\"\\\\\\\\'$MAIN_CCM_NAME\\\\\\\\'\\\\\""
 
+# Get local IP address (used as cookie)
+IFCONFIG_LINE=`ifconfig | grep "inet addr:.*Bcast:"`
+COLON_INDEX=`expr index "$IFCONFIG_LINE" :`
+BCAST_INDEX=`expr index "$IFCONFIG_LINE" Bcast`
+COOKIE=${IFCONFIG_LINE:COLON_INDEX:((BCAST_INDEX - 2))}
+
 # Check if this node is the main CCM node
 if [ $NODE_NAME == $MAIN_CCM_NAME ]; then
 	IS_THIS_CCM=1
@@ -72,13 +79,18 @@ do
 done
 DB_NODES_LIST="$DB_NODES_LIST]"
 
+# Store original vars.config and reltool.config to be able to restore them
+cp releases/vars.config releases/old_vars.config
+cp releases/reltool.config releases/old_reltool.config
+
 case $IS_THIS_CCM in
 	# This node is a worker
 	0)
-		# produce a proper vars.config file from template
+		# Produce a proper vars.config file from template
 		sed "s/\$CCM_LIST/$CCM_LIST/g; 
 			s/\$NODE_NAME/$NODE_NAME/g; 
 			s/\$DB_NODES_LIST/$DB_NODES_LIST/g; 
+			s/\$COOKIE/$COOKIE/g; 
 			/%%%/d" "releases/vars/worker_vars.config" > releases/vars.config
 		;;
 
@@ -138,12 +150,12 @@ case $IS_THIS_CCM in
 			s/\$CCM_LIST/$CCM_LIST/g; 
 			s/\$NODE_NAME/$NODE_NAME/g; 
 			s/\$DB_NODES_LIST/$DB_NODES_LIST/g; 
+			s/\$COOKIE/$COOKIE/g; 
 			/%%%/d" "releases/vars/ccm_vars.config" > releases/vars.config
 		;;
 esac
 
-cp releases/reltool.config releases/old_reltool.config
-
+# Change target dir in reltool.config
 sed -i "s/{target_dir,.*\\./{target_dir, \"$NODE_NAME_WITHOUT_HOSTNAME\"}./g" "releases/reltool.config"
 
 exit 0
