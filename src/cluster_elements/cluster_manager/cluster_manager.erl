@@ -146,7 +146,7 @@ handle_cast({set_monitoring, Flag}, State) ->
 handle_cast({worker_answer, cluster_state, Response}, State) ->
   case Response of
     {ok, SavedState} -> lager:info([{mod, ?MODULE}], "State read from DB");
-    {error, Error} -> lager:info([{mod, ?MODULE}], "State cannot be read from DB: ~s", [Error])
+    {error, Error} -> lager:info([{mod, ?MODULE}], "State cannot be read from DB: ~s", [Error]) %% info logging level because state may not be present in db and it's not an error
   end,
   {noreply, State};
 
