@@ -95,10 +95,14 @@ handle_call({node_is_up, Node}, _From, State) ->
   case lists:member(Node, Nodes) of
     true -> {reply, Reply, State};
     false -> State#cm_state.monitor_process ! {monitor_node, Node},
-      NewState = check_node(Node, State),
-      NewState2 = NewState#cm_state{nodes = [Node | Nodes]},
-      save_state(NewState2),
-      {reply, Reply, NewState2}
+      {Ans, NewState} = check_node(Node, State),
+      case Ans of
+        ok ->
+          NewState2 = NewState#cm_state{nodes = [Node | Nodes]},
+          save_state(NewState2),
+          {reply, Reply, NewState2};
+        _Other -> {reply, Reply, NewState}
+      end
   end;
 
 handle_call(get_nodes, _From, State) ->
@@ -301,12 +305,17 @@ stop_worker(Node, Module, State) ->
 %% ====================================================================
 check_node(Node, State) ->
   try
-    Children = supervisor:which_children({?Supervisor_Name, Node}),
-    Workers = State#cm_state.workers,
-    NewWorkers = add_children(Node, Children, Workers),
-    State#cm_state{workers = NewWorkers}
+    Ans = net_adm:ping(Node),
+    case Ans of
+      pong ->
+        Children = supervisor:which_children({?Supervisor_Name, Node}),
+        Workers = State#cm_state.workers,
+        NewWorkers = add_children(Node, Children, Workers),
+        {ok, State#cm_state{workers = NewWorkers}};
+      pang -> {error, State}
+    end
   catch
-    _:_ -> State
+    _:_ -> {error, State}
   end.
 
 %% add_children/3
@@ -410,5 +419,26 @@ save_state(State) ->
   gen_server:cast(dao, {asynch, 1, {save_state, [State]}}).
 
 merge_state(State, SavedState) ->
-  save_state(State),
-  State.
+  StateNum = erlang:max(State#cm_state.state_num, SavedState#cm_state.state_num),
+  State1 = State#cm_state{state_num = StateNum},
+
+  NewNodes = lists:filter(fun(N) -> not lists:member(N, State1#cm_state.nodes) end, SavedState#cm_state.nodes),
+
+  CreateNewState = fun(Node, TmpState) ->
+    State#cm_state.monitor_process ! {monitor_node, Node},
+    {Ans, NewState} = check_node(Node, TmpState),
+    case Ans of
+      ok ->
+        State#cm_state.monitor_process ! {monitor_node, Node},
+        NewState#cm_state{nodes = [Node | NewState#cm_state.nodes]};
+      _Other -> NewState
+    end
+  end,
+  MergedState = lists:foldl(CreateNewState, State1, NewNodes),
+
+  save_state(MergedState),
+  MergedState.
+
+%% wstawic ta metode w miejsca gdzie zmieniaja sie workery, dodac rozsylanie powiadomien do dispatcherow
+increase_state_num(State) ->
+  State#cm_state{state_num = State#cm_state.state_num + 1}.
