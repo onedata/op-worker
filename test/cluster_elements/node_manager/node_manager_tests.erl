@@ -64,6 +64,7 @@ heart_beat_test() ->
 	
 	application:set_env(?APP_Name, ccm_nodes, [not_existing_node]), 
 	ok = gen_server:cast(?Node_Manager_Name, reset_ccm_connection),
+  timer:sleep(50),
 	Ccm_status2 = gen_server:call(?Node_Manager_Name, get_ccm_connection_status),
 	?assert(Ccm_status2 =:= not_connected),
 

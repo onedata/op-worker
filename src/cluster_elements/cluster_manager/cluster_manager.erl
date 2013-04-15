@@ -340,6 +340,7 @@ add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
 -spec monitoring_loop(Flag) -> ok when
   Flag :: on | off.
 %% ====================================================================
+%% TODO sprawdzijak ta petla wplywa na hot-swapping kodu
 monitoring_loop(Flag) ->
   case Flag of
     on ->
@@ -406,6 +407,12 @@ node_down(Node, State) ->
 
   State#cm_state{workers = NewWorkers, nodes = NewNodes}.
 
+%% get_state_from_db/1
+%% ====================================================================
+%% @doc This function starts DAO and gets cluster state from DB.
+-spec get_state_from_db(State :: term()) -> NewState when
+  NewState :: term().
+%% ====================================================================
 get_state_from_db(State) ->
   {Ans, NewState} = start_worker(node(), dao, [], State),
   case Ans of
@@ -415,9 +422,21 @@ get_state_from_db(State) ->
   end,
   NewState.
 
+%% save_state/1
+%% ====================================================================
+%% @doc This function saves cluster state in DB.
+-spec save_state(State :: term()) -> ok.
+%% ====================================================================
 save_state(State) ->
   gen_server:cast(dao, {asynch, 1, {save_state, [State]}}).
 
+%% merge_state/2
+%% ====================================================================
+%% @doc This function updates cluster state on the basis of data read
+%% from DB.
+-spec merge_state(State :: term(), SavedState:: term()) -> NewState when
+  NewState :: term().
+%% ====================================================================
 merge_state(State, SavedState) ->
   StateNum = erlang:max(State#cm_state.state_num, SavedState#cm_state.state_num),
   State1 = State#cm_state{state_num = StateNum},
@@ -439,6 +458,13 @@ merge_state(State, SavedState) ->
   save_state(MergedState),
   MergedState.
 
-%% wstawic ta metode w miejsca gdzie zmieniaja sie workery, dodac rozsylanie powiadomien do dispatcherow
+%% increase_state_num/1
+%% ====================================================================
+%% @doc This function increases the cluster state value and informs all
+%% dispatchers about it.
+-spec increase_state_num(State :: term()) -> NewState when
+  NewState :: term().
+%% ====================================================================
+%% TODO wstawic ta metode w miejsca gdzie zmieniaja sie workery, dodac rozsylanie powiadomien do dispatcherow
 increase_state_num(State) ->
   State#cm_state{state_num = State#cm_state.state_num + 1}.

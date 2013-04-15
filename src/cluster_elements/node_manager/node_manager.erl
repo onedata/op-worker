@@ -110,15 +110,10 @@ handle_call(_Request, _From, State) ->
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 handle_cast(do_heart_beat, State) ->
-  {New_conn_status, New_state_num} = heart_beat(State#node_state.ccm_con_status),
-  NewState = case New_conn_status of
-    ok -> State#node_state{ccm_con_status = New_conn_status, state_num = New_state_num};
-    _Other -> State#node_state{ccm_con_status = New_conn_status}
-  end,
-	{noreply, NewState};
+	{noreply, heart_beat(State#node_state.ccm_con_status, State)};
 
 handle_cast(reset_ccm_connection, State) ->
-	{noreply, State#node_state{ccm_con_status = heart_beat(not_connected)}};
+	{noreply, heart_beat(not_connected, State)};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -167,14 +162,14 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %% ====================================================================
 
-%% heart_beat/1
+%% heart_beat/2
 %% ====================================================================
 %% @doc Connects with ccm and tells that the node is alive.
 %% First it establishes network connection, next sends message to ccm.
--spec heart_beat(Conn_status :: atom()) -> New_conn_status when
-	New_conn_status ::  atom(). 
+-spec heart_beat(Conn_status :: atom(), State::term()) -> NewStatus when
+	NewStatus ::  term().
 %% ====================================================================
-heart_beat(Conn_status) ->
+heart_beat(Conn_status, State) ->
 	New_conn_status = case Conn_status of
 		not_connected ->
 			{ok, CCM_Nodes} = application:get_env(veil_cluster_node, ccm_nodes),
@@ -201,9 +196,12 @@ heart_beat(Conn_status) ->
       {New_conn_status2, 0}
 	end,
 
-	lager:info([{mod, ?MODULE}], "Haert beat on node: ~s: ~s, new state_num: ~b", [node(), New_conn_status3, New_state_num]),
-	
-  {New_conn_status, New_state_num}.
+	lager:info([{mod, ?MODULE}], "Haert beat on node: ~s: connection: ~s: heartbeat: ~s, new state_num: ~b", [node(), New_conn_status, New_conn_status3, New_state_num]),
+
+  case New_conn_status3 of
+    ok -> State#node_state{ccm_con_status = New_conn_status, state_num = New_state_num};
+    _Other -> State#node_state{ccm_con_status = New_conn_status}
+  end.
 
 %% init_net_connection/1
 %% ====================================================================
