@@ -113,15 +113,22 @@ modules_start_test() ->
   application:set_env(?APP_Name, initialization_time, 1),
 
   ok = application:start(?APP_Name),
+  StateNum0 = gen_server:call({global, ?CCM}, get_state_num),
+  ?assert(StateNum0 == 1),
+
   timer:sleep(300),
   State = gen_server:call({global, ?CCM}, get_state),
   Workers = State#cm_state.workers,
   ?assert(length(Workers) == 1),
+  StateNum1 = gen_server:call({global, ?CCM}, get_state_num),
+  ?assert(StateNum1 == 2),
 
   timer:sleep(1000),
   State2 = gen_server:call({global, ?CCM}, get_state),
   Workers2 = State2#cm_state.workers,
   ?assert(length(Workers2) == length(Jobs)),
+  StateNum2 = gen_server:call({global, ?CCM}, get_state_num),
+  ?assert(StateNum2 == 3),
 
   ok = application:stop(?APP_Name),
   net_kernel:stop().
