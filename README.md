@@ -92,6 +92,7 @@ Setting parameters
 ------------------
 
 List of parameters that can be set:
+
     -name       -> name of the node (erlang long name)
     -node_type  -> type of the node (ccm|worker); determines the role of the node
     -main_ccm   -> main CCM name (of the cluster this node operates in)
@@ -99,6 +100,7 @@ List of parameters that can be set:
     -db_nodes   -> list of DBMS nodes
 
 Blablabla
+
 cos nie dziala
 
 
