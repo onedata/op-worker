@@ -75,8 +75,32 @@ Note:
 -------------------------------------------------------------------------------
 
 
-Using Makefile to generate releases and test environments of veil cluster nodes
-===============================================================================
+Deploying a release
+===================
+
+After generation of a release package, configuration files contain default parameters. The script 'apply_config', that
+comes with the package (in directory 'config') is used to set up and start a release.
+
+Prerequisites
+-------------------
+
+Firstly, the user must have execution rights on both '/config/apply_config' and 'bin/veil_cluster_node' scripts.
+
+Secondly, 'config.args' file must be present in 'config' directory (along with 'apply_config' script).
+
+
+
+
+
+
+
+
+
+
+
+
+(development) Using Makefile to generate releases and test environments of veil cluster nodes
+=============================================================================================
 
 
 1. Generating and managing a single node release for development purposes

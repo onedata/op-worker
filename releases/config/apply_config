@@ -1,28 +1,180 @@
 #!/bin/bash
 
+# Enter the script directory
+PATH_TO_SCRIPT=`echo $0 | sed "s/apply_config//g"`
+cd $PATH_TO_SCRIPT
+
 # Ensure config file exists
 if [ ! -f config.args ]; then
-	echo "Error: configuration file 'config.args' not found in current directory."
+	echo " "
+	echo "Error: missing configuration file"
+	echo "'config.args' not found in script directory."
+	echo "Terminating."
+	exit 1
 fi
 
-# Retrieve node name from config file, trim spaces
-NODE_NAME=`grep 'name:' config.args`
-NODE_NAME=${NODE_NAME:5:${#NODE_NAME}}
-NODE_NAME=$(echo $NODE_NAME | tr -d ' ')
 
-# Retrieve node type from config file, trim spaces
-NODE_TYPE=`grep 'type:' config.args`
-NODE_TYPE=${NODE_TYPE:5:${#NODE_TYPE}}
-NODE_TYPE=$(echo $NODE_TYPE | tr -d ' ')
+# Function used to retrieve a parameter from script arguments. 
+# args: 
+# $1: <<script arguments>>   (arguments passed to the script; $*)
+# $2: <<token of desired parameter>>    (eg. '-main_ccm' to retrieve main ccm name)
+# $3: <<single|list>>      (expecting result as a single term or a list?)
+# 
+# The function starts reading parameters after ocurrence of desired token and continues for one word (single) or until it stumbles upon
+# another token starting with '-' or end of line (list)
+get_parameter_from_args()
+{
+	local ARGS=$1
+	local TOKEN=$2
+	local RETURN_OPTION=$3
 
-# Retrieve main_ccm name from config file, trim spaces
-MAIN_CCM=`grep 'main_ccm:' config.args`
-MAIN_CCM=${MAIN_CCM:9:${#MAIN_CCM}}
-MAIN_CCM=$(echo $MAIN_CCM | tr -d ' ')
+	# Find the occurence of desired token. If there isn't one, return with -no_param value.
+	local INDEX=`awk -v a="$ARGS" -v b="$TOKEN" 'BEGIN{print index(a, b)}'`
+	if [[ $INDEX -eq 0 ]]; then
+		RESULT="-no_param"
+		return
+	fi
 
-# Retrieve opt_ccms from config file
-OPT_CCMS=`grep 'opt_ccms:' config.args`
-OPT_CCMS=${OPT_CCMS:9:${#OPT_CCMS}}
+	# Trim the arguments string so that it starts after the token
+	local ARGS=${ARGS:$(($INDEX + ${#TOKEN})):${#ARGS}}
+
+	# Find the next occurence of a hyphen 
+	INDEX=`awk -v a="$ARGS" -v b="-" 'BEGIN{print index(a, b)}'`
+
+	# If its zero, the ARGS variable holds the desired string. If not, cut off the part after the hyphen
+	if [[ $INDEX -gt 0 ]]; then
+		ARGS=${ARGS:0:$(($INDEX - 1))}
+	fi
+
+	# If the expected result is a single word, get the first one from remaining string. 
+	# This somehow resolves errors like passing a double 'name' parameter.
+	if [[ $RETURN_OPTION == "single" ]]; then
+		ARGS=`echo $ARGS | cut -f1 -d' '`
+	else
+		ARGS=`echo $ARGS`          # trims spaces from the beginning of the list
+	fi
+
+	if [[ $ARGS == "" ]]; then
+		RESULT="-no_param"
+		return
+	fi
+
+	# "return" the parameter(s)
+	RESULT=$ARGS
+}
+
+# Function used to retrieve a parameter from 'config.args' file. 
+# args:
+# $1: <<token of desired parameter>> (eg. main_ccm: to retrieve main ccm name)
+# $2: <<single|list>>      (expecting result as a single term or a list?)
+get_parameter_from_file()
+{
+	local TOKEN=$1
+	local RETURN_OPTION=$2
+
+	RESULT=`grep "$TOKEN" config.args`
+	RESULT=${RESULT:${#TOKEN}:${#RESULT}}
+	
+	if [[ $RETURN_OPTION == "single" ]]; then
+		RESULT=`echo $RESULT | cut -f1 -d' '`
+	else
+		RESULT=`echo $RESULT`          # trims spaces from the beginning of the list
+	fi
+
+	# If parameter doesn't occur in config file, the script shall not proceed (it couldn't have been in args either)
+	# 'opt_ccms' is an exception; it's not mandatory
+	if [[ $RESULT == "" ]] && [[ $TOKEN != 'opt_ccms:' ]]; then
+		echo " "
+		echo "Error: missing parameter"
+		echo "'${TOKEN%?}' must occur in script arguments or 'config.args' file."
+		echo "Terminating."
+		exit 1
+	fi
+}
+
+# Check for '-attach' option. If it occurs, it's logical to assume the node is already running, so no further configuration is needed
+INDEX=`awk -v a="$*" -v b="-attach" 'BEGIN{print index(a, b)}'`
+if [[ $INDEX -gt 0 ]]; then
+
+	# User requested attaching to the node
+	echo " "
+	echo "==========================================================="
+	echo "Attaching to the running node..."
+	echo " "
+
+	../bin/veil_cluster_node attach
+
+	# The attachment failed
+    if [ $? -ne 0 ]; then
+        echo ""
+        echo "Error during attaching to the node."
+        echo "Is the node running?"
+        exit 1
+    fi
+
+   	exit 0
+fi
+
+
+#####################################
+# GATHER CONFIG FROM ARGS AND CONFIG FILE
+
+#####################################
+# NODE NAME
+
+# Check for node name in script args
+get_parameter_from_args "$*" -name single
+NODE_NAME=$RESULT
+
+# If there was none specified...
+if [[ $NODE_NAME == "-no_param" ]]; then
+	# ... retrieve node name from config file
+	get_parameter_from_file name: single
+	NODE_NAME=$RESULT
+fi
+
+
+#####################################
+# NODE TYPE
+
+# Check for node type in script args
+get_parameter_from_args "$*" -node_type single
+NODE_TYPE=$RESULT
+
+# If there was none specified...
+if [[ $NODE_TYPE == "-no_param" ]]; then
+	# ... retrieve node type from config file
+	get_parameter_from_file node_type: single
+	NODE_TYPE=$RESULT
+fi
+
+#####################################
+# MAIN CCM
+
+# Check for main_ccm name in script args
+get_parameter_from_args "$*" -main_ccm single
+MAIN_CCM=$RESULT
+
+# If there was none specified...
+if [[ $MAIN_CCM == "-no_param" ]]; then
+	# ... retrieve main_ccm name from config file
+	get_parameter_from_file main_ccm: single
+	MAIN_CCM=$RESULT
+fi
+
+#####################################
+# OPTIONAL CCMS
+
+# Check for opt_ccms in script args
+get_parameter_from_args "$*" -opt_ccms list
+OPT_CCMS=$RESULT
+
+# If there were none specified...
+if [[ $OPT_CCMS == "-no_param" ]]; then
+	# ... retrieve opt_ccms from config file
+	get_parameter_from_file opt_ccms: list
+	OPT_CCMS=$RESULT
+fi
 
 # And turn them into a formatted list, along with main ccm
 OPT_CCMS_ARRAY=$(echo $OPT_CCMS | tr " " "\n")
@@ -33,9 +185,21 @@ do
 done
 CCMS_LIST="${CCMS_LIST%?}]"
 
-# Retrieve db_nodes from config file
-DB_NODES=`grep 'db_nodes:' config.args`
-DB_NODES=${DB_NODES:9:${#DB_NODES}}
+
+
+#####################################
+# DBMS NODES
+
+# Check for db_nodes in script args
+get_parameter_from_args "$*" -db_nodes list
+DB_NODES=$RESULT
+
+# If there were none specified...
+if [[ $DB_NODES == "-no_param" ]]; then
+	# ... retrieve db_nodes from config file
+	get_parameter_from_file db_nodes: list
+	DB_NODES=$RESULT
+fi
 
 # And turn them into a formatted list
 DB_NODES_ARRAY=$(echo $DB_NODES | tr " " "\n")
@@ -45,6 +209,20 @@ do
     DB_NODES_LIST="$DB_NODES_LIST\"\\\'$DB_NODE\\\'\","
 done
 DB_NODES_LIST="${DB_NODES_LIST%?}]"
+
+
+#####################################
+# PUT CONFIGURATION INTO 'VM.ARGS' AND 'SYS.CONFIG'
+
+echo " "
+echo "==========================================================="
+echo "Applying configuration:"
+echo " "
+echo "NODE_NAME = $NODE_NAME"
+echo "NODE_TYPE = $NODE_TYPE"
+echo " MAIN_CCM = $MAIN_CCM"
+echo " OPT_CCMS = $OPT_CCMS"
+echo " DB_NODES = $DB_NODES"
 
 # Get application version
 START_ERL=`cat ../releases/start_erl.data`
@@ -89,7 +267,7 @@ if [ $NODE_TYPE == 'ccm' ]; then
 	done
 	CCM_SYNC_LIST="${CCM_SYNC_LIST:0:((${#CCM_SYNC_LIST} - 2))}]"
 
-	# Produce proper config entry
+	# Produce a proper config entry
 	DIST_APP_CFG="[
  %% kernel config for ccm distributed application
  {kernel,
@@ -111,3 +289,45 @@ SYS_CFG="$DIST_APP_CFG$SYS_CFG"
 
 # And overwrite the old sys.config
 echo "$SYS_CFG" > ../releases/$APP_VSN/sys.config
+
+# Applying config is done
+echo " "
+echo "Done."
+
+# Check for '-console' option (-console overrides -start)
+INDEX=`awk -v a="$*" -v b="-console" 'BEGIN{print index(a, b)}'`
+if [[ $INDEX -gt 0 ]]; then
+
+	# User requested starting the node with console
+	echo " "
+	echo "==========================================================="
+	echo "Starting $NODE_NAME with erlang console..."
+	echo " "
+	../bin/veil_cluster_node console
+
+	# No need for result checking; user will get the dump in console
+
+else
+	# Check for '-start' option
+	INDEX=`awk -v a="$*" -v b="-start" 'BEGIN{print index(a, b)}'`
+	if [[ $INDEX -gt 0 ]]; then
+
+		# User requested starting the node
+		echo " "
+		echo "==========================================================="
+		echo "Starting $NODE_NAME..."
+		echo " "
+		../bin/veil_cluster_node start
+		../bin/veil_cluster_node ping
+
+		# The node failed to start
+        if [ $? -ne 0 ]; then
+            echo ""
+            echo "Error during start of the node or it doesn't respond to pings."
+            echo "Start the node with console or consult erl_crash.dump for details."
+            exit 1
+        fi
+	fi
+fi
+
+exit 0
