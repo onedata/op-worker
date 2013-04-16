@@ -109,9 +109,10 @@ Another way is passing these parameters via command line arguments. In this case
 
 NOTE:
 
-* "command line way" can specify any subset of parameters, hence:
-    * parameters passed via command line OVERRIDE those in 'config.args' file
-    * executing './apply_config' will cause the script to use all parameters from 'config.args'
+* parameters passed via command line OVERRIDE those in 'config.args' file
+* "command line way" can specify any subset of parameters, for instance:
+    * './apply_config' will cause the script to use all parameters from 'config.args'
+    * './apply_config -name somename@host.net' will cause the script to use parameters from 'config.args' except node name
 * (both) parameter order can be arbitrary
 * (both) multiple word values (eg. DBMS nodes) are passed as a space-delimited list (eg. -db_nodes dbnode1@host.net dbnode2@host.net)
 * (both) parameter values can't contain a space or a hyphen
