@@ -22,7 +22,7 @@ init(_Args) ->
 	[].
 
 handle(_ProtocolVersion, ping) ->
-  pong.
+  pong;
 
 handle(_ProtocolVersion, _Msg) ->
 	ok.
