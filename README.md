@@ -82,12 +82,21 @@ After generation of a release package, configuration files contain default param
 comes with the package (in directory 'config') is used to set up and start a release.
 
 Prerequisites
--------------------
+-------------
 
-Firstly, the user must have execution rights on both '/config/apply_config' and 'bin/veil_cluster_node' scripts.
+Firstly, the user must have execution rights on both '/config/apply_config' and '/bin/veil_cluster_node' scripts.
 
 Secondly, 'config.args' file must be present in 'config' directory (along with 'apply_config' script).
 
+Setting parameters
+------------------
+
+List of parameters that can be set:
+    -name       -> name of the node (erlang long name)
+    -node_type  -> type of the node (ccm|worker); determines the role of the node
+    -main_ccm   -> main CCM name (of the cluster this node operates in)
+    -opt_ccms   -> list of optional CCMs (this parameter is not mandatory)
+    -db_nodes   -> list of DBMS nodes
 
 
 
@@ -97,6 +106,7 @@ Secondly, 'config.args' file must be present in 'config' directory (along with '
 
 
 
+-------------------------------------------------------------------------------
 
 
 (development) Using Makefile to generate releases and test environments of veil cluster nodes
