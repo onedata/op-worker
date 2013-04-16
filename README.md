@@ -114,7 +114,7 @@ NOTE:
     * './apply_config' will cause the script to use all parameters from 'config.args'
     * './apply_config -name somename@host.net' will cause the script to use parameters from 'config.args' except node name
 * (both) parameter order can be arbitrary
-* (both) multiple word values (eg. DBMS nodes) are passed as a space-delimited list (eg. -db_nodes dbnode1@host.net dbnode2@host.net)
+* (both) multiple values (eg. DBMS nodes) are passed as a space-delimited list (eg. -db_nodes dbnode1@host.net dbnode2@host.net)
 * (both) parameter values can't contain spaces or hyphens
 * (command line) parameter names are preceded by a hyphen; '-'
 
@@ -127,12 +127,14 @@ There are three options which are used to start a release. They are passed along
     -attach   -> the script will skip configuration and try to attach to a running node with an erlang shell (used after -start)
     -console  -> the script will perform the configuration and then start the node with an erlang shell
 
+If none of these arguments occur, the script will terminate after setting up the parameters.
+
 Full example of usage
 ---------------------
 
     ~$  ./apply_config -name mynode@host.net -node_type worker -console
 
-Above command will configure the release according to 'config.args' except for name and node_type which will be modified
+Above command will configure the release according to 'config.args', except for name and node_type which will be modified
 corresponding to command line arguments. Then, the node will be started presenting to the user with an erlang shell.
 
 -------------------------------------------------------------------------------
