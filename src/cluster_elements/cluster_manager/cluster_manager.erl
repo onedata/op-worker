@@ -215,8 +215,47 @@ code_change(_OldVsn, State, _Extra) ->
   NewState ::  term().
 %% ====================================================================
 init_cluster(State) ->
+  Nodes = State#cm_state.nodes,
+  %%lJobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager],
+  JobsAndArgs = [{cluster_rengine, []}, {control_panel, []}, {dao, []}, {fslogic, []}, {gateway, []}, {rtransfer, []}, {rule_manager, []}],
+
+  CreateRunningWorkersList = fun({N, M, Child}, Workers) ->
+    [M | Workers]
+  end,
+  Workers = State#cm_state.workers,
+  RunningWorkers = lists:foldl(CreateRunningWorkersList, [], Workers),
+
+  CreateJobsList = fun({Job, A}, {TmpJobs, TmpArgs}) ->
+     case lists:member(Job, RunningWorkers) of
+       true -> Ans;
+       false -> {[Job | TmpJobs], [A | TmpArgs]}
+     end
+  end,
+  {Jobs, Args} = lists:foldl(CreateRunningWorkersList, [], Workers),
+
+  NewState = case erlang:length(Nodes) >= erlang:length(Jobs) of
+    true -> init_cluster_nodes_dominance(State, Nodes, Jobs, [], Args, []);
+    false -> init_cluster_jobs_dominance(State, Jobs, Args, Nodes, [])
+  end,
+
   plan_next_cluster_state_check(),
-  State.
+  NewState.
+
+init_cluster_nodes_dominance(State, [], _Jobs1, _Jobs2, _Args1, _Args2) ->
+  State;
+init_cluster_nodes_dominance(State, Nodes, [], Jobs2, [], Args2) ->
+  init_cluster_nodes_dominance(State, Nodes, Jobs2, [], Args2, []);
+init_cluster_nodes_dominance(State, [N | Nodes], [J | Jobs1], Jobs2, [A | Args1], Args2) ->
+  NewState = start_worker(N, J, A, State),
+  init_cluster_nodes_dominance(NewState, Nodes, Jobs1, [J | Jobs2], Args1, [A | Args2]).
+
+init_cluster_jobs_dominance(State, [], [], _Nodes1, _Nodes2) ->
+  State;
+init_cluster_jobs_dominance(State, Jobs, Args, [], Nodes2) ->
+  init_cluster_jobs_dominance(State, Jobs, Args, Nodes2, []);
+init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2) ->
+  NewState = start_worker(N, J, A, State),
+  init_cluster_jobs_dominance(NewState, Jobs, Args, Nodes1, [N | Nodes2]).
 
 %% check_cluster_state/1
 %% ====================================================================

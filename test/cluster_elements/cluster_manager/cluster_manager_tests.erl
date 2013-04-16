@@ -103,4 +103,15 @@ worker_start_stop_test() ->
 	ok = application:stop(?APP_Name),
 	net_kernel:stop().
 
+modules_start_test() ->
+  net_kernel:start([node1, shortnames]),
+
+  application:set_env(?APP_Name, node_type, ccm),
+  application:set_env(?APP_Name, ccm_nodes, [node()]),
+
+  ok = application:start(?APP_Name),
+
+  ok = application:stop(?APP_Name),
+  net_kernel:stop().
+
 -endif.
