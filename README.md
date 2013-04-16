@@ -98,6 +98,9 @@ List of parameters that can be set:
     -opt_ccms   -> list of optional CCMs (this parameter is not mandatory)
     -db_nodes   -> list of DBMS nodes
 
+Blablabla
+cos nie dziala
+
 
 
 
