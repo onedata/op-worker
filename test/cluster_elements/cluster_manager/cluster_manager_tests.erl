@@ -103,7 +103,7 @@ worker_start_stop_test() ->
 	ok = application:stop(?APP_Name),
 	net_kernel:stop().
 
-modules_start_test() ->
+modules_start_and_ping_test() ->
   Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager],
 
   net_kernel:start([node1, shortnames]),
@@ -129,6 +129,17 @@ modules_start_test() ->
   ?assert(length(Workers2) == length(Jobs)),
   StateNum2 = gen_server:call({global, ?CCM}, get_state_num),
   ?assert(StateNum2 == 3),
+
+  ProtocolVersion = 1,
+  CheckModules = fun(M, Sum) ->
+    Ans = gen_server:call(M, {test_call, ProtocolVersion, ping}),
+    case Ans of
+      pong -> Sum + 1;
+      _Other -> Sum
+    end
+  end,
+  PongsNum = lists:foldl(CheckModules, 0, Jobs),
+  ?assert(PongsNum == length(Jobs)),
 
   ok = application:stop(?APP_Name),
   net_kernel:stop().
