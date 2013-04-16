@@ -93,17 +93,31 @@ Setting parameters
 
 List of parameters that can be set:
 
-    -name       -> name of the node (erlang long name)
-    -node_type  -> type of the node (ccm|worker); determines the role of the node
-    -main_ccm   -> main CCM name (of the cluster this node operates in)
-    -opt_ccms   -> list of optional CCMs (this parameter is not mandatory)
-    -db_nodes   -> list of DBMS nodes
+    name       -> name of the node (erlang long name)
+    node_type  -> type of the node (ccm|worker); determines the role of the node
+    main_ccm   -> main CCM name (of the cluster this node operates in)
+    opt_ccms   -> list of optional CCMs (this parameter is not mandatory)
+    db_nodes   -> list of DBMS nodes
 
-Blablabla
+Primarily, these parameters are retrieved from 'config.args' file. It should contain these parameters in following manner:
 
-cos nie dziala
+    <parameter_name>: <parameter_value>
 
+Another way is passing these parameters via command line arguments. In this case the syntax is:
 
+    ./apply_config -<parameter1_name> <parameter1_value> -<parameter2_name> <parameter2_value> ...
+
+NOTE:
+
+* "command line way" can specify any subset of parameters, hence:
+** parameters passed via command line OVERRIDE those in 'config.args' file
+** executing './apply_config' will cause the script to use all parameters from 'config.args'
+* (both) parameter order can be arbitrary
+* (both) multiple word values (eg. DBMS nodes) are passed as a space-delimited list (eg. -db_nodes dbnode1@host.net dbnode2@host.net)
+* (both) parameter values can't contain a space or a hyphen
+* (command line) parameter names are preceded by a hyphen; '-'
+
+TESTTESTTEST
 
 
 
