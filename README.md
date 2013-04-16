@@ -127,7 +127,7 @@ There are three options which are used to start a release. They are passed along
     -attach   -> the script will skip configuration and try to attach to a running node with an erlang shell (used after -start)
     -console  -> the script will perform the configuration and then start the node with an erlang shell
 
-If none of these arguments occur, the script will terminate after setting up the parameters.
+If none of these arguments occur, the script will terminate after setting up the configuration.
 
 Full example of usage
 ---------------------
