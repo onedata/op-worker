@@ -118,9 +118,9 @@ handle_call(_Request, _From, State) ->
 	NewState :: term(),
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_cast({synch, ProtocolVersion, Msg, MsgId, ReplyDisp}, State) ->
+handle_cast({synch, ProtocolVersion, Msg, MsgId, ReplyTo}, State) ->
 	PlugIn = State#host_state.plug_in,
-	spawn(fun() -> proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyDisp) end),	
+	spawn(fun() -> proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) end),
 	{noreply, State};
 
 handle_cast({asynch, ProtocolVersion, Msg}, State) ->

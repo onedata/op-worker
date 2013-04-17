@@ -74,6 +74,10 @@ init([]) ->
   Timeout :: non_neg_integer() | infinity,
   Reason :: term().
 %% ====================================================================
+handle_call({Task, ProtocolVersion, AnsPid, Request}, _From, State) ->
+  lager:info("qqq"),
+  {reply, worker_not_found, State};
+
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
 
