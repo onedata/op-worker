@@ -99,6 +99,11 @@ handle_call(clearLoadInfo, _From, State) ->
     Reply = ok,
     {reply, Reply, State#host_state{load_info = {[], [], 0, Max}}};
 
+handle_call({test_call, ProtocolVersion, Msg}, _From, State) ->
+  PlugIn = State#host_state.plug_in,
+  Reply = PlugIn:handle(ProtocolVersion, Msg),
+  {reply, Reply, State};
+
 handle_call(_Request, _From, State) ->
     {reply, wrong_request, State}.
 

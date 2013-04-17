@@ -103,4 +103,45 @@ worker_start_stop_test() ->
 	ok = application:stop(?APP_Name),
 	net_kernel:stop().
 
+modules_start_and_ping_test() ->
+  Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager],
+
+  net_kernel:start([node1, shortnames]),
+
+  application:set_env(?APP_Name, node_type, ccm),
+  application:set_env(?APP_Name, ccm_nodes, [node()]),
+  application:set_env(?APP_Name, initialization_time, 1),
+
+  ok = application:start(?APP_Name),
+  StateNum0 = gen_server:call({global, ?CCM}, get_state_num),
+  ?assert(StateNum0 == 1),
+
+  timer:sleep(300),
+  State = gen_server:call({global, ?CCM}, get_state),
+  Workers = State#cm_state.workers,
+  ?assert(length(Workers) == 1),
+  StateNum1 = gen_server:call({global, ?CCM}, get_state_num),
+  ?assert(StateNum1 == 2),
+
+  timer:sleep(1000),
+  State2 = gen_server:call({global, ?CCM}, get_state),
+  Workers2 = State2#cm_state.workers,
+  ?assert(length(Workers2) == length(Jobs)),
+  StateNum2 = gen_server:call({global, ?CCM}, get_state_num),
+  ?assert(StateNum2 == 3),
+
+  ProtocolVersion = 1,
+  CheckModules = fun(M, Sum) ->
+    Ans = gen_server:call(M, {test_call, ProtocolVersion, ping}),
+    case Ans of
+      pong -> Sum + 1;
+      _Other -> Sum
+    end
+  end,
+  PongsNum = lists:foldl(CheckModules, 0, Jobs),
+  ?assert(PongsNum == length(Jobs)),
+
+  ok = application:stop(?APP_Name),
+  net_kernel:stop().
+
 -endif.

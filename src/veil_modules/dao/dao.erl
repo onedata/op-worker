@@ -64,13 +64,20 @@ init(_Args) ->
 %% E.g. calling handle(_, {save_record, [Id, Rec]}) will execute dao_cluster:save_record(Id, Rec) and normalize return value.
 %% @end
 -spec handle(ProtocolVersion :: term(), Request) -> Result when
-    Request :: {Method, Args} | {Mod :: atom(), Method, Args},
+    Request :: {Method, Args} | {Mod :: atom(), Method, Args} | ping | get_version,
     Method :: atom(),
     Args :: list(),
-    Result :: ok | {ok, Response} | {error, Error},
+    Result :: ok | {ok, Response} | {error, Error} | pong | Version,
     Response :: term(),
+    Version :: term(),
     Error :: term().
 %% ====================================================================
+handle(_ProtocolVersion, ping) ->
+  pong;
+
+handle(_ProtocolVersion, get_version) ->
+  1;
+
 handle(_ProtocolVersion, {Target, Method, Args}) when is_atom(Target), is_atom(Method), is_list(Args) ->
     Module =
         case Target of

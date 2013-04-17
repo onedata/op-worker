@@ -95,15 +95,28 @@ handle_call({node_is_up, Node}, _From, State) ->
   case lists:member(Node, Nodes) of
     true -> {reply, Reply, State};
     false -> State#cm_state.monitor_process ! {monitor_node, Node},
-      {Ans, NewState} = check_node(Node, State),
+      {Ans, NewState, WorkersFound} = check_node(Node, State),
+
+      %% This case checks if node state was analysed correctly.
+      %% If it was, it upgrades state number if necessary (workers
+      %% were running on node).
       case Ans of
         ok ->
           NewState2 = NewState#cm_state{nodes = [Node | Nodes]},
-          save_state(NewState2),
-          {reply, Reply, NewState2};
+
+          NewState3 = case WorkersFound of
+            true -> increase_state_num(NewState2);
+            false -> NewState2
+          end,
+
+          save_state(NewState3),
+          {reply, Reply, NewState3};
         _Other -> {reply, Reply, NewState}
       end
   end;
+
+handle_call(get_state_num, _From, State) ->
+  {reply, State#cm_state.state_num, State};
 
 handle_call(get_nodes, _From, State) ->
   {reply, State#cm_state.nodes, State};
@@ -139,9 +152,17 @@ handle_cast(check_cluster_state, State) ->
   {noreply, NewState};
 
 handle_cast({node_down, Node}, State) ->
-  NewState = node_down(Node, State),
-  save_state(NewState),
-  {noreply, NewState};
+  {NewState, WorkersFound} = node_down(Node, State),
+
+  %% If workers were running on node that is down,
+  %% upgrade state.
+  NewState2 = case WorkersFound of
+    true -> increase_state_num(NewState);
+    false -> NewState
+  end,
+
+  save_state(NewState2),
+  {noreply, NewState2};
 
 handle_cast({set_monitoring, Flag}, State) ->
   State#cm_state.monitor_process ! {Flag, State#cm_state.nodes},
@@ -215,8 +236,55 @@ code_change(_OldVsn, State, _Extra) ->
   NewState ::  term().
 %% ====================================================================
 init_cluster(State) ->
+  Nodes = State#cm_state.nodes,
+  %%Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager],
+  JobsAndArgs = [{cluster_rengine, []}, {control_panel, []}, {dao, []}, {fslogic, []}, {gateway, []}, {rtransfer, []}, {rule_manager, []}],
+
+  CreateRunningWorkersList = fun({_N, M, _Child}, Workers) ->
+    [M | Workers]
+  end,
+  Workers = State#cm_state.workers,
+  RunningWorkers = lists:foldl(CreateRunningWorkersList, [], Workers),
+
+  CreateJobsList = fun({Job, A}, {TmpJobs, TmpArgs}) ->
+     case lists:member(Job, RunningWorkers) of
+       true -> {TmpJobs, TmpArgs};
+       false -> {[Job | TmpJobs], [A | TmpArgs]}
+     end
+  end,
+  {Jobs, Args} = lists:foldl(CreateJobsList, {[], []}, JobsAndArgs),
+
+  NewState3 = case length(Jobs) > 0 of
+    true ->
+      NewState = case erlang:length(Nodes) >= erlang:length(Jobs) of
+        true -> init_cluster_nodes_dominance(State, Nodes, Jobs, [], Args, []);
+        false -> init_cluster_jobs_dominance(State, Jobs, Args, Nodes, [])
+      end,
+
+      NewState2 = increase_state_num(NewState),
+      save_state(NewState2),
+      NewState2;
+    false -> State
+  end,
+
   plan_next_cluster_state_check(),
-  State.
+  NewState3.
+
+init_cluster_nodes_dominance(State, [], _Jobs1, _Jobs2, _Args1, _Args2) ->
+  State;
+init_cluster_nodes_dominance(State, Nodes, [], Jobs2, [], Args2) ->
+  init_cluster_nodes_dominance(State, Nodes, Jobs2, [], Args2, []);
+init_cluster_nodes_dominance(State, [N | Nodes], [J | Jobs1], Jobs2, [A | Args1], Args2) ->
+  {_Ans, NewState} = start_worker(N, J, A, State),
+  init_cluster_nodes_dominance(NewState, Nodes, Jobs1, [J | Jobs2], Args1, [A | Args2]).
+
+init_cluster_jobs_dominance(State, [], [], _Nodes1, _Nodes2) ->
+  State;
+init_cluster_jobs_dominance(State, Jobs, Args, [], Nodes2) ->
+  init_cluster_jobs_dominance(State, Jobs, Args, Nodes2, []);
+init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2) ->
+  {_Ans, NewState} = start_worker(N, J, A, State),
+  init_cluster_jobs_dominance(NewState, Jobs, Args, Nodes1, [N | Nodes2]).
 
 %% check_cluster_state/1
 %% ====================================================================
@@ -311,11 +379,12 @@ check_node(Node, State) ->
         Children = supervisor:which_children({?Supervisor_Name, Node}),
         Workers = State#cm_state.workers,
         NewWorkers = add_children(Node, Children, Workers),
-        {ok, State#cm_state{workers = NewWorkers}};
-      pang -> {error, State}
+        WorkersFound = length(NewWorkers) > length(Workers),
+        {ok, State#cm_state{workers = NewWorkers}, WorkersFound};
+      pang -> {error, State, false}
     end
   catch
-    _:_ -> {error, State}
+    _:_ -> {error, State, false}
   end.
 
 %% add_children/3
@@ -387,14 +456,14 @@ change_monitoring([Node | Nodes], Flag) ->
   NewState :: term().
 %% ====================================================================
 node_down(Node, State) ->
-  CreateNewWorkersList = fun({N, M, Child}, Workers) ->
+  CreateNewWorkersList = fun({N, M, Child}, {Workers, Found}) ->
     case N of
-      Node -> Workers;
-      _N2 -> [{N, M, Child} | Workers]
+      Node -> {Workers, true};
+      _N2 -> {[{N, M, Child} | Workers], Found}
     end
   end,
   Workers = State#cm_state.workers,
-  NewWorkers = lists:foldl(CreateNewWorkersList, [], Workers),
+  {NewWorkers, WorkersFound} = lists:foldl(CreateNewWorkersList, {[], false}, Workers),
 
   CreateNewNodesList = fun(N, Nodes) ->
     case N of
@@ -405,7 +474,7 @@ node_down(Node, State) ->
   Nodes = State#cm_state.nodes,
   NewNodes = lists:foldl(CreateNewNodesList, [], Nodes),
 
-  State#cm_state{workers = NewWorkers, nodes = NewNodes}.
+  {State#cm_state{workers = NewWorkers, nodes = NewNodes}, WorkersFound}.
 
 %% get_state_from_db/1
 %% ====================================================================
@@ -415,12 +484,13 @@ node_down(Node, State) ->
 %% ====================================================================
 get_state_from_db(State) ->
   {Ans, NewState} = start_worker(node(), dao, [], State),
-  case Ans of
+  NewState2 = case Ans of
     ok ->
-      gen_server:cast(dao, {synch, 1, {get_state, []}, cluster_state, {global, ?CCM}});
-    error -> error
+      gen_server:cast(dao, {synch, 1, {get_state, []}, cluster_state, {global, ?CCM}}),
+      increase_state_num(NewState);
+    error -> NewState
   end,
-  NewState.
+  NewState2.
 
 %% save_state/1
 %% ====================================================================
@@ -443,20 +513,29 @@ merge_state(State, SavedState) ->
 
   NewNodes = lists:filter(fun(N) -> not lists:member(N, State1#cm_state.nodes) end, SavedState#cm_state.nodes),
 
-  CreateNewState = fun(Node, TmpState) ->
+  CreateNewState = fun(Node, {TmpState, TmpWorkersFound}) ->
     State#cm_state.monitor_process ! {monitor_node, Node},
-    {Ans, NewState} = check_node(Node, TmpState),
+    {Ans, NewState, WorkersFound} = check_node(Node, TmpState),
     case Ans of
       ok ->
         State#cm_state.monitor_process ! {monitor_node, Node},
-        NewState#cm_state{nodes = [Node | NewState#cm_state.nodes]};
-      _Other -> NewState
+        NewState2 = NewState#cm_state{nodes = [Node | NewState#cm_state.nodes]},
+        case WorkersFound of
+          true -> {NewState2, true};
+          false -> {NewState2, TmpWorkersFound}
+        end;
+      _Other -> {NewState, TmpWorkersFound}
     end
   end,
-  MergedState = lists:foldl(CreateNewState, State1, NewNodes),
+  {MergedState, IncrementNum} = lists:foldl(CreateNewState, {State1, false}, NewNodes),
 
-  save_state(MergedState),
-  MergedState.
+  MergedState2 = case IncrementNum of
+    true -> increase_state_num(MergedState);
+    false -> MergedState
+  end,
+
+  save_state(MergedState2),
+  MergedState2.
 
 %% increase_state_num/1
 %% ====================================================================
