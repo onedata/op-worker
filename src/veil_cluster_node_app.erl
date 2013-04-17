@@ -34,7 +34,10 @@
 %% ====================================================================
 start(_StartType, _StartArgs) ->
 	{ok, NodeType} = application:get_env(veil_cluster_node, node_type),
-    veil_cluster_node_sup:start_link(NodeType).
+  {ok, Port} = application:get_env(veil_cluster_node, dispatcher_port),
+  {ok, PoolSize} = application:get_env(veil_cluster_node, dispatcher_pool_size),
+  {ok, _} = ranch:start_listener(dispatcher_listener, PoolSize, ranch_tcp, [{port, Port}], ranch_handler, []),
+  veil_cluster_node_sup:start_link(NodeType).
 
 %% stop/1
 %% ====================================================================
@@ -43,4 +46,5 @@ start(_StartType, _StartArgs) ->
 	Result ::  ok.
 %% ====================================================================
 stop(_State) ->
-    ok.
+  ranch:stop_listener(dispatcher_listener),
+  ok.

@@ -21,21 +21,46 @@
 -ifdef(TEST).
 
 %% ====================================================================
-%% Test functions
+%% Test setup and teardown
+%% ====================================================================
+
+setup() ->
+  net_kernel:start([node1, shortnames]),
+  lager:start(),
+  ok = application:start(ranch).
+
+teardown(_Args) ->
+  ok = application:stop(ranch),
+  net_kernel:stop().
+
+%% ====================================================================
+%% Test generation
+%% ====================================================================
+
+generate_test_() ->
+  {setup,
+    fun setup/0,
+    fun teardown/1,
+    [?_test(env()),
+      ?_test(wrong_request()),
+      ?_test(nodes_counting_and_monitoring()),
+      ?_test(worker_start_stop()),
+      ?_test(modules_start_and_ping())]}.
+
+%% ====================================================================
+%% Functions used by tests
 %% ====================================================================
 
 %% This test checks if all environment variables needed by ccm are defined.
-env_test() ->
+env() ->
 	ok = application:start(?APP_Name),
 	{ok, _InitTime} = application:get_env(?APP_Name, initialization_time),
 	{ok, _Period} = application:get_env(?APP_Name, cluster_clontrol_period),
 	ok = application:stop(?APP_Name).
 
 %% This test checks if ccm is resistant to incorrect requests.
-wrong_request_test() ->
-	net_kernel:start([node1, shortnames]),
-
-	application:set_env(?APP_Name, node_type, ccm), 
+wrong_request() ->
+	application:set_env(?APP_Name, node_type, ccm),
 	application:set_env(?APP_Name, ccm_nodes, [node()]), 
 
 	ok = application:start(?APP_Name),
@@ -44,13 +69,12 @@ wrong_request_test() ->
 	Reply = gen_server:call({global, ?CCM}, abc),
 	?assert(Reply =:= wrong_request),
 	
-	ok = application:stop(?APP_Name),
-	net_kernel:stop().
+	ok = application:stop(?APP_Name).
 
 %% This test checks if ccm properly registers nodes in cluster.
 %% Furthermore, it checks if it properly monitors state of these nodes.
-nodes_counting_and_monitoring_test() ->
-	net_kernel:start([node1, shortnames]),
+nodes_counting_and_monitoring() ->
+
 
 	application:set_env(?APP_Name, node_type, ccm), 
 	application:set_env(?APP_Name, ccm_nodes, [node()]), 
@@ -78,14 +102,11 @@ nodes_counting_and_monitoring_test() ->
 	Nodes4 = gen_server:call({global, ?CCM}, get_nodes),
 	?assert(length(Nodes4) == 1),
 
-	ok = application:stop(?APP_Name),
-	net_kernel:stop().
+	ok = application:stop(?APP_Name).
 
 %% This test checks if ccm is able to start and stop workers.
-worker_start_stop_test() ->
-	net_kernel:start([node1, shortnames]),
-
-	application:set_env(?APP_Name, node_type, ccm), 
+worker_start_stop() ->
+	application:set_env(?APP_Name, node_type, ccm),
 	application:set_env(?APP_Name, ccm_nodes, [node()]), 
 
 	ok = application:start(?APP_Name),
@@ -100,13 +121,10 @@ worker_start_stop_test() ->
 	{ok, NewState2} = cluster_manager:stop_worker(node(), Module, NewState),
 	?assert(length(NewState2#cm_state.workers) == 0),
 
-	ok = application:stop(?APP_Name),
-	net_kernel:stop().
+	ok = application:stop(?APP_Name).
 
-modules_start_and_ping_test() ->
+modules_start_and_ping() ->
   Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager],
-
-  net_kernel:start([node1, shortnames]),
 
   application:set_env(?APP_Name, node_type, ccm),
   application:set_env(?APP_Name, ccm_nodes, [node()]),
@@ -141,7 +159,6 @@ modules_start_and_ping_test() ->
   PongsNum = lists:foldl(CheckModules, 0, Jobs),
   ?assert(PongsNum == length(Jobs)),
 
-  ok = application:stop(?APP_Name),
-  net_kernel:stop().
+  ok = application:stop(?APP_Name).
 
 -endif.

@@ -400,6 +400,7 @@ add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
   case Id of
     node_manager -> add_children(Node, Children, Workers);
     cluster_manager -> add_children(Node, Children, Workers);
+    request_dispatcher -> add_children(Node, Children, Workers);
     _Other -> [{Node, Id, ChildPid} | add_children(Node, Children, Workers)]
   end.
 

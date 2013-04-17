@@ -26,3 +26,6 @@
 %% information about time of requests processing (used by ccm during
 %% load balancing).
 -record(host_state, {plug_in = non, plug_in_state = [], load_info = []}).
+
+%% This record is used by requests_dispatcher (it contains its state).
+-record(dispatcher_state, {}).

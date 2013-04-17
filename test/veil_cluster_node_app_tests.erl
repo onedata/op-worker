@@ -21,25 +21,48 @@
 -ifdef(TEST).
 
 %% ====================================================================
-%% Test functions
+%% Test setup and teardown
+%% ====================================================================
+
+setup() ->
+  lager:start(),
+  ok = application:start(ranch).
+
+teardown(_Args) ->
+  ok = application:stop(ranch).
+
+%% ====================================================================
+%% Test generation
+%% ====================================================================
+
+generate_test_() ->
+  {setup,
+    fun setup/0,
+    fun teardown/1,
+    [?_test(env()),
+      ?_test(worker()),
+      ?_test(ccm())]}.
+
+%% ====================================================================
+%% Functions used by tests
 %% ====================================================================
 
 %% This test checks if environment variable that describes
 %% type of application is defined.
-env_test() ->
+env() ->
 	ok = application:start(?APP_Name),
 	{ok, _Type} = application:get_env(?APP_Name, node_type),
 	ok = application:stop(?APP_Name).
 
 %% This tests checks if application starts properly when it acts as worker.
-worker_test() -> 
+worker() ->
 	application:set_env(?APP_Name, node_type, worker), 
 	ok = application:start(?APP_Name),
     ?assertNot(undefined == whereis(?Supervisor_Name)),
 	ok = application:stop(?APP_Name).
 
 %% This tests checks if application starts properly when it acts as ccm.
-ccm_test() -> 
+ccm() ->
 	application:set_env(?APP_Name, node_type, ccm), 
 	ok = application:start(?APP_Name),
     ?assertNot(undefined == whereis(?Supervisor_Name)),
