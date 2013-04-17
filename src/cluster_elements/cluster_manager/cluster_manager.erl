@@ -97,6 +97,9 @@ handle_call({node_is_up, Node}, _From, State) ->
     false -> State#cm_state.monitor_process ! {monitor_node, Node},
       {Ans, NewState, WorkersFound} = check_node(Node, State),
 
+      %% This case checks if node state was analysed correctly.
+      %% If it was, it upgrades state number if necessary (workers
+      %% were running on node).
       case Ans of
         ok ->
           NewState2 = NewState#cm_state{nodes = [Node | Nodes]},
@@ -151,6 +154,8 @@ handle_cast(check_cluster_state, State) ->
 handle_cast({node_down, Node}, State) ->
   {NewState, WorkersFound} = node_down(Node, State),
 
+  %% If workers were running on node that is down,
+  %% upgrade state.
   NewState2 = case WorkersFound of
     true -> increase_state_num(NewState);
     false -> NewState

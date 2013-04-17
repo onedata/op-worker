@@ -25,6 +25,9 @@ init(_Args) ->
 handle(_ProtocolVersion, ping) ->
   pong;
 
+handle(_ProtocolVersion, get_version) ->
+  1;
+
 handle(_ProtocolVersion, _Msg) ->
 	ok.
 
