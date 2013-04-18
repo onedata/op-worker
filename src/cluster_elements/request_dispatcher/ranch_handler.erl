@@ -43,34 +43,37 @@ init(Ref, Socket, Transport, _Opts = []) ->
 loop(Socket, Transport, RanchTimeout, DispatcherTimeout) ->
   case Transport:recv(Socket, 0, RanchTimeout) of
     {ok, Data} ->
-      {Synch, Task, ProtocolVersion, Msg, Answer_type} = decode_protocol_buffer(Data),
-      case Synch of
-        true ->
-          try
-            Pid = self(),
-            Ans = gen_server:call(?Dispatcher_Name, {Task, ProtocolVersion, Pid, Msg}),
-            case Ans of
-              ok ->
-                receive
-                  Ans2 -> Transport:send(Socket, atom_to_binary(Ans2, utf8))
-                after DispatcherTimeout ->
-                  Transport:send(Socket, <<"dispatcher timeout">>)
-                end;
-              Other -> Transport:send(Socket, atom_to_binary(Other, utf8))
-            end
-          catch
-            _:_ -> Transport:send(Socket, <<"dispatcher error">>)
-          end;
-        false ->
-          try
-            Ans = gen_server:call(?Dispatcher_Name, {Task, ProtocolVersion, Msg}),
-            Transport:send(Socket, atom_to_binary(Ans, utf8))
+      try
+        {Synch, Task, ProtocolVersion, Msg, Answer_type} = decode_protocol_buffer(Data),
+        case Synch of
+          true ->
+            try
+              Pid = self(),
+              Ans = gen_server:call(?Dispatcher_Name, {Task, ProtocolVersion, Pid, Msg}),
+              case Ans of
+                ok ->
+                  receive
+                    Ans2 -> Transport:send(Socket, encode_answer(Ans, Answer_type, Ans2))
+                  after DispatcherTimeout ->
+                    Transport:send(Socket, encode_answer(dispatcher_timeout, non, []))
+                  end;
+                Other -> Transport:send(Socket, encode_answer(Other, non, []))
+              end
             catch
-              _:_ -> Transport:send(Socket, <<"dispatcher error">>)
-          end;
-        _Other -> Transport:send(Socket, <<"wrong message format">>)
-       end,
-       loop(Socket, Transport, RanchTimeout, DispatcherTimeout);
+              _:_ -> Transport:send(Socket, encode_answer(dispatcher_error, non, []))
+            end;
+          false ->
+            try
+              Ans = gen_server:call(?Dispatcher_Name, {Task, ProtocolVersion, Msg}),
+              Transport:send(Socket, encode_answer(Ans, non, []))
+            catch
+                _:_ -> Transport:send(Socket, encode_answer(dispatcher_error, non, []))
+            end
+         end,
+         loop(Socket, Transport, RanchTimeout, DispatcherTimeout)
+    catch
+      _:_ -> Transport:send(Socket, encode_answer(wrong_message_format, non, []))
+    end;
     _ ->
       ok = Transport:close(Socket)
   end.

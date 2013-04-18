@@ -98,14 +98,18 @@ dispatcher_connection() ->
 
   gen_tcp:send(Socket, Msg),
   {ok, Ans} = gen_tcp:recv(Socket, 0),
-  ?assert(Ans =:= <<"wrong_worker_type">>),
+
+  AnsMessage = #answer{answer_status = "wrong_worker_type"},
+  AnsMessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(AnsMessage)),
+
+  ?assert(Ans =:= AnsMessageBytes),
 
   Message2 = #clustermsg{module_name = "module", message_type = "atom", answer_type = "atom",
     synch = false, protocol_version = 1, input = PingBytes},
   Msg2 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message2)),
   gen_tcp:send(Socket, Msg2),
   {ok, Ans2} = gen_tcp:recv(Socket, 0),
-  ?assert(Ans2 =:= <<"wrong_worker_type">>),
+  ?assert(Ans2 =:= AnsMessageBytes),
 
   ok = application:stop(?APP_Name).
 
@@ -147,6 +151,11 @@ ping() ->
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
 
+  Pong = #atom{value = "pong"},
+  PongBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Pong)),
+  PongAns = #answer{answer_status = "ok", worker_answer = PongBytes},
+  PongAnsBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(PongAns)),
+
   CheckModules = fun(M, Sum) ->
     Message = #clustermsg{module_name = atom_to_binary(M, utf8), message_type = "atom", answer_type = "atom",
     synch = true, protocol_version = 1, input = PingBytes},
@@ -154,9 +163,9 @@ ping() ->
 
     gen_tcp:send(Socket, Msg),
     {ok, Ans} = gen_tcp:recv(Socket, 0),
-    case binary_to_atom(Ans,utf8) of
-      pong -> Sum + 1;
-      _Other -> Sum
+    case Ans =:= PongAnsBytes of
+      true -> Sum + 1;
+      false -> Sum
     end
   end,
   PongsNum = lists:foldl(CheckModules, 0, Jobs),
