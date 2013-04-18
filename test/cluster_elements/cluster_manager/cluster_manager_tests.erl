@@ -124,6 +124,8 @@ worker_start_stop() ->
 
 	ok = application:stop(?APP_Name).
 
+%% This test checks if cluster manager correctly stars workers and if
+%% the can be used inside cluster (using ping request).
 modules_start_and_ping() ->
   Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager],
 

@@ -74,13 +74,20 @@ init([]) ->
   Timeout :: non_neg_integer() | infinity,
   Reason :: term().
 %% ====================================================================
-handle_call(update_state, _From, State) ->
-  {Ans, NewState} = pull_state(State),
-  {reply, Ans, NewState};
+handle_call({update_state, NewStateNum}, _From, State) ->
+  case State#dispatcher_state.state_num == NewStateNum of
+    true -> {reply, ok, State};
+    false ->
+      {Ans, NewState, CMStateNum} = pull_state(State),
+      NewState2 = case Ans of
+        ok -> NewState#dispatcher_state{state_num = CMStateNum};
+        _Other -> NewState
+      end,
+      {reply, Ans, NewState2}
+  end;
 
 handle_call({get_workers, Module}, _From, State) ->
   {reply, get_workers(Module, State), State};
-
 
 handle_call({Task, ProtocolVersion, AnsPid, Request}, _From, State) ->
   Ans = get_worker_node(Task, State),
@@ -88,7 +95,7 @@ handle_call({Task, ProtocolVersion, AnsPid, Request}, _From, State) ->
     {Node, NewState} ->
       case Node of
         non -> {reply, worker_not_found, State};
-        N ->
+        _N ->
           gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, disp_call, {proc, AnsPid}}),
           {reply, ok, NewState}
       end;
@@ -101,7 +108,7 @@ handle_call({Task, ProtocolVersion, Request}, _From, State) ->
     {Node, NewState} ->
       case Node of
         non -> {reply, worker_not_found, State};
-        N ->
+        _N ->
           gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request}),
           {reply, ok, NewState}
       end;
@@ -122,8 +129,8 @@ handle_call(_Request, _From, State) ->
   NewState :: term(),
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_cast({update_workers, WorkersList}, State) ->
-  {noreply, update_workers(WorkersList, State)};
+handle_cast({update_workers, WorkersList, NewStateNum}, State) ->
+  {noreply, update_workers(WorkersList, State#dispatcher_state{state_num = NewStateNum})};
 
 handle_cast(_Msg, State) ->
   {noreply, State}.
@@ -172,23 +179,35 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %% ====================================================================
 
+%% get_nodes/2
+%% ====================================================================
+%% @doc Gets nodes were module is working.
+-spec get_nodes(Module :: atom(), State :: term()) -> Result when
+  Result ::  term().
+%% ====================================================================
 get_nodes(cluster_rengine, State) ->
-  {L1, L2} = ?get_workers(cluster_rengine, State);
+  ?get_workers(cluster_rengine, State);
 get_nodes(control_panel, State) ->
-  {L1, L2} = ?get_workers(control_panel, State);
+  ?get_workers(control_panel, State);
 get_nodes(dao, State) ->
-  {L1, L2} = ?get_workers(dao, State);
+  ?get_workers(dao, State);
 get_nodes(fslogic, State) ->
-  {L1, L2} = ?get_workers(fslogic, State);
+  ?get_workers(fslogic, State);
 get_nodes(gateway, State) ->
-  {L1, L2} = ?get_workers(gateway, State);
+  ?get_workers(gateway, State);
 get_nodes(rtransfer, State) ->
-  {L1, L2} = ?get_workers(rtransfer, State);
+  ?get_workers(rtransfer, State);
 get_nodes(rule_manager, State) ->
-  {L1, L2} = ?get_workers(rule_manager, State);
+  ?get_workers(rule_manager, State);
 get_nodes(_Other, _State) ->
   wrong_worker_type.
 
+%% update_nodes/3
+%% ====================================================================
+%% @doc Updates information about nodes were module is working.
+-spec update_nodes(Module :: atom(), NewNodes:: term(), State :: term()) -> Result when
+  Result ::  term().
+%% ====================================================================
 update_nodes(cluster_rengine, NewNodes, State) ->
   ?update_workers(cluster_rengine, NewNodes, State);
 update_nodes(control_panel, NewNodes, State) ->
@@ -206,6 +225,12 @@ update_nodes(rule_manager, NewNodes, State) ->
 update_nodes(_Other, _NewNodes, State) ->
   State.
 
+%% get_worker_node/2
+%% ====================================================================
+%% @doc Chooses one from nodes where module is working.
+-spec get_worker_node(Module :: atom(), State :: term()) -> Result when
+  Result ::  term().
+%% ====================================================================
 get_worker_node(Module, State) ->
   Nodes = get_nodes(Module,State),
   case Nodes of
@@ -215,6 +240,13 @@ get_worker_node(Module, State) ->
     Other -> Other
   end.
 
+%% choose_worker/2
+%% ====================================================================
+%% @doc Helper function used by get_worker_node/2. It chooses node and
+%% put it on recently used nodes list.
+-spec choose_worker(L1 :: term(), L2 :: term()) -> Result when
+  Result ::  term().
+%% ====================================================================
 choose_worker([], []) ->
   {non, {[], []}};
 choose_worker([], L2) ->
@@ -222,6 +254,14 @@ choose_worker([], L2) ->
 choose_worker([N | L1], L2) ->
   {N, {L1, [N, L2]}}.
 
+%% add_worker/3
+%% ====================================================================
+%% @doc Adds nodes to list that describes module.
+-spec add_worker(Module :: atom(), Node :: term(), State :: term()) -> Result when
+  Result ::  {ok, NewState} | Error,
+  Error :: term(),
+  NewState :: term().
+%% ====================================================================
 add_worker(Module, Node, State) ->
   Nodes = get_nodes(Module,State),
   case Nodes of
@@ -230,6 +270,12 @@ add_worker(Module, Node, State) ->
     Other -> Other
   end.
 
+%% update_workers/2
+%% ====================================================================
+%% @doc Updates dispatcher state when new workers list appears.
+-spec update_workers(WorkersList :: term(), State :: term()) -> Result when
+  Result ::  term().
+%% ====================================================================
 update_workers(WorkersList, _State) ->
   Update = fun({Node, Module}, TmpState) ->
     Ans = add_worker(Module, Node, TmpState),
@@ -240,19 +286,34 @@ update_workers(WorkersList, _State) ->
   end,
   lists:foldl(Update, #dispatcher_state{}, WorkersList).
 
+%% pull_state/1
+%% ====================================================================
+%% @doc Pulls workers list from cluster manager.
+-spec pull_state(State :: term()) -> Result when
+  Result :: {ok, NewState} | {error, State},
+  State :: term(),
+  NewState :: term().
+%% ====================================================================
 pull_state(State) ->
   try
-    WorkersList = gen_server:call({global, ?CCM}, get_workers),
-    {ok, update_workers(WorkersList, State)}
+    {WorkersList, StateNum} = gen_server:call({global, ?CCM}, get_workers),
+    {ok, update_workers(WorkersList, State), StateNum}
   catch
     _:_ ->
       lager:error([{mod, ?MODULE}], "Dispatcher on node: ~s: can not pull workers list", [node()]),
-      {error, State}
+      {error, State, 0}
   end.
 
+%% get_workers/2
+%% ====================================================================
+%% @doc Returns information about nodes were module is working according
+%% to dispatcher knowledge.
+-spec get_workers(Module :: atom, State :: term()) -> Result when
+  Result :: term().
+%% ====================================================================
 get_workers(Module, State) ->
   Nodes = get_nodes(Module,State),
   case Nodes of
     {L1, L2} -> lists:flatten([L1, L2]);
-    Other -> []
+    _Other -> []
   end.

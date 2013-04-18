@@ -53,6 +53,7 @@ generate_test_() ->
 %% Functions used by tests
 %% ====================================================================
 
+%% This test checks if all environment variables needed by node_manager are defined.
 env() ->
   ok = application:start(?APP_Name),
   {ok, _Port} = application:get_env(veil_cluster_node, dispatcher_port),
@@ -62,6 +63,7 @@ env() ->
   {ok, _Path} = application:get_env(veil_cluster_node, ssl_cert_path),
   ok = application:stop(?APP_Name).
 
+%% This test checks dispatcher uses protocol buffer correctly.
 protocol_buffers() ->
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
@@ -86,6 +88,7 @@ protocol_buffers() ->
   EncodedPong = ranch_handler:encode_answer(ok, "atom", pong),
   ?assert(EncodedPong =:= MessageBytes2).
 
+%% This tests check if client may connect to dispatcher.
 dispatcher_connection() ->
   Cert = "../veilfs.pem",
   application:set_env(?APP_Name, node_type, ccm),
@@ -119,6 +122,7 @@ dispatcher_connection() ->
 
   ok = application:stop(?APP_Name).
 
+%% This test checks if workers list inside dispatcher is refreshed correctly.
 workers_list_actualization() ->
   Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager],
 
@@ -141,6 +145,7 @@ workers_list_actualization() ->
 
   ok = application:stop(?APP_Name).
 
+%% This test checks if client outside the cluster can ping all modules via dispatcher.
 ping() ->
   Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager],
 

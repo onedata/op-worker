@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module forwards requests from ranch to dispatcher.
+%% @doc: This module forwards requests from socket to dispatcher.
 %% @end
 %% ===================================================================
 
@@ -27,10 +27,24 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
+
+%% start_link/4
+%% ====================================================================
+%% @doc Starts handler
+-spec start_link(Ref :: term(), Socket :: term(), Transport :: term(), Opts :: term()) -> Result when
+  Result ::  {ok,Pid},
+  Pid :: pid().
+%% ====================================================================
 start_link(Ref, Socket, Transport, Opts) ->
   Pid = spawn_link(?MODULE, init, [Ref, Socket, Transport, Opts]),
   {ok, Pid}.
 
+%% init/4
+%% ====================================================================
+%% @doc Initializes handler loop
+-spec init(Ref :: term(), Socket :: term(), Transport :: term(), Opts :: term()) -> Result when
+  Result ::  ok.
+%% ====================================================================
 init(Ref, Socket, Transport, _Opts = []) ->
   {ok, RanchTimeout} = application:get_env(veil_cluster_node, ranch_timeout),
   {ok, DispatcherTimeout} = application:get_env(veil_cluster_node, dispatcher_timeout),
@@ -39,6 +53,13 @@ init(Ref, Socket, Transport, _Opts = []) ->
 
 %% ====================================================================
 %% Internal functions
+%% ====================================================================
+
+%% loop/4
+%% ====================================================================
+%% @doc Main handler loop. It receives clients messages and forwards them to dispatcher
+-spec loop(Socket :: term(), Transport :: term(), RanchTimeout :: integer(), DispatcherTimeout :: integer()) -> Result when
+  Result ::  ok.
 %% ====================================================================
 loop(Socket, Transport, RanchTimeout, DispatcherTimeout) ->
   case Transport:recv(Socket, 0, RanchTimeout) of
@@ -78,11 +99,27 @@ loop(Socket, Transport, RanchTimeout, DispatcherTimeout) ->
       ok = Transport:close(Socket)
   end.
 
+%% decode_protocol_buffer/1
+%% ====================================================================
+%% @doc Decodes the message using protocol buffers records_translator.
+-spec decode_protocol_buffer(MsgBytes :: binary()) -> Result when
+  Result ::  {Synch, ModuleName, Msg, Answer_type},
+  Synch :: boolean(),
+  ModuleName :: atom(),
+  Msg :: term(),
+  Answer_type :: string().
+%% ====================================================================
 decode_protocol_buffer(MsgBytes) ->
   #clustermsg{module_name = ModuleName, message_type = Message_type, answer_type = Answer_type, synch = Synch, protocol_version = Prot_version, input = Bytes} = communication_protocol_pb:decode_clustermsg(MsgBytes),
   Msg = erlang:apply(communication_protocol_pb, list_to_atom("decode_" ++ Message_type), [Bytes]),
   {Synch, list_to_atom(ModuleName), Prot_version, records_translator:translate(Msg), Answer_type}.
 
+%% encode_answer/3
+%% ====================================================================
+%% @doc Encodes answer using protocol buffers records_translator.
+-spec encode_answer(Main_Answer :: atom(), AnswerType :: string(), Worker_Answer :: term()) -> Result when
+  Result ::  binary().
+%% ====================================================================
 encode_answer(Main_Answer, AnswerType, Worker_Answer) ->
   Message = case Main_Answer of
     ok -> case AnswerType of
