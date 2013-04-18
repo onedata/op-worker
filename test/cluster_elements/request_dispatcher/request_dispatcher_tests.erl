@@ -27,6 +27,7 @@
 setup() ->
   net_kernel:start([node1, shortnames]),
   lager:start(),
+  ssl:start(),
   ok = application:start(ranch).
 
 teardown(_Args) ->
@@ -56,6 +57,9 @@ env() ->
   ok = application:start(?APP_Name),
   {ok, _Port} = application:get_env(veil_cluster_node, dispatcher_port),
   {ok, _PoolSize} = application:get_env(veil_cluster_node, dispatcher_pool_size),
+  {ok, _RTimeout} = application:get_env(veil_cluster_node, ranch_timeout),
+  {ok, _DTimeout} = application:get_env(veil_cluster_node, dispatcher_timeout),
+  {ok, _Path} = application:get_env(veil_cluster_node, ssl_cert_path),
   ok = application:stop(?APP_Name).
 
 protocol_buffers() ->
@@ -83,11 +87,13 @@ protocol_buffers() ->
   ?assert(EncodedPong =:= MessageBytes2).
 
 dispatcher_connection() ->
+  Cert = "../veilfs.pem",
   application:set_env(?APP_Name, node_type, ccm),
+  application:set_env(?APP_Name, ssl_cert_path, Cert),
   ok = application:start(?APP_Name),
 
   {ok, Port} = application:get_env(veil_cluster_node, dispatcher_port),
-  {ok, Socket} = gen_tcp:connect("localhost", Port, [binary,{active, false}]),
+  {ok, Socket} = ssl:connect("localhost", Port, [binary, {active, false}, {packet, raw}, {certfile, Cert}]),
 
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
@@ -96,8 +102,8 @@ dispatcher_connection() ->
     synch = true, protocol_version = 1, input = PingBytes},
   Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  gen_tcp:send(Socket, Msg),
-  {ok, Ans} = gen_tcp:recv(Socket, 0),
+  ssl:send(Socket, Msg),
+  {ok, Ans} = ssl:recv(Socket, 0),
 
   AnsMessage = #answer{answer_status = "wrong_worker_type"},
   AnsMessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(AnsMessage)),
@@ -107,8 +113,8 @@ dispatcher_connection() ->
   Message2 = #clustermsg{module_name = "module", message_type = "atom", answer_type = "atom",
     synch = false, protocol_version = 1, input = PingBytes},
   Msg2 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message2)),
-  gen_tcp:send(Socket, Msg2),
-  {ok, Ans2} = gen_tcp:recv(Socket, 0),
+  ssl:send(Socket, Msg2),
+  {ok, Ans2} = ssl:recv(Socket, 0),
   ?assert(Ans2 =:= AnsMessageBytes),
 
   ok = application:stop(?APP_Name).
@@ -138,7 +144,9 @@ workers_list_actualization() ->
 ping() ->
   Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager],
 
+  Cert = "../veilfs.pem",
   application:set_env(?APP_Name, node_type, ccm),
+  application:set_env(?APP_Name, ssl_cert_path, Cert),
   application:set_env(?APP_Name, ccm_nodes, [node()]),
   application:set_env(?APP_Name, initialization_time, 1),
 
@@ -146,7 +154,7 @@ ping() ->
   timer:sleep(1500),
 
   {ok, Port} = application:get_env(veil_cluster_node, dispatcher_port),
-  {ok, Socket} = gen_tcp:connect("localhost", Port, [binary,{active, false}]),
+  {ok, Socket} = ssl:connect("localhost", Port, [binary, {active, false}, {packet, raw}, {certfile, Cert}]),
 
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
@@ -161,8 +169,8 @@ ping() ->
     synch = true, protocol_version = 1, input = PingBytes},
     Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-    gen_tcp:send(Socket, Msg),
-    {ok, Ans} = gen_tcp:recv(Socket, 0),
+    ssl:send(Socket, Msg),
+    {ok, Ans} = ssl:recv(Socket, 0),
     case Ans =:= PongAnsBytes of
       true -> Sum + 1;
       false -> Sum

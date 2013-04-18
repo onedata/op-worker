@@ -27,6 +27,7 @@
 setup() ->
   net_kernel:start([node1, shortnames]),
   lager:start(),
+  ssl:start(),
   ok = application:start(ranch).
 
 teardown(_Args) ->

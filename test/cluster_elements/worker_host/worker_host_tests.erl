@@ -26,6 +26,7 @@
 
 setup() ->
   lager:start(),
+  ssl:start(),
   ok = application:start(ranch).
 
 teardown(_Args) ->

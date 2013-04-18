@@ -18,6 +18,9 @@
                   kernel,
                   stdlib,
                   lager,
+                  crypto,
+                  public_key,
+                  ssl,
                   ranch
                  ]},
   {mod, {veil_cluster_node_app, []}},
@@ -43,6 +46,8 @@
       %% time in ms after witch ranch kills thread that does nothing
       {ranch_timeout, 5000},
       %% time in ms after witch ranch answers with error
-      {dispatcher_timeout, 2000}
+      {dispatcher_timeout, 2000},
+      %% path to certificate used by ranch_ssl
+      {ssl_cert_path, "./veilfs.pem"}
   		]}
  ]}.
