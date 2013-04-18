@@ -1,0 +1,9 @@
+message ClusterMsg {
+    required string module_name = 1;
+    required string message_type = 2;
+    required bytes input = 3;
+}
+
+message Atom {
+   required string atom = 1;
+}

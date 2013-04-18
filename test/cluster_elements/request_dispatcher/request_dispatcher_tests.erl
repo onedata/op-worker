@@ -12,6 +12,7 @@
 
 -module(request_dispatcher_tests).
 -include("registered_names.hrl").
+-include("communication_protocol_pb.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -41,6 +42,7 @@ generate_test_() ->
     fun setup/0,
     fun teardown/1,
     [?_test(env()),
+      ?_test(protocol_buffers()),
       ?_test(dispatcher_connection()),
       ?_test(workers_list_actualization()),
       ?_test(ping())
@@ -55,6 +57,17 @@ env() ->
   {ok, _Port} = application:get_env(veil_cluster_node, dispatcher_port),
   {ok, _PoolSize} = application:get_env(veil_cluster_node, dispatcher_pool_size),
   ok = application:stop(?APP_Name).
+
+protocol_buffers() ->
+  Ping = #atom{atom = "ping"},
+  PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
+
+  Message = #clustermsg{module_name = "module", message_type = "atom", input = PingBytes},
+  MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+
+  {Mod, Msg} = ranch_handler:decode_protocol_buffer(MessageBytes),
+  ?assert(Mod =:= module),
+  ?assert(Msg =:= ping).
 
 dispatcher_connection() ->
   application:set_env(?APP_Name, node_type, ccm),

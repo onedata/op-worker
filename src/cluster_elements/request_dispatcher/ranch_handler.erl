@@ -12,12 +12,17 @@
 -module(ranch_handler).
 -behaviour(ranch_protocol).
 -include("registered_names.hrl").
+-include("communication_protocol_pb.hrl").
 
 %% ====================================================================
 %% API
 %% ====================================================================
 -export([start_link/4]).
 -export([init/4]).
+
+-ifdef(TEST).
+-export([decode_protocol_buffer/1]).
+-endif.
 
 %% ====================================================================
 %% API functions
@@ -69,3 +74,8 @@ loop(Socket, Transport, RanchTimeout, DispatcherTimeout) ->
     _ ->
       ok = Transport:close(Socket)
   end.
+
+decode_protocol_buffer(MsgBytes) ->
+  #clustermsg{module_name = ModuleName, message_type = InputType, input = Bytes} = communication_protocol_pb:decode_clustermsg(MsgBytes),
+  Msg = erlang:apply(communication_protocol_pb, list_to_atom("decode_" ++ InputType), [Bytes]),
+  {list_to_atom(ModuleName), records_translator:translate(Msg)}.
