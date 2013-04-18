@@ -3,6 +3,9 @@
 -record(clustermsg, {
     module_name = erlang:error({required, module_name}),
     message_type = erlang:error({required, message_type}),
+    answer_type = erlang:error({required, answer_type}),
+    synch = erlang:error({required, synch}),
+    protocol_version = erlang:error({required, protocol_version}),
     input = erlang:error({required, input})
 }).
 -endif.
@@ -10,7 +13,7 @@
 -ifndef(ATOM_PB_H).
 -define(ATOM_PB_H, true).
 -record(atom, {
-    atom = erlang:error({required, atom})
+    value = erlang:error({required, value})
 }).
 -endif.
 

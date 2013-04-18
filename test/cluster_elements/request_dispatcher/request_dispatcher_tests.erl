@@ -59,15 +59,19 @@ env() ->
   ok = application:stop(?APP_Name).
 
 protocol_buffers() ->
-  Ping = #atom{atom = "ping"},
+  Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
 
-  Message = #clustermsg{module_name = "module", message_type = "atom", input = PingBytes},
+  Message = #clustermsg{module_name = "module", message_type = "atom", answer_type = "atom",
+  synch = true, protocol_version = 1, input = PingBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {Mod, Msg} = ranch_handler:decode_protocol_buffer(MessageBytes),
-  ?assert(Mod =:= module),
-  ?assert(Msg =:= ping).
+  {Synch, Task, ProtocolVersion, Msg, Answer_type} = ranch_handler:decode_protocol_buffer(MessageBytes),
+  ?assert(Synch),
+  ?assert(Msg =:= ping),
+  ?assert(Task =:= module),
+  ?assert(ProtocolVersion == 1),
+  ?assert(Answer_type =:= "atom").
 
 dispatcher_connection() ->
   application:set_env(?APP_Name, node_type, ccm),
@@ -75,13 +79,22 @@ dispatcher_connection() ->
 
   {ok, Port} = application:get_env(veil_cluster_node, dispatcher_port),
   {ok, Socket} = gen_tcp:connect("localhost", Port, [binary,{active, false}]),
-  Msg = {synch, not_existing_module, 1, "message"},
-  gen_tcp:send(Socket, term_to_binary(Msg)),
+
+  Ping = #atom{value = "ping"},
+  PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
+
+  Message = #clustermsg{module_name = "module", message_type = "atom", answer_type = "atom",
+    synch = true, protocol_version = 1, input = PingBytes},
+  Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+
+  gen_tcp:send(Socket, Msg),
   {ok, Ans} = gen_tcp:recv(Socket, 0),
   ?assert(Ans =:= <<"wrong_worker_type">>),
 
-  Msg2 = {asynch, not_existing_module, 1, "message"},
-  gen_tcp:send(Socket, term_to_binary(Msg2)),
+  Message2 = #clustermsg{module_name = "module", message_type = "atom", answer_type = "atom",
+    synch = false, protocol_version = 1, input = PingBytes},
+  Msg2 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message2)),
+  gen_tcp:send(Socket, Msg2),
   {ok, Ans2} = gen_tcp:recv(Socket, 0),
   ?assert(Ans2 =:= <<"wrong_worker_type">>),
 
@@ -121,10 +134,16 @@ ping() ->
 
   {ok, Port} = application:get_env(veil_cluster_node, dispatcher_port),
   {ok, Socket} = gen_tcp:connect("localhost", Port, [binary,{active, false}]),
-  ProtocolVersion = 1,
+
+  Ping = #atom{value = "ping"},
+  PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
+
   CheckModules = fun(M, Sum) ->
-    Msg = {synch, M, 1, ping},
-    gen_tcp:send(Socket, term_to_binary(Msg)),
+    Message = #clustermsg{module_name = atom_to_binary(M, utf8), message_type = "atom", answer_type = "atom",
+    synch = true, protocol_version = 1, input = PingBytes},
+    Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+
+    gen_tcp:send(Socket, Msg),
     {ok, Ans} = gen_tcp:recv(Socket, 0),
     case binary_to_atom(Ans,utf8) of
       pong -> Sum + 1;

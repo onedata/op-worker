@@ -25,7 +25,7 @@
 %% ====================================================================
 
 translate(Record) when is_record(Record, atom) ->
-  list_to_atom(Record#atom.atom);
+  list_to_atom(Record#atom.value);
 
 translate(Record) ->
   Record.

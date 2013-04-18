@@ -1,9 +1,12 @@
 message ClusterMsg {
     required string module_name = 1;
     required string message_type = 2;
-    required bytes input = 3;
+    required string answer_type = 3;
+    required bool synch = 4;
+    required int32 protocol_version = 5;
+    required bytes input = 6;
 }
 
 message Atom {
-   required string atom = 1;
+   required string value = 1;
 }

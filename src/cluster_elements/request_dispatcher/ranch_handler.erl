@@ -43,9 +43,9 @@ init(Ref, Socket, Transport, _Opts = []) ->
 loop(Socket, Transport, RanchTimeout, DispatcherTimeout) ->
   case Transport:recv(Socket, 0, RanchTimeout) of
     {ok, Data} ->
-      Request = binary_to_term(Data),
-      case Request of
-        {synch, Task, ProtocolVersion, Msg} ->
+      {Synch, Task, ProtocolVersion, Msg, Answer_type} = decode_protocol_buffer(Data),
+      case Synch of
+        true ->
           try
             Pid = self(),
             Ans = gen_server:call(?Dispatcher_Name, {Task, ProtocolVersion, Pid, Msg}),
@@ -61,7 +61,7 @@ loop(Socket, Transport, RanchTimeout, DispatcherTimeout) ->
           catch
             _:_ -> Transport:send(Socket, <<"dispatcher error">>)
           end;
-        {asynch, Task, ProtocolVersion, Msg} ->
+        false ->
           try
             Ans = gen_server:call(?Dispatcher_Name, {Task, ProtocolVersion, Msg}),
             Transport:send(Socket, atom_to_binary(Ans, utf8))
@@ -76,6 +76,6 @@ loop(Socket, Transport, RanchTimeout, DispatcherTimeout) ->
   end.
 
 decode_protocol_buffer(MsgBytes) ->
-  #clustermsg{module_name = ModuleName, message_type = InputType, input = Bytes} = communication_protocol_pb:decode_clustermsg(MsgBytes),
-  Msg = erlang:apply(communication_protocol_pb, list_to_atom("decode_" ++ InputType), [Bytes]),
-  {list_to_atom(ModuleName), records_translator:translate(Msg)}.
+  #clustermsg{module_name = ModuleName, message_type = Message_type, answer_type = Answer_type, synch = Synch, protocol_version = Prot_version, input = Bytes} = communication_protocol_pb:decode_clustermsg(MsgBytes),
+  Msg = erlang:apply(communication_protocol_pb, list_to_atom("decode_" ++ Message_type), [Bytes]),
+  {Synch, list_to_atom(ModuleName), Prot_version, records_translator:translate(Msg), Answer_type}.
