@@ -78,6 +78,10 @@ handle_call(update_state, _From, State) ->
   {Ans, NewState} = pull_state(State),
   {reply, Ans, NewState};
 
+handle_call({get_workers, Module}, _From, State) ->
+  {reply, get_workers(Module, State), State};
+
+
 handle_call({Task, ProtocolVersion, AnsPid, Request}, _From, State) ->
   Ans = get_worker_node(Task, State),
   case Ans of
@@ -244,4 +248,11 @@ pull_state(State) ->
     _:_ ->
       lager:error([{mod, ?MODULE}], "Dispatcher on node: ~s: can not pull workers list", [node()]),
       {error, State}
+  end.
+
+get_workers(Module, State) ->
+  Nodes = get_nodes(Module,State),
+  case Nodes of
+    {L1, L2} -> lists:flatten([L1, L2]);
+    Other -> []
   end.
