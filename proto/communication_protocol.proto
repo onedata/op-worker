@@ -4,7 +4,12 @@ message ClusterMsg {
     required string answer_type = 3;
     required bool synch = 4;
     required int32 protocol_version = 5;
-    required bytes input = 6;
+    optional bytes input = 6;
+}
+
+message Answer {
+   required string answer_status = 1;
+   optional bytes worker_answer = 2;
 }
 
 message Atom {

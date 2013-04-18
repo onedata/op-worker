@@ -17,7 +17,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([translate/1]).
+-export([translate/1, translate_to_record/1]).
 
 
 %% ====================================================================
@@ -29,3 +29,9 @@ translate(Record) when is_record(Record, atom) ->
 
 translate(Record) ->
   Record.
+
+translate_to_record(Value) when is_atom(Value) ->
+  #atom{value = atom_to_list(Value)};
+
+translate_to_record(Value) ->
+  Value.

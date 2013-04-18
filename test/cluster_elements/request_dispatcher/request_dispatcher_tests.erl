@@ -71,7 +71,16 @@ protocol_buffers() ->
   ?assert(Msg =:= ping),
   ?assert(Task =:= module),
   ?assert(ProtocolVersion == 1),
-  ?assert(Answer_type =:= "atom").
+  ?assert(Answer_type =:= "atom"),
+
+  Pong = #atom{value = "pong"},
+  PongBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Pong)),
+
+  Message2 = #answer{answer_status = "ok", worker_answer = PongBytes},
+  MessageBytes2 = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(Message2)),
+
+  EncodedPong = ranch_handler:encode_answer(ok, "atom", pong),
+  ?assert(EncodedPong =:= MessageBytes2).
 
 dispatcher_connection() ->
   application:set_env(?APP_Name, node_type, ccm),

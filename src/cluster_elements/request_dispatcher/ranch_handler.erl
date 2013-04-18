@@ -21,7 +21,7 @@
 -export([init/4]).
 
 -ifdef(TEST).
--export([decode_protocol_buffer/1]).
+-export([decode_protocol_buffer/1, encode_answer/3]).
 -endif.
 
 %% ====================================================================
@@ -79,3 +79,15 @@ decode_protocol_buffer(MsgBytes) ->
   #clustermsg{module_name = ModuleName, message_type = Message_type, answer_type = Answer_type, synch = Synch, protocol_version = Prot_version, input = Bytes} = communication_protocol_pb:decode_clustermsg(MsgBytes),
   Msg = erlang:apply(communication_protocol_pb, list_to_atom("decode_" ++ Message_type), [Bytes]),
   {Synch, list_to_atom(ModuleName), Prot_version, records_translator:translate(Msg), Answer_type}.
+
+encode_answer(Main_Answer, AnswerType, Worker_Answer) ->
+  Message = case Main_Answer of
+    ok -> case AnswerType of
+      non -> #answer{answer_status = atom_to_list(Main_Answer)};
+      _Type ->
+        WAns = erlang:apply(communication_protocol_pb, list_to_atom("encode_" ++ AnswerType), [records_translator:translate_to_record(Worker_Answer)]),
+        #answer{answer_status = atom_to_list(Main_Answer), worker_answer = WAns}
+    end;
+    _Other -> #answer{answer_status = atom_to_list(Main_Answer)}
+  end,
+  erlang:iolist_to_binary(communication_protocol_pb:encode_answer(Message)).
