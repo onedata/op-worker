@@ -199,8 +199,23 @@ heart_beat(Conn_status, State) ->
 	lager:info([{mod, ?MODULE}], "Haert beat on node: ~s: connection: ~s: heartbeat: ~s, new state_num: ~b", [node(), New_conn_status, New_conn_status3, New_state_num]),
 
   case New_conn_status3 of
-    ok -> State#node_state{ccm_con_status = New_conn_status, state_num = New_state_num};
+    ok ->
+      case (New_state_num == State#node_state.state_num) and (State#node_state.dispatcher_state =:= ok) of
+        true -> State#node_state{ccm_con_status = New_conn_status};
+        false ->
+          DispState = update_dispatcher(),
+          State#node_state{ccm_con_status = New_conn_status, state_num = New_state_num, dispatcher_state = DispState}
+      end;
     _Other -> State#node_state{ccm_con_status = New_conn_status}
+  end.
+
+update_dispatcher() ->
+  try
+    gen_server:call(?Dispatcher_Name, update_state)
+  catch
+    _:_ ->
+      lager:error([{mod, ?MODULE}], "Node manager on node: ~s: can not connect with dispatcher", [node()]),
+      error
   end.
 
 %% init_net_connection/1

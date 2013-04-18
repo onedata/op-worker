@@ -188,7 +188,7 @@ code_change(_OldVsn, State, _Extra) ->
 -spec proc_request(PlugIn :: atom(), ProtocolVersion :: integer(), Msg :: term(), MsgId :: integer(), ReplyDisp :: term()) -> Result when
 	Result ::  atom(). 
 %% ====================================================================
-proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyDisp) ->
+proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
 	{Megaseconds,Seconds,Microseconds} = os:timestamp(),
 	Response = 	try
 		PlugIn:handle(ProtocolVersion, Msg)
@@ -196,9 +196,11 @@ proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyDisp) ->
 		_:_ -> wrongTask
 	end,
 
-	case ReplyDisp of
+	case ReplyTo of
 		non -> ok;
-		Disp -> gen_server:cast(Disp, {worker_answer, MsgId, Response})
+    {gen_serv, Disp} -> gen_server:cast(Disp, {worker_answer, MsgId, Response});
+    {proc, Pid} -> Pid ! Response;
+    Other -> lagger:error([{mod, ?MODULE}], "Wrong reply type: ~s", [Other])
 	end,
 	
 	{Megaseconds2,Seconds2,Microseconds2} = os:timestamp(),

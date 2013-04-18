@@ -121,6 +121,9 @@ handle_call(get_state_num, _From, State) ->
 handle_call(get_nodes, _From, State) ->
   {reply, State#cm_state.nodes, State};
 
+handle_call(get_workers, _From, State) ->
+  {reply, get_workers_list(State), State};
+
 handle_call(get_state, _From, State) ->
   {reply, State, State};
 
@@ -487,7 +490,7 @@ get_state_from_db(State) ->
   {Ans, NewState} = start_worker(node(), dao, [], State),
   NewState2 = case Ans of
     ok ->
-      gen_server:cast(dao, {synch, 1, {get_state, []}, cluster_state, {global, ?CCM}}),
+      gen_server:cast(dao, {synch, 1, {get_state, []}, cluster_state, {gen_serv, {global, ?CCM}}}),
       increase_state_num(NewState);
     error -> NewState
   end,
@@ -538,6 +541,12 @@ merge_state(State, SavedState) ->
   save_state(MergedState2),
   MergedState2.
 
+get_workers_list(State) ->
+  ListWorkers = fun({Node, Module, _ChildPid}, Workers) ->
+    [{Node, Module} | Workers]
+  end,
+  lists:foldl(ListWorkers, [], State#cm_state.workers).
+
 %% increase_state_num/1
 %% ====================================================================
 %% @doc This function increases the cluster state value and informs all
@@ -547,4 +556,10 @@ merge_state(State, SavedState) ->
 %% ====================================================================
 %% TODO wstawic ta metode w miejsca gdzie zmieniaja sie workery, dodac rozsylanie powiadomien do dispatcherow
 increase_state_num(State) ->
+  WorkersList = get_workers_list(State),
+  UpdateNode = fun(Node) ->
+    gen_server:cast({?Dispatcher_Name, Node}, {update_workers, WorkersList})
+  end,
+  lists:foreach(UpdateNode, State#cm_state.nodes),
+
   State#cm_state{state_num = State#cm_state.state_num + 1}.
