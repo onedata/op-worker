@@ -1,18 +1,66 @@
 #!/bin/bash
 
-# Enter the script directory
-PATH_TO_SCRIPT=`echo $0 | sed "s/apply_config//g"`
-cd $PATH_TO_SCRIPT
+display_help()
+{
+	echo "
+Prerequisites
+-------------
 
-# Ensure config file exists
-if [ ! -f config.args ]; then
-	echo " "
-	echo "Error: missing configuration file"
-	echo "'config.args' not found in script directory."
-	echo "Terminating."
-	exit 1
-fi
+Firstly, the user must have execution rights on both '/config/apply_config' and '/bin/veil_cluster_node' scripts.
 
+Secondly, 'config.args' file must be present in 'config' directory (along with 'apply_config' script).
+
+Setting parameters
+------------------
+
+List of parameters that can be set:
+
+    name       -> name of the node (erlang long name)
+    main_ccm   -> main CCM name (of the cluster this node operates in)
+    opt_ccms   -> list of optional CCMs (this parameter is not mandatory)
+    db_nodes   -> list of DBMS nodes
+
+Primarily, these parameters are retrieved from 'config.args' file. It should contain these parameters in following manner:
+
+    <parameter_name>: <parameter_value>
+
+Another way is passing these parameters via command line arguments. In this case the syntax is:
+
+    ./apply_config -<parameter1_name> <parameter1_value> -<parameter2_name> <parameter2_value> ...
+
+NOTE:
+
+* parameters passed via command line OVERRIDE those in 'config.args' file
+* \"command line way\" can specify any subset of parameters, for instance:
+    * './apply_config' will cause the script to use all parameters from 'config.args'
+    * './apply_config -name somename@host.net' will cause the script to use parameters from 'config.args' except node name
+    * './apply_config -opt_ccms' (no opt_ccms value specified) will override opt_ccms from 'config.args' with null value
+* (both) parameter order can be arbitrary
+* (both) multiple values (eg. DBMS nodes) are passed as a space-delimited list (eg. -db_nodes dbnode1@host.net dbnode2@host.net)
+* (both) parameter values can't contain spaces or hyphens
+* (command line) parameter names are preceded by a hyphen; '-'
+
+Starting a release
+------------------
+
+There are three options which are used to start a release. They are passed along with other arguments to the 'apply_config' script.
+
+    -start    -> the script will perform the configuration and then start the node as a daemon
+    -attach   -> the script will skip configuration and try to attach to a running node with an erlang shell (used after -start)
+    -console  -> the script will perform the configuration and then start the node with an erlang shell
+
+If none of these arguments occur, the script will terminate after setting up the configuration.
+
+Full example of usage
+---------------------
+
+    ~$  ./apply_config -name mynode@host.net -main_ccm ccmnode@host.net -console
+
+Above command will configure the release according to 'config.args', except for name and main_ccm which will be modified
+corresponding to command line arguments. Then, the node will be started presenting to the user with an erlang shell."
+
+	exit 0
+}
 
 # Function used to retrieve a parameter from script arguments. 
 # args: 
@@ -29,7 +77,7 @@ get_parameter_from_args()
 	local RETURN_OPTION=$3
 
 	# Find the occurence of desired token. If there isn't one, return with -no_param value.
-	local INDEX=`awk -v a="$ARGS" -v b="$TOKEN" 'BEGIN{print index(a, b)}'`
+	local INDEX=`awk -v a=" $ARGS " -v b=" $TOKEN " 'BEGIN{print index(a, b)}'`
 	if [[ $INDEX -eq 0 ]]; then
 		RESULT="-no_param"
 		return
@@ -47,14 +95,15 @@ get_parameter_from_args()
 	fi
 
 	# If the expected result is a single word, get the first one from remaining string. 
-	# This somehow resolves errors like passing a double 'name' parameter.
+	# This somehow resolves errors like passing a double word 'name' parameter.
 	if [[ $RETURN_OPTION == "single" ]]; then
 		ARGS=`echo $ARGS | cut -f1 -d' '`
 	else
 		ARGS=`echo $ARGS`          # trims spaces from the beginning of the list
 	fi
 
-	if [[ $ARGS == "" ]]; then
+	# If the result is empty, there was no parameter value specified. Exception: -opt_ccms could have been left empty intentionally.
+	if [[ $ARGS == "" ]] && [[ $TOKEN != '-opt_ccms' ]]; then
 		RESULT="-no_param"
 		return
 	fi
@@ -75,6 +124,8 @@ get_parameter_from_file()
 	RESULT=`grep "$TOKEN" config.args`
 	RESULT=${RESULT:${#TOKEN}:${#RESULT}}
 	
+	# If the expected result is a single word, get the first one from remaining string. 
+	# This somehow resolves errors like passing a double word 'name' parameter.
 	if [[ $RETURN_OPTION == "single" ]]; then
 		RESULT=`echo $RESULT | cut -f1 -d' '`
 	else
@@ -88,12 +139,37 @@ get_parameter_from_file()
 		echo "Error: missing parameter"
 		echo "'${TOKEN%?}' must occur in script arguments or 'config.args' file."
 		echo "Terminating."
+		echo " "
+		echo "for usage help, type:"
+		echo "	~$ ./apply_config -help "
 		exit 1
 	fi
 }
 
+# Check for -help otpion
+INDEX=`awk -v a=" $* " -v b=" -help " 'BEGIN{print index(a, b)}'`
+if [[ $INDEX -gt 0 ]]; then
+	display_help
+fi
+
+# Enter the script directory
+PATH_TO_SCRIPT=`echo $0 | sed "s/apply_config//g"`
+cd $PATH_TO_SCRIPT
+
+# Ensure config file exists
+if [ ! -f config.args ]; then
+	echo " "
+	echo "Error: missing configuration file"
+	echo "'config.args' not found in script directory."
+	echo "Terminating."
+	echo " "
+	echo "for usage help, type:"
+	echo "	~$ ./apply_config -help "
+	exit 1
+fi
+
 # Check for '-attach' option. If it occurs, it's logical to assume the node is already running, so no further configuration is needed
-INDEX=`awk -v a="$*" -v b="-attach" 'BEGIN{print index(a, b)}'`
+INDEX=`awk -v a=" $* " -v b=" -attach " 'BEGIN{print index(a, b)}'`
 if [[ $INDEX -gt 0 ]]; then
 
 	# User requested attaching to the node
@@ -133,21 +209,6 @@ if [[ $NODE_NAME == "-no_param" ]]; then
 	NODE_NAME=$RESULT
 fi
 
-
-#####################################
-# NODE TYPE
-
-# Check for node type in script args
-get_parameter_from_args "$*" -node_type single
-NODE_TYPE=$RESULT
-
-# If there was none specified...
-if [[ $NODE_TYPE == "-no_param" ]]; then
-	# ... retrieve node type from config file
-	get_parameter_from_file node_type: single
-	NODE_TYPE=$RESULT
-fi
-
 #####################################
 # MAIN CCM
 
@@ -160,6 +221,13 @@ if [[ $MAIN_CCM == "-no_param" ]]; then
 	# ... retrieve main_ccm name from config file
 	get_parameter_from_file main_ccm: single
 	MAIN_CCM=$RESULT
+fi
+
+# Originally let's assume this node is a worker 
+NODE_TYPE="worker"
+# Check if the node name equals main CCM -> this node is a CCM
+if [[ $NODE_NAME == $MAIN_CCM ]]; then
+	NODE_TYPE="ccm"
 fi
 
 #####################################
@@ -177,11 +245,15 @@ if [[ $OPT_CCMS == "-no_param" ]]; then
 fi
 
 # And turn them into a formatted list, along with main ccm
-OPT_CCMS_ARRAY=$(echo $OPT_CCMS | tr " " "\n")
 CCMS_LIST="[\"\\\'$MAIN_CCM\\\'\","
-for OPT_CCM in $OPT_CCMS_ARRAY
+for OPT_CCM in $OPT_CCMS
 do
     CCMS_LIST="$CCMS_LIST\"\\\'$OPT_CCM\\\'\","
+
+	# Check if the node name equals current CCM -> this node is a CCM
+	if [[ $NODE_NAME == $OPT_CCM ]]; then
+		NODE_TYPE="ccm"
+	fi
 done
 CCMS_LIST="${CCMS_LIST%?}]"
 
@@ -202,9 +274,8 @@ if [[ $DB_NODES == "-no_param" ]]; then
 fi
 
 # And turn them into a formatted list
-DB_NODES_ARRAY=$(echo $DB_NODES | tr " " "\n")
 DB_NODES_LIST="["
-for DB_NODE in $DB_NODES_ARRAY
+for DB_NODE in $DB_NODES
 do
     DB_NODES_LIST="$DB_NODES_LIST\"\\\'$DB_NODE\\\'\","
 done
@@ -215,7 +286,7 @@ DB_NODES_LIST="${DB_NODES_LIST%?}]"
 # PUT CONFIGURATION INTO 'VM.ARGS' AND 'SYS.CONFIG'
 
 echo " "
-echo "==========================================================="
+echo "-------"
 echo "Applying configuration:"
 echo " "
 echo "NODE_NAME = $NODE_NAME"
@@ -243,12 +314,12 @@ sed -i "s/-veil_cluster_node db_nodes.*/-veil_cluster_node db_nodes $DB_NODES_LI
 # Remove config for distributed application from sys.config
 sed -n -i '1h;1!H;${;g;s/\[.*%% SASL/\n %% SASL/g;p;}' ../releases/$APP_VSN/sys.config
 
-# If this node is a ccm, create a proper entry
-if [ $NODE_TYPE == 'ccm' ]; then
+# If this node is a ccm and there is at least two of CCM nodes in the cluster, create a proper DA entry
+if [[ $NODE_TYPE == 'ccm' ]] && [[ $OPT_CCM != "" ]]; then
 
 	# Produce list of ccms: [main_ccm, {opt_ccm1, opt_ccm2...}]
 	CCM_HIERARCHY_LIST="['$MAIN_CCM', {"
-	for OPT_CCM in $OPT_CCMS_ARRAY
+	for OPT_CCM in $OPT_CCMS
 	do
 	    CCM_HIERARCHY_LIST="$CCM_HIERARCHY_LIST'$OPT_CCM',"
 	done
@@ -259,7 +330,7 @@ if [ $NODE_TYPE == 'ccm' ]; then
 	if [ $NODE_NAME != $MAIN_CCM ]; then
 		CCM_SYNC_LIST="['$MAIN_CCM', "
 	fi
-	for OPT_CCM in $OPT_CCMS_ARRAY
+	for OPT_CCM in $OPT_CCMS
 	do
 		if [ $NODE_NAME != $OPT_CCM ]; then
 	    	CCM_SYNC_LIST="$CCM_SYNC_LIST'$OPT_CCM', "
@@ -278,7 +349,7 @@ if [ $NODE_TYPE == 'ccm' ]; then
  },
  "
 
-# If this node is a worker, add only '[' that has been removed by sed
+# If this node is a worker or an only CCM, add only '[' that has been removed by sed
 else
 	DIST_APP_CFG="["
 fi
@@ -295,7 +366,7 @@ echo " "
 echo "Done."
 
 # Check for '-console' option (-console overrides -start)
-INDEX=`awk -v a="$*" -v b="-console" 'BEGIN{print index(a, b)}'`
+INDEX=`awk -v a=" $* " -v b=" -console " 'BEGIN{print index(a, b)}'`
 if [[ $INDEX -gt 0 ]]; then
 
 	# User requested starting the node with console
@@ -309,7 +380,7 @@ if [[ $INDEX -gt 0 ]]; then
 
 else
 	# Check for '-start' option
-	INDEX=`awk -v a="$*" -v b="-start" 'BEGIN{print index(a, b)}'`
+	INDEX=`awk -v a=" $* " -v b=" -start " 'BEGIN{print index(a, b)}'`
 	if [[ $INDEX -gt 0 ]]; then
 
 		# User requested starting the node
@@ -320,7 +391,7 @@ else
 		../bin/veil_cluster_node start
 		../bin/veil_cluster_node ping
 
-		# The node failed to start
+		# The node failed to start or is not responding to pings
         if [ $? -ne 0 ]; then
             echo ""
             echo "Error during start of the node or it doesn't respond to pings."

@@ -94,7 +94,6 @@ Setting parameters
 List of parameters that can be set:
 
     name       -> name of the node (erlang long name)
-    node_type  -> type of the node (ccm|worker); determines the role of the node
     main_ccm   -> main CCM name (of the cluster this node operates in)
     opt_ccms   -> list of optional CCMs (this parameter is not mandatory)
     db_nodes   -> list of DBMS nodes
@@ -113,6 +112,7 @@ NOTE:
 * "command line way" can specify any subset of parameters, for instance:
     * './apply_config' will cause the script to use all parameters from 'config.args'
     * './apply_config -name somename@host.net' will cause the script to use parameters from 'config.args' except node name
+    * './apply_config -opt_ccms' (no opt_ccms value specified) will override opt_ccms from 'config.args' with null value
 * (both) parameter order can be arbitrary
 * (both) multiple values (eg. DBMS nodes) are passed as a space-delimited list (eg. -db_nodes dbnode1@host.net dbnode2@host.net)
 * (both) parameter values can't contain spaces or hyphens
@@ -132,109 +132,96 @@ If none of these arguments occur, the script will terminate after setting up the
 Full example of usage
 ---------------------
 
-    ~$  ./apply_config -name mynode@host.net -node_type worker -console
+    ~$  ./apply_config -name mynode@host.net -main_ccm ccmnode@host.net -console
 
-Above command will configure the release according to 'config.args', except for name and node_type which will be modified
+Above command will configure the release according to 'config.args', except for name and main_ccm which will be modified
 corresponding to command line arguments. Then, the node will be started presenting to the user with an erlang shell.
 
 -------------------------------------------------------------------------------
 
 
-(development) Using Makefile to generate releases and test environments of veil cluster nodes
-=============================================================================================
+Development - using Makefile to generate single releases and test environments of veil cluster nodes
+====================================================================================================
 
 
 1. Generating and managing a single node release for development purposes
 -------------------------------------------------------------------------
 
-The script 'gen_dev' produces a vars.config file used in rebar. It is used in the process of release generation.
+The script 'gen_dev' generates a single node release for testing purposes. It uses 'apply_config' script to set the configuration.
 
 Every node (worker or CCM) requires information about all CCMs running in the cluster. Hence to generate release of
 a node it is required to specify the following set of arguments:
 
-    -name node_name@host -main_ccm main_ccm_node@host [-opt_ccm opt_ccm_node1@host opt_ccm_node2@host ...] -db_nodes db1@host db2@host
+    -name node_name@host -main_ccm main_ccm_node@host [-opt_ccms opt_ccm_node1@host opt_ccm_node2@host ...] -db_nodes db1@host db2@host
 
  - The expression after -name specifies the node for which the release will be generated. It can be one of CCMs listed later on.
  - The expression after -main_ccm specifies the node name of the main CCM.
- - The expression after -opt_ccm specifies the list of optional CCMs. These arguments are not mandatory.
+ - The expression after -opt_ccms specifies the list of optional CCMs. These arguments are not mandatory.
  - The expression after -db_nodes specifies the list of all DBMS nodes.
 
 The above argument string can be either placed in file 'gen_dev.args' located in the root directory or passed to Makefile.
 
+Optionally, one of following can be added to arguments:
+
+    -no_compile     -> skips code compilation straight to release generation
+    -no_generate    -> skips code compilation and release generation (creates a copy of existing release).
+
 #### Generating a release:
 
-    ~$  make release_config args="-name node_name@host -main_ccm main_ccm_node@host -opt_ccm opt_ccm_node1@host opt_ccm_node2@host -db_nodes db1@host db2@host"
+    ~$  make gen_test_node args="-name node_name@host -main_ccm main_ccm_node@host -opt_ccms opt_ccm_node1@host opt_ccm_node2@host -db_nodes db1@host db2@host"
 
-    ~$  make release_config_from_file
+    ~$  make gen_test_node_from_file
 
 After either of these operations, the release will be placed in releases/node_name, with all the environment variables set up.
 
 #### Starting and managing generated packages:
 
-    ~$  make start_config node="node_name"               -> starts the node called 'node_name' as a daemon
+    ~$  make start_node node="node_name"               -> starts the node called 'node_name' as a daemon
 
-    ~$  make node_attach node="node_name"                -> attaches to the running node called 'node_name' with an erlang shell
+    ~$  make attach_to_node node="node_name"           -> attaches to the running node called 'node_name' with an erlang shell
 
-    ~$  make start_config_console node="node_name"       -> combines the two above
-
-
-
-#### To produce a vars.config file without generation one can use:
-
-    ~$  make gen_config args="-name node_name@host -main_ccm main_ccm_node@host -opt_ccm opt_ccm_node1@host opt_ccm_node2@host -db_nodes db1@host db2@host"
-
-    ~$  make gen_config_from_file
-
-NOTE - this will change reltool.config accordingly to arguments and save the old version in old_reltool.config.
-After generation the old file should be restored, either manually or by using:
-
-    ~$  make gen_config_cleanup
-
-
-
-#### Another files that take part in vars.config creation are:
-     - vars/ccm_vars.config
-     - vars/worker_vars.config
-
-Those are strongly connected with the script itself. The script swaps strings starting with "$" with ones calculated
-from script arguments and thus creates the vars.config file. For a broader description consult these files.
-
+    ~$  make start_node_console node="node_name"       -> combines the two above
 
 
 2. Generating a local test environment
 --------------------------------------
 
-The script 'gen_test' simplifies setting up a bunch of cluster nodes for testing. It uses the functionalities listed above.
+The script 'gen_test' simplifies setting up a bunch of cluster nodes for testing. It uses both 'gen_dev' and 'apply_config' scripts.
 To generate a testing environment proper arguments must be passed to the script:
 
-    -worker worker1@host worker2@host ... -main_ccm main_ccm_node@host [-opt_ccm opt_ccm_node1@host opt_ccm_node2@host ...] -db_nodes db1@host db2@host
+    -workers worker1@host worker2@host ... -main_ccm main_ccm_node@host [-opt_ccms opt_ccm_node1@host opt_ccm_node2@host ...] -db_nodes db1@host db2@host
 
- - The expression after -worker specifies the list of workers in the cluster.
+ - The expression after -workers specifies the list of workers in the cluster.
  - The expression after -main_ccm specifies the node name of the main CCM.
- - The expression after -opt_ccm specifies the list of optional CCMs in the cluster (not mandatory).
+ - The expression after -opt_ccms specifies the list of optional CCMs in the cluster (not mandatory).
  - The expression after -db_nodes specifies the list of all DBMS nodes.
 
 Again, these arguments can be obtained from 'gen_test.args' or passed via args to Makefile.
 
-#### Possible usages:
+#### Generating releases for the whole cluster:
 
-    ~$  make gen_test_env args="-worker worker1@host -main_ccm main_ccm_node@host -opt_ccm opt_ccm_node1@host opt_ccm_node2@host -db_nodes db1@host db2@host"
+    ~$  make gen_test_env args="-workers worker1@host -main_ccm main_ccm_node@host -opt_ccms opt_ccm_node1@host opt_ccm_node2@host -db_nodes db1@host db2@host"
 
     ~$  make gen_test_env_from_file
 
 Both of these commands produce a release for each node in corresponding directories.
 
-#### Starting the whole cluster:
+#### Starting previously generated cluster:
 
-    ~$  make start_test_env args="-worker worker1@host -main_ccm main_ccm_node@host -opt_ccm opt_ccm_node1@host opt_ccm_node2@host -db_nodes db1@host db2@host"
+    ~$  make start_test_env args="-workers worker1@host -main_ccm main_ccm_node@host -opt_ccms opt_ccm_node1@host opt_ccm_node2@host -db_nodes db1@host db2@host"
 
     ~$  make start_test_env_from_file
 
 It is important that the same args are passed to Makefile or remain in the .args file. This is the way for the script
 to know which release packages need to be started.
 
-Every node can be started independently with use of 'start_config', 'node_attach' and 'start_config_console' make targets.
+#### Generating and immediately starting the whole cluster:
 
+    ~$  make gen_start_test_env args="-workers worker1@host -main_ccm main_ccm_node@host -opt_ccms opt_ccm_node1@host opt_ccm_node2@host -db_nodes db1@host db2@host"
+
+    ~$  make gen_start_test_env_from_file
+
+Every node can be started independently with use of 'start_node', 'attach_to_node' and 'start_node_console' make targets.
 
 
 

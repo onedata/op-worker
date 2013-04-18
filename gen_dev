@@ -1,161 +1,196 @@
 #!/bin/bash
 
-if [ $# -eq 1 ] && [ $1 == "-clean_up" ]; then
-	mv releases/old_reltool.config releases/reltool.config 2>/dev/null
-	mv releases/old_vars.config releases/vars.config 2>/dev/null
-	exit 0
-fi
+# Display usage help
+error_bad_args()
+{
+	echo "Usage:"
+	echo "variant 1: (argument order can be arbitrary)"
+	echo "	$0 -name node_name@host -main_ccm main_ccm_node@host [-opt_ccms opt_ccm_node1@host opt_ccm_node2@host ...] -db_nodes dbnode1@host dbnode2@host ..."
+	echo " "
+	echo "variant 2: (file 'gen_dev.args' with arguments present in script directory)"
+	echo "	$0"
+	echo " "
+	echo "Additional parameters: (acceptable in both variants)"
+	echo "-no_compile -> skip code compilation straight to release generation."
+	echo "-no_generate -> skip code compilation and release generation (creates a copy of existing release)."	
+	exit 1	
+}
 
-# Simple validation of arguments
-if [ $# -lt 4 ] || [ $1 != "-name" ] || [ $3 != "-main_ccm" ]; then
+# Function used to retrieve a parameter from script arguments. 
+# args: 
+# $1: <<script arguments>>   (arguments passed to the script; $*)
+# $2: <<token of desired parameter>>    (eg. '-main_ccm' to retrieve main ccm name)
+# $3: <<single|list>>      (expecting result as a single term or a list?)
+# 
+# The function starts reading parameters after ocurrence of desired token and continues for one word (single) or until it stumbles upon
+# another token starting with '-' or end of line (list)
+get_parameter_from_args()
+{
+	local ARGS=$1
+	local TOKEN=$2
+	local RETURN_OPTION=$3
 
-	# Check for .args file
-	if [ $# -eq 0 ] && [ -f gen_dev.args ]; then
-		ARGS=`cat gen_dev.args`
-		echo 'Using arguments from gen_dev.args'
-		./gen_dev $ARGS
-		exit 0
-	
-	# Invalid arguments or absence of .args file
+	# Find the occurence of desired token. If there isn't one, there was no parameter value specified = error. 
+	# Exception: -opt_ccms could have been left empty intentionally.
+	local INDEX=`awk -v a=" $ARGS " -v b=" $TOKEN " 'BEGIN{print index(a, b)}'`
+	if [[ $INDEX -eq 0 ]]; then
+		if [[ $TOKEN == '-opt_ccms' ]]; then
+			RESULT=""
+			return
+		else
+			echo " "
+			echo "Error: missing parameter"
+			echo "'$TOKEN' must occur in script arguments."
+			echo "Terminating."
+			echo " "
+			error_bad_args
+			exit 1
+		fi
+	fi
+
+	# Trim the arguments string so that it starts after the token
+	local ARGS=${ARGS:$(($INDEX + ${#TOKEN})):${#ARGS}}
+
+	# Find the next occurence of a hyphen 
+	INDEX=`awk -v a="$ARGS" -v b="-" 'BEGIN{print index(a, b)}'`
+
+	# If its zero, the ARGS variable holds the desired string. If not, cut off the part after the hyphen
+	if [[ $INDEX -gt 0 ]]; then
+		ARGS=${ARGS:0:$(($INDEX - 1))}
+	fi
+
+	# If the expected result is a single word, get the first one from remaining string. 
+	# This somehow resolves errors like passing a double word 'name' parameter.
+	if [[ $RETURN_OPTION == "single" ]]; then
+		ARGS=`echo $ARGS | cut -f1 -d' '`
 	else
-		echo "Usage:"
-		echo "	$0 -name node_name@host -main_ccm main_ccm_node@host [-opt_ccm opt_ccm_node1@host opt_ccm_node2@host ...] -db_nodes dbnode1@host dbnode2@host ..."
-		echo " "
-		echo "or:"
-		echo "	$0 (file 'gen_dev.args' containing arguments present in script directory)"
-		echo " "
-		echo "after rebar ./generate:"
-		echo "	$0 -clean_up (restores reltool.config to the original state)"
-		exit 1
+		ARGS=`echo $ARGS`          # trims spaces from the beginning of the list
+	fi
+
+	# If the result is empty, there was no parameter value specified = error. Exception: -opt_ccms could have been left empty intentionally.
+	if [[ $ARGS == "" ]]; then
+		if [[ $TOKEN == '-opt_ccms' ]]; then
+			RESULT=""
+			return
+		else
+			echo " "
+			echo "Error: missing parameter"
+			echo "'$TOKEN' must occur in script arguments."
+			echo "Terminating."
+			echo " "
+			error_bad_args
+			exit 1
+		fi
+	fi
+
+	# "return" the parameter(s)
+	RESULT=$ARGS
+}
+
+# Enter the script directory
+PATH_TO_SCRIPT=`echo $0 | sed "s/gen_dev//g"`
+cd $PATH_TO_SCRIPT
+
+# Accepting only no args, -no_compile or -no_generate and reading from file. Otherwise all args have to be passed via args
+if [[ $# -eq 0 ]] || 
+	[[ $# -eq 1  && $1 == "-no_compile" ]] || 
+	[[ $# -eq 1  && $1 == "-no_generate" ]]; then
+	# Check for .args file
+	if [[ -f gen_dev.args ]]; then
+		# Get args from 
+		ARGS=`cat gen_dev.args`
+		# And execute the script with the args from there
+		if [[ $1 == "" ]]; then
+			echo "Using arguments from gen_dev.args"
+		else
+			echo "Using arguments from gen_dev.args with $1 option"			
+		fi
+		./gen_dev $ARGS $1
+		exit 0
+	else
+		# Error; no args file
+		error_bad_args
 	fi
 fi
 
 
-# Variables with node name and main CCM name, initially this node is not a CCM node, string with CCM nodes initialized with main CCM
-NODE_NAME=$2
-AT_INDEX=`expr index "$2" @`
-NODE_NAME_WITHOUT_HOSTNAME=${NODE_NAME:0:(($AT_INDEX - 1))}
-MAIN_CCM_NAME=$4
-IS_THIS_CCM=0
-CCM_LIST="[\\\\\"\\\\\\\\'$MAIN_CCM_NAME\\\\\\\\'\\\\\""
+#####################################
+# GATHER ARGS
 
-# Get local IP address (used as cookie)
-IFCONFIG_LINE=`ifconfig | grep "inet addr:.*Bcast:"`
-COLON_INDEX=`expr index "$IFCONFIG_LINE" :`
-BCAST_INDEX=`expr index "$IFCONFIG_LINE" Bcast`
-COOKIE=${IFCONFIG_LINE:COLON_INDEX:((BCAST_INDEX - 2))}
+# Get node name from script args
+get_parameter_from_args "$*" -name single
+NODE_NAME=$RESULT
 
-# Check if this node is the main CCM node
-if [ $NODE_NAME == $MAIN_CCM_NAME ]; then
-	IS_THIS_CCM=1
-fi
+# Get main_ccm name from script args
+get_parameter_from_args "$*" -main_ccm single
+MAIN_CCM=$RESULT
 
-if [ $5 == "-opt_ccm" ]; then
-	# Create list of CCM node names and check if this node is one of CCMs, break when -db_nodes is stumbled upon
-	for (( INDEX=6; INDEX<=$#; INDEX++ ))
-	do
-		if [ "-db_nodes" == ${!INDEX} ]; then
-			DB_NODES_LIST_INDEX=$(($INDEX + 1))
-			break;
-		fi
+# Get opt_ccms from script args
+get_parameter_from_args "$*" -opt_ccms list
+OPT_CCMS=$RESULT
 
-		CCM_LIST="$CCM_LIST,\\\\\"\\\\\\\\'${!INDEX}\\\\\\\\'\\\\\""
-		if [ $NODE_NAME == ${!INDEX} ]; then
-			IS_THIS_CCM=1
-		fi
-	done
+# Get db_nodes from script args
+get_parameter_from_args "$*" -db_nodes list
+DB_NODES=$RESULT
+
+# Get short node name (without hostname)
+AT_INDEX=`expr index "$NODE_NAME" @`
+if [[ $AT_INDEX -gt 0 ]]; then
+	NODE_NAME_WITHOUT_HOSTNAME=${NODE_NAME:0:(($AT_INDEX - 1))}
 else
-	# No opt ccms, move to db nodes
-	DB_NODES_LIST_INDEX=6
+	NODE_NAME_WITHOUT_HOSTNAME=$NODE_NAME
 fi
-CCM_LIST="$CCM_LIST]"
 
-# Create list od DBMS nodes
-DB_NODES_LIST="[\\\\\"\\\\\\\\'${!DB_NODES_LIST_INDEX}\\\\\\\\'\\\\\""
-DB_NODES_LIST_INDEX=$(($DB_NODES_LIST_INDEX + 1))
-for (( INDEX=DB_NODES_LIST_INDEX; INDEX<=$#; INDEX++ ))
-do
-	DB_NODES_LIST="$DB_NODES_LIST,\\\\\"\\\\\\\\'${!INDEX}\\\\\\\\'\\\\\""
-done
-DB_NODES_LIST="$DB_NODES_LIST]"
+echo " "
+echo "========================================"
+echo "Generating release for $NODE_NAME in    /releases/$NODE_NAME_WITHOUT_HOSTNAME"
 
-# Store original vars.config and reltool.config to be able to restore them
-cp releases/vars.config releases/old_vars.config
-cp releases/reltool.config releases/old_reltool.config
+# Skip generation if -no_generate is in args
+INDEX=`awk -v a=" $* " -v b=" -no_generate " 'BEGIN{print index(a, b)}'`
+if [[ $INDEX -eq 0 ]]; then
 
-case $IS_THIS_CCM in
-	# This node is a worker
-	0)
-		# Produce a proper vars.config file from template
-		sed "s/\$CCM_LIST/$CCM_LIST/g; 
-			s/\$NODE_NAME/$NODE_NAME/g; 
-			s/\$DB_NODES_LIST/$DB_NODES_LIST/g; 
-			s/\$COOKIE/$COOKIE/g; 
-			/%%%/d" "releases/vars/worker_vars.config" > releases/vars.config
-		;;
+	# Skip compilation if -no_compile is in args
+	INDEX=`awk -v a=" $* " -v b=" -no_compile " 'BEGIN{print index(a, b)}'`
+	if [[ $INDEX -eq 0 ]]; then
+		# Compile the code
+		./rebar compile
+	fi
 
+	# Generate the release
+	./rebar generate
+else
+	# User requested to skip release generation
+	if [[ ! -d releases/veil_cluster_node ]]; then
+		echo "Error: no release found"
+		echo "Cannot skip release generation - no release package found."
+		echo "Try executing the script without -no_generate option."
+		echo "Terminating."
+		exit 1
+	fi
+fi
 
-	# This node is a CCM 
-	1)
-		# The list with two elements - main CCM name and tuple with optional CCMs
-		CCM_HIERARCHY_LIST="['$MAIN_CCM_NAME', {"
-		if [ $# -gt 5 ]; then
-			for (( INDEX=6; INDEX<=$#; INDEX++ ))
-			do
-				if [ "-db_nodes" == ${!INDEX} ]; then
-					break;
-				fi
+# Remove old release
+rm -r releases/$NODE_NAME_WITHOUT_HOSTNAME 2>/dev/null
 
-				CCM_HIERARCHY_LIST="$CCM_HIERARCHY_LIST'${!INDEX}'"
+# Copy the release package to proper location (directory named as the node without hostname), preserve mode
+cp -R -p releases/veil_cluster_node releases/$NODE_NAME_WITHOUT_HOSTNAME
 
-				NEXT=$((INDEX + 1))
-				if [ ${!NEXT} != "-db_nodes" ]; then
-					CCM_HIERARCHY_LIST="$CCM_HIERARCHY_LIST, "
-				fi
-			done
-		fi
-		CCM_HIERARCHY_LIST="$CCM_HIERARCHY_LIST}]"
+# Execute the apply_config script with proper arguments
+./releases/$NODE_NAME_WITHOUT_HOSTNAME/config/apply_config -name $NODE_NAME -main_ccm $MAIN_CCM -opt_ccms $OPT_CCMS -db_nodes $DB_NODES
 
-		# The list with CCMs to synchronize with, skip own node name
-		SYNC_CCM_LIST="["
-		if [ $NODE_NAME != $MAIN_CCM_NAME ]; then
-			if [ $7 == "-db_nodes" ]; then
-				SYNC_CCM_LIST="['$MAIN_CCM_NAME'"
-			else
-				SYNC_CCM_LIST="['$MAIN_CCM_NAME', "
-			fi
-		fi
-		if [ $# -gt 5 ]; then
-			for (( INDEX=6; INDEX<=$#; INDEX++ ))
-			do
-				if [ ${!INDEX} == "-db_nodes" ]; then
-					break;
-				fi
+# Get IP address to use it as the cookie
+IFCONFIG_LINE=`ifconfig | grep "inet addr:.*Bcast:"`
+COLON_INDEX=`awk -v a="$IFCONFIG_LINE" -v b=":" 'BEGIN{print index(a, b)}'`
+BCAST_INDEX=`awk -v a="$IFCONFIG_LINE" -v b="Bcast" 'BEGIN{print index(a, b)}'`
+COOKIE=${IFCONFIG_LINE:COLON_INDEX:((BCAST_INDEX - COLON_INDEX - 3))}
 
-				if [ ${!INDEX} != $NODE_NAME ]; then
-					SYNC_CCM_LIST="$SYNC_CCM_LIST'${!INDEX}'"
+# Get application version
+START_ERL=`cat releases/$NODE_NAME_WITHOUT_HOSTNAME/releases/start_erl.data`
+APP_VSN=${START_ERL#* }
 
-					NEXT=$((INDEX + 1))
-					if [ ${!NEXT} != $NODE_NAME ] && [ ${!NEXT} != "-db_nodes" ]; then
-						SYNC_CCM_LIST="$SYNC_CCM_LIST, "
-					fi
-				fi
-			done
-		fi
-		SYNC_CCM_LIST="$SYNC_CCM_LIST]"
+# Replace the cookie
+sed -i "s/-setcookie.*/-setcookie '$COOKIE'/g" releases/$NODE_NAME_WITHOUT_HOSTNAME/releases/$APP_VSN/vm.args
 
-		# produce a proper vars.config file from template
-		sed "s/\$CCM_HIERARCHY_LIST/$CCM_HIERARCHY_LIST/g; 
-			s/\$SYNC_CCM_LIST/$SYNC_CCM_LIST/g; 
-			s/\$CCM_LIST/$CCM_LIST/g; 
-			s/\$NODE_NAME/$NODE_NAME/g; 
-			s/\$DB_NODES_LIST/$DB_NODES_LIST/g; 
-			s/\$COOKIE/$COOKIE/g; 
-			/%%%/d" "releases/vars/ccm_vars.config" > releases/vars.config
-		;;
-esac
-
-# Change target dir in reltool.config
-sed -i "s/{target_dir,.*\\./{target_dir, \"$NODE_NAME_WITHOUT_HOSTNAME\"}./g" "releases/reltool.config"
+echo "Cookie set to: $COOKIE"
 
 exit 0
