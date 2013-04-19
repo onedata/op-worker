@@ -172,7 +172,7 @@ Optionally, one of following can be added to arguments:
 
     ~$  make gen_test_node_from_file
 
-After either of these operations, the release will be placed in releases/node_name, with all the environment variables set up.
+After either of these operations, the release will be placed in releases/test_cluster/node_name, with all the environment variables set up.
 
 #### Starting and managing generated packages:
 
@@ -181,6 +181,8 @@ After either of these operations, the release will be placed in releases/node_na
     ~$  make attach_to_node node="node_name"           -> attaches to the running node called 'node_name' with an erlang shell
 
     ~$  make start_node_console node="node_name"       -> combines the two above
+
+Note, that it only works for packages in releases/test_cluster/ - those created with 'gen_dev' or 'gen_test'
 
 
 2. Generating a local test environment

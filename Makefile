@@ -62,10 +62,10 @@ start_test_env_from_file:
 
 ### Starting a node
 start_node:
-	./releases/$(node)/bin/veil_cluster_node start
+	./releases/test_cluster/$(node)/bin/veil_cluster_node start
 
 attach_to_node:
-	./releases/$(node)/bin/veil_cluster_node attach
+	./releases/test_cluster/$(node)/bin/veil_cluster_node attach
 
 start_node_console:
-	./releases/$(node)/bin/veil_cluster_node console
+	./releases/test_cluster/$(node)/bin/veil_cluster_node console
