@@ -33,8 +33,8 @@ save_state() ->
     true = meck:validate(dao).
 
 get_state() ->
-    meck:expect(dao, get_record, fun(cluster_state) -> #some_record{} end),
-    #some_record{} = dao_cluster:get_state(),
+    meck:expect(dao, get_record, fun(cluster_state) -> {ok, #some_record{}} end),
+    {ok, #some_record{}} = dao_cluster:get_state(),
     true = meck:validate(dao).
 
 clear_state() ->

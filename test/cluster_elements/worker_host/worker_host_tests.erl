@@ -21,11 +21,34 @@
 -ifdef(TEST).
 
 %% ====================================================================
-%% Test functions
+%% Test setup and teardown
+%% ====================================================================
+
+setup() ->
+  lager:start(),
+  ssl:start(),
+  ok = application:start(ranch).
+
+teardown(_Args) ->
+  ok = application:stop(ranch).
+
+%% ====================================================================
+%% Test generation
+%% ====================================================================
+
+generate_test_() ->
+  {setup,
+    fun setup/0,
+    fun teardown/1,
+    [?_test(wrong_request()),
+      ?_test(load_info_storing())]}.
+
+%% ====================================================================
+%% Functions used by tests
 %% ====================================================================
 
 %% This test checks if worker_host is resistant to incorrect requests.
-wrong_request_test() ->
+wrong_request() ->
 	application:set_env(?APP_Name, node_type, worker), 
 	ok = application:start(?APP_Name),
 
@@ -41,7 +64,7 @@ wrong_request_test() ->
 %% plug-in (veil module) to process requests. The tests checks not only if this
 %% information is stored but also verifies if old information is correctly deleted
 %% (to provide only latest data to ccm).
-load_info_storing_test() ->
+load_info_storing() ->
 	ClientsNum = 50,
 	application:set_env(?APP_Name, node_type, worker), 
 	ok = application:start(?APP_Name),

@@ -64,13 +64,20 @@ init(_Args) ->
 %% E.g. calling handle(_, {save_record, [Id, Rec]}) will execute dao_cluster:save_record(Id, Rec) and normalize return value.
 %% @end
 -spec handle(ProtocolVersion :: term(), Request) -> Result when
-    Request :: {Method, Args} | {Mod :: atom(), Method, Args},
+    Request :: {Method, Args} | {Mod :: atom(), Method, Args} | ping | get_version,
     Method :: atom(),
     Args :: list(),
-    Result :: ok | {ok, Response} | {error, Error},
+    Result :: ok | {ok, Response} | {error, Error} | pong | Version,
     Response :: term(),
+    Version :: term(),
     Error :: term().
 %% ====================================================================
+handle(_ProtocolVersion, ping) ->
+  pong;
+
+handle(_ProtocolVersion, get_version) ->
+  1;
+
 handle(_ProtocolVersion, {Target, Method, Args}) when is_atom(Target), is_atom(Method), is_list(Args) ->
     Module =
         case Target of
@@ -177,7 +184,7 @@ save_record(Rec) when is_tuple(Rec) ->
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec get_record(Id :: atom() | string()) ->
-    Record :: tuple() |
+    {ok, Record :: tuple()} |
     {error, Error :: term()} |
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
@@ -187,7 +194,7 @@ get_record(Id) when is_list(Id) ->
     case dao_helper:open_doc(?SYSTEM_DB_NAME, Id) of
         {ok, #doc{body = Body}} ->
             try doc_to_term(Body) of
-                Term -> Term
+                Term -> {ok, Term}
             catch
                 _:Err -> {error, {invalid_document, Err}}
             end;
@@ -249,6 +256,8 @@ term_to_doc(Field) when is_number(Field) ->
     Field;
 term_to_doc(Field) when is_boolean(Field); Field =:= null ->
     Field;
+term_to_doc(Field) when is_pid(Field) ->
+    list_to_binary(?RECORD_FIELD_PID_PREFIX ++ pid_to_list(Field));
 term_to_doc(Field) when is_binary(Field) ->
     <<<<?RECORD_FIELD_BINARY_PREFIX>>/binary, Field/binary>>;   %% Binary is saved as string, so we add a prefix
 term_to_doc(Field) when is_list(Field) ->
@@ -279,7 +288,9 @@ term_to_doc(Field) when is_tuple(Field) ->
             end
         end,
     {_, {Ret}} = lists:foldl(FoldFun, {1, InitObj}, LField),
-    {lists:reverse(Ret)}.
+    {lists:reverse(Ret)};
+term_to_doc(Field) ->
+    throw({unsupported_field, Field}).
 
 
 %% doc_to_term/1
@@ -296,9 +307,11 @@ doc_to_term(Field) when is_binary(Field) -> %% Binary type means that it is atom
     SField = binary_to_list(Field),         %% Prefix tells us which type is it
     BinPref = string:str(SField, ?RECORD_FIELD_BINARY_PREFIX),
     AtomPref = string:str(SField, ?RECORD_FIELD_ATOM_PREFIX),
+    PidPref = string:str(SField, ?RECORD_FIELD_PID_PREFIX),
     if
         BinPref == 1 -> list_to_binary(string:sub_string(SField, length(?RECORD_FIELD_BINARY_PREFIX) + 1));
         AtomPref == 1 -> list_to_atom(string:sub_string(SField, length(?RECORD_FIELD_ATOM_PREFIX) + 1));
+        PidPref == 1 -> list_to_pid(string:sub_string(SField, length(?RECORD_FIELD_PID_PREFIX) + 1));
         true -> SField
     end;
 doc_to_term(Field) when is_list(Field) ->

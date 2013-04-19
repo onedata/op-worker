@@ -19,7 +19,7 @@
 -endif.
 
 %% API
--export([start_link/0, start_link/1, insert/1, delete/1, ban/1, ban/2, reactivate/1, call/2, call/3]).
+-export([start_link/0, start_link/1, insert/1, delete/1, ban/1, ban/2, reactivate/1, call/2, call/3, store_loop/1]).
 
 %% supervisor callbacks
 -export([init/1]).
@@ -55,7 +55,8 @@ start_link() ->
 %% ====================================================================
 start_link(_Args) ->
     Pid = spawn_link(fun() -> init() end),
-    {ok, Pid}.
+    Pid ! {self(), force_update},
+    receive {Pid, ok} -> {ok, Pid} after 2000 -> {error, proc_timeout} end.
 
 %% insert/1
 %% ====================================================================
@@ -185,6 +186,7 @@ store_loop(State) ->
     NewState = update_hosts(State, timer:now_diff(erlang:now(), State)),
     receive
         {From, force_update} ->
+            update_hosts(NewState, ?DAO_DB_HOSTS_REFRESH_INTERVAL + 1),
             From ! {self(), ok};
         {From, {insert_host, Host}} ->
             ets:insert(db_host_store, {host, Host}),
@@ -216,7 +218,7 @@ store_loop(State) ->
     after ?DAO_DB_HOSTS_REFRESH_INTERVAL ->
         ok
     end,
-    store_loop(NewState).
+    ?MODULE:store_loop(NewState).
 
 
 %% registered/1

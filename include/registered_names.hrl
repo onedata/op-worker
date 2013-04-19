@@ -24,3 +24,7 @@
 %% Local name (name and node is used to identify it) of supervisor that 
 %% coordinates application at each node (one supervisor per node).
 -define(Supervisor_Name, sup_name).
+
+%% Local name (name and node is used to identify it) of gen_server that
+%% works as a dispatcher.
+-define(Dispatcher_Name, request_dispatcher).

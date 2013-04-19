@@ -1,5 +1,15 @@
-%% @author Michal
-%% @doc @todo Add description to worker_host.
+%% ===================================================================
+%% @author Michal Wrzeszcz
+%% @copyright (C): 2013 ACK CYFRONET AGH
+%% This software is released under the MIT license
+%% cited in 'LICENSE.txt'.
+%% @end
+%% ===================================================================
+%% @doc: This module hosts all VeilFS modules (fslogic, cluster_rengin etc.).
+%% It makes it easy to manage modules and provides some basic functionality
+%% for its plug-ins (VeilFS modules) e.g. requests management.
+%% @end
+%% ===================================================================
 
 -module(worker_host).
 -behaviour(gen_server).
@@ -89,6 +99,11 @@ handle_call(clearLoadInfo, _From, State) ->
     Reply = ok,
     {reply, Reply, State#host_state{load_info = {[], [], 0, Max}}};
 
+handle_call({test_call, ProtocolVersion, Msg}, _From, State) ->
+  PlugIn = State#host_state.plug_in,
+  Reply = PlugIn:handle(ProtocolVersion, Msg),
+  {reply, Reply, State};
+
 handle_call(_Request, _From, State) ->
     {reply, wrong_request, State}.
 
@@ -103,9 +118,9 @@ handle_call(_Request, _From, State) ->
 	NewState :: term(),
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_cast({synch, ProtocolVersion, Msg, MsgId, ReplyDisp}, State) ->
+handle_cast({synch, ProtocolVersion, Msg, MsgId, ReplyTo}, State) ->
 	PlugIn = State#host_state.plug_in,
-	spawn(fun() -> proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyDisp) end),	
+	spawn(fun() -> proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) end),
 	{noreply, State};
 
 handle_cast({asynch, ProtocolVersion, Msg}, State) ->
@@ -173,28 +188,24 @@ code_change(_OldVsn, State, _Extra) ->
 -spec proc_request(PlugIn :: atom(), ProtocolVersion :: integer(), Msg :: term(), MsgId :: integer(), ReplyDisp :: term()) -> Result when
 	Result ::  atom(). 
 %% ====================================================================
-proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyDisp) ->
+proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
 	{Megaseconds,Seconds,Microseconds} = os:timestamp(),
 	Response = 	try
 		PlugIn:handle(ProtocolVersion, Msg)
 	catch
 		_:_ -> wrongTask
 	end,
-	
-	case ReplyDisp of
+
+	case ReplyTo of
 		non -> ok;
-		Disp -> gen_server:cast(Disp, {worker_answer, MsgId, Response})
+    {gen_serv, Disp} -> gen_server:cast(Disp, {worker_answer, MsgId, Response});
+    {proc, Pid} -> Pid ! Response;
+    Other -> lagger:error([{mod, ?MODULE}], "Wrong reply type: ~s", [Other])
 	end,
 	
 	{Megaseconds2,Seconds2,Microseconds2} = os:timestamp(),
 	Time = 1000000*1000000*(Megaseconds2-Megaseconds) + 1000000*(Seconds2-Seconds) + Microseconds2-Microseconds,
-
-	try
-		gen_server:cast(PlugIn, {progress_report, {{Megaseconds,Seconds,Microseconds}, Time}}),
-		ok
-	catch
-		_:_ -> worker_host_error
-	end.
+	gen_server:cast(PlugIn, {progress_report, {{Megaseconds,Seconds,Microseconds}, Time}}).
 
 %% save_progress/2
 %% ====================================================================
