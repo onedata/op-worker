@@ -19,7 +19,7 @@ test: deps compile
 
 generate: compile
 	./rebar generate
-	chmod u+x ./releases/veil_cluster_node/config/apply_config
+	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster
 	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster_node
 
 docs:

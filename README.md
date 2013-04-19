@@ -78,15 +78,15 @@ Note:
 Deploying a release
 ===================
 
-After generation of a release package, configuration files contain default parameters. The script 'apply_config', that
-comes with the package (in directory 'config') is used to set up and start a release.
+After generation of a release package, configuration files contain default parameters. The script 'veil_cluster', that
+comes with the package (in directory 'bin') is used to set up and start a release.
 
 Prerequisites
 -------------
 
-Firstly, the user must have execution rights on both '/config/apply_config' and '/bin/veil_cluster_node' scripts.
+Firstly, the user must have execution rights on both '/bin/veil_cluster' and '/bin/veil_cluster_node' scripts.
 
-Secondly, 'config.args' file must be present in 'config' directory (along with 'apply_config' script).
+Secondly, 'config.args' file must be present in 'config' directory (along with 'veil_cluster' script).
 
 Setting parameters
 ------------------
@@ -104,15 +104,15 @@ Primarily, these parameters are retrieved from 'config.args' file. It should con
 
 Another way is passing these parameters via command line arguments. In this case the syntax is:
 
-    ./apply_config -<parameter1_name> <parameter1_value> -<parameter2_name> <parameter2_value> ...
+    ./veil_cluster -<parameter1_name> <parameter1_value> -<parameter2_name> <parameter2_value> ...
 
 NOTE:
 
 * parameters passed via command line OVERRIDE those in 'config.args' file
 * "command line way" can specify any subset of parameters, for instance:
-    * './apply_config' will cause the script to use all parameters from 'config.args'
-    * './apply_config -name somename@host.net' will cause the script to use parameters from 'config.args' except node name
-    * './apply_config -opt_ccms' (no opt_ccms value specified) will override opt_ccms from 'config.args' with null value
+    * './veil_cluster' will cause the script to use all parameters from 'config.args'
+    * './veil_cluster -name somename@host.net' will cause the script to use parameters from 'config.args' except node name
+    * './veil_cluster -opt_ccms' (no opt_ccms value specified) will override opt_ccms from 'config.args' with null value
 * (both) parameter order can be arbitrary
 * (both) multiple values (eg. DBMS nodes) are passed as a space-delimited list (eg. -db_nodes dbnode1@host.net dbnode2@host.net)
 * (both) parameter values can't contain spaces or hyphens
@@ -121,7 +121,7 @@ NOTE:
 Starting a release
 ------------------
 
-There are three options which are used to start a release. They are passed along with other arguments to the 'apply_config' script.
+There are three options which are used to start a release. They are passed along with other arguments to the 'veil_cluster' script.
 
     -start    -> the script will perform the configuration and then start the node as a daemon
     -attach   -> the script will skip configuration and try to attach to a running node with an erlang shell (used after -start)
@@ -132,7 +132,7 @@ If none of these arguments occur, the script will terminate after setting up the
 Full example of usage
 ---------------------
 
-    ~$  ./apply_config -name mynode@host.net -main_ccm ccmnode@host.net -console
+    ~$  ./veil_cluster -name mynode@host.net -main_ccm ccmnode@host.net -console
 
 Above command will configure the release according to 'config.args', except for name and main_ccm which will be modified
 corresponding to command line arguments. Then, the node will be started presenting to the user with an erlang shell.
@@ -147,7 +147,7 @@ Development - using Makefile to generate single releases and test environments o
 1. Generating and managing a single node release for development purposes
 -------------------------------------------------------------------------
 
-The script 'gen_dev' generates a single node release for testing purposes. It uses 'apply_config' script to set the configuration.
+The script 'gen_dev' generates a single node release for testing purposes. It uses 'veil_cluster' script to set the configuration.
 
 Every node (worker or CCM) requires information about all CCMs running in the cluster. Hence to generate release of
 a node it is required to specify the following set of arguments:
@@ -186,7 +186,7 @@ After either of these operations, the release will be placed in releases/node_na
 2. Generating a local test environment
 --------------------------------------
 
-The script 'gen_test' simplifies setting up a bunch of cluster nodes for testing. It uses both 'gen_dev' and 'apply_config' scripts.
+The script 'gen_test' simplifies setting up a bunch of cluster nodes for testing. It uses both 'gen_dev' and 'veil_cluster' scripts.
 To generate a testing environment proper arguments must be passed to the script:
 
     -workers worker1@host worker2@host ... -main_ccm main_ccm_node@host [-opt_ccms opt_ccm_node1@host opt_ccm_node2@host ...] -db_nodes db1@host db2@host
@@ -204,7 +204,7 @@ Again, these arguments can be obtained from 'gen_test.args' or passed via args t
 
     ~$  make gen_test_env_from_file
 
-Both of these commands produce a release for each node in corresponding directories.
+Both of these commands produce a release for each node in corresponding directories (/releases/test_cluster/).
 
 #### Starting previously generated cluster:
 

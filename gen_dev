@@ -88,7 +88,7 @@ get_parameter_from_args()
 }
 
 # Enter the script directory
-PATH_TO_SCRIPT=`echo $0 | sed "s/gen_dev//g"`
+PATH_TO_SCRIPT=`echo $0 | sed "s/gen_dev$//g"`
 cd $PATH_TO_SCRIPT
 
 # Accepting only no args, -no_compile or -no_generate and reading from file. Otherwise all args have to be passed via args
@@ -143,7 +143,7 @@ fi
 
 echo " "
 echo "========================================"
-echo "Generating release for $NODE_NAME in    /releases/$NODE_NAME_WITHOUT_HOSTNAME"
+echo "Generating release for $NODE_NAME in    /releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME"
 
 # Skip generation if -no_generate is in args
 INDEX=`awk -v a=" $* " -v b=" -no_generate " 'BEGIN{print index(a, b)}'`
@@ -154,12 +154,24 @@ if [[ $INDEX -eq 0 ]]; then
 	if [[ $INDEX -eq 0 ]]; then
 		# Compile the code
 		./rebar compile
+		if [ $? -ne 0 ]; then
+	        echo ""
+	        echo "Error during code compilation."
+	        echo "Terminating."
+	        exit 1
+	    fi
 	fi
 
 	# Generate the release
 	./rebar generate
+	if [ $? -ne 0 ]; then
+        echo ""
+        echo "Error during release generation."
+        echo "Terminating."
+        exit 1
+    fi
 	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster_node
-	chmod u+x ./releases/veil_cluster_node/config/apply_config	
+	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster	
 else
 	# User requested to skip release generation
 	if [[ ! -d releases/veil_cluster_node ]]; then
@@ -172,13 +184,16 @@ else
 fi
 
 # Remove old release
-rm -r releases/$NODE_NAME_WITHOUT_HOSTNAME 2>/dev/null
+rm -r releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME 2>/dev/null
+
+# Create directory for test nodes if it doesn't exit
+mkdir -p releases/test_cluster
 
 # Copy the release package to proper location (directory named as the node without hostname), preserve mode
-cp -R -p releases/veil_cluster_node releases/$NODE_NAME_WITHOUT_HOSTNAME
+cp -R -p releases/veil_cluster_node releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME
 
-# Execute the apply_config script with proper arguments
-./releases/$NODE_NAME_WITHOUT_HOSTNAME/config/apply_config -name $NODE_NAME -main_ccm $MAIN_CCM -opt_ccms $OPT_CCMS -db_nodes $DB_NODES
+# Execute the veil_cluster script with proper arguments
+./releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME/bin/veil_cluster -name $NODE_NAME -main_ccm $MAIN_CCM -opt_ccms $OPT_CCMS -db_nodes $DB_NODES
 
 # Get IP address to use it as the cookie
 IFCONFIG_LINE=`ifconfig | grep "inet addr:.*Bcast:"`
@@ -187,11 +202,11 @@ BCAST_INDEX=`awk -v a="$IFCONFIG_LINE" -v b="Bcast" 'BEGIN{print index(a, b)}'`
 COOKIE=${IFCONFIG_LINE:COLON_INDEX:((BCAST_INDEX - COLON_INDEX - 3))}
 
 # Get application version
-START_ERL=`cat releases/$NODE_NAME_WITHOUT_HOSTNAME/releases/start_erl.data`
+START_ERL=`cat releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME/releases/start_erl.data`
 APP_VSN=${START_ERL#* }
 
 # Replace the cookie
-sed -i "s/-setcookie.*/-setcookie '$COOKIE'/g" releases/$NODE_NAME_WITHOUT_HOSTNAME/releases/$APP_VSN/vm.args
+sed -i "s/-setcookie.*/-setcookie '$COOKIE'/g" releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME/releases/$APP_VSN/vm.args
 
 echo "Cookie set to: $COOKIE"
 

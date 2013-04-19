@@ -6,9 +6,9 @@ display_help()
 Prerequisites
 -------------
 
-Firstly, the user must have execution rights on both '/config/apply_config' and '/bin/veil_cluster_node' scripts.
+Firstly, the user must have execution rights on both '/bin/veil_cluster' and '/bin/veil_cluster_node' scripts.
 
-Secondly, 'config.args' file must be present in 'config' directory (along with 'apply_config' script).
+Secondly, 'config.args' file must be present in 'bin' directory (along with 'veil_cluster' script).
 
 Setting parameters
 ------------------
@@ -26,15 +26,15 @@ Primarily, these parameters are retrieved from 'config.args' file. It should con
 
 Another way is passing these parameters via command line arguments. In this case the syntax is:
 
-    ./apply_config -<parameter1_name> <parameter1_value> -<parameter2_name> <parameter2_value> ...
+    ./veil_cluster -<parameter1_name> <parameter1_value> -<parameter2_name> <parameter2_value> ...
 
 NOTE:
 
 * parameters passed via command line OVERRIDE those in 'config.args' file
 * \"command line way\" can specify any subset of parameters, for instance:
-    * './apply_config' will cause the script to use all parameters from 'config.args'
-    * './apply_config -name somename@host.net' will cause the script to use parameters from 'config.args' except node name
-    * './apply_config -opt_ccms' (no opt_ccms value specified) will override opt_ccms from 'config.args' with null value
+    * './veil_cluster' will cause the script to use all parameters from 'config.args'
+    * './veil_cluster -name somename@host.net' will cause the script to use parameters from 'config.args' except node name
+    * './veil_cluster -opt_ccms' (no opt_ccms value specified) will override opt_ccms from 'config.args' with null value
 * (both) parameter order can be arbitrary
 * (both) multiple values (eg. DBMS nodes) are passed as a space-delimited list (eg. -db_nodes dbnode1@host.net dbnode2@host.net)
 * (both) parameter values can't contain spaces or hyphens
@@ -43,7 +43,7 @@ NOTE:
 Starting a release
 ------------------
 
-There are three options which are used to start a release. They are passed along with other arguments to the 'apply_config' script.
+There are three options which are used to start a release. They are passed along with other arguments to the 'veil_cluster' script.
 
     -start    -> the script will perform the configuration and then start the node as a daemon
     -attach   -> the script will skip configuration and try to attach to a running node with an erlang shell (used after -start)
@@ -54,7 +54,7 @@ If none of these arguments occur, the script will terminate after setting up the
 Full example of usage
 ---------------------
 
-    ~$  ./apply_config -name mynode@host.net -main_ccm ccmnode@host.net -console
+    ~$  ./veil_cluster -name mynode@host.net -main_ccm ccmnode@host.net -console
 
 Above command will configure the release according to 'config.args', except for name and main_ccm which will be modified
 corresponding to command line arguments. Then, the node will be started presenting to the user with an erlang shell."
@@ -141,7 +141,7 @@ get_parameter_from_file()
 		echo "Terminating."
 		echo " "
 		echo "for usage help, type:"
-		echo "	~$ ./apply_config -help "
+		echo "	~$ ./veil_cluster -help "
 		exit 1
 	fi
 }
@@ -153,7 +153,7 @@ if [[ $INDEX -gt 0 ]]; then
 fi
 
 # Enter the script directory
-PATH_TO_SCRIPT=`echo $0 | sed "s/apply_config//g"`
+PATH_TO_SCRIPT=`echo $0 | sed "s/veil_cluster$//g"`
 cd $PATH_TO_SCRIPT
 
 # Ensure config file exists
@@ -164,7 +164,7 @@ if [ ! -f config.args ]; then
 	echo "Terminating."
 	echo " "
 	echo "for usage help, type:"
-	echo "	~$ ./apply_config -help "
+	echo "	~$ ./veil_cluster -help "
 	exit 1
 fi
 

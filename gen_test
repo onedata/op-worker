@@ -89,7 +89,7 @@ get_parameter_from_args()
 
 
 # Enter the script directory
-PATH_TO_SCRIPT=`echo $0 | sed "s/gen_test//g"`
+PATH_TO_SCRIPT=`echo $0 | sed "s/gen_test$//g"`
 cd $PATH_TO_SCRIPT
 
 # Accepting only no args, -start or -start_no_generate and reading from file. Otherwise all args have to be passed via args
@@ -148,9 +148,21 @@ if [[ $INDEX -eq 0 ]]; then
 
 	# Compile the code and generate the release (it's needed only once, then the package will be copied proper amount of times)
 	./rebar compile
-	./rebar generate
+	if [ $? -ne 0 ]; then
+        echo ""
+        echo "Error during code compilation."
+        echo "Terminating."
+        exit 1
+    fi
+	./rebar generate	
+	if [ $? -ne 0 ]; then
+        echo ""
+        echo "Error during release generation."
+        echo "Terminating."
+        exit 1
+    fi
 	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster_node
-	chmod u+x ./releases/veil_cluster_node/config/apply_config	
+	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster	
 
 	# Generate releases for all nodes
 	ALL_NODES="$WORKERS $MAIN_CCM $OPT_CCMS"
@@ -195,7 +207,7 @@ if [[ $DO_START -eq 1 ]]; then
 		fi
 
 		echo "Starting node: $NODE_NAME_WITHOUT_HOSTNAME..."
-		./releases/$NODE_NAME_WITHOUT_HOSTNAME/bin/veil_cluster_node start
+		./releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME/bin/veil_cluster_node start
         if [ $? -ne 0 ]; then
             echo ""
             echo "Error during start of node $NODE_NAME_WITHOUT_HOSTNAME. Is the test environment ready?"
