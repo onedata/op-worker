@@ -16,7 +16,12 @@
   {registered, []},
   {applications, [
                   kernel,
-                  stdlib
+                  stdlib,
+                  lager,
+                  crypto,
+                  public_key,
+                  ssl,
+                  ranch
                  ]},
   {mod, {veil_cluster_node_app, []}},
   {env, [
@@ -32,7 +37,17 @@
   		{heart_beat, 60},
   		%% List of ccm possible ccm nodes
   		{ccm_nodes, [node1@localhost]},
-        %% List of all DBMS nodes
-        {db_nodes, [db1@localhost]}
+      %% List of all DBMS nodes
+      {db_nodes, [db1@localhost]},
+      %% number of threads used by dispatcher
+      {dispatcher_pool_size, 100},
+      %% number of port used by dispatcher
+      {dispatcher_port, 5555},
+      %% time in ms after witch ranch kills thread that does nothing
+      {ranch_timeout, 5000},
+      %% time in ms after witch ranch answers with error
+      {dispatcher_timeout, 2000},
+      %% path to certificate used by ranch_ssl
+      {ssl_cert_path, "./veilfs.pem"}
   		]}
  ]}.

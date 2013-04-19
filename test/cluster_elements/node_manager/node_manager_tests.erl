@@ -20,18 +20,43 @@
 -ifdef(TEST).
 
 %% ====================================================================
-%% Test functions
+%% Test setup and teardown
+%% ====================================================================
+
+setup() ->
+  lager:start(),
+  ssl:start(),
+  ok = application:start(ranch).
+
+teardown(_Args) ->
+  ok = application:stop(ranch).
+
+%% ====================================================================
+%% Test generation
+%% ====================================================================
+
+generate_test_() ->
+  {setup,
+    fun setup/0,
+    fun teardown/1,
+    [?_test(env()),
+      ?_test(wrong_request()),
+      ?_test(node_type()),
+      ?_test(heart_beat())]}.
+
+%% ====================================================================
+%% Functions used by tests
 %% ====================================================================
 
 %% This test checks if all environment variables needed by node_manager are defined.
-env_test() -> 
+env() ->
 	ok = application:start(?APP_Name),
 	{ok, _Time} = application:get_env(?APP_Name, heart_beat),
 	{ok, _Nodes} = application:get_env(?APP_Name, ccm_nodes),
 	ok = application:stop(?APP_Name).
 
 %% This test checks if node_manager is resistant to incorrect requests.
-wrong_request_test() ->
+wrong_request() ->
 	application:set_env(?APP_Name, node_type, worker), 
 	ok = application:start(?APP_Name),
 
@@ -42,7 +67,7 @@ wrong_request_test() ->
 	ok = application:stop(?APP_Name).
 
 %% This test checks if node_manager is able to properly identify type of node which it coordinates.
-node_type_test() ->
+node_type() ->
 	{ok, NodeType} = application:get_env(?APP_Name, node_type),
 	ok = application:start(?APP_Name),
 	NodeType2 = gen_server:call(?Node_Manager_Name, getNodeType),
@@ -50,7 +75,7 @@ node_type_test() ->
 	ok = application:stop(?APP_Name).
 
 %% This test checks if node manager is able to register in ccm.
-heart_beat_test() ->
+heart_beat() ->
 	net_kernel:start([node1, shortnames]),
 
 	application:set_env(?APP_Name, node_type, worker),

@@ -121,6 +121,9 @@ handle_call(get_state_num, _From, State) ->
 handle_call(get_nodes, _From, State) ->
   {reply, State#cm_state.nodes, State};
 
+handle_call(get_workers, _From, State) ->
+  {reply, {get_workers_list(State), State#cm_state.state_num}, State};
+
 handle_call(get_state, _From, State) ->
   {reply, State, State};
 
@@ -270,6 +273,13 @@ init_cluster(State) ->
   plan_next_cluster_state_check(),
   NewState3.
 
+%% init_cluster_nodes_dominance/6
+%% ====================================================================
+%% @doc Chooses node for workers when there are more nodes than workers.
+-spec init_cluster_nodes_dominance(State :: term(), Nodes :: list(), Jobs1 :: list(),
+    Jobs2 :: list(), Args1 :: list(), Args2 :: list()) -> NewState when
+  NewState ::  term().
+%% ====================================================================
 init_cluster_nodes_dominance(State, [], _Jobs1, _Jobs2, _Args1, _Args2) ->
   State;
 init_cluster_nodes_dominance(State, Nodes, [], Jobs2, [], Args2) ->
@@ -278,6 +288,13 @@ init_cluster_nodes_dominance(State, [N | Nodes], [J | Jobs1], Jobs2, [A | Args1]
   {_Ans, NewState} = start_worker(N, J, A, State),
   init_cluster_nodes_dominance(NewState, Nodes, Jobs1, [J | Jobs2], Args1, [A | Args2]).
 
+%% init_cluster_jobs_dominance/5
+%% ====================================================================
+%% @doc Chooses node for workers when there are more workers than nodes.
+-spec init_cluster_jobs_dominance(State :: term(), Jobs :: list(),
+    Args :: list(), Nodes1 :: list(), Nodes2 :: list()) -> NewState when
+  NewState ::  term().
+%% ====================================================================
 init_cluster_jobs_dominance(State, [], [], _Nodes1, _Nodes2) ->
   State;
 init_cluster_jobs_dominance(State, Jobs, Args, [], Nodes2) ->
@@ -293,6 +310,7 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
 -spec check_cluster_state(State :: term()) -> NewState when
   NewState ::  term().
 %% ====================================================================
+%% TODO zaproponować algorytm
 check_cluster_state(State) ->
   plan_next_cluster_state_check(),
   State.
@@ -400,6 +418,7 @@ add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
   case Id of
     node_manager -> add_children(Node, Children, Workers);
     cluster_manager -> add_children(Node, Children, Workers);
+    request_dispatcher -> add_children(Node, Children, Workers);
     _Other -> [{Node, Id, ChildPid} | add_children(Node, Children, Workers)]
   end.
 
@@ -486,7 +505,7 @@ get_state_from_db(State) ->
   {Ans, NewState} = start_worker(node(), dao, [], State),
   NewState2 = case Ans of
     ok ->
-      gen_server:cast(dao, {synch, 1, {get_state, []}, cluster_state, {global, ?CCM}}),
+      gen_server:cast(dao, {synch, 1, {get_state, []}, cluster_state, {gen_serv, {global, ?CCM}}}),
       increase_state_num(NewState);
     error -> NewState
   end,
@@ -537,6 +556,19 @@ merge_state(State, SavedState) ->
   save_state(MergedState2),
   MergedState2.
 
+%% get_workers_list/1
+%% ====================================================================
+%% @doc This function provides the list of all alive workers with information
+%% at which nodes they are working.
+-spec get_workers_list(State :: term()) -> Workers when
+  Workers :: list().
+%% ====================================================================
+get_workers_list(State) ->
+  ListWorkers = fun({Node, Module, _ChildPid}, Workers) ->
+    [{Node, Module} | Workers]
+  end,
+  lists:foldl(ListWorkers, [], State#cm_state.workers).
+
 %% increase_state_num/1
 %% ====================================================================
 %% @doc This function increases the cluster state value and informs all
@@ -544,6 +576,12 @@ merge_state(State, SavedState) ->
 -spec increase_state_num(State :: term()) -> NewState when
   NewState :: term().
 %% ====================================================================
-%% TODO wstawic ta metode w miejsca gdzie zmieniaja sie workery, dodac rozsylanie powiadomien do dispatcherow
 increase_state_num(State) ->
-  State#cm_state{state_num = State#cm_state.state_num + 1}.
+  NewStateNum = State#cm_state.state_num + 1,
+  WorkersList = get_workers_list(State),
+  UpdateNode = fun(Node) ->
+    gen_server:cast({?Dispatcher_Name, Node}, {update_workers, WorkersList, NewStateNum})
+  end,
+  lists:foreach(UpdateNode, State#cm_state.nodes),
+
+  State#cm_state{state_num = NewStateNum}.
