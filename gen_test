@@ -149,6 +149,8 @@ if [[ $INDEX -eq 0 ]]; then
 	# Compile the code and generate the release (it's needed only once, then the package will be copied proper amount of times)
 	./rebar compile
 	./rebar generate
+	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster_node
+	chmod u+x ./releases/veil_cluster_node/config/apply_config	
 
 	# Generate releases for all nodes
 	ALL_NODES="$WORKERS $MAIN_CCM $OPT_CCMS"

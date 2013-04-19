@@ -158,6 +158,8 @@ if [[ $INDEX -eq 0 ]]; then
 
 	# Generate the release
 	./rebar generate
+	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster_node
+	chmod u+x ./releases/veil_cluster_node/config/apply_config	
 else
 	# User requested to skip release generation
 	if [[ ! -d releases/veil_cluster_node ]]; then
