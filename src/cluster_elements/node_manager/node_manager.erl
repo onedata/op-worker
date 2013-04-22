@@ -175,7 +175,9 @@ heart_beat(Conn_status, State) ->
 			{ok, CCM_Nodes} = application:get_env(veil_cluster_node, ccm_nodes),
 			Ans = init_net_connection(CCM_Nodes),
 			case Ans of
-				ok -> connected;
+				ok ->
+          timer:sleep(10),
+          connected;
 				error -> not_connected
 			end;
 		Other -> Other
