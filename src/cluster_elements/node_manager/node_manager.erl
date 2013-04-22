@@ -175,7 +175,9 @@ heart_beat(Conn_status, State) ->
 			{ok, CCM_Nodes} = application:get_env(veil_cluster_node, ccm_nodes),
 			Ans = init_net_connection(CCM_Nodes),
 			case Ans of
-				ok -> connected;
+				ok ->
+          timer:apply_after(500, gen_server, cast, [?Node_Manager_Name, do_heart_beat]), %% nodes may not have enough time to create cluster so another heartbeat will be done after 0.5s
+          connected;
 				error -> not_connected
 			end;
 		Other -> Other

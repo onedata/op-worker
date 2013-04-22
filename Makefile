@@ -23,7 +23,7 @@ generate: compile
 	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster_node
 
 docs:
-	./rebar doc
+	./rebar doc skip_deps=true
 
 upgrade:
 	./rebar generate-appups previous_release=${PREV}
