@@ -2,7 +2,7 @@
 -name {{node}}
 
 ## Cookie for distributed erlang
--setcookie veil_cluster_node
+-setcookie {{cookie}}
 
 ## Node type (worker or ccm)
 ## application:get_env(veil_cluster_node, nodeType) should return this
