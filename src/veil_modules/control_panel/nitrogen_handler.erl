@@ -45,10 +45,6 @@ handle(Req, _Opts) ->
     RequestBridge = simple_bridge:make_request(cowboy_request_bridge,
                                                {Req, DocRoot}),
 
-    %% Because Cowboy uses the same "Req" record, we can pass the
-    %% previously made RequestBridge to make_response, and it'll
-    %% parse out the relevant bits to keep both parts (request and 
-    %% response) using the same "Req"
     ResponseBridge = simple_bridge:make_response(cowboy_response_bridge,
                                                  RequestBridge),
 

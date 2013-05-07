@@ -24,6 +24,7 @@ header() ->
     body="  VeilFS - Control panel"
   }.
 
+
 %% This will be placed in the template instead of [[[page:body()]]] tag
 body() ->
   [
