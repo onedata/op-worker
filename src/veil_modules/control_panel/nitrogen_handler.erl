@@ -25,7 +25,6 @@
   Result :: {ok, Request :: term(), #state{}}.
 %% ====================================================================
 init({Transport, http}, Req, Opts) ->
-    io:format("~p~n~n~n", [Transport]),
     Headers = proplists:get_value(headers, Opts, []),
     Body = proplists:get_value(body, Opts, "http_handler"),
     {ok, Req, #state{headers=Headers, body=Body}}.

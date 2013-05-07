@@ -40,14 +40,9 @@ init(_Args) ->
   %% Start Cowboy...
   application:start(cowboy),
 
-  BindAddress = "0.0.0.0",
   Port = 8000,
-  ServerName = vfsgui,
   DocRoot = "./site",
   StaticPaths = ["js/","images/","css/","nitrogen/","templates/"],
-
-  io:format("Starting Cowboy Server (~s) on ~s:~p, root: '~s'~n",
-    [ServerName, BindAddress, Port, DocRoot]),
 
   Dispatch = init_dispatch(DocRoot, StaticPaths),
 
