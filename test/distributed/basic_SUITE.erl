@@ -6,10 +6,10 @@
 all() -> [test1,test2,test3].
 
 test1(_Config) ->
-  1 == 1.
+  1 = 1.
 
 test2(_Config) ->
-  1 == 1.
+  1 = 3.
 
 test3(_Config) ->
-  1 == 1.
+  1 = 1.
