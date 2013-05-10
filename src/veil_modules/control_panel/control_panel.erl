@@ -41,7 +41,7 @@ init(_Args) ->
   application:start(cowboy),
 
   Port = 8000,
-  DocRoot = "./site",
+  DocRoot = "./gui_static",
   StaticPaths = ["js/","images/","css/","nitrogen/","templates/"],
 
   Dispatch = init_dispatch(DocRoot, StaticPaths),

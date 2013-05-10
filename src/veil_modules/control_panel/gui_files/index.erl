@@ -11,7 +11,7 @@
 
 %% Template points to the template file, which will be filled with content
 main() ->
-  #template { file="./site/templates/bare.html" }.
+  #template { file="./gui_static/templates/bare.html" }.
 
 %% Page title
 title() -> "VeilFS homepage v. 0.00000000000001".
@@ -21,7 +21,7 @@ header() ->
   #panel
   {
     style="margin: 10px; background-color: #66CC33; color: white; font-weight: bold;",
-    body="  VeilFS - Control panel"
+    body="VeilFS - Control panel"
   }.
 
 

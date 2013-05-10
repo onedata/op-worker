@@ -24,7 +24,7 @@
   Protocol :: {Transport :: term(), http},
   Result :: {ok, Request :: term(), #state{}}.
 %% ====================================================================
-init({Transport, http}, Req, Opts) ->
+init({_Transport, http}, Req, Opts) ->
     Headers = proplists:get_value(headers, Opts, []),
     Body = proplists:get_value(body, Opts, "http_handler"),
     {ok, Req, #state{headers=Headers, body=Body}}.
@@ -40,7 +40,7 @@ init({Transport, http}, Req, Opts) ->
   Response :: term().
 %% ====================================================================
 handle(Req, _Opts) ->
-    DocRoot = "./site",
+    DocRoot = "./gui_static",
     RequestBridge = simple_bridge:make_request(cowboy_request_bridge,
                                                {Req, DocRoot}),
 
