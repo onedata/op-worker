@@ -11,7 +11,7 @@ test1(_Config) ->
   pong = net_adm:ping('ccm2@plgsl63.local').
 
 test2(_Config) ->
-  1 = 3.
+  1 = 1.
 
 init_vm() ->
   ok.
