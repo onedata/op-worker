@@ -226,6 +226,7 @@ terminate(_Reason, _State) ->
   Vsn :: term().
 %% ====================================================================
 code_change(_OldVsn, State, _Extra) ->
+  State#cm_state.monitor_process ! switch_code,
   {ok, State}.
 
 
@@ -447,8 +448,9 @@ monitoring_loop(Flag) ->
           change_monitoring(Nodes, false),
           monitoring_loop(off);
         {get_version, Pid} ->
-          Pid ! {monitor_process_version, 1},
+          Pid ! {monitor_process_version, node_manager:check_vsn()},
           monitoring_loop(Flag);
+        switch_code -> ?MODULE:monitoring_loop(Flag);
         exit -> ok
       end;
     off ->
@@ -457,8 +459,9 @@ monitoring_loop(Flag) ->
           change_monitoring(Nodes, true),
           monitoring_loop(on);
         {get_version, Pid} ->
-          Pid ! {monitor_process_version, 1},
+          Pid ! {monitor_process_version, node_manager:check_vsn()},
           monitoring_loop(Flag);
+        switch_code -> ?MODULE:monitoring_loop(Flag);
         exit -> ok
       end
   end.

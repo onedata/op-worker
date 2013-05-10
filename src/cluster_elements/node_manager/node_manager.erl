@@ -23,6 +23,7 @@
 %% API
 %% ====================================================================
 -export([start_link/1]).
+-export([check_vsn/0]).
 
 %% ====================================================================
 %% gen_server callbacks
@@ -271,3 +272,15 @@ send_to_ccm(Message) ->
 	catch
 		_:_ -> connection_error
 	end.
+
+check_vsn() ->
+  check_vsn(application:which_applications()).
+
+check_vsn([]) ->
+  non;
+
+check_vsn([{Application, _Description, Vsn} | Apps]) ->
+  case Application of
+    ?APP_Name -> Vsn;
+    _Other -> check_vsn(Apps)
+  end.

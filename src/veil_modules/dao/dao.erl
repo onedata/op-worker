@@ -76,7 +76,7 @@ handle(_ProtocolVersion, ping) ->
   pong;
 
 handle(_ProtocolVersion, get_version) ->
-  1;
+  node_manager:check_vsn();
 
 handle(_ProtocolVersion, {Target, Method, Args}) when is_atom(Target), is_atom(Method), is_list(Args) ->
     Module =
