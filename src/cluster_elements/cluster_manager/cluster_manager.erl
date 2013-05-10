@@ -127,6 +127,9 @@ handle_call(get_workers, _From, State) ->
 handle_call(get_state, _From, State) ->
   {reply, State, State};
 
+handle_call(get_version, _From, State) ->
+  {reply, get_version(State), State};
+
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
 
@@ -443,6 +446,9 @@ monitoring_loop(Flag) ->
         {off, Nodes} ->
           change_monitoring(Nodes, false),
           monitoring_loop(off);
+        {get_version, Pid} ->
+          Pid ! {monitor_process_version, 1},
+          monitoring_loop(Flag);
         exit -> ok
       end;
     off ->
@@ -450,6 +456,9 @@ monitoring_loop(Flag) ->
         {on, Nodes} ->
           change_monitoring(Nodes, true),
           monitoring_loop(on);
+        {get_version, Pid} ->
+          Pid ! {monitor_process_version, 1},
+          monitoring_loop(Flag);
         exit -> ok
       end
   end.
@@ -585,3 +594,24 @@ increase_state_num(State) ->
   lists:foreach(UpdateNode, State#cm_state.nodes),
 
   State#cm_state{state_num = NewStateNum}.
+
+get_version(State) ->
+  Workers = get_workers_list(State),
+  Versions = get_workers_versions(Workers),
+  Pid = self(),
+  State#cm_state.monitor_process ! {get_version, Pid},
+  receive
+    {monitor_process_version, V} -> [{monitor_process, V} | Versions]
+  after 500 ->
+    [{monitor_process, error} | Versions]
+  end.
+
+get_workers_versions(Workers) ->
+  get_workers_versions(Workers, []).
+
+get_workers_versions([], Versions) ->
+  Versions;
+
+get_workers_versions([{Node, Module} | Workers], Versions) ->
+  V = gen_server:call({Module, Node}, {test_call, 1, get_version}),
+  get_workers_versions(Workers, [{Node, Module, V} | Versions]).
