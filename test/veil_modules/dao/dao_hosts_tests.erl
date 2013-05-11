@@ -21,19 +21,12 @@
 
 -ifdef(TEST).
 
-init_test() ->
-    Pid = spawn(fun dao_hosts:init/0),
-    receive after 10 -> ok end,
-    Info = ets:info(db_host_store),
-    Pid ! {self(), shutdown},
-    ?assert(is_list(Info)).
-
 host_management_test_() ->
-    {setup, local, fun start_link/0, fun teardown/1,
+    {setup, local, fun init/0, fun teardown/1,
         [fun delete_hosts/0, fun insert_hosts/0, fun get_host/0, fun delete_hosts/0, fun ban_host/0, fun reactivate_host/0]}.
 
 call_test_() ->
-    {setup, local, fun start_link/0, fun teardown/1,
+    {setup, local, fun init/0, fun teardown/1,
         [fun call/0, fun ping/0]}.
 
 ping() ->
@@ -117,21 +110,16 @@ reactivate_host() ->
     'test@host1.lan' = dao_hosts:get_host().
 
 
-start_link() ->
+init() ->
+    gen_server:start_link({local, dao}, worker_host, [dao, [], 10], []),
     meck:new(rpc, [unstick, passthrough]),
     meck:new(net_adm, [unstick, passthrough]),
-    put(db_host, undefined),
-    {ok, Pid} = dao_hosts:start_link([]),
-    receive after 20 -> ok end,
-    Pid.
+    put(db_host, undefined).
 
-teardown(Pid) ->
+teardown(_) ->
     ?assert(meck:validate(rpc)),
     meck:unload(rpc),
     ?assert(meck:validate(net_adm)),
-    meck:unload(net_adm),
-    monitor(process, Pid),
-    Pid ! {self(), shutdown},
-    receive {'DOWN', _Ref, process, Pid, normal} -> ok after 1000 -> error(timeout) end.
+    meck:unload(net_adm).
 
 -endif.
