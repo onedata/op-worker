@@ -95,17 +95,24 @@ handle(ProtocolVersion, {Target, Method, Args}) when is_atom(Target), is_atom(Me
             T -> list_to_atom("dao_" ++ atom_to_list(T))
         end,
     try apply(Module, Method, Args) of
-        {error, Err} -> {error, Err};
+        {error, Err} ->
+            lager:error([{mod, ?MODULE}], "Handling ~p:~p with args ~p returned error: ~p", [Module, Method, Args, Err]),
+            {error, Err};
         {ok, Response} -> {ok, Response};
         ok -> ok;
-        Other -> {error, Other}
+        Other ->
+            lager:error([{mod, ?MODULE}], "Handling ~p:~p with args ~p returned unknown response: ~p", [Module, Method, Args, Other]),
+            {error, Other}
     catch
         error:{badmatch, {error, Err}} -> {error, Err};
-        _:Error -> {error, Error}
+        Type:Error ->
+            lager:error([{mod, ?MODULE}], "Handling ~p:~p with args ~p interrupted by exception: ~p:~p", [Module, Method, Args, Type, Error]),
+            {error, Error}
     end;
 handle(ProtocolVersion, {Method, Args}) when is_atom(Method), is_list(Args) ->
     handle(ProtocolVersion, {cluster, Method, Args});
 handle(_ProtocolVersion, _Request) ->
+    lager:error([{mod, ?MODULE}], "Unknown request ~p (protocol ver.: ~p)", [_Request, _ProtocolVersion]),
     {error, wrong_args}.
 
 %% cleanup/0
@@ -153,7 +160,9 @@ save_record(Rec, Id, Mode) when is_tuple(Rec), is_list(Id)->
     Valid = is_valid_record(Rec),
     if
         Valid -> ok;
-        true -> throw(unsupported_record)
+        true ->
+            lager:error([{mod, ?MODULE}], "Cannot save record: ~p because it's not supported", [Rec]),
+            throw(unsupported_record)
     end,
     Revs =
         if
@@ -297,6 +306,7 @@ term_to_doc(Field) when is_tuple(Field) ->
     {_, {Ret}} = lists:foldl(FoldFun, {1, InitObj}, LField),
     {lists:reverse(Ret)};
 term_to_doc(Field) ->
+    lager:error([{mod, ?MODULE}], "Cannot convert term to document because field: ~p is not supported", [Field]),
     throw({unsupported_field, Field}).
 
 
