@@ -225,6 +225,7 @@ call(Module, Method, Args, Attempt) when Attempt < ?RPC_MAX_RETRIES ->
                 {badrpc, Error} ->
                     {error, Error};
                 Other ->
+                    reactivate(Host),
                     Other
             end
     end;
