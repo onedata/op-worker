@@ -120,6 +120,7 @@ teardown(_) ->
     ?assert(meck:validate(rpc)),
     meck:unload(rpc),
     ?assert(meck:validate(net_adm)),
-    meck:unload(net_adm).
+    meck:unload(net_adm),
+    delete_hosts().
 
 -endif.
