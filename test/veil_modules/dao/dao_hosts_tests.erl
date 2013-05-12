@@ -16,6 +16,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("veil_modules/dao/common.hrl").
+-include("registered_names.hrl").
 
 -endif.
 
@@ -111,7 +112,14 @@ reactivate_host() ->
 
 
 init() ->
-    gen_server:start_link({local, dao}, worker_host, [dao, [], 10], []),
+    application:set_env(?APP_Name, node_type, ccm),
+    application:set_env(?APP_Name, ccm_nodes, [node()]),
+    application:set_env(?APP_Name, initialization_time, 0),
+    lager:start(),
+    ssl:start(),
+    ok = application:start(ranch),
+    ok = application:start(?APP_Name),
+    timer:sleep(500),
     meck:new(rpc, [unstick, passthrough]),
     meck:new(net_adm, [unstick, passthrough]),
     put(db_host, undefined).
@@ -121,6 +129,8 @@ teardown(_) ->
     meck:unload(rpc),
     ?assert(meck:validate(net_adm)),
     meck:unload(net_adm),
-    delete_hosts().
+    delete_hosts(),
+    ok = application:stop(?APP_Name),
+    ok = application:stop(ranch).
 
 -endif.
