@@ -69,8 +69,15 @@ start_link() ->
 init([]) ->
   {ok, Interval} = application:get_env(veil_cluster_node, initialization_time),
   timer:apply_after(Interval * 1000, gen_server, cast, [{global, ?CCM}, init_cluster]),
+  timer:apply_after(50, gen_server, cast, [{global, ?CCM}, {set_monitoring, on}]),
   timer:apply_after(100, gen_server, cast, [{global, ?CCM}, get_state_from_db]),
-  {ok, #cm_state{monitor_process = spawn(fun() -> monitoring_loop(on) end)}}.
+
+%%   Pid = self(),
+%%   M_Pid = spawn(fun() -> monitoring_loop(on) end),
+%%   M_Pid = spawn_link(?MODULE, monitoring_loop, [on]),
+%%   lager:info([{mod, ?MODULE}], "aaa init: ~s , ~s", [Pid, M_Pid]),
+%%   {ok, #cm_state{monitor_process = M_Pid}}.
+  {ok, #cm_state{}}.
 
 %% handle_call/3
 %% ====================================================================
@@ -94,7 +101,13 @@ handle_call({node_is_up, Node}, _From, State) ->
   Reply = State#cm_state.state_num,
   case lists:member(Node, Nodes) of
     true -> {reply, Reply, State};
-    false -> State#cm_state.monitor_process ! {monitor_node, Node},
+    false ->
+      case State#cm_state.monitor_process of
+        undefined -> ok;
+        _Pid -> State#cm_state.monitor_process ! {monitor_node, Node}
+      end,
+
+      %%State#cm_state.monitor_process ! {monitor_node, Node},
       {Ans, NewState, WorkersFound} = check_node(Node, State),
 
       %% This case checks if node state was analysed correctly.
@@ -171,8 +184,16 @@ handle_cast({node_down, Node}, State) ->
   {noreply, NewState2};
 
 handle_cast({set_monitoring, Flag}, State) ->
-  State#cm_state.monitor_process ! {Flag, State#cm_state.nodes},
-  {noreply, State};
+  State2 = case State#cm_state.monitor_process of
+    undefined ->
+      {ok, ChildPid} = supervisor:start_child(?Supervisor_Name, ?Sup_Child(monitor_process, nodes_monitoring, start_monitoring_loop, permanent, [on, State#cm_state.nodes])),
+      lager:info([{mod, ?MODULE}], "aaa start: ~s", [ChildPid]),
+      State#cm_state{monitor_process = ChildPid};
+    _Other ->
+      State#cm_state.monitor_process ! {Flag, State#cm_state.nodes},
+      State
+  end,
+  {noreply, State2};
 
 handle_cast({worker_answer, cluster_state, Response}, State) ->
   NewState = case Response of
@@ -213,7 +234,8 @@ handle_info(_Info, State) ->
   | {shutdown, term()}
   | term().
 %% ====================================================================
-terminate(_Reason, _State) ->
+terminate(_Reason, State) ->
+  State#cm_state.monitor_process ! exit,
   ok.
 
 
@@ -426,60 +448,6 @@ add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
     _Other -> [{Node, Id, ChildPid} | add_children(Node, Children, Workers)]
   end.
 
-%% monitoring_loop/1
-%% ====================================================================
-%% @doc Loop that monitors if nodes are alive.
--spec monitoring_loop(Flag) -> ok when
-  Flag :: on | off.
-%% ====================================================================
-%% TODO sprawdzijak ta petla wplywa na hot-swapping kodu
-monitoring_loop(Flag) ->
-  case Flag of
-    on ->
-      receive
-        {nodedown, Node} ->
-          erlang:monitor_node(Node, false),
-          gen_server:cast({global, ?CCM}, {node_down, Node}),
-          monitoring_loop(Flag);
-        {monitor_node, Node} ->
-          erlang:monitor_node(Node, true),
-          monitoring_loop(Flag);
-        {off, Nodes} ->
-          change_monitoring(Nodes, false),
-          monitoring_loop(off);
-        {get_version, Pid} ->
-          Pid ! {monitor_process_version, node_manager:check_vsn()},
-          monitoring_loop(Flag);
-        switch_code -> ?MODULE:monitoring_loop(Flag);
-        exit -> ok
-      end;
-    off ->
-      receive
-        {on, Nodes} ->
-          change_monitoring(Nodes, true),
-          monitoring_loop(on);
-        {get_version, Pid} ->
-          Pid ! {monitor_process_version, node_manager:check_vsn()},
-          monitoring_loop(Flag);
-        switch_code -> ?MODULE:monitoring_loop(Flag);
-        exit -> ok
-      end
-  end.
-
-%% change_monitoring/2
-%% ====================================================================
-%% @doc Starts or stops monitoring of nodes.
--spec change_monitoring(Nodes, Flag) -> ok when
-  Nodes :: list(),
-  Flag :: boolean().
-%% ====================================================================
-change_monitoring([], _Flag) ->
-  ok;
-
-change_monitoring([Node | Nodes], Flag) ->
-  erlang:monitor_node(Node, Flag),
-  change_monitoring(Nodes, Flag).
-
 %% node_down/2
 %% ====================================================================
 %% @doc Clears information about workers on node that is down.
@@ -599,9 +567,12 @@ increase_state_num(State) ->
   State#cm_state{state_num = NewStateNum}.
 
 get_version(State) ->
+  Pid = self(),
+  lager:info([{mod, ?MODULE}], "aaa version: ~s , ~s", [Pid, State#cm_state.monitor_process]),
+
   Workers = get_workers_list(State),
   Versions = get_workers_versions(Workers),
-  Pid = self(),
+  %%Pid = self(),
   State#cm_state.monitor_process ! {get_version, Pid},
   receive
     {monitor_process_version, V} -> [{monitor_process, V} | Versions]

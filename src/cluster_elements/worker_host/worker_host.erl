@@ -162,8 +162,10 @@ handle_info(Info, {PlugIn, State}) ->
 			| {shutdown, term()}
 			| term().
 %% ====================================================================
-terminate(_Reason, _State) ->
-    ok.
+terminate(_Reason, State) ->
+  PlugIn = State#host_state.plug_in,
+  PlugIn:cleanup(),
+  ok.
 
 
 %% code_change/3
