@@ -195,6 +195,10 @@ handle_cast({set_monitoring, Flag}, State) ->
   end,
   {noreply, State2};
 
+handle_cast(update_monitoring_loop, State) ->
+  State#cm_state.monitor_process ! switch_code,
+  {noreply, State};
+
 handle_cast({worker_answer, cluster_state, Response}, State) ->
   NewState = case Response of
     {ok, SavedState} ->
@@ -248,7 +252,8 @@ terminate(_Reason, State) ->
   Vsn :: term().
 %% ====================================================================
 code_change(_OldVsn, State, _Extra) ->
-  State#cm_state.monitor_process ! switch_code,
+  %%State#cm_state.monitor_process ! switch_code,
+  timer:apply_after(10000, gen_server, cast, [{global, ?CCM}, update_monitoring_loop]),
   {ok, State}.
 
 

@@ -26,6 +26,7 @@ monitoring_loop(Flag, Nodes) ->
   monitoring_loop(on).
 
 monitoring_loop(Flag) ->
+  1 = 1,
   Pid = self(),
   lager:info([{mod, ?MODULE}], "aaa loop: ~s", [Pid]),
   lager:info([{mod, ?MODULE}], "monitoring_loop"),
@@ -78,8 +79,7 @@ monitoring_loop(Flag) ->
     exit ->
       lager:info([{mod, ?MODULE}], "aaa loop13: ~s", [Pid]),
       ok
-  end,
-  lager:info([{mod, ?MODULE}], "aaa loop14: ~s", [Pid]).
+  end.
 
 %% change_monitoring/2
 %% ====================================================================
