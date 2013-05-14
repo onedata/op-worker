@@ -229,7 +229,7 @@ handle_info(_Info, State) ->
   | {shutdown, term()}
   | term().
 %% ====================================================================
-terminate(_Reason, State) ->
+terminate(_Reason, _State) ->
   whereis(?Monitoring_Proc) ! exit,
   ok.
 
@@ -243,7 +243,8 @@ terminate(_Reason, State) ->
   Vsn :: term().
 %% ====================================================================
 code_change(_OldVsn, State, _Extra) ->
-  timer:apply_after(10000, gen_server, cast, [{global, ?CCM}, update_monitoring_loop]),
+  {ok, Interval} = application:get_env(veil_cluster_node, hot_swapping_time),
+  timer:apply_after(Interval, gen_server, cast, [{global, ?CCM}, update_monitoring_loop]),
   {ok, State}.
 
 
