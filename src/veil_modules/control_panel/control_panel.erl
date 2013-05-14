@@ -34,12 +34,6 @@
   Error :: term().
 %% ====================================================================
 init(_Args) ->
-  %% Start the Process Registry...
-  application:start(nprocreg),
-
-  %% Start Cowboy...
-  application:start(cowboy),
-
   Port = 8000,
   DocRoot = "./gui_static",
   StaticPaths = ["js/","images/","css/","nitrogen/","templates/"],
@@ -85,8 +79,7 @@ handle(_ProtocolVersion, _Msg) ->
   Error :: timeout | term().
 %% ====================================================================
 cleanup() ->
-  application:stop(nprocreg),
-  application:stop(cowboy),
+  cowboy:stop_listener(http),
   ok.
 
 
