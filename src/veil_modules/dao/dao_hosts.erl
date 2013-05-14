@@ -200,9 +200,11 @@ get_host() ->
     Err :: term().
 %% ====================================================================
 store_exec(Msg) ->
-    gen_server:cast(dao, {sequential_synch, get(protocol_version), {hosts, store_exec, [sequential, Msg]}, non, {proc, self()}}),
+    PPid = self(),
+    Pid = spawn(fun() -> receive Resp -> PPid ! {self(), Resp} after 1000 -> exited end end),
+    gen_server:cast(dao, {sequential_synch, get(protocol_version), {hosts, store_exec, [sequential, Msg]}, non, {proc, Pid}}),
     receive
-        Response -> Response
+        {Pid, Response} -> Response
     after 100 ->
         {error, timeout}
     end.
