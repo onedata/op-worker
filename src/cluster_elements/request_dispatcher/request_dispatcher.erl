@@ -40,6 +40,7 @@
 %% ====================================================================
 
 start_link() ->
+  process_flag(trap_exit, true),
   gen_server:start_link({local, ?Dispatcher_Name}, ?MODULE, [], []).
 
 %% init/1

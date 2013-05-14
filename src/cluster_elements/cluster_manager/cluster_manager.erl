@@ -67,6 +67,7 @@ start_link() ->
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 init([]) ->
+  process_flag(trap_exit, true),
   {ok, Interval} = application:get_env(veil_cluster_node, initialization_time),
   timer:apply_after(Interval * 1000, gen_server, cast, [{global, ?CCM}, init_cluster]),
   timer:apply_after(100, gen_server, cast, [{global, ?CCM}, get_state_from_db]),

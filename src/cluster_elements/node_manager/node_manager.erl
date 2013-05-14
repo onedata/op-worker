@@ -61,6 +61,7 @@ start_link(Type) ->
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 init([Type]) when Type =:= worker ; Type =:= ccm ->
+    process_flag(trap_exit, true),
 	timer:apply_after(10, gen_server, cast, [?Node_Manager_Name, do_heart_beat]),
     {ok, #node_state{node_type = Type, ccm_con_status = not_connected}};
 
