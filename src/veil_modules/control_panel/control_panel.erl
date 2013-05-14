@@ -46,7 +46,7 @@ init(_Args) ->
     {max_keepalive, 50}
   ]),
 
-  {ok, { {one_for_one, 5, 10}, []} }.
+  ok.
 
 
 
