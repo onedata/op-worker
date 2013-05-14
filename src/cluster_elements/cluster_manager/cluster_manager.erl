@@ -19,6 +19,7 @@
 %% API
 %% ====================================================================
 -export([start_link/0]).
+-export([monitoring_loop/1, monitoring_loop/2, start_monitoring_loop/2]).
 
 %% ====================================================================
 %% gen_server callbacks
@@ -69,8 +70,9 @@ start_link() ->
 init([]) ->
   {ok, Interval} = application:get_env(veil_cluster_node, initialization_time),
   timer:apply_after(Interval * 1000, gen_server, cast, [{global, ?CCM}, init_cluster]),
+  timer:apply_after(50, gen_server, cast, [{global, ?CCM}, {set_monitoring, on}]),
   timer:apply_after(100, gen_server, cast, [{global, ?CCM}, get_state_from_db]),
-  {ok, #cm_state{monitor_process = spawn(fun() -> monitoring_loop(on) end)}}.
+  {ok, #cm_state{}}.
 
 %% handle_call/3
 %% ====================================================================
@@ -94,7 +96,12 @@ handle_call({node_is_up, Node}, _From, State) ->
   Reply = State#cm_state.state_num,
   case lists:member(Node, Nodes) of
     true -> {reply, Reply, State};
-    false -> State#cm_state.monitor_process ! {monitor_node, Node},
+    false ->
+      case whereis(?Monitoring_Proc) of
+        undefined -> ok;
+        MPid -> MPid ! {monitor_node, Node}
+      end,
+
       {Ans, NewState, WorkersFound} = check_node(Node, State),
 
       %% This case checks if node state was analysed correctly.
@@ -126,6 +133,9 @@ handle_call(get_workers, _From, State) ->
 
 handle_call(get_state, _From, State) ->
   {reply, State, State};
+
+handle_call(get_version, _From, State) ->
+  {reply, get_version(State), State};
 
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
@@ -168,7 +178,16 @@ handle_cast({node_down, Node}, State) ->
   {noreply, NewState2};
 
 handle_cast({set_monitoring, Flag}, State) ->
-  State#cm_state.monitor_process ! {Flag, State#cm_state.nodes},
+  case whereis(?Monitoring_Proc) of
+    undefined ->
+      {ok, _ChildPid} = supervisor:start_child(?Supervisor_Name, ?Sup_Child(monitor_process, ?MODULE, start_monitoring_loop, permanent, [Flag, State#cm_state.nodes]));
+    MPid ->
+      MPid ! {Flag, State#cm_state.nodes}
+  end,
+  {noreply, State};
+
+handle_cast(update_monitoring_loop, State) ->
+  whereis(?Monitoring_Proc) ! switch_code,
   {noreply, State};
 
 handle_cast({worker_answer, cluster_state, Response}, State) ->
@@ -211,6 +230,7 @@ handle_info(_Info, State) ->
   | term().
 %% ====================================================================
 terminate(_Reason, _State) ->
+  whereis(?Monitoring_Proc) ! exit,
   ok.
 
 
@@ -223,6 +243,8 @@ terminate(_Reason, _State) ->
   Vsn :: term().
 %% ====================================================================
 code_change(_OldVsn, State, _Extra) ->
+  {ok, Interval} = application:get_env(veil_cluster_node, hot_swapping_time),
+  timer:apply_after(Interval, gen_server, cast, [{global, ?CCM}, update_monitoring_loop]),
   {ok, State}.
 
 
@@ -422,52 +444,6 @@ add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
     _Other -> [{Node, Id, ChildPid} | add_children(Node, Children, Workers)]
   end.
 
-%% monitoring_loop/1
-%% ====================================================================
-%% @doc Loop that monitors if nodes are alive.
--spec monitoring_loop(Flag) -> ok when
-  Flag :: on | off.
-%% ====================================================================
-%% TODO sprawdzijak ta petla wplywa na hot-swapping kodu
-monitoring_loop(Flag) ->
-  case Flag of
-    on ->
-      receive
-        {nodedown, Node} ->
-          erlang:monitor_node(Node, false),
-          gen_server:cast({global, ?CCM}, {node_down, Node}),
-          monitoring_loop(Flag);
-        {monitor_node, Node} ->
-          erlang:monitor_node(Node, true),
-          monitoring_loop(Flag);
-        {off, Nodes} ->
-          change_monitoring(Nodes, false),
-          monitoring_loop(off);
-        exit -> ok
-      end;
-    off ->
-      receive
-        {on, Nodes} ->
-          change_monitoring(Nodes, true),
-          monitoring_loop(on);
-        exit -> ok
-      end
-  end.
-
-%% change_monitoring/2
-%% ====================================================================
-%% @doc Starts or stops monitoring of nodes.
--spec change_monitoring(Nodes, Flag) -> ok when
-  Nodes :: list(),
-  Flag :: boolean().
-%% ====================================================================
-change_monitoring([], _Flag) ->
-  ok;
-
-change_monitoring([Node | Nodes], Flag) ->
-  erlang:monitor_node(Node, Flag),
-  change_monitoring(Nodes, Flag).
-
 %% node_down/2
 %% ====================================================================
 %% @doc Clears information about workers on node that is down.
@@ -533,11 +509,11 @@ merge_state(State, SavedState) ->
   NewNodes = lists:filter(fun(N) -> not lists:member(N, State1#cm_state.nodes) end, SavedState#cm_state.nodes),
 
   CreateNewState = fun(Node, {TmpState, TmpWorkersFound}) ->
-    State#cm_state.monitor_process ! {monitor_node, Node},
+    whereis(?Monitoring_Proc) ! {monitor_node, Node},
     {Ans, NewState, WorkersFound} = check_node(Node, TmpState),
     case Ans of
       ok ->
-        State#cm_state.monitor_process ! {monitor_node, Node},
+        whereis(?Monitoring_Proc) ! {monitor_node, Node},
         NewState2 = NewState#cm_state{nodes = [Node | NewState#cm_state.nodes]},
         case WorkersFound of
           true -> {NewState2, true};
@@ -585,3 +561,129 @@ increase_state_num(State) ->
   lists:foreach(UpdateNode, State#cm_state.nodes),
 
   State#cm_state{state_num = NewStateNum}.
+
+%% start_monitoring_loop/2
+%% ====================================================================
+%% @doc Starts loop that monitors if nodes are alive.
+-spec start_monitoring_loop(Flag, Nodes) -> ok when
+  Flag :: on | off,
+  Nodes :: list().
+%% ====================================================================
+start_monitoring_loop(Flag, Nodes) ->
+  Pid = spawn_link(?MODULE, monitoring_loop, [Flag, Nodes]),
+  register(?Monitoring_Proc, Pid),
+  {ok, Pid}.
+
+%% monitoring_loop/2
+%% ====================================================================
+%% @doc Beginning of loop that monitors if nodes are alive.
+-spec monitoring_loop(Flag, Nodes) -> ok when
+  Flag :: on | off,
+  Nodes :: list().
+%% ====================================================================
+monitoring_loop(Flag, Nodes) ->
+  case Flag of
+    on ->
+      change_monitoring(Nodes, true);
+    off -> ok
+  end,
+  monitoring_loop(on).
+
+%% monitoring_loop/1
+%% ====================================================================
+%% @doc Loop that monitors if nodes are alive.
+-spec monitoring_loop(Flag) -> ok when
+  Flag :: on | off.
+%% ====================================================================
+monitoring_loop(Flag) ->
+  receive
+    {nodedown, Node} ->
+      case Flag of
+        on ->
+          erlang:monitor_node(Node, false),
+          gen_server:cast({global, ?CCM}, {node_down, Node});
+        off -> ok
+      end,
+      monitoring_loop(Flag);
+    {monitor_node, Node} ->
+      case Flag of
+        on ->
+          erlang:monitor_node(Node, true);
+        off -> ok
+      end,
+      monitoring_loop(Flag);
+    {off, Nodes} ->
+      case Flag of
+        on ->
+          change_monitoring(Nodes, false);
+        off -> ok
+      end,
+      monitoring_loop(off);
+    {on, Nodes} ->
+      case Flag of
+        off ->
+          change_monitoring(Nodes, true);
+        on -> ok
+      end,
+      monitoring_loop(on);
+    {get_version, Reply_Pid} ->
+      Reply_Pid ! {monitor_process_version, node_manager:check_vsn()},
+      monitoring_loop(Flag);
+    switch_code ->
+      ?MODULE:monitoring_loop(Flag);
+    exit ->
+      ok
+  end.
+
+%% change_monitoring/2
+%% ====================================================================
+%% @doc Starts or stops monitoring of nodes.
+-spec change_monitoring(Nodes, Flag) -> ok when
+  Nodes :: list(),
+  Flag :: boolean().
+%% ====================================================================
+change_monitoring([], _Flag) ->
+  ok;
+
+change_monitoring([Node | Nodes], Flag) ->
+  erlang:monitor_node(Node, Flag),
+  change_monitoring(Nodes, Flag).
+
+%% get_version/1
+%% ====================================================================
+%% @doc Provides list of versions of system elements.
+-spec get_version(State :: term()) -> Result when
+  Result :: list().
+%% ====================================================================
+get_version(State) ->
+  Workers = get_workers_list(State),
+  Versions = get_workers_versions(Workers),
+  Pid = self(),
+  whereis(?Monitoring_Proc) ! {get_version, Pid},
+  receive
+    {monitor_process_version, V} -> [{node(), monitor_process, V} | Versions]
+  after 500 ->
+    [{node(), monitor_process, error} | Versions]
+  end.
+
+%% get_workers_versions/1
+%% ====================================================================
+%% @doc Provides list of versions of workers.
+-spec get_workers_versions(Workers :: list()) -> Result when
+  Result :: list().
+%% ====================================================================
+get_workers_versions(Workers) ->
+  get_workers_versions(Workers, []).
+
+%% get_workers_versions/2
+%% ====================================================================
+%% @doc Provides list of versions of workers.
+-spec get_workers_versions(Workers :: list(), TmpAnswer :: list()) -> Result when
+  Result :: list().
+%% ====================================================================
+get_workers_versions([], Versions) ->
+  Versions;
+
+get_workers_versions([{Node, Module} | Workers], Versions) ->
+  V = gen_server:call({Module, Node}, {test_call, 1, get_version}),
+  get_workers_versions(Workers, [{Node, Module, V} | Versions]).

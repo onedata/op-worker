@@ -28,3 +28,6 @@
 %% Local name (name and node is used to identify it) of gen_server that
 %% works as a dispatcher.
 -define(Dispatcher_Name, request_dispatcher).
+
+%% Name of nodes monitoring process
+-define(Monitoring_Proc, monitor_process).

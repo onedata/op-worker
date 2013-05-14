@@ -70,7 +70,7 @@ handle(_ProtocolVersion, ping) ->
   pong;
 
 handle(_ProtocolVersion, get_version) ->
-  1;
+  node_manager:check_vsn();
 
 handle(_ProtocolVersion, _Msg) ->
   ok.
