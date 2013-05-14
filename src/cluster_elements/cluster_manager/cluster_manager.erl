@@ -72,12 +72,6 @@ init([]) ->
   timer:apply_after(Interval * 1000, gen_server, cast, [{global, ?CCM}, init_cluster]),
   timer:apply_after(50, gen_server, cast, [{global, ?CCM}, {set_monitoring, on}]),
   timer:apply_after(100, gen_server, cast, [{global, ?CCM}, get_state_from_db]),
-
-%%   Pid = self(),
-%%   M_Pid = spawn(fun() -> monitoring_loop(on) end),
-%%   M_Pid = spawn_link(?MODULE, monitoring_loop, [on]),
-%%   lager:info([{mod, ?MODULE}], "aaa init: ~s , ~s", [Pid, M_Pid]),
-%%   {ok, #cm_state{monitor_process = M_Pid}}.
   {ok, #cm_state{}}.
 
 %% handle_call/3
@@ -103,12 +97,11 @@ handle_call({node_is_up, Node}, _From, State) ->
   case lists:member(Node, Nodes) of
     true -> {reply, Reply, State};
     false ->
-      case State#cm_state.monitor_process of
+      case whereis(?Monitoring_Proc) of
         undefined -> ok;
-        _Pid -> State#cm_state.monitor_process ! {monitor_node, Node}
+        MPid -> MPid ! {monitor_node, Node}
       end,
 
-      %%State#cm_state.monitor_process ! {monitor_node, Node},
       {Ans, NewState, WorkersFound} = check_node(Node, State),
 
       %% This case checks if node state was analysed correctly.
@@ -185,19 +178,16 @@ handle_cast({node_down, Node}, State) ->
   {noreply, NewState2};
 
 handle_cast({set_monitoring, Flag}, State) ->
-  State2 = case State#cm_state.monitor_process of
+  case whereis(?Monitoring_Proc) of
     undefined ->
-      {ok, ChildPid} = supervisor:start_child(?Supervisor_Name, ?Sup_Child(monitor_process, ?MODULE, start_monitoring_loop, permanent, [on, State#cm_state.nodes])),
-      lager:info([{mod, ?MODULE}], "aaa start: ~s", [ChildPid]),
-      State#cm_state{monitor_process = ChildPid};
-    _Other ->
-      State#cm_state.monitor_process ! {Flag, State#cm_state.nodes},
-      State
+      {ok, _ChildPid} = supervisor:start_child(?Supervisor_Name, ?Sup_Child(monitor_process, ?MODULE, start_monitoring_loop, permanent, [Flag, State#cm_state.nodes]));
+    MPid ->
+      MPid ! {Flag, State#cm_state.nodes}
   end,
-  {noreply, State2};
+  {noreply, State};
 
 handle_cast(update_monitoring_loop, State) ->
-  State#cm_state.monitor_process ! switch_code,
+  whereis(?Monitoring_Proc) ! switch_code,
   {noreply, State};
 
 handle_cast({worker_answer, cluster_state, Response}, State) ->
@@ -240,7 +230,7 @@ handle_info(_Info, State) ->
   | term().
 %% ====================================================================
 terminate(_Reason, State) ->
-  State#cm_state.monitor_process ! exit,
+  whereis(?Monitoring_Proc) ! exit,
   ok.
 
 
@@ -253,7 +243,6 @@ terminate(_Reason, State) ->
   Vsn :: term().
 %% ====================================================================
 code_change(_OldVsn, State, _Extra) ->
-  %%State#cm_state.monitor_process ! switch_code,
   timer:apply_after(10000, gen_server, cast, [{global, ?CCM}, update_monitoring_loop]),
   {ok, State}.
 
@@ -519,11 +508,11 @@ merge_state(State, SavedState) ->
   NewNodes = lists:filter(fun(N) -> not lists:member(N, State1#cm_state.nodes) end, SavedState#cm_state.nodes),
 
   CreateNewState = fun(Node, {TmpState, TmpWorkersFound}) ->
-    State#cm_state.monitor_process ! {monitor_node, Node},
+    whereis(?Monitoring_Proc) ! {monitor_node, Node},
     {Ans, NewState, WorkersFound} = check_node(Node, TmpState),
     case Ans of
       ok ->
-        State#cm_state.monitor_process ! {monitor_node, Node},
+        whereis(?Monitoring_Proc) ! {monitor_node, Node},
         NewState2 = NewState#cm_state{nodes = [Node | NewState#cm_state.nodes]},
         case WorkersFound of
           true -> {NewState2, true};
@@ -572,15 +561,25 @@ increase_state_num(State) ->
 
   State#cm_state{state_num = NewStateNum}.
 
-%% monitoring_loop/1
+%% start_monitoring_loop/2
 %% ====================================================================
-%% @doc Loop that monitors if nodes are alive.
--spec monitoring_loop(Flag) -> ok when
-  Flag :: on | off.
+%% @doc Starts loop that monitors if nodes are alive.
+-spec start_monitoring_loop(Flag, Nodes) -> ok when
+  Flag :: on | off,
+  Nodes :: list().
 %% ====================================================================
 start_monitoring_loop(Flag, Nodes) ->
-  {ok, spawn_link(?MODULE, monitoring_loop, [Flag, Nodes])}.
+  Pid = spawn_link(?MODULE, monitoring_loop, [Flag, Nodes]),
+  register(?Monitoring_Proc, Pid),
+  {ok, Pid}.
 
+%% monitoring_loop/2
+%% ====================================================================
+%% @doc Beginning of loop that monitors if nodes are alive.
+-spec monitoring_loop(Flag, Nodes) -> ok when
+  Flag :: on | off,
+  Nodes :: list().
+%% ====================================================================
 monitoring_loop(Flag, Nodes) ->
   case Flag of
     on ->
@@ -589,59 +588,50 @@ monitoring_loop(Flag, Nodes) ->
   end,
   monitoring_loop(on).
 
+%% monitoring_loop/1
+%% ====================================================================
+%% @doc Loop that monitors if nodes are alive.
+-spec monitoring_loop(Flag) -> ok when
+  Flag :: on | off.
+%% ====================================================================
 monitoring_loop(Flag) ->
-  1 = 1,
   Pid = self(),
-  lager:info([{mod, ?MODULE}], "aaa loop: ~s", [Pid]),
-  lager:info([{mod, ?MODULE}], "monitoring_loop"),
   receive
     {nodedown, Node} ->
-      lager:info([{mod, ?MODULE}], "aaa2 loop: ~s", [Pid]),
       case Flag of
         on ->
           erlang:monitor_node(Node, false),
           gen_server:cast({global, ?CCM}, {node_down, Node});
         off -> ok
       end,
-      lager:info([{mod, ?MODULE}], "aaa3 loop: ~s", [Pid]),
       monitoring_loop(Flag);
     {monitor_node, Node} ->
-      lager:info([{mod, ?MODULE}], "aaa4 loop: ~s", [Pid]),
       case Flag of
         on ->
           erlang:monitor_node(Node, true);
         off -> ok
       end,
-      lager:info([{mod, ?MODULE}], "aaa5 loop: ~s", [Pid]),
       monitoring_loop(Flag);
     {off, Nodes} ->
-      lager:info([{mod, ?MODULE}], "aaa6 loop: ~s", [Pid]),
       case Flag of
         on ->
           change_monitoring(Nodes, false);
         off -> ok
       end,
-      lager:info([{mod, ?MODULE}], "aaa7 loop: ~s", [Pid]),
       monitoring_loop(off);
     {on, Nodes} ->
-      lager:info([{mod, ?MODULE}], "aaa8 loop: ~s", [Pid]),
       case Flag of
         off ->
           change_monitoring(Nodes, true);
         on -> ok
       end,
-      lager:info([{mod, ?MODULE}], "aaa9 loop: ~s", [Pid]),
       monitoring_loop(on);
     {get_version, Reply_Pid} ->
-      lager:info([{mod, ?MODULE}], "aaa loop10: ~s", [Pid]),
       Reply_Pid ! {monitor_process_version, node_manager:check_vsn()},
-      lager:info([{mod, ?MODULE}], "aaa loop11: ~s", [Pid]),
       monitoring_loop(Flag);
     switch_code ->
-      lager:info([{mod, ?MODULE}], "aaa loop12: ~s", [Pid]),
       ?MODULE:monitoring_loop(Flag);
     exit ->
-      lager:info([{mod, ?MODULE}], "aaa loop13: ~s", [Pid]),
       ok
   end.
 
@@ -659,23 +649,38 @@ change_monitoring([Node | Nodes], Flag) ->
   erlang:monitor_node(Node, Flag),
   change_monitoring(Nodes, Flag).
 
+%% get_version/1
+%% ====================================================================
+%% @doc Provides list of versions of system elements.
+-spec get_version(State :: term()) -> Result when
+  Result :: list().
+%% ====================================================================
 get_version(State) ->
-  Pid = self(),
-  lager:info([{mod, ?MODULE}], "aaa version: ~s , ~s", [Pid, State#cm_state.monitor_process]),
-
   Workers = get_workers_list(State),
   Versions = get_workers_versions(Workers),
-  %%Pid = self(),
-  State#cm_state.monitor_process ! {get_version, Pid},
+  Pid = self(),
+  whereis(?Monitoring_Proc) ! {get_version, Pid},
   receive
-    {monitor_process_version, V} -> [{monitor_process, V} | Versions]
+    {monitor_process_version, V} -> [{node(), monitor_process, V} | Versions]
   after 500 ->
-    [{monitor_process, error} | Versions]
+    [{node(), monitor_process, error} | Versions]
   end.
 
+%% get_workers_versions/1
+%% ====================================================================
+%% @doc Provides list of versions of workers.
+-spec get_workers_versions(Workers :: list()) -> Result when
+  Result :: list().
+%% ====================================================================
 get_workers_versions(Workers) ->
   get_workers_versions(Workers, []).
 
+%% get_workers_versions/2
+%% ====================================================================
+%% @doc Provides list of versions of workers.
+-spec get_workers_versions(Workers :: list(), TmpAnswer :: list()) -> Result when
+  Result :: list().
+%% ====================================================================
 get_workers_versions([], Versions) ->
   Versions;
 

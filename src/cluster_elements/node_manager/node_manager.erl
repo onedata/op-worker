@@ -273,9 +273,21 @@ send_to_ccm(Message) ->
 		_:_ -> connection_error
 	end.
 
+%% check_vsn/0
+%% ====================================================================
+%% @doc Checks application version
+-spec check_vsn() -> Result when
+  Result :: term().
+%% ====================================================================
 check_vsn() ->
   check_vsn(application:which_applications()).
 
+%% check_vsn/1
+%% ====================================================================
+%% @doc Checks application version
+-spec check_vsn(ApplicationData :: list()) -> Result when
+  Result :: term().
+%% ====================================================================
 check_vsn([]) ->
   non;
 
