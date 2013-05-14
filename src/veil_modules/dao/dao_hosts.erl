@@ -205,7 +205,7 @@ store_exec(Msg) ->
     gen_server:cast(dao, {sequential_synch, get(protocol_version), {hosts, store_exec, [sequential, Msg]}, non, {proc, Pid}}),
     receive
         {Pid, Response} -> Response
-    after 100 ->
+    after 300 ->
         {error, timeout}
     end.
 
