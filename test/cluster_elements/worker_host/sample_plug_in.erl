@@ -21,6 +21,10 @@
 init(_Args) ->
 	[].
 
+handle(_ProtocolVersion, {long_request, Time, Id, Pid}=_Msg) ->
+    {_, S, M} = now(),
+    receive after Time -> Pid ! {Id, S * 1000000 + M} end,
+    ok;
 handle(_ProtocolVersion, _Msg) ->
 	ok.
 

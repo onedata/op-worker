@@ -43,13 +43,22 @@
     Result :: ok | {error, Error},
     Error :: term().
 %% ====================================================================
-init(_Args) ->
-    case dao_hosts:start_link() of
-        {ok, _Pid} -> ok;
-        {error, {already_started, _Pid}} -> ok;
-        ignore -> {error, supervisor_ignore};
-        {error, _Err} = Ret -> Ret
-    end.
+init({Args, {init_status, undefined}}) ->
+    ets:new(db_host_store, [named_table, public, bag, {read_concurrency, true}]),
+    init({Args, {init_status, table_initialized}});
+init({_Args, {init_status, table_initialized}}) -> %% Final stage of initialization. ETS table was initialized
+    case application:get_env(veil_cluster_node, db_nodes) of
+        {ok, Nodes} when is_list(Nodes) ->
+            [dao_hosts:store_exec(sequential, {insert_host, Node}) || Node <- Nodes, is_atom(Node)], %% We can't use dao_hosts:insert/1 because gen_server isn't initialized yet
+            ok;
+        _ ->
+            %% TODO: logs
+            ok
+    end;
+init({Args, {init_status, _TableInfo}}) ->
+    init({Args, {init_status, table_initialized}});
+init(Args) ->
+    init({Args, {init_status, ets:info(db_host_store)}}).
 
 %% handle/1
 %% ====================================================================
@@ -78,24 +87,32 @@ handle(_ProtocolVersion, ping) ->
 handle(_ProtocolVersion, get_version) ->
   1;
 
-handle(_ProtocolVersion, {Target, Method, Args}) when is_atom(Target), is_atom(Method), is_list(Args) ->
+handle(ProtocolVersion, {Target, Method, Args}) when is_atom(Target), is_atom(Method), is_list(Args) ->
+    put(protocol_version, ProtocolVersion), %% Some sub-modules may need it to communicate with DAO' gen_server
     Module =
         case Target of
             utils -> dao;
             T -> list_to_atom("dao_" ++ atom_to_list(T))
         end,
     try apply(Module, Method, Args) of
-        {error, Err} -> {error, Err};
+        {error, Err} ->
+            lager:error([{mod, ?MODULE}], "Handling ~p:~p with args ~p returned error: ~p", [Module, Method, Args, Err]),
+            {error, Err};
         {ok, Response} -> {ok, Response};
         ok -> ok;
-        Other -> {error, Other}
+        Other ->
+            lager:error([{mod, ?MODULE}], "Handling ~p:~p with args ~p returned unknown response: ~p", [Module, Method, Args, Other]),
+            {error, Other}
     catch
         error:{badmatch, {error, Err}} -> {error, Err};
-        _:Error -> {error, Error}
+        Type:Error ->
+            lager:error([{mod, ?MODULE}], "Handling ~p:~p with args ~p interrupted by exception: ~p:~p", [Module, Method, Args, Type, Error]),
+            {error, Error}
     end;
 handle(ProtocolVersion, {Method, Args}) when is_atom(Method), is_list(Args) ->
     handle(ProtocolVersion, {cluster, Method, Args});
 handle(_ProtocolVersion, _Request) ->
+    lager:error([{mod, ?MODULE}], "Unknown request ~p (protocol ver.: ~p)", [_Request, _ProtocolVersion]),
     {error, wrong_args}.
 
 %% cleanup/0
@@ -106,10 +123,7 @@ handle(_ProtocolVersion, _Request) ->
     Error :: timeout | term().
 %% ====================================================================
 cleanup() ->
-    Pid = whereis(db_host_store_proc),
-    monitor(process, Pid),
-    Pid ! {self(), shutdown},
-    receive {'DOWN', _Ref, process, Pid, normal} -> ok after 1000 -> {error, timeout} end.
+    ok.
 
 %% ===================================================================
 %% API functions
@@ -146,7 +160,9 @@ save_record(Rec, Id, Mode) when is_tuple(Rec), is_list(Id)->
     Valid = is_valid_record(Rec),
     if
         Valid -> ok;
-        true -> throw(unsupported_record)
+        true ->
+            lager:error([{mod, ?MODULE}], "Cannot save record: ~p because it's not supported", [Rec]),
+            throw(unsupported_record)
     end,
     Revs =
         if
@@ -290,6 +306,7 @@ term_to_doc(Field) when is_tuple(Field) ->
     {_, {Ret}} = lists:foldl(FoldFun, {1, InitObj}, LField),
     {lists:reverse(Ret)};
 term_to_doc(Field) ->
+    lager:error([{mod, ?MODULE}], "Cannot convert term to document because field: ~p is not supported", [Field]),
     throw({unsupported_field, Field}).
 
 
