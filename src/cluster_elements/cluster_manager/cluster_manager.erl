@@ -595,7 +595,6 @@ monitoring_loop(Flag, Nodes) ->
   Flag :: on | off.
 %% ====================================================================
 monitoring_loop(Flag) ->
-  Pid = self(),
   receive
     {nodedown, Node} ->
       case Flag of
