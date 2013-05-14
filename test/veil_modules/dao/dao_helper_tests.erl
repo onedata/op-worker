@@ -39,81 +39,42 @@ main_test_() ->
         fun create_view/0, fun query_view/0]}.
 
 setup() ->
-    put(db_host, undefined),
-    Pid = spawn(dao_hosts, init, []),           %% <-- DON NOT swap these lines unless you understand exactly how meck works
-    meck:new(dao_hosts, [unstick, passthrough]),%% <-- And even if you do understand, then you know that you shouldn't do it
-    receive after 20 -> Pid end.
+    meck:new(dao_hosts).
 
-teardown(Pid) ->
-    meck:unload(dao_hosts),
-    Pid ! {self(), shutdown}.
+teardown(_) ->
+    meck:unload(dao_hosts).
 
 list_dbs() ->
-    case dao_helper:list_dbs() of
-        {ok, List} when is_list(List) -> ok;
-        {error, _} -> ok
-    end,
-    meck:expect(dao_hosts, call, fun(all_dbs, [<<"Name">>]) ->
-        {ok, [<<"test1">>, <<"test2">>]};
-        (_, _) -> meck:passthrough() end),
+    meck:expect(dao_hosts, call, fun(all_dbs, [<<"Name">>]) -> {ok, [<<"test1">>, <<"test2">>]} end),
     {ok, ["test1", "test2"]} = dao_helper:list_dbs("Name"),
-
     ?assert(meck:validate(dao_hosts)).
 
 get_db_info() ->
-    case dao_helper:get_db_info("test") of
-        {ok, List} when is_list(List) -> ok;
-        {error, _} -> ok
-    end.
+    meck:expect(dao_hosts, call, fun(get_db_info, [<<"Name">>]) -> {ok, []} end),
+    {ok, []} = dao_helper:get_db_info("Name").
 
 get_doc_count() ->
-    case dao_helper:get_doc_count("test") of
-        {ok, Count} when is_integer(Count) -> ok;
-        {error, _} -> ok
-    end,
-    meck:expect(dao_hosts, call, fun(get_doc_count, [<<"Name">>]) ->
-        {ok, 5};
-        (_, _) -> meck:passthrough() end),
+    meck:expect(dao_hosts, call, fun(get_doc_count, [<<"Name">>]) -> {ok, 5} end),
     {ok, 5} = dao_helper:get_doc_count("Name"),
     ?assert(meck:validate(dao_hosts)).
 
 create_db1() ->
-    case dao_helper:create_db("test") of
-        ok -> ok;
-        {error, _} -> ok
-    end,
-    meck:expect(dao_hosts, call, fun(create_db, [<<"Name">>, []]) ->
-        accepted;
-        (_, _) -> meck:passthrough() end),
+    meck:expect(dao_hosts, call, fun(create_db, [<<"Name">>, []]) -> accepted end),
     ok = dao_helper:create_db("Name"),
     ?assert(meck:validate(dao_hosts)).
 
 create_db2() ->
-    case dao_helper:create_db("test", [{q, "1"}]) of
-        ok -> ok;
-        {error, _} -> ok
-    end,
-    meck:expect(dao_hosts, call, fun(create_db, [<<"Name">>, _]) ->
-        accepted;
-        (_, _) -> meck:passthrough() end),
+    meck:expect(dao_hosts, call, fun(create_db, [<<"Name">>, _]) -> accepted end),
     ok = dao_helper:create_db("Name", [{q, "5"}]),
     ?assert(meck:validate(dao_hosts)).
 
 delete_db() ->
-    case dao_helper:delete_db("test") of
-        ok -> ok;
-        {error, _} -> ok
-    end,
-    meck:expect(dao_hosts, call, fun(delete_db, [<<"Name">>, []]) ->
-        {badrpc, {'EXIT', {database_does_not_exist, test}}};
-        (_, _) -> meck:passthrough() end),
+    meck:expect(dao_hosts, call, fun(delete_db, [<<"Name">>, []]) -> {badrpc, {'EXIT', {database_does_not_exist, test}}} end),
     {error, database_does_not_exist} = dao_helper:delete_db("Name"),
     ?assert(meck:validate(dao_hosts)).
 
 open_doc() ->
-    meck:expect(dao_hosts, call, fun(open_doc, [<<"Name">>, <<"ID">>, []]) ->
-        {ok, {some, document, from, db}};
-        (_, _) -> meck:passthrough() end),
+    meck:expect(dao_hosts, call, fun(open_doc, [<<"Name">>, <<"ID">>, []]) -> {ok, {some, document, from, db}} end),
     {ok, {some, document, from, db}} = dao_helper:open_doc("Name", "ID"),
     ?assert(meck:validate(dao_hosts)).
 

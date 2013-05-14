@@ -25,7 +25,7 @@
 %% plug_in that is used and state of this plug_in. It contains also
 %% information about time of requests processing (used by ccm during
 %% load balancing).
--record(host_state, {plug_in = non, plug_in_state = [], load_info = []}).
+-record(host_state, {plug_in = non, plug_in_state = [], load_info = [], current_seq_job = none, seq_queue = []}).
 
 %% This record is used by requests_dispatcher (it contains its state).
 -record(dispatcher_state, {cluster_rengine = {[],[]}, control_panel = {[],[]}, dao = {[],[]},
