@@ -6,4 +6,4 @@
 
 {init, [ccm1, ccm2], [{node_start, [{monitor_master, true}]}]}.%%[{node_start, [{basic2_SUITE, init_vm}]}]}.
 
-{logdir, "./logs/"}.
+{logdir, "../../logs/"}.

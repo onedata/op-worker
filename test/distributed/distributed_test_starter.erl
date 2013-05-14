@@ -1,19 +1,15 @@
--module(basic_SUITE).
--include_lib("common_test/include/ct.hrl").
--export([all/0]).
--export([test1/1, test2/1, test3/1]).
+%% Copyright
+-module(distributed_test_starter).
+-author("michal").
 
-all() -> [test1,test2,test3].
+%% API
+-export([start/0]).
 
-test1(_Config) ->
-  [{Q,ok}] = ct_master:run("dist.spec").
-  %%ok = check_progress(5000).
-
-test2(_Config) ->
-  1 = 1.
-
-test3(_Config) ->
-  1 = 1.
+start() ->
+  ct_master:run("dist.spec"),
+  %%lAns = check_progress(5000),
+  %%io:format("aaa ~s~n", [Ans]),
+  init:stop().
 
 check_progress(Timeout) when Timeout < 0 ->
   timeout;

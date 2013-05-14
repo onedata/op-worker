@@ -16,6 +16,8 @@ distclean: clean
 
 test: deps compile
 	./rebar eunit ct skip_deps=true
+	chmod +x test/start_distributed_test.sh
+	./test/start_distributed_test.sh
 
 generate: compile
 	./rebar generate
