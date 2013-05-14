@@ -85,7 +85,7 @@ handle(_ProtocolVersion, ping) ->
   pong;
 
 handle(_ProtocolVersion, get_version) ->
-  1;
+  node_manager:check_vsn();
 
 handle(ProtocolVersion, {Target, Method, Args}) when is_atom(Target), is_atom(Method), is_list(Args) ->
     put(protocol_version, ProtocolVersion), %% Some sub-modules may need it to communicate with DAO' gen_server
