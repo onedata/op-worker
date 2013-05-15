@@ -1,2 +1,2 @@
 {'*', [{outdir, "."}]}.
-{'basic2/*', [{outdir, "./basic2"}]}.
+{'example/*', [{outdir, "./example"}]}.
