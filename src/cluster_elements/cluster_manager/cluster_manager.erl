@@ -231,10 +231,7 @@ handle_info(_Info, State) ->
   | term().
 %% ====================================================================
 terminate(_Reason, _State) ->
-  case whereis(?Monitoring_Proc) of
-      Proc when is_pid(Proc) -> Proc ! exit;
-      _ -> ok
-  end,
+  catch whereis(?Monitoring_Proc) ! exit,
   ok.
 
 
