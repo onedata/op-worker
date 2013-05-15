@@ -58,6 +58,7 @@ start_link(PlugIn, PlugInArgs, LoadMemorySize) ->
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 init([PlugIn, PlugInArgs, LoadMemorySize]) ->
+    process_flag(trap_exit, true),
     {ok, #host_state{plug_in = PlugIn, plug_in_state = PlugIn:init(PlugInArgs), load_info = {[], [], 0, LoadMemorySize}}}.
 
 %% handle_call/3
@@ -194,10 +195,9 @@ handle_info(Info, {PlugIn, State}) ->
 			| {shutdown, term()}
 			| term().
 %% ====================================================================
-terminate(_Reason, State) ->
-  PlugIn = State#host_state.plug_in,
-  PlugIn:cleanup(),
-  ok.
+terminate(_Reason, #host_state{plug_in = PlugIn}) ->
+    PlugIn:cleanup(),
+    ok.
 
 
 %% code_change/3

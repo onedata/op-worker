@@ -55,6 +55,7 @@ start_link() ->
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 init([]) ->
+  process_flag(trap_exit, true),
   {ok, #dispatcher_state{}}.
 
 %% handle_call/3
