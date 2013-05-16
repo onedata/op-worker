@@ -10,6 +10,7 @@
 %% ===================================================================
 
 -include_lib("records.hrl").
+-include_lib("veil_modules/dao/dao_vfs.hrl").
 
 %% record definition used in record registration example
 -record(some_record, {field1 = "", field2 = "", field3 = ""}).
@@ -27,6 +28,11 @@
         cm_state -> ?record_info_gen(cm_state);
         host_state -> ?record_info_gen(host_state);
         node_state -> ?record_info_gen(node_state);
+        file -> ?record_info_gen(file);
+        file_location -> ?record_info_gen(file_location);
+        file_descriptor -> ?record_info_gen(file_descriptor);
+        file_meta -> ?record_info_gen(file_meta);
+        file_lock -> ?record_info_gen(file_lock);
         %next_record -> ?record_info_gen(next_record);
         _ -> {error, unsupported_record}
     end).
