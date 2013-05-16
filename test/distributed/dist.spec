@@ -1,8 +1,7 @@
-{node, ccm1, 'ccm1@plgsl63.local'}.
-{node, ccm2, 'ccm2@plgsl63.local'}.
+{node, ccm1, 'ccm1@localhost'}.
+{node, ccm2, 'ccm2@localhost'}.
 
 {init, [ccm1, ccm2], [{node_start, [{monitor_master, true}]}]}.
-%%{init, [ccm1, ccm2], [{node_start, [{monitor_master, true}, {callback_module, local_slave}]}]}.
 
 {logdir, "../../logs/"}.
 
