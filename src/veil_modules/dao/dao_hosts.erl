@@ -9,7 +9,6 @@
 %% @end
 %% ===================================================================
 -module(dao_hosts).
--behaviour(supervisor).
 
 -include_lib("veil_modules/dao/common.hrl").
 -include_lib("veil_modules/dao/dao_hosts.hrl").
@@ -19,44 +18,7 @@
 -endif.
 
 %% API
--export([start_link/0, start_link/1, insert/1, delete/1, ban/1, ban/2, reactivate/1, call/2, call/3, store_loop/1]).
-
-%% supervisor callbacks
--export([init/1]).
-
-%% ===================================================================
-%% API functions
-%% ===================================================================
-
-%% start_link/0
-%% ====================================================================
-%% @doc Starts application supervisor for host store master process
--spec start_link() -> Result when
-    Result :: {ok, pid()}
-    | ignore
-    | {error, Error},
-    Error :: {already_started, pid()}
-    | {shutdown, term()}
-    | term().
-%% ====================================================================
-start_link() ->
-    supervisor:start_link({local, dao_hosts_sup}, ?MODULE, []).
-
-%% start_link/1
-%% ====================================================================
-%% @doc Starts the hosts store master process (called by supervisor)
--spec start_link(Args) -> Result when
-    Args :: term(),
-    Result :: {ok, Pid}
-    | ignore
-    | {error, Error},
-    Pid :: pid(),
-    Error :: {already_started, Pid} | term().
-%% ====================================================================
-start_link(_Args) ->
-    Pid = spawn_link(fun() -> init() end),
-    Pid ! {self(), force_update},
-    receive {Pid, ok} -> {ok, Pid} after 2000 -> {error, proc_timeout} end.
+-export([insert/1, delete/1, ban/1, ban/2, reactivate/1, call/2, call/3, store_exec/2]).
 
 %% insert/1
 %% ====================================================================
@@ -95,6 +57,7 @@ ban(Host) ->
 -spec ban(Host :: atom(), BanTime :: integer()) -> ok | {error, no_host} | {error, timeout}.
 %% ====================================================================
 ban(Host, BanTime) ->
+    lager:warning([{mod, ?MODULE}], "Host: ~p is being banned. Reason of that is probably it wasn't answering or it was answering to slow. It'll be reactivated after: ~ps", [Host, BanTime/1000]),
     Res = store_exec({ban_host, Host}),
     put(db_host, undefined),
     {ok, _} = timer:apply_after(BanTime, ?MODULE, reactivate, [Host]),
@@ -134,91 +97,47 @@ call(Module, Method, Args) ->
         {error, Err} -> {error, Err}
     end.
 
-%% ===================================================================
-%% Behaviour callback functions
-%% ===================================================================
+%% store_exec/2
+%% ====================================================================
+%% @doc Executes Msg. Caller must ensure that this method won't be used concurrently.
+%% Currently this method is used as part of internal module implementation, although it has to be exported
+%% because it's called by gen_server (which ensures it's sequential call).
+%% @end
+-spec store_exec(sequential, Msg :: term()) -> ok | {error, Error :: term()}.
+%% ====================================================================
+store_exec(sequential, {insert_host, Host}) ->
+    ets:insert(db_host_store, {host, Host}),
+    ok;
+store_exec(sequential, {delete_host, Host}) ->
+    ets:delete_object(db_host_store, {host, Host}),
+    ets:delete_object(db_host_store, {banned_host, Host}),
+    ok;
+store_exec(sequential, {ban_host, Host}) ->
+    case registered(Host) of
+        false ->
+            {error, no_host};
+        true ->
+            ets:delete_object(db_host_store, {host, Host}),
+            ets:insert(db_host_store, {banned_host, Host}),
+            ok
+    end;
+store_exec(sequential, {reactivate_host, Host}) ->
+    case registered(Host) of
+        false ->
+            {error, no_host};
+        true ->
+            ets:delete_object(db_host_store, {banned_host, Host}),
+            ets:insert(db_host_store, {host, Host}),
+            ok
+    end;
+store_exec(sequential, _Unknown) ->
+    lager:error([{mod, ?MODULE}], "Unknown host store command: ~p", [_Unknown]),
+    {error, unknown_command}.
 
-%% init/1
-%% ====================================================================
-%% @doc <a href="http://www.erlang.org/doc/man/supervisor.html#Module:init-1">supervisor:init/1</a>
--spec init(Args :: term()) -> Result when
-    Result :: {ok, {SupervisionPolicy, [ChildSpec]}} | ignore,
-    SupervisionPolicy :: {RestartStrategy, MaxR :: non_neg_integer(), MaxT :: pos_integer()},
-    RestartStrategy :: one_for_all
-    | one_for_one
-    | rest_for_one
-    | simple_one_for_one,
-    ChildSpec :: {Id :: term(), StartFunc, RestartPolicy, Type :: worker | supervisor, Modules},
-    StartFunc :: {M :: module(), F :: atom(), A :: [term()] | undefined},
-    RestartPolicy :: permanent
-    | transient
-    | temporary,
-    Modules :: [module()] | dynamic.
-%% ====================================================================
-init([]) ->
-    {ok, {{one_for_one, 5, 10}, [?CHILD(?MODULE, worker)]}}.
 
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
-
-%% init/0
-%% ====================================================================
-%% @doc Initializes the hosts store
--spec init() -> Result when
-    Result :: ok | {error, Error},
-    Error :: term().
-%% ====================================================================
-init() ->
-    ets:new(db_host_store, [named_table, protected, bag]),
-    register(db_host_store_proc, self()),
-    store_loop({0, 0, 0}).
-
-
-%% store_loop/1
-%% ====================================================================
-%% @doc Host store main loop
--spec store_loop(State) -> NewState when
-    State :: erlang:timestamp(),
-    NewState :: erlang:timestamp().
-%% ====================================================================
-store_loop(State) ->
-    NewState = update_hosts(State, timer:now_diff(erlang:now(), State)),
-    receive
-        {From, force_update} ->
-            update_hosts(NewState, ?DAO_DB_HOSTS_REFRESH_INTERVAL + 1),
-            From ! {self(), ok};
-        {From, {insert_host, Host}} ->
-            ets:insert(db_host_store, {host, Host}),
-            From ! {self(), ok};
-        {From, {delete_host, Host}} ->
-            ets:delete_object(db_host_store, {host, Host}),
-            ets:delete_object(db_host_store, {banned_host, Host}),
-            From ! {self(), ok};
-        {From, {ban_host, Host}} ->
-            case registered(Host) of
-                false ->
-                    From ! {self(), {error, no_host}};
-                true ->
-                    ets:delete_object(db_host_store, {host, Host}),
-                    ets:insert(db_host_store, {banned_host, Host}),
-                    From ! {self(), ok}
-            end;
-        {From, {reactivate_host, Host}} ->
-            case registered(Host) of
-                false ->
-                    From ! {self(), {error, no_host}};
-                true ->
-                    ets:delete_object(db_host_store, {banned_host, Host}),
-                    ets:insert(db_host_store, {host, Host}),
-                    From ! {self(), ok}
-            end;
-        {_From, shutdown} ->
-            exit(normal)
-    after ?DAO_DB_HOSTS_REFRESH_INTERVAL ->
-        ok
-    end,
-    ?MODULE:store_loop(NewState).
 
 
 %% registered/1
@@ -231,27 +150,6 @@ registered(Host) ->
         [] -> false;
         _ -> true
     end.
-
-
-%% update_hosts/1
-%% ====================================================================
-%% @doc Update host list when it's old
--spec update_hosts(State, TimeDiff) -> NewState when
-    State :: erlang:timestamp(),
-    TimeDiff :: integer(),
-    NewState :: erlang:timestamp().
-%% ====================================================================
-update_hosts(_State, TimeDiff) when TimeDiff > ?DAO_DB_HOSTS_REFRESH_INTERVAL ->
-%% ets:delete_all_objects(db_host_store), %% Uncomment if hard reset is needed
-%% Here we have code that loads DB host list (from file application env variable)
-    case application:get_env(veil_cluster_node, db_nodes) of
-        {ok, Nodes} when is_list(Nodes) ->
-            [insert(Node) || Node <- Nodes, is_atom(Node)];
-        _ -> ok
-    end,
-    erlang:now();
-update_hosts(State, _TimeDiff) ->
-    State.
 
 
 %% get_random/0
@@ -297,17 +195,17 @@ get_host() ->
 
 %% store_exec/1
 %% ====================================================================
-%% @doc Sends Msg to host store master process and waits for replay
+%% @doc Sequentially exec Msg
 -spec store_exec(Msg :: term()) -> ok | {error, Err} | {error, timeout} when
     Err :: term().
 %% ====================================================================
 store_exec(Msg) ->
-    Pid = whereis(db_host_store_proc),
-    db_host_store_proc ! {self(), Msg},
+    PPid = self(),
+    Pid = spawn(fun() -> receive Resp -> PPid ! {self(), Resp} after 1000 -> exited end end),
+    gen_server:cast(dao, {sequential_synch, get(protocol_version), {hosts, store_exec, [sequential, Msg]}, non, {proc, Pid}}),
     receive
-        {Pid, ok} -> ok;
-        {Pid, {error, Err}} -> {error, Err}
-    after 100 ->
+        {Pid, Response} -> Response
+    after 300 ->
         {error, timeout}
     end.
 
@@ -329,10 +227,12 @@ call(Module, Method, Args, Attempt) when Attempt < ?RPC_MAX_RETRIES ->
                 {badrpc, Error} ->
                     {error, Error};
                 Other ->
+                    reactivate(Host),
                     Other
             end
     end;
 call(_Module, _Method, _Args, _Attempt) ->
+    lager:error([{mod, ?MODULE}], "DBMS call filed after: ~p attempts. Current host store state: ~p", [_Attempt, ets:lookup(db_host_store, host) ++ ets:lookup(db_host_store, banned_host)]),
     {error, rpc_retry_limit_exceeded}.
 
 

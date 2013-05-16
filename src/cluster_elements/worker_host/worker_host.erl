@@ -58,6 +58,7 @@ start_link(PlugIn, PlugInArgs, LoadMemorySize) ->
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 init([PlugIn, PlugInArgs, LoadMemorySize]) ->
+    process_flag(trap_exit, true),
     {ok, #host_state{plug_in = PlugIn, plug_in_state = PlugIn:init(PlugInArgs), load_info = {[], [], 0, LoadMemorySize}}}.
 
 %% handle_call/3
@@ -128,6 +129,38 @@ handle_cast({asynch, ProtocolVersion, Msg}, State) ->
 	spawn(fun() -> proc_request(PlugIn, ProtocolVersion, Msg, non, non) end),	
 	{noreply, State};
 
+handle_cast({sequential_synch, ProtocolVersion, Msg, MsgId, ReplyTo}, State) ->
+    PlugIn = State#host_state.plug_in,
+    Job = fun() -> proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) end,
+    gen_server:cast(State#host_state.plug_in, {sequential, job_check}), %% Process run queue
+    {noreply, State#host_state{seq_queue = State#host_state.seq_queue ++ [Job]}};
+
+handle_cast({sequential_asynch, ProtocolVersion, Msg}, State) ->
+    PlugIn = State#host_state.plug_in,
+    Job = fun() -> proc_request(PlugIn, ProtocolVersion, Msg, non, non) end,
+    gen_server:cast(State#host_state.plug_in, {sequential, job_check}), %% Process run queue
+    {noreply, State#host_state{seq_queue = State#host_state.seq_queue ++ [Job]}};
+
+handle_cast({sequential, job_end}, State) ->
+    gen_server:cast(State#host_state.plug_in, {sequential, job_check}), %% Process run queue
+    {noreply, State#host_state{current_seq_job = none}};  %% Clear current task info
+
+handle_cast({sequential, job_check}, State) ->
+    {CurrentJob, _RunQueue} = SeqState = {State#host_state.current_seq_job, State#host_state.seq_queue},
+    IsAlive = is_pid(CurrentJob) andalso is_process_alive(CurrentJob),
+    case SeqState of
+        {_Value, _Queue} when IsAlive -> %% We're running some process right now -> we should just return and let it finish
+            {noreply, State};
+        {_, []} -> %% There is no process currently running, but the run queue is empty -> we should let it be as it is
+            {noreply, State};
+        {_, [ Job | Queue ]} when is_function(Job) -> %% There is no process currently running, we can start queued job
+            Pid = spawn(fun() -> Job(), gen_server:cast(State#host_state.plug_in, {sequential, job_end}) end),
+            {noreply, State#host_state{current_seq_job = Pid, seq_queue = Queue}};
+        {Value, Queue}->  %% Unknown state
+            lager:error([{mod, ?MODULE}], "Unknown worker sequential run queue state: current job: ~p, run queue: ~p", [Value, Queue]),
+            {noreply, State}
+    end;
+
 handle_cast({progress_report, Report}, State) ->
 	NewLoadInfo = save_progress(Report, State#host_state.load_info),
     {noreply, State#host_state{load_info = NewLoadInfo}};
@@ -162,7 +195,8 @@ handle_info(Info, {PlugIn, State}) ->
 			| {shutdown, term()}
 			| term().
 %% ====================================================================
-terminate(_Reason, _State) ->
+terminate(_Reason, #host_state{plug_in = PlugIn}) ->
+    PlugIn:cleanup(),
     ok.
 
 

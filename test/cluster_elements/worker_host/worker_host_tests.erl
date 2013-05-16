@@ -41,7 +41,8 @@ generate_test_() ->
     fun setup/0,
     fun teardown/1,
     [?_test(wrong_request()),
-      ?_test(load_info_storing())]}.
+      ?_test(load_info_storing()),
+      ?_test(sequential_request())]}.
 
 %% ====================================================================
 %% Functions used by tests
@@ -116,6 +117,32 @@ load_info_storing() ->
 	?assert(Old4 =:= []),
 
 	ok = application:stop(?APP_Name).
+
+sequential_request() ->
+    ok = application:start(?APP_Name),
+    Module = sample_plug_in,
+    {ok, _ChildPid} = supervisor:start_child(?Supervisor_Name, ?Sup_Child(Module, worker_host, transient, [sample_plug_in, [], 10])),
+
+    gen_server:cast(Module, {sequential_asynch, 1, {long_request, 50, 1, self()}}),
+    gen_server:cast(Module, {sequential_asynch, 1, {long_request, 20, 2, self()}}),
+    gen_server:cast(Module, {sequential_asynch, 1, {long_request, 10, 3, self()}}),
+
+    First =
+        receive
+        {1, T1} -> T1
+        end,
+    Second =
+        receive
+        {2, T2} -> T2
+        end,
+    Third =
+        receive
+        {3, T3} -> T3
+        end,
+    true = First < Second,
+    true = Second < Third,
+
+    ok = application:stop(?APP_Name).
 
 %% ====================================================================
 %% Helper functions

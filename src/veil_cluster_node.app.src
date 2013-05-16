@@ -12,7 +12,7 @@
 {application, veil_cluster_node,
  [
   {description, "Application starts node of VeilFS central cluster"},
-  {vsn, "0.0.5"},
+  {vsn, "0.0.6"},
   {registered, []},
   {applications, [
                   kernel,
@@ -47,6 +47,9 @@
       {ranch_timeout, 5000},
       %% time in ms after witch ranch answers with error
       {dispatcher_timeout, 2000},
+      %% time in ms after witch code of loops will be reloaded
+      %% e.g. if value is 10000 hot_swap message will be sent to loops 10 seconds after release_handler:install_release execution
+      {hot_swapping_time, 10000},
       %% path to certificate used by ranch_ssl
       {ssl_cert_path, "./veilfs.pem"}
   		]}

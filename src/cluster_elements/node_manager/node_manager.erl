@@ -23,6 +23,7 @@
 %% API
 %% ====================================================================
 -export([start_link/1]).
+-export([check_vsn/0]).
 
 %% ====================================================================
 %% gen_server callbacks
@@ -61,6 +62,7 @@ start_link(Type) ->
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 init([Type]) when Type =:= worker ; Type =:= ccm ->
+    process_flag(trap_exit, true),
 	timer:apply_after(10, gen_server, cast, [?Node_Manager_Name, do_heart_beat]),
     {ok, #node_state{node_type = Type, ccm_con_status = not_connected}};
 
@@ -271,3 +273,27 @@ send_to_ccm(Message) ->
 	catch
 		_:_ -> connection_error
 	end.
+
+%% check_vsn/0
+%% ====================================================================
+%% @doc Checks application version
+-spec check_vsn() -> Result when
+  Result :: term().
+%% ====================================================================
+check_vsn() ->
+  check_vsn(application:which_applications()).
+
+%% check_vsn/1
+%% ====================================================================
+%% @doc Checks application version
+-spec check_vsn(ApplicationData :: list()) -> Result when
+  Result :: term().
+%% ====================================================================
+check_vsn([]) ->
+  non;
+
+check_vsn([{Application, _Description, Vsn} | Apps]) ->
+  case Application of
+    ?APP_Name -> Vsn;
+    _Other -> check_vsn(Apps)
+  end.
