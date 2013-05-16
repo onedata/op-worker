@@ -1,7 +1,16 @@
-#!/bin/bash
+## ===================================================================
+## @author Michal Wrzeszcz
+## @copyright (C): 2013 ACK CYFRONET AGH
+## This software is released under the MIT license
+## cited in 'LICENSE.txt'.
+## ===================================================================
+## @doc: This script starts distributed tests.
+## ===================================================================
 
-mkdir -p logs
-cd test/distributed
+#!/bin/bash
+mkdir -p test/distributed_tests_out
+cp -R test/distributed/* test/distributed_tests_out
+cd test/distributed_tests_out
 
 HOST=$HOSTNAME
 
@@ -13,19 +22,19 @@ fi
 TESTS=$(find . -name "*.spec")
 for TEST in $TESTS
 do
-    cp $TEST $TEST.tmp
-    sed -i "s/localhost/$HOST/g" $TEST.tmp
-    TESTS_TMP="$TESTS_TMP $TEST.tmp"
+    sed -i "s/localhost/$HOST/g" $TEST
 done
 
 erl -make
-erl -name starter -s distributed_test_starter start $TESTS_TMP
+erl -name starter -s distributed_test_starter start $TESTS
 
 find . -name "*.beam" -exec rm -rf {} \;
+find . -name "*.erl" -exec rm -rf {} \;
 
-for TEST in $TESTS_TMP
+for TEST in $TESTS
 do
     rm -f $TEST
 done
+rm -f Emakefile
 
 cd ../..
