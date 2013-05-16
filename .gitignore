@@ -7,3 +7,4 @@ logs
 .git
 .idea
 ebin
+test/distributed_tests_out
