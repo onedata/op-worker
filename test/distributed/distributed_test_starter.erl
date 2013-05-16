@@ -3,8 +3,16 @@
 -author("michal").
 
 %% API
--export([start/0]).
+-export([start/1]).
 
-start() ->
-  ct_master:run("dist_tmp.spec"),
+start(ConfigFiles) ->
+  start_test(ConfigFiles),
   init:stop().
+
+start_test([]) ->
+  ok;
+
+start_test([ConfigFile | Configs]) ->
+  io:format("~n~nTest ~s~n~n~n", [ConfigFile]),
+  ct_master:run(atom_to_list(ConfigFile)),
+  start_test(Configs).

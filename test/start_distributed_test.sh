@@ -2,20 +2,30 @@
 
 mkdir -p logs
 cd test/distributed
-cp dist.spec dist_tmp.spec
 
 HOST=$HOSTNAME
 
 if [[ "$HOST" != *\.* ]]
 then
-  HOST=$HOST.local
+    HOST=$HOST.local
 fi
 
-sed -i "s/localhost/$HOST/g" dist_tmp.spec
+TESTS=$(find . -name "*.spec")
+for TEST in $TESTS
+do
+    cp $TEST $TEST.tmp
+    sed -i "s/localhost/$HOST/g" $TEST.tmp
+    TESTS_TMP="$TESTS_TMP $TEST.tmp"
+done
 
 erl -make
-erl -name starter -s distributed_test_starter start
+erl -name starter -s distributed_test_starter start $TESTS_TMP
 
 find . -name "*.beam" -exec rm -rf {} \;
-rm dist_tmp.spec
+
+for TEST in $TESTS_TMP
+do
+    rm -f $TEST
+done
+
 cd ../..

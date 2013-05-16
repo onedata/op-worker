@@ -3,7 +3,8 @@
 
 {init, [ccm1, ccm2], [{node_start, [{monitor_master, true}]}]}.
 
-{logdir, "../../logs/"}.
+%%{logdir, master, "../../logs/"}.
+{logdir, all_nodes, "../../logs/"}.
 
 {alias, example, "./example"}.
 {cases, [ccm1], example, example_SUITE, [ccm1_test]}.
