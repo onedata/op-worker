@@ -90,7 +90,7 @@ protocol_buffers() ->
 
 %% This tests check if client may connect to dispatcher.
 dispatcher_connection() ->
-  Cert = "../veilfs.pem",
+  Cert = '../veilfs.pem',
   application:set_env(?APP_Name, node_type, ccm),
   application:set_env(?APP_Name, ssl_cert_path, Cert),
   ok = application:start(?APP_Name),
@@ -149,7 +149,7 @@ workers_list_actualization() ->
 ping() ->
   Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager],
 
-  Cert = "../veilfs.pem",
+  Cert = '../veilfs.pem',
   application:set_env(?APP_Name, node_type, ccm),
   application:set_env(?APP_Name, ssl_cert_path, Cert),
   application:set_env(?APP_Name, ccm_nodes, [node()]),
