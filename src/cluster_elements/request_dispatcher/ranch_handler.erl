@@ -62,6 +62,7 @@ init(Ref, Socket, Transport, _Opts = []) ->
   Result ::  ok.
 %% ====================================================================
 loop(Socket, Transport, RanchTimeout, DispatcherTimeout) ->
+  Transport:setopts(Socket, [{packet, 4}]),
   case Transport:recv(Socket, 0, RanchTimeout) of
     {ok, Data} ->
       try
