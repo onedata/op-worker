@@ -91,12 +91,13 @@ protocol_buffers() ->
 %% This tests check if client may connect to dispatcher.
 dispatcher_connection() ->
   Cert = '../veilfs.pem',
+  CertString = atom_to_list(Cert),
   application:set_env(?APP_Name, node_type, ccm),
   application:set_env(?APP_Name, ssl_cert_path, Cert),
   ok = application:start(?APP_Name),
 
   {ok, Port} = application:get_env(veil_cluster_node, dispatcher_port),
-  {ok, Socket} = ssl:connect("localhost", Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}]),
+  {ok, Socket} = ssl:connect("localhost", Port, [binary, {active, false}, {packet, 4}, {certfile, CertString}]),
 
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
@@ -150,6 +151,7 @@ ping() ->
   Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager],
 
   Cert = '../veilfs.pem',
+  CertString = atom_to_list(Cert),
   application:set_env(?APP_Name, node_type, ccm),
   application:set_env(?APP_Name, ssl_cert_path, Cert),
   application:set_env(?APP_Name, ccm_nodes, [node()]),
@@ -159,7 +161,7 @@ ping() ->
   timer:sleep(1500),
 
   {ok, Port} = application:get_env(veil_cluster_node, dispatcher_port),
-  {ok, Socket} = ssl:connect("localhost", Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}]),
+  {ok, Socket} = ssl:connect("localhost", Port, [binary, {active, false}, {packet, 4}, {certfile, CertString}]),
 
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
