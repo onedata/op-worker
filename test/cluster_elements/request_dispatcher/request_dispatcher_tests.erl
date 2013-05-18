@@ -96,7 +96,7 @@ dispatcher_connection() ->
   ok = application:start(?APP_Name),
 
   {ok, Port} = application:get_env(veil_cluster_node, dispatcher_port),
-  {ok, Socket} = ssl:connect("localhost", Port, [binary, {active, false}, {packet, raw}, {certfile, Cert}]),
+  {ok, Socket} = ssl:connect("localhost", Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}]),
 
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
@@ -159,7 +159,7 @@ ping() ->
   timer:sleep(1500),
 
   {ok, Port} = application:get_env(veil_cluster_node, dispatcher_port),
-  {ok, Socket} = ssl:connect("localhost", Port, [binary, {active, false}, {packet, raw}, {certfile, Cert}]),
+  {ok, Socket} = ssl:connect("localhost", Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}]),
 
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
