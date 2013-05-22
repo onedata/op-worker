@@ -20,6 +20,39 @@
 ## application:get_env(veil_cluster_node, initialization_time) should return this
 -veil_cluster_node initialization_time {{initialization_time}}
 
+## How long (in sec) should ccm wait between successive checks of cluster status
+## application:get_env(veil_cluster_node, cluster_clontrol_period) should return this
+-veil_cluster_node cluster_clontrol_period {{cluster_clontrol_period}}
+
+## Memory size which stores information about worker load
+## application:get_env(veil_cluster_node, worker_load_memory_size) should return this
+-veil_cluster_node worker_load_memory_size {{worker_load_memory_size}}
+
+## number of threads used by dispatcher
+## application:get_env(veil_cluster_node, dispatcher_pool_size) should return this
+-veil_cluster_node dispatcher_pool_size {{dispatcher_pool_size}}
+
+## number of port used by dispatcher
+## application:get_env(veil_cluster_node, dispatcher_port) should return this
+-veil_cluster_node dispatcher_port {{dispatcher_port}}
+
+## time in ms after witch ranch kills thread that does nothing
+## application:get_env(veil_cluster_node, ranch_timeout) should return this
+-veil_cluster_node ranch_timeout {{ranch_timeout}}
+
+## time in ms after witch ranch answers with error
+## application:get_env(veil_cluster_node, dispatcher_timeout) should return this
+-veil_cluster_node dispatcher_timeout {{dispatcher_timeout}}
+
+## time in ms after witch code of loops will be reloaded
+## e.g. if value is 10000 hot_swap message will be sent to loops 10 seconds after release_handler:install_release execution
+## application:get_env(veil_cluster_node, hot_swapping_time) should return this
+-veil_cluster_node hot_swapping_time {{hot_swapping_time}}
+
+## path to certificate used by ranch_ssl
+## application:get_env(veil_cluster_node, ssl_cert_path) should return this
+-veil_cluster_node ssl_cert_path {{ssl_cert_path}}
+
 ## List of all DBMS nodes
 ## application:get_env(veil_cluster_node, db_nodes) should return this
 -veil_cluster_node db_nodes {{db_nodes}}

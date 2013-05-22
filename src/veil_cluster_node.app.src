@@ -12,7 +12,7 @@
 {application, veil_cluster_node,
  [
   {description, "Application starts node of VeilFS central cluster"},
-  {vsn, "0.0.6"},
+  {vsn, "0.0.6_VFS-77"},
   {registered, []},
   {applications, [
                   kernel,
@@ -51,6 +51,6 @@
       %% e.g. if value is 10000 hot_swap message will be sent to loops 10 seconds after release_handler:install_release execution
       {hot_swapping_time, 10000},
       %% path to certificate used by ranch_ssl
-      {ssl_cert_path, "./veilfs.pem"}
+      {ssl_cert_path, './veilfs.pem'}
   		]}
  ]}.

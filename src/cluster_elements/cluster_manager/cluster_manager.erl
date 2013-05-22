@@ -601,7 +601,6 @@ monitoring_loop(Flag) ->
     {nodedown, Node} ->
       case Flag of
         on ->
-          erlang:monitor_node(Node, false),
           gen_server:cast({global, ?CCM}, {node_down, Node});
         off -> ok
       end,
