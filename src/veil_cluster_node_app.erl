@@ -37,7 +37,7 @@ start(_StartType, _StartArgs) ->
   {ok, Port} = application:get_env(veil_cluster_node, dispatcher_port),
   {ok, PoolSize} = application:get_env(veil_cluster_node, dispatcher_pool_size),
   {ok, CertFile} = application:get_env(veil_cluster_node, ssl_cert_path),
-  {ok, _} = ranch:start_listener(dispatcher_listener, PoolSize, ranch_ssl, [{port, Port}, {certfile, CertFile}], ranch_handler, []),
+  {ok, _} = ranch:start_listener(dispatcher_listener, PoolSize, ranch_ssl, [{port, Port}, {certfile, atom_to_list(CertFile)}], ranch_handler, []),
   veil_cluster_node_sup:start_link(NodeType).
 
 %% stop/1

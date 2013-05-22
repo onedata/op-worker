@@ -253,7 +253,7 @@ choose_worker([], []) ->
 choose_worker([], L2) ->
   choose_worker(L2, []);
 choose_worker([N | L1], L2) ->
-  {N, {L1, [N, L2]}}.
+  {N, {L1, [N | L2]}}.
 
 %% add_worker/3
 %% ====================================================================
@@ -267,7 +267,7 @@ add_worker(Module, Node, State) ->
   Nodes = get_nodes(Module,State),
   case Nodes of
     {L1, L2} ->
-      {ok, update_nodes(Module, {[Node, L1], L2}, State)};
+      {ok, update_nodes(Module, {[Node | L1], L2}, State)};
     Other -> Other
   end.
 

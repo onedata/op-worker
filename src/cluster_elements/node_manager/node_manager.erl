@@ -172,17 +172,16 @@ code_change(_OldVsn, State, _Extra) ->
 	NewStatus ::  term().
 %% ====================================================================
 heart_beat(Conn_status, State) ->
-	New_conn_status = case Conn_status of
+  {New_conn_status, UpdateTime} = case Conn_status of
 		not_connected ->
 			{ok, CCM_Nodes} = application:get_env(veil_cluster_node, ccm_nodes),
 			Ans = init_net_connection(CCM_Nodes),
 			case Ans of
 				ok ->
-          timer:apply_after(500, gen_server, cast, [?Node_Manager_Name, do_heart_beat]), %% nodes may not have enough time to create cluster so another heartbeat will be done after 0.5s
-          connected;
-				error -> not_connected
+          {connected, short}; %% nodes may not have enough time to create cluster so another heartbeat will be done after 0.5s
+				error -> {not_connected, normal}
 			end;
-		Other -> Other
+		Other -> {Other, normal}
 	end,
 
 	New_conn_status2 = case New_conn_status of
@@ -196,7 +195,10 @@ heart_beat(Conn_status, State) ->
       timer:apply_after(Interval * 1000, gen_server, cast, [?Node_Manager_Name, do_heart_beat]),
       {ok, Num};
 		_Other3 ->
-      timer:apply_after(Interval * 1000, gen_server, cast, [?Node_Manager_Name, reset_ccm_connection]),
+      case UpdateTime of
+        normal -> timer:apply_after(Interval * 1000, gen_server, cast, [?Node_Manager_Name, reset_ccm_connection]);
+        short -> timer:apply_after(500, gen_server, cast, [?Node_Manager_Name, do_heart_beat])
+      end,
       {New_conn_status2, 0}
 	end,
 
