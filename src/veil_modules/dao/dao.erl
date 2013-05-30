@@ -30,7 +30,7 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% API
--export([save_record/3, save_record/2, save_record/1, get_record/1, remove_record/1]).
+-export([save_record/1, get_record/1, remove_record/1]).
 
 %% ===================================================================
 %% Behaviour callback functions
@@ -130,33 +130,23 @@ cleanup() ->
 %% ===================================================================
 
 
-%% save_record/2
+%% save_record/1
 %% ====================================================================
-%% @doc Same as save_record/3 but with Mode = insert
-%% Should not be used directly, use {@link dao:handle/2} instead.
-%% @end
--spec save_record(Rec :: tuple(), Id :: atom() | string()) ->
-    {ok, DocId :: string()} |
-    {error, conflict} |
-    no_return(). % erlang:error(any()) | throw(any())
-save_record(Rec, Id) ->
-    save_record(Rec, Id, insert).
-
-%% save_record/3
-%% ====================================================================
-%% @doc Saves record Rec to DB as document with UUID = Id.<br/>
+%% @doc Saves record to DB. Argument has to be either Record :: term() which will be saved<br/>
+%% with random UUID as completely new document or #document record. If #document record is passed <br/>
+%% caller may set UUID and revision info in order to update this record in DB.<br/>
 %% If Mode == update then the document with given UUID will be overridden.
 %% By default however saving to existing document will fail with {error, conflict}.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
--spec save_record(Rec :: tuple(), Id :: atom() | string(), Mode :: update | insert) ->
+-spec save_record(term() | #document{uuid :: string(), rev_info :: term(), record :: term(), force_update :: boolean()}) ->
     {ok, DocId :: string()} |
     {error, conflict} |
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
-save_record(Rec, Id, Mode) when is_tuple(Rec), is_atom(Id) ->
-    save_record(Rec, atom_to_list(Id), Mode);
-save_record(Rec, Id, Mode) when is_tuple(Rec), is_list(Id)->
+save_record(#document{uuid = Id, record = Rec} = Doc) when is_tuple(Rec), is_atom(Id) ->
+    save_record(Doc#document{uuid = atom_to_list(Id)});
+save_record(#document{uuid = Id, rev_info = RevInfo, record = Rec, force_update = IsForced}) when is_tuple(Rec), is_list(Id)->
     Valid = is_valid_record(Rec),
     if
         Valid -> ok;
@@ -166,11 +156,13 @@ save_record(Rec, Id, Mode) when is_tuple(Rec), is_list(Id)->
     end,
     Revs =
         if
-            Mode =:= update -> %% If Mode == update, we need to open existing doc in order to get revs
+            IsForced -> %% If Mode == update, we need to open existing doc in order to get revs
                 case dao_helper:open_doc(?SYSTEM_DB_NAME, Id) of
                     {ok, #doc{revs = RevDef}} -> RevDef;
                     _ -> #doc{revs = RevDef} = #doc{}, RevDef
                 end;
+            RevInfo =/= 0 ->
+                RevInfo;
             true ->
                 #doc{revs = RevDef} = #doc{},
                 RevDef
@@ -178,29 +170,19 @@ save_record(Rec, Id, Mode) when is_tuple(Rec), is_list(Id)->
     case dao_helper:insert_doc(?SYSTEM_DB_NAME, #doc{id = dao_helper:name(Id), revs = Revs, body = term_to_doc(Rec)}) of
         {ok, _} -> {ok, Id};
         {error, Err} -> {error, Err}
-    end.
-
-
-%% save_record/1
-%% ====================================================================
-%% @doc Saves record Rec to DB as document with random UUID.
-%% Should not be used directly, use {@link dao:handle/2} instead.
-%% @end
--spec save_record(Rec :: tuple()) ->
-    {ok, DocId :: string()} |
-    no_return(). % erlang:error(any()) | throw(any())
-%% ====================================================================
+    end;
 save_record(Rec) when is_tuple(Rec) ->
-    save_record(Rec, dao_helper:gen_uuid(), insert).
+    save_record(#document{uuid = dao_helper:gen_uuid(), record = Rec}).
 
 
 %% get_record/1
 %% ====================================================================
-%% @doc Retrieves record with UUID = Id from DB.
+%% @doc Retrieves record with UUID = Id from DB. Returns whole #document record containing UUID, Revision Info and
+%% demanded record inside. See #document structure for more info.
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec get_record(Id :: atom() | string()) ->
-    {ok, Record :: tuple()} |
+    {ok,#document{record :: tuple()}} |
     {error, Error :: term()} |
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
@@ -208,9 +190,9 @@ get_record(Id) when is_atom(Id) ->
     get_record(atom_to_list(Id));
 get_record(Id) when is_list(Id) ->
     case dao_helper:open_doc(?SYSTEM_DB_NAME, Id) of
-        {ok, #doc{body = Body}} ->
-            try doc_to_term(Body) of
-                Term -> {ok, Term}
+        {ok, #doc{body = Body, revs = RevInfo}} ->
+            try {doc_to_term(Body), RevInfo} of
+                {Term, RInfo} -> {ok, #document{uuid = Id, rev_info = RInfo, record = Term}}
             catch
                 _:Err -> {error, {invalid_document, Err}}
             end;

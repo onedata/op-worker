@@ -28,12 +28,12 @@ teardown(_) ->
     meck:unload(dao).
 
 save_state() ->
-    meck:expect(dao, save_record, fun(#some_record{}, cluster_state, update) -> {ok, "cluster_state"} end),
+    meck:expect(dao, save_record, fun(#document{record = #some_record{}, uuid = cluster_state, force_update = true}) -> {ok, "cluster_state"} end),
     {ok, "cluster_state"} = dao_cluster:save_state(#some_record{}),
     true = meck:validate(dao).
 
 get_state() ->
-    meck:expect(dao, get_record, fun(cluster_state) -> {ok, #some_record{}} end),
+    meck:expect(dao, get_record, fun(cluster_state) -> {ok, #document{record = #some_record{}}} end),
     {ok, #some_record{}} = dao_cluster:get_state(),
     true = meck:validate(dao).
 

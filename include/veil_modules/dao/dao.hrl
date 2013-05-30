@@ -38,6 +38,12 @@
     end).
 
 
+%% Structure representing full document.
+%% `uuid` is document UUID, `rev_info` is documents' current revision number
+%% `record` is an record representing this document (its data) and `force_update` is a flag
+%% that forces dao:save_record/1 to update this document even if rev_info isn't valid or up to date.
+-record(document, {uuid = "", rev_info = 0, record = none, force_update = false}).
+
 %% DB constants
 -define(SYSTEM_DB_NAME, "system_data").
 -define(RECORD_INSTANCES_DOC_PREFIX, "record_instances_").

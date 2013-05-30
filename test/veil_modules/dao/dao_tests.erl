@@ -50,12 +50,12 @@ save_record_test() ->
     meck:expect(dao_helper, open_doc, fun(?SYSTEM_DB_NAME, "test_id") -> {error, not_found} end),
     meck:expect(dao_helper, insert_doc, fun(?SYSTEM_DB_NAME, #doc{id = Id, body = DbObj1}) -> DbObj1 = DbObj, {ok, Id} end),
     meck:expect(dao_helper, name, fun(Arg) -> meck:passthrough([Arg]) end),
-    {ok, "test_id"} = dao:save_record(ToInsert, "test_id"),
-    {ok, "test_id"} = dao:save_record(ToInsert, "test_id", update),
+    {ok, "test_id"} = dao:save_record(#document{record = ToInsert, uuid = "test_id"}),
+    {ok, "test_id"} = dao:save_record(#document{record = ToInsert, uuid = "test_id", force_update = true}),
     true = meck:validate(dao_helper),
     meck:expect(dao_helper, open_doc, fun(?SYSTEM_DB_NAME, "test_id") -> {ok, #doc{revs = {1, [<<"123">>]}}} end),
     meck:expect(dao_helper, insert_doc, fun(?SYSTEM_DB_NAME, #doc{id = Id, revs = {1, [<<"123">>]}, body = DbObj1}) -> DbObj1 = DbObj, {ok, Id} end),
-    {ok, "test_id"} = dao:save_record(ToInsert, "test_id", update),
+    {ok, "test_id"} = dao:save_record(#document{record = ToInsert, uuid = "test_id", force_update = true}),
     true = meck:validate(dao_helper),
     meck:unload(dao_helper),
     pass.
@@ -65,7 +65,7 @@ get_record_test() ->
     meck:new(dao_helper),
     meck:expect(dao_helper, open_doc, fun(?SYSTEM_DB_NAME, "test_id") -> {ok, #doc{body = DbObj}} end),
     meck:expect(dao_helper, name, fun(Arg) -> meck:passthrough([Arg]) end),
-    {ok, #some_record{field1 = 1, field3 = true}} = dao:get_record("test_id"),
+    {ok, #document{record = #some_record{field1 = 1, field3 = true}}} = dao:get_record("test_id"),
     true = meck:validate(dao_helper),
     meck:unload(dao_helper).
 
