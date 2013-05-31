@@ -10,8 +10,8 @@
 %% ===================================================================
 -module(dao_helper).
 
--include_lib("veil_modules/dao/couch_db.hrl").
 -include_lib("veil_modules/dao/common.hrl").
+-include_lib("veil_modules/dao/dao_helper.hrl").
 
 -define(ADMIN_USER_CTX, {user_ctx, #user_ctx{roles = [<<"_admin">>]}}).
 
@@ -25,7 +25,7 @@
 -export([name/1, gen_uuid/0]).
 -export([list_dbs/0, list_dbs/1, get_db_info/1, get_doc_count/1, create_db/1, create_db/2]).
 -export([delete_db/1, delete_db/2, open_doc/2, open_doc/3, insert_doc/2, insert_doc/3, delete_doc/2, delete_docs/2]).
--export([insert_docs/2, insert_docs/3, open_design_doc/2, create_view/6, query_view/3, query_view/4]).
+-export([insert_docs/2, insert_docs/3, open_design_doc/2, create_view/6, query_view/3, query_view/4, parse_view_result/1]).
 
 %% ===================================================================
 %% API functions
@@ -301,6 +301,23 @@ query_view(DbName, DesignName, ViewName, QueryArgs = #view_query_args{view_type 
         end,
     normalize_return_term(call(query_view, [name(DbName), name(DesignName), name(ViewName), QueryArgs1])).
 
+%% parse_view_result/1
+%% ====================================================================
+%% @doc Parses query result from query_view/4 into #view_result{} record. <br/>
+%% Potentially slow ( O(total_rows) ), so use it only for very small results.
+%% @end
+-spec parse_view_result(Result :: term()) ->
+    {ok, QueryResult :: #view_result{}} | {error, term()}.
+%% ====================================================================
+parse_view_result({ok, [{total_and_offset, Total, Offset} | Rows]}) ->
+    FormatKey = fun(F, K) when is_list(K) -> [F(F, X) || X <- K];
+                (_F, K) when is_binary(K) -> binary_to_list(K);
+                (_F, K) -> K end,
+    FormattedRows = [#view_row{id = binary_to_list(Id), key = FormatKey(FormatKey, Key), value = Value} || {row, {[ {id, Id} | [ {key, Key} | [{value, Value}] ] ]}} <- Rows],
+    {ok, #view_result{total = Total, offset = Offset, rows = FormattedRows}};
+parse_view_result(Other) ->
+    Other.
+
 %% name/1
 %% ====================================================================
 %% @doc Converts string/atom to binary
@@ -344,6 +361,7 @@ normalize_return_term(Term) ->
     case Term of
         ok -> ok;
         accepted -> ok;
+        {ok, [{error, Error4} | _]} -> {error, Error4};
         {ok, Response} -> {ok, Response};
         {accepted, Response} -> {ok, Response};
         {_, {'EXIT', {Error2, _}}} -> {error, {exit_error, Error2}};

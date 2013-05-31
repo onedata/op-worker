@@ -5,12 +5,11 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: files_common header
+%% @doc: dao_helper header
 %% @end
 %% ===================================================================
 
--define(PATH_SEPARATOR, $/).
+-include_lib("veil_modules/dao/couch_db.hrl").
 
--define(REG_TYPE, 0).
--define(DIR_TYPE, 1).
--define(LNK_TYPE, 2).
+-record(view_row, {id = "", key = "", value = 0}).
+-record(view_result, {total = 0, offset = 0, rows = []}).
