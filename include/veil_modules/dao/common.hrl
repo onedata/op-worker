@@ -9,7 +9,23 @@
 %% @end
 %% ===================================================================
 
+-ifndef(COMMON_HRL).
+-define(COMMON_HRL, 1).
+
+%% View definitions location
+-define(VIEW_DEF_LOCATION, "veil_modules/dao/views/").
+-define(MAP_DEF_SUFFIX, "_map.js").
+-define(REDUCE_DEF_SUFFIX, "_reduce.js").
+
 %% Macros
+
+%% Loads view definition from file
+-define(LOAD_VIEW_DEF(Name, Type), begin
+    case file:read_file(?VIEW_DEF_LOCATION ++ Name ++ (case Type of map -> ?MAP_DEF_SUFFIX; reduce -> ?REDUCE_DEF_SUFFIX end)) of
+        {ok, Data} -> binary_to_list(Data);
+        _ -> ""
+    end
+end).
 
 %% Seeds pseudo-random number generator with current time and hashed node name. <br/>
 %% See {@link random:seed/3} and {@link erlang:now/0} for more details
@@ -32,3 +48,7 @@
 
 %% Helper macro for declaring transient children of supervisor (used by init/1 in supervisor behaviour callback)
 -define(CHILD(I, Type), {I, {I, start_link, [[]]}, transient, 5000, Type, [I]}).
+
+
+
+-endif.

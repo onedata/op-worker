@@ -11,6 +11,7 @@
 
 -include_lib("records.hrl").
 -include_lib("veil_modules/dao/dao_vfs.hrl").
+-include_lib("veil_modules/dao/common.hrl").
 
 %% record definition used in record registration example
 -record(some_record, {field1 = "", field2 = "", field3 = ""}).
@@ -38,19 +39,48 @@
     end).
 
 
-%% Structure representing full document.
+%% Record-wrapper for regular records that needs to be saved in DB. Adds UUID and Revision info to each record.
 %% `uuid` is document UUID, `rev_info` is documents' current revision number
 %% `record` is an record representing this document (its data) and `force_update` is a flag
 %% that forces dao:save_record/1 to update this document even if rev_info isn't valid or up to date.
 -record(veil_document, {uuid = "", rev_info = 0, record = none, force_update = false}).
 
-%% DB constants
+%% These records allows representing databases, design documents and their views.
+%% Used in DAO initial configuration in order to easily setup/update views in database.
+-record(db_info, {name = "", designs = []}).
+-record(design_info, {name = "", version = 0, views = []}).
+-record(view_info, {name = "", map = "", reduce = ""}).
+
+%% ====================================================================
+%% DB definitions
+%% ====================================================================
+%% DB Names
 -define(SYSTEM_DB_NAME, "system_data").
 -define(FILES_DB_NAME, "files").
 -define(DESCRIPTORS_DB_NAME, "file_descriptors").
+
+%% Design Names
+-define(VFS_BASE_DESIGN_NAME, "vfs_base").
+
+%% View Names
+-define(FILE_TREE_VIEW_NAME, "file_tree").
+
+%% Others
 -define(RECORD_INSTANCES_DOC_PREFIX, "record_instances_").
 -define(RECORD_FIELD_BINARY_PREFIX, "__bin__: ").
 -define(RECORD_FIELD_ATOM_PREFIX, "__atom__: ").
 -define(RECORD_FIELD_PID_PREFIX, "__pid__: ").
 -define(RECORD_TUPLE_FIELD_NAME_PREFIX, "tuple_field_").
 -define(RECORD_META_FIELD_NAME, "record__").
+
+-define(DATABASE_DESIGN_STRUCTURE, [ %% List of all databases. Head of the list = default database
+    #db_info{name = ?SYSTEM_DB_NAME, designs = []},
+    #db_info{name = ?FILES_DB_NAME, designs = [ %% List of all design documents in this database
+        #design_info{name = ?VFS_BASE_DESIGN_NAME, version = 0.1, views = [ %% List of all views in this design
+            #view_info{name = ?FILE_TREE_VIEW_NAME,
+                map = ?LOAD_VIEW_DEF(?FILE_TREE_VIEW_NAME, map),
+                reduce = ?LOAD_VIEW_DEF(?FILE_TREE_VIEW_NAME, reduce)}
+        ]}
+    ]},
+    #db_info{name = ?DESCRIPTORS_DB_NAME, designs = []}
+]).

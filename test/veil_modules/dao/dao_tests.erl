@@ -23,8 +23,13 @@ main_test_() ->
     {inorder, [fun init/0, fun handle/0, fun cleanup/0]}.
 
 init() ->
+    meck:new(dao),
+    meck:expect(dao, init, fun([]) -> meck:passthrough([[]]) end),
+    meck:expect(dao, setup_views, fun(_) -> ok end),
     ok = dao:init([]),
-    ok = dao:init([]).
+    ok = dao:init([]),
+    true = meck:validate(dao),
+    meck:unload(dao).
 
 handle() ->
     ?assertNot({error, wrong_args} =:= dao:handle(1, {helper, test, []})),

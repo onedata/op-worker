@@ -49,7 +49,8 @@ init({Args, {init_status, undefined}}) ->
 init({_Args, {init_status, table_initialized}}) -> %% Final stage of initialization. ETS table was initialized
     case application:get_env(veil_cluster_node, db_nodes) of
         {ok, Nodes} when is_list(Nodes) ->
-            [dao_hosts:store_exec(sequential, {insert_host, Node}) || Node <- Nodes, is_atom(Node)], %% We can't use dao_hosts:insert/1 because gen_server isn't initialized yet
+            [dao_hosts:insert(Node) || Node <- Nodes, is_atom(Node)],
+            catch setup_views(?DATABASE_DESIGN_STRUCTURE),
             ok;
         _ ->
             lager:warrning("There are no DB hosts given in application env variable."),
@@ -218,6 +219,35 @@ remove_record(Id) when is_list(Id) ->
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
+
+%% setup_views/1
+%% ====================================================================
+%% @doc Creates or updates design documents
+%% @end
+-spec setup_views(DesignStruct :: list()) -> ok.
+%% ====================================================================
+setup_views(DesignStruct) ->
+    %% TODO: error reporting
+    %% TODO: implement updating existing designs
+    DesignFun = fun(#design_info{name = Name, views = ViewList, version = Version}, DbName) ->
+            case dao_helper:open_design_doc(DbName, Name) of
+                {ok, #doc{body = _Body}} ->
+                    not_yet_implemented;
+                _ ->
+                lists:map(fun(#view_info{name = ViewName, map = Map, reduce = Reduce}) ->
+                        dao_helper:create_view(DbName, Name, ViewName, Map, Reduce, Version)
+                    end, ViewList)
+            end,
+            DbName
+        end,
+
+    DbFun = fun(#db_info{name = Name, designs = Designs}) ->
+            dao_helper:create_db(Name, []),
+            lists:foldl(DesignFun, Name, Designs)
+        end,
+
+    lists:map(DbFun, DesignStruct),
+    ok.
 
 %% is_valid_record/1
 %% ====================================================================
