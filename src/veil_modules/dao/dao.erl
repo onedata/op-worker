@@ -31,6 +31,7 @@
 
 %% API
 -export([save_record/1, get_record/1, remove_record/1, load_view_def/2, set_db/1]).
+-export([doc_to_term/1]).
 
 %% ===================================================================
 %% Behaviour callback functions

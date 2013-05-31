@@ -311,9 +311,13 @@ query_view(DbName, DesignName, ViewName, QueryArgs = #view_query_args{view_type 
 %% ====================================================================
 parse_view_result({ok, [{total_and_offset, Total, Offset} | Rows]}) ->
     FormatKey = fun(F, K) when is_list(K) -> [F(F, X) || X <- K];
-                (_F, K) when is_binary(K) -> binary_to_list(K);
-                (_F, K) -> K end,
-    FormattedRows = [#view_row{id = binary_to_list(Id), key = FormatKey(FormatKey, Key), value = Value} || {row, {[ {id, Id} | [ {key, Key} | [{value, Value}] ] ]}} <- Rows],
+                   (_F, K) when is_binary(K) -> binary_to_list(K);
+                   (_F, K) -> K end,
+    FormatDoc = fun([{doc, D}]) -> dao:doc_to_term(D);
+                   (_) -> none end,
+    FormattedRows = [#view_row{id = binary_to_list(Id),
+        key = FormatKey(FormatKey, Key), value = Value, record = FormatDoc(Doc)}
+            || {row, {[ {id, Id} | [ {key, Key} | [ {value, Value} | Doc ] ] ]}} <- Rows],
     {ok, #view_result{total = Total, offset = Offset, rows = FormattedRows}};
 parse_view_result(Other) ->
     Other.

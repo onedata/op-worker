@@ -11,5 +11,5 @@
 
 -include_lib("veil_modules/dao/couch_db.hrl").
 
--record(view_row, {id = "", key = "", value = 0}).
+-record(view_row, {id = "", key = "", value = 0, record = none}).
 -record(view_result, {total = 0, offset = 0, rows = []}).
