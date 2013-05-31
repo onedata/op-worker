@@ -73,7 +73,9 @@
 -define(RECORD_TUPLE_FIELD_NAME_PREFIX, "tuple_field_").
 -define(RECORD_META_FIELD_NAME, "record__").
 
--define(DATABASE_DESIGN_STRUCTURE, [ %% List of all databases. Head of the list = default database
+-define(DEFAULT_DB, ?SYSTEM_DB_NAME).
+
+-define(DATABASE_DESIGN_STRUCTURE, [ %% List of all databases.
     #db_info{name = ?SYSTEM_DB_NAME, designs = []},
     #db_info{name = ?FILES_DB_NAME, designs = [ %% List of all design documents in this database
         #design_info{name = ?VFS_BASE_DESIGN_NAME, version = 0.1, views = [ %% List of all views in this design

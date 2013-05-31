@@ -30,7 +30,7 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% API
--export([save_record/1, get_record/1, remove_record/1, load_view_def/2]).
+-export([save_record/1, get_record/1, remove_record/1, load_view_def/2, set_db/1]).
 
 %% ===================================================================
 %% Behaviour callback functions
@@ -158,7 +158,7 @@ save_record(#veil_document{uuid = Id, rev_info = RevInfo, record = Rec, force_up
     Revs =
         if
             IsForced -> %% If Mode == update, we need to open existing doc in order to get revs
-                case dao_helper:open_doc(?SYSTEM_DB_NAME, Id) of
+                case dao_helper:open_doc(get_db(), Id) of
                     {ok, #doc{revs = RevDef}} -> RevDef;
                     _ -> #doc{revs = RevDef} = #doc{}, RevDef
                 end;
@@ -168,7 +168,7 @@ save_record(#veil_document{uuid = Id, rev_info = RevInfo, record = Rec, force_up
                 #doc{revs = RevDef} = #doc{},
                 RevDef
         end,
-    case dao_helper:insert_doc(?SYSTEM_DB_NAME, #doc{id = dao_helper:name(Id), revs = Revs, body = term_to_doc(Rec)}) of
+    case dao_helper:insert_doc(get_db(), #doc{id = dao_helper:name(Id), revs = Revs, body = term_to_doc(Rec)}) of
         {ok, _} -> {ok, Id};
         {error, Err} -> {error, Err}
     end;
@@ -190,7 +190,7 @@ save_record(Rec) when is_tuple(Rec) ->
 get_record(Id) when is_atom(Id) ->
     get_record(atom_to_list(Id));
 get_record(Id) when is_list(Id) ->
-    case dao_helper:open_doc(?SYSTEM_DB_NAME, Id) of
+    case dao_helper:open_doc(get_db(), Id) of
         {ok, #doc{body = Body, revs = RevInfo}} ->
             try {doc_to_term(Body), RevInfo} of
                 {Term, RInfo} -> {ok, #veil_document{uuid = Id, rev_info = RInfo, record = Term}}
@@ -213,12 +213,35 @@ get_record(Id) when is_list(Id) ->
 remove_record(Id) when is_atom(Id) ->
     remove_record(atom_to_list(Id));
 remove_record(Id) when is_list(Id) ->
-    dao_helper:delete_doc(?SYSTEM_DB_NAME, Id).
+    dao_helper:delete_doc(get_db(), Id).
 
 
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
+
+%% set_db/1
+%% ====================================================================
+%% @doc Sets current working database name
+%% @end
+-spec set_db(DbName :: string()) -> ok.
+%% ====================================================================
+set_db(DbName) ->
+    put(current_db, DbName).
+
+%% get_db/0
+%% ====================================================================
+%% @doc Gets current working database name
+%% @end
+-spec get_db() -> DbName :: string().
+%% ====================================================================
+get_db() ->
+    case get(current_db) of
+        DbName when is_list(DbName) ->
+            DbName;
+        _ ->
+            ?DEFAULT_DB
+    end.
 
 %% setup_views/1
 %% ====================================================================

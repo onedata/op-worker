@@ -14,9 +14,10 @@
 
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/couch_db.hrl").
+-include_lib("files_common.hrl").
 
 %% API - File system management
--export([del_file/2, list_dir/2, lock_file/3, rename_file/3, unlock_file/3]).
+-export([del_file/2, list_dir/2, lock_file/3, rename_file/3, unlock_file/3, test/0]).
 
 -ifdef(TEST).
 -compile([export_all]).
@@ -25,6 +26,40 @@
 %% ===================================================================
 %% API functions
 %% ===================================================================
+
+
+save_file(#file{} = File) ->
+    dao:save_record(File);
+save_file(#veil_document{record = #file{}} = FileDoc) ->
+    dao:save_record(FileDoc).
+
+remove_file(File) ->
+    {ok, FData} = get_file(File),
+    dao:remove_record(FData#veil_document.uuid).
+
+get_file({absolute_path, Path}) ->
+    get_file({relative_path, Path, ""});
+get_file({relative_path, Path, Root}) ->
+    pass;
+get_file({uuid, UUID}) ->
+    dao:get_record(UUID).
+
+test() ->
+    {ok, UUID1} = save_file(#file{name = "users", type = ?DIR_TYPE}),
+    {ok, UUID2} = save_file(#file{name = "plgroxeon", type = ?DIR_TYPE, parent = UUID1}),
+    save_file(#file{name = "plguser1", type = ?DIR_TYPE, parent = UUID1}),
+    save_file(#file{name = "plguser2", type = ?DIR_TYPE, parent = UUID1}),
+    save_file(#file{name = "file1", parent = UUID2}),
+    save_file(#file{name = "file2", parent = UUID2}),
+    save_file(#file{name = "file3", parent = UUID2}),
+    {ok, UUID3} = save_file(#file{name = "dir1", type = ?DIR_TYPE, parent = UUID2}),
+    {ok, UUID4} = save_file(#file{name = "dir2", type = ?DIR_TYPE, parent = UUID2}),
+    save_file(#file{name = "file4", parent = UUID3}),
+    save_file(#file{name = "file5", parent = UUID3}),
+    save_file(#file{name = "file6", parent = UUID4}),
+    save_file(#file{name = "file7", parent = UUID4}),
+    save_file(#file{name = "file8", parent = UUID4}),
+    save_file(#file{name = "file1", parent = UUID4}).
 
 
 
