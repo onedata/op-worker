@@ -145,6 +145,8 @@ cleanup() ->
     {error, conflict} |
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
+save_record(#veil_document{uuid = "", record = Rec} = Doc) when is_tuple(Rec) ->
+    save_record(Doc#veil_document{uuid = dao_helper:gen_uuid()});
 save_record(#veil_document{uuid = Id, record = Rec} = Doc) when is_tuple(Rec), is_atom(Id) ->
     save_record(Doc#veil_document{uuid = atom_to_list(Id)});
 save_record(#veil_document{uuid = Id, rev_info = RevInfo, record = Rec, force_update = IsForced}) when is_tuple(Rec), is_list(Id)->
@@ -173,7 +175,7 @@ save_record(#veil_document{uuid = Id, rev_info = RevInfo, record = Rec, force_up
         {error, Err} -> {error, Err}
     end;
 save_record(Rec) when is_tuple(Rec) ->
-    save_record(#veil_document{uuid = dao_helper:gen_uuid(), record = Rec}).
+    save_record(#veil_document{record = Rec}).
 
 
 %% get_record/1
