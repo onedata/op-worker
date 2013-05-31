@@ -50,7 +50,6 @@ init({_Args, {init_status, table_initialized}}) -> %% Final stage of initializat
     case application:get_env(veil_cluster_node, db_nodes) of
         {ok, Nodes} when is_list(Nodes) ->
             [dao_hosts:insert(Node) || Node <- Nodes, is_atom(Node)],
-            io:format(user, "CWD: ~p ~p ~n", [file:get_cwd(), load_view_def("file_tree", map)]),
             catch setup_views(?DATABASE_DESIGN_STRUCTURE),
             ok;
         _ ->
