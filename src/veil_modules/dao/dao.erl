@@ -30,7 +30,7 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% API
--export([save_record/1, get_record/1, remove_record/1]).
+-export([save_record/1, get_record/1, remove_record/1, load_view_def/2]).
 
 %% ===================================================================
 %% Behaviour callback functions
@@ -50,6 +50,7 @@ init({_Args, {init_status, table_initialized}}) -> %% Final stage of initializat
     case application:get_env(veil_cluster_node, db_nodes) of
         {ok, Nodes} when is_list(Nodes) ->
             [dao_hosts:insert(Node) || Node <- Nodes, is_atom(Node)],
+            io:format(user, "CWD: ~p ~p ~n", [file:get_cwd(), load_view_def("file_tree", map)]),
             catch setup_views(?DATABASE_DESIGN_STRUCTURE),
             ok;
         _ ->
@@ -248,6 +249,18 @@ setup_views(DesignStruct) ->
 
     lists:map(DbFun, DesignStruct),
     ok.
+
+%% load_view_def/2
+%% ====================================================================
+%% @doc Loads view definition from file.
+%% @end
+-spec load_view_def(Name :: string(), Type :: map | reduce) -> string().
+%% ====================================================================
+load_view_def(Name, Type) ->
+    case file:read_file(?VIEW_DEF_LOCATION ++ Name ++ (case Type of map -> ?MAP_DEF_SUFFIX; reduce -> ?REDUCE_DEF_SUFFIX end)) of
+        {ok, Data} -> binary_to_list(Data);
+        _ -> ""
+    end.
 
 %% is_valid_record/1
 %% ====================================================================

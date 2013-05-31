@@ -13,19 +13,11 @@
 -define(COMMON_HRL, 1).
 
 %% View definitions location
--define(VIEW_DEF_LOCATION, "veil_modules/dao/views/").
+-define(VIEW_DEF_LOCATION, "views/").
 -define(MAP_DEF_SUFFIX, "_map.js").
 -define(REDUCE_DEF_SUFFIX, "_reduce.js").
 
 %% Macros
-
-%% Loads view definition from file
--define(LOAD_VIEW_DEF(Name, Type), begin
-    case file:read_file(?VIEW_DEF_LOCATION ++ Name ++ (case Type of map -> ?MAP_DEF_SUFFIX; reduce -> ?REDUCE_DEF_SUFFIX end)) of
-        {ok, Data} -> binary_to_list(Data);
-        _ -> ""
-    end
-end).
 
 %% Seeds pseudo-random number generator with current time and hashed node name. <br/>
 %% See {@link random:seed/3} and {@link erlang:now/0} for more details

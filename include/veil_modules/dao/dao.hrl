@@ -78,8 +78,8 @@
     #db_info{name = ?FILES_DB_NAME, designs = [ %% List of all design documents in this database
         #design_info{name = ?VFS_BASE_DESIGN_NAME, version = 0.1, views = [ %% List of all views in this design
             #view_info{name = ?FILE_TREE_VIEW_NAME,
-                map = ?LOAD_VIEW_DEF(?FILE_TREE_VIEW_NAME, map),
-                reduce = ?LOAD_VIEW_DEF(?FILE_TREE_VIEW_NAME, reduce)}
+                map = dao:load_view_def(?FILE_TREE_VIEW_NAME, map),
+                reduce = dao:load_view_def(?FILE_TREE_VIEW_NAME, reduce)}
         ]}
     ]},
     #db_info{name = ?DESCRIPTORS_DB_NAME, designs = []}
