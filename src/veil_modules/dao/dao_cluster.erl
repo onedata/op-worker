@@ -48,7 +48,7 @@ save_state(Rec) when is_tuple(Rec) ->
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 save_state(Id, Rec) when is_tuple(Rec), is_atom(Id) ->
-    dao:save_record(#document{record = Rec, force_update = true, uuid = Id}).
+    dao:save_record(#veil_document{record = Rec, force_update = true, uuid = Id}).
 
 
 %% get_state/0
@@ -72,7 +72,7 @@ get_state() ->
 get_state(Id) ->
     case dao:get_record(Id) of
         {ok, State} ->
-            {ok, State#document.record};
+            {ok, State#veil_document.record};
         Other ->
             {error, Other}
     end.

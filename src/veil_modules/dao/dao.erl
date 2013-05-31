@@ -133,20 +133,20 @@ cleanup() ->
 %% save_record/1
 %% ====================================================================
 %% @doc Saves record to DB. Argument has to be either Record :: term() which will be saved<br/>
-%% with random UUID as completely new document or #document record. If #document record is passed <br/>
+%% with random UUID as completely new document or #veil_document record. If #veil_document record is passed <br/>
 %% caller may set UUID and revision info in order to update this record in DB.<br/>
 %% If Mode == update then the document with given UUID will be overridden.
 %% By default however saving to existing document will fail with {error, conflict}.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
--spec save_record(term() | #document{uuid :: string(), rev_info :: term(), record :: term(), force_update :: boolean()}) ->
+-spec save_record(term() | #veil_document{uuid :: string(), rev_info :: term(), record :: term(), force_update :: boolean()}) ->
     {ok, DocId :: string()} |
     {error, conflict} |
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
-save_record(#document{uuid = Id, record = Rec} = Doc) when is_tuple(Rec), is_atom(Id) ->
-    save_record(Doc#document{uuid = atom_to_list(Id)});
-save_record(#document{uuid = Id, rev_info = RevInfo, record = Rec, force_update = IsForced}) when is_tuple(Rec), is_list(Id)->
+save_record(#veil_document{uuid = Id, record = Rec} = Doc) when is_tuple(Rec), is_atom(Id) ->
+    save_record(Doc#veil_document{uuid = atom_to_list(Id)});
+save_record(#veil_document{uuid = Id, rev_info = RevInfo, record = Rec, force_update = IsForced}) when is_tuple(Rec), is_list(Id)->
     Valid = is_valid_record(Rec),
     if
         Valid -> ok;
@@ -172,17 +172,17 @@ save_record(#document{uuid = Id, rev_info = RevInfo, record = Rec, force_update 
         {error, Err} -> {error, Err}
     end;
 save_record(Rec) when is_tuple(Rec) ->
-    save_record(#document{uuid = dao_helper:gen_uuid(), record = Rec}).
+    save_record(#veil_document{uuid = dao_helper:gen_uuid(), record = Rec}).
 
 
 %% get_record/1
 %% ====================================================================
-%% @doc Retrieves record with UUID = Id from DB. Returns whole #document record containing UUID, Revision Info and
-%% demanded record inside. See #document structure for more info.
+%% @doc Retrieves record with UUID = Id from DB. Returns whole #veil_document record containing UUID, Revision Info and
+%% demanded record inside. See #veil_document structure for more info.
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec get_record(Id :: atom() | string()) ->
-    {ok,#document{record :: tuple()}} |
+    {ok,#veil_document{record :: tuple()}} |
     {error, Error :: term()} |
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
@@ -192,7 +192,7 @@ get_record(Id) when is_list(Id) ->
     case dao_helper:open_doc(?SYSTEM_DB_NAME, Id) of
         {ok, #doc{body = Body, revs = RevInfo}} ->
             try {doc_to_term(Body), RevInfo} of
-                {Term, RInfo} -> {ok, #document{uuid = Id, rev_info = RInfo, record = Term}}
+                {Term, RInfo} -> {ok, #veil_document{uuid = Id, rev_info = RInfo, record = Term}}
             catch
                 _:Err -> {error, {invalid_document, Err}}
             end;
