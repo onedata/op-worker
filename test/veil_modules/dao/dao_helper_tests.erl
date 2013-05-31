@@ -102,7 +102,7 @@ create_view() ->
         {not_found, missing};
         (update_doc, [<<"Name">>, #doc{id = <<"_design/des">>}, [{user_ctx, {user_ctx, null, [<<"_admin">>], undefined}}]]) ->
             accepted end),
-    ok = dao_helper:create_view("Name", "des", "view", "map func", "red_func"),
+    ok = dao_helper:create_view("Name", "des", "view", "map func", "red_func", 1),
     ?assert(meck:validate(dao_hosts)).
 
 query_view() ->

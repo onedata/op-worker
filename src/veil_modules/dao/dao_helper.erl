@@ -25,7 +25,7 @@
 -export([name/1, gen_uuid/0]).
 -export([list_dbs/0, list_dbs/1, get_db_info/1, get_doc_count/1, create_db/1, create_db/2]).
 -export([delete_db/1, delete_db/2, open_doc/2, open_doc/3, insert_doc/2, insert_doc/3, delete_doc/2, delete_docs/2]).
--export([insert_docs/2, insert_docs/3, create_view/5, query_view/3, query_view/4]).
+-export([insert_docs/2, insert_docs/3, open_design_doc/2, create_view/6, query_view/3, query_view/4]).
 
 %% ===================================================================
 %% API functions
@@ -228,20 +228,30 @@ delete_docs(DbName, DocIDs) ->
 %% Views Management
 %% ===================================================================
 
-%% create_view/5
+%% open_design_doc/2
+%% ====================================================================
+%% @doc Returns design document with a given design doc name
+-spec open_design_doc(DbName :: string(), DesignName :: string()) -> {ok, #doc{}} | {error, {not_found, missing | deleted}} | {error, term()}.
+%% ====================================================================
+open_design_doc(DbName, DesignName) ->
+    open_doc(DbName, ?DESIGN_DOC_PREFIX ++ DesignName).
+
+%% create_view/6
 %% ====================================================================
 %% @doc Creates view with given Map and Reduce function. When Reduce = "", reduce function won't be created
--spec create_view(DbName :: string(), DesignName :: string(), ViewName :: string(), Map :: string(), Reduce :: string()) -> [ok | {error, term()}].
+-spec create_view(DbName :: string(), DesignName :: string(), ViewName :: string(), Map :: string(), Reduce :: string(), DesignVersion :: integer()) ->
+    [ok | {error, term()}].
 %% ====================================================================
-create_view(DbName, Doc = #doc{}, ViewName, Map, Reduce) ->
+create_view(DbName, Doc = #doc{}, ViewName, Map, Reduce, DesignVersion) ->
     {MapRd, MapRdValue} =
         case Reduce of
             "" -> {["map"], [dao_json:mk_str(Map)]};
             _ -> {["map", "reduce"], [dao_json:mk_str(Map), dao_json:mk_str(Reduce)]}
         end,
     Doc1 = dao_json:mk_field(Doc, "language", dao_json:mk_str("javascript")),
+    DocV = dao_json:mk_field(Doc1, "version", DesignVersion),
     Views =
-        case dao_json:get_field(Doc1, "views") of
+        case dao_json:get_field(DocV, "views") of
             {error, not_found} -> dao_json:mk_obj();
             Other -> Other
         end,
@@ -252,12 +262,12 @@ create_view(DbName, Doc = #doc{}, ViewName, Map, Reduce) ->
         {ok, _} -> ok;
         Other1 -> Other1
     end;
-create_view(DbName, DesignName, ViewName, Map, Reduce) ->
+create_view(DbName, DesignName, ViewName, Map, Reduce, DesignVersion) ->
     DsgName = ?DESIGN_DOC_PREFIX ++ DesignName,
     case open_doc(DbName, DsgName) of
         {error, {not_found, _}} ->
-            create_view(DbName, dao_json:mk_doc(DsgName), ViewName, Map, Reduce);
-        {ok, Doc} -> create_view(DbName, Doc, ViewName, Map, Reduce);
+            create_view(DbName, dao_json:mk_doc(DsgName), ViewName, Map, Reduce, DesignVersion);
+        {ok, Doc} -> create_view(DbName, Doc, ViewName, Map, Reduce, DesignVersion);
         Other -> Other
     end.
 
