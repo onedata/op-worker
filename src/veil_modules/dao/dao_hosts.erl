@@ -57,7 +57,7 @@ ban(Host) ->
 -spec ban(Host :: atom(), BanTime :: integer()) -> ok | {error, no_host} | {error, timeout}.
 %% ====================================================================
 ban(Host, BanTime) ->
-    lager:warning([{mod, ?MODULE}], "Host: ~p is being banned. Reason of that is probably it wasn't answering or it was answering to slow. It'll be reactivated after: ~ps", [Host, BanTime/1000]),
+    lager:warning("Host: ~p is being banned. Reason of that is probably it wasn't answering or it was answering to slow. It'll be reactivated after: ~ps", [Host, BanTime/1000]),
     Res = store_exec({ban_host, Host}),
     put(db_host, undefined),
     {ok, _} = timer:apply_after(BanTime, ?MODULE, reactivate, [Host]),
@@ -131,7 +131,7 @@ store_exec(sequential, {reactivate_host, Host}) ->
             ok
     end;
 store_exec(sequential, _Unknown) ->
-    lager:error([{mod, ?MODULE}], "Unknown host store command: ~p", [_Unknown]),
+    lager:error("Unknown host store command: ~p", [_Unknown]),
     {error, unknown_command}.
 
 
@@ -232,7 +232,7 @@ call(Module, Method, Args, Attempt) when Attempt < ?RPC_MAX_RETRIES ->
             end
     end;
 call(_Module, _Method, _Args, _Attempt) ->
-    lager:error([{mod, ?MODULE}], "DBMS call filed after: ~p attempts. Current host store state: ~p", [_Attempt, ets:lookup(db_host_store, host) ++ ets:lookup(db_host_store, banned_host)]),
+    lager:error("DBMS call filed after: ~p attempts. Current host store state: ~p", [_Attempt, ets:lookup(db_host_store, host) ++ ets:lookup(db_host_store, banned_host)]),
     {error, rpc_retry_limit_exceeded}.
 
 

@@ -52,7 +52,7 @@ init({_Args, {init_status, table_initialized}}) -> %% Final stage of initializat
             [dao_hosts:store_exec(sequential, {insert_host, Node}) || Node <- Nodes, is_atom(Node)], %% We can't use dao_hosts:insert/1 because gen_server isn't initialized yet
             ok;
         _ ->
-            %% TODO: logs
+            lager:warrning("There are no DB hosts given in application env variable."),
             ok
     end;
 init({Args, {init_status, _TableInfo}}) ->
@@ -96,23 +96,23 @@ handle(ProtocolVersion, {Target, Method, Args}) when is_atom(Target), is_atom(Me
         end,
     try apply(Module, Method, Args) of
         {error, Err} ->
-            lager:error([{mod, ?MODULE}], "Handling ~p:~p with args ~p returned error: ~p", [Module, Method, Args, Err]),
+            lager:error("Handling ~p:~p with args ~p returned error: ~p", [Module, Method, Args, Err]),
             {error, Err};
         {ok, Response} -> {ok, Response};
         ok -> ok;
         Other ->
-            lager:error([{mod, ?MODULE}], "Handling ~p:~p with args ~p returned unknown response: ~p", [Module, Method, Args, Other]),
+            lager:error("Handling ~p:~p with args ~p returned unknown response: ~p", [Module, Method, Args, Other]),
             {error, Other}
     catch
         error:{badmatch, {error, Err}} -> {error, Err};
         Type:Error ->
-            lager:error([{mod, ?MODULE}], "Handling ~p:~p with args ~p interrupted by exception: ~p:~p", [Module, Method, Args, Type, Error]),
+            lager:error("Handling ~p:~p with args ~p interrupted by exception: ~p:~p", [Module, Method, Args, Type, Error]),
             {error, Error}
     end;
 handle(ProtocolVersion, {Method, Args}) when is_atom(Method), is_list(Args) ->
     handle(ProtocolVersion, {cluster, Method, Args});
 handle(_ProtocolVersion, _Request) ->
-    lager:error([{mod, ?MODULE}], "Unknown request ~p (protocol ver.: ~p)", [_Request, _ProtocolVersion]),
+    lager:error("Unknown request ~p (protocol ver.: ~p)", [_Request, _ProtocolVersion]),
     {error, wrong_args}.
 
 %% cleanup/0
@@ -151,7 +151,7 @@ save_record(#veil_document{uuid = Id, rev_info = RevInfo, record = Rec, force_up
     if
         Valid -> ok;
         true ->
-            lager:error([{mod, ?MODULE}], "Cannot save record: ~p because it's not supported", [Rec]),
+            lager:error("Cannot save record: ~p because it's not supported", [Rec]),
             throw(unsupported_record)
     end,
     Revs =
@@ -288,7 +288,7 @@ term_to_doc(Field) when is_tuple(Field) ->
     {_, {Ret}} = lists:foldl(FoldFun, {1, InitObj}, LField),
     {lists:reverse(Ret)};
 term_to_doc(Field) ->
-    lager:error([{mod, ?MODULE}], "Cannot convert term to document because field: ~p is not supported", [Field]),
+    lager:error("Cannot convert term to document because field: ~p is not supported", [Field]),
     throw({unsupported_field, Field}).
 
 
