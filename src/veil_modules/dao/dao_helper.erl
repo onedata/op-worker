@@ -256,7 +256,7 @@ create_view(DbName, Doc = #doc{}, ViewName, Map, Reduce, DesignVersion) ->
             Other -> Other
         end,
     VField = dao_json:mk_field(Views, ViewName, dao_json:mk_fields(dao_json:mk_obj(), MapRd, MapRdValue)),
-    NewDoc = dao_json:mk_field(Doc1, "views", VField),
+    NewDoc = dao_json:mk_field(DocV, "views", VField),
     case insert_doc(DbName, NewDoc, [?ADMIN_USER_CTX]) of
         ok -> ok;
         {ok, _} -> ok;

@@ -29,17 +29,20 @@
 
 
 save_file(#file{} = File) ->
-    dao:save_record(File);
+    save_file(#veil_document{record = File});
 save_file(#veil_document{record = #file{}} = FileDoc) ->
+    dao:set_db(?FILES_DB_NAME),
     dao:save_record(FileDoc).
 
 remove_file(File) ->
+    dao:set_db(?FILES_DB_NAME),
     {ok, FData} = get_file(File),
     dao:remove_record(FData#veil_document.uuid).
 
 get_file({absolute_path, Path}) ->
     get_file({relative_path, Path, ""});
 get_file({relative_path, Path, Root}) ->
+    dao:set_db(?FILES_DB_NAME),
     pass;
 get_file({uuid, UUID}) ->
     dao:get_record(UUID).

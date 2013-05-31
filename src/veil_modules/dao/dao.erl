@@ -257,8 +257,8 @@ setup_views(DesignStruct) ->
                 {ok, #doc{body = _Body}} ->
                     not_yet_implemented;
                 _ ->
-                lists:map(fun(#view_info{name = ViewName, map = Map, reduce = Reduce}) ->
-                        dao_helper:create_view(DbName, Name, ViewName, Map, Reduce, Version)
+                lists:map(fun(#view_info{name = ViewName}) ->
+                        dao_helper:create_view(DbName, Name, ViewName, load_view_def(ViewName, map), load_view_def(ViewName, reduce), Version)
                     end, ViewList)
             end,
             DbName

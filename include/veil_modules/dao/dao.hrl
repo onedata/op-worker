@@ -49,7 +49,7 @@
 %% Used in DAO initial configuration in order to easily setup/update views in database.
 -record(db_info, {name = "", designs = []}).
 -record(design_info, {name = "", version = 0, views = []}).
--record(view_info, {name = "", map = "", reduce = ""}).
+-record(view_info, {name = "", design = "", db_name = ""}).
 
 %% ====================================================================
 %% DB definitions
@@ -62,8 +62,8 @@
 %% Design Names
 -define(VFS_BASE_DESIGN_NAME, "vfs_base").
 
-%% View Names
--define(FILE_TREE_VIEW_NAME, "file_tree").
+%% Views
+-define(FILE_TREE_VIEW, #view_info{name = "file_tree", design = ?VFS_BASE_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
 
 %% Others
 -define(RECORD_INSTANCES_DOC_PREFIX, "record_instances_").
@@ -73,16 +73,22 @@
 -define(RECORD_TUPLE_FIELD_NAME_PREFIX, "tuple_field_").
 -define(RECORD_META_FIELD_NAME, "record__").
 
--define(DEFAULT_DB, ?SYSTEM_DB_NAME).
+%% List of all used databases :: [string()]
+-define(DB_LIST, [?SYSTEM_DB_NAME, ?FILES_DB_NAME, ?DESCRIPTORS_DB_NAME]).
+%% List of all used views :: [#view_info]
+-define(VIEW_LIST, [?FILE_TREE_VIEW]).
+%% Default database name
+-define(DEFAULT_DB, lists:nth(1, ?DB_LIST)).
 
--define(DATABASE_DESIGN_STRUCTURE, [ %% List of all databases.
-    #db_info{name = ?SYSTEM_DB_NAME, designs = []},
-    #db_info{name = ?FILES_DB_NAME, designs = [ %% List of all design documents in this database
-        #design_info{name = ?VFS_BASE_DESIGN_NAME, version = 0.1, views = [ %% List of all views in this design
-            #view_info{name = ?FILE_TREE_VIEW_NAME,
-                map = dao:load_view_def(?FILE_TREE_VIEW_NAME, map),
-                reduce = dao:load_view_def(?FILE_TREE_VIEW_NAME, reduce)}
-        ]}
-    ]},
-    #db_info{name = ?DESCRIPTORS_DB_NAME, designs = []}
-]).
+%% Do not try to read this macro (3 nested list comprehensions). All it does is:
+%% Create an list containing #db_info structures base on ?DB_LIST
+%% Inside every #db_info, list of #design_info is created based on views list (?VIEW_LIST)
+%% Inside every #design_info, list of #view_info is created based on views list (?VIEW_LIST)
+%% Such structural representation of views, makes it easier to initialize views in DBMS
+%% WARNING: Do not evaluate this macro anywhere but dao:init/cleanup because it's
+%% potentially slow - O(db_count * view_count^2)
+-define(DATABASE_DESIGN_STRUCTURE, [#db_info{name = DbName,
+                                        designs = [#design_info{name = DesignNam,
+                                                views = [ViewInfo || #view_info{design = Design} = ViewInfo <- ?VIEW_LIST, Design == DesignNam]
+                                            } || #view_info{db_name = DbName1, design = DesignNam} <- ?VIEW_LIST, DbName1 == DbName]
+                                        } || DbName <- ?DB_LIST]).
