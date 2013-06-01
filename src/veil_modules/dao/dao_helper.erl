@@ -314,7 +314,7 @@ parse_view_result({ok, [{total_and_offset, Total, Offset} | Rows]}) ->
                    (_F, K) when is_binary(K) -> binary_to_list(K);
                    (_F, K) -> K end,
     FormatDoc = fun([{doc, {[ {_id, Id} | [ {_rev, RevInfo} | D ] ]}}]) ->
-                        #veil_document{record = dao:doc_to_term({D}), uuid = binary_to_list(Id), rev_info = RevInfo};
+                        #veil_document{record = dao:doc_to_term({D}), uuid = binary_to_list(Id), rev_info = revision(RevInfo)};
                    (_) -> none end,
     FormattedRows = [#view_row{id = binary_to_list(Id),
         key = FormatKey(FormatKey, Key), value = Value, doc = FormatDoc(Doc)}
@@ -334,6 +334,18 @@ name(Name) when is_list(Name) ->
     ?l2b(Name);
 name(Name) when is_binary(Name) ->
     Name.
+
+%% revision/1
+%% ====================================================================
+%% @doc Normalize revision info
+-spec revision(RevInfo :: term()) -> term().
+%% ====================================================================
+revision(RevInfo) when is_binary(RevInfo) ->
+    [Num, Rev] = string:tokens(binary_to_list(RevInfo), [$-]),
+    {list_to_integer(Num), [binary:encode_unsigned(list_to_integer(Rev, 16))]};
+revision({Num, [Rev | _Old]}) ->
+    {Num, [Rev]}.
+
 
 %% gen_uuid/0
 %% ====================================================================
