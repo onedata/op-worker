@@ -159,7 +159,7 @@ get_file({absolute_path, Path}) ->
 get_file({relative_path, [?PATH_SEPARATOR | _] = Path, Root}) ->
     get_file({relative_path, string:tokens(Path, [?PATH_SEPARATOR]), Root});
 get_file({relative_path, [], []}) -> %% Root dir query
-    {ok, #veil_document{uuid = "", record = #file{type = ?DIR_TYPE, perms = 8#777}}}; %% TODO: perms constants
+    {ok, #veil_document{uuid = "", record = #file{type = ?DIR_TYPE, perms = ?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM}}};
 get_file({relative_path, [Dir | Path], Root}) ->
     dao:set_db(?FILES_DB_NAME),
     Res = dao_helper:query_view(?FILE_TREE_VIEW#view_info.db_name, ?FILE_TREE_VIEW#view_info.design, ?FILE_TREE_VIEW#view_info.name,
