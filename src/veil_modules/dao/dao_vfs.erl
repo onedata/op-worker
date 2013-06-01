@@ -108,6 +108,11 @@ list_descriptors({by_file, File}, N, Offset) ->
 list_descriptors({_Type, _Resouce}, _N, _Offset) ->
     not_yet_implemented.
 
+
+%% ===================================================================
+%% Files Management
+%% ===================================================================
+
 save_file(#file{} = File) ->
     save_file(#veil_document{record = File});
 save_file(#veil_document{record = #file{}} = FileDoc) ->
