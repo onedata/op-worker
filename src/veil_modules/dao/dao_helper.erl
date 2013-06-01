@@ -10,7 +10,7 @@
 %% ===================================================================
 -module(dao_helper).
 
--include_lib("veil_modules/dao/common.hrl").
+-include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/dao_helper.hrl").
 
 -define(ADMIN_USER_CTX, {user_ctx, #user_ctx{roles = [<<"_admin">>]}}).
@@ -313,10 +313,11 @@ parse_view_result({ok, [{total_and_offset, Total, Offset} | Rows]}) ->
     FormatKey = fun(F, K) when is_list(K) -> [F(F, X) || X <- K];
                    (_F, K) when is_binary(K) -> binary_to_list(K);
                    (_F, K) -> K end,
-    FormatDoc = fun([{doc, D}]) -> dao:doc_to_term(D);
+    FormatDoc = fun([{doc, {[ {_id, Id} | [ {_rev, RevInfo} | D ] ]}}]) ->
+                        #veil_document{record = dao:doc_to_term({D}), uuid = binary_to_list(Id), rev_info = RevInfo};
                    (_) -> none end,
     FormattedRows = [#view_row{id = binary_to_list(Id),
-        key = FormatKey(FormatKey, Key), value = Value, record = FormatDoc(Doc)}
+        key = FormatKey(FormatKey, Key), value = Value, doc = FormatDoc(Doc)}
             || {row, {[ {id, Id} | [ {key, Key} | [ {value, Value} | Doc ] ] ]}} <- Rows],
     {ok, #view_result{total = Total, offset = Offset, rows = FormattedRows}};
 parse_view_result(Other) ->
