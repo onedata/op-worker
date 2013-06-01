@@ -229,7 +229,8 @@ rename_file(File, NewName) ->
 
 %% list_dir/2
 %% ====================================================================
-%% @doc Lists N files from specified directory starting from Offset.
+%% @doc Lists N files from specified directory starting from Offset. <br/>
+%% Non-error return value is always list of #veil_document{record = #file{}} records.<br/>
 %% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
 %% @end
 -spec list_dir(Dir :: file(), N :: pos_integer(), Offset :: non_neg_integer()) -> [file_info()].
@@ -250,7 +251,7 @@ list_dir(Dir, N, Offset) ->
     case dao_helper:parse_view_result(Res) of
         {ok, #view_result{rows = Rows}} -> %% We need to strip results that don't match search criteria (tail of last query possibly), because
                                            %% `end_key` seems to behave strange combined with `limit` option. TODO: get rid of it after DBMS switch
-            {ok, [FileInfo || #view_row{doc = #veil_document{record = #file{parent = Parent} = FileInfo }} <- Rows, Parent == Id]};
+            {ok, [FileDoc || #view_row{doc = #veil_document{record = #file{parent = Parent} } = FileDoc } <- Rows, Parent == Id]};
         _ ->
             %% TODO: error handling
             throw(inavlid_data)
