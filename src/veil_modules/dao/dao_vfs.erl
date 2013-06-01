@@ -14,18 +14,13 @@
 
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/dao_helper.hrl").
+-include_lib("veil_modules/dao/dao_types.hrl").
 -include_lib("files_common.hrl").
 
--type file() :: {absolute_path, Path :: string()}
-              | {relative_path, Path :: string(), RootUUID :: string()}
-              | {uuid, FileUUID :: string()}.
--type file_info() :: #file{}.
--type file_doc() :: #veil_document{record :: #file{}}.
-
 %% API - File system management
--export([list_dir/3, rename_file/2, get_full_path/1, lock_file/3, unlock_file/3, test/0]).
--export([save_descriptor/1, remove_descriptor/1, get_descriptor/1, descriptors_for_file/3]).
--export([save_file/1, remove_file/1, get_file/1, file_info/1, get_full_path/1]).
+-export([list_dir/3, rename_file/2, lock_file/3, unlock_file/3, test/0]). %% High level API functions
+-export([save_descriptor/1, remove_descriptor/1, get_descriptor/1, descriptors_for_file/3]). %% Base descriptor management API functions
+-export([save_file/1, remove_file/1, get_file/1, file_info/1, get_path_info/1]). %% Base file management API function
 
 
 -ifdef(TEST).
@@ -110,13 +105,13 @@ file_info(File) ->
     {ok, FileDoc} = get_file(File),
     {ok, FileDoc#veil_document.record}.
 
-get_full_path({absolute_path, Path}) ->
-    get_full_path({relative_path, Path, ""});
-get_full_path({relative_path, [?PATH_SEPARATOR | _] = Path, Root}) ->
-    get_full_path({relative_path, string:tokens(Path, [?PATH_SEPARATOR]), Root});
-get_full_path({relative_path, [], _}) -> %% Root dir query
+get_path_info({absolute_path, Path}) ->
+    get_path_info({relative_path, Path, ""});
+get_path_info({relative_path, [?PATH_SEPARATOR | _] = Path, Root}) ->
+    get_path_info({relative_path, string:tokens(Path, [?PATH_SEPARATOR]), Root});
+get_path_info({relative_path, [], _}) -> %% Root dir query
     {ok, []};
-get_full_path({relative_path, Path, Root}) ->
+get_path_info({relative_path, Path, Root}) ->
     {FullPath, _} =
         lists:foldl(fun(Elem, {AccIn, AccRoot}) ->
             {ok, #veil_document{record = FileInfo, uuid = NewRoot}} = get_file({relative_path, [Elem], AccRoot}),

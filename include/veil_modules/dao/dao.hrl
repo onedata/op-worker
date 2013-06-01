@@ -9,6 +9,9 @@
 %% @end
 %% ===================================================================
 
+-ifndef(DAO_HRL).
+-define(DAO_HRL, 1).
+
 -include_lib("records.hrl").
 -include_lib("veil_modules/dao/dao_vfs.hrl").
 -include_lib("veil_modules/dao/common.hrl").
@@ -94,3 +97,4 @@
                                                     Design == DesignName, DbName2 == DbName]
                                             } || #view_info{db_name = DbName1, design = DesignName} <- ?VIEW_LIST, DbName1 == DbName]
                                         } || DbName <- ?DB_LIST]).
+-endif.
