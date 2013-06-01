@@ -52,14 +52,13 @@ get_descriptor(Fd) ->
     dao:get_record(Fd).
 
 descriptors_for_file(File, N, Offset) ->
-    dao:set_db(?DESCRIPTORS_DB_NAME),
     {ok, #veil_document{uuid = FileId}} = get_file(File),
     Res = dao_helper:query_view(?FD_BY_FILE_VIEW#view_info.db_name, ?FD_BY_FILE_VIEW#view_info.design, ?FD_BY_FILE_VIEW#view_info.name,
         #view_query_args{keys = [dao_helper:name(FileId)], include_docs = true,
-            limit = N, skip = Offset, inclusive_end = false}), %% Inclusive end does not work, disable to be sure
+            limit = N, skip = Offset}),
     case dao_helper:parse_view_result(Res) of
         {ok, #view_result{rows = Rows}} ->
-            [FdInfo || #view_row{doc = #veil_document{record = #file_descriptor{file = FileId1} = FdInfo }} <- Rows, FileId1 == FileId];
+            {ok, [FdInfo || #view_row{doc = #veil_document{record = #file_descriptor{file = FileId1} = FdInfo }} <- Rows, FileId1 == FileId]};
         Data ->
             %% TODO: error handling
             throw({inavlid_data, Data})
@@ -118,7 +117,7 @@ get_full_path({relative_path, [?PATH_SEPARATOR | _] = Path, Root}) ->
 get_full_path({relative_path, [], _}) -> %% Root dir query
     {ok, []};
 get_full_path({relative_path, Path, Root}) ->
-    FullPath =
+    {FullPath, _} =
         lists:foldl(fun(Elem, {AccIn, AccRoot}) ->
             {ok, #veil_document{record = FileInfo, uuid = NewRoot}} = get_file({relative_path, [Elem], AccRoot}),
             {[FileInfo | AccIn], NewRoot}
@@ -158,7 +157,7 @@ list_dir(Dir, N, Offset) ->
                            limit = N, include_docs = true, skip = Offset, inclusive_end = false}), %% Inclusive end does not work, disable to be sure
     case dao_helper:parse_view_result(Res) of
         {ok, #view_result{rows = Rows}} ->
-            [FileInfo || #view_row{doc = #veil_document{record = #file{parent = Parent} = FileInfo }} <- Rows, Parent == Id];
+            {ok, [FileInfo || #view_row{doc = #veil_document{record = #file{parent = Parent} = FileInfo }} <- Rows, Parent == Id]};
         _ ->
             %% TODO: error handling
             throw(inavlid_data)
