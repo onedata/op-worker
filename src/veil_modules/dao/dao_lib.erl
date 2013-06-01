@@ -42,11 +42,11 @@ wrap_record(Record) when is_tuple(Record) ->
 -spec strip_wrappers(VeilDocOrList :: #veil_document{} | [#veil_document{}]) -> tuple() | [tuple()].
 %% ====================================================================
 strip_wrappers({ok, List}) when is_list(List) ->
-    strip_wrappers(List);
+    {ok, strip_wrappers(List)};
 strip_wrappers(List) when is_list(List) ->
     [X || #veil_document{record = X} <- List];
 strip_wrappers({ok, #veil_document{} = Doc}) ->
-    strip_wrappers(Doc);
+    {ok, strip_wrappers(Doc)};
 strip_wrappers(#veil_document{record = Record}) when is_tuple(Record) ->
     Record;
 strip_wrappers(Other) ->
