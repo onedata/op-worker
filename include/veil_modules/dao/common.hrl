@@ -38,9 +38,4 @@
 %% Returns random positive number from range 1 .. N. This macro is simply shortcut to random:uniform(N)
 -define(RND(N), random:uniform(N)).
 
-%% Helper macro for declaring transient children of supervisor (used by init/1 in supervisor behaviour callback)
--define(CHILD(I, Type), {I, {I, start_link, [[]]}, transient, 5000, Type, [I]}).
-
-
-
 -endif.
