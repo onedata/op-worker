@@ -38,8 +38,8 @@ handle() ->
     ?assert({error, wrong_args} =:= dao:handle(1, {"wrong", test, []})),
     ?assert({error, undef} =:= dao:handle(1, {wrong, test, []})),
     meck:new(dao_vfs),
-    meck:expect(dao_vfs, list_dir, fun(_, _) -> ok end),
-    ok = dao:handle(1, {vfs, list_dir, ["", test]}),
+    meck:expect(dao_vfs, list_dir, fun(_, _, _) -> ok end),
+    ok = dao:handle(1, {vfs, list_dir, [test, test, test]}),
     meck:unload(dao_vfs).
 
 cleanup() ->

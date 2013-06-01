@@ -20,7 +20,10 @@
 -ifdef(TEST).
 
 list_dir_test() ->
-    not_yet_implemented = dao_vfs:list_dir("test", "test").
+    ok.
+
+rename_file_test() ->
+    ok.
 
 lock_file_test() ->
     not_yet_implemented = dao_vfs:lock_file("test", "test", write).
@@ -28,10 +31,6 @@ lock_file_test() ->
 unlock_file_test() ->
     not_yet_implemented = dao_vfs:unlock_file("test", "test", write).
 
-del_file_test() ->
-    not_yet_implemented = dao_vfs:del_file("test", "test").
 
-rename_file_test() ->
-    not_yet_implemented = dao_vfs:rename_file("test", "test", "name").
 
 -endif.
