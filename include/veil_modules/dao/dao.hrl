@@ -64,6 +64,7 @@
 
 %% Views
 -define(FILE_TREE_VIEW, #view_info{name = "file_tree", design = ?VFS_BASE_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
+-define(FD_BY_FILE_VIEW, #view_info{name = "fd_by_name", design = ?VFS_BASE_DESIGN_NAME, db_name = ?DESCRIPTORS_DB_NAME}).
 
 %% Others
 -define(RECORD_INSTANCES_DOC_PREFIX, "record_instances_").
