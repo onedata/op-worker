@@ -77,7 +77,7 @@
 %% List of all used databases :: [string()]
 -define(DB_LIST, [?SYSTEM_DB_NAME, ?FILES_DB_NAME, ?DESCRIPTORS_DB_NAME]).
 %% List of all used views :: [#view_info]
--define(VIEW_LIST, [?FILE_TREE_VIEW]).
+-define(VIEW_LIST, [?FILE_TREE_VIEW, ?FD_BY_FILE_VIEW]).
 %% Default database name
 -define(DEFAULT_DB, lists:nth(1, ?DB_LIST)).
 
