@@ -14,7 +14,7 @@
 -include_lib("veil_modules/dao/dao.hrl").
 
 -type uuid() :: string().
--type path() :: string().
+-type path() :: string(). %% Has to start with ?PATH_SEPARATOR !!!
 
 -type file_path() :: {absolute_path, Path :: path()} | {relative_path, Path :: path(), RootUUID :: uuid()}.
 -type file() :: file_path() | {uuid, FileUUID :: uuid()}.

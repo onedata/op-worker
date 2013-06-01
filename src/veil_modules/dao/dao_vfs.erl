@@ -37,9 +37,9 @@
 
 %% save_descriptor/1
 %% ====================================================================
-%% @doc Saves file descriptor to DB. Argument should be either #file_descriptor record
+%% @doc Saves file descriptor to DB. Argument should be either #file_descriptor{} record
 %% (if you want to save it as new document) <br/>
-%% or #veil_document that wraps #file_descriptor if you want to update descriptor in DB. <br/>
+%% or #veil_document{} that wraps #file_descriptor{} if you want to update descriptor in DB. <br/>
 %% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
@@ -113,17 +113,41 @@ list_descriptors({_Type, _Resouce}, _N, _Offset) ->
 %% Files Management
 %% ===================================================================
 
+%% save_file/1
+%% ====================================================================
+%% @doc Saves file to DB. Argument should be either #file{} record
+%% (if you want to save it as new document) <br/>
+%% or #veil_document{} that wraps #file{} if you want to update file in DB. <br/>
+%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec save_file(File :: file_info() | file_doc()) -> {ok, uuid()} | {error, any()} | no_return().
+%% ====================================================================
 save_file(#file{} = File) ->
     save_file(#veil_document{record = File});
 save_file(#veil_document{record = #file{}} = FileDoc) ->
     dao:set_db(?FILES_DB_NAME),
     dao:save_record(FileDoc).
 
+%% remove_file/1
+%% ====================================================================
+%% @doc Removes file from DB. Argument should be file() - see dao_types.hrl for more details <br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec remove_file(File :: file()) -> ok | {error, any()} | no_return().
+%% ====================================================================
 remove_file(File) ->
     dao:set_db(?FILES_DB_NAME),
     {ok, FData} = get_file(File),
     dao:remove_record(FData#veil_document.uuid).
 
+%% get_file/1
+%% ====================================================================
+%% @doc Gets file from DB. Argument should be file() - see dao_types.hrl for more details <br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec get_file(File :: file()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
+%% ====================================================================
 get_file({absolute_path, Path}) ->
     get_file({relative_path, Path, ""});
 get_file({relative_path, [?PATH_SEPARATOR | _] = Path, Root}) ->
@@ -148,13 +172,21 @@ get_file({relative_path, [Dir | Path], Root}) ->
         end,
     case Path of
         [] -> {ok, FileDoc};
-        _ ->
-            get_file({relative_path, Path, NewRoot})
+        _ -> get_file({relative_path, Path, NewRoot})
     end;
 get_file({uuid, UUID}) ->
     %% TODO: type match checking
     dao:get_record(UUID).
 
+
+%% get_path_info/1
+%% ====================================================================
+%% @doc Gets all files existing in given path from DB. Argument should be file_path() - see dao_types.hrl for more details <br/>
+%% Similar to get_file/1 but returns list containing file_doc() for every file within given path(), not only the last one<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec get_path_info(File :: file_path()) -> {ok, [file_doc()]} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
+%% ====================================================================
 get_path_info({absolute_path, Path}) ->
     get_path_info({relative_path, Path, ""});
 get_path_info({relative_path, [?PATH_SEPARATOR | _] = Path, Root}) ->
@@ -164,17 +196,18 @@ get_path_info({relative_path, [], _}) -> %% Root dir query
 get_path_info({relative_path, Path, Root}) ->
     {FullPath, _} =
         lists:foldl(fun(Elem, {AccIn, AccRoot}) ->
-            {ok, #veil_document{record = FileInfo, uuid = NewRoot}} = get_file({relative_path, [Elem], AccRoot}),
+            {ok, FileInfo = #veil_document{uuid = NewRoot}} = get_file({relative_path, [Elem], AccRoot}),
             {[FileInfo | AccIn], NewRoot}
         end, {[], Root}, Path),
     {ok, lists:reverse(FullPath)}.
+
 
 %% rename_file/2
 %% ====================================================================
 %% @doc Renames specified file to NewName.
 %% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
 %% @end
--spec rename_file(File :: file(), NewName :: string()) -> ok | no_return().
+-spec rename_file(File :: file(), NewName :: string()) -> {ok, NewUUID :: uuid()} | no_return().
 %% ====================================================================
 rename_file(File, NewName) ->
     {ok, #veil_document{record = FileInfo} = FileDoc} = get_file(File),
