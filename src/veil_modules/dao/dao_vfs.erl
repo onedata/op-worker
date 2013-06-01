@@ -13,11 +13,20 @@
 -module(dao_vfs).
 
 -include_lib("veil_modules/dao/dao.hrl").
--include_lib("veil_modules/dao/couch_db.hrl").
+-include_lib("veil_modules/dao/dao_helper.hrl").
 -include_lib("files_common.hrl").
 
+-type file() :: {absolute_path, Path :: string()}
+              | {relative_path, Path :: string(), RootUUID :: string()}
+              | {uuid, FileUUID :: string()}.
+-type file_info() :: #file{}.
+-type file_doc() :: #veil_document{record :: #file{}}.
+
 %% API - File system management
--export([del_file/2, list_dir/2, lock_file/3, rename_file/3, unlock_file/3, test/0]).
+-export([list_dir/3, rename_file/2, get_full_path/1, lock_file/3, unlock_file/3, test/0]).
+-export([save_descriptor/1, remove_descriptor/1, get_descriptor/1, descriptors_for_file/3]).
+-export([save_file/1, remove_file/1, get_file/1, file_info/1, get_full_path/1]).
+
 
 -ifdef(TEST).
 -compile([export_all]).
@@ -27,6 +36,34 @@
 %% API functions
 %% ===================================================================
 
+save_descriptor(#file_descriptor{} = Fd) ->
+    save_descriptor(#veil_document{record = Fd});
+save_descriptor(#veil_document{record = #file_descriptor{}} = FdDoc) ->
+    dao:set_db(?DESCRIPTORS_DB_NAME),
+    dao:save_record(FdDoc).
+
+remove_descriptor(Fd) ->
+    dao:set_db(?DESCRIPTORS_DB_NAME),
+    dao:remove_record(Fd).
+
+get_descriptor(Fd) ->
+    dao:set_db(?DESCRIPTORS_DB_NAME),
+    %% TODO: type match checking
+    dao:get_record(Fd).
+
+descriptors_for_file(File, N, Offset) ->
+    dao:set_db(?DESCRIPTORS_DB_NAME),
+    {ok, #veil_document{uuid = FileId}} = get_file(File),
+    Res = dao_helper:query_view(?FD_BY_FILE_VIEW#view_info.db_name, ?FD_BY_FILE_VIEW#view_info.design, ?FD_BY_FILE_VIEW#view_info.name,
+        #view_query_args{keys = [dao_helper:name(FileId)], include_docs = true,
+            limit = N, skip = Offset, inclusive_end = false}), %% Inclusive end does not work, disable to be sure
+    case dao_helper:parse_view_result(Res) of
+        {ok, #view_result{rows = Rows}} ->
+            [FdInfo || #view_row{doc = #veil_document{record = #file_descriptor{file = FileId1} = FdInfo }} <- Rows, FileId1 == FileId];
+        Data ->
+            %% TODO: error handling
+            throw({inavlid_data, Data})
+    end.
 
 save_file(#file{} = File) ->
     save_file(#veil_document{record = File});
@@ -41,11 +78,91 @@ remove_file(File) ->
 
 get_file({absolute_path, Path}) ->
     get_file({relative_path, Path, ""});
-get_file({relative_path, Path, Root}) ->
+get_file({relative_path, [?PATH_SEPARATOR | _] = Path, Root}) ->
+    get_file({relative_path, string:tokens(Path, [?PATH_SEPARATOR]), Root});
+get_file({relative_path, [], []}) -> %% Root dir query
+    {ok, #veil_document{uuid = "", record = #file{type = ?DIR_TYPE, perms = 8#777}}}; %% TODO: perms constants
+get_file({relative_path, [Dir | Path], Root}) ->
     dao:set_db(?FILES_DB_NAME),
-    pass;
+    Res = dao_helper:query_view(?FILE_TREE_VIEW#view_info.db_name, ?FILE_TREE_VIEW#view_info.design, ?FILE_TREE_VIEW#view_info.name,
+                                #view_query_args{keys = [[dao_helper:name(Root), dao_helper:name(Dir)]],
+                                    include_docs = case Path of [] -> true; _ -> false end}), %% Include doc representing leaf of our file path
+    {NewRoot, FileDoc} =
+        case dao_helper:parse_view_result(Res) of
+            {ok, #view_result{rows = [#view_row{id = Id, doc = FDoc}]}} ->
+                {Id, FDoc};
+            {ok, #view_result{rows = []}} ->
+                lager:error("File ~p not found (root = ~p)", [Dir, Root]),
+                throw(file_not_found);
+            _Other ->
+                lager:error("Invalid view response: ~p", [_Other]),
+                throw(invalid_data)
+        end,
+    case Path of
+        [] -> {ok, FileDoc};
+        _ ->
+            get_file({relative_path, Path, NewRoot})
+    end;
 get_file({uuid, UUID}) ->
+    %% TODO: type match checking
     dao:get_record(UUID).
+
+file_info(File) ->
+    {ok, FileDoc} = get_file(File),
+    {ok, FileDoc#veil_document.record}.
+
+get_full_path({absolute_path, Path}) ->
+    get_full_path({relative_path, Path, ""});
+get_full_path({relative_path, [?PATH_SEPARATOR | _] = Path, Root}) ->
+    get_full_path({relative_path, string:tokens(Path, [?PATH_SEPARATOR]), Root});
+get_full_path({relative_path, [], _}) -> %% Root dir query
+    {ok, []};
+get_full_path({relative_path, Path, Root}) ->
+    FullPath =
+        lists:foldl(fun(Elem, {AccIn, AccRoot}) ->
+            {ok, #veil_document{record = FileInfo, uuid = NewRoot}} = get_file({relative_path, [Elem], AccRoot}),
+            {[FileInfo | AccIn], NewRoot}
+        end, {[], Root}, Path),
+    {ok, lists:reverse(FullPath)}.
+
+%% rename_file/2
+%% ====================================================================
+%% @doc Renames specified file to NewName.
+%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
+%% @end
+-spec rename_file(File :: file(), NewName :: string()) -> ok | no_return().
+%% ====================================================================
+rename_file(File, NewName) ->
+    {ok, #veil_document{record = FileInfo} = FileDoc} = get_file(File),
+    {ok, _} = save_file(FileDoc#veil_document{record = FileInfo#file{name = NewName}}).
+
+%% list_dir/2
+%% ====================================================================
+%% @doc Lists N files from specified directory starting from Offset.
+%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
+%% @end
+-spec list_dir(Dir :: file(), N :: pos_integer(), Offset :: non_neg_integer()) -> [file_info()].
+%% ====================================================================
+list_dir(Dir, N, Offset) ->
+    Id =
+        case get_file(Dir) of
+            {ok, #veil_document{record = #file{type = ?DIR_TYPE}, uuid = UUID}} ->
+                UUID;
+            R ->
+                %% TODO: error handling
+                throw({dir_not_found, R})
+        end,
+    NextId =  integer_to_list(list_to_integer(case Id of [] -> "0"; _ -> Id end, 16)+1, 16), %% Dirty hack needed because `inclusive_end` option does not work in BigCouch for some reason
+    Res = dao_helper:query_view(?FILE_TREE_VIEW#view_info.db_name, ?FILE_TREE_VIEW#view_info.design, ?FILE_TREE_VIEW#view_info.name,
+        #view_query_args{start_key = [dao_helper:name(Id), dao_helper:name("")], end_key = [dao_helper:name(NextId), dao_helper:name("")],
+                           limit = N, include_docs = true, skip = Offset, inclusive_end = false}), %% Inclusive end does not work, disable to be sure
+    case dao_helper:parse_view_result(Res) of
+        {ok, #view_result{rows = Rows}} ->
+            [FileInfo || #view_row{doc = #veil_document{record = #file{parent = Parent} = FileInfo }} <- Rows, Parent == Id];
+        _ ->
+            %% TODO: error handling
+            throw(inavlid_data)
+    end.
 
 test() ->
     {ok, UUID1} = save_file(#file{name = "users", type = ?DIR_TYPE}),
@@ -62,20 +179,12 @@ test() ->
     save_file(#file{name = "file6", parent = UUID4}),
     save_file(#file{name = "file7", parent = UUID4}),
     save_file(#file{name = "file8", parent = UUID4}),
-    save_file(#file{name = "file1", parent = UUID4}).
+    save_file(#file{name = "file1", parent = UUID4}),
+    save_descriptor(#file_descriptor{file = UUID3}),
+    save_descriptor(#file_descriptor{file = UUID3}),
+    save_descriptor(#file_descriptor{file = UUID4})
+,   save_descriptor(#file_descriptor{file = UUID2}).
 
-
-
-%% list_dir/2
-%% ====================================================================
-%% @doc Lists all files from specified directory owned by specified user.
-%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
-%% Not yet implemented. This is placeholder/template method only!
-%% @end
--spec list_dir(UserID :: string(), DirID :: string()) -> not_yet_implemented.
-%% ====================================================================
-list_dir(_UserID, _DirID) ->
-    not_yet_implemented.
 
 %% lock_file/3
 %% ====================================================================
@@ -98,30 +207,6 @@ lock_file(_UserID, _FileID, _Mode) ->
 %% ====================================================================
 unlock_file(_UserID, _FileID, _Mode) ->
     not_yet_implemented.
-
-
-%% rename_file/3
-%% ====================================================================
-%% @doc Renames specified file owned by specified user to NewName.
-%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
-%% Not yet implemented. This is placeholder/template method only!
-%% @end
--spec rename_file(UserID :: string(), FileID :: string(), _NewName :: string()) -> not_yet_implemented.
-%% ====================================================================
-rename_file(_UserID, _FileID, _NewName) ->
-    not_yet_implemented.
-
-%% del_file/2
-%% ====================================================================
-%% @doc Deletes specified file owned by specified user.
-%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
-%% Not yet implemented. This is placeholder/template method only!
-%% @end
--spec del_file(UserID :: string(), FileID :: string()) -> not_yet_implemented.
-%% ====================================================================
-del_file(_UserID, _FileID) ->
-    not_yet_implemented.
-
     
 %% ===================================================================
 %% Internal functions
