@@ -175,8 +175,14 @@ get_file({relative_path, [Dir | Path], Root}) ->
         _ -> get_file({relative_path, Path, NewRoot})
     end;
 get_file({uuid, UUID}) ->
-    %% TODO: type match checking
-    dao:get_record(UUID).
+    case dao:get_record(UUID) of
+        {ok, #veil_document{record = #file{}} = Doc} ->
+            {ok, Doc};
+        {ok, #veil_document{}} ->
+            {error, invalid_file_record};
+        Other ->
+            Other
+    end.
 
 
 %% get_path_info/1
