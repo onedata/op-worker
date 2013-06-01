@@ -10,7 +10,7 @@
 %% ===================================================================
 
 
--record(file_location, {protocol = "", host = "", port = 0, urn = ""}).
+-record(file_location, {storage_helper_id = "", file_id = ""}).
 -record(file_lock, {type = 1, uid = "", sid = "", pid = 0, offset = 0, size = 0}).
 -record(file, {type = 1, name = "", size = 0, uid = "", gids = [], perms = 0, parent = "", ref_file = "", location = #file_location{}, locks = []}).
 
