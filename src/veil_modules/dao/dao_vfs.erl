@@ -75,8 +75,14 @@ remove_descriptor(Fd) ->
 %% ====================================================================
 get_descriptor(Fd) ->
     dao:set_db(?DESCRIPTORS_DB_NAME),
-    %% TODO: record type checking
-    dao:get_record(Fd).
+    case dao:get_record(Fd) of
+        {ok, #veil_document{record = #file_descriptor{}} = Doc} ->
+            {ok, Doc};
+        {ok, #veil_document{}} ->
+            {error, invalid_fd_record};
+        Other ->
+            Other
+    end.
 
 
 %% list_descriptors/3
@@ -175,6 +181,7 @@ get_file({relative_path, [Dir | Path], Root}) ->
         _ -> get_file({relative_path, Path, NewRoot})
     end;
 get_file({uuid, UUID}) ->
+    dao:set_db(?FILES_DB_NAME),
     case dao:get_record(UUID) of
         {ok, #veil_document{record = #file{}} = Doc} ->
             {ok, Doc};
