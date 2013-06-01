@@ -44,7 +44,7 @@
 
 %% Record-wrapper for regular records that needs to be saved in DB. Adds UUID and Revision info to each record.
 %% `uuid` is document UUID, `rev_info` is documents' current revision number
-%% `record` is an record representing this document (its data) and `force_update` is a flag
+%% `record` is an record representing this document (its data), `force_update` is a flag
 %% that forces dao:save_record/1 to update this document even if rev_info isn't valid or up to date.
 -record(veil_document, {uuid = "", rev_info = 0, record = none, force_update = false}).
 

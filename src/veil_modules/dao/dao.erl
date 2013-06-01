@@ -19,6 +19,7 @@
 
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/couch_db.hrl").
+-include_lib("veil_modules/dao/dao_types.hrl").
 
 -import(dao_helper, [name/1]).
 
@@ -137,8 +138,7 @@ cleanup() ->
 %% @doc Saves record to DB. Argument has to be either Record :: term() which will be saved<br/>
 %% with random UUID as completely new document or #veil_document record. If #veil_document record is passed <br/>
 %% caller may set UUID and revision info in order to update this record in DB.<br/>
-%% If Mode == update then the document with given UUID will be overridden.
-%% By default however saving to existing document will fail with {error, conflict}.<br/>
+%% If you got #veil_document{} via {@link dao:get_record/1}, uuid and rev_info are in place and you shouldn't touch them<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec save_record(term() | #veil_document{uuid :: string(), rev_info :: term(), record :: term(), force_update :: boolean()}) ->
@@ -182,7 +182,9 @@ save_record(Rec) when is_tuple(Rec) ->
 %% get_record/1
 %% ====================================================================
 %% @doc Retrieves record with UUID = Id from DB. Returns whole #veil_document record containing UUID, Revision Info and
-%% demanded record inside. See #veil_document structure for more info.
+%% demanded record inside. #veil_document{}.uuid and #veil_document{}.rev_info should not be ever changed. <br/>
+%% You can strip wrappers if you do not need them using API functions of dao_lib module.
+%% See #veil_document{} structure for more info.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec get_record(Id :: atom() | string()) ->
@@ -209,7 +211,7 @@ get_record(Id) when is_list(Id) ->
 %% @doc Removes record with given UUID from DB
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
--spec remove_record(Id :: atom()) ->
+-spec remove_record(Id :: atom() | uuid()) ->
     ok |
     {error, Error :: term()}.
 %% ====================================================================

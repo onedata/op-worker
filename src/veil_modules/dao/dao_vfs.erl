@@ -19,7 +19,7 @@
 
 %% API - File system management
 -export([list_dir/3, rename_file/2, lock_file/3, unlock_file/3, test/0]). %% High level API functions
--export([save_descriptor/1, remove_descriptor/1, get_descriptor/1, descriptors_for_file/3]). %% Base descriptor management API functions
+-export([save_descriptor/1, remove_descriptor/1, get_descriptor/1, list_descriptors/3]). %% Base descriptor management API functions
 -export([save_file/1, remove_file/1, get_file/1, file_info/1, get_path_info/1]). %% Base file management API function
 
 
@@ -31,33 +31,82 @@
 %% API functions
 %% ===================================================================
 
+%% ===================================================================
+%% File Descriptors Management
+%% ===================================================================
+
+%% save_descriptor/1
+%% ====================================================================
+%% @doc Saves file descriptor to DB. Argument should be either #file_descriptor record
+%% (if you want to save it as new document) <br/>
+%% or #veil_document that wraps #file_descriptor if you want to update descriptor in DB. <br/>
+%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec save_descriptor(Fd :: fd_info() | fd_doc()) -> {ok, uuid()} | {error, any()} | no_return().
+%% ====================================================================
 save_descriptor(#file_descriptor{} = Fd) ->
     save_descriptor(#veil_document{record = Fd});
 save_descriptor(#veil_document{record = #file_descriptor{}} = FdDoc) ->
     dao:set_db(?DESCRIPTORS_DB_NAME),
     dao:save_record(FdDoc).
 
+
+%% remove_descriptor/1
+%% ====================================================================
+%% @doc Removes file descriptor from DB. Argument should be uuid() of #file_descriptor.
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec remove_descriptor(Fd :: fd()) -> ok | {error, any()} | no_return().
+%% ====================================================================
 remove_descriptor(Fd) ->
     dao:set_db(?DESCRIPTORS_DB_NAME),
     dao:remove_record(Fd).
 
+
+%% get_descriptor/1
+%% ====================================================================
+%% @doc Gets file descriptor from DB. Argument should be uuid() of #file_descriptor record
+%% Non-error return value is always {ok, #veil_document{record = #file_descriptor}.
+%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec get_descriptor(Fd :: fd()) -> {ok, fd_doc()} | {error, any()} | no_return().
+%% ====================================================================
 get_descriptor(Fd) ->
     dao:set_db(?DESCRIPTORS_DB_NAME),
-    %% TODO: type match checking
+    %% TODO: record type checking
     dao:get_record(Fd).
 
-descriptors_for_file(File, N, Offset) ->
+
+%% list_descriptors/3
+%% ====================================================================
+%% @doc Lists file descriptor from DB. <br/>
+%% First argument is a two-element tuple containing type of resource used to filter descriptors and resource itself<br/>
+%% Currently only {by_file, File :: file()} is supported. <br/>
+%% Second argument limits number of rows returned. 3rd argument sets offset of query (skips first Offset rows) <br/>
+%% Non-error return value is always  {ok, [#veil_document{record = #file_descriptor]}.
+%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec list_descriptors(MatchCriteria, N :: pos_integer(), Offset :: non_neg_integer()) ->
+    {ok, fd_doc()} | {error, any()} | no_return() when
+    MatchCriteria :: {by_file, File :: file()}.
+%% ====================================================================
+list_descriptors({by_file, File}, N, Offset) ->
     {ok, #veil_document{uuid = FileId}} = get_file(File),
     Res = dao_helper:query_view(?FD_BY_FILE_VIEW#view_info.db_name, ?FD_BY_FILE_VIEW#view_info.design, ?FD_BY_FILE_VIEW#view_info.name,
         #view_query_args{keys = [dao_helper:name(FileId)], include_docs = true,
             limit = N, skip = Offset}),
     case dao_helper:parse_view_result(Res) of
         {ok, #view_result{rows = Rows}} ->
-            {ok, [FdInfo || #view_row{doc = #veil_document{record = #file_descriptor{file = FileId1} = FdInfo }} <- Rows, FileId1 == FileId]};
+            {ok, [FdDoc || #view_row{doc = #veil_document{record = #file_descriptor{file = FileId1}} = FdDoc} <- Rows, FileId1 == FileId]};
         Data ->
             %% TODO: error handling
             throw({inavlid_data, Data})
-    end.
+    end;
+list_descriptors({_Type, _Resouce}, _N, _Offset) ->
+    not_yet_implemented.
 
 save_file(#file{} = File) ->
     save_file(#veil_document{record = File});
@@ -130,6 +179,7 @@ rename_file(File, NewName) ->
     {ok, #veil_document{record = FileInfo} = FileDoc} = get_file(File),
     {ok, _} = save_file(FileDoc#veil_document{record = FileInfo#file{name = NewName}}).
 
+
 %% list_dir/2
 %% ====================================================================
 %% @doc Lists N files from specified directory starting from Offset.
@@ -151,7 +201,8 @@ list_dir(Dir, N, Offset) ->
         #view_query_args{start_key = [dao_helper:name(Id), dao_helper:name("")], end_key = [dao_helper:name(NextId), dao_helper:name("")],
                            limit = N, include_docs = true, skip = Offset, inclusive_end = false}), %% Inclusive end does not work, disable to be sure
     case dao_helper:parse_view_result(Res) of
-        {ok, #view_result{rows = Rows}} ->
+        {ok, #view_result{rows = Rows}} -> %% We need to strip results that don't match search criteria (tail of last query possibly), because
+                                           %% `end_key` seems to behave strange combined with `limit` option. TODO: get rid of it after DBMS switch
             {ok, [FileInfo || #view_row{doc = #veil_document{record = #file{parent = Parent} = FileInfo }} <- Rows, Parent == Id]};
         _ ->
             %% TODO: error handling
@@ -191,6 +242,7 @@ test() ->
 lock_file(_UserID, _FileID, _Mode) ->
     not_yet_implemented.
 
+
 %% unlock_file/3
 %% ====================================================================
 %% @doc Takes off a read/write lock on specified file owned by specified user.
@@ -201,7 +253,8 @@ lock_file(_UserID, _FileID, _Mode) ->
 %% ====================================================================
 unlock_file(_UserID, _FileID, _Mode) ->
     not_yet_implemented.
-    
+
+
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
