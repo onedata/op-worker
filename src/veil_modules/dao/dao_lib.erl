@@ -75,7 +75,7 @@ apply(Module, Method, Args, ProtocolVersion) ->
 %% ====================================================================
 apply(Module, Method, Args, ProtocolVersion, Timeout) ->
     Workers = gen_server:call(request_dispatcher, {get_workers, dao}),
-    apply(Module, Method, Args, ProtocolVersion, Timeout, [X || {_,X} <- lists:sort([ {crypto:rand_uniform(0, 100), N} || N <- Workers])]).
+    apply(Module, Method, Args, ProtocolVersion, Timeout, Workers).
 
 %% ===================================================================
 %% Internal functions
@@ -90,14 +90,16 @@ apply(Module, Method, Args, ProtocolVersion, Timeout) ->
 %% ====================================================================
 apply(_Module, _Method, _Args, _ProtocolVersion, _Timeout, []) ->
     {error, no_active_workers_found};
-apply(Module, {asynch, Method}, Args, ProtocolVersion, Timeout, [ Worker | Tail ]) ->
+apply(Module, {asynch, Method}, Args, ProtocolVersion, Timeout, Workers) ->
+    {Head, [ Worker | Tail ]} = lists:split(crypto:rand_uniform(0, length(Workers)), Workers), %% Complexity O(length(Workers))
     try gen_server:cast({dao, Worker}, {asynch, ProtocolVersion, {Module, Method, Args}}) of
         _ -> ok
     catch
-        _:_ -> apply(Module, {asynch, Method}, Args, ProtocolVersion, Timeout, Tail)
+        _:_ -> apply(Module, {asynch, Method}, Args, ProtocolVersion, Timeout, lists:append(Head, Tail)) %% Complexity O(length(Workers))
     end;
-apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout, [ Worker | Tail ]) ->
+apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout, Workers) ->
     PPid = self(),
+    {Head, [ Worker | Tail ]} = lists:split(crypto:rand_uniform(0, length(Workers)), Workers),
     Pid = spawn(fun() -> receive Response -> PPid ! {self(), Response} after Timeout -> exit end end),
     try gen_server:cast({dao, Worker}, {synch, ProtocolVersion, {Module, Method, Args}, dao_lib_call, {proc, Pid}}) of
         _ ->
@@ -107,7 +109,7 @@ apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout, [ Worker | Tail ]
                 {error, timeout}
             end
     catch
-        _ -> apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout, Tail)
+        _ -> apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout, lists:append(Head, Tail))
     end;
 apply(Module, Method, Args, ProtocolVersion, Timeout, Workers) ->
     apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout, Workers).
