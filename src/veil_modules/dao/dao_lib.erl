@@ -14,7 +14,7 @@
 -include_lib("veil_modules/dao/dao.hrl").
 
 %% API
--export([wrap_record/1, strip_wrappers/1]).
+-export([wrap_record/1, strip_wrappers/1, apply/4, apply/5]).
 
 %% ===================================================================
 %% API functions
@@ -51,8 +51,63 @@ strip_wrappers(#veil_document{record = Record}) when is_tuple(Record) ->
     Record;
 strip_wrappers(Other) ->
     Other.
-    
+
+%% apply/4
+%% ====================================================================
+%% @doc Same as apply/5 but with default Timeout
+%% @end
+-spec apply(Module :: module(), Method :: atom() | {synch, atom()} | {asynch, atom()},
+            Args :: [term()], ProtocolVersion :: number()) -> any() | {error, no_active_workers_found}.
+%% ====================================================================
+apply(Module, Method, Args, ProtocolVersion) ->
+    apply(Module, Method, Args, ProtocolVersion, ?DAO_REQUEST_TIMEOUT).
+
+%% apply/5
+%% ====================================================================
+%% @doc Behaves similar to erlang:apply/3 but works only with DAO worker<br/>.
+%% Method calls are made through random gen_server. <br/>
+%% Method should be tuple {synch, Method} or {asynch, Method}<br/>
+%% but if its simple atom(), {synch, Method} is assumed<br/>
+%% Timeout argument defines how long should this method wait for response
+%% @end
+-spec apply(Module :: module(), Method :: atom() | {synch, atom()} | {asynch, atom()},
+            Args :: [term()], ProtocolVersion :: number(), Timeout :: pos_integer()) -> any() | {error, no_active_workers_found}.
+%% ====================================================================
+apply(Module, Method, Args, ProtocolVersion, Timeout) ->
+    Workers = gen_server:call(request_dispatcher, {get_workers, dao}),
+    apply(Module, Method, Args, ProtocolVersion, Timeout, [X || {_,X} <- lists:sort([ {crypto:rand_uniform(0, 100), N} || N <- Workers])]).
+
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
-    
+
+%% apply/6
+%% ====================================================================
+%% @doc Internal version of apply/5
+%% @end
+-spec apply(Module :: module(), Method :: atom() | {synch, atom()} | {asynch, atom()},
+    Args :: [term()], ProtocolVersion :: number(), Timeout :: pos_integer(), [Worker :: atom()]) -> any() | {error, no_active_workers_found}.
+%% ====================================================================
+apply(_Module, _Method, _Args, _ProtocolVersion, _Timeout, []) ->
+    {error, no_active_workers_found};
+apply(Module, {asynch, Method}, Args, ProtocolVersion, Timeout, [ Worker | Tail ]) ->
+    try gen_server:cast({dao, Worker}, {asynch, ProtocolVersion, {Module, Method, Args}}) of
+        _ -> ok
+    catch
+        _:_ -> apply(Module, {asynch, Method}, Args, ProtocolVersion, Timeout, Tail)
+    end;
+apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout, [ Worker | Tail ]) ->
+    PPid = self(),
+    Pid = spawn(fun() -> receive Response -> PPid ! {self(), Response} after Timeout -> exit end end),
+    try gen_server:cast({dao, Worker}, {synch, ProtocolVersion, {Module, Method, Args}, dao_lib_call, {proc, Pid}}) of
+        _ ->
+            receive
+                {Pid, Resp} -> Resp
+            after Timeout ->
+                {error, timeout}
+            end
+    catch
+        _ -> apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout, Tail)
+    end;
+apply(Module, Method, Args, ProtocolVersion, Timeout, Workers) ->
+    apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout, Workers).

@@ -12,6 +12,8 @@
 -ifndef(COMMON_HRL).
 -define(COMMON_HRL, 1).
 
+-define(DAO_REQUEST_TIMEOUT, 5000).
+
 %% View definitions location
 -define(VIEW_DEF_LOCATION, "views/").
 -define(MAP_DEF_SUFFIX, "_map.js").
