@@ -172,6 +172,9 @@ get_file({relative_path, [Dir | Path], Root}) ->
             {ok, #view_result{rows = []}} ->
                 lager:error("File ~p not found (root = ~p)", [Dir, Root]),
                 throw(file_not_found);
+            {ok, #view_result{rows = [#view_row{id = Id, doc = FDoc} | _Tail]}} ->
+                lager:warring("File ~p (root = ~p) is duplicated. Returning first copy. Others: ", [Dir, Root, _Tail]),
+                {Id, FDoc};
             _Other ->
                 lager:error("Invalid view response: ~p", [_Other]),
                 throw(invalid_data)
