@@ -3,7 +3,9 @@
 all: deps generate docs
 
 compile:
+    cp -R veilprotocol/proto src
 	./rebar compile
+	rm -rf src/proto
 
 deps:
 	./rebar get-deps
