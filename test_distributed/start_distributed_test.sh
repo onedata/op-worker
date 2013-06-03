@@ -8,9 +8,9 @@
 ## ===================================================================
 
 #!/bin/bash
-mkdir -p test/distributed_tests_out
-cp -R test/distributed/* test/distributed_tests_out
-cd test/distributed_tests_out
+mkdir -p distributed_tests_out
+cp -R test_distributed/* distributed_tests_out
+cd distributed_tests_out
 
 HOST=$HOSTNAME
 
@@ -36,5 +36,6 @@ do
     rm -f $TEST
 done
 rm -f Emakefile
+rm -f start_distributed_test.sh
 
-cd ../..
+cd ..

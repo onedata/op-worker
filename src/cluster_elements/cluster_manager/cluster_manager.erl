@@ -280,7 +280,7 @@ init_cluster(State) ->
   end,
   {Jobs, Args} = lists:foldl(CreateJobsList, {[], []}, JobsAndArgs),
 
-  NewState3 = case length(Jobs) > 0 of
+  NewState3 = case (length(Jobs) > 0) and (length(Nodes) > 0) of
     true ->
       NewState = case erlang:length(Nodes) >= erlang:length(Jobs) of
         true -> init_cluster_nodes_dominance(State, Nodes, Jobs, [], Args, []);
