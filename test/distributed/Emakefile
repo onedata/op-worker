@@ -1,3 +1,4 @@
 %% directories to be compiled
-{'*', [{outdir, "."}]}.
+{'*', [{outdir, "."}, {i, "../../include"}]}.
 {'example/*', [{outdir, "./example"}]}.
+{'crash_test/*', [{outdir, "./crash_test"}]}.

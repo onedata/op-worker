@@ -1,0 +1,1 @@
+-define(INIT_DIST_TEST, code:add_path("../..")).

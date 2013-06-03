@@ -75,8 +75,6 @@ wrong_request() ->
 %% This test checks if ccm properly registers nodes in cluster.
 %% Furthermore, it checks if it properly monitors state of these nodes.
 nodes_counting_and_monitoring() ->
-
-
 	application:set_env(?APP_Name, node_type, ccm), 
 	application:set_env(?APP_Name, ccm_nodes, [node()]), 
 
