@@ -26,7 +26,7 @@ do
 done
 
 erl -make
-erl -noshell -name starter -s distributed_test_starter start $TESTS
+erl -name starter -s distributed_test_starter start $TESTS
 
 find . -name "*.beam" -exec rm -rf {} \;
 find . -name "*.erl" -exec rm -rf {} \;
