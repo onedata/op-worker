@@ -25,6 +25,12 @@ do
     sed -i "s/localhost/$HOST/g" $TEST
 done
 
+SCRS=$(find . -name "*.erl")
+for SCR in $SCRS
+do
+    sed -i "s/localhost/$HOST/g" $SCR
+done
+
 erl -make
 erl -name starter -s distributed_test_starter start $TESTS
 
