@@ -13,6 +13,7 @@
 -module(request_dispatcher_tests).
 -include("registered_names.hrl").
 -include("communication_protocol_pb.hrl").
+-include("modules_and_args.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -125,7 +126,7 @@ dispatcher_connection() ->
 
 %% This test checks if workers list inside dispatcher is refreshed correctly.
 workers_list_actualization() ->
-  Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager],
+  Jobs = ?Modules,
 
   application:set_env(?APP_Name, node_type, ccm),
   application:set_env(?APP_Name, ccm_nodes, [node()]),
@@ -148,7 +149,7 @@ workers_list_actualization() ->
 
 %% This test checks if client outside the cluster can ping all modules via dispatcher.
 ping() ->
-  Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager],
+  Jobs = ?Modules,
 
   Cert = '../veilfs.pem',
   CertString = atom_to_list(Cert),

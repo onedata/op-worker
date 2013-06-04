@@ -14,6 +14,7 @@
 -include("registered_names.hrl").
 -include("records.hrl").
 -include("supervision_macros.hrl").
+-include("modules_and_args.hrl").
 
 %% ====================================================================
 %% API
@@ -263,8 +264,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% ====================================================================
 init_cluster(State) ->
   Nodes = State#cm_state.nodes,
-  %%Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager],
-  JobsAndArgs = [{cluster_rengine, []}, {control_panel, []}, {dao, []}, {fslogic, []}, {gateway, []}, {rtransfer, []}, {rule_manager, []}],
+  JobsAndArgs = ?Modules_With_Args,
 
   CreateRunningWorkersList = fun({_N, M, _Child}, Workers) ->
     [M | Workers]

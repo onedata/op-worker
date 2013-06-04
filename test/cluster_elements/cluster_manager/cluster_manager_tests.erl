@@ -13,6 +13,7 @@
 -module(cluster_manager_tests).
 -include("registered_names.hrl").
 -include("records.hrl").
+-include("modules_and_args.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -125,7 +126,7 @@ worker_start_stop() ->
 %% This test checks if cluster manager correctly stars workers and if
 %% the can be used inside cluster (using ping request).
 modules_start_and_ping() ->
-  Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager],
+  Jobs = ?Modules,
 
   application:set_env(?APP_Name, node_type, ccm),
   application:set_env(?APP_Name, ccm_nodes, [node()]),

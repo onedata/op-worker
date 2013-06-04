@@ -43,5 +43,6 @@ do
 done
 rm -f Emakefile
 rm -f start_distributed_test.sh
+killall beam
 
 cd ..
