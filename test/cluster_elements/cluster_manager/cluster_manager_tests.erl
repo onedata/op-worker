@@ -86,7 +86,7 @@ nodes_counting_and_monitoring() ->
 	timer:sleep(10),
 	lists:foreach(fun(Node) -> gen_server:call({global, ?CCM}, {node_is_up, Node}) end, Nodes),
 
-  %% the test will be used when distributed test environment will be ready
+  %% the test is moved to distributed test directory
 %% 	Nodes2 = gen_server:call({global, ?CCM}, get_nodes),
 %% 	?assert(length(Nodes) + 1 == length(Nodes2)),
 %% 	lists:foreach(fun(Node) -> ?assert(lists:member(Node, Nodes2)) end, Nodes),
