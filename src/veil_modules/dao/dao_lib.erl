@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Rafal Slota
 %% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license 
+%% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -71,49 +71,38 @@ apply(Module, Method, Args, ProtocolVersion) ->
 %% Timeout argument defines how long should this method wait for response
 %% @end
 -spec apply(Module :: module(), Method :: atom() | {synch, atom()} | {asynch, atom()},
-            Args :: [term()], ProtocolVersion :: number(), Timeout :: pos_integer()) -> any() | {error, no_active_workers_found}.
+            Args :: [term()], ProtocolVersion :: number(), Timeout :: pos_integer()) -> any() | {error, worker_not_found} | {error, timeout}.
 %% ====================================================================
+apply(Module, {asynch, Method}, Args, ProtocolVersion, _Timeout) ->
+    try gen_server:call(request_dispatcher, {dao, ProtocolVersion, {Module, Method, Args}}) of
+	      ok ->
+	          ok;
+	      worker_not_found ->
+	          {error, worker_not_found}
+    catch
+	      Type:Error ->
+	      lager:error("Cannot make a call to request_dispatcher on node ~p Reason: ~p", [dao, node(), {Type, Error}])
+    end;
+apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout) ->
+    PPid = self(),
+    Pid = spawn(fun() -> receive Response -> PPid ! {self(), Response} after Timeout -> exit end end),
+    try gen_server:call(request_dispatcher, {dao, ProtocolVersion, Pid, {Module, Method, Args}}) of
+        ok ->
+            receive
+                {Pid, Resp} -> Resp
+            after Timeout ->
+                {error, timeout}
+            end;
+        worker_not_found ->
+            {error, worker_not_found}
+    catch
+	      Type:Error ->
+	      lager:error("Cannot make a call to request_dispatcher on node ~p Reason: ~p", [dao, node(), {Type, Error}])
+    end;
 apply(Module, Method, Args, ProtocolVersion, Timeout) ->
-    Workers = gen_server:call(request_dispatcher, {get_workers, dao}),
-    apply(Module, Method, Args, ProtocolVersion, Timeout, Workers).
+    apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout).
 
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
 
-%% apply/6
-%% ====================================================================
-%% @doc Internal version of apply/5
-%% @end
--spec apply(Module :: module(), Method :: atom() | {synch, atom()} | {asynch, atom()},
-    Args :: [term()], ProtocolVersion :: number(), Timeout :: pos_integer(), [Worker :: atom()]) -> any() | {error, no_active_workers_found}.
-%% ====================================================================
-apply(_Module, _Method, _Args, _ProtocolVersion, _Timeout, []) ->
-    {error, no_active_workers_found};
-apply(Module, {asynch, Method}, Args, ProtocolVersion, Timeout, Workers) ->
-    {Head, [ Worker | Tail ]} = lists:split(crypto:rand_uniform(0, length(Workers)), Workers), %% Complexity O(length(Workers))
-    try gen_server:call({dao, Worker}, {asynch, ProtocolVersion, {Module, Method, Args}}) of
-        _ -> ok
-    catch
-        Type:Error ->
-            lager:error("Cannot call worker ~p on node ~p. Reason: ~p", [dao, Worker, {Type, Error}]),
-            apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout, lists:append(Head, Tail))
-    end;
-apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout, Workers) ->
-    PPid = self(),
-    {Head, [ Worker | Tail ]} = lists:split(crypto:rand_uniform(0, length(Workers)), Workers), %% Complexity O(length(Workers))
-    Pid = spawn(fun() -> receive Response -> PPid ! {self(), Response} after Timeout -> exit end end),
-    try gen_server:call({dao, Worker}, {synch, ProtocolVersion, {Module, Method, Args}, dao_lib_call, {proc, Pid}}) of
-        _ ->
-            receive
-                {Pid, Resp} -> Resp
-            after Timeout ->
-                {error, timeout}
-            end
-    catch
-        Type:Error ->
-            lager:error("Cannot call worker ~p on node ~p. Reason: ~p", [dao, Worker, {Type, Error}]),
-            apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout, lists:append(Head, Tail))
-    end;
-apply(Module, Method, Args, ProtocolVersion, Timeout, Workers) ->
-    apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout, Workers).
