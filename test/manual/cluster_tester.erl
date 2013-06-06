@@ -1,6 +1,26 @@
-%% Copyright
+%% ===================================================================
+%% @author Michal Wrzeszcz
+%% @copyright (C): 2013 ACK CYFRONET AGH
+%% This software is released under the MIT license
+%% cited in 'LICENSE.txt'.
+%% @end
+%% ===================================================================
+%% @doc: This module tests cluster by sending large number of requests
+%% to each worker. To use it enter .eunit directory (after 'make test'
+%% command) and run erlang with the same cookie as veil cluster
+%% uses (cookie is used to test if all modules work well after the
+%% stress test). Test methods use list of pairs
+%% {erlang_node, dispatcher_port}. E.g. to start test of cluster with
+%% 2 nodes on localhost that use dispatcher ports 5555 and 6666 and
+%% cookie 172.16.67.140 use commands:
+%% cd .eunit
+%% erl -name tester -setcookie 172.16.67.140 -pa ../ebin ../deps/*/ebin
+%% and then in erlang shell:
+%% net_adm:ping('ccm1@127.0.0.1').
+%% cluster_tester:test_cluster([{'w1@127.0.0.1', 6666}, {'ccm1@127.0.0.1', 5555}]).
+%% @end
+%% ===================================================================
 -module(cluster_tester).
--author("michal").
 
 -include("registered_names.hrl").
 -include("modules_and_args.hrl").
@@ -10,7 +30,7 @@
 -export([test_cluster/1, test_cluster/2]).
 
 test_cluster(Nodes) ->
-  test_cluster(Nodes, 1000).
+  test_cluster(Nodes, 500).
 
 test_cluster(Nodes, PingsNum) ->
   ssl:start(),
@@ -48,7 +68,7 @@ test_ccm(Nodes) ->
       false
   end.
 
-ping_test(Nodes, _PingsNum) ->
+ping_test(Nodes, PingsNum) ->
   Cert = '../veilfs.pem',
   CertString = atom_to_list(Cert),
   Ping = #atom{value = "ping"},
@@ -68,31 +88,53 @@ ping_test(Nodes, _PingsNum) ->
   end,
   Messages = lists:foldl(CreateMessages, [], Jobs),
 
-  CheckNodes = fun({Node, Port}, S) ->
-    try
-      NodeStr = atom_to_list(Node),
-      Machine = string:sub_string(NodeStr, string:str(NodeStr, "@")+1),
-      {ok, Socket} = ssl:connect(Machine, Port, [binary, {active, false}, {packet, 4}, {certfile, CertString}]),
+  AnsPid = self(),
+  CheckNodes = fun({Node, Port}) ->
+    spawn(fun() ->
+      for(1, PingsNum,
+        fun() -> spawn(fun() ->
+          try
+            NodeStr = atom_to_list(Node),
+            Machine = string:sub_string(NodeStr, string:str(NodeStr, "@")+1),
+            {ok, Socket} = ssl:connect(Machine, Port, [binary, {active, false}, {packet, 4}, {certfile, CertString}]),
 
-      CheckModules = fun(M, Sum) ->
-        ssl:send(Socket, M),
-        {ok, Ans} = ssl:recv(Socket, 0),
-        case Ans =:= PongAnsBytes of
-          true -> Sum + 1;
-          false -> Sum
-        end
-      end,
+            CheckModules = fun(M, Sum) ->
+              ssl:send(Socket, M),
+              {ok, Ans} = ssl:recv(Socket, 0),
+              case Ans =:= PongAnsBytes of
+                true -> Sum + 1;
+                false -> Sum
+              end
+            end,
 
-      PongsNum = lists:foldl(CheckModules, 0, Messages),
-      S + PongsNum
-    catch
-      _:_ ->
-        io:format("Cannot connect to node: ~s using port: ~b~n", [Node, Port]),
-        S
-    end
+            PongsNum = lists:foldl(CheckModules, 0, Messages),
+            AnsPid ! PongsNum
+          catch
+            _:_ ->
+              io:format("Cannot connect to node: ~s using port: ~b~n", [Node, Port]),
+              AnsPid ! 0
+          end
+        end)
+      end)
+    end)
   end,
 
-  PongsNum2 = lists:foldl(CheckNodes, 0, Nodes),
-  ExpectedPongsNum = (length(Jobs) * length(Nodes)),
+  lists:foreach(CheckNodes, Nodes),
+  PongsNum2 = waitForAns(length(Nodes) * PingsNum),
+  ExpectedPongsNum = (length(Jobs) * length(Nodes)) * PingsNum,
   io:format("Pongs number: ~b, expected: ~b~n", [PongsNum2, ExpectedPongsNum]),
   PongsNum2 == ExpectedPongsNum.
+
+for(N, N, F) -> [F()];
+for(I, N, F) -> [F()|for(I+1, N, F)].
+
+waitForAns(ProcNum) ->
+  waitForAns(ProcNum, 0).
+waitForAns(0, Ans) ->
+  Ans;
+waitForAns(ProcNum, Ans) ->
+  receive
+    Num -> waitForAns(ProcNum-1, Ans + Num)
+  after
+    5000 -> Ans
+  end.
