@@ -14,7 +14,7 @@
 -include_lib("veil_modules/dao/dao.hrl").
 
 %% API
--export([wrap_record/1, strip_wrappers/1, apply/4, apply/5]).
+-export([wrap_record/1, strip_wrappers/1]).
 
 %% ===================================================================
 %% API functions
