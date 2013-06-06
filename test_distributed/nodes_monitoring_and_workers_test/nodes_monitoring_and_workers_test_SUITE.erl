@@ -84,7 +84,7 @@ tester_test(_Config) ->
 
   Ports = [5555, 6666, 7777, 8888],
   CheckNodes = fun(Port, S) ->
-    {ok, Socket} = ssl:connect("localhost", Port, [binary, {active, false}, {packet, 4}, {certfile, CertString}]),
+    {ok, Socket} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, CertString}]),
 
     CheckModules = fun(M, Sum) ->
       Message = #clustermsg{module_name = atom_to_binary(M, utf8), message_type = "atom", answer_type = "atom",

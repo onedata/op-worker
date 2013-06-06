@@ -9,7 +9,7 @@
 %% if cluster is avaliable.
 %% @end
 %% ===================================================================
--module(manual_tester).
+-module(ping_tester).
 -include("registered_names.hrl").
 -include("communication_protocol_pb.hrl").
 
