@@ -128,6 +128,11 @@ handle_cast({synch, ProtocolVersion, Msg, MsgId, ReplyTo}, State) ->
 	spawn(fun() -> proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) end),
 	{noreply, State};
 
+handle_cast({synch, ProtocolVersion, Msg, ReplyTo}, State) ->
+  PlugIn = State#host_state.plug_in,
+  spawn(fun() -> proc_request(PlugIn, ProtocolVersion, Msg, non, ReplyTo) end),
+  {noreply, State};
+
 handle_cast({asynch, ProtocolVersion, Msg}, State) ->
 	PlugIn = State#host_state.plug_in,
 	spawn(fun() -> proc_request(PlugIn, ProtocolVersion, Msg, non, non) end),	
@@ -138,6 +143,12 @@ handle_cast({sequential_synch, ProtocolVersion, Msg, MsgId, ReplyTo}, State) ->
     Job = fun() -> proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) end,
     gen_server:cast(State#host_state.plug_in, {sequential, job_check}), %% Process run queue
     {noreply, State#host_state{seq_queue = State#host_state.seq_queue ++ [Job]}};
+
+handle_cast({sequential_synch, ProtocolVersion, Msg, ReplyTo}, State) ->
+  PlugIn = State#host_state.plug_in,
+  Job = fun() -> proc_request(PlugIn, ProtocolVersion, Msg, non, ReplyTo) end,
+  gen_server:cast(State#host_state.plug_in, {sequential, job_check}), %% Process run queue
+  {noreply, State#host_state{seq_queue = State#host_state.seq_queue ++ [Job]}};
 
 handle_cast({sequential_asynch, ProtocolVersion, Msg}, State) ->
     PlugIn = State#host_state.plug_in,
@@ -223,7 +234,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% ====================================================================
 %% @doc Processes client request using PlugIn:handle function. Afterwards,
 %% it sends the answer to dispatcher and logs info about processing time.
--spec proc_request(PlugIn :: atom(), ProtocolVersion :: integer(), Msg :: term(), MsgId :: integer(), ReplyDisp :: term()) -> Result when
+-spec proc_request(PlugIn :: atom(), ProtocolVersion :: integer(), Msg :: term(), MsgId :: term(), ReplyDisp :: term()) -> Result when
 	Result ::  atom(). 
 %% ====================================================================
 proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
@@ -236,8 +247,16 @@ proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
 
 	case ReplyTo of
 		non -> ok;
-    {gen_serv, Disp} -> gen_server:cast(Disp, {worker_answer, MsgId, Response});
-    {proc, Pid} -> Pid ! Response;
+    {gen_serv, Serv} ->
+      case MsgId of
+        non -> gen_server:cast(Serv, Response);
+        Id -> gen_server:cast(Serv, {worker_answer, Id, Response})
+      end;
+    {proc, Pid} ->
+      case MsgId of
+        non -> Pid ! Response;
+        Id -> Pid ! {worker_answer, Id, Response}
+      end;
     Other -> lagger:error([{mod, ?MODULE}], "Wrong reply type: ~s", [Other])
 	end,
 	

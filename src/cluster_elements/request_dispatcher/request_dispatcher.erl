@@ -90,6 +90,19 @@ handle_call({update_state, NewStateNum}, _From, State) ->
 handle_call({get_workers, Module}, _From, State) ->
   {reply, get_workers(Module, State), State};
 
+handle_call({Task, ProtocolVersion, AnsPid, MsgId, Request}, _From, State) ->
+  Ans = get_worker_node(Task, State),
+  case Ans of
+    {Node, NewState} ->
+      case Node of
+        non -> {reply, worker_not_found, State};
+        _N ->
+          gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}),
+          {reply, ok, NewState}
+      end;
+    Other -> {reply, Other, State}
+  end;
+
 handle_call({Task, ProtocolVersion, AnsPid, Request}, _From, State) ->
   Ans = get_worker_node(Task, State),
   case Ans of
@@ -97,7 +110,7 @@ handle_call({Task, ProtocolVersion, AnsPid, Request}, _From, State) ->
       case Node of
         non -> {reply, worker_not_found, State};
         _N ->
-          gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, disp_call, {proc, AnsPid}}),
+          gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, {proc, AnsPid}}),
           {reply, ok, NewState}
       end;
     Other -> {reply, Other, State}
