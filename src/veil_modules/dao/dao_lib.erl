@@ -52,55 +52,6 @@ strip_wrappers(#veil_document{record = Record}) when is_tuple(Record) ->
 strip_wrappers(Other) ->
     Other.
 
-%% apply/4
-%% ====================================================================
-%% @doc Same as apply/5 but with default Timeout
-%% @end
--spec apply(Module :: module(), Method :: atom() | {synch, atom()} | {asynch, atom()},
-            Args :: [term()], ProtocolVersion :: number()) -> any() | {error, no_active_workers_found}.
-%% ====================================================================
-apply(Module, Method, Args, ProtocolVersion) ->
-    apply(Module, Method, Args, ProtocolVersion, ?DAO_REQUEST_TIMEOUT).
-
-%% apply/5
-%% ====================================================================
-%% @doc Behaves similar to erlang:apply/3 but works only with DAO worker<br/>.
-%% Method calls are made through random gen_server. <br/>
-%% Method should be tuple {synch, Method} or {asynch, Method}<br/>
-%% but if its simple atom(), {synch, Method} is assumed<br/>
-%% Timeout argument defines how long should this method wait for response
-%% @end
--spec apply(Module :: module(), Method :: atom() | {synch, atom()} | {asynch, atom()},
-            Args :: [term()], ProtocolVersion :: number(), Timeout :: pos_integer()) -> any() | {error, worker_not_found} | {error, timeout}.
-%% ====================================================================
-apply(Module, {asynch, Method}, Args, ProtocolVersion, _Timeout) ->
-    try gen_server:call(request_dispatcher, {dao, ProtocolVersion, {Module, Method, Args}}) of
-	      ok ->
-	          ok;
-	      worker_not_found ->
-	          {error, worker_not_found}
-    catch
-	      Type:Error ->
-	      lager:error("Cannot make a call to request_dispatcher on node ~p Reason: ~p", [dao, node(), {Type, Error}])
-    end;
-apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout) ->
-    PPid = self(),
-    Pid = spawn(fun() -> receive Response -> PPid ! {self(), Response} after Timeout -> exit end end),
-    try gen_server:call(request_dispatcher, {dao, ProtocolVersion, Pid, {Module, Method, Args}}) of
-        ok ->
-            receive
-                {Pid, Resp} -> Resp
-            after Timeout ->
-                {error, timeout}
-            end;
-        worker_not_found ->
-            {error, worker_not_found}
-    catch
-	      Type:Error ->
-	      lager:error("Cannot make a call to request_dispatcher on node ~p Reason: ~p", [dao, node(), {Type, Error}])
-    end;
-apply(Module, Method, Args, ProtocolVersion, Timeout) ->
-    apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout).
 
 %% ===================================================================
 %% Internal functions
