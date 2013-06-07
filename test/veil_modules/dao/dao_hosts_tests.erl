@@ -25,10 +25,10 @@
 
 host_management_test_() ->
     {setup, fun setup/0, fun teardown/1,
-        [fun delete_hosts/0, fun insert_hosts/0, fun get_host/0, fun delete_hosts/0, fun ban_host/0, fun reactivate_host/0]}.
+        {inorder, [fun delete_hosts/0, fun insert_hosts/0, fun get_host/0, fun delete_hosts/0, fun ban_host/0, fun reactivate_host/0]}}.
 
 call_test_() ->
-    {setup, fun setup/0, fun teardown/1,
+    {foreach, fun setup/0, fun teardown/1,
         [fun call/0, fun ping/0]}.
 
 setup() ->
@@ -39,10 +39,17 @@ setup() ->
     worker_host:start_link(dao, [], 10).
 
 teardown({ok, Pid}) ->
+    Unload = meck:unload([rpc, net_adm]),
     exit(Pid, shutdown),
-    teardown([]);
+    Shutdown = receive {'EXIT', Pid,shutdown} -> ok after 100 -> teardown_timeout end,
+    ?assertEqual([ok, ok], [Unload, Shutdown]);
+teardown({error, {already_started, Pid}}) ->
+    Unload = meck:unload([rpc, net_adm]),
+    exit(Pid, shutdown),
+    Shutdown = receive {'EXIT', Pid,shutdown} -> ok after 100 -> teardown_timeout end,
+    ?assertEqual([ok, ok], [Unload, Shutdown]);
 teardown(_) ->
-    meck:unload([rpc, net_adm]).
+    ok = meck:unload([rpc, net_adm]).
 
 
 ping() ->
