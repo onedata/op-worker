@@ -25,12 +25,12 @@
 %% ====================================================================
 
 setup() ->
-  lager:start(),
   ssl:start(),
   ok = application:start(ranch).
 
 teardown(_Args) ->
-  ok = application:stop(ranch).
+  application:stop(ranch),
+  application:stop(ssl).
 
 %% ====================================================================
 %% Test generation

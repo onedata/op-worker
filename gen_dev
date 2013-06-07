@@ -153,7 +153,7 @@ if [[ $INDEX -eq 0 ]]; then
 	INDEX=`awk -v a=" $* " -v b=" -no_compile " 'BEGIN{print index(a, b)}'`
 	if [[ $INDEX -eq 0 ]]; then
 		# Compile the code
-		./rebar compile
+		./rebar compile skip_deps=true
 		if [ $? -ne 0 ]; then
 	        echo ""
 	        echo "Error during code compilation."

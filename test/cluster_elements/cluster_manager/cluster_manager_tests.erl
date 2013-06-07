@@ -26,12 +26,12 @@
 
 setup() ->
   net_kernel:start([node1, shortnames]),
-  lager:start(),
   ssl:start(),
   ok = application:start(ranch).
 
 teardown(_Args) ->
   ok = application:stop(ranch),
+  ok = application:stop(ssl),
   net_kernel:stop().
 
 %% ====================================================================
@@ -127,7 +127,7 @@ worker_start_stop() ->
 %% This test checks if cluster manager correctly stars workers and if
 %% the can be used inside cluster (using ping request).
 modules_start_and_ping() ->
-  Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager],
+  Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager, central_logger],
 
   application:set_env(?APP_Name, node_type, ccm),
   application:set_env(?APP_Name, ccm_nodes, [node()]),
@@ -140,7 +140,7 @@ modules_start_and_ping() ->
   timer:sleep(300),
   State = gen_server:call({global, ?CCM}, get_state),
   Workers = State#cm_state.workers,
-  ?assert(length(Workers) == 1),
+  ?assert(length(Workers) == 2),
   StateNum1 = gen_server:call({global, ?CCM}, get_state_num),
   ?assert(StateNum1 == 2),
 

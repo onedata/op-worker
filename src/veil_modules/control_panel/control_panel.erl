@@ -25,8 +25,7 @@
 %% init/1
 %% ====================================================================
 %% @doc {@link worker_plugin_behaviour} callback init/1 <br />
-%% Starts required applications (nprocreg and cowboy), sets up
-%% cowboy dispatch with nitrogen handler and finally starts
+%% Sets up cowboy dispatch with nitrogen handler and starts
 %% cowboy service on desired port.
 %% @end
 -spec init(Args :: term()) -> Result when

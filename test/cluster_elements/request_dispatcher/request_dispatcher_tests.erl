@@ -26,12 +26,12 @@
 
 setup() ->
   net_kernel:start([node1, shortnames]),
-  lager:start(),
   ssl:start(),
   ok = application:start(ranch).
 
 teardown(_Args) ->
   ok = application:stop(ranch),
+  ok = application:stop(ssl),
   net_kernel:stop().
 
 %% ====================================================================
@@ -125,14 +125,14 @@ dispatcher_connection() ->
 
 %% This test checks if workers list inside dispatcher is refreshed correctly.
 workers_list_actualization() ->
-  Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager],
+  Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager, central_logger],
 
   application:set_env(?APP_Name, node_type, ccm),
   application:set_env(?APP_Name, ccm_nodes, [node()]),
   application:set_env(?APP_Name, initialization_time, 1),
 
   ok = application:start(?APP_Name),
-  timer:sleep(1500),
+  timer:sleep(2000),
 
   CheckModules = fun(M, Sum) ->
     Workers = gen_server:call(?Dispatcher_Name, {get_workers, M}),
@@ -148,7 +148,7 @@ workers_list_actualization() ->
 
 %% This test checks if client outside the cluster can ping all modules via dispatcher.
 ping() ->
-  Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager],
+  Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager, central_logger],
 
   Cert = '../veilfs.pem',
   CertString = atom_to_list(Cert),

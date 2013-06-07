@@ -115,7 +115,6 @@ init() ->
     application:set_env(?APP_Name, node_type, ccm),
     application:set_env(?APP_Name, ccm_nodes, [node()]),
     application:set_env(?APP_Name, initialization_time, 0),
-    lager:start(),
     ssl:start(),
     ok = application:start(ranch),
     ok = application:start(?APP_Name),
