@@ -55,7 +55,7 @@ init({_Args, {init_status, table_initialized}}) -> %% Final stage of initializat
             catch setup_views(?DATABASE_DESIGN_STRUCTURE),
             ok;
         _ ->
-            lager:warrning("There are no DB hosts given in application env variable."),
+            lager:warning("There are no DB hosts given in application env variable."),
             ok
     end;
 init({Args, {init_status, _TableInfo}}) ->

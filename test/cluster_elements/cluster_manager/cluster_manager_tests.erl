@@ -44,9 +44,10 @@ generate_test_() ->
     fun teardown/1,
     [?_test(env()),
       ?_test(wrong_request()),
-      ?_test(nodes_counting_and_monitoring()),
-      ?_test(worker_start_stop()),
-      ?_test(modules_start_and_ping())]}.
+      ?_test(nodes_counting_and_monitoring())
+      %%?_test(worker_start_stop()),
+      %%?_test(modules_start_and_ping())
+    ]}.
 
 %% ====================================================================
 %% Functions used by tests
