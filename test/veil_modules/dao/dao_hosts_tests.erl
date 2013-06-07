@@ -44,10 +44,7 @@ teardown({ok, Pid}) ->
     Shutdown = receive {'EXIT', Pid,shutdown} -> ok after 100 -> teardown_timeout end,
     ?assertEqual([ok, ok], [Unload, Shutdown]);
 teardown({error, {already_started, Pid}}) ->
-    Unload = meck:unload([rpc, net_adm]),
-    exit(Pid, shutdown),
-    Shutdown = receive {'EXIT', Pid,shutdown} -> ok after 100 -> teardown_timeout end,
-    ?assertEqual([ok, ok], [Unload, Shutdown]);
+    teardown({ok, Pid});
 teardown(_) ->
     ok = meck:unload([rpc, net_adm]).
 
