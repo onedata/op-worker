@@ -8,3 +8,4 @@ logs
 .idea
 ebin
 test/distributed_tests_out
+test/eunit_results
