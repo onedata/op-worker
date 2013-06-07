@@ -10,6 +10,8 @@
 %% @end
 %% ===================================================================
 
+-ifndef(REGISTERED_NAMES_HRL).
+-define(REGISTERED_NAMES_HRL, 1).
 
 %% Name of the application.
 -define(APP_Name, veil_cluster_node).
@@ -31,3 +33,5 @@
 
 %% Name of nodes monitoring process
 -define(Monitoring_Proc, monitor_process).
+
+-endif.
