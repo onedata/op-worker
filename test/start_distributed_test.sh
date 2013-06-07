@@ -25,7 +25,7 @@ do
     if [[ "`cat $TEST` | grep cth_surefire" != "" ]]; then
         echo "" >> $TEST
         TEST_NAME=`basename "$TEST" ".spec"`
-        echo "{ct_hooks, cth_surefire, [{path,\"TEST-$TEST_NAME-report.xml\"}]}." >> $TEST
+        echo "{ct_hooks, [{cth_surefire, [{path,\"TEST-$TEST_NAME-report.xml\"}]}]}." >> $TEST
     fi
     sed -i "s/localhost/$HOST/g" $TEST
 done
@@ -35,8 +35,6 @@ erl -noshell -name starter -s distributed_test_starter start $TESTS
 
 find . -name "*.beam" -exec rm -rf {} \;
 find . -name "*.erl" -exec rm -rf {} \;
-
-exit 0
 
 for TEST in $TESTS
 do
