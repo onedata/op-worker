@@ -155,7 +155,7 @@ remove_file(File) ->
 -spec get_file(File :: file()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
 get_file({internal_path, [], []}) -> %% Root dir query
-    {ok, #veil_document{uuid = "", record = #file{type = ?DIR_TYPE, perms = ?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM}}};
+    {ok, #veil_document{uuid = "", record = #file{type = ?DIR_TYPE, perms = ?RD_ALL_PERM bor ?WR_ALL_PERM bor ?EX_ALL_PERM}}};
 get_file({internal_path, [Dir | Path], Root}) ->
     dao:set_db(?FILES_DB_NAME),
     Res = dao_helper:query_view(?FILE_TREE_VIEW#view_info.db_name, ?FILE_TREE_VIEW#view_info.design, ?FILE_TREE_VIEW#view_info.name,
