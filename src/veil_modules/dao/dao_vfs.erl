@@ -312,9 +312,9 @@ test_init() ->
 
 %% file_path_analyze/1
 %% ====================================================================
-%% @doc Converts Path :: path() to internal dao format
+%% @doc Converts Path :: file_path() to internal dao format
 %% @end
--spec file_path_analyze(Path :: path()) -> {internal_path, TokenList :: list(), RootUUID :: uuid()}.
+-spec file_path_analyze(Path :: file_path()) -> {internal_path, TokenList :: list(), RootUUID :: uuid()}.
 %% ====================================================================
 file_path_analyze({Path, Root}) when is_list(Path), is_list(Root) ->
     file_path_analyze({relative_path, Path, Root});
