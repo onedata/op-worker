@@ -55,7 +55,7 @@ init({_Args, {init_status, table_initialized}}) -> %% Final stage of initializat
             catch setup_views(?DATABASE_DESIGN_STRUCTURE),
             ok;
         _ ->
-            lager:warrning("There are no DB hosts given in application env variable."),
+            lager:warning("There are no DB hosts given in application env variable."),
             ok
     end;
 init({Args, {init_status, _TableInfo}}) ->
@@ -93,9 +93,10 @@ handle(_ProtocolVersion, get_version) ->
 handle(ProtocolVersion, {Target, Method, Args}) when is_atom(Target), is_atom(Method), is_list(Args) ->
     put(protocol_version, ProtocolVersion), %% Some sub-modules may need it to communicate with DAO' gen_server
     Module =
-        case Target of
-            utils -> dao;
-            T -> list_to_atom("dao_" ++ atom_to_list(T))
+        case atom_to_list(Target) of
+            "utils" -> dao;
+            [$d, $a, $o, $_ | T] -> list_to_atom("dao_" ++ T);
+            T -> list_to_atom("dao_" ++ T)
         end,
     try apply(Module, Method, Args) of
         {error, Err} ->

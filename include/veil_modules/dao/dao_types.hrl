@@ -13,10 +13,11 @@
 -define(DAO_TYPES_HRL, 1).
 -include_lib("veil_modules/dao/dao.hrl").
 
--type uuid() :: string().
--type path() :: string(). %% Has to start with ?PATH_SEPARATOR !!!
+-type uuid() :: string(). %% Pattern: "^[0-9a-f]+$"
+-type path() :: string(). %% Pattern: "^/?(.+/)*[.+]?$" (starting with ?PATH_SEPARATOR is optional)
 
--type file_path() :: {absolute_path, Path :: path()} | {relative_path, Path :: path(), RootUUID :: uuid()}.
+-type file_path() :: {absolute_path, Path :: path()} | {relative_path, Path :: path(), RootUUID :: uuid()}
+                   | {Path :: path(), RootUUID :: uuid()} | uuid().
 -type file() :: file_path() | {uuid, FileUUID :: uuid()}.
 -type file_info() :: #file{}.
 -type file_doc() :: #veil_document{record :: #file{}}.

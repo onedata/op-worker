@@ -26,6 +26,6 @@
 %% This record describes state of file for each user. #file_descriptor.file is an UUID of #file.
 %% For regular files can be used to mark file as used in order to block e.g. physical file transfer
 %% For dirs it should be used as FUSE's readdir state. Cursor says how many dir has been read by now
--record(file_descriptor, {file = "", mode = 0, uid = "", sid = "", pid = 0, cursor = 0}).
+-record(file_descriptor, {file = "", mode = 0, fuse_id = "", create_time = "", expire_time = 60*15, cursor = 0}).
 
 -endif.
