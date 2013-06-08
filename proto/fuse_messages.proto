@@ -33,7 +33,7 @@ message GetFileChildren{
 }
 
 message FileChildren{
-	repeated FileLocation child_location = 2;
+	repeated FileLocation child_location = 1;
 }
 
 
@@ -44,7 +44,7 @@ message DeleteFile{
 
 message CreateLink{
 	required string from_file_logic_name = 1;
-	required string to_file_logic_name = 1;
+	required string to_file_logic_name = 2;
 }
 
 message RenameFile{
