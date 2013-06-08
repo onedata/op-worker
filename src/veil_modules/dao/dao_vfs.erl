@@ -154,13 +154,9 @@ remove_file(File) ->
 %% @end
 -spec get_file(File :: file()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
-get_file({absolute_path, Path}) ->
-    get_file({relative_path, Path, ""});
-get_file({relative_path, [?PATH_SEPARATOR | _] = Path, Root}) ->
-    get_file({relative_path, string:tokens(Path, [?PATH_SEPARATOR]), Root});
-get_file({relative_path, [], []}) -> %% Root dir query
+get_file({internal_path, [], []}) -> %% Root dir query
     {ok, #veil_document{uuid = "", record = #file{type = ?DIR_TYPE, perms = ?RWE_USR_PERM bor ?RWE_GRP_PERM bor ?RWE_OTH_PERM}}};
-get_file({relative_path, [Dir | Path], Root}) ->
+get_file({internal_path, [Dir | Path], Root}) ->
     dao:set_db(?FILES_DB_NAME),
     Res = dao_helper:query_view(?FILE_TREE_VIEW#view_info.db_name, ?FILE_TREE_VIEW#view_info.design, ?FILE_TREE_VIEW#view_info.name,
                                 #view_query_args{keys = [[dao_helper:name(Root), dao_helper:name(Dir)]],
@@ -181,7 +177,7 @@ get_file({relative_path, [Dir | Path], Root}) ->
         end,
     case Path of
         [] -> {ok, FileDoc};
-        _ -> get_file({relative_path, Path, NewRoot})
+        _ -> get_file({internal_path, Path, NewRoot})
     end;
 get_file({uuid, UUID}) ->
     dao:set_db(?FILES_DB_NAME),
@@ -192,7 +188,9 @@ get_file({uuid, UUID}) ->
             {error, invalid_file_record};
         Other ->
             Other
-    end.
+    end;
+get_file(Path) ->
+    get_file(file_path_analyze(Path)).
 
 
 %% get_path_info/1
@@ -203,19 +201,15 @@ get_file({uuid, UUID}) ->
 %% @end
 -spec get_path_info(File :: file_path()) -> {ok, [file_doc()]} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
-get_path_info({absolute_path, Path}) ->
-    get_path_info({relative_path, Path, ""});
-get_path_info({relative_path, [?PATH_SEPARATOR | _] = Path, Root}) ->
-    get_path_info({relative_path, string:tokens(Path, [?PATH_SEPARATOR]), Root});
-get_path_info({relative_path, [], _}) -> %% Root dir query
-    {ok, []};
-get_path_info({relative_path, Path, Root}) ->
+get_path_info({internal_path, Path, Root}) ->
     {FullPath, _} =
         lists:foldl(fun(Elem, {AccIn, AccRoot}) ->
             {ok, FileInfo = #veil_document{uuid = NewRoot}} = get_file({relative_path, [Elem], AccRoot}),
             {[FileInfo | AccIn], NewRoot}
         end, {[], Root}, Path),
-    {ok, lists:reverse(FullPath)}.
+    {ok, lists:reverse(FullPath)};
+get_path_info(File) ->
+    get_path_info(file_path_analyze(File)).
 
 
 %% rename_file/2
@@ -314,4 +308,23 @@ test_init() ->
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
-    
+
+
+%% file_path_analyze/1
+%% ====================================================================
+%% @doc Converts Path :: path() to internal dao format
+%% @end
+-spec file_path_analyze(Path :: path()) -> {internal_path, TokenList :: list(), RootUUID :: uuid()}.
+%% ====================================================================
+file_path_analyze({Path, Root}) when is_list(Path), is_list(Root) ->
+    file_path_analyze({relative_path, Path, Root});
+file_path_analyze(Path) when is_list(Path) ->
+    file_path_analyze({relative_path, Path, ""});
+file_path_analyze({absolute_path, Path}) when is_list(Path) ->
+    file_path_analyze({relative_path, Path, ""});
+file_path_analyze({relative_path, [?PATH_SEPARATOR | Path], Root}) when is_list(Path), is_list(Root) ->
+    file_path_analyze({relative_path, Path, Root});
+file_path_analyze({relative_path, Path, Root}) when is_list(Path), is_list(Root) ->
+    {internal_path, string:tokens(Path, [?PATH_SEPARATOR]), Root};
+file_path_analyze(Path) ->
+    throw({invalid_file_path, Path}).
