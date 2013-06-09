@@ -1,0 +1,64 @@
+message FuseMessage{
+	required string id = 1;
+	required string message_type = 2;
+	required bytes message_input = 3;
+}
+
+message GetFileLocation{
+    required string file_logic_name = 1;
+}
+
+message GetNewFileLocation{	
+	required string file_logic_name = 1;
+}	
+
+message FileLocation{
+    required string storage_helper = 1;
+    required string file_id = 2;
+    required int32 validity = 3;
+}
+
+
+message FileNotUsed{
+    required string file_logic_name = 1;
+}
+ 
+message RenewFileLocation{
+    required string file_logic_name = 1;
+}
+
+
+message GetFileChildren{
+	required string dir_logic_name = 1;
+}
+
+message FileChildren{
+	repeated FileLocation child_location = 1;
+}
+
+
+
+message DeleteFile{
+	required string file_logic_name = 1;	
+}
+
+message CreateLink{
+	required string from_file_logic_name = 1;
+	required string to_file_logic_name = 2;
+}
+
+message RenameFile{
+	required string from_file_logic_name = 1;
+	required string to_file_logic_name = 2;
+}
+
+message ChangeFileOwner{
+	required string logic_file_name = 1;
+	required int32 uid = 2;
+	required int32 guid = 3;  
+}
+
+message ChangeFilePerms{
+	required string logic_file_name = 1;
+	required int32 perms = 2;
+}
