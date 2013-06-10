@@ -14,7 +14,7 @@ all() -> [ccm1_test, ccm2_test, worker_test, tester_test].
 ccm1_test(_Config) ->
   ?INIT_DIST_TEST,
   env_setter:start_test(),
-  env_setter:start_app([{node_type, ccm}, {dispatcher_port, 5555}, {heart_beat, 1}, {initialization_time, 5}, {ccm_nodes, ['ccm1@localhost']}]),
+  env_setter:start_app([{node_type, ccm}, {dispatcher_port, 5055}, {heart_beat, 1}, {initialization_time, 5}, {ccm_nodes, ['ccm1@localhost']}]),
   timer:sleep(10000),
   env_setter:stop_app(),
   env_setter:stop_test().
@@ -82,7 +82,7 @@ tester_test(_Config) ->
   PongAns = #answer{answer_status = "ok", worker_answer = PongBytes},
   PongAnsBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(PongAns)),
 
-  Ports = [5555, 6666, 7777, 8888],
+  Ports = [5055, 6666, 7777, 8888],
   CheckNodes = fun(Port, S) ->
     {ok, Socket} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, CertString}]),
 
