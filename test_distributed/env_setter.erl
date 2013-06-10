@@ -15,7 +15,8 @@ start_test() ->
   ok = application:load(?APP_Name).
 
 stop_test() ->
-  ok = application:stop(ranch).
+  ok = application:stop(ranch),
+  ok = application:unload(?APP_Name).
 
 start_app(Vars) ->
   set_env_vars(Vars),
