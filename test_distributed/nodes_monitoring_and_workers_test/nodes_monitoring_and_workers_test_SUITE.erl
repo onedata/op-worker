@@ -1,3 +1,15 @@
+%% ===================================================================
+%% @author Michal Wrzeszcz
+%% @copyright (C): 2013 ACK CYFRONET AGH
+%% This software is released under the MIT license
+%% cited in 'LICENSE.txt'.
+%% @end
+%% ===================================================================
+%% @doc: This test creates many Erlang virtual machines and uses them
+%% to test how ccm manages workers and monitors nodes.
+%% @end
+%% ===================================================================
+
 -module(nodes_monitoring_and_workers_test_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
@@ -11,6 +23,11 @@
 
 all() -> [ccm1_test, ccm2_test, worker_test, tester_test].
 
+%% ====================================================================
+%% Test functions
+%% ====================================================================
+
+%% This function runs on node that hosts ccm
 ccm1_test(_Config) ->
   ?INIT_DIST_TEST,
   env_setter:synch_nodes(['worker1@localhost', 'worker2@localhost', 'worker3@localhost', 'tester@localhost']),
@@ -28,6 +45,7 @@ ccm1_test(_Config) ->
   env_setter:stop_app(),
   env_setter:stop_test().
 
+%% This function runs on node that hosts worker1
 worker1_test(_Config) ->
   ?INIT_DIST_TEST,
   env_setter:synch_nodes(['ccm1@localhost', 'worker2@localhost', 'worker3@localhost', 'tester@localhost']),
@@ -42,6 +60,7 @@ worker1_test(_Config) ->
   env_setter:stop_app(),
   env_setter:stop_test().
 
+%% This function runs on node that hosts worker2
 worker2_test(_Config) ->
   ?INIT_DIST_TEST,
   env_setter:synch_nodes(['ccm1@localhost', 'worker1@localhost', 'worker3@localhost', 'tester@localhost']),
@@ -56,6 +75,7 @@ worker2_test(_Config) ->
   env_setter:stop_app(),
   env_setter:stop_test().
 
+%% This function runs on node that hosts worker3
 worker3_test(_Config) ->
   ?INIT_DIST_TEST,
   env_setter:synch_nodes(['ccm1@localhost', 'worker1@localhost', 'worker2@localhost', 'tester@localhost']),
@@ -70,6 +90,7 @@ worker3_test(_Config) ->
   env_setter:stop_app(),
   env_setter:stop_test().
 
+%% This function connects with other nodes using ssl and checks if cluster works properly
 tester_test(_Config) ->
   ?INIT_DIST_TEST,
   env_setter:synch_nodes(['ccm1@localhost', 'worker1@localhost', 'worker2@localhost', 'worker3@localhost']),

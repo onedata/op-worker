@@ -29,6 +29,11 @@
 %% API
 -export([test_cluster/1, test_cluster/2, manytesters_node/2, manytesters_node/3]).
 
+%% ====================================================================
+%% API functions
+%% ====================================================================
+
+%% Two functions below test cluster using many tester nodes
 manytesters_node(TesNodes, ClusterNodes) ->
   manytesters_node(TesNodes, ClusterNodes, 500).
 
@@ -46,7 +51,7 @@ manytesters_node(TesNodes, ClusterNodes, PingsNum) ->
   io:format("Test with many testers: time in mocroseconds: ~b, pongs num: ~b, pongs per sec: ~f~n", [Time, PongsNum, PongsNum/Time*1000000]),
   {PongsNum, Time, FinalAns}.
 
-
+%% Two functions below test cluster using one tester node
 test_cluster(Nodes) ->
   test_cluster(Nodes, 500).
 
@@ -61,6 +66,11 @@ test_cluster(Nodes, PingsNum) ->
   io:format("Test time in mocroseconds: ~b, pongs num: ~b, pongs per sec: ~f~n", [Time, PongsNum, PongsNum/Time*1000000]),
   {PongsNum, Time, FinalAns}.
 
+%% ====================================================================
+%% Internal functions
+%% ====================================================================
+
+%% This function checks if state of cluster is ok
 test_ccm(Nodes) ->
   Jobs = ?Modules,
 
@@ -88,6 +98,7 @@ test_ccm(Nodes) ->
       false
   end.
 
+%% This function ping all nodes in cluster
 ping_test(Nodes, PingsNum) ->
   Cert = '../veilfs.pem',
   CertString = atom_to_list(Cert),
@@ -148,9 +159,11 @@ ping_test(Nodes, PingsNum) ->
   io:format("Pongs number: ~b, expected: ~b~n", [PongsNum2, ExpectedPongsNum]),
   {PongsNum2, Time, PongsNum2 == ExpectedPongsNum}.
 
+%% Internal function used as for loop
 for(N, N, F) -> [F()];
 for(I, N, F) -> [F()|for(I+1, N, F)].
 
+%% This function waits for ProcNum integer messages and sum values of this messages
 waitForAns(ProcNum) ->
   waitForAns(ProcNum, 0).
 waitForAns(0, Ans) ->
@@ -162,6 +175,7 @@ waitForAns(ProcNum, Ans) ->
     5000 -> Ans
   end.
 
+%% This function waits for ProcNum test's results and returns result of distributed test
 waitForAns2(ProcNum) ->
   waitForAns2(ProcNum, {0, 0, true}).
 waitForAns2(0, Ans) ->

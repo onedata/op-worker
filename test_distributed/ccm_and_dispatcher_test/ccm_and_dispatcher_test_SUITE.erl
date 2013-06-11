@@ -1,4 +1,15 @@
-%% Copyright
+%% ===================================================================
+%% @author Michal Wrzeszcz
+%% @copyright (C): 2013 ACK CYFRONET AGH
+%% This software is released under the MIT license
+%% cited in 'LICENSE.txt'.
+%% @end
+%% ===================================================================
+%% @doc: This test checks if ccm manages workers and if dispatcher
+%% has knowledge about workers.
+%% @end
+%% ===================================================================
+
 -module(ccm_and_dispatcher_test_SUITE).
 -include_lib("common_test/include/ct.hrl").
 -export([all/0]).
@@ -12,6 +23,11 @@
 
 all() -> [modules_start_and_ping_test, dispatcher_connection_test, workers_list_actualization_test, ping_test, application_start_test].
 
+%% ====================================================================
+%% Test functions
+%% ====================================================================
+
+%% This function tests if application starts properly
 application_start_test(_Config) ->
   ?INIT_DIST_TEST,
   env_setter:start_test(),
@@ -30,6 +46,7 @@ application_start_test(_Config) ->
 
   env_setter:stop_test().
 
+%% This function tests if ccm is able to start and connect (using gen_server messages) workers
 modules_start_and_ping_test(_Config) ->
   ?INIT_DIST_TEST,
   env_setter:start_test(),
