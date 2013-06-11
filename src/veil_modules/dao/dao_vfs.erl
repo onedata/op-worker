@@ -238,7 +238,7 @@ list_dir(Dir, N, Offset) ->
             {ok, #veil_document{record = #file{type = ?DIR_TYPE}, uuid = UUID}} ->
                 UUID;
             R ->
-                %% TODO: error handling
+                lager:error("Directory ~p not found. Error: ~p", [Dir, R]),
                 throw({dir_not_found, R})
         end,
     NextId =  integer_to_list(list_to_integer(case Id of [] -> "0"; _ -> Id end, 16)+1, 16), %% Dirty hack needed because `inclusive_end` option does not work in BigCouch for some reason

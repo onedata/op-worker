@@ -15,6 +15,7 @@
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
+-include_lib("veil_modules/dao/dao_helper.hrl").
 -include_lib("files_common.hrl").
 -endif.
 
@@ -27,14 +28,17 @@ file_descriptor_test_() ->
 
 file_test_() ->
     {foreach, fun setup/0, fun teardown/1,
-        [fun save_file/0, fun remove_file/0, fun get_file/0, fun list_dir/0, fun rename_file/0, fun get_path_info/0]}.
+        [fun save_file/0, fun get_file/0, fun remove_file/0, fun list_dir/0, fun rename_file/0, fun get_path_info/0]}.
 
 
 setup() ->
     meck:new([dao, dao_helper]),
     meck:expect(dao, set_db, fun(_) -> ok end),
     meck:expect(dao, save_record, fun(_) -> {ok, "uuid"} end),
-    meck:expect(dao, remove_record, fun(_) -> ok end).
+    meck:expect(dao, get_record, fun(_) -> {ok, #veil_document{}} end),
+    meck:expect(dao, remove_record, fun(_) -> ok end),
+    meck:expect(dao_helper, name, fun(Arg) -> Arg end),
+    meck:expect(dao_helper, query_view, 4, ok).
 
 
 teardown(_) ->
@@ -98,7 +102,16 @@ save_file() ->
     ?assert(meck:validate([dao, dao_helper])).
 
 
-remove_file() -> 
+remove_file() ->
+    File = {internal_path, ["path", "test1"], "root"},
+    meck:expect(dao_helper, parse_view_result, 1, meck:seq([{ok, #view_result{rows = [#view_row{id = "root2"}]}},
+        {ok, #view_result{rows = [#view_row{doc = #veil_document{uuid = "uuid", record = #file{}}}]}}])),
+
+    ?assertMatch(ok, dao_vfs:remove_file(File)),
+
+    ?assert(meck:called(dao, set_db, [?FILES_DB_NAME])),
+    ?assert(meck:called(dao, remove_record, ["uuid"])),
+    ?assertEqual(2, meck:num_calls(dao_helper, parse_view_result, [ok])),
     ?assert(meck:validate([dao, dao_helper])).
 
 
@@ -115,6 +128,14 @@ list_dir() ->
 
 
 rename_file() ->
+    File = {internal_path, ["path", "test1"], "root"},
+    meck:expect(dao_helper, parse_view_result, 1, meck:seq([{ok, #view_result{rows = [#view_row{id = "root2"}]}},
+        {ok, #view_result{rows = [#view_row{doc = #veil_document{uuid = "uuid", record = #file{}}}]}}])),
+
+    ?assertMatch({ok, "uuid"}, dao_vfs:rename_file(File, "name")),
+
+    ?assert(meck:called(dao, save_record, [#veil_document{uuid = "uuid", record = #file{name = "name"}}])),
+    ?assertEqual(2, meck:num_calls(dao_helper, parse_view_result, [ok])),
     ?assert(meck:validate([dao, dao_helper])).
 
 
