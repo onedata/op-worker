@@ -35,3 +35,7 @@
 -define(EX_OTH_PERM, 8#1).
 -define(RW_OTH_PERM, ?RD_OTH_PERM bor ?WR_OTH_PERM).
 -define(RWE_OTH_PERM, ?RD_OTH_PERM bor ?WR_OTH_PERM bor ?EX_OTH_PERM).
+%% All
+-define(RD_ALL_PERM, ?RD_USR_PERM bor ?RD_GRP_PERM bor ?RD_OTH_PERM).
+-define(WR_ALL_PERM, ?WR_USR_PERM bor ?WR_GRP_PERM bor ?WR_OTH_PERM).
+-define(EX_ALL_PERM, ?EX_USR_PERM bor ?EX_GRP_PERM bor ?EX_OTH_PERM).
