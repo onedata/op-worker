@@ -3,10 +3,14 @@
 all: deps generate docs
 
 compile:
+	cp -R veilprotocol/proto src
 	./rebar compile
+	rm -rf src/proto
 
 deps:
 	./rebar get-deps
+	git submodule init
+	git submodule update
 
 clean:
 	./rebar clean
