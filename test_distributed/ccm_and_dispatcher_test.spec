@@ -10,4 +10,4 @@
 
 %% test castes to be run
 {alias, ccm_and_dispatcher_test, "./ccm_and_dispatcher_test"}.
-{cases, [ccm], ccm_and_dispatcher_test, ccm_and_dispatcher_test_SUITE, [modules_start_and_ping_test, dispatcher_connection_test, workers_list_actualization_test, ping_test]}.
+{cases, [ccm], ccm_and_dispatcher_test, ccm_and_dispatcher_test_SUITE, [modules_start_and_ping_test, dispatcher_connection_test, workers_list_actualization_test, ping_test, application_start_test]}.

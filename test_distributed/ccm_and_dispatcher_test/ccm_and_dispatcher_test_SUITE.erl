@@ -2,7 +2,7 @@
 -module(ccm_and_dispatcher_test_SUITE).
 -include_lib("common_test/include/ct.hrl").
 -export([all/0]).
--export([modules_start_and_ping_test/1, dispatcher_connection_test/1, workers_list_actualization_test/1, ping_test/1]).
+-export([modules_start_and_ping_test/1, dispatcher_connection_test/1, workers_list_actualization_test/1, ping_test/1, application_start_test/1]).
 
 -include("env_setter.hrl").
 -include("registered_names.hrl").
@@ -10,7 +10,25 @@
 -include("modules_and_args.hrl").
 -include("communication_protocol_pb.hrl").
 
-all() -> [modules_start_and_ping_test, dispatcher_connection_test, workers_list_actualization_test, ping_test].
+all() -> [modules_start_and_ping_test, dispatcher_connection_test, workers_list_actualization_test, ping_test, application_start_test].
+
+application_start_test(_Config) ->
+  ?INIT_DIST_TEST,
+  env_setter:start_test(),
+
+  env_setter:start_app([{node_type, ccm}, {dispatcher_port, 6666}, {ccm_nodes, [node()]}]),
+  {ok, ccm} = application:get_env(?APP_Name, node_type),
+  Check1 = (undefined == whereis(?Supervisor_Name)),
+  Check1 = false,
+  env_setter:stop_app(),
+
+  env_setter:start_app([{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [node()]}]),
+  {ok, worker} = application:get_env(?APP_Name, node_type),
+  Check2 = (undefined == whereis(?Supervisor_Name)),
+  Check2 = false,
+  env_setter:stop_app(),
+
+  env_setter:stop_test().
 
 modules_start_and_ping_test(_Config) ->
   ?INIT_DIST_TEST,
