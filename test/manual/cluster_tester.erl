@@ -27,7 +27,25 @@
 -include("communication_protocol_pb.hrl").
 
 %% API
--export([test_cluster/1, test_cluster/2]).
+-export([test_cluster/1, test_cluster/2, manytesters_node/2, manytesters_node/3]).
+
+manytesters_node(TesNodes, ClusterNodes) ->
+  manytesters_node(TesNodes, ClusterNodes, 500).
+
+manytesters_node(TesNodes, ClusterNodes, PingsNum) ->
+  AnsPid = self(),
+  RunTest = fun(Node) ->
+    spawn(fun() ->
+      Ans = rpc:call(Node, ?MODULE, test_cluster, [ClusterNodes, PingsNum]),
+      AnsPid ! Ans
+    end)
+  end,
+  lists:foreach(RunTest, TesNodes),
+  {PongsNum, Time, FinalAns} = waitForAns2(length(TesNodes)),
+  io:format("Final test with many testers result: ~s~n", [FinalAns]),
+  io:format("Test with many testers: time in mocroseconds: ~b, pongs num: ~b, pongs per sec: ~f~n", [Time, PongsNum, PongsNum/Time*1000000]),
+  {PongsNum, Time, FinalAns}.
+
 
 test_cluster(Nodes) ->
   test_cluster(Nodes, 500).
@@ -35,11 +53,13 @@ test_cluster(Nodes) ->
 test_cluster(Nodes, PingsNum) ->
   ssl:start(),
   Ans = test_ccm(Nodes),
-  Ans2 = ping_test(Nodes, PingsNum),
+  {PongsNum, Time, Ans2} = ping_test(Nodes, PingsNum),
   Ans3 = test_ccm(Nodes),
+
   FinalAns = (Ans and Ans2 and Ans3),
   io:format("Final test result: ~s~n", [FinalAns]),
-  FinalAns.
+  io:format("Test time in mocroseconds: ~b, pongs num: ~b, pongs per sec: ~f~n", [Time, PongsNum, PongsNum/Time*1000000]),
+  {PongsNum, Time, FinalAns}.
 
 test_ccm(Nodes) ->
   Jobs = ?Modules,
@@ -119,11 +139,14 @@ ping_test(Nodes, PingsNum) ->
     end)
   end,
 
+  {Megaseconds,Seconds,Microseconds} = erlang:now(),
   lists:foreach(CheckNodes, Nodes),
   PongsNum2 = waitForAns(length(Nodes) * PingsNum),
+  {Megaseconds2,Seconds2,Microseconds2} = erlang:now(),
+  Time = 1000000*1000000*(Megaseconds2-Megaseconds) + 1000000*(Seconds2-Seconds) + Microseconds2-Microseconds,
   ExpectedPongsNum = (length(Jobs) * length(Nodes)) * PingsNum,
   io:format("Pongs number: ~b, expected: ~b~n", [PongsNum2, ExpectedPongsNum]),
-  PongsNum2 == ExpectedPongsNum.
+  {PongsNum2, Time, PongsNum2 == ExpectedPongsNum}.
 
 for(N, N, F) -> [F()];
 for(I, N, F) -> [F()|for(I+1, N, F)].
@@ -137,4 +160,16 @@ waitForAns(ProcNum, Ans) ->
     Num -> waitForAns(ProcNum-1, Ans + Num)
   after
     5000 -> Ans
+  end.
+
+waitForAns2(ProcNum) ->
+  waitForAns2(ProcNum, {0, 0, true}).
+waitForAns2(0, Ans) ->
+  Ans;
+waitForAns2(ProcNum, {PongsNum, Time, FinalAns}) ->
+  receive
+    {PongsNum2, Time2, FinalAns2} ->
+      waitForAns2(ProcNum-1, {PongsNum + PongsNum2, erlang:max(Time, Time2), FinalAns and FinalAns2})
+  after
+    10000 -> {PongsNum, Time, FinalAns}
   end.
