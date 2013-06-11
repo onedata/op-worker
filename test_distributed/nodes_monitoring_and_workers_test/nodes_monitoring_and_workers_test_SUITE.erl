@@ -13,58 +13,86 @@ all() -> [ccm1_test, ccm2_test, worker_test, tester_test].
 
 ccm1_test(_Config) ->
   ?INIT_DIST_TEST,
+  env_setter:synch_nodes(['worker1@localhost', 'worker2@localhost', 'worker3@localhost', 'tester@localhost']),
+
   Cert = '../../../veilfs.pem',
   env_setter:start_test(),
-  env_setter:start_app([{node_type, ccm}, {dispatcher_port, 5055}, {heart_beat, 1}, {initialization_time, 5}, {ccm_nodes, ['ccm1@localhost']}, {ssl_cert_path, Cert}]),
-  timer:sleep(10000),
+  env_setter:start_app([{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [node()]}, {ssl_cert_path, Cert}]),
+
+  gen_server:cast(?Node_Manager_Name, do_heart_beat),
+  gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  timer:sleep(2000),
+  gen_server:cast({global, ?CCM}, init_cluster),
+
+  timer:sleep(3000),
   env_setter:stop_app(),
   env_setter:stop_test().
 
 worker1_test(_Config) ->
   ?INIT_DIST_TEST,
+  env_setter:synch_nodes(['ccm1@localhost', 'worker2@localhost', 'worker3@localhost', 'tester@localhost']),
+
   Cert = '../../../veilfs.pem',
   env_setter:start_test(),
-  env_setter:start_app([{node_type, worker}, {dispatcher_port, 6666}, {heart_beat, 1}, {ccm_nodes, ['ccm1@localhost']}, {ssl_cert_path, Cert}]),
-  timer:sleep(10000),
+  env_setter:start_app([{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, ['ccm1@localhost']}, {ssl_cert_path, Cert}]),
+  timer:sleep(1000),
+  gen_server:cast(?Node_Manager_Name, do_heart_beat),
+
+  timer:sleep(4000),
   env_setter:stop_app(),
   env_setter:stop_test().
 
 worker2_test(_Config) ->
   ?INIT_DIST_TEST,
+  env_setter:synch_nodes(['ccm1@localhost', 'worker1@localhost', 'worker3@localhost', 'tester@localhost']),
+
   Cert = '../../../veilfs.pem',
   env_setter:start_test(),
-  env_setter:start_app([{node_type, worker}, {dispatcher_port, 7777}, {heart_beat, 1}, {ccm_nodes, ['ccm1@localhost']}, {ssl_cert_path, Cert}]),
-  timer:sleep(10000),
+  env_setter:start_app([{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, ['ccm1@localhost']}, {ssl_cert_path, Cert}]),
+  timer:sleep(1000),
+  gen_server:cast(?Node_Manager_Name, do_heart_beat),
+
+  timer:sleep(4000),
   env_setter:stop_app(),
   env_setter:stop_test().
 
 worker3_test(_Config) ->
   ?INIT_DIST_TEST,
+  env_setter:synch_nodes(['ccm1@localhost', 'worker1@localhost', 'worker2@localhost', 'tester@localhost']),
+
   Cert = '../../../veilfs.pem',
   env_setter:start_test(),
-  env_setter:start_app([{node_type, worker}, {dispatcher_port, 8888}, {heart_beat, 1}, {ccm_nodes, ['ccm1@localhost']}, {ssl_cert_path, Cert}]),
-  timer:sleep(10000),
+  env_setter:start_app([{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, ['ccm1@localhost']}, {ssl_cert_path, Cert}]),
+  timer:sleep(1000),
+  gen_server:cast(?Node_Manager_Name, do_heart_beat),
+
+  timer:sleep(4000),
   env_setter:stop_app(),
   env_setter:stop_test().
 
 tester_test(_Config) ->
   ?INIT_DIST_TEST,
-  env_setter:start_test(),
-  timer:sleep(500),
-  pong = net_adm:ping('ccm1@localhost'),
+  env_setter:synch_nodes(['ccm1@localhost', 'worker1@localhost', 'worker2@localhost', 'worker3@localhost']),
 
-  timer:sleep(7000),
+  env_setter:start_test(),
+
+  timer:sleep(3000),
   NotExistingNodes = ['n1@localhost', 'n2@localhost', 'n3@localhost'],
   lists:foreach(fun(Node) -> gen_server:call({global, ?CCM}, {node_is_up, Node}) end, NotExistingNodes),
 
   NodesUp = ['ccm1@localhost', 'worker1@localhost', 'worker2@localhost', 'worker3@localhost'],
- 	Nodes = gen_server:call({global, ?CCM}, get_nodes),
+	Nodes = gen_server:call({global, ?CCM}, get_nodes),
   Check1 = (length(Nodes) == length(NodesUp)),
+    try
+    Check1 = (length(Nodes) < 1000)
+      catch
+        _:_ -> ok
+  end,
   Check1 = true,
-  lists:foreach(fun(Node) ->
-    Check2 = (lists:member(Node, Nodes)),
-    Check2 = true
-  end, NodesUp),
+    lists:foreach(fun(Node) ->
+      Check2 = (lists:member(Node, Nodes)),
+      Check2 = true
+    end, NodesUp),
 
   lists:foreach(fun(Node) -> gen_server:call({global, ?CCM}, {node_is_up, Node}) end, NodesUp),
   Nodes2 = gen_server:call({global, ?CCM}, get_nodes),
