@@ -19,11 +19,66 @@
 
 -ifdef(TEST).
 
-list_dir_test() ->
-    ok.
+file_descriptor_test_() ->
+    {foreach, fun setup/0, fun teardown/1,
+        [fun save_descriptor/0, fun remove_descriptor/0, fun get_descriptor/0, fun list_descriptors/0]}.
 
-rename_file_test() ->
-    ok.
+
+file_test_() ->
+    {foreach, fun setup/0, fun teardown/1,
+        [fun save_file/0, fun remove_file/0, fun get_file/0, fun list_dir/0, fun rename_file/0, fun get_path_info/0]}.
+
+
+setup() ->
+    ?assert(true).
+
+
+teardown(_) ->
+    ?assert(true).
+
+
+file_path_analyze_test() ->
+    ?assert(true).
+
+list_dir() -> 
+    ?assert(true).
+
+
+rename_file() ->
+    ?assert(true).
+
+
+save_descriptor() -> 
+    ?assert(true).
+
+
+remove_descriptor() -> 
+    ?assert(true).
+
+
+get_descriptor() -> 
+    ?assert(true).
+
+
+list_descriptors() -> 
+    ?assert(true).
+
+
+save_file() -> 
+    ?assert(true).
+
+
+remove_file() -> 
+    ?assert(true).
+
+
+get_file() -> 
+    ?assert(true).
+
+
+get_path_info() -> 
+    ?assert(true).
+
 
 lock_file_test() ->
     not_yet_implemented = dao_vfs:lock_file("test", "test", write).
