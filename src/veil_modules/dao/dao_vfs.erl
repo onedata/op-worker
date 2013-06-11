@@ -108,10 +108,10 @@ list_descriptors({by_file, File}, N, Offset) ->
         {ok, #view_result{rows = Rows}} ->
             {ok, [FdDoc || #view_row{doc = #veil_document{record = #file_descriptor{file = FileId1}} = FdDoc} <- Rows, FileId1 == FileId]};
         Data ->
-            %% TODO: error handling
+            lager:error("Invalid file descriptor view response: ~p", [Data]),
             throw({inavlid_data, Data})
     end;
-list_descriptors({_Type, _Resouce}, _N, _Offset) ->
+list_descriptors({_Type, _Resource}, _N, _Offset) ->
     not_yet_implemented.
 
 
@@ -249,8 +249,8 @@ list_dir(Dir, N, Offset) ->
         {ok, #view_result{rows = Rows}} -> %% We need to strip results that don't match search criteria (tail of last query possibly), because
                                            %% `end_key` seems to behave strange combined with `limit` option. TODO: get rid of it after DBMS switch
             {ok, [FileDoc || #view_row{doc = #veil_document{record = #file{parent = Parent} } = FileDoc } <- Rows, Parent == Id]};
-        _ ->
-            %% TODO: error handling
+        _Other ->
+            lager:error("Invalid view response: ~p", [_Other]),
             throw(inavlid_data)
     end.
 

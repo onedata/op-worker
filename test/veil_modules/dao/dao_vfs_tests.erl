@@ -75,6 +75,7 @@ remove_descriptor() ->
 
 
 get_descriptor() ->
+    meck:expect(dao, get_record, fun(_) -> {ok, #veil_document{record = #file{}}} end),
     meck:expect(dao, get_record, fun("uuid") -> {ok, #veil_document{record = #file_descriptor{file = "test"}}};
                                     ("uuid2") -> {ok, #veil_document{record = #file{}}} end),
     ?assertMatch({ok, #veil_document{record = #file_descriptor{file = "test"}}},
@@ -88,7 +89,14 @@ get_descriptor() ->
     ?assert(meck:validate([dao, dao_helper])).
 
 
-list_descriptors() -> 
+list_descriptors() ->
+    meck:expect(dao, get_record, fun(_) -> {ok, #veil_document{uuid = "uuid", record = #file{}}} end),
+    meck:expect(dao_helper, parse_view_result, 1, {ok, #view_result{rows = [#view_row{doc = #veil_document{record = #file_descriptor{file = "uuid"}}}]}}),
+    ?assertMatch({ok, [#veil_document{record = #file_descriptor{}}]}, dao_vfs:list_descriptors({by_file, {uuid, "file"}}, 5, 0)),
+
+    ?assert(meck:called(dao_helper, query_view, [?FD_BY_FILE_VIEW#view_info.db_name, ?FD_BY_FILE_VIEW#view_info.design, ?FD_BY_FILE_VIEW#view_info.name,
+        #view_query_args{keys = ["uuid"], include_docs = true, limit = 5, skip = 0}])),
+    ?assert(meck:called(dao_helper, parse_view_result, [ok])),
     ?assert(meck:validate([dao, dao_helper])).
 
 
@@ -103,15 +111,12 @@ save_file() ->
 
 
 remove_file() ->
-    File = {internal_path, ["path", "test1"], "root"},
-    meck:expect(dao_helper, parse_view_result, 1, meck:seq([{ok, #view_result{rows = [#view_row{id = "root2"}]}},
-        {ok, #view_result{rows = [#view_row{doc = #veil_document{uuid = "uuid", record = #file{}}}]}}])),
+    meck:expect(dao, get_record, fun(_) -> {ok, #veil_document{uuid = "uuid", record = #file{}}} end),
 
-    ?assertMatch(ok, dao_vfs:remove_file(File)),
+    ?assertMatch(ok, dao_vfs:remove_file({uuid, "file"})),
 
     ?assert(meck:called(dao, set_db, [?FILES_DB_NAME])),
     ?assert(meck:called(dao, remove_record, ["uuid"])),
-    ?assertEqual(2, meck:num_calls(dao_helper, parse_view_result, [ok])),
     ?assert(meck:validate([dao, dao_helper])).
 
 
@@ -124,18 +129,26 @@ get_path_info() ->
 
 
 list_dir() ->
+    meck:expect(dao, get_record, fun(_) -> {ok, #veil_document{uuid = "f", record = #file{type = ?REG_TYPE}}} end),
+    ?assertThrow({dir_not_found, _}, dao_vfs:list_dir({uuid, "file"}, 1, 0)),
+
+    meck:expect(dao, get_record, fun(_) -> {ok, #veil_document{uuid = "f", record = #file{type = ?DIR_TYPE}}} end),
+    meck:expect(dao_helper, parse_view_result, fun(_) -> {ok, #view_result{rows =
+        [#view_row{doc = #veil_document{record = #file{parent = "f"}}}]}} end),
+
+    ?assertMatch({ok, [#veil_document{record = #file{}}]}, dao_vfs:list_dir({uuid, "file"}, 5, 0)),
+
+    ?assert(meck:called(dao_helper, query_view, [?FILE_TREE_VIEW#view_info.db_name, ?FILE_TREE_VIEW#view_info.design, ?FILE_TREE_VIEW#view_info.name, '_'])),
+    ?assert(meck:called(dao_helper, parse_view_result, [ok])),
     ?assert(meck:validate([dao, dao_helper])).
 
 
 rename_file() ->
-    File = {internal_path, ["path", "test1"], "root"},
-    meck:expect(dao_helper, parse_view_result, 1, meck:seq([{ok, #view_result{rows = [#view_row{id = "root2"}]}},
-        {ok, #view_result{rows = [#view_row{doc = #veil_document{uuid = "uuid", record = #file{}}}]}}])),
+    meck:expect(dao, get_record, fun(_) -> {ok, #veil_document{uuid = "uuid", record = #file{}}} end),
 
-    ?assertMatch({ok, "uuid"}, dao_vfs:rename_file(File, "name")),
+    ?assertMatch({ok, "uuid"}, dao_vfs:rename_file({uuid, "file"}, "name")),
 
     ?assert(meck:called(dao, save_record, [#veil_document{uuid = "uuid", record = #file{name = "name"}}])),
-    ?assertEqual(2, meck:num_calls(dao_helper, parse_view_result, [ok])),
     ?assert(meck:validate([dao, dao_helper])).
 
 
