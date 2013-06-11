@@ -33,7 +33,8 @@ file_test_() ->
 setup() ->
     meck:new([dao, dao_helper]),
     meck:expect(dao, set_db, fun(_) -> ok end),
-    meck:expect(dao, save_record, fun(_) -> {ok, "uuid"} end).
+    meck:expect(dao, save_record, fun(_) -> {ok, "uuid"} end),
+    meck:expect(dao, remove_record, fun(_) -> ok end).
 
 
 teardown(_) ->
@@ -55,21 +56,31 @@ file_path_analyze_test() ->
 save_descriptor() ->
     Doc = #veil_document{record = #file_descriptor{}},
     ?assertMatch({ok, "uuid"}, dao_vfs:save_descriptor(Doc)),
-    ?assert(meck:called(dao, set_db, [?DESCRIPTORS_DB_NAME])),
-    ?assert(meck:called(dao, save_record, [Doc])),
-
     ?assertMatch({ok, "uuid"}, dao_vfs:save_descriptor(#file_descriptor{})),
+
+    ?assertEqual(2, meck:num_calls(dao, set_db, [?DESCRIPTORS_DB_NAME])),
+    ?assertEqual(2, meck:num_calls(dao, save_record, [Doc])),
+    ?assert(meck:validate([dao, dao_helper])).
+
+
+remove_descriptor() ->
+    ?assertMatch(ok, dao_vfs:remove_descriptor("uuid")),
     ?assert(meck:called(dao, set_db, [?DESCRIPTORS_DB_NAME])),
-    ?assert(meck:called(dao, save_record, [Doc])),
-
+    ?assert(meck:called(dao, remove_record, ["uuid"])),
     ?assert(meck:validate([dao, dao_helper])).
 
 
-remove_descriptor() -> 
-    ?assert(meck:validate([dao, dao_helper])).
+get_descriptor() ->
+    meck:expect(dao, get_record, fun("uuid") -> {ok, #veil_document{record = #file_descriptor{file = "test"}}};
+                                    ("uuid2") -> {ok, #veil_document{record = #file{}}} end),
+    ?assertMatch({ok, #veil_document{record = #file_descriptor{file = "test"}}},
+        dao_vfs:get_descriptor("uuid")),
+    ?assert(meck:called(dao, get_record, ["uuid"])),
 
+    ?assertMatch({error, invalid_fd_record}, dao_vfs:get_descriptor("uuid2")),
+    ?assert(meck:called(dao, get_record, ["uuid2"])),
 
-get_descriptor() -> 
+    ?assertEqual(2, meck:num_calls(dao, set_db, [?DESCRIPTORS_DB_NAME])),
     ?assert(meck:validate([dao, dao_helper])).
 
 
@@ -77,7 +88,13 @@ list_descriptors() ->
     ?assert(meck:validate([dao, dao_helper])).
 
 
-save_file() -> 
+save_file() ->
+    Doc = #veil_document{record = #file{}},
+    ?assertMatch({ok, "uuid"}, dao_vfs:save_file(Doc)),
+    ?assertMatch({ok, "uuid"}, dao_vfs:save_file(#file{})),
+
+    ?assertEqual(2, meck:num_calls(dao, set_db, [?FILES_DB_NAME])),
+    ?assertEqual(2, meck:num_calls(dao, save_record, [Doc])),
     ?assert(meck:validate([dao, dao_helper])).
 
 
