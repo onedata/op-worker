@@ -15,6 +15,7 @@
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
+-include_lib("files_common.hrl").
 -endif.
 
 -ifdef(TEST).
@@ -30,54 +31,74 @@ file_test_() ->
 
 
 setup() ->
-    ?assert(true).
+    meck:new([dao, dao_helper]),
+    meck:expect(dao, set_db, fun(_) -> ok end),
+    meck:expect(dao, save_record, fun(_) -> {ok, "uuid"} end).
 
 
 teardown(_) ->
-    ?assert(true).
+    ok = meck:unload([dao, dao_helper]).
 
 
 file_path_analyze_test() ->
-    ?assert(true).
+    Expected1 = {internal_path, ["test", "test2"], "uuid"},
+    Expected2 = {internal_path, ["test", "test2"], ""},
+    Path = "test" ++ [?PATH_SEPARATOR] ++ "test2",
+    ?assertMatch(Expected1, dao_vfs:file_path_analyze({Path, "uuid"})),
+    ?assertMatch(Expected1, dao_vfs:file_path_analyze({relative_path, Path, "uuid"})),
+    ?assertMatch(Expected2, dao_vfs:file_path_analyze(Path)),
+    ?assertMatch(Expected2, dao_vfs:file_path_analyze({absolute_path, Path})),
+    ?assertThrow({invalid_file_path, {absolute_path, "path", "uuid"}}, dao_vfs:file_path_analyze({absolute_path, "path", "uuid"})),
+    ?assertThrow({invalid_file_path, 2}, dao_vfs:file_path_analyze(2)).
 
-list_dir() -> 
-    ?assert(true).
 
+save_descriptor() ->
+    Doc = #veil_document{record = #file_descriptor{}},
+    ?assertMatch({ok, "uuid"}, dao_vfs:save_descriptor(Doc)),
+    ?assert(meck:called(dao, set_db, [?DESCRIPTORS_DB_NAME])),
+    ?assert(meck:called(dao, save_record, [Doc])),
 
-rename_file() ->
-    ?assert(true).
+    ?assertMatch({ok, "uuid"}, dao_vfs:save_descriptor(#file_descriptor{})),
+    ?assert(meck:called(dao, set_db, [?DESCRIPTORS_DB_NAME])),
+    ?assert(meck:called(dao, save_record, [Doc])),
 
-
-save_descriptor() -> 
-    ?assert(true).
+    ?assert(meck:validate([dao, dao_helper])).
 
 
 remove_descriptor() -> 
-    ?assert(true).
+    ?assert(meck:validate([dao, dao_helper])).
 
 
 get_descriptor() -> 
-    ?assert(true).
+    ?assert(meck:validate([dao, dao_helper])).
 
 
 list_descriptors() -> 
-    ?assert(true).
+    ?assert(meck:validate([dao, dao_helper])).
 
 
 save_file() -> 
-    ?assert(true).
+    ?assert(meck:validate([dao, dao_helper])).
 
 
 remove_file() -> 
-    ?assert(true).
+    ?assert(meck:validate([dao, dao_helper])).
 
 
 get_file() -> 
-    ?assert(true).
+    ?assert(meck:validate([dao, dao_helper])).
 
 
 get_path_info() -> 
-    ?assert(true).
+    ?assert(meck:validate([dao, dao_helper])).
+
+
+list_dir() ->
+    ?assert(meck:validate([dao, dao_helper])).
+
+
+rename_file() ->
+    ?assert(meck:validate([dao, dao_helper])).
 
 
 lock_file_test() ->
