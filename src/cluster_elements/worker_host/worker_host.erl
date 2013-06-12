@@ -251,7 +251,7 @@ proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
 		non -> ok;
     {gen_serv, Disp} -> gen_server:cast(Disp, {worker_answer, MsgId, Response});
     {proc, Pid} -> Pid ! Response;
-    Other -> lagger:error("Wrong reply type: ~s", [Other])
+    Other -> lager:error("Wrong reply type: ~s", [Other])
 	end,
 	
 	{Megaseconds2,Seconds2,Microseconds2} = os:timestamp(),
