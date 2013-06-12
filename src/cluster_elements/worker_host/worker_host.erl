@@ -18,7 +18,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_link/3]).
+-export([start_link/3, stop/1]).
 
 %% ====================================================================
 %% gen_server callbacks
@@ -44,6 +44,16 @@
 %% ====================================================================
 start_link(PlugIn, PlugInArgs, LoadMemorySize) ->
     gen_server:start_link({local, PlugIn}, ?MODULE, [PlugIn, PlugInArgs, LoadMemorySize], []).
+
+%% stop/1
+%% ====================================================================
+%% @doc Stops the server
+-spec stop(PlugIn) -> ok when
+  PlugIn :: atom().
+%% ====================================================================
+
+stop(PlugIn) ->
+  gen_server:cast(PlugIn, stop).
 
 %% init/1
 %% ====================================================================
@@ -168,6 +178,9 @@ handle_cast({sequential, job_check}, State) ->
 handle_cast({progress_report, Report}, State) ->
 	NewLoadInfo = save_progress(Report, State#host_state.load_info),
     {noreply, State#host_state{load_info = NewLoadInfo}};
+
+handle_cast(stop, State) ->
+  {stop, normal, State};
 
 handle_cast(_Msg, State) ->
 	{noreply, State}.

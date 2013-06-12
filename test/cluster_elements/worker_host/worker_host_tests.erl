@@ -11,8 +11,6 @@
 %% ===================================================================
 
 -module(worker_host_tests).
--include("registered_names.hrl").
--include("supervision_macros.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -21,57 +19,26 @@
 -ifdef(TEST).
 
 %% ====================================================================
-%% Test setup and teardown
-%% ====================================================================
-
-setup() ->
-  lager:start(),
-  ssl:start(),
-  ok = application:start(ranch).
-
-teardown(_Args) ->
-  ok = application:stop(ranch).
-
-%% ====================================================================
-%% Test generation
-%% ====================================================================
-
-generate_test_() ->
-  {setup,
-    fun setup/0,
-    fun teardown/1,
-    [?_test(wrong_request()),
-      ?_test(load_info_storing()),
-      ?_test(sequential_request())]}.
-
-%% ====================================================================
-%% Functions used by tests
+%% Test functions
 %% ====================================================================
 
 %% This test checks if worker_host is resistant to incorrect requests.
-wrong_request() ->
-	application:set_env(?APP_Name, node_type, worker), 
-	ok = application:start(?APP_Name),
-
+wrong_request_test() ->
 	Module = sample_plug_in,
-	{ok, _ChildPid} = supervisor:start_child(?Supervisor_Name, ?Sup_Child(Module, worker_host, transient, [sample_plug_in, [], 10])),
+  worker_host:start_link(sample_plug_in, [], 10),
 	gen_server:cast(Module, abc),
 	Reply = gen_server:call(Module, abc),
 	?assert(Reply =:= wrong_request),
-
-	ok = application:stop(?APP_Name).
+  worker_host:stop(Module).
 
 %% This test checks if worker properly stores information about time used by
 %% plug-in (veil module) to process requests. The tests checks not only if this
 %% information is stored but also verifies if old information is correctly deleted
 %% (to provide only latest data to ccm).
-load_info_storing() ->
+load_info_storing_test() ->
 	ClientsNum = 50,
-	application:set_env(?APP_Name, node_type, worker), 
-	ok = application:start(?APP_Name),
-
 	Module = sample_plug_in,
-	{ok, _ChildPid} = supervisor:start_child(?Supervisor_Name, ?Sup_Child(Module, worker_host, transient, [sample_plug_in, [], 2 * ClientsNum])),
+  worker_host:start_link(sample_plug_in, [], 2 * ClientsNum),
 	
 	startClients(ClientsNum, Module),
 	timer:sleep(10 * ClientsNum),
@@ -116,12 +83,11 @@ load_info_storing() ->
 	?assert(New4 =:= []),
 	?assert(Old4 =:= []),
 
-	ok = application:stop(?APP_Name).
+  worker_host:stop(Module).
 
-sequential_request() ->
-    ok = application:start(?APP_Name),
+sequential_request_test() ->
     Module = sample_plug_in,
-    {ok, _ChildPid} = supervisor:start_child(?Supervisor_Name, ?Sup_Child(Module, worker_host, transient, [sample_plug_in, [], 10])),
+    worker_host:start_link(sample_plug_in, [], 10),
 
     gen_server:cast(Module, {sequential_asynch, 1, {long_request, 50, 1, self()}}),
     gen_server:cast(Module, {sequential_asynch, 1, {long_request, 20, 2, self()}}),
@@ -142,7 +108,7 @@ sequential_request() ->
     true = First < Second,
     true = Second < Third,
 
-    ok = application:stop(?APP_Name).
+    worker_host:stop(Module).
 
 %% ====================================================================
 %% Helper functions

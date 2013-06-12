@@ -14,24 +14,18 @@
 -include("registered_names.hrl").
 -include("records.hrl").
 -include("supervision_macros.hrl").
+-include("modules_and_args.hrl").
 
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_link/0]).
+-export([start_link/0, start_link/1, stop/0]).
 -export([monitoring_loop/1, monitoring_loop/2, start_monitoring_loop/2]).
 
 %% ====================================================================
 %% gen_server callbacks
 %% ====================================================================
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
-
-%% ====================================================================
-%% Test API
-%% ====================================================================
-%%-ifdef(TEST).
--export([start_worker/4, stop_worker/3]).
-%%-endif.
 
 %% ====================================================================
 %% API functions
@@ -48,12 +42,39 @@
   Error :: {already_started,Pid} | term().
 %% ====================================================================
 start_link() ->
-  Ans = gen_server:start_link(?MODULE, [], []),
+  start_link(normal).
+
+%% start_link/1
+%% ====================================================================
+%% @doc Starts cluster manager
+-spec start_link(Mode) -> Result when
+  Mode :: test | normal,
+  Result ::  {ok,Pid}
+  | ignore
+  | {error,Error},
+  Pid :: pid(),
+  Error :: {already_started,Pid} | term().
+%% ====================================================================
+start_link(Mode) ->
+  Args = case Mode of
+    test -> [test];
+    _Other -> []
+  end,
+  Ans = gen_server:start_link(?MODULE, Args, []),
   case Ans of
     {ok, Pid} -> global:re_register_name(?CCM, Pid);
     _A -> error
   end,
   Ans.
+
+%% stop/0
+%% ====================================================================
+%% @doc Stops the server
+-spec stop() -> ok.
+%% ====================================================================
+
+stop() ->
+  gen_server:cast(?CCM, stop).
 
 %% init/1
 %% ====================================================================
@@ -73,6 +94,10 @@ init([]) ->
   timer:apply_after(Interval * 1000, gen_server, cast, [{global, ?CCM}, init_cluster]),
   timer:apply_after(50, gen_server, cast, [{global, ?CCM}, {set_monitoring, on}]),
   timer:apply_after(100, gen_server, cast, [{global, ?CCM}, get_state_from_db]),
+  {ok, #cm_state{}};
+
+init([test]) ->
+  process_flag(trap_exit, true),
   {ok, #cm_state{}}.
 
 %% handle_call/3
@@ -202,6 +227,9 @@ handle_cast({worker_answer, cluster_state, Response}, State) ->
   end,
   {noreply, NewState};
 
+handle_cast(stop, State) ->
+  {stop, normal, State};
+
 handle_cast(_Msg, State) ->
   {noreply, State}.
 
@@ -263,8 +291,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% ====================================================================
 init_cluster(State) ->
   Nodes = State#cm_state.nodes,
-  %%Jobs = [cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager],
-  JobsAndArgs = [{cluster_rengine, []}, {control_panel, []}, {dao, []}, {fslogic, []}, {gateway, []}, {rtransfer, []}, {rule_manager, []}],
+  JobsAndArgs = ?Modules_With_Args,
 
   CreateRunningWorkersList = fun({_N, M, _Child}, Workers) ->
     [M | Workers]
@@ -280,7 +307,7 @@ init_cluster(State) ->
   end,
   {Jobs, Args} = lists:foldl(CreateJobsList, {[], []}, JobsAndArgs),
 
-  NewState3 = case length(Jobs) > 0 of
+  NewState3 = case (length(Jobs) > 0) and (length(Nodes) > 0) of
     true ->
       NewState = case erlang:length(Nodes) >= erlang:length(Jobs) of
         true -> init_cluster_nodes_dominance(State, Nodes, Jobs, [], Args, []);
@@ -438,11 +465,10 @@ add_children(_Node, [], Workers) ->
   Workers;
 
 add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
-  case Id of
-    node_manager -> add_children(Node, Children, Workers);
-    cluster_manager -> add_children(Node, Children, Workers);
-    request_dispatcher -> add_children(Node, Children, Workers);
-    _Other -> [{Node, Id, ChildPid} | add_children(Node, Children, Workers)]
+  Jobs = ?Modules,
+  case lists:member(Id, Jobs) of
+    false -> add_children(Node, Children, Workers);
+    true -> [{Node, Id, ChildPid} | add_children(Node, Children, Workers)]
   end.
 
 %% node_down/2
@@ -588,7 +614,7 @@ monitoring_loop(Flag, Nodes) ->
       change_monitoring(Nodes, true);
     off -> ok
   end,
-  monitoring_loop(on).
+  monitoring_loop(Flag).
 
 %% monitoring_loop/1
 %% ====================================================================

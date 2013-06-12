@@ -8,9 +8,9 @@
 ## ===================================================================
 
 #!/bin/bash
-mkdir -p test/distributed_tests_out
-cp -R test/distributed/* test/distributed_tests_out
-cd test/distributed_tests_out
+mkdir -p distributed_tests_out
+cp -R test_distributed/* distributed_tests_out
+cd distributed_tests_out
 
 HOST=$HOSTNAME
 
@@ -25,6 +25,12 @@ do
     sed -i "s/localhost/$HOST/g" $TEST
 done
 
+SCRS=$(find . -name "*.erl")
+for SCR in $SCRS
+do
+    sed -i "s/localhost/$HOST/g" $SCR
+done
+
 erl -make
 erl -name starter -s distributed_test_starter start $TESTS
 
@@ -36,5 +42,7 @@ do
     rm -f $TEST
 done
 rm -f Emakefile
+rm -f start_distributed_test.sh
+killall beam
 
-cd ../..
+cd ..

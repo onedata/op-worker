@@ -71,4 +71,11 @@ init([NodeType]) when NodeType =:= ccm ->
       ?Sup_Child(request_dispatcher, request_dispatcher, permanent, []),
       ?Sup_Child(cluster_manager, cluster_manager, permanent, []),
       ?Sup_Child(node_manager, node_manager, permanent, [NodeType])
-    ]}}.
+    ]}};
+
+init([NodeType]) when NodeType =:= ccm_test ->
+  {ok, { {one_for_one, 5, 10}, [
+    ?Sup_Child(request_dispatcher, request_dispatcher, permanent, []),
+    ?Sup_Child(cluster_manager, cluster_manager, permanent, [test]),
+    ?Sup_Child(node_manager, node_manager, permanent, [ccm])
+  ]}}.
