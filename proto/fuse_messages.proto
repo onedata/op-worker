@@ -1,7 +1,7 @@
 message FuseMessage{
 	required string id = 1;
 	required string message_type = 2;
-	required bytes message_input = 3;
+	required bytes input = 3;
 }
 
 message GetFileLocation{
@@ -37,6 +37,9 @@ message FileChildren{
 }
 
 
+message CreateDir{
+	required string dir_logic_name = 1;
+}
 
 message DeleteFile{
 	required string file_logic_name = 1;	
