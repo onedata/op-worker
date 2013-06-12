@@ -1,3 +1,5 @@
+#!/bin/bash
+
 ## ===================================================================
 ## @author Michal Wrzeszcz
 ## @copyright (C): 2013 ACK CYFRONET AGH
@@ -7,7 +9,6 @@
 ## @doc: This script starts distributed tests.
 ## ===================================================================
 
-#!/bin/bash
 mkdir -p distributed_tests_out
 cp -R test_distributed/* distributed_tests_out
 cd distributed_tests_out
