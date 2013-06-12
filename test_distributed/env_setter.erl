@@ -62,10 +62,10 @@ start_app(Vars) ->
   set_env_vars(Vars),
   ok = application:start(?APP_Name).
 
-%% stop_test/0
+%% stop_app/0
 %% ====================================================================
 %% @doc This function stops the application.
--spec stop_test() -> ok.
+-spec stop_app() -> ok.
 %% ====================================================================
 
 stop_app() ->
