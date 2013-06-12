@@ -19,27 +19,27 @@
 -ifdef(TEST).
 
 state_test_() ->
-    {setup, fun setup/0, fun teardown/1, [fun save_state/0, fun get_state/0, fun clear_state/0]}.
+    {foreach, fun setup/0, fun teardown/1, [fun save_state/0, fun get_state/0, fun clear_state/0]}.
 
 setup() ->
     meck:new(dao).
 
 teardown(_) ->
-    meck:unload(dao).
+    ok = meck:unload(dao).
 
 save_state() ->
-    meck:expect(dao, save_record, fun(#some_record{}, cluster_state, update) -> {ok, "cluster_state"} end),
-    {ok, "cluster_state"} = dao_cluster:save_state(#some_record{}),
-    true = meck:validate(dao).
+    meck:expect(dao, save_record, fun(#veil_document{record = #some_record{}, uuid = cluster_state, force_update = true}) -> {ok, "cluster_state"} end),
+    ?assertEqual({ok, "cluster_state"}, dao_cluster:save_state(#some_record{})),
+    ?assert(meck:validate(dao)).
 
 get_state() ->
-    meck:expect(dao, get_record, fun(cluster_state) -> {ok, #some_record{}} end),
-    {ok, #some_record{}} = dao_cluster:get_state(),
-    true = meck:validate(dao).
+    meck:expect(dao, get_record, fun(cluster_state) -> {ok, #veil_document{record = #some_record{}}} end),
+    ?assertMatch({ok, #some_record{}}, dao_cluster:get_state()),
+    ?assert(meck:validate(dao)).
 
 clear_state() ->
     meck:expect(dao, remove_record, fun(cluster_state) -> ok end),
-    ok = dao_cluster:clear_state(),
-    true = meck:validate(dao).
+    ?assertEqual(ok, dao_cluster:clear_state()),
+    ?assert(meck:validate(dao)).
 
 -endif.

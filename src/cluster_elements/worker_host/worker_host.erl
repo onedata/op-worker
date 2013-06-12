@@ -115,6 +115,10 @@ handle_call({test_call, ProtocolVersion, Msg}, _From, State) ->
   Reply = PlugIn:handle(ProtocolVersion, Msg),
   {reply, Reply, State};
 
+handle_call(Request, _From, State) when is_tuple(Request) -> %% Proxy call. Each cast can be achieved by instant proxy-call which ensures
+                                                             %% that request was made, unlike cast because cast ignores state of node/gen_server
+    {reply, gen_server:cast(State#host_state.plug_in, Request), State};
+
 handle_call(_Request, _From, State) ->
     {reply, wrong_request, State}.
 

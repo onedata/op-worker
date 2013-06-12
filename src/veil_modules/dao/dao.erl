@@ -19,6 +19,7 @@
 
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/couch_db.hrl").
+-include_lib("veil_modules/dao/dao_types.hrl").
 
 -import(dao_helper, [name/1]).
 
@@ -30,7 +31,8 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% API
--export([save_record/3, save_record/2, save_record/1, get_record/1, remove_record/1]).
+-export([save_record/1, get_record/1, remove_record/1, load_view_def/2, set_db/1]).
+-export([doc_to_term/1]).
 
 %% ===================================================================
 %% Behaviour callback functions
@@ -49,10 +51,11 @@ init({Args, {init_status, undefined}}) ->
 init({_Args, {init_status, table_initialized}}) -> %% Final stage of initialization. ETS table was initialized
     case application:get_env(veil_cluster_node, db_nodes) of
         {ok, Nodes} when is_list(Nodes) ->
-            [dao_hosts:store_exec(sequential, {insert_host, Node}) || Node <- Nodes, is_atom(Node)], %% We can't use dao_hosts:insert/1 because gen_server isn't initialized yet
+            [dao_hosts:insert(Node) || Node <- Nodes, is_atom(Node)],
+            catch setup_views(?DATABASE_DESIGN_STRUCTURE),
             ok;
         _ ->
-            %% TODO: logs
+            lager:warning("There are no DB hosts given in application env variable."),
             ok
     end;
 init({Args, {init_status, _TableInfo}}) ->
@@ -90,29 +93,30 @@ handle(_ProtocolVersion, get_version) ->
 handle(ProtocolVersion, {Target, Method, Args}) when is_atom(Target), is_atom(Method), is_list(Args) ->
     put(protocol_version, ProtocolVersion), %% Some sub-modules may need it to communicate with DAO' gen_server
     Module =
-        case Target of
-            utils -> dao;
-            T -> list_to_atom("dao_" ++ atom_to_list(T))
+        case atom_to_list(Target) of
+            "utils" -> dao;
+            [$d, $a, $o, $_ | T] -> list_to_atom("dao_" ++ T);
+            T -> list_to_atom("dao_" ++ T)
         end,
     try apply(Module, Method, Args) of
         {error, Err} ->
-            lager:error([{mod, ?MODULE}], "Handling ~p:~p with args ~p returned error: ~p", [Module, Method, Args, Err]),
+            lager:error("Handling ~p:~p with args ~p returned error: ~p", [Module, Method, Args, Err]),
             {error, Err};
         {ok, Response} -> {ok, Response};
         ok -> ok;
         Other ->
-            lager:error([{mod, ?MODULE}], "Handling ~p:~p with args ~p returned unknown response: ~p", [Module, Method, Args, Other]),
+            lager:error("Handling ~p:~p with args ~p returned unknown response: ~p", [Module, Method, Args, Other]),
             {error, Other}
     catch
         error:{badmatch, {error, Err}} -> {error, Err};
         Type:Error ->
-            lager:error([{mod, ?MODULE}], "Handling ~p:~p with args ~p interrupted by exception: ~p:~p", [Module, Method, Args, Type, Error]),
+            lager:error("Handling ~p:~p with args ~p interrupted by exception: ~p:~p", [Module, Method, Args, Type, Error]),
             {error, Error}
     end;
 handle(ProtocolVersion, {Method, Args}) when is_atom(Method), is_list(Args) ->
     handle(ProtocolVersion, {cluster, Method, Args});
 handle(_ProtocolVersion, _Request) ->
-    lager:error([{mod, ?MODULE}], "Unknown request ~p (protocol ver.: ~p)", [_Request, _ProtocolVersion]),
+    lager:error("Unknown request ~p (protocol ver.: ~p)", [_Request, _ProtocolVersion]),
     {error, wrong_args}.
 
 %% cleanup/0
@@ -130,87 +134,72 @@ cleanup() ->
 %% ===================================================================
 
 
-%% save_record/2
+%% save_record/1
 %% ====================================================================
-%% @doc Same as save_record/3 but with Mode = insert
+%% @doc Saves record to DB. Argument has to be either Record :: term() which will be saved<br/>
+%% with random UUID as completely new document or #veil_document record. If #veil_document record is passed <br/>
+%% caller may set UUID and revision info in order to update this record in DB.<br/>
+%% If you got #veil_document{} via {@link dao:get_record/1}, uuid and rev_info are in place and you shouldn't touch them<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
--spec save_record(Rec :: tuple(), Id :: atom() | string()) ->
-    {ok, DocId :: string()} |
-    {error, conflict} |
-    no_return(). % erlang:error(any()) | throw(any())
-save_record(Rec, Id) ->
-    save_record(Rec, Id, insert).
-
-%% save_record/3
-%% ====================================================================
-%% @doc Saves record Rec to DB as document with UUID = Id.<br/>
-%% If Mode == update then the document with given UUID will be overridden.
-%% By default however saving to existing document will fail with {error, conflict}.<br/>
-%% Should not be used directly, use {@link dao:handle/2} instead.
-%% @end
--spec save_record(Rec :: tuple(), Id :: atom() | string(), Mode :: update | insert) ->
+-spec save_record(term() | #veil_document{uuid :: string(), rev_info :: term(), record :: term(), force_update :: boolean()}) ->
     {ok, DocId :: string()} |
     {error, conflict} |
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
-save_record(Rec, Id, Mode) when is_tuple(Rec), is_atom(Id) ->
-    save_record(Rec, atom_to_list(Id), Mode);
-save_record(Rec, Id, Mode) when is_tuple(Rec), is_list(Id)->
+save_record(#veil_document{uuid = "", record = Rec} = Doc) when is_tuple(Rec) ->
+    save_record(Doc#veil_document{uuid = dao_helper:gen_uuid()});
+save_record(#veil_document{uuid = Id, record = Rec} = Doc) when is_tuple(Rec), is_atom(Id) ->
+    save_record(Doc#veil_document{uuid = atom_to_list(Id)});
+save_record(#veil_document{uuid = Id, rev_info = RevInfo, record = Rec, force_update = IsForced}) when is_tuple(Rec), is_list(Id)->
     Valid = is_valid_record(Rec),
     if
         Valid -> ok;
         true ->
-            lager:error([{mod, ?MODULE}], "Cannot save record: ~p because it's not supported", [Rec]),
+            lager:error("Cannot save record: ~p because it's not supported", [Rec]),
             throw(unsupported_record)
     end,
     Revs =
         if
-            Mode =:= update -> %% If Mode == update, we need to open existing doc in order to get revs
-                case dao_helper:open_doc(?SYSTEM_DB_NAME, Id) of
+            IsForced -> %% If Mode == update, we need to open existing doc in order to get revs
+                case dao_helper:open_doc(get_db(), Id) of
                     {ok, #doc{revs = RevDef}} -> RevDef;
                     _ -> #doc{revs = RevDef} = #doc{}, RevDef
                 end;
+            RevInfo =/= 0 ->
+                RevInfo;
             true ->
                 #doc{revs = RevDef} = #doc{},
                 RevDef
         end,
-    case dao_helper:insert_doc(?SYSTEM_DB_NAME, #doc{id = dao_helper:name(Id), revs = Revs, body = term_to_doc(Rec)}) of
+    case dao_helper:insert_doc(get_db(), #doc{id = dao_helper:name(Id), revs = Revs, body = term_to_doc(Rec)}) of
         {ok, _} -> {ok, Id};
         {error, Err} -> {error, Err}
-    end.
-
-
-%% save_record/1
-%% ====================================================================
-%% @doc Saves record Rec to DB as document with random UUID.
-%% Should not be used directly, use {@link dao:handle/2} instead.
-%% @end
--spec save_record(Rec :: tuple()) ->
-    {ok, DocId :: string()} |
-    no_return(). % erlang:error(any()) | throw(any())
-%% ====================================================================
+    end;
 save_record(Rec) when is_tuple(Rec) ->
-    save_record(Rec, dao_helper:gen_uuid(), insert).
+    save_record(#veil_document{record = Rec}).
 
 
 %% get_record/1
 %% ====================================================================
-%% @doc Retrieves record with UUID = Id from DB.
+%% @doc Retrieves record with UUID = Id from DB. Returns whole #veil_document record containing UUID, Revision Info and
+%% demanded record inside. #veil_document{}.uuid and #veil_document{}.rev_info should not be ever changed. <br/>
+%% You can strip wrappers if you do not need them using API functions of dao_lib module.
+%% See #veil_document{} structure for more info.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec get_record(Id :: atom() | string()) ->
-    {ok, Record :: tuple()} |
+    {ok,#veil_document{record :: tuple()}} |
     {error, Error :: term()} |
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 get_record(Id) when is_atom(Id) ->
     get_record(atom_to_list(Id));
 get_record(Id) when is_list(Id) ->
-    case dao_helper:open_doc(?SYSTEM_DB_NAME, Id) of
-        {ok, #doc{body = Body}} ->
-            try doc_to_term(Body) of
-                Term -> {ok, Term}
+    case dao_helper:open_doc(get_db(), Id) of
+        {ok, #doc{body = Body, revs = RevInfo}} ->
+            try {doc_to_term(Body), RevInfo} of
+                {Term, RInfo} -> {ok, #veil_document{uuid = Id, rev_info = RInfo, record = Term}}
             catch
                 _:Err -> {error, {invalid_document, Err}}
             end;
@@ -223,19 +212,110 @@ get_record(Id) when is_list(Id) ->
 %% @doc Removes record with given UUID from DB
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
--spec remove_record(Id :: atom()) ->
+-spec remove_record(Id :: atom() | uuid()) ->
     ok |
     {error, Error :: term()}.
 %% ====================================================================
 remove_record(Id) when is_atom(Id) ->
     remove_record(atom_to_list(Id));
 remove_record(Id) when is_list(Id) ->
-    dao_helper:delete_doc(?SYSTEM_DB_NAME, Id).
+    dao_helper:delete_doc(get_db(), Id).
 
 
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
+
+%% set_db/1
+%% ====================================================================
+%% @doc Sets current working database name
+%% @end
+-spec set_db(DbName :: string()) -> ok.
+%% ====================================================================
+set_db(DbName) ->
+    put(current_db, DbName).
+
+%% get_db/0
+%% ====================================================================
+%% @doc Gets current working database name
+%% @end
+-spec get_db() -> DbName :: string().
+%% ====================================================================
+get_db() ->
+    case get(current_db) of
+        DbName when is_list(DbName) ->
+            DbName;
+        _ ->
+            ?DEFAULT_DB
+    end.
+
+%% setup_views/1
+%% ====================================================================
+%% @doc Creates or updates design documents
+%% @end
+-spec setup_views(DesignStruct :: list()) -> ok.
+%% ====================================================================
+setup_views(DesignStruct) ->
+    DesignFun = fun(#design_info{name = Name, views = ViewList}, DbName) ->  %% Foreach design document
+            LastCTX = %% Calculate MD5 sum of current views (read from files)
+                lists:foldl(fun(#view_info{name = ViewName}, CTX) ->
+                            crypto:md5_update(CTX, load_view_def(ViewName, map) ++ load_view_def(ViewName, reduce))
+                        end, crypto:md5_init(), ViewList),
+
+            LocalVersion = dao_helper:name(integer_to_list(binary:decode_unsigned(crypto:md5_final(LastCTX)), 16)),
+            NewViewList =
+                case dao_helper:open_design_doc(DbName, Name) of
+                    {ok, #doc{body = Body}} -> %% Design document exists, so lets calculate MD5 sum of its views
+                        ViewsField = dao_json:get_field(Body, "views"),
+                        DbViews = [ dao_json:get_field(ViewsField, ViewName) || #view_info{name = ViewName} <- ViewList ],
+                        EmptyString = fun(Str) when is_binary(Str) -> binary_to_list(Str); %% Helper function converting non-string value to empty string
+                                         (_) -> "" end,
+                        VStrings = [ EmptyString(dao_json:get_field(V, "map")) ++ EmptyString(dao_json:get_field(V, "reduce")) || {L}=V <- DbViews, is_list(L)],
+                        LastCTX1 = lists:foldl(fun(VStr, CTX) -> crypto:md5_update(CTX, VStr) end, crypto:md5_init(), VStrings),
+                        DbVersion = dao_helper:name(integer_to_list(binary:decode_unsigned(crypto:md5_final(LastCTX1)), 16)),
+                        case DbVersion of %% Compare DbVersion with LocalVersion
+                            LocalVersion ->
+                                lager:info("DB version of design ~p is ~p and matches local version. Design is up to date", [Name, LocalVersion]),
+                                [];
+                            _Other ->
+                                lager:info("DB version of design ~p is ~p and does not match ~p. Rebuilding design document", [Name, _Other, LocalVersion]),
+                                ViewList
+                        end;
+                    _ ->
+                        lager:info("Design document ~p in DB ~p not exists. Creating...", [Name, DbName]),
+                        ViewList
+                end,
+
+            lists:map(fun(#view_info{name = ViewName}) -> %% Foreach view
+                case dao_helper:create_view(DbName, Name, ViewName, load_view_def(ViewName, map), load_view_def(ViewName, reduce), LocalVersion) of
+                    ok ->
+                        lager:info("View ~p in design ~p, DB ~p has been created.", [ViewName, Name, DbName]);
+                    _Err ->
+                        lager:error("View ~p in design ~p, DB ~p creation failed. Error: ~p", [ViewName, Name, DbName, _Err])
+                end
+            end, NewViewList),
+            DbName
+        end,
+
+    DbFun = fun(#db_info{name = Name, designs = Designs}) -> %% Foreach database
+            dao_helper:create_db(Name, []),
+            lists:foldl(DesignFun, Name, Designs)
+        end,
+
+    lists:map(DbFun, DesignStruct),
+    ok.
+
+%% load_view_def/2
+%% ====================================================================
+%% @doc Loads view definition from file.
+%% @end
+-spec load_view_def(Name :: string(), Type :: map | reduce) -> string().
+%% ====================================================================
+load_view_def(Name, Type) ->
+    case file:read_file(?VIEW_DEF_LOCATION ++ Name ++ (case Type of map -> ?MAP_DEF_SUFFIX; reduce -> ?REDUCE_DEF_SUFFIX end)) of
+        {ok, Data} -> binary_to_list(Data);
+        _ -> ""
+    end.
 
 %% is_valid_record/1
 %% ====================================================================
@@ -306,7 +386,7 @@ term_to_doc(Field) when is_tuple(Field) ->
     {_, {Ret}} = lists:foldl(FoldFun, {1, InitObj}, LField),
     {lists:reverse(Ret)};
 term_to_doc(Field) ->
-    lager:error([{mod, ?MODULE}], "Cannot convert term to document because field: ~p is not supported", [Field]),
+    lager:error("Cannot convert term to document because field: ~p is not supported", [Field]),
     throw({unsupported_field, Field}).
 
 

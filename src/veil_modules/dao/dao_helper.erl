@@ -10,8 +10,8 @@
 %% ===================================================================
 -module(dao_helper).
 
--include_lib("veil_modules/dao/couch_db.hrl").
--include_lib("veil_modules/dao/common.hrl").
+-include_lib("veil_modules/dao/dao.hrl").
+-include_lib("veil_modules/dao/dao_helper.hrl").
 
 -define(ADMIN_USER_CTX, {user_ctx, #user_ctx{roles = [<<"_admin">>]}}).
 
@@ -25,7 +25,7 @@
 -export([name/1, gen_uuid/0]).
 -export([list_dbs/0, list_dbs/1, get_db_info/1, get_doc_count/1, create_db/1, create_db/2]).
 -export([delete_db/1, delete_db/2, open_doc/2, open_doc/3, insert_doc/2, insert_doc/3, delete_doc/2, delete_docs/2]).
--export([insert_docs/2, insert_docs/3, create_view/5, query_view/3, query_view/4]).
+-export([insert_docs/2, insert_docs/3, open_design_doc/2, create_view/6, query_view/3, query_view/4, parse_view_result/1]).
 
 %% ===================================================================
 %% API functions
@@ -228,36 +228,46 @@ delete_docs(DbName, DocIDs) ->
 %% Views Management
 %% ===================================================================
 
-%% create_view/5
+%% open_design_doc/2
+%% ====================================================================
+%% @doc Returns design document with a given design doc name
+-spec open_design_doc(DbName :: string(), DesignName :: string()) -> {ok, #doc{}} | {error, {not_found, missing | deleted}} | {error, term()}.
+%% ====================================================================
+open_design_doc(DbName, DesignName) ->
+    open_doc(DbName, ?DESIGN_DOC_PREFIX ++ DesignName).
+
+%% create_view/6
 %% ====================================================================
 %% @doc Creates view with given Map and Reduce function. When Reduce = "", reduce function won't be created
--spec create_view(DbName :: string(), DesignName :: string(), ViewName :: string(), Map :: string(), Reduce :: string()) -> [ok | {error, term()}].
+-spec create_view(DbName :: string(), DesignName :: string(), ViewName :: string(), Map :: string(), Reduce :: string(), DesignVersion :: integer()) ->
+    [ok | {error, term()}].
 %% ====================================================================
-create_view(DbName, Doc = #doc{}, ViewName, Map, Reduce) ->
+create_view(DbName, Doc = #doc{}, ViewName, Map, Reduce, DesignVersion) ->
     {MapRd, MapRdValue} =
         case Reduce of
             "" -> {["map"], [dao_json:mk_str(Map)]};
             _ -> {["map", "reduce"], [dao_json:mk_str(Map), dao_json:mk_str(Reduce)]}
         end,
     Doc1 = dao_json:mk_field(Doc, "language", dao_json:mk_str("javascript")),
+    DocV = dao_json:mk_field(Doc1, "version", DesignVersion),
     Views =
-        case dao_json:get_field(Doc1, "views") of
+        case dao_json:get_field(DocV, "views") of
             {error, not_found} -> dao_json:mk_obj();
             Other -> Other
         end,
     VField = dao_json:mk_field(Views, ViewName, dao_json:mk_fields(dao_json:mk_obj(), MapRd, MapRdValue)),
-    NewDoc = dao_json:mk_field(Doc1, "views", VField),
+    NewDoc = dao_json:mk_field(DocV, "views", VField),
     case insert_doc(DbName, NewDoc, [?ADMIN_USER_CTX]) of
         ok -> ok;
         {ok, _} -> ok;
         Other1 -> Other1
     end;
-create_view(DbName, DesignName, ViewName, Map, Reduce) ->
+create_view(DbName, DesignName, ViewName, Map, Reduce, DesignVersion) ->
     DsgName = ?DESIGN_DOC_PREFIX ++ DesignName,
     case open_doc(DbName, DsgName) of
         {error, {not_found, _}} ->
-            create_view(DbName, dao_json:mk_doc(DsgName), ViewName, Map, Reduce);
-        {ok, Doc} -> create_view(DbName, Doc, ViewName, Map, Reduce);
+            create_view(DbName, dao_json:mk_doc(DsgName), ViewName, Map, Reduce, DesignVersion);
+        {ok, Doc} -> create_view(DbName, Doc, ViewName, Map, Reduce, DesignVersion);
         Other -> Other
     end.
 
@@ -291,6 +301,28 @@ query_view(DbName, DesignName, ViewName, QueryArgs = #view_query_args{view_type 
         end,
     normalize_return_term(call(query_view, [name(DbName), name(DesignName), name(ViewName), QueryArgs1])).
 
+%% parse_view_result/1
+%% ====================================================================
+%% @doc Parses query result from query_view/4 into #view_result{} record. <br/>
+%% Potentially slow ( O(total_rows) ), so use it only for very small results.
+%% @end
+-spec parse_view_result(Result :: term()) ->
+    {ok, QueryResult :: #view_result{}} | {error, term()}.
+%% ====================================================================
+parse_view_result({ok, [{total_and_offset, Total, Offset} | Rows]}) ->
+    FormatKey = fun(F, K) when is_list(K) -> [F(F, X) || X <- K];
+                   (_F, K) when is_binary(K) -> binary_to_list(K);
+                   (_F, K) -> K end,
+    FormatDoc = fun([{doc, {[ {_id, Id} | [ {_rev, RevInfo} | D ] ]}}]) ->
+                        #veil_document{record = dao:doc_to_term({D}), uuid = binary_to_list(Id), rev_info = revision(RevInfo)};
+                   (_) -> none end,
+    FormattedRows = [#view_row{id = binary_to_list(Id),
+        key = FormatKey(FormatKey, Key), value = Value, doc = FormatDoc(Doc)}
+            || {row, {[ {id, Id} | [ {key, Key} | [ {value, Value} | Doc ] ] ]}} <- Rows],
+    {ok, #view_result{total = Total, offset = Offset, rows = FormattedRows}};
+parse_view_result(Other) ->
+    Other.
+
 %% name/1
 %% ====================================================================
 %% @doc Converts string/atom to binary
@@ -302,6 +334,18 @@ name(Name) when is_list(Name) ->
     ?l2b(Name);
 name(Name) when is_binary(Name) ->
     Name.
+
+%% revision/1
+%% ====================================================================
+%% @doc Normalize revision info
+-spec revision(RevInfo :: term()) -> term().
+%% ====================================================================
+revision(RevInfo) when is_binary(RevInfo) ->
+    [Num, Rev] = string:tokens(binary_to_list(RevInfo), [$-]),
+    {list_to_integer(Num), [binary:encode_unsigned(list_to_integer(Rev, 16))]};
+revision({Num, [Rev | _Old]}) ->
+    {Num, [Rev]}.
+
 
 %% gen_uuid/0
 %% ====================================================================
@@ -334,6 +378,7 @@ normalize_return_term(Term) ->
     case Term of
         ok -> ok;
         accepted -> ok;
+        {ok, [{error, Error4} | _]} -> {error, Error4};
         {ok, Response} -> {ok, Response};
         {accepted, Response} -> {ok, Response};
         {_, {'EXIT', {Error2, _}}} -> {error, {exit_error, Error2}};
