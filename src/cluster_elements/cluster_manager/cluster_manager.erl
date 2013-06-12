@@ -93,7 +93,8 @@ init([]) ->
   {ok, Interval} = application:get_env(veil_cluster_node, initialization_time),
   timer:apply_after(Interval * 1000, gen_server, cast, [{global, ?CCM}, init_cluster]),
   timer:apply_after(50, gen_server, cast, [{global, ?CCM}, {set_monitoring, on}]),
-  timer:apply_after(100, gen_server, cast, [{global, ?CCM}, get_state_from_db]),
+  timer:apply_after(100, gen_server, cast, [{global, ?CCM}, start_central_logger]),
+  timer:apply_after(150, gen_server, cast, [{global, ?CCM}, get_state_from_db]),
   {ok, #cm_state{}};
 
 init([test]) ->
@@ -184,6 +185,10 @@ handle_cast(init_cluster, State) ->
 
 handle_cast(get_state_from_db, State) ->
   NewState = get_state_from_db(State),
+  {noreply, NewState};
+
+handle_cast(start_central_logger, State) ->
+  NewState = start_central_logger(State),
   {noreply, NewState};
 
 handle_cast(check_cluster_state, State) ->
@@ -510,6 +515,20 @@ get_state_from_db(State) ->
     ok ->
       gen_server:cast(dao, {synch, 1, {get_state, []}, cluster_state, {gen_serv, {global, ?CCM}}}),
       increase_state_num(NewState);
+    error -> NewState
+  end,
+  NewState2.
+
+%% start_central_logger/1
+%% ====================================================================
+%% @doc This function starts the central_logger before other modules.
+-spec start_central_logger(State :: term()) -> NewState when
+  NewState :: term().
+%% ====================================================================
+start_central_logger(State) ->
+  {Ans, NewState} = start_worker(node(), central_logger, [], State),
+  NewState2 = case Ans of
+    ok -> increase_state_num(NewState);
     error -> NewState
   end,
   NewState2.
