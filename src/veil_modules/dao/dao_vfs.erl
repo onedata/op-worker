@@ -18,7 +18,7 @@
 -include_lib("files_common.hrl").
 
 %% API - File system management
--export([list_dir/3, rename_file/2, lock_file/3, unlock_file/3, test_init/0]). %% High level API functions
+-export([list_dir/3, rename_file/2, lock_file/3, unlock_file/3]). %% High level API functions
 -export([save_descriptor/1, remove_descriptor/1, get_descriptor/1, list_descriptors/3]). %% Base descriptor management API functions
 -export([save_file/1, remove_file/1, get_file/1, get_path_info/1]). %% Base file management API function
 
@@ -108,10 +108,10 @@ list_descriptors({by_file, File}, N, Offset) ->
         {ok, #view_result{rows = Rows}} ->
             {ok, [FdDoc || #view_row{doc = #veil_document{record = #file_descriptor{file = FileId1}} = FdDoc} <- Rows, FileId1 == FileId]};
         Data ->
-            %% TODO: error handling
+            lager:error("Invalid file descriptor view response: ~p", [Data]),
             throw({inavlid_data, Data})
     end;
-list_descriptors({_Type, _Resouce}, _N, _Offset) ->
+list_descriptors({_Type, _Resource}, _N, _Offset) ->
     not_yet_implemented.
 
 
@@ -238,7 +238,7 @@ list_dir(Dir, N, Offset) ->
             {ok, #veil_document{record = #file{type = ?DIR_TYPE}, uuid = UUID}} ->
                 UUID;
             R ->
-                %% TODO: error handling
+                lager:error("Directory ~p not found. Error: ~p", [Dir, R]),
                 throw({dir_not_found, R})
         end,
     NextId =  integer_to_list(list_to_integer(case Id of [] -> "0"; _ -> Id end, 16)+1, 16), %% Dirty hack needed because `inclusive_end` option does not work in BigCouch for some reason
@@ -249,8 +249,8 @@ list_dir(Dir, N, Offset) ->
         {ok, #view_result{rows = Rows}} -> %% We need to strip results that don't match search criteria (tail of last query possibly), because
                                            %% `end_key` seems to behave strange combined with `limit` option. TODO: get rid of it after DBMS switch
             {ok, [FileDoc || #view_row{doc = #veil_document{record = #file{parent = Parent} } = FileDoc } <- Rows, Parent == Id]};
-        _ ->
-            %% TODO: error handling
+        _Other ->
+            lager:error("Invalid view response: ~p", [_Other]),
             throw(inavlid_data)
     end.
 
@@ -277,32 +277,6 @@ lock_file(_UserID, _FileID, _Mode) ->
 %% ====================================================================
 unlock_file(_UserID, _FileID, _Mode) ->
     not_yet_implemented.
-
-
-%% ===================================================================
-%% Test Method - TODO: delete before creating pull request
-%% ===================================================================
-
-test_init() ->
-    {ok, UUID1} = save_file(#file{name = "users", type = ?DIR_TYPE}),
-    {ok, UUID2} = save_file(#file{name = "plgroxeon", type = ?DIR_TYPE, parent = UUID1}),
-    save_file(#file{name = "plguser1", type = ?DIR_TYPE, parent = UUID1}),
-    save_file(#file{name = "plguser2", type = ?DIR_TYPE, parent = UUID1}),
-    save_file(#file{name = "file1", parent = UUID2}),
-    save_file(#file{name = "file2", parent = UUID2}),
-    save_file(#file{name = "file3", parent = UUID2}),
-    {ok, UUID3} = save_file(#file{name = "dir1", type = ?DIR_TYPE, parent = UUID2}),
-    {ok, UUID4} = save_file(#file{name = "dir2", type = ?DIR_TYPE, parent = UUID2}),
-    save_file(#file{name = "file4", parent = UUID3}),
-    save_file(#file{name = "file5", parent = UUID3}),
-    save_file(#file{name = "file6", parent = UUID4}),
-    save_file(#file{name = "file7", parent = UUID4}),
-    save_file(#file{name = "file8", parent = UUID4}),
-    save_file(#file{name = "file1", parent = UUID4}),
-    save_descriptor(#file_descriptor{file = UUID3}),
-    save_descriptor(#file_descriptor{file = UUID3}),
-    save_descriptor(#file_descriptor{file = UUID4}),
-    save_descriptor(#file_descriptor{file = UUID2}).
 
 
 %% ===================================================================

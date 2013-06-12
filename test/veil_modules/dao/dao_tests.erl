@@ -146,4 +146,10 @@ doc_to_term_test() ->
         "test string", [1, {6.53, [{unknown_record, 1, 5}, {"test1", false}]}, 5.4, <<1,2,3>>, [1, SPid, "test"]]},
     ?assertMatch(Out, dao:doc_to_term(Ans)).
 
+
+get_set_db_test() ->
+    ?assertEqual(?DEFAULT_DB, dao:get_db()),
+    dao:set_db("db"),
+    ?assertEqual("db", dao:get_db()).
+
 -endif.
