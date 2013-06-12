@@ -1,3 +1,0 @@
-%% directories to be compiled
-{'*', [{outdir, "."}]}.
-{'example/*', [{outdir, "./example"}]}.

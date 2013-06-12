@@ -20,80 +20,55 @@
 -ifdef(TEST).
 
 %% ====================================================================
-%% Test setup and teardown
+%% Test functions
 %% ====================================================================
-
-setup() ->
-  ssl:start(),
-  ok = application:start(ranch).
-
-teardown(_Args) ->
-  ok = application:stop(ranch),
-  ok = application:stop(ssl).
-
-%% ====================================================================
-%% Test generation
-%% ====================================================================
-
-generate_test_() ->
-  {setup,
-    fun setup/0,
-    fun teardown/1,
-    [?_test(env()),
-      ?_test(wrong_request()),
-      ?_test(node_type()),
-      ?_test(heart_beat())]}.
-
-%% ====================================================================
-%% Functions used by tests
-%% ====================================================================
-
-%% This test checks if all environment variables needed by node_manager are defined.
-env() ->
-	ok = application:start(?APP_Name),
-	{ok, _Time} = application:get_env(?APP_Name, heart_beat),
-	{ok, _Nodes} = application:get_env(?APP_Name, ccm_nodes),
-	ok = application:stop(?APP_Name).
 
 %% This test checks if node_manager is resistant to incorrect requests.
-wrong_request() ->
-	application:set_env(?APP_Name, node_type, worker), 
-	ok = application:start(?APP_Name),
-
+wrong_request_test() ->
+  application:set_env(?APP_Name, ccm_nodes, [not_existing_node]),
+  application:set_env(?APP_Name, heart_beat, 60),
+	node_manager:start_link(worker),
 	gen_server:cast(?Node_Manager_Name, abc),
 	Reply = gen_server:call(?Node_Manager_Name, abc),
 	?assert(Reply =:= wrong_request),
-	
-	ok = application:stop(?APP_Name).
+  node_manager:stop().
 
 %% This test checks if node_manager is able to properly identify type of node which it coordinates.
-node_type() ->
-	{ok, NodeType} = application:get_env(?APP_Name, node_type),
-	ok = application:start(?APP_Name),
-	NodeType2 = gen_server:call(?Node_Manager_Name, getNodeType),
-	?assert(NodeType =:= NodeType2),
-	ok = application:stop(?APP_Name).
+node_type_test() ->
+  application:set_env(?APP_Name, ccm_nodes, [not_existing_node]),
+  application:set_env(?APP_Name, heart_beat, 60),
+  node_manager:start_link(worker),
+	NodeType = gen_server:call(?Node_Manager_Name, getNodeType),
+	?assert(NodeType =:= worker),
+  node_manager:stop().
 
 %% This test checks if node manager is able to register in ccm.
-heart_beat() ->
+heart_beat_test() ->
 	net_kernel:start([node1, shortnames]),
 
-	application:set_env(?APP_Name, node_type, worker),
-	application:set_env(?APP_Name, ccm_nodes, [not_existing_node, node()]), 
+	application:set_env(?APP_Name, heart_beat, 60),
+	application:set_env(?APP_Name, ccm_nodes, [not_existing_node, node()]),
+  application:set_env(?APP_Name, worker_load_memory_size, 1000),
+  application:set_env(?APP_Name, hot_swapping_time, 10000),
+  application:set_env(?APP_Name, initialization_time, 10),
+  application:set_env(?APP_Name, cluster_clontrol_period, 300),
 
-	ok = application:start(?APP_Name),
-	timer:sleep(50),
+  node_manager:start_link(worker),
+  cluster_manager:start_link(test),
+
+	timer:sleep(500),
 
 	Ccm_status = gen_server:call(?Node_Manager_Name, get_ccm_connection_status),
 	?assert(Ccm_status =:= connected),
-	
-	application:set_env(?APP_Name, ccm_nodes, [not_existing_node]), 
+
+	application:set_env(?APP_Name, ccm_nodes, [not_existing_node]),
 	ok = gen_server:cast(?Node_Manager_Name, reset_ccm_connection),
   timer:sleep(50),
 	Ccm_status2 = gen_server:call(?Node_Manager_Name, get_ccm_connection_status),
 	?assert(Ccm_status2 =:= not_connected),
 
-	ok = application:stop(?APP_Name),
+  node_manager:stop(),
+  cluster_manager:stop(),
 	net_kernel:stop().
 
 -endif.
