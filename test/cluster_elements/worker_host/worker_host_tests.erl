@@ -11,8 +11,6 @@
 %% ===================================================================
 
 -module(worker_host_tests).
--include("registered_names.hrl").
--include("supervision_macros.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

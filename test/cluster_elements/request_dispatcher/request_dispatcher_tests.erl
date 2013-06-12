@@ -11,9 +11,7 @@
 %% ===================================================================
 
 -module(request_dispatcher_tests).
--include("registered_names.hrl").
 -include("communication_protocol_pb.hrl").
--include("modules_and_args.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

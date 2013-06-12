@@ -12,8 +12,6 @@
 
 -module(cluster_manager_tests).
 -include("registered_names.hrl").
--include("records.hrl").
--include("modules_and_args.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
