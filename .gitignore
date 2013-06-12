@@ -9,3 +9,4 @@ logs
 ebin
 test/eunit_results
 distributed_tests_out
+.dialyzer.plt
