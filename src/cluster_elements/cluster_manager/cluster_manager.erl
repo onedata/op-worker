@@ -503,6 +503,20 @@ node_down(Node, State) ->
 
   {State#cm_state{workers = NewWorkers, nodes = NewNodes}, WorkersFound}.
 
+%% start_central_logger/1
+%% ====================================================================
+%% @doc This function starts the central_logger before other modules.
+-spec start_central_logger(State :: term()) -> NewState when
+  NewState :: term().
+%% ====================================================================
+start_central_logger(State) ->
+  {Ans, NewState} = start_worker(node(), central_logger, [], State),
+  NewState2 = case Ans of
+                ok -> increase_state_num(NewState);
+                error -> NewState
+              end,
+  NewState2.
+
 %% get_state_from_db/1
 %% ====================================================================
 %% @doc This function starts DAO and gets cluster state from DB.
@@ -515,20 +529,6 @@ get_state_from_db(State) ->
     ok ->
       gen_server:cast(dao, {synch, 1, {get_state, []}, cluster_state, {gen_serv, {global, ?CCM}}}),
       increase_state_num(NewState);
-    error -> NewState
-  end,
-  NewState2.
-
-%% start_central_logger/1
-%% ====================================================================
-%% @doc This function starts the central_logger before other modules.
--spec start_central_logger(State :: term()) -> NewState when
-  NewState :: term().
-%% ====================================================================
-start_central_logger(State) ->
-  {Ans, NewState} = start_worker(node(), central_logger, [], State),
-  NewState2 = case Ans of
-    ok -> increase_state_num(NewState);
     error -> NewState
   end,
   NewState2.
