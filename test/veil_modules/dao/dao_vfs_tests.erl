@@ -120,11 +120,40 @@ remove_file() ->
     ?assert(meck:validate([dao, dao_helper])).
 
 
-get_file() -> 
+get_file() ->
+    File = {internal_path, ["path", "test1"], "root"},
+    ?assertMatch({ok, #veil_document{record = #file{name = ""}}}, dao_vfs:get_file({internal_path, "", ""})),
+
+    meck:expect(dao, get_record, fun(_) -> {ok, #veil_document{uuid = "f", record = #file{name = "test"}}} end),
+    ?assertMatch({ok, #veil_document{record = #file{name = "test"}}}, dao_vfs:get_file({uuid, "file"})),
+    ?assert(meck:called(dao, get_record, ["file"])),
+    ?assert(meck:called(dao, set_db, [?FILES_DB_NAME])),
+
+    meck:expect(dao, get_record, fun(_) -> {ok, #veil_document{}} end),
+    ?assertMatch({error, invalid_file_record}, dao_vfs:get_file({uuid, "file"})),
+    ?assert(meck:called(dao, get_record, ["file"])),
+    ?assert(meck:called(dao, set_db, [?FILES_DB_NAME])),
+
+    meck:expect(dao_helper, parse_view_result, 1, meck:seq([invalid, {ok, #view_result{rows = []}},
+        {ok, #view_result{rows = [#view_row{doc = #veil_document{record = #file{name = "test"}}}]}}])),
+
+    ?assertThrow(invalid_data, dao_vfs:get_file(File)),
+    ?assertThrow(file_not_found, dao_vfs:get_file(File)),
+    ?assertMatch({ok, #veil_document{record = #file{name = "test"}}}, dao_vfs:get_file(File)),
+
+    ?assertEqual(4, meck:num_calls(dao_helper, parse_view_result, ['_'])),
     ?assert(meck:validate([dao, dao_helper])).
 
 
-get_path_info() -> 
+get_path_info() ->
+    File = {internal_path, ["path", "test1"], "root"},
+    meck:expect(dao_helper, parse_view_result, 1, meck:seq([
+        {ok, #view_result{rows = [#view_row{doc = #veil_document{record = #file{name = "test1"}}}]}},
+        {ok, #view_result{rows = [#view_row{doc = #veil_document{record = #file{name = "test2"}}}]}}])),
+    ?assertMatch({ok, [#veil_document{record = #file{name = "test1"}}, #veil_document{record = #file{name = "test2"}}]},
+        dao_vfs:get_path_info(File)),
+
+    ?assertEqual(2, meck:num_calls(dao_helper, parse_view_result, ['_'])),
     ?assert(meck:validate([dao, dao_helper])).
 
 
