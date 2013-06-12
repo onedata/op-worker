@@ -34,7 +34,7 @@ start_test() ->
   code:add_paths(Deps),
   lager:start(),
   ssl:start(),
-  ok = application:start(ranch),
+  application:start(ranch),
   ok = application:load(?APP_Name).
 
 %% stop_test/0
@@ -44,11 +44,11 @@ start_test() ->
 %% ====================================================================
 
 stop_test() ->
-  ok = application:stop(ranch),
-  ok = application:stop(lagger),
-  ok = application:stop(ssl),
-  ok = application:stop(crypto),
-  ok = application:stop(public_key),
+  application:stop(ranch),
+  application:stop(lagger),
+  application:stop(ssl),
+  application:stop(crypto),
+  application:stop(public_key),
   ok = application:unload(?APP_Name).
 
 %% start_app/1
