@@ -1,10 +1,12 @@
 message ClusterMsg {
     required string module_name = 1;
     required string message_type = 2;
-    required string answer_type = 3;
-    required bool synch = 4;
-    required int32 protocol_version = 5;
-    optional bytes input = 6;
+    required string message_decoder_name = 3;
+    required string answer_type = 4;
+    required string answer_decoder_name = 5;
+    required bool synch = 6;
+    required int32 protocol_version = 7;
+    optional bytes input = 8;
 }
 
 message Answer {
