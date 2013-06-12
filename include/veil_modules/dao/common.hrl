@@ -9,6 +9,16 @@
 %% @end
 %% ===================================================================
 
+-ifndef(COMMON_HRL).
+-define(COMMON_HRL, 1).
+
+-define(DAO_REQUEST_TIMEOUT, 5000).
+
+%% View definitions location
+-define(VIEW_DEF_LOCATION, "views/").
+-define(MAP_DEF_SUFFIX, "_map.js").
+-define(REDUCE_DEF_SUFFIX, "_reduce.js").
+
 %% Macros
 
 %% Seeds pseudo-random number generator with current time and hashed node name. <br/>
@@ -30,5 +40,4 @@
 %% Returns random positive number from range 1 .. N. This macro is simply shortcut to random:uniform(N)
 -define(RND(N), random:uniform(N)).
 
-%% Helper macro for declaring transient children of supervisor (used by init/1 in supervisor behaviour callback)
--define(CHILD(I, Type), {I, {I, start_link, [[]]}, transient, 5000, Type, [I]}).
+-endif.

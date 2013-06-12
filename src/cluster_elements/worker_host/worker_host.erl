@@ -18,7 +18,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_link/3]).
+-export([start_link/3, stop/1]).
 
 %% ====================================================================
 %% gen_server callbacks
@@ -44,6 +44,16 @@
 %% ====================================================================
 start_link(PlugIn, PlugInArgs, LoadMemorySize) ->
     gen_server:start_link({local, PlugIn}, ?MODULE, [PlugIn, PlugInArgs, LoadMemorySize], []).
+
+%% stop/1
+%% ====================================================================
+%% @doc Stops the server
+-spec stop(PlugIn) -> ok when
+  PlugIn :: atom().
+%% ====================================================================
+
+stop(PlugIn) ->
+  gen_server:cast(PlugIn, stop).
 
 %% init/1
 %% ====================================================================
@@ -105,6 +115,10 @@ handle_call({test_call, ProtocolVersion, Msg}, _From, State) ->
   Reply = PlugIn:handle(ProtocolVersion, Msg),
   {reply, Reply, State};
 
+handle_call(Request, _From, State) when is_tuple(Request) -> %% Proxy call. Each cast can be achieved by instant proxy-call which ensures
+                                                             %% that request was made, unlike cast because cast ignores state of node/gen_server
+    {reply, gen_server:cast(State#host_state.plug_in, Request), State};
+
 handle_call(_Request, _From, State) ->
     {reply, wrong_request, State}.
 
@@ -164,6 +178,9 @@ handle_cast({sequential, job_check}, State) ->
 handle_cast({progress_report, Report}, State) ->
 	NewLoadInfo = save_progress(Report, State#host_state.load_info),
     {noreply, State#host_state{load_info = NewLoadInfo}};
+
+handle_cast(stop, State) ->
+  {stop, normal, State};
 
 handle_cast(_Msg, State) ->
 	{noreply, State}.

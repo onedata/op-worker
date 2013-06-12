@@ -7,5 +7,5 @@ logs
 .git
 .idea
 ebin
-test/distributed_tests_out
 test/eunit_results
+distributed_tests_out
