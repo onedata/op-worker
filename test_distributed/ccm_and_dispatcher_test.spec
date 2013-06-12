@@ -1,3 +1,16 @@
+%% ===================================================================
+%% @author Michal Wrzeszcz
+%% @copyright (C): 2013 ACK CYFRONET AGH
+%% This software is released under the MIT license
+%% cited in 'LICENSE.txt'.
+%% @end
+%% ===================================================================
+%% @doc: This file is a specification of a test. The test can be found
+%% in nodes_monitoring_and_workers_test directory. The test description
+%% can be found in nodes_monitoring_and_workers_test.erl file.
+%% @end
+%% ===================================================================
+
 %% slave nodes
 {node, ccm, 'ccm@localhost'}.
 
