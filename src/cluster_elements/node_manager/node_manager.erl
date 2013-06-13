@@ -22,7 +22,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_link/1]).
+-export([start_link/1, stop/0]).
 -export([check_vsn/0]).
 
 %% ====================================================================
@@ -48,6 +48,15 @@
 
 start_link(Type) ->
     gen_server:start_link({local, ?Node_Manager_Name}, ?MODULE, [Type], []).
+
+%% stop/0
+%% ====================================================================
+%% @doc Stops the server
+-spec stop() -> ok.
+%% ====================================================================
+
+stop() ->
+  gen_server:cast(?Node_Manager_Name, stop).
 
 %% init/1
 %% ====================================================================
@@ -116,6 +125,9 @@ handle_cast(do_heart_beat, State) ->
 
 handle_cast(reset_ccm_connection, State) ->
 	{noreply, heart_beat(not_connected, State)};
+
+handle_cast(stop, State) ->
+  {stop, normal, State};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -202,7 +214,7 @@ heart_beat(Conn_status, State) ->
       {New_conn_status2, 0}
 	end,
 
-	lager:info([{mod, ?MODULE}], "Haert beat on node: ~s: connection: ~s: heartbeat: ~s, new state_num: ~b", [node(), New_conn_status, New_conn_status3, New_state_num]),
+	lager:info([{mod, ?MODULE}], "Heart beat on node: ~s: connection: ~s: heartbeat: ~s, new state_num: ~b", [node(), New_conn_status, New_conn_status3, New_state_num]),
 
   case New_conn_status3 of
     ok ->

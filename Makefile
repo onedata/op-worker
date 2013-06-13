@@ -3,10 +3,14 @@
 all: deps generate docs
 
 compile:
+	cp -R veilprotocol/proto src
 	./rebar compile
+	rm -rf src/proto
 
 deps:
 	./rebar get-deps
+	git submodule init
+	git submodule update
 
 clean:
 	./rebar clean
@@ -16,8 +20,8 @@ distclean: clean
 
 test: deps compile
 	./rebar eunit ct skip_deps=true
-	chmod +x test/start_distributed_test.sh
-	./test/start_distributed_test.sh
+	chmod +x test_distributed/start_distributed_test.sh
+	./test_distributed/start_distributed_test.sh
 
 generate: compile
 	./rebar generate
@@ -30,6 +34,20 @@ docs:
 upgrade:
 	./rebar generate-appups previous_release=${PREV}
 	./rebar generate-upgrade previous_release=${PREV}
+
+
+# Builds .dialyzer.plt init file. This is internal target, call dialyzer_init instead
+.dialyzer.plt:
+	-dialyzer --build_plt --output_plt .dialyzer.plt --apps kernel stdlib sasl erts ssl tools runtime_tools crypto inets xmerl snmp public_key eunit syntax_tools compiler ./deps/*/ebin
+
+
+# Starts dialyzer on whole ./ebin dir. If .dialyzer.plt does not exist, will be generated
+dialyzer: compile .dialyzer.plt
+	-dialyzer ./ebin --plt .dialyzer.plt -Werror_handling -Wrace_conditions
+
+
+# Starts full initialization of .dialyzer.plt that is required by dialyzer
+dialyzer_init: compile .dialyzer.plt
 
 
 ##############################

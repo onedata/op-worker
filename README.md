@@ -68,6 +68,11 @@ generation of package for hot code swapping
     ~$  make PREV="name of directory with previous release" upgrade
 
 
+starting 'dialyzer' in order to analyze binaries in ./ebin:
+
+    ~$ make dialyzer
+
+
 Note:
 
 * in Linux you should use './rebar' instead of 'rebar'
