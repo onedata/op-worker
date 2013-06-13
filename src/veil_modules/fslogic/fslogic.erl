@@ -24,6 +24,8 @@
 %% TODO zrobić okresowe sprawdzanie drskryptorów i usuwanie przestarzałych z bazy
 %% potrzebna w dao funkcja listująca wszystkie deskryptory
 
+%% TODO dodać mechanizm cachowania uuidów, które mogą być wielokrotnie użyte w krótkim czasie
+
 %% ====================================================================
 %% API functions
 %% ====================================================================
@@ -75,26 +77,32 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getf
 
 %% TODO zabezpieczyć na wypadek gdyby pytano o istniejący plik
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getnewfilelocation) ->
-  {FileName, Parent} = get_parent_and_name_from_path(Record#getnewfilelocation.file_logic_name),
-  Storage_helper = "helper1",
-  File_id = "real_location_of" ++ FileName,
-  FileLocation = #file_location{storage_helper_id = Storage_helper, file_id = File_id},
-  File = #file{type = ?REG_TYPE, name = FileName, size = 0, parent = Parent, location = FileLocation},
+  {ParentFound, ParentInfo} = get_parent_and_name_from_path(Record#getnewfilelocation.file_logic_name, ProtocolVersion),
 
-  Pid = self(),
-  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 1, {vfs, save_file, [File]}}),
-  {Status, TmpAns} = wait_for_dao_ans(Ans, FileName, 1, "save_file"),
-
-  Validity = ?LOCATION_VALIDITY,
-  case Status of
+  case ParentFound of
     ok ->
-      {Status2, TmpAns2} = save_file_descriptor(ProtocolVersion, File, FuseID, Validity),
-      case Status2 of
+      {FileName, Parent} = ParentInfo,
+      Storage_helper = "helper1",
+      File_id = "real_location_of" ++ FileName,
+      FileLocation = #file_location{storage_helper_id = Storage_helper, file_id = File_id},
+      File = #file{type = ?REG_TYPE, name = FileName, size = 0, parent = Parent, location = FileLocation},
+
+      Pid = self(),
+      Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 1, {vfs, save_file, [File]}}),
+      {Status, TmpAns} = wait_for_dao_ans(Ans, FileName, 1, "save_file"),
+
+      Validity = ?LOCATION_VALIDITY,
+      case Status of
         ok ->
-          #filelocation{storage_helper = Storage_helper, file_id = File_id, validity = Validity};
-        _BadStatus2 -> #filelocation{storage_helper = TmpAns2, file_id = "Error", validity = 0}
+          {Status2, TmpAns2} = save_file_descriptor(ProtocolVersion, File, FuseID, Validity),
+          case Status2 of
+            ok ->
+              #filelocation{storage_helper = Storage_helper, file_id = File_id, validity = Validity};
+            _BadStatus2 -> #filelocation{storage_helper = TmpAns2, file_id = "Error", validity = 0}
+          end;
+        _BadStatus -> #filelocation{storage_helper = TmpAns, file_id = "Error", validity = 0}
       end;
-    _BadStatus -> #filelocation{storage_helper = TmpAns, file_id = "Error", validity = 0}
+    _ParentError -> #filelocation{storage_helper = ParentInfo, file_id = "Error", validity = 0}
   end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, filenotused) ->
@@ -109,17 +117,23 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, rene
   #filelocationvalidity{answer = "ok", validity = ?LOCATION_VALIDITY};
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, createdir) ->
-  {FileName, Parent} = get_parent_and_name_from_path(Record#createdir.dir_logic_name),
-  File = #file{type = ?DIR_TYPE, name = FileName, parent = Parent},
+  {ParentFound, ParentInfo} = get_parent_and_name_from_path(Record#createdir.dir_logic_name, ProtocolVersion),
 
-  Pid = self(),
-  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 1, {vfs, save_file, [File]}}),
-  {Status, TmpAns} = wait_for_dao_ans(Ans, FileName, 1, "save_file"),
-
-  case Status of
+  case ParentFound of
     ok ->
-      #atom{value = "ok"};
-    _BadStatus -> #atom{value = TmpAns}
+      {FileName, Parent} = ParentInfo,
+      File = #file{type = ?DIR_TYPE, name = FileName, parent = Parent},
+
+      Pid = self(),
+      Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 1, {vfs, save_file, [File]}}),
+      {Status, TmpAns} = wait_for_dao_ans(Ans, FileName, 1, "save_file"),
+
+      case Status of
+        ok ->
+          #atom{value = "ok"};
+        _BadStatus -> #atom{value = TmpAns}
+      end;
+    _ParentError -> #filelocation{storage_helper = ParentInfo, file_id = "Error", validity = 0}
   end;
 
 %% TODO zrobić obsługę większej ilości katalogów niż 1000
@@ -130,33 +144,54 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getf
   Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 1, {vfs, list_dir, [File, 1000, 0]}}),
   {Status, TmpAns} = wait_for_dao_ans(Ans, File, 1, "list_dir"),
 
-  Locations = case Status of
-    ok -> create_file_location_list(TmpAns, ?LOCATION_VALIDITY);
-    _BadStatus -> [#filelocation{storage_helper = TmpAns, file_id = "Error", validity = 0}]
+  Children = case Status of
+    ok -> create_children_list(TmpAns);
+    _BadStatus -> [TmpAns]
   end,
 
-  #filechildren{child_location = Locations}.
+  #filechildren{child_logic_name = Children};
 
-%% handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, deletefile) ->
-%%   File = Record#deletefile.file_logic_name,
-%%
-%%   Pid = self(),
-%%   Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 1, {vfs, remove_file, [File]}}),
-%%   {Status, TmpAns} = wait_for_dao_ans(Ans, File, 1, "remove_file"),
-%%
-%%   Validity = ?LOCATION_VALIDITY,
-%%   case Status of
-%%     ok ->
-%%       {Status2, TmpAns2} = save_file_descriptor(ProtocolVersion, File, FuseID, Validity),
-%%       case Status2 of
-%%         ok ->
-%%           FileDesc = TmpAns#veil_document.record,
-%%           FileLoc = FileDesc#file.location,
-%%           #filelocation{storage_helper = FileLoc#file_location.storage_helper_id, file_id = FileLoc#file_location.file_id, validity = Validity};
-%%         _BadStatus2 -> #filelocation{storage_helper = TmpAns2, file_id = "Error", validity = 0}
-%%       end;
-%%     _BadStatus -> #filelocation{storage_helper = TmpAns, file_id = "Error", validity = 0}
-%%   end;
+handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, deletefile) ->
+  File = Record#deletefile.file_logic_name,
+
+  Pid = self(),
+  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 1, {vfs, remove_file, [File]}}),
+  LogMessage = "remove_file",
+  {Status, TmpAns} = case Ans of
+    ok ->
+      receive
+        {worker_answer, 1, ok} -> {ok, ok};
+        Ans2 ->
+          lager:error([{mod, ?MODULE}], "Error: wrong dao answer for: " ++ LogMessage ++ ", file: ~s, answer: ~p", [File, Ans2]),
+          {error, "Error: wrong dao answer for: " ++ LogMessage}
+      after 1000 ->
+        lager:error([{mod, ?MODULE}], "Error: dao timeout for: " ++ LogMessage ++ ", file: ~s", [File]),
+        {error, "Error: dao timeout for: " ++ LogMessage}
+      end;
+    Other ->
+      lager:error([{mod, ?MODULE}], "Error: dispatcher error for: " ++ LogMessage ++ ", file: ~s, error: ~p", [File, Other]),
+      {error, "Error: dispatcher for: " ++ LogMessage}
+  end,
+
+  case Status of
+    ok ->
+      #atom{value = "ok"};
+    _BadStatus -> #atom{value = TmpAns}
+  end;
+
+handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, renamefile) ->
+  File = Record#renamefile.from_file_logic_name,
+  NewFileName = Record#renamefile.to_file_logic_name,
+
+  Pid = self(),
+  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 1, {vfs, rename_file, [File, NewFileName]}}),
+  {Status, TmpAns} = wait_for_dao_ans(Ans, File, 1, "rename_file"),
+
+  case Status of
+    ok ->
+      #atom{value = "ok"};
+    _BadStatus -> #atom{value = TmpAns}
+  end.
 
 save_file_descriptor(ProtocolVersion, File, FuseID, Validity) ->
   Pid = self(),
@@ -185,21 +220,34 @@ wait_for_dao_ans(Ans, File, MessageId, LogMessage) ->
       {error, "Error: dispatcher for: " ++ LogMessage}
   end.
 
-get_parent_and_name_from_path(Path) ->
+get_parent_and_name_from_path(Path, ProtocolVersion) ->
   Pos = string:rchr(Path, $/),
   case Pos of
-    0 -> {Path, ""};
-    _Other -> {string:substr(Path, Pos + 1), string:substr(Path, 1, Pos -1)}
+    0 -> {ok, {Path, ""}};
+    _Other ->
+      File = string:substr(Path, Pos + 1),
+      Parent = string:substr(Path, 1, Pos -1),
+
+      case Parent =:= "" of
+        true -> {ok, {File, ""}};
+        false ->
+          Pid = self(),
+          Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 1000, {vfs, get_file, [Parent]}}),
+
+          {Status, TmpAns} = wait_for_dao_ans(Ans, Parent, 1000, "get_file"),
+          case Status of
+            ok -> {ok, {File, TmpAns#veil_document.uuid}};
+            _BadStatus -> {error, "Error: cannot find parent: " ++ TmpAns}
+          end
+      end
   end.
 
-create_file_location_list(Files, Validity) ->
-  create_file_location_list(Files, [], Validity).
+create_children_list(Files) ->
+  create_children_list(Files, []).
 
-create_file_location_list([], Ans, _Validity) ->
+create_children_list([], Ans) ->
   Ans;
 
-create_file_location_list([File | Rest], Ans, Validity) ->
+create_children_list([File | Rest], Ans) ->
   FileDesc = File#veil_document.record,
-  FileLoc = FileDesc#file.location,
-  AnsPart = #filelocation{storage_helper = FileLoc#file_location.storage_helper_id, file_id = FileLoc#file_location.file_id, validity = Validity},
-  create_file_location_list(Rest, [AnsPart | Ans], Validity).
+  create_children_list(Rest, [FileDesc#file.name | Ans]).
