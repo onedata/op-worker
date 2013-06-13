@@ -54,14 +54,25 @@ save_descriptor(#veil_document{record = #file_descriptor{}} = FdDoc) ->
 
 %% remove_descriptor/1
 %% ====================================================================
-%% @doc Removes file descriptor from DB. Argument should be uuid() of #file_descriptor.
+%% @doc Removes file descriptor from DB. Argument should be uuid() of #file_descriptor or same as in {@link list_descriptors/3}.
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec remove_descriptor(Fd :: fd()) -> ok | {error, any()} | no_return().
 %% ====================================================================
-remove_descriptor(Fd) ->
+remove_descriptor(ListSpec) when is_tuple(ListSpec) ->
+    remove_descriptor3(ListSpec, 1000, 0);
+remove_descriptor(Fd) when is_list(Fd) ->
     dao:set_db(?DESCRIPTORS_DB_NAME),
     dao:remove_record(Fd).
+
+remove_descriptor3(ListSpec, BatchSize, Offset) ->
+    case list_descriptors(ListSpec, BatchSize, Offset) of
+        {ok, []} -> ok;
+        {ok, Docs} ->
+            [remove_descriptor(Fd) || #veil_document{uuid = Fd} <- Docs, is_list(Fd)],
+            remove_descriptor3(ListSpec, BatchSize, Offset + BatchSize);
+        Other -> Other
+    end.
 
 
 %% get_descriptor/1
@@ -235,7 +246,7 @@ rename_file(File, NewName) ->
 %% Non-error return value is always list of #veil_document{record = #file{}} records.<br/>
 %% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
 %% @end
--spec list_dir(Dir :: file(), N :: pos_integer(), Offset :: non_neg_integer()) -> [file_info()].
+-spec list_dir(Dir :: file(), N :: pos_integer(), Offset :: non_neg_integer()) -> {ok, [file_info()]}.
 %% ====================================================================
 list_dir(Dir, N, Offset) ->
     Id =
