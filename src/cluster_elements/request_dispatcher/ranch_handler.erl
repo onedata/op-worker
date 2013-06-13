@@ -142,7 +142,7 @@ encode_answer(Main_Answer, AnswerType, Answer_decoder_name, Worker_Answer) ->
           #answer{answer_status = atom_to_list(Main_Answer), worker_answer = WAns}
         catch
           Type:Error ->
-            lager:error("Ranch handler error during encoding answer: ~p:~p", [Type, Error]),
+            lager:error("Ranch handler error during encoding answer: ~p:~p, answer type: ~s, decoder ~s, worker answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Worker_Answer]),
             #answer{answer_status = "answer_encoding_error"}
         end
     end;
