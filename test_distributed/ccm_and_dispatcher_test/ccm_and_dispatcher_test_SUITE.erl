@@ -32,13 +32,13 @@ application_start_test(_Config) ->
   ?INIT_DIST_TEST,
   env_setter:start_test(),
 
-  env_setter:start_app([{node_type, ccm}, {dispatcher_port, 6666}, {ccm_nodes, [node()]}]),
+  env_setter:start_app([{node_type, ccm}, {dispatcher_port, 6666}, {ccm_nodes, [node()]}, {dns_port, 1312}]),
   {ok, ccm} = application:get_env(?APP_Name, node_type),
   Check1 = (undefined == whereis(?Supervisor_Name)),
   Check1 = false,
   env_setter:stop_app(),
 
-  env_setter:start_app([{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [node()]}]),
+  env_setter:start_app([{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [node()]}, {dns_port, 1313}]),
   {ok, worker} = application:get_env(?APP_Name, node_type),
   Check2 = (undefined == whereis(?Supervisor_Name)),
   Check2 = false,
@@ -50,7 +50,7 @@ application_start_test(_Config) ->
 modules_start_and_ping_test(_Config) ->
   ?INIT_DIST_TEST,
   env_setter:start_test(),
-  env_setter:start_app([{node_type, ccm_test}, {dispatcher_port, 6666}, {ccm_nodes, [node()]}]),
+  env_setter:start_app([{node_type, ccm_test}, {dispatcher_port, 6666}, {ccm_nodes, [node()]}, {dns_port, 1314}]),
 
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
@@ -103,7 +103,7 @@ dispatcher_connection_test(_Config) ->
   CertString = atom_to_list(Cert),
   Port = 6666,
   env_setter:start_test(),
-  env_setter:start_app([{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [node()]}, {ssl_cert_path, Cert}]),
+  env_setter:start_app([{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [node()]}, {ssl_cert_path, Cert}, {dns_port, 1315}]),
 
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
@@ -147,7 +147,7 @@ workers_list_actualization_test(_Config) ->
   Jobs = ?Modules,
 
   env_setter:start_test(),
-  env_setter:start_app([{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [node()]}, {ssl_cert_path, Cert}]),
+  env_setter:start_app([{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [node()]}, {ssl_cert_path, Cert}, {dns_port, 1316}]),
 
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
@@ -178,7 +178,7 @@ ping_test(_Config) ->
   Jobs = ?Modules,
 
   env_setter:start_test(),
-  env_setter:start_app([{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [node()]}, {ssl_cert_path, Cert}]),
+  env_setter:start_app([{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [node()]}, {ssl_cert_path, Cert}, {dns_port, 1317}]),
 
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),

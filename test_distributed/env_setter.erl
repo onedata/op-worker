@@ -23,7 +23,7 @@
 
 %% start_test/0
 %% ====================================================================
-%% @doc This function ets environment for application.
+%% @doc This function sets environment for application.
 -spec start_test() -> ok.
 %% ====================================================================
 
@@ -44,11 +44,11 @@ start_test() ->
 %% ====================================================================
 
 stop_test() ->
-  application:stop(ranch),
-  application:stop(lager),
-  application:stop(ssl),
-  application:stop(crypto),
-  application:stop(public_key),
+  ok = application:stop(ranch),
+  ok = application:stop(lager),
+  ok = application:stop(ssl),
+  ok = application:stop(crypto),
+  ok = application:stop(public_key),
   ok = application:unload(?APP_Name).
 
 %% start_app/1

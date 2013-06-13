@@ -34,7 +34,7 @@ ccm1_test(_Config) ->
 
   Cert = '../../../veilfs.pem',
   env_setter:start_test(),
-  env_setter:start_app([{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [node()]}, {ssl_cert_path, Cert}]),
+  env_setter:start_app([{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [node()]}, {ssl_cert_path, Cert}, {dns_port, 1308}]),
 
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
@@ -52,7 +52,7 @@ worker1_test(_Config) ->
 
   Cert = '../../../veilfs.pem',
   env_setter:start_test(),
-  env_setter:start_app([{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, ['ccm1@localhost']}, {ssl_cert_path, Cert}]),
+  env_setter:start_app([{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, ['ccm1@localhost']}, {ssl_cert_path, Cert}, {dns_port, 1309}]),
   timer:sleep(1000),
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
 
@@ -67,7 +67,7 @@ worker2_test(_Config) ->
 
   Cert = '../../../veilfs.pem',
   env_setter:start_test(),
-  env_setter:start_app([{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, ['ccm1@localhost']}, {ssl_cert_path, Cert}]),
+  env_setter:start_app([{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, ['ccm1@localhost']}, {ssl_cert_path, Cert}, {dns_port, 1310}]),
   timer:sleep(1000),
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
 
@@ -82,7 +82,7 @@ worker3_test(_Config) ->
 
   Cert = '../../../veilfs.pem',
   env_setter:start_test(),
-  env_setter:start_app([{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, ['ccm1@localhost']}, {ssl_cert_path, Cert}]),
+  env_setter:start_app([{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, ['ccm1@localhost']}, {ssl_cert_path, Cert}, {dns_port, 1311}]),
   timer:sleep(1000),
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
 

@@ -29,9 +29,21 @@
 %% load balancing).
 -record(host_state, {plug_in = non, plug_in_state = [], load_info = [], current_seq_job = none, seq_queue = []}).
 
+
+%% This record is used by dns_worker worker (it contains its state). The first element of
+%% a tuple is a name of module and the second is a list of ip addresses
+%% of nodes sorted ascending by load.
+%%
+%% Example:
+%%     Assuming that dns_worker plugin worker works on node1@127.0.0.1 and node2@192.168.0.1,
+%%     (load on node1 < load on node2) and control_panel works on node3@127.0.0.1,
+%%     state of dns_worker worker will look like:
+%% {dns_state, [{dns_worker, [{127,0,0,1}, {192,168,0,1}]}, {control_panel, [{127,0,0,1}]}]}
+-record(dns_worker_state, {workers_list = [] :: [{atom(),  [inet:ip4_address()]}]}).
+
 %% This record is used by requests_dispatcher (it contains its state).
 -record(dispatcher_state, {central_logger = {[],[]}, cluster_rengine = {[],[]}, control_panel = {[],[]}, dao = {[],[]},
-  fslogic = {[],[]}, gateway = {[],[]}, rtransfer = {[],[]}, rule_manager = {[],[]}, state_num = 0}).
+  fslogic = {[],[]}, gateway = {[],[]}, rtransfer = {[],[]}, rule_manager = {[],[]}, dns_worker = {[], []}, state_num = 0}).
 %% gets lists of workers that works as module M on the basis of data from record R
 -define(get_workers(M, R), R#dispatcher_state.M).
 %% updates (in record M) the list of workers that works as module M
