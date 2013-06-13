@@ -20,7 +20,7 @@
 %% API - File system management
 -export([list_dir/3, rename_file/2, lock_file/3, unlock_file/3]). %% High level API functions
 -export([save_descriptor/1, remove_descriptor/1, get_descriptor/1, list_descriptors/3]). %% Base descriptor management API functions
--export([save_file/1, remove_file/1, get_file/1, get_path_info/1]). %% Base file management API function
+-export([save_file/1, remove_file/1, get_file/1, get_path_info/1, test/0]). %% Base file management API function
 
 
 -ifdef(TEST).
@@ -100,13 +100,18 @@ get_descriptor(Fd) ->
     MatchCriteria :: {by_file, File :: file()}.
 %% ====================================================================
 list_descriptors({by_file, File}, N, Offset) ->
+    list_descriptors({by_file_n_owner, {File, ""}}, N, Offset);
+list_descriptors({by_file_n_owner, {File, Owner}}, N, Offset) ->
     {ok, #veil_document{uuid = FileId}} = get_file(File),
+    StartKey = [dao_helper:name(FileId), dao_helper:name(Owner)],
+    EndKey = case Owner of "" -> [dao_helper:name(next_id(FileId)), dao_helper:name("")]; _ -> [dao_helper:name((FileId)), dao_helper:name(next_id(Owner))] end,
     Res = dao_helper:query_view(?FD_BY_FILE_VIEW#view_info.db_name, ?FD_BY_FILE_VIEW#view_info.design, ?FD_BY_FILE_VIEW#view_info.name,
-        #view_query_args{keys = [dao_helper:name(FileId)], include_docs = true,
+        #view_query_args{start_key = StartKey, end_key = EndKey, include_docs = true,
             limit = N, skip = Offset}),
     case dao_helper:parse_view_result(Res) of
         {ok, #view_result{rows = Rows}} ->
-            {ok, [FdDoc || #view_row{doc = #veil_document{record = #file_descriptor{file = FileId1}} = FdDoc} <- Rows, FileId1 == FileId]};
+            {ok, [FdDoc || #view_row{doc = #veil_document{record = #file_descriptor{file = FileId1, fuse_id = OwnerId}} = FdDoc} <- Rows,
+                FileId1 == FileId, OwnerId == Owner orelse Owner == ""]};
         Data ->
             lager:error("Invalid file descriptor view response: ~p", [Data]),
             throw({inavlid_data, Data})
@@ -241,7 +246,7 @@ list_dir(Dir, N, Offset) ->
                 lager:error("Directory ~p not found. Error: ~p", [Dir, R]),
                 throw({dir_not_found, R})
         end,
-    NextId =  integer_to_list(list_to_integer(case Id of [] -> "0"; _ -> Id end, 16)+1, 16), %% Dirty hack needed because `inclusive_end` option does not work in BigCouch for some reason
+    NextId =  next_id(Id), %% Dirty hack needed because `inclusive_end` option does not work in BigCouch for some reason
     Res = dao_helper:query_view(?FILE_TREE_VIEW#view_info.db_name, ?FILE_TREE_VIEW#view_info.design, ?FILE_TREE_VIEW#view_info.name,
         #view_query_args{start_key = [dao_helper:name(Id), dao_helper:name("")], end_key = [dao_helper:name(NextId), dao_helper:name("")],
                            limit = N, include_docs = true, skip = Offset, inclusive_end = false}), %% Inclusive end does not work, disable to be sure
@@ -302,3 +307,6 @@ file_path_analyze({relative_path, Path, Root}) when is_list(Path), is_list(Root)
     {internal_path, string:tokens(Path, [?PATH_SEPARATOR]), Root};
 file_path_analyze(Path) ->
     throw({invalid_file_path, Path}).
+
+next_id(Id) ->
+    binary_to_list(binary:encode_unsigned(binary:decode_unsigned(list_to_binary(Id))+1)).
