@@ -245,7 +245,7 @@ rename_file(File, NewName) ->
 %% Non-error return value is always list of #veil_document{record = #file{}} records.<br/>
 %% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
 %% @end
--spec list_dir(Dir :: file(), N :: pos_integer(), Offset :: non_neg_integer()) -> {ok, [file_info()]}.
+-spec list_dir(Dir :: file(), N :: pos_integer(), Offset :: non_neg_integer()) -> {ok, [file_doc()]}.
 %% ====================================================================
 list_dir(Dir, N, Offset) ->
     Id =
