@@ -214,7 +214,7 @@ heart_beat(Conn_status, State) ->
       {New_conn_status2, 0}
 	end,
 
-	lager:info([{mod, ?MODULE}], "Haert beat on node: ~s: connection: ~s: heartbeat: ~s, new state_num: ~b", [node(), New_conn_status, New_conn_status3, New_state_num]),
+	lager:info([{mod, ?MODULE}], "Heart beat on node: ~s: connection: ~s: heartbeat: ~s, new state_num: ~b", [node(), New_conn_status, New_conn_status3, New_state_num]),
 
   case New_conn_status3 of
     ok ->
