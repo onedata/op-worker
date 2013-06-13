@@ -32,17 +32,17 @@ protocol_buffers_test() ->
   FuseMessage = #fusemessage{id = "1", message_type = "getfilelocation", input = FileLocationMessageBytes},
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
-  Message = #clustermsg{module_name = "module", message_type = "fusemessage",
-  message_decoder_name = "fuse_messages", answer_type = "atom",
-  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+  Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
+  message_decoder_name = "fuse_messages", answer_type = "filelocation",
+  answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, Answer_type} = ranch_handler:decode_protocol_buffer(MessageBytes),
   ?assert(Synch),
-  ?assert(Task =:= module),
-  ?assert(Answer_decoder_name =:= "communication_protocol"),
+  ?assert(Task =:= fslogic),
+  ?assert(Answer_decoder_name =:= "fuse_messages"),
   ?assert(ProtocolVersion == 1),
-  ?assert(Answer_type =:= "atom"),
+  ?assert(Answer_type =:= "filelocation"),
 
   ?assert(is_record(Msg, fusemessage)),
   ?assert(Msg#fusemessage.id =:= "1"),

@@ -36,7 +36,7 @@ ping(Host, Module, Cert, Port) ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = PingBytes},
   Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, raw}, {certfile, Cert}]),
+  {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}]),
   ssl:send(Socket, Msg),
   {ok, Ans} = ssl:recv(Socket, 0),
 

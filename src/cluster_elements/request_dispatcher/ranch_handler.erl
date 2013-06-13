@@ -137,8 +137,14 @@ encode_answer(Main_Answer, AnswerType, Answer_decoder_name, Worker_Answer) ->
     ok -> case AnswerType of
       non -> #answer{answer_status = atom_to_list(Main_Answer)};
       _Type ->
-        WAns = erlang:apply(list_to_atom(Answer_decoder_name ++ "_pb"), list_to_atom("encode_" ++ AnswerType), [records_translator:translate_to_record(Worker_Answer)]),
-        #answer{answer_status = atom_to_list(Main_Answer), worker_answer = WAns}
+        try
+          WAns = erlang:apply(list_to_atom(Answer_decoder_name ++ "_pb"), list_to_atom("encode_" ++ AnswerType), [records_translator:translate_to_record(Worker_Answer)]),
+          #answer{answer_status = atom_to_list(Main_Answer), worker_answer = WAns}
+        catch
+          Type:Error ->
+            lager:error("Ranch handler error during encoding answer: ~p:~p", [Type, Error]),
+            #answer{answer_status = "answer_encoding_error"}
+        end
     end;
     _Other -> #answer{answer_status = atom_to_list(Main_Answer)}
   end,
