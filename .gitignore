@@ -7,4 +7,6 @@ logs
 .git
 .idea
 ebin
+test/eunit_results
 distributed_tests_out
+.dialyzer.plt
