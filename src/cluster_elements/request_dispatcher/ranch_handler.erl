@@ -21,7 +21,7 @@
 -export([init/4]).
 
 -ifdef(TEST).
--export([decode_protocol_buffer/1, encode_answer/3]).
+-export([decode_protocol_buffer/1, encode_answer/1, encode_answer/4]).
 -endif.
 
 %% ====================================================================
@@ -66,7 +66,7 @@ loop(Socket, Transport, RanchTimeout, DispatcherTimeout) ->
   case Transport:recv(Socket, 0, RanchTimeout) of
     {ok, Data} ->
       try
-        {Synch, Task, ProtocolVersion, Msg, Answer_type} = decode_protocol_buffer(Data),
+        {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, Answer_type} = decode_protocol_buffer(Data),
         case Synch of
           true ->
             try
@@ -75,26 +75,26 @@ loop(Socket, Transport, RanchTimeout, DispatcherTimeout) ->
               case Ans of
                 ok ->
                   receive
-                    Ans2 -> Transport:send(Socket, encode_answer(Ans, Answer_type, Ans2))
+                    Ans2 -> Transport:send(Socket, encode_answer(Ans, Answer_type, Answer_decoder_name, Ans2))
                   after DispatcherTimeout ->
-                    Transport:send(Socket, encode_answer(dispatcher_timeout, non, []))
+                    Transport:send(Socket, encode_answer(dispatcher_timeout))
                   end;
-                Other -> Transport:send(Socket, encode_answer(Other, non, []))
+                Other -> Transport:send(Socket, encode_answer(Other))
               end
             catch
-              _:_ -> Transport:send(Socket, encode_answer(dispatcher_error, non, []))
+              _:_ -> Transport:send(Socket, encode_answer(dispatcher_error))
             end;
           false ->
             try
               Ans = gen_server:call(?Dispatcher_Name, {Task, ProtocolVersion, Msg}),
-              Transport:send(Socket, encode_answer(Ans, non, []))
+              Transport:send(Socket, encode_answer(Ans))
             catch
-                _:_ -> Transport:send(Socket, encode_answer(dispatcher_error, non, []))
+                _:_ -> Transport:send(Socket, encode_answer(dispatcher_error))
             end
          end,
          loop(Socket, Transport, RanchTimeout, DispatcherTimeout)
     catch
-      _:_ -> Transport:send(Socket, encode_answer(wrong_message_format, non, []))
+      _:_ -> Transport:send(Socket, encode_answer(wrong_message_format))
     end;
     _ ->
       ok = Transport:close(Socket)
@@ -111,22 +111,33 @@ loop(Socket, Transport, RanchTimeout, DispatcherTimeout) ->
   Answer_type :: string().
 %% ====================================================================
 decode_protocol_buffer(MsgBytes) ->
-  #clustermsg{module_name = ModuleName, message_type = Message_type, answer_type = Answer_type, synch = Synch, protocol_version = Prot_version, input = Bytes} = communication_protocol_pb:decode_clustermsg(MsgBytes),
-  Msg = erlang:apply(communication_protocol_pb, list_to_atom("decode_" ++ Message_type), [Bytes]),
-  {Synch, list_to_atom(ModuleName), Prot_version, records_translator:translate(Msg), Answer_type}.
+  #clustermsg{module_name = ModuleName, message_type = Message_type, message_decoder_name = Message_decoder_name, answer_type = Answer_type,
+  answer_decoder_name = Answer_decoder_name, synch = Synch, protocol_version = Prot_version, input = Bytes}
+    = communication_protocol_pb:decode_clustermsg(MsgBytes),
+  Msg = erlang:apply(list_to_atom(Message_decoder_name ++ "_pb"), list_to_atom("decode_" ++ Message_type), [Bytes]),
+  {Synch, list_to_atom(ModuleName), Answer_decoder_name, Prot_version, records_translator:translate(Msg, Message_decoder_name), Answer_type}.
 
-%% encode_answer/3
+%% encode_answer/1
 %% ====================================================================
 %% @doc Encodes answer using protocol buffers records_translator.
--spec encode_answer(Main_Answer :: atom(), AnswerType :: string(), Worker_Answer :: term()) -> Result when
+-spec encode_answer(Main_Answer :: atom()) -> Result when
   Result ::  binary().
 %% ====================================================================
-encode_answer(Main_Answer, AnswerType, Worker_Answer) ->
+encode_answer(Main_Answer) ->
+  encode_answer(Main_Answer, non, "non", []).
+
+%% encode_answer/4
+%% ====================================================================
+%% @doc Encodes answer using protocol buffers records_translator.
+-spec encode_answer(Main_Answer :: atom(), AnswerType :: string(), Answer_decoder_name :: string(), Worker_Answer :: term()) -> Result when
+  Result ::  binary().
+%% ====================================================================
+encode_answer(Main_Answer, AnswerType, Answer_decoder_name, Worker_Answer) ->
   Message = case Main_Answer of
     ok -> case AnswerType of
       non -> #answer{answer_status = atom_to_list(Main_Answer)};
       _Type ->
-        WAns = erlang:apply(communication_protocol_pb, list_to_atom("encode_" ++ AnswerType), [records_translator:translate_to_record(Worker_Answer)]),
+        WAns = erlang:apply(list_to_atom(Answer_decoder_name ++ "_pb"), list_to_atom("encode_" ++ AnswerType), [records_translator:translate_to_record(Worker_Answer)]),
         #answer{answer_status = atom_to_list(Main_Answer), worker_answer = WAns}
     end;
     _Other -> #answer{answer_status = atom_to_list(Main_Answer)}

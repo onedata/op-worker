@@ -115,8 +115,8 @@ dispatcher_connection_test(_Config) ->
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
 
-  Message = #clustermsg{module_name = "module", message_type = "atom", answer_type = "atom",
-    synch = true, protocol_version = 1, input = PingBytes},
+  Message = #clustermsg{module_name = "module", message_type = "atom", message_decoder_name = "communication_protocol",
+  answer_type = "atom", answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = PingBytes},
   Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   ssl:send(Socket, Msg),
@@ -128,8 +128,8 @@ dispatcher_connection_test(_Config) ->
   Check1 = (Ans =:= AnsMessageBytes),
   Check1 = true,
 
-  Message2 = #clustermsg{module_name = "module", message_type = "atom", answer_type = "atom",
-    synch = false, protocol_version = 1, input = PingBytes},
+  Message2 = #clustermsg{module_name = "module", message_type = "atom", message_decoder_name = "communication_protocol",
+  answer_type = "atom", answer_decoder_name = "communication_protocol", synch = false, protocol_version = 1, input = PingBytes},
   Msg2 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message2)),
   ssl:send(Socket, Msg2),
   {ok, Ans2} = ssl:recv(Socket, 0),
@@ -197,8 +197,9 @@ ping_test(_Config) ->
   PongAnsBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(PongAns)),
 
   CheckModules = fun(M, Sum) ->
-    Message = #clustermsg{module_name = atom_to_binary(M, utf8), message_type = "atom", answer_type = "atom",
-    synch = true, protocol_version = 1, input = PingBytes},
+    Message = #clustermsg{module_name = atom_to_binary(M, utf8), message_type = "atom",
+    message_decoder_name = "communication_protocol", answer_type = "atom",
+    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = PingBytes},
     Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
     ssl:send(Socket, Msg),

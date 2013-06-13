@@ -31,8 +31,9 @@ ping(Host, Module, Cert, Port) ->
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
 
-  Message = #clustermsg{module_name = atom_to_list(Module), message_type = "atom", answer_type = "atom",
-  synch = true, protocol_version = 1, input = PingBytes},
+  Message = #clustermsg{module_name = atom_to_list(Module), message_type = "atom",
+  message_decoder_name = "communication_protocol", answer_type = "atom",
+  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = PingBytes},
   Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, raw}, {certfile, Cert}]),
@@ -41,4 +42,4 @@ ping(Host, Module, Cert, Port) ->
 
   #answer{worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   MsgAtom = communication_protocol_pb:decode_atom(Bytes),
-  records_translator:translate(MsgAtom).
+  records_translator:translate(MsgAtom, "communication_protocol").
