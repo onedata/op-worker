@@ -20,7 +20,7 @@
 %% API - File system management
 -export([list_dir/3, rename_file/2, lock_file/3, unlock_file/3]). %% High level API functions
 -export([save_descriptor/1, remove_descriptor/1, get_descriptor/1, list_descriptors/3]). %% Base descriptor management API functions
--export([save_file/1, remove_file/1, get_file/1, get_path_info/1, test/0]). %% Base file management API function
+-export([save_file/1, remove_file/1, get_file/1, get_path_info/1]). %% Base file management API function
 
 
 -ifdef(TEST).
