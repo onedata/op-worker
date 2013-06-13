@@ -95,7 +95,7 @@ list_descriptors() ->
     ?assertMatch({ok, [#veil_document{record = #file_descriptor{}}]}, dao_vfs:list_descriptors({by_file, {uuid, "file"}}, 5, 0)),
 
     ?assert(meck:called(dao_helper, query_view, [?FD_BY_FILE_VIEW#view_info.db_name, ?FD_BY_FILE_VIEW#view_info.design, ?FD_BY_FILE_VIEW#view_info.name,
-        #view_query_args{keys = ["uuid"], include_docs = true, limit = 5, skip = 0}])),
+        #view_query_args{start_key = ["uuid", ""], end_key = ["uuie", ""], include_docs = true, limit = 5, skip = 0}])),
     ?assert(meck:called(dao_helper, parse_view_result, [ok])),
     ?assert(meck:validate([dao, dao_helper])).
 
