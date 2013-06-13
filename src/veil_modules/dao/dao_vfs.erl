@@ -57,7 +57,7 @@ save_descriptor(#veil_document{record = #file_descriptor{}} = FdDoc) ->
 %% @doc Removes file descriptor from DB. Argument should be uuid() of #file_descriptor or same as in {@link list_descriptors/3}.
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec remove_descriptor(Fd :: fd()) -> ok | {error, any()} | no_return().
+-spec remove_descriptor(Fd :: fd() | fd_select()) -> ok | {error, any()} | no_return().
 %% ====================================================================
 remove_descriptor(ListSpec) when is_tuple(ListSpec) ->
     remove_descriptor3(ListSpec, 1000, 0);
@@ -106,9 +106,8 @@ get_descriptor(Fd) ->
 %% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec list_descriptors(MatchCriteria, N :: pos_integer(), Offset :: non_neg_integer()) ->
-    {ok, fd_doc()} | {error, any()} | no_return() when
-    MatchCriteria :: {by_file, File :: file()}.
+-spec list_descriptors(MatchCriteria :: fd_select(), N :: pos_integer(), Offset :: non_neg_integer()) ->
+    {ok, fd_doc()} | {error, any()} | no_return().
 %% ====================================================================
 list_descriptors({by_file, File}, N, Offset) ->
     list_descriptors({by_file_n_owner, {File, ""}}, N, Offset);
@@ -303,7 +302,6 @@ unlock_file(_UserID, _FileID, _Mode) ->
 %% file_path_analyze/1
 %% ====================================================================
 %% @doc Converts Path :: file_path() to internal dao format
-%% @end
 -spec file_path_analyze(Path :: file_path()) -> {internal_path, TokenList :: list(), RootUUID :: uuid()}.
 %% ====================================================================
 file_path_analyze({Path, Root}) when is_list(Path), is_list(Root) ->
@@ -319,5 +317,11 @@ file_path_analyze({relative_path, Path, Root}) when is_list(Path), is_list(Root)
 file_path_analyze(Path) ->
     throw({invalid_file_path, Path}).
 
+
+%% next_id/1
+%% ====================================================================
+%% @doc Returns "incremented string"
+-spec next_id(Id :: string()) -> string().
+%% ====================================================================
 next_id(Id) ->
     binary_to_list(binary:encode_unsigned(binary:decode_unsigned(list_to_binary(Id))+1)).
