@@ -31,9 +31,22 @@
 %% ====================================================================
 -export([init/1, handle/2, cleanup/0]).
 
+%% init/1
+%% ====================================================================
+%% @doc {@link worker_plugin_behaviour} callback init/1
+-spec init(Args :: term()) -> list().
+%% ====================================================================
 init(_Args) ->
 	[].
 
+%% handle/1
+%% ====================================================================
+%% @doc {@link worker_plugin_behaviour} callback handle/1. <br/>
+%% Processes standard worker requests (e.g. ping) and requests from FUSE.
+%% @end
+-spec handle(ProtocolVersion :: term(), Request :: term()) -> Result when
+  Result :: term().
+%% ====================================================================
 handle(_ProtocolVersion, ping) ->
   pong;
 
@@ -46,11 +59,24 @@ handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
 handle(_ProtocolVersion, _Msg) ->
 	ok.
 
+%% cleanup/0
+%% ====================================================================
+%% @doc {@link worker_plugin_behaviour} callback cleanup/0
+-spec cleanup() -> ok.
+%% ====================================================================
 cleanup() ->
 	ok.
 
 %% ====================================================================
 %% Internal functions
+%% ====================================================================
+
+%% handle_fuse_message/3
+%% ====================================================================
+%% @doc Processes requests from FUSE.
+%% @end
+-spec handle_fuse_message(ProtocolVersion :: term(), Record :: record(), FuseID :: string()) -> Result when
+  Result :: term().
 %% ====================================================================
 
 %% TODO zastanowić się nad formą odpowiedzi o niesistniejący plik (teraz zwraca błąd)
@@ -193,6 +219,14 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, rena
     _BadStatus -> #atom{value = TmpAns}
   end.
 
+%% save_file_descriptor/4
+%% ====================================================================
+%% @doc Saves in db information that a file is used by FUSE.
+%% @end
+-spec save_file_descriptor(ProtocolVersion :: term(), File :: string(), FuseID :: string(), Validity :: integer()) -> Result when
+  Result :: term().
+%% ====================================================================
+
 save_file_descriptor(ProtocolVersion, File, FuseID, Validity) ->
   Pid = self(),
 
@@ -202,6 +236,15 @@ save_file_descriptor(ProtocolVersion, File, FuseID, Validity) ->
 
   Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 100, {vfs, save_descriptor, [Descriptor]}}),
   wait_for_dao_ans(Ans, File, 100, "save_descriptor").
+
+%% wait_for_dao_ans/4
+%% ====================================================================
+%% @doc Waits for answer from dao and analysis answers from gen_server
+%% (first parameter) and from dao (checks possible errors).
+%% @end
+-spec wait_for_dao_ans(Ans :: term(), File :: string(), MessageId :: integer(), LogMessage :: string()) -> Result when
+  Result :: term().
+%% ====================================================================
 
 wait_for_dao_ans(Ans, File, MessageId, LogMessage) ->
   case Ans of
@@ -219,6 +262,14 @@ wait_for_dao_ans(Ans, File, MessageId, LogMessage) ->
       lager:error([{mod, ?MODULE}], "Error: dispatcher error for: " ++ LogMessage ++ ", file: ~s, error: ~p", [File, Other]),
       {error, "Error: dispatcher for: " ++ LogMessage}
   end.
+
+%% get_parent_and_name_from_path/2
+%% ====================================================================
+%% @doc Gets parent uuid and file name on the basis of absolute path.
+%% @end
+-spec get_parent_and_name_from_path(Path :: string(), ProtocolVersion :: term()) -> Result when
+  Result :: term().
+%% ====================================================================
 
 get_parent_and_name_from_path(Path, ProtocolVersion) ->
   Pos = string:rchr(Path, $/),
@@ -242,8 +293,26 @@ get_parent_and_name_from_path(Path, ProtocolVersion) ->
       end
   end.
 
+%% create_children_list/1
+%% ====================================================================
+%% @doc Creates list of children logical names on the basis of list with
+%% veil_documents that describe children.
+%% @end
+-spec create_children_list(Files :: list()) -> Result when
+  Result :: term().
+%% ====================================================================
+
 create_children_list(Files) ->
   create_children_list(Files, []).
+
+%% create_children_list/2
+%% ====================================================================
+%% @doc Creates list of children logical names on the basis of list with
+%% veil_documents that describe children.
+%% @end
+-spec create_children_list(Files :: list(), TmpAns :: list()) -> Result when
+  Result :: term().
+%% ====================================================================
 
 create_children_list([], Ans) ->
   Ans;

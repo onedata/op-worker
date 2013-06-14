@@ -6,7 +6,7 @@
 %% @end
 %% ===================================================================
 %% @doc: This module contains functions that allow manually test
-%% if cluster is avaliable.
+%% fslogic.
 %% @end
 %% ===================================================================
 -module(fslogic_tester).
@@ -22,6 +22,8 @@
 %% API functions
 %% ====================================================================
 
+%% Three functions below (test functions with different number of parameters)
+%% do full test of fslogic. They simulate different requests from FSE.
 test() ->
   test("localhost").
 
@@ -78,6 +80,7 @@ test(Host, Cert, Port) ->
   io:format("ls test: aswer status: ~s~n", [Status11]),
   lists:foreach(PrintFiles, Files11).
 
+%% Each of following functions simulate one request from FUSE.
 create_file(Host, Cert, Port, FileName) ->
   FslogicMessage = #getnewfilelocation{file_logic_name = FileName},
   FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_getnewfilelocation(FslogicMessage)),
