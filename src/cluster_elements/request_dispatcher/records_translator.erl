@@ -26,7 +26,7 @@
 %% translate/2
 %% ====================================================================
 %% @doc Translates record to simpler terms if possible.
--spec translate(Record :: record(), DecoderName :: string()) -> Result when
+-spec translate(Record :: tuple(), DecoderName :: string()) -> Result when
   Result ::  term().
 %% ====================================================================
 translate(Record, _DecoderName) when is_record(Record, atom) ->
@@ -52,7 +52,7 @@ translate(Record, _DecoderName) ->
 %% ====================================================================
 %% @doc Translates term to record if possible.
 -spec translate_to_record(Value :: term()) -> Result when
-  Result ::  record() | term().
+  Result ::  tuple() | term().
 %% ====================================================================
 translate_to_record(Value) when is_atom(Value) ->
   #atom{value = atom_to_list(Value)};

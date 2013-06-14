@@ -272,7 +272,7 @@ proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
         non -> Pid ! Response;
         Id -> Pid ! {worker_answer, Id, Response}
       end;
-    Other -> lagger:error([{mod, ?MODULE}], "Wrong reply type: ~s", [Other])
+    Other -> lagger:error("Wrong reply type: ~s", [Other])
 	end,
 	
 	{Megaseconds2,Seconds2,Microseconds2} = os:timestamp(),

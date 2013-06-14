@@ -75,7 +75,7 @@ cleanup() ->
 %% ====================================================================
 %% @doc Processes requests from FUSE.
 %% @end
--spec handle_fuse_message(ProtocolVersion :: term(), Record :: record(), FuseID :: string()) -> Result when
+-spec handle_fuse_message(ProtocolVersion :: term(), Record :: tuple(), FuseID :: string()) -> Result when
   Result :: term().
 %% ====================================================================
 
@@ -268,7 +268,7 @@ wait_for_dao_ans(Ans, File, MessageId, LogMessage) ->
 %% @doc Gets parent uuid and file name on the basis of absolute path.
 %% @end
 -spec get_parent_and_name_from_path(Path :: string(), ProtocolVersion :: term()) -> Result when
-  Result :: term().
+  Result :: tuple().
 %% ====================================================================
 
 get_parent_and_name_from_path(Path, ProtocolVersion) ->
