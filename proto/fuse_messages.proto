@@ -38,7 +38,7 @@ message GetFileChildren{
 }
 
 message FileChildren{
-	repeated FileLocation child_location = 1;
+	repeated string child_logic_name = 1;
 }
 
 
