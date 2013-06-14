@@ -45,7 +45,7 @@ start_test() ->
 
 stop_test() ->
   application:stop(ranch),
-  application:stop(lagger),
+  application:stop(lager),
   application:stop(ssl),
   application:stop(crypto),
   application:stop(public_key),
