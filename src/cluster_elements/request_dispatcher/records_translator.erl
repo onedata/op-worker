@@ -17,22 +17,35 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([translate/1, translate_to_record/1]).
+-export([translate/2, translate_to_record/1]).
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
 
-%% translate/1
+%% translate/2
 %% ====================================================================
 %% @doc Translates record to simpler terms if possible.
--spec translate(Record :: tuple()) -> Result when
+-spec translate(Record :: tuple(), DecoderName :: string()) -> Result when
   Result ::  term().
 %% ====================================================================
-translate(Record) when is_record(Record, atom) ->
+translate(Record, _DecoderName) when is_record(Record, atom) ->
   list_to_atom(Record#atom.value);
 
-translate(Record) ->
+translate(Record, DecoderName) when is_tuple(Record) ->
+  RecordList = lists:reverse(tuple_to_list(Record)),
+  [End | Rest] = RecordList,
+  RecordList2 = case is_binary(End) of
+    true ->
+      [Type | Rest2] = Rest,
+      DecodedEnd = erlang:apply(list_to_atom(DecoderName ++ "_pb"), list_to_atom("decode_" ++ Type), [End]),
+      [DecodedEnd | [list_to_atom(Type) | Rest2]];
+    false -> RecordList
+  end,
+  TmpAns = lists:foldl(fun(E, Sum) -> [translate(E, DecoderName) | Sum] end, [], RecordList2),
+  list_to_tuple(TmpAns);
+
+translate(Record, _DecoderName) ->
   Record.
 
 %% translate_to_record/1
