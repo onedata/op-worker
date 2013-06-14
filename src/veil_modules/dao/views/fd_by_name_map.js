@@ -1,3 +1,3 @@
 function(doc) {
-    emit(doc.file, 1);
+    emit([doc.file, doc.fuse_id], 1);
 }

@@ -54,14 +54,25 @@ save_descriptor(#veil_document{record = #file_descriptor{}} = FdDoc) ->
 
 %% remove_descriptor/1
 %% ====================================================================
-%% @doc Removes file descriptor from DB. Argument should be uuid() of #file_descriptor.
+%% @doc Removes file descriptor from DB. Argument should be uuid() of #file_descriptor or same as in {@link list_descriptors/3}.
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec remove_descriptor(Fd :: fd()) -> ok | {error, any()} | no_return().
+-spec remove_descriptor(Fd :: fd() | fd_select()) -> ok | {error, any()} | no_return().
 %% ====================================================================
-remove_descriptor(Fd) ->
+remove_descriptor(ListSpec) when is_tuple(ListSpec) ->
+    remove_descriptor3(ListSpec, 1000, 0);
+remove_descriptor(Fd) when is_list(Fd) ->
     dao:set_db(?DESCRIPTORS_DB_NAME),
     dao:remove_record(Fd).
+
+remove_descriptor3(ListSpec, BatchSize, Offset) ->
+    case list_descriptors(ListSpec, BatchSize, Offset) of
+        {ok, []} -> ok;
+        {ok, Docs} ->
+            [remove_descriptor(Fd) || #veil_document{uuid = Fd} <- Docs, is_list(Fd)],
+            remove_descriptor3(ListSpec, BatchSize, Offset + BatchSize);
+        Other -> Other
+    end.
 
 
 %% get_descriptor/1
@@ -95,18 +106,22 @@ get_descriptor(Fd) ->
 %% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec list_descriptors(MatchCriteria, N :: pos_integer(), Offset :: non_neg_integer()) ->
-    {ok, fd_doc()} | {error, any()} | no_return() when
-    MatchCriteria :: {by_file, File :: file()}.
+-spec list_descriptors(MatchCriteria :: fd_select(), N :: pos_integer(), Offset :: non_neg_integer()) ->
+    {ok, fd_doc()} | {error, any()} | no_return().
 %% ====================================================================
 list_descriptors({by_file, File}, N, Offset) ->
+    list_descriptors({by_file_n_owner, {File, ""}}, N, Offset);
+list_descriptors({by_file_n_owner, {File, Owner}}, N, Offset) ->
     {ok, #veil_document{uuid = FileId}} = get_file(File),
+    StartKey = [dao_helper:name(FileId), dao_helper:name(Owner)],
+    EndKey = case Owner of "" -> [dao_helper:name(next_id(FileId)), dao_helper:name("")]; _ -> [dao_helper:name((FileId)), dao_helper:name(next_id(Owner))] end,
     Res = dao_helper:query_view(?FD_BY_FILE_VIEW#view_info.db_name, ?FD_BY_FILE_VIEW#view_info.design, ?FD_BY_FILE_VIEW#view_info.name,
-        #view_query_args{keys = [dao_helper:name(FileId)], include_docs = true,
+        #view_query_args{start_key = StartKey, end_key = EndKey, include_docs = true,
             limit = N, skip = Offset}),
     case dao_helper:parse_view_result(Res) of
         {ok, #view_result{rows = Rows}} ->
-            {ok, [FdDoc || #view_row{doc = #veil_document{record = #file_descriptor{file = FileId1}} = FdDoc} <- Rows, FileId1 == FileId]};
+            {ok, [FdDoc || #view_row{doc = #veil_document{record = #file_descriptor{file = FileId1, fuse_id = OwnerId}} = FdDoc} <- Rows,
+                FileId1 == FileId, OwnerId == Owner orelse Owner == ""]};
         Data ->
             lager:error("Invalid file descriptor view response: ~p", [Data]),
             throw({inavlid_data, Data})
@@ -230,7 +245,7 @@ rename_file(File, NewName) ->
 %% Non-error return value is always list of #veil_document{record = #file{}} records.<br/>
 %% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
 %% @end
--spec list_dir(Dir :: file(), N :: pos_integer(), Offset :: non_neg_integer()) -> [file_info()].
+-spec list_dir(Dir :: file(), N :: pos_integer(), Offset :: non_neg_integer()) -> {ok, [file_info()]}.
 %% ====================================================================
 list_dir(Dir, N, Offset) ->
     Id =
@@ -241,7 +256,7 @@ list_dir(Dir, N, Offset) ->
                 lager:error("Directory ~p not found. Error: ~p", [Dir, R]),
                 throw({dir_not_found, R})
         end,
-    NextId =  integer_to_list(list_to_integer(case Id of [] -> "0"; _ -> Id end, 16)+1, 16), %% Dirty hack needed because `inclusive_end` option does not work in BigCouch for some reason
+    NextId =  next_id(Id), %% Dirty hack needed because `inclusive_end` option does not work in BigCouch for some reason
     Res = dao_helper:query_view(?FILE_TREE_VIEW#view_info.db_name, ?FILE_TREE_VIEW#view_info.design, ?FILE_TREE_VIEW#view_info.name,
         #view_query_args{start_key = [dao_helper:name(Id), dao_helper:name("")], end_key = [dao_helper:name(NextId), dao_helper:name("")],
                            limit = N, include_docs = true, skip = Offset, inclusive_end = false}), %% Inclusive end does not work, disable to be sure
@@ -287,7 +302,6 @@ unlock_file(_UserID, _FileID, _Mode) ->
 %% file_path_analyze/1
 %% ====================================================================
 %% @doc Converts Path :: file_path() to internal dao format
-%% @end
 -spec file_path_analyze(Path :: file_path()) -> {internal_path, TokenList :: list(), RootUUID :: uuid()}.
 %% ====================================================================
 file_path_analyze({Path, Root}) when is_list(Path), is_list(Root) ->
@@ -302,3 +316,12 @@ file_path_analyze({relative_path, Path, Root}) when is_list(Path), is_list(Root)
     {internal_path, string:tokens(Path, [?PATH_SEPARATOR]), Root};
 file_path_analyze(Path) ->
     throw({invalid_file_path, Path}).
+
+
+%% next_id/1
+%% ====================================================================
+%% @doc Returns "incremented string"
+-spec next_id(Id :: string()) -> string().
+%% ====================================================================
+next_id(Id) ->
+    binary_to_list(binary:encode_unsigned(binary:decode_unsigned(list_to_binary(Id))+1)).

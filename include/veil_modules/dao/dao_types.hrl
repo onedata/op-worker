@@ -23,6 +23,7 @@
 -type file_doc() :: #veil_document{record :: #file{}}.
 
 -type fd() :: uuid().
+-type fd_select() :: {by_file, File :: file()} | {by_file_n_owner, {File :: file(), Owner :: string()}}.
 -type fd_info() :: #file_descriptor{}.
 -type fd_doc() :: #veil_document{record :: #file_descriptor{}}.
 
