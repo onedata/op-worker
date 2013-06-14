@@ -9,7 +9,7 @@ compile:
 
 deps:
 	./rebar get-deps
-    ./submodules.sh
+	./submodules.sh
 
 clean:
 	./rebar clean
