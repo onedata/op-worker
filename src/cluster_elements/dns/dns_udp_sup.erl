@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: The main responsibility of this module is to sustain udp listener for dns
+%% @doc: The main responsibility of this module is to sustain udp listener for dns.
 %% @end
 %% ===================================================================
 
@@ -50,7 +50,6 @@ start_link() ->
 %% init/1
 %% ====================================================================
 %% @doc Reads udp listener variables and returns child specification based on those data.
-%% @see <a href="http://www.erlang.org/doc/man/supervisor.html#Module:init-1">supervisor:init/1</a>
 -spec init([]) -> Result when
 	Result :: {ok, {SupervisionPolicy, [ChildSpec]}},
 	SupervisionPolicy :: {RestartStrategy, MaxR :: non_neg_integer(), MaxT :: pos_integer()},
