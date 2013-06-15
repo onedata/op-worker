@@ -9,6 +9,9 @@
 %% @end
 %% ===================================================================
 
+-ifndef(FILES_COMMON_HRL).
+-define(FILES_COMMON_HRL, 1).
+
 -define(PATH_SEPARATOR, $/).
 
 %% Used in #file{type = ?}
@@ -39,3 +42,5 @@
 -define(RD_ALL_PERM, ?RD_USR_PERM bor ?RD_GRP_PERM bor ?RD_OTH_PERM).
 -define(WR_ALL_PERM, ?WR_USR_PERM bor ?WR_GRP_PERM bor ?WR_OTH_PERM).
 -define(EX_ALL_PERM, ?EX_USR_PERM bor ?EX_GRP_PERM bor ?EX_OTH_PERM).
+
+-endif. %% FILES_COMMON_HRL

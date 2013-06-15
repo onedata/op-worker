@@ -12,10 +12,12 @@
 -ifndef(DAO_VFS_HRL).
 -define(DAO_VFS_HRL, 1).
 
+-include_lib("files_common.hrl").
+
 %% Files' location (storage helper id and its relative file ID). Designed for use within #file record (`location` filed).
 -record(file_location, {storage_helper_id = "", file_id = ""}).
 %% Files' locks. Designed for use within #file record (`locks` field).
--record(file_lock, {type = 1, uid = "", sid = "", pid = 0, offset = 0, size = 0}).
+-record(file_lock, {type = ?REG_TYPE, uid = "", sid = "", pid = 0, offset = 0, size = 0}).
 %% Veil File
 -record(file, {type = 1, name = "", size = 0, uid = "", gids = [], perms = 0, parent = "", ref_file = "", location = #file_location{}, locks = []}).
 

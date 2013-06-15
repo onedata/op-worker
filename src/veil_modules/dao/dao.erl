@@ -31,7 +31,7 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% API
--export([save_record/1, get_record/1, remove_record/1, load_view_def/2, set_db/1]).
+-export([save_record/1, get_record/1, remove_record/1, list_records/2, load_view_def/2, set_db/1]).
 -export([doc_to_term/1]).
 
 %% ===================================================================
@@ -220,6 +220,40 @@ remove_record(Id) when is_atom(Id) ->
     remove_record(atom_to_list(Id));
 remove_record(Id) when is_list(Id) ->
     dao_helper:delete_doc(get_db(), Id).
+
+
+%% list_records/2
+%% ====================================================================
+%% @doc Executes view query and parses returned result into #view_result{} record. <br/>
+%% Strings from #view_query_args{} are not transformed by {@link dao_helper:name/1},
+%% the caller has to do it by himself.
+%% @end
+-spec list_records(ViewInfo :: #view_info{}, QueryArgs :: #view_query_args{}) ->
+    {ok, QueryResult :: #view_result{}} | {error, term()}.
+%% ====================================================================
+list_records(#view_info{name = ViewName, design = DesignName, db_name = DbName}, QueryArgs) ->
+    {Total, Offset, Rows} =
+        case dao_helper:query_view(DbName, DesignName, ViewName, QueryArgs) of
+            {ok, [{total_and_offset, Total1, Offset1} | Rows1]} -> {Total1, Offset1, Rows1};
+            {error, _} = E -> throw(E);
+            Other ->
+                lager:error("dao_helper:query_view has returned unknown query result: ~p", [Other]),
+                throw({unknown_query_result, Other})
+        end,
+    FormatKey =  %% Recursive lambda:
+        fun(F, K) when is_list(K) -> [F(F, X) || X <- K];
+           (_F, K) when is_binary(K) -> binary_to_list(K);
+           (_F, K) -> K
+        end,
+    FormatDoc =
+        fun([{doc, {[ {_id, Id} | [ {_rev, RevInfo} | D ] ]}}]) ->
+                #veil_document{record = doc_to_term({D}), uuid = binary_to_list(Id), rev_info = dao_helper:revision(RevInfo)};
+           (_) -> none
+        end,
+    FormattedRows =
+        [#view_row{id = binary_to_list(Id), key = FormatKey(FormatKey, Key), value = Value, doc = FormatDoc(Doc)}
+        || {row, {[ {id, Id} | [ {key, Key} | [ {value, Value} | Doc ] ] ]}} <- Rows],
+    {ok, #view_result{total = Total, offset = Offset, rows = FormattedRows}}.
 
 
 %% ===================================================================

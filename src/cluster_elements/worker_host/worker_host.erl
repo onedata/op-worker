@@ -208,9 +208,9 @@ handle_cast(_Msg, State) ->
 	NewState :: term(),
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_info(Info, {PlugIn, State}) ->
+handle_info(Info, State) ->
 	PlugIn = State#host_state.plug_in,
-    {_Reply, NewPlugInState} = PlugIn:handle(Info, State#host_state.plug_in_state),
+    {_Reply, NewPlugInState} = PlugIn:handle(Info, State#host_state.plug_in_state), %% TODO: fix me ! There's no such callback in worker_plugin
     {noreply, State#host_state{plug_in_state = NewPlugInState}}.
 
 
