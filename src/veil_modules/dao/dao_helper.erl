@@ -22,10 +22,10 @@
 -import(dao_hosts, [call/2]).
 
 %% API
--export([name/1, gen_uuid/0]).
+-export([name/1, gen_uuid/0, revision/1]).
 -export([list_dbs/0, list_dbs/1, get_db_info/1, get_doc_count/1, create_db/1, create_db/2]).
 -export([delete_db/1, delete_db/2, open_doc/2, open_doc/3, insert_doc/2, insert_doc/3, delete_doc/2, delete_docs/2]).
--export([insert_docs/2, insert_docs/3, open_design_doc/2, create_view/6, query_view/3, query_view/4, parse_view_result/1]).
+-export([insert_docs/2, insert_docs/3, open_design_doc/2, create_view/6, query_view/3, query_view/4]).
 
 %% ===================================================================
 %% API functions
@@ -301,27 +301,6 @@ query_view(DbName, DesignName, ViewName, QueryArgs = #view_query_args{view_type 
         end,
     normalize_return_term(call(query_view, [name(DbName), name(DesignName), name(ViewName), QueryArgs1])).
 
-%% parse_view_result/1
-%% ====================================================================
-%% @doc Parses query result from query_view/4 into #view_result{} record. <br/>
-%% Potentially slow ( O(total_rows) ), so use it only for very small results.
-%% @end
--spec parse_view_result(Result :: term()) ->
-    {ok, QueryResult :: #view_result{}} | {error, term()}.
-%% ====================================================================
-parse_view_result({ok, [{total_and_offset, Total, Offset} | Rows]}) ->
-    FormatKey = fun(F, K) when is_list(K) -> [F(F, X) || X <- K];
-                   (_F, K) when is_binary(K) -> binary_to_list(K);
-                   (_F, K) -> K end,
-    FormatDoc = fun([{doc, {[ {_id, Id} | [ {_rev, RevInfo} | D ] ]}}]) ->
-                        #veil_document{record = dao:doc_to_term({D}), uuid = binary_to_list(Id), rev_info = revision(RevInfo)};
-                   (_) -> none end,
-    FormattedRows = [#view_row{id = binary_to_list(Id),
-        key = FormatKey(FormatKey, Key), value = Value, doc = FormatDoc(Doc)}
-            || {row, {[ {id, Id} | [ {key, Key} | [ {value, Value} | Doc ] ] ]}} <- Rows],
-    {ok, #view_result{total = Total, offset = Offset, rows = FormattedRows}};
-parse_view_result(Other) ->
-    Other.
 
 %% name/1
 %% ====================================================================

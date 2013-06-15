@@ -115,10 +115,8 @@ list_descriptors({by_file_n_owner, {File, Owner}}, N, Offset) ->
     {ok, #veil_document{uuid = FileId}} = get_file(File),
     StartKey = [dao_helper:name(FileId), dao_helper:name(Owner)],
     EndKey = case Owner of "" -> [dao_helper:name(next_id(FileId)), dao_helper:name("")]; _ -> [dao_helper:name((FileId)), dao_helper:name(next_id(Owner))] end,
-    Res = dao_helper:query_view(?FD_BY_FILE_VIEW#view_info.db_name, ?FD_BY_FILE_VIEW#view_info.design, ?FD_BY_FILE_VIEW#view_info.name,
-        #view_query_args{start_key = StartKey, end_key = EndKey, include_docs = true,
-            limit = N, skip = Offset}),
-    case dao_helper:parse_view_result(Res) of
+    QueryArgs = #view_query_args{start_key = StartKey, end_key = EndKey, include_docs = true, limit = N, skip = Offset},
+    case dao:list_records(?FD_BY_FILE_VIEW, QueryArgs) of
         {ok, #view_result{rows = Rows}} ->
             {ok, [FdDoc || #view_row{doc = #veil_document{record = #file_descriptor{file = FileId1, fuse_id = OwnerId}} = FdDoc} <- Rows,
                 FileId1 == FileId, OwnerId == Owner orelse Owner == ""]};
@@ -172,12 +170,11 @@ remove_file(File) ->
 get_file({internal_path, [], []}) -> %% Root dir query
     {ok, #veil_document{uuid = "", record = #file{type = ?DIR_TYPE, perms = ?RD_ALL_PERM bor ?WR_ALL_PERM bor ?EX_ALL_PERM}}};
 get_file({internal_path, [Dir | Path], Root}) ->
-    dao:set_db(?FILES_DB_NAME),
-    Res = dao_helper:query_view(?FILE_TREE_VIEW#view_info.db_name, ?FILE_TREE_VIEW#view_info.design, ?FILE_TREE_VIEW#view_info.name,
-                                #view_query_args{keys = [[dao_helper:name(Root), dao_helper:name(Dir)]],
-                                    include_docs = case Path of [] -> true; _ -> false end}), %% Include doc representing leaf of our file path
+    QueryArgs =
+        #view_query_args{keys = [[dao_helper:name(Root), dao_helper:name(Dir)]],
+            include_docs = case Path of [] -> true; _ -> false end}, %% Include doc representing leaf of our file path
     {NewRoot, FileDoc} =
-        case dao_helper:parse_view_result(Res) of
+        case dao:list_records(?FILE_TREE_VIEW, QueryArgs) of
             {ok, #view_result{rows = [#view_row{id = Id, doc = FDoc}]}} ->
                 {Id, FDoc};
             {ok, #view_result{rows = []}} ->
@@ -245,7 +242,7 @@ rename_file(File, NewName) ->
 %% Non-error return value is always list of #veil_document{record = #file{}} records.<br/>
 %% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
 %% @end
--spec list_dir(Dir :: file(), N :: pos_integer(), Offset :: non_neg_integer()) -> {ok, [file_info()]}.
+-spec list_dir(Dir :: file(), N :: pos_integer(), Offset :: non_neg_integer()) -> {ok, [file_doc()]}.
 %% ====================================================================
 list_dir(Dir, N, Offset) ->
     Id =
@@ -257,10 +254,10 @@ list_dir(Dir, N, Offset) ->
                 throw({dir_not_found, R})
         end,
     NextId =  next_id(Id), %% Dirty hack needed because `inclusive_end` option does not work in BigCouch for some reason
-    Res = dao_helper:query_view(?FILE_TREE_VIEW#view_info.db_name, ?FILE_TREE_VIEW#view_info.design, ?FILE_TREE_VIEW#view_info.name,
+    QueryArgs =
         #view_query_args{start_key = [dao_helper:name(Id), dao_helper:name("")], end_key = [dao_helper:name(NextId), dao_helper:name("")],
-                           limit = N, include_docs = true, skip = Offset, inclusive_end = false}), %% Inclusive end does not work, disable to be sure
-    case dao_helper:parse_view_result(Res) of
+            limit = N, include_docs = true, skip = Offset, inclusive_end = false}, %% Inclusive end does not work, disable to be sure
+    case dao:list_records(?FILE_TREE_VIEW, QueryArgs) of
         {ok, #view_result{rows = Rows}} -> %% We need to strip results that don't match search criteria (tail of last query possibly), because
                                            %% `end_key` seems to behave strange combined with `limit` option. TODO: get rid of it after DBMS switch
             {ok, [FileDoc || #view_row{doc = #veil_document{record = #file{parent = Parent} } = FileDoc } <- Rows, Parent == Id]};
