@@ -10,6 +10,8 @@
 %% @end
 %% ===================================================================
 
+-ifndef(RECORDS_HRL).
+-define(RECORDS_HRL, 1).
 
 %% This record is used by node_manager (it contains its state). 
 %% It describes node type (ccm or worker) and status of connection
@@ -34,3 +36,5 @@
 -define(get_workers(M, R), R#dispatcher_state.M).
 %% updates (in record M) the list of workers that works as module M
 -define(update_workers(M, MValue, R), R#dispatcher_state{M = MValue}).
+
+-endif.

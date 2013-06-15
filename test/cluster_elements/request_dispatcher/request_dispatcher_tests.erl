@@ -28,14 +28,16 @@ protocol_buffers_test() ->
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
 
-  Message = #clustermsg{module_name = "module", message_type = "atom", answer_type = "atom",
-  synch = true, protocol_version = 1, input = PingBytes},
+  Message = #clustermsg{module_name = "module", message_type = "atom",
+  message_decoder_name = "communication_protocol", answer_type = "atom",
+  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = PingBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {Synch, Task, ProtocolVersion, Msg, Answer_type} = ranch_handler:decode_protocol_buffer(MessageBytes),
+  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, Answer_type} = ranch_handler:decode_protocol_buffer(MessageBytes),
   ?assert(Synch),
   ?assert(Msg =:= ping),
   ?assert(Task =:= module),
+  ?assert(Answer_decoder_name =:= "communication_protocol"),
   ?assert(ProtocolVersion == 1),
   ?assert(Answer_type =:= "atom"),
 
@@ -45,7 +47,7 @@ protocol_buffers_test() ->
   Message2 = #answer{answer_status = "ok", worker_answer = PongBytes},
   MessageBytes2 = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(Message2)),
 
-  EncodedPong = ranch_handler:encode_answer(ok, "atom", pong),
+  EncodedPong = ranch_handler:encode_answer(ok, "atom", "communication_protocol", pong),
   ?assert(EncodedPong =:= MessageBytes2).
 
 -endif.

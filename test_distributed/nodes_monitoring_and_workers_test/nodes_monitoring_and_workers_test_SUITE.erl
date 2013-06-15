@@ -140,8 +140,9 @@ tester_test(_Config) ->
     {ok, Socket} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, CertString}]),
 
     CheckModules = fun(M, Sum) ->
-      Message = #clustermsg{module_name = atom_to_binary(M, utf8), message_type = "atom", answer_type = "atom",
-      synch = true, protocol_version = 1, input = PingBytes},
+      Message = #clustermsg{module_name = atom_to_binary(M, utf8), message_type = "atom",
+      message_decoder_name = "communication_protocol", answer_type = "atom",
+      answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = PingBytes},
       Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
       ssl:send(Socket, Msg),
