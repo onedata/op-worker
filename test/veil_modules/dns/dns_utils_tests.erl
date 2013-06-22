@@ -63,12 +63,12 @@ dns_utils_protocol_agnostic_test_() ->
 
 %% Checks if generate_answer can handle wrong worker name
 generate_answer__wrong_worker(Protocol) ->
-	Domain = "cluster_manager.xxxx.xxx.xxx",
+	Domain = "control_panel.xxxx.xxx.xxx",
 
 	{ok, Gen_Server} = gen_server_mock:new(),
 
 	try
-		expect_get_workers(Gen_Server, cluster_manager, self(), worker_not_found),
+		expect_get_workers(Gen_Server, control_panel, self(), worker_not_found),
 
 		Message = create_supported_request(Domain),
 		BinMessage = inet_dns:encode(Message),
@@ -95,13 +95,13 @@ generate_answer__unsupported_class(Protocol) ->
 
 %% Checks if generate_answer can handle lack of the answer from dns_worker
 generate_answer__request_with_dispatcher_timeout(Protocol) ->
-	Domain = "cluster_manager.xxxx.xxx.xxx",
+	Domain = "control_panel.xxxx.xxx.xxx",
 	Dispatcher_Timeout = 0,
 
 	{ok, Gen_Server} = gen_server_mock:new(),
 
 	try
-		gen_server_mock:expect_call(Gen_Server, fun ({dns_worker, 1, _Pid, {get_worker, cluster_manager}}, _From, State) ->
+		gen_server_mock:expect_call(Gen_Server, fun ({dns_worker, 1, _Pid, {get_worker, control_panel}}, _From, State) ->
 				{ok, ok, State}     %% we are not sending response to Pid
 			end),
 
@@ -122,12 +122,12 @@ generate_answer__request_with_dispatcher_timeout(Protocol) ->
 
 %% Checks if generate_answer can handle one dns query for module which is not currently working
 generate_answer__request_with_one_query_and_empty_answer(Protocol) ->
-	Domain = "cluster_manager.xxxx.xxx.xxx",
+	Domain = "control_panel.xxxx.xxx.xxx",
 
 	{ok, Gen_Server} = gen_server_mock:new(),
 
 	try
-		expect_get_workers(Gen_Server, cluster_manager, self(), {ok, []}),
+		expect_get_workers(Gen_Server, control_panel, self(), {ok, []}),
 
 		Message = create_supported_request(Domain),
 		BinMessage = inet_dns:encode(Message),
@@ -146,13 +146,13 @@ generate_answer__request_with_one_query_and_empty_answer(Protocol) ->
 
 %% Checks if generate_answer can handle one dns query for module working on only one node
 generate_answer__request_with_one_query_and_one_answer(Protocol) ->
-	Domain = "cluster_manager.xxxx.xxx.xxx",
+	Domain = "control_panel.xxxx.xxx.xxx",
 	ResponseTTL = 60,
 
 	{ok, Gen_Server} = gen_server_mock:new(),
 
 	try
-		expect_get_workers(Gen_Server, cluster_manager, self(), {ok, [{127,0,0,1}]}),
+		expect_get_workers(Gen_Server, control_panel, self(), {ok, [{127,0,0,1}]}),
 
 		Message = create_supported_request(Domain),
 		BinMessage = inet_dns:encode(Message),
@@ -170,13 +170,13 @@ generate_answer__request_with_one_query_and_one_answer(Protocol) ->
 
 %% Checks if generate_answer can handle dns query for module working on multiple nodes
 generate_answer__request_with_one_query_and_multiple_answers(Protocol) ->
-	Domain = "cluster_manager.xxxx.xxx.xxx",
+	Domain = "control_panel.xxxx.xxx.xxx",
 	ResponseTTL = 60,
 
 	{ok, Gen_Server} = gen_server_mock:new(),
 
 	try
-		expect_get_workers(Gen_Server, cluster_manager, self(), {ok, [{127,0,0,1}, {192,168,0,1}, {172,16,0,1}]}),
+		expect_get_workers(Gen_Server, control_panel, self(), {ok, [{127,0,0,1}, {192,168,0,1}, {172,16,0,1}]}),
 
 		Message = create_supported_request(Domain),
 		BinMessage = inet_dns:encode(Message),
@@ -207,13 +207,13 @@ generate_answer__request_with_no_query_and_no_answer(Protocol) ->
 
 %% Checks if generate_answer can handle udp protocol specific response truncation rules
 generate_answer__request_with_one_query_and_nearly_truncated_answer(Protocol) ->
-	Domain = "cluster_manager.xxxx.xxx.xxx",
+	Domain = "control_panel.xxxx.xxx.xxx",
 	ResponseTTL = 60,
 
 	{ok, Gen_Server} = gen_server_mock:new(),
 
 	try
-		expect_get_workers(Gen_Server, cluster_manager, self(), {ok, lists:duplicate(29, {127,0,0,1})}),
+		expect_get_workers(Gen_Server, control_panel, self(), {ok, lists:duplicate(29, {127,0,0,1})}),
 
 		Message = create_supported_request(Domain),
 		BinMessage = inet_dns:encode(Message),
@@ -231,13 +231,13 @@ generate_answer__request_with_one_query_and_nearly_truncated_answer(Protocol) ->
 
 %% Checks if generate_answer can handle udp protocol specific response truncation rules
 generate_answer__request_with_one_query_and_truncated_answer(Protocol) ->
-	Domain = "cluster_manager.xxxx.xxx.xxx",
+	Domain = "control_panel.xxxx.xxx.xxx",
 	ResponseTTL = 60,
 
 	{ok, Gen_Server} = gen_server_mock:new(),
 
 	try
-		expect_get_workers(Gen_Server, cluster_manager, self(), {ok, lists:duplicate(30, {127,0,0,1})}),
+		expect_get_workers(Gen_Server, control_panel, self(), {ok, lists:duplicate(30, {127,0,0,1})}),
 
 		Message = create_supported_request(Domain),
 		BinMessage = inet_dns:encode(Message),
@@ -257,17 +257,17 @@ generate_answer__request_with_one_query_and_truncated_answer(Protocol) ->
 		assert_expectations_and_stop(Gen_Server)
 	end.
 
-%% Checks if generate_answer can handle multiple queries when not every query has answer - the reason is domain name
+%% Checks if generate_answer can handle multiple queries when not every query has answer - the reason is wrong domain name
 generate_answer__request_with_multiple_query_and_one_answer(Protocol) ->
-	Domain = "cluster_manager.xxxx.xxx.xxx",
+	Domain = "control_panel.xxxx.xxx.xxx",
 	ResponseTTL = 60,
 
 	{ok, Gen_Server} = gen_server_mock:new(),
 
 	try
-		expect_get_workers(Gen_Server, cluster_manager, self(), {ok, [{127,0,0,1}]}),
+		expect_get_workers(Gen_Server, control_panel, self(), {ok, [{127,0,0,1}]}),
 
-		WrongQuery = create_supported_query(Domain ++ "uknown_suffix"),
+		WrongQuery = create_supported_query("uknown_module" ++ Domain),
 		Message = create_request(create_standard_header(), [create_supported_query(Domain), WrongQuery]),
 		BinMessage = inet_dns:encode(Message),
 
@@ -284,14 +284,14 @@ generate_answer__request_with_multiple_query_and_one_answer(Protocol) ->
 
 %% Checks if generate_answer can handle multiple queries when not every query has answer - the reason is not currently working module
 generate_answer__request_with_multiple_query_and_multiple_answer_number_of_answers_not_match(Protocol) ->
-	Domain = "cluster_manager.xxxx.xxx.xxx",
+	Domain = "control_panel.xxxx.xxx.xxx",
 	ResponseTTL = 60,
 
 	{ok, Gen_Server} = gen_server_mock:new(),
 
 	try
-		expect_get_workers(Gen_Server, cluster_manager, self(), {ok, lists:duplicate(1, {127,0,0,1})}, 2),
-		expect_get_workers(Gen_Server, cluster_manager, self(), {ok, []}, 1),
+		expect_get_workers(Gen_Server, control_panel, self(), {ok, lists:duplicate(1, {127,0,0,1})}, 2),
+		expect_get_workers(Gen_Server, control_panel, self(), {ok, []}, 1),
 
 		Message = create_supported_request(Domain, 3),
 		BinMessage = inet_dns:encode(Message),
@@ -309,14 +309,14 @@ generate_answer__request_with_multiple_query_and_multiple_answer_number_of_answe
 
 %% Checks if generate_answer can handle multiple queries when dispatcher returns different responses for the same queries
 generate_answer__request_with_multiple_query_and_multiple_answer_number_of_answers_not_match_wrong_module(Protocol) ->
-	Domain = "cluster_manager.xxxx.xxx.xxx",
+	Domain = "control_panel.xxxx.xxx.xxx",
 	ResponseTTL = 60,
 
 	{ok, Gen_Server} = gen_server_mock:new(),
 
 	try
-		expect_get_workers(Gen_Server, cluster_manager, self(), {ok, lists:duplicate(1, {127,0,0,1})}, 2),
-		expect_get_workers(Gen_Server, cluster_manager, self(), worker_not_found, 1),
+		expect_get_workers(Gen_Server, control_panel, self(), {ok, lists:duplicate(1, {127,0,0,1})}, 2),
+		expect_get_workers(Gen_Server, control_panel, self(), worker_not_found, 1),
 
 		Message = create_supported_request(Domain, 3),
 		BinMessage = inet_dns:encode(Message),
@@ -334,13 +334,13 @@ generate_answer__request_with_multiple_query_and_multiple_answer_number_of_answe
 
 %% Checks if generate_answer can handle multiple queries when number of queries match number of answers
 generate_answer__request_with_multiple_query_and_multiple_answer(Protocol) ->
-	Domain = "cluster_manager.xxxx.xxx.xxx",
+	Domain = "control_panel.xxxx.xxx.xxx",
 	ResponseTTL = 60,
 
 	{ok, Gen_Server} = gen_server_mock:new(),
 
 	try
-		expect_get_workers(Gen_Server, cluster_manager, self(), {ok, lists:duplicate(1, {127,0,0,1})}, 3),
+		expect_get_workers(Gen_Server, control_panel, self(), {ok, lists:duplicate(1, {127,0,0,1})}, 3),
 
 		Message = create_supported_request(Domain, 3),
 		BinMessage = inet_dns:encode(Message),
@@ -358,13 +358,13 @@ generate_answer__request_with_multiple_query_and_multiple_answer(Protocol) ->
 
 %% Checks if generate_answer can handle domain name ending with a dot
 generate_answer__request_domain_ending_with_dot(Protocol) ->
-	Domain = "cluster_manager.xxxx.xxx.xxx",
+	Domain = "control_panel.xxxx.xxx.xxx",
 	ResponseTTL = 60,
 
 	{ok, Gen_Server} = gen_server_mock:new(),
 
 	try
-		expect_get_workers(Gen_Server, cluster_manager, self(), {ok, [{127,0,0,1}]}),
+		expect_get_workers(Gen_Server, control_panel, self(), {ok, [{127,0,0,1}]}),
 
 		Message = create_supported_request(Domain ++ "."),
 		BinMessage = inet_dns:encode(Message),
@@ -387,7 +387,7 @@ generate_answer__request_domain_ending_with_dot(Protocol) ->
 
 %% Helper function for testing unsupported types and classes
 generate_answer__with_query_params(Protocol, Type, Class) ->
-	Domain = "cluster_manager.xxxx.xxx.xxx",
+	Domain = "control_panel.xxxx.xxx.xxx",
 
 	Message = create_request(create_standard_header(), #dns_query{domain=Domain, type=Type, class=Class}),
 	BinMessage = inet_dns:encode(Message),

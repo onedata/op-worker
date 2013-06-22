@@ -59,7 +59,7 @@
 ## number of dns tcp acceptors
 -veil_cluster_node dns_tcp_acceptor_pool_size {{dns_tcp_acceptor_pool_size}}
 
-## time in sec after which dns closes idle connection
+## time (in sec) after which dns closes idle connection
 -veil_cluster_node dns_tcp_timeout {{dns_tcp_timeout}}
 
 ## dns port

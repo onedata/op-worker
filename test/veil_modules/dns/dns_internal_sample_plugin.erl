@@ -25,7 +25,9 @@
 
 %% init/1
 %% ====================================================================
-%% @doc {@link worker_plugin_behaviour} callback init/1
+%% @doc {@link worker_plugin_behaviour} callback init/1.
+%% @end
+%% ====================================================================
 -spec init(Args :: term()) -> Result when
 	Result :: ok | {error, Error},
 	Error :: term().
@@ -35,7 +37,9 @@ init(ok) ->
 
 %% handle/1
 %% ====================================================================
-%% @doc {@link worker_plugin_behaviour} callback handle/1
+%% @doc {@link worker_plugin_behaviour} callback handle/1.
+%% @end
+%% ====================================================================
 -spec handle(ProtocolVersion :: term(), Request) -> Result when
 	Request :: ping | get_version,
 	Result :: ok | {ok, Response} | {error, Error} | pong | Version,
@@ -52,7 +56,9 @@ handle(_ProtocolVersion, get_version) ->
 
 %% cleanup/0
 %% ====================================================================
-%% @doc {@link worker_plugin_behaviour} callback cleanup/0
+%% @doc {@link worker_plugin_behaviour} callback cleanup/0.
+%% @end
+%% ====================================================================
 -spec cleanup() -> Result when
 	Result :: ok | {error, Error},
 	Error :: timeout | term().

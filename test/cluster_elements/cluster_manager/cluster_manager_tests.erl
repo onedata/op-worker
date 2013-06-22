@@ -198,7 +198,7 @@ update_dns_state__unresolveable_ip_address() ->
 
 %% Checks if update_dns_state can work with current worker host implementation.
 update_dns_state__current_worker_host_implementation() ->
-	{ok, State} = worker_host:init([dns_worker, [], 100]),
+	{ok, State} = worker_host:init([dns_worker, test, 100]),
 	Ref = erlang:monitor(process, self()),
 
 	{reply, {{MegaS, S, MicroS}, Load}, _} = worker_host:handle_call(getLoadInfo, {self(), Ref}, State),

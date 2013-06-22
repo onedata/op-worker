@@ -44,11 +44,11 @@ start_test() ->
 %% ====================================================================
 
 stop_test() ->
-  ok = application:stop(ranch),
-  ok = application:stop(lager),
-  ok = application:stop(ssl),
-  ok = application:stop(crypto),
-  ok = application:stop(public_key),
+  application:stop(ranch),
+  application:stop(lager),
+  application:stop(ssl),
+  application:stop(crypto),
+  application:stop(public_key),
   ok = application:unload(?APP_Name).
 
 %% start_app/1

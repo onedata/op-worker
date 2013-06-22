@@ -171,6 +171,10 @@ handle_call(get_state, _From, State) ->
 handle_call(get_version, _From, State) ->
   {reply, get_version(State), State};
 
+handle_call({stop_worker, Node, Module}, _From, State) ->
+  {Ans, New_State} = stop_worker(Node, Module, State),
+  {reply, Ans, New_State};
+
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
 
@@ -618,6 +622,7 @@ increase_state_num(State) ->
 %% update_dispatcher_state/3
 %% ====================================================================
 %% @doc Updates dispatchers' states.
+%% @end
 -spec update_dispatcher_state(WorkersList, Nodes, NewStateNum) -> ok when
 	WorkersList :: list(),
 	Nodes :: list(),
@@ -633,6 +638,7 @@ update_dispatcher_state(WorkersList, Nodes, NewStateNum) ->
 %% update_dns_state/1
 %% ====================================================================
 %% @doc Updates dnses' states.
+%% @end
 -spec update_dns_state(WorkersList) -> ok when
 	WorkersList :: list().
 %% ====================================================================
@@ -658,7 +664,8 @@ update_dns_state(WorkersList) ->
 
 	ModulesToNodes = lists:map(fun ({Module, NodesAndPids}) ->
 			NodeToLoads = [{Node, check_load(Pid)} || {Node, Pid} <- NodesAndPids],
-			MergedByNode = MergeByFirstElement(NodeToLoads),
+			FilteredNodeToLoads = [{Node, Load} || {Node, {ok, Load}} <- NodeToLoads],
+			MergedByNode = MergeByFirstElement(FilteredNodeToLoads),
 
 			NodeToLoad = [{Node, lists:sum(LoadOfPids)} || {Node, LoadOfPids} <- MergedByNode],
 			SortedNodesByLoad = lists:keysort(2, NodeToLoad),
@@ -684,19 +691,25 @@ update_dns_state(WorkersList) ->
 %% check_load/1
 %% ====================================================================
 %% @doc Checks load of worker plugin.
--spec check_load(WorkerPlugin) -> float() when
+%% @end
+-spec check_load(WorkerPlugin) -> {ok, float()} | {error, term()} when
 	WorkerPlugin :: pid().
 %% ====================================================================
 check_load(WorkerPlugin) ->
 	BeforeCall = os:timestamp(),
-	{LastLoadInfo, Load} = gen_server:call(WorkerPlugin, getLoadInfo),
-	TimeDiff = timer:now_diff(BeforeCall, LastLoadInfo),
-	Load / TimeDiff.
+	try
+		{LastLoadInfo, Load} = gen_server:call(WorkerPlugin, getLoadInfo),
+		TimeDiff = timer:now_diff(BeforeCall, LastLoadInfo),
+		{ok, Load / TimeDiff}
+	catch
+		exit:Reason -> {error, Reason}
+	end.
 
 
 %% node_to_ip/1
 %% ====================================================================
 %% @doc Resolve ipv4 address of node.
+%% @end
 -spec node_to_ip(Node) -> Result when
 	Result :: {ok, inet:ip4_address()}
 	| {error, inet:posix()},

@@ -19,7 +19,7 @@
 
 %% log directories (all_nodes does not include master)
 %% {logdir, master, "."}.
-{logdir, all_nodes, "./example"}.
+{logdir, all_nodes, "./ccm_and_dispatcher_test"}.
 
 %% test castes to be run
 {alias, ccm_and_dispatcher_test, "./ccm_and_dispatcher_test"}.

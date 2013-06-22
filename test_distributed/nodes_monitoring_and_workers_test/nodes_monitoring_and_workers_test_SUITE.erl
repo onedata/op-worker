@@ -96,13 +96,13 @@ tester_test(_Config) ->
   env_setter:synch_nodes(['ccm1@localhost', 'worker1@localhost', 'worker2@localhost', 'worker3@localhost']),
 
   env_setter:start_test(),
-
+  global:sync(),
   timer:sleep(3000),
   NotExistingNodes = ['n1@localhost', 'n2@localhost', 'n3@localhost'],
   lists:foreach(fun(Node) -> gen_server:call({global, ?CCM}, {node_is_up, Node}) end, NotExistingNodes),
 
   NodesUp = ['ccm1@localhost', 'worker1@localhost', 'worker2@localhost', 'worker3@localhost'],
-	Nodes = gen_server:call({global, ?CCM}, get_nodes),
+  Nodes = gen_server:call({global, ?CCM}, get_nodes),
   Check1 = (length(Nodes) == length(NodesUp)),
     try
     Check1 = (length(Nodes) < 1000)

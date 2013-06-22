@@ -13,7 +13,7 @@
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
--include("records.hrl").
+-include("veil_modules/dns/dns_worker.hrl").
 -define(SAMPLE_PLUGIN, dns_internal_sample_plugin).
 -define(MAX_RESPONSE_TIME, 500).
 -endif.
@@ -67,7 +67,7 @@ get_workers() ->
 
 %% Checks if dns worker updates state
 update_state() ->
-	{ok, Worker} = worker_host:start_link(dns_worker, [], 1000),
+	{ok, Worker} = worker_host:start_link(dns_worker, test, 1000),
 
 	ExpectedState =  [{sample_plugin, [{127,0,0,1}]},
 					  {sample_plugin2, [{192,168,0,1},
@@ -75,31 +75,35 @@ update_state() ->
 
 	SampleUpdateStateRequest = {update_state, ExpectedState},
 
-	gen_server:cast(Worker, {synch, 1, SampleUpdateStateRequest, test, {proc, self()}}),
+	try
+		gen_server:cast(Worker, {synch, 1, SampleUpdateStateRequest, non, {proc, self()}}),
 
-	receive_with_default_timeout(ok),
+		receive_with_default_timeout(ok),
 
-	PluginState = gen_server:call(Worker, getPlugInState),
-	?assertEqual(ExpectedState, PluginState#dns_worker_state.workers_list),
+		PluginState = gen_server:call(Worker, getPlugInState),
+		?assertEqual(ExpectedState, PluginState#dns_worker_state.workers_list)
+	after
+		kill_worker_host_with_timeout(Worker)
+	end.
 
-	kill_worker_host_with_timeout(Worker).
 
-
-%% Checks if updatePluginState used by dns worker can work with current worker host implementation
+%% Checks if updatePluginState used by dns_worker supports current worker_host implementation
 updatePluginState_works_with_current_worker_host_implementation() ->
 	{ok, State} = worker_host:init([?SAMPLE_PLUGIN, ok, 100]),
 	Ref = erlang:monitor(process, self()),
 	From = {self(), Ref},
 
 	SampleDNSState = #dns_worker_state{workers_list = [{sample_plugin, [{127,0,0,1}, {127,0,0,2}]}]},
-	{reply, _Response, UpdatedPluginState} = worker_host:handle_call({updatePlugInState, SampleDNSState}, From, State),
+	try
+		{reply, _Response, UpdatedPluginState} = worker_host:handle_call({updatePlugInState, SampleDNSState}, From, State),
 
-	{reply, SampleDNSState, _NewWorkerState} = worker_host:handle_call(getPlugInState, From, UpdatedPluginState),
+		{reply, SampleDNSState, _NewWorkerState} = worker_host:handle_call(getPlugInState, From, UpdatedPluginState)
+	after
+		erlang:demonitor(Ref)
+	end.
 
-	erlang:demonitor(Ref).
 
-
-%% Checks if update_state request supported by dns worker can work with current worker host implementation
+%% Checks if update_state request supported by dns_worker can work with current worker_host implementation
 update_state_works_with_current_worker_host_implementation() ->
 	{ok, State} = worker_host:init([?SAMPLE_PLUGIN, ok, 100]),
 
@@ -119,21 +123,21 @@ update_state_works_with_current_worker_host_implementation() ->
 	end.
 
 
-%% Checks if get_worker request supported by dns worker can work with current worker host implementation
+%% Checks if get_worker request supported by dns_worker can work with current worker host implementation
 get_worker_works_with_current_worker_host_implementation() ->
 	{ok, State} = worker_host:init([?SAMPLE_PLUGIN, ok, 100]),
 
 	meck:new(?SAMPLE_PLUGIN),
 
 	try
-		SampleGetWorkerRequest = {get_worker, dns_worker},
+		ExpectedGetWorkerRequest = {get_worker, dns_worker},
 		ExpectedAnswer = {ok, [{127,0,0,1}]},
 		meck:expect(?SAMPLE_PLUGIN, handle, fun(_PluginVersion, ActualRequest) ->
-				?assertEqual(SampleGetWorkerRequest, ActualRequest),
+				?assertEqual(ExpectedGetWorkerRequest, ActualRequest),
 				ExpectedAnswer
 			end),
 
-		worker_host:handle_cast({synch, 1, SampleGetWorkerRequest, test, {proc, self()}}, State),
+		worker_host:handle_cast({synch, 1, ExpectedGetWorkerRequest, non, {proc, self()}}, State),
 
 		receive_with_default_timeout(ExpectedAnswer),
 
@@ -159,10 +163,13 @@ receive_with_default_timeout(ExpectedAnswer) ->
 get_workers_with_initial_state_and_expected_response(InitialState, Module, ExpectedResponse) ->
 	{ok, Worker} = worker_host:start_link(dns_worker, InitialState, 1000),
 
-	gen_server:cast(Worker, {synch, 1, {get_worker, Module}, test, {proc, self()}}),
+	try
+		gen_server:cast(Worker, {synch, 1, {get_worker, Module}, non, {proc, self()}}),
 
-	receive_with_default_timeout(ExpectedResponse),
-	kill_worker_host_with_timeout(Worker).
+		receive_with_default_timeout(ExpectedResponse)
+	after
+		kill_worker_host_with_timeout(Worker)
+	end.
 
 
 %% Helping function for killing worker host

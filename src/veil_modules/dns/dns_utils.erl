@@ -12,12 +12,11 @@
 
 -module(dns_utils).
 -include_lib("kernel/src/inet_dns.hrl").
+-include("veil_modules/dns/dns_utils.hrl").
 -define(BASE_DNS_HEADER_SIZE, 12).  %% header size according to RFC1035#section-4.1.1
 -define(BASE_DNS_QUESTION_SIZE, 4). %% query size according to RFC1035#section-4.1.2
 -define(DNS_ANSWER_SIZE, 16).       %% making assumption that answer have matching query(label compression)
 -define(MAX_UDP_PACKET, 512).
--define(DOMAIN_SUFFIX, ["xxxx", "xxx", "xxx"]).
--define(DEFAULT_WORKER_PARAMETERS, [{domain, Domain}, {type, Type}, {ttl, ResponseTTL},	{class, Class}]).
 
 
 %% ====================================================================
@@ -29,6 +28,8 @@
 %% generate_response/5
 %% ====================================================================
 %% @doc Generates binary dns response for given binary dns request, non protocol agnostic.
+%% @end
+%% ====================================================================
 -spec generate_answer(Packet, Dispatcher, DispatcherTimeout, ResponseTTL, Protocol) -> Result when
 	Packet :: binary(),
 	Dispatcher :: term(),
@@ -59,6 +60,8 @@ generate_answer(Packet, Dispatcher, DispatcherTimeout, ResponseTTL, tcp) ->
 %% handle_max_udp_response_size/3
 %% ====================================================================
 %% @doc Sets tc flag and truncates list of answers if packet size exceed limit.
+%% @end
+%% ====================================================================
 -spec handle_max_udp_response_size(Header :: term(), QuestionList :: [#dns_query{domain::[any()]}], AnswerList :: list()) -> Result when
 	Result :: {NewHeader :: term(), NewAnswerList :: list()}.
 %% ====================================================================
@@ -67,7 +70,7 @@ handle_max_udp_response_size(Header, QuestionList, AnswerList) ->
 	LeftSize = ?MAX_UDP_PACKET - ?BASE_DNS_HEADER_SIZE - QueriesSize,
 	DNS_Responses_Size = length(AnswerList) * ?DNS_ANSWER_SIZE,
 	if
-		DNS_Responses_Size > LeftSize -> lager:info("Truncating dns_worker response"),
+		DNS_Responses_Size > LeftSize -> lager:info("Truncating dns response"),
 									     FilteredAnswerList = lists:sublist(AnswerList, 1, LeftSize div ?DNS_ANSWER_SIZE),
 										 {inet_dns:make_header(Header, tc, 1), FilteredAnswerList};
 		true -> {Header, AnswerList}
@@ -77,6 +80,8 @@ handle_max_udp_response_size(Header, QuestionList, AnswerList) ->
 %% generate_answer/4
 %% ====================================================================
 %% @doc Generate dns answer for given dns request - protocol agnostic.
+%% @end
+%% ====================================================================
 -spec generate_answer(Packet, Dispatcher, DispatcherTimeout, ResponseTTL) -> Result when
 	Packet :: binary(),
 	Dispatcher :: term(),
@@ -105,6 +110,8 @@ generate_answer(Packet, Dispatcher, DispatcherTimeout, ResponseTTL) ->
 %% create_response_params/6
 %% ====================================================================
 %% @doc Returns all parameters required to construct dns_worker response.
+%% @end
+%% ====================================================================
 -spec create_response_params(A_In_Queries, AllQueries, ArList, Dispatcher, DispatcherTimeout, ResponseTTL) -> Result when
 	A_In_Queries :: list(),
 	AllQueries :: list(),
@@ -130,6 +137,8 @@ create_response_params(A_In_Queries, AllQueries, ArList, Dispatcher, DispatcherT
 %% create_workers_response_params/4
 %% ====================================================================
 %% @doc Returns response params for specified query. Query labels comparisons are case insensitive.
+%% @end
+%% ====================================================================
 -spec create_workers_response_params(Query, Dispatcher, DispatcherTimeout, ResponseTTL) -> Result when
 	Query :: term(),
 	Dispatcher :: term(),
@@ -139,18 +148,21 @@ create_response_params(A_In_Queries, AllQueries, ArList, Dispatcher, DispatcherT
 %% ====================================================================
 create_workers_response_params(#dns_query{domain = Domain,type = Type, class = Class}, Dispatcher, DispatcherTimeout, ResponseTTL) ->
 	LoweredDomain = string:to_lower(Domain),
-	Tokens = string:tokens(LoweredDomain, "."),
+	[StrModule | _Domain_Suffix] = string:tokens(LoweredDomain, "."),
+	Module = list_to_atom(StrModule),
 
-	case Tokens of
-		[Module | ?DOMAIN_SUFFIX] -> DispatcherResponse = get_workers(list_to_atom(Module), Dispatcher, DispatcherTimeout),
+	case lists:member(Module, ?EXTERNALLY_VISIBLE_MODULES) of
+		true -> DispatcherResponse = get_workers(Module, Dispatcher, DispatcherTimeout),
 									 translate_dispatcher_response_to_params(DispatcherResponse, Domain, Type, Class, ResponseTTL);
-		_ -> [{rc, ?NXDOMAIN}]
+		false -> [{rc, ?NXDOMAIN}]
 	end.
 
 
 %% get_workers/3
 %% ====================================================================
 %% @doc Returns workers for given module received from dns_worker.
+%% @end
+%% ====================================================================
 -spec get_workers(Module, Dispatcher, DispatcherTimeout) -> Result when
 	Module :: atom(),
 	Dispatcher :: term(),
@@ -177,6 +189,8 @@ get_workers(Module, Dispatcher, DispatcherTimeout) ->
 %% translate_dispatcher_response_to_params/5
 %% ====================================================================
 %% @doc Returns apropriate parameters based on dispatcher response.
+%% @end
+%% ====================================================================
 -spec translate_dispatcher_response_to_params(DispatcherResponse, Domain, Type, Class, ResponseTTL) -> list() when
 	DispatcherResponse :: {ok, ListOfWorkers :: list()} | {error, Reason :: atom()},
 	Domain :: string(),
@@ -197,6 +211,8 @@ translate_dispatcher_response_to_params(DispatcherResponse, Domain, Type, Class,
 %% create_response_from_properties/3
 %% ====================================================================
 %% @doc Creates dns response from given properties.
+%% @end
+%% ====================================================================
 -spec create_response_from_properties(Header, Queries, Props) -> Result when
 	Header :: term(),
 	Queries :: term(),

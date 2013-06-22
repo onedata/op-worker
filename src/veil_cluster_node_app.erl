@@ -39,14 +39,7 @@ start(_StartType, _StartArgs) ->
   {ok, Port} = application:get_env(?APP_Name, dispatcher_port),
   {ok, DispatcherPoolSize} = application:get_env(?APP_Name, dispatcher_pool_size),
   {ok, CertFile} = application:get_env(?APP_Name, ssl_cert_path),
-  {ok, DispatcherTimeout} = application:get_env(?APP_Name, dispatcher_timeout),
-  {ok, TcpAcceptorPool} = application:get_env(?APP_Name, dns_tcp_acceptor_pool_size),
-  {ok, TcpTimeout} = application:get_env(?APP_Name, dns_tcp_timeout),
-  {ok, DNSPort} = application:get_env(?APP_Name, dns_port),
-  {ok, DNSResponseTTL} = application:get_env(?APP_Name, dns_response_ttl),
-  {ok, _} = ranch:start_listener(dispatcher_listener, DispatcherPoolSize, ranch_tcp, [{port, Port}, {certfile, atom_to_list(CertFile)}], ranch_handler, []),
-  DNS_Transport_Options =  [{packet, 2}, {dispatcher_timeout, DispatcherTimeout}, {dns_response_ttl, DNSResponseTTL}, {dns_tcp_timeout, TcpTimeout}, {keepalive, true}],
-  {ok, _} = ranch:start_listener(dns_tcp_listener, TcpAcceptorPool, ranch_tcp, [{port, DNSPort}], dns_ranch_tcp_handler, DNS_Transport_Options),
+  {ok, _} = ranch:start_listener(dispatcher_listener, DispatcherPoolSize, ranch_ssl, [{port, Port}, {certfile, atom_to_list(CertFile)}], ranch_handler, []),
   veil_cluster_node_sup:start_link(NodeType).
 
 
@@ -58,5 +51,4 @@ start(_StartType, _StartArgs) ->
 %% ====================================================================
 stop(_State) ->
   ranch:stop_listener(dispatcher_listener),
-  ranch:stop_listener(dns_tcp_listener),
   ok.

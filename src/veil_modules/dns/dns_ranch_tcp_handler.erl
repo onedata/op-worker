@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module is responsible for handling tcp aspects of dns protocol
+%% @doc: This module is responsible for handling tcp aspects of dns protocol.
 %% @end
 %% ===================================================================
 
@@ -25,6 +25,8 @@
 %% start_link/4
 %% ====================================================================
 %% @doc Starts handler.
+%% @end
+%% ====================================================================
 -spec start_link(Ref :: term(), Socket :: term(), Transport :: term(), Opts :: term()) -> Result when
 	Result ::  {ok, Pid},
 	Pid :: pid().
@@ -37,6 +39,8 @@ start_link(Ref, Socket, Transport, Opts) ->
 %% init/4
 %% ====================================================================
 %% @doc Initializes handler loop.
+%% @end
+%% ====================================================================
 -spec init(Ref :: term(), Socket :: term(), Transport :: term(), Opts :: list()) -> Result when
 	Result ::  ok.
 %% ====================================================================
@@ -56,6 +60,8 @@ init(Ref, Socket, Transport, Opts) ->
 %% loop/5
 %% ====================================================================
 %% @doc Main handler loop.
+%% @end
+%% ====================================================================
 -spec loop(Socket, Transport, ResponseTTL, TCPIdleTime, DispatcherTimeout) -> ok when
 	Socket :: inet:socket(),
 	Transport :: term(),
@@ -76,6 +82,8 @@ loop(Socket, Transport, ResponseTTL, TCPIdleTime, DispatcherTimeout) ->
 %% handle_request/5
 %% ====================================================================
 %% @doc Handles dns request.
+%% @end
+%% ====================================================================
 -spec handle_request(Socket, Transport, Packet, ResponseTTL, DispatcherTimeout) -> term() when
 	Socket :: inet:socket(),
 	Transport :: term(),
