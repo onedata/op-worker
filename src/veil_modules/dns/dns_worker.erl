@@ -109,12 +109,12 @@ cleanup() ->
 	end,
 
 	SafelyExecute(fun () -> ok = supervisor:terminate_child(?Supervisor_Name, ?DNS_UDP),
-		supervisor:terminate_child(?Supervisor_Name, ?DNS_UDP)
-	end,
+			supervisor:delete_child(?Supervisor_Name, ?DNS_UDP)
+		end,
 		"Error stopping dns udp listener, status ~p"),
 
 	SafelyExecute(fun () -> ok = ranch:stop_listener(dns_tcp_listener)
-	end,
+		end,
 		"Error stopping dns tcp listener, status ~p"),
 	ok.
 

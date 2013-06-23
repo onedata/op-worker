@@ -97,7 +97,7 @@ tester_test(_Config) ->
 
   env_setter:start_test(),
   global:sync(),
-  timer:sleep(3000),
+  timer:sleep(4000),
   NotExistingNodes = ['n1@localhost', 'n2@localhost', 'n3@localhost'],
   lists:foreach(fun(Node) -> gen_server:call({global, ?CCM}, {node_is_up, Node}) end, NotExistingNodes),
 
