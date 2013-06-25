@@ -18,6 +18,7 @@
 -include_lib("files_common.hrl").
 -include("fuse_messages_pb.hrl").
 -include("communication_protocol_pb.hrl").
+-include("veil_modules/dao/dao_types.hrl").
 
 -define(LOCATION_VALIDITY, 60*15).
 -define(FILE_NOT_FOUND_MESSAGE, "Error: file_not_found").
@@ -87,7 +88,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getf
   Validity = ?LOCATION_VALIDITY,
   case Status of
     ok ->
-      {Status2, TmpAns2} = save_file_descriptor(ProtocolVersion, File, FuseID, Validity),
+      {Status2, TmpAns2} = save_file_descriptor(ProtocolVersion, File, TmpAns#veil_document.uuid, FuseID, Validity),
       case Status2 of
         ok ->
           FileDesc = TmpAns#veil_document.record,
@@ -123,7 +124,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getn
             Validity = ?LOCATION_VALIDITY,
             case Status of
               ok ->
-                {Status2, TmpAns2} = save_file_descriptor(ProtocolVersion, File, FuseID, Validity),
+                {Status2, TmpAns2} = save_file_descriptor(ProtocolVersion, File, TmpAns, FuseID, Validity),
                 case Status2 of
                   ok ->
                     #filelocation{storage_helper = Storage_helper, file_id = File_id, validity = Validity};
@@ -277,15 +278,15 @@ save_file_descriptor(ProtocolVersion, File, Validity) ->
   wait_for_dao_ans(Ans, File, 100, "save_descriptor").
 
 
-%% save_file_descriptor/4
+%% save_file_descriptor/5
 %% ====================================================================
 %% @doc Saves in db information that a file is used by FUSE.
 %% @end
--spec save_file_descriptor(ProtocolVersion :: term(), File :: string(), FuseID :: string(), Validity :: integer()) -> Result when
+-spec save_file_descriptor(ProtocolVersion :: term(), File :: string(), Uuid::uuid(), FuseID :: string(), Validity :: integer()) -> Result when
   Result :: term().
 %% ====================================================================
 
-save_file_descriptor(ProtocolVersion, File, FuseID, Validity) ->
+save_file_descriptor(ProtocolVersion, File, Uuid, FuseID, Validity) ->
   Pid = self(),
   Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 20, {vfs, list_descriptors, [{by_file_n_owner, {File, FuseID}}, 0, 10]}}),
 
@@ -294,7 +295,7 @@ save_file_descriptor(ProtocolVersion, File, FuseID, Validity) ->
     ok ->
       case length(TmpAns) of
         0 ->
-          save_new_file_descriptor(ProtocolVersion, File, FuseID, Validity);
+          save_new_file_descriptor(ProtocolVersion, File, Uuid, FuseID, Validity);
         1 ->
           [VeilDoc | _] = TmpAns,
           save_file_descriptor(ProtocolVersion, VeilDoc, Validity);
@@ -305,10 +306,10 @@ save_file_descriptor(ProtocolVersion, File, FuseID, Validity) ->
     _Other -> {Status, TmpAns}
   end.
 
-save_new_file_descriptor(ProtocolVersion, File, FuseID, Validity) ->
+save_new_file_descriptor(ProtocolVersion, File, Uuid, FuseID, Validity) ->
   Pid = self(),
 
-  Descriptor = update_file_descriptor(#file_descriptor{file = File, fuse_id = FuseID}, Validity),
+  Descriptor = update_file_descriptor(#file_descriptor{file = Uuid, fuse_id = FuseID}, Validity),
   Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 100, {vfs, save_descriptor, [Descriptor]}}),
   wait_for_dao_ans(Ans, File, 100, "save_descriptor").
 
