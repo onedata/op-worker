@@ -99,7 +99,6 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getf
     _BadStatus -> #filelocation{storage_helper = TmpAns, file_id = "Error", validity = 0}
   end;
 
-%% TODO zabezpieczyć na wypadek gdyby pytano o istniejący plik
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getnewfilelocation) ->
   File = Record#getnewfilelocation.file_logic_name,
   {FindStatus, FindTmpAns} = get_file(ProtocolVersion, File, FuseID),
@@ -113,12 +112,12 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getn
           ok ->
             {FileName, Parent} = ParentInfo,
             Storage_helper = "helper1",
-            File_id = "real_location_of" ++ FileName,
+            File_id = "real_location_of___" ++ re:replace(File, "/", "___", [global, {return,list}]),
             FileLocation = #file_location{storage_helper_id = Storage_helper, file_id = File_id},
-            File = #file{type = ?REG_TYPE, name = FileName, size = 0, parent = Parent, location = FileLocation},
+            FileRecord = #file{type = ?REG_TYPE, name = FileName, size = 0, parent = Parent, location = FileLocation},
 
             Pid = self(),
-            Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 1, {vfs, save_file, [File]}}),
+            Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 1, {vfs, save_file, [FileRecord]}}),
             {Status, TmpAns} = wait_for_dao_ans(Ans, FileName, 1, "save_file"),
 
             Validity = ?LOCATION_VALIDITY,
@@ -135,30 +134,37 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getn
           _ParentError -> #filelocation{storage_helper = ParentInfo, file_id = "Error", validity = 0}
         end;
       _Other ->
+        lager:error([{mod, ?MODULE}], "Error: can not create new file: ~s, can not chceck if file exists", [File]),
         #filelocation{storage_helper = "Error: can not chceck if file exists", file_id = "Error", validity = 0}
     end;
-    _Other2 -> #filelocation{storage_helper = "Error: can not chceck if file exists", file_id = "Error", validity = 0}
+    _Other2 ->
+      lager:error([{mod, ?MODULE}], "Error: can not create new file: ~s, can not chceck if file exists", [File]),
+      #filelocation{storage_helper = "Error: can not chceck if file exists", file_id = "Error", validity = 0}
   end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, filenotused) ->
   File = Record#filenotused.file_logic_name,
   Pid = self(),
-  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 1, {vfs, remove_descriptor, [{by_file_n_owner, {File, FuseID}}]}}),
-  {Status, TmpAns} = wait_for_dao_ans(Ans, File, 1, "remove_descriptor"),
+  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 40, {vfs, remove_descriptor, [{by_file_n_owner, {File, FuseID}}]}}),
+  {Status, TmpAns} = wait_for_dao_ans(Ans, File, 40, "remove_descriptor"),
   case Status of
     ok -> #atom{value = "ok"};
-    _Other -> #atom{value = TmpAns}
+    _Other ->
+      lager:error([{mod, ?MODULE}], "Error: for file not used message, file: ~s", [File]),
+      #atom{value = TmpAns}
   end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, renewfilelocation) ->
   File = Record#renewfilelocation.file_logic_name,
   Pid = self(),
-  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 1, {vfs, list_descriptors, [{by_file_n_owner, {File, FuseID}}, 0, 10]}}),
-  {Status, TmpAns} = wait_for_dao_ans(Ans, File, 1, "list_descriptors"),
+  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 50, {vfs, list_descriptors, [{by_file_n_owner, {File, FuseID}}, 0, 10]}}),
+  {Status, TmpAns} = wait_for_dao_ans(Ans, File, 50, "list_descriptors"),
   case Status of
     ok ->
-      case size(TmpAns) of
-        0 -> #filelocationvalidity{answer = "Error: file descriptor not found", validity = 0};
+      case length(TmpAns) of
+        0 ->
+          lager:error([{mod, ?MODULE}], "Error: can not renew file location for file: ~s, descriptor not found", [File]),
+          #filelocationvalidity{answer = "Error: file descriptor not found", validity = 0};
         1 ->
           [VeilDoc | _] = TmpAns,
           Validity = ?LOCATION_VALIDITY,
@@ -167,15 +173,23 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, rene
           case Status2 of
             ok ->
               #filelocationvalidity{answer = "ok", validity = Validity};
-            _BadStatus2 -> #filelocationvalidity{answer = TmpAns2, validity = 0}
+            _BadStatus2 ->
+              lager:error([{mod, ?MODULE}], "Error: can not renew file location for file: ~s", [File]),
+              #filelocationvalidity{answer = TmpAns2, validity = 0}
           end;
-        _Many -> #filelocationvalidity{answer = "Error: too many file descriptors", validity = 0}
+        _Many ->
+          lager:error([{mod, ?MODULE}], "Error: can not renew file location for file: ~s, too many file descriptors", [File]),
+          #filelocationvalidity{answer = "Error: too many file descriptors", validity = 0}
       end;
-    _Other -> #filelocationvalidity{answer = TmpAns, validity = 0}
+    _Other ->
+      lager:error([{mod, ?MODULE}], "Error: can not renew file location for file: ~s", [File]),
+      #filelocationvalidity{answer = TmpAns, validity = 0}
   end;
 
+%% TODO sprawdzić czy katalog istnieje
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, createdir) ->
-  {ParentFound, ParentInfo} = get_parent_and_name_from_path(Record#createdir.dir_logic_name, ProtocolVersion),
+  Dir = Record#createdir.dir_logic_name,
+  {ParentFound, ParentInfo} = get_parent_and_name_from_path(Dir, ProtocolVersion),
 
   case ParentFound of
     ok ->
@@ -183,15 +197,19 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, crea
       File = #file{type = ?DIR_TYPE, name = FileName, parent = Parent},
 
       Pid = self(),
-      Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 1, {vfs, save_file, [File]}}),
-      {Status, TmpAns} = wait_for_dao_ans(Ans, FileName, 1, "save_file"),
+      Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 60, {vfs, save_file, [File]}}),
+      {Status, TmpAns} = wait_for_dao_ans(Ans, FileName, 60, "save_file"),
 
       case Status of
         ok ->
           #atom{value = "ok"};
-        _BadStatus -> #atom{value = TmpAns}
+        _BadStatus ->
+          lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s", [Dir]),
+          #atom{value = TmpAns}
       end;
-    _ParentError -> #filelocation{storage_helper = ParentInfo, file_id = "Error", validity = 0}
+    _ParentError ->
+      lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s", [Dir]),
+      #filelocation{storage_helper = ParentInfo, file_id = "Error", validity = 0}
   end;
 
 %% TODO zrobić obsługę większej ilości katalogów niż 1000 (trzeba wprowadzić nowe wiadomości do protokołu)
@@ -199,12 +217,14 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getf
   File = Record#getfilechildren.dir_logic_name,
 
   Pid = self(),
-  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 1, {vfs, list_dir, [File, 1000, 0]}}),
-  {Status, TmpAns} = wait_for_dao_ans(Ans, File, 1, "list_dir"),
+  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 70, {vfs, list_dir, [File, 1000, 0]}}),
+  {Status, TmpAns} = wait_for_dao_ans(Ans, File, 70, "list_dir"),
 
   Children = case Status of
     ok -> create_children_list(TmpAns);
-    _BadStatus -> [TmpAns]
+    _BadStatus ->
+      lager:error([{mod, ?MODULE}], "Error: can not list files in dir: ~s", [File]),
+      [TmpAns]
   end,
 
   #filechildren{child_logic_name = Children};
@@ -213,28 +233,15 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, dele
   File = Record#deletefile.file_logic_name,
 
   Pid = self(),
-  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 1, {vfs, remove_file, [File]}}),
-  LogMessage = "remove_file",
-  {Status, TmpAns} = case Ans of
-    ok ->
-      receive
-        {worker_answer, 1, ok} -> {ok, ok};
-        Ans2 ->
-          lager:error([{mod, ?MODULE}], "Error: wrong dao answer for: " ++ LogMessage ++ ", file: ~s, answer: ~p", [File, Ans2]),
-          {error, "Error: wrong dao answer for: " ++ LogMessage}
-      after 1000 ->
-        lager:error([{mod, ?MODULE}], "Error: dao timeout for: " ++ LogMessage ++ ", file: ~s", [File]),
-        {error, "Error: dao timeout for: " ++ LogMessage}
-      end;
-    Other ->
-      lager:error([{mod, ?MODULE}], "Error: dispatcher error for: " ++ LogMessage ++ ", file: ~s, error: ~p", [File, Other]),
-      {error, "Error: dispatcher for: " ++ LogMessage}
-  end,
+  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 110, {vfs, remove_file, [File]}}),
+  {Status, TmpAns} = wait_for_dao_ans(Ans, File, 110, "remove_file"),
 
   case Status of
     ok ->
       #atom{value = "ok"};
-    _BadStatus -> #atom{value = TmpAns}
+    _BadStatus ->
+      lager:error([{mod, ?MODULE}], "Error: can not remove file: ~s", [File]),
+      #atom{value = TmpAns}
   end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, renamefile) ->
@@ -242,20 +249,22 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, rena
   NewFileName = Record#renamefile.to_file_logic_name,
 
   Pid = self(),
-  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 1, {vfs, rename_file, [File, NewFileName]}}),
-  {Status, TmpAns} = wait_for_dao_ans(Ans, File, 1, "rename_file"),
+  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 80, {vfs, rename_file, [File, NewFileName]}}),
+  {Status, TmpAns} = wait_for_dao_ans(Ans, File, 80, "rename_file"),
 
   case Status of
     ok ->
       #atom{value = "ok"};
-    _BadStatus -> #atom{value = TmpAns}
+    _BadStatus ->
+      lager:error([{mod, ?MODULE}], "Error: can not rename file: ~s", [File]),
+      #atom{value = TmpAns}
   end.
 
-%% save_file_descriptor/4
+%% save_file_descriptor/3
 %% ====================================================================
 %% @doc Saves in db information that a file is used by FUSE.
 %% @end
--spec save_file_descriptor(ProtocolVersion :: term(), File :: string(), FuseID :: string(), Validity :: integer()) -> Result when
+-spec save_file_descriptor(ProtocolVersion :: term(), File :: record(), Validity :: integer()) -> Result when
   Result :: term().
 %% ====================================================================
 
@@ -267,18 +276,31 @@ save_file_descriptor(ProtocolVersion, File, Validity) ->
   Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 100, {vfs, save_descriptor, [File#veil_document{record = Descriptor}]}}),
   wait_for_dao_ans(Ans, File, 100, "save_descriptor").
 
+
+%% save_file_descriptor/4
+%% ====================================================================
+%% @doc Saves in db information that a file is used by FUSE.
+%% @end
+-spec save_file_descriptor(ProtocolVersion :: term(), File :: string(), FuseID :: string(), Validity :: integer()) -> Result when
+  Result :: term().
+%% ====================================================================
+
 save_file_descriptor(ProtocolVersion, File, FuseID, Validity) ->
   Pid = self(),
-  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 1, {vfs, list_descriptors, [{by_file_n_owner, {File, FuseID}}, 0, 10]}}),
-  {Status, TmpAns} = wait_for_dao_ans(Ans, File, 1, "list_descriptors"),
+  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 20, {vfs, list_descriptors, [{by_file_n_owner, {File, FuseID}}, 0, 10]}}),
+
+  {Status, TmpAns} = wait_for_dao_ans(Ans, File, 20, "list_descriptors"),
   case Status of
     ok ->
-      case size(TmpAns) of
-        0 -> save_new_file_descriptor(ProtocolVersion, File, FuseID, Validity);
+      case length(TmpAns) of
+        0 ->
+          save_new_file_descriptor(ProtocolVersion, File, FuseID, Validity);
         1 ->
           [VeilDoc | _] = TmpAns,
           save_file_descriptor(ProtocolVersion, VeilDoc, Validity);
-        _Many -> {error, "Error: too many file descriptors"}
+        _Many ->
+          lager:error([{mod, ?MODULE}], "Error: to many file descriptors for file: ~s", [File]),
+          {error, "Error: too many file descriptors"}
       end;
     _Other -> {Status, TmpAns}
   end.
@@ -287,7 +309,6 @@ save_new_file_descriptor(ProtocolVersion, File, FuseID, Validity) ->
   Pid = self(),
 
   Descriptor = update_file_descriptor(#file_descriptor{file = File, fuse_id = FuseID}, Validity),
-
   Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 100, {vfs, save_descriptor, [Descriptor]}}),
   wait_for_dao_ans(Ans, File, 100, "save_descriptor").
 
@@ -309,6 +330,7 @@ wait_for_dao_ans(Ans, File, MessageId, LogMessage) ->
   case Ans of
     ok ->
       receive
+        {worker_answer, MessageId, ok} -> {ok, ok};
         {worker_answer, MessageId, {ok, DaoAns}} -> {ok, DaoAns};
         {worker_answer, MessageId, {error, file_not_found}} -> {error, file_not_found};
         Ans2 ->
@@ -348,7 +370,9 @@ get_parent_and_name_from_path(Path, ProtocolVersion) ->
           {Status, TmpAns} = wait_for_dao_ans(Ans, Parent, 1000, "get_file"),
           case Status of
             ok -> {ok, {File, TmpAns#veil_document.uuid}};
-            _BadStatus -> {error, "Error: cannot find parent: " ++ TmpAns}
+            _BadStatus ->
+              lager:error([{mod, ?MODULE}], "Error: cannot find parent for path: ~s", [Path]),
+              {error, "Error: cannot find parent: " ++ TmpAns}
           end
       end
   end.
@@ -383,5 +407,5 @@ create_children_list([File | Rest], Ans) ->
 
 get_file(ProtocolVersion, File, FuseID) ->
   Pid = self(),
-  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 1, {vfs, get_file, [File]}}),
-  wait_for_dao_ans(Ans, File, 1, "get_file").
+  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 30, {vfs, get_file, [File]}}),
+  wait_for_dao_ans(Ans, File, 30, "get_file").
