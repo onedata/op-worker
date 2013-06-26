@@ -187,30 +187,43 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, rene
       #filelocationvalidity{answer = TmpAns, validity = 0}
   end;
 
-%% TODO sprawdzić czy katalog istnieje
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, createdir) ->
   Dir = Record#createdir.dir_logic_name,
-  {ParentFound, ParentInfo} = get_parent_and_name_from_path(Dir, ProtocolVersion),
+  {FindStatus, FindTmpAns} = get_file(ProtocolVersion, Dir, FuseID),
+  case FindStatus of
+    ok -> #atom{value = ?FILE_ALREADY_EXISTS};
+    error -> case FindTmpAns of
+      file_not_found ->
+        {ParentFound, ParentInfo} = get_parent_and_name_from_path(Dir, ProtocolVersion),
 
-  case ParentFound of
-    ok ->
-      {FileName, Parent} = ParentInfo,
-      File = #file{type = ?DIR_TYPE, name = FileName, parent = Parent},
+        case ParentFound of
+          ok ->
+            {FileName, Parent} = ParentInfo,
+            File = #file{type = ?DIR_TYPE, name = FileName, parent = Parent},
 
-      Pid = self(),
-      Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 60, {vfs, save_file, [File]}}),
-      {Status, TmpAns} = wait_for_dao_ans(Ans, FileName, 60, "save_file"),
+            Pid = self(),
+            Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 60, {vfs, save_file, [File]}}),
+            {Status, TmpAns} = wait_for_dao_ans(Ans, FileName, 60, "save_file"),
 
-      case Status of
-        ok ->
-          #atom{value = "ok"};
-        _BadStatus ->
-          lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s", [Dir]),
-          #atom{value = TmpAns}
+            case Status of
+              ok ->
+                #atom{value = "ok"};
+              _BadStatus ->
+                lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s", [Dir]),
+                #atom{value = TmpAns}
+            end;
+          _ParentError ->
+            lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s", [Dir]),
+            #atom{value = ParentInfo}
+        end;
+
+       _Other ->
+        lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s, can not chceck if dir exists", [Dir]),
+         #atom{value = "Error: can not chceck if dir exists"}
       end;
-    _ParentError ->
-      lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s", [Dir]),
-      #filelocation{storage_helper = ParentInfo, file_id = "Error", validity = 0}
+    _Other2 ->
+      lager:error([{mod, ?MODULE}], "Error: can not create new dir: ~s, can not chceck if dir exists", [Dir]),
+      #atom{value = "Error: can not chceck if dir exists"}
   end;
 
 %% TODO zrobić obsługę większej ilości katalogów niż 1000 (trzeba wprowadzić nowe wiadomości do protokołu)
