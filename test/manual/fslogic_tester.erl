@@ -32,12 +32,15 @@ test(Host) ->
 
 test(Host, Cert, Port) ->
   ssl:start(),
-  TestFile = "test_file6",
-  DirName = "test_dir6",
-  FilesInDir = [DirName ++ "/file_in_dir111", DirName ++ "/file_in_dir112", DirName ++ "/file_in_dir113"],
+  TestFile = "fslogic_test_file",
+  DirName = "fslogic_test_dir",
+  FilesInDir = [DirName ++ "/file_in_dir1", DirName ++ "/file_in_dir2", DirName ++ "/file_in_dir3"],
+  NewNameOfFIle = "new_name_of_file",
 
   {Status, Helper, Id, Validity} = create_file(Host, Cert, Port, TestFile),
   io:format("Test file creation: aswer status: ~s, helper: ~s, id: ~s, validity: ~b~n", [Status, Helper, Id, Validity]),
+  {Status1, Helper1, Id1, Validity1} = create_file(Host, Cert, Port, TestFile),
+  io:format("Test file created second time: aswer status: ~s, helper: ~s, id: ~s, validity: ~b~n", [Status1, Helper1, Id1, Validity1]),
 
   {Status2, Helper2, Id2, Validity2} = get_file_location(Host, Cert, Port, TestFile),
   io:format("Test file location check: aswer status: ~s, helper: ~s, id: ~s, validity: ~b~n", [Status2, Helper2, Id2, Validity2]),
@@ -47,9 +50,13 @@ test(Host, Cert, Port) ->
 
   {Status4, Answer4} = file_not_used(Host, Cert, Port, TestFile),
   io:format("Test file not used message: aswer status: ~s, answer: ~p~n", [Status4, Answer4]),
+  {Status4_1, Answer4_1} = file_not_used(Host, Cert, Port, TestFile),
+  io:format("Test file not used message (second time): aswer status: ~s, answer: ~p~n", [Status4_1, Answer4_1]),
 
   {Status5, Answer5} = mkdir(Host, Cert, Port, DirName),
   io:format("Test directory creation: aswer status: ~s, answer: ~p~n", [Status5, Answer5]),
+  {Status5_1, Answer5_1} = mkdir(Host, Cert, Port, DirName),
+  io:format("Test directory created second time: aswer status: ~s, answer: ~p~n", [Status5_1, Answer5_1]),
 
   CreateFile = fun(File) ->
     {Status6, Helper6, Id6, Validity6} = create_file(Host, Cert, Port, File),
@@ -66,19 +73,39 @@ test(Host, Cert, Port) ->
 
   [FirstFileInDir | FilesInDirTail] = FilesInDir,
   {Status8, Answer8} = delete_file(Host, Cert, Port, FirstFileInDir),
-  io:format("Test file delete: aswer status: ~s, answer: ~p~n", [Status8, Answer8]),
+  io:format("Test file ~s delete: aswer status: ~s, answer: ~p~n", [FirstFileInDir, Status8, Answer8]),
+  {Status8_1, Answer8_1} = delete_file(Host, Cert, Port, FirstFileInDir),
+  io:format("Test file deleted second time: aswer status: ~s, answer: ~p~n", [Status8_1, Answer8_1]),
 
   {Status9, Files9} = ls(Host, Cert, Port, DirName),
   io:format("ls test: aswer status: ~s~n", [Status9]),
   lists:foreach(PrintFiles, Files9),
 
-  [SecondFileInDir | _] = FilesInDirTail,
-  {Status10, Answer10} = rename_file(Host, Cert, Port, SecondFileInDir, "new_name_of" ++ SecondFileInDir),
+  [SecondFileInDir | FilesInDirTail2] = FilesInDirTail,
+  {Status10, Answer10} = rename_file(Host, Cert, Port, SecondFileInDir, NewNameOfFIle),
   io:format("Test file rename: aswer status: ~s, answer: ~p~n", [Status10, Answer10]),
+  FilesInDir2 = [DirName ++ "/" ++ NewNameOfFIle | FilesInDirTail2],
 
   {Status11, Files11} = ls(Host, Cert, Port, DirName),
   io:format("ls test: aswer status: ~s~n", [Status11]),
-  lists:foreach(PrintFiles, Files11).
+  lists:foreach(PrintFiles, Files11),
+
+  {Status12, Answer12} = delete_file(Host, Cert, Port, DirName),
+  io:format("Directory delete: aswer status: ~s, answer: ~p~n", [Status12, Answer12]),
+
+  Delete = fun(File) ->
+    {Status13, Answer13} = delete_file(Host, Cert, Port, File),
+    io:format("Test file ~s delete: aswer status: ~s, answer: ~p~n", [File, Status13, Answer13])
+  end,
+  lists:foreach(Delete, FilesInDir2),
+
+  {Status14, Answer14} = delete_file(Host, Cert, Port, DirName),
+  io:format("Directory delete: aswer status: ~s, answer: ~p~n", [Status14, Answer14]),
+  {Status14_1, Answer14_1} = delete_file(Host, Cert, Port, DirName),
+  io:format("Directory delete second time: aswer status: ~s, answer: ~p~n", [Status14_1, Answer14_1]),
+
+  {Status15, Answer15} = delete_file(Host, Cert, Port, TestFile),
+  io:format("Test file ~s delete: aswer status: ~s, answer: ~p~n", [TestFile, Status15, Answer15]).
 
 %% Each of following functions simulate one request from FUSE.
 create_file(Host, Cert, Port, FileName) ->

@@ -80,7 +80,6 @@ cleanup() ->
 -spec handle_fuse_message(ProtocolVersion :: term(), Record :: tuple(), FuseID :: string()) -> Result when
   Result :: term().
 %% ====================================================================
-%% TODO sprawdzić czy poprawnie odpowiada na zapytanie o nieistniejacy plik
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getfilelocation) ->
   File = Record#getfilelocation.file_logic_name,
   {Status, TmpAns} = get_file(ProtocolVersion, File, FuseID),
@@ -96,7 +95,6 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getf
           #filelocation{storage_helper = FileLoc#file_location.storage_helper_id, file_id = FileLoc#file_location.file_id, validity = Validity};
         _BadStatus2 -> #filelocation{storage_helper = TmpAns2, file_id = "Error", validity = 0}
       end;
-    {error, file_not_found} -> #filelocation{storage_helper = ?FILE_NOT_FOUND_MESSAGE, file_id = "Error", validity = 0};
     _BadStatus -> #filelocation{storage_helper = TmpAns, file_id = "Error", validity = 0}
   end;
 
@@ -106,7 +104,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getn
   case FindStatus of
     ok -> #filelocation{storage_helper = ?FILE_ALREADY_EXISTS, file_id = "Error", validity = 0};
     error -> case FindTmpAns of
-      file_not_found ->
+        ?FILE_NOT_FOUND_MESSAGE ->
         {ParentFound, ParentInfo} = get_parent_and_name_from_path(File, ProtocolVersion),
 
         case ParentFound of
@@ -193,7 +191,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, crea
   case FindStatus of
     ok -> #atom{value = ?FILE_ALREADY_EXISTS};
     error -> case FindTmpAns of
-      file_not_found ->
+        ?FILE_NOT_FOUND_MESSAGE ->
         {ParentFound, ParentInfo} = get_parent_and_name_from_path(Dir, ProtocolVersion),
 
         case ParentFound of
@@ -245,17 +243,45 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getf
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, deletefile) ->
   File = Record#deletefile.file_logic_name,
+  {FindStatus, FindTmpAns} = get_file(ProtocolVersion, File, FuseID),
 
-  Pid = self(),
-  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 110, {vfs, remove_file, [File]}}),
-  {Status, TmpAns} = wait_for_dao_ans(Ans, File, 110, "remove_file"),
-
-  case Status of
+  case FindStatus of
     ok ->
-      #atom{value = "ok"};
-    _BadStatus ->
-      lager:error([{mod, ?MODULE}], "Error: can not remove file: ~s", [File]),
-      #atom{value = TmpAns}
+      Pid = self(),
+      FileDesc = FindTmpAns#veil_document.record,
+      {ChildrenStatus, ChildrenTmpAns} = case FileDesc#file.type of
+        ?DIR_TYPE ->
+          Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 130, {vfs, list_dir, [File, 1000, 0]}}),
+          wait_for_dao_ans(Ans, File, 130, "list_dir");
+        _OtherType -> {ok, []}
+      end,
+
+      case ChildrenStatus of
+        ok -> case length(ChildrenTmpAns) of
+          0 ->
+            Ans2 = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 110, {vfs, remove_file, [File]}}),
+            {Status, TmpAns} = wait_for_dao_ans(Ans2, File, 110, "remove_file"),
+
+            case Status of
+              ok ->
+                %% Taka linia wywala potem getfilechildren, choć nie ma on nic wspólnego z deskryptorami - dlaczego?
+                %% gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, {vfs, remove_descriptor, [{by_file_n_owner, {File, FuseID}}]}}),
+                #atom{value = "ok"};
+              _BadStatus ->
+                lager:error([{mod, ?MODULE}], "Error: can not remove file: ~s", [File]),
+                #atom{value = TmpAns}
+            end;
+          _Other ->
+            lager:error([{mod, ?MODULE}], "Error: can not remove file (it has children): ~s", [File]),
+            #atom{value = "Error: children exist"}
+          end;
+        _Other2 ->
+          lager:error([{mod, ?MODULE}], "Error: can not remove file (can not check children): ~s", [File]),
+          #atom{value = ChildrenTmpAns}
+      end;
+    _FindError ->
+      lager:error([{mod, ?MODULE}], "Error: can not remove file (can not check file type): ~s", [File]),
+      #atom{value = FindTmpAns}
   end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, renamefile) ->
@@ -284,7 +310,6 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, rena
 
 save_file_descriptor(ProtocolVersion, File, Validity) ->
   Pid = self(),
-
   Descriptor = update_file_descriptor(File#veil_document.record, Validity),
 
   Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 100, {vfs, save_descriptor, [File#veil_document{record = Descriptor}]}}),
@@ -301,7 +326,7 @@ save_file_descriptor(ProtocolVersion, File, Validity) ->
 
 save_file_descriptor(ProtocolVersion, File, Uuid, FuseID, Validity) ->
   Pid = self(),
-  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 20, {vfs, list_descriptors, [{by_file_n_owner, {File, FuseID}}, 0, 10]}}),
+  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 20, {vfs, list_descriptors, [{by_file_n_owner, {File, FuseID}}, 10, 0]}}),
 
   {Status, TmpAns} = wait_for_dao_ans(Ans, File, 20, "list_descriptors"),
   case Status of
@@ -321,7 +346,6 @@ save_file_descriptor(ProtocolVersion, File, Uuid, FuseID, Validity) ->
 
 save_new_file_descriptor(ProtocolVersion, File, Uuid, FuseID, Validity) ->
   Pid = self(),
-
   Descriptor = update_file_descriptor(#file_descriptor{file = Uuid, fuse_id = FuseID}, Validity),
   Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 100, {vfs, save_descriptor, [Descriptor]}}),
   wait_for_dao_ans(Ans, File, 100, "save_descriptor").
@@ -346,7 +370,7 @@ wait_for_dao_ans(Ans, File, MessageId, LogMessage) ->
       receive
         {worker_answer, MessageId, ok} -> {ok, ok};
         {worker_answer, MessageId, {ok, DaoAns}} -> {ok, DaoAns};
-        {worker_answer, MessageId, {error, file_not_found}} -> {error, file_not_found};
+        {worker_answer, MessageId, {error, file_not_found}} -> {error, ?FILE_NOT_FOUND_MESSAGE};
         Ans2 ->
           lager:error([{mod, ?MODULE}], "Error: wrong dao answer for: " ++ LogMessage ++ ", file: ~s, answer: ~p", [File, Ans2]),
           {error, "Error: wrong dao answer for: " ++ LogMessage}
