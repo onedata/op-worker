@@ -34,7 +34,7 @@ test(Host, Cert, Port) ->
   ssl:start(),
   TestFile = "fslogic_test_file",
   DirName = "fslogic_test_dir",
-  FilesInDir = [DirName ++ "/file_in_dir1", DirName ++ "/file_in_dir2", DirName ++ "/file_in_dir3"],
+  FilesInDir = [DirName ++ "/file_in_dir1", DirName ++ "/file_in_dir2", DirName ++ "/file_in_dir3", DirName ++ "/file_in_dir4", DirName ++ "/file_in_dir5"],
   NewNameOfFIle = "new_name_of_file",
 
   {Status, Helper, Id, Validity} = create_file(Host, Cert, Port, TestFile),
@@ -64,12 +64,20 @@ test(Host, Cert, Port) ->
   end,
   lists:foreach(CreateFile, FilesInDir),
 
-  {Status7, Files7} = ls(Host, Cert, Port, DirName),
-  io:format("ls test: aswer status: ~s~n", [Status7]),
+  {Status7, Files7} = ls(Host, Cert, Port, DirName, 10, 0),
+  io:format("ls test (num 10, offset 0): aswer status: ~s~n", [Status7]),
   PrintFiles = fun(Name7) ->
     io:format("ls test output file name: ~s~n", [Name7])
   end,
   lists:foreach(PrintFiles, Files7),
+
+  {Status7_1, Files7_1} = ls(Host, Cert, Port, DirName, 3, non),
+  io:format("ls test (num 3, offset not specified): aswer status: ~s~n", [Status7_1]),
+  lists:foreach(PrintFiles, Files7_1),
+
+  {Status7_2, Files7_2} = ls(Host, Cert, Port, DirName, 5, 3),
+  io:format("ls test (num 5, offset 3): aswer status: ~s~n", [Status7_2]),
+  lists:foreach(PrintFiles, Files7_2),
 
   [FirstFileInDir | FilesInDirTail] = FilesInDir,
   {Status8, Answer8} = delete_file(Host, Cert, Port, FirstFileInDir),
@@ -77,7 +85,7 @@ test(Host, Cert, Port) ->
   {Status8_1, Answer8_1} = delete_file(Host, Cert, Port, FirstFileInDir),
   io:format("Test file deleted second time: aswer status: ~s, answer: ~p~n", [Status8_1, Answer8_1]),
 
-  {Status9, Files9} = ls(Host, Cert, Port, DirName),
+  {Status9, Files9} = ls(Host, Cert, Port, DirName, 10, non),
   io:format("ls test: aswer status: ~s~n", [Status9]),
   lists:foreach(PrintFiles, Files9),
 
@@ -86,7 +94,7 @@ test(Host, Cert, Port) ->
   io:format("Test file rename: aswer status: ~s, answer: ~p~n", [Status10, Answer10]),
   FilesInDir2 = [DirName ++ "/" ++ NewNameOfFIle | FilesInDirTail2],
 
-  {Status11, Files11} = ls(Host, Cert, Port, DirName),
+  {Status11, Files11} = ls(Host, Cert, Port, DirName, 10, non),
   io:format("ls test: aswer status: ~s~n", [Status11]),
   lists:foreach(PrintFiles, Files11),
 
@@ -213,8 +221,11 @@ mkdir(Host, Cert, Port, DirName) ->
   Answer2 = records_translator:translate(Answer, "communication_protocol"),
   {Status, Answer2}.
 
-ls(Host, Cert, Port, Dir) ->
-  FslogicMessage = #getfilechildren{dir_logic_name = Dir},
+ls(Host, Cert, Port, Dir, Num, Offset) ->
+  FslogicMessage = case Offset of
+    non -> #getfilechildren{dir_logic_name = Dir, children_num = Num};
+    _Other -> #getfilechildren{dir_logic_name = Dir, children_num = Num, offset = Offset}
+  end,
   FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_getfilechildren(FslogicMessage)),
 
   FuseMessage = #fusemessage{id = "1", message_type = "getfilechildren", input = FslogicMessageMessageBytes},

@@ -224,12 +224,13 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, crea
       #atom{value = "Error: can not chceck if dir exists"}
   end;
 
-%% TODO zrobić obsługę większej ilości katalogów niż 1000 (trzeba wprowadzić nowe wiadomości do protokołu)
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getfilechildren) ->
   File = Record#getfilechildren.dir_logic_name,
+  Num = Record#getfilechildren.children_num,
+  Offset = Record#getfilechildren.offset,
 
   Pid = self(),
-  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 70, {vfs, list_dir, [File, 1000, 0]}}),
+  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 70, {vfs, list_dir, [File, Num, Offset]}}),
   {Status, TmpAns} = wait_for_dao_ans(Ans, File, 70, "list_dir"),
 
   Children = case Status of
@@ -264,8 +265,6 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, dele
 
             case Status of
               ok ->
-                %% Taka linia wywala potem getfilechildren, choć nie ma on nic wspólnego z deskryptorami - dlaczego?
-                %% gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, {vfs, remove_descriptor, [{by_file_n_owner, {File, FuseID}}]}}),
                 #atom{value = "ok"};
               _BadStatus ->
                 lager:error([{mod, ?MODULE}], "Error: can not remove file: ~s", [File]),
