@@ -158,7 +158,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, file
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, renewfilelocation) ->
   File = Record#renewfilelocation.file_logic_name,
   Pid = self(),
-  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 50, {vfs, list_descriptors, [{by_file_n_owner, {File, FuseID}}, 0, 10]}}),
+  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 50, {vfs, list_descriptors, [{by_file_n_owner, {File, FuseID}}, 10, 0]}}),
   {Status, TmpAns} = wait_for_dao_ans(Ans, File, 50, "list_descriptors"),
   case Status of
     ok ->
