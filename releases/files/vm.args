@@ -53,6 +53,18 @@
 ## application:get_env(veil_cluster_node, ssl_cert_path) should return this
 -veil_cluster_node ssl_cert_path {{ssl_cert_path}}
 
+## how long dns response remains valid (in sec)
+-veil_cluster_node dns_response_ttl {{dns_response_ttl}}
+
+## number of dns tcp acceptors
+-veil_cluster_node dns_tcp_acceptor_pool_size {{dns_tcp_acceptor_pool_size}}
+
+## time (in sec) after which dns closes idle connection
+-veil_cluster_node dns_tcp_timeout {{dns_tcp_timeout}}
+
+## dns port
+-veil_cluster_node dns_port {{dns_port}}
+
 ## List of all DBMS nodes
 ## application:get_env(veil_cluster_node, db_nodes) should return this
 -veil_cluster_node db_nodes {{db_nodes}}

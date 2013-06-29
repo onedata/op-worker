@@ -28,6 +28,13 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %% ====================================================================
+%% Test API
+%% ====================================================================
+-ifdef(TEST).
+-export([update_dns_state/1]).
+-endif.
+
+%% ====================================================================
 %% API functions
 %% ====================================================================
 
@@ -39,7 +46,7 @@
   | ignore
   | {error,Error},
   Pid :: pid(),
-  Error :: {already_started,Pid} | term().
+  Error :: {already_started, Pid} | term().
 %% ====================================================================
 start_link() ->
   start_link(normal).
@@ -163,6 +170,10 @@ handle_call(get_state, _From, State) ->
 
 handle_call(get_version, _From, State) ->
   {reply, get_version(State), State};
+
+handle_call({stop_worker, Node, Module}, _From, State) ->
+  {Ans, New_State} = stop_worker(Node, Module, State),
+  {reply, Ans, New_State};
 
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
@@ -367,6 +378,7 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
 %% ====================================================================
 %% TODO zaproponować algorytm
 check_cluster_state(State) ->
+  update_dns_state(State#cm_state.workers),
   plan_next_cluster_state_check(),
   State.
 
@@ -463,7 +475,7 @@ check_node(Node, State) ->
 %% add_children/3
 %% ====================================================================
 %% @doc Add workers that run on node to workers list.
--spec add_children(Node :: atom(), Childern :: list(), Workers :: term()) -> NewWorkersList when
+-spec add_children(Node :: atom(), Children :: list(), Workers :: term()) -> NewWorkersList when
   NewWorkersList :: list().
 %% ====================================================================
 add_children(_Node, [], Workers) ->
@@ -594,19 +606,121 @@ get_workers_list(State) ->
 %% increase_state_num/1
 %% ====================================================================
 %% @doc This function increases the cluster state value and informs all
-%% dispatchers about it.
+%% dispatchers and dnses about it.
 -spec increase_state_num(State :: term()) -> NewState when
   NewState :: term().
 %% ====================================================================
 increase_state_num(State) ->
+  update_dns_state(State#cm_state.workers),
+
   NewStateNum = State#cm_state.state_num + 1,
   WorkersList = get_workers_list(State),
-  UpdateNode = fun(Node) ->
-    gen_server:cast({?Dispatcher_Name, Node}, {update_workers, WorkersList, NewStateNum})
-  end,
-  lists:foreach(UpdateNode, State#cm_state.nodes),
-
+  update_dispatcher_state(WorkersList, State#cm_state.nodes, NewStateNum),
   State#cm_state{state_num = NewStateNum}.
+
+
+%% update_dispatcher_state/3
+%% ====================================================================
+%% @doc Updates dispatchers' states.
+%% @end
+-spec update_dispatcher_state(WorkersList, Nodes, NewStateNum) -> ok when
+	WorkersList :: list(),
+	Nodes :: list(),
+	NewStateNum :: integer().
+%% ====================================================================
+update_dispatcher_state(WorkersList, Nodes, NewStateNum) ->
+	UpdateNode = fun(Node) ->
+		gen_server:cast({?Dispatcher_Name, Node}, {update_workers, WorkersList, NewStateNum})
+	end,
+	lists:foreach(UpdateNode, Nodes).
+
+
+%% update_dns_state/1
+%% ====================================================================
+%% @doc Updates dnses' states.
+%% @end
+-spec update_dns_state(WorkersList) -> ok when
+	WorkersList :: list().
+%% ====================================================================
+update_dns_state(WorkersList) ->
+	ModuleToNodeAndPid = [{Module, {Node, Pid}} || {Node, Module, Pid} <- WorkersList],
+
+	MergeByFirstElement = fun (List) -> lists:reverse(lists:foldl(fun({Key, Value}, []) ->  [{Key, [Value]}];
+			({Key, Value}, [{Key, AccValues} | Tail]) -> [{Key, [Value | AccValues]} | Tail];
+			({Key, Value}, Acc) -> [{Key, [Value]} | Acc]
+		end, [], lists:keysort(1, List)))
+	end,
+
+	MergedByModule = MergeByFirstElement(ModuleToNodeAndPid),
+
+	NodeToIPWithLogging = fun (Node) ->
+		case node_to_ip(Node) of
+			{ok, Address} -> Address;
+			{error, Error} ->
+				lager:error("Cannot resolve ip address for node ~p, error: ~p", [Node, Error]),
+				unknownaddress
+		end
+	end,
+
+	ModulesToNodes = lists:map(fun ({Module, NodesAndPids}) ->
+			NodeToLoads = [{Node, check_load(Pid)} || {Node, Pid} <- NodesAndPids],
+			FilteredNodeToLoads = [{Node, Load} || {Node, {ok, Load}} <- NodeToLoads],
+			MergedByNode = MergeByFirstElement(FilteredNodeToLoads),
+
+			NodeToLoad = [{Node, lists:sum(LoadOfPids)} || {Node, LoadOfPids} <- MergedByNode],
+			SortedNodesByLoad = lists:keysort(2, NodeToLoad),
+
+			Nodes = [Node || {Node, _Time} <- SortedNodesByLoad],
+			IPs = [NodeToIPWithLogging(Node) || Node <- Nodes],
+
+			FilteredIPs = [IP || IP <- IPs, IP =/= unknownaddress],
+			{Module, FilteredIPs}
+		end, MergedByModule),
+
+	FilteredModulesToNodes = [{Module, Nodes} || {Module, Nodes} <- ModulesToNodes, Nodes =/= []],
+
+	DNS_Pids = [Pid || {Module, NodesAndPids} <- MergedByModule, {_Node, Pid} <- NodesAndPids, Module =:= dns_worker],
+
+	UpdateDnsWorker = fun (Pid) ->
+		gen_server:cast(Pid, {asynch, 1, {update_state, FilteredModulesToNodes}})
+	end,
+
+	lists:foreach(UpdateDnsWorker, DNS_Pids).
+
+
+%% check_load/1
+%% ====================================================================
+%% @doc Checks load of worker plugin.
+%% @end
+-spec check_load(WorkerPlugin) -> {ok, float()} | {error, term()} when
+	WorkerPlugin :: pid().
+%% ====================================================================
+check_load(WorkerPlugin) ->
+	BeforeCall = os:timestamp(),
+	try
+		{LastLoadInfo, Load} = gen_server:call(WorkerPlugin, getLoadInfo),
+		TimeDiff = timer:now_diff(BeforeCall, LastLoadInfo),
+		{ok, Load / TimeDiff}
+	catch
+		exit:Reason -> {error, Reason}
+	end.
+
+
+%% node_to_ip/1
+%% ====================================================================
+%% @doc Resolve ipv4 address of node.
+%% @end
+-spec node_to_ip(Node) -> Result when
+	Result :: {ok, inet:ip4_address()}
+	| {error, inet:posix()},
+	Node :: atom().
+%% ====================================================================
+node_to_ip(Node) ->
+	StrNode = atom_to_list(Node),
+	AddressWith@ = lists:dropwhile(fun (Char) -> Char =/= $@ end, StrNode),
+	Address = lists:dropwhile(fun (Char) -> Char =:= $@ end, AddressWith@),
+	inet:getaddr(Address, inet).
+
 
 %% start_monitoring_loop/2
 %% ====================================================================

@@ -31,7 +31,7 @@
 
 %% This record is used by requests_dispatcher (it contains its state).
 -record(dispatcher_state, {central_logger = {[],[]}, cluster_rengine = {[],[]}, control_panel = {[],[]}, dao = {[],[]},
-  fslogic = {[],[]}, gateway = {[],[]}, rtransfer = {[],[]}, rule_manager = {[],[]}, state_num = 0}).
+  fslogic = {[],[]}, gateway = {[],[]}, rtransfer = {[],[]}, rule_manager = {[],[]}, dns_worker = {[], []}, state_num = 0}).
 %% gets lists of workers that works as module M on the basis of data from record R
 -define(get_workers(M, R), R#dispatcher_state.M).
 %% updates (in record M) the list of workers that works as module M

@@ -251,7 +251,7 @@ code_change(_OldVsn, State, _Extra) ->
 	Result ::  atom(). 
 %% ====================================================================
 proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
-	{Megaseconds,Seconds,Microseconds} = os:timestamp(),
+	BeforeProcessingRequest = os:timestamp(),
 	Response = 	try
 		PlugIn:handle(ProtocolVersion, Msg)
 	catch
@@ -274,10 +274,10 @@ proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
       end;
     Other -> lagger:error("Wrong reply type: ~s", [Other])
 	end,
-	
-	{Megaseconds2,Seconds2,Microseconds2} = os:timestamp(),
-	Time = 1000000*1000000*(Megaseconds2-Megaseconds) + 1000000*(Seconds2-Seconds) + Microseconds2-Microseconds,
-	gen_server:cast(PlugIn, {progress_report, {{Megaseconds,Seconds,Microseconds}, Time}}).
+
+	AfterProcessingRequest = os:timestamp(),
+	Time = timer:now_diff(AfterProcessingRequest, BeforeProcessingRequest),
+	gen_server:cast(PlugIn, {progress_report, {BeforeProcessingRequest, Time}}).
 
 %% save_progress/2
 %% ====================================================================

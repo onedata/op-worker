@@ -13,9 +13,11 @@
 -module(veil_cluster_node_app).
 
 -behaviour(application).
+-include("registered_names.hrl").
 
 %% Application callbacks
 -export([start/2, stop/1]).
+
 
 %% ===================================================================
 %% Application callbacks
@@ -33,12 +35,13 @@
                 | term().
 %% ====================================================================
 start(_StartType, _StartArgs) ->
-	{ok, NodeType} = application:get_env(veil_cluster_node, node_type),
-  {ok, Port} = application:get_env(veil_cluster_node, dispatcher_port),
-  {ok, PoolSize} = application:get_env(veil_cluster_node, dispatcher_pool_size),
-  {ok, CertFile} = application:get_env(veil_cluster_node, ssl_cert_path),
-  {ok, _} = ranch:start_listener(dispatcher_listener, PoolSize, ranch_ssl, [{port, Port}, {certfile, atom_to_list(CertFile)}], ranch_handler, []),
+  {ok, NodeType} = application:get_env(?APP_Name, node_type),
+  {ok, Port} = application:get_env(?APP_Name, dispatcher_port),
+  {ok, DispatcherPoolSize} = application:get_env(?APP_Name, dispatcher_pool_size),
+  {ok, CertFile} = application:get_env(?APP_Name, ssl_cert_path),
+  {ok, _} = ranch:start_listener(dispatcher_listener, DispatcherPoolSize, ranch_ssl, [{port, Port}, {certfile, atom_to_list(CertFile)}], ranch_handler, []),
   veil_cluster_node_sup:start_link(NodeType).
+
 
 %% stop/1
 %% ====================================================================

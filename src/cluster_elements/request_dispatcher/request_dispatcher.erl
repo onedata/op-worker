@@ -215,6 +215,8 @@ get_nodes(rule_manager, State) ->
   ?get_workers(rule_manager, State);
 get_nodes(central_logger, State) ->
   ?get_workers(central_logger, State);
+get_nodes(dns_worker, State) ->
+	?get_workers(dns_worker, State);
 get_nodes(_Other, _State) ->
   wrong_worker_type.
 
@@ -240,6 +242,8 @@ update_nodes(rule_manager, NewNodes, State) ->
   ?update_workers(rule_manager, NewNodes, State);
 update_nodes(central_logger, NewNodes, State) ->
   ?update_workers(central_logger, NewNodes, State);
+update_nodes(dns_worker, NewNodes, State) ->
+	?update_workers(dns_worker, NewNodes, State);
 update_nodes(_Other, _NewNodes, State) ->
   State.
 
