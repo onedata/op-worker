@@ -27,6 +27,7 @@
 wrong_request_test() ->
   application:set_env(?APP_Name, ccm_nodes, [not_existing_node]),
   application:set_env(?APP_Name, heart_beat, 60),
+  application:set_env(?APP_Name, node_monitoring_period, 15),
 	node_manager:start_link(worker),
 	gen_server:cast(?Node_Manager_Name, abc),
 	Reply = gen_server:call(?Node_Manager_Name, abc),
@@ -37,6 +38,7 @@ wrong_request_test() ->
 node_type_test() ->
   application:set_env(?APP_Name, ccm_nodes, [not_existing_node]),
   application:set_env(?APP_Name, heart_beat, 60),
+  application:set_env(?APP_Name, node_monitoring_period, 15),
   node_manager:start_link(worker),
 	NodeType = gen_server:call(?Node_Manager_Name, getNodeType),
 	?assert(NodeType =:= worker),
@@ -52,6 +54,7 @@ heart_beat_test() ->
   application:set_env(?APP_Name, hot_swapping_time, 10000),
   application:set_env(?APP_Name, initialization_time, 10),
   application:set_env(?APP_Name, cluster_clontrol_period, 300),
+  application:set_env(?APP_Name, node_monitoring_period, 15),
 
   node_manager:start_link(worker),
   cluster_manager:start_link(test),

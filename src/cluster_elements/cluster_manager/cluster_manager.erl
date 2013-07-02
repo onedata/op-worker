@@ -98,10 +98,11 @@ stop() ->
 init([]) ->
   process_flag(trap_exit, true),
   {ok, Interval} = application:get_env(veil_cluster_node, initialization_time),
-  timer:apply_after(Interval * 1000, gen_server, cast, [{global, ?CCM}, init_cluster]),
-  timer:apply_after(50, gen_server, cast, [{global, ?CCM}, {set_monitoring, on}]),
-  timer:apply_after(100, gen_server, cast, [{global, ?CCM}, start_central_logger]),
-  timer:apply_after(150, gen_server, cast, [{global, ?CCM}, get_state_from_db]),
+  Pid = self(),
+  erlang:send_after(Interval * 1000, Pid, {timer, init_cluster}),
+  erlang:send_after(50, Pid, {timer, {set_monitoring, on}}),
+  erlang:send_after(100, Pid, {timer, start_central_logger}),
+  erlang:send_after(150, Pid, {timer, get_state_from_db}),
   {ok, #cm_state{}};
 
 init([test]) ->
@@ -261,6 +262,10 @@ handle_cast(_Msg, State) ->
   NewState :: term(),
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
+handle_info({timer, Msg}, State) ->
+  gen_server:cast({global, ?CCM}, Msg),
+  {noreply, State};
+
 handle_info(_Info, State) ->
   {noreply, State}.
 
@@ -289,7 +294,7 @@ terminate(_Reason, _State) ->
 %% ====================================================================
 code_change(_OldVsn, State, _Extra) ->
   {ok, Interval} = application:get_env(veil_cluster_node, hot_swapping_time),
-  timer:apply_after(Interval, gen_server, cast, [{global, ?CCM}, update_monitoring_loop]),
+  erlang:send_after(Interval, self(), {timer, update_monitoring_loop}),
   {ok, State}.
 
 
@@ -393,7 +398,7 @@ check_cluster_state(State) ->
 %% ====================================================================
 plan_next_cluster_state_check() ->
   {ok, Interval} = application:get_env(veil_cluster_node, cluster_clontrol_period),
-  timer:apply_after(Interval * 1000, gen_server, cast, [{global, ?CCM}, check_cluster_state]).
+  erlang:send_after(Interval * 1000, self(), {timer, check_cluster_state}).
 
 %% start_worker/4
 %% ====================================================================

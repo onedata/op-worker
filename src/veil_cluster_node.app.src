@@ -58,9 +58,11 @@
       {dns_response_ttl, 60},
       %% number of dns tcp acceptors
       {dns_tcp_acceptor_pool_size, 50},
-	  %% time in sec after which dns closes idle connection
-	  {dns_tcp_timeout, 30},
-	  %% dns port
-	  {dns_port, 53}
+      %% time in sec after which dns closes idle connection
+      {dns_tcp_timeout, 30},
+      %% dns port
+      {dns_port, 53},
+      %% how often should node manager wait between successive checks of node status
+      {node_monitoring_period, 15}
   		]}
  ]}.
