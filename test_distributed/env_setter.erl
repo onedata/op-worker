@@ -32,8 +32,10 @@ start_test() ->
   {ok, Dirs} = file:list_dir("../../../deps"),
   Deps = list_deps(Dirs, "../../../deps/", "/ebin", []),
   code:add_paths(Deps),
+  application:start(sasl),
   lager:start(),
   ssl:start(),
+  application:start(os_mon),
   application:start(ranch),
   ok = application:load(?APP_Name).
 
@@ -45,10 +47,12 @@ start_test() ->
 
 stop_test() ->
   application:stop(ranch),
-  application:stop(lager),
+  application:stop(os_mon),
   application:stop(ssl),
   application:stop(crypto),
   application:stop(public_key),
+  application:stop(lager),
+  application:stop(sasl),
   ok = application:unload(?APP_Name).
 
 %% start_app/1

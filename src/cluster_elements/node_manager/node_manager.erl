@@ -338,7 +338,7 @@ get_node_stats(Window) ->
     end,
     {InTmp + In, OutTmp + Out}
   end,
-  Net = lists:foldl(GetNetInfo, {}, GetNetInfo),
+  Net = lists:foldl(GetNetInfo, {0, 0}, Ports),
   {Proc, Mem, Net}.
 
 
