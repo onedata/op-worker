@@ -17,10 +17,12 @@
   {applications, [
                   kernel,
                   stdlib,
+                  sasl,
                   lager,
                   crypto,
                   public_key,
                   ssl,
+                  os_mon,
                   ranch
                  ]},
   {mod, {veil_cluster_node_app, []}},

@@ -71,7 +71,7 @@ stop() ->
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 init([Type]) when Type =:= worker ; Type =:= ccm ->
-    process_flag(trap_exit, true),
+  process_flag(trap_exit, true),
 	timer:apply_after(10, gen_server, cast, [?Node_Manager_Name, do_heart_beat]),
     {ok, #node_state{node_type = Type, ccm_con_status = not_connected}};
 
@@ -157,7 +157,7 @@ handle_info(_Info, State) ->
 			| term().
 %% ====================================================================
 terminate(_Reason, _State) ->
-    ok.
+  ok.
 
 
 %% code_change/3
@@ -311,3 +311,29 @@ check_vsn([{Application, _Description, Vsn} | Apps]) ->
     ?APP_Name -> Vsn;
     _Other -> check_vsn(Apps)
   end.
+
+get_node_stats(Window) ->
+  ProcTmp = case Window of
+    short -> cpu_sup:avg1();
+    medium -> cpu_sup:avg5();
+    long -> cpu_sup:avg15()
+  end,
+  Proc = ProcTmp / 256,
+  {Total, Allocated, _Worst} = memsup:get_memory_data(),
+  Mem = Allocated / Total,
+  Ports = erlang:ports(),
+  GetNetInfo = fun(Port, {InTmp, OutTmp}) ->
+    In = case erlang:port_info(Port, input) of
+      {input, V} -> V;
+      _Other -> 0
+    end,
+    Out = case erlang:port_info(Port, output) of
+      {output, V2} -> V2;
+      _Other2 -> 0
+    end,
+    {InTmp + In, OutTmp + Out}
+  end,
+  Net = lists:foldl(GetNetInfo, {}, GetNetInfo),
+  {Proc, Mem, Net}.
+
+
