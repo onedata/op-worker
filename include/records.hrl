@@ -30,11 +30,6 @@
 -record(host_state, {plug_in = non, plug_in_state = [], load_info = [], current_seq_job = none, seq_queue = []}).
 
 %% This record is used by requests_dispatcher (it contains its state).
--record(dispatcher_state, {central_logger = {[],[]}, cluster_rengine = {[],[]}, control_panel = {[],[]}, dao = {[],[]},
-  fslogic = {[],[]}, gateway = {[],[]}, rtransfer = {[],[]}, rule_manager = {[],[]}, dns_worker = {[], []}, state_num = 0}).
-%% gets lists of workers that works as module M on the basis of data from record R
--define(get_workers(M, R), R#dispatcher_state.M).
-%% updates (in record M) the list of workers that works as module M
--define(update_workers(M, MValue, R), R#dispatcher_state{M = MValue}).
+-record(dispatcher_state, {modules = [], state_num = 0}).
 
 -endif.

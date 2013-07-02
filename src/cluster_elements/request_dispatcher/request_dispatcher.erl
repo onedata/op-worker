@@ -13,6 +13,7 @@
 -behaviour(gen_server).
 -include("registered_names.hrl").
 -include("records.hrl").
+-include("modules_and_args.hrl").
 
 %% ====================================================================
 %% API
@@ -56,7 +57,7 @@ start_link() ->
 %% ====================================================================
 init([]) ->
   process_flag(trap_exit, true),
-  {ok, #dispatcher_state{}}.
+  {ok, initState()}.
 
 %% handle_call/3
 %% ====================================================================
@@ -79,12 +80,8 @@ handle_call({update_state, NewStateNum}, _From, State) ->
   case State#dispatcher_state.state_num == NewStateNum of
     true -> {reply, ok, State};
     false ->
-      {Ans, NewState, CMStateNum} = pull_state(State),
-      NewState2 = case Ans of
-        ok -> NewState#dispatcher_state{state_num = CMStateNum};
-        _Other -> NewState
-      end,
-      {reply, Ans, NewState2}
+      {Ans, NewState} = pull_state(State),
+      {reply, Ans, NewState}
   end;
 
 handle_call({get_workers, Module}, _From, State) ->
@@ -118,6 +115,32 @@ handle_call({Task, ProtocolVersion, AnsPid, Request}, _From, State) ->
 
 handle_call({Task, ProtocolVersion, Request}, _From, State) ->
   Ans = get_worker_node(Task, State),
+  case Ans of
+    {Node, NewState} ->
+      case Node of
+        non -> {reply, worker_not_found, State};
+        _N ->
+          gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request}),
+          {reply, ok, NewState}
+      end;
+    Other -> {reply, Other, State}
+  end;
+
+handle_call({node_chosen, {Task, ProtocolVersion, AnsPid, Request}}, _From, State) ->
+  Ans = check_worker_node(Task, State),
+  case Ans of
+    {Node, NewState} ->
+      case Node of
+        non -> {reply, worker_not_found, State};
+        _N ->
+          gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, {proc, AnsPid}}),
+          {reply, ok, NewState}
+      end;
+    Other -> {reply, Other, State}
+  end;
+
+handle_call({node_chosen, {Task, ProtocolVersion, Request}}, _From, State) ->
+  Ans = check_worker_node(Task, State),
   case Ans of
     {Node, NewState} ->
       case Node of
@@ -199,26 +222,16 @@ code_change(_OldVsn, State, _Extra) ->
 -spec get_nodes(Module :: atom(), State :: term()) -> Result when
   Result ::  term().
 %% ====================================================================
-get_nodes(cluster_rengine, State) ->
-  ?get_workers(cluster_rengine, State);
-get_nodes(control_panel, State) ->
-  ?get_workers(control_panel, State);
-get_nodes(dao, State) ->
-  ?get_workers(dao, State);
-get_nodes(fslogic, State) ->
-  ?get_workers(fslogic, State);
-get_nodes(gateway, State) ->
-  ?get_workers(gateway, State);
-get_nodes(rtransfer, State) ->
-  ?get_workers(rtransfer, State);
-get_nodes(rule_manager, State) ->
-  ?get_workers(rule_manager, State);
-get_nodes(central_logger, State) ->
-  ?get_workers(central_logger, State);
-get_nodes(dns_worker, State) ->
-	?get_workers(dns_worker, State);
-get_nodes(_Other, _State) ->
-  wrong_worker_type.
+get_nodes(Module, State) ->
+  get_nodes_list(Module, State#dispatcher_state.modules).
+
+get_nodes_list(_Module, []) ->
+  wrong_worker_type;
+get_nodes_list(Module, [{M, N} | T]) ->
+  case M =:= Module of
+    true -> N;
+    false -> get_nodes_list(Module, T)
+  end.
 
 %% update_nodes/3
 %% ====================================================================
@@ -226,26 +239,18 @@ get_nodes(_Other, _State) ->
 -spec update_nodes(Module :: atom(), NewNodes:: term(), State :: term()) -> Result when
   Result ::  term().
 %% ====================================================================
-update_nodes(cluster_rengine, NewNodes, State) ->
-  ?update_workers(cluster_rengine, NewNodes, State);
-update_nodes(control_panel, NewNodes, State) ->
-  ?update_workers(control_panel, NewNodes, State);
-update_nodes(dao, NewNodes, State) ->
-  ?update_workers(dao, NewNodes, State);
-update_nodes(fslogic, NewNodes, State) ->
-  ?update_workers(fslogic, NewNodes, State);
-update_nodes(gateway, NewNodes, State) ->
-  ?update_workers(gateway, NewNodes, State);
-update_nodes(rtransfer, NewNodes, State) ->
-  ?update_workers(rtransfer, NewNodes, State);
-update_nodes(rule_manager, NewNodes, State) ->
-  ?update_workers(rule_manager, NewNodes, State);
-update_nodes(central_logger, NewNodes, State) ->
-  ?update_workers(central_logger, NewNodes, State);
-update_nodes(dns_worker, NewNodes, State) ->
-	?update_workers(dns_worker, NewNodes, State);
-update_nodes(_Other, _NewNodes, State) ->
-  State.
+update_nodes(Module, NewNodes, State) ->
+  Modules = State#dispatcher_state.modules,
+  NewModules = update_nodes_list(Module, NewNodes, Modules, []),
+  State#dispatcher_state{modules = NewModules}.
+
+update_nodes_list(_Module, _NewNodes, [], Ans) ->
+  Ans;
+update_nodes_list(Module, NewNodes, [{M, N} | T], Ans) ->
+  case M =:= Module of
+    true -> update_nodes_list(Module, NewNodes, T, [{M, NewNodes} | Ans]);
+    false -> update_nodes_list(Module, NewNodes, T, [{M, N} | Ans])
+  end.
 
 %% get_worker_node/2
 %% ====================================================================
@@ -259,6 +264,29 @@ get_worker_node(Module, State) ->
     {L1, L2} ->
       {N, NewLists} = choose_worker(L1, L2),
       {N, update_nodes(Module, NewLists, State)};
+    Other -> Other
+  end.
+
+%% get_worker_node/2
+%% ====================================================================
+%% @doc Checks if module is working on this node. If not, chooses other
+%% node from nodes where module is working.
+-spec check_worker_node(Module :: atom(), State :: term()) -> Result when
+  Result ::  term().
+%% ====================================================================
+check_worker_node(Module, State) ->
+  Nodes = get_nodes(Module,State),
+  case Nodes of
+    {L1, L2} ->
+      Check = (lists:member(node, lists:flatten([L1, L2]))),
+      case Check of
+        true ->
+          lager:error([{mod, ?MODULE}], "Error: module ~p does not work at this node", [Module]),
+          node();
+        false ->
+          {N, NewLists} = choose_worker(L1, L2),
+          {N, update_nodes(Module, NewLists, State)}
+      end;
     Other -> Other
   end.
 
@@ -306,7 +334,7 @@ update_workers(WorkersList, _State) ->
       _Other -> TmpState
     end
   end,
-  lists:foldl(Update, #dispatcher_state{}, WorkersList).
+  lists:foldl(Update, initState(), WorkersList).
 
 %% pull_state/1
 %% ====================================================================
@@ -319,11 +347,12 @@ update_workers(WorkersList, _State) ->
 pull_state(State) ->
   try
     {WorkersList, StateNum} = gen_server:call({global, ?CCM}, get_workers),
-    {ok, update_workers(WorkersList, State), StateNum}
+    NewState = update_workers(WorkersList, State),
+    {ok, NewState#dispatcher_state{state_num = StateNum}}
   catch
     _:_ ->
       lager:error([{mod, ?MODULE}], "Dispatcher on node: ~s: can not pull workers list", [node()]),
-      {error, State, 0}
+      {error, State}
   end.
 
 %% get_workers/2
@@ -339,3 +368,10 @@ get_workers(Module, State) ->
     {L1, L2} -> lists:flatten([L1, L2]);
     _Other -> []
   end.
+
+initState() ->
+  CreateModules = fun(Module, TmpList) ->
+    [{Module, {[],[]}} | TmpList]
+  end,
+  NewModules = lists:foldl(CreateModules, [], ?Modules),
+  #dispatcher_state{modules = NewModules}.

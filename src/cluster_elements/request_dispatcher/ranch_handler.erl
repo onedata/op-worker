@@ -71,7 +71,7 @@ loop(Socket, Transport, RanchTimeout, DispatcherTimeout) ->
           true ->
             try
               Pid = self(),
-              Ans = gen_server:call(?Dispatcher_Name, {Task, ProtocolVersion, Pid, Msg}),
+              Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Pid, Msg}}),
               case Ans of
                 ok ->
                   receive
@@ -86,7 +86,7 @@ loop(Socket, Transport, RanchTimeout, DispatcherTimeout) ->
             end;
           false ->
             try
-              Ans = gen_server:call(?Dispatcher_Name, {Task, ProtocolVersion, Msg}),
+              Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Msg}}),
               Transport:send(Socket, encode_answer(Ans))
             catch
                 _:_ -> Transport:send(Socket, encode_answer(dispatcher_error))
