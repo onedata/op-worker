@@ -106,6 +106,10 @@ handle_call(getNode, _From, State) ->
 handle_call(get_ccm_connection_status, _From, State) ->
 	{reply, State#node_state.ccm_con_status, State};
 
+handle_call({get_node_stats, Window}, _From, State) ->
+  Reply = get_node_stats(Window),
+  {reply, Reply, State};
+
 handle_call(_Request, _From, State) ->
 	{reply, wrong_request, State}.
 
@@ -316,7 +320,8 @@ get_node_stats(Window) ->
   ProcTmp = case Window of
     short -> cpu_sup:avg1();
     medium -> cpu_sup:avg5();
-    long -> cpu_sup:avg15()
+    long -> cpu_sup:avg15();
+    _W -> wrong_window
   end,
   Proc = ProcTmp / 256,
   {Total, Allocated, _Worst} = memsup:get_memory_data(),
