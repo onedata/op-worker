@@ -31,7 +31,7 @@
 %% Test API
 %% ====================================================================
 -ifdef(TEST).
--export([update_dns_state/1]).
+-export([update_dns_state/2, calculate_node_load/1]).
 -endif.
 
 %% ====================================================================
@@ -383,7 +383,6 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
 %% ====================================================================
 %% TODO zaproponować algorytm
 check_cluster_state(State) ->
-  update_dns_state(State#cm_state.workers),
   plan_next_cluster_state_check(),
   State.
 
@@ -616,7 +615,8 @@ get_workers_list(State) ->
   NewState :: term().
 %% ====================================================================
 increase_state_num(State) ->
-  update_dns_state(State#cm_state.workers),
+  NodeToLoad = calculate_node_load(State#cm_state.nodes),
+  update_dns_state(State#cm_state.workers, NodeToLoad),
 
   NewStateNum = State#cm_state.state_num + 1,
   WorkersList = get_workers_list(State),
@@ -640,15 +640,16 @@ update_dispatcher_state(WorkersList, Nodes, NewStateNum) ->
 	lists:foreach(UpdateNode, Nodes).
 
 
-%% update_dns_state/1
+%% update_dns_state/2
 %% ====================================================================
 %% @doc Updates dnses' states.
 %% @end
--spec update_dns_state(WorkersList) -> ok when
-	WorkersList :: list().
+-spec update_dns_state(WorkersList, NodeToLoad) -> ok when
+	WorkersList :: list(),
+  NodeToLoad :: list().
 %% ====================================================================
-update_dns_state(WorkersList) ->
-	ModuleToNodeAndPid = [{Module, {Node, Pid}} || {Node, Module, Pid} <- WorkersList],
+update_dns_state(WorkersList, NodeToLoad) ->
+	ModuleToNode = [{Module, Node} || {Node, Module, _Pid} <- WorkersList],
 
 	MergeByFirstElement = fun (List) -> lists:reverse(lists:foldl(fun({Key, Value}, []) ->  [{Key, [Value]}];
 			({Key, Value}, [{Key, AccValues} | Tail]) -> [{Key, [Value | AccValues]} | Tail];
@@ -656,7 +657,7 @@ update_dns_state(WorkersList) ->
 		end, [], lists:keysort(1, List)))
 	end,
 
-	MergedByModule = MergeByFirstElement(ModuleToNodeAndPid),
+	MergedByModule = MergeByFirstElement(ModuleToNode),
 
 	NodeToIPWithLogging = fun (Node) ->
 		case node_to_ip(Node) of
@@ -667,13 +668,18 @@ update_dns_state(WorkersList) ->
 		end
 	end,
 
-	ModulesToNodes = lists:map(fun ({Module, NodesAndPids}) ->
-			NodeToLoads = [{Node, check_load(Pid)} || {Node, Pid} <- NodesAndPids],
-			FilteredNodeToLoads = [{Node, Load} || {Node, {ok, Load}} <- NodeToLoads],
-			MergedByNode = MergeByFirstElement(FilteredNodeToLoads),
-
-			NodeToLoad = [{Node, lists:sum(LoadOfPids)} || {Node, LoadOfPids} <- MergedByNode],
-			SortedNodesByLoad = lists:keysort(2, NodeToLoad),
+	ModulesToNodes = lists:map(fun ({Module, Nodes}) ->
+      GetLoads = fun({Node, Value}, TmpAns) ->
+        case lists:member(Node, Nodes) of
+          true -> case Value of
+            error -> [{Node, 100000} | TmpAns];
+            _ -> [{Node, Value} | TmpAns]
+          end;
+          false -> TmpAns
+        end
+      end,
+      FilteredNodeToLoad = lists:foldl(GetLoads, [], NodeToLoad),
+			SortedNodesByLoad = lists:keysort(2, FilteredNodeToLoad),
 
 			Nodes = [Node || {Node, _Time} <- SortedNodesByLoad],
 			IPs = [NodeToIPWithLogging(Node) || Node <- Nodes],
@@ -683,14 +689,60 @@ update_dns_state(WorkersList) ->
 		end, MergedByModule),
 
 	FilteredModulesToNodes = [{Module, Nodes} || {Module, Nodes} <- ModulesToNodes, Nodes =/= []],
-
-	DNS_Pids = [Pid || {Module, NodesAndPids} <- MergedByModule, {_Node, Pid} <- NodesAndPids, Module =:= dns_worker],
-
-	UpdateDnsWorker = fun (Pid) ->
-		gen_server:cast(Pid, {asynch, 1, {update_state, FilteredModulesToNodes}})
+	UpdateDnsWorker = fun ({_Node, Module, Pid}) ->
+    case Module of
+      dns_worker -> gen_server:cast(Pid, {asynch, 1, {update_state, FilteredModulesToNodes}});
+      _ -> ok
+    end
 	end,
 
-	lists:foreach(UpdateDnsWorker, DNS_Pids).
+	lists:foreach(UpdateDnsWorker, WorkersList),
+  ok.
+
+update_dns_state2(WorkersList) ->
+  ModuleToNodeAndPid = [{Module, {Node, Pid}} || {Node, Module, Pid} <- WorkersList],
+
+  MergeByFirstElement = fun (List) -> lists:reverse(lists:foldl(fun({Key, Value}, []) ->  [{Key, [Value]}];
+    ({Key, Value}, [{Key, AccValues} | Tail]) -> [{Key, [Value | AccValues]} | Tail];
+    ({Key, Value}, Acc) -> [{Key, [Value]} | Acc]
+  end, [], lists:keysort(1, List)))
+  end,
+
+  MergedByModule = MergeByFirstElement(ModuleToNodeAndPid),
+
+  NodeToIPWithLogging = fun (Node) ->
+    case node_to_ip(Node) of
+      {ok, Address} -> Address;
+      {error, Error} ->
+        lager:error("Cannot resolve ip address for node ~p, error: ~p", [Node, Error]),
+        unknownaddress
+    end
+  end,
+
+  ModulesToNodes = lists:map(fun ({Module, NodesAndPids}) ->
+    NodeToLoads = [{Node, check_load(Pid)} || {Node, Pid} <- NodesAndPids],
+    FilteredNodeToLoads = [{Node, Load} || {Node, {ok, Load}} <- NodeToLoads],
+    MergedByNode = MergeByFirstElement(FilteredNodeToLoads),
+
+    NodeToLoad = [{Node, lists:sum(LoadOfPids)} || {Node, LoadOfPids} <- MergedByNode],
+    SortedNodesByLoad = lists:keysort(2, NodeToLoad),
+
+    Nodes = [Node || {Node, _Time} <- SortedNodesByLoad],
+    IPs = [NodeToIPWithLogging(Node) || Node <- Nodes],
+
+    FilteredIPs = [IP || IP <- IPs, IP =/= unknownaddress],
+    {Module, FilteredIPs}
+  end, MergedByModule),
+
+  FilteredModulesToNodes = [{Module, Nodes} || {Module, Nodes} <- ModulesToNodes, Nodes =/= []],
+
+  DNS_Pids = [Pid || {Module, NodesAndPids} <- MergedByModule, {_Node, Pid} <- NodesAndPids, Module =:= dns_worker],
+
+  UpdateDnsWorker = fun (Pid) ->
+    gen_server:cast(Pid, {asynch, 1, {update_state, FilteredModulesToNodes}})
+  end,
+
+  lists:foreach(UpdateDnsWorker, DNS_Pids).
 
 
 %% check_load/1
@@ -707,7 +759,7 @@ check_load(WorkerPlugin) ->
 		TimeDiff = timer:now_diff(BeforeCall, LastLoadInfo),
 		{ok, Load / TimeDiff}
 	catch
-		exit:Reason -> {error, Reason}
+		_:Reason -> {error, Reason}
 	end.
 
 
@@ -851,3 +903,32 @@ get_workers_versions([], Versions) ->
 get_workers_versions([{Node, Module} | Workers], Versions) ->
   V = gen_server:call({Module, Node}, {test_call, 1, get_version}),
   get_workers_versions(Workers, [{Node, Module, V} | Versions]).
+
+calculate_node_load(Nodes) ->
+  GetNodeInfo = fun(Node) ->
+    Info = try
+      gen_server:call({?Node_Manager_Name, Node}, {get_node_stats, short})
+    catch
+      _:_ ->
+        lager:error([{mod, ?MODULE}], "Can not get status of node: ~s", [Node]),
+        {error, error, {error, error}}
+    end,
+    {Node, Info}
+  end,
+  NodesInfo = lists:map(GetNodeInfo, Nodes),
+  GetNetMax = fun({_Node, {_Proc, _MemAvg, {InSum, OutSum}}}, {InTmp, OutTmp}) ->
+    case InSum of
+      error -> {InTmp, OutTmp};
+      _ -> {erlang:max(InSum, InTmp), erlang:max(OutSum, OutTmp)}
+    end
+  end,
+  {InMax, OutMax} = lists:foldl(GetNetMax, {0, 0}, NodesInfo),
+  InMax2 = erlang:max(InMax, 1),
+  OutMax2 = erlang:max(OutMax, 1),
+  CalculateNodeValue = fun({Node, {Proc, MemAvg, {InSum, OutSum}}}) ->
+    case Proc of
+      error -> {Node, error};
+      _ -> {Node, Proc + MemAvg + InSum/InMax2 + OutSum/OutMax2}
+    end
+  end,
+  lists:map(CalculateNodeValue, NodesInfo).
