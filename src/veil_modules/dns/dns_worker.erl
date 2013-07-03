@@ -79,14 +79,36 @@ handle(_ProtocolVersion, get_version) ->
 	node_manager:check_vsn();
 
 handle(_ProtocolVersion, {update_state, ModulesToNodes}) ->
-	New_DNS_State = #dns_worker_state{workers_list = ModulesToNodes},
+  ModulesToNodes2 = lists:map(fun ({Module, Nodes}) ->
+    GetLoads = fun({Node, V}) ->
+      {Node, V, V}
+    end,
+    {Module, lists:map(GetLoads, Nodes)}
+  end, ModulesToNodes),
+	New_DNS_State = #dns_worker_state{workers_list = ModulesToNodes2},
 	ok = gen_server:call(?MODULE, {updatePlugInState, New_DNS_State});
 
 handle(_ProtocolVersion, {get_worker, Module}) ->
 	DNS_State = gen_server:call(?MODULE, getPlugInState),
 	WorkerList = DNS_State#dns_worker_state.workers_list,
 	Result = proplists:get_value(Module, WorkerList, []),
-	{ok, Result};
+
+  PrepareResult = fun({Node, V, C}, {TmpAns, TmpWorkers}) ->
+    TmpAns2 = case C of
+      V -> [Node | TmpAns];
+      _ -> TmpAns
+    end,
+    C2 = case C of
+      1 -> V;
+      _ -> C - 1
+    end,
+    {TmpAns2, [{Node, V, C2} | TmpWorkers]}
+  end,
+  {Result2, WorkerList2} = lists:foldl(PrepareResult, {[], []}, Result),
+
+  New_DNS_State = #dns_worker_state{workers_list = WorkerList2},
+  ok = gen_server:call(?MODULE, {updatePlugInState, New_DNS_State}),
+	{ok, Result2};
 
 handle(ProtocolVersion, Msg) ->
 	throw({unsupported_request, ProtocolVersion, Msg}).
