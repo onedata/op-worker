@@ -1,0 +1,11 @@
+ccm_nodes: 
+  value: |
+    ["\'some_other_node@vfs.com\'"]
+  erlang_term: |
+    ['some_other_node@vfs.com']
+
+db_nodes: 
+  value: |
+    ["\'another_node@vfs.com\'"]
+  erlang_term: |
+    ['another_node@vfs.com']
