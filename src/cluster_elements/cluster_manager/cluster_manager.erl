@@ -106,7 +106,7 @@ init([]) ->
 
 init([test]) ->
   process_flag(trap_exit, true),
-  {ok, #cm_state{}}.
+  {ok, #cm_state{nodes = [node()]}}.
 
 %% handle_call/3
 %% ====================================================================
@@ -126,33 +126,37 @@ init([test]) ->
   Reason :: term().
 %% ====================================================================
 handle_call({node_is_up, Node}, _From, State) ->
-  Nodes = State#cm_state.nodes,
   Reply = State#cm_state.state_num,
-  case lists:member(Node, Nodes) of
+  case Node =:= node() of
     true -> {reply, Reply, State};
     false ->
-      case whereis(?Monitoring_Proc) of
-        undefined -> ok;
-        MPid -> MPid ! {monitor_node, Node}
-      end,
-
-      {Ans, NewState, WorkersFound} = check_node(Node, State),
-
-      %% This case checks if node state was analysed correctly.
-      %% If it was, it upgrades state number if necessary (workers
-      %% were running on node).
-      case Ans of
-        ok ->
-          NewState2 = NewState#cm_state{nodes = [Node | Nodes]},
-
-          NewState3 = case WorkersFound of
-            true -> increase_state_num(NewState2);
-            false -> NewState2
+      Nodes = State#cm_state.nodes,
+      case lists:member(Node, Nodes) of
+        true -> {reply, Reply, State};
+        false ->
+          case whereis(?Monitoring_Proc) of
+            undefined -> ok;
+            MPid -> MPid ! {monitor_node, Node}
           end,
 
-          save_state(NewState3),
-          {reply, Reply, NewState3};
-        _Other -> {reply, Reply, NewState}
+          {Ans, NewState, WorkersFound} = check_node(Node, State),
+
+          %% This case checks if node state was analysed correctly.
+          %% If it was, it upgrades state number if necessary (workers
+          %% were running on node).
+          case Ans of
+            ok ->
+              NewState2 = NewState#cm_state{nodes = [Node | Nodes]},
+
+              NewState3 = case WorkersFound of
+                true -> increase_state_num(NewState2);
+                false -> NewState2
+              end,
+
+              save_state(NewState3),
+              {reply, Reply, NewState3};
+            _Other -> {reply, Reply, NewState}
+          end
       end
   end;
 
@@ -194,13 +198,28 @@ handle_cast(init_cluster, State) ->
   NewState = init_cluster(State),
   {noreply, NewState};
 
+
 handle_cast(get_state_from_db, State) ->
-  NewState = get_state_from_db(State),
-  {noreply, NewState};
+  case State#cm_state.nodes =:= [] of
+    true ->
+      Pid = self(),
+      erlang:send_after(1000, Pid, {timer, get_state_from_db}),
+      {noreply, State};
+    false ->
+      NewState = get_state_from_db(State),
+      {noreply, NewState}
+  end;
 
 handle_cast(start_central_logger, State) ->
-  NewState = start_central_logger(State),
-  {noreply, NewState};
+  case State#cm_state.nodes =:= [] of
+    true ->
+      Pid = self(),
+      erlang:send_after(1000, Pid, {timer, start_central_logger}),
+      {noreply, State};
+    false ->
+      NewState = start_central_logger(State),
+      {noreply, NewState}
+  end;
 
 handle_cast(check_cluster_state, State) ->
   NewState = check_cluster_state(State),
@@ -212,7 +231,8 @@ handle_cast({node_down, Node}, State) ->
   %% If workers were running on node that is down,
   %% upgrade state.
   NewState2 = case WorkersFound of
-    true -> increase_state_num(NewState);
+    true ->
+      increase_state_num(init_cluster(NewState));
     false -> NewState
   end,
 
@@ -261,6 +281,10 @@ handle_cast(_Msg, State) ->
   NewState :: term(),
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
+handle_info({timer, Msg}, State) ->
+  gen_server:cast({global, ?CCM}, Msg),
+  {noreply, State};
+
 handle_info(_Info, State) ->
   {noreply, State}.
 
@@ -307,37 +331,45 @@ code_change(_OldVsn, State, _Extra) ->
 %% ====================================================================
 init_cluster(State) ->
   Nodes = State#cm_state.nodes,
-  JobsAndArgs = ?Modules_With_Args,
-
-  CreateRunningWorkersList = fun({_N, M, _Child}, Workers) ->
-    [M | Workers]
-  end,
-  Workers = State#cm_state.workers,
-  RunningWorkers = lists:foldl(CreateRunningWorkersList, [], Workers),
-
-  CreateJobsList = fun({Job, A}, {TmpJobs, TmpArgs}) ->
-     case lists:member(Job, RunningWorkers) of
-       true -> {TmpJobs, TmpArgs};
-       false -> {[Job | TmpJobs], [A | TmpArgs]}
-     end
-  end,
-  {Jobs, Args} = lists:foldl(CreateJobsList, {[], []}, JobsAndArgs),
-
-  NewState3 = case (length(Jobs) > 0) and (length(Nodes) > 0) of
+  case length(Nodes) > 0 of
     true ->
-      NewState = case erlang:length(Nodes) >= erlang:length(Jobs) of
-        true -> init_cluster_nodes_dominance(State, Nodes, Jobs, [], Args, []);
-        false -> init_cluster_jobs_dominance(State, Jobs, Args, Nodes, [])
+      JobsAndArgs = ?Modules_With_Args,
+
+      CreateRunningWorkersList = fun({_N, M, _Child}, Workers) ->
+        [M | Workers]
+      end,
+      Workers = State#cm_state.workers,
+      RunningWorkers = lists:foldl(CreateRunningWorkersList, [], Workers),
+
+      CreateJobsList = fun({Job, A}, {TmpJobs, TmpArgs}) ->
+         case lists:member(Job, RunningWorkers) of
+           true -> {TmpJobs, TmpArgs};
+           false -> {[Job | TmpJobs], [A | TmpArgs]}
+         end
+      end,
+      {Jobs, Args} = lists:foldl(CreateJobsList, {[], []}, JobsAndArgs),
+
+      NewState3 = case length(Jobs) > 0 of
+        true ->
+          NewState = case erlang:length(Nodes) >= erlang:length(Jobs) of
+            true -> init_cluster_nodes_dominance(State, Nodes, Jobs, [], Args, []);
+            false -> init_cluster_jobs_dominance(State, Jobs, Args, Nodes, [])
+          end,
+
+          NewState2 = increase_state_num(NewState),
+          save_state(NewState2),
+          NewState2;
+        false -> State
       end,
 
-      NewState2 = increase_state_num(NewState),
-      save_state(NewState2),
-      NewState2;
-    false -> State
-  end,
-
-  plan_next_cluster_state_check(),
-  NewState3.
+      plan_next_cluster_state_check(),
+      NewState3;
+    false ->
+      Pid = self(),
+      {ok, Interval} = application:get_env(veil_cluster_node, initialization_time),
+      erlang:send_after(1000 * Interval, Pid, {timer, init_cluster}),
+      State
+  end.
 
 %% init_cluster_nodes_dominance/6
 %% ====================================================================
@@ -522,12 +554,22 @@ node_down(Node, State) ->
   NewState :: term().
 %% ====================================================================
 start_central_logger(State) ->
-  {Ans, NewState} = start_worker(node(), central_logger, [], State),
-  NewState2 = case Ans of
-                ok -> increase_state_num(NewState);
-                error -> NewState
-              end,
-  NewState2.
+  [LoggerNode | _] = State#cm_state.nodes,
+
+  CreateRunningWorkersList = fun({_N, M, _Child}, Workers) ->
+    [M | Workers]
+  end,
+  Workers = State#cm_state.workers,
+  RunningWorkers = lists:foldl(CreateRunningWorkersList, [], Workers),
+  case lists:member(central_logger, RunningWorkers) of
+    true -> State;
+    false ->
+      {Ans, NewState} = start_worker(LoggerNode, central_logger, [], State),
+      case Ans of
+        ok -> increase_state_num(NewState);
+        error -> NewState
+      end
+  end.
 
 %% get_state_from_db/1
 %% ====================================================================
@@ -536,14 +578,26 @@ start_central_logger(State) ->
   NewState :: term().
 %% ====================================================================
 get_state_from_db(State) ->
-  {Ans, NewState} = start_worker(node(), dao, [], State),
-  NewState2 = case Ans of
-    ok ->
-      gen_server:cast(dao, {synch, 1, {get_state, []}, cluster_state, {gen_serv, {global, ?CCM}}}),
-      increase_state_num(NewState);
-    error -> NewState
+  [DaoNode | _] = State#cm_state.nodes,
+
+  CreateRunningWorkersList = fun({_N, M, _Child}, Workers) ->
+    [M | Workers]
   end,
-  NewState2.
+  Workers = State#cm_state.workers,
+  RunningWorkers = lists:foldl(CreateRunningWorkersList, [], Workers),
+  case lists:member(dao, RunningWorkers) of
+    true ->
+      gen_server:cast({dao, DaoNode}, {synch, 1, {get_state, []}, cluster_state, {gen_serv, {global, ?CCM}}}),
+      State;
+    false ->
+      {Ans, NewState} = start_worker(DaoNode, dao, [], State),
+      case Ans of
+        ok ->
+          gen_server:cast({dao, DaoNode}, {synch, 1, {get_state, []}, cluster_state, {gen_serv, {global, ?CCM}}}),
+          increase_state_num(NewState);
+        error -> NewState
+      end
+  end.
 
 %% save_state/1
 %% ====================================================================

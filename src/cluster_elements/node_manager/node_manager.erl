@@ -221,25 +221,29 @@ heart_beat(Conn_status, State) ->
       case (New_state_num == State#node_state.state_num) and (State#node_state.dispatcher_state =:= ok) of
         true -> State#node_state{ccm_con_status = New_conn_status};
         false ->
-          DispState = update_dispatcher(New_state_num),
+          DispState = update_dispatcher(New_state_num, State#node_state.node_type),
           State#node_state{ccm_con_status = New_conn_status, state_num = New_state_num, dispatcher_state = DispState}
       end;
     _Other -> State#node_state{ccm_con_status = New_conn_status}
   end.
 
-%% update_dispatcher/0
+%% update_dispatcher/2
 %% ====================================================================
 %% @doc Tells dispatcher that cluster state has changed.
--spec update_dispatcher(New_state_num :: integer()) -> Result when
+-spec update_dispatcher(New_state_num :: integer(), Type :: atom()) -> Result when
   Result ::  atom().
 %% ====================================================================
-update_dispatcher(New_state_num) ->
-  try
-    gen_server:call(?Dispatcher_Name, {update_state, New_state_num})
-  catch
-    _:_ ->
-      lager:error([{mod, ?MODULE}], "Node manager on node: ~s: can not connect with dispatcher", [node()]),
-      error
+update_dispatcher(New_state_num, Type) ->
+  case Type =:= ccm of
+    true -> ok;
+    false ->
+      try
+        gen_server:call(?Dispatcher_Name, {update_state, New_state_num})
+      catch
+        _:_ ->
+          lager:error([{mod, ?MODULE}], "Node manager on node: ~s: can not connect with dispatcher", [node()]),
+          error
+      end
   end.
 
 %% init_net_connection/1
