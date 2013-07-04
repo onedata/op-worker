@@ -203,7 +203,7 @@ handle_cast(get_state_from_db, State) ->
   case State#cm_state.nodes =:= [] of
     true ->
       Pid = self(),
-      erlang:send_after(10000, Pid, {timer, get_state_from_db}),
+      erlang:send_after(1000, Pid, {timer, get_state_from_db}),
       {noreply, State};
     false ->
       NewState = get_state_from_db(State),
@@ -214,7 +214,7 @@ handle_cast(start_central_logger, State) ->
   case State#cm_state.nodes =:= [] of
     true ->
       Pid = self(),
-      erlang:send_after(10000, Pid, {timer, start_central_logger}),
+      erlang:send_after(1000, Pid, {timer, start_central_logger}),
       {noreply, State};
     false ->
       NewState = start_central_logger(State),
@@ -231,7 +231,8 @@ handle_cast({node_down, Node}, State) ->
   %% If workers were running on node that is down,
   %% upgrade state.
   NewState2 = case WorkersFound of
-    true -> increase_state_num(NewState);
+    true ->
+      increase_state_num(init_cluster(NewState));
     false -> NewState
   end,
 
@@ -553,7 +554,8 @@ node_down(Node, State) ->
   NewState :: term().
 %% ====================================================================
 start_central_logger(State) ->
-  {Ans, NewState} = start_worker(node(), central_logger, [], State),
+  [LoggerNode | _] = State#cm_state.nodes,
+  {Ans, NewState} = start_worker(LoggerNode, central_logger, [], State),
   NewState2 = case Ans of
                 ok -> increase_state_num(NewState);
                 error -> NewState
@@ -567,7 +569,8 @@ start_central_logger(State) ->
   NewState :: term().
 %% ====================================================================
 get_state_from_db(State) ->
-  {Ans, NewState} = start_worker(node(), dao, [], State),
+  [DaoNode | _] = State#cm_state.nodes,
+  {Ans, NewState} = start_worker(DaoNode, dao, [], State),
   NewState2 = case Ans of
     ok ->
       gen_server:cast(dao, {synch, 1, {get_state, []}, cluster_state, {gen_serv, {global, ?CCM}}}),
