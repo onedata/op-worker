@@ -21,10 +21,10 @@ main(OverlayFileList) ->
     c:cd("../.."),
     code:add_patha("deps/yamler/ebin"),
 
-    % Create an ets table to store parameters
+    % Create an ets table to store entries
     ets:new(entries, [named_table, private, bag, {read_concurrency, false}]),
 
-    % Put parameters from default.yml into the table
+    % Put entries from default.yml into the table
     try process_default_yml()
     catch _:Message -> 
         io:format("Error while processing default.yml:~n~p~nstack trace:~n~p~n", [Message, erlang:get_stacktrace()]),        
@@ -50,6 +50,7 @@ main(OverlayFileList) ->
     VmArgsEntries = lists:keysort(1, [Param || {vm_args, Param} <- ets:lookup(entries, vm_args)]),
     AppSrcEntries = lists:keysort(1, [Param || {app_src, Param} <- ets:lookup(entries, app_src)]),
 
+    % Try writing args to files
     try
         write_to_vm_args(VmArgsEntries),
         write_to_app_src(AppSrcEntries)
@@ -58,7 +59,16 @@ main(OverlayFileList) ->
         halt(1)
     end,
 
-    io:format("vm.args and veil_cluster_node.app.src generated successfully.~n").
+    % Try copying sys.config
+    case os:cmd("cp config/sys.config releases/files/sys.config") of
+        [] ->
+            proceed;
+        _ ->
+            io:format("Error while copying sys.config. Is it present in /config directory?~n"),        
+            halt(1)
+    end,
+
+    io:format("Configuration applied successfully.~n").
 
 
 
@@ -77,12 +87,12 @@ process_default_yml() ->
 extract_groups_from_section(Section) ->
     {SectionName, ListOfGroups} = Section,
     case SectionName of
-        obsolete_arguments -> 
-            skip;
         vm_arguments ->
             extract_entries_from_groups(-1000, ListOfGroups);
         veil_cluster_node_env ->
-            extract_entries_from_groups(1, ListOfGroups)
+            extract_entries_from_groups(1, ListOfGroups);
+        _ ->
+            skip
     end.
 
 
@@ -213,7 +223,14 @@ write_to_vm_args(EntryList) ->
 
 % Write to app.src in proper format
 write_to_app_src(ParameterList) -> 
-    {ok, Data} = file:read_file("src/veil_cluster_node.app.src"),
+    Data =  case file:read_file("config/veil_cluster_node.app.src") of
+                {ok, DataRead} -> 
+                    DataRead;
+                _ ->
+                    io:format("Error while reading veil_cluster_node.app.src. Is it present in /config directory?~n"),        
+                    halt(1)
+            end,
+
     OldFile = to_list(Data),
     {match, [{From, _Through}]} = re:run(OldFile, "\\{env, \\["),
     NewFileBeginning = string:substr(OldFile, 1, From),

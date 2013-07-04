@@ -137,7 +137,7 @@ veil_cluster_node_env:
 
 
 
-obsolete_arguments:
+obsolete:
   - group: 
       - parameter:
           description: |
