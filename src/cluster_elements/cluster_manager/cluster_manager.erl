@@ -106,7 +106,7 @@ init([]) ->
 
 init([test]) ->
   process_flag(trap_exit, true),
-  {ok, #cm_state{}}.
+  {ok, #cm_state{nodes = [node()]}}.
 
 %% handle_call/3
 %% ====================================================================
