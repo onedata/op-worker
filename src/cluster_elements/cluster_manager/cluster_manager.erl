@@ -31,7 +31,7 @@
 %% Test API
 %% ====================================================================
 -ifdef(TEST).
--export([update_dns_state/3, calculate_node_load/1]).
+-export([update_dns_state/3]).
 -endif.
 
 %% ====================================================================
@@ -381,10 +381,44 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
 -spec check_cluster_state(State :: term()) -> NewState when
   NewState ::  term().
 %% ====================================================================
-%% TODO zaproponować algorytm
 check_cluster_state(State) ->
+  NewState = case length(State#cm_state.nodes) > 1 of
+    true ->
+      {NodesLoad, AvgLoad} = calculate_node_load(State#cm_state.nodes, long),
+      WorkersLoad = calculate_worker_load(State#cm_state.workers),
+      Load = calculate_load(NodesLoad, WorkersLoad),
+
+      MinV = lists:min([NodeLoad || {_Node, NodeLoad, _ModulesLoads} <- Load, NodeLoad =/= error]),
+      MaxV = lists:max([NodeLoad || {_Node, NodeLoad, _ModulesLoads} <- Load, NodeLoad =/= error]),
+      case MinV > 0 and (((MaxV >= 2* MinV) and (MaxV >= 1.5 * AvgLoad)) or (MaxV >= 5* MinV)) of
+        true ->
+          [{MaxNode, MaxNodeModulesLoads} | _] = [{Node, ModulesLoads} || {Node, NodeLoad, ModulesLoads} <- Load, NodeLoad == MaxV],
+          MaxMV = lists:max([MLoad || {_Module, MLoad} <- MaxNodeModulesLoads, MLoad =/= error]),
+          case MaxMV >= 0.5 of
+            true ->
+              [MaxModule | _] = [Module || {Module, MLoad} <- MaxNodeModulesLoads, MLoad == MaxMV],
+              [{MinNode, MinNodeModulesLoads} | _] = [{Node, ModulesLoads} || {Node, NodeLoad, ModulesLoads} <- Load, NodeLoad == MinV],
+              MinWorkers = [Module || {Module, _MLoad} <- MinNodeModulesLoads, Module == MaxModule],
+              case MinWorkers =:= [] of
+                true ->
+                  lager:info([{mod, ?MODULE}], "Worker: ~s will be started at node: ~s", [MaxModule, MinNode]),
+                  {_WorkerRuns, TmpState} = start_worker(MinNode, MaxModule, proplists:get_value(MaxModule, ?Modules_With_Args, []), State),
+                  TmpState;
+                false ->
+                  lager:info([{mod, ?MODULE}], "Worker: ~s will be stopped at node", [MaxModule, MaxNode]),
+                  {_WorkerStopped, TmpState2} = stop_worker(MaxNode, MaxModule, State),
+                  TmpState2
+              end;
+            false -> State
+          end;
+        false -> State
+      end;
+    false -> State
+  end,
+
+  lager:info([{mod, ?MODULE}], "Cluster state ok"),
   plan_next_cluster_state_check(),
-  State.
+  NewState.
 
 %% plan_next_cluster_state_check/0
 %% ====================================================================
@@ -615,7 +649,9 @@ get_workers_list(State) ->
   NewState :: term().
 %% ====================================================================
 increase_state_num(State) ->
-  {Load, AvgLoad} = calculate_load(State#cm_state.nodes, State#cm_state.workers),
+  {NodesLoad, AvgLoad} = calculate_node_load(State#cm_state.nodes, short),
+  WorkersLoad = calculate_worker_load(State#cm_state.workers),
+  Load = calculate_load(NodesLoad, WorkersLoad),
   update_dns_state(State#cm_state.workers, Load, AvgLoad),
 
   NewStateNum = State#cm_state.state_num + 1,
@@ -881,10 +917,10 @@ get_workers_versions([{Node, Module} | Workers], Versions) ->
   V = gen_server:call({Module, Node}, {test_call, 1, get_version}),
   get_workers_versions(Workers, [{Node, Module, V} | Versions]).
 
-calculate_node_load(Nodes) ->
+calculate_node_load(Nodes, Period) ->
   GetNodeInfo = fun(Node) ->
     Info = try
-      gen_server:call({?Node_Manager_Name, Node}, {get_node_stats, short})
+      gen_server:call({?Node_Manager_Name, Node}, {get_node_stats, Period})
     catch
       _:_ ->
         lager:error([{mod, ?MODULE}], "Can not get status of node: ~s", [Node]),
@@ -951,12 +987,9 @@ calculate_worker_load(Workers) ->
   end,
   lists:map(EvaluateLoad, MergedByNode).
 
-calculate_load(Nodes, Workers) ->
-  {NodesLoad, Avg} = calculate_node_load(Nodes),
-  WorkersLoad = calculate_worker_load(Workers),
-
+calculate_load(NodesLoad, WorkersLoad) ->
   Merge = fun ({Node, Modules}) ->
     {Node, proplists:get_value(Node, NodesLoad, error), Modules}
   end,
-  {lists:map(Merge, WorkersLoad), Avg}.
+  lists:map(Merge, WorkersLoad).
 
