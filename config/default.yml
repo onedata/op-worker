@@ -37,17 +37,17 @@ veil_cluster_node_env:
           name: ccm_nodes
           description: List of possible ccm nodes
           value: |
-            ["\'nonode@nohost\'","\'nonode@nohost\'","\'nonode@nohost\'"]
+            ["\'ccm1@127.0.0.1\'"]
           erlang_term: |
-            ['nonode@nohost','nonode@nohost','nonode@nohost']
+            ['ccm1@127.0.0.1']
 
       - parameter:
           name: db_nodes
           description: List of all DBMS nodes
           value: |
-            ["\'nonode@nohost\'","\'nonode@nohost\'"]
+            ["\'db1@127.0.0.1\'"]
           erlang_term: |
-            ['nonode@nohost','nonode@nohost']
+            ['db1@127.0.0.1']
 
       - parameter:
           name: initialization_time
@@ -82,6 +82,8 @@ veil_cluster_node_env:
           value: |
             "\'./veilfs.pem\'"
           erlang_term: "'./veilfs.pem'"
+          # this has to be in double quotes so that single quotes are preserved after
+          # conversion to list and it ends up correct in app.src
 
 
 
