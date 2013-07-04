@@ -1,161 +1,152 @@
 vm_arguments:
-  - group: 
-      - name: general    
 
-      - argument:
-          name: node_name
-          description: Name of the node
-          value: -name nonode@nohost
+  # GENERAL
+  - argument:
+      name: node_name
+      description: Name of the node
+      value: -name nonode@nohost
 
-      - argument:
-          name: cookie
-          description: Erlang cookie
-          value: -setcookie veil_cluster_node
+  - argument:
+      name: cookie
+      description: Erlang cookie
+      value: -setcookie veil_cluster_node
 
-      - argument:
-          name: error_logger_warnings
-          description: Treat error_logger warnings as warnings
-          value: +W w
+  - argument:
+      name: error_logger_warnings
+      description: Treat error_logger warnings as warnings
+      value: +W w
 
-      - argument:
-          name: erl_max_ports
-          description: Increase number of concurrent ports/sockets
-          value: -env ERL_MAX_PORTS 4096
+  - argument:
+      name: erl_max_ports
+      description: Increase number of concurrent ports/sockets
+      value: -env ERL_MAX_PORTS 4096
 
 
 
 veil_cluster_node_env:
-  - group:
-      - name: general
 
-      - parameter:
-          name: node_type
-          description: Node type (worker or ccm)
-          value: ccm
+  # GENERAL
+  - parameter:
+      name: node_type
+      description: Node type (worker or ccm)
+      value: ccm
 
-      - parameter:
-          name: ccm_nodes
-          description: List of possible ccm nodes
-          value: |
-            ["\'ccm1@127.0.0.1\'"]
-          erlang_term: |
-            ['ccm1@127.0.0.1']
+  - parameter:
+      name: ccm_nodes
+      description: List of possible ccm nodes
+      value: |
+        ["\'ccm1@127.0.0.1\'"]
+      erlang_term: |
+        ['ccm1@127.0.0.1']
 
-      - parameter:
-          name: db_nodes
-          description: List of all DBMS nodes
-          value: |
-            ["\'db1@127.0.0.1\'"]
-          erlang_term: |
-            ['db1@127.0.0.1']
+  - parameter:
+      name: db_nodes
+      description: List of all DBMS nodes
+      value: |
+        ["\'db1@127.0.0.1\'"]
+      erlang_term: |
+        ['db1@127.0.0.1']
 
-      - parameter:
-          name: initialization_time
-          description: How long should ccm wait for workers before it initializes cluster
-          value: 10
+  - parameter:
+      name: initialization_time
+      description: How long should ccm wait for workers before it initializes cluster
+      value: 10
 
-      - parameter:
-          name: heart_beat
-          description: How long (in sec) should worker sleep before next connection try (when it cannot connect to ccm)
-          value: 60
+  - parameter:
+      name: heart_beat
+      description: How long (in sec) should worker sleep before next connection try (when it cannot connect to ccm)
+      value: 60
 
-      - parameter:
-          name: cluster_clontrol_period
-          description: How long (in sec) should ccm wait between successive checks of cluster status
-          value: 300
+  - parameter:
+      name: cluster_clontrol_period
+      description: How long (in sec) should ccm wait between successive checks of cluster status
+      value: 300
 
-      - parameter:
-          name: worker_load_memory_size
-          description: Memory size which stores information about worker load
-          value: 1000
+  - parameter:
+      name: worker_load_memory_size
+      description: Memory size which stores information about worker load
+      value: 1000
 
-      - parameter:
-          name: hot_swapping_time
-          description: |
-            Time in ms after witch code of loops will be reloaded
-            e.g. if value is 10000 hot_swap message will be sent to loops 10 seconds after release_handler:install_release execution
-          value: 2000
+  - parameter:
+      name: hot_swapping_time
+      description: |
+        Time in ms after witch code of loops will be reloaded
+        e.g. if value is 10000 hot_swap message will be sent to loops 10 seconds after release_handler:install_release execution
+      value: 2000
 
-      - parameter:
-          name: ssl_cert_path
-          description: Path to certificate used by ranch_ssl
-          value: |
-            "\'./veilfs.pem\'"
-          erlang_term: "'./veilfs.pem'"
-          # this has to be in double quotes so that single quotes are preserved after
-          # conversion to list and it ends up correct in app.src
-
+  - parameter:
+      name: ssl_cert_path
+      description: Path to certificate used by ranch_ssl
+      value: |
+        "\'./veilfs.pem\'"
+      erlang_term: "'./veilfs.pem'"
+      # this has to be in double quotes so that single quotes are preserved after
+      # conversion to list and it ends up correct in app.src
 
 
-  - group:
-      - name: dispatcher
+  # DISPATCHER
+  - parameter:
+      name: dispatcher_pool_size
+      description: Number of threads used by dispatcher
+      value: 100
 
-      - parameter:
-          name: dispatcher_pool_size
-          description: Number of threads used by dispatcher
-          value: 100
+  - parameter:
+      name: dispatcher_port
+      description: Number of port used by dispatcher
+      value: 5555
 
-      - parameter:
-          name: dispatcher_port
-          description: Number of port used by dispatcher
-          value: 5555
+  - parameter:
+      name: ranch_timeout
+      description: Time in ms after witch ranch kills thread that does nothing
+      value: 5000
 
-      - parameter:
-          name: ranch_timeout
-          description: Time in ms after witch ranch kills thread that does nothing
-          value: 5000
-
-      - parameter:
-          name: dispatcher_timeout
-          description: Time in ms after witch ranch answers with error
-          value: 2000
+  - parameter:
+      name: dispatcher_timeout
+      description: Time in ms after witch ranch answers with error
+      value: 2000
 
 
+  # DNS
+  - parameter:
+      name: dns_response_ttl
+      description: How long dns response remains valid (in sec)
+      value: 60
 
-  - group: 
-      - name: dns    
+  - parameter:
+      name: dns_tcp_acceptor_pool_size
+      description: Number of dns tcp acceptors
+      value: 50
 
-      - parameter:
-          name: dns_response_ttl
-          description: How long dns response remains valid (in sec)
-          value: 60
+  - parameter:
+      name: dns_tcp_timeout
+      description: Time (in sec) after which dns closes idle connection
+      value: 30
 
-      - parameter:
-          name: dns_tcp_acceptor_pool_size
-          description: Number of dns tcp acceptors
-          value: 50
-
-      - parameter:
-          name: dns_tcp_timeout
-          description: Time (in sec) after which dns closes idle connection
-          value: 30
-
-      - parameter:
-          name: dns_port
-          description: DNS port
-          value: 53
+  - parameter:
+      name: dns_port
+      description: DNS port
+      value: 53
 
 
 
 
 
 obsolete:
-  - group: 
-      - parameter:
-          description: |
-            Heartbeat management; auto-restarts VM if it dies or becomes unresponsive
-            (Disabled by default..use with caution!)
-          name: heart
-          value: -heart
+  - parameter:
+      description: |
+        Heartbeat management; auto-restarts VM if it dies or becomes unresponsive
+        (Disabled by default..use with caution!)
+      name: heart
+      value: -heart
 
-      - parameter:
-          description: Enable kernel poll and a few async threads
-          name: kernel_pool_async_threads
-          value: |
-            +K true
-            +A 5
+  - parameter:
+      description: Enable kernel poll and a few async threads
+      name: kernel_pool_async_threads
+      value: |
+        +K true
+        +A 5
 
-      - parameter:
-          description: Tweak GC to run more often
-          name: erl_fullsweep_after
-          value: -env ERL_FULLSWEEP_AFTER 10
+  - parameter:
+      description: Tweak GC to run more often
+      name: erl_fullsweep_after
+      value: -env ERL_FULLSWEEP_AFTER 10

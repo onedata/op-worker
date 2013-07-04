@@ -34,13 +34,34 @@ main(OverlayFileList) ->
     % Get entries from overlay files if any was specified and shadow the ones in table
     case OverlayFileList of 
         [] ->
-            skip;
+            % No overlay files specified, looking for hostname dependent file
+            Hostname = case lists:reverse(os:cmd("hostname")) of
+                % Remove a newline from the end of the hostname
+                [10|T] -> lists:reverse(T);
+                ProperHostname -> ProperHostname
+            end,
+
+            try 
+                case filelib:is_file("config/" ++ Hostname ++ ".yml") of
+                    false ->
+                        skip;
+                    true ->
+                        io:format("Using hostname-dependent overlay file: ~s.yml~n", [Hostname]),
+                        process_overlay_file("config/" ++ Hostname ++ ".yml")
+                end
+            catch _:Message2 -> 
+                io:format("Error while processing ~p:~n~p~nstack trace:~n~p~n", 
+                    [Hostname ++ ".yml", Message2, erlang:get_stacktrace()]),                    
+                halt(1)
+            end;
+            
         FileList ->
             lists:foreach(
                 fun(Filename) ->
                     try process_overlay_file("config/" ++ Filename)
-                    catch _:Message2 -> 
-                        io:format("Error while processing ~p:~n~p~nstack trace:~n~p~n", [Filename, Message2, erlang:get_stacktrace()]),                    
+                    catch _:Message3 -> 
+                        io:format("Error while processing ~p:~n~p~nstack trace:~n~p~n", 
+                            [Filename, Message3, erlang:get_stacktrace()]),                    
                         halt(1)
                     end
                 end, FileList)
@@ -54,8 +75,8 @@ main(OverlayFileList) ->
     try
         write_to_vm_args(VmArgsEntries),
         write_to_app_src(AppSrcEntries)
-    catch _:Message3 -> 
-        io:format("Error while writing to files:~n~p~nstack trace:~n~p~n", [Message3, erlang:get_stacktrace()]),        
+    catch _:Message4 -> 
+        io:format("Error while writing to files:~n~p~nstack trace:~n~p~n", [Message4, erlang:get_stacktrace()]),        
         halt(1)
     end,
 
@@ -77,28 +98,28 @@ main(OverlayFileList) ->
 
 process_default_yml() ->
     {ok, [ListOfSections]} = yaml:load_file("config/default.yml", [implicit_atoms]),
-    lists:foreach(fun(Section) -> extract_groups_from_section(Section) end, ListOfSections).
+    lists:foreach(fun(Section) -> process_section(Section) end, ListOfSections).
 
 
-% Every section can have a number of groups
-% Depending on section, we don't process them at all,
-% Process them with bigger priority (-1000), do that they come first
-% Or process them with normal priority(1)
-extract_groups_from_section(Section) ->
-    {SectionName, ListOfGroups} = Section,
+% Every section can have a number of entries.
+% Depending on section, we 
+% process them with bigger priority (-1000), so that they come first,
+% process them with normal priority(1),
+% or don't process them at all
+process_section(Section) ->
+    {SectionName, ListOfEntries} = Section,
     case SectionName of
         vm_arguments ->
-            extract_entries_from_groups(-1000, ListOfGroups);
+            extract_entries_from_section(-1000, ListOfEntries);
         veil_cluster_node_env ->
-            extract_entries_from_groups(1, ListOfGroups);
+            extract_entries_from_section(1, ListOfEntries);
         _ ->
             skip
     end.
 
 
 % Numeration is needed to keep sequence of args in result files
-extract_entries_from_groups(NumerationStart, ListOfGroups) ->
-    ListOfEntries = lists:foldl(fun([{_GroupName, Entries}], Acc) -> Acc ++ Entries end, [], ListOfGroups),
+extract_entries_from_section(NumerationStart, ListOfEntries) ->
     lists:foldl(
         fun([{parameter, Parameter}], Counter) -> 
                 store_parameter(Parameter, Counter); 
@@ -170,8 +191,12 @@ remove_newline_from_end(Term) ->
 
 % For each entry in overlay file, shadow the one from default.yml
 process_overlay_file(File) ->
-    {ok, [ListOfEntries]} = yaml:load_file(File, [implicit_atoms]),
-    lists:foreach(fun({EntryName, EntryValue}) -> overlay_entry(EntryName, EntryValue) end, ListOfEntries).
+    case yaml:load_file(File, [implicit_atoms]) of
+        {ok, [ListOfEntries]} -> 
+            lists:foreach(fun({EntryName, EntryValue}) -> overlay_entry(EntryName, EntryValue) end, ListOfEntries);
+        {ok, []} ->
+            skip
+    end.
 
 
 % Do the overlay
