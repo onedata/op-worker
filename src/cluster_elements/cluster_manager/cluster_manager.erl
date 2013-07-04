@@ -126,33 +126,37 @@ init([test]) ->
   Reason :: term().
 %% ====================================================================
 handle_call({node_is_up, Node}, _From, State) ->
-  Nodes = State#cm_state.nodes,
   Reply = State#cm_state.state_num,
-  case lists:member(Node, Nodes) of
+  case Node =:= node() of
     true -> {reply, Reply, State};
     false ->
-      case whereis(?Monitoring_Proc) of
-        undefined -> ok;
-        MPid -> MPid ! {monitor_node, Node}
-      end,
-
-      {Ans, NewState, WorkersFound} = check_node(Node, State),
-
-      %% This case checks if node state was analysed correctly.
-      %% If it was, it upgrades state number if necessary (workers
-      %% were running on node).
-      case Ans of
-        ok ->
-          NewState2 = NewState#cm_state{nodes = [Node | Nodes]},
-
-          NewState3 = case WorkersFound of
-            true -> increase_state_num(NewState2);
-            false -> NewState2
+      Nodes = State#cm_state.nodes,
+      case lists:member(Node, Nodes) of
+        true -> {reply, Reply, State};
+        false ->
+          case whereis(?Monitoring_Proc) of
+            undefined -> ok;
+            MPid -> MPid ! {monitor_node, Node}
           end,
 
-          save_state(NewState3),
-          {reply, Reply, NewState3};
-        _Other -> {reply, Reply, NewState}
+          {Ans, NewState, WorkersFound} = check_node(Node, State),
+
+          %% This case checks if node state was analysed correctly.
+          %% If it was, it upgrades state number if necessary (workers
+          %% were running on node).
+          case Ans of
+            ok ->
+              NewState2 = NewState#cm_state{nodes = [Node | Nodes]},
+
+              NewState3 = case WorkersFound of
+                true -> increase_state_num(NewState2);
+                false -> NewState2
+              end,
+
+              save_state(NewState3),
+              {reply, Reply, NewState3};
+            _Other -> {reply, Reply, NewState}
+          end
       end
   end;
 
@@ -194,13 +198,28 @@ handle_cast(init_cluster, State) ->
   NewState = init_cluster(State),
   {noreply, NewState};
 
+
 handle_cast(get_state_from_db, State) ->
-  NewState = get_state_from_db(State),
-  {noreply, NewState};
+  case State#cm_state.nodes =:= [] of
+    true ->
+      Pid = self(),
+      erlang:send_after(1000, Pid, {timer, get_state_from_db}),
+      {noreply, State};
+    false ->
+      NewState = get_state_from_db(State),
+      {noreply, NewState}
+  end;
 
 handle_cast(start_central_logger, State) ->
-  NewState = start_central_logger(State),
-  {noreply, NewState};
+  case State#cm_state.nodes =:= [] of
+    true ->
+      Pid = self(),
+      erlang:send_after(1000, Pid, {timer, start_central_logger}),
+      {noreply, State};
+    false ->
+      NewState = start_central_logger(State),
+      {noreply, NewState}
+  end;
 
 handle_cast(check_cluster_state, State) ->
   NewState = check_cluster_state(State),
@@ -261,6 +280,10 @@ handle_cast(_Msg, State) ->
   NewState :: term(),
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
+handle_info({timer, Msg}, State) ->
+  gen_server:cast({global, ?CCM}, Msg),
+  {noreply, State};
+
 handle_info(_Info, State) ->
   {noreply, State}.
 
