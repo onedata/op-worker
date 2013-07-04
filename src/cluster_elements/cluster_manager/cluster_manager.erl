@@ -555,12 +555,21 @@ node_down(Node, State) ->
 %% ====================================================================
 start_central_logger(State) ->
   [LoggerNode | _] = State#cm_state.nodes,
-  {Ans, NewState} = start_worker(LoggerNode, central_logger, [], State),
-  NewState2 = case Ans of
-                ok -> increase_state_num(NewState);
-                error -> NewState
-              end,
-  NewState2.
+
+  CreateRunningWorkersList = fun({_N, M, _Child}, Workers) ->
+    [M | Workers]
+  end,
+  Workers = State#cm_state.workers,
+  RunningWorkers = lists:foldl(CreateRunningWorkersList, [], Workers),
+  case lists:member(central_logger, RunningWorkers) of
+    true -> State;
+    false ->
+      {Ans, NewState} = start_worker(LoggerNode, central_logger, [], State),
+      case Ans of
+        ok -> increase_state_num(NewState);
+        error -> NewState
+      end
+  end.
 
 %% get_state_from_db/1
 %% ====================================================================
@@ -570,14 +579,25 @@ start_central_logger(State) ->
 %% ====================================================================
 get_state_from_db(State) ->
   [DaoNode | _] = State#cm_state.nodes,
-  {Ans, NewState} = start_worker(DaoNode, dao, [], State),
-  NewState2 = case Ans of
-    ok ->
-      gen_server:cast(dao, {synch, 1, {get_state, []}, cluster_state, {gen_serv, {global, ?CCM}}}),
-      increase_state_num(NewState);
-    error -> NewState
+
+  CreateRunningWorkersList = fun({_N, M, _Child}, Workers) ->
+    [M | Workers]
   end,
-  NewState2.
+  Workers = State#cm_state.workers,
+  RunningWorkers = lists:foldl(CreateRunningWorkersList, [], Workers),
+  case lists:member(dao, RunningWorkers) of
+    true ->
+      gen_server:cast({dao, DaoNode}, {synch, 1, {get_state, []}, cluster_state, {gen_serv, {global, ?CCM}}}),
+      State;
+    false ->
+      {Ans, NewState} = start_worker(DaoNode, dao, [], State),
+      case Ans of
+        ok ->
+          gen_server:cast({dao, DaoNode}, {synch, 1, {get_state, []}, cluster_state, {gen_serv, {global, ?CCM}}}),
+          increase_state_num(NewState);
+        error -> NewState
+      end
+  end.
 
 %% save_state/1
 %% ====================================================================
