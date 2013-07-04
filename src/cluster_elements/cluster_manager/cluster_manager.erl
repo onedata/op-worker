@@ -203,7 +203,7 @@ handle_cast(get_state_from_db, State) ->
   case State#cm_state.nodes =:= [] of
     true ->
       Pid = self(),
-      erlang:send_after(1000, Pid, {timer, get_state_from_db}),
+      erlang:send_after(10000, Pid, {timer, get_state_from_db}),
       {noreply, State};
     false ->
       NewState = get_state_from_db(State),
@@ -214,7 +214,7 @@ handle_cast(start_central_logger, State) ->
   case State#cm_state.nodes =:= [] of
     true ->
       Pid = self(),
-      erlang:send_after(1000, Pid, {timer, start_central_logger}),
+      erlang:send_after(10000, Pid, {timer, start_central_logger}),
       {noreply, State};
     false ->
       NewState = start_central_logger(State),
@@ -330,37 +330,45 @@ code_change(_OldVsn, State, _Extra) ->
 %% ====================================================================
 init_cluster(State) ->
   Nodes = State#cm_state.nodes,
-  JobsAndArgs = ?Modules_With_Args,
-
-  CreateRunningWorkersList = fun({_N, M, _Child}, Workers) ->
-    [M | Workers]
-  end,
-  Workers = State#cm_state.workers,
-  RunningWorkers = lists:foldl(CreateRunningWorkersList, [], Workers),
-
-  CreateJobsList = fun({Job, A}, {TmpJobs, TmpArgs}) ->
-     case lists:member(Job, RunningWorkers) of
-       true -> {TmpJobs, TmpArgs};
-       false -> {[Job | TmpJobs], [A | TmpArgs]}
-     end
-  end,
-  {Jobs, Args} = lists:foldl(CreateJobsList, {[], []}, JobsAndArgs),
-
-  NewState3 = case (length(Jobs) > 0) and (length(Nodes) > 0) of
+  case length(Nodes) > 0 of
     true ->
-      NewState = case erlang:length(Nodes) >= erlang:length(Jobs) of
-        true -> init_cluster_nodes_dominance(State, Nodes, Jobs, [], Args, []);
-        false -> init_cluster_jobs_dominance(State, Jobs, Args, Nodes, [])
+      JobsAndArgs = ?Modules_With_Args,
+
+      CreateRunningWorkersList = fun({_N, M, _Child}, Workers) ->
+        [M | Workers]
+      end,
+      Workers = State#cm_state.workers,
+      RunningWorkers = lists:foldl(CreateRunningWorkersList, [], Workers),
+
+      CreateJobsList = fun({Job, A}, {TmpJobs, TmpArgs}) ->
+         case lists:member(Job, RunningWorkers) of
+           true -> {TmpJobs, TmpArgs};
+           false -> {[Job | TmpJobs], [A | TmpArgs]}
+         end
+      end,
+      {Jobs, Args} = lists:foldl(CreateJobsList, {[], []}, JobsAndArgs),
+
+      NewState3 = case length(Jobs) > 0 of
+        true ->
+          NewState = case erlang:length(Nodes) >= erlang:length(Jobs) of
+            true -> init_cluster_nodes_dominance(State, Nodes, Jobs, [], Args, []);
+            false -> init_cluster_jobs_dominance(State, Jobs, Args, Nodes, [])
+          end,
+
+          NewState2 = increase_state_num(NewState),
+          save_state(NewState2),
+          NewState2;
+        false -> State
       end,
 
-      NewState2 = increase_state_num(NewState),
-      save_state(NewState2),
-      NewState2;
-    false -> State
-  end,
-
-  plan_next_cluster_state_check(),
-  NewState3.
+      plan_next_cluster_state_check(),
+      NewState3;
+    false ->
+      Pid = self(),
+      {ok, Interval} = application:get_env(veil_cluster_node, initialization_time),
+      erlang:send_after(1000 * Interval, Pid, {timer, init_cluster}),
+      State
+  end.
 
 %% init_cluster_nodes_dominance/6
 %% ====================================================================
