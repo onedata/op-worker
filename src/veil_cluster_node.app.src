@@ -51,6 +51,8 @@
       %% e.g. if value is 10000 hot_swap message will be sent to loops 10 seconds after release_handler:install_release execution
       {hot_swapping_time, 10000},
       %% path to certificate used by ranch_ssl
-      {ssl_cert_path, './veilfs.pem'}
+      {ssl_cert_path, './veilfs.pem'},
+      %% how often fslogic should clean not used descriptors
+      {fslogic_cleaning_period, 600000}
   		]}
  ]}.

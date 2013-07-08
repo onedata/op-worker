@@ -12,11 +12,12 @@
 -module(fslogic_tester).
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
+-include("registered_names.hrl").
 
 %% ====================================================================
 %% API
 %% ====================================================================
--export([test/0, test/1, test/3]).
+-export([test/1, test/2, test/4]).
 
 %% ====================================================================
 %% API functions
@@ -24,13 +25,13 @@
 
 %% Three functions below (test functions with different number of parameters)
 %% do full test of fslogic. They simulate different requests from FSE.
-test() ->
-  test("localhost").
+test(FSLogicNode) ->
+  test("localhost", FSLogicNode).
 
-test(Host) ->
-  test(Host, "veilfs.pem", 5555).
+test(Host, FSLogicNode) ->
+  test(Host, "veilfs.pem", 5555, FSLogicNode).
 
-test(Host, Cert, Port) ->
+test(Host, Cert, Port, FSLogicNode) ->
   ssl:start(),
   TestFile = "fslogic_test_file",
   DirName = "fslogic_test_dir",
@@ -52,6 +53,19 @@ test(Host, Cert, Port) ->
   io:format("Test file not used message: aswer status: ~s, answer: ~p~n", [Status4, Answer4]),
   {Status4_1, Answer4_1} = file_not_used(Host, Cert, Port, TestFile),
   io:format("Test file not used message (second time): aswer status: ~s, answer: ~p~n", [Status4_1, Answer4_1]),
+
+
+
+  io:format("Test automatic descriptors cleaning~n"),
+  {Status4_2, Helper4_2, Id4_2, Validity4_2} = get_file_location(Host, Cert, Port, TestFile),
+  io:format("Test file location check: aswer status: ~s, helper: ~s, id: ~s, validity: ~b~n", [Status4_2, Helper4_2, Id4_2, Validity4_2]),
+
+  clear_old_descriptors(FSLogicNode),
+
+  {Status4_4, Answer4_4, Validity4_4} = renew_file_location(Host, Cert, Port, TestFile),
+  io:format("Test renewing location: aswer status: ~s, answer: ~s, validity: ~b~n", [Status4_4, Answer4_4, Validity4_4]),
+
+
 
   {Status5, Answer5} = mkdir(Host, Cert, Port, DirName),
   io:format("Test directory creation: aswer status: ~s, answer: ~p~n", [Status5, Answer5]),
@@ -286,3 +300,9 @@ rename_file(Host, Cert, Port, FileName, NewName) ->
   Answer = communication_protocol_pb:decode_atom(Bytes),
   Answer2 = records_translator:translate(Answer, "communication_protocol"),
   {Status, Answer2}.
+
+clear_old_descriptors(Node) ->
+  {Megaseconds,Seconds, _Microseconds} = os:timestamp(),
+  Time = 1000000*Megaseconds + Seconds + 60*15 + 1,
+  gen_server:call({?Dispatcher_Name, Node}, {fslogic, 1, {delete_old_descriptors_test, Time}}),
+  timer:sleep(500).

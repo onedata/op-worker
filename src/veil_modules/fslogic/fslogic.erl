@@ -39,6 +39,9 @@
 -spec init(Args :: term()) -> list().
 %% ====================================================================
 init(_Args) ->
+  Pid = self(),
+  {ok, Interval} = application:get_env(veil_cluster_node, fslogic_cleaning_period),
+  erlang:send_after(Interval, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
 	[].
 
 %% handle/1
@@ -54,6 +57,18 @@ handle(_ProtocolVersion, ping) ->
 
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
+
+handle(ProtocolVersion, {delete_old_descriptors_test, Time}) ->
+  delete_old_descriptors(ProtocolVersion, Time),
+  ok;
+
+handle(ProtocolVersion, {delete_old_descriptors, Pid}) ->
+  {Megaseconds,Seconds, _Microseconds} = os:timestamp(),
+  Time = 1000000*Megaseconds + Seconds - 15,
+  delete_old_descriptors(ProtocolVersion, Time),
+  {ok, Interval} = application:get_env(veil_cluster_node, fslogic_cleaning_period),
+  erlang:send_after(Interval, Pid, {timer, {asynch, ProtocolVersion, {delete_old_descriptors, Pid}}}),
+  ok;
 
 handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
   handle_fuse_message(ProtocolVersion, Record#fusemessage.input, Record#fusemessage.id);
@@ -446,3 +461,14 @@ get_file(ProtocolVersion, File, FuseID) ->
   Pid = self(),
   Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 30, {vfs, get_file, [File]}}),
   wait_for_dao_ans(Ans, File, 30, "get_file").
+
+delete_old_descriptors(ProtocolVersion, Time) ->
+  Pid = self(),
+  Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 13, {vfs, remove_descriptor, [{by_expired_before, Time}]}}),
+
+  {Status, _TmpAns} = wait_for_dao_ans(Ans, "all_files", 13, "remove_descriptor"),
+  case Status of
+    ok ->
+      lager:info([{mod, ?MODULE}], "Old descriptors cleared");
+    _Other -> lager:error([{mod, ?MODULE}], "Error during clearing old descriptors")
+  end.
