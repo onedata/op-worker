@@ -293,10 +293,10 @@ setup_views(DesignStruct) ->
     DesignFun = fun(#design_info{name = Name, views = ViewList}, DbName) ->  %% Foreach design document
             LastCTX = %% Calculate MD5 sum of current views (read from files)
                 lists:foldl(fun(#view_info{name = ViewName}, CTX) ->
-                            crypto:md5_update(CTX, load_view_def(ViewName, map) ++ load_view_def(ViewName, reduce))
-                        end, crypto:md5_init(), ViewList),
+                            crypto:hash_update(CTX, load_view_def(ViewName, map) ++ load_view_def(ViewName, reduce))
+                        end, crypto:hash_init(md5), ViewList),
 
-            LocalVersion = dao_helper:name(integer_to_list(binary:decode_unsigned(crypto:md5_final(LastCTX)), 16)),
+            LocalVersion = dao_helper:name(integer_to_list(binary:decode_unsigned(crypto:hash_final(LastCTX)), 16)),
             NewViewList =
                 case dao_helper:open_design_doc(DbName, Name) of
                     {ok, #doc{body = Body}} -> %% Design document exists, so lets calculate MD5 sum of its views
@@ -305,8 +305,8 @@ setup_views(DesignStruct) ->
                         EmptyString = fun(Str) when is_binary(Str) -> binary_to_list(Str); %% Helper function converting non-string value to empty string
                                          (_) -> "" end,
                         VStrings = [ EmptyString(dao_json:get_field(V, "map")) ++ EmptyString(dao_json:get_field(V, "reduce")) || {L}=V <- DbViews, is_list(L)],
-                        LastCTX1 = lists:foldl(fun(VStr, CTX) -> crypto:md5_update(CTX, VStr) end, crypto:md5_init(), VStrings),
-                        DbVersion = dao_helper:name(integer_to_list(binary:decode_unsigned(crypto:md5_final(LastCTX1)), 16)),
+                        LastCTX1 = lists:foldl(fun(VStr, CTX) -> crypto:hash_update(CTX, VStr) end, crypto:hash_init(md5), VStrings),
+                        DbVersion = dao_helper:name(integer_to_list(binary:decode_unsigned(crypto:hash_final(LastCTX1)), 16)),
                         case DbVersion of %% Compare DbVersion with LocalVersion
                             LocalVersion ->
                                 lager:info("DB version of design ~p is ~p and matches local version. Design is up to date", [Name, LocalVersion]),
