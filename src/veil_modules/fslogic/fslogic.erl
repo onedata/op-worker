@@ -352,7 +352,7 @@ save_new_file_descriptor(ProtocolVersion, File, Uuid, FuseID, Validity) ->
 update_file_descriptor(Descriptor, Validity) ->
   {Megaseconds,Seconds, _Microseconds} = os:timestamp(),
   Time = 1000000*Megaseconds + Seconds,
-  Descriptor#file_descriptor{create_time = Time, expire_time = Validity}.
+  Descriptor#file_descriptor{create_time = Time, validity_time = Validity}.
 
 %% wait_for_dao_ans/4
 %% ====================================================================
