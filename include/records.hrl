@@ -30,6 +30,6 @@
 -record(host_state, {plug_in = non, plug_in_state = [], load_info = [], current_seq_job = none, seq_queue = []}).
 
 %% This record is used by requests_dispatcher (it contains its state).
--record(dispatcher_state, {modules = [], state_num = 0}).
+-record(dispatcher_state, {modules = [], state_num = 0, current_load = 0, avg_load = 0}).
 
 -endif.

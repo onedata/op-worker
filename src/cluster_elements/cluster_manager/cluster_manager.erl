@@ -132,11 +132,6 @@ handle_call({node_is_up, Node}, _From, State) ->
   case lists:member(Node, Nodes) of
     true -> {reply, Reply, State};
     false ->
-      case whereis(?Monitoring_Proc) of
-        undefined -> ok;
-        MPid -> MPid ! {monitor_node, Node}
-      end,
-
       {Ans, NewState, WorkersFound} = check_node(Node, State),
 
       %% This case checks if node state was analysed correctly.
@@ -144,15 +139,19 @@ handle_call({node_is_up, Node}, _From, State) ->
       %% were running on node).
       case Ans of
         ok ->
-          NewState2 = NewState#cm_state{nodes = [Node | Nodes]},
-
-          NewState3 = case WorkersFound of
-            true -> increase_state_num(NewState2);
-            false -> NewState2
+          case whereis(?Monitoring_Proc) of
+            undefined -> ok;
+            MPid -> MPid ! {monitor_node, Node}
           end,
 
-          save_state(NewState3),
-          {reply, Reply, NewState3};
+          NewState2 = NewState#cm_state{nodes = [Node | Nodes]},
+
+          case WorkersFound of
+            true -> gen_server:cast({global, ?CCM}, update_dispatchers_and_dns);
+            false -> ok
+          end,
+          save_state(NewState2),
+          {reply, Reply, NewState2};
         _Other -> {reply, Reply, NewState}
       end
   end;
@@ -164,7 +163,8 @@ handle_call(get_nodes, _From, State) ->
   {reply, State#cm_state.nodes, State};
 
 handle_call(get_workers, _From, State) ->
-  {reply, {get_workers_list(State), State#cm_state.state_num}, State};
+  WorkersList = get_workers_list(State),
+  {reply, {WorkersList, State#cm_state.state_num}, State};
 
 handle_call(get_state, _From, State) ->
   {reply, State, State};
@@ -195,6 +195,10 @@ handle_cast(init_cluster, State) ->
   NewState = init_cluster(State),
   {noreply, NewState};
 
+handle_cast(update_dispatchers_and_dns, State) ->
+  NewState = update_dispatchers_and_dns(State, true, true),
+  {noreply, NewState};
+
 handle_cast(get_state_from_db, State) ->
   NewState = get_state_from_db(State),
   {noreply, NewState};
@@ -213,7 +217,7 @@ handle_cast({node_down, Node}, State) ->
   %% If workers were running on node that is down,
   %% upgrade state.
   NewState2 = case WorkersFound of
-    true -> increase_state_num(NewState);
+    true -> update_dispatchers_and_dns(NewState, true, true);
     false -> NewState
   end,
 
@@ -335,7 +339,7 @@ init_cluster(State) ->
         false -> init_cluster_jobs_dominance(State, Jobs, Args, Nodes, [])
       end,
 
-      NewState2 = increase_state_num(NewState),
+      NewState2 = update_dispatchers_and_dns(NewState, true, true),
       save_state(NewState2),
       NewState2;
     false -> State
@@ -390,7 +394,7 @@ check_cluster_state(State) ->
 
       MinV = lists:min([NodeLoad || {_Node, NodeLoad, _ModulesLoads} <- Load, NodeLoad =/= error]),
       MaxV = lists:max([NodeLoad || {_Node, NodeLoad, _ModulesLoads} <- Load, NodeLoad =/= error]),
-      case MinV > 0 and (((MaxV >= 2* MinV) and (MaxV >= 1.5 * AvgLoad)) or (MaxV >= 5* MinV)) of
+      case (MinV > 0) and (((MaxV >= 2* MinV) and (MaxV >= 1.5 * AvgLoad)) or (MaxV >= 5* MinV)) of
         true ->
           [{MaxNode, MaxNodeModulesLoads} | _] = [{Node, ModulesLoads} || {Node, NodeLoad, ModulesLoads} <- Load, NodeLoad == MaxV],
           MaxMV = lists:max([MLoad || {_Module, MLoad} <- MaxNodeModulesLoads, MLoad =/= error]),
@@ -562,7 +566,7 @@ node_down(Node, State) ->
 start_central_logger(State) ->
   {Ans, NewState} = start_worker(node(), central_logger, [], State),
   NewState2 = case Ans of
-                ok -> increase_state_num(NewState);
+                ok -> update_dispatchers_and_dns(NewState, true, true);
                 error -> NewState
               end,
   NewState2.
@@ -578,7 +582,7 @@ get_state_from_db(State) ->
   NewState2 = case Ans of
     ok ->
       gen_server:cast(dao, {synch, 1, {get_state, []}, cluster_state, {gen_serv, {global, ?CCM}}}),
-      increase_state_num(NewState);
+      update_dispatchers_and_dns(NewState, true, true);
     error -> NewState
   end,
   NewState2.
@@ -621,7 +625,7 @@ merge_state(State, SavedState) ->
   {MergedState, IncrementNum} = lists:foldl(CreateNewState, {State1, false}, NewNodes),
 
   MergedState2 = case IncrementNum of
-    true -> increase_state_num(MergedState);
+    true -> update_dispatchers_and_dns(MergedState, true, true);
     false -> MergedState
   end,
 
@@ -641,37 +645,45 @@ get_workers_list(State) ->
   end,
   lists:foldl(ListWorkers, [], State#cm_state.workers).
 
-%% increase_state_num/1
+%% update_dispatchers_and_dns/3
 %% ====================================================================
-%% @doc This function increases the cluster state value and informs all
-%% dispatchers and dnses about it.
--spec increase_state_num(State :: term()) -> NewState when
+%% @doc This function updates all dispatchers and dnses.
+-spec update_dispatchers_and_dns(State :: term(), UpdateDNS :: boolean(), IncreaseStateNum :: boolean()) -> NewState when
   NewState :: term().
 %% ====================================================================
-increase_state_num(State) ->
-  {NodesLoad, AvgLoad} = calculate_node_load(State#cm_state.nodes, short),
-  WorkersLoad = calculate_worker_load(State#cm_state.workers),
-  Load = calculate_load(NodesLoad, WorkersLoad),
-  update_dns_state(State#cm_state.workers, Load, AvgLoad),
+update_dispatchers_and_dns(State, UpdateDNS, IncreaseStateNum) ->
+  case UpdateDNS of
+    true ->
+      {NodesLoad, AvgLoad} = calculate_node_load(State#cm_state.nodes, medium),
+      WorkersLoad = calculate_worker_load(State#cm_state.workers),
+      Load = calculate_load(NodesLoad, WorkersLoad),
+      update_dns_state(State#cm_state.workers, Load, AvgLoad);
+    false -> ok
+  end,
 
-  NewStateNum = State#cm_state.state_num + 1,
+  NewStateNum = case IncreaseStateNum of
+    true -> State#cm_state.state_num + 1;
+    false -> State#cm_state.state_num
+  end,
   WorkersList = get_workers_list(State),
-  update_dispatcher_state(WorkersList, State#cm_state.nodes, NewStateNum),
+  {NodesLoad2, AvgLoad2} = calculate_node_load(State#cm_state.nodes, short),
+  update_dispatcher_state(WorkersList, State#cm_state.nodes, NewStateNum, NodesLoad2, AvgLoad2),
   State#cm_state{state_num = NewStateNum}.
 
-
-%% update_dispatcher_state/3
+%% update_dispatcher_state/5
 %% ====================================================================
 %% @doc Updates dispatchers' states.
 %% @end
--spec update_dispatcher_state(WorkersList, Nodes, NewStateNum) -> ok when
+-spec update_dispatcher_state(WorkersList, Nodes, NewStateNum, Loads, AvgLoad) -> ok when
 	WorkersList :: list(),
 	Nodes :: list(),
-	NewStateNum :: integer().
+	NewStateNum :: integer(),
+  Loads :: list(),
+  AvgLoad :: integer().
 %% ====================================================================
-update_dispatcher_state(WorkersList, Nodes, NewStateNum) ->
+update_dispatcher_state(WorkersList, Nodes, NewStateNum, Loads, AvgLoad) ->
 	UpdateNode = fun(Node) ->
-		gen_server:cast({?Dispatcher_Name, Node}, {update_workers, WorkersList, NewStateNum})
+		gen_server:cast({?Dispatcher_Name, Node}, {update_workers, WorkersList, NewStateNum, proplists:get_value(Node, Loads, 0), AvgLoad})
 	end,
 	lists:foreach(UpdateNode, Nodes).
 

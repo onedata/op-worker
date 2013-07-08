@@ -166,8 +166,8 @@ handle_call(_Request, _From, State) ->
   NewState :: term(),
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_cast({update_workers, WorkersList, NewStateNum}, State) ->
-  {noreply, update_workers(WorkersList, State#dispatcher_state{state_num = NewStateNum})};
+handle_cast({update_workers, WorkersList, NewStateNum, CurLoad, AvgLoad}, State) ->
+  {noreply, update_workers(WorkersList, State#dispatcher_state{state_num = NewStateNum, current_load = CurLoad, avg_load = AvgLoad})};
 
 handle_cast(_Msg, State) ->
   {noreply, State}.
@@ -278,7 +278,7 @@ check_worker_node(Module, State) ->
   Nodes = get_nodes(Module,State),
   case Nodes of
     {L1, L2} ->
-      Check = (lists:member(node, lists:flatten([L1, L2]))),
+      Check = ((lists:member(node, lists:flatten([L1, L2]))) and (State#dispatcher_state.current_load =< 3) and (State#dispatcher_state.current_load =< 2*State#dispatcher_state.avg_load)),
       case Check of
         true ->
           lager:error([{mod, ?MODULE}], "Error: module ~p does not work at this node", [Module]),
