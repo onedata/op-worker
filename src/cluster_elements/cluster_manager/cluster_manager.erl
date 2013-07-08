@@ -386,43 +386,59 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
   NewState ::  term().
 %% ====================================================================
 check_cluster_state(State) ->
-  NewState = case length(State#cm_state.nodes) > 1 of
-    true ->
-      {NodesLoad, AvgLoad} = calculate_node_load(State#cm_state.nodes, long),
-      WorkersLoad = calculate_worker_load(State#cm_state.workers),
-      Load = calculate_load(NodesLoad, WorkersLoad),
+  CheckNum = (State#cm_state.cluster_check_num + 1) rem 15,
 
-      MinV = lists:min([NodeLoad || {_Node, NodeLoad, _ModulesLoads} <- Load, NodeLoad =/= error]),
-      MaxV = lists:max([NodeLoad || {_Node, NodeLoad, _ModulesLoads} <- Load, NodeLoad =/= error]),
-      case (MinV > 0) and (((MaxV >= 2* MinV) and (MaxV >= 1.5 * AvgLoad)) or (MaxV >= 5* MinV)) of
+  NewState = case CheckNum of
+    0 ->
+      case length(State#cm_state.nodes) > 1 of
         true ->
-          [{MaxNode, MaxNodeModulesLoads} | _] = [{Node, ModulesLoads} || {Node, NodeLoad, ModulesLoads} <- Load, NodeLoad == MaxV],
-          MaxMV = lists:max([MLoad || {_Module, MLoad} <- MaxNodeModulesLoads, MLoad =/= error]),
-          case MaxMV >= 0.5 of
+          {NodesLoad, AvgLoad} = calculate_node_load(State#cm_state.nodes, long),
+          WorkersLoad = calculate_worker_load(State#cm_state.workers),
+          Load = calculate_load(NodesLoad, WorkersLoad),
+
+          MinV = lists:min([NodeLoad || {_Node, NodeLoad, _ModulesLoads} <- Load, NodeLoad =/= error]),
+          MaxV = lists:max([NodeLoad || {_Node, NodeLoad, _ModulesLoads} <- Load, NodeLoad =/= error]),
+          case (MinV > 0) and (((MaxV >= 2* MinV) and (MaxV >= 1.5 * AvgLoad)) or (MaxV >= 5* MinV)) of
             true ->
-              [MaxModule | _] = [Module || {Module, MLoad} <- MaxNodeModulesLoads, MLoad == MaxMV],
-              [{MinNode, MinNodeModulesLoads} | _] = [{Node, ModulesLoads} || {Node, NodeLoad, ModulesLoads} <- Load, NodeLoad == MinV],
-              MinWorkers = [Module || {Module, _MLoad} <- MinNodeModulesLoads, Module == MaxModule],
-              case MinWorkers =:= [] of
+              [{MaxNode, MaxNodeModulesLoads} | _] = [{Node, ModulesLoads} || {Node, NodeLoad, ModulesLoads} <- Load, NodeLoad == MaxV],
+              MaxMV = lists:max([MLoad || {_Module, MLoad} <- MaxNodeModulesLoads, MLoad =/= error]),
+              case MaxMV >= 0.5 of
                 true ->
-                  lager:info([{mod, ?MODULE}], "Worker: ~s will be started at node: ~s", [MaxModule, MinNode]),
-                  {_WorkerRuns, TmpState} = start_worker(MinNode, MaxModule, proplists:get_value(MaxModule, ?Modules_With_Args, []), State),
-                  TmpState;
-                false ->
-                  lager:info([{mod, ?MODULE}], "Worker: ~s will be stopped at node", [MaxModule, MaxNode]),
-                  {_WorkerStopped, TmpState2} = stop_worker(MaxNode, MaxModule, State),
-                  TmpState2
+                  [MaxModule | _] = [Module || {Module, MLoad} <- MaxNodeModulesLoads, MLoad == MaxMV],
+                  [{MinNode, MinNodeModulesLoads} | _] = [{Node, ModulesLoads} || {Node, NodeLoad, ModulesLoads} <- Load, NodeLoad == MinV],
+                  MinWorkers = [Module || {Module, _MLoad} <- MinNodeModulesLoads, Module == MaxModule],
+                  case MinWorkers =:= [] of
+                    true ->
+                      lager:info([{mod, ?MODULE}], "Worker: ~s will be started at node: ~s", [MaxModule, MinNode]),
+                      {WorkerRuns, TmpState} = start_worker(MinNode, MaxModule, proplists:get_value(MaxModule, ?Modules_With_Args, []), State),
+                      case WorkerRuns of
+                        true -> update_dispatchers_and_dns(State, true, true);
+                        false -> TmpState
+                      end;
+                    false ->
+                      lager:info([{mod, ?MODULE}], "Worker: ~s will be stopped at node", [MaxModule, MaxNode]),
+                      {WorkerStopped, TmpState2} = stop_worker(MaxNode, MaxModule, State),
+                      case WorkerStopped of
+                        true -> update_dispatchers_and_dns(State, true, true);
+                        false -> TmpState2
+                      end
+                  end;
+                false -> State
               end;
             false -> State
           end;
         false -> State
       end;
-    false -> State
+    _ ->
+      case CheckNum rem 5 of
+        0 -> update_dispatchers_and_dns(State, true, false);
+        _ -> update_dispatchers_and_dns(State, false, false)
+      end
   end,
 
   lager:info([{mod, ?MODULE}], "Cluster state ok"),
   plan_next_cluster_state_check(),
-  NewState.
+  NewState#cm_state{cluster_check_num = CheckNum}.
 
 %% plan_next_cluster_state_check/0
 %% ====================================================================
