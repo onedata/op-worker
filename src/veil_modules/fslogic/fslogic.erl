@@ -10,6 +10,10 @@
 %% @end
 %% ===================================================================
 
+%% TODO dodać sprawdzanie uprawnieć, gdy będziemy mieli już autentykację klienta
+%% (obecnie generowane warningi to efekt przekazywania parametrów, które będą
+%% do tego potrzebne, a nie są obecnie używane)
+
 -module(fslogic).
 -behaviour(worker_plugin_behaviour).
 
@@ -24,14 +28,21 @@
 -define(FILE_NOT_FOUND_MESSAGE, "Error: file_not_found").
 -define(FILE_ALREADY_EXISTS, "Error: file_already_exists").
 
-%% TODO zrobić okresowe sprawdzanie drskryptorów i usuwanie przestarzałych z bazy
-%% potrzebna w dao funkcja listująca wszystkie deskryptory
-%% TODO dodać wszędzie logowanie w przypadku błędów
+%% ====================================================================
+%% API
+%% ====================================================================
+-export([init/1, handle/2, cleanup/0]).
+
+%% ====================================================================
+%% Test API
+%% ====================================================================
+-ifdef(TEST).
+-export([handle_fuse_message/3]).
+-endif.
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([init/1, handle/2, cleanup/0]).
 
 %% init/1
 %% ====================================================================
@@ -358,11 +369,27 @@ save_file_descriptor(ProtocolVersion, File, Uuid, FuseID, Validity) ->
     _Other -> {Status, TmpAns}
   end.
 
+%% save_new_file_descriptor/5
+%% ====================================================================
+%% @doc Saves in db information that a file is used by FUSE.
+%% @end
+-spec save_new_file_descriptor(ProtocolVersion :: term(), File :: string(), Uuid::uuid(), FuseID :: string(), Validity :: integer()) -> Result when
+  Result :: term().
+%% ====================================================================
+
 save_new_file_descriptor(ProtocolVersion, File, Uuid, FuseID, Validity) ->
   Pid = self(),
   Descriptor = update_file_descriptor(#file_descriptor{file = Uuid, fuse_id = FuseID}, Validity),
   Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 100, {vfs, save_descriptor, [Descriptor]}}),
   wait_for_dao_ans(Ans, File, 100, "save_descriptor").
+
+%% update_file_descriptor/2
+%% ====================================================================
+%% @doc Updates descriptor (record, not in DB)
+%% @end
+-spec update_file_descriptor(Descriptor :: record(),  Validity :: integer()) -> Result when
+  Result :: record().
+%% ====================================================================
 
 update_file_descriptor(Descriptor, Validity) ->
   {Megaseconds,Seconds, _Microseconds} = os:timestamp(),
@@ -457,18 +484,37 @@ create_children_list([File | Rest], Ans) ->
   FileDesc = File#veil_document.record,
   create_children_list(Rest, [FileDesc#file.name | Ans]).
 
+%% get_file/3
+%% ====================================================================
+%% @doc Gets file info from DB
+%% @end
+-spec get_file(ProtocolVersion :: term(), File :: string(), FuseID :: string()) -> Result when
+  Result :: term().
+%% ====================================================================
+
 get_file(ProtocolVersion, File, FuseID) ->
   Pid = self(),
   Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 30, {vfs, get_file, [File]}}),
   wait_for_dao_ans(Ans, File, 30, "get_file").
 
+%% delete_old_descriptors/3
+%% ====================================================================
+%% @doc Deletes old descriptors (older than Time)
+%% @end
+-spec delete_old_descriptors(ProtocolVersion :: term(), Time :: integer()) -> Result when
+  Result :: term().
+%% ====================================================================
+
 delete_old_descriptors(ProtocolVersion, Time) ->
   Pid = self(),
   Ans = gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, Pid, 13, {vfs, remove_descriptor, [{by_expired_before, Time}]}}),
 
-  {Status, _TmpAns} = wait_for_dao_ans(Ans, "all_files", 13, "remove_descriptor"),
+  {Status, TmpAns} = wait_for_dao_ans(Ans, "all_files", 13, "remove_descriptor"),
   case Status of
     ok ->
-      lager:info([{mod, ?MODULE}], "Old descriptors cleared");
-    _Other -> lager:error([{mod, ?MODULE}], "Error during clearing old descriptors")
+      lager:info([{mod, ?MODULE}], "Old descriptors cleared"),
+      ok;
+    _Other ->
+      lager:error([{mod, ?MODULE}], "Error during clearing old descriptors"),
+      TmpAns
   end.
