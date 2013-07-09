@@ -31,7 +31,7 @@
 %% Test API
 %% ====================================================================
 -ifdef(TEST).
--export([update_dns_state/3]).
+-export([update_dns_state/3, calculate_load/2, calculate_worker_load/1, calculate_node_load/2]).
 -endif.
 
 %% ====================================================================
@@ -802,7 +802,7 @@ check_load(WorkerPlugin) ->
 		TimeDiff = timer:now_diff(BeforeCall, LastLoadInfo),
 		Load / TimeDiff
 	catch
-		_:Reason ->
+		_:_ ->
       lager:error([{mod, ?MODULE}], "Can not get status of worker plugin"),
       error
 	end.
