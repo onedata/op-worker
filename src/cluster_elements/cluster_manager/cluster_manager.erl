@@ -412,14 +412,18 @@ check_cluster_state(State) ->
                       lager:info([{mod, ?MODULE}], "Worker: ~s will be started at node: ~s", [MaxModule, MinNode]),
                       {WorkerRuns, TmpState} = start_worker(MinNode, MaxModule, proplists:get_value(MaxModule, ?Modules_With_Args, []), State),
                       case WorkerRuns of
-                        true -> update_dispatchers_and_dns(State, true, true);
+                        true ->
+                          save_state(TmpState),
+                          update_dispatchers_and_dns(TmpState, true, true);
                         false -> TmpState
                       end;
                     false ->
                       lager:info([{mod, ?MODULE}], "Worker: ~s will be stopped at node", [MaxModule, MaxNode]),
                       {WorkerStopped, TmpState2} = stop_worker(MaxNode, MaxModule, State),
                       case WorkerStopped of
-                        true -> update_dispatchers_and_dns(State, true, true);
+                        true ->
+                          save_state(TmpState2),
+                          update_dispatchers_and_dns(TmpState2, true, true);
                         false -> TmpState2
                       end
                   end;
@@ -437,8 +441,8 @@ check_cluster_state(State) ->
   end,
 
   lager:info([{mod, ?MODULE}], "Cluster state ok"),
-  plan_next_cluster_state_check(),
-  NewState#cm_state{cluster_check_num = CheckNum}.
+  NewState2 = init_cluster(NewState), %% if any worker is down and some worker type has no running instances, new worker should be started anywhere
+  NewState2#cm_state{cluster_check_num = CheckNum}.
 
 %% plan_next_cluster_state_check/0
 %% ====================================================================

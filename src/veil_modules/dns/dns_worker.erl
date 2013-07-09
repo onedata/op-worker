@@ -104,9 +104,17 @@ handle(_ProtocolVersion, {get_worker, Module}) ->
     end,
     {TmpAns2, [{Node, V, C2} | TmpWorkers]}
   end,
-  {Result2, WorkerList2} = lists:foldl(PrepareResult, {[], []}, Result),
+  {Result2, ModuleWorkerList} = lists:foldl(PrepareResult, {[], []}, Result),
 
-  New_DNS_State = #dns_worker_state{workers_list = WorkerList2},
+  PrepareState = fun({M, Workers}, TmpWorkersList) ->
+    TmpAns2 = case M =:= Module of
+      true -> [{M, ModuleWorkerList} | TmpWorkersList];
+      false -> [{M, Workers} | TmpWorkersList]
+    end
+  end,
+  NewWorkersList = lists:foldl(PrepareState, [], WorkerList),
+
+  New_DNS_State = #dns_worker_state{workers_list = NewWorkersList},
   ok = gen_server:call(?MODULE, {updatePlugInState, New_DNS_State}),
 	{ok, Result2};
 
