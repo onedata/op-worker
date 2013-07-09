@@ -3,3 +3,4 @@
 {'example/*', [{outdir, "./example"}]}.
 {'nodes_monitoring_and_workers_test/*', [{outdir, "./nodes_monitoring_and_workers_test"}, {i, "../include"}]}.
 {'ccm_and_dispatcher_test/*', [{outdir, "./ccm_and_dispatcher_test"}, {i, "../include"}]}.
+{'dns/*', [{outdir, "./dns"}, {i, "../include"}]}.

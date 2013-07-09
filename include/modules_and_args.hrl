@@ -10,5 +10,5 @@
 %% @end
 %% ===================================================================
 
--define(Modules, [central_logger, cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager]).
--define(Modules_With_Args, [{central_logger, []}, {cluster_rengine, []}, {control_panel, []}, {dao, []}, {fslogic, []}, {gateway, []}, {rtransfer, []}, {rule_manager, []}]).
+-define(Modules, [central_logger, cluster_rengine, control_panel, dao, fslogic, gateway, rtransfer, rule_manager, dns_worker]).
+-define(Modules_With_Args, [{central_logger, []}, {cluster_rengine, []}, {control_panel, []}, {dao, []}, {fslogic, []}, {gateway, []}, {rtransfer, []}, {rule_manager, []}, {dns_worker, []}]).

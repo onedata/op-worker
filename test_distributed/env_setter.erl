@@ -23,7 +23,7 @@
 
 %% start_test/0
 %% ====================================================================
-%% @doc This function ets environment for application.
+%% @doc This function sets environment for application.
 -spec start_test() -> ok.
 %% ====================================================================
 

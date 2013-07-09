@@ -10,3 +10,6 @@ ebin
 test/eunit_results
 distributed_tests_out
 .dialyzer.plt
+src/veil_cluster_node.app.src
+releases/files/sys.config
+releases/files/vm.args
