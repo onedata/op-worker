@@ -326,5 +326,7 @@ assert_expectations_and_stop(Gen_Server) ->
 		gen_server_mock:stop(Gen_Server)
 	end.
 
+%% TODO testy aktualizacji dnsa, gdy obciążenia klastra są nierówne
+%% TODO testy zmiany organizacji klastra
 
 -endif.
