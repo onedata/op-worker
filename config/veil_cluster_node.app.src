@@ -27,7 +27,8 @@
                   ssl,
                   ranch,
                   nprocreg,
-                  cowboy
+                  cowboy,
+                  ibrowse
                  ]},
   {mod, {veil_cluster_node_app, []}},
   {env, [

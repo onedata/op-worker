@@ -18,6 +18,11 @@
 %% ====================================================================
 -export([init/1, handle/2, cleanup/0]).
 
+% Paths in gui static directory
+-define(static_paths, ["js/","images/","css/","nitrogen/","templates/"]).
+% Cowboy listener reference (used to stop the listener)
+-define(listener_ref, http).
+
 %% ===================================================================
 %% Behaviour callback functions
 %% ===================================================================
@@ -33,20 +38,29 @@
   Error :: term().
 %% ====================================================================
 init(_Args) ->
-  Port = 8000,
-  DocRoot = "./gui_static",
-  StaticPaths = ["js/","images/","css/","nitrogen/","templates/"],
+  {ok, DocRoot} = application:get_env(veil_cluster_node, control_panel_static_files_root),
+  Dispatch = init_dispatch(atom_to_list(DocRoot), ?static_paths),
 
-  Dispatch = init_dispatch(DocRoot, StaticPaths),
+  {ok, Cert} = application:get_env(veil_cluster_node, ssl_cert_path),
+  CertString = atom_to_list(Cert),
+
+  {ok, Port} = application:get_env(veil_cluster_node, control_panel_port),
+  {ok, NbAcceptors} = application:get_env(veil_cluster_node, control_panel_number_of_acceptors),
+  {ok, MaxKeepAlive} = application:get_env(veil_cluster_node, control_panel_max_keepalive),
 
   %% Start the listener
-  {ok, _} = cowboy:start_http(http, 100, [{port, Port}], [
-    {env, [{dispatch, Dispatch}]},
-    {max_keepalive, 50}
-  ]),
-
+  {ok, _} = cowboy:start_https(?listener_ref, NbAcceptors,
+    [
+      {port, Port},
+      {certfile, CertString},
+      {keyfile, CertString},
+      {password, ""}
+    ],
+    [
+      {env, [{dispatch, Dispatch}]},
+      {max_keepalive, MaxKeepAlive}
+    ]),
   ok.
-
 
 
 %% handle/1
@@ -94,8 +108,6 @@ init_dispatch(DocRoot,StaticPaths) ->
     Opts = [
       {mimetypes, {fun mimetypes:path_to_mimes/2, default}}
         | localized_dir_file(DocRoot, Dir)
-
-
     ],
     {Path,Handler,Opts}
   end, StaticPaths),

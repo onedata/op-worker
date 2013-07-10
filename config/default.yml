@@ -106,6 +106,30 @@ veil_cluster_node_env:
       value: 2000
 
 
+  #CONTROL PANEL
+  - parameter:
+      name: control_panel_port
+      description: Port on which control_panel is available
+      value: 8000
+
+  - parameter:
+      name: control_panel_static_files_root
+      description: Directory in release, where static gui files are stored
+      value: |
+        "\'./gui_static\'"
+      erlang_term: "'./gui_static'"
+
+  - parameter:
+      name: control_panel_number_of_acceptors
+      description: Number of accepting processes in control_panel
+      value: 100
+
+  - parameter:
+      name: control_panel_max_keepalive
+      description: Max time in sec to keep a connection alive
+      value: 50
+
+
   # DNS
   - parameter:
       name: dns_response_ttl

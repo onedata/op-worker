@@ -52,7 +52,7 @@ div.header
     font-weight: bold;
 }
 
-a.header_link 
+a.header_link
 {
     margin: 15px; 
     color: white; 
@@ -61,86 +61,25 @@ a.header_link
     border: 1px dotted white;
 }
 
-div.logs
+div.login_panel
 {
-    margin: 30px;
+    margin: auto;
+    margin-top: 50px;
+    border: 2px solid #66CC33;
+    padding: 0px;
+    width: 500px;
+    text-align: center;
+    padding-bottom: 5px; 
 }
 
-table.log
+label.login_title
 {
-    border-width: 1px;
-    border-spacing: 0px;
-    border-style: solid;
-    border-color: gray;
-    border-collapse: collapse;
-    width: 100%;
+    margin-bottom: 10px;
+    background-color: #66CC33;
 }
 
-td.log_header
+.login_error
 {
-    padding-left: 5px;
-    border-width: 0px 0px 1px 0px;
-    border-style: dashed;
-    border-color: gray;
+    color: red;
     font-weight: bold;
 }
-
-table td.timestamp
-{
-    border-width: 0px 0px 1px 0px;
-    padding-right: 5px;
-    text-align: right;
-    border-style: dashed;
-    border-color: gray;
-    font-style: italic;
-}
-
-td.metadata
-{
-    padding: 0px 0px 0px 5px;
-    border-width: 0px 0px 1px 0px;
-    border-style: dashed;
-    border-color: gray;
-    background-color: #F3F3F3;
-    color: #555555;
-    font-size: 75%;
-    line-height: 175%;
-}
-
-td.metadata:hover
-{
-    cursor: pointer;
-}
-
-td.metadata_hint
-{
-    padding: 0px 5px 0px 0px;
-    border-width: 0px 0px 1px 0px;
-    border-style: dashed;
-    border-color: gray;
-    background-color: #F3F3F3;
-    color: #555555;
-    font-size: 75%;
-    line-height: 175%;
-    text-align: right;
-    font-style: italic;
-}
-
-td.metadata_hint:hover
-{
-    cursor: pointer;
-}
-
-td.log_content
-{
-    padding-left: 5px;
-}
-
-td.severity_debug { background-color: #E5F3FF; }
-td.severity_info { background-color: #DDFFBB; }
-td.severity_notice { background-color: #EEFFAA; }
-td.severity_warning { background-color: #FFFFAA; }
-td.severity_error { background-color: #FFEEAA; }
-td.severity_critical { background-color: #FFDDC3; }
-td.severity_alert { background-color: #FFDDC3; }
-td.severity_emergency { background-color: #FFDDC3; }
