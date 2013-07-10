@@ -31,7 +31,7 @@
 %% Test API
 %% ====================================================================
 -ifdef(TEST).
--export([update_dns_state/3, calculate_load/2, calculate_worker_load/1, calculate_node_load/2]).
+-export([update_dns_state/3, update_dispatcher_state/5, calculate_load/2, calculate_worker_load/1, calculate_node_load/2]).
 -endif.
 
 %% ====================================================================
@@ -681,14 +681,18 @@ update_dispatchers_and_dns(State, UpdateDNS, IncreaseStateNum) ->
     false -> ok
   end,
 
-  NewStateNum = case IncreaseStateNum of
-    true -> State#cm_state.state_num + 1;
-    false -> State#cm_state.state_num
-  end,
-  WorkersList = get_workers_list(State),
-  {NodesLoad2, AvgLoad2} = calculate_node_load(State#cm_state.nodes, short),
-  update_dispatcher_state(WorkersList, State#cm_state.nodes, NewStateNum, NodesLoad2, AvgLoad2),
-  State#cm_state{state_num = NewStateNum}.
+  case IncreaseStateNum of
+    true ->
+      NewStateNum = State#cm_state.state_num + 1,
+      WorkersList = get_workers_list(State),
+      {NodesLoad2, AvgLoad2} = calculate_node_load(State#cm_state.nodes, short),
+      update_dispatcher_state(WorkersList, State#cm_state.nodes, NewStateNum, NodesLoad2, AvgLoad2),
+      State#cm_state{state_num = NewStateNum};
+    false ->
+      {NodesLoad2, AvgLoad2} = calculate_node_load(State#cm_state.nodes, short),
+      update_dispatcher_state(State#cm_state.nodes, NodesLoad2, AvgLoad2),
+      State
+  end.
 
 %% update_dispatcher_state/5
 %% ====================================================================
@@ -707,6 +711,20 @@ update_dispatcher_state(WorkersList, Nodes, NewStateNum, Loads, AvgLoad) ->
 	end,
 	lists:foreach(UpdateNode, Nodes).
 
+%% update_dispatcher_state/3
+%% ====================================================================
+%% @doc Updates dispatchers' states.
+%% @end
+-spec update_dispatcher_state(Nodes, Loads, AvgLoad) -> ok when
+  Nodes :: list(),
+  Loads :: list(),
+  AvgLoad :: integer().
+%% ====================================================================
+update_dispatcher_state(Nodes, Loads, AvgLoad) ->
+  UpdateNode = fun(Node) ->
+    gen_server:cast({?Dispatcher_Name, Node}, {update_loads, proplists:get_value(Node, Loads, 0), AvgLoad})
+  end,
+  lists:foreach(UpdateNode, Nodes).
 
 %% update_dns_state/2
 %% ====================================================================

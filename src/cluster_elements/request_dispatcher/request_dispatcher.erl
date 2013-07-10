@@ -191,8 +191,11 @@ handle_call(_Request, _From, State) ->
   NewState :: term(),
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_cast({update_workers, WorkersList, NewStateNum, CurLoad, AvgLoad}, State) ->
+handle_cast({update_workers, WorkersList, NewStateNum, CurLoad, AvgLoad}, _State) ->
   {noreply, update_workers(WorkersList, NewStateNum, CurLoad, AvgLoad)};
+
+handle_cast({update_loads, CurLoad, AvgLoad}, State) ->
+  {noreply, State#dispatcher_state{current_load = CurLoad, avg_load = AvgLoad}};
 
 handle_cast(_Msg, State) ->
   {noreply, State}.

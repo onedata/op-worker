@@ -264,6 +264,27 @@ update_dns_state__current_worker_host_implementation() ->
 	?assert(is_integer(Load)),
 	erlang:demonitor(Ref).
 
+update_dispatcher_test() ->
+  request_dispatcher:start_link(),
+
+  N1 = node(),
+  Loads = [{'node@127.0.0.1', 1}, {N1, 1}],
+  Nodes = ['node@127.0.0.1', N1],
+  WorkersList = [{N1, fslogic}, {N1, dao}, {n2, fslogic}, {n3, fslogic}, {n3, dao}, {n4, gateway}, {N1, dns_worker}],
+  cluster_manager:update_dispatcher_state(WorkersList, Nodes, 1, Loads, 1),
+
+  gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, 1, 1, 1}),
+  Requests = [fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, dao, rtransfer, dao, dns_worker, dns_worker, gateway, gateway],
+  ExpectedAns = [n3, n2, N1, N1, n2, n3, n3, n3, non, N1, N1, N1, n4, n4],
+
+  FullAns = lists:foldl(fun(R, TmpAns) ->
+    Ans = gen_server:call(?Dispatcher_Name, {get_worker_node, R}),
+    [Ans | TmpAns]
+  end, [], Requests),
+  ?assertEqual(ExpectedAns, lists:reverse(FullAns)),
+
+  request_dispatcher:stop().
+
 %% ====================================================================
 %% Helping functions
 %% ====================================================================
@@ -325,8 +346,5 @@ assert_expectations_and_stop(Gen_Server) ->
 	after
 		gen_server_mock:stop(Gen_Server)
 	end.
-
-%% TODO testy aktualizacji dnsa, gdy obciążenia klastra są nierówne
-%% TODO testy zmiany organizacji klastra
 
 -endif.
