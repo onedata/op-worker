@@ -42,6 +42,7 @@ start_test() ->
   application:start(nitrogen_core),
   application:start(simple_bridge),
   application:start(mimetypes),
+  application:start(ibrowse),
   ok = application:load(?APP_Name).
 
 %% stop_test/0
