@@ -150,7 +150,7 @@ handle_call({node_is_up, Node}, _From, State) ->
               NewState2 = NewState#cm_state{nodes = [Node | Nodes]},
 
               NewState3 = case WorkersFound of
-                true -> increase_state_num(NewState2);
+                true -> gen_server:cast({global, ?CCM}, update_dispatchers_and_dns);
                 false -> NewState2
               end,
 
@@ -1060,7 +1060,7 @@ calculate_node_load(Nodes, Period) ->
 %% calculate_worker_load/1
 %% ====================================================================
 %% @doc Calculates load of all workers in cluster
--spec calculate_node_load(Workers :: list()) -> Result when
+-spec calculate_worker_load(Workers :: list()) -> Result when
   Result :: list().
 %% ====================================================================
 calculate_worker_load(Workers) ->
