@@ -61,8 +61,8 @@ stop_test() ->
   application:stop(cowboy),
   application:stop(sasl),
   application:stop(nitrogen_core),
-  application:stop(simple_bridge),
   application:stop(mimetypes),
+  application:stop(simple_bridge),
   application:stop(ibrowse),
   ok = application:unload(?APP_Name).
 
