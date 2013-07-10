@@ -967,6 +967,12 @@ get_workers_versions([{Node, Module} | Workers], Versions) ->
   V = gen_server:call({Module, Node}, {test_call, 1, get_version}),
   get_workers_versions(Workers, [{Node, Module, V} | Versions]).
 
+%% calculate_node_load/2
+%% ====================================================================
+%% @doc Calculates load of all nodes in cluster
+-spec calculate_node_load(Nodes :: list(), Period :: atom()) -> Result when
+  Result :: list().
+%% ====================================================================
 calculate_node_load(Nodes, Period) ->
   GetNodeInfo = fun(Node) ->
     Info = try
@@ -1002,6 +1008,12 @@ calculate_node_load(Nodes, Period) ->
     _ -> {Ans, Sum / Count}
   end.
 
+%% calculate_worker_load/1
+%% ====================================================================
+%% @doc Calculates load of all workers in cluster
+-spec calculate_node_load(Workers :: list()) -> Result when
+  Result :: list().
+%% ====================================================================
 calculate_worker_load(Workers) ->
   WorkersLoad = [{Node, {Module, check_load(Pid)}} || {Node, Module, Pid} <- Workers],
 
@@ -1037,6 +1049,12 @@ calculate_worker_load(Workers) ->
   end,
   lists:map(EvaluateLoad, MergedByNode).
 
+%% calculate_load/2
+%% ====================================================================
+%% @doc Merges nodes' and workers' loads to more useful form
+-spec calculate_load(NodesLoad :: list(), WorkersLoad :: list()) -> Result when
+  Result :: list().
+%% ====================================================================
 calculate_load(NodesLoad, WorkersLoad) ->
   Merge = fun ({Node, Modules}) ->
     {Node, proplists:get_value(Node, NodesLoad, error), Modules}

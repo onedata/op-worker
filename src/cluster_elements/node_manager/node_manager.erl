@@ -331,6 +331,13 @@ check_vsn([{Application, _Description, Vsn} | Apps]) ->
     _Other -> check_vsn(Apps)
   end.
 
+%% get_node_stats/2
+%% ====================================================================
+%% @doc Get statistics about node load
+-spec get_node_stats(Window :: atom(), Stats :: term()) -> Result when
+  Result :: term().
+%% ====================================================================
+
 get_node_stats(Window, {New, Old, NewListSize, _Max}) ->
   {ok, Period} = application:get_env(veil_cluster_node, node_monitoring_period),
   {ProcTmp, MemAndNetSize}  = case Window of
@@ -360,6 +367,13 @@ get_node_stats(Window, {New, Old, NewListSize, _Max}) ->
   end,
   {Proc, MemAvg, {InSum, OutSum}}.
 
+%% get_memory_and_net_info/0
+%% ====================================================================
+%% @doc Checks memory and network usage
+-spec get_memory_and_net_info() -> Result when
+  Result :: term().
+%% ====================================================================
+
 get_memory_and_net_info() ->
   {Total, Allocated, _Worst} = memsup:get_memory_data(),
   Mem = case Total of
@@ -380,6 +394,13 @@ get_memory_and_net_info() ->
   end,
   Net = lists:foldl(GetNetInfo, {0, 0}, Ports),
   {Mem, Net}.
+
+%% save_progress/2
+%% ====================================================================
+%% @doc Saves information about node load
+-spec save_progress(Report :: atom(), Stats :: term()) -> Result when
+  Result :: term().
+%% ====================================================================
 
 save_progress(Report, {New, Old, NewListSize, Max}) ->
   case NewListSize + 1 of

@@ -253,6 +253,13 @@ code_change(_OldVsn, State, _Extra) ->
 get_nodes(Module, State) ->
   get_nodes_list(Module, State#dispatcher_state.modules).
 
+%% get_nodes_list/2
+%% ====================================================================
+%% @doc Gets nodes were module is working.
+-spec get_nodes_list(Module :: atom(), Modules :: list()) -> Result when
+  Result ::  term().
+%% ====================================================================
+
 get_nodes_list(_Module, []) ->
   wrong_worker_type;
 get_nodes_list(Module, [{M, N} | T]) ->
@@ -263,7 +270,7 @@ get_nodes_list(Module, [{M, N} | T]) ->
 
 %% update_nodes/3
 %% ====================================================================
-%% @doc Updates information about nodes were module is working.
+%% @doc Updates information about nodes (were modules are working).
 -spec update_nodes(Module :: atom(), NewNodes:: term(), State :: term()) -> Result when
   Result ::  term().
 %% ====================================================================
@@ -272,6 +279,12 @@ update_nodes(Module, NewNodes, State) ->
   NewModules = update_nodes_list(Module, NewNodes, Modules, []),
   State#dispatcher_state{modules = NewModules}.
 
+%% update_nodes_list/4
+%% ====================================================================
+%% @doc Updates information about nodes (were modules are working).
+-spec update_nodes_list(Module :: atom(), NewNodes:: term(), Modules :: list(), TmpList :: list()) -> Result when
+  Result ::  term().
+%% ====================================================================
 update_nodes_list(_Module, _NewNodes, [], Ans) ->
   Ans;
 update_nodes_list(Module, NewNodes, [{M, N} | T], Ans) ->
@@ -405,6 +418,12 @@ get_workers(Module, State) ->
     _Other -> []
   end.
 
+%% initState/0
+%% ====================================================================
+%% @doc Initializes new record #dispatcher_state
+-spec initState() -> Result when
+  Result :: record().
+%% ====================================================================
 initState() ->
   CreateModules = fun(Module, TmpList) ->
     [{Module, {[],[]}} | TmpList]
@@ -412,6 +431,12 @@ initState() ->
   NewModules = lists:foldl(CreateModules, [], ?Modules),
   #dispatcher_state{modules = NewModules}.
 
+%% initState/2
+%% ====================================================================
+%% @doc Initializes new record #dispatcher_state
+-spec initState(SNum :: integer(), CLoad :: number(), ALoad :: number()) -> Result when
+  Result :: record().
+%% ====================================================================
 initState(SNum, CLoad, ALoad) ->
   NewState = initState(),
   NewState#dispatcher_state{state_num = SNum, current_load = CLoad, avg_load = ALoad}.

@@ -51,6 +51,7 @@ protocol_buffers_test() ->
   EncodedPong = ranch_handler:encode_answer(ok, "atom", "communication_protocol", pong),
   ?assert(EncodedPong =:= MessageBytes2).
 
+%% This test checks if dispatcher returns nodes where modules are running correctly
 get_worker_node_test() ->
   request_dispatcher:start_link(),
 
@@ -68,6 +69,8 @@ get_worker_node_test() ->
 
   request_dispatcher:stop().
 
+%% This test checks if dispatcher returns nodes where modules are running correctly
+%% when it is expected to process request on chosen node and node load is low
 check_worker_node_ok_test() ->
   request_dispatcher:start_link(),
 
@@ -85,12 +88,22 @@ check_worker_node_ok_test() ->
 
   request_dispatcher:stop().
 
+%% This test checks if dispatcher returns nodes where modules are running correctly
+%% when it is expected to process request on chosen node and node load is high
 check_worker_node_high_load1_test() ->
   check_worker_node_high_load_helper(3.5, 3.5).
 
+%% This test checks if dispatcher returns nodes where modules are running correctly
+%% when it is expected to process request on chosen node and node load is high
 check_worker_node_high_load2_test() ->
   check_worker_node_high_load_helper(2, 0.9).
 
+%% ====================================================================
+%% Helper functions
+%% ====================================================================
+
+%% This function checks if dispatcher returns nodes where modules are running correctly
+%% when it is expected to process request on chosen node and node load is high
 check_worker_node_high_load_helper(Current, Avg) ->
   request_dispatcher:start_link(),
 
