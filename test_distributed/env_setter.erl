@@ -27,6 +27,7 @@
 -spec start_test() -> ok.
 %% ====================================================================
 
+
 start_test() ->
   code:add_path("../../../ebin"),
   {ok, Dirs} = file:list_dir("../../../deps"),
@@ -37,6 +38,12 @@ start_test() ->
   ssl:start(),
   application:start(os_mon),
   application:start(ranch),
+  application:start(nprocreg),
+  application:start(cowboy),
+  application:start(sasl),
+  application:start(nitrogen_core),
+  application:start(simple_bridge),
+  application:start(mimetypes),
   ok = application:load(?APP_Name).
 
 %% stop_test/0

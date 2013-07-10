@@ -1,0 +1,282 @@
+#!/usr/bin/env escript
+
+
+main(OverlayFileList) ->
+
+    % Check if yamler is existent in deps
+    case filelib:is_file("./deps/yamler") of
+        false ->
+            io:format("yamler not found in /deps directory. Make sure deps are pulled (make deps).~n"),
+            halt(1);
+        true ->
+            proceed
+    end, 
+
+    % Compile yamler and add beams to erlang searchpath
+    os:cmd("chmod u+x rebar"),
+    os:cmd("cp rebar deps/yamler"),
+    c:cd("deps/yamler"),
+    os:cmd("./rebar compile"),
+    os:cmd("rm rebar"),
+    c:cd("../.."),
+    code:add_patha("deps/yamler/ebin"),
+
+    % Create an ets table to store entries
+    ets:new(entries, [named_table, private, bag, {read_concurrency, false}]),
+
+    % Put entries from default.yml into the table
+    try process_default_yml()
+    catch _:Message -> 
+        io:format("Error while processing default.yml:~n~p~nstack trace:~n~p~n", [Message, erlang:get_stacktrace()]),        
+        halt(1)
+    end,
+
+    % Get entries from overlay files if any was specified and shadow the ones in table
+    case OverlayFileList of 
+        [] ->
+            % No overlay files specified, looking for hostname dependent file
+            Hostname = case lists:reverse(os:cmd("hostname")) of
+                % Remove a newline from the end of the hostname
+                [10|T] -> lists:reverse(T);
+                ProperHostname -> ProperHostname
+            end,
+
+            try 
+                case filelib:is_file("config/" ++ Hostname ++ ".yml") of
+                    false ->
+                        skip;
+                    true ->
+                        io:format("Using hostname-dependent overlay file: ~s.yml~n", [Hostname]),
+                        process_overlay_file("config/" ++ Hostname ++ ".yml")
+                end
+            catch _:Message2 -> 
+                io:format("Error while processing ~p:~n~p~nstack trace:~n~p~n", 
+                    [Hostname ++ ".yml", Message2, erlang:get_stacktrace()]),                    
+                halt(1)
+            end;
+            
+        FileList ->
+            lists:foreach(
+                fun(Filename) ->
+                    try process_overlay_file("config/" ++ Filename)
+                    catch _:Message3 -> 
+                        io:format("Error while processing ~p:~n~p~nstack trace:~n~p~n", 
+                            [Filename, Message3, erlang:get_stacktrace()]),                    
+                        halt(1)
+                    end
+                end, FileList)
+    end,
+
+    % Get entries and write them to files
+    VmArgsEntries = lists:keysort(1, [Param || {vm_args, Param} <- ets:lookup(entries, vm_args)]),
+    AppSrcEntries = lists:keysort(1, [Param || {app_src, Param} <- ets:lookup(entries, app_src)]),
+
+    % Try writing args to files
+    try
+        write_to_vm_args(VmArgsEntries),
+        write_to_app_src(AppSrcEntries)
+    catch _:Message4 -> 
+        io:format("Error while writing to files:~n~p~nstack trace:~n~p~n", [Message4, erlang:get_stacktrace()]),        
+        halt(1)
+    end,
+
+    % Try copying sys.config
+    case os:cmd("cp config/sys.config releases/files/sys.config") of
+        [] ->
+            proceed;
+        _ ->
+            io:format("Error while copying sys.config. Is it present in /config directory?~n"),        
+            halt(1)
+    end,
+
+    io:format("Configuration applied successfully.~n").
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% functions used to process default.yml
+
+process_default_yml() ->
+    {ok, [ListOfSections]} = yaml:load_file("config/default.yml", [implicit_atoms]),
+    lists:foreach(fun(Section) -> process_section(Section) end, ListOfSections).
+
+
+% Every section can have a number of entries.
+% Depending on section, we 
+% process them with bigger priority (-1000), so that they come first,
+% process them with normal priority(1),
+% or don't process them at all
+process_section(Section) ->
+    {SectionName, ListOfEntries} = Section,
+    case SectionName of
+        vm_arguments ->
+            extract_entries_from_section(-1000, ListOfEntries);
+        veil_cluster_node_env ->
+            extract_entries_from_section(1, ListOfEntries);
+        _ ->
+            skip
+    end.
+
+
+% Numeration is needed to keep sequence of args in result files
+extract_entries_from_section(NumerationStart, ListOfEntries) ->
+    lists:foldl(
+        fun([{parameter, Parameter}], Counter) -> 
+                store_parameter(Parameter, Counter); 
+            ([{argument, Argument}], Counter) -> 
+                store_argument(Argument, Counter); 
+            (_, Counter) -> 
+                Counter
+        end, NumerationStart, ListOfEntries).
+
+
+% Parameters are destined to both vm.args and *app.src
+store_parameter(Parameter, Counter) ->    
+    {name, Name} = lists:keyfind(name, 1, Parameter),
+    {description, Description} = lists:keyfind(description, 1, Parameter),
+
+    {Value, ErlangTerm} = get_value_and_erlang_term(Parameter),
+
+    ets:insert(entries, {vm_args, {Counter, env, Name, Description, 
+        "-veil_cluster_node " ++  to_list(Name) ++ " " ++ to_list(Value)}}),
+
+    ets:insert(entries, {app_src, {Counter, env, Name, Description, 
+        "\t\t{" ++ to_list(Name) ++ ", " ++ to_list(ErlangTerm) ++ "}"}}),
+    Counter + 1.
+
+
+% Arguments are destined to vm.args only
+store_argument(Argument, Counter) ->    
+    {name, Name} = lists:keyfind(name, 1, Argument),
+    {description, Description} = lists:keyfind(description, 1, Argument),
+
+    {Value, _ErlangTerm} = get_value_and_erlang_term(Argument),
+
+    ets:insert(entries, {vm_args, {Counter, arg, Name, Description, to_list(Value)}}),
+    Counter + 1.
+
+
+% Retrieve "value" and "erlang_term" attributes from a parameter
+get_value_and_erlang_term(Entry) ->    
+    {value, Value} = lists:keyfind(value, 1, Entry),
+
+    NewValue = remove_newline_from_end(Value),
+
+    ErlangTerm = case lists:keyfind(erlang_term, 1, Entry) of
+        false -> 
+            none;
+        {erlang_term, Term} ->
+            remove_newline_from_end(Term)
+    end,
+    NewErlangTerm = case ErlangTerm of
+        none ->
+            NewValue;
+        ErlangTerm2 -> ErlangTerm2
+    end,
+    {NewValue, NewErlangTerm}.
+
+
+% Remove newline from the end of an entry if it has one
+remove_newline_from_end(Term) ->
+    case lists:reverse(to_list(Term)) of
+        % Entry ends with a newline, remove it
+        [10|T] -> list_to_binary(lists:reverse(T));
+        % It doesn't, don't do anything
+        _ -> Term
+    end.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% functions used to process overlay file
+
+% For each entry in overlay file, shadow the one from default.yml
+process_overlay_file(File) ->
+    case yaml:load_file(File, [implicit_atoms]) of
+        {ok, [ListOfEntries]} -> 
+            lists:foreach(fun({EntryName, EntryValue}) -> overlay_entry(EntryName, EntryValue) end, ListOfEntries);
+        {ok, []} ->
+            skip
+    end.
+
+
+% Do the overlay
+overlay_entry(EntryName, EntryValue) ->
+    {Value, ErlangTerm} = get_value_and_erlang_term(EntryValue),
+
+    % Check for argument name in those going to vm.args. If it exists, shadow it
+    VmArgsEntries = ets:lookup(entries, vm_args),
+    case lists:keyfind(EntryName, 3, [Entry || {vm_args, Entry} <- VmArgsEntries]) of
+        false ->
+            skip;
+        {Id, Type, Name, Description, Text} ->
+            ets:delete_object(entries, {vm_args, {Id, Type, Name, Description, Text}}),
+            case Type of
+                arg ->
+                    ets:insert(entries, {vm_args, {Id, Type, Name, Description, to_list(Value)}});
+                env ->
+                    ets:insert(entries, {vm_args, {Id, Type, Name, Description, 
+                        "-veil_cluster_node " ++  to_list(Name) ++ " " ++ to_list(Value)}})
+            end
+    end,
+
+    % Check for argument name in those going to app.src. If it exists, shadow it
+    AppSrcEntries = ets:lookup(entries, app_src),
+    case lists:keyfind(EntryName, 3, [Entry || {app_src, Entry} <- AppSrcEntries]) of
+        false ->
+            skip;
+        {Id2, Type2, Name2, Description2, Text2} ->
+            ets:delete_object(entries, {app_src, {Id2, Type2, Name2, Description2, Text2}}),
+            ets:insert(entries, {app_src, {Id2, env, Name2, Description2, 
+                "\t\t{" ++ to_list(Name2) ++ ", " ++ to_list(ErlangTerm) ++ "}"}})        
+    end.
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% functions used to write to config files    
+
+% Write to vm.args in proper format
+write_to_vm_args(EntryList) -> 
+    FileContent = lists:foldl(
+        fun({_Id, _Type, _Name, Description, Text}, Acc) -> 
+            Lines = string:tokens(to_list(Description), "\n"),
+            ConcatenatedLines = lists:foldl(fun(Line, Acc2) -> Acc2 ++  "## " ++ Line ++ "\n" end, [], Lines),
+            Acc ++ ConcatenatedLines ++ Text ++ "\n\n"
+        end, [], EntryList),
+    file:write_file("releases/files/vm.args", list_to_binary(FileContent)).
+
+
+% Write to app.src in proper format
+write_to_app_src(ParameterList) -> 
+    Data =  case file:read_file("config/veil_cluster_node.app.src") of
+                {ok, DataRead} -> 
+                    DataRead;
+                _ ->
+                    io:format("Error while reading veil_cluster_node.app.src. Is it present in /config directory?~n"),        
+                    halt(1)
+            end,
+
+    OldFile = to_list(Data),
+    {match, [{From, _Through}]} = re:run(OldFile, "\\{env, \\["),
+    NewFileBeginning = string:substr(OldFile, 1, From),
+
+    Parameters = lists:foldl(
+        fun({_Id, _Type, _Name, Description, Text}, Acc) -> 
+            Lines = string:tokens(to_list(Description), "\n"),
+            ConcatenatedLines = lists:foldl(fun(Line, Acc2) -> Acc2 ++  "\t\t%% " ++ Line ++ "\n" end, [], Lines),
+            Acc ++ ConcatenatedLines ++ Text ++ ",\n"
+        end, [], ParameterList),
+
+    % Remove a newline and comma from last two positions
+    [_Newline|ParametersRemovedNewline] = lists:reverse(Parameters),
+    [_Comma|ParametersRemovedComma] = ParametersRemovedNewline,
+
+    file:write_file("src/veil_cluster_node.app.src",
+        NewFileBeginning ++ "{env, [\n" ++ lists:reverse(ParametersRemovedComma) ++ "\n\t]}\n]}.").
+
+
+% Convenience functions
+to_list(X) when is_binary(X) -> binary_to_list(X);
+to_list(X) when is_integer(X) -> integer_to_list(X);
+to_list(X) when is_atom(X) -> atom_to_list(X);
+to_list(X) -> X.

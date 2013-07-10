@@ -133,12 +133,18 @@ OPT_CCMS=$RESULT
 get_parameter_from_args "$*" -db_nodes list
 DB_NODES=$RESULT
 
-# Get short node name (without hostname)
+# Get short node name (without hostname) and hostname
 AT_INDEX=`expr index "$NODE_NAME" @`
 if [[ $AT_INDEX -gt 0 ]]; then
 	NODE_NAME_WITHOUT_HOSTNAME=${NODE_NAME:0:(($AT_INDEX - 1))}
+	HOSTNAME=${NODE_NAME:(($AT_INDEX - 1)):${#NODE_NAME}}
 else
-	NODE_NAME_WITHOUT_HOSTNAME=$NODE_NAME
+    echo " "
+    echo "Error: longname expected"
+    echo "'$NODE_NAME' must be a valid erlang longname."
+    echo "Terminating."
+    echo " "
+    exit 1
 fi
 
 echo " "
@@ -153,7 +159,7 @@ if [[ $INDEX -eq 0 ]]; then
 	INDEX=`awk -v a=" $* " -v b=" -no_compile " 'BEGIN{print index(a, b)}'`
 	if [[ $INDEX -eq 0 ]]; then
 		# Compile the code
-		./rebar compile
+		make compile
 		if [ $? -ne 0 ]; then
 	        echo ""
 	        echo "Error during code compilation."
@@ -183,11 +189,27 @@ else
 	fi
 fi
 
-# Remove old release
-rm -r releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME 2>/dev/null
-
 # Create directory for test nodes if it doesn't exit
 mkdir -p releases/test_cluster
+
+
+# Originally let's assume this node is a worker
+NODE_TYPE="worker"
+# Check if the node name equals main CCM -> this node is a CCM
+if [[ $NODE_NAME == $MAIN_CCM ]]; then
+	NODE_TYPE="ccm"
+fi
+for OPT_CCM in $OPT_CCMS
+do
+	# Check if the node name equals current CCM -> this node is a CCM
+	if [[ $NODE_NAME == $OPT_CCM ]]; then
+		NODE_TYPE="ccm"
+	fi
+done
+
+
+# Remove old release
+rm -r releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME 2>/dev/null
 
 # Copy the release package to proper location (directory named as the node without hostname), preserve mode
 cp -R -p releases/veil_cluster_node releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME
@@ -207,7 +229,23 @@ APP_VSN=${START_ERL#* }
 
 # Replace the cookie
 sed -i "s/-setcookie.*/-setcookie '$COOKIE'/g" releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME/releases/$APP_VSN/vm.args
-
 echo "Cookie set to: $COOKIE"
+
+# Generate a corresponding worker if this node is a CCM
+if [[ $NODE_TYPE == "ccm" ]]; then
+    echo " "
+    echo "****************"
+    echo "Generating worker for $NODE_NAME in    /releases/test_cluster/${NODE_NAME_WITHOUT_HOSTNAME}_worker"
+
+    rm -r releases/test_cluster/${NODE_NAME_WITHOUT_HOSTNAME}_worker 2>/dev/null
+
+    cp -R -p releases/veil_cluster_node releases/test_cluster/${NODE_NAME_WITHOUT_HOSTNAME}_worker
+
+    ./releases/test_cluster/${NODE_NAME_WITHOUT_HOSTNAME}_worker/bin/veil_cluster \
+    -name ${NODE_NAME_WITHOUT_HOSTNAME}_worker${HOSTNAME} -main_ccm $MAIN_CCM -opt_ccms $OPT_CCMS -db_nodes $DB_NODES
+
+    sed -i "s/-setcookie.*/-setcookie '$COOKIE'/g" releases/test_cluster/${NODE_NAME_WITHOUT_HOSTNAME}_worker/releases/$APP_VSN/vm.args
+    echo "Cookie set to: $COOKIE"
+fi
 
 exit 0

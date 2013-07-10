@@ -109,9 +109,9 @@ get_descriptor(Fd) ->
 -spec list_descriptors(MatchCriteria :: fd_select(), N :: pos_integer(), Offset :: non_neg_integer()) ->
     {ok, fd_doc()} | {error, any()} | no_return().
 %% ====================================================================
-list_descriptors({by_file, File}, N, Offset) ->
+list_descriptors({by_file, File}, N, Offset) when N > 0, Offset >= 0 ->
     list_descriptors({by_file_n_owner, {File, ""}}, N, Offset);
-list_descriptors({by_file_n_owner, {File, Owner}}, N, Offset) ->
+list_descriptors({by_file_n_owner, {File, Owner}}, N, Offset) when N > 0, Offset >= 0 ->
     {ok, #veil_document{uuid = FileId}} = get_file(File),
     StartKey = [dao_helper:name(FileId), dao_helper:name(Owner)],
     EndKey = case Owner of "" -> [dao_helper:name(next_id(FileId)), dao_helper:name("")]; _ -> [dao_helper:name((FileId)), dao_helper:name(next_id(Owner))] end,
@@ -124,7 +124,18 @@ list_descriptors({by_file_n_owner, {File, Owner}}, N, Offset) ->
             lager:error("Invalid file descriptor view response: ~p", [Data]),
             throw({inavlid_data, Data})
     end;
-list_descriptors({_Type, _Resource}, _N, _Offset) ->
+list_descriptors({by_expired_before, Time}, N, Offset) when N > 0, Offset >= 0 ->
+    StartKey = 0,
+    EndKey = Time,
+    QueryArgs = #view_query_args{start_key = StartKey, end_key = EndKey, include_docs = true, limit = N, skip = Offset},
+    case dao:list_records(?FD_BY_EXPIRED_BEFORE_VIEW, QueryArgs) of
+        {ok, #view_result{rows = Rows}} ->
+            {ok, [FdDoc || #view_row{doc = #veil_document{record = #file_descriptor{}} = FdDoc} <- Rows]};
+        Data ->
+            lager:error("Invalid file descriptor view response: ~p", [Data]),
+            throw({inavlid_data, Data})
+    end;
+list_descriptors({_Type, _Resource}, _N, _Offset) when _N > 0, _Offset >= 0 ->
     not_yet_implemented.
 
 

@@ -133,19 +133,24 @@ encode_answer(Main_Answer) ->
   Result ::  binary().
 %% ====================================================================
 encode_answer(Main_Answer, AnswerType, Answer_decoder_name, Worker_Answer) ->
-  Message = case Main_Answer of
+  Check = ((Main_Answer =:= ok) and is_atom(Worker_Answer) and (Worker_Answer =:= worker_plug_in_error)),
+  Main_Answer2 = case Check of
+     true -> Worker_Answer;
+     false -> Main_Answer
+  end,
+  Message = case Main_Answer2 of
     ok -> case AnswerType of
-      non -> #answer{answer_status = atom_to_list(Main_Answer)};
+      non -> #answer{answer_status = atom_to_list(Main_Answer2)};
       _Type ->
         try
           WAns = erlang:apply(list_to_atom(Answer_decoder_name ++ "_pb"), list_to_atom("encode_" ++ AnswerType), [records_translator:translate_to_record(Worker_Answer)]),
-          #answer{answer_status = atom_to_list(Main_Answer), worker_answer = WAns}
+          #answer{answer_status = atom_to_list(Main_Answer2), worker_answer = WAns}
         catch
           Type:Error ->
             lager:error("Ranch handler error during encoding answer: ~p:~p, answer type: ~s, decoder ~s, worker answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Worker_Answer]),
             #answer{answer_status = "answer_encoding_error"}
         end
     end;
-    _Other -> #answer{answer_status = atom_to_list(Main_Answer)}
+    _Other -> #answer{answer_status = atom_to_list(Main_Answer2)}
   end,
   erlang:iolist_to_binary(communication_protocol_pb:encode_answer(Message)).
