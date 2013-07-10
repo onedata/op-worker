@@ -59,7 +59,6 @@ get_login_url() ->
   Result :: {ok, list()} | {error, Error},
   Error :: missing_credentials | auth_invalid | auth_failed.
 %% ====================================================================
-%
 validate_openid_login() ->	
 	% Extract GET parameters
 	Parameters = wf:mqs(?openid_login_response_key_list),
