@@ -83,6 +83,11 @@ veil_cluster_node_env:
       # this has to be in double quotes so that single quotes are preserved after
       # conversion to list and it ends up correct in app.src
 
+  - parameter:
+      name: fslogic_cleaning_period
+      description: How often fslogic should clean not used descriptors
+      value: 600000
+
 
   # DISPATCHER
   - parameter:
