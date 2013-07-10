@@ -18,7 +18,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_link/0]).
+-export([start_link/0, stop/0]).
 
 %% ====================================================================
 %% gen_server callbacks
@@ -42,6 +42,15 @@
 
 start_link() ->
   gen_server:start_link({local, ?Dispatcher_Name}, ?MODULE, [], []).
+
+%% stop/0
+%% ====================================================================
+%% @doc Stops the server
+-spec stop() -> ok.
+%% ====================================================================
+
+stop() ->
+  gen_server:cast(?Dispatcher_Name, stop).
 
 %% init/1
 %% ====================================================================
@@ -152,6 +161,22 @@ handle_call({node_chosen, {Task, ProtocolVersion, Request}}, _From, State) ->
     Other -> {reply, Other, State}
   end;
 
+%% test call
+handle_call({get_worker_node, Module}, _From, State) ->
+  Ans = get_worker_node(Module, State),
+  case Ans of
+    {Node, NewState} -> {reply, Node, NewState};
+    Other -> {reply, Other, State}
+  end;
+
+%% test call
+handle_call({check_worker_node, Module}, _From, State) ->
+  Ans = check_worker_node(Module, State),
+  case Ans of
+    {Node, NewState} -> {reply, Node, NewState};
+    Other -> {reply, Other, State}
+  end;
+
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
 
@@ -167,7 +192,7 @@ handle_call(_Request, _From, State) ->
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 handle_cast({update_workers, WorkersList, NewStateNum, CurLoad, AvgLoad}, State) ->
-  {noreply, update_workers(WorkersList, State#dispatcher_state{state_num = NewStateNum, current_load = CurLoad, avg_load = AvgLoad})};
+  {noreply, update_workers(WorkersList, NewStateNum, CurLoad, AvgLoad)};
 
 handle_cast(_Msg, State) ->
   {noreply, State}.
@@ -278,12 +303,13 @@ check_worker_node(Module, State) ->
   Nodes = get_nodes(Module,State),
   case Nodes of
     {L1, L2} ->
-      Check = (lists:member(node, lists:flatten([L1, L2]))),
+      ThisNode = node(),
+      Check = (lists:member(ThisNode, lists:flatten([L1, L2]))),
       case Check of
         true ->
           Check2 = ((State#dispatcher_state.current_load =< 3) and (State#dispatcher_state.current_load =< 2*State#dispatcher_state.avg_load)),
           case Check2 of
-            true -> {node(), State};
+            true -> {ThisNode, State};
             false ->
               lager:warning([{mod, ?MODULE}], "Error: load of node too high", [Module]),
               {N, NewLists} = choose_worker(L1, L2),
@@ -330,10 +356,10 @@ add_worker(Module, Node, State) ->
 %% update_workers/2
 %% ====================================================================
 %% @doc Updates dispatcher state when new workers list appears.
--spec update_workers(WorkersList :: term(), State :: term()) -> Result when
+-spec update_workers(WorkersList :: term(), SNum :: integer(), CLoad :: number(), ALoad :: number()) -> Result when
   Result ::  term().
 %% ====================================================================
-update_workers(WorkersList, _State) ->
+update_workers(WorkersList, SNum, CLoad, ALoad) ->
   Update = fun({Node, Module}, TmpState) ->
     Ans = add_worker(Module, Node, TmpState),
       case Ans of
@@ -341,7 +367,7 @@ update_workers(WorkersList, _State) ->
       _Other -> TmpState
     end
   end,
-  lists:foldl(Update, initState(), WorkersList).
+  lists:foldl(Update, initState(SNum, CLoad, ALoad), WorkersList).
 
 %% pull_state/1
 %% ====================================================================
@@ -354,7 +380,7 @@ update_workers(WorkersList, _State) ->
 pull_state(State) ->
   try
     {WorkersList, StateNum} = gen_server:call({global, ?CCM}, get_workers),
-    NewState = update_workers(WorkersList, State),
+    NewState = update_workers(WorkersList, State#dispatcher_state.state_num, State#dispatcher_state.current_load, State#dispatcher_state.avg_load),
     {ok, NewState#dispatcher_state{state_num = StateNum}}
   catch
     _:_ ->
@@ -382,3 +408,7 @@ initState() ->
   end,
   NewModules = lists:foldl(CreateModules, [], ?Modules),
   #dispatcher_state{modules = NewModules}.
+
+initState(SNum, CLoad, ALoad) ->
+  NewState = initState(),
+  NewState#dispatcher_state{state_num = SNum, current_load = CLoad, avg_load = ALoad}.

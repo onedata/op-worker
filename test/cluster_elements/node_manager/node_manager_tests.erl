@@ -74,6 +74,4 @@ heart_beat_test() ->
   cluster_manager:stop(),
 	net_kernel:stop().
 
-%%TODO testy pobierania info o obciążeniu
-
 -endif.
