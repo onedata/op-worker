@@ -63,14 +63,14 @@ dns_udp_handler_responds_to_dns_queries(_Config) ->
 
 		env_setter:start_test(),
 		env_setter:start_app(Env),
-		timer:sleep(500),
 
 		gen_server:cast(?Node_Manager_Name, do_heart_beat),
 		gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+    timer:sleep(100),
 		gen_server:cast({global, ?CCM}, init_cluster),
 		timer:sleep(3000),
 
-		%% Both - dns udp handler and dns_worker should work
+		%Both - dns udp handler and dns_worker should work
 		MessagingTest = fun () ->
 			ok = gen_udp:send(Socket, Address, DNS_Port, BinRequest),
 			{ok, {_, DNS_Port, Packet}} = gen_udp:recv(Socket, 0, infinity),
@@ -119,6 +119,7 @@ dns_ranch_tcp_handler_responds_to_dns_queries(_Config) ->
 
 		gen_server:cast(?Node_Manager_Name, do_heart_beat),
 		gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+    timer:sleep(100),
 		gen_server:cast({global, ?CCM}, init_cluster),
 		timer:sleep(3000),
 

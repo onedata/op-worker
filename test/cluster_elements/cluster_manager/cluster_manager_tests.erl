@@ -264,6 +264,7 @@ update_dns_state__current_worker_host_implementation() ->
 	?assert(is_integer(Load)),
 	erlang:demonitor(Ref).
 
+%% Checks if dispatcher is updated properly
 update_dispatcher_test() ->
   request_dispatcher:start_link(),
 
