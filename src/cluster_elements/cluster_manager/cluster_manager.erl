@@ -135,11 +135,6 @@ handle_call({node_is_up, Node}, _From, State) ->
       case lists:member(Node, Nodes) of
         true -> {reply, Reply, State};
         false ->
-          case whereis(?Monitoring_Proc) of
-            undefined -> ok;
-            MPid -> MPid ! {monitor_node, Node}
-          end,
-
           {Ans, NewState, WorkersFound} = check_node(Node, State),
 
           %% This case checks if node state was analysed correctly.
@@ -147,6 +142,11 @@ handle_call({node_is_up, Node}, _From, State) ->
           %% were running on node).
           case Ans of
             ok ->
+              case whereis(?Monitoring_Proc) of
+                undefined -> ok;
+                MPid -> MPid ! {monitor_node, Node}
+              end,
+
               NewState2 = NewState#cm_state{nodes = [Node | Nodes]},
 
               NewState3 = case WorkersFound of
@@ -360,7 +360,7 @@ init_cluster(State) ->
             false -> init_cluster_jobs_dominance(State, Jobs, Args, Nodes, [])
           end,
 
-          NewState2 = increase_state_num(NewState),
+          NewState2 = update_dispatchers_and_dns(NewState, true, true),
           save_state(NewState2),
           NewState2;
         false -> State
@@ -623,7 +623,7 @@ start_central_logger(State) ->
     false ->
       {Ans, NewState} = start_worker(LoggerNode, central_logger, [], State),
       case Ans of
-        ok -> increase_state_num(NewState);
+        ok -> update_dispatchers_and_dns(NewState, true, true);
         error -> NewState
       end
   end.
@@ -651,7 +651,7 @@ get_state_from_db(State) ->
       case Ans of
         ok ->
           gen_server:cast({dao, DaoNode}, {synch, 1, {get_state, []}, cluster_state, {gen_serv, {global, ?CCM}}}),
-          increase_state_num(NewState);
+          update_dispatchers_and_dns(NewState, true, true);
         error -> NewState
       end
   end.

@@ -52,7 +52,7 @@
 init(_Args) ->
   Pid = self(),
   {ok, Interval} = application:get_env(veil_cluster_node, fslogic_cleaning_period),
-  erlang:send_after(Interval, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
+  erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
 	[].
 
 %% handle/1
@@ -78,7 +78,7 @@ handle(ProtocolVersion, {delete_old_descriptors, Pid}) ->
   Time = 1000000*Megaseconds + Seconds - 15,
   delete_old_descriptors(ProtocolVersion, Time),
   {ok, Interval} = application:get_env(veil_cluster_node, fslogic_cleaning_period),
-  erlang:send_after(Interval, Pid, {timer, {asynch, ProtocolVersion, {delete_old_descriptors, Pid}}}),
+  erlang:send_after(Interval * 1000, Pid, {timer, {asynch, ProtocolVersion, {delete_old_descriptors, Pid}}}),
   ok;
 
 handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
