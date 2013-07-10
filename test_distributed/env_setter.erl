@@ -57,6 +57,13 @@ stop_test() ->
   application:stop(ssl),
   application:stop(crypto),
   application:stop(public_key),
+  application:start(nprocreg),
+  application:start(cowboy),
+  application:start(sasl),
+  application:start(nitrogen_core),
+  application:start(simple_bridge),
+  application:start(mimetypes),
+  application:start(ibrowse),
   ok = application:unload(?APP_Name).
 
 %% start_app/1
