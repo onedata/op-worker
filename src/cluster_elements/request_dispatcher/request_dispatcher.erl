@@ -278,12 +278,19 @@ check_worker_node(Module, State) ->
   Nodes = get_nodes(Module,State),
   case Nodes of
     {L1, L2} ->
-      Check = ((lists:member(node, lists:flatten([L1, L2]))) and (State#dispatcher_state.current_load =< 3) and (State#dispatcher_state.current_load =< 2*State#dispatcher_state.avg_load)),
+      Check = (lists:member(node, lists:flatten([L1, L2]))),
       case Check of
         true ->
-          lager:error([{mod, ?MODULE}], "Error: module ~p does not work at this node", [Module]),
-          node();
+          Check2 = ((State#dispatcher_state.current_load =< 3) and (State#dispatcher_state.current_load =< 2*State#dispatcher_state.avg_load)),
+          case Check2 of
+            true -> {node(), State};
+            false ->
+              lager:warning([{mod, ?MODULE}], "Error: load of node too high", [Module]),
+              {N, NewLists} = choose_worker(L1, L2),
+              {N, update_nodes(Module, NewLists, State)}
+          end;
         false ->
+          lager:error([{mod, ?MODULE}], "Error: module ~p does not work at this node", [Module]),
           {N, NewLists} = choose_worker(L1, L2),
           {N, update_nodes(Module, NewLists, State)}
       end;
