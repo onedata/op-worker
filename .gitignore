@@ -13,3 +13,4 @@ distributed_tests_out
 src/veil_cluster_node.app.src
 releases/files/sys.config
 releases/files/vm.args
+./veilprotocol

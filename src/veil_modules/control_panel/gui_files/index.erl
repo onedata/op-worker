@@ -22,7 +22,11 @@ header() ->
   #panel
   {
     class = header,
-    body = "VeilFS - Control panel"
+    body = 
+    [
+      #link { class = header_link, text="MAIN PAGE", url="/index" },
+      #link { class = header_link, text="LOGIN / LOGOUT", url="/login" }
+    ]
   }.
 
 
