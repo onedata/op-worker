@@ -12,6 +12,7 @@
 
 -module(request_dispatcher_tests).
 -include("communication_protocol_pb.hrl").
+-include("registered_names.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -49,5 +50,75 @@ protocol_buffers_test() ->
 
   EncodedPong = ranch_handler:encode_answer(ok, "atom", "communication_protocol", pong),
   ?assert(EncodedPong =:= MessageBytes2).
+
+%% This test checks if dispatcher returns nodes where modules are running correctly
+get_worker_node_test() ->
+  request_dispatcher:start_link(),
+
+  N1 = node(),
+  WorkersList = [{N1, fslogic}, {N1, dao}, {n2, fslogic}, {n3, fslogic}, {n3, dao}, {n4, gateway}, {N1, dns_worker}],
+  gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, 1, 1, 1}),
+  Requests = [fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, dao, rtransfer, dao, dns_worker, dns_worker, gateway, gateway],
+  ExpectedAns = [n3, n2, N1, N1, n2, n3, n3, n3, non, N1, N1, N1, n4, n4],
+
+  FullAns = lists:foldl(fun(R, TmpAns) ->
+    Ans = gen_server:call(?Dispatcher_Name, {get_worker_node, R}),
+    [Ans | TmpAns]
+  end, [], Requests),
+  ?assertEqual(ExpectedAns, lists:reverse(FullAns)),
+
+  request_dispatcher:stop().
+
+%% This test checks if dispatcher returns nodes where modules are running correctly
+%% when it is expected to process request on chosen node and node load is low
+check_worker_node_ok_test() ->
+  request_dispatcher:start_link(),
+
+  N1 = node(),
+  WorkersList = [{N1, fslogic}, {N1, dao}, {n2, fslogic}, {n3, fslogic}, {n3, dao},{n3, gateway}, {n4, gateway}, {N1, dns_worker}],
+  gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, 1, 1, 1}),
+  Requests = [fslogic, fslogic, fslogic, fslogic, dao, rtransfer, dao, dns_worker, dns_worker, gateway, gateway, gateway],
+  ExpectedAns = [N1, N1, N1, N1, N1, non, N1, N1, N1, n4, n3, n3],
+
+  FullAns = lists:foldl(fun(R, TmpAns) ->
+    Ans = gen_server:call(?Dispatcher_Name, {check_worker_node, R}),
+    [Ans | TmpAns]
+  end, [], Requests),
+  ?assertEqual(ExpectedAns, lists:reverse(FullAns)),
+
+  request_dispatcher:stop().
+
+%% This test checks if dispatcher returns nodes where modules are running correctly
+%% when it is expected to process request on chosen node and node load is high
+check_worker_node_high_load1_test() ->
+  check_worker_node_high_load_helper(3.5, 3.5).
+
+%% This test checks if dispatcher returns nodes where modules are running correctly
+%% when it is expected to process request on chosen node and node load is high
+check_worker_node_high_load2_test() ->
+  check_worker_node_high_load_helper(2, 0.9).
+
+%% ====================================================================
+%% Helper functions
+%% ====================================================================
+
+%% This function checks if dispatcher returns nodes where modules are running correctly
+%% when it is expected to process request on chosen node and node load is high
+check_worker_node_high_load_helper(Current, Avg) ->
+  request_dispatcher:start_link(),
+
+  N1 = node(),
+  WorkersList = [{N1, fslogic}, {N1, dao}, {n2, fslogic}, {n3, fslogic}, {n3, dao}, {n4, gateway}, {N1, dns_worker}],
+  gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, 1, Current, Avg}),
+  Requests = [fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, dao, rtransfer, dao, dns_worker, dns_worker, gateway, gateway],
+  ExpectedAns = [n3, n2, N1, N1, n2, n3, n3, n3, non, N1, N1, N1, n4, n4],
+
+  FullAns = lists:foldl(fun(R, TmpAns) ->
+    Ans = gen_server:call(?Dispatcher_Name, {check_worker_node, R}),
+    [Ans | TmpAns]
+  end, [], Requests),
+  ?assertEqual(ExpectedAns, lists:reverse(FullAns)),
+
+  request_dispatcher:stop().
 
 -endif.

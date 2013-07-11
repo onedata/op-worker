@@ -25,6 +25,7 @@
                   lager,
                   crypto,
                   ssl,
+                  os_mon,
                   ranch,
                   nprocreg,
                   cowboy,
