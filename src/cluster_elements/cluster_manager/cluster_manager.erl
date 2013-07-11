@@ -1075,7 +1075,7 @@ calculate_worker_load(Workers) ->
   MergedByNode = MergeByFirstElement(WorkersLoad),
 
   EvaluateLoad = fun ({Node, Modules}) ->
-    GetLoadsSum = fun({Module, Value}, TmpAns) ->
+    GetLoadsSum = fun({_Module, Value}, TmpAns) ->
       case Value of
         error -> TmpAns;
         _ -> TmpAns + Value

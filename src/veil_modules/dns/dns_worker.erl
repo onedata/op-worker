@@ -107,7 +107,7 @@ handle(_ProtocolVersion, {get_worker, Module}) ->
   {Result2, ModuleWorkerList} = lists:foldl(PrepareResult, {[], []}, Result),
 
   PrepareState = fun({M, Workers}, TmpWorkersList) ->
-    TmpAns2 = case M =:= Module of
+    case M =:= Module of
       true -> [{M, ModuleWorkerList} | TmpWorkersList];
       false -> [{M, Workers} | TmpWorkersList]
     end
