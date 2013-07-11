@@ -40,6 +40,7 @@ start_test() ->
   application:start(ranch),
   application:start(nprocreg),
   application:start(cowboy),
+  application:stop(lager),
   application:start(sasl),
   application:start(nitrogen_core),
   application:start(simple_bridge),
