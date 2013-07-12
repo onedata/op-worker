@@ -71,7 +71,7 @@ handle_max_udp_response_size(Header, QuestionList, AnswerList) ->
 	DNS_Responses_Size = length(AnswerList) * ?DNS_ANSWER_SIZE,
 	if
 		DNS_Responses_Size > LeftSize -> lager:info("Truncating dns response"),
-									     FilteredAnswerList = lists:sublist(AnswerList, 1, LeftSize div ?DNS_ANSWER_SIZE),
+									     FilteredAnswerList = lists:sublist(AnswerList, 1, erlang:max(LeftSize, 0) div ?DNS_ANSWER_SIZE),
 										 {inet_dns:make_header(Header, tc, 1), FilteredAnswerList};
 		true -> {Header, AnswerList}
 	end.
