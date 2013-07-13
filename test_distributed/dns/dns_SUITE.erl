@@ -32,7 +32,6 @@ all() -> [dns_udp_sup_env_test, dns_ranch_tcp_handler_responds_to_dns_queries, d
 dns_udp_sup_env_test(_Config) ->
 	try
 		?INIT_DIST_TEST,
-		code:add_path("."),
 		env_setter:start_test(),
 		assert_all_deps_are_met(?APP_Name, dns_worker)
 	after
@@ -43,14 +42,13 @@ dns_udp_sup_env_test(_Config) ->
 dns_udp_handler_responds_to_dns_queries(_Config) ->
 	ct:timetrap({seconds, 30}),
 	?INIT_DIST_TEST,
-	Cert = '../../../veilfs.pem',
 	Port = 6667,
 	DNS_Port = 1328,
 	UDP_Port = 1400,
 	Address = "localhost",
 	SupportedDomain = "dns_worker",
 	Env = [{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [node()]},
-			{ssl_cert_path, Cert}, {dns_port, DNS_Port}, {initialization_time, 1}],
+			{dns_port, DNS_Port}, {initialization_time, 1}],
 
 	{ok, Socket} = gen_udp:open(UDP_Port, [{active, false}, binary]),
 
@@ -98,13 +96,12 @@ dns_udp_handler_responds_to_dns_queries(_Config) ->
 dns_ranch_tcp_handler_responds_to_dns_queries(_Config) ->
 	ct:timetrap({seconds, 30}),
 	?INIT_DIST_TEST,
-	Cert = '../../../veilfs.pem',
 	Port = 6667,
 	DNS_Port = 1329,
 	Address = "localhost",
 	SupportedDomain = "dns_worker",
 	Env = [{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [node()]},
-		{ssl_cert_path, Cert}, {dns_port, DNS_Port}, {initialization_time, 1}],
+		{dns_port, DNS_Port}, {initialization_time, 1}],
 
 	RequestHeader = #dns_header{id = 1, qr = false, opcode = ?QUERY, rd = 1},
 	RequestQuery = #dns_query{domain=SupportedDomain, type=?T_A,class=?C_IN},
@@ -119,7 +116,7 @@ dns_ranch_tcp_handler_responds_to_dns_queries(_Config) ->
 
 		gen_server:cast(?Node_Manager_Name, do_heart_beat),
 		gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-    timer:sleep(100),
+        timer:sleep(100),
 		gen_server:cast({global, ?CCM}, init_cluster),
 		timer:sleep(3000),
 

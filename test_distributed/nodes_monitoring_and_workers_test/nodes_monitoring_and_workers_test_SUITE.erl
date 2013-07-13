@@ -32,16 +32,15 @@ ccm1_test(_Config) ->
   ?INIT_DIST_TEST,
   env_setter:synch_nodes(['worker1@localhost', 'worker2@localhost', 'worker3@localhost', 'tester@localhost']),
 
-  Cert = '../../../veilfs.pem',
   env_setter:start_test(),
-  env_setter:start_app([{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [node()]}, {ssl_cert_path, Cert}, {dns_port, 1308}]),
+  env_setter:start_app([{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [node()]}, {dns_port, 1308}]),
 
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
   timer:sleep(2000),
   gen_server:cast({global, ?CCM}, init_cluster),
 
-  timer:sleep(3000),
+  timer:sleep(6000),
   env_setter:stop_app(),
   env_setter:stop_test().
 
@@ -50,13 +49,12 @@ worker1_test(_Config) ->
   ?INIT_DIST_TEST,
   env_setter:synch_nodes(['ccm1@localhost', 'worker2@localhost', 'worker3@localhost', 'tester@localhost']),
 
-  Cert = '../../../veilfs.pem',
   env_setter:start_test(),
-  env_setter:start_app([{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, ['ccm1@localhost']}, {ssl_cert_path, Cert}, {dns_port, 1309}]),
+  env_setter:start_app([{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, ['ccm1@localhost']}, {dns_port, 1309}]),
   timer:sleep(1000),
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
 
-  timer:sleep(4000),
+  timer:sleep(7000),
   env_setter:stop_app(),
   env_setter:stop_test().
 
@@ -65,13 +63,12 @@ worker2_test(_Config) ->
   ?INIT_DIST_TEST,
   env_setter:synch_nodes(['ccm1@localhost', 'worker1@localhost', 'worker3@localhost', 'tester@localhost']),
 
-  Cert = '../../../veilfs.pem',
   env_setter:start_test(),
-  env_setter:start_app([{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, ['ccm1@localhost']}, {ssl_cert_path, Cert}, {dns_port, 1310}]),
+  env_setter:start_app([{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, ['ccm1@localhost']}, {dns_port, 1310}]),
   timer:sleep(1000),
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
 
-  timer:sleep(4000),
+  timer:sleep(7000),
   env_setter:stop_app(),
   env_setter:stop_test().
 
@@ -80,13 +77,12 @@ worker3_test(_Config) ->
   ?INIT_DIST_TEST,
   env_setter:synch_nodes(['ccm1@localhost', 'worker1@localhost', 'worker2@localhost', 'tester@localhost']),
 
-  Cert = '../../../veilfs.pem',
   env_setter:start_test(),
-  env_setter:start_app([{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, ['ccm1@localhost']}, {ssl_cert_path, Cert}, {dns_port, 1311}]),
+  env_setter:start_app([{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, ['ccm1@localhost']}, {dns_port, 1311}]),
   timer:sleep(1000),
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
 
-  timer:sleep(4000),
+  timer:sleep(7000),
   env_setter:stop_app(),
   env_setter:stop_test().
 
@@ -97,7 +93,7 @@ tester_test(_Config) ->
 
   env_setter:start_test(),
   global:sync(),
-  timer:sleep(4000),
+  timer:sleep(6000),
   NotExistingNodes = ['n1@localhost', 'n2@localhost', 'n3@localhost'],
   lists:foreach(fun(Node) -> gen_server:call({global, ?CCM}, {node_is_up, Node}) end, NotExistingNodes),
 
@@ -120,8 +116,7 @@ tester_test(_Config) ->
   Check4 = (length(Workers) == length(Jobs)),
   Check4 = true,
 
-  Cert = '../../../veilfs.pem',
-  CertString = atom_to_list(Cert),
+  PeerCert = ?COMMON_FILE("peer.pem"),
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
 
@@ -132,7 +127,7 @@ tester_test(_Config) ->
 
   Ports = [5055, 6666, 7777, 8888],
   CheckNodes = fun(Port, S) ->
-    {ok, Socket} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, CertString}]),
+    {ok, Socket} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, PeerCert}]),
 
     CheckModules = fun(M, Sum) ->
       Message = #clustermsg{module_name = atom_to_binary(M, utf8), message_type = "atom",

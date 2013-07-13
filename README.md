@@ -22,6 +22,23 @@ The 'veil_modules' includes directories that contain code of 'proper' modules of
 
 The 'proto' includes definitions of protocol buffer messages used by clients during the communication with VeilCluster.
 
+#### Prerequisites
+In order to compile the project, you need to have fallowing additional libraries, its headers and all its prerequisites in include/ld path:
+
+* libglobus_gsi_callback
+* libglobus_common
+* libssl
+
+Use this command to install the required dependency packages:
+
+* Debian/Ubuntu Dependencies (.deb packages):
+
+        apt-get install libglobus-gsi-callback-dev
+
+* RHEL/CentOS/Fedora Dependencies (.rpm packages):
+
+        yum install globus-gsi-callback-devel
+
 #### Tests
 Tests should be put in 'test' directory. It should contain the same subdirectories as 'src'. Each test name should be constructed as follows: 'name of tested file'_tests.erl, e.g., 'node_manager_tests.erl' should contain functions that test code from 'node_manager.erl' file.
 

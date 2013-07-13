@@ -29,9 +29,12 @@
 
 
 start_test() ->
-  code:add_path("../../../ebin"),
-  {ok, Dirs} = file:list_dir("../../../deps"),
-  Deps = list_deps(Dirs, "../../../deps/", "/ebin", []),
+  stop_test(), %% Stop all applications (if any)
+
+  timer:sleep(1000),
+  code:add_path("./ebin"),
+  {ok, Dirs} = file:list_dir("./deps"),
+  Deps = list_deps(Dirs, "./deps/", "/ebin", []),
   code:add_paths(Deps),
   application:start(sasl),
   lager:start(),
@@ -44,7 +47,7 @@ start_test() ->
   application:start(simple_bridge),
   application:start(mimetypes),
   application:start(ibrowse),
-  ok = application:load(?APP_Name).
+  application:load(?APP_Name).
 
 %% stop_test/0
 %% ====================================================================
@@ -66,7 +69,12 @@ stop_test() ->
   application:stop(mimetypes),
   application:stop(simple_bridge),
   application:stop(ibrowse),
-  ok = application:unload(?APP_Name).
+  try
+    stop_app()
+  catch
+    _:_ -> ok
+  end,
+  application:unload(?APP_Name).
 
 %% start_app/1
 %% ====================================================================
@@ -76,7 +84,8 @@ stop_test() ->
 %% ====================================================================
 
 start_app(Vars) ->
-  set_env_vars(Vars),
+  set_env_vars([{nif_prefix, './'}, {ca_dir, './cacerts/'}] ++ Vars),
+  application:stop(?APP_Name), %% Make sure that veil_cluster isn't running before starting new instance
   ok = application:start(?APP_Name).
 
 %% stop_app/0

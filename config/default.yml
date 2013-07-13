@@ -78,8 +78,8 @@ veil_cluster_node_env:
       name: ssl_cert_path
       description: Path to certificate used by ranch_ssl
       value: |
-        "\'./veilfs.pem\'"
-      erlang_term: "'./veilfs.pem'"
+        "\'./cacerts/veilfs.pem\'"
+      erlang_term: "'./cacerts/veilfs.pem'"
       # this has to be in double quotes so that single quotes are preserved after
       # conversion to list and it ends up correct in app.src
 
@@ -92,6 +92,13 @@ veil_cluster_node_env:
       name: node_monitoring_period
       description: How often should node manager wait between successive checks of node status
       value: 15
+
+  - parameter:
+        name: nif_prefix
+        description: Prefix to c_lib directory containing NIF libs
+        value: |
+          "\'.\'"
+        erlang_term: "'.'"
 
 
   # DISPATCHER
@@ -114,6 +121,11 @@ veil_cluster_node_env:
       name: dispatcher_timeout
       description: Time in ms after witch ranch answers with error
       value: 2000
+
+  - parameter:
+      name: ca_dir
+      description: path to dir containing CA and CRL certs used by GSI handler
+      value: cacerts
 
 
   #CONTROL PANEL

@@ -5,3 +5,4 @@ git submodule update
 cd veilprotocol
 git merge master
 cd ..
+git submodule update

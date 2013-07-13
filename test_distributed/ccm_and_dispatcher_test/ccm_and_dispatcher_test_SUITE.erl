@@ -100,18 +100,17 @@ modules_start_and_ping_test(_Config) ->
 dispatcher_connection_test(_Config) ->
   ?INIT_DIST_TEST,
 
-  Cert = '../../../veilfs.pem',
-  CertString = atom_to_list(Cert),
+  PeerCert = ?COMMON_FILE("peer.pem"),
   Port = 6666,
   env_setter:start_test(),
-  env_setter:start_app([{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [node()]}, {ssl_cert_path, Cert}, {dns_port, 1315}]),
+  env_setter:start_app([{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [node()]}, {dns_port, 1315}]),
 
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
   gen_server:cast({global, ?CCM}, init_cluster),
   timer:sleep(1500),
 
-  {ok, Socket} = ssl:connect("localhost", Port, [binary, {active, false}, {packet, 4}, {certfile, CertString}]),
+  {ok, Socket} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, PeerCert}]),
 
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
@@ -143,12 +142,11 @@ dispatcher_connection_test(_Config) ->
 %% This test checks if workers list inside dispatcher is refreshed correctly.
 workers_list_actualization_test(_Config) ->
   ?INIT_DIST_TEST,
-  Cert = '../../../veilfs.pem',
   Port = 6666,
   Jobs = ?Modules,
 
   env_setter:start_test(),
-  env_setter:start_app([{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [node()]}, {ssl_cert_path, Cert}, {dns_port, 1316}]),
+  env_setter:start_app([{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [node()]}, {dns_port, 1316}]),
 
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
@@ -173,13 +171,13 @@ workers_list_actualization_test(_Config) ->
 %% This test checks if client outside the cluster can ping all modules via dispatcher.
 ping_test(_Config) ->
   ?INIT_DIST_TEST,
-  Cert = '../../../veilfs.pem',
-  CertString = atom_to_list(Cert),
+
+  PeerCert = ?COMMON_FILE("peer.pem"),
   Port = 6666,
   Jobs = ?Modules,
 
   env_setter:start_test(),
-  env_setter:start_app([{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [node()]}, {ssl_cert_path, Cert}, {dns_port, 1317}]),
+  env_setter:start_app([{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [node()]}, {dns_port, 1317}]),
 
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
@@ -187,7 +185,14 @@ ping_test(_Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   timer:sleep(1500),
 
-  {ok, Socket} = ssl:connect("localhost", Port, [binary, {active, false}, {packet, 4}, {certfile, CertString}]),
+  %% Proxy validation test
+  {error, _} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
+  {error, _} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, ?TEST_FILE("certs/proxy_valid.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_unknown_ca.pem")}]),
+  {error, _} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, ?TEST_FILE("certs/proxy_outdated.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
+  {error, _} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, ?TEST_FILE("certs/proxy_unknown_ca.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
+  {ok, _Socket1} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, ?TEST_FILE("certs/proxy_valid.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
+
+  {ok, Socket} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, PeerCert}]),
 
   Ping = #atom{value = "ping"},
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
