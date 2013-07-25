@@ -1,74 +1,96 @@
-message FuseMessage{
+message FuseMessage {
 	required string id = 1;
 	required string message_type = 2;
 	required bytes input = 3;
 }
 
-message GetFileLocation{
+message GetFileLocation {
     required string file_logic_name = 1;
 }
 
-message GetNewFileLocation{	
-	required string file_logic_name = 1;
-}	
+message GetNewFileLocation {
+    required string file_logic_name = 1;
+    required uint32 mode = 2;
+}
 
-message FileLocation{
-    required string storage_helper = 1;
-    required string file_id = 2;
-    required int32 validity = 3;
+message GetFileAttr {
+    required string file_logic_name = 1;
+}
+
+message FileAttr {
+    optional string answer = 1 [default = "ok"];
+    required int32 mode = 2;
+    required int32 uid = 3;
+    required int32 gid = 4;
+    required int32 atime = 5;
+    required int32 mtime = 6;
+    required int32 ctime = 7;
+    required int32 nlink = 8;
+    required string type = 9;
+}
+
+message FileLocation {
+    optional string answer = 1 [default = "ok"];
+    required int32 storage_id = 2;
+    required string file_id = 3;
+    required int32 validity = 4;
+    optional string storage_helper_name = 5;
+    repeated string storage_helper_args = 6;
 }
 
 
-message FileNotUsed{
+message FileNotUsed {
     required string file_logic_name = 1;
 }
  
-message RenewFileLocation{
+message RenewFileLocation {
     required string file_logic_name = 1;
 }
 
-message FileLocationValidity{
-	required string answer = 1;
+message FileLocationValidity {
+	optional string answer = 1 [default = "ok"];
 	optional int32 validity = 2;
 }
 
 
-message GetFileChildren{
+message GetFileChildren {
 	required string dir_logic_name = 1;
 	required int32 children_num = 2;
 	optional int32 offset = 3 [default = 0];
 }
 
-message FileChildren{
-	repeated string child_logic_name = 1;
+message FileChildren {
+    optional string answer = 1 [default = "ok"];
+    repeated string child_logic_name = 2;
 }
 
 
-message CreateDir{
+message CreateDir {
 	required string dir_logic_name = 1;
+    required uint32 mode = 2;
 }
 
-message DeleteFile{
+message DeleteFile {
 	required string file_logic_name = 1;	
 }
 
-message CreateLink{
+message CreateLink {
 	required string from_file_logic_name = 1;
 	required string to_file_logic_name = 2;
 }
 
-message RenameFile{
+message RenameFile {
 	required string from_file_logic_name = 1;
 	required string to_file_logic_name = 2;
 }
 
-message ChangeFileOwner{
+message ChangeFileOwner {
 	required string logic_file_name = 1;
 	required int32 uid = 2;
 	required int32 guid = 3;  
 }
 
-message ChangeFilePerms{
+message ChangeFilePerms {
 	required string logic_file_name = 1;
 	required int32 perms = 2;
 }
