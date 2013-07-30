@@ -67,10 +67,10 @@ stop() ->
 init([]) ->
   process_flag(trap_exit, true),
   try gsi_handler:init() of     %% Failed initialization of GSI should not disturb dispacher's startup
-      ok -> ok;
-      {error, Error} -> io:format("GSI Handler init failed. Error: ~p", [Error])
+    ok -> ok;
+    {error, Error} -> io:format("GSI Handler init failed. Error: ~p", [Error])
   catch
-      _:Except -> io:format("GSI Handler init failed. Exception: ~p", [Except])
+    _:Except -> io:format("GSI Handler init failed. Exception: ~p", [Except])
   end,
   {ok, initState()}.
 
@@ -91,14 +91,6 @@ init([]) ->
   Timeout :: non_neg_integer() | infinity,
   Reason :: term().
 %% ====================================================================
-handle_call({update_state, NewStateNum}, _From, State) ->
-  case State#dispatcher_state.state_num == NewStateNum of
-    true -> {reply, ok, State};
-    false ->
-      {Ans, NewState} = pull_state(State),
-      {reply, Ans, NewState}
-  end;
-
 handle_call({get_workers, Module}, _From, State) ->
   {reply, get_workers(Module, State), State};
 
@@ -126,7 +118,7 @@ handle_call({Task, ProtocolVersion, AnsPid, Request}, _From, State) ->
           {reply, ok, NewState}
       end;
     Other -> {reply, Other, State}
-   end;
+  end;
 
 handle_call({Task, ProtocolVersion, Request}, _From, State) ->
   Ans = get_worker_node(Task, State),
@@ -197,6 +189,26 @@ handle_call(_Request, _From, State) ->
   NewState :: term(),
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
+handle_cast({update_state, NewStateNum}, State) ->
+  case State#dispatcher_state.state_num == NewStateNum of
+    true ->
+      gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewStateNum}),
+      {noreply, State};
+    false ->
+      {Ans, NewState} = pull_state(State),
+
+      case Ans of
+        ok ->
+          lager:info([{mod, ?MODULE}], "Dispatcher had old state number, data updated"),
+          gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState#dispatcher_state.state_num});
+        _ ->
+          lager:error([{mod, ?MODULE}], "Dispatcher had old state number but could not update data"),
+          error
+      end,
+
+      {noreply, NewState}
+  end;
+
 handle_cast({update_workers, WorkersList, NewStateNum, CurLoad, AvgLoad}, _State) ->
   {noreply, update_workers(WorkersList, NewStateNum, CurLoad, AvgLoad)};
 
@@ -333,12 +345,12 @@ check_worker_node(Module, State) ->
           case Check2 of
             true -> {ThisNode, State};
             false ->
-              lager:warning([{mod, ?MODULE}], "Error: load of node too high", [Module]),
+              lager:warning([{mod, ?MODULE}], "Load of node too high", [Module]),
               {N, NewLists} = choose_worker(L1, L2),
               {N, update_nodes(Module, NewLists, State)}
           end;
         false ->
-          lager:error([{mod, ?MODULE}], "Error: module ~p does not work at this node", [Module]),
+          lager:warning([{mod, ?MODULE}], "Module ~p does not work at this node", [Module]),
           {N, NewLists} = choose_worker(L1, L2),
           {N, update_nodes(Module, NewLists, State)}
       end;
@@ -384,7 +396,7 @@ add_worker(Module, Node, State) ->
 update_workers(WorkersList, SNum, CLoad, ALoad) ->
   Update = fun({Node, Module}, TmpState) ->
     Ans = add_worker(Module, Node, TmpState),
-      case Ans of
+    case Ans of
       {ok, NewState} -> NewState;
       _Other -> TmpState
     end
