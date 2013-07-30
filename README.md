@@ -3,33 +3,27 @@ VeilCluster
 
 VeilCluster is a part of VeilFS system that unifies access to files stored at heterogeneous data storage systems that belong to geographically distributed organizations.
 
+
 Goals
 -----
 
-The goal of VeilCluster is provision of self-scalable cluster that will be a central point of each data centre that uses VeilFS. This central point will decide where users' files should be put. It will also execute rules (defined by administrators and users) and migrate data.
+The main goal of VeilCluster is to provision a self-scalable cluster, which manages the VeilFS system in a single data centre, i.e. it stores meta-data about actual users' data from the data centre, decides how to distribute users' files among available storage systems, and executes data management rules, which can be defined by administrators or users.
 
 
 Getting Started
 ---------------
-VeilCluster is built with Rebar. It contains application that starts node. The environment variable 'nodeType' decides what type of node should be started (worker or ccm (Central Cluster Manager)).
 
-#### Src
-Sources are put in 'src'. Directly in the 'src' directory only files needed to start application can be put. The 'src' includes subdirectories: 'cluster_elements', 'veil_modules' and 'proto'.
-
-The 'cluster_elements' includes directories that contain code of Erlang modules that enable cluster management and host 'proper' modules of VeilFS. These Erlang modules are responsible for load balancing, spawning processes for requests etc. This allows implementation of 'proper' modules using sequential code.
-
-The 'veil_modules' includes directories that contain code of 'proper' modules of VeilFS. Each 'proper' module will work inside of 'worker_host' (one of 'cluster_elements') so it must implement 'worker_plugin_behaviour' defined in 'worker_plugin_behaviour.erl' file in this directory.
-
-The 'proto' includes definitions of protocol buffer messages used by clients during the communication with VeilCluster.
+This is a short tutorial how to start VeilCluster on a single machine.
 
 #### Prerequisites
-In order to compile the project, you need to have fallowing additional libraries, its headers and all its prerequisites in include/ld path:
+
+In order to compile the project, you need to have the following libraries:
 
 * libglobus_gsi_callback
 * libglobus_common
 * libssl
 
-Use this command to install the required dependency packages:
+Use the following command to install the required dependency packages:
 
 * Debian/Ubuntu Dependencies (.deb packages):
 
@@ -39,8 +33,62 @@ Use this command to install the required dependency packages:
 
         yum install globus-gsi-callback-devel
 
+
+#### Compilation and Releases
+
+To build a working release of VeilCluster from scratch, type the following commands:
+
+    ~$  make test
+    ~$  make generate
+
+After this step we should have a 'veil_cluster_node' folder in the 'releases' folder.
+
+
+#### Execution
+
+Now, we are ready to start CCM and worker processes:
+
+    ~$  cp -R releases/veil_cluster_node releases/veil_cluster_node_worker
+    ~$  ./releases/veil_cluster_node/bin/veil_cluster -name ccm@127.0.0.1 -main_ccm ccm@127.0.0.1 -opt_ccms -db_nodes db@127.0.0.1 -start
+    ~$  ./releases/veil_cluster_node_worker/bin/veil_cluster -name worker@127.0.0.1 -main_ccm ccm@127.0.0.1 -opt_ccms -db_nodes db@127.0.0.1 -start
+
+    ~$  curl https://127.0.0.1:8000
+
+If everything went correct, two processes should be started and a default web site of the VeilCluster should be available.
+
+Note:
+
+* To have a fully working VeilFS installation, we should also start a BigCouch instance on the same machine, with its cookie set to 'veil_cluster_node' and hostname set to 'db'. 
+
+-------------------------------------------------------------------------------
+
+Repo layout
+===========
+
+
+* c_src               # TODO uzupelnic
+* cacerts             # TODO uzupelnic
+* config              # TODO uzupelnic
+* include             # TODO uzupelnic
+* releases            # folder for generated VeilCluster releases
+* src
+    * cluster_elements  # includes directories that contain code of Erlang modules that enable cluster management and host 'proper' modules of VeilFS
+    * veil_modules      # includes directories that contain code of 'proper' modules of VeilFS
+    * proto             # definitions of protocol buffer messages used by clients during the communication with VeilCluster
+* test
+* test_distributed    # TODO uzupelnic - czy to nie moze byc w 'test' ???
+* ...                 # othe VeilCluster files
+
+#### Src
+Directly in the 'src' directory only files needed to start application can be put.
+
+The 'cluster_elements' includes source of Erlang modules, which are responsible for load balancing, spawning processes for requests etc. This allows implementation of 'proper' modules using sequential code.
+
+The 'veil_modules' includes directories that contain code of 'proper' modules of VeilFS. Each 'proper' module will work inside of 'worker_host' (one of 'cluster_elements') so it must implement 'worker_plugin_behaviour' defined in 'worker_plugin_behaviour.erl' file in this directory.
+
+
 #### Tests
-Tests should be put in 'test' directory. It should contain the same subdirectories as 'src'. Each test name should be constructed as follows: 'name of tested file'_tests.erl, e.g., 'node_manager_tests.erl' should contain functions that test code from 'node_manager.erl' file.
+It should contain the same subdirectories as 'src'. Each test name should be constructed as follows: 'name of tested file'_tests.erl, e.g. 'node_manager_tests.erl' should contain functions that test code from 'node_manager.erl' file.
 
 Eunit is used during tests so each test file should:
 
@@ -49,45 +97,31 @@ Eunit is used during tests so each test file should:
 * use compilation control macros (code between '-ifdef(TEST).' and '-endif.').
 
 #### Releases
-Release handling is done using 'releases' directory and 'reltool.config' file. To create new release, version must be changed in both 'src/veil_cluster_node.app.src' and 'releases/reltool.conf'.
-
-#### Documentation
-Documentation is generated automatically using edoc so it should use tags defined by it.
-
-#### Useful commands:
-
-standard compilation:
-
-    ~$  rebar compile
-    ~$  make compile
+To create new release, version must be changed in both 'src/veil_cluster_node.app.src' and 'releases/reltool.conf'.
 
 
-compilation & execution of unit tests:
+Node:
 
-    ~$  rebar compile eunit
-    ~$  make test
-
-
-compilation & creation of release:
-
-    ~$  rebar compile generate
-    ~$  make generate
+* Documentation is generated automatically using edoc so it should use tags defined by it.
 
 
-generates documentation:
-
-    ~$  rebar doc
-    ~$  make docs
+-------------------------------------------------------------------------------
 
 
-generation of package for hot code swapping
+Useful make commands
+===============
 
-    ~$  make PREV="name of directory with previous release" upgrade
+    ~$  make compile # compilation
 
+    ~$  make test # compilation & execution of unit tests
 
-starting 'dialyzer' in order to analyze binaries in ./ebin:
+    ~$  make generate # compilation & creation of release:
 
-    ~$ make dialyzer
+    ~$  make docs # documentation generation
+
+    ~$  make PREV="name of directory with previous release" upgrade # generation of package for hot code swapping
+
+    ~$ make dialyzer # starting 'dialyzer' in order to analyze binaries in ./ebin:
 
 
 Note:
@@ -99,18 +133,19 @@ Note:
 -------------------------------------------------------------------------------
 
 
-Deploying a release
+Release management
 ===================
 
 After generation of a release package, configuration files contain default parameters. The script 'veil_cluster', that
-comes with the package (in directory 'bin') is used to set up and start a release.
+comes with the package (in the 'bin' directory) is used to set up and start a release.
 
 Prerequisites
 -------------
 
-Firstly, the user must have execution rights on both '/bin/veil_cluster' and '/bin/veil_cluster_node' scripts.
+Firstly, the user must have execution rights on both './bin/veil_cluster' and './bin/veil_cluster_node' scripts.
 
-Secondly, 'config.args' file must be present in 'config' directory (along with 'veil_cluster' script).
+// TODO to along veil_cluster czy w config ???
+Secondly, 'config.args' file must be present in the 'config' directory (along with 'veil_cluster' script).
 
 Setting parameters
 ------------------
@@ -122,7 +157,7 @@ List of parameters that can be set:
     opt_ccms   -> list of optional CCMs (this parameter is not mandatory)
     db_nodes   -> list of DBMS nodes
 
-Primarily, these parameters are retrieved from 'config.args' file. It should contain these parameters in following manner:
+Primarily, these parameters are retrieved from 'config.args' file. It should contain these parameters in the following manner:
 
     <parameter_name>: <parameter_value>
 
@@ -163,12 +198,13 @@ corresponding to command line arguments. Then, the node will be started presenti
 
 -------------------------------------------------------------------------------
 
+# TODO - zastanowic sie nad przeniesieniem tego do innego dokumentu pt. Development
 
 Development - using Makefile to generate single releases and test environments of veil cluster nodes
 ====================================================================================================
 
 
-1. Generating and managing a single node release for development purposes
+Generating and managing a single node release for development purposes
 -------------------------------------------------------------------------
 
 The script 'gen_dev' generates a single node release for testing purposes. It uses 'veil_cluster' script to set the configuration.
@@ -209,7 +245,7 @@ After either of these operations, the release will be placed in releases/test_cl
 Note, that it only works for packages in releases/test_cluster/ - those created with 'gen_dev' or 'gen_test'
 
 
-2. Generating a local test environment
+Generating a local test environment
 --------------------------------------
 
 The script 'gen_test' simplifies setting up a bunch of cluster nodes for testing. It uses both 'gen_dev' and 'veil_cluster' scripts.
@@ -248,7 +284,6 @@ to know which release packages need to be started.
     ~$  make gen_start_test_env_from_file
 
 Every node can be started independently with use of 'start_node', 'attach_to_node' and 'start_node_console' make targets.
-
 
 
 
