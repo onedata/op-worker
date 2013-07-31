@@ -25,7 +25,7 @@
 %% Every record that will be saved to DB have to be "registered" with this define.
 %% Each registered record should be listed in defined below 'case' block as fallow:
 %% record_name -> ?record_info_gen(record_name);
-%% when 'record_name' is name of the record. 'some_record' is an example.
+%% where 'record_name' is the name of the record. 'some_record' is an example.
 -define(dao_record_info(R),
     case R of
         some_record -> ?record_info_gen(some_record);
@@ -37,6 +37,7 @@
         file_descriptor -> ?record_info_gen(file_descriptor);
         file_meta -> ?record_info_gen(file_meta);
         file_lock -> ?record_info_gen(file_lock);
+        storage_info -> ?record_info_gen(storage_info);
         %next_record -> ?record_info_gen(next_record);
         _ -> {error, unsupported_record}
     end).
@@ -76,6 +77,7 @@
 -define(FILE_TREE_VIEW, #view_info{name = "file_tree", design = ?VFS_BASE_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
 -define(FD_BY_FILE_VIEW, #view_info{name = "fd_by_name", design = ?VFS_BASE_DESIGN_NAME, db_name = ?DESCRIPTORS_DB_NAME}).
 -define(FD_BY_EXPIRED_BEFORE_VIEW, #view_info{name = "fd_by_expired_before", design = ?VFS_BASE_DESIGN_NAME, db_name = ?DESCRIPTORS_DB_NAME}).
+-define(ALL_STORAGE_VIEW, #view_info{name = "all_storage", design = ?VFS_BASE_DESIGN_NAME, db_name = ?SYSTEM_DB_NAME}).
 
 %% Others
 -define(RECORD_INSTANCES_DOC_PREFIX, "record_instances_").
@@ -88,7 +90,7 @@
 %% List of all used databases :: [string()]
 -define(DB_LIST, [?SYSTEM_DB_NAME, ?FILES_DB_NAME, ?DESCRIPTORS_DB_NAME]).
 %% List of all used views :: [#view_info]
--define(VIEW_LIST, [?FILE_TREE_VIEW, ?FD_BY_FILE_VIEW, ?FD_BY_EXPIRED_BEFORE_VIEW]).
+-define(VIEW_LIST, [?FILE_TREE_VIEW, ?FD_BY_FILE_VIEW, ?FD_BY_EXPIRED_BEFORE_VIEW, ?ALL_STORAGE_VIEW]).
 %% Default database name
 -define(DEFAULT_DB, lists:nth(1, ?DB_LIST)).
 

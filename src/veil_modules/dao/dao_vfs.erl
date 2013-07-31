@@ -21,6 +21,7 @@
 -export([list_dir/3, rename_file/2, lock_file/3, unlock_file/3]). %% High level API functions
 -export([save_descriptor/1, remove_descriptor/1, get_descriptor/1, list_descriptors/3]). %% Base descriptor management API functions
 -export([save_file/1, remove_file/1, get_file/1, get_path_info/1]). %% Base file management API function
+-export([save_storage/1, remove_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
 
 
 -ifdef(TEST).
@@ -303,6 +304,81 @@ unlock_file(_UserID, _FileID, _Mode) ->
 
 
 %% ===================================================================
+%% Storage management functions
+%% ===================================================================
+
+
+%% save_storage/1
+%% ====================================================================
+%% @doc Saves storage info to DB. Argument should be either #storage_info{} record
+%% (if you want to save it as new document) <br/>
+%% or #veil_document{} that wraps #storage_info{} if you want to update storage info in DB. <br/>
+%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec save_storage(Storage :: #storage_info{} | #veil_document{}) -> {ok, uuid()} | {error, any()} | no_return().
+%% ====================================================================
+save_storage(#storage_info{} = Storage) ->
+    save_storage(#veil_document{record = Storage});
+save_storage(#veil_document{record = #storage_info{}} = StorageDoc) ->
+    dao:set_db(?SYSTEM_DB_NAME),
+    dao:save_record(StorageDoc).
+
+
+%% remove_storage/1
+%% ====================================================================
+%% @doc Removes storage info from DB. Argument should be storage id (same as its document id) <br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec remove_storage(StorageID :: uuid()) -> ok | {error, any()} | no_return().
+%% ====================================================================
+remove_storage(StorageID) ->
+    dao:set_db(?SYSTEM_DB_NAME),
+    dao:remove_record(StorageID).
+
+
+%% get_storage/1
+%% ====================================================================
+%% @doc Gets storage info from DB. Argument should be uuid() of storage document <br/>
+%% Non-error return value is always {ok, #veil_document{record = #storage_info{}}.
+%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec get_storage(StorageID :: uuid()) -> {ok, storage_doc()} | {error, any()} | no_return().
+%% ====================================================================
+get_storage(StorageID) ->
+    dao:set_db(?SYSTEM_DB_NAME),
+    case dao:get_record(StorageID) of
+        {ok, #veil_document{record = #storage_info{}} = Doc} ->
+            {ok, Doc};
+        {ok, #veil_document{}} ->
+            {error, invalid_storage_record};
+        Other ->
+            Other
+    end.
+
+
+%% list_storage/0
+%% ====================================================================
+%% @doc Lists all storage docs. <br/>
+%% Non-error return value is always list of #veil_document{record = #storage_info{}} records.<br/>
+%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
+%% @end
+-spec list_storage() -> {ok, [storage_doc()]} | no_return().
+%% ====================================================================
+list_storage() ->
+    QueryArgs =
+        #view_query_args{start_key = 0, end_key = 1, include_docs = true}, %% All keys are (int)0 so will get all documents
+    case dao:list_records(?ALL_STORAGE_VIEW, QueryArgs) of
+        {ok, #view_result{rows = Rows}} ->
+            {ok, [Doc || #view_row{doc = #veil_document{record = #storage_info{} } = Doc } <- Rows]};
+        _Other ->
+            lager:error("Invalid view response: ~p", [_Other]),
+            throw(inavlid_data)
+    end.
+
+
+%% ===================================================================
 %% Internal functions
 %% ===================================================================
 
@@ -331,5 +407,6 @@ file_path_analyze(Path) ->
 %% @doc Returns "incremented string"
 -spec next_id(Id :: string()) -> string().
 %% ====================================================================
+next_id("") -> [10]; %% CouchDB doesnt like ASCII chars < 10
 next_id(Id) ->
     binary_to_list(binary:encode_unsigned(binary:decode_unsigned(list_to_binary(Id))+1)).

@@ -27,6 +27,8 @@
 -type fd_info() :: #file_descriptor{}.
 -type fd_doc() :: #veil_document{record :: #file_descriptor{}}.
 
+-type storage_doc() :: #veil_document{record :: #storage_info{}}.
+
 -type veil_doc() :: #veil_document{}.
 
 -endif.

@@ -30,6 +30,10 @@ file_test_() ->
     {foreach, fun setup/0, fun teardown/1,
         [fun save_file/0, fun get_file/0, fun remove_file/0, fun list_dir/0, fun rename_file/0, fun get_path_info/0]}.
 
+storage_test_() ->
+	{foreach, fun setup/0, fun teardown/1,
+		[fun save_storage/0, fun remove_storage/0, fun get_storage/0]}.
+
 
 setup() ->
     meck:new([dao, dao_helper]),
@@ -176,6 +180,38 @@ rename_file() ->
     ?assertMatch({ok, "uuid"}, dao_vfs:rename_file({uuid, "file"}, "name")),
 
     ?assert(meck:called(dao, save_record, [#veil_document{uuid = "uuid", record = #file{name = "name"}}])),
+    ?assert(meck:validate([dao, dao_helper])).
+
+
+save_storage() ->
+    Doc = #veil_document{record = #storage_info{}},
+    ?assertMatch({ok, "uuid"}, dao_vfs:save_storage(Doc)),
+    ?assertMatch({ok, "uuid"}, dao_vfs:save_storage(#storage_info{})),
+
+    ?assertEqual(2, meck:num_calls(dao, set_db, [?SYSTEM_DB_NAME])),
+    ?assertEqual(2, meck:num_calls(dao, save_record, [Doc])),
+    ?assert(meck:validate([dao, dao_helper])).
+
+
+remove_storage() ->
+    ?assertMatch(ok, dao_vfs:remove_storage("uuid")),
+    ?assert(meck:called(dao, set_db, [?SYSTEM_DB_NAME])),
+    ?assert(meck:called(dao, remove_record, ["uuid"])),
+    ?assert(meck:validate([dao, dao_helper])).
+
+
+get_storage() ->
+    meck:expect(dao, get_record, fun(_) -> {ok, #veil_document{record = #file{}}} end),
+    meck:expect(dao, get_record, fun("uuid") -> {ok, #veil_document{record = #storage_info{name = "test"}}};
+        ("uuid2") -> {ok, #veil_document{record = #file{}}} end),
+    ?assertMatch({ok, #veil_document{record = #storage_info{name = "test"}}},
+        dao_vfs:get_storage("uuid")),
+    ?assert(meck:called(dao, get_record, ["uuid"])),
+
+    ?assertMatch({error, invalid_storage_record}, dao_vfs:get_storage("uuid2")),
+    ?assert(meck:called(dao, get_record, ["uuid2"])),
+
+    ?assertEqual(2, meck:num_calls(dao, set_db, [?SYSTEM_DB_NAME])),
     ?assert(meck:validate([dao, dao_helper])).
 
 
