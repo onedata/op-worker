@@ -13,6 +13,8 @@
 -behaviour(ranch_protocol).
 -include("registered_names.hrl").
 -include("communication_protocol_pb.hrl").
+-include("cluster_elements/request_dispatcher/gsi_handler.hrl").
+-include_lib("public_key/include/public_key.hrl").
 
 %% ====================================================================
 %% API
@@ -63,15 +65,19 @@ init(Ref, Socket, Transport, _Opts = []) ->
 %% ====================================================================
 loop(Socket, Transport, RanchTimeout, DispatcherTimeout) ->
   Transport:setopts(Socket, [{packet, 4}]),
+  {ok, PeerCertDER} = ssl:peercert(Socket),
+  PeerCert = public_key:pkix_decode_cert(PeerCertDER, otp),
+  lager:info("Peer connected using certificate with subject: ~p ~n", [gsi_handler:proxy_subject(PeerCert)]),
   case Transport:recv(Socket, 0, RanchTimeout) of
     {ok, Data} ->
       try
         {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, Answer_type} = decode_protocol_buffer(Data),
+        Request = #veil_request{subject = gsi_handler:proxy_subject(PeerCert), request = Msg},
         case Synch of
           true ->
             try
               Pid = self(),
-              Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Pid, Msg}}),
+              Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Pid, Request}}),
               case Ans of
                 ok ->
                   receive
@@ -86,7 +92,7 @@ loop(Socket, Transport, RanchTimeout, DispatcherTimeout) ->
             end;
           false ->
             try
-              Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Msg}}),
+              Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Request}}),
               Transport:send(Socket, encode_answer(Ans))
             catch
                 _:_ -> Transport:send(Socket, encode_answer(dispatcher_error))

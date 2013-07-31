@@ -14,6 +14,7 @@
 -module(worker_host).
 -behaviour(gen_server).
 -include("records.hrl").
+-include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 
 %% ====================================================================
 %% API
@@ -257,8 +258,15 @@ code_change(_OldVsn, State, _Extra) ->
 %% ====================================================================
 proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
 	BeforeProcessingRequest = os:timestamp(),
+    Request =
+        case Msg of
+            #veil_request{subject = Subj, request = Msg1} ->
+                put(user_id, Subj),
+                Msg1;
+            NotWrapped -> NotWrapped
+        end,
 	Response = 	try
-		PlugIn:handle(ProtocolVersion, Msg)
+		PlugIn:handle(ProtocolVersion, Request)
 	catch
     Type:Error ->
       lager:error("Worker plug-in ~p error: ~p:~p", [PlugIn, Type, Error]),

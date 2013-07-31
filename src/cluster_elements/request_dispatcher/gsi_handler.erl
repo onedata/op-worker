@@ -14,7 +14,7 @@
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("registered_names.hrl").
 
--export([init/0, verify_callback/3, load_certs/1, update_crls/1]).
+-export([init/0, verify_callback/3, load_certs/1, update_crls/1, proxy_subject/1]).
 %% ===================================================================
 %% API
 %% ===================================================================
@@ -116,6 +116,26 @@ update_crls(CADir) ->
     CAsAndDPs = [{OtpCert, get_dp_url(OtpCert), Name} || {OtpCert, Name} <- CAs],
     lists:foreach(fun(X) -> update_crl(CADir, X) end, CAsAndDPs),
     ok.
+
+
+%% proxy_subject/1
+%% ====================================================================
+%% @doc Returns subject of given certificate.
+%% If proxy certificate is given, EEC subject is returned.
+%% @end
+-spec proxy_subject(OtpCert :: #'OTPCertificate'{}) -> {rdnSequence, [#'AttributeTypeAndValue'{}]}.
+%% ====================================================================
+proxy_subject(OtpCert = #'OTPCertificate'{tbsCertificate = #'OTPTBSCertificate'{} = TbsCert}) ->
+    Subject = TbsCert#'OTPTBSCertificate'.subject,
+    case is_proxy_certificate(OtpCert) of
+        true -> %% Delete last 'common name' attribute, because its proxy-specific
+            {rdnSequence, Attrs} = Subject,
+            Attrs1 = lists:keydelete(?'id-at-commonName', 2, lists:reverse(Attrs)),
+            {rdnSequence, lists:reverse(Attrs1)};
+        false ->
+            Subject
+    end.
+
 
 %% ===================================================================
 %% Internal Methods
@@ -277,3 +297,19 @@ get_dp_url(OtpCert = #'OTPCertificate'{}) ->
 %% ====================================================================
 strip_filename_ext(FileName) when is_list(FileName) ->
     string:substr(FileName, 1, length(FileName)-4).
+
+
+%% is_proxy_certificate/1
+%% ====================================================================
+%% @doc Checks is given OTP Certificate has an proxy extension
+%% @end
+-spec is_proxy_certificate(OtpCert :: #'OTPCertificate'{}) -> boolean().
+%% ====================================================================
+is_proxy_certificate(OtpCert = #'OTPCertificate'{}) ->
+    Ext = OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.extensions,
+    case Ext of
+        Exts when is_list(Exts) ->
+            lists:foldl(fun(#'Extension'{extnID = ?PROXY_CERT_EXT}, _) -> true;
+                    (_, AccIn) -> AccIn end, false, Ext);
+        _ -> false
+    end.

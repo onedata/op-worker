@@ -12,6 +12,11 @@
 -ifndef(GSI_HANDLER_HRL).
 -define(GSI_HANDLER, 1).
 
+-record(veil_request, {subject, request}).
+
 -define(GSI_SLAVE_COUNT, 2). %% How many slave nodes that loads GSI NIF has to be started
+
+%% Proxy Certificate Extension ID
+-define(PROXY_CERT_EXT, {1,3,6,1,5,5,7,1,14}).
 
 -endif.
