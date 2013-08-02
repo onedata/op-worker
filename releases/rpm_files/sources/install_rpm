@@ -1,0 +1,18 @@
+#!/bin/bash
+
+# $1 = $RPM_BUILD_ROOT from SPEC file
+# $2 = {_%prefix} from SPEC file
+
+for FILE in `find . -type f -exec ls {} \; 2> /dev/null`
+do
+	FILE=${FILE:2:${#FILE}}
+	if [[ $FILE != `basename $0` ]]; then
+		FILE_DIR=$(dirname $2/${FILE})
+	    mkdir -p $1/$FILE_DIR
+		install -m 0700 $FILE $1/${FILE_DIR}/
+	fi
+	if [[ $FILE == "veil_init_d" ]]; then
+	    mkdir -p $1/etc/init.d
+		install -m 0700 $FILE $1/etc/init.d/veil
+	fi
+done

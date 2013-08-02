@@ -1,0 +1,41 @@
+#!/bin/sh
+#
+# chkconfig: 2345 80 30
+# description: Veil service
+
+set -e
+
+### BEGIN INIT INFO
+# Provides:		veil_init
+# Required-Start:	$local_fs $remote_fs $network $time
+# Required-Stop:	$local_fs $remote_fs $network $time
+# Should-Start:		$syslog
+# Should-Stop:		$syslog
+# Default-Start:	2 3 4 5
+# Default-Stop:		0 1 6
+# Short-Description:	Veil service
+# Description:	Start veil cluster nodes that are configured on this machine
+### END INIT INFO
+
+# Needed for erlexec to run
+export HOME=/
+
+case "$1" in
+    start|start_veil|start_db)
+		# Create a lock file (required by red-hat based systems)
+		touch /var/lock/subsys/veil
+
+		/opt/veil/scripts/erl_launcher escript /opt/veil/scripts/init.escript $1
+		;;
+
+    stop|stop_veil|stop_db|restart|reload|force-reload|status)
+		/opt/veil/scripts/erl_launcher escript /opt/veil/scripts/init.escript $1
+		;;
+		
+    *)
+        echo "Usage: $0 {start|start_veil|start_db|stop|stop_veil|stop_db|restart|reload|force-reload|status}"
+        exit 1
+		;;
+esac
+
+exit 0

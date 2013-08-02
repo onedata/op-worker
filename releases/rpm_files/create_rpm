@@ -1,0 +1,44 @@
+#!/bin/bash
+
+# Path, where rpm building will take place
+RPM_BUILD_DIRECTORY=/tmp/veil_rpmbuild
+
+##############################
+# Exit on any failure
+set -e
+
+# Enter script directory
+RUNNER_SCRIPT_DIR=$(cd ${0%/*} && pwd)
+cd $RUNNER_SCRIPT_DIR
+
+# Check if veil_cluster_node release exists
+if [[ ! -d "../veil_cluster_node" ]]; then
+  	echo "Generate a release first."
+fi
+
+# Prepare empty build directory
+rm -rf $RPM_BUILD_DIRECTORY
+mkdir -p $RPM_BUILD_DIRECTORY
+cd $RPM_BUILD_DIRECTORY
+
+# Create required directory structure
+mkdir -p BUILD RPMS SOURCES SPECS SRPMS tmp
+
+cp $RUNNER_SCRIPT_DIR/veil.spec SPECS/
+
+mkdir -p $RPM_BUILD_DIRECTORY/SOURCES/veil/files/veil_cluster_node
+cp -R $RUNNER_SCRIPT_DIR/sources/* $RPM_BUILD_DIRECTORY/SOURCES/veil
+cp -R $RUNNER_SCRIPT_DIR/../veil_cluster_node/* $RPM_BUILD_DIRECTORY/SOURCES/veil/files/veil_cluster_node
+
+cd $RPM_BUILD_DIRECTORY/SOURCES
+tar zcf veil.tar.gz veil
+
+# Launch rpmbuild
+cd $RPM_BUILD_DIRECTORY
+rpmbuild -ba SPECS/veil.spec
+
+# Move created RPM to releases directory
+mv -f $RPM_BUILD_DIRECTORY/RPMS/x86_64/* $RUNNER_SCRIPT_DIR/..
+
+# Clean up
+rm -rf $RPM_BUILD_DIRECTORY

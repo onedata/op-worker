@@ -42,6 +42,9 @@ upgrade:
 	./rebar generate-appups previous_release=${PREV}
 	./rebar generate-upgrade previous_release=${PREV}
 
+rpm: deps generate
+	./releases/rpm_files/create_rpm
+
 
 # Builds .dialyzer.plt init file. This is internal target, call dialyzer_init instead
 .dialyzer.plt:
