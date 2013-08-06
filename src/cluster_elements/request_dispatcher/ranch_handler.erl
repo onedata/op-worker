@@ -50,8 +50,19 @@ start_link(Ref, Socket, Transport, Opts) ->
 init(Ref, Socket, Transport, _Opts = []) ->
   {ok, RanchTimeout} = application:get_env(veil_cluster_node, ranch_timeout),
   {ok, DispatcherTimeout} = application:get_env(veil_cluster_node, dispatcher_timeout),
+  {ok, PeerCert} = ssl:peercert(Socket),
+  {ok, {Serial, Issuer}} = public_key:pkix_issuer_id(PeerCert, self),
+
   ok = ranch:accept_ack(Ref),
-  loop(Socket, Transport, RanchTimeout, DispatcherTimeout).
+  EEC = 
+    case ets:lookup(gsi_state, {Serial, Issuer}) of 
+      [{_, EEC1, _}]    -> EEC1;
+      _                 -> ssl:renegotiate(Socket),
+                           ssl:close(Socket),
+                           throw(no_eec_cert)      
+    end,   
+  lager:info("Peer connected using certificate with subject: ~p ~n", [gsi_handler:proxy_subject(EEC)]),
+  loop(Socket, Transport, RanchTimeout, DispatcherTimeout, EEC).
 
 %% ====================================================================
 %% Internal functions
@@ -60,19 +71,16 @@ init(Ref, Socket, Transport, _Opts = []) ->
 %% loop/4
 %% ====================================================================
 %% @doc Main handler loop. It receives clients messages and forwards them to dispatcher
--spec loop(Socket :: term(), Transport :: term(), RanchTimeout :: integer(), DispatcherTimeout :: integer()) -> Result when
+-spec loop(Socket :: term(), Transport :: term(), RanchTimeout :: integer(), DispatcherTimeout :: integer(), EEC  :: term()) -> Result when
   Result ::  ok.
 %% ====================================================================
-loop(Socket, Transport, RanchTimeout, DispatcherTimeout) ->
+loop(Socket, Transport, RanchTimeout, DispatcherTimeout, EEC) ->
   Transport:setopts(Socket, [{packet, 4}]),
-  {ok, PeerCertDER} = ssl:peercert(Socket),
-  PeerCert = public_key:pkix_decode_cert(PeerCertDER, otp),
-  lager:info("Peer connected using certificate with subject: ~p ~n", [gsi_handler:proxy_subject(PeerCert)]),
   case Transport:recv(Socket, 0, RanchTimeout) of
     {ok, Data} ->
       try
         {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, Answer_type} = decode_protocol_buffer(Data),
-        Request = #veil_request{subject = gsi_handler:proxy_subject(PeerCert), request = Msg},
+        Request = #veil_request{subject = gsi_handler:proxy_subject(EEC), request = Msg},
         case Synch of
           true ->
             try
@@ -98,7 +106,7 @@ loop(Socket, Transport, RanchTimeout, DispatcherTimeout) ->
                 _:_ -> Transport:send(Socket, encode_answer(dispatcher_error))
             end
          end,
-         loop(Socket, Transport, RanchTimeout, DispatcherTimeout)
+         loop(Socket, Transport, RanchTimeout, DispatcherTimeout, EEC)
     catch
       _:_ -> Transport:send(Socket, encode_answer(wrong_message_format))
     end;

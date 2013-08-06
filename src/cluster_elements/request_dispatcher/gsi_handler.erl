@@ -31,7 +31,7 @@ init() ->
         {ok, ccm} -> throw(ccm_node);                     %% ccm node doesn't have socket interface, so GSI would be useless
         _ -> ok
     end,
-    ets:new(gsi_state, [{read_concurrency, true}, public, set, named_table]),
+    ets:new(gsi_state, [{read_concurrency, true}, public, ordered_set, named_table]),
     start_slaves(?GSI_SLAVE_COUNT),
     {ok, CADir1} = application:get_env(?APP_Name, ca_dir),
     CADir = atom_to_list(CADir1),
@@ -61,7 +61,21 @@ verify_callback(OtpCert, valid_peer, Certs) ->
                 [public_key:pkix_encode('OTPCertificate', Cert, otp) || Cert <- Certs], %% peer CA chain
                 [DER || [DER] <- ets:match(gsi_state, {{ca, '_'}, '$1', '_'})],                        %% cluster CA store
                 [DER || [DER] <- ets:match(gsi_state, {{crl, '_'}, '$1', '_'})]]) of                  %% cluster CRL store
-        {ok, 1} -> {valid, []};
+        {ok, 1} ->
+            {ok, EEC} = find_eec_cert(OtpCert, Certs, is_proxy_certificate(OtpCert)), 
+            {ok, {Serial, Issuer}} = public_key:pkix_issuer_id(OtpCert, self),
+            case ets:lookup(gsi_state, {Serial, Issuer}) of 
+                [{_, _, TRef1}]     -> timer:cancel(TRef1);
+                _                     -> ok
+            end,  
+            TBSCert = OtpCert#'OTPCertificate'.tbsCertificate,
+            {'Validity', _NotBeforeStr, NotAfterStr} = TBSCert#'OTPTBSCertificate'.validity,
+            Now = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
+            NotAfter = time_str_2_gregorian_sec(NotAfterStr),
+            {ok, TRef} = timer:apply_after(timer:seconds(NotAfter - Now), ets, delete, [gsi_state, {Serial, Issuer}]), 
+            ets:insert(gsi_state, {{Serial, Issuer}, EEC, TRef}),  
+            lager:info("Peer ~p validated", [Serial]),
+            {valid, []};
         {ok, 0, Errno} ->
             lager:info("Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
             {fail, {ssl_erron, Errno}};
@@ -313,3 +327,50 @@ is_proxy_certificate(OtpCert = #'OTPCertificate'{}) ->
                     (_, AccIn) -> AccIn end, false, Ext);
         _ -> false
     end.
+
+
+%% find_eec_cert/3
+%% ====================================================================
+%% @doc For given proxy certificate returns its EEC 
+%% @end
+-spec find_eec_cert(CurrentOtp :: #'OTPCertificate'{}, Chain :: [#'OTPCertificate'{}], IsProxy :: boolean()) -> {ok, #'OTPCertificate'{}} | no_return().
+%% ====================================================================
+find_eec_cert(CurrentOtp, Chain, true) ->
+    false = public_key:pkix_is_self_signed(CurrentOtp),
+    {ok, NextCert} = 
+        lists:foldl(fun(_, {ok, Found}) -> {ok, Found};
+                    (Cert, NotFound)-> case public_key:pkix_is_issuer(CurrentOtp, Cert) of 
+                                           true -> {ok, Cert};
+                                           false -> NotFound
+                                        end end,    
+                no_cert, Chain), 
+    find_eec_cert(NextCert, Chain, is_proxy_certificate(NextCert));
+find_eec_cert(CurrentOtp, _Chain, false) ->
+    {ok, CurrentOtp}.
+
+
+%% time_str_2_gregorian_sec/1
+%% ====================================================================
+%% @doc See pubkey_cert:time_str_2_gregorian_sec/1  
+%% @end
+-spec time_str_2_gregorian_sec(TimeStr :: term()) -> integer().
+%% ====================================================================
+time_str_2_gregorian_sec({utcTime, [Y1,Y2,M1,M2,D1,D2,H1,H2,M3,M4,S1,S2,Z]}) ->
+    case list_to_integer([Y1,Y2]) of
+        N when N >= 70 ->
+            time_str_2_gregorian_sec({generalTime,
+            [$1,$9,Y1,Y2,M1,M2,D1,D2,
+            H1,H2,M3,M4,S1,S2,Z]});
+        _ ->
+            time_str_2_gregorian_sec({generalTime,
+            [$2,$0,Y1,Y2,M1,M2,D1,D2,
+            H1,H2,M3,M4,S1,S2,Z]})
+    end;
+time_str_2_gregorian_sec({_,[Y1,Y2,Y3,Y4,M1,M2,D1,D2,H1,H2,M3,M4,S1,S2,$Z]}) ->
+    Year = list_to_integer([Y1, Y2, Y3, Y4]),
+    Month = list_to_integer([M1, M2]),
+    Day = list_to_integer([D1, D2]),
+    Hour = list_to_integer([H1, H2]),
+    Min = list_to_integer([M3, M4]),
+    Sec = list_to_integer([S1, S2]),
+    calendar:datetime_to_gregorian_seconds({{Year, Month, Day}, {Hour, Min, Sec}}).
