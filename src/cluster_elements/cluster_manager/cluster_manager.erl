@@ -126,14 +126,49 @@ init([test]) ->
   Timeout :: non_neg_integer() | infinity,
   Reason :: term().
 %% ====================================================================
-handle_call({node_is_up, Node}, _From, State) ->
+handle_call(get_state_num, _From, State) ->
+  {reply, State#cm_state.state_num, State};
+
+handle_call(get_nodes, _From, State) ->
+  {reply, State#cm_state.nodes, State};
+
+handle_call(get_workers, _From, State) ->
+  WorkersList = get_workers_list(State),
+  {reply, {WorkersList, State#cm_state.state_num}, State};
+
+handle_call(get_state, _From, State) ->
+  {reply, State, State};
+
+handle_call(get_version, _From, State) ->
+  {reply, get_version(State), State};
+
+handle_call(_Request, _From, State) ->
+  {reply, wrong_request, State}.
+
+
+%% handle_cast/2
+%% ====================================================================
+%% @doc <a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_cast-2">gen_server:handle_cast/2</a>
+-spec handle_cast(Request :: term(), State :: term()) -> Result when
+  Result :: {noreply, NewState}
+  | {noreply, NewState, Timeout}
+  | {noreply, NewState, hibernate}
+  | {stop, Reason :: term(), NewState},
+  NewState :: term(),
+  Timeout :: non_neg_integer() | infinity.
+%% ====================================================================
+handle_cast({node_is_up, Node}, State) ->
   Reply = State#cm_state.state_num,
   case Node =:= node() of
-    true -> {reply, Reply, State};
+    true ->
+      gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, Reply}),
+      {noreply, State};
     false ->
       Nodes = State#cm_state.nodes,
       case lists:member(Node, Nodes) of
-        true -> {reply, Reply, State};
+        true ->
+          gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, Reply}),
+          {noreply, State};
         false ->
           {Ans, NewState, WorkersFound} = check_node(Node, State),
 
@@ -155,47 +190,15 @@ handle_call({node_is_up, Node}, _From, State) ->
                 false -> ok
               end,
 
-              {reply, Reply, NewState2};
-            _Other -> {reply, Reply, NewState}
+              gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, Reply}),
+              {noreply, NewState2};
+            _Other ->
+              gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, Reply}),
+              {noreply, NewState}
           end
       end
   end;
 
-handle_call(get_state_num, _From, State) ->
-  {reply, State#cm_state.state_num, State};
-
-handle_call(get_nodes, _From, State) ->
-  {reply, State#cm_state.nodes, State};
-
-handle_call(get_workers, _From, State) ->
-  WorkersList = get_workers_list(State),
-  {reply, {WorkersList, State#cm_state.state_num}, State};
-
-handle_call(get_state, _From, State) ->
-  {reply, State, State};
-
-handle_call(get_version, _From, State) ->
-  {reply, get_version(State), State};
-
-handle_call({stop_worker, Node, Module}, _From, State) ->
-  {Ans, New_State} = stop_worker(Node, Module, State),
-  {reply, Ans, New_State};
-
-handle_call(_Request, _From, State) ->
-  {reply, wrong_request, State}.
-
-
-%% handle_cast/2
-%% ====================================================================
-%% @doc <a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_cast-2">gen_server:handle_cast/2</a>
--spec handle_cast(Request :: term(), State :: term()) -> Result when
-  Result :: {noreply, NewState}
-  | {noreply, NewState, Timeout}
-  | {noreply, NewState, hibernate}
-  | {stop, Reason :: term(), NewState},
-  NewState :: term(),
-  Timeout :: non_neg_integer() | infinity.
-%% ====================================================================
 handle_cast(init_cluster, State) ->
   NewState = init_cluster(State),
   {noreply, NewState};
@@ -274,6 +277,10 @@ handle_cast({worker_answer, cluster_state, Response}, State) ->
                  State
              end,
   {noreply, NewState};
+
+handle_cast({stop_worker, Node, Module}, State) ->
+  {_Ans, New_State} = stop_worker(Node, Module, State),
+  {noreply, New_State};
 
 handle_cast(stop, State) ->
   {stop, normal, State};

@@ -72,7 +72,7 @@ stop() ->
 %% ====================================================================
 init([Type]) when Type =:= worker ; Type =:= ccm ->
   process_flag(trap_exit, true),
-  erlang:send_after(10, self(), {timer, do_heart_beat}),
+  erlang:send_after(10, self(), {timer, do_quick_heart_beat}),
   erlang:send_after(100, self(), {timer, monitor_mem_net}),
 
   {ok, Period} = application:get_env(veil_cluster_node, node_monitoring_period),
@@ -130,6 +130,12 @@ handle_call(_Request, _From, State) ->
 %% ====================================================================
 handle_cast(do_heart_beat, State) ->
   {noreply, heart_beat(State#node_state.ccm_con_status, State)};
+
+handle_cast(do_quick_heart_beat, State) ->
+  {noreply, heart_beat(State#node_state.ccm_con_status, State, true)};
+
+handle_cast({heart_beat_ok, StateNum}, State) ->
+  {noreply, heart_beat_response(StateNum, State)};
 
 handle_cast(reset_ccm_connection, State) ->
   {noreply, heart_beat(not_connected, State)};
@@ -207,47 +213,56 @@ code_change(_OldVsn, State, _Extra) ->
   NewStatus ::  term().
 %% ====================================================================
 heart_beat(Conn_status, State) ->
-  {New_conn_status, UpdateTime} = case Conn_status of
+  heart_beat(Conn_status, State, false).
+
+%% heart_beat/3
+%% ====================================================================
+%% @doc Connects with ccm and tells that the node is alive.
+%% First it establishes network connection, next sends message to ccm.
+-spec heart_beat(Conn_status :: atom(), State::term(), ShortPeriod :: boolean()) -> NewStatus when
+  NewStatus ::  term().
+%% ====================================================================
+heart_beat(Conn_status, State, ShortPeriod) ->
+  New_conn_status = case Conn_status of
                                     not_connected ->
                                       {ok, CCM_Nodes} = application:get_env(veil_cluster_node, ccm_nodes),
                                       Ans = init_net_connection(CCM_Nodes),
                                       case Ans of
-                                        ok ->
-                                          {connected, short}; %% nodes may not have enough time to create cluster so another heartbeat will be done after 0.5s
-                                        error -> {not_connected, normal}
+                                        ok -> connected;
+                                        error -> not_connected
                                       end;
-                                    Other -> {Other, normal}
+                                    Other -> Other
                                   end,
 
-  New_conn_status2 = case New_conn_status of
-                       connected -> heart_beat();
-                       Other2 -> Other2
-                     end,
-
   {ok, Interval} = application:get_env(veil_cluster_node, heart_beat),
-  {New_conn_status3, New_state_num} = case New_conn_status2 of
-                                        {ok, Num} ->
-                                          erlang:send_after(Interval * 1000, self(), {timer, do_heart_beat}),
-                                          {ok, Num};
-                                        _Other3 ->
-                                          case UpdateTime of
-                                            normal -> erlang:send_after(Interval * 1000, self(), {timer, reset_ccm_connection});
-                                            short -> erlang:send_after(500, self(), {timer, do_heart_beat})
-                                          end,
-                                          {New_conn_status2, 0}
-                                      end,
+  case New_conn_status of
+    connected ->
+      gen_server:cast({global, ?CCM}, {node_is_up, node()}),
 
-  lager:info([{mod, ?MODULE}], "Heart beat on node: ~s: connection: ~s: heartbeat: ~s, new state_num: ~b", [node(), New_conn_status, New_conn_status3, New_state_num]),
-
-  case New_conn_status3 of
-    ok ->
-      case (New_state_num == State#node_state.state_num) and (New_state_num == State#node_state.dispatcher_state) of
-        true -> State#node_state{ccm_con_status = New_conn_status};
-        false ->
-          update_dispatcher(New_state_num, State#node_state.node_type),
-          State#node_state{ccm_con_status = New_conn_status, state_num = New_state_num}
+      case ShortPeriod of
+        true -> erlang:send_after(500, self(), {timer, do_heart_beat});
+        false -> erlang:send_after(Interval * 1000, self(), {timer, do_heart_beat})
       end;
-    _Other -> State#node_state{ccm_con_status = New_conn_status}
+    _ -> erlang:send_after(500, self(), {timer, do_heart_beat})
+  end,
+
+  lager:info([{mod, ?MODULE}], "Heart beat on node: ~s: sent; connection: ~s", [node(), New_conn_status]),
+  State#node_state{ccm_con_status = New_conn_status}.
+
+%% heart_beat_response/2
+%% ====================================================================
+%% @doc Saves information about ccm connection when ccm answers to its request
+-spec heart_beat_response(New_state_num :: integer(), State::term()) -> NewStatus when
+  NewStatus ::  term().
+%% ====================================================================
+heart_beat_response(New_state_num, State) ->
+  lager:info([{mod, ?MODULE}], "Heart beat on node: ~s: answered, new state_num: ~b", [node(), New_state_num]),
+
+  case (New_state_num == State#node_state.state_num) and (New_state_num == State#node_state.dispatcher_state) of
+    true -> State;
+    false ->
+      update_dispatcher(New_state_num, State#node_state.node_type),
+      State#node_state{state_num = New_state_num}
   end.
 
 %% update_dispatcher/2
@@ -281,31 +296,6 @@ init_net_connection([Node | Nodes]) ->
     end
   catch
     _:_ -> error
-  end.
-
-%% heart_beat/0
-%% ====================================================================
-%% @doc Tells ccm that node is alive.
--spec heart_beat() -> Result when
-  Result ::  atom().
-%% ====================================================================
-heart_beat() ->
-  case send_to_ccm({node_is_up, node()}) of
-    {ok, Num} when is_number(Num) -> {ok, Num};
-    _Other -> heart_beat_error
-  end.
-
-%% send_to_ccm/1
-%% ====================================================================
-%% @doc Sends message to ccm.
--spec send_to_ccm(Message :: term()) -> Result when
-  Result ::  atom().
-%% ====================================================================
-send_to_ccm(Message) ->
-  try
-    {ok, gen_server:call({global, ?CCM}, Message)}
-  catch
-    _:_ -> connection_error
   end.
 
 %% check_vsn/0

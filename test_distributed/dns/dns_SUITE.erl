@@ -15,32 +15,47 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("kernel/src/inet_dns.hrl").
 
+-include("nodes_manager.hrl").
+-include("registered_names.hrl").
+
 -export([all/0]).
 -export([dns_udp_sup_env_test/1, dns_udp_handler_responds_to_dns_queries/1, dns_ranch_tcp_handler_responds_to_dns_queries/1]).
 
--include("env_setter.hrl").
--include("registered_names.hrl").
+%% export nodes' codes
+-export([dns_udp_sup_env_test_code/0]).
 
 all() -> [dns_udp_sup_env_test, dns_ranch_tcp_handler_responds_to_dns_queries, dns_udp_handler_responds_to_dns_queries].
 
 
 %% ====================================================================
-%% Tests
+%% Code of nodes used during the test
+%% ====================================================================
+
+dns_udp_sup_env_test_code() ->
+  assert_all_deps_are_met(?APP_Name, dns_worker),
+  ok.
+
+%% ====================================================================
+%% Test functions
 %% ====================================================================
 
 %% Checks if all necessary variables are declared in application
 dns_udp_sup_env_test(_Config) ->
-	try
-		?INIT_DIST_TEST,
-		env_setter:start_test(),
-		assert_all_deps_are_met(?APP_Name, dns_worker)
-	after
-		env_setter:stop_test()
-	end.
+  ?INIT_DIST_TEST,
+  NodesUp = nodes_manager:start_test_on_nodes(1),
+  [Node | _] = NodesUp,
+
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm}, {dispatcher_port, 6666}, {ccm_nodes, [Node]}, {dns_port, 1312}]]),
+  false = lists:member(error, StartLog),
+
+  ok = rpc:call(Node, ?MODULE, dns_udp_sup_env_test_code, []),
+
+  StopLog = nodes_manager:stop_app_on_nodes(NodesUp),
+  false = lists:member(error, StopLog),
+  ok = nodes_manager:stop_nodes(NodesUp).
 
 %% Checks if dns_udp_handler responds before and after running dns_worker
 dns_udp_handler_responds_to_dns_queries(_Config) ->
-	ct:timetrap({seconds, 30}),
 	?INIT_DIST_TEST,
 	Port = 6667,
 	DNS_Port = 1328,
@@ -56,17 +71,19 @@ dns_udp_handler_responds_to_dns_queries(_Config) ->
 	RequestQuery = #dns_query{domain=SupportedDomain, type=?T_A,class=?C_IN},
 	Request = #dns_rec{header=RequestHeader, qdlist=[RequestQuery], anlist=[], nslist=[], arlist=[]},
 
+  NodesUp = nodes_manager:start_test_on_nodes(1),
+  [Node | _] = NodesUp,
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [Env]),
+  false = lists:member(error, StartLog),
+  timer:sleep(100),
+
 	try
 		BinRequest = inet_dns:encode(Request),
 
-		env_setter:start_test(),
-		env_setter:start_app(Env),
-
-		gen_server:cast(?Node_Manager_Name, do_heart_beat),
+		gen_server:cast({?Node_Manager_Name, Node}, do_heart_beat),
 		gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-    timer:sleep(100),
 		gen_server:cast({global, ?CCM}, init_cluster),
-		timer:sleep(3000),
+		timer:sleep(500),
 
 		%Both - dns udp handler and dns_worker should work
 		MessagingTest = fun () ->
@@ -83,12 +100,9 @@ dns_udp_handler_responds_to_dns_queries(_Config) ->
 		try
 			gen_udp:close(Socket)
 		after
-			try
-				env_setter:stop_app()
-			after
-				env_setter:stop_test()
-			end
-
+      StopLog = nodes_manager:stop_app_on_nodes(NodesUp),
+      false = lists:member(error, StopLog),
+      ok = nodes_manager:stop_nodes(NodesUp)
 		end
 	end.
 
@@ -107,18 +121,19 @@ dns_ranch_tcp_handler_responds_to_dns_queries(_Config) ->
 	RequestQuery = #dns_query{domain=SupportedDomain, type=?T_A,class=?C_IN},
 	Request = #dns_rec{header=RequestHeader, qdlist=[RequestQuery], anlist=[], nslist=[], arlist=[]},
 
+  NodesUp = nodes_manager:start_test_on_nodes(1),
+  [Node | _] = NodesUp,
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [Env]),
+  false = lists:member(error, StartLog),
+  timer:sleep(100),
+
 	try
 		BinRequest = inet_dns:encode(Request),
 
-		env_setter:start_test(),
-		env_setter:start_app(Env),
-		timer:sleep(500),
-
-		gen_server:cast(?Node_Manager_Name, do_heart_beat),
+		gen_server:cast({?Node_Manager_Name, Node}, do_heart_beat),
 		gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-        timer:sleep(100),
 		gen_server:cast({global, ?CCM}, init_cluster),
-		timer:sleep(3000),
+		timer:sleep(500),
 
 		{ok, Socket} = gen_tcp:connect(Address, DNS_Port, [{active, false}, binary, {packet, 2}]),
 		try
@@ -139,11 +154,9 @@ dns_ranch_tcp_handler_responds_to_dns_queries(_Config) ->
 			gen_tcp:close(Socket)
 		end
 	after
-		try
-			env_setter:stop_app()
-		after
-			env_setter:stop_test()
-		end
+    StopLog = nodes_manager:stop_app_on_nodes(NodesUp),
+    false = lists:member(error, StopLog),
+    ok = nodes_manager:stop_nodes(NodesUp)
 	end.
 
 %% ====================================================================

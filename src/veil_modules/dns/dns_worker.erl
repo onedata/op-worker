@@ -173,8 +173,8 @@ start_listening() ->
 		start_tcp_listener(TcpAcceptorPool, DNSPort, DNS_TCP_Transport_Options, Pid)
 	catch
 		_:Reason -> lager:warning("Error during starting listeners, ~p", [Reason]),
-			Result = gen_server:call({global, ?CCM}, {stop_worker, node(), ?MODULE}),
-			lager:info("Terminating ~p with status ~p", [?MODULE, Result])
+			gen_server:cast({global, ?CCM}, {stop_worker, node(), ?MODULE}),
+			lager:info("Terminating ~p", [?MODULE])
 
 	end,
 	ok.

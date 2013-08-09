@@ -132,7 +132,7 @@ ping_test(Nodes, PingsNum) ->
 
             CheckModules = fun(M, Sum) ->
               ssl:send(Socket, M),
-              {ok, Ans} = ssl:recv(Socket, 0),
+              {ok, Ans} = ssl:recv(Socket, 0, 5000),
               case Ans =:= PongAnsBytes of
                 true -> Sum + 1;
                 false -> Sum

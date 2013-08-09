@@ -10,18 +10,13 @@
 %% @end
 %% ===================================================================
 
-%% slave nodes
-{node, ccm, 'dns_ccm@localhost'}.
-
-%% start nodes
-{init, [ccm], [{node_start, [{monitor_master, true}]}]}.
-
 %% log directories (all_nodes does not include master)
 %% {logdir, master, "."}.
 {logdir, all_nodes, "./dns"}.
+{include, ["../include", "."]}.
 
 %% test castes to be run
 {alias, dns, "./dns"}.
 
-{cases, [ccm], dns, dns_SUITE, all}.
+{suites, dns, all}.
 

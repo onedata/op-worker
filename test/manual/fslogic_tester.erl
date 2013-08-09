@@ -149,7 +149,7 @@ create_file(Host, Cert, Port, FileName) ->
 
   {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
   ssl:send(Socket, MessageBytes),
-  {ok, Ans} = ssl:recv(Socket, 0),
+  {ok, Ans} = ssl:recv(Socket, 0, 5000),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Location = fuse_messages_pb:decode_filelocation(Bytes),
@@ -170,7 +170,7 @@ get_file_location(Host, Cert, Port, FileName) ->
 
   {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
   ssl:send(Socket, MessageBytes),
-  {ok, Ans} = ssl:recv(Socket, 0),
+  {ok, Ans} = ssl:recv(Socket, 0, 5000),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Location = fuse_messages_pb:decode_filelocation(Bytes),
@@ -191,7 +191,7 @@ renew_file_location(Host, Cert, Port, FileName) ->
 
   {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
   ssl:send(Socket, MessageBytes),
-  {ok, Ans} = ssl:recv(Socket, 0),
+  {ok, Ans} = ssl:recv(Socket, 0, 5000),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Validity = fuse_messages_pb:decode_filelocationvalidity(Bytes),
@@ -212,7 +212,7 @@ file_not_used(Host, Cert, Port, FileName) ->
 
   {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
   ssl:send(Socket, MessageBytes),
-  {ok, Ans} = ssl:recv(Socket, 0),
+  {ok, Ans} = ssl:recv(Socket, 0, 5000),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Answer = communication_protocol_pb:decode_atom(Bytes),
@@ -233,7 +233,7 @@ mkdir(Host, Cert, Port, DirName) ->
 
   {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
   ssl:send(Socket, MessageBytes),
-  {ok, Ans} = ssl:recv(Socket, 0),
+  {ok, Ans} = ssl:recv(Socket, 0, 5000),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Answer = communication_protocol_pb:decode_atom(Bytes),
@@ -257,7 +257,7 @@ ls(Host, Cert, Port, Dir, Num, Offset) ->
 
   {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
   ssl:send(Socket, MessageBytes),
-  {ok, Ans} = ssl:recv(Socket, 0),
+  {ok, Ans} = ssl:recv(Socket, 0, 5000),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Files = fuse_messages_pb:decode_filechildren(Bytes),
@@ -278,7 +278,7 @@ delete_file(Host, Cert, Port, FileName) ->
 
   {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
   ssl:send(Socket, MessageBytes),
-  {ok, Ans} = ssl:recv(Socket, 0),
+  {ok, Ans} = ssl:recv(Socket, 0, 5000),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Answer = communication_protocol_pb:decode_atom(Bytes),
@@ -299,7 +299,7 @@ rename_file(Host, Cert, Port, FileName, NewName) ->
 
   {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
   ssl:send(Socket, MessageBytes),
-  {ok, Ans} = ssl:recv(Socket, 0),
+  {ok, Ans} = ssl:recv(Socket, 0, 5000),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Answer = communication_protocol_pb:decode_atom(Bytes),
@@ -320,7 +320,7 @@ change_file_perms(Host, Cert, Port, FileName, Perms) ->
 
     {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
     ssl:send(Socket, MessageBytes),
-    {ok, Ans} = ssl:recv(Socket, 0),
+    {ok, Ans} = ssl:recv(Socket, 0, 5000),
 
     #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
     Answer = communication_protocol_pb:decode_atom(Bytes),

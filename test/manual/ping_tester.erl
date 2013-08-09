@@ -38,7 +38,7 @@ ping(Host, Module, Cert, Port) ->
 
   {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}]),
   ssl:send(Socket, Msg),
-  {ok, Ans} = ssl:recv(Socket, 0),
+  {ok, Ans} = ssl:recv(Socket, 0, 5000),
 
   #answer{worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   MsgAtom = communication_protocol_pb:decode_atom(Bytes),

@@ -13,91 +13,68 @@
 -module(nodes_monitoring_and_workers_test_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
--include("env_setter.hrl").
+-include("nodes_manager.hrl").
 -include("registered_names.hrl").
 -include("modules_and_args.hrl").
 -include("communication_protocol_pb.hrl").
 
+%% export for ct
 -export([all/0]).
--export([ccm1_test/1, worker1_test/1, worker2_test/1, worker3_test/1, tester_test/1]).
+-export([main_test/1]).
 
-all() -> [ccm1_test, ccm2_test, worker_test, tester_test].
+%% export nodes' codes
+-export([ccm_code1/0, ccm_code2/0, worker_code/0]).
+
+all() -> [main_test].
 
 %% ====================================================================
-%% Test functions
+%% Code of nodes used during the test
 %% ====================================================================
 
-%% This function runs on node that hosts ccm
-ccm1_test(_Config) ->
-  ?INIT_DIST_TEST,
-  env_setter:synch_nodes(['worker1@localhost', 'worker2@localhost', 'worker3@localhost', 'tester@localhost']),
-
-  env_setter:start_test(),
-  env_setter:start_app([{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [node()]}, {dns_port, 1308}]),
-
+ccm_code1() ->
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  timer:sleep(2000),
+  ok.
+
+ccm_code2() ->
   gen_server:cast({global, ?CCM}, init_cluster),
+  ok.
 
-  timer:sleep(6000),
-  env_setter:stop_app(),
-  env_setter:stop_test().
-
-%% This function runs on node that hosts worker1
-worker1_test(_Config) ->
-  ?INIT_DIST_TEST,
-  env_setter:synch_nodes(['ccm1@localhost', 'worker2@localhost', 'worker3@localhost', 'tester@localhost']),
-
-  env_setter:start_test(),
-  env_setter:start_app([{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, ['ccm1@localhost']}, {dns_port, 1309}]),
-  timer:sleep(1000),
+worker_code() ->
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
+  ok.
 
-  timer:sleep(7000),
-  env_setter:stop_app(),
-  env_setter:stop_test().
 
-%% This function runs on node that hosts worker2
-worker2_test(_Config) ->
+%% ====================================================================
+%% Test function
+%% ====================================================================
+
+main_test(_Config) ->
   ?INIT_DIST_TEST,
-  env_setter:synch_nodes(['ccm1@localhost', 'worker1@localhost', 'worker3@localhost', 'tester@localhost']),
+  nodes_manager:start_deps_for_tester_node(),
+  NodesUp = nodes_manager:start_test_on_nodes(4),
+  false = lists:member(error, NodesUp),
 
-  env_setter:start_test(),
-  env_setter:start_app([{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, ['ccm1@localhost']}, {dns_port, 1310}]),
-  timer:sleep(1000),
-  gen_server:cast(?Node_Manager_Name, do_heart_beat),
+  [CCM | WorkerNodes] = NodesUp,
 
-  timer:sleep(7000),
-  env_setter:stop_app(),
-  env_setter:stop_test().
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1309}],
+    [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}],
+    [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}]]),
+  false = lists:member(error, StartLog),
 
-%% This function runs on node that hosts worker3
-worker3_test(_Config) ->
-  ?INIT_DIST_TEST,
-  env_setter:synch_nodes(['ccm1@localhost', 'worker1@localhost', 'worker2@localhost', 'tester@localhost']),
+  ok = rpc:call(CCM, ?MODULE, ccm_code1, []),
+  timer:sleep(100),
+  RunWorkerCode = fun(Node) ->
+    ok = rpc:call(Node, ?MODULE, worker_code, [])
+  end,
+  lists:foreach(RunWorkerCode, WorkerNodes),
+  timer:sleep(100),
+  ok = rpc:call(CCM, ?MODULE, ccm_code2, []),
 
-  env_setter:start_test(),
-  env_setter:start_app([{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, ['ccm1@localhost']}, {dns_port, 1311}]),
-  timer:sleep(1000),
-  gen_server:cast(?Node_Manager_Name, do_heart_beat),
-
-  timer:sleep(7000),
-  env_setter:stop_app(),
-  env_setter:stop_test().
-
-%% This function connects with other nodes using ssl and checks if cluster works properly
-tester_test(_Config) ->
-  ?INIT_DIST_TEST,
-  env_setter:synch_nodes(['ccm1@localhost', 'worker1@localhost', 'worker2@localhost', 'worker3@localhost']),
-
-  env_setter:start_test(),
-  global:sync(),
-  timer:sleep(6000),
   NotExistingNodes = ['n1@localhost', 'n2@localhost', 'n3@localhost'],
-  lists:foreach(fun(Node) -> gen_server:call({global, ?CCM}, {node_is_up, Node}) end, NotExistingNodes),
-
-  NodesUp = ['ccm1@localhost', 'worker1@localhost', 'worker2@localhost', 'worker3@localhost'],
+  lists:foreach(fun(Node) -> gen_server:cast({global, ?CCM}, {node_is_up, Node}) end, NotExistingNodes),
+  timer:sleep(100),
   Nodes = gen_server:call({global, ?CCM}, get_nodes),
   Check1 = (length(Nodes) == length(NodesUp)),
   Check1 = true,
@@ -106,7 +83,8 @@ tester_test(_Config) ->
       Check2 = true
     end, NodesUp),
 
-  lists:foreach(fun(Node) -> gen_server:call({global, ?CCM}, {node_is_up, Node}) end, NodesUp),
+  lists:foreach(fun(Node) -> gen_server:cast({global, ?CCM}, {node_is_up, Node}) end, NodesUp),
+  timer:sleep(100),
   Nodes2 = gen_server:call({global, ?CCM}, get_nodes),
   Check3 = (length(Nodes2) == length(NodesUp)),
   Check3 = true,
@@ -136,7 +114,7 @@ tester_test(_Config) ->
       Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
       ssl:send(Socket, Msg),
-      {ok, Ans} = ssl:recv(Socket, 0),
+      {ok, Ans} = ssl:recv(Socket, 0, 5000),
       case Ans =:= PongAnsBytes of
         true -> Sum + 1;
         false -> Sum
@@ -151,4 +129,7 @@ tester_test(_Config) ->
   Check5 = (PongsNum2 == (length(Jobs) * length(Ports))),
   Check5 = true,
 
-  env_setter:stop_test().
+  StopLog = nodes_manager:stop_app_on_nodes(NodesUp),
+  false = lists:member(error, StopLog),
+  ok = nodes_manager:stop_nodes(NodesUp),
+  nodes_manager:stop_deps_for_tester_node().
