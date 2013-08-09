@@ -8,7 +8,7 @@
                             ets:insert(suite_state, {ct_root, filename:join(CWD, "../..")}),
                             code:add_path(filename:join(CWD, "../..")),
                             code:add_path(CWD),
-                            shell_default:cd("../../..")
+                            shell_default:cd("../..")
                         end).
 
 %% Returns absolute path to given file using virtual CWD which equals to current SUITE directory

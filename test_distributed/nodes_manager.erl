@@ -19,7 +19,7 @@
 %% API
 %% ====================================================================
 -export([start_test_on_nodes/1, start_test_on_nodes/2, stop_nodes/1, start_local_test/0, start_app_on_nodes/2, stop_app_on_nodes/1, stop_local_test/0]).
--export([start_deps/0, start_app/1, stop_deps/0, stop_app/0, start_deps_for_tester_node/0, stop_deps_for_tester_node/0]).
+-export([start_deps/0, start_app/1, stop_deps/0, stop_app/0, start_deps_for_tester_node/0, stop_deps_for_tester_node/0, get_db_node/0]).
 
 %% ====================================================================
 %% API functions
@@ -227,6 +227,11 @@ start_app(Vars) ->
 stop_app() ->
   application:stop(?APP_Name).
 
+get_db_node() ->
+  Node = atom_to_list(node()),
+  [_, Host] = string:tokens(Node, "@"),
+  list_to_atom("db@" ++ Host).
+
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
@@ -294,9 +299,9 @@ make_code_path() ->
 %% ====================================================================
 set_deps() ->
   timer:sleep(1000),
-  code:add_path("./ebin"),
-  {ok, Dirs} = file:list_dir("./deps"),
-  Deps = list_deps(Dirs, "./deps/", "/ebin", []),
+  code:add_path("../ebin"),
+  {ok, Dirs} = file:list_dir("../deps"),
+  Deps = list_deps(Dirs, "../deps/", "/ebin", []),
   code:add_paths(Deps).
 
 %% list_deps/4
