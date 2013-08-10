@@ -27,7 +27,12 @@ COOKIE=${IFCONFIG_LINE:COLON_INDEX:((BCAST_INDEX - COLON_INDEX - 3))}
 for TEST in $TESTS
 do
     echo "Test: " $TEST
-    ct_run -name tester -setcookie $COOKIE -spec  $TEST
+    if [[ "`cat $TEST` | grep cth_surefire" != "" ]]; then
+        echo "" >> $TEST
+        TEST_NAME=`basename "$TEST" ".spec"`
+        echo "{ct_hooks, [{cth_surefire, [{path,\"TEST-$TEST_NAME-report.xml\"}]}]}." >> $TEST
+    fi
+    ct_run -noshell -name tester -setcookie $COOKIE -spec  $TEST
 done
 
 find . -name "*.beam" -exec rm -rf {} \;
