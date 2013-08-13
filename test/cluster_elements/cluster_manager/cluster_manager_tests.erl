@@ -18,9 +18,6 @@
 
 %% TODO dodać test mergowania stanu aktualnego ze stanem z bazy
 
-%% TODO testy aktualizacji dnsu rozszerzyć o sytuacje kiedy jakiś node nie żyje
-%% oraz kiedy jakiś worker nie żyje
-
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
@@ -37,11 +34,15 @@ update_dns_state_test_() ->
 		?_test(update_dns_state__current_worker_host_implementation()),
 		?_test(update_dns_state__unresolveable_ip_address()),
 		?_test(update_dns_state__empty_list()),
+    ?_test(calculate_node_load_error()),
+    ?_test(calculate_worker_load_error()),
+    ?_test(loads_merging_on_error()),
 		?_test(update_dns_state__one_non_dns_worker()),
 		?_test(update_dns_state__one_dns_worker()),
     ?_test(calculate_worker_load__one_worker()),
 		?_test(update_dns_state__many_non_dns_workers()),
 		?_test(update_dns_state__many_non_dns_workers_one_dns_worker()),
+    ?_test(update_dns_state__many_non_dns_workers_one_dns_worker_errors()),
     ?_test(calculate_worker_load__many_non_dns_workers()),
 		?_test(update_dns_state__many_non_dns_workers_many_dns_workers())
 	].
@@ -74,6 +75,19 @@ update_dns_state__empty_list() ->
   WorkersLoad = cluster_manager:calculate_worker_load([]),
   Load = cluster_manager:calculate_load(NodesLoad, WorkersLoad),
   cluster_manager:update_dns_state([], Load, AvgLoad).
+
+calculate_node_load_error() ->
+  {NodesLoad, AvgLoad} = cluster_manager:calculate_node_load([n1, n2], medium),
+  ?assertEqual(NodesLoad, [{n2, error}, {n1, error}]),
+  ?assert(AvgLoad == 0).
+
+calculate_worker_load_error() ->
+  Load = cluster_manager:calculate_worker_load([{n1, module, self()}]),
+  ?assertEqual([{n1, [{module, error}]}], Load).
+
+loads_merging_on_error() ->
+  Load = cluster_manager:calculate_load([{n2, error}, {n1, error}], [{n1, [{module, error}]}]),
+  ?assertEqual([{n2, error, []}, {n1, error, [{module, error}]}], Load).
 
 %% Checks if update_dns_state can work with one dns worker.
 update_dns_state__one_dns_worker() ->
@@ -128,7 +142,7 @@ update_dns_state__many_non_dns_workers() ->
 		{list_to_atom("node@192.168.0." ++ integer_to_list(Load)), module, Gen_Server}
 	end, Gen_ServersAndTimes),
 
-  Load = lists:map(fun({Gen_Server, Load}) ->
+  Load = lists:map(fun({_Gen_Server, Load}) ->
     {list_to_atom("node@192.168.0." ++ integer_to_list(Load)), 3, [{module, 1}]}
   end, Gen_ServersAndTimes),
   Avg = 3,
@@ -152,7 +166,7 @@ update_dns_state__many_non_dns_workers_one_dns_worker() ->
   end, Non_DNS_WorkersAndTimes),
   Workers = [{'node@192.168.0.60', dns_worker, DNS_Worker} | ManyNonDnsWorkers],
 
-  Load = lists:map(fun({Gen_Server, Load}) ->
+  Load = lists:map(fun({_Gen_Server, Load}) ->
     {list_to_atom("node@192.168.0." ++ integer_to_list(Load)), 3, [{module, 1}]}
   end, Non_DNS_WorkersAndTimes),
   Load2 = [{'node@192.168.0.60', 3, [{dns_worker, 1}]} | Load],
@@ -171,6 +185,46 @@ update_dns_state__many_non_dns_workers_one_dns_worker() ->
 		assert_expectations_and_stop([DNS_Worker | Non_DNS_Workers])
 	end.
 
+%% Checks if update_dns_state can work with many non dns workers on same node and one dns worker when errors appear
+update_dns_state__many_non_dns_workers_one_dns_worker_errors() ->
+  Non_DNS_Workers = gen_server_mock:new(5),
+  {ok, DNS_Worker} = gen_server_mock:new(),
+
+  Times = lists:seq(10, 50, 10),
+  Non_DNS_WorkersAndTimes = lists:zip(Non_DNS_Workers, Times),
+
+  ManyNonDnsWorkers = lists:map(fun({Gen_Server, Load}) ->
+    {list_to_atom("node@192.168.0." ++ integer_to_list(Load)), module, Gen_Server}
+  end, Non_DNS_WorkersAndTimes),
+  WorkersTmp1 = [{'node@192.168.1.1', module, self()} | ManyNonDnsWorkers],
+  WorkersTmp2 = [{'node@192.168.0.60', dns_worker, DNS_Worker} | WorkersTmp1],
+  WorkersTmp3 = [{'node@192.168.1.1', module3, self()} | WorkersTmp2],
+  Workers = [{'node@192.168.1.1', module2, self()} | WorkersTmp3],
+
+  Load = lists:map(fun({_Gen_Server, Load}) ->
+    {list_to_atom("node@192.168.0." ++ integer_to_list(Load)), 3, [{module, 1}]}
+  end, Non_DNS_WorkersAndTimes),
+
+  ErrorLoad = cluster_manager:calculate_load([{n1, error}, {'node@192.168.1.1', error}], [{n1, [{module, error}, {module2, error}]}, {'node@192.168.1.1', [{module, error}, {module2, error}]}]),
+  TmpLoad = [{'node@192.168.0.60', 3, [{dns_worker, 1}]} | Load],
+  Load2 = lists:flatten([ErrorLoad, TmpLoad]),
+  Avg = 3,
+
+  Expected_DNS_State = [
+    {dns_worker, [{{192,168,0,60}, 1}]},
+    {module, [{{192,168,0,50}, 1}, {{192,168,0,40}, 1}, {{192,168,0,30}, 1}, {{192,168,0,20}, 1}, {{192,168,0,10}, 1}, {{192,168,1,1}, 1}]},
+    {module2, [{{192,168,1,1}, 1}]},
+    {module3, [{{192,168,1,1}, 1}]}
+  ],
+
+  expect_update_state(DNS_Worker, Expected_DNS_State),
+
+  try
+    cluster_manager:update_dns_state(Workers, Load2, Avg)
+  after
+    assert_expectations_and_stop([DNS_Worker | Non_DNS_Workers])
+  end.
+
 % Checks workers load calculation
 calculate_worker_load__many_non_dns_workers() ->
   Non_DNS_Workers = gen_server_mock:new(5),
@@ -186,7 +240,7 @@ calculate_worker_load__many_non_dns_workers() ->
 
   expect_load_info([{DNS_Worker, 100} | Gen_ServersAndTimes]),
 
-  ExpectedAns = lists:map(fun({Gen_Server, Load}) ->
+  ExpectedAns = lists:map(fun({_Gen_Server, Load}) ->
     N = list_to_atom("node@192.168.0." ++ integer_to_list(Load)),
     case Load == 50 of
       true -> {N, [{module, 1.0}, {dns_worker, 1.0}]};
@@ -227,7 +281,7 @@ update_dns_state__many_non_dns_workers_many_dns_workers() ->
     end
   end, WorkersAndTimes),
 
-  Load = lists:map(fun({Gen_Server, Load}) ->
+  Load = lists:map(fun({_Gen_Server, Load}) ->
     case Load > 50 of
       true -> {list_to_atom("node@192.168.0." ++ integer_to_list(Load)), 3, [{dns_worker, 1}]};
       false -> {list_to_atom("node@192.168.0." ++ integer_to_list(Load)), 3, [{module, 1}]}
@@ -273,7 +327,7 @@ update_dns_state__current_worker_host_implementation() ->
 
 %% Checks if dispatcher is updated properly
 update_dispatcher_test() ->
-  request_dispatcher:start_link(),
+  {ok, _} = request_dispatcher:start_link(),
 
   N1 = node(),
   Loads = [{'node@127.0.0.1', 1}, {N1, 1}],

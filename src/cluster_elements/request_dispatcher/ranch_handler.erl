@@ -108,7 +108,9 @@ loop(Socket, Transport, RanchTimeout, DispatcherTimeout, EEC) ->
          end,
          loop(Socket, Transport, RanchTimeout, DispatcherTimeout, EEC)
     catch
-      _:_ -> Transport:send(Socket, encode_answer(wrong_message_format))
+      wrong_message_format -> Transport:send(Socket, encode_answer(wrong_message_format));
+      wrong_internal_message_type -> Transport:send(Socket, encode_answer(wrong_internal_message_type));
+      _:_ -> Transport:send(Socket, encode_answer(ranch_handler_error))
     end;
     _ ->
       ok = Transport:close(Socket)
@@ -125,11 +127,23 @@ loop(Socket, Transport, RanchTimeout, DispatcherTimeout, EEC) ->
   Answer_type :: string().
 %% ====================================================================
 decode_protocol_buffer(MsgBytes) ->
+  DecodedBytes = try
+    communication_protocol_pb:decode_clustermsg(MsgBytes)
+  catch
+    _:_ -> throw(wrong_message_format)
+  end,
+
   #clustermsg{module_name = ModuleName, message_type = Message_type, message_decoder_name = Message_decoder_name, answer_type = Answer_type,
-  answer_decoder_name = Answer_decoder_name, synch = Synch, protocol_version = Prot_version, input = Bytes}
-    = communication_protocol_pb:decode_clustermsg(MsgBytes),
-  Msg = erlang:apply(list_to_atom(Message_decoder_name ++ "_pb"), list_to_atom("decode_" ++ Message_type), [Bytes]),
+    answer_decoder_name = Answer_decoder_name, synch = Synch, protocol_version = Prot_version, input = Bytes} = DecodedBytes,
+
+  Msg = try
+    erlang:apply(list_to_atom(Message_decoder_name ++ "_pb"), list_to_atom("decode_" ++ Message_type), [Bytes])
+  catch
+    _:_ -> throw(wrong_internal_message_type)
+  end,
+
   {Synch, list_to_atom(ModuleName), Answer_decoder_name, Prot_version, records_translator:translate(Msg, Message_decoder_name), Answer_type}.
+
 
 %% encode_answer/1
 %% ====================================================================
@@ -161,10 +175,17 @@ encode_answer(Main_Answer, AnswerType, Answer_decoder_name, Worker_Answer) ->
           #answer{answer_status = atom_to_list(Main_Answer2), worker_answer = WAns}
         catch
           Type:Error ->
-            lager:error("Ranch handler error during encoding answer: ~p:~p, answer type: ~s, decoder ~s, worker answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Worker_Answer]),
-            #answer{answer_status = "answer_encoding_error"}
+            lager:error("Ranch handler error during encoding worker answer: ~p:~p, answer type: ~s, decoder ~s, worker answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Worker_Answer]),
+            #answer{answer_status = "worker_answer_encoding_error"}
         end
     end;
-    _Other -> #answer{answer_status = atom_to_list(Main_Answer2)}
+    _Other ->
+      try
+        #answer{answer_status = atom_to_list(Main_Answer2)}
+      catch
+        Type:Error ->
+          lager:error("Ranch handler error during encoding main answer: ~p:~p, main answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Main_Answer2]),
+          #answer{answer_status = "main_answer_encoding_error"}
+      end
   end,
   erlang:iolist_to_binary(communication_protocol_pb:encode_answer(Message)).

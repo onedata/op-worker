@@ -13,7 +13,6 @@
 
 %% TODO nie przetestowane widoki (można to zrobić w teście ct) - ogólnie przydałby się jakiś integracyjny test dao w ct
 %% TODO nie przetestowane listowanie rekordów (funkcja ogólna)
-%% TODO testy term_to_doc i doc_to_term powinny sprawdzać również działanie funkcji dla błędnych danych
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -150,6 +149,25 @@ doc_to_term_test() ->
         "test string", [1, {6.53, [{unknown_record, 1, 5}, {"test1", false}]}, 5.4, <<1,2,3>>, [1, SPid, "test"]]},
     ?assertMatch(Out, dao:doc_to_term(Ans)).
 
+
+doc_to_term_wrong_data_test() ->
+  Ans = try
+    dao:doc_to_term({some_atom})
+  catch
+    Ex -> Ex
+  end,
+  ?assertEqual(Ans, invalid_document).
+
+term_to_doc_wrong_data_test() ->
+  Field = fun() ->
+    ok
+  end,
+  Ans = try
+    dao:term_to_doc(Field)
+  catch
+    Ex -> Ex
+  end,
+  ?assertEqual(Ans, {unsupported_field, Field}).
 
 get_set_db_test() ->
     ?assertEqual(?DEFAULT_DB, dao:get_db()),

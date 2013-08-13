@@ -113,6 +113,55 @@ sequential_request_test() ->
 
     worker_host:stop(Module).
 
+synch_request_with_msg_id_test() ->
+  Module = sample_plug_in,
+  worker_host:start_link(sample_plug_in, [], 10),
+
+  gen_server:cast(Module, {synch, 1, {ok_request, 1}, 11, {proc, self()}}),
+  timer:sleep(50),
+  gen_server:cast(Module, {synch, 1, {ok_request, 2}, 22, {proc, self()}}),
+  timer:sleep(50),
+  gen_server:cast(Module, {synch, 1, {ok_request, 3}, 33, {proc, self()}}),
+
+  First =
+    receive
+      {worker_answer, 33, 3} -> ok
+    after 1000 ->
+      error
+    end,
+  Second =
+    receive
+      {worker_answer, 11, 1} -> ok
+    after 1000 ->
+      error
+    end,
+  Third =
+    receive
+      {worker_answer, 22, 2} -> ok
+    after 1000 ->
+      error
+    end,
+  ?assert(First =:= ok),
+  ?assert(Second =:= ok),
+  ?assert(Third  =:= ok),
+
+
+  worker_host:stop(Module).
+
+error_request_test() ->
+  Module = sample_plug_in,
+  worker_host:start_link(sample_plug_in, [], 10),
+
+  gen_server:cast(Module, {synch, 1, error_request, {proc, self()}}),
+  Ans = receive
+    worker_plug_in_error -> ok
+  after 1000 ->
+    error
+  end,
+  ?assert(Ans =:= ok),
+
+  worker_host:stop(Module).
+
 %% ====================================================================
 %% Helper functions
 %% ====================================================================

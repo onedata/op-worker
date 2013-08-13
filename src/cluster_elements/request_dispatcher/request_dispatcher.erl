@@ -21,6 +21,13 @@
 -export([start_link/0, stop/0]).
 
 %% ====================================================================
+%% Test API
+%% ====================================================================
+-ifdef(TEST).
+-export([start_link/1]).
+-endif.
+
+%% ====================================================================
 %% gen_server callbacks
 %% ====================================================================
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -29,7 +36,7 @@
 %% API functions
 %% ====================================================================
 
-%% start_link/1
+%% start_link/0
 %% ====================================================================
 %% @doc Starts the server
 -spec start_link() -> Result when
@@ -41,7 +48,23 @@
 %% ====================================================================
 
 start_link() ->
-  gen_server:start_link({local, ?Dispatcher_Name}, ?MODULE, [], []).
+  gen_server:start_link({local, ?Dispatcher_Name}, ?MODULE, ?Modules, []).
+
+-ifdef(TEST).
+%% start_link/1
+%% ====================================================================
+%% @doc Starts the server
+-spec start_link(Modules :: list()) -> Result when
+  Result ::  {ok,Pid}
+  | ignore
+  | {error,Error},
+  Pid :: pid(),
+  Error :: {already_started,Pid} | term().
+%% ====================================================================
+
+start_link(Modules) ->
+  gen_server:start_link({local, ?Dispatcher_Name}, ?MODULE, Modules, []).
+-endif.
 
 %% stop/0
 %% ====================================================================
@@ -64,7 +87,7 @@ stop() ->
   State :: term(),
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-init([]) ->
+init(Modules) ->
   process_flag(trap_exit, true),
   try gsi_handler:init() of     %% Failed initialization of GSI should not disturb dispacher's startup
     ok -> ok;
@@ -72,7 +95,7 @@ init([]) ->
   catch
     _:Except -> io:format("GSI Handler init failed. Exception: ~p", [Except])
   end,
-  {ok, initState()}.
+  {ok, initState(Modules)}.
 
 %% handle_call/3
 %% ====================================================================
@@ -210,10 +233,16 @@ handle_cast({update_state, NewStateNum}, State) ->
   end;
 
 handle_cast({update_workers, WorkersList, NewStateNum, CurLoad, AvgLoad}, _State) ->
-  {noreply, update_workers(WorkersList, NewStateNum, CurLoad, AvgLoad)};
+  {noreply, update_workers(WorkersList, NewStateNum, CurLoad, AvgLoad, ?Modules)};
+
+handle_cast({update_workers, WorkersList, NewStateNum, CurLoad, AvgLoad, Modules}, _State) ->
+  {noreply, update_workers(WorkersList, NewStateNum, CurLoad, AvgLoad, Modules)};
 
 handle_cast({update_loads, CurLoad, AvgLoad}, State) ->
   {noreply, State#dispatcher_state{current_load = CurLoad, avg_load = AvgLoad}};
+
+handle_cast(stop, State) ->
+  {stop, normal, State};
 
 handle_cast(_Msg, State) ->
   {noreply, State}.
@@ -387,13 +416,13 @@ add_worker(Module, Node, State) ->
     Other -> Other
   end.
 
-%% update_workers/2
+%% update_workers/5
 %% ====================================================================
 %% @doc Updates dispatcher state when new workers list appears.
--spec update_workers(WorkersList :: term(), SNum :: integer(), CLoad :: number(), ALoad :: number()) -> Result when
+-spec update_workers(WorkersList :: term(), SNum :: integer(), CLoad :: number(), ALoad :: number(), Modules :: list()) -> Result when
   Result ::  term().
 %% ====================================================================
-update_workers(WorkersList, SNum, CLoad, ALoad) ->
+update_workers(WorkersList, SNum, CLoad, ALoad, Modules) ->
   Update = fun({Node, Module}, TmpState) ->
     Ans = add_worker(Module, Node, TmpState),
     case Ans of
@@ -401,7 +430,7 @@ update_workers(WorkersList, SNum, CLoad, ALoad) ->
       _Other -> TmpState
     end
   end,
-  lists:foldl(Update, initState(SNum, CLoad, ALoad), WorkersList).
+  lists:foldl(Update, initState(SNum, CLoad, ALoad, Modules), WorkersList).
 
 %% pull_state/1
 %% ====================================================================
@@ -414,7 +443,7 @@ update_workers(WorkersList, SNum, CLoad, ALoad) ->
 pull_state(State) ->
   try
     {WorkersList, StateNum} = gen_server:call({global, ?CCM}, get_workers),
-    NewState = update_workers(WorkersList, State#dispatcher_state.state_num, State#dispatcher_state.current_load, State#dispatcher_state.avg_load),
+    NewState = update_workers(WorkersList, State#dispatcher_state.state_num, State#dispatcher_state.current_load, State#dispatcher_state.avg_load, ?Modules),
     {ok, NewState#dispatcher_state{state_num = StateNum}}
   catch
     _:_ ->
@@ -436,25 +465,25 @@ get_workers(Module, State) ->
     _Other -> []
   end.
 
-%% initState/0
+%% initState/1
 %% ====================================================================
 %% @doc Initializes new record #dispatcher_state
--spec initState() -> Result when
+-spec initState(Modules :: list()) -> Result when
   Result :: record().
 %% ====================================================================
-initState() ->
+initState(Modules) ->
   CreateModules = fun(Module, TmpList) ->
     [{Module, {[],[]}} | TmpList]
   end,
-  NewModules = lists:foldl(CreateModules, [], ?Modules),
+  NewModules = lists:foldl(CreateModules, [], Modules),
   #dispatcher_state{modules = NewModules}.
 
-%% initState/2
+%% initState/4
 %% ====================================================================
 %% @doc Initializes new record #dispatcher_state
--spec initState(SNum :: integer(), CLoad :: number(), ALoad :: number()) -> Result when
+-spec initState(SNum :: integer(), CLoad :: number(), ALoad :: number(), Modules :: list()) -> Result when
   Result :: record().
 %% ====================================================================
-initState(SNum, CLoad, ALoad) ->
-  NewState = initState(),
+initState(SNum, CLoad, ALoad, Modules) ->
+  NewState = initState(Modules),
   NewState#dispatcher_state{state_num = SNum, current_load = CLoad, avg_load = ALoad}.

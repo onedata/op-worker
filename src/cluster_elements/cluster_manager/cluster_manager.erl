@@ -230,7 +230,7 @@ handle_cast(start_central_logger, State) ->
   end;
 
 handle_cast(save_state, State) ->
-  Ans = gen_server:call(?Dispatcher_Name, {dao, 1, {save_state, [State]}}),
+  Ans = gen_server:call(?Dispatcher_Name, {dao, 1, {save_state, [State]}, 500}),
   case Ans of
     ok -> lager:info([{mod, ?MODULE}], "Save state message sent");
     _ -> lager:error([{mod, ?MODULE}], "Save state error: ~p", [Ans])
@@ -820,6 +820,7 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
   end,
 
   ModuleToNode = [{Module, Node} || {Node, Module, _Pid} <- WorkersList],
+
   MergedByModule = MergeByFirstElement(ModuleToNode),
 
   ModulesToNodes = lists:map(fun ({Module, Nodes}) ->
@@ -851,19 +852,24 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
 
     FilteredNodeToLoad = lists:foldl(GetLoads, [], NodeToLoad),
 
-    MinV = lists:min([V || {_Node, V} <- FilteredNodeToLoad]),
-    FilteredNodeToLoad2 = case MinV of
-                            1 -> FilteredNodeToLoad;
-                            _ -> [{Node, erlang:round(V/MinV) } || {Node, V} <- FilteredNodeToLoad]
-                          end,
+    case FilteredNodeToLoad of
+      [] -> {Module, []};
+      _ ->
+        MinV = lists:min([V || {_Node, V} <- FilteredNodeToLoad]),
+        FilteredNodeToLoad2 = case MinV of
+                                1 -> FilteredNodeToLoad;
+                                _ -> [{Node, erlang:round(V/MinV) } || {Node, V} <- FilteredNodeToLoad]
+                              end,
 
-    IPs = [{NodeToIPWithLogging(Node), Param} || {Node, Param} <- FilteredNodeToLoad2],
+        IPs = [{NodeToIPWithLogging(Node), Param} || {Node, Param} <- FilteredNodeToLoad2],
 
-    FilteredIPs = [{IP, Param} || {IP, Param} <- IPs, IP =/= unknownaddress],
-    {Module, FilteredIPs}
+        FilteredIPs = [{IP, Param} || {IP, Param} <- IPs, IP =/= unknownaddress],
+        {Module, FilteredIPs}
+    end
   end, MergedByModule),
 
   FilteredModulesToNodes = [{Module, Nodes} || {Module, Nodes} <- ModulesToNodes, Nodes =/= []],
+
   UpdateDnsWorker = fun ({_Node, Module, Pid}) ->
     case Module of
       dns_worker -> gen_server:cast(Pid, {asynch, 1, {update_state, FilteredModulesToNodes}});
@@ -884,7 +890,7 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
 check_load(WorkerPlugin) ->
   BeforeCall = os:timestamp(),
   try
-    {LastLoadInfo, Load} = gen_server:call(WorkerPlugin, getLoadInfo),
+    {LastLoadInfo, Load} = gen_server:call(WorkerPlugin, getLoadInfo, 500),
     TimeDiff = timer:now_diff(BeforeCall, LastLoadInfo),
     Load / TimeDiff
   catch
@@ -1032,7 +1038,7 @@ get_workers_versions([], Versions) ->
   Versions;
 
 get_workers_versions([{Node, Module} | Workers], Versions) ->
-  V = gen_server:call({Module, Node}, {test_call, 1, get_version}),
+  V = gen_server:call({Module, Node}, {test_call, 1, get_version}, 500),
   get_workers_versions(Workers, [{Node, Module, V} | Versions]).
 
 %% calculate_node_load/2
@@ -1044,7 +1050,7 @@ get_workers_versions([{Node, Module} | Workers], Versions) ->
 calculate_node_load(Nodes, Period) ->
   GetNodeInfo = fun(Node) ->
     Info = try
-      gen_server:call({?Node_Manager_Name, Node}, {get_node_stats, Period})
+      gen_server:call({?Node_Manager_Name, Node}, {get_node_stats, Period}, 500)
     catch
       _:_ ->
         lager:error([{mod, ?MODULE}], "Can not get status of node: ~s", [Node]),
@@ -1124,8 +1130,8 @@ calculate_worker_load(Workers) ->
   Result :: list().
 %% ====================================================================
 calculate_load(NodesLoad, WorkersLoad) ->
-  Merge = fun ({Node, Modules}) ->
-    {Node, proplists:get_value(Node, NodesLoad, error), Modules}
+  Merge = fun ({Node, NLoad}) ->
+    {Node, NLoad, proplists:get_value(Node, WorkersLoad, [])}
   end,
-  lists:map(Merge, WorkersLoad).
+  lists:map(Merge, NodesLoad).
 

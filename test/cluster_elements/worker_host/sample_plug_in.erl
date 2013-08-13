@@ -26,6 +26,12 @@ handle(_ProtocolVersion, {long_request, Time, Id, Pid}=_Msg) ->
     receive after Time -> Pid ! {Id, S * 1000000 + M} end,
     ok;
 
+handle(_ProtocolVersion, {ok_request, Msg}) ->
+  Msg;
+
+handle(_ProtocolVersion, error_request) ->
+  0 = 1;
+
 handle(_ProtocolVersion, _Msg) ->
 	ok.
 

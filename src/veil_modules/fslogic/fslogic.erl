@@ -10,7 +10,7 @@
 %% @end
 %% ===================================================================
 
-%% TODO dodać sprawdzanie uprawnieć, gdy będziemy mieli już autentykację klienta
+%% TODO dodać sprawdzanie uprawnień, gdy będziemy mieli już autentykację klienta
 %% (obecnie generowane warningi to efekt przekazywania parametrów, które będą
 %% do tego potrzebne, a nie są obecnie używane)
 

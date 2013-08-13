@@ -19,12 +19,12 @@
 -include("communication_protocol_pb.hrl").
 
 -export([all/0]).
--export([modules_start_and_ping_test/1, dispatcher_connection_test/1, workers_list_actualization_test/1, ping_test/1, application_start_test/1]).
+-export([modules_start_and_ping_test/1, dispatcher_connection_test/1, workers_list_actualization_test/1, ping_test/1, application_start_test/1, validation_test/1]).
 
 %% export nodes' codes
 -export([application_start_test_code/0]).
 
-all() -> [modules_start_and_ping_test, dispatcher_connection_test, workers_list_actualization_test, ping_test, application_start_test].
+all() -> [application_start_test, modules_start_and_ping_test, workers_list_actualization_test, validation_test, ping_test, dispatcher_connection_test].
 
 %% ====================================================================
 %% Code of nodes used during the test
@@ -199,6 +199,36 @@ workers_list_actualization_test(_Config) ->
   false = lists:member(error, StopLog),
   ok = nodes_manager:stop_nodes(NodesUp).
 
+validation_test(_Config) ->
+  ?INIT_DIST_TEST,
+  Port = 6666,
+
+  nodes_manager:start_deps_for_tester_node(),
+  NodesUp = nodes_manager:start_test_on_nodes(1),
+  false = lists:member(error, NodesUp),
+
+  [CCM | _] = NodesUp,
+
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [CCM]}, {dns_port, 1317}]]),
+  false = lists:member(error, StartLog),
+
+  gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
+  gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  timer:sleep(100),
+  gen_server:cast({global, ?CCM}, init_cluster),
+  timer:sleep(1500),
+
+  {error, _} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
+  {error, _} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, ?TEST_FILE("certs/proxy_valid.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_unknown_ca.pem")}]),
+  {error, _} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, ?TEST_FILE("certs/proxy_outdated.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
+  {error, _} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, ?TEST_FILE("certs/proxy_unknown_ca.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
+  {ok, _Socket1} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, ?TEST_FILE("certs/proxy_valid.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
+
+  StopLog = nodes_manager:stop_app_on_nodes(NodesUp),
+  false = lists:member(error, StopLog),
+  ok = nodes_manager:stop_nodes(NodesUp),
+  nodes_manager:stop_deps_for_tester_node().
+
 %% This test checks if client outside the cluster can ping all modules via dispatcher.
 ping_test(_Config) ->
   ?INIT_DIST_TEST,
@@ -221,13 +251,6 @@ ping_test(_Config) ->
   timer:sleep(100),
   gen_server:cast({global, ?CCM}, init_cluster),
   timer:sleep(1500),
-
-  %% Proxy validation test
-  {error, _} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
-  {error, _} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, ?TEST_FILE("certs/proxy_valid.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_unknown_ca.pem")}]),
-  {error, _} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, ?TEST_FILE("certs/proxy_outdated.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
-  {error, _} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, ?TEST_FILE("certs/proxy_unknown_ca.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
-  {ok, _Socket1} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, ?TEST_FILE("certs/proxy_valid.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
 
   {ok, Socket} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, PeerCert}]),
 
