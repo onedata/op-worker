@@ -11,6 +11,10 @@
 %% ===================================================================
 -module(dao_tests).
 
+%% TODO nie przetestowane widoki (można to zrobić w teście ct) - ogólnie przydałby się jakiś integracyjny test dao w ct
+%% TODO nie przetestowane listowanie rekordów (funkcja ogólna)
+%% TODO testy term_to_doc i doc_to_term powinny sprawdzać również działanie funkcji dla błędnych danych
+
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("veil_modules/dao/dao.hrl").

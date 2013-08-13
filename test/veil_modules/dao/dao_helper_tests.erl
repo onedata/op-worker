@@ -11,6 +11,9 @@
 %% ===================================================================
 -module(dao_helper_tests).
 
+%% TODO słabo przetestowane sytuacje wyjątkowe (większość lini odpowiadających
+%% za obsługę błędu nie użyta w czasie testów) - poprawić
+
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("veil_modules/dao/couch_db.hrl").

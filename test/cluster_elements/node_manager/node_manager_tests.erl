@@ -10,6 +10,8 @@
 %% @end
 %% ===================================================================
 
+%% TODO sprawdzić funkcję get_node_stats (raczej testy ct niż eunit)
+
 -module(node_manager_tests).
 -include("registered_names.hrl").
 

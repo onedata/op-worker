@@ -10,6 +10,9 @@
 %% @end
 %% ===================================================================
 
+%% TODO przetestować synchroniczne zapytania
+%% TODO przetestować zachowanie w przypadku błędu plug-inu
+
 -module(worker_host_tests).
 
 -ifdef(TEST).

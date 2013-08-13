@@ -11,6 +11,11 @@
 %% ===================================================================
 -module(fslogic_utils_tests).
 
+%% TODO dodać testy dla przypadków brzegowych (kiedy strip_path_leaf i basename
+%% zwracają [?PATH_SEPARATOR]
+
+%% TODO dodać test get_parent_and_name_from_path
+
 -ifdef(TEST).
 
 -include_lib("eunit/include/eunit.hrl").

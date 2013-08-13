@@ -13,6 +13,13 @@
 -module(cluster_manager_tests).
 -include("registered_names.hrl").
 
+%% TODO dodać testy (raczej ct) sytuacji, w których pada węzeł oraz
+%% kiedy jakiś węzeł jest mocno obciążony (równoważenia obciążenia)
+
+%% TODO dodać test mergowania stanu aktualnego ze stanem z bazy
+
+%% TODO testy aktualizacji dnsu rozszerzyć o sytuacje kiedy jakiś node nie żyje
+%% oraz kiedy jakiś worker nie żyje
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

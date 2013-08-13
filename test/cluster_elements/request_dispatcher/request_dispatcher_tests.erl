@@ -10,6 +10,11 @@
 %% @end
 %% ===================================================================
 
+%% TODO sprawdzić zachowanie funkcji kodującej i dekudującej (encode_answer i decode_protocol_buffer) w ranch_handler
+%% w przypadku błędnych argumentów (rekordów/protoclo_bufferów)
+
+%% TODO sprawdzić metodę handle_call pod kątem forwardowania różnych typów zapytań do workerów
+
 -module(request_dispatcher_tests).
 -include("communication_protocol_pb.hrl").
 -include("registered_names.hrl").

@@ -10,6 +10,11 @@
 %% @end
 %% ===================================================================
 
+%% TODO testy obecnie są w test/manual/fslogic_tester (testują również poprawność zachowania bazy danych) oraz istniejet test ct
+%% dopisać tutaj takie same testy wykorzystujące mocki
+%% (obecnie wiemy, że wysztsko działa dobrze, takie testy z mockami przydadzą się jeśli coś nie będzie działać
+%% - łatwiej zdiagnozujemy gdzie jest problem)
+
 -module(fslogic_tests).
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
@@ -57,10 +62,6 @@ protocol_buffers_test() ->
   ?assert(is_record(InternalMsg, getfilelocation)),
   ?assert(InternalMsg#getfilelocation.file_logic_name =:= "some_file").
 
-%% TODO testy obecnie są w test/manual/fslogic_tester (testują również poprawność zachowania bazy danych)
-%% dopisać tutaj takie same testy wykorzystujące mocki
-%% (obecnie wiemy, że wysztsko działa dobrze, takie testy z mockami przydadzą się jeśli coś nie będzie działać
-%% - łatwiej zdiagnozujemy gdzie jest problem)
 %% getfilelocation_test() ->
 %%   PVersion = 1,
 %%   File = "fslogic_test_file",

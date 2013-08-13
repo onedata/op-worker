@@ -11,6 +11,8 @@
 %% ===================================================================
 -module(dao_vfs_tests).
 
+%% TODO brakuje testu listowania deskryptorów po dacie wygaśnięcia
+%% TODO brakuje testów funkcji list_storage oraz remove_descriptor3
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").

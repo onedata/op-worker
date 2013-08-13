@@ -11,6 +11,8 @@
 %% ===================================================================
 -module(dao_lib_tests).
 
+%% TODO przetestować metodę apply
+
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
 

@@ -28,9 +28,6 @@ all() -> [distributed_test].
 %% Test functions
 %% ====================================================================
 
-%% TODO można pomyśleć o użyciu makr z unit testów zamiast sprawdzania
-%% poprzez przypisanie - będzie ładniejsze wyjście w przypadku błędu
-
 %% ====================================================================
 %% Sample distributed test
 %% ====================================================================
