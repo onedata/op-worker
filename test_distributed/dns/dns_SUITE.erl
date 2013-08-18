@@ -12,7 +12,6 @@
 %% ===================================================================
 
 -module(dns_SUITE).
--include_lib("common_test/include/ct.hrl").
 -include_lib("kernel/src/inet_dns.hrl").
 
 -include("nodes_manager.hrl").
@@ -46,13 +45,13 @@ dns_udp_sup_env_test(_Config) ->
   [Node | _] = NodesUp,
 
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm}, {dispatcher_port, 6666}, {ccm_nodes, [Node]}, {dns_port, 1312}]]),
-  false = lists:member(error, StartLog),
+  ?assertEqual(false, lists:member(error, StartLog)),
 
-  ok = rpc:call(Node, ?MODULE, dns_udp_sup_env_test_code, []),
+  ?assertEqual(ok, rpc:call(Node, ?MODULE, dns_udp_sup_env_test_code, [])),
 
   StopLog = nodes_manager:stop_app_on_nodes(NodesUp),
-  false = lists:member(error, StopLog),
-  ok = nodes_manager:stop_nodes(NodesUp).
+  ?assertEqual(false, lists:member(error, StopLog)),
+  ?assertEqual(ok, nodes_manager:stop_nodes(NodesUp)).
 
 %% Checks if dns_udp_handler responds before and after running dns_worker
 dns_udp_handler_responds_to_dns_queries(_Config) ->
@@ -65,7 +64,8 @@ dns_udp_handler_responds_to_dns_queries(_Config) ->
 	Env = [{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [node()]},
 			{dns_port, DNS_Port}, {initialization_time, 1}],
 
-	{ok, Socket} = gen_udp:open(UDP_Port, [{active, false}, binary]),
+	{OpenAns, Socket} = gen_udp:open(UDP_Port, [{active, false}, binary]),
+  ?assertEqual(ok, OpenAns),
 
 	RequestHeader = #dns_header{id = 1, qr = false, opcode = ?QUERY, rd = 1},
 	RequestQuery = #dns_query{domain=SupportedDomain, type=?T_A,class=?C_IN},
@@ -74,7 +74,7 @@ dns_udp_handler_responds_to_dns_queries(_Config) ->
   NodesUp = nodes_manager:start_test_on_nodes(1),
   [Node | _] = NodesUp,
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, [Env]),
-  false = lists:member(error, StartLog),
+  ?assertEqual(false, lists:member(error, StartLog)),
   timer:sleep(100),
 
 	try
@@ -87,12 +87,15 @@ dns_udp_handler_responds_to_dns_queries(_Config) ->
 
 		%Both - dns udp handler and dns_worker should work
 		MessagingTest = fun () ->
-			ok = gen_udp:send(Socket, Address, DNS_Port, BinRequest),
-			{ok, {_, DNS_Port, Packet}} = gen_udp:recv(Socket, 0, infinity),
-			{ok, Response} = inet_dns:decode(Packet),
+			SendAns = gen_udp:send(Socket, Address, DNS_Port, BinRequest),
+      ?assertEqual(ok, SendAns),
+			{RecvAns, {_, DNS_Port, Packet}} = gen_udp:recv(Socket, 0, infinity),
+      ?assertEqual(ok, RecvAns),
+			{DecodeAns, Response} = inet_dns:decode(Packet),
+      ?assertEqual(ok, DecodeAns),
 			Header = Response#dns_rec.header,
-			?NOERROR = Header#dns_header.rcode,
-			1 == length(Response#dns_rec.anlist)
+      ?assertEqual(?NOERROR, Header#dns_header.rcode),
+      ?assertEqual(1, length(Response#dns_rec.anlist))
 		end,
 
 		MessagingTest()
@@ -101,8 +104,8 @@ dns_udp_handler_responds_to_dns_queries(_Config) ->
 			gen_udp:close(Socket)
 		after
       StopLog = nodes_manager:stop_app_on_nodes(NodesUp),
-      false = lists:member(error, StopLog),
-      ok = nodes_manager:stop_nodes(NodesUp)
+      ?assertEqual(false, lists:member(error, StopLog)),
+      ?assertEqual(ok, nodes_manager:stop_nodes(NodesUp))
 		end
 	end.
 
@@ -124,7 +127,7 @@ dns_ranch_tcp_handler_responds_to_dns_queries(_Config) ->
   NodesUp = nodes_manager:start_test_on_nodes(1),
   [Node | _] = NodesUp,
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, [Env]),
-  false = lists:member(error, StartLog),
+  ?assertEqual(false, lists:member(error, StartLog)),
   timer:sleep(100),
 
 	try
@@ -135,14 +138,18 @@ dns_ranch_tcp_handler_responds_to_dns_queries(_Config) ->
 		gen_server:cast({global, ?CCM}, init_cluster),
 		timer:sleep(500),
 
-		{ok, Socket} = gen_tcp:connect(Address, DNS_Port, [{active, false}, binary, {packet, 2}]),
+		{ConAns, Socket} = gen_tcp:connect(Address, DNS_Port, [{active, false}, binary, {packet, 2}]),
+    ?assertEqual(ok, ConAns),
 		try
 			SendMessageAndAssertResults = fun () ->
-				ok = gen_tcp:send(Socket, BinRequest),
-				{ok, Packet} = gen_tcp:recv(Socket, 0, infinity),
-				{ok, Response} = inet_dns:decode(Packet),
+				SendAns = gen_tcp:send(Socket, BinRequest),
+        ?assertEqual(ok, SendAns),
+				{RecvAns, Packet} = gen_tcp:recv(Socket, 0, infinity),
+        ?assertEqual(ok, RecvAns),
+				{DecodeAns, Response} = inet_dns:decode(Packet),
+        ?assertEqual(ok, DecodeAns),
 				Header = Response#dns_rec.header,
-				?NOERROR = Header#dns_header.rcode
+        ?assertEqual(?NOERROR, Header#dns_header.rcode)
 			end,
 
 			SendMessageAndAssertResults(),
@@ -155,8 +162,8 @@ dns_ranch_tcp_handler_responds_to_dns_queries(_Config) ->
 		end
 	after
     StopLog = nodes_manager:stop_app_on_nodes(NodesUp),
-    false = lists:member(error, StopLog),
-    ok = nodes_manager:stop_nodes(NodesUp)
+    ?assertEqual(false, lists:member(error, StopLog)),
+    ?assertEqual(ok, nodes_manager:stop_nodes(NodesUp))
 	end.
 
 %% ====================================================================

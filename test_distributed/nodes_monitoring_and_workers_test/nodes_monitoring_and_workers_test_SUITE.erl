@@ -12,7 +12,6 @@
 
 -module(nodes_monitoring_and_workers_test_SUITE).
 
--include_lib("common_test/include/ct.hrl").
 -include("nodes_manager.hrl").
 -include("registered_names.hrl").
 -include("modules_and_args.hrl").
@@ -53,7 +52,7 @@ main_test(_Config) ->
   ?INIT_DIST_TEST,
   nodes_manager:start_deps_for_tester_node(),
   NodesUp = nodes_manager:start_test_on_nodes(4),
-  false = lists:member(error, NodesUp),
+  ?assertEqual(false, lists:member(error, NodesUp)),
 
   [CCM | WorkerNodes] = NodesUp,
 
@@ -61,38 +60,34 @@ main_test(_Config) ->
     [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1309}],
     [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}],
     [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}]]),
-  false = lists:member(error, StartLog),
+  ?assertEqual(false, lists:member(error, StartLog)),
 
-  ok = rpc:call(CCM, ?MODULE, ccm_code1, []),
+  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
   timer:sleep(100),
   RunWorkerCode = fun(Node) ->
-    ok = rpc:call(Node, ?MODULE, worker_code, [])
+    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, []))
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   timer:sleep(100),
-  ok = rpc:call(CCM, ?MODULE, ccm_code2, []),
+  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
 
   NotExistingNodes = ['n1@localhost', 'n2@localhost', 'n3@localhost'],
   lists:foreach(fun(Node) -> gen_server:cast({global, ?CCM}, {node_is_up, Node}) end, NotExistingNodes),
   timer:sleep(100),
   Nodes = gen_server:call({global, ?CCM}, get_nodes),
-  Check1 = (length(Nodes) == length(NodesUp)),
-  Check1 = true,
+  ?assertEqual(length(Nodes), length(NodesUp)),
     lists:foreach(fun(Node) ->
-      Check2 = (lists:member(Node, Nodes)),
-      Check2 = true
+      ?assert(lists:member(Node, Nodes))
     end, NodesUp),
 
   lists:foreach(fun(Node) -> gen_server:cast({global, ?CCM}, {node_is_up, Node}) end, NodesUp),
   timer:sleep(100),
   Nodes2 = gen_server:call({global, ?CCM}, get_nodes),
-  Check3 = (length(Nodes2) == length(NodesUp)),
-  Check3 = true,
+  ?assertEqual(length(Nodes2), length(NodesUp)),
 
   {Workers, _StateNum} = gen_server:call({global, ?CCM}, get_workers),
   Jobs = ?Modules,
-  Check4 = (length(Workers) == length(Jobs)),
-  Check4 = true,
+  ?assertEqual(length(Workers), length(Jobs)),
 
   PeerCert = ?COMMON_FILE("peer.pem"),
   Ping = #atom{value = "ping"},
@@ -105,7 +100,8 @@ main_test(_Config) ->
 
   Ports = [5055, 6666, 7777, 8888],
   CheckNodes = fun(Port, S) ->
-    {ok, Socket} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, PeerCert}]),
+    {ConAns, Socket} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, PeerCert}]),
+    ?assertEqual(ok, ConAns),
 
     CheckModules = fun(M, Sum) ->
       Message = #clustermsg{module_name = atom_to_binary(M, utf8), message_type = "atom",
@@ -114,7 +110,8 @@ main_test(_Config) ->
       Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
       ssl:send(Socket, Msg),
-      {ok, Ans} = ssl:recv(Socket, 0, 5000),
+      {RecvAns, Ans} = ssl:recv(Socket, 0, 5000),
+      ?assertEqual(ok, RecvAns),
       case Ans =:= PongAnsBytes of
         true -> Sum + 1;
         false -> Sum
@@ -126,10 +123,9 @@ main_test(_Config) ->
   end,
 
   PongsNum2 = lists:foldl(CheckNodes, 0, Ports),
-  Check5 = (PongsNum2 == (length(Jobs) * length(Ports))),
-  Check5 = true,
+  ?assertEqual(PongsNum2, length(Jobs) * length(Ports)),
 
   StopLog = nodes_manager:stop_app_on_nodes(NodesUp),
-  false = lists:member(error, StopLog),
-  ok = nodes_manager:stop_nodes(NodesUp),
+  ?assertEqual(false, lists:member(error, StopLog)),
+  ?assertEqual(ok, nodes_manager:stop_nodes(NodesUp)),
   nodes_manager:stop_deps_for_tester_node().

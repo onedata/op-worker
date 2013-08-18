@@ -11,7 +11,6 @@
 %% ===================================================================
 
 -module(fslogic_test_SUITE).
--include_lib("common_test/include/ct.hrl").
 
 -include("nodes_manager.hrl").
 -include("registered_names.hrl").
@@ -38,13 +37,13 @@ integration_test(_Config) ->
 
   nodes_manager:start_deps_for_tester_node(),
   NodesUp = nodes_manager:start_test_on_nodes(1),
-  false = lists:member(error, NodesUp),
+  ?assertEqual(false, lists:member(error, NodesUp)),
 
   [FSLogicNode | _] = NodesUp,
 
   DB_Node = nodes_manager:get_db_node(),
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}]]),
-  false = lists:member(error, StartLog),
+  ?assertEqual(false, lists:member(error, StartLog)),
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
@@ -60,90 +59,87 @@ integration_test(_Config) ->
   end, FilesInDirNames),
   NewNameOfFIle = "new_name_of_file",
 
-  {ok, _} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ["/tmp/root"]]),
+  {InsertStorageAns, _} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ["/tmp/root"]]),
+  ?assertEqual(ok, InsertStorageAns),
 
   {Status, Helper, Id, _Validity, AnswerOpt0} = create_file(Host, Cert, Port, TestFile),
-  Status = "ok",
-  AnswerOpt0 = ?VOK,
+  ?assertEqual("ok", Status),
+  ?assertEqual(?VOK, AnswerOpt0),
   {Status1, _Helper1, _Id1, _Validity1, AnswerOpt1} = create_file(Host, Cert, Port, TestFile),
-  Status1 = "ok",
-  AnswerOpt1 = ?VEEXIST,
+  ?assertEqual("ok", Status1),
+  ?assertEqual(?VEEXIST, AnswerOpt1),
 
 
 
   {Status2, Helper2, Id2, _Validity2, AnswerOpt2} = get_file_location(Host, Cert, Port, TestFile),
-  Status2 = "ok",
-  AnswerOpt2 = ?VOK,
-  Helper2 = Helper,
-  Id2 = Id,
+  ?assertEqual("ok", Status2),
+  ?assertEqual(?VOK, AnswerOpt2),
+  ?assertEqual(Helper, Helper2),
+  ?assertEqual(Id, Id2),
 
   {Status3, _Validity3, AnswerOpt3} = renew_file_location(Host, Cert, Port, TestFile),
-  Status3 = "ok",
-  AnswerOpt3 = ?VOK,
+  ?assertEqual("ok", Status3),
+  ?assertEqual(?VOK, AnswerOpt3),
 
   {Status4, Answer4} = file_not_used(Host, Cert, Port, TestFile),
-  Status4 = "ok",
-  Answer4 = list_to_atom(?VOK),
+  ?assertEqual("ok", Status4),
+  ?assertEqual(list_to_atom(?VOK), Answer4),
   {Status4_1, Answer4_1} = file_not_used(Host, Cert, Port, TestFile),
-  Status4_1 = "ok",
-  Answer4_1 = list_to_atom(?VOK),
+  ?assertEqual("ok", Status4_1),
+  ?assertEqual(list_to_atom(?VOK), Answer4_1),
 
 
 
   %% Test automatic descriptors cleaning
   {Status4_2, Helper4_2, Id4_2, _Validity4_2, AnswerOpt4_2} = get_file_location(Host, Cert, Port, TestFile),
-  Status4_2 = "ok",
-  AnswerOpt4_2 = ?VOK,
-  Helper4_2 = Helper,
-  Id4_2 = Id,
+  ?assertEqual("ok", Status4_2),
+  ?assertEqual(?VOK, AnswerOpt4_2),
+  ?assertEqual(Helper, Helper4_2),
+  ?assertEqual(Id, Id4_2),
 
   clear_old_descriptors(FSLogicNode),
 
   {Status4_4, _Validity4_4, AnswerOpt4_4} = renew_file_location(Host, Cert, Port, TestFile),
-  Status4_4 = "ok",
-  AnswerOpt4_4 = ?VENOENT,
+  ?assertEqual("ok", Status4_4),
+  ?assertEqual(?VENOENT, AnswerOpt4_4),
 
 
 
   {Status5, Answer5} = mkdir(Host, Cert, Port, DirName),
-  Status5 = "ok",
-  Answer5 = list_to_atom(?VOK),
+  ?assertEqual("ok", Status5),
+  ?assertEqual(list_to_atom(?VOK), Answer5),
   {Status5_1, Answer5_1} = mkdir(Host, Cert, Port, DirName),
-  Status5_1 = "ok",
-  Answer5_1 = list_to_atom(?VEEXIST),
+  ?assertEqual("ok", Status5_1),
+  ?assertEqual(list_to_atom(?VEEXIST), Answer5_1),
 
   CreateFile = fun(File) ->
     {Status6, _Helper6, _Id6, _Validity6, AnswerOpt6} = create_file(Host, Cert, Port, File),
-    Status6 = "ok",
-    AnswerOpt6 = ?VOK
+    ?assertEqual("ok", Status6),
+    ?assertEqual(?VOK, AnswerOpt6)
   end,
   lists:foreach(CreateFile, FilesInDir),
 
   {Status7, Files7, AnswerOpt7} = ls(Host, Cert, Port, DirName, 10, 0),
-  Status7 = "ok",
-  AnswerOpt7 = ?VOK,
+  ?assertEqual("ok", Status7),
+  ?assertEqual(?VOK, AnswerOpt7),
   Check7 = (length(FilesInDir) == length(Files7)),
   Check7 = true,
   lists:foreach(fun(Name7) ->
-    CheckElem7 = lists:member(Name7, Files7),
-    CheckElem7 = true
+    ?assert(lists:member(Name7, Files7))
   end, FilesInDirNames),
 
 
   {Status7_1, Files7_1, AnswerOpt7_1} = ls(Host, Cert, Port, DirName, 3, non),
-  Status7_1 = "ok",
-  AnswerOpt7_1 = ?VOK,
-  Check7_1 = (length(Files7_1) == 3),
-  Check7_1 = true,
+  ?assertEqual("ok", Status7_1),
+  ?assertEqual(?VOK, AnswerOpt7_1),
+  ?assertEqual(3, length(Files7_1)),
 
   {Status7_2, Files7_2, AnswerOpt7_2} = ls(Host, Cert, Port, DirName, 5, 3),
-  Status7_2 = "ok",
-  AnswerOpt7_2 = ?VOK,
-  Check7_2 = (length(Files7_2) == 2),
-  Check7_2 = true,
+  ?assertEqual("ok", Status7_2),
+  ?assertEqual(?VOK, AnswerOpt7_2),
+  ?assertEqual(2, length(Files7_2)),
   lists:foreach(fun(Name7_2) ->
-    CheckElem7_sum = (lists:member(Name7_2, Files7_2) or lists:member(Name7_2, Files7_1)),
-    CheckElem7_sum = true
+    ?assert(lists:member(Name7_2, Files7_2) or lists:member(Name7_2, Files7_1))
   end, FilesInDirNames),
 
 
@@ -151,74 +147,70 @@ integration_test(_Config) ->
   [FirstFileInDir | FilesInDirTail] = FilesInDir,
   [_ | FilesInDirNamesTail] = FilesInDirNames,
   {Status8, Answer8} = delete_file(Host, Cert, Port, FirstFileInDir),
-  Status8 = "ok",
-  Answer8 = list_to_atom(?VOK),
+  ?assertEqual("ok", Status8),
+  ?assertEqual(list_to_atom(?VOK), Answer8),
 
   {Status8_1, Answer8_1} = delete_file(Host, Cert, Port, FirstFileInDir),
-  Status8_1 = "ok",
-  Answer8_1 = list_to_atom(?VEIO),
+  ?assertEqual("ok", Status8_1),
+  ?assertEqual(list_to_atom(?VEIO), Answer8_1),
 
   {Status9, Files9, AnswerOpt9} = ls(Host, Cert, Port, DirName, 10, non),
-  Status9 = "ok",
-  AnswerOpt9 = ?VOK,
-  Check9 = (length(FilesInDirTail) == length(Files9)),
-  Check9 = true,
+  ?assertEqual("ok", Status9),
+  ?assertEqual(?VOK, AnswerOpt9),
+  ?assertEqual(length(FilesInDirTail), length(Files9)),
   lists:foreach(fun(Name9) ->
-    CheckElem9 = lists:member(Name9, Files9),
-    CheckElem9 = true
+    ?assert(lists:member(Name9, Files9))
   end, FilesInDirNamesTail),
 
   [SecondFileInDir | FilesInDirTail2] = FilesInDirTail,
   [_ | FilesInDirNamesTail2] = FilesInDirNamesTail,
   {Status10, Answer10} = rename_file(Host, Cert, Port, SecondFileInDir, NewNameOfFIle),
-  Status10 = "ok",
-  Answer10 = list_to_atom(?VOK),
+  ?assertEqual("ok", Status10),
+  ?assertEqual(list_to_atom(?VOK), Answer10),
 
   {Status10_2, Answer10_2} = change_file_perms(Host, Cert, Port, NewNameOfFIle, 8#400),
-  Status10_2 = "ok",
-  Answer10_2 = list_to_atom(?VOK),
+  ?assertEqual("ok", Status10_2),
+  ?assertEqual(list_to_atom(?VOK), Answer10_2),
 
   {Status11, Files11, AnswerOpt11} = ls(Host, Cert, Port, DirName, 10, non),
-  Status11 = "ok",
-  AnswerOpt11 = ?VOK,
-  Check11 = (length(FilesInDirNamesTail2) == length(Files11)),
-  Check11 = true,
+  ?assertEqual("ok", Status11),
+  ?assertEqual(?VOK, AnswerOpt11),
+  ?assertEqual(length(FilesInDirNamesTail2), length(Files11)),
   lists:foreach(fun(Name11) ->
-    CheckElem11 = lists:member(Name11, Files11),
-    CheckElem11 = true
+    ?assert(lists:member(Name11, Files11))
   end, FilesInDirNamesTail2),
 
 
 
   {Status12, Answer12} = delete_file(Host, Cert, Port, DirName),
-  Status12 = "ok",
-  Answer12 = list_to_atom(?VENOTEMPTY),
+  ?assertEqual("ok", Status12),
+  ?assertEqual(list_to_atom(?VENOTEMPTY), Answer12),
 
   Delete = fun(File) ->
     {Status13, Answer13} = delete_file(Host, Cert, Port, File),
-    Status13 = "ok",
-    Answer13 = list_to_atom(?VOK)
+    ?assertEqual("ok", Status13),
+    ?assertEqual(list_to_atom(?VOK), Answer13)
   end,
   lists:foreach(Delete, FilesInDirTail2),
 
   {Status14, Answer14} = delete_file(Host, Cert, Port, DirName),
-  Status14 = "ok",
-  Answer14 = list_to_atom(?VOK),
+  ?assertEqual("ok", Status14),
+  ?assertEqual(list_to_atom(?VOK), Answer14),
   {Status14_1, Answer14_1} = delete_file(Host, Cert, Port, DirName),
-  Status14_1 = "ok",
-  Answer14_1 = list_to_atom(?VEIO),
+  ?assertEqual("ok", Status14_1),
+  ?assertEqual(list_to_atom(?VEIO), Answer14_1),
 
   {Status15, Answer15} = delete_file(Host, Cert, Port, TestFile),
-  Status15 = "ok",
-  Answer15 = list_to_atom(?VOK),
+  ?assertEqual("ok", Status15),
+  ?assertEqual(list_to_atom(?VOK), Answer15),
 
   {Status16, Answer16} = delete_file(Host, Cert, Port, NewNameOfFIle),
-  Status16 = "ok",
-  Answer16 = list_to_atom(?VOK),
+  ?assertEqual("ok", Status16),
+  ?assertEqual(list_to_atom(?VOK), Answer16),
 
   StopLog = nodes_manager:stop_app_on_nodes(NodesUp),
-  false = lists:member(error, StopLog),
-  ok = nodes_manager:stop_nodes(NodesUp),
+  ?assertEqual(false, lists:member(error, StopLog)),
+  ?assertEqual(ok, nodes_manager:stop_nodes(NodesUp)),
   nodes_manager:stop_deps_for_tester_node().
 
 %% ====================================================================
@@ -238,9 +230,11 @@ create_file(Host, Cert, Port, FileName) ->
   answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  ?assertEqual(ok, ConAns),
   ssl:send(Socket, MessageBytes),
-  {ok, Ans} = ssl:recv(Socket, 0, 5000),
+  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Location = fuse_messages_pb:decode_filelocation(Bytes),
@@ -259,9 +253,11 @@ get_file_location(Host, Cert, Port, FileName) ->
   answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  ?assertEqual(ok, ConAns),
   ssl:send(Socket, MessageBytes),
-  {ok, Ans} = ssl:recv(Socket, 0, 5000),
+  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Location = fuse_messages_pb:decode_filelocation(Bytes),
@@ -280,9 +276,11 @@ renew_file_location(Host, Cert, Port, FileName) ->
   answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  ?assertEqual(ok, ConAns),
   ssl:send(Socket, MessageBytes),
-  {ok, Ans} = ssl:recv(Socket, 0, 5000),
+  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Validity = fuse_messages_pb:decode_filelocationvalidity(Bytes),
@@ -301,9 +299,11 @@ file_not_used(Host, Cert, Port, FileName) ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  ?assertEqual(ok, ConAns),
   ssl:send(Socket, MessageBytes),
-  {ok, Ans} = ssl:recv(Socket, 0, 5000),
+  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Answer = communication_protocol_pb:decode_atom(Bytes),
@@ -322,9 +322,11 @@ mkdir(Host, Cert, Port, DirName) ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  ?assertEqual(ok, ConAns),
   ssl:send(Socket, MessageBytes),
-  {ok, Ans} = ssl:recv(Socket, 0, 5000),
+  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Answer = communication_protocol_pb:decode_atom(Bytes),
@@ -346,9 +348,11 @@ ls(Host, Cert, Port, Dir, Num, Offset) ->
   answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  ?assertEqual(ok, ConAns),
   ssl:send(Socket, MessageBytes),
-  {ok, Ans} = ssl:recv(Socket, 0, 5000),
+  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Files = fuse_messages_pb:decode_filechildren(Bytes),
@@ -367,9 +371,11 @@ delete_file(Host, Cert, Port, FileName) ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  ?assertEqual(ok, ConAns),
   ssl:send(Socket, MessageBytes),
-  {ok, Ans} = ssl:recv(Socket, 0, 5000),
+  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Answer = communication_protocol_pb:decode_atom(Bytes),
@@ -388,9 +394,11 @@ rename_file(Host, Cert, Port, FileName, NewName) ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  ?assertEqual(ok, ConAns),
   ssl:send(Socket, MessageBytes),
-  {ok, Ans} = ssl:recv(Socket, 0, 5000),
+  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Answer = communication_protocol_pb:decode_atom(Bytes),
@@ -409,9 +417,11 @@ change_file_perms(Host, Cert, Port, FileName, Perms) ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ok, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  ?assertEqual(ok, ConAns),
   ssl:send(Socket, MessageBytes),
-  {ok, Ans} = ssl:recv(Socket, 0, 5000),
+  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Answer = communication_protocol_pb:decode_atom(Bytes),
