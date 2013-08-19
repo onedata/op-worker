@@ -17,7 +17,7 @@
 -include("nodes_manager.hrl").
 -include("registered_names.hrl").
 
--export([all/0]).
+-export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([dns_udp_sup_env_test/1, dns_udp_handler_responds_to_dns_queries/1, dns_ranch_tcp_handler_responds_to_dns_queries/1]).
 
 %% export nodes' codes
@@ -39,30 +39,24 @@ dns_udp_sup_env_test_code() ->
 %% ====================================================================
 
 %% Checks if all necessary variables are declared in application
-dns_udp_sup_env_test(_Config) ->
-  ?INIT_DIST_TEST,
-  NodesUp = nodes_manager:start_test_on_nodes(1),
+dns_udp_sup_env_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+
   [Node | _] = NodesUp,
 
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm}, {dispatcher_port, 6666}, {ccm_nodes, [Node]}, {dns_port, 1312}]]),
-  ?assertEqual(false, lists:member(error, StartLog)),
-
-  ?assertEqual(ok, rpc:call(Node, ?MODULE, dns_udp_sup_env_test_code, [])),
-
-  StopLog = nodes_manager:stop_app_on_nodes(NodesUp),
-  ?assertEqual(false, lists:member(error, StopLog)),
-  ?assertEqual(ok, nodes_manager:stop_nodes(NodesUp)).
+  ?assertEqual(ok, rpc:call(Node, ?MODULE, dns_udp_sup_env_test_code, [])).
 
 %% Checks if dns_udp_handler responds before and after running dns_worker
-dns_udp_handler_responds_to_dns_queries(_Config) ->
-	?INIT_DIST_TEST,
-	Port = 6667,
-	DNS_Port = 1328,
+dns_udp_handler_responds_to_dns_queries(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+  [Node | _] = NodesUp,
+
 	UDP_Port = 1400,
 	Address = "localhost",
 	SupportedDomain = "dns_worker",
-	Env = [{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [node()]},
-			{dns_port, DNS_Port}, {initialization_time, 1}],
+  DNS_Port = ?config(dns_port, Config),
 
 	{OpenAns, Socket} = gen_udp:open(UDP_Port, [{active, false}, binary]),
   ?assertEqual(ok, OpenAns),
@@ -70,12 +64,6 @@ dns_udp_handler_responds_to_dns_queries(_Config) ->
 	RequestHeader = #dns_header{id = 1, qr = false, opcode = ?QUERY, rd = 1},
 	RequestQuery = #dns_query{domain=SupportedDomain, type=?T_A,class=?C_IN},
 	Request = #dns_rec{header=RequestHeader, qdlist=[RequestQuery], anlist=[], nslist=[], arlist=[]},
-
-  NodesUp = nodes_manager:start_test_on_nodes(1),
-  [Node | _] = NodesUp,
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [Env]),
-  ?assertEqual(false, lists:member(error, StartLog)),
-  timer:sleep(100),
 
 	try
 		BinRequest = inet_dns:encode(Request),
@@ -100,37 +88,24 @@ dns_udp_handler_responds_to_dns_queries(_Config) ->
 
 		MessagingTest()
 	after
-		try
-			gen_udp:close(Socket)
-		after
-      StopLog = nodes_manager:stop_app_on_nodes(NodesUp),
-      ?assertEqual(false, lists:member(error, StopLog)),
-      ?assertEqual(ok, nodes_manager:stop_nodes(NodesUp))
-		end
+		gen_udp:close(Socket)
 	end.
 
 %% Checks if dns_ranch_tcp_handler does not close connection after first response
-dns_ranch_tcp_handler_responds_to_dns_queries(_Config) ->
+dns_ranch_tcp_handler_responds_to_dns_queries(Config) ->
 	ct:timetrap({seconds, 30}),
-	?INIT_DIST_TEST,
-	Port = 6667,
-	DNS_Port = 1329,
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+  [Node | _] = NodesUp,
+
 	Address = "localhost",
 	SupportedDomain = "dns_worker",
-	Env = [{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [node()]},
-		{dns_port, DNS_Port}, {initialization_time, 1}],
+  DNS_Port = ?config(dns_port, Config),
 
 	RequestHeader = #dns_header{id = 1, qr = false, opcode = ?QUERY, rd = 1},
 	RequestQuery = #dns_query{domain=SupportedDomain, type=?T_A,class=?C_IN},
 	Request = #dns_rec{header=RequestHeader, qdlist=[RequestQuery], anlist=[], nslist=[], arlist=[]},
 
-  NodesUp = nodes_manager:start_test_on_nodes(1),
-  [Node | _] = NodesUp,
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [Env]),
-  ?assertEqual(false, lists:member(error, StartLog)),
-  timer:sleep(100),
-
-	try
 		BinRequest = inet_dns:encode(Request),
 
 		gen_server:cast({?Node_Manager_Name, Node}, do_heart_beat),
@@ -159,12 +134,46 @@ dns_ranch_tcp_handler_responds_to_dns_queries(_Config) ->
 
 		after
 			gen_tcp:close(Socket)
-		end
-	after
-    StopLog = nodes_manager:stop_app_on_nodes(NodesUp),
-    ?assertEqual(false, lists:member(error, StopLog)),
-    ?assertEqual(ok, nodes_manager:stop_nodes(NodesUp))
-	end.
+		end.
+
+%% ====================================================================
+%% SetUp and TearDown functions
+%% ====================================================================
+
+init_per_testcase(dns_udp_sup_env_test, Config) ->
+  ?INIT_DIST_TEST,
+
+  NodesUp = nodes_manager:start_test_on_nodes(1),
+  [Node | _] = NodesUp,
+
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm}, {dispatcher_port, 6666}, {ccm_nodes, [Node]}, {dns_port, 1312}]]),
+
+  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
+  lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config);
+
+init_per_testcase(_, Config) ->
+  ?INIT_DIST_TEST,
+
+  Port = 6667,
+  DNS_Port = 1328,
+
+  NodesUp = nodes_manager:start_test_on_nodes(1),
+  [Node | _] = NodesUp,
+
+  Env = [{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [Node]},
+    {dns_port, DNS_Port}, {initialization_time, 1}],
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [Env]),
+
+  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
+  lists:append([{dns_port, DNS_Port}, {nodes, NodesUp}, {assertions, Assertions}], Config).
+
+end_per_testcase(_, Config) ->
+  Nodes = ?config(nodes, Config),
+  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
+  StopAns = nodes_manager:stop_nodes(Nodes),
+
+  ?assertEqual(false, lists:member(error, StopLog)),
+  ?assertEqual(ok, StopAns).
 
 %% ====================================================================
 %% Helping functions

@@ -15,7 +15,7 @@
 -include("registered_names.hrl").
 
 %% export for ct
--export([all/0]).
+-export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([distributed_test/1, local_test/1]).
 
 %% export nodes' codes
@@ -32,20 +32,12 @@ all() -> [distributed_test].
 %% ====================================================================
 
 %% Test function (it runs on tester node)
-distributed_test(_Config) ->
-  ?INIT_DIST_TEST,
-
-  %% To see slaves output use nodes_manager:start_test_on_nodes with 2 arguments (second argument should be true)
-  %% e.g. nodes_manager:start_test_on_nodes(2, true)
-  Nodes = nodes_manager:start_test_on_nodes(2),
-  ?assertEqual(false, lists:member(error, Nodes)),
+distributed_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  Nodes = ?config(nodes, Config),
 
   [Node1 | Nodes2] = Nodes,
   [Node2 | _] = Nodes2,
-
-  StartLog = nodes_manager:start_app_on_nodes(Nodes, [[{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [Node1]}, {dns_port, 1308}],
-    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [Node1]}, {dns_port, 1309}]]),
-  ?assertEqual(false, lists:member(error, StartLog)),
 
   ?assertEqual(ok, rpc:call(Node1, ?MODULE, node1_code1, [])),
   timer:sleep(100),
@@ -57,11 +49,7 @@ distributed_test(_Config) ->
   ?assertEqual(length(Nodes), length(NodesListFromCCM)),
   lists:foreach(fun(Node) ->
     ?assert(lists:member(Node, NodesListFromCCM))
-  end, Nodes),
-
-  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  ?assertEqual(false, lists:member(error, StopLog)),
-  ?assertEqual(ok, nodes_manager:stop_nodes(Nodes)).
+  end, Nodes).
 
 %% Code of nodes used during the test
 node1_code1() ->
@@ -83,19 +71,51 @@ node2_code() ->
 %% should use slaves (even when only one node is needed).
 %% ====================================================================
 
-local_test(_Config) ->
-  ?INIT_DIST_TEST,
-  ?assertEqual(ok, nodes_manager:start_local_test()),
-
-  ?assertEqual(ok, nodes_manager:start_app([{node_type, ccm_test}, {dispatcher_port, 7777}, {ccm_nodes, [node()]}, {dns_port, 1312}])),
+local_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
 
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
   gen_server:cast({global, ?CCM}, init_cluster),
 
   NodesListFromCCM = gen_server:call({global, ?CCM}, get_nodes),
-  ?assertEqual(1, length(NodesListFromCCM)),
-
-  ?assertEqual(ok, nodes_manager:stop_local_test()).
+  ?assertEqual(1, length(NodesListFromCCM)).
 
 
+%% ====================================================================
+%% SetUp and TearDown functions
+%% ====================================================================
+
+init_per_testcase(distributed_test, Config) ->
+  ?INIT_DIST_TEST,
+
+  %% To see slaves output use nodes_manager:start_test_on_nodes with 2 arguments (second argument should be true)
+  %% e.g. nodes_manager:start_test_on_nodes(2, true)
+  Nodes = nodes_manager:start_test_on_nodes(2),
+  [Node1 | _] = Nodes,
+
+  StartLog = nodes_manager:start_app_on_nodes(Nodes, [[{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [Node1]}, {dns_port, 1308}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [Node1]}, {dns_port, 1309}]]),
+
+  Assertions = [{false, lists:member(error, Nodes)}, {false, lists:member(error, StartLog)}],
+  lists:append([{nodes, Nodes}, {assertions, Assertions}], Config);
+
+init_per_testcase(local_test, Config) ->
+  ?INIT_DIST_TEST,
+  StartTestAns = nodes_manager:start_test_on_local_node(),
+  StartAppAns = nodes_manager:start_app([{node_type, ccm_test}, {dispatcher_port, 7777}, {ccm_nodes, [node()]}, {dns_port, 1312}]),
+  Assertions = [{ok, StartTestAns}, {ok, StartAppAns}],
+  lists:append([{assertions, Assertions}], Config).
+
+
+end_per_testcase(distributed_test, Config) ->
+  Nodes = ?config(nodes, Config),
+  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
+  StopAns = nodes_manager:stop_nodes(Nodes),
+  %% use assertions AFTER all code that should be executed (they will show info for user but do not disturb cleaning up)
+  ?assertEqual(false, lists:member(error, StopLog)),
+  ?assertEqual(ok, StopAns);
+
+end_per_testcase(local_test, _Config) ->
+  StopAns = nodes_manager:stop_test_on_local_nod(),
+  ?assertEqual(ok, StopAns).

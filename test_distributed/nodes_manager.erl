@@ -14,16 +14,26 @@
 -module(nodes_manager).
 
 -include("registered_names.hrl").
+-include("nodes_manager.hrl").
 
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_test_on_nodes/1, start_test_on_nodes/2, stop_nodes/1, start_local_test/0, start_app_on_nodes/2, stop_app_on_nodes/1, stop_local_test/0]).
+-export([start_test_on_nodes/1, start_test_on_nodes/2, stop_nodes/1, start_test_on_local_node/0, start_app_on_nodes/2, stop_app_on_nodes/1, stop_test_on_local_nod/0, check_start_assertions/1]).
 -export([start_deps/0, start_app/1, stop_deps/0, stop_app/0, start_deps_for_tester_node/0, stop_deps_for_tester_node/0, get_db_node/0]).
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
+
+%% check_start_assertions/0
+%% ====================================================================
+%% @doc Checks if test was initialized properly.
+-spec check_start_assertions(Config :: term()) -> ok.
+%% ====================================================================
+check_start_assertions(Config) ->
+  Assertions = ?config(assertions, Config),
+  lists:foreach(fun({Exp, Real}) -> ?assertEqual(Exp, Real) end, Assertions).
 
 %% start_deps_for_tester_node/0
 %% ====================================================================
@@ -59,14 +69,14 @@ stop_deps_for_tester_node() ->
   application:stop(crypto),
   application:stop(public_key).
 
-%% start_local_test/0
+%% start_test_on_local_node/0
 %% ====================================================================
 %% @doc Starts dependencies needed when test is run locally on one node.
--spec start_local_test() -> Result when
+-spec start_test_on_local_node() -> Result when
   Result ::  ok | {error, Reason},
   Reason :: term().
 %% ====================================================================
-start_local_test() ->
+start_test_on_local_node() ->
   set_deps(),
   start_deps().
 
@@ -144,13 +154,13 @@ stop_nodes([Node | Nodes]) ->
   slave:stop(Node),
   stop_nodes(Nodes).
 
-%% stop_local_test/0
+%% stop_test_on_local_nod/0
 %% ====================================================================
 %% @doc Stops dependencies needed when test is run locally on one node.
--spec stop_local_test() -> Result when
+-spec stop_test_on_local_nod() -> Result when
   Result ::  ok | error.
 %% ====================================================================
-stop_local_test() ->
+stop_test_on_local_nod() ->
   App = stop_app(),
   Deps = stop_deps(),
   case (Deps =:= ok) and (App =:= ok) of

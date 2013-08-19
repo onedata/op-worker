@@ -18,7 +18,7 @@
 -include("fuse_messages_pb.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 
--export([all/0]).
+-export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([integration_test/1]).
 
 all() -> [integration_test].
@@ -28,22 +28,14 @@ all() -> [integration_test].
 %% ====================================================================
 
 %% Checks fslogic integration with dao and db
-integration_test(_Config) ->
-  ?INIT_DIST_TEST,
+integration_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
 
   Cert = ?COMMON_FILE("peer.pem"),
   Host = "localhost",
-  Port = 6666,
-
-  nodes_manager:start_deps_for_tester_node(),
-  NodesUp = nodes_manager:start_test_on_nodes(1),
-  ?assertEqual(false, lists:member(error, NodesUp)),
-
+  Port = ?config(port, Config),
   [FSLogicNode | _] = NodesUp,
-
-  DB_Node = nodes_manager:get_db_node(),
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}]]),
-  ?assertEqual(false, lists:member(error, StartLog)),
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
@@ -206,12 +198,34 @@ integration_test(_Config) ->
 
   {Status16, Answer16} = delete_file(Host, Cert, Port, NewNameOfFIle),
   ?assertEqual("ok", Status16),
-  ?assertEqual(list_to_atom(?VOK), Answer16),
+  ?assertEqual(list_to_atom(?VOK), Answer16).
 
-  StopLog = nodes_manager:stop_app_on_nodes(NodesUp),
+%% ====================================================================
+%% SetUp and TearDown functions
+%% ====================================================================
+
+init_per_testcase(_, Config) ->
+  ?INIT_DIST_TEST,
+  nodes_manager:start_deps_for_tester_node(),
+
+  NodesUp = nodes_manager:start_test_on_nodes(1),
+  [FSLogicNode | _] = NodesUp,
+
+  DB_Node = nodes_manager:get_db_node(),
+  Port = 6666,
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}]]),
+
+  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
+  lists:append([{port, Port}, {nodes, NodesUp}, {assertions, Assertions}], Config).
+
+end_per_testcase(_, Config) ->
+  Nodes = ?config(nodes, Config),
+  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
+  StopAns = nodes_manager:stop_nodes(Nodes),
+  nodes_manager:stop_deps_for_tester_node(),
+
   ?assertEqual(false, lists:member(error, StopLog)),
-  ?assertEqual(ok, nodes_manager:stop_nodes(NodesUp)),
-  nodes_manager:stop_deps_for_tester_node().
+  ?assertEqual(ok, StopAns).
 
 %% ====================================================================
 %% Helper functions

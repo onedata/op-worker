@@ -18,7 +18,7 @@
 -include("communication_protocol_pb.hrl").
 
 %% export for ct
--export([all/0]).
+-export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([main_test/1]).
 
 %% export nodes' codes
@@ -48,19 +48,11 @@ worker_code() ->
 %% Test function
 %% ====================================================================
 
-main_test(_Config) ->
-  ?INIT_DIST_TEST,
-  nodes_manager:start_deps_for_tester_node(),
-  NodesUp = nodes_manager:start_test_on_nodes(4),
-  ?assertEqual(false, lists:member(error, NodesUp)),
+main_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
-
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}],
-    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1309}],
-    [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}],
-    [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}]]),
-  ?assertEqual(false, lists:member(error, StartLog)),
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
   timer:sleep(100),
@@ -123,9 +115,32 @@ main_test(_Config) ->
   end,
 
   PongsNum2 = lists:foldl(CheckNodes, 0, Ports),
-  ?assertEqual(PongsNum2, length(Jobs) * length(Ports)),
+  ?assertEqual(PongsNum2, length(Jobs) * length(Ports)).
 
-  StopLog = nodes_manager:stop_app_on_nodes(NodesUp),
+%% ====================================================================
+%% SetUp and TearDown functions
+%% ====================================================================
+
+init_per_testcase(_, Config) ->
+  ?INIT_DIST_TEST,
+  nodes_manager:start_deps_for_tester_node(),
+
+  NodesUp = nodes_manager:start_test_on_nodes(4),
+  [CCM | _] = NodesUp,
+
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1309}],
+    [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}],
+    [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}]]),
+
+  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
+  lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config).
+
+end_per_testcase(_, Config) ->
+  Nodes = ?config(nodes, Config),
+  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
+  StopAns = nodes_manager:stop_nodes(Nodes),
+  nodes_manager:stop_deps_for_tester_node(),
+
   ?assertEqual(false, lists:member(error, StopLog)),
-  ?assertEqual(ok, nodes_manager:stop_nodes(NodesUp)),
-  nodes_manager:stop_deps_for_tester_node().
+  ?assertEqual(ok, StopAns).
