@@ -101,8 +101,14 @@ init([]) ->
   Pid = self(),
   erlang:send_after(Interval * 1000, Pid, {timer, init_cluster}),
   erlang:send_after(50, Pid, {timer, {set_monitoring, on}}),
-  erlang:send_after(100, Pid, {timer, start_central_logger}),
-  erlang:send_after(150, Pid, {timer, get_state_from_db}),
+
+  {ok, Interval2} = application:get_env(veil_cluster_node, heart_beat),
+  LoggerAndDAOInterval = case Interval > (2*Interval2 + 1) of
+    true -> 2*Interval2;
+    false -> Interval - 1
+  end,
+  erlang:send_after(LoggerAndDAOInterval * 1000 + 100, Pid, {timer, start_central_logger}),
+  erlang:send_after(LoggerAndDAOInterval * 1000 + 200, Pid, {timer, get_state_from_db}),
   {ok, #cm_state{}};
 
 init([test]) ->
@@ -141,6 +147,9 @@ handle_call(get_state, _From, State) ->
 
 handle_call(get_version, _From, State) ->
   {reply, get_version(State), State};
+
+handle_call(get_ccm_node, _From, State) ->
+  {reply, node(), State};
 
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
@@ -628,8 +637,6 @@ node_down(Node, State) ->
   NewState :: term().
 %% ====================================================================
 start_central_logger(State) ->
-  [LoggerNode | _] = State#cm_state.nodes,
-
   CreateRunningWorkersList = fun({_N, M, _Child}, Workers) ->
     [M | Workers]
   end,
@@ -638,6 +645,7 @@ start_central_logger(State) ->
   case lists:member(central_logger, RunningWorkers) of
     true -> State;
     false ->
+      [LoggerNode | _] = State#cm_state.nodes,
       {Ans, NewState} = start_worker(LoggerNode, central_logger, [], State),
       case Ans of
         ok -> update_dispatchers_and_dns(NewState, true, true);
@@ -652,8 +660,6 @@ start_central_logger(State) ->
   NewState :: term().
 %% ====================================================================
 get_state_from_db(State) ->
-  [DaoNode | _] = State#cm_state.nodes,
-
   CreateRunningWorkersList = fun({_N, M, _Child}, Workers) ->
     [M | Workers]
   end,
@@ -661,9 +667,17 @@ get_state_from_db(State) ->
   RunningWorkers = lists:foldl(CreateRunningWorkersList, [], Workers),
   case lists:member(dao, RunningWorkers) of
     true ->
+      FindDAO = fun({N, M, _Child}, TmpAns) ->
+        case M of
+          dao -> N;
+          _ -> TmpAns
+        end
+      end,
+      DaoNode = lists:foldl(FindDAO, [], Workers),
       gen_server:cast({dao, DaoNode}, {synch, 1, {get_state, []}, cluster_state, {gen_serv, {global, ?CCM}}}),
       State;
     false ->
+      [DaoNode | _] = State#cm_state.nodes,
       {Ans, NewState} = start_worker(DaoNode, dao, [], State),
       case Ans of
         ok ->

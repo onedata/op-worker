@@ -20,7 +20,8 @@
 %% API
 %% ====================================================================
 -export([start_test_on_nodes/1, start_test_on_nodes/2, stop_nodes/1, start_test_on_local_node/0, start_app_on_nodes/2, stop_app_on_nodes/1, stop_test_on_local_nod/0, check_start_assertions/1]).
--export([start_deps/0, start_app/1, stop_deps/0, stop_app/0, start_deps_for_tester_node/0, stop_deps_for_tester_node/0, get_db_node/0]).
+-export([start_test_on_nodes_with_dist_app/2, start_test_on_nodes_with_dist_app/3, start_node/2, stop_node/1]).
+-export([start_deps/0, start_app/2, start_app_local/1, stop_deps/0, stop_app/1, stop_app_local/0, start_deps_for_tester_node/0, stop_deps_for_tester_node/0, get_db_node/0]).
 
 %% ====================================================================
 %% API functions
@@ -101,10 +102,61 @@ start_test_on_nodes(NodesNum, Verbose) ->
   case NodesNum > 0 of
     true ->
       Host = get_host(),
-      Nodes = create_nodes_description(Host, NodesNum),
-      start_nodes(Nodes, [], Verbose);
+      Nodes = create_nodes_description(Host, [], NodesNum),
+
+      Params = case Verbose of
+        true -> lists:map(fun(_) -> "" end, Nodes);
+        _ -> lists:map(fun(_) -> " -noshell" end, Nodes)
+      end,
+
+      start_nodes(Nodes, Params);
     false -> []
   end.
+
+%% start_test_on_nodes_with_dist_app/2
+%% ====================================================================
+%% @doc Starts nodes needed for test.
+-spec start_test_on_nodes_with_dist_app(NodesNum :: integer(), CCMNum :: integer()) -> Result when
+  Result ::  list().
+%% ====================================================================
+start_test_on_nodes_with_dist_app(NodesNum, CCMNum) ->
+  start_test_on_nodes_with_dist_app(NodesNum, CCMNum, false).
+
+%% start_test_on_nodes_with_dist_app/3
+%% ====================================================================
+%% @doc Starts nodes needed for test.
+-spec start_test_on_nodes_with_dist_app(NodesNum :: integer(), CCMNum :: integer(), Verbose :: boolean()) -> Result when
+  Result ::  list().
+%% ====================================================================
+start_test_on_nodes_with_dist_app(NodesNum, CCMNum, Verbose) ->
+  set_deps(),
+
+  case NodesNum > 0 of
+    true ->
+      Host = get_host(),
+      Nodes = create_nodes_description(Host, [], NodesNum),
+
+      DistNodes = create_dist_nodes_list(Nodes, CCMNum),
+      DistAppDesc = create_dist_app_description(DistNodes),
+      Params = create_nodes_params_for_dist_nodes(Nodes, DistNodes, DistAppDesc),
+
+      Params2 = case Verbose of
+                 true -> lists:map(fun(P) -> P end, Params);
+                 _ -> lists:map(fun(P) -> " -noshell " ++ P end, Params)
+               end,
+
+      {start_nodes(Nodes, Params2), Params2};
+    false -> []
+  end.
+
+%% start_app/2
+%% ====================================================================
+%% @doc Starts application (with arguments) on node.
+-spec start_app(Node :: atom(), Args  :: list()) -> Result when
+  Result ::  list().
+%% ====================================================================
+start_app(Node, Args) ->
+  rpc:call(Node, nodes_manager, start_app_local, [Args]).
 
 %% start_app_on_nodes/2
 %% ====================================================================
@@ -117,12 +169,21 @@ start_app_on_nodes([], _Args) ->
 
 start_app_on_nodes([Node | Nodes], [Arg | Args]) ->
   Deps = rpc:call(Node, nodes_manager, start_deps, []),
-  App = rpc:call(Node, nodes_manager, start_app, [Arg]),
+  App = start_app(Node, Arg),
   Ans = case (Deps =:= ok) and (App =:= ok) of
     true -> ok;
     false -> error
   end,
   [Ans | start_app_on_nodes(Nodes, Args)].
+
+%% stop_app/1
+%% ====================================================================
+%% @doc Stops application on node.
+-spec stop_app(Node :: atom()) -> Result when
+  Result ::  list().
+%% ====================================================================
+stop_app(Node) ->
+  rpc:call(Node, nodes_manager, stop_app_local, []).
 
 %% stop_app_on_nodes/1
 %% ====================================================================
@@ -134,7 +195,7 @@ stop_app_on_nodes([]) ->
   [];
 
 stop_app_on_nodes([Node | Nodes]) ->
-  App = rpc:call(Node, nodes_manager, stop_app, []),
+  App = stop_app(Node),
   Deps = rpc:call(Node, nodes_manager, stop_deps, []),
   Ans = case (Deps =:= ok) and (App =:= ok) of
     true -> ok;
@@ -151,7 +212,7 @@ stop_nodes([]) ->
   ok;
 
 stop_nodes([Node | Nodes]) ->
-  slave:stop(Node),
+  stop_node(Node),
   stop_nodes(Nodes).
 
 %% stop_test_on_local_nod/0
@@ -161,7 +222,7 @@ stop_nodes([Node | Nodes]) ->
   Result ::  ok | error.
 %% ====================================================================
 stop_test_on_local_nod() ->
-  App = stop_app(),
+  App = stop_app_local(),
   Deps = stop_deps(),
   case (Deps =:= ok) and (App =:= ok) of
     true -> ok;
@@ -209,74 +270,178 @@ stop_deps() ->
   application:stop(mimetypes),
   application:stop(simple_bridge),
   application:stop(ibrowse),
-  try
-    stop_app()
-  catch
-    _:_ -> ok
-  end,
   application:unload(?APP_Name).
 
-%% start_app/1
+%% start_app_local/1
 %% ====================================================================
 %% @doc This function starts the application ands sets environment
 %% variables for it.
--spec start_app(Vars :: list()) -> ok.
+-spec start_app_local(Vars :: list()) -> ok.
 %% ====================================================================
 
-start_app(Vars) ->
+start_app_local(Vars) ->
   set_env_vars([{nif_prefix, './'}, {ca_dir, './cacerts/'}] ++ Vars),
   application:stop(?APP_Name), %% Make sure that veil_cluster isn't running before starting new instance
   application:start(?APP_Name).
 
-%% stop_app/0
+%% stop_app_local/0
 %% ====================================================================
 %% @doc This function stops the application.
--spec stop_app() -> ok.
+-spec stop_app_local() -> ok.
 %% ====================================================================
 
-stop_app() ->
+stop_app_local() ->
   application:stop(?APP_Name).
+
+%% get_db_node/0
+%% ====================================================================
+%% @doc This function returns db node.
+-spec get_db_node() -> atom().
+%% ====================================================================
 
 get_db_node() ->
   Node = atom_to_list(node()),
   [_, Host] = string:tokens(Node, "@"),
   list_to_atom("db@" ++ Host).
 
+%% start_node/2
+%% ====================================================================
+%% @doc Starts node with params.
+-spec start_node(Node :: atom(), Params :: string()) -> Result when
+  Result ::  {Ans, Node},
+  Ans :: term(),
+  Node :: atom().
+%% ====================================================================
+
+start_node(Node, Params) ->
+  NodeStr = atom_to_list(Node),
+  [BegStr, HostStr] = string:tokens(NodeStr, "@"),
+  Host = list_to_atom(HostStr),
+  NodeName = list_to_atom(BegStr),
+
+  start_node(NodeName, Host, Params).
+
+%% stop_node/1
+%% ====================================================================
+%% @doc Stops node.
+-spec stop_node(Node :: atom()) -> ok.
+%% ====================================================================
+
+stop_node(Node) ->
+  slave:stop(Node).
+
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
 
-%% start_nodes/3
+%% start_node/3
+%% ====================================================================
+%% @doc Starts node with params.
+-spec start_node(NodeName :: atom(), Host :: atom(), Params :: string()) -> Result when
+  Result ::  {Ans, Node},
+  Ans :: term(),
+  Node :: atom().
+%% ====================================================================
+start_node(NodeName, Host, Params) ->
+  slave:start(Host, NodeName, make_code_path() ++ " -setcookie \"" ++ atom_to_list(erlang:get_cookie()) ++ "\"" ++ Params).
+
+%% start_nodes/2
 %% ====================================================================
 %% @doc Starts nodes needed for test.
--spec start_nodes(NodesNames:: list(), TmpAns :: list(), Verbose :: boolean()) -> Result when
+-spec start_nodes(NodesNames:: list(), AdditionalParams :: string()) -> Result when
   Result ::  list().
 %% ====================================================================
-start_nodes([], Ans, _Verbose) ->
-  Ans;
 
-start_nodes([{NodeName, Host} | Nodes], Ans, Verbose) ->
-  {TmpAns, Node} = case Verbose of
-    true -> slave:start(Host, NodeName, make_code_path() ++ " -setcookie \"" ++ atom_to_list(erlang:get_cookie()) ++ "\"");
-    _ -> slave:start(Host, NodeName, make_code_path() ++ " -noshell -setcookie \"" ++ atom_to_list(erlang:get_cookie()) ++ "\"")
-  end,
-  case TmpAns of
-    ok -> start_nodes(Nodes, [Node | Ans], Verbose);
-    _ -> start_nodes(Nodes, [error | Ans], Verbose)
-  end.
-
-%% create_nodes_description/2
-%% ====================================================================
-%% @doc Creates description of nodes needed for test.
--spec create_nodes_description(Host:: atom(), Counter :: integer()) -> Result when
-  Result ::  list().
-%% ====================================================================
-create_nodes_description(_Host, 0) ->
+start_nodes([], _AdditionalParams) ->
   [];
 
-create_nodes_description(Host, Counter) ->
+start_nodes([{NodeName, Host} | Nodes], [Param | AdditionalParams]) ->
+  Pid = self(),
+  spawn(fun() ->
+    {TmpAns, Node} = start_node(NodeName, Host, Param),
+    Pid ! {NodeName, TmpAns, Node}
+  end),
+  OtherNodesAns = start_nodes(Nodes, AdditionalParams),
+  Node3 = receive
+    {NodeName, TmpAns2, Node2} ->
+      case TmpAns2 of
+        ok -> Node2;
+        _ -> error
+      end
+  after 5000 ->
+    error
+  end,
+  [Node3 | OtherNodesAns].
+
+%% create_nodes_description/3
+%% ====================================================================
+%% @doc Creates description of nodes needed for test.
+-spec create_nodes_description(Host:: atom(), TmpAns :: list(), Counter :: integer()) -> Result when
+  Result ::  list().
+%% ====================================================================
+create_nodes_description(_Host, Ans, 0) ->
+  Ans;
+
+create_nodes_description(Host, Ans, Counter) ->
   Desc = {list_to_atom("slave" ++ integer_to_list(Counter)), Host},
-  [Desc | create_nodes_description(Host, Counter - 1)].
+  create_nodes_description(Host, [Desc | Ans], Counter - 1).
+
+%% create_dist_nodes_list/2
+%% ====================================================================
+%% @doc Creates list of nodes for distributed application
+-spec create_dist_nodes_list(Nodes:: list(), DistNodesNum :: integer()) -> Result when
+  Result ::  list().
+%% ====================================================================
+
+create_dist_nodes_list(_, 0) ->
+  [];
+
+create_dist_nodes_list([{NodeName, Host} | Nodes], DistNodesNum) ->
+  Node = "'" ++ atom_to_list(NodeName) ++ "@" ++ atom_to_list(Host) ++ "'",
+  [Node | create_dist_nodes_list(Nodes, DistNodesNum - 1)].
+
+%% create_dist_app_description/1
+%% ====================================================================
+%% @doc Creates description of distributed application
+-spec create_dist_app_description(DistNodes:: list()) -> Result when
+  Result ::  string().
+%% ====================================================================
+
+create_dist_app_description(DistNodes) ->
+  [Main | Rest] = DistNodes,
+  RestString = lists:foldl(fun(N, TmpAns) ->
+    case TmpAns of
+      "" -> N;
+      _ -> TmpAns ++ ", " ++ N
+    end
+  end, "", Rest),
+  "\"[{veil_cluster_node, 1000, [" ++ Main ++ ", {" ++ RestString ++ "}]}]\"".
+
+%% create_nodes_params_for_dist_nodes/3
+%% ====================================================================
+%% @doc Creates list of nodes for distributed application
+-spec create_nodes_params_for_dist_nodes(Nodes:: list(), DistNodes :: list(), DistAppDescription :: string()) -> Result when
+  Result ::  list().
+%% ====================================================================
+
+create_nodes_params_for_dist_nodes([], _DistNodes, _DistAppDescription) ->
+  [];
+
+create_nodes_params_for_dist_nodes([{NodeName, Host}  | Nodes], DistNodes, DistAppDescription) ->
+  Node = "'" ++ atom_to_list(NodeName) ++ "@" ++ atom_to_list(Host) ++ "'",
+  case lists:member(Node, DistNodes) of
+    true ->
+      SynchNodes = lists:delete(Node, DistNodes),
+      SynchNodesString = lists:foldl(fun(N, TmpAns) ->
+        case TmpAns of
+          "" -> N;
+          _ -> TmpAns ++ ", " ++ N
+        end
+      end, "", SynchNodes),
+      Param = " -kernel distributed " ++ DistAppDescription ++ " -kernel sync_nodes_mandatory \"[" ++ SynchNodesString ++ "]\" -kernel sync_nodes_timeout 30000 ",
+      [Param | create_nodes_params_for_dist_nodes(Nodes, DistNodes, DistAppDescription)];
+    false -> ["" | create_nodes_params_for_dist_nodes(Nodes, DistNodes, DistAppDescription)]
+  end.
 
 %% make_code_path/0
 %% ====================================================================

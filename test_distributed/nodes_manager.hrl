@@ -32,15 +32,15 @@
     case (BoolExpr) of
       true -> ok;
       __V ->
-        Args = [{module, ?MODULE},
+        __Args = [{module, ?MODULE},
           {line, ?LINE},
           {expression, (??BoolExpr)},
           {expected, true},
           {value, case __V of false -> __V;
                     _ -> {not_a_boolean,__V}
                   end}],
-        ct:print("assertion_failed: ~p~n", [Args]),
-        erlang:error({assertion_failed, Args})
+        ct:print("assertion_failed: ~p~n", [__Args]),
+        erlang:error({assertion_failed, __Args})
     end
   end)())).
 
@@ -50,13 +50,13 @@
     case (Expr) of
       Guard -> ok;
       __V ->
-        Args = [{module, ?MODULE},
+        __Args = [{module, ?MODULE},
           {line, ?LINE},
           {expression, (??Expr)},
           {expected, (??Guard)},
           {value, __V}],
-        ct:print("assertMatch_failed: ~p~n", [Args]),
-        erlang:error({assertMatch_failed, Args})
+        ct:print("assertMatch_failed: ~p~n", [__Args]),
+        erlang:error({assertMatch_failed, __Args})
     end
   end)())).
 
@@ -66,13 +66,13 @@
     case (Expr) of
       __X -> ok;
       __V ->
-        Args = [{module, ?MODULE},
+        __Args = [{module, ?MODULE},
           {line, ?LINE},
           {expression, (??Expr)},
           {expected, __X},
           {value, __V}],
-        ct:print("assertEqual_failed: ~p~n", [Args]),
-        erlang:error({assertEqual_failed, Args})
+        ct:print("assertEqual_failed: ~p~n", [__Args]),
+        erlang:error({assertEqual_failed, __Args})
     end
   end)(Expect))).
 
@@ -81,19 +81,19 @@
   ((fun () ->
     try (Expr) of
       __V ->
-        Args = [{module, ?MODULE},
+        __Args = [{module, ?MODULE},
           {line, ?LINE},
           {expression, (??Expr)},
           {expected,
             "{ "++(??Class)++" , "++(??Term)
               ++" , [...] }"},
           {unexpected_success, __V}],
-        ct:print("assertException_failed: ~p~n", [Args]),
-        erlang:error({assertException_failed, Args})
+        ct:print("assertException_failed: ~p~n", [__Args]),
+        erlang:error({assertException_failed, __Args})
     catch
       Class:Term -> ok;
       __C:__T ->
-        Args = [{module, ?MODULE},
+        __Args = [{module, ?MODULE},
           {line, ?LINE},
           {expression, (??Expr)},
           {expected,
@@ -101,8 +101,8 @@
               ++" , [...] }"},
           {unexpected_exception,
             {__C, __T, erlang:get_stacktrace()}}],
-        ct:print("assertException_failed: ~p~n", [Args]),
-        erlang:error({assertException_failed, Args})
+        ct:print("assertException_failed: ~p~n", [__Args]),
+        erlang:error({assertException_failed, __Args})
     end
   end)())).
 
@@ -112,13 +112,13 @@
     case ?_cmd_(Cmd) of
       {(N), __Out} -> __Out;
       {__N, _} ->
-        Args = [{module, ?MODULE},
+        __Args = [{module, ?MODULE},
           {line, ?LINE},
           {command, (Cmd)},
           {expected_status,(N)},
           {status,__N}],
-        ct:print("command_failed: ~p~n", [Args]),
-        erlang:error({command_failed, Args})
+        ct:print("command_failed: ~p~n", [__Args]),
+        erlang:error({command_failed, __Args})
     end
   end)())).
 
@@ -128,13 +128,13 @@
     case ?_cmd_(Cmd) of
       {(N), _} -> ok;
       {__N, _} ->
-        Args = [{module, ?MODULE},
+        __Args = [{module, ?MODULE},
           {line, ?LINE},
           {command, (Cmd)},
           {expected_status,(N)},
           {status,__N}],
-        ct:print("assertCmd_failed: ~p~n", [Args]),
-        erlang:error({assertCmd_failed, Args})
+        ct:print("assertCmd_failed: ~p~n", [__Args]),
+        erlang:error({assertCmd_failed, __Args})
     end
   end)())).
 
@@ -144,12 +144,12 @@
     case ?_cmd_(Cmd) of
       {_, (T)} -> ok;
       {_, __T} ->
-        Args = [{module, ?MODULE},
+        __Args = [{module, ?MODULE},
           {line, ?LINE},
           {command,(Cmd)},
           {expected_output,(T)},
           {output,__T}],
-        ct:print("assertCmdOutput_failed: ~p~n", [Args]),
-        erlang:error({assertCmdOutput_failed, Args})
+        ct:print("assertCmdOutput_failed: ~p~n", [__Args]),
+        erlang:error({assertCmdOutput_failed, __Args})
     end
   end)())).

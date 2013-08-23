@@ -103,7 +103,7 @@ init_per_testcase(distributed_test, Config) ->
 init_per_testcase(local_test, Config) ->
   ?INIT_DIST_TEST,
   StartTestAns = nodes_manager:start_test_on_local_node(),
-  StartAppAns = nodes_manager:start_app([{node_type, ccm_test}, {dispatcher_port, 7777}, {ccm_nodes, [node()]}, {dns_port, 1312}]),
+  StartAppAns = nodes_manager:start_app_local([{node_type, ccm_test}, {dispatcher_port, 7777}, {ccm_nodes, [node()]}, {dns_port, 1312}]),
   Assertions = [{ok, StartTestAns}, {ok, StartAppAns}],
   lists:append([{assertions, Assertions}], Config).
 
