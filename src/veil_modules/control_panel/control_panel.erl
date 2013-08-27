@@ -85,7 +85,7 @@ handle(_ProtocolVersion, _Msg) ->
 %% cleanup/0
 %% ====================================================================
 %% @doc {@link worker_plugin_behaviour} callback cleanup/0 <br />
-%% Stops previously started applications (nprocreg and cowboy)
+%% Stops cowboy listener and terminates
 %% @end
 -spec cleanup() -> Result when
   Result :: ok | {error, Error},
@@ -101,7 +101,7 @@ cleanup() ->
 %% ====================================================================
 
 %% Compiles dispatch options to the format cowboy expects
-init_dispatch(DocRoot,StaticPaths) ->
+init_dispatch(DocRoot, StaticPaths) ->
   Handler = cowboy_static,
   StaticDispatches = lists:map(fun(Dir) ->
     Path = reformat_path(Dir),

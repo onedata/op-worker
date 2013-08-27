@@ -85,7 +85,10 @@ handle(_ProtocolVersion, {unsubscribe, Subscriber}) ->
   remove_subscriber(Subscriber);
 
 handle(_ProtocolVersion, {dispatch_log, Message, Timestamp, Severity, Metadata}) ->
-  dispatch_log(Message, Timestamp, Severity, Metadata).
+  dispatch_log(Message, Timestamp, Severity, Metadata);
+
+handle(_ProtocolVersion, _Request) ->
+  wrong_request.
 
 %% cleanup/0
 %% ====================================================================

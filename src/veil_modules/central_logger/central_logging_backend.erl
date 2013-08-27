@@ -158,5 +158,4 @@ dispatch_log(Message, Timestamp, Severity, OldMetadata) ->
     gen_server:call(?Dispatcher_Name, {central_logger, 1, {dispatch_log, Message, Timestamp, Severity, Metadata}})
   catch _:_ ->
     central_logger_not_running
-  end,
-  ok.
+  end.

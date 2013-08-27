@@ -239,7 +239,7 @@ handle_cast(start_central_logger, State) ->
   end;
 
 handle_cast(save_state, State) ->
-  Ans = gen_server:call(?Dispatcher_Name, {dao, 1, {save_state, [State]}, 500}),
+  Ans = gen_server:call(?Dispatcher_Name, {dao, 1, {save_state, [State]}}, 500),
   case Ans of
     ok -> lager:info([{mod, ?MODULE}], "Save state message sent");
     _ -> lager:error([{mod, ?MODULE}], "Save state error: ~p", [Ans])

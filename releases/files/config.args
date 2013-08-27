@@ -1,5 +1,5 @@
 %% This file contains parameters for veil cluster node configuration. 
-%% It is used by 'apply_config' script to set up environment before starting a cluster node.
+%% It is used by 'veil_cluster' script to set up environment before starting a cluster node.
 %% Every node must be configured individually before starting.
 
 
