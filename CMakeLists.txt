@@ -10,20 +10,24 @@ set(VeilHelpers_VERSION $(VeilHelpers_VERSION_MAJOR).$(VeilHelpers_VERSION_MINOR
 
 # CMake config
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
+set(DEPS_DIR "deps")
+
+# Deps
+add_subdirectory(${DEPS_DIR}/gmock)
+add_subdirectory(${DEPS_DIR}/gtest)
 
 # Include paths
 include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_BINARY_DIR})
 
+# Setup pthreads
+message(STATUS "Checking for pthreads...")
+find_package(Threads REQUIRED)
+
 # Setup fuse
 message(STATUS "Checking for FUSE...")
 find_package(FUSE REQUIRED)
 include_directories(${FUSE_INCLUDE_DIRS})
-
-# Setup OpenSSL
-message(STATUS "Checking for OpenSSL...")
-find_package(OpenSSL REQUIRED)
-include_directories(${OPENSSL_INCLUDE_DIR})
 
 # Setup Boost
 set(Boost_USE_STATIC_LIBS        ON)
@@ -49,7 +53,45 @@ add_library(veilhelpers ${HELPER_SOURCES})
 target_link_libraries(veilhelpers
     ${FUSE_LIBRARIES}
     ${Boost_LIBRARIES}
-    veilhelpers
     dl
     z
 )
+
+###########################
+##         TESTS         ##
+###########################
+
+enable_testing()
+include_directories(${GTEST_INCLUDE_DIR})
+include_directories(${GMOCK_INCLUDE_DIR})
+
+add_custom_target(cunit)
+macro(run_test test_target)
+  string(REGEX REPLACE "_test" "" test_name "${test_target}")  
+  add_custom_target(${test_target}_runtest
+      COMMAND ${test_target} --gtest_output="xml:cunit_results/TEST-${test_name}.xml"
+      DEPENDS ${test_target}
+      WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
+  add_dependencies(cunit ${test_target}_runtest)
+endmacro()
+
+set(TEST_SOURCES_DIR "test")
+include_directories(${TEST_SOURCES_DIR}/include)
+
+file(GLOB files ${TEST_SOURCES_DIR}/*_test.cc)
+foreach(file ${files})
+    get_filename_component(TEST_NAME ${file} NAME_WE)
+    add_executable(${TEST_NAME} ${file})
+    add_dependencies(${TEST_NAME} gtest gmock veilFuse veilhelpers veilclient veilprotocol)
+    target_link_libraries(${TEST_NAME}
+        ${CMAKE_THREAD_LIBS_INIT}
+        ${GTEST_LIBRARIES}
+        ${GMOCK_LIBRARIES}
+        ${FUSE_LIBRARIES}
+        veilhelpers
+        dl 
+        z
+    )    
+    add_test(${TEST_NAME} ${TEST_NAME})
+    run_test(${TEST_NAME})
+endforeach()

@@ -10,8 +10,49 @@ The goal of VeilHelpers is provision of a "storage helpers" - liblaries allowing
 
 Getting Started
 ---------------
-VeilHelpers is NOT a standalone project. It shouldn't be built separately. It should be build only with VeilCluster or VeilClient.
+VeilHelpers is built with CMake. More informations about compiling the project in "Compilation" section.
 
+Prerequisites
+-------------
+
+In order to compile the project, you need to have fallowing additional libraries, its headers and all its prerequisites in include/ld path:
+Also you need cmake 2.8+.
+
+* libfuse
+* libboost
+
+Use this command to install the required dependency packages:
+
+* Debian/Ubuntu Dependencies (.deb packages):
+
+        apt-get install libfuse-dev libboost-dev
+
+* RHEL/CentOS/Fedora Dependencies (.rpm packages):
+
+        yum install fuse-libs fuse-devel cmake28 boost-devel boost-static subversion
+        
+Compilation
+-----------
+
+#### Build
+    
+    make -s build
+    
+after this step you should have your libveilhelpers.a in "build" subdirectory.
+    
+
+#### Testing
+    
+There are two testing targets:
+
+    make -s test
+
+which has summarized output (per test case) and:
+
+    make -s cunit
+
+which shows detailed test results. 
+    
 Support
 -------
 For more information visit project Confluence or write to 'wrzeszcz@agh.edu.pl'.
