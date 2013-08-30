@@ -59,6 +59,7 @@ init(Ref, Socket, Transport, _Opts = []) ->
       [{_, EEC1, _}]    -> EEC1;
       _                 -> ssl:renegotiate(Socket),
                            ssl:close(Socket),
+                           lager:error("Peer was validated but EEC was not found. Please check if GSI validation is enabled."),
                            throw(no_eec_cert)      
     end,   
   lager:info("Peer connected using certificate with subject: ~p ~n", [gsi_handler:proxy_subject(EEC)]),

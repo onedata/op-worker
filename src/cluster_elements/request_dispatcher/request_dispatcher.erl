@@ -91,9 +91,10 @@ init(Modules) ->
   process_flag(trap_exit, true),
   try gsi_handler:init() of     %% Failed initialization of GSI should not disturb dispacher's startup
     ok -> ok;
-    {error, Error} -> io:format("GSI Handler init failed. Error: ~p", [Error])
+    {error, Error} -> lager:error("GSI Handler init failed. Error: ~p", [Error])
   catch
-    _:Except -> io:format("GSI Handler init failed. Exception: ~p", [Except])
+    throw:ccm_node -> lager:info("GSI Handler init interrupted due to wrong node type (CCM)");
+    _:Except -> lager:error("GSI Handler init failed. Exception: ~p", [Except])
   end,
   {ok, initState(Modules)}.
 
