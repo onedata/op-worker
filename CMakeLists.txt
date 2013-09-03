@@ -11,6 +11,7 @@ set(VeilHelpers_VERSION $(VeilHelpers_VERSION_MAJOR).$(VeilHelpers_VERSION_MINOR
 # CMake config
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 set(DEPS_DIR "deps")
+link_directories(${PROJECT_BINARY_DIR})
 
 # Deps
 add_subdirectory(${DEPS_DIR}/gmock)
@@ -48,7 +49,10 @@ set(CMAKE_SKIP_RPATH TRUE) # Something is wrong with CMake RPATH config, we need
 
 # Define targets
 
-add_library(veilhelpers ${HELPER_SOURCES})
+add_library(veilhelpersShared SHARED ${HELPER_SOURCES})
+add_library(veilhelpers STATIC ${HELPER_SOURCES})
+
+set_target_properties(veilhelpersShared PROPERTIES OUTPUT_NAME veilhelpers)
 
 target_link_libraries(veilhelpers
     ${FUSE_LIBRARIES}
