@@ -27,7 +27,7 @@ Use the following command to install the required dependency packages:
 
 * RHEL/CentOS/Fedora Dependencies (.rpm packages):
 
-        yum install globus-proxy-utils globus-gsi-callback-devel
+        yum install globus-proxy-utils globus-gsi-callback-devel fuse-libs fuse-devel cmake28 boost-devel boost-static subversion
 
         ln -s /usr/lib64/globus/include/globus_config.h /usr/include/globus
 

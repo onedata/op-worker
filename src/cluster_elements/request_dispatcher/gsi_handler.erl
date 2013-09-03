@@ -14,7 +14,7 @@
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("registered_names.hrl").
 
--export([init/0, verify_callback/3, load_certs/1, update_crls/1, proxy_subject/1]).
+-export([init/0, verify_callback/3, load_certs/1, update_crls/1, proxy_subject/1, call/3]).
 %% ===================================================================
 %% API
 %% ===================================================================
@@ -210,6 +210,10 @@ initialize_node(NodeName) when is_atom(NodeName) ->
 -spec call(Module :: atom(), Method :: atom(), Args :: [term()]) -> ok | no_return().
 %% ====================================================================
 call(Module, Method, Args) ->
+    case ets:info(gsi_state) of 
+        undefined -> error(gsi_handler_not_loaded);
+        _ -> ok 
+    end,
     Nodes = ets:lookup(gsi_state, node),
     call(Module, Method, Args, Nodes).
 
@@ -226,6 +230,7 @@ call(_Module, _Method, _Args, []) ->
     {error, verification_nodes_down};
 call(Module, Method, Args, [{node, NodeName} | OtherNodes]) ->
     case rpc:call(get_node(NodeName), Module, Method, Args) of
+        {badrpc, {'EXIT', Exit}} -> {'EXIT', Exit};
         {badrpc, Reason} ->
             spawn(fun() -> initialize_node(NodeName) end),
             lager:error("GSI slave node ~p is down (reason ~p). Trying to reinitialize node", [get_node(NodeName), Reason]),
