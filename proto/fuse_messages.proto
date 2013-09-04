@@ -79,6 +79,15 @@ message CreateLink {
 	required string to_file_logic_name = 2;
 }
 
+message GetLink {
+	required string file_logic_name = 1;	
+}
+
+message LinkInfo {
+    optional string answer = 1 [default = "ok"];
+	required string file_logic_name = 2;	
+}
+
 message RenameFile {
 	required string from_file_logic_name = 1;
 	required string to_file_logic_name = 2;
