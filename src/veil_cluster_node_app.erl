@@ -42,11 +42,12 @@ start(_StartType, _StartArgs) ->
       {ok, DispatcherPoolSize} = application:get_env(?APP_Name, dispatcher_pool_size),
       {ok, CertFile} = application:get_env(?APP_Name, ssl_cert_path),
       {ok, _} = ranch:start_listener(dispatcher_listener, DispatcherPoolSize, ranch_ssl,
-          [{port, Port}, {certfile, atom_to_list(CertFile)},
+          [{max_connections, infinity}, {port, Port}, {certfile, atom_to_list(CertFile)},
               {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}}],
           ranch_handler, []);
     false -> ok
   end,
+  fprof:start(), %% Start fprof server. It doesnt do enything unless it's used.
   veil_cluster_node_sup:start_link(NodeType).
 
 

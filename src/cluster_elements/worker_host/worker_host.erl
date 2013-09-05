@@ -272,14 +272,13 @@ proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
       lager:error("Worker plug-in ~p error: ~p:~p", [PlugIn, Type, Error]),
       worker_plug_in_error
 	end,
-
 	case ReplyTo of
 		non -> ok;
     {gen_serv, Serv} ->
       case MsgId of
         non -> gen_server:cast(Serv, Response);
         Id -> gen_server:cast(Serv, {worker_answer, Id, Response})
-      end;
+      end; 
     {proc, Pid} ->
       case MsgId of
         non -> Pid ! Response;
