@@ -1,5 +1,5 @@
 %% ===================================================================
-%% @author Michał Wrzeszcz
+%% @author Michal Wrzeszcz
 %% @copyright (C): 2013 ACK CYFRONET AGH
 %% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
@@ -17,18 +17,22 @@
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
+-include("veil_modules/dao/dao_vfs.hrl").
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([integration_test/1]).
+-export([files_manager_standard_files_test/1, files_manager_tmp_files_test/1, fuse_requests_test/1]).
 
-all() -> [integration_test].
+all() -> [files_manager_tmp_files_test, files_manager_standard_files_test, fuse_requests_test].
+
+-define(SH, "DirectIO").
+-define(SH_ARGS, ["/tmp"]). %% Root of test filesystem
 
 %% ====================================================================
 %% Test functions
 %% ====================================================================
 
 %% Checks fslogic integration with dao and db
-integration_test(Config) ->
+fuse_requests_test(Config) ->
   nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
@@ -51,7 +55,7 @@ integration_test(Config) ->
   end, FilesInDirNames),
   NewNameOfFIle = "new_name_of_file",
 
-  {InsertStorageAns, _} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ["/tmp/root"]]),
+  {InsertStorageAns, _} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ["/tmp"]]),
   ?assertEqual(ok, InsertStorageAns),
 
   {Status, Helper, Id, _Validity, AnswerOpt0} = create_file(Host, Cert, Port, TestFile),
@@ -114,8 +118,7 @@ integration_test(Config) ->
   {Status7, Files7, AnswerOpt7} = ls(Host, Cert, Port, DirName, 10, 0),
   ?assertEqual("ok", Status7),
   ?assertEqual(?VOK, AnswerOpt7),
-  Check7 = (length(FilesInDir) == length(Files7)),
-  Check7 = true,
+  ?assertEqual(length(FilesInDir), length(Files7)),
   lists:foreach(fun(Name7) ->
     ?assert(lists:member(Name7, Files7))
   end, FilesInDirNames),
@@ -223,6 +226,174 @@ integration_test(Config) ->
   ?assertEqual("ok", Status20),
   ?assertEqual(?VENOENT, Answer20),
   ok.
+
+%% Checks files manager (manipulation on tmp files copies)
+files_manager_tmp_files_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+  [Node1 | _] = NodesUp,
+
+  gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
+  gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  timer:sleep(100),
+  gen_server:cast({global, ?CCM}, init_cluster),
+  timer:sleep(1500),
+
+  SHInfo = #storage_helper_info{name = ?SH, init_args = ?SH_ARGS},
+  File = "files_manager_test_file1",
+  NotExistingFile = "files_manager_test_not_existing_file",
+
+  AnsCreate = rpc:call(Node1, files_manager, create_file_storage_system, [SHInfo, File]),
+  ?assertEqual(ok, AnsCreate),
+
+  AnsCreate2 = rpc:call(Node1, files_manager, create_file_storage_system, [SHInfo, File]),
+  ?assertEqual({error,file_exists}, AnsCreate2),
+
+  AnsWrite1 = rpc:call(Node1, files_manager, write_storage_system, [SHInfo, File, list_to_binary("abcdefgh")]),
+  ?assertEqual(8, AnsWrite1),
+
+  {StatusRead1, AnsRead1} = rpc:call(Node1, files_manager, read_storage_system, [SHInfo, File, 2, 2]),
+  ?assertEqual(ok, StatusRead1),
+  ?assertEqual("cd", binary_to_list(AnsRead1)),
+
+  {StatusRead2, AnsRead2} = rpc:call(Node1, files_manager, read_storage_system, [SHInfo, File, 7, 2]),
+  ?assertEqual(ok, StatusRead2),
+  ?assertEqual("h", binary_to_list(AnsRead2)),
+
+  AnsWrite2 = rpc:call(Node1, files_manager, write_storage_system, [SHInfo, File, 3, list_to_binary("123")]),
+  ?assertEqual(3, AnsWrite2),
+
+  {StatusRead3, AnsRead3} = rpc:call(Node1, files_manager, read_storage_system, [SHInfo, File, 2, 5]),
+  ?assertEqual(ok, StatusRead3),
+  ?assertEqual("c123g", binary_to_list(AnsRead3)),
+
+  AnsWrite3 = rpc:call(Node1, files_manager, write_storage_system, [SHInfo, File, list_to_binary("XYZ")]),
+  ?assertEqual(3, AnsWrite3),
+
+  {StatusRead4, AnsRead4} = rpc:call(Node1, files_manager, read_storage_system, [SHInfo, File, 2, 5]),
+  ?assertEqual(ok, StatusRead4),
+  ?assertEqual("c123g", binary_to_list(AnsRead4)),
+
+  {StatusRead5, AnsRead5} = rpc:call(Node1, files_manager, read_storage_system, [SHInfo, File, 0, 100]),
+  ?assertEqual(ok, StatusRead5),
+  ?assertEqual("abc123ghXYZ", binary_to_list(AnsRead5)),
+
+  {StatusRead6, AnsRead6} = rpc:call(Node1, files_manager, read_storage_system, [SHInfo, NotExistingFile, 0, 100]),
+  ?assertEqual(wrong_getatt_return_code, StatusRead6),
+  ?assert(is_integer(AnsRead6)),
+
+  AnsDel = rpc:call(Node1, files_manager, delete_file_storage_system, [SHInfo, File]),
+  ?assertEqual(ok, AnsDel),
+
+  {StatusDel2, AnsDel2}  = rpc:call(Node1, files_manager, delete_file_storage_system, [SHInfo, File]),
+  ?assertEqual(wrong_getatt_return_code, StatusDel2),
+  ?assert(is_integer(AnsDel2)).
+
+%% Checks files manager (manipulation on users' files)
+files_manager_standard_files_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+  [Node1 | _] = NodesUp,
+
+  gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
+  gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  timer:sleep(100),
+  gen_server:cast({global, ?CCM}, init_cluster),
+  timer:sleep(1500),
+
+  {InsertStorageAns, _} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ["/tmp"]]),
+  ?assertEqual(ok, InsertStorageAns),
+
+  DirName = "fslogic_test_dir2",
+  FileInDir = "files_manager_test_file2",
+  FileInDir2 = "files_manager_test_file3",
+  FileInDir2NewName = "files_manager_test_file3_new_name",
+  File = DirName ++ "/" ++ FileInDir,
+  File2 = DirName ++ "/" ++ FileInDir2,
+  File2NewName = DirName ++ "/" ++ FileInDir2NewName,
+
+  NotExistingFile = "files_manager_test_not_existing_file",
+
+  MkDirAns = rpc:call(Node1, files_manager, mkdir, [DirName]),
+  ?assertEqual(ok, MkDirAns),
+
+  MkDirAns2 = rpc:call(Node1, files_manager, mkdir, [DirName]),
+  ?assertEqual({logical_file_system_error, ?VEEXIST}, MkDirAns2),
+
+  AnsCreate = rpc:call(Node1, files_manager, create, [File]),
+  ?assertEqual(ok, AnsCreate),
+
+  AnsCreate2 = rpc:call(Node1, files_manager, create, [File]),
+  ?assertEqual({logical_file_system_error, ?VEEXIST}, AnsCreate2),
+
+  AnsWrite1 = rpc:call(Node1, files_manager, write, [File, list_to_binary("abcdefgh")]),
+  ?assertEqual(8, AnsWrite1),
+
+  {StatusRead1, AnsRead1} = rpc:call(Node1, files_manager, read, [File, 2, 2]),
+  ?assertEqual(ok, StatusRead1),
+  ?assertEqual("cd", binary_to_list(AnsRead1)),
+
+  {StatusRead2, AnsRead2} = rpc:call(Node1, files_manager, read, [File, 7, 2]),
+  ?assertEqual(ok, StatusRead2),
+  ?assertEqual("h", binary_to_list(AnsRead2)),
+
+  AnsWrite2 = rpc:call(Node1, files_manager, write, [File, 3, list_to_binary("123")]),
+  ?assertEqual(3, AnsWrite2),
+
+  {StatusRead3, AnsRead3} = rpc:call(Node1, files_manager, read, [File, 2, 5]),
+  ?assertEqual(ok, StatusRead3),
+  ?assertEqual("c123g", binary_to_list(AnsRead3)),
+
+  AnsWrite3 = rpc:call(Node1, files_manager, write, [File, list_to_binary("XYZ")]),
+  ?assertEqual(3, AnsWrite3),
+
+  {StatusRead4, AnsRead4} = rpc:call(Node1, files_manager, read, [File, 2, 5]),
+  ?assertEqual(ok, StatusRead4),
+  ?assertEqual("c123g", binary_to_list(AnsRead4)),
+
+  {StatusRead5, AnsRead5} = rpc:call(Node1, files_manager, read, [File, 0, 100]),
+  ?assertEqual(ok, StatusRead5),
+  ?assertEqual("abc123ghXYZ", binary_to_list(AnsRead5)),
+
+  {StatusRead6, AnsRead6} = rpc:call(Node1, files_manager, read, [NotExistingFile, 0, 100]),
+  ?assertEqual(logical_file_system_error, StatusRead6),
+  ?assertEqual(?VENOENT, AnsRead6),
+
+  AnsCreate3 = rpc:call(Node1, files_manager, create, [File2]),
+  ?assertEqual(ok, AnsCreate3),
+
+  {StatusLs, AnsLs} = rpc:call(Node1, files_manager, ls, [DirName, 100, 0]),
+  ?assertEqual(ok, StatusLs),
+  ?assertEqual(2, length(AnsLs)),
+  ?assert(lists:member(FileInDir, AnsLs)),
+  ?assert(lists:member(FileInDir2, AnsLs)),
+
+  AnsMv = rpc:call(Node1, files_manager, mv, [File2, File2NewName]),
+  ?assertEqual(ok, AnsMv),
+
+  AnsChPerm = rpc:call(Node1, files_manager, change_file_perm, [File, 8#777]),
+  ?assertEqual(ok, AnsChPerm),
+
+  {StatusLs2, AnsLs2} = rpc:call(Node1, files_manager, ls, [DirName, 100, 0]),
+  ?assertEqual(ok, StatusLs2),
+  ?assertEqual(2, length(AnsLs2)),
+  ?assert(lists:member(FileInDir, AnsLs2)),
+  ?assert(lists:member(FileInDir2NewName, AnsLs2)),
+
+  AnsDel = rpc:call(Node1, files_manager, delete, [File]),
+  ?assertEqual(ok, AnsDel),
+
+  AnsDel2 = rpc:call(Node1, files_manager, delete, [File2NewName]),
+  ?assertEqual(ok, AnsDel2),
+
+  AnsDel3 = rpc:call(Node1, files_manager, delete, [File2NewName]),
+  ?assertEqual({logical_file_system_error, ?VENOENT}, AnsDel3),
+
+  AnsDirDelete = rpc:call(Node1, files_manager, rmdir, [DirName]),
+  ?assertEqual(ok, AnsDirDelete),
+
+  AnsDirDelete2 = rpc:call(Node1, files_manager, rmdir, [DirName]),
+  ?assertEqual({logical_file_system_error, ?VEIO}, AnsDirDelete2).
 
 %% ====================================================================
 %% SetUp and TearDown functions

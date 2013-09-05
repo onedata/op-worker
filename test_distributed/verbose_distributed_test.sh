@@ -43,7 +43,7 @@ do
     rm -f $TEST
 done
 rm -f Emakefile
-rm -f start_distributed_test.sh
+rm -f *.sh
 rm -rf cacerts
 rm -rf c_lib
 rm -rf views

@@ -58,3 +58,8 @@ do
 done
 
 echo "Distributed tests OK: $DoneSum, all: $AllSum, Compile errors: $CompileErrors"
+
+if [ $CompileErrors -ne 0 ]
+then
+  exit 1
+fi

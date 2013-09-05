@@ -52,7 +52,7 @@ init(_Args) ->
   Pid = self(),
   {ok, Interval} = application:get_env(veil_cluster_node, fslogic_cleaning_period),
   erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
-	[].
+  [].
 
 %% handle/1
 %% ====================================================================
@@ -83,8 +83,11 @@ handle(ProtocolVersion, {delete_old_descriptors, Pid}) ->
 handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
   handle_fuse_message(ProtocolVersion, Record#fusemessage.input, Record#fusemessage.id);
 
+handle(ProtocolVersion, {internal_call, Record}) ->
+  handle_fuse_message(ProtocolVersion, Record, non);
+
 handle(_ProtocolVersion, _Msg) ->
-	ok.
+  ok.
 
 %% cleanup/0
 %% ====================================================================
@@ -92,7 +95,7 @@ handle(_ProtocolVersion, _Msg) ->
 -spec cleanup() -> ok.
 %% ====================================================================
 cleanup() ->
-	ok.
+  ok.
 
 %% ====================================================================
 %% Internal functions
@@ -106,125 +109,126 @@ cleanup() ->
   Result :: term().
 %% ====================================================================
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, changefileperms) ->
-    FileName = Record#changefileperms.logic_file_name,
-    case get_file(ProtocolVersion, FileName, FuseID) of
-        {ok, #veil_document{record = #file{} = File} = Doc} ->
-            NewFile = Doc#veil_document{record = File#file{perms = Record#changefileperms.perms}}, 
-            case dao_lib:apply(dao_vfs, save_file, [NewFile], ProtocolVersion) of
-                {ok, _} -> #atom{value = ?VOK};
-                Other1 ->
-                    lager:error("fslogic could not save file ~p due to: ~p", [FileName, Other1]),
-                    #atom{value = ?VEIO}
-            end;
-        {error, file_not_found} -> #atom{value = ?VENOENT};
-        Other ->
-            lager:error("fslogic could not get file ~p due to: ~p", [FileName, Other]),
-            #atom{value = ?VEIO}
-    end;
+  FileName = Record#changefileperms.logic_file_name,
+  case get_file(ProtocolVersion, FileName, FuseID) of
+    {ok, #veil_document{record = #file{} = File} = Doc} ->
+      NewFile = Doc#veil_document{record = File#file{perms = Record#changefileperms.perms}},
+      case dao_lib:apply(dao_vfs, save_file, [NewFile], ProtocolVersion) of
+        {ok, _} -> #atom{value = ?VOK};
+        Other1 ->
+          lager:error("fslogic could not save file ~p due to: ~p", [FileName, Other1]),
+          #atom{value = ?VEIO}
+      end;
+    {error, file_not_found} -> #atom{value = ?VENOENT};
+    Other ->
+      lager:error("fslogic could not get file ~p due to: ~p", [FileName, Other]),
+      #atom{value = ?VEIO}
+  end;
+
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getfileattr) ->
-    lager:debug("FileAttr for ~p", [Record#getfileattr.file_logic_name]),
-    case get_file(ProtocolVersion, Record#getfileattr.file_logic_name, FuseID) of
-        {ok, #veil_document{record = #file{} = File}} ->
-            Type =
-                case File#file.type of
-                    ?DIR_TYPE -> "DIR";
-                    ?REG_TYPE -> "REG";
-                    ?LNK_TYPE -> "LNK";
-                    _ -> "UNK"
-                end,
-            %% TODO: *time are not implemented because whole file_meta isnt working yet
-            #fileattr{answer = ?VOK, mode = File#file.perms, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, nlink = 0, type = Type};
-        {error, file_not_found} ->
-            lager:debug("FileAttr: ENOENT"),
-            #fileattr{answer = ?VENOENT, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, nlink = 0, type = ""};
-        _ ->
-            #fileattr{answer = ?VEIO, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, nlink = 0, type = ""}
-    end;
+  lager:debug("FileAttr for ~p", [Record#getfileattr.file_logic_name]),
+  case get_file(ProtocolVersion, Record#getfileattr.file_logic_name, FuseID) of
+    {ok, #veil_document{record = #file{} = File}} ->
+      Type =
+        case File#file.type of
+          ?DIR_TYPE -> "DIR";
+          ?REG_TYPE -> "REG";
+          ?LNK_TYPE -> "LNK";
+          _ -> "UNK"
+        end,
+      %% TODO: *time are not implemented because whole file_meta isnt working yet
+      #fileattr{answer = ?VOK, mode = File#file.perms, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, nlink = 0, type = Type};
+    {error, file_not_found} ->
+      lager:debug("FileAttr: ENOENT"),
+      #fileattr{answer = ?VENOENT, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, nlink = 0, type = ""};
+    _ ->
+      #fileattr{answer = ?VEIO, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, nlink = 0, type = ""}
+  end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getfilelocation) ->
-    File = Record#getfilelocation.file_logic_name,
-    {Status, TmpAns} = get_file(ProtocolVersion, File, FuseID),
-    Validity = ?LOCATION_VALIDITY,
-    case {Status, TmpAns} of
-        {ok, _} ->
-        case TmpAns#veil_document.record#file.type of
-            ?REG_TYPE ->
-                {Status2, TmpAns2} = save_file_descriptor(ProtocolVersion, File, TmpAns#veil_document.uuid, FuseID, Validity),
-                case Status2 of
-                ok ->
-                    FileDesc = TmpAns#veil_document.record,
-                    FileLoc = FileDesc#file.location,
-                    case dao_lib:apply(dao_vfs, get_storage, [FileLoc#file_location.storage_id], ProtocolVersion) of
-                        {ok, #veil_document{record = Storage}} ->
-                            SH = fslogic_storage:get_sh_for_fuse(FuseID, Storage),
-                            #filelocation{storage_id = Storage#storage_info.id, file_id = FileLoc#file_location.file_id, validity = Validity,
-                                          storage_helper_name = SH#storage_helper_info.name, storage_helper_args = SH#storage_helper_info.init_args};
-                        Other ->
-                            lager:error("Cannot fetch storage: ~p for file: ~p, reason: ~p", [FileLoc#file_location.storage_id, TmpAns#veil_document.uuid, Other]),
-                            #filelocation{answer = ?VEIO, storage_id = -1, file_id = "", validity = 0}
-                    end;
-                _BadStatus2 ->
-                    lager:warning("Unknown fslogic error: ~p", [TmpAns2]),
-                    #filelocation{answer = ?VEIO, storage_id = -1, file_id = "", validity = 0} 
-                end;
-            _ -> #filelocation{answer = ?VENOTSUP, storage_id = -1, file_id = "", validity = 0}
-        end;
+  File = Record#getfilelocation.file_logic_name,
+  {Status, TmpAns} = get_file(ProtocolVersion, File, FuseID),
+  Validity = ?LOCATION_VALIDITY,
+  case {Status, TmpAns} of
+    {ok, _} ->
+      case TmpAns#veil_document.record#file.type of
+        ?REG_TYPE ->
+          {Status2, TmpAns2} = save_file_descriptor(ProtocolVersion, File, TmpAns#veil_document.uuid, FuseID, Validity),
+          case Status2 of
+            ok ->
+              FileDesc = TmpAns#veil_document.record,
+              FileLoc = FileDesc#file.location,
+              case dao_lib:apply(dao_vfs, get_storage, [FileLoc#file_location.storage_id], ProtocolVersion) of
+                {ok, #veil_document{record = Storage}} ->
+                  SH = fslogic_storage:get_sh_for_fuse(FuseID, Storage),
+                  #filelocation{storage_id = Storage#storage_info.id, file_id = FileLoc#file_location.file_id, validity = Validity,
+                  storage_helper_name = SH#storage_helper_info.name, storage_helper_args = SH#storage_helper_info.init_args};
+                Other ->
+                  lager:error("Cannot fetch storage: ~p for file: ~p, reason: ~p", [FileLoc#file_location.storage_id, TmpAns#veil_document.uuid, Other]),
+                  #filelocation{answer = ?VEIO, storage_id = -1, file_id = "", validity = 0}
+              end;
+            _BadStatus2 ->
+              lager:warning("Unknown fslogic error: ~p", [TmpAns2]),
+              #filelocation{answer = ?VEIO, storage_id = -1, file_id = "", validity = 0}
+          end;
+        _ -> #filelocation{answer = ?VENOTSUP, storage_id = -1, file_id = "", validity = 0}
+      end;
     {error, file_not_found} -> #filelocation{answer = ?VENOENT, storage_id = -1, file_id = "", validity = 0};
-        _BadStatus ->
-          lager:warning("Unknown fslogic error: ~p", [_BadStatus]),
-          #filelocation{answer = ?VEIO, storage_id = -1, file_id = "", validity = 0}
-    end;
+    _BadStatus ->
+      lager:warning("Unknown fslogic error: ~p", [_BadStatus]),
+      #filelocation{answer = ?VEIO, storage_id = -1, file_id = "", validity = 0}
+  end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getnewfilelocation) ->
-    File = Record#getnewfilelocation.file_logic_name,
-    {FindStatus, FindTmpAns} = get_file(ProtocolVersion, File, FuseID),
-    case FindStatus of
-        ok -> #filelocation{answer = ?VEEXIST, storage_id = -1, file_id = "", validity = 0};
-        error -> case FindTmpAns of
-            file_not_found ->
-            {ParentFound, ParentInfo} = fslogic_utils:get_parent_and_name_from_path(File, ProtocolVersion),
+  File = Record#getnewfilelocation.file_logic_name,
+  {FindStatus, FindTmpAns} = get_file(ProtocolVersion, File, FuseID),
+  case FindStatus of
+    ok -> #filelocation{answer = ?VEEXIST, storage_id = -1, file_id = "", validity = 0};
+    error -> case FindTmpAns of
+               file_not_found ->
+                 {ParentFound, ParentInfo} = fslogic_utils:get_parent_and_name_from_path(File, ProtocolVersion),
 
-            case ParentFound of
-                ok ->
-                    {FileName, Parent} = ParentInfo,
-                    {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], ProtocolVersion),
-                    case fslogic_storage:select_storage(FuseID, StorageList) of
-                        #veil_document{uuid = UUID, record = #storage_info{} = Storage} ->
-                            File_id = "real_location_of___" ++ re:replace(File, "/", "___", [global, {return,list}]),
-                            FileLocation = #file_location{storage_id = UUID, file_id = File_id},
-                            FileRecord = #file{type = ?REG_TYPE, name = FileName, size = 0, parent = Parent, perms = Record#getnewfilelocation.mode, location = FileLocation},
+                 case ParentFound of
+                   ok ->
+                     {FileName, Parent} = ParentInfo,
+                     {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], ProtocolVersion),
+                     case fslogic_storage:select_storage(FuseID, StorageList) of
+                       #veil_document{uuid = UUID, record = #storage_info{} = Storage} ->
+                         File_id = "real_location_of___" ++ re:replace(File, "/", "___", [global, {return,list}]),
+                         FileLocation = #file_location{storage_id = UUID, file_id = File_id},
+                         FileRecord = #file{type = ?REG_TYPE, name = FileName, size = 0, parent = Parent, perms = Record#getnewfilelocation.mode, location = FileLocation},
 
-                            Status = dao_lib:apply(dao_vfs, save_file, [FileRecord], ProtocolVersion),
-                            Validity = ?LOCATION_VALIDITY,
-                            case Status of
-                                {ok, FileUUID} ->
-                                    {Status2, _TmpAns2} = save_file_descriptor(ProtocolVersion, File, FileUUID, FuseID, Validity),
-                                    case Status2 of
-                                      ok ->
-                                          #storage_helper_info{name = SHName, init_args = SHArgs} = fslogic_storage:get_sh_for_fuse(FuseID, Storage),
-                                          #filelocation{storage_id = Storage#storage_info.id, file_id = File_id, validity = Validity, storage_helper_name = SHName, storage_helper_args = SHArgs};
-                                      _BadStatus2 ->
-                                	  	lager:error([{mod, ?MODULE}], "Error: cannot save file_descriptor document: ~p", [_BadStatus2]), 
-                                        #filelocation{answer = ?VEIO, storage_id = -1, file_id = "", validity = 0}
-                                    end;
-                                _BadStatus -> 
-                                	lager:error([{mod, ?MODULE}], "Error: cannot save file document: ~p", [_BadStatus]),
-                                	#filelocation{answer = ?VEIO, storage_id = -1, file_id = "", validity = 0}
-                            end;
-                        {error, SelectError} ->
-                            lager:error([{mod, ?MODULE}], "Error: can not get storage information: ~p", [SelectError]),
-                            #filelocation{answer = ?VEIO, storage_id = -1, file_id = "", validity = 0}
-                    end;
-                _ParentError -> #filelocation{answer = ?VEIO, storage_id = -1, file_id = "", validity = 0}
-            end;
-          _Other ->
-            lager:error([{mod, ?MODULE}], "Error: can not create new file: ~s, can not chceck if file exists", [File]),
-            #filelocation{answer = ?VEIO, storage_id = -1, file_id = "", validity = 0}
-        end;
-        _Other2 ->
-          lager:error([{mod, ?MODULE}], "Error: can not create new file: ~s, can not chceck if file exists", [File]),
-          #filelocation{answer = ?VEIO, storage_id = -1, file_id = "", validity = 0}
-    end;
+                         Status = dao_lib:apply(dao_vfs, save_file, [FileRecord], ProtocolVersion),
+                         Validity = ?LOCATION_VALIDITY,
+                         case Status of
+                           {ok, FileUUID} ->
+                             {Status2, _TmpAns2} = save_file_descriptor(ProtocolVersion, File, FileUUID, FuseID, Validity),
+                             case Status2 of
+                               ok ->
+                                 #storage_helper_info{name = SHName, init_args = SHArgs} = fslogic_storage:get_sh_for_fuse(FuseID, Storage),
+                                 #filelocation{storage_id = Storage#storage_info.id, file_id = File_id, validity = Validity, storage_helper_name = SHName, storage_helper_args = SHArgs};
+                               _BadStatus2 ->
+                                 lager:error([{mod, ?MODULE}], "Error: cannot save file_descriptor document: ~p", [_BadStatus2]),
+                                 #filelocation{answer = ?VEIO, storage_id = -1, file_id = "", validity = 0}
+                             end;
+                           _BadStatus ->
+                             lager:error([{mod, ?MODULE}], "Error: cannot save file document: ~p", [_BadStatus]),
+                             #filelocation{answer = ?VEIO, storage_id = -1, file_id = "", validity = 0}
+                         end;
+                       {error, SelectError} ->
+                         lager:error([{mod, ?MODULE}], "Error: can not get storage information: ~p", [SelectError]),
+                         #filelocation{answer = ?VEIO, storage_id = -1, file_id = "", validity = 0}
+                     end;
+                   _ParentError -> #filelocation{answer = ?VEIO, storage_id = -1, file_id = "", validity = 0}
+                 end;
+               _Other ->
+                 lager:error([{mod, ?MODULE}], "Error: can not create new file: ~s, can not chceck if file exists", [File]),
+                 #filelocation{answer = ?VEIO, storage_id = -1, file_id = "", validity = 0}
+             end;
+    _Other2 ->
+      lager:error([{mod, ?MODULE}], "Error: can not create new file: ~s, can not chceck if file exists", [File]),
+      #filelocation{answer = ?VEIO, storage_id = -1, file_id = "", validity = 0}
+  end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, filenotused) ->
   File = Record#filenotused.file_logic_name,
@@ -272,31 +276,31 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, crea
   case FindStatus of
     ok -> #atom{value = ?VEEXIST};
     error -> case FindTmpAns of
-        file_not_found ->
-        {ParentFound, ParentInfo} = fslogic_utils:get_parent_and_name_from_path(Dir, ProtocolVersion),
+               file_not_found ->
+                 {ParentFound, ParentInfo} = fslogic_utils:get_parent_and_name_from_path(Dir, ProtocolVersion),
 
-        case ParentFound of
-          ok ->
-            {FileName, Parent} = ParentInfo,
-            File = #file{type = ?DIR_TYPE, name = FileName, parent = Parent, perms = Record#createdir.mode},
+                 case ParentFound of
+                   ok ->
+                     {FileName, Parent} = ParentInfo,
+                     File = #file{type = ?DIR_TYPE, name = FileName, parent = Parent, perms = Record#createdir.mode},
 
-            {Status, _TmpAns} = dao_lib:apply(dao_vfs, save_file, [File], ProtocolVersion),
-            case Status of
-              ok ->
-                #atom{value = ?VOK};
-              _BadStatus ->
-                lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s, error: ~p", [Dir, _BadStatus]),
-                #atom{value = ?VEIO}
-            end;
-          _ParentError ->
-            lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s, parentInfo: ~p", [Dir, _ParentError]),
-            #atom{value = ?VEIO}
-        end;
+                     {Status, _TmpAns} = dao_lib:apply(dao_vfs, save_file, [File], ProtocolVersion),
+                     case Status of
+                       ok ->
+                         #atom{value = ?VOK};
+                       _BadStatus ->
+                         lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s, error: ~p", [Dir, _BadStatus]),
+                         #atom{value = ?VEIO}
+                     end;
+                   _ParentError ->
+                     lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s, parentInfo: ~p", [Dir, _ParentError]),
+                     #atom{value = ?VEIO}
+                 end;
 
-       _Other ->
-        lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s, can not chceck if dir exists", [Dir]),
-         #atom{value = "Error: can not chceck if dir exists"}
-      end;
+               _Other ->
+                 lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s, can not chceck if dir exists", [Dir]),
+                 #atom{value = "Error: can not chceck if dir exists"}
+             end;
     _Other2 ->
       lager:error([{mod, ?MODULE}], "Error: can not create new dir: ~s, can not chceck if dir exists", [Dir]),
       #atom{value = "Error: can not chceck if dir exists"}
@@ -325,27 +329,27 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, dele
     ok ->
       FileDesc = FindTmpAns#veil_document.record,
       {ChildrenStatus, ChildrenTmpAns} = case FileDesc#file.type of
-        ?DIR_TYPE ->
-          dao_lib:apply(dao_vfs, list_dir, [File, 10, 0], ProtocolVersion);
-        _OtherType -> {ok, []}
-      end,
+                                           ?DIR_TYPE ->
+                                             dao_lib:apply(dao_vfs, list_dir, [File, 10, 0], ProtocolVersion);
+                                           _OtherType -> {ok, []}
+                                         end,
 
       case ChildrenStatus of
-        ok -> 
+        ok ->
           case length(ChildrenTmpAns) of
-	          0 ->
-	            Status = dao_lib:apply(dao_vfs, remove_file, [File], ProtocolVersion),
-	            case Status of
-	              ok ->
-	                #atom{value = ?VOK};
-	              _BadStatus ->
-	                lager:error([{mod, ?MODULE}], "Error: can not remove file: ~s", [File]),
-	                #atom{value = ?VEIO}
-	            end;
-	          _Other ->
-	            lager:error([{mod, ?MODULE}], "Error: can not remove file (it has children): ~s", [File]),
-	            #atom{value = ?VENOTEMPTY}
-	      end;
+            0 ->
+              Status = dao_lib:apply(dao_vfs, remove_file, [File], ProtocolVersion),
+              case Status of
+                ok ->
+                  #atom{value = ?VOK};
+                _BadStatus ->
+                  lager:error([{mod, ?MODULE}], "Error: can not remove file: ~s", [File]),
+                  #atom{value = ?VEIO}
+              end;
+            _Other ->
+              lager:error([{mod, ?MODULE}], "Error: can not remove file (it has children): ~s", [File]),
+              #atom{value = ?VENOTEMPTY}
+          end;
         _Other2 ->
           lager:error([{mod, ?MODULE}], "Error: can not remove file (can not check children): ~s", [File]),
           #atom{value = ?VEIO}
@@ -365,7 +369,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, rena
           case get_file(ProtocolVersion, fslogic_utils:strip_path_leaf(NewFileName), FuseID) of
             {ok, #veil_document{uuid = NewParent}} ->
               Renamed = OldDoc#veil_document{record =
-                  OldFile#file{parent = NewParent, name = fslogic_utils:basename(NewFileName)}},
+              OldFile#file{parent = NewParent, name = fslogic_utils:basename(NewFileName)}},
               case dao_lib:apply(dao_vfs, save_file, [Renamed], ProtocolVersion)  of
                 {ok, _} -> #atom{value = ?VOK};
                 Other ->
@@ -451,20 +455,24 @@ save_file_descriptor(ProtocolVersion, File, Validity) ->
 %% ====================================================================
 
 save_file_descriptor(ProtocolVersion, File, Uuid, FuseID, Validity) ->
-  Status = dao_lib:apply(dao_vfs, list_descriptors, [{by_file_n_owner, {File, FuseID}}, 10, 0], ProtocolVersion),
-  case Status of
-    {ok, TmpAns} ->
-      case length(TmpAns) of
-        0 ->
-          save_new_file_descriptor(ProtocolVersion, File, Uuid, FuseID, Validity);
-        1 ->
-          [VeilDoc | _] = TmpAns,
-          save_file_descriptor(ProtocolVersion, VeilDoc, Validity);
-        _Many ->
-          lager:error([{mod, ?MODULE}], "Error: to many file descriptors for file: ~s", [File]),
-          {error, "Error: too many file descriptors"}
-      end;
-    _Other -> _Other
+  case FuseID of
+    non -> {ok, ok};
+    _ ->
+      Status = dao_lib:apply(dao_vfs, list_descriptors, [{by_file_n_owner, {File, FuseID}}, 10, 0], ProtocolVersion),
+      case Status of
+        {ok, TmpAns} ->
+          case length(TmpAns) of
+            0 ->
+              save_new_file_descriptor(ProtocolVersion, File, Uuid, FuseID, Validity);
+            1 ->
+              [VeilDoc | _] = TmpAns,
+              save_file_descriptor(ProtocolVersion, VeilDoc, Validity);
+            _Many ->
+              lager:error([{mod, ?MODULE}], "Error: to many file descriptors for file: ~s", [File]),
+              {error, "Error: too many file descriptors"}
+          end;
+        _Other -> _Other
+      end
   end.
 
 %% save_new_file_descriptor/5

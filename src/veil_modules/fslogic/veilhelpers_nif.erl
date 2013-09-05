@@ -15,10 +15,25 @@
 
 -export([start/1, getattr/3, access/4, mknod/5, unlink/3, rename/4, chmod/4, chown/5, truncate/4, 
          open/4, read/6, write/6, read/5, write/5, statfs/3, release/4, fsync/5, mkdir/4, rmdir/3]).
+%% TODO zaimplementować natsępujące funkcje
+-export([is_reg/1, is_dir/1, get_flag/1]).
 %% ===================================================================
 %% API
 %% ===================================================================
 
+%% TODO this 2 functions should be implemented
+is_reg(_St_mode) ->
+  true.
+
+is_dir(_St_mode) ->
+  true.
+
+get_flag(Flag) ->
+  case Flag of
+    o_rdonly -> 0;
+    o_wronly -> 1;
+    o_rdwr -> 2
+  end.
 
 %% start/1
 %% ====================================================================
@@ -152,7 +167,7 @@ open(_sh_name, _sh_args, _path, _fi) ->
 %% ====================================================================
 %% @doc First 2 arguments of this method should come from #storage_helper_info{} record. <br/>
 %%      Those two arguments decide which Storage Helper shall be used for this operation. <br/>
-%%      ErrorCode return valueequals to bytes read count if operation was succesfull, otherwise negated POSIX error code will be returned. <br/>
+%%      ErrorCode return value equals to bytes read count if operation was succesfull, otherwise negated POSIX error code will be returned. <br/>
 %%      read/6 reads _size bytes (starting with _offset) from given file. If the _fi arguemnt is given with valid file descriptor ('fd' field) <br/>
 %%      the 'fd' will be used to access file. Otherwise read/6 will open file for you.
 %% @end
