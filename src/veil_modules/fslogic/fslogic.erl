@@ -386,7 +386,47 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, rena
       lager:warning("Cannot find source file: ~p", [File]),
       #atom{value = ?VENOENT};
     _ -> #atom{value = ?VEIO}
-  end.
+  end;
+
+%% Symbolic link creation. From - link name, To - path pointed by new link
+handle_fuse_message(ProtocolVersion, #createlink{from_file_logic_name = From, to_file_logic_name = To}, FuseID) ->
+    case get_file(ProtocolVersion, From, FuseID) of
+        {error, file_not_found} -> 
+            case get_file(ProtocolVersion, fslogic_utils:strip_path_leaf(From), FuseID) of
+                {ok, #veil_document{uuid = Parent}} ->
+                    LinkDoc = #file{type = ?LNK_TYPE, name = fslogic_utils:basename(From), ref_file = To, size = 0, parent = Parent},
+                    case dao_lib:apply(dao_vfs, save_file, [LinkDoc], ProtocolVersion) of 
+                        {ok, _} ->
+                            #atom{value = ?VOK};
+                        {error, Reason} ->
+                            lager:error("Cannot save link file (from ~p to ~p) due to error: ~p", [From, To, Reason]),
+                            #atom{value = ?VEIO}
+                    end;
+                {error, file_not_found} ->
+                    lager:error("Cannot create link ~p because parent directory does not exist.", [From]),
+                    #atom{value = ?VENOENT};
+                {error, Reason1} ->
+                    lager:error("Cannot fetch file information for file ~p due to error: ~p", [fslogic_utils:strip_path_leaf(From), Reason1]),
+                    #atom{value = ?VEIO}
+            end;
+        {ok, #veil_document{}} ->
+            lager:error("Cannot create link - file already exists: ~p", [From]),
+            #atom{value = ?VEEXIST};
+        _ -> #atom{value = ?VEIO}
+    end;
+
+%% Fetch link data (target path)
+handle_fuse_message(ProtocolVersion, #getlink{file_logic_name = File}, FuseID) -> 
+    case get_file(ProtocolVersion, File, FuseID) of
+        {ok, #veil_document{record = #file{ref_file = Target}}} ->
+            #linkinfo{file_logic_name = Target};
+        {error, file_not_found} ->
+            lager:error("Link ~p does not exist.", [File]),
+            #linkinfo{answer = ?VENOENT, file_logic_name = ""};
+        {error, Reason} ->
+            lager:error("Cannot read link ~p due to error: ~p", [File, Reason]),
+            #linkinfo{answer = ?VEIO, file_logic_name = ""}   
+    end.
 
 
 %% save_file_descriptor/3

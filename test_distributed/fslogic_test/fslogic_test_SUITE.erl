@@ -198,7 +198,31 @@ integration_test(Config) ->
 
   {Status16, Answer16} = delete_file(Host, Cert, Port, NewNameOfFIle),
   ?assertEqual("ok", Status16),
-  ?assertEqual(list_to_atom(?VOK), Answer16).
+  ?assertEqual(list_to_atom(?VOK), Answer16),
+
+  %% Link tests
+
+  % Create link
+  {Status17, Answer17} = create_link(Host, Cert, Port, "link_name", "/target/path"),
+  ?assertEqual("ok", Status17),
+  ?assertEqual(list_to_atom(?VOK), Answer17),
+
+  % Create same link second time
+  {Status18, Answer18} = create_link(Host, Cert, Port, "link_name", "/target/path1"),
+  ?assertEqual("ok", Status18),
+  ?assertEqual(list_to_atom(?VEEXIST), Answer18),
+
+  % Check if created link has valid data
+  {Status19, Answer19, LinkPath} = get_link(Host, Cert, Port, "link_name"),
+  ?assertEqual("ok", Status19),
+  ?assertEqual("ok", Answer19),
+  ?assertEqual("/target/path", LinkPath),
+
+  % Try to fetch invalid link data
+  {Status20, Answer20, _} = get_link(Host, Cert, Port, "link_name1"),
+  ?assertEqual("ok", Status20),
+  ?assertEqual(?VENOENT, Answer20),
+  ok.
 
 %% ====================================================================
 %% SetUp and TearDown functions
@@ -441,6 +465,52 @@ change_file_perms(Host, Cert, Port, FileName, Perms) ->
   Answer = communication_protocol_pb:decode_atom(Bytes),
   Answer2 = records_translator:translate(Answer, "communication_protocol"),
   {Status, Answer2}.
+
+create_link(Host, Cert, Port, From, To) ->
+  FslogicMessage = #createlink{from_file_logic_name = From, to_file_logic_name = To},
+  FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_createlink(FslogicMessage)),
+
+  FuseMessage = #fusemessage{id = "1", message_type = "createlink", input = FslogicMessageMessageBytes},
+  FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
+
+  Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
+  message_decoder_name = "fuse_messages", answer_type = "atom",
+  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+  MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+
+  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  ?assertEqual(ok, ConAns),
+  ssl:send(Socket, MessageBytes),
+  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  ?assertEqual(ok, SendAns),
+
+  #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
+  Answer = communication_protocol_pb:decode_atom(Bytes),
+  Answer2 = records_translator:translate(Answer, "communication_protocol"),
+  {Status, Answer2}.
+
+get_link(Host, Cert, Port, FileName) ->
+  FslogicMessage = #getlink{file_logic_name = FileName},
+  FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_getlink(FslogicMessage)),
+
+  FuseMessage = #fusemessage{id = "1", message_type = "getlink", input = FslogicMessageMessageBytes},
+  FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
+
+  Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
+  message_decoder_name = "fuse_messages", answer_type = "linkinfo",
+  answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+  MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+
+  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  ?assertEqual(ok, ConAns),
+  ssl:send(Socket, MessageBytes),
+  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  ?assertEqual(ok, SendAns),
+
+  #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
+  Resp = fuse_messages_pb:decode_linkinfo(Bytes),
+  Resp1 = records_translator:translate(Resp, "fuse_messages"),
+  {Status, Resp#linkinfo.answer, Resp1#linkinfo.file_logic_name}.
 
 
 clear_old_descriptors(Node) ->
