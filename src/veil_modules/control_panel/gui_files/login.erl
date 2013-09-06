@@ -1,8 +1,12 @@
 %% ===================================================================
 %% @author Lukasz Opiola
-%%
-%% This file contains nitrogen website code
-%% (should it be mentioned in docs ??)
+%% @copyright (C): 2013 ACK CYFRONET AGH
+%% This software is released under the MIT license
+%% cited in 'LICENSE.txt'.
+%% @end
+%% ===================================================================
+%% @doc: This file contains nitrogen website code
+%% @end
 %% ===================================================================
 
 -module (login).
@@ -24,7 +28,8 @@ header() ->
 		body = 
 		[
 			#link { class = header_link, text="MAIN PAGE", url="/index" },
-			#link { class = header_link, text="LOGIN / LOGOUT", url="/login" }
+			#link { class = header_link, text="LOGIN / LOGOUT", url="/login" },
+			#link { class = header_link, text="MANAGE ACCOUNT", url="/manage_account" }
 		]
 	}.
 
@@ -42,13 +47,13 @@ body() ->
 					#button { text="Sign in", postback = login }, 
 					#br {} 
 				]};
-			Nickname -> 
+			Login -> 
 				#panel { class = login_panel, body = 
 				[
 					#label { class = login_title, text = "Logout" },
 					#panel { body = 
 					[
-						"Logged in as " ++ wf:to_list(Nickname),
+						"Logged in as " ++ wf:to_list(Login),
 						#br {},
 						"Click below to logout"
 					]},

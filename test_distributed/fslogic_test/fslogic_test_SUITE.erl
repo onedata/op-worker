@@ -60,8 +60,10 @@ fuse_requests_test(Config) ->
 
   {ReadFileAns, PemBin} = file:read_file(Cert),
   ?assertEqual(ok, ReadFileAns),
-  {ExtractAns, DN} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
-  ?assertEqual(ok, ExtractAns),
+  {ExtractAns, RDNSequence} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
+  ?assertEqual(rdnSequence, ExtractAns),
+  {ConvertAns, DN} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
+  ?assertEqual(ok, ConvertAns),
   DnList = [DN],
 
   Login = "user1",
@@ -243,8 +245,10 @@ users_separation_test(Config) ->
 
   {ReadFileAns, PemBin} = file:read_file(Cert),
   ?assertEqual(ok, ReadFileAns),
-  {ExtractAns, DN} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
-  ?assertEqual(ok, ExtractAns),
+  {ExtractAns, RDNSequence} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
+  ?assertEqual(rdnSequence, ExtractAns),
+  {ConvertAns, DN} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
+  ?assertEqual(ok, ConvertAns),
   DnList = [DN],
 
   Login = "user1",
@@ -256,8 +260,10 @@ users_separation_test(Config) ->
 
   {ReadFileAns2, PemBin2} = file:read_file(Cert2),
   ?assertEqual(ok, ReadFileAns2),
-  {ExtractAns2, DN2} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin2]),
-  ?assertEqual(ok, ExtractAns2),
+  {ExtractAns2, RDNSequence2} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin2]),
+  ?assertEqual(rdnSequence, ExtractAns2),
+  {ConvertAns2, DN2} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence2]),
+  ?assertEqual(ok, ConvertAns2),
   DnList2 = [DN2],
 
   Login2 = "user2",

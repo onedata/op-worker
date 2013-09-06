@@ -238,7 +238,18 @@ start_deps() ->
   stop_deps(), %% Stop all applications (if any)
 
   application:start(sasl),
+
+  % Load configuration from sys.config so that lager starts with proper configuration
+  application:load(lager),
+  {ok, [Data]} = file:consult("sys.config"),
+  Config = proplists:get_value(lager, Data),
+  lists:foreach(
+    fun(Key) -> 
+      application:set_env(lager, Key, proplists:get_value(Key, Config)) 
+    end, proplists:get_keys(Config)),
   lager:start(),
+
+
   ssl:start(),
   application:start(os_mon),
   application:start(ranch),

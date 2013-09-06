@@ -15,6 +15,8 @@ cd distributed_tests_out
 cp -R ../cacerts .
 cp -R ../c_lib/ .
 cp -R ../src/veil_modules/dao/views .
+cp -R ../src/veil_modules/control_panel/gui_files/gui_static .
+cp -R ../config/sys.config .
 
 TESTS=$(find . -name "*.spec")
 erl -make
@@ -47,5 +49,7 @@ rm -f *.sh
 rm -rf cacerts
 rm -rf c_lib
 rm -rf views
+rm -rf gui_static
+rm -f sys.config
 
 cd ..

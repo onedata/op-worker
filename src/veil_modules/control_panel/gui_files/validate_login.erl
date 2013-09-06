@@ -1,8 +1,12 @@
 %% ===================================================================
 %% @author Lukasz Opiola
-%%
-%% This file contains nitrogen website code
-%% (should it be mentioned in docs ??)
+%% @copyright (C): 2013 ACK CYFRONET AGH
+%% This software is released under the MIT license
+%% cited in 'LICENSE.txt'.
+%% @end
+%% ===================================================================
+%% @doc: This file contains nitrogen website code
+%% @end
 %% ===================================================================
 
 -module (validate_login).
@@ -24,60 +28,58 @@ header() ->
 		body = 
 		[
 			#link { class = header_link, text="MAIN PAGE", url="/index" },
-			#link { class = header_link, text="LOGIN / LOGOUT", url="/login" }
+			#link { class = header_link, text="LOGIN / LOGOUT", url="/login" },
+			#link { class = header_link, text="MANAGE ACCOUNT", url="/manage_account" }
 		]
 	}.
 
 
 %% This will be placed in the template instead of [[[page:body()]]] tag
 body() ->
-	case wf:user() of
-		undefined -> continue;
-		_ -> wf:redirect("/login")
-	end,
+	case (wf:user() =:= undefined) of
+		false -> wf:redirect("/login");
+		true -> 
+			LoginMessage = case openid_utils:nitrogen_prepare_validation_parameters() of
+				{error, invalid_request} -> {error, invalid_request};
+				{EndpointURL, RequestBody} -> openid_utils:validate_openid_login({EndpointURL, RequestBody})
+			end,				
 
-	LoginMessage = openid_utils:validate_openid_login(),
+			#panel { class = login_panel, body = 	
+				case LoginMessage of
+					{error, invalid_request} ->
+						[
+							#label { class = login_title, text = "Login finalization" },
+							#label { class = login_error, text = "Unable to process this login request." },
+							#button { text = "Back to login page", postback = {redirect, "/login"} }
+						];
 
-	#panel { class = login_panel, body = 	
-		case LoginMessage of
-			{error, missing_credentials} -> 
-			[
-				#label { class = login_title, text = "Login finalization" },
-				#label { class = login_error, text = "Login request invalid." },
-				#button { text = "Back to login page", postback = {redirect, "/login"} }
-			];
+					{error, auth_invalid} ->
+						[
+							#label { class = login_title, text = "Login finalization" },
+							#label { class = login_error, text = "OpenID Provider denied the authenticity of this login request." },
+							#button { text = "Back to login page", postback = {redirect, "/login"} }
+						];
 
-			{error, auth_invalid} ->
-			[
-				#label { class = login_title, text = "Login finalization" },
-				#label { class = login_error, text = "OpenID Provider denied the authenticity of this login request." },
-				#button { text = "Back to login page", postback = {redirect, "/login"} }
-			];
-
-			{error, auth_failed} ->
-			[
-				#label { class = login_title, text = "Login finalization" },
-				#label { class = login_error, text = "Unable to reach OpenID Provider." },
-				#button { text = "Back to login page", postback = {redirect, "/login"} }
-			];
-				
-			{ok, [{nickname, Nickname}, {email, Email}, {fullname, FullName}]} ->
-			wf:user(Nickname),
-			[
-				#label { class = login_title, text = "Login finalization" },
-				#panel { body = 
-				[
-					"Welcome " ++ Nickname ++  "!",
-					#br {},
-					"Looks like your name is " ++ FullName,
-					#br {},
-					"And your email is " ++ Email
-				]},
-				#button { text = "Home page", postback = {redirect, "/index"} }
-			]
-		end
-	}.
+					{error, no_connection} ->
+						[
+							#label { class = login_title, text = "Login finalization" },
+							#label { class = login_error, text = "Unable to reach OpenID Provider." },
+							#button { text = "Back to login page", postback = {redirect, "/login"} }
+						];
+						
+					ok ->					
+						{ok, Proplist} = openid_utils:nitrogen_retrieve_user_info(),
+						{Login, UserDoc} = user_logic:sign_in(Proplist),						
+						wf:user(Login),	
+						wf:session(user_doc, UserDoc),
+						wf:redirect("/manage_account"),
+						[]		
+				end
+			}
+	end.
 
 % Button redirection events
 event({redirect, Target}) ->
 	wf:redirect(Target).
+
+%% c("../../../src/veil_modules/control_panel/gui_files/validate_login.erl").

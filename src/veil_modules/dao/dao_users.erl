@@ -99,5 +99,3 @@ get_user({Key, Value}) ->
             lager:error("Invalid view response: ~p", [Other]),
             throw(invalid_data)
     end.
-
-

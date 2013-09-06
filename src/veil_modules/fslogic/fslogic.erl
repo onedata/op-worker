@@ -612,13 +612,17 @@ get_user_root() ->
   UserId = get(user_id),
   case UserId of
     {rdnSequence, RDNSequence} ->
-      DN = user_logic:rdn_sequence_to_dn_string(RDNSequence),
-      {GetUserAns, User} = user_logic:get_user({dn, DN}),
-      case GetUserAns of
+      {RND_ANS, DN} = user_logic:rdn_sequence_to_dn_string(RDNSequence),
+      case RND_ANS of
         ok ->
-          UserRecord = User#veil_document.record,
-          {ok, UserRecord#user.login};
-        _ -> {error, get_user_error}
+          {GetUserAns, User} = user_logic:get_user({dn, DN}),
+          case GetUserAns of
+            ok ->
+              UserRecord = User#veil_document.record,
+              {ok, UserRecord#user.login};
+            _ -> {error, get_user_error}
+          end;
+        _ -> {error, rdn_sequence_to_dn_string_error}
       end;
     _ -> {error, get_user_id_error}
   end.
@@ -639,12 +643,16 @@ get_user_id(FuseID) ->
       UserId = get(user_id),
       case UserId of
         {rdnSequence, RDNSequence} ->
-          DN = user_logic:rdn_sequence_to_dn_string(RDNSequence),
-          {GetUserAns, User} = user_logic:get_user({dn, DN}),
-          case GetUserAns of
+          {RND_ANS, DN} = user_logic:rdn_sequence_to_dn_string(RDNSequence),
+          case RND_ANS of
             ok ->
-              {ok, User#veil_document.uuid};
-            _ -> {error, get_user_error}
+              {GetUserAns, User} = user_logic:get_user({dn, DN}),
+              case GetUserAns of
+                ok ->
+                  {ok, User#veil_document.uuid};
+                _ -> {error, get_user_error}
+              end;
+            _ -> {error, rdn_sequence_to_dn_string_error}
           end;
         _ -> {error, get_user_id_error}
       end
@@ -674,7 +682,7 @@ get_full_file_name(FileName, FuseID) ->
             _ -> Root ++ "/" ++ FileName
           end,
           {ok, NewFileName};
-        _ -> {root_not_found, RootAns}
+        _ -> {root_not_found, Root}
       end
   end.
 

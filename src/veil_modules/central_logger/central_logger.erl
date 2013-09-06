@@ -34,17 +34,17 @@
 %% ====================================================================
 init(_) ->
   ets:new(subscribers_ets, [named_table, public, bag, {read_concurrency, true}]),
-% change trace console to omit duplicate logs
+  % change trace console to omit duplicate logs
   gen_event:delete_handler(lager_event, lager_console_backend, []),
   supervisor:start_child(lager_handler_watcher_sup, [lager_event, lager_console_backend,
     [info, {lager_default_formatter, [{destination, "", [time," [",severity,"] ", message, "\n"]}]}]]),
 
-% remove standard file traces
+  % remove standard file traces
   gen_event:delete_handler(lager_event, {lager_file_backend, "log/debug.log"}, []),
   gen_event:delete_handler(lager_event, {lager_file_backend, "log/info.log"}, []),
   gen_event:delete_handler(lager_event, {lager_file_backend, "log/error.log"}, []),
 
-%  install proper file traces for a central_logger
+  %  install proper file traces for a central_logger
   install_trace_file("log/debug.log", debug, 10485760, "$D0", 10, [{destination, local}], false),
   install_trace_file("log/info.log", info, 104857600, "$W5D23", 100, [{destination, local}], false),
   install_trace_file("log/error.log", error, 1048576000, "$M1D1", 1000, [{destination, local}], false),
@@ -81,6 +81,9 @@ handle(_ProtocolVersion, get_version) ->
 handle(_ProtocolVersion, {subscribe, Subscriber}) ->
   add_subscriber(Subscriber);
 
+handle(_ProtocolVersion, get_subscribers) ->
+  get_subscribers();
+
 handle(_ProtocolVersion, {unsubscribe, Subscriber}) ->
   remove_subscriber(Subscriber);
 
@@ -100,25 +103,14 @@ handle(_ProtocolVersion, _Request) ->
   Error :: timeout | term().
 %% ====================================================================
 cleanup() ->
-% delete ets table
+  % Delete ets table
   ets:delete(subscribers_ets),
 
-% change trace console back to normal
-  gen_event:delete_handler(lager_event, lager_console_backend, []),
-  supervisor:start_child(lager_handler_watcher_sup, [lager_event, lager_console_backend, info]),
+  % Restart lager completely, which will remove all traces and install default ones
+  application:stop(lager),
+  application:load(lager),
+  lager:start(),
 
-  % remove no longer used file traces
-  gen_event:delete_handler(lager_event, {lager_file_backend, "log/debug.log"}, []),
-  gen_event:delete_handler(lager_event, {lager_file_backend, "log/global_debug.log"}, []),
-  gen_event:delete_handler(lager_event, {lager_file_backend, "log/info.log"}, []),
-  gen_event:delete_handler(lager_event, {lager_file_backend, "log/global_info.log"}, []),
-  gen_event:delete_handler(lager_event, {lager_file_backend, "log/error.log"}, []),
-  gen_event:delete_handler(lager_event, {lager_file_backend, "log/global_error.log"}, []),
-
-  % install proper file traces
-  install_trace_file("log/debug.log", debug, 10485760, "$D0", 10, [], false),
-  install_trace_file("log/info.log", info, 104857600, "$W5D23", 100, [], false),
-  install_trace_file("log/error.log", error, 1048576000, "$M1D1", 1000, [], false),
 	ok.
 
 %% ====================================================================
@@ -177,17 +169,17 @@ do_log(Message, Timestamp, Severity, Metadata) ->
 
 %% send_log_to_subscribers/4
 %% ====================================================================
-%% @doc Propadates the log to all subscribing pids
+%% @doc Propagates the log to all subscribing pids
 -spec send_log_to_subscribers(Message :: string(), Timestamp :: term(), Severity :: atom(), Metadata :: list()) -> Result when
   Result :: ok.
 %% ====================================================================
 send_log_to_subscribers(Message, Timestamp, Severity, Metadata) ->
   lists:foreach
   (
-    fun({subscriber, Sub}) ->
+    fun(Sub) ->
       Sub ! {log, {Message, Timestamp, Severity, Metadata}}
     end,
-    ets:lookup(subscribers_ets, subscriber)
+    get_subscribers()
   ).
 
 %% add_subscriber/1
@@ -198,6 +190,19 @@ send_log_to_subscribers(Message, Timestamp, Severity, Metadata) ->
 %% ====================================================================
 add_subscriber(Subscriber) ->
   ets:insert(subscribers_ets, {subscriber, Subscriber}).
+
+%% get_subscribers/0
+%% ====================================================================
+%% @doc Returns list of subscribing Pids
+-spec get_subscribers() -> Result when
+  Result :: list() | {error, Error :: term()}.
+%% ====================================================================
+get_subscribers() ->
+  lists:map
+  (
+    fun({subscriber, Sub}) -> Sub end,
+    ets:lookup(subscribers_ets, subscriber)
+  ).
 
 %% remove_subscriber/1
 %% ====================================================================
@@ -242,7 +247,7 @@ install_trace_file(File, Level, MaxSize, DateSpec, MaxCount, Filter, ChangeForma
       {ok, Trace} = lager_util:validate_trace({Filters, Level, {lager_file_backend, File}}),
       {MinLevel, Traces} = lager_config:get(loglevel),
       NewTraces = [Trace|lists:delete(Trace, Traces)],
-      lager_util:trace_filter([ element(1, T) || T <- NewTraces]),
+      lager_util:trace_filter([element(1, T) || T <- NewTraces]),
       lager_config:set(loglevel, {MinLevel, NewTraces})
   end.
 

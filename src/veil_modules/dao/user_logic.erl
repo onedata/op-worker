@@ -22,7 +22,7 @@
 -export([sign_in/1, create_user/5, get_user/1, remove_user/1]).
 -export([get_login/1, get_name/1, get_teams/1, update_teams/2]).
 -export([get_email_list/1, update_email_list/2, get_dn_list/1, update_dn_list/2]).
--export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1]).
+-export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, oid_code_to_shortname/1]).
 
 -define(UserRootPerms, 8#600).
 
@@ -92,19 +92,19 @@ create_user(Login, Name, Teams, Email, DnList) ->
 			_ -> []
 		end
 	},
-	dao_lib:apply(dao_users, save_user, [User], 1),
-  GetUserAns = get_user({login, Login}),
+	{ok, UUID} = dao_lib:apply(dao_users, save_user, [User], 1),
+	GetUserAns = get_user({uuid, UUID}),
 
-  {GetUserFirstAns, UserRec} = GetUserAns,
-  case GetUserFirstAns of
-    ok ->
-      RootAns = create_root(Login, UserRec#veil_document.uuid),
-      case RootAns of
-        ok -> GetUserAns;
-        _ -> {RootAns, UserRec}
-      end;
-    _ -> GetUserAns
-  end.
+	{GetUserFirstAns, UserRec} = GetUserAns,
+	case GetUserFirstAns of
+		ok ->
+			RootAns = create_root(Login, UserRec#veil_document.uuid),
+			case RootAns of
+				ok -> GetUserAns;
+				_ -> {RootAns, UserRec}
+			end;
+		_ -> GetUserAns
+	end.
 
 
 %% get_user/1
@@ -278,31 +278,36 @@ update_dn_list(#veil_document{record = UserInfo} = UserDoc, NewDnList) ->
 -spec rdn_sequence_to_dn_string([#'AttributeTypeAndValue'{}]) -> string() | no_return().
 %% ====================================================================
 rdn_sequence_to_dn_string(RDNSequence) ->
-    DNString = lists:foldl(
-        fun([{'AttributeTypeAndValue', Type, Value}], Acc) ->
-            ValueString = case Value of 
-                List when is_list(List) -> List;
-                {_, List2} when is_list(List2) -> List2;
-                {_, Binary} when is_binary(Binary) -> binary_to_list(Binary);
-                _ -> throw({cannot_retrieve_value, Type, Value})
-            end,
-            Acc ++ oid_code_to_shortname(Type) ++ "=" ++ ValueString ++ ","
-        end, "", lists:reverse(RDNSequence)),
+	try
+	    DNString = lists:foldl(
+	        fun([#'AttributeTypeAndValue'{type = Type, value = Value}], Acc) ->
+	            ValueString = case Value of 
+	                List when is_list(List) -> List;
+	                {_, List2} when is_list(List2) -> List2;
+	                {_, Binary} when is_binary(Binary) -> binary_to_list(Binary);
+	                _ -> throw({cannot_retrieve_value, Type, Value})
+	            end,
+	            Acc ++ oid_code_to_shortname(Type) ++ "=" ++ ValueString ++ ","
+	        end, "", lists:reverse(RDNSequence)),
 
-    %Remove tailing comma
-    [_Comma|ProperString] = lists:reverse(DNString),
-    lists:reverse(ProperString). 
+	    %Remove tailing comma
+	    [_Comma|ProperString] = lists:reverse(DNString),
+	    {ok, lists:reverse(ProperString)}
+	catch Type:Message ->
+		lager:error("Failed to convert rdnSequence to dn string.~n~p: ~p~n~p", [Type, Message, erlang:get_stacktrace()]),
+		{error, conversion_failed}
+	end.
 
 
 %% extract_dn_from_cert/1
 %% ====================================================================
-%% @doc Processes a .pem certificate and extracts subject (DN) part, returning it as a string.
+%% @doc Processes a .pem certificate and extracts subject (DN) part, returning it as an rdnSequence.
 %% Returns an error if:
 %%   - fails to extract DN
 %%   - certificate is a proxy certificate -> {error, proxy_ceertificate}
 %%   - certificate is self-signed -> {error, self_signed}
 %% @end
--spec extract_dn_from_cert(PemBin :: binary()) -> {ok, string()} | {error, Reason} when
+-spec extract_dn_from_cert(PemBin :: binary()) -> {rdnSequence, [#'AttributeTypeAndValue'{}]} | {error, Reason} when
 	Reason :: proxy_ceertificate | self_signed | extraction_failed.
 %% ====================================================================
 extract_dn_from_cert(PemBin) ->	
@@ -315,12 +320,11 @@ extract_dn_from_cert(PemBin) ->
 		IsSelfSigned = public_key:pkix_is_self_signed(OtpCert),
 		if
 			IsProxy -> 
-				{error, proxy_ceertificate};
+				{error, proxy_certificate};
 			IsSelfSigned -> 
 				{error, self_signed};
 			true ->				
-				{rdnSequence, RDNSequence} = gsi_handler:proxy_subject(OtpCert),
-			    {ok, rdn_sequence_to_dn_string(RDNSequence)} 
+				gsi_handler:proxy_subject(OtpCert)
 		end
 	catch Type:Message ->
 		lager:error("Unable to extract subject from cert file.~n~p: ~p~n~p~n~nCertificate binary:~n~p", 
@@ -348,6 +352,7 @@ extract_dn_from_cert(PemBin) ->
   	Result :: user_doc().
 %% ====================================================================
 synchronize_user_info(User, Teams, Email, DnList) ->
+	%% Actual updates will probably happen so rarely, that there is no need to scoop those 3 DB updates into one.
 	User2 = case (get_teams(User) =:= Teams) or (Teams =:= "") of
 		true -> User;
 		false -> 
@@ -381,22 +386,22 @@ synchronize_user_info(User, Teams, Email, DnList) ->
 %% @end
 -spec oid_code_to_shortname(term()) -> string() | no_return().
 %% ====================================================================
-oid_code_to_shortname(?'id-at-name') -> "name";
-oid_code_to_shortname(?'id-at-surname') -> "SN";
-oid_code_to_shortname(?'id-at-givenName') -> "GN";
-oid_code_to_shortname(?'id-at-initials') -> "initials";
-oid_code_to_shortname(?'id-at-generationQualifier') -> "generationQualifier";
-oid_code_to_shortname(?'id-at-commonName') -> "CN";
-oid_code_to_shortname(?'id-at-localityName') -> "L";
-oid_code_to_shortname(?'id-at-stateOrProvinceName') -> "ST";
-oid_code_to_shortname(?'id-at-organizationName') -> "O";
-oid_code_to_shortname(?'id-at-organizationalUnitName') -> "OU";
-oid_code_to_shortname(?'id-at-title') -> "title";
-oid_code_to_shortname(?'id-at-dnQualifier') -> "dnQualifier";
-oid_code_to_shortname(?'id-at-countryName') -> "C";
-oid_code_to_shortname(?'id-at-serialNumber') -> "serialNumber";
-oid_code_to_shortname(?'id-at-pseudonym') -> "pseudonym";
-oid_code_to_shortname(Code) -> throw({unknown_csr_code, Code}).
+oid_code_to_shortname(?'id-at-name') 					-> "name";
+oid_code_to_shortname(?'id-at-surname') 				-> "SN";
+oid_code_to_shortname(?'id-at-givenName') 				-> "GN";
+oid_code_to_shortname(?'id-at-initials') 				-> "initials";
+oid_code_to_shortname(?'id-at-generationQualifier') 	-> "generationQualifier";
+oid_code_to_shortname(?'id-at-commonName') 				-> "CN";
+oid_code_to_shortname(?'id-at-localityName') 			-> "L";
+oid_code_to_shortname(?'id-at-stateOrProvinceName')		-> "ST";
+oid_code_to_shortname(?'id-at-organizationName') 		-> "O";
+oid_code_to_shortname(?'id-at-organizationalUnitName') 	-> "OU";
+oid_code_to_shortname(?'id-at-title') 					-> "title";
+oid_code_to_shortname(?'id-at-dnQualifier') 			-> "dnQualifier";
+oid_code_to_shortname(?'id-at-countryName') 			-> "C";
+oid_code_to_shortname(?'id-at-serialNumber') 			-> "serialNumber";
+oid_code_to_shortname(?'id-at-pseudonym') 				-> "pseudonym";
+oid_code_to_shortname(Code) -> throw({unknown_oid_code, Code}).
 
 %% create_root/2
 %% ====================================================================

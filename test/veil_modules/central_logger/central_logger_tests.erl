@@ -10,15 +10,6 @@
 %% ===================================================================
 -module(central_logger_tests).
 
-%% TODO nie przetestowano inicjalizacji i sprzątania modułu, jeśli jest to zbyt trudne w eunit
-%% można to zrobić w ct (jednak nie ma testu logger w ct stąd też uwaga tutaj)
-%% TODO w funkcji do_log wydaje się, ze jest testowana tylko jedna główna ścieżka
-%% np. brakuje testów dla których wartość wyrażenia
-%% (LevelThreshold band SeverityAsInt) /= 0 orelse Destinations /= []
-%% byłaby true lub Traces nie było pustą listą
-
-%% TODO brakuje testów dispatch_log z central_logging_backend
-
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
@@ -34,7 +25,7 @@ teardown(_) ->
 %=================================================       
 % TEST I    
 
-% test if subscription system works properly
+% test if subscription system and log streaming works properly
 subscribing() ->
 	% this many pids
 	NumberOfPids = 20,

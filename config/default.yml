@@ -136,7 +136,7 @@ veil_cluster_node_env:
 
   - parameter:
       name: control_panel_static_files_root
-      description: Directory in release, where static gui files are stored
+      description: Directory in release where static gui files are stored
       value: |
         "\'./gui_static\'"
       erlang_term: "'./gui_static'"
