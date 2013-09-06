@@ -14,6 +14,7 @@
 
 -include_lib("records.hrl").
 -include_lib("veil_modules/dao/dao_vfs.hrl").
+-include_lib("veil_modules/dao/dao_users.hrl").
 -include_lib("veil_modules/dao/common.hrl").
 
 %% record definition used in record registration example
@@ -38,6 +39,7 @@
         file_meta -> ?record_info_gen(file_meta);
         file_lock -> ?record_info_gen(file_lock);
         storage_info -> ?record_info_gen(storage_info);
+        user -> ?record_info_gen(user);
         %next_record -> ?record_info_gen(next_record);
         _ -> {error, unsupported_record}
     end).
@@ -69,15 +71,23 @@
 -define(SYSTEM_DB_NAME, "system_data").
 -define(FILES_DB_NAME, "files").
 -define(DESCRIPTORS_DB_NAME, "file_descriptors").
+-define(USERS_DB_NAME, "users").
 
 %% Design Names
 -define(VFS_BASE_DESIGN_NAME, "vfs_base").
+-define(USER_BY_LOGIN_DESIGN_NAME, "user_by_login").
+-define(USER_BY_EMAIL_DESIGN_NAME, "user_by_email").
+-define(USER_BY_DN_DESIGN_NAME, "user_by_dn").
 
 %% Views
 -define(FILE_TREE_VIEW, #view_info{name = "file_tree", design = ?VFS_BASE_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
 -define(FD_BY_FILE_VIEW, #view_info{name = "fd_by_name", design = ?VFS_BASE_DESIGN_NAME, db_name = ?DESCRIPTORS_DB_NAME}).
 -define(FD_BY_EXPIRED_BEFORE_VIEW, #view_info{name = "fd_by_expired_before", design = ?VFS_BASE_DESIGN_NAME, db_name = ?DESCRIPTORS_DB_NAME}).
 -define(ALL_STORAGE_VIEW, #view_info{name = "all_storage", design = ?VFS_BASE_DESIGN_NAME, db_name = ?SYSTEM_DB_NAME}).
+
+-define(USER_BY_EMAIL_VIEW, #view_info{name = "user_by_email", design = ?USER_BY_EMAIL_DESIGN_NAME, db_name = ?USERS_DB_NAME}).
+-define(USER_BY_LOGIN_VIEW, #view_info{name = "user_by_login", design = ?USER_BY_LOGIN_DESIGN_NAME, db_name = ?USERS_DB_NAME}).
+-define(USER_BY_DN_VIEW, #view_info{name = "user_by_dn", design = ?USER_BY_DN_DESIGN_NAME, db_name = ?USERS_DB_NAME}).
 
 %% Others
 -define(RECORD_INSTANCES_DOC_PREFIX, "record_instances_").
@@ -88,9 +98,10 @@
 -define(RECORD_META_FIELD_NAME, "record__").
 
 %% List of all used databases :: [string()]
--define(DB_LIST, [?SYSTEM_DB_NAME, ?FILES_DB_NAME, ?DESCRIPTORS_DB_NAME]).
+-define(DB_LIST, [?SYSTEM_DB_NAME, ?FILES_DB_NAME, ?DESCRIPTORS_DB_NAME, ?USERS_DB_NAME]).
 %% List of all used views :: [#view_info]
--define(VIEW_LIST, [?FILE_TREE_VIEW, ?FD_BY_FILE_VIEW, ?FD_BY_EXPIRED_BEFORE_VIEW, ?ALL_STORAGE_VIEW]).
+-define(VIEW_LIST, [?FILE_TREE_VIEW, ?FD_BY_FILE_VIEW, ?FD_BY_EXPIRED_BEFORE_VIEW, ?ALL_STORAGE_VIEW, 
+    ?USER_BY_EMAIL_VIEW, ?USER_BY_LOGIN_VIEW, ?USER_BY_DN_VIEW]).
 %% Default database name
 -define(DEFAULT_DB, lists:nth(1, ?DB_LIST)).
 

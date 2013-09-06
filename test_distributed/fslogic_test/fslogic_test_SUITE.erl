@@ -20,9 +20,9 @@
 -include("veil_modules/dao/dao_vfs.hrl").
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([files_manager_standard_files_test/1, files_manager_tmp_files_test/1, fuse_requests_test/1]).
+-export([files_manager_standard_files_test/1, files_manager_tmp_files_test/1, fuse_requests_test/1, users_separation_test/1]).
 
-all() -> [files_manager_tmp_files_test, files_manager_standard_files_test, fuse_requests_test].
+all() -> [files_manager_tmp_files_test, files_manager_standard_files_test, fuse_requests_test, users_separation_test].
 
 -define(SH, "DirectIO").
 -define(SH_ARGS, ["/tmp"]). %% Root of test filesystem
@@ -57,6 +57,19 @@ fuse_requests_test(Config) ->
 
   {InsertStorageAns, _} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ["/tmp"]]),
   ?assertEqual(ok, InsertStorageAns),
+
+  {ReadFileAns, PemBin} = file:read_file(Cert),
+  ?assertEqual(ok, ReadFileAns),
+  {ExtractAns, DN} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
+  ?assertEqual(ok, ExtractAns),
+  DnList = [DN],
+
+  Login = "user1",
+  Name = "user1 user1",
+  Teams = "user1 team",
+  Email = "user1@email.net",
+  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+  ?assertEqual(ok, CreateUserAns),
 
   {Status, Helper, Id, _Validity, AnswerOpt0} = create_file(Host, Cert, Port, TestFile),
   ?assertEqual("ok", Status),
@@ -203,6 +216,103 @@ fuse_requests_test(Config) ->
   ?assertEqual("ok", Status16),
   ?assertEqual(list_to_atom(?VOK), Answer16),
 
+  RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
+  ?assertEqual(ok, RemoveUserAns).
+
+%% Checks fslogic integration with dao and db
+users_separation_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+
+  Cert = ?COMMON_FILE("peer.pem"),
+  Cert2 = ?COMMON_FILE("peer2.pem"),
+  Host = "localhost",
+  Port = ?config(port, Config),
+  [FSLogicNode | _] = NodesUp,
+
+  TestFile = "users_separation_test_file",
+
+  gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
+  gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  timer:sleep(100),
+  gen_server:cast({global, ?CCM}, init_cluster),
+  timer:sleep(1500),
+
+  {InsertStorageAns, _} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ["/tmp"]]),
+  ?assertEqual(ok, InsertStorageAns),
+
+  {ReadFileAns, PemBin} = file:read_file(Cert),
+  ?assertEqual(ok, ReadFileAns),
+  {ExtractAns, DN} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
+  ?assertEqual(ok, ExtractAns),
+  DnList = [DN],
+
+  Login = "user1",
+  Name = "user1 user1",
+  Teams = "user1 team",
+  Email = "user1@email.net",
+  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+  ?assertEqual(ok, CreateUserAns),
+
+  {ReadFileAns2, PemBin2} = file:read_file(Cert2),
+  ?assertEqual(ok, ReadFileAns2),
+  {ExtractAns2, DN2} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin2]),
+  ?assertEqual(ok, ExtractAns2),
+  DnList2 = [DN2],
+
+  Login2 = "user2",
+  Name2 = "user2 user2",
+  Teams2 = "user2 team",
+  Email2 = "user2@email.net",
+  {CreateUserAns2, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
+  ?assertEqual(ok, CreateUserAns2),
+
+  {Status, Helper, Id, _Validity, AnswerOpt} = create_file(Host, Cert, Port, TestFile),
+  ?assertEqual("ok", Status),
+  ?assertEqual(?VOK, AnswerOpt),
+
+  {Status2, Helper2, Id2, _Validity2, AnswerOpt2} = get_file_location(Host, Cert, Port, TestFile),
+  ?assertEqual("ok", Status2),
+  ?assertEqual(?VOK, AnswerOpt2),
+  ?assertEqual(Helper, Helper2),
+  ?assertEqual(Id, Id2),
+
+  {Status3, _Helper3, _Id3, _Validity3, AnswerOpt3} = get_file_location(Host, Cert2, Port, TestFile),
+  ?assertEqual("ok", Status3),
+  ?assertEqual(?VENOENT, AnswerOpt3),
+
+  {Status4, Helper4, Id4, _Validity4, AnswerOpt4} = create_file(Host, Cert2, Port, TestFile),
+  ?assertEqual("ok", Status4),
+  ?assertEqual(?VOK, AnswerOpt4),
+
+  {Status5, Helper5, Id5, _Validity5, AnswerOpt5} = get_file_location(Host, Cert2, Port, TestFile),
+  ?assertEqual("ok", Status5),
+  ?assertEqual(?VOK, AnswerOpt5),
+  ?assertEqual(Helper4, Helper5),
+  ?assertEqual(Id4, Id5),
+
+  {Status6, Answer6} = delete_file(Host, Cert, Port, TestFile),
+  ?assertEqual("ok", Status6),
+  ?assertEqual(list_to_atom(?VOK), Answer6),
+
+  {Status7, _Helper7, _Id7, _Validity7, AnswerOpt7} = get_file_location(Host, Cert, Port, TestFile),
+  ?assertEqual("ok", Status7),
+  ?assertEqual(?VENOENT, AnswerOpt7),
+
+  {Status8, Helper8, Id8, _Validity8, AnswerOpt8} = get_file_location(Host, Cert2, Port, TestFile),
+  ?assertEqual("ok", Status8),
+  ?assertEqual(?VOK, AnswerOpt8),
+  ?assertEqual(Helper4, Helper8),
+  ?assertEqual(Id4, Id8),
+
+  {Status9, Answer9} = delete_file(Host, Cert2, Port, TestFile),
+  ?assertEqual("ok", Status9),
+  ?assertEqual(list_to_atom(?VOK), Answer9),
+
+  {Status10, _Helper10, _Id10, _Validity10, AnswerOpt10} = get_file_location(Host, Cert2, Port, TestFile),
+  ?assertEqual("ok", Status10),
+  ?assertEqual(?VENOENT, AnswerOpt10),
+
   %% Link tests
 
   % Create link
@@ -225,7 +335,11 @@ fuse_requests_test(Config) ->
   {Status20, Answer20, _} = get_link(Host, Cert, Port, "link_name1"),
   ?assertEqual("ok", Status20),
   ?assertEqual(?VENOENT, Answer20),
-  ok.
+
+  RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
+  ?assertEqual(ok, RemoveUserAns),
+  RemoveUserAns2 = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN2}]),
+  ?assertEqual(ok, RemoveUserAns2).
 
 %% Checks files manager (manipulation on tmp files copies)
 files_manager_tmp_files_test(Config) ->

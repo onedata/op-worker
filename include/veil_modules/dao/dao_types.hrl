@@ -31,4 +31,8 @@
 
 -type veil_doc() :: #veil_document{}.
 
+-type user() :: uuid().
+-type user_info() :: #user{}.
+-type user_doc() :: #veil_document{record :: #user{}}.
+
 -endif.
