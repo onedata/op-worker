@@ -38,7 +38,7 @@ test(Host, Cert, Port, FSLogicNode) ->
   FilesInDir = [DirName ++ "/file_in_dir1", DirName ++ "/file_in_dir2", DirName ++ "/file_in_dir3", DirName ++ "/file_in_dir4", DirName ++ "/file_in_dir5"],
   NewNameOfFIle = "new_name_of_file",
 
-  {ok, _} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ["/tmp/root"]]),
+  {ok, _} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", "/tmp/veilfs"]),
   
   {Status, Helper, Id, Validity, AnswerOpt0} = create_file(Host, Cert, Port, TestFile),
   io:format("Test file creation: aswer status: ~s, helper: ~s, id: ~s, validity: ~b, answer: ~p ~n", [Status, Helper, Id, Validity, AnswerOpt0]),

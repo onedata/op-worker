@@ -25,7 +25,7 @@
 all() -> [files_manager_tmp_files_test, files_manager_standard_files_test, fuse_requests_test, users_separation_test].
 
 -define(SH, "DirectIO").
--define(SH_ARGS, ["/tmp"]). %% Root of test filesystem
+-define(TEST_ROOT, ["/tmp/veilfs"]). %% Root of test filesystem
 
 %% ====================================================================
 %% Test functions
@@ -55,7 +55,7 @@ fuse_requests_test(Config) ->
   end, FilesInDirNames),
   NewNameOfFIle = "new_name_of_file",
 
-  {InsertStorageAns, _} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ["/tmp"]]),
+  {InsertStorageAns, _} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
 
   {ReadFileAns, PemBin} = file:read_file(Cert),
@@ -240,7 +240,7 @@ users_separation_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   timer:sleep(1500),
 
-  {InsertStorageAns, _} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ["/tmp"]]),
+  {InsertStorageAns, _} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
 
   {ReadFileAns, PemBin} = file:read_file(Cert),
@@ -359,7 +359,7 @@ files_manager_tmp_files_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   timer:sleep(1500),
 
-  SHInfo = #storage_helper_info{name = ?SH, init_args = ?SH_ARGS},
+  SHInfo = #storage_helper_info{name = ?SH, init_args = ?TEST_ROOT},
   File = "files_manager_test_file1",
   NotExistingFile = "files_manager_test_not_existing_file",
 
@@ -421,7 +421,7 @@ files_manager_standard_files_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   timer:sleep(1500),
 
-  {InsertStorageAns, _} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ["/tmp"]]),
+  {InsertStorageAns, _} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
 
   DirName = "fslogic_test_dir2",

@@ -20,7 +20,7 @@
 -include("veil_modules/dao/dao_vfs.hrl").
 
 -define(SH, "DirectIO").
--define(SH_ARGS, ["/tmp"]). %% Root of test filesystem
+-define(SH_ARGS, ["/tmp/veilfs"]). %% Root of test filesystem
 -define(TEST_FILE1, "testfile1").
 -define(TEST_FILE2, "testfile2").
 
@@ -94,15 +94,15 @@ integration_test(Config) ->
 
     % Unlink
     ErrorCode10 = rpc:call(FSLogicNode, veilhelpers, exec, [unlink, SHInfo, [?TEST_FILE2]]),
-    ?assertEqual(0, ErrorCode10),  
+    ?assertEqual(0, ErrorCode10),
 
     % mkdir
     ErrorCode11 = rpc:call(FSLogicNode, veilhelpers, exec, [mkdir, SHInfo, [?TEST_FILE1, 8#755]]),
-    ?assertEqual(0, ErrorCode11), 
+    ?assertEqual(0, ErrorCode11),
 
     % rmdir
     ErrorCode12 = rpc:call(FSLogicNode, veilhelpers, exec, [rmdir, SHInfo, [?TEST_FILE1]]),
-    ?assertEqual(0, ErrorCode12), 
+    ?assertEqual(0, ErrorCode12),
 
     ok.
 

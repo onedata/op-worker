@@ -9,6 +9,9 @@
 ## @doc: This script starts distributed tests.
 ## ===================================================================
 
+rm -rf /tmp/veilfs
+mkdir /tmp/veilfs
+
 mkdir -p distributed_tests_out
 cp -R test_distributed/* distributed_tests_out
 cd distributed_tests_out
