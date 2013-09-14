@@ -1,0 +1,44 @@
+message RemoteFileMangement {
+    required string message_type = 1;
+    required bytes input = 2;
+}
+
+message CreateFile {
+    required string file_id = 1;
+}
+
+message DeleteFile {
+    required string file_id = 1;    
+}
+
+message TruncateFile {
+    required string file_id = 1;
+    required int32 length = 2;  
+}
+
+message ReadFile {
+    required string file_id = 1;
+    required int32 size = 2;
+    optional int32 offset = 3 [default = 0];
+}
+
+message FileData {
+    required string answer_status = 1;
+    optional string operation_guid = 2;
+    optional string new_data_source = 3;
+    optional bytes data = 4;
+}
+
+message WriteFile {
+    required string file_id = 1;
+    optional int32 size = 2;
+    optional bytes data = 3;
+    optional int32 offset = 4 [default = 0];
+}
+
+message WriteInfo {
+    required string answer_status = 1;
+    optional string operation_guid = 2;
+    optional string new_data_listener = 3;
+}
+
