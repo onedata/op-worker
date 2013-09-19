@@ -89,7 +89,7 @@ handle_call(_Request, State) ->
 handle_event({log,  #lager_msg {metadata = Metadata, severity = Severity, timestamp = Timestamp, message = Message} }, State) ->
   case lists:keyfind(destination, 1, Metadata) of
     {destination, _} -> already_logged;
-    _ -> dispatch_log(Message, Timestamp, Severity, Metadata)
+    _ -> spawn(fun() -> dispatch_log(Message, Timestamp, Severity, Metadata) end)
   end,
   {ok, State};
 
