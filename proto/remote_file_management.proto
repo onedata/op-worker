@@ -1,3 +1,5 @@
+package veil.protocol.remote_file_management;
+
 message RemoteFileMangement {
     required string message_type = 1;
     required bytes input = 2;

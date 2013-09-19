@@ -1,3 +1,5 @@
+package veil.protocol.fuse_messages;
+
 message FuseMessage {
 	required string id = 1;
 	required string message_type = 2;
