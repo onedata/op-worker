@@ -9,7 +9,7 @@ message CreateFile {
     required string file_id = 1;
 }
 
-message DeleteFile {
+message DeleteFileAtStorage {
     required string file_id = 1;    
 }
 
