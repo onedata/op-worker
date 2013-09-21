@@ -40,7 +40,8 @@ message WriteFile {
 
 message WriteInfo {
     required string answer_status = 1;
-    optional string operation_guid = 2;
-    optional string new_data_listener = 3;
+    optional int32 bytes_written = 2 [default = 0];
+    optional string operation_guid = 3;
+    optional string new_data_listener = 4;
 }
 
