@@ -10,10 +10,6 @@
 %% @end
 %% ===================================================================
 
-%% TODO dodać sprawdzanie uprawnień, gdy będziemy mieli już autentykację klienta
-%% (obecnie generowane warningi to efekt przekazywania parametrów, które będą
-%% do tego potrzebne, a nie są obecnie używane)
-
 -module(fslogic).
 -behaviour(worker_plugin_behaviour).
 
@@ -27,7 +23,6 @@
 -include_lib("veil_modules/dao/dao_types.hrl").
 
 -define(LOCATION_VALIDITY, 60*15).
--define(CLUSTER_USER_ID, cluster).
 
 %% ====================================================================
 %% API
@@ -111,7 +106,7 @@ cleanup() ->
   Result :: term().
 %% ====================================================================
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, changefileperms) ->
-    {FileNameFindingAns, FileName} = get_full_file_name(Record#changefileperms.logic_file_name, FuseID),
+    {FileNameFindingAns, FileName} = get_full_file_name(Record#changefileperms.logic_file_name),
     case FileNameFindingAns of
       ok ->
         case get_file(ProtocolVersion, FileName, FuseID) of
@@ -132,7 +127,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, chan
     end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getfileattr) ->
-    {FileNameFindingAns, FileName} = get_full_file_name(Record#getfileattr.file_logic_name, FuseID),
+    {FileNameFindingAns, FileName} = get_full_file_name(Record#getfileattr.file_logic_name),
     case FileNameFindingAns of
       ok ->
         lager:debug("FileAttr for ~p", [FileName]),
@@ -157,7 +152,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getf
     end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getfilelocation) ->
-    {FileNameFindingAns, File} = get_full_file_name(Record#getfilelocation.file_logic_name, FuseID),
+    {FileNameFindingAns, File} = get_full_file_name(Record#getfilelocation.file_logic_name),
     case FileNameFindingAns of
       ok ->
         {Status, TmpAns} = get_file(ProtocolVersion, File, FuseID),
@@ -171,10 +166,10 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getf
                     ok ->
                         FileDesc = TmpAns#veil_document.record,
                         FileLoc = FileDesc#file.location,
-                        case dao_lib:apply(dao_vfs, get_storage, [FileLoc#file_location.storage_id], ProtocolVersion) of
+                        case dao_lib:apply(dao_vfs, get_storage, [{uuid, FileLoc#file_location.storage_id}], ProtocolVersion) of
                             {ok, #veil_document{record = Storage}} ->
-                                SH = fslogic_storage:get_sh_for_fuse(FuseID, Storage),
-                                #filelocation{storage_id = Storage#storage_info.id, file_id = FileLoc#file_location.file_id, validity = Validity,
+                                {SH, File_id} = get_sh_and_id(FuseID, Storage, FileLoc#file_location.file_id),
+                                #filelocation{storage_id = Storage#storage_info.id, file_id = File_id, validity = Validity,
                                               storage_helper_name = SH#storage_helper_info.name, storage_helper_args = SH#storage_helper_info.init_args};
                             Other ->
                                 lager:error("Cannot fetch storage: ~p for file: ~p, reason: ~p", [FileLoc#file_location.storage_id, TmpAns#veil_document.uuid, Other]),
@@ -195,7 +190,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getf
     end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getnewfilelocation) ->
-    {FileNameFindingAns, File} = get_full_file_name(Record#getnewfilelocation.file_logic_name, FuseID),
+    {FileNameFindingAns, File} = get_full_file_name(Record#getnewfilelocation.file_logic_name),
     case FileNameFindingAns of
       ok ->
         {FindStatus, FindTmpAns} = get_file(ProtocolVersion, File, FuseID),
@@ -214,7 +209,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getn
                                 File_id = "real_location_of___" ++ re:replace(File, "/", "___", [global, {return,list}]),
                                 FileLocation = #file_location{storage_id = UUID, file_id = File_id},
 
-                                {UserIdStatus, UserId} = get_user_id(FuseID),
+                                {UserIdStatus, UserId} = get_user_id(),
                                 case UserIdStatus of
                                   ok ->
                                     FileRecord = #file{type = ?REG_TYPE, name = FileName, uid = UserId, size = 0, parent = Parent, perms = Record#getnewfilelocation.mode, location = FileLocation},
@@ -226,8 +221,9 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getn
                                             {Status2, _TmpAns2} = save_file_descriptor(ProtocolVersion, File, FileUUID, FuseID, Validity),
                                             case Status2 of
                                               ok ->
-                                                  #storage_helper_info{name = SHName, init_args = SHArgs} = fslogic_storage:get_sh_for_fuse(FuseID, Storage),
-                                                  #filelocation{storage_id = Storage#storage_info.id, file_id = File_id, validity = Validity, storage_helper_name = SHName, storage_helper_args = SHArgs};
+                                                  {SH, File_id2} = get_sh_and_id(FuseID, Storage, File_id),
+                                                  #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
+                                                  #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = SHName, storage_helper_args = SHArgs};
                                               _BadStatus2 ->
                                               lager:error([{mod, ?MODULE}], "Error: cannot save file_descriptor document: ~p", [_BadStatus2]),
                                                 #filelocation{answer = ?VEIO, storage_id = -1, file_id = "", validity = 0}
@@ -257,7 +253,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getn
     end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, filenotused) ->
-  {FileNameFindingAns, File} = get_full_file_name(Record#filenotused.file_logic_name, FuseID),
+  {FileNameFindingAns, File} = get_full_file_name(Record#filenotused.file_logic_name),
   case FileNameFindingAns of
     ok ->
       Status = dao_lib:apply(dao_vfs, remove_descriptor, [{by_file_n_owner, {File, FuseID}}], ProtocolVersion),
@@ -271,7 +267,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, file
   end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, renewfilelocation) ->
-  {FileNameFindingAns, File} = get_full_file_name(Record#renewfilelocation.file_logic_name, FuseID),
+  {FileNameFindingAns, File} = get_full_file_name(Record#renewfilelocation.file_logic_name),
   case FileNameFindingAns of
     ok ->
       {Status, TmpAns} = dao_lib:apply(dao_vfs, list_descriptors, [{by_file_n_owner, {File, FuseID}}, 10, 0], ProtocolVersion),
@@ -305,7 +301,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, rene
   end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, createdir) ->
-  {FileNameFindingAns, Dir} = get_full_file_name(Record#createdir.dir_logic_name, FuseID),
+  {FileNameFindingAns, Dir} = get_full_file_name(Record#createdir.dir_logic_name),
   case FileNameFindingAns of
     ok ->
       {FindStatus, FindTmpAns} = get_file(ProtocolVersion, Dir, FuseID),
@@ -318,7 +314,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, crea
             case ParentFound of
               ok ->
                 {FileName, Parent} = ParentInfo,
-                {UserIdStatus, UserId} = get_user_id(FuseID),
+                {UserIdStatus, UserId} = get_user_id(),
                 case UserIdStatus of
                   ok ->
                     File = #file{type = ?DIR_TYPE, name = FileName, uid = UserId, parent = Parent, perms = Record#createdir.mode},
@@ -349,8 +345,8 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, crea
     _  -> #atom{value = ?VEIO}
   end;
 
-handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getfilechildren) ->
-  {FileNameFindingAns, File} = get_full_file_name(Record#getfilechildren.dir_logic_name, FuseID),
+handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, getfilechildren) ->
+  {FileNameFindingAns, File} = get_full_file_name(Record#getfilechildren.dir_logic_name),
   case FileNameFindingAns of
     ok ->
       Num = Record#getfilechildren.children_num,
@@ -369,7 +365,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getf
   end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, deletefile) ->
-  {FileNameFindingAns, File} = get_full_file_name(Record#deletefile.file_logic_name, FuseID),
+  {FileNameFindingAns, File} = get_full_file_name(Record#deletefile.file_logic_name),
   case FileNameFindingAns of
     ok ->
       {FindStatus, FindTmpAns} = get_file(ProtocolVersion, File, FuseID),
@@ -411,8 +407,8 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, dele
   end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, renamefile) ->
-  {FileNameFindingAns, File} = get_full_file_name(Record#renamefile.from_file_logic_name, FuseID),
-  {FileNameFindingAns2, NewFileName} = get_full_file_name(Record#renamefile.to_file_logic_name, FuseID),
+  {FileNameFindingAns, File} = get_full_file_name(Record#renamefile.from_file_logic_name),
+  {FileNameFindingAns2, NewFileName} = get_full_file_name(Record#renamefile.to_file_logic_name),
   case {FileNameFindingAns, FileNameFindingAns2} of
     {ok, ok} ->
       case get_file(ProtocolVersion, File, FuseID) of
@@ -449,10 +445,13 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, rena
 
 %% Symbolic link creation. From - link name, To - path pointed by new link
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, createlink) ->
-  {FileNameFindingAns, From} = get_full_file_name(Record#createlink.from_file_logic_name, FuseID),
-  {FileNameFindingAns2, To} = get_full_file_name(Record#createlink.to_file_logic_name, FuseID),
-  case {FileNameFindingAns, FileNameFindingAns2} of
-    {ok, ok} ->
+  {FileNameFindingAns, From} = get_full_file_name(Record#createlink.from_file_logic_name),
+%%   {FileNameFindingAns2, To} = get_full_file_name(Record#createlink.to_file_logic_name),
+  To = Record#createlink.to_file_logic_name,
+%%   case {FileNameFindingAns, FileNameFindingAns2} of
+%%     {ok, ok} ->
+  case FileNameFindingAns of
+    ok ->
       case get_file(ProtocolVersion, From, FuseID) of
           {error, file_not_found} ->
               case get_file(ProtocolVersion, fslogic_utils:strip_path_leaf(From), FuseID) of
@@ -482,12 +481,13 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, crea
 
 %% Fetch link data (target path)
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getlink) ->
-  {FileNameFindingAns, File} = get_full_file_name(Record#getlink.file_logic_name, FuseID),
+  {FileNameFindingAns, File} = get_full_file_name(Record#getlink.file_logic_name),
   case FileNameFindingAns of
     ok ->
       case get_file(ProtocolVersion, File, FuseID) of
           {ok, #veil_document{record = #file{ref_file = Target}}} ->
-              #linkinfo{file_logic_name = get_file_name_from_full_file_name(Target, FuseID)};
+%%               #linkinfo{file_logic_name = get_file_name_from_full_file_name(Target)};
+              #linkinfo{file_logic_name = Target};
           {error, file_not_found} ->
               lager:error("Link ~p does not exist.", [File]),
               #linkinfo{answer = ?VENOENT, file_logic_name = ""};
@@ -611,66 +611,52 @@ delete_old_descriptors(ProtocolVersion, Time) ->
 get_user_root() ->
   UserId = get(user_id),
   case UserId of
-    {rdnSequence, RDNSequence} ->
-      {RND_ANS, DN} = user_logic:rdn_sequence_to_dn_string(RDNSequence),
-      case RND_ANS of
-        ok ->
+    undefined -> {error, get_user_id_error};
+    DN ->
           {GetUserAns, User} = user_logic:get_user({dn, DN}),
           case GetUserAns of
             ok ->
               UserRecord = User#veil_document.record,
               {ok, UserRecord#user.login};
             _ -> {error, get_user_error}
-          end;
-        _ -> {error, rdn_sequence_to_dn_string_error}
-      end;
-    _ -> {error, get_user_id_error}
+          end
   end.
 
-%% get_user_id/1
+%% get_user_id/0
 %% ====================================================================
 %% @doc Gets user's id.
 %% @end
--spec get_user_id(FuseID :: string()) -> Result when
+-spec get_user_id() -> Result when
   Result :: {ok, UserID} | {error, ErrorDesc},
   UserID :: term(),
   ErrorDesc :: atom.
 %% ====================================================================
-get_user_id(FuseID) ->
-  case FuseID of
-    non -> {ok, ?CLUSTER_USER_ID};
-    _ ->
-      UserId = get(user_id),
-      case UserId of
-        {rdnSequence, RDNSequence} ->
-          {RND_ANS, DN} = user_logic:rdn_sequence_to_dn_string(RDNSequence),
-          case RND_ANS of
-            ok ->
+get_user_id() ->
+  UserId = get(user_id),
+  case UserId of
+    undefined -> {ok, ?CLUSTER_USER_ID};
+    DN ->
               {GetUserAns, User} = user_logic:get_user({dn, DN}),
               case GetUserAns of
                 ok ->
                   {ok, User#veil_document.uuid};
                 _ -> {error, get_user_error}
-              end;
-            _ -> {error, rdn_sequence_to_dn_string_error}
-          end;
-        _ -> {error, get_user_id_error}
-      end
+              end
   end.
 
-%% get_full_file_name/2
+%% get_full_file_name/1
 %% ====================================================================
 %% @doc Gets file's full name (user's root is added to name).
 %% @end
--spec get_full_file_name(FileName :: string(), FuseID :: string()) -> Result when
+-spec get_full_file_name(FileName :: string()) -> Result when
   Result :: {ok, FullFileName} | {error, ErrorDesc},
   FullFileName :: string(),
   ErrorDesc :: atom.
 %% ====================================================================
 
-get_full_file_name(FileName, FuseID) ->
-  case FuseID of
-    non ->
+get_full_file_name(FileName) ->
+  case get(user_id) of
+    undefined ->
       {ok, FileName};
     _ ->
       [Beg | _] = FileName,
@@ -686,28 +672,47 @@ get_full_file_name(FileName, FuseID) ->
       end
   end.
 
-%% get_file_name_from_full_file_name/2
-%% ====================================================================
-%% @doc Gets file's name from full name (user's root is deleted to name).
-%% @end
--spec get_file_name_from_full_file_name(FileName :: string(), FuseID :: string()) -> Result when
-  Result :: {ok, FileName} | {error, ErrorDesc},
-  FileName :: string(),
-  ErrorDesc :: atom.
-%% ====================================================================
+%% Function is not used anymore
+%% %% get_file_name_from_full_file_name/1
+%% %% ====================================================================
+%% %% @doc Gets file's name from full name (user's root is deleted to name).
+%% %% @end
+%% -spec get_file_name_from_full_file_name(FileName :: string()) -> Result when
+%%   Result :: {ok, FileName} | {error, ErrorDesc},
+%%   FileName :: string(),
+%%   ErrorDesc :: atom.
+%% %% ====================================================================
+%%
+%% get_file_name_from_full_file_name(FileName) ->
+%%   case get(user_id) of
+%%     undefined ->
+%%       FileName;
+%%     _ ->
+%%       Pos = string:chr(FileName, $/),
+%%       case Pos of
+%%         1 ->
+%%           FileName2 = string:substr(FileName, 2),
+%%           Pos2 = string:chr(FileName2, $/),
+%%           string:substr(FileName2, Pos2);
+%%         _ ->
+%%           string:substr(FileName, Pos)
+%%       end
+%%   end.
 
-get_file_name_from_full_file_name(FileName, FuseID) ->
-  case FuseID of
-    non ->
-      {ok, FileName};
-    _ ->
-      Pos = string:chr(FileName, $/),
-      case Pos of
-        1 ->
-          FileName2 = string:substr(FileName, 2),
-          Pos2 = string:chr(FileName2, $/),
-          string:substr(FileName2, Pos2);
-        _ ->
-          string:substr(FileName, Pos)
-      end
+%% get_sh_and_id/3
+%% ====================================================================
+%% @doc Returns storage hel[per info and new file id (it may be changed for Cluster Proxy).
+%% @end
+-spec get_sh_and_id(FuseID :: string(), Storage :: term(), File_id :: string()) -> Result when
+  Result :: {SHI, NewFileId},
+  SHI :: term(),
+  NewFileId :: string().
+%% ====================================================================
+get_sh_and_id(FuseID, Storage, File_id) ->
+  SHI = fslogic_storage:get_sh_for_fuse(FuseID, Storage),
+  #storage_helper_info{name = SHName, init_args = _SHArgs} = SHI,
+  case SHName =:= "ClusterProxy" of
+    true ->
+      {SHI, integer_to_list(Storage#storage_info.id) ++ ?REMOTE_HELPER_SEPARATOR ++ File_id};
+    false -> {SHI, File_id}
   end.

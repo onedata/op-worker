@@ -18,6 +18,7 @@
 -include("fuse_messages_pb.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao_vfs.hrl").
+-include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 
 -define(NewFileLogicMode, 8#744).
 -define(NewFileStorageMode, 8#744).
@@ -28,12 +29,12 @@
 %% Logical file organization management (only db is used)
 -export([mkdir/1, rmdir/1, mv/2, chown/0, change_file_perm/2, ls/3]).
 %% File access (db and helper are used)
--export([read/3, write/3, write/2, create/1, delete/1]).
+-export([read/3, write/3, write/2, create/1, truncate/2, delete/1]).
 %% Physical files organization management (to better organize files on storage;
 %% the user does not see results of these operations)
 -export([mkdir_storage_system/0, mv_storage_system/0, delete_dir_storage_system/0]).
 %% Physical files access (used to create temporary copies for remote files)
--export([read_storage_system/4, write_storage_system/4, write_storage_system/3, create_file_storage_system/2, delete_file_storage_system/2, ls_storage_system/0]).
+-export([read_storage_system/4, write_storage_system/4, write_storage_system/3, create_file_storage_system/2, truncate_storage_system/3, delete_file_storage_system/2, ls_storage_system/0]).
 
 %% ====================================================================
 %% Logical file organization management (only db is used)
@@ -270,6 +271,32 @@ create(File) ->
     _ -> {Status, TmpAns}
   end.
 
+%% truncate/2
+%% ====================================================================
+%% @doc Truncates file (uses logical name of file). First it gets
+%% information about storage helper and file id at helper.
+%% Next it uses storage helper to truncate file on storage.
+%% @end
+-spec truncate(File :: string(), Size :: integer()) -> Result when
+  Result :: ok | {ErrorGeneral, ErrorDetail},
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+truncate(File, Size) ->
+  Record = #getfilelocation{file_logic_name = File},
+  {Status, TmpAns} = contact_fslogic(Record),
+  case Status of
+    ok ->
+      Response = TmpAns#filelocation.answer,
+      case Response of
+        ?VOK ->
+          Storage_helper_info = #storage_helper_info{name = TmpAns#filelocation.storage_helper_name, init_args = TmpAns#filelocation.storage_helper_args},
+          truncate_storage_system(Storage_helper_info, TmpAns#filelocation.file_id, Size);
+        _ -> {logical_file_system_error, Response}
+      end;
+    _ -> {Status, TmpAns}
+  end.
+
 %% delete/1
 %% ====================================================================
 %% @doc Deletes file (uses logical name of file). First it gets
@@ -416,7 +443,7 @@ write_storage_system(Storage_helper_info, File, Offset, Buf) ->
       case veilhelpers:exec(is_reg, [Stat#st_stat.st_mode]) of
         true ->
           FSize = Stat#st_stat.st_size,
-          case FSize =< Offset of
+          case FSize < Offset of
             false ->
               Flag = veilhelpers:exec(get_flag, [o_wronly]),
               {ErrorCode2, FFI} = veilhelpers:exec(open, Storage_helper_info, [File, #st_fuse_file_info{flags = Flag}]),
@@ -511,6 +538,34 @@ create_file_storage_system(Storage_helper_info, File) ->
       end
   end.
 
+%% truncate_storage_system/2
+%% ====================================================================
+%% @doc Truncates file (operates only on storage). First it checks if file
+%% exists and is regular file. If everything is ok, it truncates file.
+%% @end
+-spec truncate_storage_system(Storage_helper_info :: record(), File :: string(), Size :: integer()) -> Result when
+  Result :: ok | {ErrorGeneral, ErrorDetail},
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+truncate_storage_system(Storage_helper_info, File, Size) ->
+  {ErrorCode, Stat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
+  case ErrorCode of
+    0 ->
+      case veilhelpers:exec(is_reg, [Stat#st_stat.st_mode]) of
+        true ->
+          ErrorCode2 = veilhelpers:exec(truncate, Storage_helper_info, [File, Size]),
+          case ErrorCode2 of
+            0 -> ok;
+            {error, 'NIF_not_loaded'} -> ErrorCode2;
+            _ -> {wrong_truncate_return_code, ErrorCode2}
+          end;
+        false -> {error, not_regular_file}
+      end;
+    error -> {ErrorCode, Stat};
+    _ -> {wrong_getatt_return_code, ErrorCode}
+  end.
+
 %% delete_file_storage_system/2
 %% ====================================================================
 %% @doc Deletes file (operates only on storage). First it checks if file
@@ -564,13 +619,18 @@ ls_storage_system() ->
   ErrorDetail :: term().
 %% ====================================================================
 contact_fslogic(Record) ->
+  UserID = get(user_id),
+
   MsgId = case get(files_manager_msg_id) of
             ID when is_integer(ID) ->
               put(files_manager_msg_id, ID + 1);
             _ -> put(files_manager_msg_id, 0)
           end,
 
-  CallAns = gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {internal_call, Record}}),
+  CallAns = case UserID of
+              undefined -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {internal_call, Record}});
+              _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, #veil_request{subject = UserID, request = Record}})
+  end,
   case CallAns of
     ok ->
       receive

@@ -15,7 +15,7 @@
 -include_lib("files_common.hrl").
 
 %% API
--export([get_sh_for_fuse/2, select_storage/2, insert_storage/2]).
+-export([get_sh_for_fuse/2, select_storage/2, insert_storage/2, insert_storage/3]).
 
 
 %% ====================================================================
@@ -63,15 +63,25 @@ select_storage(_, _) ->
 %% insert_storage/2
 %% ====================================================================
 %% @doc Creates new mock-storage info in DB that uses default storage helper with name HelperName and argument list HelperArgs.
-%%      TODO: This is mock method and should be replaced by GUI-tool form control_panel module.
 %% @end
 -spec insert_storage(HelperName :: string(), HelperArgs :: [string()]) -> term().
 %% ====================================================================
 insert_storage(HelperName, HelperArgs) ->
-    {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], 1),
-    ID = lists:foldl(fun(X, L) -> erlang:max(L, X#storage_info.id)  end, 1, dao_lib:strip_wrappers(StorageList)),
-    Storage = #storage_info{id = ID + 1, default_storage_helper = #storage_helper_info{name = HelperName, init_args = HelperArgs}},
-    dao_lib:apply(dao_vfs, save_storage, [Storage], 1).
+  insert_storage(HelperName, HelperArgs, []).
+
+
+%% insert_storage/3
+%% ====================================================================
+%% @doc Creates new mock-storage info in DB that uses default storage helper with name HelperName and argument list HelperArgs.
+%%      TODO: This is mock method and should be replaced by GUI-tool form control_panel module.
+%% @end
+-spec insert_storage(HelperName :: string(), HelperArgs :: [string()], Fuse_groups :: list()) -> term().
+%% ====================================================================
+insert_storage(HelperName, HelperArgs, Fuse_groups) ->
+  {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], 1),
+  ID = lists:foldl(fun(X, L) -> erlang:max(L, X#storage_info.id)  end, 1, dao_lib:strip_wrappers(StorageList)),
+  Storage = #storage_info{id = ID + 1, default_storage_helper = #storage_helper_info{name = HelperName, init_args = HelperArgs}, fuse_groups = Fuse_groups},
+  dao_lib:apply(dao_vfs, save_storage, [Storage], 1).
 
 
 %% ====================================================================

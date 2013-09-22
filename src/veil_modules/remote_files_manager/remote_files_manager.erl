@@ -1,0 +1,206 @@
+%% ===================================================================
+%% @author Michal Wrzeszcz
+%% @copyright (C): 2013 ACK CYFRONET AGH
+%% This software is released under the MIT license
+%% cited in 'LICENSE.txt'.
+%% @end
+%% ===================================================================
+%% @doc: This module implements worker_plugin_behaviour to provide
+%% functionality of remote files manager.
+%% @end
+%% ===================================================================
+
+-module(remote_files_manager).
+-behaviour(worker_plugin_behaviour).
+
+-include("remote_file_management_pb.hrl").
+-include("communication_protocol_pb.hrl").
+-include("veil_modules/fslogic/fslogic.hrl").
+-include("veil_modules/dao/dao.hrl").
+
+%% ====================================================================
+%% API
+%% ====================================================================
+-export([init/1, handle/2, cleanup/0]).
+
+%% ====================================================================
+%% Test API
+%% ====================================================================
+-ifdef(TEST).
+-export([get_storage_and_id/1]).
+-endif.
+
+%% ====================================================================
+%% API functions
+%% ====================================================================
+
+%% init/1
+%% ====================================================================
+%% @doc {@link worker_plugin_behaviour} callback init/1
+-spec init(Args :: term()) -> list().
+%% ====================================================================
+init(_Args) ->
+  Pid = self(),
+  {ok, Interval} = application:get_env(veil_cluster_node, fslogic_cleaning_period),
+  erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
+  [].
+
+%% handle/1
+%% ====================================================================
+%% @doc {@link worker_plugin_behaviour} callback handle/1. <br/>
+%% Processes standard worker requests (e.g. ping) and requests from FUSE.
+%% @end
+-spec handle(ProtocolVersion :: term(), Request :: term()) -> Result when
+  Result :: term().
+%% ====================================================================
+handle(_ProtocolVersion, ping) ->
+  pong;
+
+handle(_ProtocolVersion, get_version) ->
+  node_manager:check_vsn();
+
+handle(ProtocolVersion, Record) when is_record(Record, remotefilemangement) ->
+  handle_message(ProtocolVersion, Record#remotefilemangement.input);
+
+handle(_ProtocolVersion, _Msg) ->
+  ok.
+
+%% cleanup/0
+%% ====================================================================
+%% @doc {@link worker_plugin_behaviour} callback cleanup/0
+-spec cleanup() -> ok.
+%% ====================================================================
+cleanup() ->
+  ok.
+
+%% ====================================================================
+%% Internal functions
+%% ====================================================================
+
+%% handle_message/2
+%% ====================================================================
+%% @doc Processes requests from Cluster Proxy.
+%% @end
+-spec handle_message(ProtocolVersion :: term(), Record :: tuple()) -> Result when
+  Result :: term().
+%% ====================================================================
+handle_message(ProtocolVersion, Record) when is_record(Record, createfile) ->
+  FileId = Record#createfile.file_id,
+  SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
+  case SH_And_ID of
+    {Storage_helper_info, File} ->
+      TmpAns = files_manager:create_file_storage_system(Storage_helper_info, File),
+      case TmpAns of
+        ok -> #atom{value = ?VOK};
+        Other ->
+          lager:warning("create_file_storage_system error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
+          #atom{value = ?VEIO}
+      end;
+    _ -> #atom{value = ?VEIO}
+  end;
+
+handle_message(ProtocolVersion, Record) when is_record(Record, deletefileatstorage) ->
+  FileId = Record#deletefileatstorage.file_id,
+  SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
+  case SH_And_ID of
+    {Storage_helper_info, File} ->
+      TmpAns = files_manager:delete_file_storage_system(Storage_helper_info, File),
+      case TmpAns of
+        ok -> #atom{value = ?VOK};
+        Other ->
+          lager:warning("delete_file_storage_system error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
+          #atom{value = ?VEIO}
+      end;
+    _ -> #atom{value = ?VEIO}
+  end;
+
+handle_message(ProtocolVersion, Record) when is_record(Record, truncatefile) ->
+  FileId = Record#truncatefile.file_id,
+  Length = Record#truncatefile.length,
+  SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
+  case SH_And_ID of
+    {Storage_helper_info, File} ->
+      TmpAns = files_manager:truncate_storage_system(Storage_helper_info, File, Length),
+      case TmpAns of
+        ok -> #atom{value = ?VOK};
+        Other ->
+          lager:warning("truncate_storage_system error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
+          #atom{value = ?VEIO}
+      end;
+    _ -> #atom{value = ?VEIO}
+  end;
+
+handle_message(ProtocolVersion, Record) when is_record(Record, readfile) ->
+  FileId = Record#readfile.file_id,
+  Size = Record#readfile.size,
+  Offset = Record#readfile.offset,
+  SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
+  case SH_And_ID of
+    {Storage_helper_info, File} ->
+      TmpAns = files_manager:read_storage_system(Storage_helper_info, File, Offset, Size),
+      case TmpAns of
+        {ok, Bytes} -> #filedata{answer_status = ?VOK, data = Bytes};
+        Other ->
+          lager:warning("read_storage_system error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
+          #filedata{answer_status = ?VEIO}
+      end;
+    _ -> #filedata{answer_status = ?VEIO}
+  end;
+
+handle_message(ProtocolVersion, Record) when is_record(Record, writefile) ->
+  FileId = Record#writefile.file_id,
+  Bytes = Record#writefile.data,
+  Offset = Record#writefile.offset,
+  SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
+  case SH_And_ID of
+    {Storage_helper_info, File} ->
+      TmpAns = files_manager:write_storage_system(Storage_helper_info, File, Offset, Bytes),
+      case TmpAns of
+        BytesNum when is_integer(BytesNum) -> #writeinfo{answer_status = ?VOK, bytes_written = BytesNum};
+        Other ->
+          lager:warning("write_storage_system error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
+          #writeinfo{answer_status = ?VEIO}
+      end;
+    _ -> #writeinfo{answer_status = ?VEIO}
+  end.
+
+get_storage_and_id(Combined) ->
+  Pos = string:str(Combined, ?REMOTE_HELPER_SEPARATOR),
+  case Pos of
+    0 -> error;
+    _ ->
+      try
+        Storage = list_to_integer(string:substr(Combined, 1, Pos - 1)),
+        File = string:substr(Combined, Pos + length(?REMOTE_HELPER_SEPARATOR)),
+        {Storage, File}
+      catch
+        _:_ -> error
+      end
+  end.
+
+%% get_helper_and_id/2
+%% ====================================================================
+%% @doc Gets storage helper info and new file id on the basis of file id from request.
+%% @end
+-spec get_helper_and_id(Combined :: string(), ProtocolVersion :: term()) -> Result when
+  Result :: {SHI, FileId} | error,
+  SHI :: term(),
+  FileId :: string().
+%% ====================================================================
+get_helper_and_id(Combined, ProtocolVersion) ->
+  Storage_And_ID = get_storage_and_id(Combined),
+  case Storage_And_ID of
+    error ->
+      lager:warning("Can not get storage and id from file_id: ~p", [Combined]),
+      error;
+    _ ->
+      {Storage, File} = Storage_And_ID,
+      case dao_lib:apply(dao_vfs, get_storage, [{id, Storage}], ProtocolVersion) of
+        {ok, #veil_document{record = StorageRecord}} ->
+          SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, StorageRecord),
+          {SHI, File};
+        Other ->
+          lager:warning("Can not get storage from id: ~p", [Other]),
+          error
+      end
+  end.

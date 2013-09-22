@@ -26,6 +26,7 @@ all() -> [files_manager_tmp_files_test, files_manager_standard_files_test, fuse_
 
 -define(SH, "DirectIO").
 -define(TEST_ROOT, ["/tmp/veilfs"]). %% Root of test filesystem
+-define(ProtocolVersion, 1).
 
 %% ====================================================================
 %% Test functions
@@ -55,7 +56,7 @@ fuse_requests_test(Config) ->
   end, FilesInDirNames),
   NewNameOfFIle = "new_name_of_file",
 
-  {InsertStorageAns, _} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT]),
+  {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
 
   {ReadFileAns, PemBin} = file:read_file(Cert),
@@ -218,6 +219,9 @@ fuse_requests_test(Config) ->
   ?assertEqual("ok", Status16),
   ?assertEqual(list_to_atom(?VOK), Answer16),
 
+  RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+  ?assertEqual(ok, RemoveStorageAns),
+
   RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
   ?assertEqual(ok, RemoveUserAns).
 
@@ -240,7 +244,7 @@ users_separation_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   timer:sleep(1500),
 
-  {InsertStorageAns, _} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT]),
+  {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
 
   {ReadFileAns, PemBin} = file:read_file(Cert),
@@ -342,6 +346,9 @@ users_separation_test(Config) ->
   ?assertEqual("ok", Status20),
   ?assertEqual(?VENOENT, Answer20),
 
+  RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+  ?assertEqual(ok, RemoveStorageAns),
+
   RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
   ?assertEqual(ok, RemoveUserAns),
   RemoveUserAns2 = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN2}]),
@@ -398,6 +405,13 @@ files_manager_tmp_files_test(Config) ->
   ?assertEqual(ok, StatusRead5),
   ?assertEqual("abc123ghXYZ", binary_to_list(AnsRead5)),
 
+  AnsTruncate = rpc:call(Node1, files_manager, truncate_storage_system, [SHInfo, File, 5]),
+  ?assertEqual(ok, AnsTruncate),
+
+  {StatusRead5_1, AnsRead5_1} = rpc:call(Node1, files_manager, read_storage_system, [SHInfo, File, 0, 100]),
+  ?assertEqual(ok, StatusRead5_1),
+  ?assertEqual("abc12", binary_to_list(AnsRead5_1)),
+
   {StatusRead6, AnsRead6} = rpc:call(Node1, files_manager, read_storage_system, [SHInfo, NotExistingFile, 0, 100]),
   ?assertEqual(wrong_getatt_return_code, StatusRead6),
   ?assert(is_integer(AnsRead6)),
@@ -421,7 +435,7 @@ files_manager_standard_files_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   timer:sleep(1500),
 
-  {InsertStorageAns, _} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT]),
+  {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
 
   DirName = "fslogic_test_dir2",
@@ -475,6 +489,13 @@ files_manager_standard_files_test(Config) ->
   ?assertEqual(ok, StatusRead5),
   ?assertEqual("abc123ghXYZ", binary_to_list(AnsRead5)),
 
+  AnsTruncate = rpc:call(Node1, files_manager, truncate, [File, 5]),
+  ?assertEqual(ok, AnsTruncate),
+
+  {StatusRead5_1, AnsRead5_1} = rpc:call(Node1, files_manager, read, [File, 0, 100]),
+  ?assertEqual(ok, StatusRead5_1),
+  ?assertEqual("abc12", binary_to_list(AnsRead5_1)),
+
   {StatusRead6, AnsRead6} = rpc:call(Node1, files_manager, read, [NotExistingFile, 0, 100]),
   ?assertEqual(logical_file_system_error, StatusRead6),
   ?assertEqual(?VENOENT, AnsRead6),
@@ -513,7 +534,10 @@ files_manager_standard_files_test(Config) ->
   ?assertEqual(ok, AnsDirDelete),
 
   AnsDirDelete2 = rpc:call(Node1, files_manager, rmdir, [DirName]),
-  ?assertEqual({logical_file_system_error, ?VEIO}, AnsDirDelete2).
+  ?assertEqual({logical_file_system_error, ?VEIO}, AnsDirDelete2),
+
+  RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+  ?assertEqual(ok, RemoveStorageAns).
 
 %% ====================================================================
 %% SetUp and TearDown functions

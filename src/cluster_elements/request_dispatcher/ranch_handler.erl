@@ -81,7 +81,9 @@ loop(Socket, Transport, RanchTimeout, DispatcherTimeout, EEC) ->
     {ok, Data} ->
       try
         {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, Answer_type} = decode_protocol_buffer(Data),
-        Request = #veil_request{subject = gsi_handler:proxy_subject(EEC), request = Msg},
+        {rdnSequence, Rdn} = gsi_handler:proxy_subject(EEC),
+        {ok, DnString} = user_logic:rdn_sequence_to_dn_string(Rdn),
+        Request = #veil_request{subject = DnString, request = Msg},
         case Synch of
           true ->
             try

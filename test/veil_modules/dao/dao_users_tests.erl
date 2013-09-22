@@ -47,7 +47,7 @@ main_test_() ->
             {"remove & get user doc by uuid",
                 fun() ->
                     meck:expect(dao, set_db, fun(?USERS_DB_NAME) -> ok end),
-                    meck:expect(dao, get_record, fun(UUID) -> {ok, #veil_document{ record = #user{}, uuid = "existing_uuid" }} end),
+                    meck:expect(dao, get_record, fun(_UUID) -> {ok, #veil_document{ record = #user{}, uuid = "existing_uuid" }} end),
                     meck:expect(dao, remove_record, fun(_UUID) -> ok end),
                     ?assertEqual({ok, #veil_document{ record = #user{}, uuid = "existing_uuid" }}, dao_users:get_user({uuid, "existing_uuid"})),
                     ?assertEqual(ok, dao_users:remove_user({uuid, "existing_uuid"})),

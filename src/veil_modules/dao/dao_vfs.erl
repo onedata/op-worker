@@ -327,35 +327,54 @@ save_storage(#veil_document{record = #storage_info{}} = StorageDoc) ->
 
 %% remove_storage/1
 %% ====================================================================
-%% @doc Removes storage info from DB. Argument should be storage id (same as its document id) <br/>
+%% @doc Removes storage info from DB. Argument should be uuid() of storage document or ID of storage <br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec remove_storage(StorageID :: uuid()) -> ok | {error, any()} | no_return().
+-spec remove_storage({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) -> ok | {error, any()} | no_return().
 %% ====================================================================
-remove_storage(StorageID) ->
+remove_storage({uuid, DocUUID}) when is_list(DocUUID) ->
     dao:set_db(?SYSTEM_DB_NAME),
-    dao:remove_record(StorageID).
+    dao:remove_record(DocUUID);
+remove_storage({id, StorageID}) when is_integer(StorageID) ->
+    dao:set_db(?SYSTEM_DB_NAME),
+    {ok, SData} = get_storage({id, StorageID}),
+    dao:remove_record(SData#veil_document.uuid).
 
 
 %% get_storage/1
 %% ====================================================================
-%% @doc Gets storage info from DB. Argument should be uuid() of storage document <br/>
+%% @doc Gets storage info from DB. Argument should be uuid() of storage document or ID of storage. <br/>
 %% Non-error return value is always {ok, #veil_document{record = #storage_info{}}.
 %% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec get_storage(StorageID :: uuid()) -> {ok, storage_doc()} | {error, any()} | no_return().
+-spec get_storage({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) -> {ok, storage_doc()} | {error, any()} | no_return().
 %% ====================================================================
-get_storage(StorageID) ->
+get_storage({uuid, DocUUID}) when is_list(DocUUID) ->
     dao:set_db(?SYSTEM_DB_NAME),
-    case dao:get_record(StorageID) of
+    case dao:get_record(DocUUID) of
         {ok, #veil_document{record = #storage_info{}} = Doc} ->
             {ok, Doc};
         {ok, #veil_document{}} ->
             {error, invalid_storage_record};
         Other ->
             Other
-    end.
+    end;
+get_storage({id, StorageID}) when is_integer(StorageID) ->
+    QueryArgs =
+        #view_query_args{keys = [StorageID], include_docs = true}, 
+    case dao:list_records(?STORAGE_BY_ID_VIEW, QueryArgs) of
+        {ok, #view_result{rows = [Row]}} ->
+            #view_row{doc = #veil_document{record = #storage_info{} } = Doc } = Row,
+            {ok, Doc};
+        {ok, #view_result{rows = Rows}} ->
+            [#view_row{doc = #veil_document{record = #storage_info{} } = Doc } | _Tail] = Rows,
+            lager:warning("Storage with ID ~p is duplicated. Returning first copy. All: ~p", [StorageID, Rows]),
+            {ok, Doc};
+        _Other ->
+            lager:error("Invalid view response: ~p", [_Other]),
+            throw(inavlid_data)
+    end. 
 
 
 %% list_storage/0

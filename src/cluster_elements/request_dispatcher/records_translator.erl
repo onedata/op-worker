@@ -37,9 +37,15 @@ translate(Record, DecoderName) when is_tuple(Record) ->
   [End | Rest] = RecordList,
   RecordList2 = case is_binary(End) of
     true ->
-      [Type | Rest2] = Rest,
-      DecodedEnd = erlang:apply(list_to_atom(DecoderName ++ "_pb"), list_to_atom("decode_" ++ Type), [End]),
-      [DecodedEnd | [list_to_atom(Type) | Rest2]];
+      try
+        [Type | Rest2] = Rest,
+        DecodedEnd = erlang:apply(list_to_atom(DecoderName ++ "_pb"), list_to_atom("decode_" ++ Type), [End]),
+        [DecodedEnd | [list_to_atom(Type) | Rest2]]
+      catch
+        _:_ ->
+          lager:warning("Can not translate record: ~p, using decoder: ~p", [Record, DecoderName]),
+          RecordList
+      end;
     false -> RecordList
   end,
   TmpAns = lists:foldl(fun(E, Sum) -> [translate(E, DecoderName) | Sum] end, [], RecordList2),

@@ -196,7 +196,7 @@ save_storage() ->
 
 
 remove_storage() ->
-    ?assertMatch(ok, dao_vfs:remove_storage("uuid")),
+    ?assertMatch(ok, dao_vfs:remove_storage({uuid, "uuid"})),
     ?assert(meck:called(dao, set_db, [?SYSTEM_DB_NAME])),
     ?assert(meck:called(dao, remove_record, ["uuid"])),
     ?assert(meck:validate([dao, dao_helper])).
@@ -207,10 +207,10 @@ get_storage() ->
     meck:expect(dao, get_record, fun("uuid") -> {ok, #veil_document{record = #storage_info{name = "test"}}};
         ("uuid2") -> {ok, #veil_document{record = #file{}}} end),
     ?assertMatch({ok, #veil_document{record = #storage_info{name = "test"}}},
-        dao_vfs:get_storage("uuid")),
+        dao_vfs:get_storage({uuid, "uuid"})),
     ?assert(meck:called(dao, get_record, ["uuid"])),
 
-    ?assertMatch({error, invalid_storage_record}, dao_vfs:get_storage("uuid2")),
+    ?assertMatch({error, invalid_storage_record}, dao_vfs:get_storage({uuid, "uuid2"})),
     ?assert(meck:called(dao, get_record, ["uuid2"])),
 
     ?assertEqual(2, meck:num_calls(dao, set_db, [?SYSTEM_DB_NAME])),
