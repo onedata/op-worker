@@ -7,6 +7,8 @@
 
 #include "term_translator.h"
 
+namespace veil {
+namespace cluster {
 
 /*********************************************************************
 *
@@ -163,3 +165,7 @@ ERL_NIF_TERM make_stat(ErlNifEnv* env, struct stat st) {
 
     return enif_make_tuple_from_array(env, elems, i);
 }
+
+
+} // cluster
+} // veil

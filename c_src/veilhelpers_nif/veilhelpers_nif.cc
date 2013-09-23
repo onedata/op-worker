@@ -13,8 +13,8 @@
 #include <vector>
 #include <boost/shared_ptr.hpp>
 
-#include "helpers/IStorageHelper.hh"
-#include "helpers/storageHelperFactory.hh"
+#include "helpers/IStorageHelper.h"
+#include "helpers/storageHelperFactory.h"
 
 #include "term_translator.h"
 
@@ -27,8 +27,16 @@
 
 using namespace std;
 using namespace boost;
+using namespace veil::cluster;
+using namespace veil::helpers;
+
+namespace veil {
+namespace cluster {
 
 StorageHelperFactory SHFactory;     // StorageHelperFactory instance
+
+} // cluster
+} // veil
 
 /*********************************************************************
 *
