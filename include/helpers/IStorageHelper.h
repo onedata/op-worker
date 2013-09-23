@@ -1,16 +1,19 @@
 /**
- * @file IStorageHelper.hh
+ * @file IStorageHelper.h
  * @author Rafal Slota
  * @copyright (C) 2013 ACK CYFRONET AGH
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef STORAGE_HELPER_I_HH
-#define STORAGE_HELPER_I_HH 1
+#ifndef STORAGE_HELPER_I_H
+#define STORAGE_HELPER_I_H
 
 #include <unistd.h>
 #include <fcntl.h>
 #include <fuse.h>
+
+namespace veil {
+namespace helpers {
 
 /**
  * The IStorageHelper interface.
@@ -60,4 +63,7 @@ class IStorageHelper {
         #endif // HAVE_SETXATTR
 };
 
-#endif // STORAGE_HELPER_I_HH
+} // namespace helpers
+} // namespace veil
+
+#endif // STORAGE_HELPER_I_H

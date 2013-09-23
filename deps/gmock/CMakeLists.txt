@@ -14,3 +14,6 @@ ExternalProject_Get_Property(gmock binary_dir)
 ExternalProject_Get_Property(gmock source_dir)
 set(GMOCK_INCLUDE_DIR ${source_dir}/include PARENT_SCOPE)
 set(GMOCK_LIBRARIES ${binary_dir}/libgmock.a  ${binary_dir}/libgmock_main.a PARENT_SCOPE)
+
+set(GTEST_INCLUDE_DIR ${source_dir}/gtest/include PARENT_SCOPE)
+set(GTEST_LIBRARIES ${binary_dir}/gtest/libgtest.a  ${binary_dir}/gtest/libgtest_main.a PARENT_SCOPE)

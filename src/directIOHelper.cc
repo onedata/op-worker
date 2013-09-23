@@ -28,10 +28,15 @@
 
 #include <limits.h>
 
-#include "directIOHelper.hh"
+#include "directIOHelper.h"
 
 #include <iostream>
+
+
 using namespace std;
+
+namespace veil {
+namespace helpers {
 
 static char root_path[PATH_MAX];
 static int root_path_len;
@@ -297,6 +302,7 @@ int DirectIOHelper::sh_open(const char *path, struct fuse_file_info *fi)
         return -errno;
 
     fi->fh = res;
+
     return 0;
 }
 
@@ -322,6 +328,7 @@ int DirectIOHelper::sh_read(const char *path, char *buf, size_t size, off_t offs
 
     if(fi->fh <= 0)
         close(fd);
+
     return res;
 }
 
@@ -347,6 +354,7 @@ int DirectIOHelper::sh_write(const char *path, const char *buf, size_t size,
 
     if(fi->fh <= 0)
         close(fd);
+
     return res;
 }
 
@@ -471,3 +479,7 @@ DirectIOHelper::DirectIOHelper(std::vector<std::string> args) {
         strncpy(root_path, args[0].c_str(), PATH_MAX);
     root_path_len = strlen(root_path);
 }
+
+
+} // namespace helpers
+} // namespace veil

@@ -15,11 +15,26 @@ link_directories(${PROJECT_BINARY_DIR})
 
 # Deps
 add_subdirectory(${DEPS_DIR}/gmock)
-add_subdirectory(${DEPS_DIR}/gtest)
+add_subdirectory(${DEPS_DIR}/glog)
 
 # Include paths
 include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_BINARY_DIR})
+include_directories(${GLOG_INCLUDE_DIR})
+
+# Setup git
+message(STATUS "Checking for Git...")
+find_package(Git REQUIRED)
+
+# Setup ProtoBuf
+message(STATUS "Checking for Protobuf...")
+find_package(Protobuf REQUIRED)
+include_directories(${PROTOBUF_INCLUDE_DIR})
+
+# Setup OpenSSL
+message(STATUS "Checking for OpenSSL...")
+find_package(OpenSSL REQUIRED)
+include_directories(${OPENSSL_INCLUDE_DIR})
 
 # Setup pthreads
 message(STATUS "Checking for pthreads...")
@@ -35,31 +50,88 @@ set(Boost_USE_STATIC_LIBS        ON)
 set(Boost_USE_MULTITHREADED      ON)
 set(Boost_USE_STATIC_RUNTIME    OFF)
 find_package(Boost COMPONENTS system thread filesystem REQUIRED)
-set(Boost_LIBRARIES "boost_thread-mt.a;boost_filesystem-mt.a;boost_system-mt.a") # SL6 bug fix
+set(Boost_LIBRARIES         "boost_thread-mt.a;boost_filesystem-mt.a;boost_system-mt.a") # SL6 bug fix
+set(Boost_LIBRARIES_SHARED  "boost_thread-mt.so;boost_filesystem-mt.so;boost_system-mt.so") # SL6 bug fix
 link_directories(${Boost_LIBRARY_DIRS})
 include_directories(${Boost_INCLUDE_DIRS})
+
+# Pull git submodules
+message(STATUS "Pulling submodules using git...")
+execute_process(COMMAND ${GIT_EXECUTABLE} submodule init
+                WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+execute_process(COMMAND ${GIT_EXECUTABLE} submodule update
+                WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+execute_process(COMMAND ${GIT_EXECUTABLE} submodule foreach git checkout 
+                WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+
+# Compile .proto files
+file(GLOB PROTO_FILES "${PROJECT_SOURCE_DIR}/veilprotocol/proto/*.proto")
+PROTOBUF_GENERATE_CPP(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
+include_directories(${CMAKE_CURRENT_BINARY_DIR}) 
 
 # Setup sources
 file(GLOB HELPER_SOURCES "src/[a-zA-Z]*.cc")
 
 # Setup compile flags
-set(CUSTOM_RPATH "${CMAKE_INSTALL_PREFIX}/${LIB_DIR}:${CMAKE_CURRENT_BINARY_DIR}:.:${LIB_DIR}:../${LIB_DIR}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2 ${FUSE_DEFINITIONS} -Wl,-rpath,${CUSTOM_RPATH}")
+set(CUSTOM_RPATH "${CMAKE_INSTALL_PREFIX}/${LIB_DIR}:${CMAKE_CURRENT_BINARY_DIR}:.:${LIB_DIR}:../${LIB_DIR}:./c_lib:../c_lib")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -O2 ${FUSE_DEFINITIONS} -Wl,-rpath,${CUSTOM_RPATH}")
 set(CMAKE_SKIP_RPATH TRUE) # Something is wrong with CMake RPATH config, we need to use old-fashion way
 
 # Define targets
 
+add_library(veilprotocol ${PROTO_SRCS})
 add_library(veilhelpersShared SHARED ${HELPER_SOURCES})
 add_library(veilhelpers STATIC ${HELPER_SOURCES})
 
+add_dependencies(veilhelpers glog veilprotocol)
+add_dependencies(veilhelpersShared glog veilprotocol)
+
 set_target_properties(veilhelpersShared PROPERTIES OUTPUT_NAME veilhelpers)
 
+message(STATUS ${CMAKE_THREAD_LIBS_INIT})
+message(STATUS ${CMAKE_THREAD_LIBS_INIT})
+message(STATUS ${PROTOBUF_LIBRARY})
 target_link_libraries(veilhelpers
     ${FUSE_LIBRARIES}
+    ${CMAKE_THREAD_LIBS_INIT}
     ${Boost_LIBRARIES}
+    ${GLOG_LIBRARIES}
+    ${PROTOBUF_LIBRARY}
+    ${OPENSSL_LIBRARIES}
+    ${GLOG_LIBRARIES}
+    veilprotocol
     dl
     z
 )
+
+target_link_libraries(veilhelpersShared
+    ${FUSE_LIBRARIES}
+    ${CMAKE_THREAD_LIBS_INIT}
+    ${Boost_LIBRARIES_SHARED}
+    ${GLOG_LIBRARIES}
+    ${PROTOBUF_LIBRARY}
+    ${OPENSSL_LIBRARIES}
+    ${GLOG_LIBRARIES}
+    veilprotocol
+    dl
+    z
+)
+
+target_link_libraries(veilprotocol
+    ${PROTOBUF_LIBRARY}
+    ${CMAKE_THREAD_LIBS_INIT}
+)
+
+
+install(TARGETS veilhelpers veilhelpersShared 
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
+)
+install(FILES ${GLOG_LIBRARIES} ${GTEST_LIBRARIES} ${GMOCK_LIBRARIES} DESTINATION lib)
+install(DIRECTORY ${GTEST_INCLUDE_DIR}/ DESTINATION include)
+install(DIRECTORY ${GMOCK_INCLUDE_DIR}/ DESTINATION include)
+install(DIRECTORY ${GLOG_INCLUDE_DIR}/ DESTINATION include)
+message(STATUS ${GLOG_INCLUDE_DIR})
 
 ###########################
 ##         TESTS         ##

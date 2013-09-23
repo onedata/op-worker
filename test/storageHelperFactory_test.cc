@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#include "testCommon.hh"
-#include "helpers/storageHelperFactory.hh"
+#include "testCommonH.h"
+#include "helpers/storageHelperFactory.h"
 
 INIT_AND_RUN_ALL_TESTS(); // TEST RUNNER !
 

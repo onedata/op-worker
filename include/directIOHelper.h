@@ -1,5 +1,5 @@
 /**
- * @file directIOHelper.hh
+ * @file directIOHelper.h
  * @author Beata Skiba
  * @copyright (C) 2013 ACK CYFRONET AGH
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
@@ -13,7 +13,10 @@
 #include <fuse.h>
 #include <vector>
 #include <string>
-#include "helpers/IStorageHelper.hh"
+#include "helpers/IStorageHelper.h"
+
+namespace veil {
+namespace helpers {
 
 /**
  * The DirectIOHelper class
@@ -64,5 +67,8 @@ class DirectIOHelper : public IStorageHelper {
         #endif // HAVE_SETXATTR
 
 };
+
+} // namespace helpers
+} // namespace veil
 
 #endif /* DIRECT_IO_HELPER_HH */
