@@ -7,8 +7,10 @@
 
 #include "simpleConnectionPool.h"
 #include "glog/logging.h"
+#include <netinet/in.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <iterator>
 #include <algorithm>
@@ -116,11 +118,20 @@ list<string> SimpleConnectionPool::dnsQuery(string hostname)
     list<string> lst;
     struct addrinfo *result;
     struct addrinfo *res;
+
     if(getaddrinfo(hostname.c_str(), NULL, NULL, &result) == 0) {
         for(res = result; res != NULL; res = res->ai_next) {
-            char ip[NI_MAXHOST] = "";
-            if(getnameinfo(res->ai_addr, res->ai_addrlen, ip, NI_MAXHOST, NULL, 0, 0) == 0)
-                lst.push_back(string(ip));
+            char ip[INET_ADDRSTRLEN + 1] = "";
+            switch(res->ai_addr->sa_family) {
+                case AF_INET:
+                    if(inet_ntop(res->ai_addr->sa_family, &((struct sockaddr_in*)res->ai_addr)->sin_addr, ip, INET_ADDRSTRLEN + 1) != NULL)
+                        lst.push_back(string(ip));  
+                case AF_INET6:
+                    // Not supported
+                    break;
+                default:
+                    break;
+            }
         }       
     }
 
