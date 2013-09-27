@@ -115,7 +115,7 @@ list_descriptors({by_file, File}, N, Offset) when N > 0, Offset >= 0 ->
 list_descriptors({by_file_n_owner, {File, Owner}}, N, Offset) when N > 0, Offset >= 0 ->
     {ok, #veil_document{uuid = FileId}} = get_file(File),
     StartKey = [dao_helper:name(FileId), dao_helper:name(Owner)],
-    EndKey = case Owner of "" -> [dao_helper:name(next_id(FileId)), dao_helper:name("")]; _ -> [dao_helper:name((FileId)), dao_helper:name(next_id(Owner))] end,
+    EndKey = case Owner of "" -> [dao_helper:name(uca_increment(FileId)), dao_helper:name("")]; _ -> [dao_helper:name((FileId)), dao_helper:name(uca_increment(Owner))] end,
     QueryArgs = #view_query_args{start_key = StartKey, end_key = EndKey, include_docs = true, limit = N, skip = Offset},
     case dao:list_records(?FD_BY_FILE_VIEW, QueryArgs) of
         {ok, #view_result{rows = Rows}} ->
@@ -265,7 +265,7 @@ list_dir(Dir, N, Offset) ->
                 lager:error("Directory ~p not found. Error: ~p", [Dir, R]),
                 throw({dir_not_found, R})
         end,
-    NextId =  next_id(Id), %% Dirty hack needed because `inclusive_end` option does not work in BigCouch for some reason
+    NextId =  uca_increment(Id), %% Dirty hack needed because `inclusive_end` option does not work in BigCouch for some reason
     QueryArgs =
         #view_query_args{start_key = [dao_helper:name(Id), dao_helper:name("")], end_key = [dao_helper:name(NextId), dao_helper:name("")],
             limit = N, include_docs = true, skip = Offset, inclusive_end = false}, %% Inclusive end does not work, disable to be sure
@@ -421,11 +421,58 @@ file_path_analyze(Path) ->
     throw({invalid_file_path, Path}).
 
 
-%% next_id/1
+%% uca_increment/1
 %% ====================================================================
-%% @doc Returns "incremented string"
--spec next_id(Id :: string()) -> string().
+%% @doc Returns "incremented string" based on Unicode Collation Algorithm. 
+%%      This method works only for alpha-numeric strings.
+%% @end
+-spec uca_increment(Id :: string()) -> string().
 %% ====================================================================
-next_id("") -> [10]; %% CouchDB doesnt like ASCII chars < 10
-next_id(Id) ->
-    binary_to_list(binary:encode_unsigned(binary:decode_unsigned(list_to_binary(Id))+1)).
+uca_increment(Str) when is_list(Str) ->
+    case try_toupper(Str) of 
+        {Str1, true} -> Str1;
+        {_, false} ->   
+            case lists:reverse(uca_increment({lists:reverse(Str), true})) of
+                [10 | T] -> [$Z || _ <- T] ++ [10];
+                Other -> Other
+            end
+    end;
+uca_increment({Tail, false}) ->
+    Tail;
+uca_increment({[], true}) ->
+    [10];
+uca_increment({[C | Tail], true}) ->
+    {NC, Continue} = next_char(C),
+    [NC | uca_increment({Tail ,Continue})].
+
+%% Internal helper function used by uca_increment/1
+try_toupper(Str) when is_list(Str) ->
+    {Return, Status} = try_toupper({lists:reverse(Str), true}),
+    {lists:reverse(Return), Status};
+try_toupper({"", true}) ->
+    {"", false};
+try_toupper({[C | Tail], true}) when C >= $a, C =< $z ->
+    { [(C - 32) | Tail], true };
+try_toupper({[C | Tail], true}) ->
+    { NewTail, Status} = try_toupper({Tail, true}),
+    { [ C | NewTail], Status }.
+
+%% Internal helper function used by uca_increment/1
+next_char(C) when C >= $a, C < $z; C >= $A, C < $Z; C >= $0, C < $9 ->
+    {C + 1, false};
+next_char($9) ->
+    {$a, false};
+next_char($z) ->
+    {$0, true};
+next_char($Z) ->
+    {$0, true};
+next_char($$) ->
+    {$0, false};
+next_char(Other) ->
+    Collation = " `^_-,;:!?.'\"()[]{}@*/\\&#%+<=>|~$",
+    Res = 
+        case lists:dropwhile(fun(Char) -> Char =/= Other end, Collation) of 
+            [Other | [ Next | _ ]] -> Next;
+            [] -> throw({unsupported_char, Other})
+        end,
+    {Res, false}.

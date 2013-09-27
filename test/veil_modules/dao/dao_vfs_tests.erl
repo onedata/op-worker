@@ -101,7 +101,7 @@ list_descriptors() ->
 
 
     ?assert(meck:called(dao, list_records, [?FD_BY_FILE_VIEW,
-        #view_query_args{start_key = ["uuid", ""], end_key = ["uuie", ""], include_docs = true, limit = 5, skip = 0}])),
+        #view_query_args{start_key = ["uuid", ""], end_key = ["uuiD", ""], include_docs = true, limit = 5, skip = 0}])),
     ?assert(meck:validate([dao, dao_helper])).
 
 
@@ -223,6 +223,33 @@ lock_file_test() ->
 unlock_file_test() ->
     not_yet_implemented = dao_vfs:unlock_file("test", "test", write).
 
+uca_increment_test() ->
+    ?assertMatch([10], dao_vfs:uca_increment("")),
+    ?assertMatch("1", dao_vfs:uca_increment("0")),
+    ?assertMatch("a", dao_vfs:uca_increment("9")),
+    ?assertMatch("A", dao_vfs:uca_increment("a")),
+    ?assertMatch("Z", dao_vfs:uca_increment("z")),
+    ?assertMatch("E", dao_vfs:uca_increment("D")),
+    ?assertMatch("0", dao_vfs:uca_increment("$")),
+    ?assertMatch("#", dao_vfs:uca_increment("&")),
+    ?assertMatch("4add42F", dao_vfs:uca_increment("4add42f")),
+    ?assertMatch("4adD42Z", dao_vfs:uca_increment("4add42Z")),
+    ?assertMatch("423432422", dao_vfs:uca_increment("423432421")),
+    ?assertMatch("42343242a", dao_vfs:uca_increment("423432429")),
+    ?assertMatch("423432430", dao_vfs:uca_increment("42343242Z")),
+    ?assertMatch("423500000", dao_vfs:uca_increment("4234ZZZZZ")),
+    ?assertMatch("423a00000", dao_vfs:uca_increment("4239ZZZZZ")),
+    ?assertMatch("423B00000", dao_vfs:uca_increment("423AZZZZZ")),
+    ?assertMatch("ZZZZ\n", dao_vfs:uca_increment("ZZZZ")),
+    ?assertMatch("ZZZZ", dao_vfs:uca_increment("ZzZZ")),
+    ?assertMatch("ZzCZ", dao_vfs:uca_increment("ZzcZ")),
+    ?assertMatch("ZZ Z", dao_vfs:uca_increment("Zz Z")),
+    ?assertMatch("Z 60", dao_vfs:uca_increment("Z 5Z")),
+    ?assertMatch("Z`00", dao_vfs:uca_increment("Z ZZ")),
+    ?assertMatch("1{00", dao_vfs:uca_increment("1]ZZ")),
+    ?assertMatch("1C]DA", dao_vfs:uca_increment("1c]DA")),
+    ?assertMatch("1C$000", dao_vfs:uca_increment("1C$$ZZ")),
+    ?assertMatch("1C$$00", dao_vfs:uca_increment("1C$~ZZ")).
 
 
 -endif.
