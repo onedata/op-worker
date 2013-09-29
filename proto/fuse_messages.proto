@@ -1,9 +1,9 @@
 package veil.protocol.fuse_messages;
 
 message FuseMessage {
-	required string id = 1;
-	required string message_type = 2;
-	required bytes input = 3;
+    required string id = 1;
+    required string message_type = 2;
+    required bytes input = 3;
 }
 
 message GetFileLocation {
@@ -24,11 +24,13 @@ message FileAttr {
     required int32 mode = 2;
     required int32 uid = 3;
     required int32 gid = 4;
-    required int32 atime = 5;
-    required int32 mtime = 6;
-    required int32 ctime = 7;
-    required int32 nlink = 8;
+    required int64 atime = 5;
+    required int64 mtime = 6;
+    required int64 ctime = 7;
     required string type = 9;
+    optional int32 size = 10 [default = 0];
+    optional string uname = 11 [default = ""];
+    optional string gname = 12 [default = ""];
 }
 
 message FileLocation {
@@ -50,15 +52,15 @@ message RenewFileLocation {
 }
 
 message FileLocationValidity {
-	optional string answer = 1 [default = "ok"];
-	optional int32 validity = 2;
+    optional string answer = 1 [default = "ok"];
+    optional int32 validity = 2;
 }
 
 
 message GetFileChildren {
-	required string dir_logic_name = 1;
-	required int32 children_num = 2;
-	optional int32 offset = 3 [default = 0];
+    required string dir_logic_name = 1;
+    required int32 children_num = 2;
+    optional int32 offset = 3 [default = 0];
 }
 
 message FileChildren {
@@ -68,40 +70,53 @@ message FileChildren {
 
 
 message CreateDir {
-	required string dir_logic_name = 1;
+    required string dir_logic_name = 1;
     required uint32 mode = 2;
 }
 
 message DeleteFile {
-	required string file_logic_name = 1;	
+    required string file_logic_name = 1;
 }
 
 message CreateLink {
-	required string from_file_logic_name = 1;
-	required string to_file_logic_name = 2;
+    required string from_file_logic_name = 1;
+    required string to_file_logic_name = 2;
 }
 
 message GetLink {
-	required string file_logic_name = 1;	
+    required string file_logic_name = 1;
 }
 
 message LinkInfo {
     optional string answer = 1 [default = "ok"];
-	required string file_logic_name = 2;	
+    required string file_logic_name = 2;
 }
 
 message RenameFile {
-	required string from_file_logic_name = 1;
-	required string to_file_logic_name = 2;
+    required string from_file_logic_name = 1;
+    required string to_file_logic_name = 2;
 }
 
 message ChangeFileOwner {
-	required string logic_file_name = 1;
-	required int32 uid = 2;
-	required int32 guid = 3;  
+    required string file_logic_name = 1;
+    required int32 uid = 2;
+    optional string uname = 4 [default = ""];
+}
+
+message ChangeFileGroup {
+    required string file_logic_name = 1;
+    required int32 gid = 3; 
+    optional string gname = 5 [default = ""]; 
 }
 
 message ChangeFilePerms {
-	required string logic_file_name = 1;
-	required int32 perms = 2;
+    required string file_logic_name = 1;
+    required int32 perms = 2;
+}
+
+message UpdateTimes {
+    required string file_logic_name = 1;
+    optional int64 atime = 2 [default = -1];
+    optional int64 mtime = 3 [default = -1];
+    optional int64 ctime = 4 [default = -1];
 }
