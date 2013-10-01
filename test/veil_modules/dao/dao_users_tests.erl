@@ -31,6 +31,7 @@ main_test_() ->
         [
             {"save user doc",
                 fun() ->
+                    LowestUUID = integer_to_list(?LOWEST_USER_ID),
                     meck:expect(dao, save_record, 
                         fun(Arg) -> 
                             case Arg of 
@@ -38,8 +39,17 @@ main_test_() ->
                                 #veil_document{record = #user{}, uuid = UUID} -> {ok, UUID}
                             end
                         end),
+                    meck:expect(dao, list_records, 
+                        fun(?USER_BY_UID_VIEW, #view_query_args{include_docs = false, limit = 1, direction = rev}) ->
+                            {ok, #view_result{rows = [#view_row{id = "32345"}]}}
+                        end), 
                     meck:expect(dao, set_db, fun(?USERS_DB_NAME) -> ok end),
-                    ?assertEqual({ok, "new_uuid"}, dao_users:save_user(#user{})),
+                    ?assertEqual({ok, "32346"}, dao_users:save_user(#user{})),
+                    meck:expect(dao, list_records, 
+                        fun(?USER_BY_UID_VIEW, #view_query_args{include_docs = false, limit = 1, direction = rev}) ->
+                            {ok, #view_result{rows = []}}
+                        end), 
+                    ?assertEqual({ok, LowestUUID}, dao_users:save_user(#user{})),
                     ?assertEqual({ok, "existing_uuid"}, dao_users:save_user(#veil_document{record = #user{}, uuid = "existing_uuid"})),
                     ?assert(meck:validate(dao))
                 end},

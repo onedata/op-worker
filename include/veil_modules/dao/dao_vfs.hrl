@@ -19,11 +19,11 @@
 %% Files' locks. Designed for use within #file record (`locks` field).
 -record(file_lock, {type = ?REG_TYPE, uid = "", sid = "", pid = 0, offset = 0, size = 0}).
 %% Veil File
--record(file, {type = 1, name = "", size = 0, uid = "", gids = [], perms = 0, parent = "", ref_file = "", location = #file_location{}, locks = []}).
+-record(file, {type = 1, name = "", uid = "", gids = [], perms = 0, parent = "", ref_file = "", location = #file_location{}, locks = [], meta_doc}).
 
 %% Those record contains meta data for file which UUID match #file_meta.file field
 -record(file_tag, {key = "", value = []}).
--record(file_meta, {file = "", tags = [], mime_type = "", last_modified = 0, description = ""}).
+-record(file_meta, {tags = [], mime_type = "", size = 0, ctime = 0, atime = 0, mtime = 0, description = ""}).
 
 %% This record describes state of file for each user. #file_descriptor.file is an UUID of #file.
 %% For regular files can be used to mark file as used in order to block e.g. physical file transfer

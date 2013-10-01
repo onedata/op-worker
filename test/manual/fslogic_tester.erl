@@ -309,7 +309,7 @@ rename_file(Host, Cert, Port, FileName, NewName) ->
   {Status, Answer2}.
 
 change_file_perms(Host, Cert, Port, FileName, Perms) ->
-    FslogicMessage = #changefileperms{logic_file_name = FileName, perms = Perms},
+    FslogicMessage = #changefileperms{file_logic_name = FileName, perms = Perms},
     FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_changefileperms(FslogicMessage)),
 
     FuseMessage = #fusemessage{id = "1", message_type = "changefileperms", input = FslogicMessageMessageBytes},

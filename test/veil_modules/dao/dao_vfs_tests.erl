@@ -32,6 +32,10 @@ file_test_() ->
     {foreach, fun setup/0, fun teardown/1,
         [fun save_file/0, fun get_file/0, fun remove_file/0, fun list_dir/0, fun rename_file/0, fun get_path_info/0]}.
 
+file_meta_test_() ->
+    {foreach, fun setup/0, fun teardown/1,
+        [fun save_file_meta/0, fun get_file_meta/0, fun remove_file_meta/0]}.
+
 storage_test_() ->
 	{foreach, fun setup/0, fun teardown/1,
 		[fun save_storage/0, fun remove_storage/0, fun get_storage/0]}.
@@ -60,6 +64,33 @@ file_path_analyze_test() ->
     ?assertMatch(Expected2, dao_vfs:file_path_analyze({absolute_path, Path})),
     ?assertThrow({invalid_file_path, {absolute_path, "path", "uuid"}}, dao_vfs:file_path_analyze({absolute_path, "path", "uuid"})),
     ?assertThrow({invalid_file_path, 2}, dao_vfs:file_path_analyze(2)).
+
+
+save_file_meta() ->
+    Doc = #veil_document{record = #file_meta{}},
+    ?assertMatch({ok, "uuid"}, dao_vfs:save_file_meta(Doc)),
+    ?assertMatch({ok, "uuid"}, dao_vfs:save_file_meta(#file_meta{})),
+
+    ?assertEqual(2, meck:num_calls(dao, set_db, [?FILES_DB_NAME])),
+    ?assertEqual(2, meck:num_calls(dao, save_record, [Doc])),
+    ?assert(meck:validate([dao, dao_helper])).
+
+
+remove_file_meta() ->
+    ?assertMatch(ok, dao_vfs:remove_file_meta("uuid")),
+    ?assert(meck:called(dao, set_db, [?FILES_DB_NAME])),
+    ?assert(meck:called(dao, remove_record, ["uuid"])),
+    ?assert(meck:validate([dao, dao_helper])).
+
+
+get_file_meta() ->
+    meck:expect(dao, get_record, fun(_) -> {ok, #veil_document{record = #file_meta{}}} end),
+    meck:expect(dao, get_record, fun("uuid") -> {ok, #veil_document{record = #file_meta{ctime = 1111}}} end),
+    ?assertMatch({ok, #veil_document{record = #file_meta{ctime = 1111}}}, dao_vfs:get_file_meta("uuid")),
+    ?assert(meck:called(dao, get_record, ["uuid"])),
+
+    ?assertEqual(1, meck:num_calls(dao, set_db, [?FILES_DB_NAME])),
+    ?assert(meck:validate([dao, dao_helper])).
 
 
 save_descriptor() ->

@@ -22,6 +22,7 @@
 -export([save_descriptor/1, remove_descriptor/1, get_descriptor/1, list_descriptors/3]). %% Base descriptor management API functions
 -export([save_file/1, remove_file/1, get_file/1, get_path_info/1]). %% Base file management API function
 -export([save_storage/1, remove_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
+-export([save_file_meta/1, remove_file_meta/1, get_file_meta/1]).
 
 
 -ifdef(TEST).
@@ -141,8 +142,55 @@ list_descriptors({_Type, _Resource}, _N, _Offset) when _N > 0, _Offset >= 0 ->
 
 
 %% ===================================================================
+%% Files Meta Management
+%% ===================================================================
+
+%% save_file_meta/1
+%% ====================================================================
+%% @doc Saves file_meta to DB. Argument should be either #file_meta{} record
+%% (if you want to save it as new document) <br/>
+%% or #veil_document{} that wraps #file_meta{} if you want to update file meta in DB. <br/>
+%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec save_file_meta(FMeta :: #file_meta{} | #veil_document{}) -> {ok, uuid()} | {error, any()} | no_return().
+%% ====================================================================
+save_file_meta(#file_meta{} = FMeta) ->
+    save_file_meta(#veil_document{record = FMeta});
+save_file_meta(#veil_document{record = #file_meta{}} = FMetaDoc) ->
+    dao:set_db(?FILES_DB_NAME),
+    dao:save_record(FMetaDoc).
+
+%% remove_file_meta/1
+%% ====================================================================
+%% @doc Removes file_meta from DB. Argument should be uuid() of veil_document - see dao_types.hrl for more details <br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec remove_file_meta(FMeta :: uuid()) -> ok | {error, any()} | no_return().
+%% ====================================================================
+remove_file_meta(FMeta) ->
+    dao:set_db(?FILES_DB_NAME),
+    dao:remove_record(FMeta).
+
+
+%% get_file_meta/1
+%% ====================================================================
+%% @doc Gets file meta from DB. Argument should be uuid() of #file_meta record
+%% Non-error return value is always {ok, #veil_document{record = #file_meta}.
+%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec get_file_meta(Fd :: fd()) -> {ok, fd_doc()} | {error, any()} | no_return().
+%% ====================================================================
+get_file_meta(FMetaUUID) ->
+    dao:set_db(?FILES_DB_NAME),
+    {ok, #veil_document{record = #file_meta{}}} = dao:get_record(FMetaUUID).  
+
+
+%% ===================================================================
 %% Files Management
 %% ===================================================================
+
 
 %% save_file/1
 %% ====================================================================

@@ -94,9 +94,9 @@ handle_message(ProtocolVersion, Record) when is_record(Record, createfile) ->
         ok -> #atom{value = ?VOK};
         Other ->
           lager:warning("create_file_storage_system error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
-          #atom{value = ?VEIO}
+          #atom{value = ?VEREMOTEIO}
       end;
-    _ -> #atom{value = ?VEIO}
+    _ -> #atom{value = ?VEREMOTEIO}
   end;
 
 handle_message(ProtocolVersion, Record) when is_record(Record, deletefileatstorage) ->
@@ -109,9 +109,9 @@ handle_message(ProtocolVersion, Record) when is_record(Record, deletefileatstora
         ok -> #atom{value = ?VOK};
         Other ->
           lager:warning("delete_file_storage_system error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
-          #atom{value = ?VEIO}
+          #atom{value = ?VEREMOTEIO}
       end;
-    _ -> #atom{value = ?VEIO}
+    _ -> #atom{value = ?VEREMOTEIO}
   end;
 
 handle_message(ProtocolVersion, Record) when is_record(Record, truncatefile) ->
@@ -125,9 +125,9 @@ handle_message(ProtocolVersion, Record) when is_record(Record, truncatefile) ->
         ok -> #atom{value = ?VOK};
         Other ->
           lager:warning("truncate_storage_system error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
-          #atom{value = ?VEIO}
+          #atom{value = ?VEREMOTEIO}
       end;
-    _ -> #atom{value = ?VEIO}
+    _ -> #atom{value = ?VEREMOTEIO}
   end;
 
 handle_message(ProtocolVersion, Record) when is_record(Record, readfile) ->
@@ -142,9 +142,9 @@ handle_message(ProtocolVersion, Record) when is_record(Record, readfile) ->
         {ok, Bytes} -> #filedata{answer_status = ?VOK, data = Bytes};
         Other ->
           lager:warning("read_storage_system error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
-          #filedata{answer_status = ?VEIO}
+          #filedata{answer_status = ?VEREMOTEIO}
       end;
-    _ -> #filedata{answer_status = ?VEIO}
+    _ -> #filedata{answer_status = ?VEREMOTEIO}
   end;
 
 handle_message(ProtocolVersion, Record) when is_record(Record, writefile) ->
@@ -159,9 +159,9 @@ handle_message(ProtocolVersion, Record) when is_record(Record, writefile) ->
         BytesNum when is_integer(BytesNum) -> #writeinfo{answer_status = ?VOK, bytes_written = BytesNum};
         Other ->
           lager:warning("write_storage_system error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
-          #writeinfo{answer_status = ?VEIO}
+          #writeinfo{answer_status = ?VEREMOTEIO}
       end;
-    _ -> #writeinfo{answer_status = ?VEIO}
+    _ -> #writeinfo{answer_status = ?VEREMOTEIO}
   end.
 
 get_storage_and_id(Combined) ->

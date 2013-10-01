@@ -94,7 +94,7 @@ init(Modules) ->
     {error, Error} -> lager:error("GSI Handler init failed. Error: ~p", [Error])
   catch
     throw:ccm_node -> lager:info("GSI Handler init interrupted due to wrong node type (CCM)");
-    _:Except -> lager:error("GSI Handler init failed. Exception: ~p", [Except])
+    _:Except -> lager:error("GSI Handler init failed. Exception: ~p ~n ~p", [Except, erlang:get_stacktrace()])
   end,
   {ok, initState(Modules)}.
 

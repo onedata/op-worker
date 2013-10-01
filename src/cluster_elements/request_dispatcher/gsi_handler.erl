@@ -31,10 +31,13 @@ init() ->
         {ok, ccm} -> throw(ccm_node);                     %% ccm node doesn't have socket interface, so GSI would be useless
         _ -> ok
     end,
+    lager:info("GSI Handler module is starting"),
     ets:new(gsi_state, [{read_concurrency, true}, public, ordered_set, named_table]),
-    start_slaves(?GSI_SLAVE_COUNT),
+
     {ok, CADir1} = application:get_env(?APP_Name, ca_dir),
     CADir = atom_to_list(CADir1),
+
+    {SSPid, _Ref} = spawn_monitor(fun() -> start_slaves(?GSI_SLAVE_COUNT) end), 
 
     case filelib:is_dir(CADir) of
         true ->
@@ -43,6 +46,17 @@ init() ->
         false ->
             lager:error("Cannot find GSI CA certs dir (~p)", [CADir])
     end,
+
+    receive 
+        {'DOWN', _, process, SSPid, normal} -> lager:info("GSI Handler module successfully loaded");
+        {'DOWN', _, process, SSPid, Reason} -> 
+            lager:warning("GSI Handler: slave node loader unknown exit reason: ~p", [Reason]),
+            lager:info("GSI Handler module partially loaded")
+    after 5000 ->
+        lager:error("GSI Handler: slave node loader execution timeout, state unknown"),
+        lager:info("GSI Handler module partially loaded")
+    end,
+
     ok.
 
 
@@ -101,6 +115,7 @@ verify_callback(OtpCert, _IgnoredError, Certs) ->
 -spec load_certs(CADir :: string()) -> ok | no_return().
 %% ====================================================================
 load_certs(CADir) ->
+    lager:info("GSI Handler: Loading CA certs from dir ~p", [CADir]),
     {ok, Files} = file:list_dir(CADir),
     CA1 = [{strip_filename_ext(Name), file:read_file(filename:join(CADir, Name))} || Name <- Files, lists:suffix(".pem", Name)],
     CRL1 = [{strip_filename_ext(Name), file:read_file(filename:join(CADir, strip_filename_ext(Name) ++ ".crl"))} || Name <- Files, lists:suffix(".pem", Name)],
@@ -114,7 +129,7 @@ load_certs(CADir) ->
                         'CertificateList' -> ets:insert(gsi_state, {{crl, public_key:pkix_issuer_id(X, self)}, X, Name}), {CAs, CRLs + 1};
                         _ -> {CAs, CRLs}
                     end end, {0, 0}, lists:flatten(CA2 ++ CRL2)),
-    lager:info("~p CA and ~p CRL certs successfully loaded", [Len1, Len2]),
+    lager:info("GSI Handler: ~p CA and ~p CRL certs successfully loaded", [Len1, Len2]),
     ok.
 
 
@@ -158,7 +173,7 @@ proxy_subject(OtpCert = #'OTPCertificate'{tbsCertificate = #'OTPTBSCertificate'{
 
 %% start_slaves/1
 %% ====================================================================
-%% @doc Initializes Count slave nodes. See {@link initialize_node/1}.
+%% @doc ttializes Count slave nodes. See {@link initialize_node/1}.
 %% @end
 -spec start_slaves(Count :: non_neg_integer()) -> [any()].
 %% ====================================================================
@@ -175,7 +190,7 @@ start_slaves(Count) when Count >= 0 ->
 %% ====================================================================
 initialize_node(NodeName) when is_atom(NodeName) ->
     lager:info("Trying to start GSI slave node: ~p @ ~p", [NodeName, get_host()]),
-    NodeRes =
+    NodeRes1 =
         case slave:start(get_host(), NodeName, make_code_path() ++ " -setcookie \"" ++ atom_to_list(erlang:get_cookie()) ++ "\"", no_link, erl) of
             {error, {already_running, Node}} ->
                 lager:info("GSI slave node ~p is already running", [Node]),
@@ -187,17 +202,23 @@ initialize_node(NodeName) when is_atom(NodeName) ->
                 lager:error("Could not start GSI slave node ~p @ ~p due to error: ~p", [NodeName, get_host(), Reason]),
                 'nonode@nohost'
         end,
-    {ok, Prefix} = application:get_env(?APP_Name, nif_prefix),
-    case rpc:call(NodeRes, gsi_nif, start, [atom_to_list(Prefix)]) of
-        ok ->
-            lager:info("NIF lib on node ~p was successfully loaded", [NodeRes]),
-            ets:insert(gsi_state, {node, NodeName});
-        {error,{reload, _}} ->
-            lager:info("NIF lib on node ~p is already loaded", [NodeRes]),
-            ets:insert(gsi_state, {node, NodeName});
-        {error, Reason1} ->
-            lager:error("Could not load NIF lib on node ~p due to: ~p. Killing node", [NodeRes, Reason1]),
-            slave:stop(NodeRes)
+    case NodeRes1 of 
+        'nonode@nohost' -> {error, cannot_start_node};
+        NodeRes ->
+            {ok, Prefix} = application:get_env(?APP_Name, nif_prefix),
+            case rpc:call(NodeRes, gsi_nif, start, [atom_to_list(Prefix)]) of
+                ok ->
+                    lager:info("NIF lib on node ~p was successfully loaded", [NodeRes]),
+                    ets:insert(gsi_state, {node, NodeName});
+                {error,{reload, _}} ->
+                    lager:info("NIF lib on node ~p is already loaded", [NodeRes]),
+                    ets:insert(gsi_state, {node, NodeName});
+                {error, Reason1} ->
+                    lager:error("Could not load NIF lib on node ~p due to: ~p. Killing node", [NodeRes, Reason1]),
+                    slave:stop(NodeRes);
+                {badrpc, Reason2} ->
+                    lager:error("Could not load NIF lib on node ~p due to: ~p. Ignoring", [NodeRes, Reason2])
+            end
     end.
 
 
@@ -246,6 +267,8 @@ call(Module, Method, Args, [{node, NodeName} | OtherNodes]) ->
 %% @end
 -spec update_crl(CADir :: string(), {OtpCert :: #'OTPCertificate'{}, [URLs :: string()], Name :: string()}) -> not_yet_implemented.
 %% ====================================================================
+update_crl(_CADir, {_OtpCert, [], _Name}) ->
+    no_dp;  
 update_crl(_CADir, {_OtpCert, [_URL | _URLs], _Name}) ->
     not_yet_implemented.                                    %% TODO: implement CRL update via http (httpc module?)
 

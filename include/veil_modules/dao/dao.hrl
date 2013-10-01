@@ -78,6 +78,7 @@
 -define(USER_BY_LOGIN_DESIGN_NAME, "user_by_login").
 -define(USER_BY_EMAIL_DESIGN_NAME, "user_by_email").
 -define(USER_BY_DN_DESIGN_NAME, "user_by_dn").
+-define(USER_BY_UID_DESIGN_NAME, "user_by_uid").
 
 %% Views
 -define(FILE_TREE_VIEW, #view_info{name = "file_tree", design = ?VFS_BASE_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
@@ -89,6 +90,7 @@
 -define(USER_BY_EMAIL_VIEW, #view_info{name = "user_by_email", design = ?USER_BY_EMAIL_DESIGN_NAME, db_name = ?USERS_DB_NAME}).
 -define(USER_BY_LOGIN_VIEW, #view_info{name = "user_by_login", design = ?USER_BY_LOGIN_DESIGN_NAME, db_name = ?USERS_DB_NAME}).
 -define(USER_BY_DN_VIEW, #view_info{name = "user_by_dn", design = ?USER_BY_DN_DESIGN_NAME, db_name = ?USERS_DB_NAME}).
+-define(USER_BY_UID_VIEW, #view_info{name = "user_by_uid", design = ?USER_BY_UID_DESIGN_NAME, db_name = ?USERS_DB_NAME}).
 
 %% Others
 -define(RECORD_INSTANCES_DOC_PREFIX, "record_instances_").
@@ -102,7 +104,7 @@
 -define(DB_LIST, [?SYSTEM_DB_NAME, ?FILES_DB_NAME, ?DESCRIPTORS_DB_NAME, ?USERS_DB_NAME]).
 %% List of all used views :: [#view_info]
 -define(VIEW_LIST, [?FILE_TREE_VIEW, ?FD_BY_FILE_VIEW, ?FD_BY_EXPIRED_BEFORE_VIEW, ?ALL_STORAGE_VIEW, 
-    ?USER_BY_EMAIL_VIEW, ?USER_BY_LOGIN_VIEW, ?USER_BY_DN_VIEW, ?STORAGE_BY_ID_VIEW]).
+    ?USER_BY_EMAIL_VIEW, ?USER_BY_LOGIN_VIEW, ?USER_BY_DN_VIEW, ?STORAGE_BY_ID_VIEW, ?USER_BY_UID_VIEW]).
 %% Default database name
 -define(DEFAULT_DB, lists:nth(1, ?DB_LIST)).
 

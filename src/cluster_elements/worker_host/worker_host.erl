@@ -269,7 +269,7 @@ proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
 		PlugIn:handle(ProtocolVersion, Request)
 	catch
     Type:Error ->
-      lager:error("Worker plug-in ~p error: ~p:~p", [PlugIn, Type, Error]),
+      lager:error("Worker plug-in ~p error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
       worker_plug_in_error
 	end,
 	case ReplyTo of

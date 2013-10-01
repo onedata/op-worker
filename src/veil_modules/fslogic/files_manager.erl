@@ -27,7 +27,7 @@
 %% API
 %% ====================================================================
 %% Logical file organization management (only db is used)
--export([mkdir/1, rmdir/1, mv/2, chown/0, change_file_perm/2, ls/3]).
+-export([mkdir/1, rmdir/1, mv/2, chown/0, change_file_perm/2, ls/3, getfileattr/1]).
 %% File access (db and helper are used)
 -export([read/3, write/3, write/2, create/1, truncate/2, delete/1]).
 %% Physical files organization management (to better organize files on storage;
@@ -125,7 +125,7 @@ chown() ->
   ErrorDetail :: term().
 %% ====================================================================
 change_file_perm(FileName, NewPerms) ->
-  Record = #changefileperms{logic_file_name = FileName, perms = NewPerms},
+  Record = #changefileperms{file_logic_name = FileName, perms = NewPerms},
   {Status, TmpAns} = contact_fslogic(Record),
   case Status of
     ok ->
@@ -155,6 +155,40 @@ ls(DirName, ChildrenNum, Offset) ->
       Response = TmpAns#filechildren.answer,
       case Response of
         ?VOK -> {ok, TmpAns#filechildren.child_logic_name};
+        _ -> {logical_file_system_error, Response}
+      end;
+    _ -> {Status, TmpAns}
+  end.
+
+%% getfileattr/1
+%% ====================================================================
+%% @doc Returns file attributes
+%% @end
+-spec getfileattr(FileName :: string()) -> Result when
+  Result :: {ok, Attributes} | {ErrorGeneral, ErrorDetail},
+  Attributes :: term(),
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+getfileattr(FileName) ->
+  Record = #getfileattr{file_logic_name = FileName},
+  {Status, TmpAns} = contact_fslogic(Record),
+  case Status of
+    ok ->
+      Response = TmpAns#fileattr.answer,
+      case Response of
+        ?VOK -> {ok, #fileattributes{
+          mode = TmpAns#fileattr.mode,
+          uid = TmpAns#fileattr.uid,
+          gid = TmpAns#fileattr.gid,
+          atime = TmpAns#fileattr.atime,
+          mtime = TmpAns#fileattr.mtime,
+          ctime = TmpAns#fileattr.ctime,
+          type = TmpAns#fileattr.type,
+          size = TmpAns#fileattr.size,
+          uname = TmpAns#fileattr.uname,
+          gname = TmpAns#fileattr.gname
+        }};
         _ -> {logical_file_system_error, Response}
       end;
     _ -> {Status, TmpAns}

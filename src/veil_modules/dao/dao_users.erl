@@ -14,7 +14,6 @@
 -include_lib("veil_modules/dao/dao_helper.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
 
-
 %% ===================================================================
 %% API functions
 %% ===================================================================
@@ -33,9 +32,24 @@
 %% ====================================================================
 save_user(#user{} = User) ->
     save_user(#veil_document{record = User});
-save_user(#veil_document{record = #user{}} = FdDoc) ->
+save_user(#veil_document{record = #user{}, uuid = UUID} = UserDoc) when is_list(UUID), UUID =/= "" ->
     dao:set_db(?USERS_DB_NAME),
-    dao:save_record(FdDoc).
+    dao:save_record(UserDoc);
+save_user(#veil_document{record = #user{}} = UserDoc) ->
+    QueryArgs = #view_query_args{start_key = integer_to_binary(?HIGHEST_USER_ID), end_key = integer_to_binary(0), 
+                                 include_docs = false, limit = 1, direction = rev},
+    NewUUID =
+        case dao:list_records(?USER_BY_UID_VIEW, QueryArgs) of 
+            {ok, #view_result{rows = [#view_row{id = MaxUID} | _]}} ->
+                integer_to_list(max(list_to_integer(MaxUID) + 1, ?LOWEST_USER_ID));
+            {ok, #view_result{rows = []}} ->
+                integer_to_list(?LOWEST_USER_ID); 
+            Other ->
+                lager:error("Invalid view response: ~p", [Other]),
+                throw(invalid_data)   
+        end,
+    save_user(UserDoc#veil_document{uuid = NewUUID}).
+
 
 
 %% remove_user/1

@@ -17,6 +17,7 @@
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
+-include("veil_modules/dao/dao.hrl").
 -include("veil_modules/dao/dao_vfs.hrl").
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
@@ -163,7 +164,7 @@ fuse_requests_test(Config) ->
 
   {Status8_1, Answer8_1} = delete_file(Host, Cert, Port, FirstFileInDir),
   ?assertEqual("ok", Status8_1),
-  ?assertEqual(list_to_atom(?VEIO), Answer8_1),
+  ?assertEqual(list_to_atom(?VEREMOTEIO), Answer8_1),
 
   {Status9, Files9, AnswerOpt9} = ls(Host, Cert, Port, DirName, 10, non),
   ?assertEqual("ok", Status9),
@@ -175,13 +176,57 @@ fuse_requests_test(Config) ->
 
   [SecondFileInDir | FilesInDirTail2] = FilesInDirTail,
   [_ | FilesInDirNamesTail2] = FilesInDirNamesTail,
+
+  {Status19, Attr3} = get_file_attr(Host, Cert, Port, SecondFileInDir),
+  ?assertEqual("ok", Status19),
+
+
+  %% updatetimes message test
+  {Status20, Answer20} = update_times(Host, Cert, Port, SecondFileInDir, 1234, 5678),
+  ?assertEqual("ok", Status20),
+  ?assertEqual(list_to_atom(?VOK), Answer20),
+
+  %% times update is async so we need to wait for it 
+  timer:sleep(500),
+  {Status21, Attr4} = get_file_attr(Host, Cert, Port, SecondFileInDir),
+  ?assertEqual("ok", Status21),
+
+  ?assertEqual(1234, Attr4#fileattr.atime),
+  ?assertEqual(5678, Attr4#fileattr.mtime),
+  %% updatetimes message test end
+
+
+  timer:sleep(1100),
   {Status10, Answer10} = rename_file(Host, Cert, Port, SecondFileInDir, NewNameOfFIle),
   ?assertEqual("ok", Status10),
   ?assertEqual(list_to_atom(?VOK), Answer10),
 
+  %% ctime update is async so we need to wait for it 
+  timer:sleep(500),
+
+  {Status17, Attr1} = get_file_attr(Host, Cert, Port, NewNameOfFIle),
+  ?assertEqual("ok", Status17),
+
+  %% Check if ctime was updated after rename
+  ?assert(Attr1#fileattr.ctime > Attr3#fileattr.ctime),
+
+
+  timer:sleep(1100),
   {Status10_2, Answer10_2} = change_file_perms(Host, Cert, Port, NewNameOfFIle, 8#400),
   ?assertEqual("ok", Status10_2),
   ?assertEqual(list_to_atom(?VOK), Answer10_2),
+
+  %% ctime update is async so we need to wait for it 
+  timer:sleep(500),
+
+  {Status18, Attr2} = get_file_attr(Host, Cert, Port, NewNameOfFIle),
+  ?assertEqual("ok", Status18),
+
+  %% Check if ctime was updated after chmod
+  ?assert(Attr2#fileattr.ctime > Attr1#fileattr.ctime),
+
+  %% Check if perms are set
+  ?assertEqual(8#400, Attr2#fileattr.mode),
 
   {Status11, Files11, AnswerOpt11} = ls(Host, Cert, Port, DirName, 10, non),
   ?assertEqual("ok", Status11),
@@ -209,7 +254,7 @@ fuse_requests_test(Config) ->
   ?assertEqual(list_to_atom(?VOK), Answer14),
   {Status14_1, Answer14_1} = delete_file(Host, Cert, Port, DirName),
   ?assertEqual("ok", Status14_1),
-  ?assertEqual(list_to_atom(?VEIO), Answer14_1),
+  ?assertEqual(list_to_atom(?VEREMOTEIO), Answer14_1),
 
   {Status15, Answer15} = delete_file(Host, Cert, Port, TestFile),
   ?assertEqual("ok", Status15),
@@ -226,6 +271,7 @@ fuse_requests_test(Config) ->
   ?assertEqual(ok, RemoveUserAns).
 
 %% Checks fslogic integration with dao and db
+%% This test also checks chown & chgrp behaviour
 users_separation_test(Config) ->
   nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
@@ -259,7 +305,7 @@ users_separation_test(Config) ->
   Name = "user1 user1",
   Teams = "user1 team",
   Email = "user1@email.net",
-  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+  {CreateUserAns, #veil_document{uuid = UserID1}} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
 
   {ReadFileAns2, PemBin2} = file:read_file(Cert2),
@@ -274,8 +320,17 @@ users_separation_test(Config) ->
   Name2 = "user2 user2",
   Teams2 = "user2 team",
   Email2 = "user2@email.net",
-  {CreateUserAns2, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
+  {CreateUserAns2, #veil_document{uuid = UserID2}} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
   ?assertEqual(ok, CreateUserAns2),
+
+  %% Current time
+  Time = fslogic_utils:time(),
+  timer:sleep(1100),
+
+  %% Users have different (and next to each other) IDs
+  UID1 = list_to_integer(UserID1),
+  UID2 = list_to_integer(UserID2),  
+  ?assertEqual(UID2, UID1 + 1),
 
   {Status, Helper, Id, _Validity, AnswerOpt} = create_file(Host, Cert, Port, TestFile),
   ?assertEqual("ok", Status),
@@ -300,6 +355,75 @@ users_separation_test(Config) ->
   ?assertEqual(?VOK, AnswerOpt5),
   ?assertEqual(Helper4, Helper5),
   ?assertEqual(Id4, Id5),
+
+  %% Check if owners are set correctly
+
+  {Status21, Attr1} = get_file_attr(Host, Cert, Port, TestFile),
+  ?assertEqual("ok", Status21),
+  {Status22, Attr2} = get_file_attr(Host, Cert2, Port, TestFile),
+  ?assertEqual("ok", Status22),
+
+  %% Check logins
+  ?assertEqual(Login, Attr1#fileattr.uname),
+  ?assertEqual(Login2, Attr2#fileattr.uname),
+
+  %% Check UIDs
+  ?assertEqual(UID1, Attr1#fileattr.uid),
+  ?assertEqual(UID2, Attr2#fileattr.uid),
+
+  timer:sleep(1100), 
+  
+  %% chown test
+  {Status23, Answer23} = chown(Host, Cert, Port, TestFile, 77777, "unknown"),
+  ?assertEqual("ok", Status23),
+  ?assertEqual(list_to_atom(?VEINVAL), Answer23),
+
+  {Status24, Answer24} = chown(Host, Cert, Port, TestFile, 0, Login2),
+  ?assertEqual("ok", Status24),
+  ?assertEqual(list_to_atom(?VOK), Answer24),
+
+  {Status25, Answer25} = chown(Host, Cert2, Port, TestFile, UID1, "unknown"),
+  ?assertEqual("ok", Status25),
+  ?assertEqual(list_to_atom(?VOK), Answer25),
+
+  %% Check if owners are set properly
+  {Status26, Attr3} = get_file_attr(Host, Cert, Port, TestFile),
+  ?assertEqual("ok", Status26),
+  {Status27, Attr4} = get_file_attr(Host, Cert2, Port, TestFile),
+  ?assertEqual("ok", Status27),
+
+  %% Check logins
+  ?assertEqual(Login2, Attr3#fileattr.uname),
+  ?assertEqual(Login, Attr4#fileattr.uname),
+
+  %% Check UIDs
+  ?assertEqual(UID2, Attr3#fileattr.uid),
+  ?assertEqual(UID1, Attr4#fileattr.uid),
+
+  %% Check if change time was updated and if times was setup correctly on file creation
+  ?assert(Attr1#fileattr.atime > Time),
+  ?assert(Attr1#fileattr.mtime > Time),
+  ?assert(Attr1#fileattr.ctime > Time),
+  ?assert(Attr2#fileattr.atime > Time),
+  ?assert(Attr2#fileattr.mtime > Time),
+  ?assert(Attr2#fileattr.ctime > Time),
+
+  ?assert(Attr3#fileattr.ctime > Attr1#fileattr.ctime),
+  ?assert(Attr4#fileattr.ctime > Attr2#fileattr.ctime),
+
+  %% Check attrs in files_manager
+  {FMStatys, FM_Attrs} = rpc:call(FSLogicNode, files_manager, getfileattr, [Login2 ++ "/" ++ TestFile]),
+  ?assertEqual(ok, FMStatys),
+  ?assertEqual(Attr4#fileattr.mode, FM_Attrs#fileattributes.mode),
+  ?assertEqual(Attr4#fileattr.uid, FM_Attrs#fileattributes.uid),
+  ?assertEqual(Attr4#fileattr.gid, FM_Attrs#fileattributes.gid),
+  ?assertEqual(Attr4#fileattr.type, FM_Attrs#fileattributes.type),
+  ?assertEqual(Attr4#fileattr.size, FM_Attrs#fileattributes.size),
+  ?assertEqual(Attr4#fileattr.uname, FM_Attrs#fileattributes.uname),
+  ?assertEqual(Attr4#fileattr.gname, FM_Attrs#fileattributes.gname),
+  ?assertEqual(Attr4#fileattr.ctime, FM_Attrs#fileattributes.ctime),
+  ?assertEqual(Attr4#fileattr.mtime, FM_Attrs#fileattributes.mtime),
+  ?assertEqual(Attr4#fileattr.atime, FM_Attrs#fileattributes.atime),
 
   {Status6, Answer6} = delete_file(Host, Cert, Port, TestFile),
   ?assertEqual("ok", Status6),
@@ -534,7 +658,7 @@ files_manager_standard_files_test(Config) ->
   ?assertEqual(ok, AnsDirDelete),
 
   AnsDirDelete2 = rpc:call(Node1, files_manager, rmdir, [DirName]),
-  ?assertEqual({logical_file_system_error, ?VEIO}, AnsDirDelete2),
+  ?assertEqual({logical_file_system_error, ?VEREMOTEIO}, AnsDirDelete2),
 
   RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns).
@@ -759,7 +883,7 @@ rename_file(Host, Cert, Port, FileName, NewName) ->
   {Status, Answer2}.
 
 change_file_perms(Host, Cert, Port, FileName, Perms) ->
-  FslogicMessage = #changefileperms{logic_file_name = FileName, perms = Perms},
+  FslogicMessage = #changefileperms{file_logic_name = FileName, perms = Perms},
   FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_changefileperms(FslogicMessage)),
 
   FuseMessage = #fusemessage{id = "1", message_type = "changefileperms", input = FslogicMessageMessageBytes},
@@ -826,6 +950,98 @@ get_link(Host, Cert, Port, FileName) ->
   Resp = fuse_messages_pb:decode_linkinfo(Bytes),
   Resp1 = records_translator:translate(Resp, "fuse_messages"),
   {Status, Resp#linkinfo.answer, Resp1#linkinfo.file_logic_name}.
+
+get_file_attr(Host, Cert, Port, FileName) ->
+  FslogicMessage = #getfileattr{file_logic_name = FileName},
+  FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_getfileattr(FslogicMessage)),
+
+  FuseMessage = #fusemessage{id = "1", message_type = "getfileattr", input = FslogicMessageMessageBytes},
+  FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
+
+  Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
+  message_decoder_name = "fuse_messages", answer_type = "fileattr",
+  answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
+  MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+
+  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  ?assertEqual(ok, ConAns),
+  ssl:send(Socket, MessageBytes),
+  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  ?assertEqual(ok, SendAns),
+
+  #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
+  Resp = fuse_messages_pb:decode_fileattr(Bytes),
+  Resp1 = records_translator:translate(Resp, "fuse_messages"),
+  {Status, Resp1}.
+
+update_times(Host, Cert, Port, FileName, ATime, MTime) ->
+    FslogicMessage = #updatetimes{file_logic_name = FileName, atime = ATime, mtime = MTime},
+    FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_updatetimes(FslogicMessage)),
+
+    FuseMessage = #fusemessage{id = "1", message_type = "updatetimes", input = FslogicMessageMessageBytes},
+    FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
+
+    Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
+    message_decoder_name = "fuse_messages", answer_type = "atom",
+    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+
+    {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+    ?assertEqual(ok, ConAns),
+    ssl:send(Socket, MessageBytes),
+    {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+    ?assertEqual(ok, SendAns),
+
+    #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
+    Answer = communication_protocol_pb:decode_atom(Bytes),
+    Answer2 = records_translator:translate(Answer, "communication_protocol"),
+    {Status, Answer2}.
+
+chown(Host, Cert, Port, FileName, UID, UName) ->
+    FslogicMessage = #changefileowner{file_logic_name = FileName, uid = UID, uname = UName},
+    FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_changefileowner(FslogicMessage)),
+
+    FuseMessage = #fusemessage{id = "1", message_type = "changefileowner", input = FslogicMessageMessageBytes},
+    FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
+
+    Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
+    message_decoder_name = "fuse_messages", answer_type = "atom",
+    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+
+    {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+    ?assertEqual(ok, ConAns),
+    ssl:send(Socket, MessageBytes),
+    {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+    ?assertEqual(ok, SendAns),
+
+    #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
+    Answer = communication_protocol_pb:decode_atom(Bytes),
+    Answer2 = records_translator:translate(Answer, "communication_protocol"),
+    {Status, Answer2}.
+
+chgrp(Host, Cert, Port, FileName, GID, GName) ->
+    FslogicMessage = #changefilegroup{file_logic_name = FileName, gid = GID, gname = GName},
+    FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_changefilegroup(FslogicMessage)),
+
+    FuseMessage = #fusemessage{id = "1", message_type = "changefilegroup", input = FslogicMessageMessageBytes},
+    FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
+
+    Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
+    message_decoder_name = "fuse_messages", answer_type = "atom",
+    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+
+    {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+    ?assertEqual(ok, ConAns),
+    ssl:send(Socket, MessageBytes),
+    {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+    ?assertEqual(ok, SendAns),
+
+    #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
+    Answer = communication_protocol_pb:decode_atom(Bytes),
+    Answer2 = records_translator:translate(Answer, "communication_protocol"),
+    {Status, Answer2}.
 
 
 clear_old_descriptors(Node) ->
