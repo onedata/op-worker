@@ -663,7 +663,7 @@ contact_fslogic(Record) ->
 
   CallAns = case UserID of
               undefined -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {internal_call, Record}});
-              _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, #veil_request{subject = UserID, request = Record}})
+              _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, #veil_request{subject = UserID, request = {internal_call, Record}}})
   end,
   case CallAns of
     ok ->
@@ -693,15 +693,14 @@ read_bytes(_Storage_helper_info, _File, _Offset, 0, _FFI) ->
 read_bytes(Storage_helper_info, File, Offset, Size, FFI) ->
   {ErrorCode, Bytes} = veilhelpers:exec(read, Storage_helper_info, [File, Size, Offset, FFI]),
   case ErrorCode of
-    0 -> {error, bytes_cannot_be_read};
-    BytesNum when is_integer(BytesNum) ->
+    BytesNum when is_integer(BytesNum), BytesNum > 0 ->
       {TmpErrorCode, TmpBytes} = read_bytes(Storage_helper_info, File, Offset + BytesNum, Size - BytesNum, FFI),
       case TmpErrorCode of
         ok -> {ok, <<Bytes/binary, TmpBytes/binary>>};
         _ -> {TmpErrorCode, TmpBytes}
       end;
     error -> {ErrorCode, Bytes};
-    _ -> {error, wrong_read_return_code}
+    _ -> {error, {wrong_read_return_code, ErrorCode}}
   end.
 
 %% write_bytes/5
@@ -722,8 +721,7 @@ write_bytes(_Storage_helper_info, _File, _Offset, <<>>, _FFI) ->
 write_bytes(Storage_helper_info, File, Offset, Buf, FFI) ->
   ErrorCode = veilhelpers:exec(write, Storage_helper_info, [File, Buf, Offset, FFI]),
   case ErrorCode of
-    0 -> {error, bytes_cannot_be_written};
-    BytesNum when is_integer(BytesNum) ->
+    BytesNum when is_integer(BytesNum), BytesNum > 0 ->
       <<_:BytesNum/binary, NewBuf/binary>> = Buf,
       TmpErrorCode = write_bytes(Storage_helper_info, File, Offset + BytesNum, NewBuf, FFI),
       case TmpErrorCode of
@@ -731,5 +729,7 @@ write_bytes(Storage_helper_info, File, Offset, Buf, FFI) ->
         _ -> TmpErrorCode
       end;
     {error, 'NIF_not_loaded'} -> ErrorCode;
-    _ -> {error, wrong_write_return_code}
+    _ ->
+      lager:error("Write bytes error - wrong code: ~p", [ErrorCode]),
+      {error, {wrong_write_return_code, ErrorCode}}
   end.

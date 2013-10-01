@@ -88,7 +88,7 @@ struct fuse_file_info get_ffi(ErlNifEnv* env, ERL_NIF_TERM term) {
     if(!enif_get_tuple(env, term, &n, &elems) || n != 11)
         return ffi;
 
-    if(get_atom(env, elems[i++]) != "st_fuse_file_info")
+    if(get_atom(env, elems[i++]) != FFI_RECORD_NAME)
         return ffi;
 
     ffi.flags = get_int(env, elems[i++]);
@@ -108,7 +108,7 @@ struct fuse_file_info get_ffi(ErlNifEnv* env, ERL_NIF_TERM term) {
 ERL_NIF_TERM make_ffi(ErlNifEnv* env, struct fuse_file_info ffi) {
     ERL_NIF_TERM elems[32];
     int i = 0;
-    elems[i++] = enif_make_atom(env, "st_use_file_info");
+    elems[i++] = enif_make_atom(env, FFI_RECORD_NAME);
 
     elems[i++] = enif_make_int64(env, (ErlNifSInt64)ffi.flags);
     elems[i++] = enif_make_uint64(env, (ErlNifUInt64)ffi.fh_old);
@@ -127,7 +127,7 @@ ERL_NIF_TERM make_ffi(ErlNifEnv* env, struct fuse_file_info ffi) {
 ERL_NIF_TERM make_statvfs(ErlNifEnv* env, struct statvfs stat) {
     ERL_NIF_TERM elems[32];
     int i = 0;
-    elems[i++] = enif_make_atom(env, "st_statvfs");
+    elems[i++] = enif_make_atom(env, STATVFS_RECORD_NAME);
 
     elems[i++] = enif_make_uint64(env, (ErlNifUInt64)stat.f_bsize);
     elems[i++] = enif_make_uint64(env, (ErlNifUInt64)stat.f_frsize);
@@ -147,7 +147,7 @@ ERL_NIF_TERM make_statvfs(ErlNifEnv* env, struct statvfs stat) {
 ERL_NIF_TERM make_stat(ErlNifEnv* env, struct stat st) {
     ERL_NIF_TERM elems[32];
     int i = 0;
-    elems[i++] = enif_make_atom(env, "st_stat");
+    elems[i++] = enif_make_atom(env, STAT_RECORD_NAME);
 
     elems[i++] = enif_make_int64(env, (ErlNifSInt64)st.st_dev);
     elems[i++] = enif_make_int64(env, (ErlNifSInt64)st.st_ino);

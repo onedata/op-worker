@@ -465,6 +465,10 @@ users_separation_test(Config) ->
   ?assertEqual("ok", Answer19),
   ?assertEqual("/target/path", LinkPath),
 
+  {Status19_2, Answer19_2} = delete_file(Host, Cert, Port, "link_name"),
+  ?assertEqual("ok", Status19_2),
+  ?assertEqual(list_to_atom(?VOK), Answer19_2),
+
   % Try to fetch invalid link data
   {Status20, Answer20, _} = get_link(Host, Cert, Port, "link_name1"),
   ?assertEqual("ok", Status20),

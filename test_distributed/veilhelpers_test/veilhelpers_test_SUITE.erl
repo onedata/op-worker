@@ -54,26 +54,27 @@ integration_test(Config) ->
     % Open
     {ErrorCode1, FFI} = rpc:call(FSLogicNode, veilhelpers, exec, [open, SHInfo, [?TEST_FILE1, #st_fuse_file_info{flags = ?O_RDWR}]]), %% Open is optional, just for preformance boost
     ?assertEqual(0, ErrorCode1),
+    ?assertEqual(?O_RDWR, FFI#st_fuse_file_info.flags),
 
     % Write
     ErrorCode2 = rpc:call(FSLogicNode, veilhelpers, exec, [write, SHInfo, [?TEST_FILE1, <<"file content">>, 0, FFI]]),
     ?assertEqual(12, ErrorCode2), %% Bytes written count
-
-    % Close
-    ErrorCode3 = rpc:call(FSLogicNode, veilhelpers, exec, [release, SHInfo, [?TEST_FILE1, FFI]]),
-    ?assertEqual(0, ErrorCode3),
 
     % Read
     {ErrorCode4, Data1} = rpc:call(FSLogicNode, veilhelpers, exec, [read, SHInfo, [?TEST_FILE1, 3, 1, FFI]]),
     ?assertEqual(3, ErrorCode4), %% Bytes read count
     ?assertMatch(<<"ile">>, Data1),
 
+    % Close
+    ErrorCode3 = rpc:call(FSLogicNode, veilhelpers, exec, [release, SHInfo, [?TEST_FILE2, FFI]]),
+    ?assertEqual(0, ErrorCode3),
+
     % Move file
     ErrorCode5 = rpc:call(FSLogicNode, veilhelpers, exec, [rename, SHInfo, [?TEST_FILE1, ?TEST_FILE2]]),
     ?assertEqual(0, ErrorCode5),
 
     % Read
-    {ErrorCode6, Data2} = rpc:call(FSLogicNode, veilhelpers, exec, [read, SHInfo, [?TEST_FILE2, 4, 4, FFI]]),
+    {ErrorCode6, Data2} = rpc:call(FSLogicNode, veilhelpers, exec, [read, SHInfo, [?TEST_FILE2, 4, 4, #st_fuse_file_info{}]]),
     ?assertEqual(4, ErrorCode6), %% Bytes read count
     ?assertMatch(<<" con">>, Data2),
 

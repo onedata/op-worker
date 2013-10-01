@@ -114,7 +114,7 @@ static ERL_NIF_TERM sh_truncate(ErlNifEnv* env, int argc, const ERL_NIF_TERM arg
 static ERL_NIF_TERM sh_open(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
     INIT;
   
-    struct fuse_file_info ffi = get_ffi(env, argv[4]);
+    struct fuse_file_info ffi = get_ffi(env, argv[3]);
     int ret = sh->sh_open(get_string(env, argv[2]).c_str(), &ffi);
 
     return enif_make_tuple2(env, enif_make_int(env, ret), make_ffi(env, ffi));

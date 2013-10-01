@@ -83,8 +83,9 @@ handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
 handle(ProtocolVersion, {internal_call, Record}) ->
   handle_fuse_message(ProtocolVersion, Record, non);
 
+%% Handle requests that have wrong structure.
 handle(_ProtocolVersion, _Msg) ->
-  ok.
+  wrong_request.
 
 %% cleanup/0
 %% ====================================================================

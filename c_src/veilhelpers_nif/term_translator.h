@@ -17,6 +17,11 @@
 
 #define MAX_STRING_SIZE 2048
 
+// Names of Erlang records used in C code
+#define FFI_RECORD_NAME         "st_fuse_file_info"
+#define STATVFS_RECORD_NAME     "st_statvfs"
+#define STAT_RECORD_NAME        "st_stat"
+
 using namespace std;
 
 namespace veil {

@@ -33,7 +33,8 @@
 exec(Method, SHInfo = #storage_helper_info{}, Args) ->
     Args1 = [SHInfo#storage_helper_info.name | [SHInfo#storage_helper_info.init_args | Args]],
     exec(Method, Args1).
-exec(Method, Args) when is_atom(Method), is_list(Args) -> 
+exec(Method, Args) when is_atom(Method), is_list(Args) ->
+    lager:info("veilhelpers:exec with args: ~p ~p", [Method, Args]),
     case gsi_handler:call(veilhelpers_nif, Method, Args) of 
         {error, 'NIF_not_loaded'} ->
             ok = load_veilhelpers(),
