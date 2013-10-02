@@ -19,10 +19,9 @@ namespace config {
 
     // Variables below are used as default values when ConnectionPool object is wasnt set 
     // but storage helper tries to use TCP/IP connection. It should not happen.
-    int clusterPort;
-    string proxyCert;
-    string certFile;
-    string clusterHostname;
+    unsigned int clusterPort;
+    string       proxyCert;
+    string       clusterHostname;
 
     namespace {
         boost::shared_ptr<SimpleConnectionPool> connectionPool;

@@ -9,7 +9,7 @@
 #include "connectionPool_mock.h"
 #include "communicationHandler_mock.h"
 #include "helpers/storageHelperFactory.h"
-#include "clusterProxyHelper.h"
+#include "clusterProxyHelper_proxy.h"
 #include <google/protobuf/descriptor.h>
 #include <errno.h>
 #include <boost/algorithm/string.hpp>
@@ -35,7 +35,7 @@ class ClusterProxyHelperTest
 protected:
     shared_ptr<MockConnectionPool> mockPool;
     shared_ptr<MockCommunicationHandler> mockConnection;
-    shared_ptr<ClusterProxyHelper> proxy;
+    shared_ptr<ProxyClusterProxyHelper> proxy;
 
     struct fuse_file_info ffi;
     char buf[1024];
@@ -43,7 +43,7 @@ protected:
     virtual void SetUp() {
         mockPool.reset(new MockConnectionPool());
         mockConnection.reset(new MockCommunicationHandler());
-        proxy.reset(new ClusterProxyHelper(vector<string>()));
+        proxy.reset(new ProxyClusterProxyHelper(vector<string>()));
 
         config::setConnectionPool(mockPool);
         EXPECT_CALL(*mockPool, selectConnection(_, _)).WillRepeatedly(Return(mockConnection));
@@ -51,6 +51,7 @@ protected:
     }
 
     virtual void TearDown() {
+        config::setConnectionPool(shared_ptr<SimpleConnectionPool>());
     }
 
 };
@@ -58,7 +59,7 @@ protected:
 
 TEST_F(ClusterProxyHelperTest, commonClusterMsgSetup)
 {
-    ClusterMsg msg = commonClusterMsgSetup("inputType", "inputData");
+    ClusterMsg msg = proxy->commonClusterMsgSetup("inputType", "inputData");
 
     EXPECT_EQ(PROTOCOL_VERSION, msg.protocol_version());
     EXPECT_EQ(true, msg.synch());
@@ -81,7 +82,7 @@ TEST_F(ClusterProxyHelperTest, sendCluserMessage)
     answer.set_answer_status("ok");
     EXPECT_CALL(*mockConnection, communicate(Truly(bind(identityEqual<ClusterMsg>, cref(clm), _1)), _)).WillOnce(Return(answer));
 
-    Answer real = sendCluserMessage(clm);
+    Answer real = proxy->sendCluserMessage(clm);
     EXPECT_EQ("ok", real.answer_status());
 }
 
@@ -93,7 +94,7 @@ TEST_F(ClusterProxyHelperTest, requestMessage)
     answer.set_worker_answer("worker");
     EXPECT_CALL(*mockConnection, communicate(_, _)).WillOnce(Return(answer));
 
-    EXPECT_EQ("worker", requestMessage("inputType", "answerType", "inputData"));
+    EXPECT_EQ("worker", proxy->requestMessage("inputType", "answerType", "inputData"));
 }
 
 TEST_F(ClusterProxyHelperTest, requestAtom)
@@ -105,7 +106,7 @@ TEST_F(ClusterProxyHelperTest, requestAtom)
     answer.set_worker_answer(atom.SerializeAsString());
     EXPECT_CALL(*mockConnection, communicate(_, _)).WillOnce(Return(answer));
 
-    EXPECT_EQ("value", requestAtom("inputType", "inputData"));
+    EXPECT_EQ("value", proxy->requestAtom("inputType", "inputData"));
 }
 
 TEST_F(ClusterProxyHelperTest, open)

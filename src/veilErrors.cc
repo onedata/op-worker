@@ -22,6 +22,16 @@ namespace veil {
             return -EEXIST;
         else if(verr == VEIO)
             return -EIO;
+        else if(verr == VENOTSUP)
+            return -ENOTSUP;
+        else if(verr == VENOTEMPTY)
+            return -ENOTEMPTY;
+        else if(verr == VEREMOTEIO)
+            return -EREMOTEIO;
+        else if(verr == VEPERM)
+            return -EPERM;
+        else if(verr == VEINVAL)
+            return -EINVAL;
         else
             return -EIO;
     }

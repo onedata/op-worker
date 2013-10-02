@@ -21,9 +21,9 @@ namespace helpers {
 
 namespace config {
 
-    extern int clusterPort;
-    extern std::string proxyCert;
-    extern std::string certFile;
+    extern unsigned int clusterPort;
+    extern std::string  proxyCert;
+    extern std::string  clusterHostname;
 
     namespace {
         extern boost::shared_ptr<SimpleConnectionPool> connectionPool;

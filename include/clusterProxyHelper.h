@@ -14,6 +14,7 @@
 #include <vector>
 #include <string>
 #include "helpers/IStorageHelper.h"
+#include "simpleConnectionPool.h"
 
 #include "remote_file_management.pb.h"
 #include "communication_protocol.pb.h"
@@ -26,22 +27,16 @@
 namespace veil {
 namespace helpers {
 
-
-protocol::communication_protocol::ClusterMsg commonClusterMsgSetup(std::string inputType, std::string inputData);   ///< Setups commonly used fields in ClusterMsg for RemoteFileManagement.
-protocol::communication_protocol::Answer sendCluserMessage(protocol::communication_protocol::ClusterMsg &msg);      ///< Sends ClusterMsg to cluster and receives Answer. This function handles connection selection and its releasing.
-std::string requestMessage(std::string inputType, std::string answerType, std::string inputData);                   ///< Creates & sends ClusterMsg with given types and input. Response is an serialized message od type "answerType".
-std::string requestAtom(std::string inputType, std::string inputData);                                              ///< Same as requestMessage except it always receives Atom. Return value is an strign value of Atom.
-
-
 /**
  * The ClusterProxyHelper class
- * Storage helper used to access files on mounted as local filesystem.
+ * Storage helper used to access files through VeilCluster (accessed over TLS protocol).
  */
 class ClusterProxyHelper : public IStorageHelper {
 
     public:
-        ClusterProxyHelper(std::vector<std::string>);               ///< This storage helper uses only the first element of args vector.
-                                                                    ///< It shall be ablosute path to diretory used by this storage helper as root mount point.
+        ClusterProxyHelper(std::vector<std::string>);               ///< This storage helper uses either 0 or 3 arguments. If no arguments are passed, default Veilhelpers connetion pooling will be used.
+                                                                    ///< Otherwise first argument shall be cluster's hostname, second - cluster's port and third one - path to peer certificate.
+        virtual ~ClusterProxyHelper();
 
         int sh_getattr(const char *path, struct stat *stbuf) ;
         int sh_access(const char *path, int mask) ;
@@ -80,6 +75,18 @@ class ClusterProxyHelper : public IStorageHelper {
         int sh_listxattr(const char *path, char *list, size_t size) ;
         int sh_removexattr(const char *path, const char *name) ;
         #endif // HAVE_SETXATTR
+
+    protected:
+        boost::shared_ptr<SimpleConnectionPool>     m_connectionPool;
+        unsigned int      m_clusterPort;
+        std::string       m_proxyCert;
+        std::string       m_clusterHostname;
+
+        protocol::communication_protocol::Answer sendCluserMessage(protocol::communication_protocol::ClusterMsg &msg);      ///< Sends ClusterMsg to cluster and receives Answer. This function handles connection selection and its releasing.
+        protocol::communication_protocol::ClusterMsg commonClusterMsgSetup(std::string inputType, std::string inputData);   ///< Setups commonly used fields in ClusterMsg for RemoteFileManagement.
+        std::string requestMessage(std::string inputType, std::string answerType, std::string inputData);                   ///< Creates & sends ClusterMsg with given types and input. Response is an serialized message od type "answerType".
+        std::string requestAtom(std::string inputType, std::string inputData);                                              ///< Same as requestMessage except it always receives Atom. Return value is an strign value of Atom.
+
 
 };
 

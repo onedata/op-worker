@@ -46,10 +46,19 @@ static inline string tolower(string input) {
     return input;
 }
 
+template<typename T>
+T fromString(std::string in) {
+    T out;
+    std::istringstream iss(in);
+    iss >> out;
+    return out;
+}
+
 namespace veil {
 namespace helpers {
 
-ClusterMsg commonClusterMsgSetup(string inputType, string inputData) {
+
+ClusterMsg ClusterProxyHelper::commonClusterMsgSetup(string inputType, string inputData) {
 
     RemoteFileMangement rfm;
     rfm.set_message_type(tolower(inputType));
@@ -67,8 +76,36 @@ ClusterMsg commonClusterMsgSetup(string inputType, string inputData) {
     return clm;
 }
 
-Answer sendCluserMessage(ClusterMsg &msg) {
-    shared_ptr<CommunicationHandler> connection = config::getConnectionPool()->selectConnection();
+string ClusterProxyHelper::requestMessage(string inputType, string answerType, string inputData) {
+    ClusterMsg clm = commonClusterMsgSetup(inputType, inputData);
+
+    clm.set_answer_type(tolower(answerType));
+    clm.set_answer_decoder_name(RFM_DECODER);
+
+    Answer answer = sendCluserMessage(clm);
+
+    return answer.worker_answer();
+}   
+
+string ClusterProxyHelper::requestAtom(string inputType, string inputData) {
+    ClusterMsg clm = commonClusterMsgSetup(inputType, inputData);
+
+    clm.set_answer_type(tolower(Atom::descriptor()->name()));
+    clm.set_answer_decoder_name(COMMUNICATION_PROTOCOL_DECODER);
+
+    Answer answer = sendCluserMessage(clm);
+
+    Atom atom;
+    if(answer.has_worker_answer()) {
+        atom.ParseFromString(answer.worker_answer());
+        return atom.value();
+    }
+
+    return "";
+}
+
+Answer ClusterProxyHelper::sendCluserMessage(ClusterMsg &msg) {
+    shared_ptr<CommunicationHandler> connection = m_connectionPool ? m_connectionPool->selectConnection() : config::getConnectionPool()->selectConnection();
     if(!connection) 
     {
         LOG(ERROR) << "Cannot select connection from connectionPool";
@@ -85,33 +122,10 @@ Answer sendCluserMessage(ClusterMsg &msg) {
     return answer;
 }
 
-string requestMessage(string inputType, string answerType, string inputData) {
-    ClusterMsg clm = commonClusterMsgSetup(inputType, inputData);
 
-    clm.set_answer_type(tolower(answerType));
-    clm.set_answer_decoder_name(RFM_DECODER);
-
-    Answer answer = sendCluserMessage(clm);
-
-    return answer.worker_answer();
-}   
-
-string requestAtom(string inputType, string inputData) {
-    ClusterMsg clm = commonClusterMsgSetup(inputType, inputData);
-
-    clm.set_answer_type(tolower(Atom::descriptor()->name()));
-    clm.set_answer_decoder_name(COMMUNICATION_PROTOCOL_DECODER);
-
-    Answer answer = sendCluserMessage(clm);
-
-    Atom atom;
-    if(answer.has_worker_answer()) {
-        atom.ParseFromString(answer.worker_answer());
-        return atom.value();
-    }
-
-    return "";
-}
+//////////////////////
+// Helper callbacks //
+//////////////////////
 
 int ClusterProxyHelper::sh_getattr(const char *path, struct stat *stbuf)
 {
@@ -338,7 +352,21 @@ int ClusterProxyHelper::sh_removexattr(const char *path, const char *name)
 
 ClusterProxyHelper::ClusterProxyHelper(std::vector<std::string> args)
 {
-    (void) args;
+    if(args.size() >= 3) { // If arguments are given, use them to establish connection instead default VeilHelpers configuration
+        m_clusterHostname   = args[0];
+        m_clusterPort       = fromString<unsigned int>(args[1]);
+        m_proxyCert         = args[2];
+
+        m_connectionPool.reset(new SimpleConnectionPool(m_clusterHostname, m_clusterPort, m_proxyCert, NULL));
+    } else { // Otherwise init local config using global values
+        m_clusterHostname   = config::clusterHostname;
+        m_clusterPort       = config::clusterPort;
+        m_proxyCert         = config::proxyCert;
+    }
+}
+
+ClusterProxyHelper::~ClusterProxyHelper()
+{
 }
 
 } // namespace helpers
