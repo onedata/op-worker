@@ -1,16 +1,16 @@
 %% ===================================================================
-%% @author Rafał Słota
+%% @author Michal Wrzeszcz
 %% @copyright (C): 2013 ACK CYFRONET AGH
 %% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc:This test checks how many simple messages may be sent and received
-%% in worst case (open/close ssl socket before/after each operation).
+%% @doc:This test checks if reuse_sessions ssl flag can change performance
+%% (when we compare results to ping test results).
 %% @end
 %% ===================================================================
 
--module(veilcluster_driver_ping).
+-module(veilcluster_driver_ping_v2).
 -export([new/1, run/4]).
 
 -include("basho_bench.hrl").
@@ -32,7 +32,7 @@ new(_Id) ->
 run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes}) ->
     Host = lists:nth((KeyGen() rem length(Hosts)) + 1 , Hosts),
     NewState = {Hosts, CertFile, PongAnsBytes},
-    case ssl:connect(Host, 5555, [binary, {active, false}, {packet, 4}, {certfile, CertFile}, {keyfile, CertFile}, {cacertfile, CertFile}, {reuse_sessions, false}], 5000) of 
+    case ssl:connect(Host, 5555, [binary, {active, false}, {packet, 4}, {certfile, CertFile}, {keyfile, CertFile}, {cacertfile, CertFile}, {reuse_sessions, true}], 5000) of
         {ok, Socket} ->
             Res = 
                 try ping(Action, Socket, PongAnsBytes) of 
