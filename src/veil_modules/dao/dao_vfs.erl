@@ -218,6 +218,11 @@ save_file(#veil_document{record = #file{}} = FileDoc) ->
 remove_file(File) ->
     dao:set_db(?FILES_DB_NAME),
     {ok, FData} = get_file(File),
+    case FData of 
+        #veil_document{record = #file{meta_doc = FMeta}} when is_list(FMeta) ->
+            remove_file_meta(FMeta);
+        _ -> ok
+    end,
     dao:remove_record(FData#veil_document.uuid).
 
 %% get_file/1

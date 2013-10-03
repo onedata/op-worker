@@ -1,3 +1,5 @@
+// View that allows fetch file_descriptor document assigned to given file UUID
 function(doc) {
-    emit([doc.file, doc.fuse_id], 1);
+    if(doc.record__ == "file_descriptor")
+        emit([doc.file, doc.fuse_id], 1);
 }

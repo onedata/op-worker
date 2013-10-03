@@ -1,4 +1,6 @@
+// View that allows selecting user by its login
 function(doc)
 {
-	emit(doc.login, null);
+    if(doc.record__ == "user")
+	   emit(doc.login, null);
 }

@@ -147,12 +147,13 @@ save_file() ->
 
 
 remove_file() ->
-    meck:expect(dao, get_record, fun(_) -> {ok, #veil_document{uuid = "uuid", record = #file{}}} end),
+    meck:expect(dao, get_record, fun(_) -> {ok, #veil_document{uuid = "uuid", record = #file{meta_doc = "meta"}}} end),
 
     ?assertMatch(ok, dao_vfs:remove_file({uuid, "file"})),
 
     ?assert(meck:called(dao, set_db, [?FILES_DB_NAME])),
     ?assert(meck:called(dao, remove_record, ["uuid"])),
+    ?assert(meck:called(dao, remove_record, ["meta"])),
     ?assert(meck:validate([dao, dao_helper])).
 
 

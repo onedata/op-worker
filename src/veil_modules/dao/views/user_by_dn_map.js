@@ -1,5 +1,7 @@
+// View that allows selecting user document by user's cert DN
 function(doc)
 {
-	for(key in doc.dn_list)
-		emit(doc.dn_list[key], null);
+    if(doc.record__ == "user")
+	   for(key in doc.dn_list)
+		  emit(doc.dn_list[key], null);
 }

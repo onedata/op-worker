@@ -1,3 +1,5 @@
+// View that allows selecting user by its UID
 function(doc) {
-    emit(doc._id, 0);
+    if(doc.record__ == "user")
+        emit(doc._id, 0);
 }
