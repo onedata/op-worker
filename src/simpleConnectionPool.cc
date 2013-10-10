@@ -14,11 +14,14 @@
 #include <netdb.h>
 #include <iterator>
 #include <algorithm>
+#include <boost/thread/thread_time.hpp>
 
 using namespace boost;
 using namespace std;
 
 namespace veil {
+
+unsigned int maxConnectionCount = 10;
 
 SimpleConnectionPool::SimpleConnectionPool(string hostname, int port, string certPath, bool (*updateCert)()) :
     m_hostname(hostname),
@@ -32,8 +35,11 @@ SimpleConnectionPool::~SimpleConnectionPool() {}
 
 shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(bool forceNew, unsigned int nth) 
 {
-    boost::unique_lock< boost::shared_mutex > lock(m_access);
+    boost::unique_lock< boost::mutex > lock(m_access);
     shared_ptr<CommunicationHandler> conn;
+
+    if(maxConnectionCount <= 0)
+        maxConnectionCount = 1;
 
     list<pair<shared_ptr<CommunicationHandler>, time_t> >::iterator it = m_connectionPool.begin();
     while(it != m_connectionPool.end()) {
@@ -42,10 +48,15 @@ shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(bool for
         else ++it;
     }
 
-    if(nth == 0 || --nth >= m_connectionPool.size()) {
+    if(nth == 0 || --nth >= CommunicationHandler::getInstancesCount())
         forceNew = true;
-        nth = m_connectionPool.size() - 1; // Just to be sure
-    }
+
+    if(nth >= maxConnectionCount) 
+        return shared_ptr<CommunicationHandler>(); 
+
+    int tryCount = 0; // After 1,5 sec allow to create additional connection
+    while((m_connectionPool.empty() || forceNew) && CommunicationHandler::getInstancesCount() >= maxConnectionCount && tryCount++ < 30)
+        m_accessCond.timed_wait(lock, posix_time::milliseconds(50));
 
     if(m_connectionPool.empty() || forceNew)
     {
@@ -63,8 +74,6 @@ shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(bool for
         list<string>::iterator it = m_hostnamePool.begin();
         while(it != m_hostnamePool.end()) // Delete all hostname from m_hostnamePool which are not present in dnsQuery response
         {
-            
-            
             list<string>::const_iterator itIP = find(ips.begin(), ips.end(), (*it));
             if(itIP == ips.end())
                 it = m_hostnamePool.erase(it);
@@ -73,7 +82,6 @@ shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(bool for
         
         for(it = ips.begin(); it != ips.end(); ++it) 
         {
-            
             list<string>::const_iterator itIP = find(m_hostnamePool.begin(), m_hostnamePool.end(), (*it));
             if(itIP == m_hostnamePool.end())
                 m_hostnamePool.push_back((*it));
@@ -86,7 +94,6 @@ shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(bool for
             m_hostnamePool.pop_front();
             m_hostnamePool.push_back(connectTo);
             
-            
             conn.reset(new CommunicationHandler(connectTo, m_port, m_certPath)); 
             if(conn->openConnection() == 0) 
                 break;
@@ -95,11 +102,12 @@ shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(bool for
             LOG(WARNING) << "Cannot connect to host: " << connectTo << ":" << m_port;    
         }
         
-        if(forceNew)    return conn;
+        if(forceNew)    return conn; 
         else            m_connectionPool.push_back(pair<shared_ptr<CommunicationHandler>, time_t>(conn, time(NULL)));
     }
     
     it = m_connectionPool.begin();
+    nth = (nth >= m_connectionPool.size() ? m_connectionPool.size() - 1 : nth);
     advance(it, nth);
     conn = (*it).first;
     m_connectionPool.erase(it);
@@ -109,8 +117,12 @@ shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(bool for
 
 void SimpleConnectionPool::releaseConnection(shared_ptr<CommunicationHandler> conn) 
 {
-    boost::unique_lock< boost::shared_mutex > lock(m_access);
+    if(!conn)
+        return;
+
+    boost::unique_lock< boost::mutex > lock(m_access);
     m_connectionPool.push_front(pair<shared_ptr<CommunicationHandler>, time_t>(conn, time(NULL)));
+    m_accessCond.notify_one();
 }
 
 list<string> SimpleConnectionPool::dnsQuery(string hostname) 

@@ -14,7 +14,7 @@
 #include <openssl/err.h>
 
 #include <string>
-
+#include <boost/thread.hpp>
 #include "communication_protocol.pb.h"
 #include "veilErrors.h"
 
@@ -39,6 +39,9 @@ protected:
     int m_port;
     std::string m_certPath;
 
+    boost::mutex m_access;
+    volatile static int instancesCount;
+
     virtual int openTCPConnection();                                ///< Opens INET socket.
     
     virtual int initCTX();                                          ///< Initialize certificates etc.
@@ -59,6 +62,9 @@ public:
                                                                     ///< estabilished and the whole process will be repeated.
                                                                     ///< @param retry How many times tries has to be made before returning error.
                                                                     ///< @return Answer protobuf message. If error occures, empty Answer object will be returned.
+
+    static int getInstancesCount();
+
 };
 
 } // namespace veil

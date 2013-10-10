@@ -19,6 +19,8 @@
 
 namespace veil {
 
+extern unsigned int maxConnectionCount;
+
 class SimpleConnectionPool
 {
 public:
@@ -40,11 +42,12 @@ public:
 
 protected:
     std::string          m_hostname;
-    bool            (*updateCertCB)();
-    int             m_port;
+    bool                 (*updateCertCB)();
+    int                  m_port;
     std::string          m_certPath;
 
-    boost::shared_mutex m_access;
+    boost::mutex                m_access;
+    boost::condition_variable   m_accessCond;
     std::list<std::pair<boost::shared_ptr<CommunicationHandler>, time_t> > m_connectionPool;   ///< Connection pool. @see SimpleConnectionPool::selectConnection
     std::list<std::string> m_hostnamePool;
     

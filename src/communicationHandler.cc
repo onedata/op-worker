@@ -39,10 +39,12 @@
                             }
 
 using namespace std;
+using namespace boost;
 using namespace veil::protocol::communication_protocol;
 
 namespace veil {
 
+volatile int CommunicationHandler::instancesCount = 0;
 
 CommunicationHandler::CommunicationHandler(string hostname, int port, string certPath) :
     sslContext(NULL),
@@ -51,11 +53,15 @@ CommunicationHandler::CommunicationHandler(string hostname, int port, string cer
     m_port(port),
     m_certPath(certPath)
 {
+    unique_lock< boost::mutex > lock(m_access);
+    ++instancesCount;
     initSSL();
 }
 
 CommunicationHandler::~CommunicationHandler()
 {
+    unique_lock< boost::mutex > lock(m_access);
+    --instancesCount;
     closeConnection();
 }
 
@@ -366,6 +372,7 @@ Answer CommunicationHandler::communicate(ClusterMsg &msg, uint8_t retry)
             
         LOG(ERROR) << "TCP communication error";
         answer.set_answer_status(VEIO);
+
         return answer;
     }
 
@@ -384,7 +391,12 @@ Answer CommunicationHandler::communicate(ClusterMsg &msg, uint8_t retry)
 
     if(answer.answer_status() != VOK)
         LOG(INFO) << "Received answer with non-ok status: " << answer.answer_status();
+
     return answer;
+}
+
+int CommunicationHandler::getInstancesCount() {
+    return instancesCount;
 }
 
 } // namespace veil
