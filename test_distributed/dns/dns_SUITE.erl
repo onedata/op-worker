@@ -18,19 +18,19 @@
 -include("registered_names.hrl").
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([dns_udp_sup_env_test/1, dns_udp_handler_responds_to_dns_queries/1, dns_ranch_tcp_handler_responds_to_dns_queries/1]).
+-export([dns_worker_env_test/1, dns_udp_handler_responds_to_dns_queries/1, dns_ranch_tcp_handler_responds_to_dns_queries/1]).
 
 %% export nodes' codes
--export([dns_udp_sup_env_test_code/0]).
+-export([dns_worker_env_test_code/0]).
 
-all() -> [dns_udp_sup_env_test, dns_ranch_tcp_handler_responds_to_dns_queries, dns_udp_handler_responds_to_dns_queries].
+all() -> [dns_worker_env_test, dns_ranch_tcp_handler_responds_to_dns_queries, dns_udp_handler_responds_to_dns_queries].
 
 
 %% ====================================================================
 %% Code of nodes used during the test
 %% ====================================================================
 
-dns_udp_sup_env_test_code() ->
+dns_worker_env_test_code() ->
   assert_all_deps_are_met(?APP_Name, dns_worker),
   ok.
 
@@ -39,133 +39,76 @@ dns_udp_sup_env_test_code() ->
 %% ====================================================================
 
 %% Checks if all necessary variables are declared in application
-dns_udp_sup_env_test(Config) ->
+dns_worker_env_test(Config) ->
   nodes_manager:check_start_assertions(Config),
-  NodesUp = ?config(nodes, Config),
+  {Node, _DNS_Port} = extract_node_and_dns_port(Config),
 
-  [Node | _] = NodesUp,
-
-  ?assertEqual(ok, rpc:call(Node, ?MODULE, dns_udp_sup_env_test_code, [])).
+  ?assertEqual(ok, rpc:call(Node, ?MODULE, dns_worker_env_test_code, [])).
 
 %% Checks if dns_udp_handler responds before and after running dns_worker
 dns_udp_handler_responds_to_dns_queries(Config) ->
-  nodes_manager:check_start_assertions(Config),
-  NodesUp = ?config(nodes, Config),
-  [Node | _] = NodesUp,
+  prepare_test_and_start_cluster(Config),
 
-	UDP_Port = 1400,
-	Address = "localhost",
-	SupportedDomain = "dns_worker",
-  DNS_Port = ?config(dns_port, Config),
+  {Node, DNS_Port} = extract_node_and_dns_port(Config),
+  Host = get_host(Node),
 
-	{OpenAns, Socket} = gen_udp:open(UDP_Port, [{active, false}, binary]),
+  {OpenAns, Socket} = gen_udp:open(0, [{active, false}, binary]),
   ?assertEqual(ok, OpenAns),
 
-	RequestHeader = #dns_header{id = 1, qr = false, opcode = ?QUERY, rd = 1},
-	RequestQuery = #dns_query{domain=SupportedDomain, type=?T_A,class=?C_IN},
-	Request = #dns_rec{header=RequestHeader, qdlist=[RequestQuery], anlist=[], nslist=[], arlist=[]},
+  Request = create_request(),
+  Sender = fun () -> gen_udp:send(Socket, Host, DNS_Port, Request) end,
+  Receiver = fun () -> {RcvAns, {_, DNS_Port, Packet}} = gen_udp:recv(Socket, 0, infinity),
+                       {RcvAns, Packet}
+  end,
 
-	try
-		BinRequest = inet_dns:encode(Request),
+  try
+    send_message_and_assert_results(Sender, Receiver)
+  after
+    gen_udp:close(Socket)
+  end.
 
-		gen_server:cast({?Node_Manager_Name, Node}, do_heart_beat),
-		gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-		gen_server:cast({global, ?CCM}, init_cluster),
-		timer:sleep(500),
-
-		%Both - dns udp handler and dns_worker should work
-		MessagingTest = fun () ->
-			SendAns = gen_udp:send(Socket, Address, DNS_Port, BinRequest),
-      ?assertEqual(ok, SendAns),
-			{RecvAns, {_, DNS_Port, Packet}} = gen_udp:recv(Socket, 0, infinity),
-      ?assertEqual(ok, RecvAns),
-			{DecodeAns, Response} = inet_dns:decode(Packet),
-      ?assertEqual(ok, DecodeAns),
-			Header = Response#dns_rec.header,
-      ?assertEqual(?NOERROR, Header#dns_header.rcode),
-      ?assertEqual(1, length(Response#dns_rec.anlist))
-		end,
-
-		MessagingTest()
-	after
-		gen_udp:close(Socket)
-	end.
 
 %% Checks if dns_ranch_tcp_handler does not close connection after first response
 dns_ranch_tcp_handler_responds_to_dns_queries(Config) ->
-	ct:timetrap({seconds, 30}),
-  nodes_manager:check_start_assertions(Config),
-  NodesUp = ?config(nodes, Config),
-  [Node | _] = NodesUp,
+  prepare_test_and_start_cluster(Config),
 
-	Address = "localhost",
-	SupportedDomain = "dns_worker",
-  DNS_Port = ?config(dns_port, Config),
+  {Node, DNS_Port} = extract_node_and_dns_port(Config),
+  Host = get_host(Node),
 
-	RequestHeader = #dns_header{id = 1, qr = false, opcode = ?QUERY, rd = 1},
-	RequestQuery = #dns_query{domain=SupportedDomain, type=?T_A,class=?C_IN},
-	Request = #dns_rec{header=RequestHeader, qdlist=[RequestQuery], anlist=[], nslist=[], arlist=[]},
+  {ConAns, Socket} = gen_tcp:connect(Host, DNS_Port, [{active, false}, binary, {packet, 2}]),
+  ?assertEqual(ok, ConAns),
 
-		BinRequest = inet_dns:encode(Request),
+  Request = create_request(),
+  Sender = fun () -> gen_tcp:send(Socket, Request) end,
+  Receiver = fun () -> gen_tcp:recv(Socket, 0, infinity) end,
 
-		gen_server:cast({?Node_Manager_Name, Node}, do_heart_beat),
-		gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-		gen_server:cast({global, ?CCM}, init_cluster),
-		timer:sleep(500),
+  try
+    send_message_and_assert_results(Sender, Receiver),
 
-		{ConAns, Socket} = gen_tcp:connect(Address, DNS_Port, [{active, false}, binary, {packet, 2}]),
-    ?assertEqual(ok, ConAns),
-		try
-			SendMessageAndAssertResults = fun () ->
-				SendAns = gen_tcp:send(Socket, BinRequest),
-        ?assertEqual(ok, SendAns),
-				{RecvAns, Packet} = gen_tcp:recv(Socket, 0, infinity),
-        ?assertEqual(ok, RecvAns),
-				{DecodeAns, Response} = inet_dns:decode(Packet),
-        ?assertEqual(ok, DecodeAns),
-				Header = Response#dns_rec.header,
-        ?assertEqual(?NOERROR, Header#dns_header.rcode)
-			end,
-
-			SendMessageAndAssertResults(),
-
-			%% connection should still be valid
-			SendMessageAndAssertResults()
-
-		after
-			gen_tcp:close(Socket)
-		end.
+    %% connection should still be valid
+    send_message_and_assert_results(Sender, Receiver)
+  after
+    gen_tcp:close(Socket)
+  end.
 
 %% ====================================================================
 %% SetUp and TearDown functions
 %% ====================================================================
 
-init_per_testcase(dns_udp_sup_env_test, Config) ->
-  ?INIT_DIST_TEST,
-
-  NodesUp = nodes_manager:start_test_on_nodes(1),
-  [Node | _] = NodesUp,
-
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm}, {dispatcher_port, 6666}, {ccm_nodes, [Node]}, {dns_port, 1312}]]),
-
-  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
-  lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config);
-
 init_per_testcase(_, Config) ->
   ?INIT_DIST_TEST,
 
-  Port = 6667,
-  DNS_Port = 1328,
-
   NodesUp = nodes_manager:start_test_on_nodes(1),
   [Node | _] = NodesUp,
 
-  Env = [{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [Node]},
-    {dns_port, DNS_Port}, {initialization_time, 1}],
+  DNS_Port = 1312,
+  Env = [{node_type, ccm_test}, {dispatcher_port, 6666}, {ccm_nodes, [Node]}, {dns_port, DNS_Port}],
+
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, [Env]),
 
   Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
   lists:append([{dns_port, DNS_Port}, {nodes, NodesUp}, {assertions, Assertions}], Config).
+
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
@@ -178,6 +121,63 @@ end_per_testcase(_, Config) ->
 %% ====================================================================
 %% Helping functions
 %% ====================================================================
+
+%% Helper function setting test timeout, checking start assertions and waiting for cluster creation
+prepare_test_and_start_cluster(Config) ->
+  ct:timetrap({seconds, 30}),
+  nodes_manager:check_start_assertions(Config),
+  start_cluster(Config),
+  timer:sleep(2000).
+
+
+%% Helper function for starting cluster
+start_cluster(Config) ->
+  [Node | _] = ?config(nodes, Config),
+  gen_server:cast({?Node_Manager_Name, Node}, do_heart_beat),
+  gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  gen_server:cast({global, ?CCM}, init_cluster),
+  ok.
+
+
+%% Helper function extracting node and dns port from test config
+extract_node_and_dns_port(Config) ->
+  [Node | _] = ?config(nodes, Config),
+  DNS_Port = ?config(dns_port, Config),
+  {Node, DNS_Port}.
+
+
+%% Helper function returning host for given node
+get_host(Node) ->
+  NodeAsList = atom_to_list(Node),
+  [_, Host] = string:tokens(NodeAsList, "@"),
+  Host.
+
+
+%% Helper function creating sample binary dns request
+create_request() ->
+  SupportedDomain = "dns_worker",
+
+  RequestHeader = #dns_header{id = 1, qr = false, opcode = ?QUERY, rd = 1},
+  RequestQuery = #dns_query{domain=SupportedDomain, type=?T_A,class=?C_IN},
+  Request = #dns_rec{header=RequestHeader, qdlist=[RequestQuery], anlist=[], nslist=[], arlist=[]},
+
+  inet_dns:encode(Request).
+
+
+%% Helper function sending request and asserting returned response
+send_message_and_assert_results(Sender, Receiver) ->
+  SendAns = Sender(),
+  ?assertEqual(ok, SendAns),
+
+  {RecvAns, Packet} = Receiver(),
+  ?assertEqual(ok, RecvAns),
+
+  {DecodeAns, Response} = inet_dns:decode(Packet),
+  ?assertEqual(ok, DecodeAns),
+
+  Header = Response#dns_rec.header,
+  ?assertEqual(?NOERROR, Header#dns_header.rcode).
+
 
 %% Helper function returning type of expression
 type_of(X) when is_integer(X)   -> integer;
@@ -198,16 +198,16 @@ type_of(_X)                     -> unknown.
 %% Helper function for asserting that all module dependencies
 %% are set and have declared type
 assert_all_deps_are_met(Application, Deps) when is_list(Deps) ->
-	lists:foreach(fun(Dep) ->
-			assert_all_deps_are_met(Application, Dep)
-		end, Deps);
+  lists:foreach(fun(Dep) ->
+      assert_all_deps_are_met(Application, Dep)
+    end, Deps);
 
 assert_all_deps_are_met(Application, {VarName, VarType}) when is_atom(VarName) andalso is_atom(VarType) ->
 
-	{ok, Value} = application:get_env(Application, VarName),
-	VarType = type_of(Value);
+  {ok, Value} = application:get_env(Application, VarName),
+  ?assertEqual(VarType, type_of(Value));
 
 assert_all_deps_are_met(Application, Module) when is_atom(Module) ->
 
-	Dependencies = Module:env_dependencies(),
-	assert_all_deps_are_met(Application, Dependencies).
+  Dependencies = Module:env_dependencies(),
+  assert_all_deps_are_met(Application, Dependencies).
