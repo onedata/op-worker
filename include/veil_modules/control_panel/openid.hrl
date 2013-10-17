@@ -16,10 +16,11 @@
 -define(xrds_url, "https://openid.plgrid.pl/gateway").
 -define(openid_checkid_mode, "openid.mode=checkid_setup").
 -define(openid_ns, "openid.ns=http://specs.openid.net/auth/2.0").
--define(openid_return_to, "openid.return_to=https://veilfsdev.com:8000/validate_login").
+-define(openid_return_to_prefix, "openid.return_to=https://"). % Hostname goes here
+-define(openid_return_to_suffix, "/validate_login"). % Params go here
 -define(openid_claimed_id, "openid.claimed_id=http://specs.openid.net/auth/2.0/identifier_select").
 -define(openid_identity, "openid.identity=http://specs.openid.net/auth/2.0/identifier_select").
--define(openid_realm, "openid.realm=https://veilfsdev.com:8000").
+-define(openid_realm_prefix, "openid.realm=https://"). % Hostname goes here
 -define(openid_sreg_required, "openid.sreg.required=nickname,email,fullname").
 -define(openid_ns_ext1, "openid.ns.ext1=http://openid.net/srv/ax/1.0").
 -define(openid_ext1_mode, "openid.ext1.mode=fetch_request").
@@ -36,6 +37,7 @@
 -define(openid_signed_key, "openid.signed").
 -define(openid_sig_key, "openid.sig").
 -define(valid_auth_info, "is_valid:true\n").
+
 
 % Macros used to extract parameters from OpenID response
 % They are atoms so use of nitrogen wf:q is straightforward

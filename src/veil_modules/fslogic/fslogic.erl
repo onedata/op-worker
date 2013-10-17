@@ -32,6 +32,7 @@
 %% API
 %% ====================================================================
 -export([init/1, handle/2, cleanup/0]).
+-export([get_full_file_name/1, get_file/3, get_user_id/0, get_user_root/1]).
 
 %% ====================================================================
 %% Test API
@@ -85,7 +86,7 @@ handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
   handle_fuse_message(ProtocolVersion, Record#fusemessage.input, Record#fusemessage.id);
 
 handle(ProtocolVersion, {internal_call, Record}) ->
-  handle_fuse_message(ProtocolVersion, Record, non);
+  handle_fuse_message(ProtocolVersion, Record, ?CLUSTER_FUSE_ID);
 
 %% Handle requests that have wrong structure.
 handle(_ProtocolVersion, _Msg) ->
@@ -353,7 +354,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getn
                         {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], ProtocolVersion),
                         case fslogic_storage:select_storage(FuseID, StorageList) of
                             #veil_document{uuid = UUID, record = #storage_info{} = Storage} ->
-                                File_id = "real_location_of___" ++ re:replace(File, "/", "___", [global, {return,list}]),
+                                File_id = dao_helper:gen_uuid() ++ re:replace(File, "/", "___", [global, {return,list}]),
                                 FileLocation = #file_location{storage_id = UUID, file_id = File_id},
 
                                 {UserIdStatus, UserId} = get_user_id(),
@@ -695,7 +696,7 @@ save_file_descriptor(ProtocolVersion, File, Validity) ->
 
 save_file_descriptor(ProtocolVersion, File, Uuid, FuseID, Validity) ->
   case FuseID of
-    non -> {ok, ok};
+    ?CLUSTER_FUSE_ID -> {ok, ok};
     _ ->
       Status = dao_lib:apply(dao_vfs, list_descriptors, [{by_file_n_owner, {File, FuseID}}, 10, 0], ProtocolVersion),
       case Status of
@@ -771,6 +772,20 @@ delete_old_descriptors(ProtocolVersion, Time) ->
       Other
   end.
 
+%% get_user_root/1
+%% ====================================================================
+%% @doc Gets user's root directory.
+%% @end
+-spec get_user_root(UserDoc :: term()) -> Result when
+  Result :: {ok, RootDir} | {error, ErrorDesc},
+  RootDir :: string(),
+  ErrorDesc :: atom.
+%% ====================================================================
+
+get_user_root(UserDoc) ->
+  UserRecord = UserDoc#veil_document.record,
+  UserRecord#user.login.
+
 %% get_user_root/0
 %% ====================================================================
 %% @doc Gets user's root directory.
@@ -789,8 +804,7 @@ get_user_root() ->
           {GetUserAns, User} = user_logic:get_user({dn, DN}),
           case GetUserAns of
             ok ->
-              UserRecord = User#veil_document.record,
-              {ok, UserRecord#user.login};
+              {ok, get_user_root(User)};
             _ -> {error, get_user_error}
           end
   end.
@@ -837,9 +851,9 @@ get_full_file_name(FileName) ->
       case RootAns of
         ok ->
           NewFileName = case Beg of
-            $/ -> Root ++ FileName;
-            _ -> Root ++ "/" ++ FileName
-          end,
+                          $/ -> Root ++ FileName;
+                          _ -> Root ++ "/" ++ FileName
+                        end,
           {ok, NewFileName};
         _ -> {root_not_found, Root}
       end

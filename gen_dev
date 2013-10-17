@@ -92,7 +92,7 @@ PATH_TO_SCRIPT=`echo $0 | sed "s/gen_dev$//g"`
 cd $PATH_TO_SCRIPT
 
 # Accepting only no args, -no_compile or -no_generate and reading from file. Otherwise all args have to be passed via args
-if [[ $# -eq 0 ]] || 
+if  [[ $# -eq 0 ]] || 
 	[[ $# -eq 1  && $1 == "-no_compile" ]] || 
 	[[ $# -eq 1  && $1 == "-no_generate" ]]; then
 	# Check for .args file
@@ -159,6 +159,7 @@ if [[ $INDEX -eq 0 ]]; then
 	INDEX=`awk -v a=" $* " -v b=" -no_compile " 'BEGIN{print index(a, b)}'`
 	if [[ $INDEX -eq 0 ]]; then
 		# Compile the code
+		make deps
 		make compile
 		if [ $? -ne 0 ]; then
 	        echo ""
@@ -222,6 +223,14 @@ IFCONFIG_LINE=`ifconfig | grep "inet addr:.*Bcast:"`
 COLON_INDEX=`awk -v a="$IFCONFIG_LINE" -v b=":" 'BEGIN{print index(a, b)}'`
 BCAST_INDEX=`awk -v a="$IFCONFIG_LINE" -v b="Bcast" 'BEGIN{print index(a, b)}'`
 COOKIE=${IFCONFIG_LINE:COLON_INDEX:((BCAST_INDEX - COLON_INDEX - 3))}
+
+# Override cookie using db_node hostname if it's specified
+FIRST_DB_NODE=${DB_NODES[0]}
+AT_INDEX=`expr index "$FIRST_DB_NODE" @`
+
+if [[ $AT_INDEX -gt 0 ]]; then
+	COOKIE=${FIRST_DB_NODE:$AT_INDEX:${#FIRST_DB_NODE}}
+fi
 
 # Get application version
 START_ERL=`cat releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME/releases/start_erl.data`

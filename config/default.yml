@@ -132,7 +132,7 @@ veil_cluster_node_env:
   - parameter:
       name: control_panel_port
       description: Port on which control_panel is available
-      value: 8000
+      value: 443
 
   - parameter:
       name: control_panel_static_files_root
@@ -149,7 +149,29 @@ veil_cluster_node_env:
   - parameter:
       name: control_panel_max_keepalive
       description: Max time in sec to keep a connection alive
-      value: 50
+      value: 1
+
+  - parameter:
+      name: control_panel_socket_timeout
+      description: Socket timeout in ms
+      value: 60000
+
+  - parameter:
+      name: multipart_max_length_mb
+      description: Maximum post body size for a file upload (data/multipart) in MB
+      value: 1000
+
+  - parameter:
+      name: control_panel_download_buffer
+      description: Buffer size used to send file to a client
+      value: 1048576 
+
+  - parameter:
+      name: control_panel_upload_buffer
+      description: Buffer size used to stream file from a client
+      value: 1048576
+
+
 
 
   # DNS

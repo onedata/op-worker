@@ -15,6 +15,7 @@
 -include_lib("records.hrl").
 -include_lib("veil_modules/dao/dao_vfs.hrl").
 -include_lib("veil_modules/dao/dao_users.hrl").
+-include_lib("veil_modules/dao/dao_share.hrl").
 -include_lib("veil_modules/dao/common.hrl").
 
 %% record definition used in record registration example
@@ -40,6 +41,7 @@
         file_lock -> ?record_info_gen(file_lock);
         storage_info -> ?record_info_gen(storage_info);
         user -> ?record_info_gen(user);
+        share_desc -> ?record_info_gen(share_desc);
         %next_record -> ?record_info_gen(next_record);
         _ -> {error, unsupported_record}
     end).
@@ -79,6 +81,8 @@
 -define(USER_BY_EMAIL_DESIGN_NAME, "user_by_email").
 -define(USER_BY_DN_DESIGN_NAME, "user_by_dn").
 -define(USER_BY_UID_DESIGN_NAME, "user_by_uid").
+-define(SHARE_BY_FILE_DESIGN_NAME, "share_by_file").
+-define(SHARE_BY_USER_DESIGN_NAME, "share_by_user").
 
 %% Views
 -define(FILE_TREE_VIEW, #view_info{name = "file_tree", design = ?VFS_BASE_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
@@ -92,6 +96,9 @@
 -define(USER_BY_DN_VIEW, #view_info{name = "user_by_dn", design = ?USER_BY_DN_DESIGN_NAME, db_name = ?USERS_DB_NAME}).
 -define(USER_BY_UID_VIEW, #view_info{name = "user_by_uid", design = ?USER_BY_UID_DESIGN_NAME, db_name = ?USERS_DB_NAME}).
 
+-define(SHARE_BY_FILE_VIEW, #view_info{name = "share_by_file", design = ?SHARE_BY_FILE_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
+-define(SHARE_BY_USER_VIEW, #view_info{name = "share_by_user", design = ?SHARE_BY_USER_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
+
 %% Others
 -define(RECORD_INSTANCES_DOC_PREFIX, "record_instances_").
 -define(RECORD_FIELD_BINARY_PREFIX, "__bin__: ").
@@ -104,7 +111,7 @@
 -define(DB_LIST, [?SYSTEM_DB_NAME, ?FILES_DB_NAME, ?DESCRIPTORS_DB_NAME, ?USERS_DB_NAME]).
 %% List of all used views :: [#view_info]
 -define(VIEW_LIST, [?FILE_TREE_VIEW, ?FD_BY_FILE_VIEW, ?FD_BY_EXPIRED_BEFORE_VIEW, ?ALL_STORAGE_VIEW, 
-    ?USER_BY_EMAIL_VIEW, ?USER_BY_LOGIN_VIEW, ?USER_BY_DN_VIEW, ?STORAGE_BY_ID_VIEW, ?USER_BY_UID_VIEW]).
+    ?USER_BY_EMAIL_VIEW, ?USER_BY_LOGIN_VIEW, ?USER_BY_DN_VIEW, ?USER_BY_UID_VIEW, ?STORAGE_BY_ID_VIEW, ?SHARE_BY_FILE_VIEW, ?SHARE_BY_USER_VIEW]).
 %% Default database name
 -define(DEFAULT_DB, lists:nth(1, ?DB_LIST)).
 

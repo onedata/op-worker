@@ -375,12 +375,12 @@ check_worker_node(Module, State) ->
           case Check2 of
             true -> {ThisNode, State};
             false ->
-              lager:warning([{mod, ?MODULE}], "Load of node too high", [Module]),
+%%               lager:warning([{mod, ?MODULE}], "Load of node too high", [Module]),
               {N, NewLists} = choose_worker(L1, L2),
               {N, update_nodes(Module, NewLists, State)}
           end;
         false ->
-          lager:warning([{mod, ?MODULE}], "Module ~p does not work at this node", [Module]),
+%%           lager:warning([{mod, ?MODULE}], "Module ~p does not work at this node", [Module]),
           {N, NewLists} = choose_worker(L1, L2),
           {N, update_nodes(Module, NewLists, State)}
       end;

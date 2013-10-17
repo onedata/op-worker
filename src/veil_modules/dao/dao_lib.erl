@@ -87,13 +87,13 @@ apply(Module, {asynch, Method}, Args, ProtocolVersion, _Timeout) ->
             {error, {Type, Error}}
     end;
 apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout) ->
-    case get(msgId) of
+    case get(msgID) of
         ID when is_integer(ID) ->
             put(msgID, ID + 1);
         _ -> put(msgID, 0)
     end,
-    MsgID = get(msgId),
-    try gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, self(), get(msgId), {Module, Method, Args}}) of
+    MsgID = get(msgID),
+    try gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, self(), MsgID, {Module, Method, Args}}) of
         ok ->
             receive
                 {worker_answer, MsgID, Resp} -> Resp

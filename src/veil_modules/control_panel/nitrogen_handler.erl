@@ -17,52 +17,79 @@
 
 -record(state, {headers, body}).
 
+%% ====================================================================
+%% API functions
+%% ====================================================================
+
 %% init/3
 %% ====================================================================
 %% @doc Initializes a request-response procedure
 -spec init(Protocol, Request :: term(), Options :: term()) -> Result when
-  Protocol :: {Transport :: term(), http},
-  Result :: {ok, Request :: term(), #state{}}.
+	Protocol :: {Transport :: term(), http},
+	Result :: {ok, Request :: term(), #state{}}.
 %% ====================================================================
 init({_Transport, http}, Req, Opts) ->
-    Headers = proplists:get_value(headers, Opts, []),
-    Body = proplists:get_value(body, Opts, "http_handler"),
-    {ok, Req, #state{headers=Headers, body=Body}}.
+	Headers = proplists:get_value(headers, Opts, []),
+	Body = proplists:get_value(body, Opts, "http_handler"),
+	{ok, Req, #state{headers=Headers, body=Body}}.
 
 
 %% handle/2
 %% ====================================================================
 %% @doc Handles a request producing a response with use of Nitrogen engine
+%% or a file stream response
+%% @end
 -spec handle(Request, Options) -> Result when
-  Result :: {ok, Response, Options},
-  Request :: term(),
-  Options :: term(),
-  Response :: term().
+	Result :: {ok, Response, Options},
+	Request :: term(),
+	Options :: term(),
+	Response :: term().
 %% ====================================================================
-handle(Req, _Opts) ->
-    DocRoot = "./gui_static",
-    RequestBridge = simple_bridge:make_request(cowboy_request_bridge,
-                                               {Req, DocRoot}),
+handle(InitialReq, _Opts) ->
+	% Pass the request to file_transfer_handler to see if it should handle it
+	ProcessedReq = case file_transfer_handler:maybe_handle_request(InitialReq) of 
+		% Request handled
+		{true, Req} ->
+			Req;
 
-    ResponseBridge = simple_bridge:make_response(cowboy_response_bridge,
-                                                 RequestBridge),
+		% Request not handled
+		{false, Req} ->
+			{ok, DocRoot} = application:get_env(veil_cluster_node, control_panel_static_files_root),
+		    RequestData = cowboy_request_bridge:init({Req, DocRoot}),
+		    ReqBridge = simple_bridge_request_wrapper:new(cowboy_request_bridge, RequestData, false, [], [], none),
+		    % Pass the request to multipart_bridge to check if it's a file upload request
+		    % and dispatch the file if needed
+		    RequestBridge = case veil_multipart_bridge:parse(ReqBridge) of
+		        {ok, Params, Files} ->
+		            ReqBridge:set_multipart(Params, Files);
+		        {ok, not_multipart} -> 
+		            ReqBridge;
+		        {error, Error} -> 
+		            throw({server_error, Error})
+		    end,
 
-    %% Establishes the context with the Request and Response Bridges
-    nitrogen:init_request(RequestBridge, ResponseBridge),
-    
-    {ok, NewReq} = nitrogen:run(),
+			% Make response bridge
+			ResponseBridge = simple_bridge:make_response(cowboy_response_bridge, RequestBridge),
 
-    %% This will be returned back to cowboy
-    {ok, NewReq, _Opts}.
+			% Establish the context with the Request and Response Bridges
+			nitrogen:init_request(RequestBridge, ResponseBridge),
+
+		 	% Process the request in nitrogen engine
+			{ok, NewReq} = nitrogen:run(),
+
+			NewReq
+	end,
+	% This will be returned back to cowboy
+	{ok, ProcessedReq, _Opts}.
 
 %% terminate/3
 %% ====================================================================
 %% @doc Cowboy handler callback
 -spec terminate(Reason, Request, State) -> Result when
-  Result :: ok,
-  Reason :: term(),
-  Request :: term(),
-  State :: term().
+	Result :: ok,
+	Reason :: term(),
+	Request :: term(),
+	State :: term().
 %% ====================================================================
 terminate(_Reason, _Req, _State) ->
-  ok.
+	ok.

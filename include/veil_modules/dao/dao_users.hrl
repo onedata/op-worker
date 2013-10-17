@@ -19,4 +19,25 @@
 -define(LOWEST_USER_ID, 20000).
 -define(HIGHEST_USER_ID, 65000).
 
+
+%% Mapping of erlang macros vs. DN string attributes
+-define(oid_code_to_shortname_mapping,
+	[
+		{?'id-at-name', "name"},
+		{?'id-at-surname', "SN"},
+		{?'id-at-givenName', "GN"},
+		{?'id-at-initials', "initials"},
+		{?'id-at-generationQualifier', "generationQualifier"},
+		{?'id-at-commonName', "CN"},
+		{?'id-at-localityName', "L"},
+		{?'id-at-stateOrProvinceName', "ST"},
+		{?'id-at-organizationName', "O"},
+		{?'id-at-organizationalUnitName', "OU"},
+		{?'id-at-title', "title"},
+		{?'id-at-dnQualifier', "dnQualifier"},
+		{?'id-at-countryName', "C"},
+		{?'id-at-serialNumber', "serialNumber"},
+		{?'id-at-pseudonym', "pseudonym"}
+	]).
+
 -endif.

@@ -4,7 +4,7 @@
 
 /***** Nitrogen Elements *****/
 
-.label {
+label.nitrogen_label {
     display: block;
     font-weight: bold;
 }
@@ -166,3 +166,25 @@ div.inplace_textbox .LV_invalid {
 .dropzone-container div.ui-state-highlight {
     /*background: limegreen;*/
 }
+
+/* Recaptcha */
+
+.recaptcha * {
+	line-height:1em;
+}
+
+.recaptcha {
+	width:315px !important;
+}
+
+/*** jQuery Tabs ***/
+
+/* Move hiddent tabs off the screen to hide them. This provides
+ * a correct tabs element placement and width for cases when
+ * they are immediately used / modified by a java script. */
+.ui-tabs .ui-tabs-hide {
+    display: inline !important;
+    position: absolute;
+    left:-10000px;
+}
+

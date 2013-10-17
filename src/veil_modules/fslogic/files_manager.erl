@@ -18,10 +18,12 @@
 -include("fuse_messages_pb.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao_vfs.hrl").
+-include("veil_modules/dao/dao_share.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
+-include_lib("veil_modules/dao/dao_types.hrl").
 
--define(NewFileLogicMode, 8#744).
--define(NewFileStorageMode, 8#744).
+-define(NewFileLogicMode, 8#644).
+-define(NewFileStorageMode, 8#644).
 
 %% ====================================================================
 %% API
@@ -35,6 +37,9 @@
 -export([mkdir_storage_system/0, mv_storage_system/0, delete_dir_storage_system/0]).
 %% Physical files access (used to create temporary copies for remote files)
 -export([read_storage_system/4, write_storage_system/4, write_storage_system/3, create_file_storage_system/2, truncate_storage_system/3, delete_file_storage_system/2, ls_storage_system/0]).
+
+%% File sharing
+-export([get_file_by_uuid/1, get_file_full_name_by_uuid/1, create_standard_share/1, create_share/2, get_share/1, remove_share/1]).
 
 %% ====================================================================
 %% Logical file organization management (only db is used)
@@ -354,7 +359,12 @@ delete(File) ->
           Storage_helper_info = #storage_helper_info{name = TmpAns#filelocation.storage_helper_name, init_args = TmpAns#filelocation.storage_helper_args},
           TmpAns2 = delete_file_storage_system(Storage_helper_info, TmpAns#filelocation.file_id),
 
-          case TmpAns2 of
+          TmpAns2_2 = case TmpAns2 of
+            {wrong_getatt_return_code, -2} -> ok;
+            _ -> TmpAns2
+          end,
+
+          case TmpAns2_2 of
             ok ->
               Record2 = #deletefile{file_logic_name = File},
               {Status3, TmpAns3} = contact_fslogic(Record2),
@@ -367,7 +377,7 @@ delete(File) ->
                   end;
                 _ -> {Status3, TmpAns3}
               end;
-            _ -> TmpAns2
+            _ -> TmpAns2_2
           end;
         _ -> {logical_file_system_error, Response}
       end;
@@ -568,7 +578,9 @@ create_file_storage_system(Storage_helper_info, File) ->
             _ -> {wrong_truncate_return_code, ErrorCode3}
           end;
         {error, 'NIF_not_loaded'} -> ErrorCode2;
-        _ -> {wrong_mknod_return_code, ErrorCode2}
+        _ ->
+          lager:error("Can note create file %p, code: %p, helper info: %p, mode: %p%n", [File, ErrorCode2, Storage_helper_info, ?NewFileStorageMode]),
+          {wrong_mknod_return_code, ErrorCode2}
       end
   end.
 
@@ -669,7 +681,7 @@ contact_fslogic(Record) ->
     ok ->
       receive
         {worker_answer, MsgId, Resp} -> {ok, Resp}
-      after 1000 ->
+      after 15000 ->
         {error, timeout}
       end;
     _ -> {error, CallAns}
@@ -733,3 +745,195 @@ write_bytes(Storage_helper_info, File, Offset, Buf, FFI) ->
       lager:error("Write bytes error - wrong code: ~p", [ErrorCode]),
       {error, {wrong_write_return_code, ErrorCode}}
   end.
+
+%% get_file_by_uuid/1
+%% ====================================================================
+%% @doc Gets file record on the basis of uuid.
+%% @end
+-spec get_file_by_uuid(UUID :: string()) -> Result when
+  Result :: {ok, File} | {ErrorGeneral, ErrorDetail},
+  File :: term(),
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+get_file_by_uuid(UUID) ->
+  dao_lib:apply(dao_vfs, get_file, [{uuid, UUID}], 1).
+
+%% get_file_full_name_by_uuid/1
+%% ====================================================================
+%% @doc Gets file full name (with root of the user's system) on the basis of uuid.
+%% @end
+-spec get_file_full_name_by_uuid(UUID :: string()) -> Result when
+  Result :: {ok, FullPath} | {ErrorGeneral, ErrorDetail},
+  FullPath :: string(),
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+get_file_full_name_by_uuid(UUID) ->
+  get_full_path(UUID, "").
+
+%% get_full_path/1
+%% ====================================================================
+%% @doc Gets file full path (with root of the user's system) on the basis of uuid.
+%% @end
+-spec get_full_path(UUID :: string(), TmpPath :: string()) -> Result when
+  Result :: {ok, FullPath} | {ErrorGeneral, ErrorDetail},
+  FullPath :: string(),
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+get_full_path("", TmpPath) ->
+  {ok, TmpPath};
+
+get_full_path(UUID, TmpPath) ->
+  case get_file_by_uuid(UUID) of
+    {ok, #veil_document{record = FileRec}} ->
+      case TmpPath of
+        "" -> get_full_path(FileRec#file.parent, FileRec#file.name);
+        _ -> get_full_path(FileRec#file.parent, FileRec#file.name ++ "/" ++ TmpPath)
+      end;
+    _ -> {error, {get_file_by_uuid, UUID}}
+  end.
+
+%% create_standard_share/1
+%% ====================================================================
+%% @doc Creates standard share info (share with all) for file (file path is
+%% an argument).
+%% @end
+-spec create_standard_share(File :: string()) -> Result when
+  Result :: {ok, Share_info} | {ErrorGeneral, ErrorDetail},
+  Share_info :: term(),
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+create_standard_share(File) ->
+  create_share(File, all).
+
+%% create_share/2
+%% ====================================================================
+%% @doc Creates share info for file (file path is an argument).
+%% @end
+-spec create_share(File :: string(), Share_With :: term()) -> Result when
+  Result :: {ok, Share_info} | {ErrorGeneral, ErrorDetail},
+  Share_info :: term(),
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+create_share(File, Share_With) ->
+  {Status, FullName} = fslogic:get_full_file_name(File),
+  {Status2, UID} = fslogic:get_user_id(),
+  case {Status, Status2} of
+    {ok, ok} ->
+      case fslogic:get_file(1, FullName, ?CLUSTER_FUSE_ID) of
+        {ok, #veil_document{uuid = FUuid}} ->
+          Share_info = #share_desc{file = FUuid, user = UID, share_with = Share_With},
+          add_share(Share_info);
+        Other -> Other
+      end;
+    {_, error} ->
+      {Status2, UID};
+    _ ->
+      {Status, FullName}
+  end.
+
+%% add_share/1
+%% ====================================================================
+%% @doc Adds info about share to db.
+%% @end
+-spec add_share(Share_info :: term()) -> Result when
+  Result :: {ok, Share_uuid} | {ErrorGeneral, ErrorDetail},
+  Share_uuid :: term(),
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+add_share(Share_info) ->
+  {Status, Ans} = get_share({file_uuid, Share_info#share_desc.file}),
+  Found = case {Status, Ans} of
+            {error, share_not_found} -> false;
+            {ok, OneAns} when is_record(OneAns, veil_document) ->
+              Sh_Inf = OneAns#veil_document.record,
+              case Share_info#share_desc.share_with =:= Sh_Inf#share_desc.share_with of
+                true -> {true, OneAns};
+                _ -> false
+              end;
+            {ok, _} ->
+              Check = fun(Sh_doc, TmpAns) ->
+                case TmpAns of
+                  false ->
+                    Sh_Inf = Sh_doc#veil_document.record,
+                    case Share_info#share_desc.share_with =:= Sh_Inf#share_desc.share_with of
+                      true -> {true, Sh_doc};
+                      _ -> false
+                    end;
+                  true -> TmpAns
+                end
+              end,
+              lists:foldl(Check, false, Ans);
+            _ -> error
+          end,
+  case Found of
+    {true, ExistingShare} -> {exists, ExistingShare};
+    false ->
+      dao_lib:apply(dao_share, save_file_share, [Share_info], 1);
+    _ -> {Status, Ans}
+  end.
+
+%% get_share/1
+%% ====================================================================
+%% @doc Gets info about share from db.
+%% @end
+-spec get_share(Key:: {file, File :: uuid()} |
+{user, User :: uuid()} |
+{uuid, UUID :: uuid()}) -> Result when
+  Result :: {ok, Share_doc} | {ErrorGeneral, ErrorDetail},
+  Share_doc :: term(),
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+get_share({file, File}) ->
+  {Status, FullName} = fslogic:get_full_file_name(File),
+  case Status of
+    ok ->
+      case fslogic:get_file(1, FullName, ?CLUSTER_FUSE_ID) of
+        {ok, #veil_document{uuid = FUuid}} ->
+          GetAns = get_share({file_uuid, FUuid}),
+          GetAns;
+        Other ->
+          Other
+      end;
+    _ ->
+      {Status, FullName}
+  end;
+
+get_share({file_uuid, File}) ->
+  dao_lib:apply(dao_share, get_file_share, [{file, File}], 1);
+
+get_share(Key) ->
+  dao_lib:apply(dao_share, get_file_share, [Key], 1).
+
+%% remove_share/1
+%% ====================================================================
+%% @doc Removes info about share from db.
+%% @end
+-spec remove_share(Key:: {file, File :: uuid()} |
+{user, User :: uuid()} |
+{uuid, UUID :: uuid()}) -> Result when
+  Result :: ok | {ErrorGeneral, ErrorDetail},
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+remove_share({file, File}) ->
+  {Status, FullName} = fslogic:get_full_file_name(File),
+  case Status of
+    ok ->
+      case fslogic:get_file(1, FullName, ?CLUSTER_FUSE_ID) of
+        {ok, #veil_document{uuid = FUuid}} ->
+          dao_lib:apply(dao_share, remove_file_share, [{file, FUuid}], 1);
+        Other -> Other
+      end;
+    _ ->
+      {Status, FullName}
+  end;
+
+remove_share(Key) ->
+  dao_lib:apply(dao_share, remove_file_share, [Key], 1).

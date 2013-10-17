@@ -19,11 +19,14 @@
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao.hrl").
 -include("veil_modules/dao/dao_vfs.hrl").
+-include("veil_modules/dao/dao.hrl").
+-include("veil_modules/dao/dao_share.hrl").
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([files_manager_standard_files_test/1, files_manager_tmp_files_test/1, fuse_requests_test/1, users_separation_test/1]).
+-export([files_manager_standard_files_test/1, files_manager_tmp_files_test/1, fuse_requests_test/1, users_separation_test/1, file_sharing_test/1]).
+-export([create_standard_share/2, create_share/3, get_share/2]).
 
-all() -> [files_manager_tmp_files_test, files_manager_standard_files_test, fuse_requests_test, users_separation_test].
+all() -> [files_manager_tmp_files_test, files_manager_standard_files_test, fuse_requests_test, users_separation_test, file_sharing_test].
 
 -define(SH, "DirectIO").
 -define(TEST_ROOT, ["/tmp/veilfs"]). %% Root of test filesystem
@@ -32,6 +35,164 @@ all() -> [files_manager_tmp_files_test, files_manager_standard_files_test, fuse_
 %% ====================================================================
 %% Test functions
 %% ====================================================================
+
+%% Checks file sharing functions
+file_sharing_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+
+  Cert = ?COMMON_FILE("peer.pem"),
+  Host = "localhost",
+  Port = ?config(port, Config),
+  [FSLogicNode | _] = NodesUp,
+
+  gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
+  gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  timer:sleep(100),
+  gen_server:cast({global, ?CCM}, init_cluster),
+  timer:sleep(1500),
+
+  TestFile = "file_sharing_test_file",
+  TestFile2 = "file_sharing_test_file2",
+  DirName = "file_sharing_test_dir",
+
+  {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT]),
+  ?assertEqual(ok, InsertStorageAns),
+
+  {ReadFileAns, PemBin} = file:read_file(Cert),
+  ?assertEqual(ok, ReadFileAns),
+  {ExtractAns, RDNSequence} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
+  ?assertEqual(rdnSequence, ExtractAns),
+  {ConvertAns, DN} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
+  ?assertEqual(ok, ConvertAns),
+  DnList = [DN],
+
+  Login = "user1",
+  Name = "user1 user1",
+  Teams = "user1 team",
+  Email = "user1@email.net",
+  {CreateUserAns, User_Doc} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+  ?assertEqual(ok, CreateUserAns),
+  put(user_id, DN),
+
+
+
+  {StatusCreate1, AnsCreate1} = rpc:call(FSLogicNode, fslogic_test_SUITE, create_standard_share, [TestFile, DN]),
+  ?assertEqual(error, StatusCreate1),
+  ?assertEqual(file_not_found, AnsCreate1),
+
+  {StatusCreateFile, _Helper, _Id, _Validity, AnswerCreateFile} = create_file(Host, Cert, Port, TestFile),
+  ?assertEqual("ok", StatusCreateFile),
+  ?assertEqual(?VOK, AnswerCreateFile),
+
+  {StatusCreate2, AnsCreate2} = rpc:call(FSLogicNode, fslogic_test_SUITE, create_standard_share, [TestFile, DN]),
+  ?assertEqual(ok, StatusCreate2),
+
+  {StatusCreate3, AnsCreate3} = rpc:call(FSLogicNode, fslogic_test_SUITE, create_standard_share, [TestFile, DN]),
+  ?assertEqual(exists, StatusCreate3),
+  ?assertEqual(AnsCreate2, AnsCreate3#veil_document.uuid),
+
+  {StatusGet, AnsGet} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{uuid, AnsCreate2}, DN]),
+  ?assertEqual(ok, StatusGet),
+  ?assertEqual(AnsCreate2, AnsGet#veil_document.uuid),
+
+  {StatusGet2, AnsGet2} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{file, TestFile}, DN]),
+  ?assertEqual(ok, StatusGet2),
+  ?assertEqual(AnsCreate2, AnsGet2#veil_document.uuid),
+
+  {StatusGet3, AnsGet3} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{user, User_Doc#veil_document.uuid}, DN]),
+  ?assertEqual(ok, StatusGet3),
+  ?assertEqual(AnsCreate2, AnsGet3#veil_document.uuid),
+  ShareDoc = AnsGet3#veil_document.record,
+
+  {StatusCreateFile2, _Helper2, _Id2, _Validity2, AnswerCreateFile2} = create_file(Host, Cert, Port, TestFile2),
+  ?assertEqual("ok", StatusCreateFile2),
+  ?assertEqual(?VOK, AnswerCreateFile2),
+
+  {StatusCreate4, AnsCreate4} = rpc:call(FSLogicNode, fslogic_test_SUITE, create_share, [TestFile, some_share, DN]),
+  ?assertEqual(ok, StatusCreate4),
+
+  {StatusCreate5, AnsCreate5} = rpc:call(FSLogicNode, fslogic_test_SUITE, create_standard_share, [TestFile2, DN]),
+  ?assertEqual(ok, StatusCreate5),
+
+  {StatusGet4, AnsGet4} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{uuid, AnsCreate4}, DN]),
+  ?assertEqual(ok, StatusGet4),
+  ?assertEqual(AnsCreate4, AnsGet4#veil_document.uuid),
+
+  {StatusGet5, AnsGet5} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{uuid, AnsCreate5}, DN]),
+  ?assertEqual(ok, StatusGet5),
+  ?assertEqual(AnsCreate5, AnsGet5#veil_document.uuid),
+  ShareDoc2 = AnsGet5#veil_document.record,
+
+  {StatusGet6, AnsGet6} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{file, TestFile}, DN]),
+  ?assertEqual(ok, StatusGet6),
+  ?assertEqual(2, length(AnsGet6)),
+  ?assert(lists:member(AnsGet, AnsGet6)),
+  ?assert(lists:member(AnsGet4, AnsGet6)),
+
+  {StatusGet7, AnsGet7} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{user, User_Doc#veil_document.uuid}, DN]),
+  ?assertEqual(ok, StatusGet7),
+  ?assertEqual(3, length(AnsGet7)),
+  ?assert(lists:member(AnsGet, AnsGet7)),
+  ?assert(lists:member(AnsGet4, AnsGet7)),
+  ?assert(lists:member(AnsGet5, AnsGet7)),
+
+  {StatusGet8, AnsGet8} = rpc:call(FSLogicNode, files_manager, get_file_by_uuid, [ShareDoc#share_desc.file]),
+  ?assertEqual(ok, StatusGet8),
+  ?assertEqual(ShareDoc#share_desc.file, AnsGet8#veil_document.uuid),
+  FileRecord = AnsGet8#veil_document.record,
+  ?assertEqual(TestFile, FileRecord#file.name),
+
+  {StatusGet9, AnsGet9} = rpc:call(FSLogicNode, files_manager, get_file_full_name_by_uuid, [ShareDoc#share_desc.file]),
+  ?assertEqual(ok, StatusGet9),
+  ?assertEqual(Login ++ "/" ++ TestFile, AnsGet9),
+
+
+
+  {StatusMkdir, AnswerMkdir} = mkdir(Host, Cert, Port, DirName),
+  ?assertEqual("ok", StatusMkdir),
+  ?assertEqual(list_to_atom(?VOK), AnswerMkdir),
+
+  {Status_MV, AnswerMV} = rename_file(Host, Cert, Port, TestFile2, DirName ++ "/" ++ TestFile2),
+  ?assertEqual("ok", Status_MV),
+  ?assertEqual(list_to_atom(?VOK), AnswerMV),
+
+  {StatusGet10, AnsGet10} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{file, DirName ++ "/" ++ TestFile2}, DN]),
+  ?assertEqual(ok, StatusGet10),
+  ?assertEqual(AnsCreate5, AnsGet10#veil_document.uuid),
+
+  {StatusGet11, AnsGet11} = rpc:call(FSLogicNode, fslogic_test_SUITE, get_share, [{file, TestFile2}, DN]),
+  ?assertEqual(error, StatusGet11),
+  ?assertEqual(file_not_found, AnsGet11),
+
+  {StatusGet12, AnsGet12} = rpc:call(FSLogicNode, files_manager, get_file_full_name_by_uuid, [ShareDoc2#share_desc.file]),
+  ?assertEqual(ok, StatusGet12),
+  ?assertEqual(Login ++ "/" ++ DirName ++ "/" ++ TestFile2, AnsGet12),
+
+
+
+
+  AnsRemove = rpc:call(FSLogicNode, files_manager, remove_share, [{uuid, AnsCreate2}]),
+  ?assertEqual(ok, AnsRemove),
+
+
+  {StatusDelete, AnswerDelete} = delete_file(Host, Cert, Port, TestFile),
+  ?assertEqual("ok", StatusDelete),
+  ?assertEqual(list_to_atom(?VOK), AnswerDelete),
+
+  {StatusDelete2, AnswerDelete2} = delete_file(Host, Cert, Port, DirName ++ "/" ++ TestFile2),
+  ?assertEqual("ok", StatusDelete2),
+  ?assertEqual(list_to_atom(?VOK), AnswerDelete2),
+
+  {StatusDelete, AnswerDelete} = delete_file(Host, Cert, Port, DirName),
+  ?assertEqual("ok", StatusDelete),
+  ?assertEqual(list_to_atom(?VOK), AnswerDelete),
+
+  RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+  ?assertEqual(ok, RemoveStorageAns),
+
+  RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
+  ?assertEqual(ok, RemoveUserAns).
 
 %% Checks fslogic integration with dao and db
 fuse_requests_test(Config) ->
@@ -50,6 +211,7 @@ fuse_requests_test(Config) ->
   timer:sleep(1500),
 
   TestFile = "fslogic_test_file",
+  TestFile2 = "fslogic_test_file2",
   DirName = "fslogic_test_dir",
   FilesInDirNames = ["file_in_dir1", "file_in_dir2", "file_in_dir3", "file_in_dir4",  "file_in_dir5"],
   FilesInDir = lists:map(fun(N) ->
@@ -235,6 +397,28 @@ fuse_requests_test(Config) ->
   lists:foreach(fun(Name11) ->
     ?assert(lists:member(Name11, Files11))
   end, FilesInDirNamesTail2),
+
+
+  %% create file and move to dir
+  {Status_MV, _, _, _, AnswerMV} = create_file(Host, Cert, Port, TestFile2),
+  ?assertEqual("ok", Status_MV),
+  ?assertEqual(?VOK, AnswerMV),
+
+  {Status_MV2, AnswerMV2} = rename_file(Host, Cert, Port, TestFile2, DirName ++ "/" ++ TestFile2),
+  ?assertEqual("ok", Status_MV2),
+  ?assertEqual(list_to_atom(?VOK), AnswerMV2),
+
+  {Status_MV3, _, _, _, AnswerMV3} = create_file(Host, Cert, Port, TestFile2),
+  ?assertEqual("ok", Status_MV3),
+  ?assertEqual(?VOK, AnswerMV3),
+
+  {Status_MV4, AnswerMV4} = delete_file(Host, Cert, Port, TestFile2),
+  ?assertEqual("ok", Status_MV4),
+  ?assertEqual(list_to_atom(?VOK), AnswerMV4),
+
+  {Status_MV5, AnswerMV5} = delete_file(Host, Cert, Port, DirName ++ "/" ++TestFile2),
+  ?assertEqual("ok", Status_MV5),
+  ?assertEqual(list_to_atom(?VOK), AnswerMV5),
 
 
 
@@ -566,6 +750,7 @@ files_manager_standard_files_test(Config) ->
   {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
 
+  TestFile = "files_manager_standard_test_file",
   DirName = "fslogic_test_dir2",
   FileInDir = "files_manager_test_file2",
   FileInDir2 = "files_manager_test_file3",
@@ -648,6 +833,28 @@ files_manager_standard_files_test(Config) ->
   ?assertEqual(2, length(AnsLs2)),
   ?assert(lists:member(FileInDir, AnsLs2)),
   ?assert(lists:member(FileInDir2NewName, AnsLs2)),
+
+
+
+
+  %% create file and move to dir
+  AnsCreate4 = rpc:call(Node1, files_manager, create, [TestFile]),
+  ?assertEqual(ok, AnsCreate4),
+
+  AnsMv2 = rpc:call(Node1, files_manager, mv, [TestFile, DirName ++ "/" ++ TestFile]),
+  ?assertEqual(ok, AnsMv2),
+
+  AnsCreate5 = rpc:call(Node1, files_manager, create, [TestFile]),
+  ?assertEqual(ok, AnsCreate5),
+
+  AnsMvDel = rpc:call(Node1, files_manager, delete, [TestFile]),
+  ?assertEqual(ok, AnsMvDel),
+
+  AnsMvDel = rpc:call(Node1, files_manager, delete, [DirName ++ "/" ++ TestFile]),
+  ?assertEqual(ok, AnsMvDel),
+
+
+
 
   AnsDel = rpc:call(Node1, files_manager, delete, [File]),
   ?assertEqual(ok, AnsDel),
@@ -1053,3 +1260,15 @@ clear_old_descriptors(Node) ->
   Time = 1000000*Megaseconds + Seconds + 60*15 + 1,
   gen_server:call({?Dispatcher_Name, Node}, {fslogic, 1, {delete_old_descriptors_test, Time}}),
   timer:sleep(500).
+
+create_standard_share(TestFile, DN) ->
+  put(user_id, DN),
+  files_manager:create_standard_share(TestFile).
+
+create_share(TestFile, Share_With, DN) ->
+  put(user_id, DN),
+  files_manager:create_share(TestFile, Share_With).
+
+get_share(Key, DN) ->
+  put(user_id, DN),
+  files_manager:get_share(Key).

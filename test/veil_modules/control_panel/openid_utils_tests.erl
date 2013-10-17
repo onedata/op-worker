@@ -25,10 +25,14 @@
     </XRD>
 </xrds:XRDS>").
 
+-define(hostname, "some.host.name.com").
+-define(redirect_params, "?x=12433425jdfg").
+
 -define(correct_request_url, 
 	"https://openid.plgrid.pl/server?openid.mode=checkid_setup&openid.ns=http://specs.openid.net/auth/2.0&" ++
-	"openid.return_to=https://veilfsdev.com:8000/validate_login&openid.claimed_id=http://specs.openid.net/auth/2.0/identifier_select&" ++ 
-	"openid.identity=http://specs.openid.net/auth/2.0/identifier_select&openid.realm=https://veilfsdev.com:8000&" ++
+	"openid.return_to=https://" ++ ?hostname ++ "/validate_login" ++ ?redirect_params ++ 
+	"&openid.claimed_id=http://specs.openid.net/auth/2.0/identifier_select&" ++ 
+	"openid.identity=http://specs.openid.net/auth/2.0/identifier_select&openid.realm=https://" ++ ?hostname ++ "&" ++
 	"openid.sreg.required=nickname,email,fullname&openid.ns.ext1=http://openid.net/srv/ax/1.0&openid.ext1.mode=fetch_request&" ++ 
 	"openid.ext1.type.dn1=http://openid.plgrid.pl/certificate/dn1&openid.ext1.type.dn2=http://openid.plgrid.pl/certificate/dn2&" ++
 	"openid.ext1.type.dn3=http://openid.plgrid.pl/certificate/dn3&openid.ext1.type.teams=http://openid.plgrid.pl/userTeams&" ++
@@ -49,7 +53,7 @@ get_url_test_() ->
 			{"URL correctness",
 				fun() ->
 					meck:expect(ibrowse, send_req, fun(_, _, _) -> {ok, "200", [], ?mock_xrds_file} end),
-					?assertEqual(?correct_request_url, openid_utils:get_login_url()),
+					?assertEqual(?correct_request_url, openid_utils:get_login_url(?hostname, ?redirect_params)),
 					?assert(meck:validate(ibrowse))
 				end},
 
@@ -57,7 +61,7 @@ get_url_test_() ->
 				fun() ->
 					meck:expect(ibrowse, send_req, fun(_, _, _) -> {ok, "404", [], []} end),
 					meck:expect(lager, log, fun(error, _, _, _) -> ok end),
-					?assertEqual({error, endpoint_unavailable}, openid_utils:get_login_url()),
+					?assertEqual({error, endpoint_unavailable}, openid_utils:get_login_url(?hostname, ?redirect_params)),
 					?assert(meck:validate(ibrowse)),
 					?assert(meck:validate(lager))
 				end},			
@@ -66,7 +70,7 @@ get_url_test_() ->
 				fun() ->
 					meck:expect(ibrowse, send_req, fun(_, _, _) -> {error, econnrefused} end),
 					meck:expect(lager, log, fun(error, _, _, _) -> ok end),
-					?assertEqual({error, endpoint_unavailable}, openid_utils:get_login_url()),
+					?assertEqual({error, endpoint_unavailable}, openid_utils:get_login_url(?hostname, ?redirect_params)),
 					?assert(meck:validate(ibrowse)),
 					?assert(meck:validate(lager))
 				end}		

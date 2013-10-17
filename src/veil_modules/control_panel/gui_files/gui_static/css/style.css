@@ -1,59 +1,111 @@
-/***** CSS RESET *****/
-html,body,div,span,applet,object,iframe,h1,h2,h3,h4,h5,h6,p,blockquote,pre,a,abbr,acronym,address,big,cite,code,del,dfn,em,font,img,ins,kbd,q,s,samp,small,strike,strong,sub,sup,tt,var,b,u,i,center,dl,dt,dd,ol,ul,li,fieldset,form,label,legend,table,caption,tbody,tfoot,thead,tr,th,td{margin:0;padding:0;border:0;outline:0;font-size:100%;vertical-align:baseline;background:transparent}body{line-height:1}ol,ul{list-style:none}blockquote,q{quotes:none}blockquote:before,blockquote:after,q:before,q:after{content:'';content:none}:focus{outline:0}ins{text-decoration:none}del{text-decoration:line-through}table{border-collapse:collapse;border-spacing:0}
-
-/***** STYLE *****/
-
-body { 
-    font-family: "Lucida Grande", "Segoe UI", Tahoma, Helvetica, Arial, sans-serif; 
-    font-size: 16px;
-    line-height: 32px;
+.page-container
+{
+	padding: 60px 20px 20px 20px;
+	overflow: hidden;
 }
 
-.container_12 {
-    margin-top: 40px;
+.floating-menu
+{
+	position: fixed;
+	width: 200px;
+	float: left;
 }
 
-h1 {
-    font-family: Arial, sans-serif;
-    font-weight: bold;
-    padding-bottom: 7px;
-    border-bottom: dashed 1px #DDD;
-    text-transform: uppercase;
-    font-size: 1.875em;
-    line-height: 1.066667em;
-    margin-top: 1.6em;
-    margin-bottom: 1.6em;
+.page-content
+{
+	margin-top: 50px;
 }
 
-h2 {
-    font-family: Arial, sans-serif;
-    font-size: 1.5em;
-    line-height: 1.333333em;
-    margin-top: 1.6em;
-    margin-bottom: 1.6em;
+.wide
+{
+	width: 100%;
 }
 
-h3 {
-    font-family: Arial, sans-serif;
-    font-size: 1.25em;
-    line-height: 1.6em;
-    margin-top: 1.333333em;
-    margin-bottom: 1.333333em;
+.no-margin
+{
+	margin: 0 !important;
 }
 
-p {
-    font-size: 1em;
-    line-height: 2em;
-    margin-top: 2em;
-    margin-bottom: 2em;
+.indent-10
+{
+	margin-left: 10px;
+}
+
+.login-page
+{
+	width: 500px;
+	margin: auto;
+	margin-top: 150px;
+	padding: 16px 30px 10px 30px;
+	text-align: center;
+}
+
+.login-info
+{
+	margin-top: 20px;
+	margin-bottom: 30px;
+}
+
+.search-bar
+{
+	width: 250px;
 }
 
 
-a, a:visited { 
-    color: #4488FF;
-    text-decoration: none; 
+.table-cell
+{
+	display: table-cell;
+  	vertical-align: middle !important;
 }
 
-a:hover, a:active { 
-    text-decoration: underline; 
+.list-icon
+{
+	vertical-align: middle !important;
+	margin-right: 5px;
+	height: 32px;
+}
+
+.breadcrumb-background
+{
+	border-radius: 6px 6px 6px 6px;
+	border: 2px solid rgb(189, 195, 199);
+	background-color: white;
+	margin-right: 325px;
+	position:relative;
+	margin-bottom: 0;
+}
+
+.breadcrumb-content
+{
+	font-size: 16px !important;
+	margin: 0 !important;
+	min-height: 21px;
+	max-height: 21px;
+	overflow-y: scroll;
+	line-height: 21px;
+	padding: 8px 12px 8px 5px;
+}
+
+.selected-item
+{
+	background-color: rgba(26, 188, 156, 0.2);
+}
+
+a.glyph-link
+{
+	color: rgb(82, 100, 118);
+}
+
+a.glyph-link:hover 
+{
+	color: rgb(26, 188, 156) !important;
+	text-decoration: none;
+	background-color: transparent !important;
+	z-index: 1;
+}
+
+a:focus
+{
+	color: rgb(22, 160, 133);
+	text-decoration: none;
 }

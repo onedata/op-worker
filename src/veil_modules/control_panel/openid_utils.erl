@@ -20,7 +20,7 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([get_login_url/0, nitrogen_prepare_validation_parameters/0, validate_openid_login/1, nitrogen_retrieve_user_info/0]).
+-export([get_login_url/2, nitrogen_prepare_validation_parameters/0, validate_openid_login/1, nitrogen_retrieve_user_info/0]).
 
 
 %% get_login_url/0
@@ -28,19 +28,20 @@
 %% @doc
 %% Produces an URL with proper GET parameters,
 %% used to redirect the user to OpenID Provider login page.
+%% RedirectParams are parameters concatenated to return_to field.
 %% @end
--spec get_login_url() -> Result when
+-spec get_login_url(HostName :: string(), RedirectParams :: string()) -> Result when
   Result :: ok | {error, endpoint_unavailable}.
 %% ====================================================================
-get_login_url() ->
+get_login_url(HostName, RedirectParams) ->
 	try 
 		discover_op_endpoint(?xrds_url) ++ 
 		"?" ++ ?openid_checkid_mode ++ 
 		"&" ++ ?openid_ns ++
-		"&" ++ ?openid_return_to ++
+		"&" ++ ?openid_return_to_prefix ++ HostName ++ ?openid_return_to_suffix ++ RedirectParams ++
 		"&" ++ ?openid_claimed_id ++
 		"&" ++ ?openid_identity ++
-		"&" ++ ?openid_realm ++
+		"&" ++ ?openid_realm_prefix ++ HostName ++
 		"&" ++ ?openid_sreg_required ++
 		"&" ++ ?openid_ns_ext1 ++
 		"&" ++ ?openid_ext1_mode ++
@@ -161,7 +162,7 @@ nitrogen_retrieve_user_info() ->
 				{name, Name}, 
 				{teams, Teams}, 
 				{email, Email}, 
-				{dn_list, DnList}
+				{dn_list, lists:usort(DnList)}
 		]}
 	catch Type:Message ->
 		lager:error("Failed to retrieve user info.~n~p: ~p~n~p", [Type, Message, erlang:get_stacktrace()]),

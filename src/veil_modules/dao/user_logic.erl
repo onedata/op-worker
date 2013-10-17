@@ -22,7 +22,8 @@
 -export([sign_in/1, create_user/5, get_user/1, remove_user/1]).
 -export([get_login/1, get_name/1, get_teams/1, update_teams/2]).
 -export([get_email_list/1, update_email_list/2, get_dn_list/1, update_dn_list/2]).
--export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, oid_code_to_shortname/1]).
+-export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
+-export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
 
 -define(UserRootPerms, 8#600).
 
@@ -52,14 +53,8 @@ sign_in(Proplist) ->
 			{ok, NewUser} = create_user(Login, Name, Teams, Email, DnList),
 			NewUser;
 		%% Code below is only for development purposes (connection to DB is not required)
-		{error, _} ->
-			#veil_document{record=#user{
-				login="Database", 
-				name="Error", 
-				teams="Probably connection problems",
-				email_list=["Fix it"], 
-				dn_list=["ASAP"]
-			}}
+		Error ->
+			throw(Error)
 	end,
 	{Login, User}.
 
@@ -294,7 +289,7 @@ rdn_sequence_to_dn_string(RDNSequence) ->
 	    [_Comma|ProperString] = lists:reverse(DNString),
 	    {ok, lists:reverse(ProperString)}
 	catch Type:Message ->
-		lager:error("Failed to convert rdnSequence to dn string.~n~p: ~p~n~p", [Type, Message, erlang:get_stacktrace()]),
+		lager:error("Failed to convert rdnSequence to DN string.~n~p: ~p~n~p", [Type, Message, erlang:get_stacktrace()]),
 		{error, conversion_failed}
 	end.
 
@@ -326,11 +321,21 @@ extract_dn_from_cert(PemBin) ->
 			true ->				
 				gsi_handler:proxy_subject(OtpCert)
 		end
-	catch Type:Message ->
-		lager:error("Unable to extract subject from cert file.~n~p: ~p~n~p~n~nCertificate binary:~n~p", 
-			[Type, Message, erlang:get_stacktrace(), PemBin]),
+	catch _:_ ->
 		{error, extraction_failed}
 	end.
+
+
+%% invert_dn_string/1
+%% ====================================================================
+%% @doc Inverts the sequence of entries in a DN string.
+%% @end
+-spec invert_dn_string(string()) -> string().
+%% ====================================================================
+invert_dn_string(DNString) ->	
+	Entries = string:tokens(DNString, ","),
+	string:join(lists:reverse(Entries), ",").  
+
 
 
 
@@ -386,22 +391,29 @@ synchronize_user_info(User, Teams, Email, DnList) ->
 %% @end
 -spec oid_code_to_shortname(term()) -> string() | no_return().
 %% ====================================================================
-oid_code_to_shortname(?'id-at-name') 					-> "name";
-oid_code_to_shortname(?'id-at-surname') 				-> "SN";
-oid_code_to_shortname(?'id-at-givenName') 				-> "GN";
-oid_code_to_shortname(?'id-at-initials') 				-> "initials";
-oid_code_to_shortname(?'id-at-generationQualifier') 	-> "generationQualifier";
-oid_code_to_shortname(?'id-at-commonName') 				-> "CN";
-oid_code_to_shortname(?'id-at-localityName') 			-> "L";
-oid_code_to_shortname(?'id-at-stateOrProvinceName')		-> "ST";
-oid_code_to_shortname(?'id-at-organizationName') 		-> "O";
-oid_code_to_shortname(?'id-at-organizationalUnitName') 	-> "OU";
-oid_code_to_shortname(?'id-at-title') 					-> "title";
-oid_code_to_shortname(?'id-at-dnQualifier') 			-> "dnQualifier";
-oid_code_to_shortname(?'id-at-countryName') 			-> "C";
-oid_code_to_shortname(?'id-at-serialNumber') 			-> "serialNumber";
-oid_code_to_shortname(?'id-at-pseudonym') 				-> "pseudonym";
-oid_code_to_shortname(Code) -> throw({unknown_oid_code, Code}).
+oid_code_to_shortname(Code) -> 
+	try
+		{Code, Shortname} = lists:keyfind(Code, 1, ?oid_code_to_shortname_mapping),
+		Shortname
+	catch _:_ ->
+		throw({unknown_oid_code, Code})
+	end.
+
+
+%% shortname_to_oid_code/1
+%% ====================================================================
+%% @doc Converts OpenSSL short name to erlang-like OID code.
+%% @end
+-spec shortname_to_oid_code(string()) -> term() | no_return().
+%% ====================================================================
+shortname_to_oid_code(Shortname) -> 
+	try
+		{Code, Shortname} = lists:keyfind(Shortname, 2, ?oid_code_to_shortname_mapping),
+		Code
+	catch _:_ ->
+		throw({unknown_shortname, Shortname})
+	end.
+
 
 %% create_root/2
 %% ====================================================================

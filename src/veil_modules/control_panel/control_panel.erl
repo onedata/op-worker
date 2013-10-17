@@ -6,7 +6,8 @@
 %% @end
 %% ===================================================================
 %% @doc: This module implements worker_plugin_behaviour callbacks.
-%% It is responsible for setting up a nitrogen website, running on cowboy server.
+%% It is responsible for setting up cowboy listener and registering
+%% nitrogen_handler as the handler.
 %% @end
 %% ===================================================================
 
@@ -19,7 +20,7 @@
 -export([init/1, handle/2, cleanup/0]).
 
 % Paths in gui static directory
--define(static_paths, ["js/","images/","css/","nitrogen/","templates/"]).
+-define(static_paths, ["css/", "fonts/", "images/", "js/", "nitrogen/"]).
 % Cowboy listener reference (used to stop the listener)
 -define(listener_ref, http).
 
@@ -38,6 +39,7 @@
   Error :: term().
 %% ====================================================================
 init(_Args) ->
+  % Get params from env
   {ok, DocRoot} = application:get_env(veil_cluster_node, control_panel_static_files_root),
   Dispatch = init_dispatch(atom_to_list(DocRoot), ?static_paths),
 
@@ -47,8 +49,9 @@ init(_Args) ->
   {ok, Port} = application:get_env(veil_cluster_node, control_panel_port),
   {ok, NbAcceptors} = application:get_env(veil_cluster_node, control_panel_number_of_acceptors),
   {ok, MaxKeepAlive} = application:get_env(veil_cluster_node, control_panel_max_keepalive),
+  {ok, Timeout} = application:get_env(veil_cluster_node, control_panel_socket_timeout),
 
-  %% Start the listener
+  % Start the listener
   {ok, _} = cowboy:start_https(?listener_ref, NbAcceptors,
     [
       {port, Port},
@@ -58,7 +61,8 @@ init(_Args) ->
     ],
     [
       {env, [{dispatch, Dispatch}]},
-      {max_keepalive, MaxKeepAlive}
+      {max_keepalive, MaxKeepAlive},
+      {timeout, Timeout}
     ]),
   ok.
 
@@ -112,13 +116,13 @@ init_dispatch(DocRoot, StaticPaths) ->
     {Path,Handler,Opts}
   end, StaticPaths),
 
-  %% HandlerModule will end up calling HandlerModule:handle(Req, HandlerOpts)
+  % HandlerModule will end up calling HandlerModule:handle(Req, HandlerOpts)
   HandlerModule = nitrogen_handler,
   HandlerOpts = [],
 
-  %% Set up dispatch
+  % Set up dispatch
   Dispatch = [
-  %% Nitrogen will handle everything that's not handled in the StaticDispatches
+  % Nitrogen will handle everything that's not handled in the StaticDispatches
     {'_', StaticDispatches ++ [{'_',HandlerModule , HandlerOpts}]}
   ],
   cowboy_router:compile(Dispatch).
@@ -140,7 +144,7 @@ localized_dir_file(DocRoot,Path) ->
       ]
   end.
 
-%% Ensure the paths start with /, and if a path ends with /, then add "[...]" to it
+% Ensure the paths start with /, and if a path ends with /, then add "[...]" to it
 reformat_path(Path) ->
   Path2 = case hd(Path) of
     $/ -> Path;
