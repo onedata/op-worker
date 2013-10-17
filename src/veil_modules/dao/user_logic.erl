@@ -421,8 +421,9 @@ create_root(Dir, Uid) ->
                    ok ->
                      {FileName, Parent} = ParentInfo,
                      File = #file{type = ?DIR_TYPE, name = FileName, uid = Uid, parent = Parent, perms = ?UserRootPerms},
-
-                     dao_lib:apply(dao_vfs, save_file, [File], 1),
+                     CTime = fslogic_utils:time(),
+                     FileDoc = fslogic_utils:update_meta_attr(File, times, {CTime, CTime, CTime}),
+                     dao_lib:apply(dao_vfs, save_file, [FileDoc], 1),
                      ok;
                    _ParentError -> parent_error
                  end;

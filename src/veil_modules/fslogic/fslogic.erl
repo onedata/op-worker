@@ -20,9 +20,13 @@
 -include("fuse_messages_pb.hrl").
 -include("communication_protocol_pb.hrl").
 -include("veil_modules/dao/dao_users.hrl").
--include_lib("veil_modules/dao/dao_types.hrl").
+-include("veil_modules/dao/dao_types.hrl").
+-include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 
 -define(LOCATION_VALIDITY, 60*15).
+
+%% Updates modification time for parent of X dir 
+-define(PARENT_CTIME(X, T),  gen_server:call(?Dispatcher_Name, {fslogic, 1, #veil_request{subject = get(user_id), request = {internal_call, #updatetimes{file_logic_name = fslogic_utils:strip_path_leaf(X), mtime = T}}}})).
 
 %% ====================================================================
 %% API
@@ -108,6 +112,13 @@ cleanup() ->
 %% ====================================================================
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, updatetimes) ->
     {FileNameFindingAns, FileName} = get_full_file_name(Record#updatetimes.file_logic_name),
+    case FileName of 
+        [?PATH_SEPARATOR] -> 
+            lager:warning("Trying to update times for root directory. FuseID: ~p, Request: ~p. Aborting.", [FuseID, Record]),
+            throw(invalid_updatetimes_request);
+        _ -> ok
+    end,
+    lager:debug("Updating times for file: ~p, Request: ~p", [FileName, Record]),
     case FileNameFindingAns of
         ok ->
             case get_file(ProtocolVersion, FileName, FuseID) of
@@ -119,7 +130,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, upda
                     if
                         Status -> #atom{value = ?VOK};
                         true ->
-                            dao_lib:apply(dao_vfs, {async, save_file}, [Doc#veil_document{record = File2}], ProtocolVersion),
+                            dao_lib:apply(dao_vfs, {asynch, save_file}, [Doc#veil_document{record = File2}], ProtocolVersion),
                             #atom{value = ?VOK}
                     end;
                 Other ->
@@ -358,6 +369,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getn
                                     Validity = ?LOCATION_VALIDITY,
                                     case Status of
                                         {ok, FileUUID} ->
+                                            ?PARENT_CTIME(Record#getnewfilelocation.file_logic_name, CTime),
                                             {Status2, _TmpAns2} = save_file_descriptor(ProtocolVersion, File, FileUUID, FuseID, Validity),
                                             case Status2 of
                                               ok ->
@@ -465,6 +477,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, crea
                     {Status, _TmpAns} = dao_lib:apply(dao_vfs, save_file, [File], ProtocolVersion),
                     case Status of
                       ok ->
+                        ?PARENT_CTIME(Record#createdir.dir_logic_name, CTime),
                         #atom{value = ?VOK};
                       _BadStatus ->
                         lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s, error: ~p", [Dir, _BadStatus]),
@@ -529,6 +542,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, dele
                   Status = dao_lib:apply(dao_vfs, remove_file, [File], ProtocolVersion),
                   case Status of
                     ok ->
+                      ?PARENT_CTIME(Record#deletefile.file_logic_name, fslogic_utils:time()),
                       #atom{value = ?VOK};
                     _BadStatus ->
                       lager:error([{mod, ?MODULE}], "Error: can not remove file: ~s", [File]),
@@ -565,6 +579,9 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, rena
                   Renamed = OldDoc#veil_document{record = RenamedFile},
                   case dao_lib:apply(dao_vfs, save_file, [Renamed], ProtocolVersion)  of
                     {ok, _} -> 
+                        CTime = fslogic_utils:time(),
+                        ?PARENT_CTIME(Record#renamefile.from_file_logic_name, CTime),
+                        ?PARENT_CTIME(Record#renamefile.to_file_logic_name, CTime),
                         #atom{value = ?VOK};
                     Other ->
                       lager:warning("Cannot save file document. Reason: ~p", [Other]),
@@ -601,12 +618,20 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, crea
           {error, file_not_found} ->
               case get_file(ProtocolVersion, fslogic_utils:strip_path_leaf(From), FuseID) of
                   {ok, #veil_document{uuid = Parent}} ->
-                      LinkDocInit = #file{type = ?LNK_TYPE, name = fslogic_utils:basename(From), ref_file = To, parent = Parent},
+                      UserId = 
+                        case get_user_id() of
+                            {ok, Id} -> Id;
+                            {error, Reason2} ->
+                                lager:error("Cannot get user ID while creating link due to: ~p. Link will belong to 'nobody'.", [Reason2]),
+                                -1
+                        end,
+                      LinkDocInit = #file{type = ?LNK_TYPE, name = fslogic_utils:basename(From), uid = UserId, ref_file = To, parent = Parent},
                       CTime = fslogic_utils:time(),
                       LinkDoc = fslogic_utils:update_meta_attr(LinkDocInit, times, {CTime, CTime, CTime}),
 
                       case dao_lib:apply(dao_vfs, save_file, [LinkDoc], ProtocolVersion) of
                           {ok, _} ->
+                              ?PARENT_CTIME(Record#createlink.from_file_logic_name, CTime),
                               #atom{value = ?VOK};
                           {error, Reason} ->
                               lager:error("Cannot save link file (from ~p to ~p) due to error: ~p", [From, To, Reason]),

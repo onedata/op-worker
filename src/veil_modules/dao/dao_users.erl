@@ -106,8 +106,11 @@ get_user({Key, Value}) ->
         {ok, #view_result{rows = []}} ->
             lager:error("User by ~p: ~p not found", [Key, Value]),
             throw(user_not_found);
-        {ok, #view_result{rows = [#view_row{doc = FDoc} | Tail]}} ->
-            lager:warning("User ~p is duplicated. Returning first copy. Others: ~p", [FDoc#veil_document.record#user.login, Tail]),
+        {ok, #view_result{rows = [#view_row{doc = FDoc} | Tail] = AllRows}} ->
+            case length(lists:usort(AllRows)) of 
+                Count when Count > 1 -> lager:warning("User ~p is duplicated. Returning first copy. Others: ~p", [FDoc#veil_document.record#user.login, Tail]);
+                _ -> ok
+            end,
             {ok, FDoc};
         Other ->
             lager:error("Invalid view response: ~p", [Other]),

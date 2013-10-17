@@ -143,6 +143,10 @@ signing_in_test_() ->
 					meck:expect(fslogic_utils, get_parent_and_name_from_path, 
 						fun("new_user" ,_) -> {ok, {"some", "path"}} end),
 
+                    Tim = 12345677,
+                    meck:expect(fslogic_utils, time, fun() -> Tim end),
+                    meck:expect(fslogic_utils, update_meta_attr, fun(File, times, {Tim, Tim, Tim}) -> File end),
+
 					?assertEqual({"new_user", NewUserRecord}, user_logic:sign_in(NewUserInfoProplist)),
 					?assert(meck:validate(dao_lib))
 				end},
