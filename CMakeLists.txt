@@ -74,7 +74,7 @@ file(GLOB HELPER_SOURCES "src/[a-zA-Z]*.cc")
 
 # Setup compile flags
 set(CUSTOM_RPATH "${CMAKE_INSTALL_PREFIX}/${LIB_DIR}:${CMAKE_CURRENT_BINARY_DIR}:.:${LIB_DIR}:../${LIB_DIR}:./c_lib:../c_lib")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -O2 ${FUSE_DEFINITIONS} -Wl,-rpath,${CUSTOM_RPATH}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdata-sections -ffunction-sections -Wl,--gc-sections -fPIC -O2 ${FUSE_DEFINITIONS} -Wl,-rpath,${CUSTOM_RPATH}")
 set(CMAKE_SKIP_RPATH TRUE) # Something is wrong with CMake RPATH config, we need to use old-fashion way
 
 # Define targets
@@ -101,6 +101,7 @@ target_link_libraries(veilhelpers
     ${GLOG_LIBRARIES}
     veilprotocol
     dl
+    rt
     z
 )
 
@@ -114,6 +115,7 @@ target_link_libraries(veilhelpersShared
     ${GLOG_LIBRARIES}
     veilprotocol
     dl
+    rt
     z
 )
 
@@ -166,6 +168,7 @@ foreach(file ${files})
         ${FUSE_LIBRARIES}
         veilhelpers
         dl 
+        rt
         z
     )    
     add_test(${TEST_NAME} ${TEST_NAME})
