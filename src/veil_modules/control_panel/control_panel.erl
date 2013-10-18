@@ -51,6 +51,9 @@ init(_Args) ->
   {ok, MaxKeepAlive} = application:get_env(veil_cluster_node, control_panel_max_keepalive),
   {ok, Timeout} = application:get_env(veil_cluster_node, control_panel_socket_timeout),
 
+  % Set prefix of nitrogen page modules. This cannot be set in sys.config, 
+  % because nitrogen does not start as an application.
+  application:set_env(nitrogen, module_prefix, "page"), 
   % Start the listener
   {ok, _} = cowboy:start_https(?listener_ref, NbAcceptors,
     [
