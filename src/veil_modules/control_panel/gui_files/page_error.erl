@@ -21,12 +21,14 @@ title() -> "Error".
 
 %% This will be placed in the template instead of [[[page:body()]]] tag
 body() -> 
-	#panel { class="alert alert-danger login-page", body=[
-		#h3 { text="Error" },
-		#p { class="login-info", style="font-weight: bold;", text=wf:q(reason) },
-		#p { class="login-info", text=wf:q(details) },
-		#button { postback=to_login, class="btn btn-warning btn-block", text="Login page" }
-	]}.
+	#panel { style="position: relative;", body = [
+		#panel { class="alert alert-danger login-page", body=[
+			#h3 { text="Error" },
+			#p { class="login-info", style="font-weight: bold;", text=wf:q(reason) },
+			#p { class="login-info", text=wf:q(details) },
+			#button { postback=to_login, class="btn btn-warning btn-block", text="Login page" }
+		]}
+	] ++ gui_utils:logotype_footer(120)}.
 
 event(to_login) ->
 	wf:redirect("/login").

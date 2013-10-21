@@ -352,6 +352,7 @@ process_event({action, Fun, Args}) ->
 %% Actions performed by comet (workspace refreshing)
 
 comet_loop_init() ->
+	timer:sleep(?AUTOREFRESH_PERIOD),
 	comet_loop().
 
 comet_loop() ->

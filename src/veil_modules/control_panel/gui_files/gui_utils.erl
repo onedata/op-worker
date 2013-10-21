@@ -12,7 +12,7 @@
 -module (gui_utils).
 -include("veil_modules/control_panel/common.hrl").
 -export([get_requested_hostname/0, get_user_dn/0, user_logged_in/0, storage_defined/0, dn_and_storage_defined/0]).
--export([apply_or_redirect/3, apply_or_redirect/4, top_menu/1, top_menu/2, empty_page/0]).
+-export([apply_or_redirect/3, apply_or_redirect/4, top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
 
 
 %% ====================================================================
@@ -180,6 +180,24 @@ top_menu(ActiveTabID, SubMenuBody) ->
 			]}				
 		]}
 	] ++ SubMenuBody}.
+
+
+%% logotype_footer/1
+%% ====================================================================
+%% @doc Convienience function to render logotype footer, coming after page content.
+%% @ends
+-spec logotype_footer(MarginTop :: integer()) -> list().
+%% ====================================================================
+logotype_footer(MarginTop) ->
+	[
+		#panel { style="text-align: center; position: absolute; bottom: 20px; left: 0; right: 0; z-index: -1;", 
+			body=[
+	        #image { style="position: absolute; left: 40px; top: 0;", image="/images/innow-gosp-logo.png" },
+	        #image { style="margin: 2px;", image="/images/plgrid-plus-logo.png" },
+	        #image { style="position: absolute; right: 40px; top: 14px;", image="/images/unia-logo.png" }
+	    ]},
+	    #panel { style=wf:f("height: ~Bpx;", [MarginTop + 82]) }
+	].
 
 
 

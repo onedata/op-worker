@@ -21,11 +21,13 @@ title() -> "Error 404".
 
 %% This will be placed in the template instead of [[[page:body()]]] tag
 body() -> 
-	#panel { class="alert alert-danger login-page", body=[
-		#h3 { text="Error 404" },
-		#p { class="login-info", text="Requested page could not be found on the server." },
-		#button { postback=to_login, class="btn btn-warning btn-block", text="Login page" }
-	]}.
+	#panel { style="position: relative;", body = [
+		#panel { class="alert alert-danger login-page", body=[
+			#h3 { text="Error 404" },
+			#p { class="login-info", text="Requested page could not be found on the server." },
+			#button { postback=to_login, class="btn btn-warning btn-block", text="Login page" }
+		]}
+	] ++ gui_utils:logotype_footer(120)}.
 
 event(to_login) ->
 	wf:redirect("/login").

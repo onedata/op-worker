@@ -113,11 +113,17 @@ handle_user_content_request(Req) ->
         {ok, NewReq} = try_or_throw(
             fun() ->
                 send_file(Req, Filepath, Size)
-            end, sending_failed),
+            end, {sending_failed, Filepath}),
         {true, NewReq}
 
     catch Type:Message ->
-        lager:error("Error processing user content request - ~p:~p~n~p", [Type, Message, erlang:get_stacktrace()]),
+        case Message of
+            {sending_failed, Path} ->
+                lager:error("Error while sending file ~p to user ~p - ~p:~p~n~p", 
+                    [Path, user_logic:get_login(get(user_id)), 
+                        Type, Message, erlang:get_stacktrace()]);
+            _ -> skip
+        end,
         {false, _RedirectReq} = page_error:user_content_request_error(Message, Req)
     end.
 
@@ -144,11 +150,16 @@ handle_shared_file_request(Req) ->
         {ok, NewReq} = try_or_throw(
             fun() ->
                 send_file(Req, Filepath, Size)
-            end, sending_failed),
+            end, {sending_failed, Filepath}),
         {true, NewReq}
 
     catch Type:Message ->
-        lager:error("Error processing shared file request - ~p:~p~n~p", [Type, Message, erlang:get_stacktrace()]),
+        case Message of
+            {sending_failed, Path} ->
+                lager:error("Error while sending shared file ~p - ~p:~p~n~p", 
+                    [Path, Type, Message, erlang:get_stacktrace()]);
+            _ -> skip
+        end,
         {false, _RedirectReq} = page_error:shared_file_request_error(Message, Req)
     end.
 

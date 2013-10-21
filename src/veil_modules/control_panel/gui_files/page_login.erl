@@ -28,7 +28,7 @@ body() ->
 				undefined -> "display: none;";
 				_ -> ""
 			end,
-			[
+			#panel { style="position: relative;", body = [
 				#panel { id=error_message, style=ErrorPanelStyle, class="dialog dialog-danger", body=#p { 
 					text="Session error or session expired. Please log in again." } },
 				#panel { class="alert alert-success login-page", body=[
@@ -37,7 +37,7 @@ body() ->
 						You need to have an account and possibly VeilFS service enabled." },
 					#button { postback=login, class="btn btn-primary btn-block", text="Log in via PL-Grid OpenID" }
 				]}
-			]
+			] ++ gui_utils:logotype_footer(120)}
 	end.
 
 

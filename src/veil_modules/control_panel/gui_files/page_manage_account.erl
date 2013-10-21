@@ -26,7 +26,7 @@ body() ->
 
 % Body content
 render_body() ->
-	[        
+	#panel { style="position: relative;", body = [
 		gui_utils:top_menu(manage_account_tab),
 		#panel { style="margin-top: 60px; padding: 20px;", body=[
 			#panel { id=dn_error_panel, style="display: none;",
@@ -48,7 +48,7 @@ render_body() ->
 			#h6 { style=" text-align: center;", text="Manage account" },
 			#panel { id=main_table, body = main_table() }
 		]}
-	].
+	] ++ gui_utils:logotype_footer(20)}.
 
 
 % Info to register a DN
