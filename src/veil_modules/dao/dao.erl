@@ -109,7 +109,7 @@ handle(ProtocolVersion, {Target, Method, Args}) when is_atom(Target), is_atom(Me
             {error, Other}
     catch
         error:{badmatch, {error, Err}} -> {error, Err};
-        Type:Error ->
+        _Type:Error ->
 %%             lager:error("Handling ~p:~p with args ~p interrupted by exception: ~p:~p ~n ~p", [Module, Method, Args, Type, Error, erlang:get_stacktrace()]),
             {error, Error}
     end;

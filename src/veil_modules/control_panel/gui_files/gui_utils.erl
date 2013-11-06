@@ -185,7 +185,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
 %% logotype_footer/1
 %% ====================================================================
 %% @doc Convienience function to render logotype footer, coming after page content.
-%% @ends
+%% @end
 -spec logotype_footer(MarginTop :: integer()) -> list().
 %% ====================================================================
 logotype_footer(MarginTop) ->

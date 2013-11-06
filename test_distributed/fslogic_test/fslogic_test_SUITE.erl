@@ -682,14 +682,19 @@ files_manager_tmp_files_test(Config) ->
   File = "files_manager_test_file1",
   NotExistingFile = "files_manager_test_not_existing_file",
 
+  ?assertEqual(false, files_tester:file_exists_storage(File)),
+  ?assertEqual(false, files_tester:file_exists_storage(NotExistingFile)),
+
   AnsCreate = rpc:call(Node1, files_manager, create_file_storage_system, [SHInfo, File]),
   ?assertEqual(ok, AnsCreate),
+  ?assert(files_tester:file_exists_storage(?TEST_ROOT ++ "/" ++ File)),
 
   AnsCreate2 = rpc:call(Node1, files_manager, create_file_storage_system, [SHInfo, File]),
   ?assertEqual({error,file_exists}, AnsCreate2),
 
   AnsWrite1 = rpc:call(Node1, files_manager, write_storage_system, [SHInfo, File, list_to_binary("abcdefgh")]),
   ?assertEqual(8, AnsWrite1),
+  ?assertEqual({ok, "abcdefgh"}, files_tester:read_file_storage(?TEST_ROOT ++ "/" ++ File, 100)),
 
   {StatusRead1, AnsRead1} = rpc:call(Node1, files_manager, read_storage_system, [SHInfo, File, 2, 2]),
   ?assertEqual(ok, StatusRead1),
@@ -701,6 +706,7 @@ files_manager_tmp_files_test(Config) ->
 
   AnsWrite2 = rpc:call(Node1, files_manager, write_storage_system, [SHInfo, File, 3, list_to_binary("123")]),
   ?assertEqual(3, AnsWrite2),
+  ?assertEqual({ok, "abc123gh"}, files_tester:read_file_storage(?TEST_ROOT ++ "/" ++ File, 100)),
 
   {StatusRead3, AnsRead3} = rpc:call(Node1, files_manager, read_storage_system, [SHInfo, File, 2, 5]),
   ?assertEqual(ok, StatusRead3),
@@ -708,6 +714,7 @@ files_manager_tmp_files_test(Config) ->
 
   AnsWrite3 = rpc:call(Node1, files_manager, write_storage_system, [SHInfo, File, list_to_binary("XYZ")]),
   ?assertEqual(3, AnsWrite3),
+  ?assertEqual({ok, "abc123ghXYZ"}, files_tester:read_file_storage(?TEST_ROOT ++ "/" ++ File, 100)),
 
   {StatusRead4, AnsRead4} = rpc:call(Node1, files_manager, read_storage_system, [SHInfo, File, 2, 5]),
   ?assertEqual(ok, StatusRead4),
@@ -719,6 +726,7 @@ files_manager_tmp_files_test(Config) ->
 
   AnsTruncate = rpc:call(Node1, files_manager, truncate_storage_system, [SHInfo, File, 5]),
   ?assertEqual(ok, AnsTruncate),
+  ?assertEqual({ok, "abc12"}, files_tester:read_file_storage(?TEST_ROOT ++ "/" ++ File, 100)),
 
   {StatusRead5_1, AnsRead5_1} = rpc:call(Node1, files_manager, read_storage_system, [SHInfo, File, 0, 100]),
   ?assertEqual(ok, StatusRead5_1),
@@ -730,6 +738,7 @@ files_manager_tmp_files_test(Config) ->
 
   AnsDel = rpc:call(Node1, files_manager, delete_file_storage_system, [SHInfo, File]),
   ?assertEqual(ok, AnsDel),
+  ?assertEqual(false, files_tester:file_exists_storage(File)),
 
   {StatusDel2, AnsDel2}  = rpc:call(Node1, files_manager, delete_file_storage_system, [SHInfo, File]),
   ?assertEqual(wrong_getatt_return_code, StatusDel2),
@@ -761,6 +770,12 @@ files_manager_standard_files_test(Config) ->
 
   NotExistingFile = "files_manager_test_not_existing_file",
 
+  ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [TestFile])),
+  ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [File])),
+  ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [File2])),
+  ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [File2NewName])),
+  ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [NotExistingFile])),
+
   MkDirAns = rpc:call(Node1, files_manager, mkdir, [DirName]),
   ?assertEqual(ok, MkDirAns),
 
@@ -769,12 +784,14 @@ files_manager_standard_files_test(Config) ->
 
   AnsCreate = rpc:call(Node1, files_manager, create, [File]),
   ?assertEqual(ok, AnsCreate),
+  ?assert(rpc:call(Node1, files_tester, file_exists, [File])),
 
   AnsCreate2 = rpc:call(Node1, files_manager, create, [File]),
   ?assertEqual({logical_file_system_error, ?VEEXIST}, AnsCreate2),
 
   AnsWrite1 = rpc:call(Node1, files_manager, write, [File, list_to_binary("abcdefgh")]),
   ?assertEqual(8, AnsWrite1),
+  ?assertEqual({ok, "abcdefgh"}, rpc:call(Node1, files_tester, read_file, [File, 100])),
 
   {StatusRead1, AnsRead1} = rpc:call(Node1, files_manager, read, [File, 2, 2]),
   ?assertEqual(ok, StatusRead1),
@@ -786,6 +803,7 @@ files_manager_standard_files_test(Config) ->
 
   AnsWrite2 = rpc:call(Node1, files_manager, write, [File, 3, list_to_binary("123")]),
   ?assertEqual(3, AnsWrite2),
+  ?assertEqual({ok, "abc123gh"}, rpc:call(Node1, files_tester, read_file, [File, 100])),
 
   {StatusRead3, AnsRead3} = rpc:call(Node1, files_manager, read, [File, 2, 5]),
   ?assertEqual(ok, StatusRead3),
@@ -793,6 +811,7 @@ files_manager_standard_files_test(Config) ->
 
   AnsWrite3 = rpc:call(Node1, files_manager, write, [File, list_to_binary("XYZ")]),
   ?assertEqual(3, AnsWrite3),
+  ?assertEqual({ok, "abc123ghXYZ"}, rpc:call(Node1, files_tester, read_file, [File, 100])),
 
   {StatusRead4, AnsRead4} = rpc:call(Node1, files_manager, read, [File, 2, 5]),
   ?assertEqual(ok, StatusRead4),
@@ -804,6 +823,7 @@ files_manager_standard_files_test(Config) ->
 
   AnsTruncate = rpc:call(Node1, files_manager, truncate, [File, 5]),
   ?assertEqual(ok, AnsTruncate),
+  ?assertEqual({ok, "abc12"}, rpc:call(Node1, files_tester, read_file, [File, 100])),
 
   {StatusRead5_1, AnsRead5_1} = rpc:call(Node1, files_manager, read, [File, 0, 100]),
   ?assertEqual(ok, StatusRead5_1),
@@ -815,6 +835,7 @@ files_manager_standard_files_test(Config) ->
 
   AnsCreate3 = rpc:call(Node1, files_manager, create, [File2]),
   ?assertEqual(ok, AnsCreate3),
+  ?assert(rpc:call(Node1, files_tester, file_exists, [File2])),
 
   {StatusLs, AnsLs} = rpc:call(Node1, files_manager, ls, [DirName, 100, 0]),
   ?assertEqual(ok, StatusLs),
@@ -822,8 +843,15 @@ files_manager_standard_files_test(Config) ->
   ?assert(lists:member(FileInDir, AnsLs)),
   ?assert(lists:member(FileInDir2, AnsLs)),
 
+  {File2LocationAns, File2Location} = rpc:call(Node1, files_tester, get_file_location, [File2]),
+  ?assertEqual(ok, File2LocationAns),
   AnsMv = rpc:call(Node1, files_manager, mv, [File2, File2NewName]),
   ?assertEqual(ok, AnsMv),
+  ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [File2])),
+  ?assert(rpc:call(Node1, files_tester, file_exists, [File2NewName])),
+  {File2LocationAns2, File2Location2} = rpc:call(Node1, files_tester, get_file_location, [File2NewName]),
+  ?assertEqual(ok, File2LocationAns2),
+  ?assertEqual(File2Location, File2Location2),
 
   AnsChPerm = rpc:call(Node1, files_manager, change_file_perm, [File, 8#777]),
   ?assertEqual(ok, AnsChPerm),
@@ -840,27 +868,45 @@ files_manager_standard_files_test(Config) ->
   %% create file and move to dir
   AnsCreate4 = rpc:call(Node1, files_manager, create, [TestFile]),
   ?assertEqual(ok, AnsCreate4),
+  ?assert(rpc:call(Node1, files_tester, file_exists, [TestFile])),
 
+  {TestFileLocationAns, TestFileLocation} = rpc:call(Node1, files_tester, get_file_location, [TestFile]),
+  ?assertEqual(ok, TestFileLocationAns),
   AnsMv2 = rpc:call(Node1, files_manager, mv, [TestFile, DirName ++ "/" ++ TestFile]),
   ?assertEqual(ok, AnsMv2),
+  ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [TestFile])),
+  ?assert(rpc:call(Node1, files_tester, file_exists, [DirName ++ "/" ++ TestFile])),
+  {TestFileLocationAns2, TestFileLocation2} = rpc:call(Node1, files_tester, get_file_location, [DirName ++ "/" ++ TestFile]),
+  ?assertEqual(ok, TestFileLocationAns2),
+  ?assertEqual(TestFileLocation, TestFileLocation2),
 
   AnsCreate5 = rpc:call(Node1, files_manager, create, [TestFile]),
   ?assertEqual(ok, AnsCreate5),
+  ?assert(rpc:call(Node1, files_tester, file_exists, [TestFile])),
+  {TestFileLocationAns3, TestFileLocation3} = rpc:call(Node1, files_tester, get_file_location, [TestFile]),
+  ?assertEqual(ok, TestFileLocationAns3),
+  ?assertEqual(false, TestFileLocation =:= TestFileLocation3),
 
   AnsMvDel = rpc:call(Node1, files_manager, delete, [TestFile]),
   ?assertEqual(ok, AnsMvDel),
+  ?assertEqual(false, files_tester:file_exists_storage(TestFileLocation3)),
+  ?assert(files_tester:file_exists_storage(TestFileLocation)),
 
-  AnsMvDel = rpc:call(Node1, files_manager, delete, [DirName ++ "/" ++ TestFile]),
-  ?assertEqual(ok, AnsMvDel),
+  AnsMvDel2 = rpc:call(Node1, files_manager, delete, [DirName ++ "/" ++ TestFile]),
+  ?assertEqual(ok, AnsMvDel2),
+  ?assertEqual(false, files_tester:file_exists_storage(TestFileLocation)),
 
 
 
-
+  {FileLocationAns, FileLocation} = rpc:call(Node1, files_tester, get_file_location, [File]),
+  ?assertEqual(ok, FileLocationAns),
   AnsDel = rpc:call(Node1, files_manager, delete, [File]),
   ?assertEqual(ok, AnsDel),
+  ?assertEqual(false, files_tester:file_exists_storage(FileLocation)),
 
   AnsDel2 = rpc:call(Node1, files_manager, delete, [File2NewName]),
   ?assertEqual(ok, AnsDel2),
+  ?assertEqual(false, files_tester:file_exists_storage(File2Location2)),
 
   AnsDel3 = rpc:call(Node1, files_manager, delete, [File2NewName]),
   ?assertEqual({logical_file_system_error, ?VENOENT}, AnsDel3),

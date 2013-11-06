@@ -215,6 +215,8 @@ save_file(#veil_document{record = #file{}} = FileDoc) ->
 %% @end
 -spec remove_file(File :: file()) -> ok | {error, any()} | no_return().
 %% ====================================================================
+%% TODO dao powinno przy okazji kasować wszystkie zbędne dane o tym pliku znajdujące się w bazie
+%% (po co nam w bazie informacje o sharowaniu pliku, kótry jest już skasowany?)
 remove_file(File) ->
     dao:set_db(?FILES_DB_NAME),
     {ok, FData} = get_file(File),
