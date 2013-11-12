@@ -20,7 +20,7 @@
 %% export nodes' codes
 -export([perform_10_logs/1, get_lager_traces/0]).
 
-all() -> [logging_test, init_and_cleanup_test].
+all() -> [console_loglevel_test, logging_test, init_and_cleanup_test].
 
 %% ====================================================================
 %% Code of nodes used during the test
@@ -55,6 +55,21 @@ get_lager_traces() ->
 %% ====================================================================
 %% Test functions
 %% ====================================================================
+
+%% This test function checks logger functionality of switching console loglevel
+
+console_loglevel_test(_Config) ->  
+  logger:set_console_loglevel(0),
+  ?assertEqual(logger:get_console_loglevel(), 0),
+  logger:set_console_loglevel(info),
+  ?assertEqual(logger:get_console_loglevel(), 1),
+  logger:set_console_loglevel(error),
+  ?assertEqual(logger:get_console_loglevel(), 5),
+  logger:set_console_loglevel(default),
+  {ok, Proplist} = application:get_env(lager, handlers),
+  Default = proplists:get_value(lager_console_backend, Proplist),
+  ?assertEqual(logger:get_console_loglevel(), logger:loglevel_atom_to_int(Default)).
+
 
 %% This test function checks if central_logger properly
 %% sets up lager traces and if it cleans up after termination
