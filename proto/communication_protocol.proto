@@ -8,12 +8,14 @@ message ClusterMsg {
     required string answer_decoder_name = 5;
     required bool synch = 6;
     required int32 protocol_version = 7;
-    optional bytes input = 8;
+    optional int32 message_id = 8 [default = 0];
+    optional bytes input = 9;
 }
 
 message Answer {
    required string answer_status = 1;
-   optional bytes worker_answer = 2;
+   optional int32 message_id = 2 [default = 0];
+   optional bytes worker_answer = 3;
 }
 
 message Atom {
