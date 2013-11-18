@@ -18,9 +18,9 @@
 -export([init_and_cleanup_test/1, logging_test/1]).
 
 %% export nodes' codes
--export([perform_10_logs/1, get_lager_traces/0]).
+-export([perform_10_logs/1, get_lager_traces/0, check_console_loglevel_functionalities/0]).
 
-all() -> [console_loglevel_test, logging_test, init_and_cleanup_test].
+all() -> [logging_test, init_and_cleanup_test].
 
 %% ====================================================================
 %% Code of nodes used during the test
@@ -51,24 +51,33 @@ get_lager_traces() ->
     gen_event:which_handlers(lager_event).   
 
 
+%% This test function checks logger functionality of switching console loglevel (logger module)
+check_console_loglevel_functionalities() ->  
+  try
+    ?assertEqual(ok, logger:set_console_loglevel(0)),
+    ?assertEqual(logger:get_console_loglevel(), 0),
+
+    ?assertEqual(ok, logger:set_console_loglevel(info)),
+    ?assertEqual(logger:get_console_loglevel(), 1),
+
+    ?assertEqual(ok, logger:set_console_loglevel(error)),
+    ?assertEqual(logger:get_console_loglevel(), 4),
+
+    ?assertEqual(ok, logger:set_console_loglevel(default)),
+    {ok, Proplist} = application:get_env(lager, handlers),
+    Default = proplists:get_value(lager_console_backend, Proplist),
+    ?assertEqual(logger:get_console_loglevel(), logger:loglevel_atom_to_int(Default)),
+
+    ok
+  catch Type:Message ->
+    {Type, Message}
+  end.
+
+
 
 %% ====================================================================
 %% Test functions
 %% ====================================================================
-
-%% This test function checks logger functionality of switching console loglevel
-
-console_loglevel_test(_Config) ->  
-  logger:set_console_loglevel(0),
-  ?assertEqual(logger:get_console_loglevel(), 0),
-  logger:set_console_loglevel(info),
-  ?assertEqual(logger:get_console_loglevel(), 1),
-  logger:set_console_loglevel(error),
-  ?assertEqual(logger:get_console_loglevel(), 5),
-  logger:set_console_loglevel(default),
-  {ok, Proplist} = application:get_env(lager, handlers),
-  Default = proplists:get_value(lager_console_backend, Proplist),
-  ?assertEqual(logger:get_console_loglevel(), logger:loglevel_atom_to_int(Default)).
 
 
 %% This test function checks if central_logger properly
@@ -88,6 +97,10 @@ init_and_cleanup_test(Config) ->
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
   gen_server:cast({global, ?CCM}, init_cluster),
   timer:sleep(2000),
+
+  % Test logger's console loglevel switching functionalities
+  ?assertEqual(ok, rpc:call(W, ?MODULE, check_console_loglevel_functionalities, [])),
+  ?assertEqual(ok, rpc:call(CCM, ?MODULE, check_console_loglevel_functionalities, [])),
 
   % Get new trace configuration after start of central_logger module
   NewTraces = rpc:call(W, ?MODULE, get_lager_traces, []),
@@ -153,6 +166,7 @@ logging_test(Config) ->
   ?assertEqual(ok, gen_server:call({?Dispatcher_Name, W3}, {central_logger, 1, self(), message_id, get_subscribers})),
   % To confirm, that this pid is no longer subscribed
   ?assertEqual([], receive {worker_answer, message_id, Response} -> Response after 1000 -> timeout end).
+
 
 
 

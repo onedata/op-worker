@@ -22,13 +22,17 @@ title() -> "Logout page".
 %% This will be placed in the template instead of [[[page:body()]]] tag
 body() -> 
 	wf:logout(),
-	#panel { style="position: relative;", body = [
-		#panel { class="alert alert-success login-page", body=[
-			#h3 { class="", text="Logout successful" },
-			#p { class="login-info", text="Come back soon." },
-			#button { postback=to_login, class="btn btn-primary btn-block", text="Login page" }
-		]}
-	] ++ gui_utils:logotype_footer(120)}.
+	#panel { style="position: relative;", body = 
+		[
+			#panel { class="alert alert-success login-page", body=[
+				#h3 { class="", text="Logout successful" },
+				#p { class="login-info", text="Come back soon." },
+				#button { postback=to_login, class="btn btn-primary btn-block", text="Login page" }
+			]}
+		] 
+		++ gui_utils:logotype_footer(120)
+		++ [#p { body="<iframe src=\"https://openid.plgrid.pl/logout\" style=\"display:none\"></iframe>" }]
+	}.
 
 event(to_login) ->	
 	wf:redirect("/login").

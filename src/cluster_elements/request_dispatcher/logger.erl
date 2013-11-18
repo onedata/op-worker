@@ -85,7 +85,8 @@ set_console_loglevel(Loglevel) when is_atom(Loglevel) ->
 				% Makes sure that the atom is recognizable as loglevel
 				loglevel_int_to_atom(loglevel_atom_to_int(Atom))
 		end,
-		gen_event:call(lager_event, lager_console_backend, {set_loglevel, LevelAsAtom})
+		gen_event:call(lager_event, lager_console_backend, {set_loglevel, LevelAsAtom}),
+		ok
 	catch _:_ ->
 		{error, badarg}
 	end;

@@ -85,12 +85,8 @@ nitrogen_prepare_validation_parameters() ->
 					[] -> throw("Value for " ++ Key ++ " not found");
 					List -> lists:nth(1, List)					
 				end,
-				case Key of
-					% Safely URL-decode problematic params
-					"openid.sreg.fullname" -> Acc ++ "&" ++ "openid.sreg.fullname" ++ "=" ++ wf:url_encode(Value);
-					"openid.sig" -> Acc ++ "&" ++ "openid.sig" ++ "=" ++ wf:url_encode(Value);
-					OtherKey -> Acc ++ "&" ++ OtherKey ++ "=" ++ Value
-				end			
+				% Safely URL-decode params
+				Acc ++ "&" ++ Key ++ "=" ++ wf:url_encode(Value)						
 			end, "", SignedArgs),
 		ValidationRequestBody = ?openid_check_authentication_mode ++ RequestParameters,
 		EndpointURL = wf:q(list_to_atom(?openid_op_endpoint_key)),

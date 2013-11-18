@@ -170,6 +170,19 @@ handle_call({node_chosen, {Task, ProtocolVersion, AnsPid, Request}}, _From, Stat
     Other -> {reply, Other, State}
   end;
 
+handle_call({node_chosen, {Task, ProtocolVersion, AnsPid, MsgId, Request}}, _From, State) ->
+  Ans = check_worker_node(Task, State),
+  case Ans of
+    {Node, NewState} ->
+      case Node of
+        non -> {reply, worker_not_found, State};
+        _N ->
+          gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}),
+          {reply, ok, NewState}
+      end;
+    Other -> {reply, Other, State}
+  end;
+
 handle_call({node_chosen, {Task, ProtocolVersion, Request}}, _From, State) ->
   Ans = check_worker_node(Task, State),
   case Ans of

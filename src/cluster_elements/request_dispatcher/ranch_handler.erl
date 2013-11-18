@@ -88,11 +88,17 @@ loop(Socket, Transport, RanchTimeout, DispatcherTimeout, EEC) ->
           true ->
             try
               Pid = self(),
-              Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Pid, Request}}),
+              case get(msgID) of
+                ID when is_integer(ID) ->
+                  put(msgID, ID + 1);
+                _ -> put(msgID, 0)
+              end,
+              MsgID = get(msgID),
+              Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Pid, MsgID, Request}}),
               case Ans of
                 ok ->
                   receive
-                    Ans2 -> Transport:send(Socket, encode_answer(Ans, Answer_type, Answer_decoder_name, Ans2))
+                    {worker_answer, MsgID, Ans2} -> Transport:send(Socket, encode_answer(Ans, Answer_type, Answer_decoder_name, Ans2))
                   after DispatcherTimeout ->
                     Transport:send(Socket, encode_answer(dispatcher_timeout))
                   end;

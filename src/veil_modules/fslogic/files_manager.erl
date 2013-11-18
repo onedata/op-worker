@@ -24,6 +24,7 @@
 
 -define(NewFileLogicMode, 8#644).
 -define(NewFileStorageMode, 8#644).
+-define(S_IFREG, 8#100000).
 
 %% ====================================================================
 %% API
@@ -360,9 +361,9 @@ delete(File) ->
           TmpAns2 = delete_file_storage_system(Storage_helper_info, TmpAns#filelocation.file_id),
 
           TmpAns2_2 = case TmpAns2 of
-            {wrong_getatt_return_code, -2} -> ok;
-            _ -> TmpAns2
-          end,
+                        {wrong_getatt_return_code, -2} -> ok;
+                        _ -> TmpAns2
+                      end,
 
           case TmpAns2_2 of
             ok ->
@@ -531,21 +532,21 @@ write_storage_system(Storage_helper_info, File, Buf) ->
       case veilhelpers:exec(is_reg, [Stat#st_stat.st_mode]) of
         true ->
           Offset = Stat#st_stat.st_size,
-              Flag = veilhelpers:exec(get_flag, [o_wronly]),
-              {ErrorCode2, FFI} = veilhelpers:exec(open, Storage_helper_info, [File, #st_fuse_file_info{flags = Flag}]),
-              case ErrorCode2 of
-                0 ->
-                  BytesWritten = write_bytes(Storage_helper_info, File, Offset, Buf, FFI),
+          Flag = veilhelpers:exec(get_flag, [o_wronly]),
+          {ErrorCode2, FFI} = veilhelpers:exec(open, Storage_helper_info, [File, #st_fuse_file_info{flags = Flag}]),
+          case ErrorCode2 of
+            0 ->
+              BytesWritten = write_bytes(Storage_helper_info, File, Offset, Buf, FFI),
 
-                  ErrorCode3 = veilhelpers:exec(release, Storage_helper_info, [File, FFI]),
-                  case ErrorCode3 of
-                    0 -> BytesWritten;
-                    {error, 'NIF_not_loaded'} -> ErrorCode3;
-                    _ -> {wrong_release_return_code, ErrorCode3}
-                  end;
-                error -> {ErrorCode, FFI};
-                _ -> {wrong_open_return_code, ErrorCode2}
+              ErrorCode3 = veilhelpers:exec(release, Storage_helper_info, [File, FFI]),
+              case ErrorCode3 of
+                0 -> BytesWritten;
+                {error, 'NIF_not_loaded'} -> ErrorCode3;
+                _ -> {wrong_release_return_code, ErrorCode3}
               end;
+            error -> {ErrorCode, FFI};
+            _ -> {wrong_open_return_code, ErrorCode2}
+          end;
         false -> {error, not_regular_file}
       end;
     error -> {ErrorCode, Stat};
@@ -568,7 +569,7 @@ create_file_storage_system(Storage_helper_info, File) ->
     0 -> {error, file_exists};
     error -> {ErrorCode, Stat};
     _ ->
-      ErrorCode2 = veilhelpers:exec(mknod, Storage_helper_info, [File, ?NewFileStorageMode, 0]),
+      ErrorCode2 = veilhelpers:exec(mknod, Storage_helper_info, [File, ?NewFileStorageMode bor ?S_IFREG, 0]),
       case ErrorCode2 of
         0 ->
           ErrorCode3 = veilhelpers:exec(truncate, Storage_helper_info, [File, 0]),
@@ -579,7 +580,7 @@ create_file_storage_system(Storage_helper_info, File) ->
           end;
         {error, 'NIF_not_loaded'} -> ErrorCode2;
         _ ->
-          lager:error("Can note create file %p, code: %p, helper info: %p, mode: %p%n", [File, ErrorCode2, Storage_helper_info, ?NewFileStorageMode]),
+          lager:error("Can note create file %p, code: %p, helper info: %p, mode: %p%n", [File, ErrorCode2, Storage_helper_info, ?NewFileStorageMode bor ?S_IFREG]),
           {wrong_mknod_return_code, ErrorCode2}
       end
   end.
@@ -676,7 +677,7 @@ contact_fslogic(Record) ->
   CallAns = case UserID of
               undefined -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {internal_call, Record}});
               _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, #veil_request{subject = UserID, request = {internal_call, Record}}})
-  end,
+            end,
   case CallAns of
     ok ->
       receive
