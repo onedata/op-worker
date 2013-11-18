@@ -1,11 +1,11 @@
 %% ===================================================================
 %% @author Michal Wrzeszcz
 %% @copyright (C): 2013 ACK CYFRONET AGH
-%% This software is released under the MIT license 
+%% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: It is the main module of application. It lunches 
+%% @doc: It is the main module of application. It lunches
 %% supervisor which then initializes appropriate components of node.
 %% @end
 %% ===================================================================
@@ -14,6 +14,12 @@
 
 -behaviour(application).
 -include("registered_names.hrl").
+
+%% Dispatcher cowboy listener ID
+-define(DISPATCHER_LISTENER_REF, dispatcher_listener).
+
+%% Path (relative to domain) on which cowboy expects client's requests
+-define(VEILCLIENT_URI_PATH, "/veilclient").
 
 %% Application callbacks
 -export([start/2, stop/1]).
@@ -41,10 +47,20 @@ start(_StartType, _StartArgs) ->
       {ok, Port} = application:get_env(?APP_Name, dispatcher_port),
       {ok, DispatcherPoolSize} = application:get_env(?APP_Name, dispatcher_pool_size),
       {ok, CertFile} = application:get_env(?APP_Name, ssl_cert_path),
-      {ok, _} = ranch:start_listener(dispatcher_listener, DispatcherPoolSize, ranch_ssl,
-          [{max_connections, infinity}, {port, Port}, {certfile, atom_to_list(CertFile)},
-              {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}}],
-          ranch_handler, []);
+
+      Dispatch = cowboy_router:compile([{'_', [{?VEILCLIENT_URI_PATH, ws_handler, []}]}]),
+
+      {ok, _} = cowboy:start_https(?DISPATCHER_LISTENER_REF, DispatcherPoolSize,
+        [
+          {port, Port},
+          {certfile, atom_to_list(CertFile)},
+          {keyfile, atom_to_list(CertFile)},
+          {password, ""},
+          {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}}
+        ],
+        [
+          {env, [{dispatch, Dispatch}]}
+        ]);
     false -> ok
   end,
   fprof:start(), %% Start fprof server. It doesnt do enything unless it's used.

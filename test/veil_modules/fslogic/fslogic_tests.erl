@@ -47,7 +47,7 @@ protocol_buffers_test() ->
   answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, Answer_type} = ranch_handler:decode_protocol_buffer(MessageBytes),
+  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, Answer_type} = ws_handler:decode_protocol_buffer(MessageBytes),
   ?assert(Synch),
   ?assert(Task =:= fslogic),
   ?assert(Answer_decoder_name =:= "fuse_messages"),

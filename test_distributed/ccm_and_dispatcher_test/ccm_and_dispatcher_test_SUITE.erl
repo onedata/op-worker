@@ -109,7 +109,7 @@ dispatcher_connection_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   timer:sleep(1500),
 
-  {ConAns, Socket} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, PeerCert}]),
+  {ConAns, Socket} = wss:connect('localhost', Port, [{certfile, PeerCert}]),
   ?assertEqual(ok, ConAns),
 
   Ping = #atom{value = "ping"},
@@ -119,8 +119,8 @@ dispatcher_connection_test(Config) ->
   answer_type = "atom", answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = PingBytes},
   Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  ssl:send(Socket, Msg),
-  {RecvAns, Ans} = ssl:recv(Socket, 0, 5000),
+  wss:send(Socket, Msg),
+  {RecvAns, Ans} = wss:recv(Socket, 5000),
   ?assertEqual(ok, RecvAns),
 
   AnsMessage = #answer{answer_status = "wrong_worker_type"},
@@ -131,8 +131,8 @@ dispatcher_connection_test(Config) ->
   Message2 = #clustermsg{module_name = "module", message_type = "atom", message_decoder_name = "communication_protocol",
   answer_type = "atom", answer_decoder_name = "communication_protocol", synch = false, protocol_version = 1, input = PingBytes},
   Msg2 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message2)),
-  ssl:send(Socket, Msg2),
-  {RecvAns2, Ans2} = ssl:recv(Socket, 0, 5000),
+  wss:send(Socket, Msg2),
+  {RecvAns2, Ans2} = wss:recv(Socket, 5000),
   ?assertEqual(ok, RecvAns2),
   ?assertEqual(Ans2, AnsMessageBytes).
 
@@ -173,15 +173,15 @@ validation_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   timer:sleep(1500),
 
-  {ConAns1, _} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
+  {ConAns1, _} = wss:connect('localhost', Port, [{certfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
   ?assertEqual(error, ConAns1),
-  {ConAns2, _} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, ?TEST_FILE("certs/proxy_valid.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_unknown_ca.pem")}]),
+  {ConAns2, _} = wss:connect('localhost', Port, [{certfile, ?TEST_FILE("certs/proxy_valid.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_unknown_ca.pem")}]),
   ?assertEqual(error, ConAns2),
-  {ConAns3, _} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, ?TEST_FILE("certs/proxy_outdated.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
+  {ConAns3, _} = wss:connect('localhost', Port, [{certfile, ?TEST_FILE("certs/proxy_outdated.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
   ?assertEqual(error, ConAns3),
-  {ConAns4, _} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, ?TEST_FILE("certs/proxy_unknown_ca.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
+  {ConAns4, _} = wss:connect('localhost', Port, [{certfile, ?TEST_FILE("certs/proxy_unknown_ca.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
   ?assertEqual(error, ConAns4),
-  {ConAns5, _Socket1} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, ?TEST_FILE("certs/proxy_valid.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
+  {ConAns5, _Socket1} = wss:connect('localhost', Port, [{certfile, ?TEST_FILE("certs/proxy_valid.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
   ?assertEqual(ok, ConAns5).
 
 %% This test checks if client outside the cluster can ping all modules via dispatcher.
@@ -200,7 +200,7 @@ ping_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   timer:sleep(1500),
 
-  {ConAns, Socket} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, PeerCert}]),
+  {ConAns, Socket} = wss:connect('localhost', Port, [{certfile, PeerCert}]),
   ?assertEqual(ok, ConAns),
 
   Ping = #atom{value = "ping"},
@@ -217,8 +217,8 @@ ping_test(Config) ->
     answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = PingBytes},
     Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-    ssl:send(Socket, Msg),
-    {RecvAns, Ans} = ssl:recv(Socket, 0, 5000),
+    wss:send(Socket, Msg),
+    {RecvAns, Ans} = wss:recv(Socket, 5000),
     ?assertEqual(ok, RecvAns),
     case Ans =:= PongAnsBytes of
       true -> Sum + 1;

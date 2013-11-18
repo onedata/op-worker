@@ -964,10 +964,10 @@ create_file(Host, Cert, Port, FileName) ->
   answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   ?assertEqual(ok, ConAns),
-  ssl:send(Socket, MessageBytes),
-  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  wss:send(Socket, MessageBytes),
+  {SendAns, Ans} = wss:recv(Socket, 5000),
   ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -987,10 +987,10 @@ get_file_location(Host, Cert, Port, FileName) ->
   answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   ?assertEqual(ok, ConAns),
-  ssl:send(Socket, MessageBytes),
-  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  wss:send(Socket, MessageBytes),
+  {SendAns, Ans} = wss:recv(Socket, 5000),
   ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -1010,10 +1010,10 @@ renew_file_location(Host, Cert, Port, FileName) ->
   answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   ?assertEqual(ok, ConAns),
-  ssl:send(Socket, MessageBytes),
-  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  wss:send(Socket, MessageBytes),
+  {SendAns, Ans} = wss:recv(Socket, 5000),
   ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -1033,10 +1033,10 @@ file_not_used(Host, Cert, Port, FileName) ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   ?assertEqual(ok, ConAns),
-  ssl:send(Socket, MessageBytes),
-  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  wss:send(Socket, MessageBytes),
+  {SendAns, Ans} = wss:recv(Socket, 5000),
   ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -1056,10 +1056,10 @@ mkdir(Host, Cert, Port, DirName) ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   ?assertEqual(ok, ConAns),
-  ssl:send(Socket, MessageBytes),
-  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  wss:send(Socket, MessageBytes),
+  {SendAns, Ans} = wss:recv(Socket, 5000),
   ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -1082,10 +1082,10 @@ ls(Host, Cert, Port, Dir, Num, Offset) ->
   answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   ?assertEqual(ok, ConAns),
-  ssl:send(Socket, MessageBytes),
-  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  wss:send(Socket, MessageBytes),
+  {SendAns, Ans} = wss:recv(Socket, 5000),
   ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -1105,10 +1105,10 @@ delete_file(Host, Cert, Port, FileName) ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   ?assertEqual(ok, ConAns),
-  ssl:send(Socket, MessageBytes),
-  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  wss:send(Socket, MessageBytes),
+  {SendAns, Ans} = wss:recv(Socket, 5000),
   ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -1128,10 +1128,10 @@ rename_file(Host, Cert, Port, FileName, NewName) ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   ?assertEqual(ok, ConAns),
-  ssl:send(Socket, MessageBytes),
-  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  wss:send(Socket, MessageBytes),
+  {SendAns, Ans} = wss:recv(Socket, 5000),
   ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -1151,10 +1151,10 @@ change_file_perms(Host, Cert, Port, FileName, Perms) ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   ?assertEqual(ok, ConAns),
-  ssl:send(Socket, MessageBytes),
-  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  wss:send(Socket, MessageBytes),
+  {SendAns, Ans} = wss:recv(Socket, 5000),
   ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -1174,10 +1174,10 @@ create_link(Host, Cert, Port, From, To) ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   ?assertEqual(ok, ConAns),
-  ssl:send(Socket, MessageBytes),
-  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  wss:send(Socket, MessageBytes),
+  {SendAns, Ans} = wss:recv(Socket, 5000),
   ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -1197,10 +1197,10 @@ get_link(Host, Cert, Port, FileName) ->
   answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   ?assertEqual(ok, ConAns),
-  ssl:send(Socket, MessageBytes),
-  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  wss:send(Socket, MessageBytes),
+  {SendAns, Ans} = wss:recv(Socket, 5000),
   ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -1220,10 +1220,10 @@ get_file_attr(Host, Cert, Port, FileName) ->
   answer_decoder_name = "fuse_messages", synch = true, protocol_version = 1, input = FuseMessageBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+  {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   ?assertEqual(ok, ConAns),
-  ssl:send(Socket, MessageBytes),
-  {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+  wss:send(Socket, MessageBytes),
+  {SendAns, Ans} = wss:recv(Socket, 5000),
   ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -1243,10 +1243,10 @@ update_times(Host, Cert, Port, FileName, ATime, MTime) ->
     answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
     MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-    {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+    {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
     ?assertEqual(ok, ConAns),
-    ssl:send(Socket, MessageBytes),
-    {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+    wss:send(Socket, MessageBytes),
+    {SendAns, Ans} = wss:recv(Socket, 5000),
     ?assertEqual(ok, SendAns),
 
     #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -1266,10 +1266,10 @@ chown(Host, Cert, Port, FileName, UID, UName) ->
     answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
     MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-    {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+    {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
     ?assertEqual(ok, ConAns),
-    ssl:send(Socket, MessageBytes),
-    {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+    wss:send(Socket, MessageBytes),
+    {SendAns, Ans} = wss:recv(Socket, 5000),
     ?assertEqual(ok, SendAns),
 
     #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -1289,10 +1289,10 @@ chgrp(Host, Cert, Port, FileName, GID, GName) ->
     answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
     MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-    {ConAns, Socket} = ssl:connect(Host, Port, [binary, {active, false}, {packet, 4}, {certfile, Cert}, {cacertfile, Cert}]),
+    {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
     ?assertEqual(ok, ConAns),
-    ssl:send(Socket, MessageBytes),
-    {SendAns, Ans} = ssl:recv(Socket, 0, 5000),
+    wss:send(Socket, MessageBytes),
+    {SendAns, Ans} = wss:recv(Socket, 5000),
     ?assertEqual(ok, SendAns),
 
     #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),

@@ -13,6 +13,7 @@
 -include_lib("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("registered_names.hrl").
+-include("logging.hrl").
 
 -export([init/0, verify_callback/3, load_certs/1, update_crls/1, proxy_subject/1, call/3, is_proxy_certificate/1, find_eec_cert/3]).
 %% ===================================================================
@@ -63,43 +64,18 @@ init() ->
 %% verify_callback/3
 %% ====================================================================
 %% @doc This method is an registered callback, called foreach peer certificate. <br/>
-%%      At the end it decides (based on whole peer chain) whether peer certificate is valid or not.<br/>
-%%      Currently validation is handled by Globus NIF library loaded on erlang slave nodes.
+%%      This callback saves whole certificate chain in GSI ETS based state for further use.
 %% @end
 -spec verify_callback(OtpCert :: #'OTPCertificate'{}, Status :: term(), Certs :: [#'OTPCertificate'{}]) ->
     {valid, UserState :: any()} | {fail, Reason :: term()}.
 %% ====================================================================
 verify_callback(OtpCert, valid_peer, Certs) ->
-    case call(gsi_nif, verify_cert_c,
-                [public_key:pkix_encode('OTPCertificate', OtpCert, otp),                %% peer certificate
-                [public_key:pkix_encode('OTPCertificate', Cert, otp) || Cert <- Certs], %% peer CA chain
-                [DER || [DER] <- ets:match(gsi_state, {{ca, '_'}, '$1', '_'})],                        %% cluster CA store
-                [DER || [DER] <- ets:match(gsi_state, {{crl, '_'}, '$1', '_'})]]) of                  %% cluster CRL store
-        {ok, 1} ->
-            {ok, EEC} = find_eec_cert(OtpCert, Certs, is_proxy_certificate(OtpCert)), 
-            {ok, {Serial, Issuer}} = public_key:pkix_issuer_id(OtpCert, self),
-            case ets:lookup(gsi_state, {Serial, Issuer}) of 
-                [{_, _, TRef1}]     -> timer:cancel(TRef1);
-                _                     -> ok
-            end,  
-            TBSCert = OtpCert#'OTPCertificate'.tbsCertificate,
-            {'Validity', _NotBeforeStr, NotAfterStr} = TBSCert#'OTPTBSCertificate'.validity,
-            Now = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
-            NotAfter = time_str_2_gregorian_sec(NotAfterStr),
-            {ok, TRef} = timer:apply_after(timer:seconds(NotAfter - Now), ets, delete, [gsi_state, {Serial, Issuer}]), 
-            ets:insert(gsi_state, {{Serial, Issuer}, EEC, TRef}),  
-            lager:info("Peer ~p validated", [Serial]),
-            {valid, []};
-        {ok, 0, Errno} ->
-            lager:info("Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
-            {fail, {ssl_erron, Errno}};
-        {error, Reason} ->
-            lager:error("GSI peer verification callback error: ~p", [Reason]),
-            {fail, {gsi_error, Reason}};
-        Other ->
-            lager:error("GSI verification callback returned unknown response ~p", [Other]),
-            {fail, unknown_gsi_response}
-    end;
+    Serial = save_cert_chain([OtpCert | Certs]),
+    ?info("Peer ~p connected", [Serial]),
+    {valid, []};
+verify_callback(OtpCert, {bad_cert, unknown_ca}, Certs) ->
+    save_cert_chain([OtpCert | Certs]),
+    {valid, [OtpCert | Certs]};
 verify_callback(OtpCert, _IgnoredError, Certs) ->
     case Certs of
         [OtpCert | _] -> {valid, Certs};
@@ -170,6 +146,28 @@ proxy_subject(OtpCert = #'OTPCertificate'{tbsCertificate = #'OTPTBSCertificate'{
 %% Internal Methods
 %% ===================================================================
 
+
+%% save_cert_chain/1
+%% ====================================================================
+%% @doc Saves whole given certificate chain in GSI ETS based state for further use. <br/>
+%%      EEC certificate pkix_issuer_id is used as ETS key for new entry. <br/>
+%%      Saved chain will is scheduled to removal when EEC certificate expires
+%% @end
+-spec save_cert_chain([OtpCert :: #'OTPCertificate'{}]) -> Serial :: integer().
+%% ====================================================================
+save_cert_chain([OtpCert | Certs]) ->
+    {ok, {Serial, Issuer}} = public_key:pkix_issuer_id(OtpCert, self),
+    case ets:lookup(gsi_state, {Serial, Issuer}) of
+        [{_, _, TRef1}]     -> timer:cancel(TRef1);
+        _                   -> ok
+    end,
+    TBSCert = OtpCert#'OTPCertificate'.tbsCertificate,
+    {'Validity', _NotBeforeStr, NotAfterStr} = TBSCert#'OTPTBSCertificate'.validity,
+    Now = calendar:datetime_to_gregorian_seconds(calendar:universal_time()),
+    NotAfter = time_str_2_gregorian_sec(NotAfterStr),
+    {ok, TRef} = timer:apply_after(timer:seconds(NotAfter - Now), ets, delete, [gsi_state, {Serial, Issuer}]),
+    ets:insert(gsi_state, {{Serial, Issuer}, [OtpCert | Certs], TRef}),
+    Serial.
 
 %% start_slaves/1
 %% ====================================================================

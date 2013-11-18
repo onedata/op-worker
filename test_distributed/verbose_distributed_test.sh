@@ -36,7 +36,7 @@ do
         TEST_NAME=`basename "$TEST" ".spec"`
         echo "{ct_hooks, [{cth_surefire, [{path,\"TEST-$TEST_NAME-report.xml\"}]}]}." >> $TEST
     fi
-    ct_run -noshell -name tester -setcookie $COOKIE -spec  $TEST
+    ct_run -pa ../deps/**/ebin -pa ../ebin -pa ./ -noshell -name tester -setcookie $COOKIE -spec  $TEST
 done
 
 find . -name "*.beam" -exec rm -rf {} \;

@@ -92,7 +92,7 @@ main_test(Config) ->
 
   Ports = [5055, 6666, 7777, 8888],
   CheckNodes = fun(Port, S) ->
-    {ConAns, Socket} = ssl:connect('localhost', Port, [binary, {active, false}, {packet, 4}, {certfile, PeerCert}]),
+    {ConAns, Socket} = wss:connect('localhost', Port, [{certfile, PeerCert}]),
     ?assertEqual(ok, ConAns),
 
     CheckModules = fun(M, Sum) ->
@@ -101,8 +101,8 @@ main_test(Config) ->
       answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = PingBytes},
       Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-      ssl:send(Socket, Msg),
-      {RecvAns, Ans} = ssl:recv(Socket, 0, 5000),
+      ok = wss:send(Socket, Msg),
+      {RecvAns, Ans} = wss:recv(Socket, 5000),
       ?assertEqual(ok, RecvAns),
       case Ans =:= PongAnsBytes of
         true -> Sum + 1;

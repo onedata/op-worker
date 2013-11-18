@@ -10,7 +10,7 @@
 %% @end
 %% ===================================================================
 
-%% TODO sprawdzić zachowanie funkcji kodującej i dekudującej (encode_answer i decode_protocol_buffer) w ranch_handler
+%% TODO sprawdzić zachowanie funkcji kodującej i dekudującej (encode_answer i decode_protocol_buffer) w ws_handler
 %% w przypadku błędnych argumentów (rekordów/protoclo_bufferów)
 
 %% TODO sprawdzić metodę handle_call pod kątem forwardowania różnych typów zapytań do workerów
@@ -40,7 +40,7 @@ protocol_buffers_test() ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = PingBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, Answer_type} = ranch_handler:decode_protocol_buffer(MessageBytes),
+  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, Answer_type} = ws_handler:decode_protocol_buffer(MessageBytes),
   ?assert(Synch),
   ?assert(Msg =:= ping),
   ?assert(Task =:= module),
@@ -54,7 +54,7 @@ protocol_buffers_test() ->
   Message2 = #answer{answer_status = "ok", worker_answer = PongBytes},
   MessageBytes2 = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(Message2)),
 
-  EncodedPong = ranch_handler:encode_answer(ok, "atom", "communication_protocol", pong),
+  EncodedPong = ws_handler:encode_answer(ok, "atom", "communication_protocol", pong),
   ?assert(EncodedPong =:= MessageBytes2).
 
 %% This test checks what happens when wrong request appears
@@ -63,7 +63,7 @@ protocol_buffers_wrong_request_test() ->
   PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
 
   Ans = try
-    ranch_handler:decode_protocol_buffer(some_atom),
+    ws_handler:decode_protocol_buffer(some_atom),
     ok
   catch
     wrong_message_format -> wrong_message_format;
@@ -76,7 +76,7 @@ protocol_buffers_wrong_request_test() ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = PingBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
   Ans2 = try
-    ranch_handler:decode_protocol_buffer(MessageBytes),
+    ws_handler:decode_protocol_buffer(MessageBytes),
     ok
   catch
     wrong_internal_message_type -> wrong_internal_message_type;
@@ -86,11 +86,11 @@ protocol_buffers_wrong_request_test() ->
 
 %% This test checks what happens when wrong request appears
 protocol_buffers_wrong_answer_test() ->
-  EncodedPong = ranch_handler:encode_answer("wrong_main_answer", "atom", "communication_protocol", pong),
+  EncodedPong = ws_handler:encode_answer("wrong_main_answer", "atom", "communication_protocol", pong),
   Pong = communication_protocol_pb:decode_answer(EncodedPong),
   ?assertEqual(Pong#answer.answer_status, "main_answer_encoding_error"),
 
-  EncodedPong2 = ranch_handler:encode_answer(ok, "atom", "communication_protocol", "wrong_worker_answer"),
+  EncodedPong2 = ws_handler:encode_answer(ok, "atom", "communication_protocol", "wrong_worker_answer"),
   Pong2 = communication_protocol_pb:decode_answer(EncodedPong2),
   ?assertEqual(Pong2#answer.answer_status, "worker_answer_encoding_error").
 
