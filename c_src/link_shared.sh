@@ -28,7 +28,7 @@ for libfile in $@
 do
     for file in $(ldd $BIN_DIR/$libfile | grep -v "$BIN_DIR/" | grep '=>' | awk -F'=>' '{print $2}' | awk -F' ' '{print $1}' | grep lib${LIB_NAME})
     do
-        cp -Hs $file ./$BIN_DIR
+        cp -L $file ./$BIN_DIR
         ln -sf `basename $file` $BIN_DIR/`basename $(echo $file | sed 's/\.so\..*/\.so/')`
     done
 done
