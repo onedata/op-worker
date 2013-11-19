@@ -11,6 +11,7 @@
 
 -module(ws_handler).
 -include("registered_names.hrl").
+-include("messages_white_list.hrl").
 -include("communication_protocol_pb.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include("logging.hrl").
@@ -29,7 +30,7 @@
 -export([websocket_terminate/3]).
 
 -ifdef(TEST).
--export([decode_protocol_buffer/1, encode_answer/1, encode_answer/4]).
+-export([decode_protocol_buffer/2, encode_answer/2, encode_answer/5, checkMessage/2]).
 -endif.
 
 %% ====================================================================
@@ -96,39 +97,40 @@ websocket_init(TransportName, Req, _Opts) ->
 %% ====================================================================
 websocket_handle({binary, Data}, Req, #hander_state{peer_eec = EEC, dispatcher_timeout = DispatcherTimeout} = State) ->
     try
-        {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, Answer_type} = decode_protocol_buffer(Data),
         {rdnSequence, Rdn} = gsi_handler:proxy_subject(EEC),
         {ok, DnString} = user_logic:rdn_sequence_to_dn_string(Rdn),
+        {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type} = decode_protocol_buffer(Data, DnString),
         Request = #veil_request{subject = DnString, request = Msg},
         case Synch of
             true ->
                 try
                     Pid = self(),
-                    Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Pid, Request}}),
+                    Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Pid, MsgId, Request}}),
                     case Ans of
                         ok ->
                             receive
-                                Ans2 -> {reply, {binary, encode_answer(Ans, Answer_type, Answer_decoder_name, Ans2)}, Req, State}
+                              {worker_answer, MsgId, Ans2} -> {reply, {binary, encode_answer(Ans, MsgId, Answer_type, Answer_decoder_name, Ans2)}, Req, State}
                             after DispatcherTimeout ->
-                                {reply, {binary, encode_answer(dispatcher_timeout)}, Req, State}
+                                {reply, {binary, encode_answer(dispatcher_timeout, MsgId)}, Req, State}
                             end;
-                        Other -> {reply, {binary, encode_answer(Other)}, Req, State}
+                        Other -> {reply, {binary, encode_answer(Other, MsgId)}, Req, State}
                     end
                 catch
-                    _:_ -> {reply, {binary, encode_answer(dispatcher_error)}, Req, State}
+                    _:_ -> {reply, {binary, encode_answer(dispatcher_error, MsgId)}, Req, State}
                 end;
             false ->
                 try
                     Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Request}}),
-                    {reply, {binary, encode_answer(Ans)}, Req, State}
+                    {reply, {binary, encode_answer(Ans, MsgId)}, Req, State}
                 catch
-                    _:_ -> {reply, {binary, encode_answer(dispatcher_error)}, Req, State}
+                    _:_ -> {reply, {binary, encode_answer(dispatcher_error, MsgId)}, Req, State}
                 end
         end
     catch
         wrong_message_format -> {reply, {binary, encode_answer(wrong_message_format)}, Req, State};
-        wrong_internal_message_type -> {reply, {binary, encode_answer(wrong_internal_message_type)}, Req, State};
-        _:_ -> {reply, {binary, encode_answer(ranch_handler_error)}, Req, State}
+        {wrong_internal_message_type, MsgId2} -> {reply, {binary, encode_answer(wrong_internal_message_type, MsgId2)}, Req, State};
+        {message_not_supported, MsgId2} -> {reply, {binary, encode_answer(message_not_supported, MsgId2)}, Req, State};
+        _:_ -> {reply, {binary, encode_answer(ws_handler_error)}, Req, State}
     end;
 websocket_handle({Type, Data}, Req, State) ->
     ?warning("Unknown WebSocket request. Type: ~p, Payload: ~p", [Type, Data]),
@@ -170,33 +172,38 @@ websocket_terminate(_Reason, _Req, #hander_state{peer_serial = _Serial} = _State
 %% Internal functions
 %% ====================================================================
 
-%% decode_protocol_buffer/1
+%% decode_protocol_buffer/2
 %% ====================================================================
 %% @doc Decodes the message using protocol buffers records_translator.
--spec decode_protocol_buffer(MsgBytes :: binary()) -> Result when
-  Result ::  {Synch, ModuleName, Msg, Answer_type},
+-spec decode_protocol_buffer(MsgBytes :: binary(), DN :: string()) -> Result when
+  Result ::  {Synch, ModuleName, Msg, MsgId, Answer_type},
   Synch :: boolean(),
   ModuleName :: atom(),
   Msg :: term(),
+  MsgId :: integer(),
   Answer_type :: string().
 %% ====================================================================
-decode_protocol_buffer(MsgBytes) ->
+decode_protocol_buffer(MsgBytes, DN) ->
   DecodedBytes = try
     communication_protocol_pb:decode_clustermsg(MsgBytes)
-  catch
-    _:_ -> throw(wrong_message_format)
-  end,
+                 catch
+                   _:_ -> throw(wrong_message_format)
+                 end,
 
   #clustermsg{module_name = ModuleName, message_type = Message_type, message_decoder_name = Message_decoder_name, answer_type = Answer_type,
-    answer_decoder_name = Answer_decoder_name, synch = Synch, protocol_version = Prot_version, input = Bytes} = DecodedBytes,
+  answer_decoder_name = Answer_decoder_name, synch = Synch, protocol_version = Prot_version, message_id = MsgId, input = Bytes} = DecodedBytes,
 
   Msg = try
     erlang:apply(list_to_atom(Message_decoder_name ++ "_pb"), list_to_atom("decode_" ++ Message_type), [Bytes])
-  catch
-    _:_ -> throw(wrong_internal_message_type)
-  end,
+        catch
+          _:_ -> throw({wrong_internal_message_type, MsgId})
+        end,
 
-  {Synch, list_to_atom(ModuleName), Answer_decoder_name, Prot_version, records_translator:translate(Msg, Message_decoder_name), Answer_type}.
+  TranslatedMsg = records_translator:translate(Msg, Message_decoder_name),
+  case checkMessage(TranslatedMsg, DN) of
+    true -> {Synch, list_to_atom(ModuleName), Answer_decoder_name, Prot_version, TranslatedMsg, MsgId, Answer_type};
+    false -> throw({message_not_supported, MsgId})
+  end.
 
 
 %% encode_answer/1
@@ -206,40 +213,75 @@ decode_protocol_buffer(MsgBytes) ->
   Result ::  binary().
 %% ====================================================================
 encode_answer(Main_Answer) ->
-  encode_answer(Main_Answer, non, "non", []).
+  encode_answer(Main_Answer, 0).
 
-%% encode_answer/4
+%% encode_answer/2
 %% ====================================================================
 %% @doc Encodes answer using protocol buffers records_translator.
--spec encode_answer(Main_Answer :: atom(), AnswerType :: string(), Answer_decoder_name :: string(), Worker_Answer :: term()) -> Result when
+-spec encode_answer(Main_Answer :: atom(), MsgId :: integer()) -> Result when
   Result ::  binary().
 %% ====================================================================
-encode_answer(Main_Answer, AnswerType, Answer_decoder_name, Worker_Answer) ->
+encode_answer(Main_Answer, MsgId) ->
+  encode_answer(Main_Answer, MsgId, non, "non", []).
+
+%% encode_answer/5
+%% ====================================================================
+%% @doc Encodes answer using protocol buffers records_translator.
+-spec encode_answer(Main_Answer :: atom(), MsgId :: integer(), AnswerType :: string(), Answer_decoder_name :: string(), Worker_Answer :: term()) -> Result when
+  Result ::  binary().
+%% ====================================================================
+encode_answer(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer) ->
   Check = ((Main_Answer =:= ok) and is_atom(Worker_Answer) and (Worker_Answer =:= worker_plug_in_error)),
   Main_Answer2 = case Check of
-     true -> Worker_Answer;
-     false -> Main_Answer
-  end,
+                   true -> Worker_Answer;
+                   false -> Main_Answer
+                 end,
   Message = case Main_Answer2 of
-    ok -> case AnswerType of
-      non -> #answer{answer_status = atom_to_list(Main_Answer2)};
-      _Type ->
-        try
-          WAns = erlang:apply(list_to_atom(Answer_decoder_name ++ "_pb"), list_to_atom("encode_" ++ AnswerType), [records_translator:translate_to_record(Worker_Answer)]),
-          #answer{answer_status = atom_to_list(Main_Answer2), worker_answer = WAns}
-        catch
-          Type:Error ->
-            lager:error("Ranch handler error during encoding worker answer: ~p:~p, answer type: ~s, decoder ~s, worker answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Worker_Answer]),
-            #answer{answer_status = "worker_answer_encoding_error"}
-        end
-    end;
-    _Other ->
-      try
-        #answer{answer_status = atom_to_list(Main_Answer2)}
-      catch
-        Type:Error ->
-          lager:error("Ranch handler error during encoding main answer: ~p:~p, main answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Main_Answer2]),
-          #answer{answer_status = "main_answer_encoding_error"}
-      end
-  end,
+              ok -> case AnswerType of
+                      non -> #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId};
+                      _Type ->
+                        try
+                          WAns = erlang:apply(list_to_atom(Answer_decoder_name ++ "_pb"), list_to_atom("encode_" ++ AnswerType), [records_translator:translate_to_record(Worker_Answer)]),
+                          #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId, worker_answer = WAns}
+                        catch
+                          Type:Error ->
+                            lager:error("Ranch handler error during encoding worker answer: ~p:~p, answer type: ~s, decoder ~s, worker answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Worker_Answer]),
+                            #answer{answer_status = "worker_answer_encoding_error", message_id = MsgId}
+                        end
+                    end;
+              _Other ->
+                try
+                  #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId}
+                catch
+                  Type:Error ->
+                    lager:error("Ranch handler error during encoding main answer: ~p:~p, main answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Main_Answer2]),
+                    #answer{answer_status = "main_answer_encoding_error", message_id = MsgId}
+                end
+            end,
   erlang:iolist_to_binary(communication_protocol_pb:encode_answer(Message)).
+
+%% map_dn_to_client_type/1
+%% ====================================================================
+%% @doc Checks if message can be processed by cluster.
+-spec map_dn_to_client_type(DN :: string()) -> UserType when
+  UserType :: atom().
+%% ====================================================================
+map_dn_to_client_type(_DN) ->
+  standard_user.
+
+%% checkMessage/2
+%% ====================================================================
+%% @doc Checks if message can be processed by cluster.
+-spec checkMessage(Msg :: term(), DN :: string()) -> Result when
+  Result :: boolean().
+%% ====================================================================
+checkMessage(Msg, DN) when is_atom(Msg) ->
+  lists:member(Msg, proplists:get_value(map_dn_to_client_type(DN), ?AtomsWhiteList, []));
+
+checkMessage(Msg, DN) when is_tuple(Msg) ->
+  [Record_Type | _] = tuple_to_list(Msg),
+  lists:member(Record_Type, proplists:get_value(map_dn_to_client_type(DN), ?MessagesWhiteList, []));
+
+checkMessage(Msg, DN) ->
+  lager:warning("Wrong type of message ~p for user ~p", [Msg, DN]),
+  false.

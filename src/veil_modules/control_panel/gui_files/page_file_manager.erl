@@ -614,7 +614,7 @@ rename_item(OldPath, NewName) ->
 			NewPath = filename:absname(NewName, get_key(working_directory)),
 			case item_find(NewPath) of
 				undefined -> 
-					files_manager:mv(OldPath, NewPath),
+					logical_files_manager:mv(OldPath, NewPath),
 					clear_clipboard(),
 					clear_manager(),
 					select_item(NewPath);
@@ -723,11 +723,11 @@ show_popup(Type) ->
 		share_file ->
 			Path = lists:nth(1, get_key(selected_items)),
 			Filename = filename:basename(lists:nth(1, get_key(selected_items))),
-			{Status, ShareID} = case files_manager:get_share({file, Path}) of
+			{Status, ShareID} = case logical_files_manager:get_share({file, Path}) of
 				{ok, #veil_document { uuid=UUID } } -> 
 					{exists, UUID};
 				_ ->
-					{ok, ID} = files_manager:create_standard_share(Path),
+					{ok, ID} = logical_files_manager:create_standard_share(Path),
 					{new, ID}
 			end,
 			clear_workspace(),
@@ -1050,7 +1050,7 @@ item_new(Dir, File) ->
 
 item_new(FullPath) ->
 	FileAttr = fs_get_attributes(FullPath),
-	IsShared = case files_manager:get_share({file, FullPath}) of
+	IsShared = case logical_files_manager:get_share({file, FullPath}) of
 		{ok, _} -> true;
 		_ -> false
 	end,
@@ -1141,22 +1141,22 @@ item_list_md5(ItemList) ->
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%% files_manager interfacing
+%% logical_files_manager interfacing
 
 fs_get_attributes(Path) ->
-	{ok, FileAttr} = files_manager:getfileattr(Path),
+	{ok, FileAttr} = logical_files_manager:getfileattr(Path),
 	FileAttr.
 
 
 fs_mkdir(Path) ->
-	files_manager:mkdir(Path).
+	logical_files_manager:mkdir(Path).
 
 
 fs_remove(Path) ->
 	Item = item_new(Path),
 	case item_is_dir(Item) of
 		true -> fs_remove_dir(Path);
-		false -> files_manager:delete(Path)
+		false -> logical_files_manager:delete(Path)
 	end.
 
 
@@ -1166,7 +1166,7 @@ fs_remove_dir(DirPath) ->
 		fun(Item) ->
 			fs_remove(item_path(Item))
 		end, ItemList),
-	files_manager:rmdir(DirPath).  
+	logical_files_manager:rmdir(DirPath).
 
 
 fs_list_dir(Dir) ->
@@ -1178,7 +1178,7 @@ fs_list_dir(Dir) ->
 
 
 fs_list_dir(Path, Offset, Count, Result) ->
-	case files_manager:ls(Path, Count, Offset) of 
+	case logical_files_manager:ls(Path, Count, Offset) of
 		{ok, FileList} ->
 			case length(FileList) of
 				Count -> fs_list_dir(Path, Offset + Count, Count * 10, Result ++ FileList);
@@ -1192,7 +1192,7 @@ fs_mv(Path, TargetPath) ->
 	case filename:dirname(Path) of
 		TargetPath -> ok;
 		_ -> 
-			case files_manager:mv(Path, filename:absname(filename:basename(Path), TargetPath)) of
+			case logical_files_manager:mv(Path, filename:absname(filename:basename(Path), TargetPath)) of
 				ok -> ok;
 				_ -> wf:wire(#alert { text="Unable to move " ++ filename:basename(Path) ++
 					". File exists." })

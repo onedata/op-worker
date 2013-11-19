@@ -72,7 +72,7 @@ handle_upload_request(Req, UserDoc) ->
                 undefined -> 
                     {error, incorrect_session};
                 List when is_list(List) ->
-                    % This will cause files_manager to create the file for proper user
+                    % This will cause logical_files_manager to create the file for proper user
                     put(user_id, lists:nth(1, List)),
                     {ok, _Params, _Files} = parse_multipart(Req, [], [])
             end
@@ -104,7 +104,7 @@ handle_user_content_request(Req) ->
             fun() ->
                 {FilepathBin, _} = cowboy_req:qs_val(<<"f">>, Req),
                 TryFilepath = binary_to_list(FilepathBin), 
-                {ok, Fileattr} = files_manager:getfileattr(TryFilepath),
+                {ok, Fileattr} = logical_files_manager:getfileattr(TryFilepath),
                 "REG" = Fileattr#fileattributes.type,
                 TrySize = Fileattr#fileattributes.size,
                 {TryFilepath, TrySize}
@@ -139,9 +139,9 @@ handle_shared_file_request(Req) ->
                 true = (ShareID /= <<"">>),
 
                 {ok, #veil_document { record=#share_desc { file=FileID } } } = 
-                    files_manager:get_share({uuid, binary_to_list(ShareID)}), 
-                {ok, TryFilepath} = files_manager:get_file_full_name_by_uuid(FileID),
-                {ok, Fileattr} = files_manager:getfileattr(TryFilepath),
+                    logical_files_manager:get_share({uuid, binary_to_list(ShareID)}),
+                {ok, TryFilepath} = logical_files_manager:get_file_full_name_by_uuid(FileID),
+                {ok, Fileattr} = logical_files_manager:getfileattr(TryFilepath),
                 "REG" = Fileattr#fileattributes.type,
                 TrySize = Fileattr#fileattributes.size,
                 {TryFilepath, TrySize}
@@ -185,12 +185,12 @@ send_file(Req, Filepath, Size) ->
 	{ok, _FinReq} = cowboy_req:reply(200, Req3).
 
 
-% Streams file from cluster using files_manager to http client (via socket)
+% Streams file from cluster using logical_files_manager to http client (via socket)
 stream_file(Socket, Transport, Filepath, Size, BufferSize) ->
 		stream_file(Socket, Transport, Filepath, Size, 0, BufferSize).
 
 stream_file(Socket, Transport, Filepath, Size, Sent, BufferSize) ->
-		{ok, BytesRead} = files_manager:read(Filepath, Sent, BufferSize),
+		{ok, BytesRead} = logical_files_manager:read(Filepath, Sent, BufferSize),
         ok = Transport:send(Socket, BytesRead),
         NewSent = Sent + size(BytesRead),
         if
@@ -279,7 +279,7 @@ parse_file(Req, Headers, Params) ->
     NewReq = try
         stream_file_to_fslogic(Req, FullPath, get_upload_buffer_size())
     catch Type:Message ->
-        files_manager:delete(FullPath), 
+        logical_files_manager:delete(FullPath),
         throw({"Error in parse_file", Type, Message})
     end,
     File = #uploaded_file {
@@ -292,7 +292,7 @@ parse_file(Req, Headers, Params) ->
 
 % Tries to create a file as long as one gets created (changing its name eveery time)
 ensure_unique_filename(RequestedPath, 0) ->
-    Ans = files_manager:create(RequestedPath),
+    Ans = logical_files_manager:create(RequestedPath),
     case Ans of
         ok -> RequestedPath;
         _ -> ensure_unique_filename(RequestedPath, 1)
@@ -305,7 +305,7 @@ ensure_unique_filename(RequestedPath, Counter) ->
     Ext = filename:extension(RequestedPath),
     Rootname = filename:rootname(RequestedPath), 
     NewName = lists:flatten(io_lib:format("~s(~B)~s", [Rootname, Counter, Ext])),
-    case files_manager:create(NewName) of
+    case logical_files_manager:create(NewName) of
         ok -> NewName;
         {_, ?VEEXIST} -> ensure_unique_filename(RequestedPath, Counter + 1);
         Error -> throw({"Error in ensure_unique_filename", Error})
@@ -342,10 +342,10 @@ accumulate_multipart_data(Req, Acc, BufferSize) ->
     end.           
     
 
-% Writes a chunk of data to a file via files_manager
+% Writes a chunk of data to a file via logical_files_manager
 write_to_file(Binary, FullPath) ->
     Size = size(Binary),
-    BytesWritten = files_manager:write(FullPath, Binary),
+    BytesWritten = logical_files_manager:write(FullPath, Binary),
     case BytesWritten of
         I when is_integer(I) ->
             case BytesWritten of

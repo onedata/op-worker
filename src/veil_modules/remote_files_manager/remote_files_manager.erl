@@ -89,11 +89,11 @@ handle_message(ProtocolVersion, Record) when is_record(Record, createfile) ->
   SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
   case SH_And_ID of
     {Storage_helper_info, File} ->
-      TmpAns = files_manager:create_file_storage_system(Storage_helper_info, File),
+      TmpAns = storage_files_manager:create(Storage_helper_info, File),
       case TmpAns of
         ok -> #atom{value = ?VOK};
         Other ->
-          lager:warning("create_file_storage_system error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
+          lager:warning("storage_files_manager:create error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
           #atom{value = ?VEREMOTEIO}
       end;
     _ -> #atom{value = ?VEREMOTEIO}
@@ -104,11 +104,11 @@ handle_message(ProtocolVersion, Record) when is_record(Record, deletefileatstora
   SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
   case SH_And_ID of
     {Storage_helper_info, File} ->
-      TmpAns = files_manager:delete_file_storage_system(Storage_helper_info, File),
+      TmpAns = storage_files_manager:delete(Storage_helper_info, File),
       case TmpAns of
         ok -> #atom{value = ?VOK};
         Other ->
-          lager:warning("delete_file_storage_system error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
+          lager:warning("storage_files_manager:delete error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
           #atom{value = ?VEREMOTEIO}
       end;
     _ -> #atom{value = ?VEREMOTEIO}
@@ -120,11 +120,11 @@ handle_message(ProtocolVersion, Record) when is_record(Record, truncatefile) ->
   SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
   case SH_And_ID of
     {Storage_helper_info, File} ->
-      TmpAns = files_manager:truncate_storage_system(Storage_helper_info, File, Length),
+      TmpAns = storage_files_manager:truncate(Storage_helper_info, File, Length),
       case TmpAns of
         ok -> #atom{value = ?VOK};
         Other ->
-          lager:warning("truncate_storage_system error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
+          lager:warning("storage_files_manager:truncate error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
           #atom{value = ?VEREMOTEIO}
       end;
     _ -> #atom{value = ?VEREMOTEIO}
@@ -137,11 +137,11 @@ handle_message(ProtocolVersion, Record) when is_record(Record, readfile) ->
   SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
   case SH_And_ID of
     {Storage_helper_info, File} ->
-      TmpAns = files_manager:read_storage_system(Storage_helper_info, File, Offset, Size),
+      TmpAns = storage_files_manager:read(Storage_helper_info, File, Offset, Size),
       case TmpAns of
         {ok, Bytes} -> #filedata{answer_status = ?VOK, data = Bytes};
         Other ->
-          lager:warning("read_storage_system error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
+          lager:warning("storage_files_manager:read error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
           #filedata{answer_status = ?VEREMOTEIO}
       end;
     _ -> #filedata{answer_status = ?VEREMOTEIO}
@@ -154,11 +154,11 @@ handle_message(ProtocolVersion, Record) when is_record(Record, writefile) ->
   SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
   case SH_And_ID of
     {Storage_helper_info, File} ->
-      TmpAns = files_manager:write_storage_system(Storage_helper_info, File, Offset, Bytes),
+      TmpAns = storage_files_manager:write(Storage_helper_info, File, Offset, Bytes),
       case TmpAns of
         BytesNum when is_integer(BytesNum) -> #writeinfo{answer_status = ?VOK, bytes_written = BytesNum};
         Other ->
-          lager:warning("write_storage_system error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
+          lager:warning("storage_files_manager:write error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
           #writeinfo{answer_status = ?VEREMOTEIO}
       end;
     _ -> #writeinfo{answer_status = ?VEREMOTEIO}

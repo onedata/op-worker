@@ -5,13 +5,12 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module provides high level file system operations.
+%% @doc: This module provides high level file system operations that
+%% use logical names of files.
 %% @end
 %% ===================================================================
 
-%% TODO zinegrować ze zmienionym fslogic (znającym usera)
-
--module(files_manager).
+-module(logical_files_manager).
 
 -include("registered_names.hrl").
 -include("communication_protocol_pb.hrl").
@@ -23,8 +22,6 @@
 -include_lib("veil_modules/dao/dao_types.hrl").
 
 -define(NewFileLogicMode, 8#644).
--define(NewFileStorageMode, 8#644).
--define(S_IFREG, 8#100000).
 
 %% ====================================================================
 %% API
@@ -33,14 +30,13 @@
 -export([mkdir/1, rmdir/1, mv/2, chown/0, change_file_perm/2, ls/3, getfileattr/1]).
 %% File access (db and helper are used)
 -export([read/3, write/3, write/2, create/1, truncate/2, delete/1]).
-%% Physical files organization management (to better organize files on storage;
-%% the user does not see results of these operations)
--export([mkdir_storage_system/0, mv_storage_system/0, delete_dir_storage_system/0]).
-%% Physical files access (used to create temporary copies for remote files)
--export([read_storage_system/4, write_storage_system/4, write_storage_system/3, create_file_storage_system/2, truncate_storage_system/3, delete_file_storage_system/2, ls_storage_system/0]).
 
 %% File sharing
 -export([get_file_by_uuid/1, get_file_full_name_by_uuid/1, create_standard_share/1, create_share/2, get_share/1, remove_share/1]).
+
+%% ====================================================================
+%% API functions
+%% ====================================================================
 
 %% ====================================================================
 %% Logical file organization management (only db is used)
@@ -225,7 +221,7 @@ read(File, Offset, Size) ->
       case Response of
         ?VOK ->
           Storage_helper_info = #storage_helper_info{name = TmpAns#filelocation.storage_helper_name, init_args = TmpAns#filelocation.storage_helper_args},
-          read_storage_system(Storage_helper_info, TmpAns#filelocation.file_id, Offset, Size);
+          storage_files_manager:read(Storage_helper_info, TmpAns#filelocation.file_id, Offset, Size);
         _ -> {logical_file_system_error, Response}
       end;
     _ -> {Status, TmpAns}
@@ -252,7 +248,7 @@ write(File, Buf) ->
       case Response of
         ?VOK ->
           Storage_helper_info = #storage_helper_info{name = TmpAns#filelocation.storage_helper_name, init_args = TmpAns#filelocation.storage_helper_args},
-          write_storage_system(Storage_helper_info, TmpAns#filelocation.file_id, Buf);
+          storage_files_manager:write(Storage_helper_info, TmpAns#filelocation.file_id, Buf);
         _ -> {logical_file_system_error, Response}
       end;
     _ -> {Status, TmpAns}
@@ -279,7 +275,7 @@ write(File, Offset, Buf) ->
       case Response of
         ?VOK ->
           Storage_helper_info = #storage_helper_info{name = TmpAns#filelocation.storage_helper_name, init_args = TmpAns#filelocation.storage_helper_args},
-          write_storage_system(Storage_helper_info, TmpAns#filelocation.file_id, Offset, Buf);
+          storage_files_manager:write(Storage_helper_info, TmpAns#filelocation.file_id, Offset, Buf);
         _ -> {logical_file_system_error, Response}
       end;
     _ -> {Status, TmpAns}
@@ -305,7 +301,7 @@ create(File) ->
       case Response of
         ?VOK ->
           Storage_helper_info = #storage_helper_info{name = TmpAns#filelocation.storage_helper_name, init_args = TmpAns#filelocation.storage_helper_args},
-          create_file_storage_system(Storage_helper_info, TmpAns#filelocation.file_id);
+          storage_files_manager:create(Storage_helper_info, TmpAns#filelocation.file_id);
         _ -> {logical_file_system_error, Response}
       end;
     _ -> {Status, TmpAns}
@@ -331,7 +327,7 @@ truncate(File, Size) ->
       case Response of
         ?VOK ->
           Storage_helper_info = #storage_helper_info{name = TmpAns#filelocation.storage_helper_name, init_args = TmpAns#filelocation.storage_helper_args},
-          truncate_storage_system(Storage_helper_info, TmpAns#filelocation.file_id, Size);
+          storage_files_manager:truncate(Storage_helper_info, TmpAns#filelocation.file_id, Size);
         _ -> {logical_file_system_error, Response}
       end;
     _ -> {Status, TmpAns}
@@ -358,12 +354,12 @@ delete(File) ->
       case Response of
         ?VOK ->
           Storage_helper_info = #storage_helper_info{name = TmpAns#filelocation.storage_helper_name, init_args = TmpAns#filelocation.storage_helper_args},
-          TmpAns2 = delete_file_storage_system(Storage_helper_info, TmpAns#filelocation.file_id),
+          TmpAns2 = storage_files_manager:delete(Storage_helper_info, TmpAns#filelocation.file_id),
 
           TmpAns2_2 = case TmpAns2 of
-                        {wrong_getatt_return_code, -2} -> ok;
-                        _ -> TmpAns2
-                      end,
+            {wrong_getatt_return_code, -2} -> ok;
+            _ -> TmpAns2
+          end,
 
           case TmpAns2_2 of
             ok ->
@@ -385,271 +381,7 @@ delete(File) ->
     _ -> {Status, TmpAns}
   end.
 
-%% ====================================================================
-%% Physical files organization management (to better organize files on storage;
-%% the user does not see results of these operations)
-%% ====================================================================
 
-%% mkdir_storage_system/0
-%% ====================================================================
-%% @doc Creates dir on storage
-%% @end
--spec mkdir_storage_system() -> {error, not_implemented_yet}.
-%% ====================================================================
-mkdir_storage_system() ->
-  {error, not_implemented_yet}.
-
-%% mv_storage_system/0
-%% ====================================================================
-%% @doc Moves file on storage
-%% @end
--spec mv_storage_system() -> {error, not_implemented_yet}.
-%% ====================================================================
-mv_storage_system() ->
-  {error, not_implemented_yet}.
-
-%% delete_dir_storage_system/0
-%% ====================================================================
-%% @doc Deletes dir on storage
-%% @end
--spec delete_dir_storage_system() -> {error, not_implemented_yet}.
-%% ====================================================================
-delete_dir_storage_system() ->
-  {error, not_implemented_yet}.
-
-%% ====================================================================
-%% Physical files access (used to create temporary copies for remote files)
-%% ====================================================================
-
-%% read_storage_system/4
-%% ====================================================================
-%% @doc Reads file (operates only on storage). First it checks file
-%% attributes (file type and file size). If everything is ok,
-%% it reads data from file.
-%% @end
--spec read_storage_system(Storage_helper_info :: record(), File :: string(), Offset :: integer(), Size :: integer()) -> Result when
-  Result :: {ok, Bytes} | {ErrorGeneral, ErrorDetail},
-  Bytes :: binary(),
-  ErrorGeneral :: atom(),
-  ErrorDetail :: term().
-%% ====================================================================
-read_storage_system(Storage_helper_info, File, Offset, Size) ->
-  {ErrorCode, Stat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
-  case ErrorCode of
-    0 ->
-      case veilhelpers:exec(is_reg, [Stat#st_stat.st_mode]) of
-        true ->
-          FSize = Stat#st_stat.st_size,
-          case FSize < Offset of
-            false ->
-              Flag = veilhelpers:exec(get_flag, [o_rdonly]),
-              {ErrorCode2, FFI} = veilhelpers:exec(open, Storage_helper_info, [File, #st_fuse_file_info{flags = Flag}]),
-              case ErrorCode2 of
-                0 ->
-                  Size2 = case Offset + Size > FSize of
-                            true -> FSize - Offset;
-                            false -> Size
-                          end,
-                  {ReadAns, Bytes} = read_bytes(Storage_helper_info, File, Offset, Size2, FFI),
-
-                  ErrorCode3 = veilhelpers:exec(release, Storage_helper_info, [File, FFI]),
-                  case ErrorCode3 of
-                    0 -> {ReadAns, Bytes};
-                    {error, 'NIF_not_loaded'} -> ErrorCode3;
-                    _ -> {wrong_release_return_code, ErrorCode3}
-                  end;
-                error -> {ErrorCode, FFI};
-                _ -> {wrong_open_return_code, ErrorCode2}
-              end;
-            true  -> {error, file_too_small}
-          end;
-        false -> {error, not_regular_file}
-      end;
-    error -> {ErrorCode, Stat};
-    _ -> {wrong_getatt_return_code, ErrorCode}
-  end.
-
-%% write_storage_system/4
-%% ====================================================================
-%% @doc Writes data to file (operates only on storage). First it checks file
-%% attributes (file type and file size). If everything is ok,
-%% it reads data from file.
-%% @end
--spec write_storage_system(Storage_helper_info :: record(), File :: string(), Offset :: integer(), Buf :: binary()) -> Result when
-  Result :: BytesWritten | {ErrorGeneral, ErrorDetail},
-  BytesWritten :: integer(),
-  ErrorGeneral :: atom(),
-  ErrorDetail :: term().
-%% ====================================================================
-write_storage_system(Storage_helper_info, File, Offset, Buf) ->
-  {ErrorCode, Stat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
-  case ErrorCode of
-    0 ->
-      case veilhelpers:exec(is_reg, [Stat#st_stat.st_mode]) of
-        true ->
-          FSize = Stat#st_stat.st_size,
-          case FSize < Offset of
-            false ->
-              Flag = veilhelpers:exec(get_flag, [o_wronly]),
-              {ErrorCode2, FFI} = veilhelpers:exec(open, Storage_helper_info, [File, #st_fuse_file_info{flags = Flag}]),
-              case ErrorCode2 of
-                0 ->
-                  BytesWritten = write_bytes(Storage_helper_info, File, Offset, Buf, FFI),
-
-                  ErrorCode3 = veilhelpers:exec(release, Storage_helper_info, [File, FFI]),
-                  case ErrorCode3 of
-                    0 -> BytesWritten;
-                    {error, 'NIF_not_loaded'} -> ErrorCode3;
-                    _ -> {wrong_release_return_code, ErrorCode3}
-                  end;
-                error -> {ErrorCode, FFI};
-                _ -> {wrong_open_return_code, ErrorCode2}
-              end;
-            true  -> {error, file_too_small}
-          end;
-        false -> {error, not_regular_file}
-      end;
-    error -> {ErrorCode, Stat};
-    _ -> {wrong_getatt_return_code, ErrorCode}
-  end.
-
-%% write_storage_system/3
-%% ====================================================================
-%% @doc Appends data to the end of file (operates only on storage).
-%% First it checks file attributes (file type and file size).
-%% If everything is ok, it reads data from file.
-%% @end
--spec write_storage_system(Storage_helper_info :: record(), File :: string(), Buf :: binary()) -> Result when
-  Result :: BytesWritten | {ErrorGeneral, ErrorDetail},
-  BytesWritten :: integer(),
-  ErrorGeneral :: atom(),
-  ErrorDetail :: term().
-%% ====================================================================
-write_storage_system(Storage_helper_info, File, Buf) ->
-  {ErrorCode, Stat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
-  case ErrorCode of
-    0 ->
-      case veilhelpers:exec(is_reg, [Stat#st_stat.st_mode]) of
-        true ->
-          Offset = Stat#st_stat.st_size,
-          Flag = veilhelpers:exec(get_flag, [o_wronly]),
-          {ErrorCode2, FFI} = veilhelpers:exec(open, Storage_helper_info, [File, #st_fuse_file_info{flags = Flag}]),
-          case ErrorCode2 of
-            0 ->
-              BytesWritten = write_bytes(Storage_helper_info, File, Offset, Buf, FFI),
-
-              ErrorCode3 = veilhelpers:exec(release, Storage_helper_info, [File, FFI]),
-              case ErrorCode3 of
-                0 -> BytesWritten;
-                {error, 'NIF_not_loaded'} -> ErrorCode3;
-                _ -> {wrong_release_return_code, ErrorCode3}
-              end;
-            error -> {ErrorCode, FFI};
-            _ -> {wrong_open_return_code, ErrorCode2}
-          end;
-        false -> {error, not_regular_file}
-      end;
-    error -> {ErrorCode, Stat};
-    _ -> {wrong_getatt_return_code, ErrorCode}
-  end.
-
-%% create_file_storage_system/2
-%% ====================================================================
-%% @doc Creates file (operates only on storage). First it checks if file
-%% exists. If not, it creates file.
-%% @end
--spec create_file_storage_system(Storage_helper_info :: record(), File :: string()) -> Result when
-  Result :: ok | {ErrorGeneral, ErrorDetail},
-  ErrorGeneral :: atom(),
-  ErrorDetail :: term().
-%% ====================================================================
-create_file_storage_system(Storage_helper_info, File) ->
-  {ErrorCode, Stat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
-  case ErrorCode of
-    0 -> {error, file_exists};
-    error -> {ErrorCode, Stat};
-    _ ->
-      ErrorCode2 = veilhelpers:exec(mknod, Storage_helper_info, [File, ?NewFileStorageMode bor ?S_IFREG, 0]),
-      case ErrorCode2 of
-        0 ->
-          ErrorCode3 = veilhelpers:exec(truncate, Storage_helper_info, [File, 0]),
-          case ErrorCode3 of
-            0 -> ok;
-            {error, 'NIF_not_loaded'} -> ErrorCode3;
-            _ -> {wrong_truncate_return_code, ErrorCode3}
-          end;
-        {error, 'NIF_not_loaded'} -> ErrorCode2;
-        _ ->
-          lager:error("Can note create file %p, code: %p, helper info: %p, mode: %p%n", [File, ErrorCode2, Storage_helper_info, ?NewFileStorageMode bor ?S_IFREG]),
-          {wrong_mknod_return_code, ErrorCode2}
-      end
-  end.
-
-%% truncate_storage_system/2
-%% ====================================================================
-%% @doc Truncates file (operates only on storage). First it checks if file
-%% exists and is regular file. If everything is ok, it truncates file.
-%% @end
--spec truncate_storage_system(Storage_helper_info :: record(), File :: string(), Size :: integer()) -> Result when
-  Result :: ok | {ErrorGeneral, ErrorDetail},
-  ErrorGeneral :: atom(),
-  ErrorDetail :: term().
-%% ====================================================================
-truncate_storage_system(Storage_helper_info, File, Size) ->
-  {ErrorCode, Stat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
-  case ErrorCode of
-    0 ->
-      case veilhelpers:exec(is_reg, [Stat#st_stat.st_mode]) of
-        true ->
-          ErrorCode2 = veilhelpers:exec(truncate, Storage_helper_info, [File, Size]),
-          case ErrorCode2 of
-            0 -> ok;
-            {error, 'NIF_not_loaded'} -> ErrorCode2;
-            _ -> {wrong_truncate_return_code, ErrorCode2}
-          end;
-        false -> {error, not_regular_file}
-      end;
-    error -> {ErrorCode, Stat};
-    _ -> {wrong_getatt_return_code, ErrorCode}
-  end.
-
-%% delete_file_storage_system/2
-%% ====================================================================
-%% @doc Deletes file (operates only on storage). First it checks if file
-%% exists and is regular file. If everything is ok, it deletes file.
-%% @end
--spec delete_file_storage_system(Storage_helper_info :: record(), File :: string()) -> Result when
-  Result :: ok | {ErrorGeneral, ErrorDetail},
-  ErrorGeneral :: atom(),
-  ErrorDetail :: term().
-%% ====================================================================
-delete_file_storage_system(Storage_helper_info, File) ->
-  {ErrorCode, Stat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
-  case ErrorCode of
-    0 ->
-      case veilhelpers:exec(is_reg, [Stat#st_stat.st_mode]) of
-        true ->
-          ErrorCode2 = veilhelpers:exec(unlink, Storage_helper_info, [File]),
-          case ErrorCode2 of
-            0 -> ok;
-            {error, 'NIF_not_loaded'} -> ErrorCode2;
-            _ -> {wrong_unlink_return_code, ErrorCode2}
-          end;
-        false -> {error, not_regular_file}
-      end;
-    error -> {ErrorCode, Stat};
-    _ -> {wrong_getatt_return_code, ErrorCode}
-  end.
-
-%% ls_storage_system/0
-%% ====================================================================
-%% @doc Lists files in directory on storage
-%% @end
--spec ls_storage_system() -> {error, not_implemented_yet}.
-%% ====================================================================
-ls_storage_system() ->
-  %% czy taka funkcja jest nam do czegoś potrzebna - w końcu znane będą pliki z bazy jak i kopie tymczasowe?
-  {error, not_implemented_yet}.
 
 %% ====================================================================
 %% Internal functions
@@ -677,7 +409,7 @@ contact_fslogic(Record) ->
   CallAns = case UserID of
               undefined -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {internal_call, Record}});
               _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, #veil_request{subject = UserID, request = {internal_call, Record}}})
-            end,
+  end,
   case CallAns of
     ok ->
       receive
@@ -686,65 +418,6 @@ contact_fslogic(Record) ->
         {error, timeout}
       end;
     _ -> {error, CallAns}
-  end.
-
-%% read_bytes/5
-%% ====================================================================
-%% @doc Reads file (operates only on storage).It contains loop that reads
-%% data until all requested data is read (storage may not be able to provide
-%% all requested data at once).
-%% @end
--spec read_bytes(Storage_helper_info :: record(), File :: string(), Offset :: integer(), Size :: integer(), FFI :: #st_fuse_file_info{}) -> Result when
-  Result :: {ok, Bytes} | {ErrorGeneral, ErrorDetail},
-  Bytes :: binary(),
-  ErrorGeneral :: atom(),
-  ErrorDetail :: term().
-%% ====================================================================
-read_bytes(_Storage_helper_info, _File, _Offset, 0, _FFI) ->
-  {ok, <<>>};
-
-read_bytes(Storage_helper_info, File, Offset, Size, FFI) ->
-  {ErrorCode, Bytes} = veilhelpers:exec(read, Storage_helper_info, [File, Size, Offset, FFI]),
-  case ErrorCode of
-    BytesNum when is_integer(BytesNum), BytesNum > 0 ->
-      {TmpErrorCode, TmpBytes} = read_bytes(Storage_helper_info, File, Offset + BytesNum, Size - BytesNum, FFI),
-      case TmpErrorCode of
-        ok -> {ok, <<Bytes/binary, TmpBytes/binary>>};
-        _ -> {TmpErrorCode, TmpBytes}
-      end;
-    error -> {ErrorCode, Bytes};
-    _ -> {error, {wrong_read_return_code, ErrorCode}}
-  end.
-
-%% write_bytes/5
-%% ====================================================================
-%% @doc Writes data to file (operates only on storage). It contains loop
-%% that writes data until all data is written (storage may not be able to
-%% save all data at once).
-%% @end
--spec write_bytes(Storage_helper_info :: record(), File :: string(), Offset :: integer(), Buf :: binary(), FFI :: #st_fuse_file_info{}) -> Result when
-  Result :: BytesWritten | {ErrorGeneral, ErrorDetail},
-  BytesWritten :: integer(),
-  ErrorGeneral :: atom(),
-  ErrorDetail :: term().
-%% ====================================================================
-write_bytes(_Storage_helper_info, _File, _Offset, <<>>, _FFI) ->
-  0;
-
-write_bytes(Storage_helper_info, File, Offset, Buf, FFI) ->
-  ErrorCode = veilhelpers:exec(write, Storage_helper_info, [File, Buf, Offset, FFI]),
-  case ErrorCode of
-    BytesNum when is_integer(BytesNum), BytesNum > 0 ->
-      <<_:BytesNum/binary, NewBuf/binary>> = Buf,
-      TmpErrorCode = write_bytes(Storage_helper_info, File, Offset + BytesNum, NewBuf, FFI),
-      case TmpErrorCode of
-        BytesNum2 when is_integer(BytesNum2) -> BytesNum2 + BytesNum;
-        _ -> TmpErrorCode
-      end;
-    {error, 'NIF_not_loaded'} -> ErrorCode;
-    _ ->
-      lager:error("Write bytes error - wrong code: ~p", [ErrorCode]),
-      {error, {wrong_write_return_code, ErrorCode}}
   end.
 
 %% get_file_by_uuid/1

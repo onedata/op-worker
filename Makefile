@@ -13,7 +13,8 @@ compile:
 
 deps:
 	./rebar get-deps
-	./submodules.sh
+	git submodule init
+	git submodule update
 
 clean:
 	./rebar clean

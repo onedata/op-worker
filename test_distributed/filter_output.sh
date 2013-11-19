@@ -24,7 +24,10 @@ do
 
   if [ "$Visible" == ok ]
   then
-    echo "$line"
+    if ! grep -q "Converting .*" <<<"$line" ;
+    then
+      echo "$line"
+    fi
   fi
 
   if grep -q "Recompile: .*" <<<"$line"
@@ -43,8 +46,8 @@ do
     Done=${line:$DoneStart:$DoneLength}
     DoneSum=`expr $DoneSum + $Done`
 
-    AllStart=`expr match "$line" "Testing .*: TEST COMPLETE, .*failed of "`
-    AllStopTmp=`expr match "$line" "Testing .*: TEST COMPLETE, .*failed of .* test cases"`
+    AllStart=`expr match "$line" "Testing .*: TEST COMPLETE, .*failed.* of "`
+    AllStopTmp=`expr match "$line" "Testing .*: TEST COMPLETE, .*failed.* of .* test cases"`
     AllStop=`expr $AllStopTmp - 10`
     AllLength=`expr $AllStop - $AllStart`
     All=${line:$AllStart:$AllLength}

@@ -38,7 +38,7 @@ render_body() ->
 main_panel() -> 
     TableRows = lists:map(
         fun( #veil_document { uuid=UUID, record=#share_desc { file=FileID } }) ->
-            case files_manager:get_file_full_name_by_uuid(FileID) of
+            case logical_files_manager:get_file_full_name_by_uuid(FileID) of
                 {ok, FilePath} -> 
                     Filename = filename:basename(FilePath), 
                     AddressPrefix = "https://" ++ gui_utils:get_requested_hostname() ++ 
@@ -84,7 +84,7 @@ main_panel() ->
 % Get list of user's shared files from database
 get_shared_files() ->
     #veil_document { uuid=UID } = wf:session(user_doc),
-    _ShareList = case files_manager:get_share({user, UID}) of 
+    _ShareList = case logical_files_manager:get_share({user, UID}) of
         {ok, List} when is_list(List)-> List;
         {ok, Doc} -> [Doc];
         _ -> []
@@ -145,7 +145,7 @@ remove_link_prompt(ShareID, Filename) ->
 
 % Actually remove a link
 remove_link(ShareID) ->
-    ok = files_manager:remove_share({uuid, ShareID}), 
+    ok = logical_files_manager:remove_share({uuid, ShareID}),
     wf:replace(main_table, main_panel()),
     wf:update(footer_popup, []),
     wf:wire(footer_popup, #add_class { class="hidden", speed=0 }),

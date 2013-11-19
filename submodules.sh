@@ -1,8 +1,13 @@
 #!/bin/bash
 
-git submodule init
 git submodule update
 cd veilprotocol
-git merge master
+git fetch
+git checkout master
+git pull
 cd ..
-git submodule update
+cd veilhelpers
+git fetch
+git checkout master
+git pull
+cd ..

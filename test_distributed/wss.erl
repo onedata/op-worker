@@ -38,7 +38,7 @@ websocket_info({send, Data}, _ConnState, State) ->
 websocket_info({close, Payload}, _ConnState, State) ->
     {close, Payload, State}.
 
-websocket_terminate({close, Code, Payload}, _ConnState, State) ->
+websocket_terminate({close, Code, _Payload}, _ConnState, State) ->
     State ! {self(), {closed, Code}},
     ok.
 
