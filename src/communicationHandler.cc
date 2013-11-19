@@ -1,371 +1,185 @@
 /**
  * @file communicationHandler.cc
- * @author Beata Skiba
  * @author Rafal Slota
  * @copyright (C) 2013 ACK CYFRONET AGH
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
 #include "communicationHandler.h"
-
 #include "glog/logging.h"
-
-#include <unistd.h>
 #include <iostream>
 #include <string>
-#include <fstream>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <ctype.h>
-#include <dirent.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <limits.h>
-#include <cstdlib>
-#include <sys/types.h>
-#include <sys/xattr.h>
 
 /// How many re-attampts has to be made by CommunicationHandler::communicate
 /// before returning error.
 #define RECONNECT_COUNT 1
 
-/// This macro logs openssl error, closes connection and returnf with -1 error code.
-#define SSL_OPERATION_ERROR { \
-                                LOG(ERROR) << "openssl error(): " << ERR_error_string(ERR_peek_last_error(), NULL); \
-                                closeConnection(); \
-                                return -1; \
-                            }
+/// Timout for WebSocket handshake
+#define CONNECT_TIMEOUT 5000
+
+/// Path on which cluster listenes for websocket connections
+#define CLUSTER_URI_PATH "/veilclient"
 
 using namespace std;
 using namespace boost;
 using namespace veil::protocol::communication_protocol;
+using websocketpp::lib::placeholders::_1;
+using websocketpp::lib::placeholders::_2;
+using websocketpp::lib::bind;
 
 namespace veil {
 
 volatile int CommunicationHandler::instancesCount = 0;
+boost::mutex CommunicationHandler::m_instanceMutex;
 
-CommunicationHandler::CommunicationHandler(string hostname, int port, string certPath) :
-    sslContext(NULL),
-    ssl(NULL),
-    m_hostname(hostname),
-    m_port(port),
-    m_certPath(certPath)
+CommunicationHandler::CommunicationHandler(string hostname, int port, string certPath)
+    : m_hostname(hostname),
+      m_port(port),
+      m_certPath(certPath),
+      m_connectStatus(CLOSED),
+      m_currentMsgId(0)
 {
-    unique_lock< boost::mutex > lock(m_access);
+    m_endpoint.clear_access_channels(websocketpp::log::alevel::all);
+    m_endpoint.clear_error_channels(websocketpp::log::elevel::all);
+    
+    boost::unique_lock<boost::mutex> lock(m_instanceMutex);
     ++instancesCount;
-    initSSL();
 }
-
+    
+    
 CommunicationHandler::~CommunicationHandler()
 {
-    unique_lock< boost::mutex > lock(m_access);
-    --instancesCount;
     closeConnection();
+    boost::unique_lock<boost::mutex> lock(m_instanceMutex);
+    --instancesCount;
 }
-
-void CommunicationHandler::initSSL()
-{
-    SSL_library_init();
-    SSL_load_error_strings();
-}
-
-int CommunicationHandler::initCTX()
-{
-    SSL_METHOD * method;
-
-    if(sslContext)
-        return 0;
-
-    OpenSSL_add_all_algorithms();  /* Load cryptos, et.al. */
-    SSL_load_error_strings();   /* Bring in and register error messages */
-    method = (SSL_METHOD*)SSLv3_client_method();  /* Create new client-method instance */
-
-    sslContext = SSL_CTX_new(method);   /* Create new context */
-    if ( sslContext == NULL )
-    {
-        LOG(ERROR) << "openssl error: " << ERR_error_string(ERR_peek_last_error(), NULL);
-        SSL_CTX_free(sslContext); sslContext = NULL;
-        return -1;
-    }
-
-
-    LOG(INFO) << "Using certificate file: " << m_certPath;
-
-    if(SSL_CTX_use_certificate_chain_file(sslContext, m_certPath.c_str()) != 1)
-    {
-        LOG(ERROR) << "cannot load certificate file. openssl error: " << ERR_error_string(ERR_peek_last_error(), NULL);
-        SSL_CTX_free(sslContext); sslContext = NULL;
-        return -1;
-    }
-
-    if(SSL_CTX_use_certificate_file(sslContext, m_certPath.c_str(), SSL_FILETYPE_PEM) != 1)
-    {
-        LOG(ERROR) << "cannot load certificate file. openssl error: " << ERR_error_string(ERR_peek_last_error(), NULL);
-        SSL_CTX_free(sslContext); sslContext = NULL;
-        return -1;
-    }
-
-    if(SSL_CTX_use_PrivateKey_file(sslContext, m_certPath.c_str(), SSL_FILETYPE_PEM) != 1)
-    {
-        LOG(ERROR) << "cannot load certificate file. openssl error: " << ERR_error_string(ERR_peek_last_error(), NULL);
-        SSL_CTX_free(sslContext); sslContext = NULL;
-        return -1;
-    }
-
-    return 0;
-}
-
-int CommunicationHandler::openTCPConnection()
-{
-    int sd;
-    struct sockaddr_in addr;
-    struct timeval timeout;  // Timeout for connect()
-    timeout.tv_sec = 1;
-    timeout.tv_usec = 0;
-
-    LOG(INFO) << "Connecting to: " << m_hostname << ":" << m_port;
-
-    sd = socket(AF_INET, SOCK_STREAM, 0);
-    fcntl(sd, F_SETFL, O_NONBLOCK);
-
-    bzero(&addr, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(m_port);
-    addr.sin_addr.s_addr = inet_addr(m_hostname.c_str());
-
-    if ( connect(sd, (struct sockaddr*)&addr, sizeof(addr)) != 0 )
-    {
-        fd_set set;
-        FD_ZERO(&set);
-        FD_SET(sd, &set);
-        if(errno != EINPROGRESS || select(sd+1, NULL, &set, NULL, &timeout) != 1)
-        {
-            close(sd);
-            LOG(ERROR) << "inet connect failed. errono: " << errno;
-            return -1;
-        }
-    }
-
-    LOG(INFO) << "TCP connection established";
-    return sd;
-}
-
+    
 int CommunicationHandler::openConnection()
 {
-    if(initCTX() < 0)
-        return -1;
-
-
-    serverSocket = openTCPConnection();
-    if(serverSocket < 0)
-    {
-        LOG(ERROR) << "cannot open TCP connection";
-        return -1;
-    }
-
-    if(ssl) SSL_free(ssl); ssl = NULL;
-    ssl = SSL_new(sslContext);
-    if(ssl == NULL)
-    {
-        SSL_OPERATION_ERROR;
-    }
-
-    SSL_set_mode(ssl, SSL_MODE_AUTO_RETRY);
-
-    if(SSL_set_fd(ssl, serverSocket) == 0)
-    {
-        SSL_OPERATION_ERROR;
-    }
-
-    int err, selectResult;
-    struct timeval timeout;  // Timeout for connect()
-    timeout.tv_usec = 0;
-    fd_set set;
-    while( (err = SSL_connect(ssl)) != 1 )
-    {
-        FD_ZERO(&set);
-        FD_SET(serverSocket, &set);
-        timeout.tv_sec = 1;
-        int selectType = SSL_get_error(ssl, err);
-
-        if(selectType == SSL_ERROR_WANT_READ)
-            selectResult = select(serverSocket + 1, &set, NULL, NULL, &timeout);
-        else if(selectType == SSL_ERROR_WANT_WRITE)
-            selectResult = select(serverSocket + 1, NULL, &set, NULL, &timeout);
-        else
-            SSL_OPERATION_ERROR;
-
-        if(selectResult != 1)
-            SSL_OPERATION_ERROR;
+    boost::unique_lock<boost::mutex> lock(m_connectMutex);
+    websocketpp::lib::error_code ec;
         
+    if(m_connectStatus == CONNECTED)
+        return 0;
+    
+    // Initialize ASIO
+    if(m_io_service) { // If ASIO io_service exists, then make sure that previous worker thread are stopped before we destroy that io_service
+        m_io_service->stop();
+        m_worker1.join();
+        m_worker2.join();
     }
-
-    return 0;
+    
+    // (re)Initialize io_service
+    m_io_service.reset(new boost::asio::io_service());
+    m_endpoint.init_asio(m_io_service.get());
+        
+    // Register our handlers
+    m_endpoint.set_tls_init_handler(bind(&CommunicationHandler::onTLSInit, this, ::_1));
+    m_endpoint.set_socket_init_handler(bind(&CommunicationHandler::onSocketInit, this, ::_1, ::_2));    // On socket init
+    m_endpoint.set_message_handler(bind(&CommunicationHandler::onMessage, this, ::_1, ::_2));           // Incoming WebSocket message
+    m_endpoint.set_open_handler(bind(&CommunicationHandler::onOpen, this, ::_1));                       // WebSocket connection estabilished
+    m_endpoint.set_close_handler(bind(&CommunicationHandler::onClose, this, ::_1));                     // WebSocket connection closed
+    m_endpoint.set_fail_handler(bind(&CommunicationHandler::onFail, this, ::_1));
+    m_endpoint.set_ping_handler(bind(&CommunicationHandler::onPing, this, ::_1, ::_2));
+    m_endpoint.set_pong_handler(bind(&CommunicationHandler::onPong, this, ::_1, ::_2));
+    m_endpoint.set_pong_timeout_handler(bind(&CommunicationHandler::onPongTimeout, this, ::_1, ::_2));
+    m_endpoint.set_interrupt_handler(bind(&CommunicationHandler::onInterrupt, this, ::_1));
+        
+        
+    m_connectStatus = TIMEOUT;
+    string URL = string("wss://") + m_hostname + ":" + toString(m_port) + string(CLUSTER_URI_PATH);
+    ws_client::connection_ptr con = m_endpoint.get_connection(URL, ec); // Initialize WebSocket handshake
+    if(ec.value() != 0) {
+        LOG(ERROR) << "Cannot connect to " << URL << " due to: " << ec.message();
+        return ec.value();
+    } else {
+        LOG(INFO) << "Trying to connect to: " << URL;
+    }
+        
+    m_endpoint.connect(con);
+    m_endpointConnection = con;
+        
+    // Start worker thread(s)
+    // Second worker should not be started if WebSocket client lib cannot handle full-duplex connections
+    m_worker1 = websocketpp::lib::thread(&ws_client::run, &m_endpoint);
+    //m_worker2 = websocketpp::lib::thread(&ws_client::run, &m_endpoint);
+    
+    // Wait for WebSocket handshake
+    m_connectCond.timed_wait(lock, boost::posix_time::milliseconds(CONNECT_TIMEOUT));
+    
+    LOG(INFO) << "Connection to " << URL << " status: " << m_connectStatus;
+        
+    return m_connectStatus;
 }
-
-int CommunicationHandler::sendMessage(const ClusterMsg& message)
-{
-    uint8_t * msg_buffer;
-    uint32_t msg_len;
-    uint32_t msg_buffer_len;
-
-    msg_len = message.ByteSize();
-    msg_buffer_len = sizeof(msg_len) + msg_len;
-    msg_buffer = new uint8_t [msg_buffer_len];
-
-#ifdef DEBUG
-    LOG(INFO) << "Sending packet with length: " << msg_len;
-#endif
-
-    if(!message.SerializeToArray(msg_buffer + sizeof(msg_len), msg_len))
-    {
-        LOG(ERROR) << "cannot serialize ClusterMsg";
-        delete [] msg_buffer;
-        return -1;
-    }
-    *((uint32_t *)msg_buffer) = htonl(msg_len);
-
-    int len = writeBytes(msg_buffer, msg_buffer_len);
-
-    if(len <= 0)
-    {
-        LOG(ERROR) << "sending TCP packet failed with error code: " << len;
-    }
-
-    delete [] msg_buffer;
-    return len;
-}
-
-int CommunicationHandler::receiveMessage(Answer * msg){
-    uint32_t msg_len;
-
-    if(readBytes((uint8_t *)&msg_len, sizeof(msg_len)) < 0){
-        LOG(ERROR) << "Error receiving packet length";
-        return -1;
-    }
-
-    msg_len = ntohl(msg_len);
-
-    uint8_t msg_buffer[msg_len];
-
-#ifdef DEBUG
-    LOG(INFO) << "Receiving packet with length: " << msg_len;
-#endif
-
-    if(readBytes(msg_buffer, msg_len) < 0){
-        LOG(ERROR) << "Error receiving packet";
-        return -1;
-    }
-
-    if(!msg->ParseFromArray((void *)msg_buffer, msg_len)){
-        LOG(ERROR) << "cannot parse answer";
-        return -1;
-    }
-
-    return 0;
-
-}
-
+    
+    
 void CommunicationHandler::closeConnection()
 {
-    LOG(INFO) << "closing connection";
-    SSL_CTX_free(sslContext); sslContext = NULL;
-    close(serverSocket);
-}
-
-int CommunicationHandler::writeBytes(uint8_t * msg_buffer, int size)
-{
-    if(ssl == NULL)
-        return -1;
-
-    int bytesWritten = 0;
-    int numBytes;
-    int err, selectResult;
-    struct timeval timeout;  // Timeout
-    timeout.tv_usec = 0;
-    fd_set set;
-
-    while (bytesWritten < size)
+    boost::unique_lock<boost::mutex> lock(m_connectMutex);
+    
+    if(m_connectStatus == CLOSED)
+        return;
+    
+    if(m_io_service) // Do not attempt to close connection if underlying io_service wasnt initialized
     {
-        ERR_clear_error();
-        while((numBytes = SSL_write(ssl, msg_buffer + bytesWritten, size - bytesWritten)) <= 0)
-        {
-            FD_ZERO(&set);
-            FD_SET(serverSocket, &set);
-            timeout.tv_sec = 1;
-            err = SSL_get_error(ssl, numBytes);
-            if(err == SSL_ERROR_WANT_READ)
-                selectResult = select(serverSocket+1, &set, NULL, NULL, &timeout);
-            else if(err == SSL_ERROR_WANT_WRITE)
-                selectResult = select(serverSocket+1, NULL, &set, NULL, &timeout);
-            else {
-                LOG(ERROR) << "writeBytes SSL_get_error value: " << err;
-                SSL_OPERATION_ERROR;
-            }
-
-            if(selectResult != 1) {
-                LOG(ERROR) << "select() failed with return value: " << selectResult << ", errno: " << errno;
-                SSL_OPERATION_ERROR;
-            }
-        }
+        websocketpp::lib::error_code ec;
+        m_endpoint.close(m_endpointConnection, websocketpp::close::status::normal, string("reset_by_peer"), ec); // Initialize WebSocket cloase operation
+        if(ec.value() == 0)
+            m_connectCond.timed_wait(lock, boost::posix_time::milliseconds(CONNECT_TIMEOUT)); // Wait for connection to close
         
-        bytesWritten += numBytes;
+        m_io_service->stop(); // If connection failed to close, make sure that io_service refuses to send/receive any further messages at this point
     }
-    return bytesWritten;
+    
+    // Stop workers
+    m_worker1.join();
+    m_worker2.join();
+    
+    m_connectStatus = CLOSED;
 }
 
-int CommunicationHandler::readBytes(uint8_t * msg_buffer, int size)
+
+int CommunicationHandler::sendMessage(const ClusterMsg& msg, long long msgId)
 {
-    if(ssl == NULL)
-        return -1;
-
-    int bytesRead = 0;
-    int numBytes;
-    int err, selectResult;
-    struct timeval timeout;  // Timeout
-    timeout.tv_usec = 0;
-    fd_set set;
-
-    while (bytesRead < size)
-    {
-        ERR_clear_error();
-        while((numBytes = SSL_read(ssl, msg_buffer + bytesRead, size - bytesRead)) <= 0)
-        {
-            FD_ZERO(&set);
-            FD_SET(serverSocket, &set);
-            timeout.tv_sec = 20;
-            err = SSL_get_error(ssl, numBytes);
-            if(err == SSL_ERROR_WANT_READ)
-                selectResult = select(serverSocket+1, &set, NULL, NULL, &timeout);
-            else if(err == SSL_ERROR_WANT_WRITE)
-                selectResult = select(serverSocket+1, NULL, &set, NULL, &timeout);
-            else {
-                LOG(ERROR) << "readBytes SSL_get_error value: " << err;
-                SSL_OPERATION_ERROR;
-            }
-
-            if(selectResult != 1) {
-                LOG(ERROR) << "select() failed with return value: " << selectResult << ", errno: " << errno;
-                SSL_OPERATION_ERROR;
-            }
-        }
+    if(m_connectStatus != CONNECTED)
+        return m_connectStatus;
+    
+    websocketpp::lib::error_code ec;
+    m_endpoint.send(m_endpointConnection, msg.SerializeAsString(), websocketpp::frame::opcode::binary, ec); // Initialize send operation (async)
         
-        bytesRead += numBytes;
-    }
-    return bytesRead;
+    return ec.value();
 }
-
-Answer CommunicationHandler::communicate(ClusterMsg &msg, uint8_t retry)
+    
+long long CommunicationHandler::getMsgId()
+{
+    boost::unique_lock<boost::mutex> lock(m_msgIdMutex);
+    return m_currentMsgId++;
+}
+    
+int CommunicationHandler::receiveMessage(Answer& answer, long long msgId)
+{
+    boost::unique_lock<boost::mutex> lock(m_receiveMutex);
+    
+    // Incoming message should be in inbox. Wait for it
+    while(m_incomingMessages.find(msgId) == m_incomingMessages.end())
+        if(!m_receiveCond.timed_wait(lock, boost::posix_time::milliseconds(1000)))
+            return -1;
+        
+    answer.ParseFromString(m_incomingMessages[msgId]);
+    m_incomingMessages.erase(m_incomingMessages.find(msgId));
+        
+    return 0;
+}
+    
+Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry)
 {
     Answer answer;
 
-    if(sendMessage(msg) < 0)
+    if(sendMessage(msg, 0) < 0)
     {
         if(retry > 0) 
         {
             LOG(WARNING) << "Receiving response from cluster failed, trying to reconnect and retry";
+            closeConnection();
             if(openConnection() == 0)
                 return communicate(msg, retry - 1);
         }
@@ -376,11 +190,12 @@ Answer CommunicationHandler::communicate(ClusterMsg &msg, uint8_t retry)
         return answer;
     }
 
-    if(receiveMessage(&answer) < 0)
+    if(receiveMessage(answer, 0) < 0)
     {
         if(retry > 0) 
         {
             LOG(WARNING) << "Receiving response from cluster failed, trying to reconnect and retry";
+            closeConnection();
             if(openConnection() == 0)
                 return communicate(msg, retry - 1);
         }
@@ -395,8 +210,97 @@ Answer CommunicationHandler::communicate(ClusterMsg &msg, uint8_t retry)
     return answer;
 }
 
-int CommunicationHandler::getInstancesCount() {
+int CommunicationHandler::getInstancesCount()
+{
+    boost::unique_lock<boost::mutex> lock(m_instanceMutex);
     return instancesCount;
+}
+    
+context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
+{
+    // Setup TLS connection (i.e. certificates)
+    context_ptr ctx(new boost::asio::ssl::context(boost::asio::ssl::context::tlsv1));
+        
+    try {
+        ctx->set_options(boost::asio::ssl::context::default_workarounds |
+                         boost::asio::ssl::context::no_sslv2 |
+                         boost::asio::ssl::context::single_dh_use);
+            
+        ctx->use_certificate_chain_file(m_certPath);
+        ctx->use_private_key_file(m_certPath, boost::asio::ssl::context::pem);
+    } catch (std::exception& e) {
+        LOG(ERROR) << "Cannot initialize TLS socket due to:" << e.what();
+    }
+        
+    return ctx;
+}
+    
+void CommunicationHandler::onSocketInit(websocketpp::connection_hdl hdl,socket_type &socket)
+{
+    // Disable socket delay
+    socket.lowest_layer().set_option(boost::asio::ip::tcp::no_delay(true));
+}
+    
+void CommunicationHandler::onMessage(websocketpp::connection_hdl hdl, message_ptr msg)
+{
+    long long msgId = 0;
+        
+    boost::unique_lock<boost::mutex> lock(m_receiveMutex);
+    m_incomingMessages[msgId] = msg->get_payload();         // Save incloming message to inbox and notify waiting threads
+    m_receiveCond.notify_all();
+}
+    
+void CommunicationHandler::onOpen(websocketpp::connection_hdl hdl)
+{
+    boost::unique_lock<boost::mutex> lock(m_connectMutex);
+    m_connectStatus = CONNECTED;
+    m_connectCond.notify_all();
+}
+    
+void CommunicationHandler::onClose(websocketpp::connection_hdl hdl)
+{
+    boost::unique_lock<boost::mutex> lock(m_connectMutex);
+    try {
+        m_endpoint.get_con_from_hdl(hdl)->get_socket().lowest_layer().close();  // Explicite close underlying socket to make sure that all ongoing operations will be canceld
+    } catch (boost::exception &e) {
+        LOG(ERROR) << "WebSocket connection socket close error";
+    }
+    
+    m_connectStatus = CLOSED;
+    m_connectCond.notify_all();
+}
+    
+void CommunicationHandler::onFail(websocketpp::connection_hdl hdl)
+{
+    boost::unique_lock<boost::mutex> lock(m_connectMutex);
+    m_connectStatus = HANDSHAKE_ERROR;
+    m_connectCond.notify_all();
+    
+    LOG(ERROR) << "WebSocket handshake error";
+}
+    
+bool CommunicationHandler::onPing(websocketpp::connection_hdl hdl, std::string msg)
+{
+    // No need to implement this
+    return true;
+}
+    
+void CommunicationHandler::onPong(websocketpp::connection_hdl hdl, std::string msg)
+{
+    // Since we dont ping cluster, this callback wont be called
+}
+    
+void CommunicationHandler::onPongTimeout(websocketpp::connection_hdl hdl, std::string msg)
+{
+    // Since we dont ping cluster, this callback wont be called
+    LOG(WARNING) << "WebSocket pong-message (" << msg << ") timed out";
+}
+    
+void CommunicationHandler::onInterrupt(websocketpp::connection_hdl hdl)
+{
+    LOG(WARNING) << "WebSocket connection was interrupted";
+    boost::unique_lock<boost::mutex> lock(m_connectMutex);
+    m_connectStatus = TRANSPORT_ERROR;
 }
 
 } // namespace veil

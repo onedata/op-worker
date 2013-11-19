@@ -22,7 +22,7 @@ public:
 
     void addConnection(boost::shared_ptr<CommunicationHandler> conn)
     {
-        m_connectionPool.push_back(pair<shared_ptr<CommunicationHandler>, time_t>(conn, time(NULL) + 20000));
+        m_connectionPool.push_back(pair<boost::shared_ptr<CommunicationHandler>, time_t>(conn, time(NULL) + 20000));
     }
 
     std::list<std::string> dnsQuery(std::string hostname) 

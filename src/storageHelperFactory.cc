@@ -51,14 +51,14 @@ StorageHelperFactory::~StorageHelperFactory()
 {
 }
 
-shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(std::string sh_name, std::vector<std::string> args) {
+boost::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(std::string sh_name, std::vector<std::string> args) {
     if(sh_name == "DirectIO")
-        return shared_ptr<IStorageHelper>(new DirectIOHelper(args));
+        return boost::shared_ptr<IStorageHelper>(new DirectIOHelper(args));
     else if(sh_name == "ClusterProxy")
-        return shared_ptr<IStorageHelper>(new ClusterProxyHelper(args));
+        return boost::shared_ptr<IStorageHelper>(new ClusterProxyHelper(args));
     else
     {
-        return shared_ptr<IStorageHelper>();
+        return boost::shared_ptr<IStorageHelper>();
     }
 }
 

@@ -27,7 +27,11 @@ namespace veil {
         else if(verr == VENOTEMPTY)
             return -ENOTEMPTY;
         else if(verr == VEREMOTEIO)
-            return -EREMOTEIO;
+#ifdef __gnu_linux__
+        return -EREMOTEIO;
+#else
+        return -EIO;
+#endif
         else if(verr == VEPERM)
             return -EPERM;
         else if(verr == VEINVAL)

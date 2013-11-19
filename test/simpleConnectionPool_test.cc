@@ -21,7 +21,7 @@ class SimpleConnectionPoolTest
 
 protected:
     MockConnectionPool mockPool;
-    shared_ptr<ProxySimpleConnectionPool> proxy;
+    boost::shared_ptr<ProxySimpleConnectionPool> proxy;
 
     virtual void SetUp() {
         proxy.reset(new ProxySimpleConnectionPool("host", 5555, "cert", NULL));
@@ -35,9 +35,9 @@ protected:
 // Test selectConnection method
 TEST_F(SimpleConnectionPoolTest, selectAndReleaseConnection)
 {
-    shared_ptr<MockCommunicationHandler> conn1(new MockCommunicationHandler());
-    shared_ptr<MockCommunicationHandler> conn2(new MockCommunicationHandler());
-    shared_ptr<MockCommunicationHandler> conn3(new MockCommunicationHandler());
+    boost::shared_ptr<MockCommunicationHandler> conn1(new MockCommunicationHandler());
+    boost::shared_ptr<MockCommunicationHandler> conn2(new MockCommunicationHandler());
+    boost::shared_ptr<MockCommunicationHandler> conn3(new MockCommunicationHandler());
 
     proxy->addConnection(conn1);
     proxy->addConnection(conn2);
@@ -48,7 +48,7 @@ TEST_F(SimpleConnectionPoolTest, selectAndReleaseConnection)
 
     proxy->releaseConnection(conn2);
 
-    EXPECT_EQ(shared_ptr<MockCommunicationHandler>(), proxy->selectConnection(true));
+    EXPECT_EQ(boost::shared_ptr<MockCommunicationHandler>(), proxy->selectConnection(true));
 
     EXPECT_EQ(conn2, proxy->selectConnection());
     EXPECT_EQ(conn3, proxy->selectConnection());
@@ -58,5 +58,5 @@ TEST_F(SimpleConnectionPoolTest, selectAndReleaseConnection)
     EXPECT_EQ(conn1, proxy->selectConnection());
 
     // New connection (null since CommunicationHandler fails)
-    EXPECT_EQ(shared_ptr<MockCommunicationHandler>(), proxy->selectConnection());
+    EXPECT_EQ(boost::shared_ptr<MockCommunicationHandler>(), proxy->selectConnection());
 }

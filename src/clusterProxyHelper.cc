@@ -5,8 +5,6 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#define FUSE_USE_VERSION 29
-
 #ifdef linux
 /* For pread()/pwrite()/utimensat() */
 #define _XOPEN_SOURCE 700
@@ -36,7 +34,6 @@
 #include <iostream>
 
 using namespace std;
-using namespace boost;
 using namespace boost::algorithm;
 using namespace veil::protocol::remote_file_management;
 using namespace veil::protocol::communication_protocol;
@@ -105,7 +102,7 @@ string ClusterProxyHelper::requestAtom(string inputType, string inputData) {
 }
 
 Answer ClusterProxyHelper::sendCluserMessage(ClusterMsg &msg) {
-    shared_ptr<CommunicationHandler> connection = m_connectionPool ? m_connectionPool->selectConnection() : config::getConnectionPool()->selectConnection();
+    boost::shared_ptr<CommunicationHandler> connection = m_connectionPool ? m_connectionPool->selectConnection() : config::getConnectionPool()->selectConnection();
     if(!connection) 
     {
         LOG(ERROR) << "Cannot select connection from connectionPool";

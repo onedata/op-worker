@@ -33,15 +33,15 @@ SimpleConnectionPool::SimpleConnectionPool(string hostname, int port, string cer
 
 SimpleConnectionPool::~SimpleConnectionPool() {}
 
-shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(bool forceNew, unsigned int nth) 
+boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(bool forceNew, unsigned int nth) 
 {
     boost::unique_lock< boost::mutex > lock(m_access);
-    shared_ptr<CommunicationHandler> conn;
+    boost::shared_ptr<CommunicationHandler> conn;
 
     if(maxConnectionCount <= 0)
         maxConnectionCount = 1;
 
-    list<pair<shared_ptr<CommunicationHandler>, time_t> >::iterator it = m_connectionPool.begin();
+    list<pair<boost::shared_ptr<CommunicationHandler>, time_t> >::iterator it = m_connectionPool.begin();
     while(it != m_connectionPool.end()) {
         if(time(NULL) - (*it).second >= CONNECTION_MAX_ALIVE_TIME)
             it = m_connectionPool.erase(it);
@@ -52,7 +52,7 @@ shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(bool for
         forceNew = true;
 
     if(nth >= maxConnectionCount) 
-        return shared_ptr<CommunicationHandler>(); 
+        return boost::shared_ptr<CommunicationHandler>(); 
 
     int tryCount = 0; // After 1,5 sec allow to create additional connection
     while((m_connectionPool.empty() || forceNew) && CommunicationHandler::getInstancesCount() >= maxConnectionCount && tryCount++ < 30)
@@ -65,7 +65,7 @@ shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(bool for
             if(!updateCertCB()) 
             {
                 LOG(ERROR) << "Could not find valid certificate.";
-                return shared_ptr<CommunicationHandler>();
+                return boost::shared_ptr<CommunicationHandler>();
             }
         }
         
@@ -103,7 +103,7 @@ shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(bool for
         }
         
         if(forceNew)    return conn; 
-        else            m_connectionPool.push_back(pair<shared_ptr<CommunicationHandler>, time_t>(conn, time(NULL)));
+        else            m_connectionPool.push_back(pair<boost::shared_ptr<CommunicationHandler>, time_t>(conn, time(NULL)));
     }
     
     it = m_connectionPool.begin();
@@ -115,13 +115,13 @@ shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(bool for
 }
 
 
-void SimpleConnectionPool::releaseConnection(shared_ptr<CommunicationHandler> conn) 
+void SimpleConnectionPool::releaseConnection(boost::shared_ptr<CommunicationHandler> conn) 
 {
     if(!conn)
         return;
 
     boost::unique_lock< boost::mutex > lock(m_access);
-    m_connectionPool.push_front(pair<shared_ptr<CommunicationHandler>, time_t>(conn, time(NULL)));
+    m_connectionPool.push_front(pair<boost::shared_ptr<CommunicationHandler>, time_t>(conn, time(NULL)));
     m_accessCond.notify_one();
 }
 

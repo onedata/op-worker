@@ -13,7 +13,7 @@ endif()
 ExternalProject_Add(glog
     PREFIX "${CMAKE_CURRENT_BINARY_DIR}"
     SOURCE_DIR ${GLOG_BUILD_DIR}
-    SVN_REPOSITORY http://google-glog.googlecode.com/svn/trunk
+    GIT_REPOSITORY https://github.com/RoXeon/google-glog.git
     CONFIGURE_COMMAND ${GLOG_CONFIGURE_COMMAND}
     UPDATE_COMMAND ""
     BUILD_COMMAND ${GLOG_BUILD_COMMAND}

@@ -33,9 +33,9 @@ class ClusterProxyHelperTest
     : public ::testing::Test {
 
 protected:
-    shared_ptr<MockConnectionPool> mockPool;
-    shared_ptr<MockCommunicationHandler> mockConnection;
-    shared_ptr<ProxyClusterProxyHelper> proxy;
+    boost::shared_ptr<MockConnectionPool> mockPool;
+    boost::shared_ptr<MockCommunicationHandler> mockConnection;
+    boost::shared_ptr<ProxyClusterProxyHelper> proxy;
 
     struct fuse_file_info ffi;
     char buf[1024];
@@ -51,7 +51,7 @@ protected:
     }
 
     virtual void TearDown() {
-        config::setConnectionPool(shared_ptr<SimpleConnectionPool>());
+        config::setConnectionPool(boost::shared_ptr<SimpleConnectionPool>());
     }
 
 };
@@ -80,7 +80,7 @@ TEST_F(ClusterProxyHelperTest, sendCluserMessage)
     Answer answer;
 
     answer.set_answer_status("ok");
-    EXPECT_CALL(*mockConnection, communicate(Truly(bind(identityEqual<ClusterMsg>, cref(clm), _1)), _)).WillOnce(Return(answer));
+    EXPECT_CALL(*mockConnection, communicate(Truly(bind(identityEqual<ClusterMsg>, boost::cref(clm), _1)), _)).WillOnce(Return(answer));
 
     Answer real = proxy->sendCluserMessage(clm);
     EXPECT_EQ("ok", real.answer_status());

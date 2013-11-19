@@ -5,8 +5,6 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#define FUSE_USE_VERSION 29
-
 #ifdef linux
 /* For pread()/pwrite()/utimensat() */
 #define _XOPEN_SOURCE 700
