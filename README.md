@@ -22,6 +22,8 @@ In order to compile the project, you need to have the following libraries:
 * libglobus_gsi_callback
 * libglobus_common
 * libssl
+* libfuse
+* libboost - filesystem, thread, random, system (version >= 1.49)
 
 Use the following command to install the required dependency packages:
 
