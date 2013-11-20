@@ -148,12 +148,24 @@ save_file() ->
 
 remove_file() ->
     meck:expect(dao, get_record, fun(_) -> {ok, #veil_document{uuid = "uuid", record = #file{meta_doc = "meta"}}} end),
+    meck:expect(dao, list_records, fun (?FD_BY_FILE_VIEW, #view_query_args{skip = 0}) -> {ok, #view_result{rows = [#view_row{id = "fd", doc = #veil_document{uuid = "fd", record = #file_descriptor{file = "uuid"}}}]}};
+                                       (?FD_BY_FILE_VIEW, _) -> {ok, #view_result{rows = []}};
+                                       (?SHARE_BY_FILE_VIEW, _) ->
+                                           {ok, #view_result{rows = [
+                                               #view_row{id = "share1", doc = #veil_document{uuid = "share1", record = #share_desc{file = "uuid"}}},
+                                               #view_row{id = "share2", doc = #veil_document{uuid = "share2", record = #share_desc{file = "uuid"}}}
+                                           ]}}
+                                   end),
+
 
     ?assertMatch(ok, dao_vfs:remove_file({uuid, "file"})),
 
     ?assert(meck:called(dao, set_db, [?FILES_DB_NAME])),
     ?assert(meck:called(dao, remove_record, ["uuid"])),
     ?assert(meck:called(dao, remove_record, ["meta"])),
+    ?assert(meck:called(dao, remove_record, ["fd"])),
+    ?assert(meck:called(dao, remove_record, ["share1"])),
+    ?assert(meck:called(dao, remove_record, ["share2"])),
     ?assert(meck:validate([dao, dao_helper])).
 
 

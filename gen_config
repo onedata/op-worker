@@ -20,6 +20,9 @@ main(OverlayFileList) ->
     os:cmd("rm rebar"),
     c:cd("../.."),
     code:add_patha("deps/yamler/ebin"),
+    {ok, CWD} = file:get_cwd(),
+    code:add_patha(CWD ++ "/deps/yamler/ebin"),
+    os:putenv("ERL_LIBS", CWD ++ "/deps/yamler"),
 
     % Create an ets table to store entries
     ets:new(entries, [named_table, private, bag, {read_concurrency, false}]),

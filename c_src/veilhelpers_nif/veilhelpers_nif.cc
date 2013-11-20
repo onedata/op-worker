@@ -21,7 +21,7 @@
 #define BADARG enif_make_badarg(env)
 #define INIT    if(!check_common_args(env, argc, argv)) \
                     return BADARG; \
-                shared_ptr<IStorageHelper> sh = SHFactory.getStorageHelper(get_string(env, argv[0]), get_str_vector(env, argv[1])); \
+                boost::shared_ptr<IStorageHelper> sh = SHFactory.getStorageHelper(get_string(env, argv[0]), get_str_vector(env, argv[1])); \
                 if(!sh) \
                     return enif_make_tuple2(env, enif_make_atom(env, "error"), enif_make_atom(env, "unknown_storage_helper"));
 

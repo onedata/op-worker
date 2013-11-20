@@ -26,9 +26,37 @@ rm -f $BIN_DIR/lib${LIB_NAME}*
 
 for libfile in $@
 do
-    for file in $(ldd $BIN_DIR/$libfile | grep -v "$BIN_DIR/" | grep '=>' | awk -F'=>' '{print $2}' | awk -F' ' '{print $1}' | grep lib${LIB_NAME})
+    if [ ! -e $BIN_DIR/$libfile ]; then
+        continue;
+    fi
+
+
+    if [ "`uname -s`" = "Darwin" ]; then
+        libs_list=$(otool -L $BIN_DIR/$libfile | grep -v "$BIN_DIR/" | grep -v "@loader_path" | grep -v ":" | awk -F' ' '{print $1}' | grep lib${LIB_NAME})
+    else
+        libs_list=$(ldd $BIN_DIR/$libfile | grep -v "$BIN_DIR/" | grep '=>' | awk -F'=>' '{print $2}' | awk -F' ' '{print $1}' | grep lib${LIB_NAME})
+    fi
+
+    for file in $libs_list
     do
+        # Copy and link shared library
         cp -L $file ./$BIN_DIR
-        ln -sf `basename $file` $BIN_DIR/`basename $(echo $file | sed 's/\.so\..*/\.so/')`
+        link="`basename $file`"
+        target="$BIN_DIR/`basename $(echo $file | sed 's/\.so\..*/\.so/' | sed 's/\.[0-9.]*\.dylib.*/\.dylib/')`"
+        if [ `basename $link` != `basename $target` ]; then
+            ln -sf $link $target
+        fi
+
+        chmod u+w ./$BIN_DIR/$link
+        chmod u+w ./$BIN_DIR/$libfile
+
+        # Change rpath on OSX
+        if [ "`uname -s`" = "Darwin" ]; then
+            install_name=`otool -D ./$BIN_DIR/$link | tail -1`
+            install_name_tool -id "@loader_path/$link" ./$BIN_DIR/$link
+            install_name_tool -id "@loader_path/$libfile" ./$BIN_DIR/$libfile
+            install_name_tool -change "$install_name" "@loader_path/$link" ./$BIN_DIR/$libfile
+        fi
+
     done
 done

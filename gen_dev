@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Setup sed interactive options
+if [ "`uname -s`" = "Darwin" ]; then
+    SED_OPTS="-i '' -e"
+else
+    SED_OPTS="-i"
+fi
+
 # Display usage help
 error_bad_args()
 {
@@ -134,7 +141,7 @@ get_parameter_from_args "$*" -db_nodes list
 DB_NODES=$RESULT
 
 # Get short node name (without hostname) and hostname
-AT_INDEX=`expr index "$NODE_NAME" @`
+AT_INDEX=`echo "$NODE_NAME" | sed -n "s/["@"].*//p" | wc -c`
 if [[ $AT_INDEX -gt 0 ]]; then
 	NODE_NAME_WITHOUT_HOSTNAME=${NODE_NAME:0:(($AT_INDEX - 1))}
 	HOSTNAME=${NODE_NAME:(($AT_INDEX - 1)):${#NODE_NAME}}
@@ -219,14 +226,23 @@ cp -R -p releases/veil_cluster_node releases/test_cluster/$NODE_NAME_WITHOUT_HOS
 ./releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME/bin/veil_cluster -name $NODE_NAME -main_ccm $MAIN_CCM -opt_ccms $OPT_CCMS -db_nodes $DB_NODES
 
 # Get IP address to use it as the cookie
-IFCONFIG_LINE=`ifconfig | grep "inet addr:.*Bcast:"`
-COLON_INDEX=`awk -v a="$IFCONFIG_LINE" -v b=":" 'BEGIN{print index(a, b)}'`
-BCAST_INDEX=`awk -v a="$IFCONFIG_LINE" -v b="Bcast" 'BEGIN{print index(a, b)}'`
-COOKIE=${IFCONFIG_LINE:COLON_INDEX:((BCAST_INDEX - COLON_INDEX - 3))}
+if [ "`uname -s`" = "Darwin" ]; then
+    COOKIE=`ipconfig getifaddr en0`
+else
+    IFCONFIG_LINE=`ifconfig | grep "inet addr:.*Bcast:"`
+    COLON_INDEX=`awk -v a="$IFCONFIG_LINE" -v b=":" 'BEGIN{print index(a, b)}'`
+    BCAST_INDEX=`awk -v a="$IFCONFIG_LINE" -v b="Bcast" 'BEGIN{print index(a, b)}'`
+    COOKIE=${IFCONFIG_LINE:COLON_INDEX:((BCAST_INDEX - COLON_INDEX - 3))}
+fi
+
+# Set default cookie if something went wrong. Just in case
+if [ "$COOKIE" = "" ]; then
+    COOKIE=veil_cluster_node
+fi
 
 # Override cookie using db_node hostname if it's specified
 FIRST_DB_NODE=${DB_NODES[0]}
-AT_INDEX=`expr index "$FIRST_DB_NODE" @`
+AT_INDEX=`echo "$FIRST_DB_NODE" | sed -n "s/["@"].*//p" | wc -c`
 
 if [[ $AT_INDEX -gt 0 ]]; then
 	COOKIE=${FIRST_DB_NODE:$AT_INDEX:${#FIRST_DB_NODE}}
@@ -237,7 +253,7 @@ START_ERL=`cat releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME/releases/start_
 APP_VSN=${START_ERL#* }
 
 # Replace the cookie
-sed -i "s/-setcookie.*/-setcookie '$COOKIE'/g" releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME/releases/$APP_VSN/vm.args
+sed $SED_OPTS  "s/-setcookie.*/-setcookie '$COOKIE'/g" releases/test_cluster/$NODE_NAME_WITHOUT_HOSTNAME/releases/$APP_VSN/vm.args
 echo "Cookie set to: $COOKIE"
 
 # Generate a corresponding worker if this node is a CCM
@@ -253,7 +269,7 @@ if [[ $NODE_TYPE == "ccm" ]]; then
     ./releases/test_cluster/${NODE_NAME_WITHOUT_HOSTNAME}_worker/bin/veil_cluster \
     -name ${NODE_NAME_WITHOUT_HOSTNAME}_worker${HOSTNAME} -main_ccm $MAIN_CCM -opt_ccms $OPT_CCMS -db_nodes $DB_NODES
 
-    sed -i "s/-setcookie.*/-setcookie '$COOKIE'/g" releases/test_cluster/${NODE_NAME_WITHOUT_HOSTNAME}_worker/releases/$APP_VSN/vm.args
+    sed $SED_OPTS  "s/-setcookie.*/-setcookie '$COOKIE'/g" releases/test_cluster/${NODE_NAME_WITHOUT_HOSTNAME}_worker/releases/$APP_VSN/vm.args
     echo "Cookie set to: $COOKIE"
 fi
 

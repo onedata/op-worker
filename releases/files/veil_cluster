@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Setup sed interactive options
+if [ "`uname -s`" = "Darwin" ]; then
+    SED_OPTS="-i '' -e"
+else
+    SED_OPTS="-i"
+fi
+
 display_help()
 {
 	echo "
@@ -300,19 +307,19 @@ START_ERL=`cat ../releases/start_erl.data`
 APP_VSN=${START_ERL#* }
 
 # Replace node name
-sed -i "s/-name.*/-name $NODE_NAME/g" ../releases/$APP_VSN/vm.args
+sed $SED_OPTS "s/-name.*/-name $NODE_NAME/g" ../releases/$APP_VSN/vm.args
 
 # Replace node type
-sed -i "s/-veil_cluster_node node_type.*/-veil_cluster_node node_type $NODE_TYPE/g" ../releases/$APP_VSN/vm.args
+sed $SED_OPTS "s/-veil_cluster_node node_type.*/-veil_cluster_node node_type $NODE_TYPE/g" ../releases/$APP_VSN/vm.args
 
 # Replace ccm nodes
-sed -i "s/-veil_cluster_node ccm_nodes.*/-veil_cluster_node ccm_nodes $CCMS_LIST/g" ../releases/$APP_VSN/vm.args
+sed $SED_OPTS "s/-veil_cluster_node ccm_nodes.*/-veil_cluster_node ccm_nodes $CCMS_LIST/g" ../releases/$APP_VSN/vm.args
 
 # Replace DBMS nodes
-sed -i "s/-veil_cluster_node db_nodes.*/-veil_cluster_node db_nodes $DB_NODES_LIST/g" ../releases/$APP_VSN/vm.args
+sed $SED_OPTS "s/-veil_cluster_node db_nodes.*/-veil_cluster_node db_nodes $DB_NODES_LIST/g" ../releases/$APP_VSN/vm.args
 
 # Remove config for distributed application from sys.config
-sed -n -i '1h;1!H;${;g;s/\[.*%% SASL/\n %% SASL/g;p;}' ../releases/$APP_VSN/sys.config
+sed -n $SED_OPTS '1h;1!H;${;g;s/\[.*%% SASL/ %% SASL/g;p;}' ../releases/$APP_VSN/sys.config
 
 # If this node is a ccm and there is at least two of CCM nodes in the cluster, create a proper DA entry
 if [[ $NODE_TYPE == 'ccm' ]] && [[ $OPT_CCM != "" ]]; then

@@ -16,6 +16,7 @@
 -include_lib("veil_modules/dao/dao_helper.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
 -include_lib("files_common.hrl").
+-include("logging.hrl").
 
 %% API - File system management
 -export([list_dir/3, rename_file/2, lock_file/3, unlock_file/3]). %% High level API functions
@@ -215,16 +216,39 @@ save_file(#veil_document{record = #file{}} = FileDoc) ->
 %% @end
 -spec remove_file(File :: file()) -> ok | {error, any()} | no_return().
 %% ====================================================================
-%% TODO dao powinno przy okazji kasować wszystkie zbędne dane o tym pliku znajdujące się w bazie
-%% (po co nam w bazie informacje o sharowaniu pliku, kótry jest już skasowany?)
 remove_file(File) ->
     dao:set_db(?FILES_DB_NAME),
     {ok, FData} = get_file(File),
+
+    %% Remove file meta
     case FData of 
         #veil_document{record = #file{meta_doc = FMeta}} when is_list(FMeta) ->
-            remove_file_meta(FMeta);
+            case remove_file_meta(FMeta) of 
+                ok -> ok;
+                {error, Reason} ->
+                    ?warning("Cannot remove file_meta ~p due to error: ~p", [FMeta, Reason])
+            end;
         _ -> ok
     end,
+
+    %% Remove file shares
+    try dao_share:remove_file_share({file, FData#veil_document.uuid}) of
+        ok -> ok;
+        {error, Reason2} ->
+            ?warning("Cannot clear shares for file ~p due to error: ~p", [File, Reason2])
+    catch
+        throw:share_not_found -> ok;
+        ErrType:Reason3 ->
+            ?warning("Cannot clear shares for file ~p due to ~p: ~p", [File, ErrType, Reason3])
+    end,
+
+    %% Remove descriptors
+    case remove_descriptor({by_file, {uuid, FData#veil_document.uuid}}) of
+        ok -> ok;
+        {error, Reason1} ->
+            ?warning("Cannot remove file_descriptors ~p due to error: ~p", [{by_file, {uuid, FData#veil_document.uuid}}, Reason1])
+    end,
+
     dao:remove_record(FData#veil_document.uuid).
 
 %% get_file/1
