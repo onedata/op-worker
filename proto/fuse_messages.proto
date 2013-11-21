@@ -1,5 +1,13 @@
 package veil.protocol.fuse_messages;
 
+message ChannelRegistration {
+    required string fuse_id = 1;
+}
+
+message ChannelClose {
+    required string fuse_id = 1;
+}
+
 message FuseMessage {
     required string id = 1;
     required string message_type = 2;
@@ -120,3 +128,13 @@ message UpdateTimes {
     optional int64 mtime = 3 [default = -1];
     optional int64 ctime = 4 [default = -1];
 }
+
+message TestChannel {
+    required string answer_message = 1;
+    required int32 answer_delay_in_ms = 2;
+}
+
+message TestChannelAnswer {
+    required string message = 1;
+}
+

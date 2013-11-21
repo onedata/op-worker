@@ -15,7 +15,8 @@ message ClusterMsg {
 message Answer {
    required string answer_status = 1;
    optional int32 message_id = 2 [default = 0];
-   optional bytes worker_answer = 3;
+   optional string message_type = 3 [default = ""];
+   optional bytes worker_answer = 4;
 }
 
 message Atom {
