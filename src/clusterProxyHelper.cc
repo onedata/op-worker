@@ -38,19 +38,6 @@ using namespace boost::algorithm;
 using namespace veil::protocol::remote_file_management;
 using namespace veil::protocol::communication_protocol;
 
-static inline string tolower(string input) {
-    to_lower(input);
-    return input;
-}
-
-template<typename T>
-T fromString(std::string in) {
-    T out;
-    std::istringstream iss(in);
-    iss >> out;
-    return out;
-}
-
 namespace veil {
 namespace helpers {
 
@@ -58,7 +45,7 @@ namespace helpers {
 ClusterMsg ClusterProxyHelper::commonClusterMsgSetup(string inputType, string inputData) {
 
     RemoteFileMangement rfm;
-    rfm.set_message_type(tolower(inputType));
+    rfm.set_message_type(utils::tolower(inputType));
     rfm.set_input(inputData);
 
     ClusterMsg clm;
@@ -66,7 +53,7 @@ ClusterMsg ClusterProxyHelper::commonClusterMsgSetup(string inputType, string in
     clm.set_synch(true);
     clm.set_module_name(RFM_MODULE_NAME);
     clm.set_message_decoder_name(RFM_DECODER);
-    clm.set_message_type(tolower(rfm.GetDescriptor()->name()));
+    clm.set_message_type(utils::tolower(rfm.GetDescriptor()->name()));
 
     clm.set_input(rfm.SerializeAsString());
 
@@ -76,7 +63,7 @@ ClusterMsg ClusterProxyHelper::commonClusterMsgSetup(string inputType, string in
 string ClusterProxyHelper::requestMessage(string inputType, string answerType, string inputData) {
     ClusterMsg clm = commonClusterMsgSetup(inputType, inputData);
 
-    clm.set_answer_type(tolower(answerType));
+    clm.set_answer_type(utils::tolower(answerType));
     clm.set_answer_decoder_name(RFM_DECODER);
 
     Answer answer = sendCluserMessage(clm);
@@ -87,7 +74,7 @@ string ClusterProxyHelper::requestMessage(string inputType, string answerType, s
 string ClusterProxyHelper::requestAtom(string inputType, string inputData) {
     ClusterMsg clm = commonClusterMsgSetup(inputType, inputData);
 
-    clm.set_answer_type(tolower(Atom::descriptor()->name()));
+    clm.set_answer_type(utils::tolower(Atom::descriptor()->name()));
     clm.set_answer_decoder_name(COMMUNICATION_PROTOCOL_DECODER);
 
     Answer answer = sendCluserMessage(clm);
@@ -102,7 +89,7 @@ string ClusterProxyHelper::requestAtom(string inputType, string inputData) {
 }
 
 Answer ClusterProxyHelper::sendCluserMessage(ClusterMsg &msg) {
-    boost::shared_ptr<CommunicationHandler> connection = m_connectionPool ? m_connectionPool->selectConnection() : config::getConnectionPool()->selectConnection();
+    boost::shared_ptr<CommunicationHandler> connection = m_connectionPool ? m_connectionPool->selectConnection(SimpleConnectionPool::DATA_POOL) : config::getConnectionPool()->selectConnection();
     if(!connection) 
     {
         LOG(ERROR) << "Cannot select connection from connectionPool";
@@ -351,7 +338,7 @@ ClusterProxyHelper::ClusterProxyHelper(std::vector<std::string> args)
 {
     if(args.size() >= 3) { // If arguments are given, use them to establish connection instead default VeilHelpers configuration
         m_clusterHostname   = args[0];
-        m_clusterPort       = fromString<unsigned int>(args[1]);
+        m_clusterPort       = utils::fromString<unsigned int>(args[1]);
         m_proxyCert         = args[2];
 
         m_connectionPool.reset(new SimpleConnectionPool(m_clusterHostname, m_clusterPort, m_proxyCert, NULL));

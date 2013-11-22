@@ -46,7 +46,7 @@ protected:
         proxy.reset(new ProxyClusterProxyHelper(vector<string>()));
 
         config::setConnectionPool(mockPool);
-        EXPECT_CALL(*mockPool, selectConnection(_, _)).WillRepeatedly(Return(mockConnection));
+        EXPECT_CALL(*mockPool, selectConnection(_)).WillRepeatedly(Return(mockConnection));
         EXPECT_CALL(*mockPool, releaseConnection(_)).WillRepeatedly(Return());
     }
 
@@ -80,7 +80,7 @@ TEST_F(ClusterProxyHelperTest, sendCluserMessage)
     Answer answer;
 
     answer.set_answer_status("ok");
-    EXPECT_CALL(*mockConnection, communicate(Truly(bind(identityEqual<ClusterMsg>, boost::cref(clm), _1)), _)).WillOnce(Return(answer));
+    EXPECT_CALL(*mockConnection, communicate(Truly(bind(identityEqual<ClusterMsg>, boost::cref(clm), _1)), _, _)).WillOnce(Return(answer));
 
     Answer real = proxy->sendCluserMessage(clm);
     EXPECT_EQ("ok", real.answer_status());
@@ -92,7 +92,7 @@ TEST_F(ClusterProxyHelperTest, requestMessage)
 
     answer.set_answer_status("ok");
     answer.set_worker_answer("worker");
-    EXPECT_CALL(*mockConnection, communicate(_, _)).WillOnce(Return(answer));
+    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(Return(answer));
 
     EXPECT_EQ("worker", proxy->requestMessage("inputType", "answerType", "inputData"));
 }
@@ -104,7 +104,7 @@ TEST_F(ClusterProxyHelperTest, requestAtom)
     atom.set_value("value");
     answer.set_answer_status("ok");
     answer.set_worker_answer(atom.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _)).WillOnce(Return(answer));
+    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(Return(answer));
 
     EXPECT_EQ("value", proxy->requestAtom("inputType", "inputData"));
 }
@@ -122,7 +122,7 @@ TEST_F(ClusterProxyHelperTest, read)
     ClusterMsg msg;
 
 
-    EXPECT_CALL(*mockConnection, communicate(_, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
     EXPECT_EQ(-EIO, proxy->sh_read("file_id", buf, 10, 2, &ffi));
 
     answer.set_answer_status(VOK);
@@ -132,14 +132,14 @@ TEST_F(ClusterProxyHelperTest, read)
     string strRaw(str, 9);
     resp.set_data(strRaw);
     answer.set_worker_answer(resp.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
     EXPECT_EQ(9, proxy->sh_read("file_id", buf, 10, 2, &ffi));    
     for(int i = 0; i < 9; ++i )
         EXPECT_EQ(str[i], buf[i]);
 
     resp.set_answer_status(VENOENT);
     answer.set_worker_answer(resp.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
     EXPECT_EQ(-ENOENT, proxy->sh_read("file_id", buf, 10, 2, &ffi));
 
     RemoteFileMangement rfm;
@@ -175,7 +175,7 @@ TEST_F(ClusterProxyHelperTest, write)
     memcpy(buf, str, 10);
     string strRaw(str, 10);
 
-    EXPECT_CALL(*mockConnection, communicate(_, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
     EXPECT_EQ(-EIO, proxy->sh_write("file_id", buf, 10, 2, &ffi));
 
     answer.set_answer_status(VOK);
@@ -183,12 +183,12 @@ TEST_F(ClusterProxyHelperTest, write)
     resp.set_answer_status(VOK);
     resp.set_bytes_written(9);
     answer.set_worker_answer(resp.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
     EXPECT_EQ(9, proxy->sh_write("file_id", buf, 10, 2, &ffi));    
 
     resp.set_answer_status(VENOENT);
     answer.set_worker_answer(resp.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
     EXPECT_EQ(-ENOENT, proxy->sh_write("file_id", buf, 10, 2, &ffi));
 
     RemoteFileMangement rfm;
@@ -265,17 +265,17 @@ TEST_F(ClusterProxyHelperTest, mknod)
     ClusterMsg msg;
 
     answer.set_answer_status(VOK);
-    EXPECT_CALL(*mockConnection, communicate(_, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
     EXPECT_EQ(-EIO, proxy->sh_mknod("file_id", 0755, 0));
 
     atom.set_value(VOK);
     answer.set_worker_answer(atom.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
     EXPECT_EQ(0, proxy->sh_mknod("file_id", 0755, 0));    
 
     atom.set_value(VEEXIST);
     answer.set_worker_answer(atom.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
     EXPECT_EQ(-EEXIST, proxy->sh_mknod("file_id", 0755, 0));
 
     RemoteFileMangement rfm;
@@ -313,17 +313,17 @@ TEST_F(ClusterProxyHelperTest, unlink)
     ClusterMsg msg;
 
     answer.set_answer_status(VOK);
-    EXPECT_CALL(*mockConnection, communicate(_, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
     EXPECT_EQ(-EIO, proxy->sh_unlink("file_id"));
 
     atom.set_value(VOK);
     answer.set_worker_answer(atom.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
     EXPECT_EQ(0, proxy->sh_unlink("file_id"));    
 
     atom.set_value(VEEXIST);
     answer.set_worker_answer(atom.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
     EXPECT_EQ(-EEXIST, proxy->sh_unlink("file_id"));
 
     RemoteFileMangement rfm;
@@ -391,17 +391,17 @@ TEST_F(ClusterProxyHelperTest, truncate)
     ClusterMsg msg;
 
     answer.set_answer_status(VOK);
-    EXPECT_CALL(*mockConnection, communicate(_, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
     EXPECT_EQ(-EIO, proxy->sh_truncate("file_id", 10));
 
     atom.set_value(VOK);
     answer.set_worker_answer(atom.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
     EXPECT_EQ(0, proxy->sh_truncate("file_id", 10));    
 
     atom.set_value(VEEXIST);
     answer.set_worker_answer(atom.SerializeAsString());
-    EXPECT_CALL(*mockConnection, communicate(_, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
+    EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
     EXPECT_EQ(-EEXIST, proxy->sh_truncate("file_id", 10));
 
     RemoteFileMangement rfm;

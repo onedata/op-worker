@@ -21,111 +21,150 @@ using namespace std;
 
 namespace veil {
 
-unsigned int maxConnectionCount = 10;
-
 SimpleConnectionPool::SimpleConnectionPool(string hostname, int port, string certPath, bool (*updateCert)()) :
     m_hostname(hostname),
     updateCertCB(updateCert),
     m_port(port),
     m_certPath(certPath)
-{   
+{
+    m_connectionPools[META_POOL] = ConnectionPoolInfo(DEFAULT_POOL_SIZE);
+    m_connectionPools[DATA_POOL] = ConnectionPoolInfo(DEFAULT_POOL_SIZE);
 }
 
 SimpleConnectionPool::~SimpleConnectionPool() {}
-
-boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(bool forceNew, unsigned int nth) 
+    
+boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(PoolType type)
 {
-    boost::unique_lock< boost::mutex > lock(m_access);
+    boost::unique_lock< boost::recursive_mutex > lock(m_access);
+    
+    ConnectionPoolInfo &poolInfo = m_connectionPools[type];
     boost::shared_ptr<CommunicationHandler> conn;
-
-    if(maxConnectionCount <= 0)
-        maxConnectionCount = 1;
-
-    list<pair<boost::shared_ptr<CommunicationHandler>, time_t> >::iterator it = m_connectionPool.begin();
-    while(it != m_connectionPool.end()) {
-        if(time(NULL) - (*it).second >= CONNECTION_MAX_ALIVE_TIME)
-            it = m_connectionPool.erase(it);
-        else ++it;
-    }
-
-    if(nth == 0 || --nth >= CommunicationHandler::getInstancesCount())
-        forceNew = true;
-
-    if(nth >= maxConnectionCount) 
-        return boost::shared_ptr<CommunicationHandler>(); 
-
-    int tryCount = 0; // After 1,5 sec allow to create additional connection
-    while((m_connectionPool.empty() || forceNew) && CommunicationHandler::getInstancesCount() >= maxConnectionCount && tryCount++ < 30)
-        m_accessCond.timed_wait(lock, posix_time::milliseconds(50));
-
-    if(m_connectionPool.empty() || forceNew)
-    {
-        LOG(INFO) << "Theres no connections ready to be used. Creating new one";
-        if(updateCertCB) {
-            if(!updateCertCB()) 
-            {
-                LOG(ERROR) << "Could not find valid certificate.";
-                return boost::shared_ptr<CommunicationHandler>();
-            }
-        }
-        
-        list<string> ips = dnsQuery(m_hostname);
-        
-        list<string>::iterator it = m_hostnamePool.begin();
-        while(it != m_hostnamePool.end()) // Delete all hostname from m_hostnamePool which are not present in dnsQuery response
+    
+    // Check if certificate is OK and generate new one if needed and possible
+    if(updateCertCB) {
+        if(!updateCertCB())
         {
-            list<string>::const_iterator itIP = find(ips.begin(), ips.end(), (*it));
-            if(itIP == ips.end())
-                it = m_hostnamePool.erase(it);
-            else ++it;
-        } 
-        
-        for(it = ips.begin(); it != ips.end(); ++it) 
-        {
-            list<string>::const_iterator itIP = find(m_hostnamePool.begin(), m_hostnamePool.end(), (*it));
-            if(itIP == m_hostnamePool.end())
-                m_hostnamePool.push_back((*it));
+            LOG(ERROR) << "Could not find valid certificate.";
+            return boost::shared_ptr<CommunicationHandler>();
         }
-        
-        int hostnameCount = m_hostnamePool.size();
-        while(hostnameCount--) 
-        {
-            string connectTo = m_hostnamePool.front();
-            m_hostnamePool.pop_front();
-            m_hostnamePool.push_back(connectTo);
-            
-            conn.reset(new CommunicationHandler(connectTo, m_port, m_certPath)); 
-            if(conn->openConnection() == 0) 
-                break;
-            
-            conn.reset();
-            LOG(WARNING) << "Cannot connect to host: " << connectTo << ":" << m_port;    
-        }
-        
-        if(forceNew)    return conn; 
-        else            m_connectionPool.push_back(pair<boost::shared_ptr<CommunicationHandler>, time_t>(conn, time(NULL)));
     }
     
-    it = m_connectionPool.begin();
-    nth = (nth >= m_connectionPool.size() ? m_connectionPool.size() - 1 : nth);
-    advance(it, nth);
-    conn = (*it).first;
-    m_connectionPool.erase(it);
+    lock.unlock();
+    list<string> ips = dnsQuery(m_hostname);
+    lock.lock();
+    
+    list<string>::iterator it = m_hostnamePool.begin();
+    while(it != m_hostnamePool.end()) // Delete all hostname from m_hostnamePool which are not present in dnsQuery response
+    {
+        list<string>::const_iterator itIP = find(ips.begin(), ips.end(), (*it));
+        if(itIP == ips.end())
+            it = m_hostnamePool.erase(it);
+        else ++it;
+    }
+    
+    for(it = ips.begin(); it != ips.end(); ++it)
+    {
+        list<string>::const_iterator itIP = find(m_hostnamePool.begin(), m_hostnamePool.end(), (*it));
+        if(itIP == m_hostnamePool.end())
+            m_hostnamePool.push_back((*it));
+    }
+    
+    // Connect to first working host
+    int hostnameCount = m_hostnamePool.size();
+    while(hostnameCount--)
+    {
+        string connectTo = m_hostnamePool.front();
+        m_hostnamePool.pop_front();
+        m_hostnamePool.push_back(connectTo);
+        
+        lock.unlock();
+        conn.reset(new CommunicationHandler(connectTo, m_port, m_certPath));
+        if(conn->openConnection() == 0) {
+            if(m_pushCallback && m_fuseId.size() > 0 && type == META_POOL)
+                conn->registerPushChannel(m_fuseId, m_pushCallback);
+            
+            break;
+        }
+        lock.lock();
+        conn.reset();
+        LOG(WARNING) << "Cannot connect to host: " << connectTo << ":" << m_port;
+        
+    }
+    
+    if(conn)
+        poolInfo.connections.push_front(make_pair(conn, time(NULL)));
+    else
+        LOG(ERROR) << "Opening new connection (type: " << type << ") failed!";
+    
+    return conn;
+}
+    
+boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(PoolType type)
+{
+    boost::unique_lock< boost::recursive_mutex > lock(m_access);
+    boost::shared_ptr<CommunicationHandler> conn;
+    
+    ConnectionPoolInfo &poolInfo = m_connectionPools[type];
+    
+    // Delete first connection in pool if its error counter is way to big
+    if(poolInfo.connections.size() > 0 && poolInfo.connections.front().first->getErrorCount() > MAX_CONNECTION_ERROR_COUNT)
+        poolInfo.connections.pop_front();
+    
+    // Remove redundant connections
+    while(poolInfo.connections.size() > poolInfo.size)
+        poolInfo.connections.pop_back();
+    
+    // Check if pool size matches config
+    long toStart = poolInfo.size - poolInfo.connections.size();
+    while(toStart-- > 0) // Current pool is too small, we should create some connection(s)
+    {
+        LOG(INFO) << "Connection pool (" << type << " is to small (" << poolInfo.connections.size() << " connections - expected: " << poolInfo.size << "). Opening new connection...";
+        
+        if(poolInfo.connections.size() > 0) {
+            boost::thread t = thread(boost::bind(&SimpleConnectionPool::newConnection, shared_from_this(), type));
+            t.detach();
+        }
+        else
+            conn = newConnection(type);
+    }
+    
+    if(poolInfo.connections.size() > 0)
+    {
+        conn = poolInfo.connections.front().first;
+        
+        // Round-robin
+        poolInfo.connections.push_back(poolInfo.connections.front());
+        poolInfo.connections.pop_front();
+    }
+    
     return conn;
 }
 
-
 void SimpleConnectionPool::releaseConnection(boost::shared_ptr<CommunicationHandler> conn) 
 {
-    if(!conn)
-        return;
+    return;
+}
+    
+void SimpleConnectionPool::setPoolSize(PoolType type, unsigned int s)
+{
+    boost::unique_lock< boost::recursive_mutex > lock(m_access);
+    m_connectionPools[type].size = s;
 
-    boost::unique_lock< boost::mutex > lock(m_access);
-    m_connectionPool.push_front(pair<boost::shared_ptr<CommunicationHandler>, time_t>(conn, time(NULL)));
-    m_accessCond.notify_one();
+    // Insert new connections to pool if needed (async)
+    long toStart = m_connectionPools[type].size - m_connectionPools[type].connections.size();
+    while(toStart-- > 0) {
+        boost::thread t = thread(boost::bind(&SimpleConnectionPool::newConnection, shared_from_this(), type));
+        t.detach();
+    }
+}
+    
+void SimpleConnectionPool::setPushCallback(std::string fuseId, push_callback hdl)
+{
+    m_fuseId = fuseId;
+    m_pushCallback = hdl;
 }
 
-list<string> SimpleConnectionPool::dnsQuery(string hostname) 
+list<string> SimpleConnectionPool::dnsQuery(string hostname)
 {
     list<string> lst;
     struct addrinfo *result;

@@ -19,7 +19,10 @@ public:
     MockConnectionPool() : SimpleConnectionPool("host", 5555, "certFile", NULL) {};
     ~MockConnectionPool() {};
 
-    MOCK_METHOD2(selectConnection, boost::shared_ptr<CommunicationHandler>(bool, unsigned int));
+    MOCK_METHOD2(setPoolSize, void(PoolType, unsigned int));
+    MOCK_METHOD2(setPushCallback, void(std::string, push_callback));
+        
+    MOCK_METHOD1(selectConnection, boost::shared_ptr<CommunicationHandler>(SimpleConnectionPool::PoolType));
     MOCK_METHOD1(releaseConnection, void(boost::shared_ptr<CommunicationHandler>));
 
 

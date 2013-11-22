@@ -13,45 +13,68 @@
 #include <list>
 #include <time.h>
 #include <boost/shared_ptr.hpp>
+#include <boost/enable_shared_from_this.hpp>
 #include "communicationHandler.h"
 
-#define CONNECTION_MAX_ALIVE_TIME 5 // in seconds
+#define DEFAULT_POOL_SIZE 2
+#define MAX_CONNECTION_ERROR_COUNT 5
 
 namespace veil {
 
-extern unsigned int maxConnectionCount;
+typedef std::list<std::pair<boost::shared_ptr<CommunicationHandler>, time_t> > connection_pool_t;
 
-class SimpleConnectionPool
+class SimpleConnectionPool : public boost::enable_shared_from_this<SimpleConnectionPool>
 {
 public:
+    
+    enum PoolType {
+        META_POOL = 0,  ///< Connection for meta data
+        DATA_POOL       ///< Connection for file data
+    };
+    
+    struct ConnectionPoolInfo {
+        
+        ConnectionPoolInfo(unsigned int s) : size(s) {}
+        ConnectionPoolInfo() : size(DEFAULT_POOL_SIZE) {}
+        
+        connection_pool_t connections;
+        unsigned int size;
+    };
 
     SimpleConnectionPool(std::string hostname, int port, std::string certPath, bool (*updateCert)());
     virtual ~SimpleConnectionPool();
+    
+    virtual void setPoolSize(PoolType type, unsigned int);                  ///< Sets size of connection pool. Default for each pool is: 2
+    virtual void setPushCallback(std::string fuseId, push_callback);        ///< Sets fuseID and callback function that will be registered for
+                                                                            ///< PUSH channel for every new META connection
 
     /**
-     * Returns pointer to CommunicationHandler that is not used at this moment.
-     * This method uses simple round-robin selection from FslogicProxy::m_connectionPool.
+     * Returns pointer to CommunicationHandler that is connected to cluster.
+     * This method uses simple round-robin selection for all connections in pool.
      * It also creates new instances of CommunicationHandler if needed.
-     * @warning You are reciving CommunicationHandler ownership ! It means that you have to either destroy
-     * or return ownership (prefered way, since this connection could be reused) via FslogicProxy::releaseConnection.
-     * @see FslogicProxy::releaseConnection
-     */             
-    virtual boost::shared_ptr<CommunicationHandler> selectConnection(bool forceNew = false, unsigned int nth = 1);
-    virtual void releaseConnection(boost::shared_ptr<CommunicationHandler> conn);       ///< Returns CommunicationHandler's pointer ownership back to connection pool. Returned connection can be selected later again
-                                                                                        ///< and be reused to boost preformance.
+     */
+    
+    virtual boost::shared_ptr<CommunicationHandler> selectConnection(PoolType = META_POOL);
+    virtual void releaseConnection(boost::shared_ptr<CommunicationHandler> conn);       ///< Returns CommunicationHandler's pointer ownership back to connection pool.
+                                                                                        ///< @deprecated Since selectConnection does not pass connection ownership, this
+                                                                                        ///< method is useless, so it does nothing.
 
 protected:
     std::string          m_hostname;
     bool                 (*updateCertCB)();
     int                  m_port;
     std::string          m_certPath;
+    std::string          m_fuseId;
 
-    boost::mutex                m_access;
+    push_callback        m_pushCallback;
+    
+    boost::recursive_mutex      m_access;
     boost::condition_variable   m_accessCond;
-    std::list<std::pair<boost::shared_ptr<CommunicationHandler>, time_t> > m_connectionPool;   ///< Connection pool. @see SimpleConnectionPool::selectConnection
+    std::map<PoolType, ConnectionPoolInfo>  m_connectionPools;                      ///< Connection pool. @see SimpleConnectionPool::selectConnection
     std::list<std::string> m_hostnamePool;
     
-    virtual std::list<std::string> dnsQuery(std::string hostname);          ///< Fetch IP list from DNS for given hostname.
+    virtual boost::shared_ptr<CommunicationHandler> newConnection(PoolType type);   ///< Creates new active connection and adds it to connection pool. Convenience method for testing (makes connection mocking easier) 
+    virtual std::list<std::string> dnsQuery(std::string hostname);                  ///< Fetch IP list from DNS for given hostname.
 };
 
 } // namespace veil

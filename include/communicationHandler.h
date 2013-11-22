@@ -18,11 +18,30 @@
 #include "communication_protocol.pb.h"
 #include "veilErrors.h"
 
+// PB decoder name
+#define FUSE_MESSAGES "fuse_messages"
+#define COMMUNICATION_PROTOCOL "communication_protocol"
+
+/// How many re-attampts has to be made by CommunicationHandler::communicate
+/// before returning error.
+#define RECONNECT_COUNT 1
+
+/// Timout for WebSocket handshake
+#define CONNECT_TIMEOUT 5000
+
+/// Message receive default timeout
+#define RECV_TIMEOUT 2000
+
+/// Path on which cluster listenes for websocket connections
+#define CLUSTER_URI_PATH "/veilclient"
+
+
 typedef websocketpp::client<websocketpp::config::asio_tls_client>       ws_client;
 typedef websocketpp::config::asio_tls_client::message_type::ptr         message_ptr;
 typedef boost::asio::ssl::stream<boost::asio::ip::tcp::socket>          socket_type;
 
 typedef websocketpp::lib::shared_ptr<boost::asio::ssl::context>         context_ptr;
+typedef boost::function<void(const veil::protocol::communication_protocol::Answer)>    push_callback;
 
 template<typename T>
 std::string toString(T in) {
@@ -62,14 +81,16 @@ protected:
     boost::unordered_map<long long, std::string> m_incomingMessages;
     
     // Boost based internals
-    boost::shared_ptr<boost::asio::io_service>    m_io_service;
-    ws_client                   m_endpoint;
+    boost::shared_ptr<ws_client>                  m_endpoint;
     ws_client::connection_ptr   m_endpointConnection;
     boost::thread               m_worker1;
     boost::thread               m_worker2;
-    volatile int                m_connectStatus;
-    volatile unsigned long long m_currentMsgId;
+    volatile int                m_connectStatus;    ///< Current connection status
+    volatile unsigned int       m_currentMsgId;     ///< Next messageID to be used
+    volatile unsigned int       m_errorCount;       ///< How many connection errors were cought
     static volatile int         instancesCount;
+    volatile bool               m_isPushChannel;
+    std::string                 m_fuseID;           ///< Current fuseID for PUSH channel (if any)
     
     boost::mutex                m_connectMutex;
     boost::condition_variable   m_connectCond;
@@ -77,6 +98,9 @@ protected:
     boost::mutex                m_receiveMutex;
     boost::condition_variable   m_receiveCond;
     static boost::mutex         m_instanceMutex;
+    
+    /// Callback function which shall be called for every cluster PUSH message
+    push_callback m_pushCallback;
     
     // WebSocket++ callbacks
     context_ptr onTLSInit(websocketpp::connection_hdl hdl);                 ///< On TLS init callback
@@ -94,15 +118,25 @@ public:
     CommunicationHandler(std::string hostname, int port, std::string certPath);
     virtual ~CommunicationHandler();
 
-    virtual long long   getMsgId();                                         ///< Get next message id. Thread safe. All subsequents calls returns next integer value.
+    virtual void registerPushChannel(std::string fuseID, push_callback cb); ///< Registers current connection as PUSH channel.
+                                                                            ///< @param fuseID used to identify client
+                                                                            ///< @param cb Callback function that will be called for every PUSH message
+    
+    virtual void closePushChannel();                                        ///< Closes PUSH channel. This call notify cluster that this connection shall not be used
+                                                                            ///< as PUSH channel
+    
+    virtual unsigned int   getErrorCount();                                 ///< Returns how many communication errors were found
+    
+    virtual int32_t     getMsgId();                                         ///< Get next message id. Thread safe. All subsequents calls returns next integer value.
     virtual int         openConnection();                                   ///< Opens WebSoscket connection. Returns 0 on success, non-zero otherwise.
     virtual void        closeConnection();                                  ///< Closes active connection.
-    virtual int         sendMessage(const protocol::communication_protocol::ClusterMsg& message, long long int msgID);             ///< Sends ClusterMsg using current WebSocket session. Will fail if there isnt one.
-    virtual int         receiveMessage(protocol::communication_protocol::Answer& answer, long long int msgID);                    ///< Receives Answer using current WebSocket session. Will fail if there isnt one.
-    virtual             protocol::communication_protocol::Answer communicate(protocol::communication_protocol::ClusterMsg &msg, uint8_t retry);     ///< Sends ClusterMsg and receives answer. Same as running CommunicationHandler::sendMessage and CommunicationHandler::receiveMessage
+    virtual int         sendMessage(const protocol::communication_protocol::ClusterMsg& message, int32_t msgID);             ///< Sends ClusterMsg using current WebSocket session. Will fail if there isnt one.
+    virtual int         receiveMessage(protocol::communication_protocol::Answer& answer, int32_t msgID, uint32_t timeout = RECV_TIMEOUT);                    ///< Receives Answer using current WebSocket session. Will fail if there isnt one.
+    virtual             protocol::communication_protocol::Answer communicate(protocol::communication_protocol::ClusterMsg &msg, uint8_t retry, uint32_t timeout = RECV_TIMEOUT);     ///< Sends ClusterMsg and receives answer. Same as running CommunicationHandler::sendMessage and CommunicationHandler::receiveMessage
                                                                     ///< but this method also supports reconnect option. If something goes wrong during communication, new connection will be
                                                                     ///< estabilished and the whole process will be repeated.
                                                                     ///< @param retry How many times tries has to be made before returning error.
+                                                                    ///< @param timeout Timeout for recv operation.
                                                                     ///< @return Answer protobuf message. If error occures, empty Answer object will be returned.
 
     static int getInstancesCount();                                 ///< Returns number of CommunicationHander instances.

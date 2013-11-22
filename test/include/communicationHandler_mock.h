@@ -23,11 +23,11 @@ public:
     int openConnection() {
         return 0;
     }
+      
+    // Override
+    void closeConnection() {}
 
-    void initSSL() {
-    }
-
-    MOCK_METHOD2(communicate, Answer(ClusterMsg&, uint8_t));
+    MOCK_METHOD3(communicate, Answer(ClusterMsg&, uint8_t, uint32_t));
 };
 
 #endif // COMMUNICAION_HANDLER_MOCK_H

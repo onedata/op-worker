@@ -19,12 +19,23 @@ public:
     }
 
     ~ProxySimpleConnectionPool() {}
-
-    void addConnection(boost::shared_ptr<CommunicationHandler> conn)
+    
+    // Override
+    boost::shared_ptr<CommunicationHandler> newConnection(SimpleConnectionPool::PoolType type)
     {
-        m_connectionPool.push_back(pair<boost::shared_ptr<CommunicationHandler>, time_t>(conn, time(NULL) + 20000));
+        std::cout << "cos";
+        boost::shared_ptr<CommunicationHandler> conn = boost::shared_ptr<CommunicationHandler>(new MockCommunicationHandler());
+        m_connectionPools[type].connections.push_front(make_pair(conn, time(NULL) + 20000));
+        
+        return conn;
     }
 
+    void addConnection(SimpleConnectionPool::PoolType type, boost::shared_ptr<CommunicationHandler> conn)
+    {
+        m_connectionPools[type].connections.push_back(pair<boost::shared_ptr<CommunicationHandler>, time_t>(conn, time(NULL) + 20000));
+    }
+
+    // Override
     std::list<std::string> dnsQuery(std::string hostname) 
     {
         std::list<std::string> ret;

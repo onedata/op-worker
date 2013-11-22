@@ -15,6 +15,8 @@
 #include "helpers/IStorageHelper.h"
 #include "simpleConnectionPool.h"
 
+#define PROTOCOL_VERSION 1
+
 
 namespace veil {
 namespace helpers {
@@ -32,8 +34,22 @@ namespace config {
     void setConnectionPool(boost::shared_ptr<SimpleConnectionPool> pool);
     boost::shared_ptr<SimpleConnectionPool> getConnectionPool();
 
+
 } // namespace config   
 
+namespace utils {
+
+    std::string tolower(std::string input);
+    
+    template<typename T>
+    T fromString(std::string in) {
+        T out;
+        std::istringstream iss(in);
+        iss >> out;
+        return out;
+    }
+    
+} // namespace utils
 
 /**
  * Factory providing objects of requested storage helpers.

@@ -33,30 +33,44 @@ protected:
 };
 
 // Test selectConnection method
-TEST_F(SimpleConnectionPoolTest, selectAndReleaseConnection)
+TEST_F(SimpleConnectionPoolTest, poolHasFixedSize_RoundRobinWorks)
 {
-    boost::shared_ptr<MockCommunicationHandler> conn1(new MockCommunicationHandler());
-    boost::shared_ptr<MockCommunicationHandler> conn2(new MockCommunicationHandler());
-    boost::shared_ptr<MockCommunicationHandler> conn3(new MockCommunicationHandler());
+    boost::shared_ptr<CommunicationHandler> connM[6], connD[4];
 
-    proxy->addConnection(conn1);
-    proxy->addConnection(conn2);
-    proxy->addConnection(conn3);
+    // Set pool sizes
+    proxy->setPoolSize(SimpleConnectionPool::META_POOL, 3);
+    proxy->setPoolSize(SimpleConnectionPool::DATA_POOL, 2);
+    sleep(1); // Give pooler some time to initialize fake connections
 
-    EXPECT_EQ(conn1, proxy->selectConnection());
-    EXPECT_EQ(conn2, proxy->selectConnection());
+    for(int i = 0; i < 4; ++i)
+        connM[i] = proxy->selectConnection(SimpleConnectionPool::META_POOL);
+    
+    for(int i = 0; i < 4; ++i)
+        connD[i] = proxy->selectConnection(SimpleConnectionPool::DATA_POOL);
 
-    proxy->releaseConnection(conn2);
+    for(int i = 4; i < 6; ++i)
+        connM[i] = proxy->selectConnection(SimpleConnectionPool::META_POOL);
+    
+    // RoundRobin on meta connections
+    EXPECT_EQ(connM[0], connM[3]);
+    EXPECT_EQ(connM[1], connM[4]);
+    EXPECT_EQ(connM[2], connM[5]);
+    
+    // RoundRobin on data connections
+    EXPECT_EQ(connD[0], connD[2]);
+    EXPECT_EQ(connD[1], connD[3]);
 
-    EXPECT_EQ(boost::shared_ptr<MockCommunicationHandler>(), proxy->selectConnection(true));
+    // Returned connections has to be diffenet
+    for(int i = 0; i < 6; ++i)
+    {
+        for(int j = 0; j < 4; ++j)
+            EXPECT_NE(connM[i], connD[j]);
+        for(int j = 0; j < 3; ++j)
+        {
+            if(j == i || i == j+3)
+                continue;
 
-    EXPECT_EQ(conn2, proxy->selectConnection());
-    EXPECT_EQ(conn3, proxy->selectConnection());
-
-    proxy->releaseConnection(conn1);
-
-    EXPECT_EQ(conn1, proxy->selectConnection());
-
-    // New connection (null since CommunicationHandler fails)
-    EXPECT_EQ(boost::shared_ptr<MockCommunicationHandler>(), proxy->selectConnection());
+            EXPECT_NE(connM[i], connM[j]) << "commM[i: " << i << "], commM[j: " << j << "]";
+        }
+    }
 }

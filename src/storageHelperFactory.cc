@@ -8,6 +8,7 @@
 #include "helpers/storageHelperFactory.h"
 #include "directIOHelper.h"
 #include "clusterProxyHelper.h"
+#include <boost/algorithm/string.hpp>
 
 using namespace boost;
 using namespace std;
@@ -22,6 +23,7 @@ namespace config {
     unsigned int clusterPort;
     string       proxyCert;
     string       clusterHostname;
+    
 
     namespace {
         boost::shared_ptr<SimpleConnectionPool> connectionPool;
@@ -40,8 +42,17 @@ namespace config {
         return connectionPool;
     }
 
-} // namespace config   
+} // namespace config
+    
 
+namespace utils {
+    
+    string tolower(string input) {
+        boost::algorithm::to_lower(input);
+        return input;
+    }
+    
+} // namespace utils
 
 StorageHelperFactory::StorageHelperFactory() 
 {
