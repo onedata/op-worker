@@ -11,6 +11,8 @@
 %% ===================================================================
 -module(crash_test_SUITE).
 
+%% TODO dodać sprawdzenie co się dzieje z callbackami po padzie noda
+
 -include("registered_names.hrl").
 -include("modules_and_args.hrl").
 -include("communication_protocol_pb.hrl").

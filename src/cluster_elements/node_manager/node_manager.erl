@@ -19,11 +19,24 @@
 -include("registered_names.hrl").
 -include("records.hrl").
 
+%% Dispatcher cowboy listener ID
+-define(DISPATCHER_LISTENER_REF, dispatcher_listener).
+
+%% Path (relative to domain) on which cowboy expects client's requests
+-define(VEILCLIENT_URI_PATH, "/veilclient").
+
 %% ====================================================================
 %% API
 %% ====================================================================
 -export([start_link/1, stop/0]).
 -export([check_vsn/0]).
+
+%% ====================================================================
+%% Test API
+%% ====================================================================
+%% TODO zmierzyć czy bardziej się opłaca przechowywać dane o callbackach
+%% jako stan (jak teraz) czy jako ets i ewentualnie przejść na ets
+-export([get_callback/2, addCallback/3, delete_callback/3]).
 
 %% ====================================================================
 %% gen_server callbacks
@@ -38,7 +51,7 @@
 %% ====================================================================
 %% @doc Starts the server
 -spec start_link(Type) -> Result when
-  Type :: worker | ccm,
+  Type :: test_worker | worker | ccm,
   Result ::  {ok,Pid}
   | ignore
   | {error,Error},
@@ -70,7 +83,35 @@ stop() ->
   State :: term(),
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-init([Type]) when Type =:= worker ; Type =:= ccm ->
+init([Type]) when Type =:= worker ; Type =:= ccm ; Type =:= ccm_test ->
+  case Type =/= ccm of
+    true ->
+      try
+        ranch:stop_listener(?DISPATCHER_LISTENER_REF),
+        ok
+      catch
+        _:_ -> ok
+      end,
+      {ok, Port} = application:get_env(?APP_Name, dispatcher_port),
+      {ok, DispatcherPoolSize} = application:get_env(?APP_Name, dispatcher_pool_size),
+      {ok, CertFile} = application:get_env(?APP_Name, ssl_cert_path),
+
+      Dispatch = cowboy_router:compile([{'_', [{?VEILCLIENT_URI_PATH, ws_handler, []}]}]),
+
+      {ok, _} = cowboy:start_https(?DISPATCHER_LISTENER_REF, DispatcherPoolSize,
+        [
+          {port, Port},
+          {certfile, atom_to_list(CertFile)},
+          {keyfile, atom_to_list(CertFile)},
+          {password, ""},
+          {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}}
+        ],
+        [
+          {env, [{dispatch, Dispatch}]}
+        ]);
+    false -> ok
+  end,
+
   process_flag(trap_exit, true),
   erlang:send_after(10, self(), {timer, do_quick_heart_beat}),
   erlang:send_after(100, self(), {timer, monitor_mem_net}),
@@ -78,6 +119,15 @@ init([Type]) when Type =:= worker ; Type =:= ccm ->
   {ok, Period} = application:get_env(veil_cluster_node, node_monitoring_period),
   LoadMemorySize = round(15 * 60 / Period + 1),
   {ok, #node_state{node_type = Type, ccm_con_status = not_connected, memory_and_network_info = {[], [], 0, LoadMemorySize}}};
+
+init([Type]) when Type =:= test_worker ->
+  process_flag(trap_exit, true),
+  erlang:send_after(10, self(), {timer, do_quick_heart_beat}),
+  erlang:send_after(100, self(), {timer, monitor_mem_net}),
+
+  {ok, Period} = application:get_env(veil_cluster_node, node_monitoring_period),
+  LoadMemorySize = round(15 * 60 / Period + 1),
+  {ok, #node_state{node_type = worker, ccm_con_status = not_connected, memory_and_network_info = {[], [], 0, LoadMemorySize}}};
 
 init([_Type]) ->
   {stop, wrong_type}.
@@ -114,6 +164,24 @@ handle_call({get_node_stats, Window}, _From, State) ->
   Reply = get_node_stats(Window, State#node_state.memory_and_network_info),
   {reply, Reply, State};
 
+handle_call(get_fuses_list, _From, State) ->
+  {reply, get_fuses_list(State), State};
+
+handle_call({get_all_callbacks, Fuse}, _From, State) ->
+  {reply, get_all_callbacks(Fuse, State), State};
+
+handle_call({addCallback, FuseId, Pid}, _From, State) ->
+  NewState = addCallback(State, FuseId, Pid),
+  {reply, ok, NewState};
+
+handle_call({delete_callback, FuseId, Pid}, _From, State) ->
+  {NewState, DeleteAns} = delete_callback(State, FuseId, Pid),
+  {reply, DeleteAns, NewState};
+
+handle_call({send_to_fuse, FuseId, Message, MessageDecoder}, _From, State) ->
+  {NewState, SendAns} = send_to_fuse(State, FuseId, Message, MessageDecoder),
+  {reply, SendAns, NewState};
+
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
 
@@ -134,14 +202,14 @@ handle_cast(do_heart_beat, State) ->
 handle_cast(do_quick_heart_beat, State) ->
   {noreply, heart_beat(State#node_state.ccm_con_status, State, true)};
 
-handle_cast({heart_beat_ok, StateNum}, State) ->
-  {noreply, heart_beat_response(StateNum, State)};
+handle_cast({heart_beat_ok, StateNum, CallbacksNum}, State) ->
+  {noreply, heart_beat_response(StateNum, CallbacksNum, State)};
 
 handle_cast(reset_ccm_connection, State) ->
   {noreply, heart_beat(not_connected, State)};
 
-handle_cast({dispatcher_updated, DispState}, State) ->
-  NewState = State#node_state{ dispatcher_state = DispState},
+handle_cast({dispatcher_updated, DispState, DispCallbacksNum}, State) ->
+  NewState = State#node_state{ dispatcher_state = DispState, callbacks_state = DispCallbacksNum},
   {noreply, NewState};
 
 handle_cast(stop, State) ->
@@ -153,6 +221,22 @@ handle_cast(monitor_mem_net, State) ->
   {ok, Period} = application:get_env(veil_cluster_node, node_monitoring_period),
   erlang:send_after(1000 * Period, self(), {timer, monitor_mem_net}),
   {noreply, State#node_state{memory_and_network_info = NewInfo}};
+
+handle_cast({delete_callback_by_pid, Pid}, State) ->
+  Fuse = get_fuse_by_callback_pid(State, Pid),
+  case Fuse of
+    not_found -> ok;
+    _ ->
+      spawn(fun() ->
+        try
+          gen_server:call({global, ?CCM}, {delete_callback, Fuse, node(), Pid}, 1000)
+        catch
+          _:_ ->
+            error
+        end
+      end)
+  end,
+  {noreply, State};
 
 handle_cast(_Msg, State) ->
   {noreply, State}.
@@ -186,8 +270,12 @@ handle_info(_Info, State) ->
   | term().
 %% ====================================================================
 terminate(_Reason, _State) ->
-  ok.
-
+  try
+    ranch:stop_listener(?DISPATCHER_LISTENER_REF),
+    ok
+  catch
+    _:_ -> ok
+  end.
 
 %% code_change/3
 %% ====================================================================
@@ -252,29 +340,30 @@ heart_beat(Conn_status, State, ShortPeriod) ->
 %% heart_beat_response/2
 %% ====================================================================
 %% @doc Saves information about ccm connection when ccm answers to its request
--spec heart_beat_response(New_state_num :: integer(), State::term()) -> NewStatus when
+-spec heart_beat_response(New_state_num :: integer(), CallbacksNum :: integer(), State::term()) -> NewStatus when
   NewStatus ::  term().
 %% ====================================================================
-heart_beat_response(New_state_num, State) ->
-  lager:info([{mod, ?MODULE}], "Heart beat on node: ~s: answered, new state_num: ~b", [node(), New_state_num]),
+heart_beat_response(New_state_num, CallbacksNum, State) ->
+  lager:info([{mod, ?MODULE}], "Heart beat on node: ~s: answered, new state_num: ~b, new callback_num", [node(), New_state_num, CallbacksNum]),
 
-  case (New_state_num == State#node_state.state_num) and (New_state_num == State#node_state.dispatcher_state) of
+  case (New_state_num == State#node_state.state_num) and (New_state_num == State#node_state.dispatcher_state) and (CallbacksNum == State#node_state.callbacks_num) and (CallbacksNum == State#node_state.callbacks_state)
+  of
     true -> State;
     false ->
-      update_dispatcher(New_state_num, State#node_state.node_type),
-      State#node_state{state_num = New_state_num}
+      update_dispatcher(New_state_num, CallbacksNum, State#node_state.node_type),
+      State#node_state{state_num = New_state_num, callbacks_num = CallbacksNum}
   end.
 
 %% update_dispatcher/2
 %% ====================================================================
 %% @doc Tells dispatcher that cluster state has changed.
--spec update_dispatcher(New_state_num :: integer(), Type :: atom()) -> Result when
+-spec update_dispatcher(New_state_num :: integer(), CallbacksNum :: integer(), Type :: atom()) -> Result when
   Result ::  atom().
 %% ====================================================================
-update_dispatcher(New_state_num, Type) ->
+update_dispatcher(New_state_num, CallbacksNum, Type) ->
   case Type =:= ccm of
     true -> ok;
-    false -> gen_server:cast(?Dispatcher_Name, {update_state, New_state_num})
+    false -> gen_server:cast(?Dispatcher_Name, {update_state, New_state_num, CallbacksNum})
   end.
 
 %% init_net_connection/1
@@ -399,4 +488,179 @@ save_progress(Report, {New, Old, NewListSize, Max}) ->
       {[], [Report | New], 0, Max};
     S ->
       {[Report | New], Old, S, Max}
+  end.
+
+%% get_callback/2
+%% ====================================================================
+%% @doc Gets callback to fuse (if there are more than one callback it
+%% chooses one).
+-spec get_callback(State :: term(), FuseId :: string()) -> Result when
+  Result :: non | pid().
+%% ====================================================================
+get_callback(State, FuseId) ->
+  {Callback, NewCallbacks} = get_pid_list(FuseId, State#node_state.callbacks, []),
+  {Callback, State#node_state{callbacks = NewCallbacks}}.
+
+%% get_pid_list/3
+%% ====================================================================
+%% @doc Helper function that sets callback to fuse (if there are more t
+%% han one callback itchooses one).
+-spec get_pid_list(FuseId :: string(), CallbacksList :: list(), NewCallbacksList :: list()) -> Result when
+  Result :: {non | pid(), NewCallbacks},
+  NewCallbacks :: list().
+%% ====================================================================
+get_pid_list(_FuseId, [], NewList) ->
+  {non, NewList};
+get_pid_list(FuseId, [{F, {CList1, CList2}} | T], NewList) ->
+  case F =:= FuseId of
+    true ->
+      {Callback, NewLists} = choose_callback(CList1, CList2),
+      {Callback, [{F, NewLists} | T] ++ NewList};
+    false -> get_pid_list(FuseId, T, [{F, {CList1, CList2}} | NewList])
+  end.
+
+%% get_all_callbacks/2
+%% ====================================================================
+%% @doc Gets all callbacks to fuse.
+-spec get_all_callbacks(State :: term(), FuseId :: string()) -> Result when
+  Result :: list().
+%% ====================================================================
+get_all_callbacks(Fuse, State) ->
+  {L1, L2} = proplists:get_value(Fuse, State#node_state.callbacks, {[],[]}),
+  lists:flatten(L1, L2).
+
+%% addCallback/3
+%% ====================================================================
+%% @doc Adds callback to fuse.
+-spec addCallback(State :: term(), FuseId :: string(), Pid :: pid()) -> NewState when
+  NewState :: list().
+%% ====================================================================
+addCallback(State, FuseId, Pid) ->
+  NewCallbacks = update_pid_list(FuseId, Pid, State#node_state.callbacks, []),
+  State#node_state{callbacks = NewCallbacks}.
+
+%% update_pid_list/4
+%% ====================================================================
+%% @doc Helper function that adds callback to fuse.
+-spec update_pid_list(FuseId :: string(), NewPid :: pid(), CallbacksList :: list(), NewCallbacksList :: list()) -> Result when
+  Result :: list().
+%% ====================================================================
+update_pid_list(FuseId, NewPid, [], Ans) ->
+  [{FuseId, {[NewPid], []}} | Ans];
+update_pid_list(FuseId, NewPid, [{F, {CList1, CList2}} | T], Ans) ->
+  case F =:= FuseId of
+    true ->
+      case lists:member(NewPid, CList1) or lists:member(NewPid, CList2) of
+        true ->
+          [{F, {CList1, CList2}} | Ans] ++ T;
+        false ->
+          [{F, {[NewPid | CList1], CList2}} | Ans] ++ T
+      end;
+    false -> update_pid_list(FuseId, NewPid, T, [{F, {CList1, CList2}} | Ans])
+  end.
+
+%% choose_callback/2
+%% ====================================================================
+%% @doc Helper function that chooses callback to use.
+-spec choose_callback(List1 :: list(), List2 :: list()) -> Result when
+  Result :: {non | pid(), {list(), list()}}.
+%% ====================================================================
+choose_callback([], []) ->
+  {non, {[], []}};
+choose_callback([], L2) ->
+  choose_callback(L2, []);
+choose_callback([Callback | L1], L2) ->
+  {Callback, {L1, [Callback | L2]}}.
+
+%% delete_callback/3
+%% ====================================================================
+%% @doc Deletes callback
+-spec delete_callback(State :: term(), FuseId :: string(), Pid :: pid()) -> Result when
+  Result :: {NewState, fuse_not_found | fuse_deleted | pid_not_found | pid_deleted},
+  NewState :: term().
+%% ====================================================================
+delete_callback(State, FuseId, Pid) ->
+  {NewCallbacks, DeleteAns} = delete_pid_from_list(FuseId, Pid, State#node_state.callbacks, []),
+  {State#node_state{callbacks = NewCallbacks}, DeleteAns}.
+
+%% delete_pid_from_list/4
+%% ====================================================================
+%% @doc Helper function that deletes callback
+-spec delete_pid_from_list(FuseId :: string(), Pid :: pid(), CallbacksList :: list(), NewCallbacksList :: list()) -> Result when
+  Result :: {NewList, fuse_not_found | fuse_deleted | pid_not_found | pid_deleted},
+  NewList :: term().
+%% ====================================================================
+delete_pid_from_list(_FuseId, _Pid, [], Ans) ->
+  {Ans, fuse_not_found};
+delete_pid_from_list(FuseId, Pid, [{F, {CList1, CList2}} | T], Ans) ->
+  case F =:= FuseId of
+    true ->
+      Length1 = length(CList1) + length(CList2),
+      NewCList1 = lists:delete(Pid, CList1),
+      NewCList2 = lists:delete(Pid, CList2),
+      case length(NewCList1) + length(NewCList2) of
+        0 -> {Ans ++ T, fuse_deleted};
+        Length1 -> {[{F, {NewCList1, NewCList2}} | Ans] ++ T, pid_not_found};
+        _ -> {[{F, {NewCList1, NewCList2}} | Ans] ++ T, pid_deleted}
+      end;
+    false -> delete_pid_from_list(FuseId, Pid, T, [{F, {CList1, CList2}} | Ans])
+  end.
+
+%% get_fuses_list/1
+%% ====================================================================
+%% @doc Get all fuses that have callbacka at this node
+-spec get_fuses_list(State :: term()) -> Result when
+  Result :: list().
+%% ====================================================================
+get_fuses_list(State) ->
+  lists:map(fun({Fuse, _Pids}) ->
+    Fuse
+  end, State#node_state.callbacks).
+
+%% get_fuse_by_callback_pid/2
+%% ====================================================================
+%% @doc Gets fuseId with which callback is connected
+-spec get_fuse_by_callback_pid(State :: term(), Pid :: pid()) -> Result when
+  Result :: not_found | string().
+%% ====================================================================
+get_fuse_by_callback_pid(State, Pid) ->
+  get_fuse_by_callback_pid_helper(Pid, State#node_state.callbacks).
+
+%% get_fuse_by_callback_pid_helper/2
+%% ====================================================================
+%% @doc Helper function that gets fuseId with which callback is connected
+-spec get_fuse_by_callback_pid_helper(Pid :: pid(), Callbacks :: list()) -> Result when
+  Result :: not_found | string().
+%% ====================================================================
+get_fuse_by_callback_pid_helper(_Pid, []) ->
+  not_found;
+get_fuse_by_callback_pid_helper(Pid, [{F, {CList1, CList2}} | T]) ->
+  case lists:member(Pid, CList1) or lists:member(Pid, CList2) of
+    true -> F;
+    false -> get_fuse_by_callback_pid_helper(Pid, T)
+  end.
+
+%% send_to_fuse/4
+%% ====================================================================
+%% @doc Sends message to fuse
+-spec send_to_fuse(State :: term(), FuseId :: string(), Message :: term(), MessageDecoder :: string()) -> Result when
+  Result :: channel_not_found | socket_error | ok | term().
+%% ====================================================================
+send_to_fuse(State, FuseId, Message, MessageDecoder) ->
+  {Callback, NewState} = get_callback(State, FuseId),
+  case Callback of
+    non -> {NewState, channel_not_found};
+    _ ->
+      case get(msgID) of
+        ID when is_integer(ID) ->
+          put(msgID, ID + 1);
+        _ -> put(msgID, 0)
+      end,
+      MsgID = get(msgID),
+      Callback ! {self(), Message, MessageDecoder, MsgID},
+      receive
+        {Callback, MsgID, Response} -> {NewState, Response}
+      after 500 ->
+        {NewState, socket_error}
+      end
   end.

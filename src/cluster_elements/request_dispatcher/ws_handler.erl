@@ -9,16 +9,22 @@
 %% @end
 %% ===================================================================
 
+%% TODO
+%% Zrobić tak, żeby odpowiadając atomem nie trzeba było wysyłać do handlera
+%% rekordu atom tylko, żeby handler sam przepakował ten atom do rekordu
+
 -module(ws_handler).
 -include("registered_names.hrl").
 -include("messages_white_list.hrl").
 -include("communication_protocol_pb.hrl").
+-include("fuse_messages_pb.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
+-include("veil_modules/fslogic/fslogic.hrl").
 -include("logging.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
-%% Holds state of websocket connection. peer_eec field contains #otp_certificate of connected peer.
--record(hander_state, {peer_eec, peer_serial, dispatcher_timeout}).
+%% Holds state of websocket connection. peer_dn field contains DN of certificate of connected peer.
+-record(hander_state, {peer_dn, peer_serial, dispatcher_timeout}).
 
 %% ====================================================================
 %% API
@@ -69,7 +75,9 @@ websocket_init(TransportName, Req, _Opts) ->
                 {ok, 1} ->
                     {ok, EEC} = gsi_handler:find_eec_cert(OtpCert, Certs, gsi_handler:is_proxy_certificate(OtpCert)),
                     ?info("Peer connected using certificate with subject: ~p ~n", [gsi_handler:proxy_subject(EEC)]),
-                    {ok, Req, #hander_state{peer_eec = EEC, peer_serial = Serial, dispatcher_timeout = DispatcherTimeout}};
+                    {rdnSequence, Rdn} = gsi_handler:proxy_subject(EEC),
+                    {ok, DnString} = user_logic:rdn_sequence_to_dn_string(Rdn),
+                    {ok, Req, #hander_state{peer_dn = DnString, peer_serial = Serial, dispatcher_timeout = DispatcherTimeout}};
                 {ok, 0, Errno} ->
                     ?info("Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
                     {shutdown, Req};
@@ -95,12 +103,17 @@ websocket_init(TransportName, Req, _Opts) ->
         Req :: term(),
         State :: #hander_state{}.
 %% ====================================================================
-websocket_handle({binary, Data}, Req, #hander_state{peer_eec = EEC, dispatcher_timeout = DispatcherTimeout} = State) ->
+websocket_handle({binary, Data}, Req, #hander_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout} = State) ->
     try
-        {rdnSequence, Rdn} = gsi_handler:proxy_subject(EEC),
-        {ok, DnString} = user_logic:rdn_sequence_to_dn_string(Rdn),
         {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type} = decode_protocol_buffer(Data, DnString),
-        Request = #veil_request{subject = DnString, request = Msg},
+        Request = case Msg of
+          CallbackMsg when is_record(Msg, channelregistration) ->
+            #veil_request{subject = DnString, request = #callback{fuse = CallbackMsg#channelregistration.fuse_id, pid = self(), node = node(), action = channelregistration}};
+          CallbackMsg2 when is_record(Msg, channelclose) ->
+            #veil_request{subject = DnString, request = #callback{fuse = CallbackMsg2#channelclose.fuse_id, pid = self(), node = node(), action = channelclose}};
+          _ -> #veil_request{subject = DnString, request = Msg}
+        end,
+
         case Synch of
             true ->
                 try
@@ -147,10 +160,24 @@ websocket_handle({Type, Data}, Req, State) ->
         Req :: term(),
         State :: #hander_state{}.
 %% ====================================================================
-websocket_info(Msg, Req, State) ->
-    %% Example: Send Msg to socket
-    %% TODO: PUSH channel
-    {reply, {binary, Msg}, Req, State}; %% Send Msg (has to be binary !) back to connected client
+websocket_info({ResponsePid, Message, MessageDecoder, MsgID}, Req, State) ->
+    try
+      [MessageType | _] = tuple_to_list(Message),
+      AnsRecord = encode_answer_record(push, -1, atom_to_list(MessageType), MessageDecoder, Message),
+      case list_to_atom(AnsRecord#answer.answer_status) of
+        push ->
+          ResponsePid ! {self(), MsgID, ok},
+          {reply, {binary, erlang:iolist_to_binary(communication_protocol_pb:encode_answer(AnsRecord))}, Req, State};
+        Other ->
+          ResponsePid ! {self(), MsgID, Other},
+          {ok, Req, State}
+      end
+    catch
+      Type:Error ->
+        lager:error("Ranch handler callback error for message ~p, error: ~p:~p", [Message, Type, Error]),
+        ResponsePid ! {self(), MsgID, handler_error},
+        {ok, Req, State}
+    end;
 websocket_info(_Msg, Req, State) ->
     ?warning("Unknown WebSocket PUSH request. Message: ~p", [_Msg]),
     {ok, Req, State}.
@@ -166,6 +193,7 @@ websocket_info(_Msg, Req, State) ->
 %% ====================================================================
 websocket_terminate(_Reason, _Req, #hander_state{peer_serial = _Serial} = _State) ->
     ?debug("WebSocket connection  terminate for peer ~p with reason: ~p", [_Serial, _Reason]),
+    gen_server:cast(?Node_Manager_Name, {delete_callback_by_pid, self()}),
     ok.
 
 %% ====================================================================
@@ -231,25 +259,38 @@ encode_answer(Main_Answer, MsgId) ->
   Result ::  binary().
 %% ====================================================================
 encode_answer(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer) ->
+    Message = encode_answer_record(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer),
+    erlang:iolist_to_binary(communication_protocol_pb:encode_answer(Message)).
+
+%% encode_answer_record/5
+%% ====================================================================
+%% @doc Creates answer record
+-spec encode_answer_record(Main_Answer :: atom(), MsgId :: integer(), AnswerType :: string(), Answer_decoder_name :: string(), Worker_Answer :: term()) -> Result when
+  Result ::  binary().
+%% ====================================================================
+encode_answer_record(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer) ->
   Check = ((Main_Answer =:= ok) and is_atom(Worker_Answer) and (Worker_Answer =:= worker_plug_in_error)),
   Main_Answer2 = case Check of
                    true -> Worker_Answer;
                    false -> Main_Answer
                  end,
-  Message = case Main_Answer2 of
-              ok -> case AnswerType of
+  case (Main_Answer2 =:= ok) or (Main_Answer2 =:= push) of
+              true -> case AnswerType of
                       non -> #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId};
                       _Type ->
                         try
                           WAns = erlang:apply(list_to_atom(Answer_decoder_name ++ "_pb"), list_to_atom("encode_" ++ AnswerType), [records_translator:translate_to_record(Worker_Answer)]),
-                          #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId, worker_answer = WAns}
+                          case Main_Answer2 of
+                            push -> #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId, message_type = AnswerType, worker_answer = WAns};
+                            _ -> #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId, worker_answer = WAns}
+                          end
                         catch
                           Type:Error ->
                             lager:error("Ranch handler error during encoding worker answer: ~p:~p, answer type: ~s, decoder ~s, worker answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Worker_Answer]),
                             #answer{answer_status = "worker_answer_encoding_error", message_id = MsgId}
                         end
                     end;
-              _Other ->
+              false ->
                 try
                   #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId}
                 catch
@@ -257,8 +298,7 @@ encode_answer(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer
                     lager:error("Ranch handler error during encoding main answer: ~p:~p, main answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Main_Answer2]),
                     #answer{answer_status = "main_answer_encoding_error", message_id = MsgId}
                 end
-            end,
-  erlang:iolist_to_binary(communication_protocol_pb:encode_answer(Message)).
+  end.
 
 %% map_dn_to_client_type/1
 %% ====================================================================

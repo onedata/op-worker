@@ -16,14 +16,16 @@
 -include("records.hrl").
 -include("modules_and_args.hrl").
 -include("communication_protocol_pb.hrl").
+-include("veil_modules/fslogic/fslogic.hrl").
+-include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([modules_start_and_ping_test/1, dispatcher_connection_test/1, workers_list_actualization_test/1, ping_test/1, application_start_test1/1, application_start_test2/1, validation_test/1]).
+-export([modules_start_and_ping_test/1, dispatcher_connection_test/1, workers_list_actualization_test/1, ping_test/1, application_start_test1/1, application_start_test2/1, validation_test/1, callbacks_list_actualization_test/1]).
 
 %% export nodes' codes
 -export([application_start_test_code1/0, application_start_test_code2/0]).
 
-all() -> [application_start_test1, application_start_test2, modules_start_and_ping_test, workers_list_actualization_test, validation_test, ping_test, dispatcher_connection_test].
+all() -> [application_start_test1, application_start_test2, modules_start_and_ping_test, workers_list_actualization_test, validation_test, ping_test, dispatcher_connection_test, callbacks_list_actualization_test].
 
 %% ====================================================================
 %% Code of nodes used during the test
@@ -160,6 +162,122 @@ workers_list_actualization_test(Config) ->
   OKSum = lists:foldl(CheckModules, 0, Jobs),
   ?assertEqual(OKSum, length(Jobs)).
 
+%% This test checks if callbacks list inside dispatcher is refreshed correctly.
+callbacks_list_actualization_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+  [CCM | _] = NodesUp,
+
+  gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
+  gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  timer:sleep(100),
+  gen_server:cast({global, ?CCM}, init_cluster),
+  timer:sleep(1500),
+
+  Ans1 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 1, #veil_request{subject = "DN", request = #callback{fuse = fuse1, pid = self(), node = CCM, action = channelregistration}}}}),
+  ?assertEqual(ok, Ans1),
+  Ans2 = receive
+    {worker_answer, 1, WorkerAns} -> WorkerAns
+  after 1000 ->
+    error
+  end,
+  ?assertEqual(#atom{value = "ok"}, Ans2),
+
+  Test1 = gen_server:call({?Dispatcher_Name, CCM}, get_callbacks),
+  ?assertEqual({[{fuse1, [CCM]}], 2}, Test1),
+  Test2 = gen_server:call({global, ?CCM}, get_callbacks),
+  ?assertEqual({[{fuse1, [CCM]}], 2}, Test2),
+  Test3 = gen_server:call({?Node_Manager_Name, CCM}, get_fuses_list),
+  ?assertEqual([fuse1], Test3),
+  Test4 = gen_server:call({?Node_Manager_Name, CCM}, {get_all_callbacks, fuse1}),
+  ?assertEqual([self()], Test4),
+
+  Ans3 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 2, #veil_request{subject = "DN", request = #callback{fuse = fuse2, pid = self(), node = CCM, action = channelregistration}}}}),
+  ?assertEqual(ok, Ans3),
+  Ans4 = receive
+           {worker_answer, 2, WorkerAns2} -> WorkerAns2
+         after 1000 ->
+           error
+         end,
+  ?assertEqual(#atom{value = "ok"}, Ans4),
+
+  Test5 = gen_server:call({?Dispatcher_Name, CCM}, get_callbacks),
+  ?assertEqual({[{fuse1, [CCM]}, {fuse2, [CCM]}], 3}, Test5),
+  Test6 = gen_server:call({global, ?CCM}, get_callbacks),
+  ?assertEqual({[{fuse1, [CCM]}, {fuse2, [CCM]}], 3}, Test6),
+  Test7 = gen_server:call({?Node_Manager_Name, CCM}, get_fuses_list),
+  ?assertEqual([fuse2, fuse1], Test7),
+  Test8 = gen_server:call({?Node_Manager_Name, CCM}, {get_all_callbacks, fuse2}),
+  ?assertEqual([self()], Test8),
+
+  Ans5 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 3, #veil_request{subject = "DN", request = #callback{fuse = fuse1, pid = pid2, node = CCM, action = channelregistration}}}}),
+  ?assertEqual(ok, Ans5),
+  Ans6 = receive
+           {worker_answer, 3, WorkerAns3} -> WorkerAns3
+         after 1000 ->
+           error
+         end,
+  ?assertEqual(#atom{value = "ok"}, Ans6),
+
+  Test9 = gen_server:call({?Dispatcher_Name, CCM}, get_callbacks),
+  ?assertEqual({[{fuse1, [CCM]}, {fuse2, [CCM]}], 3}, Test9),
+  Test10 = gen_server:call({global, ?CCM}, get_callbacks),
+  ?assertEqual({[{fuse1, [CCM]}, {fuse2, [CCM]}], 3}, Test10),
+  Test11 = gen_server:call({?Node_Manager_Name, CCM}, get_fuses_list),
+  ?assertEqual([fuse1, fuse2], Test11),
+  Test12 = gen_server:call({?Node_Manager_Name, CCM}, {get_all_callbacks, fuse1}),
+  ?assertEqual([pid2, self()], Test12),
+
+  Ans7 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 4, #veil_request{subject = "DN", request = #callback{fuse = fuse2, pid = self(), node = CCM, action = channelclose}}}}),
+  ?assertEqual(ok, Ans7),
+  Ans8 = receive
+           {worker_answer, 4, WorkerAns4} -> WorkerAns4
+         after 1000 ->
+           error
+         end,
+  ?assertEqual(#atom{value = "ok"}, Ans8),
+
+  Test13 = gen_server:call({?Dispatcher_Name, CCM}, get_callbacks),
+  ?assertEqual({[{fuse1, [CCM]}], 4}, Test13),
+  Test14 = gen_server:call({global, ?CCM}, get_callbacks),
+  ?assertEqual({[{fuse1, [CCM]}], 4}, Test14),
+  Test15 = gen_server:call({?Node_Manager_Name, CCM}, get_fuses_list),
+  ?assertEqual([fuse1], Test15),
+
+  Ans9 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 5, #veil_request{subject = "DN", request = #callback{fuse = fuse1, pid = pid2, node = CCM, action = channelclose}}}}),
+  ?assertEqual(ok, Ans9),
+  Ans10 = receive
+           {worker_answer, 5, WorkerAns5} -> WorkerAns5
+         after 1000 ->
+           error
+         end,
+  ?assertEqual(#atom{value = "ok"}, Ans10),
+
+  Test16 = gen_server:call({?Dispatcher_Name, CCM}, get_callbacks),
+  ?assertEqual({[{fuse1, [CCM]}], 4}, Test16),
+  Test17 = gen_server:call({global, ?CCM}, get_callbacks),
+  ?assertEqual({[{fuse1, [CCM]}], 4}, Test17),
+  Test18 = gen_server:call({?Node_Manager_Name, CCM}, get_fuses_list),
+  ?assertEqual([fuse1], Test18),
+  Test19 = gen_server:call({?Node_Manager_Name, CCM}, {get_all_callbacks, fuse1}),
+  ?assertEqual([self()], Test19),
+
+  Ans11 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 6, #veil_request{subject = "DN", request = #callback{fuse = fuse1, pid = self(), node = CCM, action = channelclose}}}}),
+  ?assertEqual(ok, Ans11),
+  Ans12 = receive
+           {worker_answer, 6, WorkerAns6} -> WorkerAns6
+         after 1000 ->
+           error
+         end,
+  ?assertEqual(#atom{value = "ok"}, Ans12),
+
+  Test20 = gen_server:call({?Dispatcher_Name, CCM}, get_callbacks),
+  ?assertEqual({[], 5}, Test20),
+  Test21 = gen_server:call({global, ?CCM}, get_callbacks),
+  ?assertEqual({[], 5}, Test21),
+  Test22 = gen_server:call({?Node_Manager_Name, CCM}, get_fuses_list),
+  ?assertEqual([], Test22).
+
 validation_test(Config) ->
   nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
@@ -280,7 +398,7 @@ init_per_testcase(type2, Config) ->
   lists:append([{port, Port}, {peer_cert, PeerCert}, {nodes, NodesUp}, {assertions, Assertions}], Config);
 
 init_per_testcase(TestCase, Config) ->
-  case lists:member(TestCase, [modules_start_and_ping_test, workers_list_actualization_test]) of
+  case lists:member(TestCase, [modules_start_and_ping_test, workers_list_actualization_test, callbacks_list_actualization_test]) of
     true -> init_per_testcase(type1, Config);
     false -> init_per_testcase(type2, Config)
   end.
@@ -303,7 +421,7 @@ end_per_testcase(type2, Config) ->
   ?assertEqual(ok, StopAns);
 
 end_per_testcase(TestCase, Config) ->
-  case lists:member(TestCase, [application_start_test1, application_start_test2, modules_start_and_ping_test, workers_list_actualization_test]) of
+  case lists:member(TestCase, [application_start_test1, application_start_test2, modules_start_and_ping_test, workers_list_actualization_test, callbacks_list_actualization_test]) of
     true -> end_per_testcase(type1, Config);
     false -> end_per_testcase(type2, Config)
   end.

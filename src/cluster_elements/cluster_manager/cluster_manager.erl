@@ -16,6 +16,8 @@
 -include("supervision_macros.hrl").
 -include("modules_and_args.hrl").
 
+-define(CALLBACKS_TABLE, callbacks_table).
+
 %% ====================================================================
 %% API
 %% ====================================================================
@@ -96,6 +98,7 @@ stop() ->
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 init([]) ->
+  ets:new(?CALLBACKS_TABLE, [named_table, set]),
   process_flag(trap_exit, true),
   {ok, Interval} = application:get_env(veil_cluster_node, initialization_time),
   Pid = self(),
@@ -112,6 +115,7 @@ init([]) ->
   {ok, #cm_state{}};
 
 init([test]) ->
+  ets:new(?CALLBACKS_TABLE, [named_table, set]),
   process_flag(trap_exit, true),
   {ok, #cm_state{nodes = [node()]}}.
 
@@ -151,6 +155,41 @@ handle_call(get_version, _From, State) ->
 handle_call(get_ccm_node, _From, State) ->
   {reply, node(), State};
 
+handle_call({addCallback, FuseId, Node, Pid}, _From, State) ->
+  try
+    gen_server:call({?Node_Manager_Name, Node}, {addCallback, FuseId, Pid}, 500),
+    CallbacksNum = case add_callback(Node, FuseId, State#cm_state.nodes, State#cm_state.callbacks_num) of
+      updated -> State#cm_state.callbacks_num + 1;
+      _ -> State#cm_state.callbacks_num
+    end,
+    {reply, ok, State#cm_state{callbacks_num = CallbacksNum}}
+  catch
+    _:_ ->
+      lager:error([{mod, ?MODULE}], "Can not add callback of node: ~p, pid ~p, fuseId ~p", [Node, Pid, FuseId]),
+      {reply, error, State}
+  end;
+
+handle_call({delete_callback, FuseId, Node, Pid}, _From, State) ->
+  try
+    Ans = gen_server:call({?Node_Manager_Name, Node}, {delete_callback, FuseId, Pid}, 500),
+    CallbacksNum = case Ans of
+      fuse_deleted ->
+        case delete_callback(Node, FuseId, State#cm_state.nodes, State#cm_state.callbacks_num) of
+          updated -> State#cm_state.callbacks_num + 1;
+          _ -> State#cm_state.callbacks_num
+        end;
+      _ -> State#cm_state.callbacks_num
+    end,
+    {reply, ok, State#cm_state{callbacks_num = CallbacksNum}}
+  catch
+    _:_ ->
+      lager:error([{mod, ?MODULE}], "Can not delete callback of node: ~p, pid ~p, fuseId ~p", [Node, Pid, FuseId]),
+      {reply, error, State}
+  end;
+
+handle_call(get_callbacks, _From, State) ->
+  {reply, {get_callbacks(), State#cm_state.callbacks_num}, State};
+
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
 
@@ -167,16 +206,15 @@ handle_call(_Request, _From, State) ->
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 handle_cast({node_is_up, Node}, State) ->
-  Reply = State#cm_state.state_num,
   case Node =:= node() of
     true ->
-      gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, Reply}),
+      gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, State#cm_state.state_num, State#cm_state.callbacks_num}),
       {noreply, State};
     false ->
       Nodes = State#cm_state.nodes,
       case lists:member(Node, Nodes) of
         true ->
-          gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, Reply}),
+          gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, State#cm_state.state_num, State#cm_state.callbacks_num}),
           {noreply, State};
         false ->
           {Ans, NewState, WorkersFound} = check_node(Node, State),
@@ -199,10 +237,10 @@ handle_cast({node_is_up, Node}, State) ->
                 false -> ok
               end,
 
-              gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, Reply}),
+              gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, State#cm_state.state_num, State#cm_state.callbacks_num}),
               {noreply, NewState2};
             _Other ->
-              gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, Reply}),
+              gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, State#cm_state.state_num, State#cm_state.callbacks_num}),
               {noreply, NewState}
           end
       end
@@ -578,7 +616,26 @@ check_node(Node, State) ->
         Workers = State#cm_state.workers,
         NewWorkers = add_children(Node, Children, Workers),
         WorkersFound = length(NewWorkers) > length(Workers),
-        {ok, State#cm_state{workers = NewWorkers}, WorkersFound};
+
+        try
+          Callbacks = gen_server:call({?Node_Manager_Name, Node}, get_fuses_list, 500),
+          Changed = lists:foldl(fun(Fuse, TmpAns) ->
+            case add_callback(Node, Fuse, State#cm_state.nodes, State#cm_state.callbacks_num) of
+              updated -> true;
+              _ -> TmpAns
+            end
+          end, false, Callbacks),
+
+          CallbacksNum = case Changed of
+            true -> State#cm_state.callbacks_num + 1;
+            false -> State#cm_state.callbacks_num
+          end,
+          {ok, State#cm_state{workers = NewWorkers, callbacks_num = CallbacksNum}, WorkersFound}
+        catch
+          _:_ ->
+          lager:error([{mod, ?MODULE}], "Can not get fuses of node: ~s", [Node]),
+            {error, State, false}
+        end;
       pang -> {error, State, false}
     end
   catch
@@ -628,7 +685,12 @@ node_down(Node, State) ->
   Nodes = State#cm_state.nodes,
   NewNodes = lists:foldl(CreateNewNodesList, [], Nodes),
 
-  {State#cm_state{workers = NewWorkers, nodes = NewNodes}, WorkersFound}.
+  CallbacksNum = case delete_all_callbacks(Node, State#cm_state.nodes, State#cm_state.callbacks_num) of
+    true -> State#cm_state.callbacks_num + 1;
+    false -> State#cm_state.callbacks_num
+  end,
+
+  {State#cm_state{workers = NewWorkers, nodes = NewNodes, callbacks_num = CallbacksNum}, WorkersFound}.
 
 %% start_central_logger/1
 %% ====================================================================
@@ -1149,3 +1211,108 @@ calculate_load(NodesLoad, WorkersLoad) ->
   end,
   lists:map(Merge, NodesLoad).
 
+%% add_callback/4
+%% ====================================================================
+%% @doc Registers callback
+-spec add_callback(Node :: term(), Fuse :: string(), Nodes :: list(), CallbacksNum :: integer()) -> Result when
+  Result :: ok | updated.
+%% ====================================================================
+add_callback(Node, Fuse, Nodes, CallbacksNum) ->
+  OldCallbacks = ets:lookup(?CALLBACKS_TABLE, Fuse),
+  case OldCallbacks of
+    [{Fuse, OldCallbacksList}] ->
+      case lists:member(Node, OldCallbacksList) of
+        true -> ok;
+        false ->
+          ets:insert(?CALLBACKS_TABLE, {Fuse, [Node | OldCallbacksList]}),
+          update_dispatcher_callback(addCallback, Nodes, Fuse, Node, CallbacksNum + 1),
+          updated
+      end;
+    _ ->
+      ets:insert(?CALLBACKS_TABLE, {Fuse, [Node]}),
+      update_dispatcher_callback(addCallback, Nodes, Fuse, Node, CallbacksNum + 1),
+      updated
+  end.
+
+%% delete_callback/4
+%% ====================================================================
+%% @doc Deletes callback
+-spec delete_callback(Node :: term(), Fuse :: string(), Nodes :: list(), CallbacksNum :: integer()) -> Result when
+  Result :: updated | not_exists.
+%% ====================================================================
+delete_callback(Node, Fuse, Nodes, CallbacksNum) ->
+  OldCallbacks = ets:lookup(?CALLBACKS_TABLE, Fuse),
+  case OldCallbacks of
+    [{Fuse, OldCallbacksList}] ->
+      case lists:member(Node, OldCallbacksList) of
+        true ->
+          case length(OldCallbacksList) of
+            1 ->
+              ets:delete(?CALLBACKS_TABLE, Fuse),
+              update_dispatcher_callback(delete_callback, Nodes, Fuse, Node, CallbacksNum + 1),
+              updated;
+            _ ->
+              ets:insert(?CALLBACKS_TABLE, {Fuse, lists:delete(Node, OldCallbacksList)}),
+              update_dispatcher_callback(delete_callback, Nodes, Fuse, Node, CallbacksNum + 1),
+              updated
+          end;
+        false -> not_exists
+      end;
+    _ -> not_exists
+  end.
+
+%% delete_all_callbacks/3
+%% ====================================================================
+%% @doc Deletes all callbacks at node
+-spec delete_all_callbacks(Node :: term(), Nodes :: list(), CallbacksNum :: integer()) -> Result when
+  Result :: boolean().
+%% ====================================================================
+delete_all_callbacks(Node, Nodes, CallbacksNum) ->
+  delete_all_callbacks(Node, ets:first(?CALLBACKS_TABLE), false, Nodes, CallbacksNum).
+
+%% delete_all_callbacks/4
+%% ====================================================================
+%% @doc Deletes all callbacks at node (helper function)
+-spec delete_all_callbacks(Node :: term(), CurrentElement :: term(), Updated :: boolean(), Nodes :: list(), CallbacksNum :: integer()) -> Result when
+  Result :: boolean().
+%% ====================================================================
+delete_all_callbacks(_Node, '$end_of_table', Updated, _Nodes, _CallbacksNum) ->
+  Updated;
+delete_all_callbacks(Node, CurrentElement, Updated, Nodes, CallbacksNum) ->
+  case delete_callback(Node, CurrentElement, Nodes, CallbacksNum) of
+    updated -> delete_all_callbacks(Node, ets:next(?CALLBACKS_TABLE, CurrentElement), true, Nodes, CallbacksNum);
+    _ -> delete_all_callbacks(Node, ets:next(?CALLBACKS_TABLE, CurrentElement), Updated, Nodes, CallbacksNum)
+  end.
+
+%% update_dispatcher_callback/5
+%% ====================================================================
+%% @doc Updates info about callbacks in all dispatchers
+-spec update_dispatcher_callback(Action :: atom(), Nodes :: list(), FuseId :: string(), Node :: term(), CallbacksNum :: integer()) -> ok.
+%% ====================================================================
+update_dispatcher_callback(Action, Nodes, FuseId, Node, CallbacksNum) ->
+  UpdateNode = fun(UpdatedNode) ->
+    gen_server:cast({?Dispatcher_Name, UpdatedNode}, {Action, FuseId, Node, CallbacksNum})
+  end,
+  lists:foreach(UpdateNode, Nodes),
+  gen_server:cast(?Dispatcher_Name, {Action, FuseId, Node, CallbacksNum}).
+
+%% get_callbacks/0
+%% ====================================================================
+%% @doc Gets information about all callbacks
+-spec get_callbacks() -> Result when
+  Result :: list().
+%% ====================================================================
+get_callbacks() ->
+  get_callbacks(ets:first(?CALLBACKS_TABLE)).
+
+%% get_callbacks/1
+%% ====================================================================
+%% @doc Gets information about all callbacks (helper function)
+-spec get_callbacks(Fuse :: string()) -> Result when
+  Result :: list().
+%% ====================================================================
+get_callbacks('$end_of_table') ->
+  [];
+get_callbacks(Fuse) ->
+  [Value] = ets:lookup(?CALLBACKS_TABLE, Fuse),
+  [Value | get_callbacks(ets:next(?CALLBACKS_TABLE, Fuse))].

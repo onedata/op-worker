@@ -15,10 +15,15 @@
 -include("records.hrl").
 -include("modules_and_args.hrl").
 
+-define(CALLBACKS_TABLE, dispatcher_callbacks_table).
+
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_link/0, stop/0]).
+-export([start_link/0, stop/0, send_to_fuse/3]).
+
+%% TODO zmierzyć czy bardziej się opłaca przechowywać dane o modułach
+%% jako stan (jak teraz) czy jako ets i ewentualnie przejść na ets
 
 %% ====================================================================
 %% Test API
@@ -88,6 +93,7 @@ stop() ->
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 init(Modules) ->
+  ets:new(?CALLBACKS_TABLE, [named_table, set]),
   process_flag(trap_exit, true),
   try gsi_handler:init() of     %% Failed initialization of GSI should not disturb dispacher's startup
     ok -> ok;
@@ -196,6 +202,9 @@ handle_call({node_chosen, {Task, ProtocolVersion, Request}}, _From, State) ->
     Other -> {reply, Other, State}
   end;
 
+handle_call({get_callback, Fuse}, _From, State) ->
+  {reply, get_callback(Fuse), State};
+
 %% test call
 handle_call({get_worker_node, Module}, _From, State) ->
   Ans = get_worker_node(Module, State),
@@ -212,6 +221,10 @@ handle_call({check_worker_node, Module}, _From, State) ->
     Other -> {reply, Other, State}
   end;
 
+%% test call
+handle_call(get_callbacks, _From, State) ->
+  {reply, {get_callbacks(), State#dispatcher_state.callbacks_num}, State};
+
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
 
@@ -226,24 +239,55 @@ handle_call(_Request, _From, State) ->
   NewState :: term(),
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
-handle_cast({update_state, NewStateNum}, State) ->
-  case State#dispatcher_state.state_num == NewStateNum of
-    true ->
-      gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewStateNum}),
+handle_cast({update_state, NewStateNum, NewCallbacksNum}, State) ->
+  case {State#dispatcher_state.state_num == NewStateNum, State#dispatcher_state.callbacks_num == NewCallbacksNum} of
+    {true, true} ->
+      gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewStateNum, NewCallbacksNum}),
       {noreply, State};
-    false ->
+    {false, true} ->
       {Ans, NewState} = pull_state(State),
 
       case Ans of
         ok ->
           lager:info([{mod, ?MODULE}], "Dispatcher had old state number, data updated"),
-          gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState#dispatcher_state.state_num});
+          gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState#dispatcher_state.state_num, NewCallbacksNum});
         _ ->
           lager:error([{mod, ?MODULE}], "Dispatcher had old state number but could not update data"),
           error
       end,
 
-      {noreply, NewState}
+      {noreply, NewState};
+    {true, false} ->
+      case pull_callbacks() of
+        error ->
+          lager:error([{mod, ?MODULE}], "Dispatcher had old callbacks number but could not update data"),
+          {noreply, State};
+        Number ->
+          lager:info([{mod, ?MODULE}], "Dispatcher had old callbacks number, data updated"),
+          gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewStateNum, Number}),
+          {noreply, State#dispatcher_state{callbacks_num = Number}}
+      end;
+    {false, false} ->
+      {Ans, NewState} = pull_state(State),
+
+      case Ans of
+        ok ->
+          lager:info([{mod, ?MODULE}], "Dispatcher had old state number, data updated"),
+          gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState#dispatcher_state.state_num, NewCallbacksNum});
+        _ ->
+          lager:error([{mod, ?MODULE}], "Dispatcher had old state number but could not update data"),
+          error
+      end,
+
+      case pull_callbacks() of
+        error ->
+          lager:error([{mod, ?MODULE}], "Dispatcher had old callbacks number but could not update data"),
+          {noreply, NewState};
+        Number ->
+          lager:info([{mod, ?MODULE}], "Dispatcher had old callbacks number, data updated"),
+          gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState#dispatcher_state.state_num, Number}),
+          {noreply, NewState#dispatcher_state{callbacks_num = Number}}
+      end
   end;
 
 handle_cast({update_workers, WorkersList, NewStateNum, CurLoad, AvgLoad}, _State) ->
@@ -257,6 +301,14 @@ handle_cast({update_loads, CurLoad, AvgLoad}, State) ->
 
 handle_cast(stop, State) ->
   {stop, normal, State};
+
+handle_cast({addCallback, FuseId, Node, CallbacksNum}, State) ->
+  add_callback(Node, FuseId),
+  {noreply, State#dispatcher_state{callbacks_num = CallbacksNum}};
+
+handle_cast({delete_callback, FuseId, Node, CallbacksNum}, State) ->
+  delete_callback(Node, FuseId),
+  {noreply, State#dispatcher_state{callbacks_num = CallbacksNum}};
 
 handle_cast(_Msg, State) ->
   {noreply, State}.
@@ -501,3 +553,134 @@ initState(Modules) ->
 initState(SNum, CLoad, ALoad, Modules) ->
   NewState = initState(Modules),
   NewState#dispatcher_state{state_num = SNum, current_load = CLoad, avg_load = ALoad}.
+
+%% add_callback/2
+%% ====================================================================
+%% @doc Adds info about callback to fuse.
+-spec add_callback(Node :: term(), Fuse :: string()) -> Result when
+  Result :: ok | updated.
+%% ====================================================================
+add_callback(Node, Fuse) ->
+  OldCallbacks = ets:lookup(?CALLBACKS_TABLE, Fuse),
+  case OldCallbacks of
+    [{Fuse, OldCallbacksList}] ->
+      case lists:member(Node, OldCallbacksList) of
+        true -> ok;
+        false ->
+          ets:insert(?CALLBACKS_TABLE, {Fuse, [Node | OldCallbacksList]}),
+          updated
+      end;
+    _ ->
+      ets:insert(?CALLBACKS_TABLE, {Fuse, [Node]}),
+      updated
+  end.
+
+%% delete_callback/2
+%% ====================================================================
+%% @doc Deletes info about callback
+-spec delete_callback(Node :: term(), Fuse :: string()) -> Result when
+  Result :: updated | not_exists.
+%% ====================================================================
+delete_callback(Node, Fuse) ->
+  OldCallbacks = ets:lookup(?CALLBACKS_TABLE, Fuse),
+  case OldCallbacks of
+    [{Fuse, OldCallbacksList}] ->
+      case lists:member(Node, OldCallbacksList) of
+        true ->
+          case length(OldCallbacksList) of
+            1 ->
+              ets:delete(?CALLBACKS_TABLE, Fuse),
+              updated;
+            _ ->
+              ets:insert(?CALLBACKS_TABLE, {Fuse, lists:delete(Node, OldCallbacksList)}),
+              updated
+          end;
+        false -> not_exists
+      end;
+    _ -> not_exists
+  end.
+
+%% get_callback/1
+%% ====================================================================
+%% @doc Gets info on which node callback to fuse can be found
+%% (if there are many nodes, one is chosen).
+-spec get_callback(Fuse :: string()) -> Result when
+  Result :: not_found | term().
+%% ====================================================================
+get_callback(Fuse) ->
+  Callbacks = ets:lookup(?CALLBACKS_TABLE, Fuse),
+  case Callbacks of
+    [{Fuse, CallbacksList}] ->
+      Num = random:uniform(length(CallbacksList)),
+      lists:nth(Num, CallbacksList);
+    _ ->
+      not_found
+  end.
+
+%% pull_callbacks/0
+%% ====================================================================
+%% @doc Pulls info about callbacks from CCM
+-spec pull_callbacks() -> Result when
+  Result :: error | CallbacksNum,
+  CallbacksNum :: integer().
+%% ====================================================================
+pull_callbacks() ->
+  try
+    {CallbacksList, CallbacksNum} = gen_server:call({global, ?CCM}, get_callbacks),
+    UpdateCallbacks = fun({Fuse, NodesList}) ->
+      ets:insert(?CALLBACKS_TABLE, {Fuse, NodesList})
+    end,
+    lists:foreach(UpdateCallbacks, CallbacksList),
+    CallbacksNum
+  catch
+    _:_ ->
+      lager:error([{mod, ?MODULE}], "Dispatcher on node: ~s: can not pull callbacks list", [node()]),
+      error
+  end.
+
+%% get_callbacks/0
+%% ====================================================================
+%% @doc Gets information about all callbacks
+-spec get_callbacks() -> Result when
+  Result :: list().
+%% ====================================================================
+get_callbacks() ->
+  get_callbacks(ets:first(?CALLBACKS_TABLE)).
+
+%% get_callbacks/1
+%% ====================================================================
+%% @doc Gets information about all callbacks (helper function)
+-spec get_callbacks(Fuse :: string()) -> Result when
+  Result :: list().
+%% ====================================================================
+get_callbacks('$end_of_table') ->
+  [];
+get_callbacks(Fuse) ->
+  [Value] = ets:lookup(?CALLBACKS_TABLE, Fuse),
+  [Value | get_callbacks(ets:next(?CALLBACKS_TABLE, Fuse))].
+
+%% send_to_fuse/3
+%% ====================================================================
+%% @doc Sends message to fuse
+-spec send_to_fuse(FuseId :: string(), Message :: term(), MessageDecoder :: string()) -> Result when
+  Result :: callback_node_not_found | node_manager_error | dispatcher_error | ok | term().
+%% ====================================================================
+send_to_fuse(Fuse, Message, MessageDecoder) ->
+  try
+    Node = gen_server:call(?Dispatcher_Name, {get_callback, Fuse}, 500),
+    case Node of
+      not_found -> callback_node_not_found;
+      _ ->
+        try
+          gen_server:call({?Node_Manager_Name, Node}, {send_to_fuse, Fuse, Message, MessageDecoder}, 1000)
+        catch
+          E1:E2 ->
+            lager:error([{mod, ?MODULE}], "Can not send by callback of node: ~p to fuse ~p, error: ~p:~p", [Node, Fuse, E1, E2]),
+            node_manager_error
+        end
+    end
+  catch
+    _:_ ->
+      lager:error([{mod, ?MODULE}], "Can not get callback node of fuse: ~p", [Fuse]),
+      dispatcher_error
+  end.

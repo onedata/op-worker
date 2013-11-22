@@ -11,8 +11,8 @@
 
 %% white lists defined as lists of pairs {user_type, white_list_for_user_type}
 -define(MessagesWhiteList, [
-  {standard_user, [fusemessage, remotefilemangement, atom]},
-  {developer, [fusemessage, remotefilemangement, atom]}
+  {standard_user, [fusemessage, remotefilemangement, channelregistration, channelclose, atom]},
+  {developer, [fusemessage, remotefilemangement, channelregistration, channelclose, atom]}
 ]).
 -define(AtomsWhiteList, [
   {standard_user, [ping]},

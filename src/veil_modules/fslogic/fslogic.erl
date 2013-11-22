@@ -74,6 +74,10 @@ handle(ProtocolVersion, {delete_old_descriptors_test, Time}) ->
   delete_old_descriptors(ProtocolVersion, Time),
   ok;
 
+handle(_ProtocolVersion, {answer_test_message, FuseID, Message}) ->
+  request_dispatcher:send_to_fuse(FuseID, #testchannelanswer{message = Message}, "fuse_messages"),
+  ok;
+
 handle(ProtocolVersion, {delete_old_descriptors, Pid}) ->
   {Megaseconds,Seconds, _Microseconds} = os:timestamp(),
   Time = 1000000*Megaseconds + Seconds - 15,
@@ -84,6 +88,25 @@ handle(ProtocolVersion, {delete_old_descriptors, Pid}) ->
 
 handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
   handle_fuse_message(ProtocolVersion, Record#fusemessage.input, Record#fusemessage.id);
+
+handle(_ProtocolVersion, Record) when is_record(Record, callback) ->
+  Answer = case Record#callback.action of
+    channelregistration ->
+      try
+        gen_server:call({global, ?CCM}, {addCallback, Record#callback.fuse, Record#callback.node, Record#callback.pid}, 1000)
+      catch
+        _:_ ->
+          error
+      end;
+    channelclose ->
+      try
+        gen_server:call({global, ?CCM}, {delete_callback, Record#callback.fuse, Record#callback.node, Record#callback.pid}, 1000)
+      catch
+        _:_ ->
+          error
+      end
+  end,
+  #atom{value = atom_to_list(Answer)};
 
 handle(ProtocolVersion, {internal_call, Record}) ->
   handle_fuse_message(ProtocolVersion, Record, ?CLUSTER_FUSE_ID);
@@ -670,8 +693,13 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getl
               #linkinfo{answer = ?VEREMOTEIO, file_logic_name = ""}
       end;
     _  -> #linkinfo{answer = ?VEREMOTEIO, file_logic_name = ""}
-  end.
+  end;
 
+%% Test message
+handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, testchannel) ->
+  Interval = Record#testchannel.answer_delay_in_ms,
+  timer:apply_after(Interval, gen_server, cast, [?MODULE, {asynch, ProtocolVersion, {answer_test_message, FuseID, Record#testchannel.answer_message}}]),
+  #atom{value = "ok"}.
 
 %% save_file_descriptor/3
 %% ====================================================================
