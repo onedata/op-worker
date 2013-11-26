@@ -29,7 +29,7 @@ eunit: deps compile
 ct: deps compile
 	./rebar ct skip_deps=true
 	chmod +x test_distributed/start_distributed_test.sh
-	./test_distributed/start_distributed_test.sh
+	./test_distributed/start_distributed_test.sh ${SUITE} ${CASE}
 
 test: eunit ct
 

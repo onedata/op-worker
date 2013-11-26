@@ -9,7 +9,7 @@
 %% @end
 %% ===================================================================
 
--module(control_panel_SUITE).
+-module(control_panel_test_SUITE).
 -include("nodes_manager.hrl").
 -include("registered_names.hrl").
 

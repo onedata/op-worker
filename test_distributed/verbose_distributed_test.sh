@@ -21,7 +21,19 @@ cp -R ../src/veil_modules/dao/views .
 cp -R ../src/veil_modules/control_panel/gui_files/gui_static .
 cp -R ../config/sys.config .
 
-TESTS=$(find . -name "*.spec")
+if [ $# -gt 0 ]
+then
+    TESTS=./$1.spec
+
+    if [ $# -gt 1 ]
+    then
+        sed -i "s/suites/cases/g" $TESTS
+        TEST_CASE=$1'_SUITE, '$2}.
+        sed -i "s/all}./$TEST_CASE/g" $TESTS
+    fi
+else
+    TESTS=$(find . -name "*.spec")
+fi
 erl -make
 
 IFCONFIG_LINE=`ifconfig | grep "inet addr:.*Bcast:"`

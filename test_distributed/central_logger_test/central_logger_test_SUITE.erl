@@ -9,7 +9,7 @@
 %% @end
 %% ===================================================================
 
--module(central_logger_SUITE).
+-module(central_logger_test_SUITE).
 -include("nodes_manager.hrl").
 -include("registered_names.hrl").
 
