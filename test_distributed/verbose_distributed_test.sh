@@ -55,6 +55,7 @@ find . -name "*.beam" -exec rm -rf {} \;
 find . -name "*.erl" -exec rm -rf {} \;
 find . -name "*.hrl" -exec rm -rf {} \;
 
+TESTS=$(find . -name "*.spec")
 for TEST in $TESTS
 do
     rm -f $TEST

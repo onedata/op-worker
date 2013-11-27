@@ -23,10 +23,10 @@
 -include("veil_modules/dao/dao_share.hrl").
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([files_manager_standard_files_test/1, files_manager_tmp_files_test/1, fuse_requests_test/1, users_separation_test/1, file_sharing_test/1]).
+-export([files_manager_standard_files_test/1, files_manager_tmp_files_test/1, fuse_requests_test/1, users_separation_test/1, file_sharing_test/1, dir_mv_test/1]).
 -export([create_standard_share/2, create_share/3, get_share/2]).
 
-all() -> [files_manager_tmp_files_test, files_manager_standard_files_test, fuse_requests_test, users_separation_test, file_sharing_test].
+all() -> [files_manager_tmp_files_test, files_manager_standard_files_test, fuse_requests_test, users_separation_test, file_sharing_test, dir_mv_test].
 
 -define(SH, "DirectIO").
 -define(TEST_ROOT, ["/tmp/veilfs"]). %% Root of test filesystem
@@ -35,6 +35,77 @@ all() -> [files_manager_tmp_files_test, files_manager_standard_files_test, fuse_
 %% ====================================================================
 %% Test functions
 %% ====================================================================
+
+%% Checks directory moving (dir cannot be moved to its child)
+dir_mv_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+
+  Cert = ?COMMON_FILE("peer.pem"),
+  Host = "localhost",
+  Port = ?config(port, Config),
+  [FSLogicNode | _] = NodesUp,
+
+  gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
+  gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  timer:sleep(100),
+  gen_server:cast({global, ?CCM}, init_cluster),
+  timer:sleep(1500),
+
+  DirName = "dir_mv_test_dir",
+  DirName2 = "dir_mv_test_dir2",
+
+  {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT]),
+  ?assertEqual(ok, InsertStorageAns),
+
+  {ReadFileAns, PemBin} = file:read_file(Cert),
+  ?assertEqual(ok, ReadFileAns),
+  {ExtractAns, RDNSequence} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
+  ?assertEqual(rdnSequence, ExtractAns),
+  {ConvertAns, DN} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
+  ?assertEqual(ok, ConvertAns),
+  DnList = [DN],
+
+  Login = "user1",
+  Name = "user1 user1",
+  Teams = "user1 team",
+  Email = "user1@email.net",
+  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+  ?assertEqual(ok, CreateUserAns),
+
+  {StatusMkdir, AnswerMkdir} = mkdir(Host, Cert, Port, DirName),
+  ?assertEqual("ok", StatusMkdir),
+  ?assertEqual(list_to_atom(?VOK), AnswerMkdir),
+
+  {StatusMkdir2, AnswerMkdir2} = mkdir(Host, Cert, Port, DirName2),
+  ?assertEqual("ok", StatusMkdir2),
+  ?assertEqual(list_to_atom(?VOK), AnswerMkdir2),
+
+  {Status_MV, AnswerMV} = rename_file(Host, Cert, Port, DirName2, DirName ++ "/" ++ DirName2),
+  ?assertEqual("ok", Status_MV),
+  ?assertEqual(list_to_atom(?VOK), AnswerMV),
+
+  {Status_MV2, AnswerMV2} = rename_file(Host, Cert, Port, DirName, DirName ++ "/" ++ DirName2 ++ "/new_dir_name"),
+  ?assertEqual("ok", Status_MV2),
+  ?assertEqual(list_to_atom(?VEREMOTEIO), AnswerMV2),
+
+  {Status_MV3, AnswerMV3} = rename_file(Host, Cert, Port, DirName, DirName ++ "/new_dir_name"),
+  ?assertEqual("ok", Status_MV3),
+  ?assertEqual(list_to_atom(?VEREMOTEIO), AnswerMV3),
+
+  {StatusDelete, AnswerDelete} = delete_file(Host, Cert, Port, DirName ++ "/" ++ DirName2),
+  ?assertEqual("ok", StatusDelete),
+  ?assertEqual(list_to_atom(?VOK), AnswerDelete),
+
+  {StatusDelete2, AnswerDelete2} = delete_file(Host, Cert, Port, DirName),
+  ?assertEqual("ok", StatusDelete2),
+  ?assertEqual(list_to_atom(?VOK), AnswerDelete2),
+
+  RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+  ?assertEqual(ok, RemoveStorageAns),
+
+  RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
+  ?assertEqual(ok, RemoveUserAns).
 
 %% Checks file sharing functions
 file_sharing_test(Config) ->

@@ -596,25 +596,32 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, rena
         {ok, #veil_document{record = #file{} = OldFile} = OldDoc} ->
           case get_file(ProtocolVersion, NewFileName, FuseID) of
             {error, file_not_found} ->
-              case get_file(ProtocolVersion, fslogic_utils:strip_path_leaf(NewFileName), FuseID) of
-                {ok, #veil_document{uuid = NewParent}} ->
-                  RenamedFileInit = OldFile#file{parent = NewParent, name = fslogic_utils:basename(NewFileName)},
-                  RenamedFile = fslogic_utils:update_meta_attr(RenamedFileInit, ctime, fslogic_utils:time()), 
-                  Renamed = OldDoc#veil_document{record = RenamedFile},
-                  case dao_lib:apply(dao_vfs, save_file, [Renamed], ProtocolVersion)  of
-                    {ok, _} -> 
-                        CTime = fslogic_utils:time(),
-                        ?PARENT_CTIME(Record#renamefile.from_file_logic_name, CTime),
-                        ?PARENT_CTIME(Record#renamefile.to_file_logic_name, CTime),
-                        #atom{value = ?VOK};
-                    Other ->
-                      lager:warning("Cannot save file document. Reason: ~p", [Other]),
-                      #atom{value = ?VEREMOTEIO}
-                  end;
-                {error, file_not_found} ->
-                  lager:warning("Cannot find destination dir: ~p", [fslogic_utils:strip_path_leaf(NewFileName)]),
-                  #atom{value = ?VENOENT};
-                _ -> #atom{value = ?VEREMOTEIO}
+              NewDir = fslogic_utils:strip_path_leaf(NewFileName),
+              case (OldFile#file.type =:= ?DIR_TYPE) and (string:str(NewDir, File) == 1) of
+                true ->
+                  lager:warning("Moving dir ~p to its child: ~p", [File, NewDir]),
+                  #atom{value = ?VEREMOTEIO};
+                false ->
+                  case get_file(ProtocolVersion, NewDir, FuseID) of
+                    {ok, #veil_document{uuid = NewParent}} ->
+                      RenamedFileInit = OldFile#file{parent = NewParent, name = fslogic_utils:basename(NewFileName)},
+                      RenamedFile = fslogic_utils:update_meta_attr(RenamedFileInit, ctime, fslogic_utils:time()),
+                      Renamed = OldDoc#veil_document{record = RenamedFile},
+                      case dao_lib:apply(dao_vfs, save_file, [Renamed], ProtocolVersion)  of
+                        {ok, _} ->
+                          CTime = fslogic_utils:time(),
+                          ?PARENT_CTIME(Record#renamefile.from_file_logic_name, CTime),
+                          ?PARENT_CTIME(Record#renamefile.to_file_logic_name, CTime),
+                          #atom{value = ?VOK};
+                        Other ->
+                          lager:warning("Cannot save file document. Reason: ~p", [Other]),
+                          #atom{value = ?VEREMOTEIO}
+                      end;
+                    {error, file_not_found} ->
+                      lager:warning("Cannot find destination dir: ~p", [NewDir]),
+                      #atom{value = ?VENOENT};
+                    _ -> #atom{value = ?VEREMOTEIO}
+                  end
               end;
             {ok, #veil_document{}} ->
               lager:warning("Destination file already exists: ~p", [File]),
@@ -812,7 +819,7 @@ delete_old_descriptors(ProtocolVersion, Time) ->
 
 get_user_root(UserDoc) ->
   UserRecord = UserDoc#veil_document.record,
-  UserRecord#user.login.
+  "/" ++ UserRecord#user.login.
 
 %% get_user_root/0
 %% ====================================================================
