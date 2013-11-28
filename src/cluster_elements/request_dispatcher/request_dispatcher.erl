@@ -666,16 +666,42 @@ get_callbacks(Fuse) ->
   Result :: callback_node_not_found | node_manager_error | dispatcher_error | ok | term().
 %% ====================================================================
 send_to_fuse(Fuse, Message, MessageDecoder) ->
-  try
+  send_to_fuse(Fuse, Message, MessageDecoder, 3).
+
+%% send_to_fuse/4
+%% ====================================================================
+%% @doc Sends message to fuse
+  -spec send_to_fuse(FuseId :: string(), Message :: term(), MessageDecoder :: string(), SendNum :: integer()) -> Result when
+Result :: callback_node_not_found | node_manager_error | dispatcher_error | ok | term().
+%% ====================================================================
+send_to_fuse(Fuse, Message, MessageDecoder, SendNum) ->
+  Ans = try
     Node = gen_server:call(?Dispatcher_Name, {get_callback, Fuse}, 500),
     case Node of
-      not_found -> callback_node_not_found;
+      not_found ->
+        callback_node_not_found;
       _ ->
         try
-          gen_server:call({?Node_Manager_Name, Node}, {send_to_fuse, Fuse, Message, MessageDecoder}, 1000)
+          Callback = gen_server:call({?Node_Manager_Name, Node}, {get_callback, Fuse}, 1000),
+          case Callback of
+            non -> channel_not_found;
+            _ ->
+              case get(callback_msg_ID) of
+                ID when is_integer(ID) ->
+                  put(callback_msg_ID, ID + 1);
+                _ -> put(callback_msg_ID, 0)
+              end,
+              MsgID = get(callback_msg_ID),
+              Callback ! {self(), Message, MessageDecoder, MsgID},
+              receive
+                {Callback, MsgID, Response} -> Response
+              after 500 ->
+                socket_error
+              end
+          end
         catch
           E1:E2 ->
-            lager:error([{mod, ?MODULE}], "Can not send by callback of node: ~p to fuse ~p, error: ~p:~p", [Node, Fuse, E1, E2]),
+            lager:error([{mod, ?MODULE}], "Can not get callback from node: ~p to fuse ~p, error: ~p:~p", [Node, Fuse, E1, E2]),
             node_manager_error
         end
     end
@@ -683,4 +709,13 @@ send_to_fuse(Fuse, Message, MessageDecoder) ->
     _:_ ->
       lager:error([{mod, ?MODULE}], "Can not get callback node of fuse: ~p", [Fuse]),
       dispatcher_error
+  end,
+  case Ans of
+    ok -> ok;
+    _ ->
+      case SendNum of
+        0 -> Ans;
+        _ ->
+          send_to_fuse(Fuse, Message, MessageDecoder, SendNum - 1)
+      end
   end.

@@ -178,9 +178,9 @@ handle_call({delete_callback, FuseId, Pid}, _From, State) ->
   {NewState, DeleteAns} = delete_callback(State, FuseId, Pid),
   {reply, DeleteAns, NewState};
 
-handle_call({send_to_fuse, FuseId, Message, MessageDecoder}, _From, State) ->
-  {NewState, SendAns} = send_to_fuse(State, FuseId, Message, MessageDecoder),
-  {reply, SendAns, NewState};
+handle_call({get_callback, FuseId}, _From, State) ->
+  {Callback, NewState} = get_callback(State, FuseId),
+  {reply, Callback, NewState};
 
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
@@ -640,27 +640,3 @@ get_fuse_by_callback_pid_helper(Pid, [{F, {CList1, CList2}} | T]) ->
     false -> get_fuse_by_callback_pid_helper(Pid, T)
   end.
 
-%% send_to_fuse/4
-%% ====================================================================
-%% @doc Sends message to fuse
--spec send_to_fuse(State :: term(), FuseId :: string(), Message :: term(), MessageDecoder :: string()) -> Result when
-  Result :: channel_not_found | socket_error | ok | term().
-%% ====================================================================
-send_to_fuse(State, FuseId, Message, MessageDecoder) ->
-  {Callback, NewState} = get_callback(State, FuseId),
-  case Callback of
-    non -> {NewState, channel_not_found};
-    _ ->
-      case get(msgID) of
-        ID when is_integer(ID) ->
-          put(msgID, ID + 1);
-        _ -> put(msgID, 0)
-      end,
-      MsgID = get(msgID),
-      Callback ! {self(), Message, MessageDecoder, MsgID},
-      receive
-        {Callback, MsgID, Response} -> {NewState, Response}
-      after 500 ->
-        {NewState, socket_error}
-      end
-  end.
