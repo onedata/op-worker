@@ -48,6 +48,8 @@ public:
     virtual void setPushCallback(std::string fuseId, push_callback);        ///< Sets fuseID and callback function that will be registered for
                                                                             ///< PUSH channel for every new META connection
 
+    virtual void resetAllConnections(PoolType type);                        ///< Drops all connections from the pool.
+
     /**
      * Returns pointer to CommunicationHandler that is connected to cluster.
      * This method uses simple round-robin selection for all connections in pool.

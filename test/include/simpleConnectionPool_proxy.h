@@ -23,7 +23,6 @@ public:
     // Override
     boost::shared_ptr<CommunicationHandler> newConnection(SimpleConnectionPool::PoolType type)
     {
-        std::cout << "cos";
         boost::shared_ptr<CommunicationHandler> conn = boost::shared_ptr<CommunicationHandler>(new MockCommunicationHandler());
         m_connectionPools[type].connections.push_front(make_pair(conn, time(NULL) + 20000));
         

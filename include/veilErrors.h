@@ -13,6 +13,7 @@
 
 /// VeilClient error codes
 #define VOK             "ok"            // Everything is just great
+#define VPUSH           "push"          // Everything is even better - PUSH message from cluster. This error code is used as Answer::answer_status for PUSH messages.
 #define VENOENT         "enoent"        // File not found
 #define VEACCES         "eacces"        // User doesn't have access to requested resource (e.g. file)
 #define VEEXIST         "eexist"        // Given file already exist
@@ -22,6 +23,9 @@
 #define VEREMOTEIO      "eremoteio"     // Remote I/O error
 #define VEPERM          "eperm"         // Operation not permitted
 #define VEINVAL         "einval"        // Invalid argument
+
+/// Cluster's answer status
+#define INVALID_FUSE_ID "invalid_fuse_id"
 
 
 namespace veil {

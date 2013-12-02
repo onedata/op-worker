@@ -32,6 +32,12 @@ SimpleConnectionPool::SimpleConnectionPool(string hostname, int port, string cer
 }
 
 SimpleConnectionPool::~SimpleConnectionPool() {}
+
+void SimpleConnectionPool::resetAllConnections(PoolType type)
+{
+    m_connectionPools[type].connections.clear();
+    setPoolSize(type, m_connectionPools[type].size); // Force connection reinitialization
+}
     
 boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(PoolType type)
 {
@@ -78,13 +84,19 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(Pool
         m_hostnamePool.push_back(connectTo);
         
         lock.unlock();
+
         conn.reset(new CommunicationHandler(connectTo, m_port, m_certPath));
+        conn->setFuseID(m_fuseId);  // Set FuseID that shall be used by this connection as session ID
+        if(m_pushCallback)                          // Set callback that shall be used for PUSH messages and error messages
+            conn->setPushCallback(m_pushCallback);  // Note that this doesnt enable/register PUSH channel !
+
+        if(m_pushCallback && m_fuseId.size() > 0 && type == META_POOL) // Enable PUSH channel (will register itself when possible)
+            conn->enablePushChannel();
+
         if(conn->openConnection() == 0) {
-            if(m_pushCallback && m_fuseId.size() > 0 && type == META_POOL)
-                conn->registerPushChannel(m_fuseId, m_pushCallback);
-            
             break;
         }
+
         lock.lock();
         conn.reset();
         LOG(WARNING) << "Cannot connect to host: " << connectTo << ":" << m_port;

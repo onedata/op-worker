@@ -114,16 +114,25 @@ protected:
     void onPongTimeout(websocketpp::connection_hdl hdl, std::string);       ///< Cluaster failed to respond on ping message
     void onInterrupt(websocketpp::connection_hdl hdl);                      ///< WebSocket connection was interuped
 
-public:
-    CommunicationHandler(std::string hostname, int port, std::string certPath);
-    virtual ~CommunicationHandler();
 
-    virtual void registerPushChannel(std::string fuseID, push_callback cb); ///< Registers current connection as PUSH channel.
+    virtual void registerPushChannel(push_callback cb);                     ///< Registers current connection as PUSH channel.
                                                                             ///< @param fuseID used to identify client
                                                                             ///< @param cb Callback function that will be called for every PUSH message
     
     virtual void closePushChannel();                                        ///< Closes PUSH channel. This call notify cluster that this connection shall not be used
                                                                             ///< as PUSH channel
+
+public:
+    CommunicationHandler(std::string hostname, int port, std::string certPath);
+    virtual ~CommunicationHandler();
+
+    virtual void setFuseID(std::string);                                    ///< Setter for field m_fuseID.
+    virtual void setPushCallback(push_callback);                            ///< Setter for field m_pushCallback.
+    virtual void enablePushChannel();                                       ///< Enables PUSH channel on this connection. 
+                                                                            ///< Note that PUSH callback has to be set with setPushCallback before invocing this method.
+    virtual void disablePushChannel();                                      ///< Disables PUSH channel on this connetion.
+
+    virtual bool sendHandshakeACK();                                        ///< Send to cluster given fuse ID. This fuseID will be used with any subsequent message.
     
     virtual unsigned int   getErrorCount();                                 ///< Returns how many communication errors were found
     

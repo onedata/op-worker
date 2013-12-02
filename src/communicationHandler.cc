@@ -12,6 +12,9 @@
 #include <google/protobuf/descriptor.h>
 #include <iostream>
 #include <string>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 using namespace std;
 using namespace boost;
@@ -51,6 +54,35 @@ unsigned int CommunicationHandler::getErrorCount()
 {
     return m_errorCount;
 }
+
+void CommunicationHandler::setFuseID(string fuseId) 
+{
+    m_fuseID = fuseId;
+}
+
+void CommunicationHandler::setPushCallback(push_callback cb) 
+{
+    m_pushCallback = cb; // Register callback
+}
+
+void CommunicationHandler::enablePushChannel() 
+{
+    // If channel wasnt active and connection is esabilished atm, register channel
+    // If connection is not active, let openConnection() take care of it
+    if(!m_isPushChannel && m_connectStatus == CONNECTED && m_pushCallback)
+        registerPushChannel(m_pushCallback);
+
+    m_isPushChannel = true;
+}
+
+void CommunicationHandler::disablePushChannel() 
+{
+    // If connection is not active theres no way to close PUSH channel
+    if(m_isPushChannel && m_connectStatus == CONNECTED)
+        closePushChannel();
+
+    m_isPushChannel = false;
+}
     
 int CommunicationHandler::openConnection()
 {
@@ -61,7 +93,7 @@ int CommunicationHandler::openConnection()
         return 0;
     
     m_connectStatus = TIMEOUT;
-    
+
     // Initialize ASIO
     if(m_endpoint) { // If endpoint exists, then make sure that previous worker thread are stopped before we destroy that io_service
         m_endpoint->stop();
@@ -115,8 +147,11 @@ int CommunicationHandler::openConnection()
     
     LOG(INFO) << "Connection to " << URL << " status: " << m_connectStatus;
     
-    if(m_isPushChannel && m_pushCallback && m_fuseID.size() > 0)
-        registerPushChannel(m_fuseID, m_pushCallback);
+    if(m_connectStatus == 0 && !sendHandshakeACK())
+        LOG(WARNING) << "Cannot set fuseId for the connection. Cluster will reject most of messages.";
+
+    if(m_connectStatus == 0 && m_isPushChannel && m_pushCallback && m_fuseID.size() > 0)
+        registerPushChannel(m_pushCallback);
         
     return m_connectStatus;
 }
@@ -139,6 +174,7 @@ void CommunicationHandler::closeConnection()
         m_endpoint->stop(); // If connection failed to close, make sure that io_service refuses to send/receive any further messages at this point
         
         try {
+            LOG(INFO) << "WebSocket: Lowest layer socket closed.";
             m_endpointConnection->get_socket().lowest_layer().close();  // Explicite close underlying socket to make sure that all ongoing operations will be canceld
         } catch (boost::exception &e) {
             LOG(ERROR) << "WebSocket connection socket close error";
@@ -153,16 +189,18 @@ void CommunicationHandler::closeConnection()
 }
     
     
-void CommunicationHandler::registerPushChannel(std::string fuseId, push_callback callback)
+void CommunicationHandler::registerPushChannel(push_callback callback)
 {
+    LOG(INFO) << "Sending registerPushChannel request with FuseId: " << m_fuseID;
+
     m_pushCallback = callback; // Register callback
     m_isPushChannel = true;
-    m_fuseID = fuseId;
     
     // Prepare PUSH channel registration request message
     ClusterMsg msg;
     ChannelRegistration reg;
-    reg.set_fuse_id(fuseId);
+    Atom at;
+    reg.set_fuse_id(m_fuseID);
     
     msg.set_module_name("fslogic");
     msg.set_protocol_version(PROTOCOL_VERSION);
@@ -173,7 +211,35 @@ void CommunicationHandler::registerPushChannel(std::string fuseId, push_callback
     msg.set_synch(1);
     msg.set_input(reg.SerializeAsString());
     
-    sendMessage(msg, getMsgId());    // Send PUSH channel registration request
+    Answer ans = communicate(msg, 0);    // Send PUSH channel registration request
+    at.ParseFromString(ans.worker_answer());
+    
+    LOG(INFO) << "PUSH channel registration status: " << ans.worker_answer() << ": " << at.value(); 
+}
+
+bool CommunicationHandler::sendHandshakeACK() 
+{
+    ClusterMsg msg;
+    HandshakeAck ack;
+
+    LOG(INFO) << "Sending HandshakeAck with fuseId: '" << m_fuseID << "'";
+
+    // Build HandshakeAck message
+    ack.set_fuse_id(m_fuseID);
+
+    msg.set_module_name("");
+    msg.set_protocol_version(PROTOCOL_VERSION);
+    msg.set_message_type(helpers::utils::tolower(ack.GetDescriptor()->name()));
+    msg.set_message_decoder_name(helpers::utils::tolower(FUSE_MESSAGES));
+    msg.set_answer_type(helpers::utils::tolower(Atom::descriptor()->name()));
+    msg.set_answer_decoder_name(helpers::utils::tolower(COMMUNICATION_PROTOCOL));
+    msg.set_synch(1);
+    msg.set_input(ack.SerializeAsString());
+
+    // Send HandshakeAck to cluster
+    Answer ans = communicate(msg, 0);
+
+    return ans.answer_status() == VOK;
 }
     
 void CommunicationHandler::closePushChannel()
@@ -194,7 +260,7 @@ void CommunicationHandler::closePushChannel()
     msg.set_synch(1);
     msg.set_input(reg.SerializeAsString());
     
-    sendMessage(msg, getMsgId());    // Send PUSH channel close request
+    Answer ans = communicate(msg, 0);    // Send PUSH channel close request
 }
 
 int CommunicationHandler::sendMessage(const ClusterMsg& msg, int32_t msgId)
@@ -278,8 +344,14 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
             answer.set_answer_status(VEIO);
         }
 
-        if(answer.answer_status() != VOK)
+        if(answer.answer_status() != VOK) 
+        {
             LOG(INFO) << "Received answer with non-ok status: " << answer.answer_status();
+            
+            // Dispatch error to client if possible using PUSH channel 
+            if(m_pushCallback)
+                m_pushCallback(answer);
+        }
 
         
     } catch (websocketpp::lib::error_code &e) {
