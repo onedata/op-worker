@@ -9,9 +9,8 @@ message ChannelClose {
 }
 
 message FuseMessage {
-    required string id = 1;
-    required string message_type = 2;
-    required bytes input = 3;
+    required string message_type = 1;
+    required bytes input = 2;
 }
 
 message GetFileLocation {
@@ -138,3 +137,21 @@ message TestChannelAnswer {
     required string message = 1;
 }
 
+message HandshakeRequest {
+    required string hostname = 1;
+
+    message EnvVariable {
+        required string name = 1;
+        required string value = 2;
+    }
+
+    repeated EnvVariable variable = 2;
+}
+
+message HandshakeResponse {
+    required string fuse_id = 1;
+}
+
+message HandshakeAck {
+    required string fuse_id = 1;
+}
