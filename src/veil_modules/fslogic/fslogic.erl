@@ -87,7 +87,7 @@ handle(ProtocolVersion, {delete_old_descriptors, Pid}) ->
   ok;
 
 handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
-  handle_fuse_message(ProtocolVersion, Record#fusemessage.input, Record#fusemessage.id);
+  handle_fuse_message(ProtocolVersion, Record#fusemessage.input, get(fuse_id));
 
 handle(_ProtocolVersion, Record) when is_record(Record, callback) ->
   Answer = case Record#callback.action of

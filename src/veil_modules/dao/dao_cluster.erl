@@ -12,11 +12,15 @@
 %% ===================================================================
 -module(dao_cluster).
 
--include_lib("veil_modules/dao/dao.hrl").
--include_lib("veil_modules/dao/couch_db.hrl").
+-include("veil_modules/dao/dao.hrl").
+-include("veil_modules/dao/dao_types.hrl").
+-include("veil_modules/dao/couch_db.hrl").
 
-%% API
+%% API - cluster state
 -export([save_state/2, save_state/1, get_state/1, get_state/0, clear_state/1, clear_state/0]).
+
+%% API - FUSE env variables
+-export([get_fuse_env/1, save_fuse_env/1, remove_fuse_env/1]).
 
 -ifdef(TEST).
 -compile([export_all]).
@@ -103,6 +107,46 @@ clear_state()->
 clear_state(Id) ->
     dao:remove_record(Id).
 
+
+%% save_fuse_env/1
+%% ====================================================================
+%% @doc Saves fuse_env record to DB.
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec save_fuse_env(#fuse_env{} | #veil_document{}) ->
+    {ok, Id :: string()} |
+    no_return(). % erlang:error(any()) | throw(any())
+%% ====================================================================
+save_fuse_env(#fuse_env{} = Env) ->
+    save_fuse_env(#veil_document{record = Env});
+save_fuse_env(#veil_document{record = #fuse_env{}} = Doc) ->
+    dao:save_record(Doc).
+
+
+%% get_fuse_env/1
+%% ====================================================================
+%% @doc Gets fuse_env record with given FuseID form DB.
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec get_fuse_env(FuseId :: uuid()) ->
+    {ok, #veil_document{}} |
+    no_return(). % erlang:error(any()) | throw(any())
+%% ====================================================================
+get_fuse_env(FuseId) ->
+    dao:get_record(FuseId).
+
+
+%% remove_fuse_env/1
+%% ====================================================================
+%% @doc Removes fuse_env record with given FuseID form DB.
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec remove_fuse_env(FuseId :: uuid()) ->
+    ok |
+    no_return(). % erlang:error(any()) | throw(any())
+%% ====================================================================
+remove_fuse_env(FuseId) ->
+    dao:remove_record(FuseId).
 
 %% ===================================================================
 %% Internal functions

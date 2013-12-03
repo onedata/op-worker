@@ -16,6 +16,7 @@
 -include_lib("veil_modules/dao/dao_vfs.hrl").
 -include_lib("veil_modules/dao/dao_users.hrl").
 -include_lib("veil_modules/dao/dao_share.hrl").
+-include_lib("veil_modules/dao/dao_cluster.hrl").
 -include_lib("veil_modules/dao/common.hrl").
 
 %% record definition used in record registration example
@@ -42,6 +43,7 @@
         storage_info -> ?record_info_gen(storage_info);
         user -> ?record_info_gen(user);
         share_desc -> ?record_info_gen(share_desc);
+        fuse_env -> ?record_info_gen(fuse_env);
         %next_record -> ?record_info_gen(next_record);
         _ -> {error, unsupported_record}
     end).

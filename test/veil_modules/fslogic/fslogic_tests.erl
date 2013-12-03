@@ -39,7 +39,7 @@ protocol_buffers_test() ->
   FileLocationMessage = #getfilelocation{file_logic_name = "some_file"},
   FileLocationMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_getfilelocation(FileLocationMessage)),
 
-  FuseMessage = #fusemessage{id = "1", message_type = "getfilelocation", input = FileLocationMessageBytes},
+  FuseMessage = #fusemessage{message_type = "getfilelocation", input = FileLocationMessageBytes},
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
@@ -56,7 +56,6 @@ protocol_buffers_test() ->
   ?assert(Answer_type =:= "filelocation"),
 
   ?assert(is_record(Msg, fusemessage)),
-  ?assert(Msg#fusemessage.id =:= "1"),
   ?assert(Msg#fusemessage.message_type =:= getfilelocation),
 
   InternalMsg = Msg#fusemessage.input,

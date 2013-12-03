@@ -21,10 +21,11 @@
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("logging.hrl").
+-include("veil_modules/dao/dao.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
 %% Holds state of websocket connection. peer_dn field contains DN of certificate of connected peer.
--record(hander_state, {peer_dn, peer_serial, dispatcher_timeout}).
+-record(hander_state, {peer_dn, peer_serial, dispatcher_timeout, fuse_id = ""}).
 
 %% ====================================================================
 %% API
@@ -103,51 +104,123 @@ websocket_init(TransportName, Req, _Opts) ->
         Req :: term(),
         State :: #hander_state{}.
 %% ====================================================================
-websocket_handle({binary, Data}, Req, #hander_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout} = State) ->
+websocket_handle({binary, Data}, Req, #hander_state{peer_dn = DnString} = State) ->
     try
-        {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type} = decode_protocol_buffer(Data, DnString),
-        Request = case Msg of
-          CallbackMsg when is_record(Msg, channelregistration) ->
-            #veil_request{subject = DnString, request = #callback{fuse = CallbackMsg#channelregistration.fuse_id, pid = self(), node = node(), action = channelregistration}};
-          CallbackMsg2 when is_record(Msg, channelclose) ->
-            #veil_request{subject = DnString, request = #callback{fuse = CallbackMsg2#channelclose.fuse_id, pid = self(), node = node(), action = channelclose}};
-          _ -> #veil_request{subject = DnString, request = Msg}
-        end,
-
-        case Synch of
-            true ->
-                try
-                    Pid = self(),
-                    Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Pid, MsgId, Request}}),
-                    case Ans of
-                        ok ->
-                            receive
-                              {worker_answer, MsgId, Ans2} -> {reply, {binary, encode_answer(Ans, MsgId, Answer_type, Answer_decoder_name, Ans2)}, Req, State}
-                            after DispatcherTimeout ->
-                                {reply, {binary, encode_answer(dispatcher_timeout, MsgId)}, Req, State}
-                            end;
-                        Other -> {reply, {binary, encode_answer(Other, MsgId)}, Req, State}
-                    end
-                catch
-                    _:_ -> {reply, {binary, encode_answer(dispatcher_error, MsgId)}, Req, State}
-                end;
-            false ->
-                try
-                    Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Request}}),
-                    {reply, {binary, encode_answer(Ans, MsgId)}, Req, State}
-                catch
-                    _:_ -> {reply, {binary, encode_answer(dispatcher_error, MsgId)}, Req, State}
-                end
-        end
+        handle(Req, decode_protocol_buffer(Data, DnString), State) %% Decode ClusterMsg and handle it
     catch
-        wrong_message_format -> {reply, {binary, encode_answer(wrong_message_format)}, Req, State};
-        {wrong_internal_message_type, MsgId2} -> {reply, {binary, encode_answer(wrong_internal_message_type, MsgId2)}, Req, State};
-        {message_not_supported, MsgId2} -> {reply, {binary, encode_answer(message_not_supported, MsgId2)}, Req, State};
+        wrong_message_format                        -> {reply, {binary, encode_answer(wrong_message_format)}, Req, State};
+        {wrong_internal_message_type, MsgId2}       -> {reply, {binary, encode_answer(wrong_internal_message_type, MsgId2)}, Req, State};
+        {message_not_supported, MsgId2}             -> {reply, {binary, encode_answer(message_not_supported, MsgId2)}, Req, State};
+        {handshake_error, _HError, MsgId2}          -> {reply, {binary, encode_answer(handshake_error, MsgId2)}, Req, State};
+        {AtomError, MsgId2} when is_atom(AtomError) -> {reply, {binary, encode_answer(AtomError, MsgId2)}, Req, State};
         _:_ -> {reply, {binary, encode_answer(ws_handler_error)}, Req, State}
     end;
 websocket_handle({Type, Data}, Req, State) ->
     ?warning("Unknown WebSocket request. Type: ~p, Payload: ~p", [Type, Data]),
     {ok, Req, State}.
+
+%% Internal websocket_handle method implementation
+%% Handle Handshake request - FUSE ID negotiation
+handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #handshakerequest{hostname = Hostname, variable = Vars} = HReq, MsgId, Answer_type}, #hander_state{peer_dn = DnString} = State) ->
+    ?debug("Handshake request: ~p", [HReq]),
+    NewFuseId = genFuseId(HReq),
+    UID = %% Fetch user's ID
+        case dao_lib:apply(dao_users, get_user, [{dn, DnString}], ProtocolVersion) of
+            {ok, #veil_document{uuid = UID1}} ->
+                UID1;
+            {error, Error} ->
+                ?error("VeilClient handshake failed. User ~p data is not available due to DAO error: ~p", [DnString, Error]),
+                throw({handshake_error, Error, MsgId})
+        end,
+
+    %% Env Vars list. Entry format: {Name :: atom(), value :: string()}
+    EnvVars = [{list_to_atom(string:to_lower(Name)), Value} || #handshakerequest_envvariable{name = Name, value = Value} <- Vars],
+
+    %% Save received data to DB
+    FuseEnv = #veil_document{uuid = NewFuseId, record = #fuse_env{uid = UID, hostname = Hostname, vars = EnvVars}},
+    case dao_lib:apply(dao_cluster, save_fuse_env, [FuseEnv], ProtocolVersion) of
+        {ok, _} -> ok;
+        {error, Error1} ->
+            ?error("VeilClient handshake failed. Cannot save FUSE env variables (~p) due to DAO error: ~p", [FuseEnv, Error1]),
+            throw({handshake_error, Error1, MsgId})
+    end,
+
+    %% Update connection state with new FUSE_ID and send it to client
+    NewState = State#hander_state{fuse_id = NewFuseId},
+    {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #handshakeresponse{fuse_id = NewFuseId})}, Req, NewState};
+
+%% Handle HandshakeACK message - set FUSE ID used in this session
+handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type}, #hander_state{peer_dn = DnString} = State) ->
+    UID = %% Fetch user's ID
+        case dao_lib:apply(dao_users, get_user, [{dn, DnString}], ProtocolVersion) of
+            {ok, #veil_document{uuid = UID1}} ->
+                UID1;
+            {error, Error} ->
+                ?error("VeilClient handshake failed. User ~p data is not available due to DAO error: ~p", [DnString, Error]),
+                throw({handshake_error, Error, MsgId})
+        end,
+
+    %% Fetch session data (using FUSE ID)
+    case dao_lib:apply(dao_cluster, get_fuse_env, [NewFuseId], ProtocolVersion) of
+        {ok, #veil_document{record = #fuse_env{uid = UID}}} ->
+            %% Session data found, and its user ID matches -> send OK status and update current connection state
+            ?debug("User ~p assigned FUSE ID ~p to the connection (PID: ~p)", [DnString, NewFuseId, self()]),
+            {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req, State#hander_state{fuse_id = NewFuseId}};
+        {ok, #veil_document{record = #fuse_env{uid = OtherUID}}} ->
+            %% Current user does not match session owner
+            ?warning("User ~p tried to access someone else's session (fuse ID: ~p, session owner UID: ~p)", [DnString, NewFuseId, OtherUID]),
+            throw({invalid_fuse_id, MsgId});
+        {error, Error1} ->
+            ?error("Cannot use fuseID ~p due to dao error: ~p", [NewFuseId, Error1]),
+            throw({invalid_fuse_id, MsgId})
+    end;
+
+%% Handle other messages
+handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type}, #hander_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID} = State) ->
+    %% Check if received message requires FuseId
+    MsgType = case Msg of
+                  M0 when is_tuple(M0)  -> erlang:element(1, M0); %% Record
+                  M1 when is_atom(M1)   -> atom                   %% Atom
+              end,
+    case {FuseID, lists:member(MsgType, ?SessionDependentMessages)} of
+        {[], false}                 -> ok;                              % Message doesn't require FuseId
+        {[], true}                  -> throw({invalid_fuse_id, MsgId}); % Message requires FuseId which is not present
+        {FID, _} when is_list(FID)  -> ok                               % FuseId is present
+    end,
+
+    Request = case Msg of
+                  CallbackMsg when is_record(CallbackMsg, channelregistration) ->
+                      #veil_request{subject = DnString, request = #callback{fuse = FuseID, pid = self(), node = node(), action = channelregistration}};
+                  CallbackMsg2 when is_record(CallbackMsg2, channelclose) ->
+                      #veil_request{subject = DnString, request = #callback{fuse = FuseID, pid = self(), node = node(), action = channelclose}};
+                  _ -> #veil_request{subject = DnString, request = Msg, fuse_id = FuseID}
+              end,
+
+    case Synch of
+        true ->
+            try
+                Pid = self(),
+                Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Pid, MsgId, Request}}),
+                case Ans of
+                    ok ->
+                        receive
+                            {worker_answer, MsgId, Ans2} -> {reply, {binary, encode_answer(Ans, MsgId, Answer_type, Answer_decoder_name, Ans2)}, Req, State}
+                        after DispatcherTimeout ->
+                            {reply, {binary, encode_answer(dispatcher_timeout, MsgId)}, Req, State}
+                        end;
+                    Other -> {reply, {binary, encode_answer(Other, MsgId)}, Req, State}
+                end
+            catch
+                _:_ -> {reply, {binary, encode_answer(dispatcher_error, MsgId)}, Req, State}
+            end;
+        false ->
+            try
+                Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Request}}),
+                {reply, {binary, encode_answer(Ans, MsgId)}, Req, State}
+            catch
+                _:_ -> {reply, {binary, encode_answer(dispatcher_error, MsgId)}, Req, State}
+            end
+    end.
 
 
 %% websocket_info/3
@@ -325,3 +398,12 @@ checkMessage(Msg, DN) when is_tuple(Msg) ->
 checkMessage(Msg, DN) ->
   lager:warning("Wrong type of message ~p for user ~p", [Msg, DN]),
   false.
+
+
+%% genFuseId/1
+%% ====================================================================
+%% @doc Generates new fuseId. Returned values will be used as document UUID in DB. All returned values shall be unique.
+-spec genFuseId(#handshakerequest{}) -> Result :: nonempty_string().
+%% ====================================================================
+genFuseId(#handshakerequest{} = _HReq) ->
+    dao_helper:gen_uuid().

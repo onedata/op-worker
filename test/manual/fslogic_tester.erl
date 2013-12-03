@@ -141,7 +141,7 @@ create_file(Host, Cert, Port, FileName) ->
   FslogicMessage = #getnewfilelocation{file_logic_name = FileName, mode = 8#644},
   FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_getnewfilelocation(FslogicMessage)),
 
-  FuseMessage = #fusemessage{id = "1", message_type = "getnewfilelocation", input = FslogicMessageMessageBytes},
+  FuseMessage = #fusemessage{message_type = "getnewfilelocation", input = FslogicMessageMessageBytes},
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
@@ -162,7 +162,7 @@ get_file_location(Host, Cert, Port, FileName) ->
   FslogicMessage = #getfilelocation{file_logic_name = FileName},
   FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_getfilelocation(FslogicMessage)),
 
-  FuseMessage = #fusemessage{id = "1", message_type = "getfilelocation", input = FslogicMessageMessageBytes},
+  FuseMessage = #fusemessage{message_type = "getfilelocation", input = FslogicMessageMessageBytes},
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
@@ -183,7 +183,7 @@ renew_file_location(Host, Cert, Port, FileName) ->
   FslogicMessage = #renewfilelocation{file_logic_name = FileName},
   FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_renewfilelocation(FslogicMessage)),
 
-  FuseMessage = #fusemessage{id = "1", message_type = "renewfilelocation", input = FslogicMessageMessageBytes},
+  FuseMessage = #fusemessage{message_type = "renewfilelocation", input = FslogicMessageMessageBytes},
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
@@ -204,7 +204,7 @@ file_not_used(Host, Cert, Port, FileName) ->
   FslogicMessage = #filenotused{file_logic_name = FileName},
   FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_filenotused(FslogicMessage)),
 
-  FuseMessage = #fusemessage{id = "1", message_type = "filenotused", input = FslogicMessageMessageBytes},
+  FuseMessage = #fusemessage{message_type = "filenotused", input = FslogicMessageMessageBytes},
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
@@ -225,7 +225,7 @@ mkdir(Host, Cert, Port, DirName) ->
   FslogicMessage = #createdir{dir_logic_name = DirName, mode = 8#644},
   FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_createdir(FslogicMessage)),
 
-  FuseMessage = #fusemessage{id = "1", message_type = "createdir", input = FslogicMessageMessageBytes},
+  FuseMessage = #fusemessage{message_type = "createdir", input = FslogicMessageMessageBytes},
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
@@ -249,7 +249,7 @@ ls(Host, Cert, Port, Dir, Num, Offset) ->
   end,
   FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_getfilechildren(FslogicMessage)),
 
-  FuseMessage = #fusemessage{id = "1", message_type = "getfilechildren", input = FslogicMessageMessageBytes},
+  FuseMessage = #fusemessage{message_type = "getfilechildren", input = FslogicMessageMessageBytes},
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
@@ -270,7 +270,7 @@ delete_file(Host, Cert, Port, FileName) ->
   FslogicMessage = #deletefile{file_logic_name = FileName},
   FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_deletefile(FslogicMessage)),
 
-  FuseMessage = #fusemessage{id = "1", message_type = "deletefile", input = FslogicMessageMessageBytes},
+  FuseMessage = #fusemessage{message_type = "deletefile", input = FslogicMessageMessageBytes},
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
@@ -291,7 +291,7 @@ rename_file(Host, Cert, Port, FileName, NewName) ->
   FslogicMessage = #renamefile{from_file_logic_name = FileName, to_file_logic_name = NewName},
   FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_renamefile(FslogicMessage)),
 
-  FuseMessage = #fusemessage{id = "1", message_type = "renamefile", input = FslogicMessageMessageBytes},
+  FuseMessage = #fusemessage{message_type = "renamefile", input = FslogicMessageMessageBytes},
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
@@ -312,7 +312,7 @@ change_file_perms(Host, Cert, Port, FileName, Perms) ->
     FslogicMessage = #changefileperms{file_logic_name = FileName, perms = Perms},
     FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_changefileperms(FslogicMessage)),
 
-    FuseMessage = #fusemessage{id = "1", message_type = "changefileperms", input = FslogicMessageMessageBytes},
+    FuseMessage = #fusemessage{message_type = "changefileperms", input = FslogicMessageMessageBytes},
     FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
     Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",

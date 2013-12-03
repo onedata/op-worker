@@ -21,6 +21,9 @@
 state_test_() ->
     {foreach, fun setup/0, fun teardown/1, [fun save_state/0, fun get_state/0, fun clear_state/0]}.
 
+fuse_env_test_() ->
+    {foreach, fun setup/0, fun teardown/1, [fun save_fuse_env/0, fun get_fuse_env/0, fun remove_fuse_env/0]}.
+
 setup() ->
     meck:new(dao).
 
@@ -41,5 +44,21 @@ clear_state() ->
     meck:expect(dao, remove_record, fun(cluster_state) -> ok end),
     ?assertEqual(ok, dao_cluster:clear_state()),
     ?assert(meck:validate(dao)).
+
+save_fuse_env() ->
+    meck:expect(dao, save_record, fun(#veil_document{record = #fuse_env{}, uuid = "UUID"}) -> {ok, "UUID"} end),
+    ?assertEqual({ok, "UUID"}, dao_cluster:save_fuse_env(#veil_document{record = #fuse_env{}, uuid = "UUID"})),
+    ?assert(meck:validate(dao)).
+
+get_fuse_env() ->
+    meck:expect(dao, get_record, fun("UUID") -> {ok, #veil_document{record = #fuse_env{uid = 123}}} end),
+    ?assertMatch({ok, #veil_document{record = #fuse_env{uid = 123}}}, dao_cluster:get_fuse_env("UUID")),
+    ?assert(meck:validate(dao)).
+
+remove_fuse_env() ->
+    meck:expect(dao, remove_record, fun("UUID") -> ok end),
+    ?assertEqual(ok, dao_cluster:remove_fuse_env("UUID")),
+    ?assert(meck:validate(dao)).
+
 
 -endif.

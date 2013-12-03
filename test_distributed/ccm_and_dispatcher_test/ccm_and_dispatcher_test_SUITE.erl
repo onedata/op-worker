@@ -16,16 +16,19 @@
 -include("records.hrl").
 -include("modules_and_args.hrl").
 -include("communication_protocol_pb.hrl").
+-include("fuse_messages_pb.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
+-include("veil_modules/dao/dao.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([modules_start_and_ping_test/1, dispatcher_connection_test/1, workers_list_actualization_test/1, ping_test/1, application_start_test1/1, application_start_test2/1, validation_test/1, callbacks_list_actualization_test/1]).
+-export([modules_start_and_ping_test/1, dispatcher_connection_test/1, workers_list_actualization_test/1, ping_test/1, application_start_test1/1,
+         veil_handshake_test/1, application_start_test2/1, validation_test/1, callbacks_list_actualization_test/1]).
 
 %% export nodes' codes
 -export([application_start_test_code1/0, application_start_test_code2/0]).
 
-all() -> [application_start_test1, application_start_test2, modules_start_and_ping_test, workers_list_actualization_test, validation_test, ping_test, dispatcher_connection_test, callbacks_list_actualization_test].
+all() -> [application_start_test1, application_start_test2, modules_start_and_ping_test, workers_list_actualization_test, validation_test, ping_test, dispatcher_connection_test, callbacks_list_actualization_test, veil_handshake_test].
 
 %% ====================================================================
 %% Code of nodes used during the test
@@ -137,6 +140,180 @@ dispatcher_connection_test(Config) ->
   {RecvAns2, Ans2} = wss:recv(Socket, 5000),
   ?assertEqual(ok, RecvAns2),
   ?assertEqual(Ans2, AnsMessageBytes).
+
+
+%% This test checks if FuseId negotiation works correctly
+veil_handshake_test(Config) ->
+    nodes_manager:check_start_assertions(Config),
+    NodesUp = ?config(nodes, Config),
+
+    Jobs = ?Modules,
+    [CCM | _] = NodesUp,
+
+    gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
+    gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+    timer:sleep(100),
+    gen_server:cast({global, ?CCM}, init_cluster),
+    timer:sleep(1500),
+
+
+    nodes_manager:check_start_assertions(Config),
+    NodesUp = ?config(nodes, Config),
+
+    Jobs = ?Modules,
+    [CCM | _] = NodesUp,
+
+    gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
+    gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+    timer:sleep(100),
+    gen_server:cast({global, ?CCM}, init_cluster),
+    timer:sleep(1500),
+
+
+    Port = ?config(port, Config),
+    Host = "localhost",
+
+    Cert1 = ?COMMON_FILE("peer.pem"),
+    Cert2 = ?COMMON_FILE("peer2.pem"),
+
+    %% Add test users since cluster wont generate FuseId without full authentication
+    AddUser = fun(Login, Cert) ->
+        {ReadFileAns, PemBin} = file:read_file(Cert),
+        ?assertEqual(ok, ReadFileAns),
+        {ExtractAns, RDNSequence} = rpc:call(CCM, user_logic, extract_dn_from_cert, [PemBin]),
+        ?assertEqual(rdnSequence, ExtractAns),
+        {ConvertAns, DN} = rpc:call(CCM, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
+        ?assertEqual(ok, ConvertAns),
+        DnList = [DN],
+
+        Name = "user1 user1",
+        Teams = "user1 team",
+        Email = "user1@email.net",
+        {CreateUserAns, _} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+        ?assertEqual(ok, CreateUserAns)
+    end,
+    %% END Add user
+
+    AddUser("user1", Cert1),
+
+    %% Open two connections for first user
+    {ok, Socket11} = wss:connect(Host, Port, [{certfile, Cert1}, {cacertfile, Cert1}]),
+    {ok, Socket12} = wss:connect(Host, Port, [{certfile, Cert1}, {cacertfile, Cert1}]),
+
+    %% Open two connections for second user
+    {ok, Socket21} = wss:connect(Host, Port, [{certfile, Cert2}, {cacertfile, Cert2}]),
+    {ok, Socket22} = wss:connect(Host, Port, [{certfile, Cert2}, {cacertfile, Cert2}]),
+
+    %% Negotiate FuseID for user1
+    FuseId11 = wss:handshakeInit(Socket11, "hostname1", [{testname1, "testvalue1"}, {testname2, "testvalue2"}]),
+    ?assert(is_list(FuseId11)),
+
+    %% Negotiate FuseId for user2 (which not exists)
+    ?assertException(throw, handshake_error, wss:handshakeInit(Socket21, "hostname2", [])),
+
+
+    %% Add user2 and renegotiate FuseId
+    AddUser("user2", Cert2),
+    FuseId21 = wss:handshakeInit(Socket21, "hostname2", []),
+    ?assert(is_list(FuseId21)),
+
+    %% Try to use FuseId that not exists
+    AnsStatus0 = wss:handshakeAck(Socket11, "someFuseId"),
+    ?assertEqual(invalid_fuse_id, AnsStatus0),
+
+    %% Try to use someone else's FuseId
+    AnsStatus1 = wss:handshakeAck(Socket11, FuseId21),
+    ?assertEqual(invalid_fuse_id, AnsStatus1),
+
+    %% Setup valid fuseId on (almost) all connections
+    AnsStatus2 = wss:handshakeAck(Socket11, FuseId11),
+    ?assertEqual(ok, AnsStatus2),
+
+    AnsStatus3 = wss:handshakeAck(Socket12, FuseId11),
+    ?assertEqual(ok, AnsStatus3),
+
+    AnsStatus4 = wss:handshakeAck(Socket21, FuseId21),
+    ?assertEqual(ok, AnsStatus4),
+
+
+    %% On Socket22 we didnt send ACK, so test if cluster returns error while sending messages that requires FuseId
+
+    %% Channel registration
+    Reg2 = #channelregistration{fuse_id = "unused"},
+    Reg2Bytes = erlang:iolist_to_binary(fuse_messages_pb:encode_channelregistration(Reg2)),
+    Message2 = #clustermsg{module_name = "fslogic", message_type = "channelregistration",
+    message_decoder_name = "fuse_messages", answer_type = "atom",
+    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = Reg2Bytes},
+    RegMsg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message2)),
+
+    %% Channel close
+    UnReg = #channelclose{fuse_id = "unused"},
+    UnRegBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_channelclose(UnReg)),
+    UnMessage = #clustermsg{module_name = "fslogic", message_type = "channelclose",
+    message_decoder_name = "fuse_messages", answer_type = "atom",
+    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = UnRegBytes},
+    UnMsg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(UnMessage)),
+
+    %% Fuse message
+    FslogicMessage = #renamefile{from_file_logic_name = "file", to_file_logic_name = "file1"},
+    FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_renamefile(FslogicMessage)),
+    FuseMessage = #fusemessage{message_type = "renamefile", input = FslogicMessageMessageBytes},
+    FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
+    Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
+    message_decoder_name = "fuse_messages", answer_type = "atom",
+    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+    FMsgBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+
+
+    %% Send messages above and receive error
+    wss:send(Socket22, RegMsg),
+    {ok, Data0} = wss:recv(Socket22, 5000),
+    #answer{answer_status = Status0} = communication_protocol_pb:decode_answer(Data0),
+    ?assertEqual(invalid_fuse_id, list_to_atom(Status0)),
+
+    wss:send(Socket22, UnMsg),
+    {ok, Data1} = wss:recv(Socket22, 5000),
+    #answer{answer_status = Status1} = communication_protocol_pb:decode_answer(Data1),
+    ?assertEqual(invalid_fuse_id, list_to_atom(Status1)),
+
+    wss:send(Socket22, FMsgBytes),
+    {ok, Data2} = wss:recv(Socket22, 5000),
+    #answer{answer_status = Status2} = communication_protocol_pb:decode_answer(Data2),
+    ?assertEqual(invalid_fuse_id, list_to_atom(Status2)),
+
+
+    %% Now send ACK with FuseId and resend those messages
+    AnsStatus5 = wss:handshakeAck(Socket22, FuseId21),
+    ?assertEqual(ok, AnsStatus5),
+
+    wss:send(Socket22, RegMsg),
+    {ok, Data3} = wss:recv(Socket22, 5000),
+    #answer{answer_status = Status3} = communication_protocol_pb:decode_answer(Data3),
+    ?assertEqual(ok, list_to_atom(Status3)),
+
+    wss:send(Socket22, UnMsg),
+    {ok, Data4} = wss:recv(Socket22, 5000),
+    #answer{answer_status = Status4} = communication_protocol_pb:decode_answer(Data4),
+    ?assertEqual(ok, list_to_atom(Status4)),
+
+    wss:send(Socket22, FMsgBytes),
+    {ok, Data5} = wss:recv(Socket22, 5000),
+    #answer{answer_status = Status5} = communication_protocol_pb:decode_answer(Data5),
+    ?assertEqual(ok, list_to_atom(Status5)),
+
+
+    %% Check if session data is correctly stored in DB
+    {DAOStatus, DAOAns} = rpc:call(CCM, dao_lib, apply, [dao_cluster, get_fuse_env, [FuseId11], 1]),
+    ?assertEqual(ok, DAOStatus),
+
+    #veil_document{record = #fuse_env{hostname = Hostname, vars = Vars}} = DAOAns,
+    ?assertEqual("hostname1", Hostname),
+    ?assertEqual([{testname1, "testvalue1"}, {testname2, "testvalue2"}], Vars),
+
+    %% Cleanup
+    rpc:call(CCM, user_logic, remove_user, [{login, "user1"}]),
+    rpc:call(CCM, user_logic, remove_user, [{login, "user2"}]).
+
 
 %% This test checks if workers list inside dispatcher is refreshed correctly.
 workers_list_actualization_test(Config) ->
@@ -392,7 +569,7 @@ init_per_testcase(type2, Config) ->
 
   PeerCert = ?COMMON_FILE("peer.pem"),
   Port = 6666,
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [CCM]}, {dns_port, 1315}]]),
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [CCM]}, {dns_port, 1315}, {db_nodes, [nodes_manager:get_db_node()]}]]),
 
   Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
   lists:append([{port, Port}, {peer_cert, PeerCert}, {nodes, NodesUp}, {assertions, Assertions}], Config);

@@ -203,7 +203,7 @@ request_forward_test() ->
 
 %% This test checks if dispatcher is able to check which messages should be discarded
 white_list_test() ->
-  ?assert(ws_handler:checkMessage(#fusemessage{id = "1", message_type = "type", input = <<>>}, "User")),
+  ?assert(ws_handler:checkMessage(#fusemessage{message_type = "type", input = <<>>}, "User")),
   ?assert(ws_handler:checkMessage(#remotefilemangement{message_type = "type", input = <<>>}, "User")),
   ?assertEqual(false, ws_handler:checkMessage(#test_record{xyz = [x], abc = "a"}, "User")),
 

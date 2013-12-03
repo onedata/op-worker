@@ -37,8 +37,6 @@ storage_helpers_management_test(Config) ->
   nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
-  FuseId1 = "ID1",
-  FuseId2 = "ID2",
   ST_Helper1 = "ClusterProxy",
   ST_Helper2 = "DirectIO",
   TestFile = "storage_helpers_management_test_file",
@@ -54,10 +52,6 @@ storage_helpers_management_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   timer:sleep(1500),
 
-  Fuse_groups = [#fuse_group_info{name = FuseId2, storage_helper = #storage_helper_info{name = ST_Helper2, init_args = ?TEST_ROOT}}],
-  {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, [ST_Helper1, [], Fuse_groups]),
-  ?assertEqual(ok, InsertStorageAns),
-
   {ReadFileAns, PemBin} = file:read_file(Cert),
   ?assertEqual(ok, ReadFileAns),
   {ExtractAns, RDNSequence} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
@@ -72,6 +66,16 @@ storage_helpers_management_test(Config) ->
   Email = "user1@email.net",
   {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
+
+  {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
+  FuseId1 = wss:handshakeInit(Socket, "hostname", []), %% Get first fuseId
+  FuseId2 = wss:handshakeInit(Socket, "hostname", []), %% Get second fuseId
+  wss:close(Socket),
+
+  Fuse_groups = [#fuse_group_info{name = FuseId2, storage_helper = #storage_helper_info{name = ST_Helper2, init_args = ?TEST_ROOT}}],
+  {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, [ST_Helper1, [], Fuse_groups]),
+  ?assertEqual(ok, InsertStorageAns),
+
 
   {Status, Helper, Id, _Validity, AnswerOpt0} = create_file(Host, Cert, Port, TestFile, FuseId1),
   ?assertEqual("ok", Status),
@@ -104,7 +108,6 @@ helper_requests_test(Config) ->
   nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
-  FuseId = "ID1",
   ST_Helper = "ClusterProxy",
   TestFile = "helper_requests_test_file",
 
@@ -137,6 +140,10 @@ helper_requests_test(Config) ->
   Email = "user1@email.net",
   {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
+
+  %% Get FuseId
+  {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
+  FuseId = wss:handshakeInit(Socket, "hostname", []),
 
   {Status, Helper, Id, _Validity, AnswerOpt0} = create_file(Host, Cert, Port, TestFile, FuseId),
   ?assertEqual("ok", Status),
@@ -236,7 +243,7 @@ create_file(Host, Cert, Port, FileName, FuseID) ->
   FslogicMessage = #getnewfilelocation{file_logic_name = FileName, mode = 8#644},
   FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_getnewfilelocation(FslogicMessage)),
 
-  FuseMessage = #fusemessage{id = FuseID, message_type = "getnewfilelocation", input = FslogicMessageMessageBytes},
+  FuseMessage = #fusemessage{message_type = "getnewfilelocation", input = FslogicMessageMessageBytes},
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
@@ -246,6 +253,10 @@ create_file(Host, Cert, Port, FileName, FuseID) ->
 
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   ?assertEqual(ok, ConAns),
+
+  HandshakeRes = wss:handshakeAck(Socket, FuseID), %% Set fuseId for this connection
+  ?assertEqual(ok, HandshakeRes),
+
   wss:send(Socket, MessageBytes),
   {SendAns, Ans} = wss:recv(Socket, 5000),
   ?assertEqual(ok, SendAns),
@@ -260,7 +271,7 @@ get_file_location(Host, Cert, Port, FileName, FuseID) ->
   FslogicMessage = #getfilelocation{file_logic_name = FileName},
   FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_getfilelocation(FslogicMessage)),
 
-  FuseMessage = #fusemessage{id = FuseID, message_type = "getfilelocation", input = FslogicMessageMessageBytes},
+  FuseMessage = #fusemessage{message_type = "getfilelocation", input = FslogicMessageMessageBytes},
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
@@ -270,6 +281,10 @@ get_file_location(Host, Cert, Port, FileName, FuseID) ->
 
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   ?assertEqual(ok, ConAns),
+
+  HandshakeRes = wss:handshakeAck(Socket, FuseID), %% Set fuseId for this connection
+  ?assertEqual(ok, HandshakeRes),
+
   wss:send(Socket, MessageBytes),
   {SendAns, Ans} = wss:recv(Socket, 5000),
   ?assertEqual(ok, SendAns),
@@ -284,7 +299,7 @@ delete_file(Host, Cert, Port, FileName, FuseID) ->
   FslogicMessage = #deletefile{file_logic_name = FileName},
   FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_deletefile(FslogicMessage)),
 
-  FuseMessage = #fusemessage{id = FuseID, message_type = "deletefile", input = FslogicMessageMessageBytes},
+  FuseMessage = #fusemessage{message_type = "deletefile", input = FslogicMessageMessageBytes},
   FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
 
   Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
@@ -294,6 +309,10 @@ delete_file(Host, Cert, Port, FileName, FuseID) ->
 
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   ?assertEqual(ok, ConAns),
+
+  HandshakeRes = wss:handshakeAck(Socket, FuseID), %% Set fuseId for this connection
+  ?assertEqual(ok, HandshakeRes),
+
   wss:send(Socket, MessageBytes),
   {SendAns, Ans} = wss:recv(Socket, 5000),
   ?assertEqual(ok, SendAns),

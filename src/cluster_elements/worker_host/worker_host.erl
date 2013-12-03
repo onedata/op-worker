@@ -260,8 +260,9 @@ proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
 	BeforeProcessingRequest = os:timestamp(),
     Request =
         case Msg of
-            #veil_request{subject = Subj, request = Msg1} ->
+            #veil_request{subject = Subj, request = Msg1, fuse_id = FuseID} ->
                 put(user_id, Subj),
+                put(fuse_id, FuseID),
                 Msg1;
             NotWrapped -> NotWrapped
         end,
