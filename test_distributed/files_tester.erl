@@ -21,7 +21,7 @@
 %% API
 %% ====================================================================
 -export([file_exists/1, read_file/2, get_file_location/1, get_permissions/1, get_owner/1]).
--export([file_exists_storage/1, read_file_storage/2, delete/1]).
+-export([file_exists_storage/1, read_file_storage/2, delete/1, delete_dir/1]).
 
 %% ====================================================================
 %% API functions
@@ -132,13 +132,24 @@ read_file_storage(File, BytesNum) ->
 
 %% delete/1
 %% ====================================================================
-%% @doc Deletes file or dir
+%% @doc Deletes file
 -spec delete(File :: string()) -> Result when
   Result ::  ok | {error, Reason},
   Reason :: term().
 %% ====================================================================
 delete(File) ->
   file:delete(File).
+
+%% delete_dir/1
+%% ====================================================================
+%% @doc Deletes dir
+-spec delete_dir(File :: string()) -> Result when
+  Result ::  ok | {error, Reason},
+  Reason :: term().
+%% ====================================================================
+delete_dir(File) ->
+  file:del_dir(File).
+
 
 %% get_file_location/1
 %% ====================================================================

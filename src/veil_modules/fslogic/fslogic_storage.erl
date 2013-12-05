@@ -11,6 +11,7 @@
 -module(fslogic_storage).
 
 -include("registered_names.hrl").
+-include("veil_modules/fslogic/fslogic.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("files_common.hrl").
 
@@ -32,15 +33,19 @@
 -spec get_sh_for_fuse(FuseID :: string(), Storage :: #storage_info{}) -> #storage_helper_info{}.
 %% ====================================================================
 get_sh_for_fuse(FuseID, Storage) ->
-    FuseGroup = get_fuse_group(FuseID),
-    Match = [SH || #fuse_group_info{name = FuseGroup1, storage_helper = #storage_helper_info{} = SH} <- Storage#storage_info.fuse_groups, FuseGroup == FuseGroup1],
-    case Match of
+  FuseGroup = get_fuse_group(FuseID),
+  case FuseGroup of
+    default ->  Storage#storage_info.default_storage_helper;
+    _ ->
+      Match = [SH || #fuse_group_info{name = FuseGroup1, storage_helper = #storage_helper_info{} = SH} <- Storage#storage_info.fuse_groups, FuseGroup == FuseGroup1],
+      case Match of
         [] -> Storage#storage_info.default_storage_helper;
         [Group] -> Group;
         [Group | _] ->
-            lager:warning("Thare are more then one group-specific configurations in storage ~p for group ~p", [Storage#storage_info.name, FuseGroup]),
-            Group
-    end.
+          lager:warning("Thare are more then one group-specific configurations in storage ~p for group ~p", [Storage#storage_info.name, FuseGroup]),
+          Group
+      end
+  end.
 
 
 %% select_storage/2
@@ -52,12 +57,12 @@ get_sh_for_fuse(FuseID, Storage) ->
 -spec select_storage(FuseID :: string(), StorageList :: [#storage_info{}]) -> #storage_info{}.
 %% ====================================================================
 select_storage(_FuseID, []) ->
-    {error, no_storage};
+  {error, no_storage};
 select_storage(_FuseID, StorageList) when is_list(StorageList) ->
-    ?SEED,
-    lists:nth(?RND(length(StorageList)) , StorageList);
+  ?SEED,
+  lists:nth(?RND(length(StorageList)) , StorageList);
 select_storage(_, _) ->
-    {error, wrong_storage_format}.
+  {error, wrong_storage_format}.
 
 
 %% insert_storage/2
@@ -81,7 +86,48 @@ insert_storage(HelperName, HelperArgs, Fuse_groups) ->
   {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], 1),
   ID = lists:foldl(fun(X, L) -> erlang:max(L, X#storage_info.id)  end, 1, dao_lib:strip_wrappers(StorageList)),
   Storage = #storage_info{id = ID + 1, default_storage_helper = #storage_helper_info{name = HelperName, init_args = HelperArgs}, fuse_groups = Fuse_groups},
-  dao_lib:apply(dao_vfs, save_storage, [Storage], 1).
+  DAO_Ans = dao_lib:apply(dao_vfs, save_storage, [Storage], 1),
+  case DAO_Ans of
+    {ok, _} ->
+      SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
+      Ans = storage_files_manager:mkdir(SHI, "users"),
+      Ans3 = case Ans of
+        ok ->
+          Ans2 = storage_files_manager:chmod(SHI, "users", 8#773),
+          case Ans2 of
+            ok ->
+              ok;
+            _ ->
+              lager:error("Can not change owner of users dir using storage helper ~p", [SHI#storage_helper_info.name]),
+              error
+          end;
+        _ ->
+          lager:error("Can not create users dir using storage helper ~p", [SHI#storage_helper_info.name]),
+          error
+      end,
+
+      Ans4 = storage_files_manager:mkdir(SHI, "groups"),
+      Ans6 = case Ans4 of
+               ok ->
+                 Ans5 = storage_files_manager:chmod(SHI, "groups", 8#773),
+                 case Ans5 of
+                   ok ->
+                     ok;
+                   _ ->
+                     lager:error("Can not change owner of groups dir using storage helper ~p", [SHI#storage_helper_info.name]),
+                     error
+                 end;
+               _ ->
+                 lager:error("Can not create groups dir using storage helper ~p", [SHI#storage_helper_info.name]),
+                 error
+             end,
+
+      case {Ans3, Ans6} of
+        {ok, ok} -> DAO_Ans;
+        _ -> {error, dirs_creation_error}
+      end;
+    _ -> DAO_Ans
+  end.
 
 
 %% ====================================================================
@@ -97,4 +143,16 @@ insert_storage(HelperName, HelperArgs, Fuse_groups) ->
 -spec get_fuse_group(FuseID :: string()) -> GroupID :: string().
 %% ====================================================================
 get_fuse_group(FuseID) ->
-    FuseID. %% Not yet implemented
+  case FuseID of
+    ?CLUSTER_FUSE_ID -> ?CLUSTER_FUSE_ID;
+    _ ->
+      {DAOStatus, DAOAns} = dao_lib:apply(dao_cluster, get_fuse_env, [FuseID], 1),
+      case DAOStatus of
+        ok ->
+          Record = DAOAns#veil_document.record,
+          proplists:get_value(group_id, Record#fuse_env.vars, default);
+        _ ->
+          lager:error("Cannot get storage helper for fuse: ~p, reason: ~p", [FuseID, {DAOStatus, DAOAns}]),
+          default
+      end
+  end.

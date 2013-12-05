@@ -182,7 +182,15 @@ user_file_counting_test(Config) ->
   RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
   ?assertEqual(ok, RemoveUserAns),
   RemoveUserAns2 = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN2}]),
-  ?assertEqual(ok, RemoveUserAns2).
+  ?assertEqual(ok, RemoveUserAns2),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login),
+  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login2),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams2),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users"),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
 
 
 %% Checks permissions management functions
@@ -276,15 +284,21 @@ user_creation_test(Config) ->
   Teams2 = Teams,
   Email2 = "user2@email.net",
 
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/" ++ Login)),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/" ++ Login2)),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/" ++ Team1)),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/" ++ Team2)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/users")),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/groups")),
 
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/" ++ Login)),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/" ++ Login2)),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/" ++ Team1)),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/" ++ Team2)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/users")),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/groups")),
+
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/users/" ++ Login)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/users/" ++ Login2)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/groups/" ++ Team1)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/groups/" ++ Team2)),
+
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/users/" ++ Login)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/users/" ++ Login2)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/groups/" ++ Team1)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/groups/" ++ Team2)),
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
@@ -298,6 +312,28 @@ user_creation_test(Config) ->
   {InsertStorageAns2, StorageUUID2} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT2]),
   ?assertEqual(ok, InsertStorageAns2),
 
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/users")),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/groups")),
+
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/users")),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/groups")),
+
+  {PermStatusUsersDir, PermsUsersDir} = files_tester:get_permissions(?TEST_ROOT ++ "/users"),
+  ?assertEqual(ok, PermStatusUsersDir),
+  ?assertEqual(8#773, PermsUsersDir rem 8#01000),
+
+  {PermStatusGroupsDir, PermsUserGroupsDir} = files_tester:get_permissions(?TEST_ROOT ++ "/groups"),
+  ?assertEqual(ok, PermStatusGroupsDir),
+  ?assertEqual(8#773, PermsUserGroupsDir rem 8#01000),
+
+  {PermStatusUsersDir2, PermsUsersDir2} = files_tester:get_permissions(?TEST_ROOT2 ++ "/users"),
+  ?assertEqual(ok, PermStatusUsersDir2),
+  ?assertEqual(8#773, PermsUsersDir2 rem 8#01000),
+
+  {PermStatusGroupsDir2, PermsUserGroupsDir2} = files_tester:get_permissions(?TEST_ROOT2 ++ "/groups"),
+  ?assertEqual(ok, PermStatusGroupsDir2),
+  ?assertEqual(8#773, PermsUserGroupsDir2 rem 8#01000),
+
   {ReadFileAns, PemBin} = file:read_file(Cert),
   ?assertEqual(ok, ReadFileAns),
   {ExtractAns, RDNSequence} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
@@ -309,33 +345,33 @@ user_creation_test(Config) ->
   {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
 
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/" ++ Login)),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/" ++ Login2)),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/" ++ Team1)),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/" ++ Team2)),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/users/" ++ Login)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT ++ "/users/" ++ Login2)),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/groups/" ++ Team1)),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/groups/" ++ Team2)),
 
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/" ++ Login)),
-  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/" ++ Login2)),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/" ++ Team1)),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/" ++ Team2)),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/users/" ++ Login)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/users/" ++ Login2)),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/groups/" ++ Team1)),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/groups/" ++ Team2)),
 
-  {PermStatus, Perms} = files_tester:get_permissions(?TEST_ROOT ++ "/" ++ Login),
+  {PermStatus, Perms} = files_tester:get_permissions(?TEST_ROOT ++ "/users/" ++ Login),
   ?assertEqual(ok, PermStatus),
   ?assertEqual(8#300, Perms rem 8#01000),
-  {PermStatus2, Perms2} = files_tester:get_permissions(?TEST_ROOT ++ "/" ++ Team1),
+  {PermStatus2, Perms2} = files_tester:get_permissions(?TEST_ROOT ++ "/groups/" ++ Team1),
   ?assertEqual(ok, PermStatus2),
   ?assertEqual(8#730, Perms2 rem 8#01000),
-  {PermStatus3, Perms3} = files_tester:get_permissions(?TEST_ROOT ++ "/" ++ Team2),
+  {PermStatus3, Perms3} = files_tester:get_permissions(?TEST_ROOT ++ "/groups/" ++ Team2),
   ?assertEqual(ok, PermStatus3),
   ?assertEqual(8#730, Perms3 rem 8#01000),
 
-  {PermStatus4, Perms4} = files_tester:get_permissions(?TEST_ROOT2 ++ "/" ++ Login),
+  {PermStatus4, Perms4} = files_tester:get_permissions(?TEST_ROOT2 ++ "/users/" ++ Login),
   ?assertEqual(ok, PermStatus4),
   ?assertEqual(8#300, Perms4 rem 8#01000),
-  {PermStatus5, Perms5} = files_tester:get_permissions(?TEST_ROOT2 ++ "/" ++ Team1),
+  {PermStatus5, Perms5} = files_tester:get_permissions(?TEST_ROOT2 ++ "/groups/" ++ Team1),
   ?assertEqual(ok, PermStatus5),
   ?assertEqual(8#730, Perms5 rem 8#01000),
-  {PermStatus6, Perms6} = files_tester:get_permissions(?TEST_ROOT2 ++ "/" ++ Team2),
+  {PermStatus6, Perms6} = files_tester:get_permissions(?TEST_ROOT2 ++ "/groups/" ++ Team2),
   ?assertEqual(ok, PermStatus6),
   ?assertEqual(8#730, Perms6 rem 8#01000),
 
@@ -367,22 +403,22 @@ user_creation_test(Config) ->
   ?assertEqual(User, User2),
   ?assertEqual(false, Group =:= Group2),
 
-  {OwnStatus3, User3, Group3} = files_tester:get_owner(?TEST_ROOT ++ "/" ++ Login),
+  {OwnStatus3, User3, Group3} = files_tester:get_owner(?TEST_ROOT ++ "/users/" ++ Login),
   ?assertEqual(ok, OwnStatus3),
   ?assertEqual(User, User3),
   ?assertEqual(Group, Group3),
 
-  {OwnStatus4, User4, Group4} = files_tester:get_owner(?TEST_ROOT ++ "/" ++ Team1),
+  {OwnStatus4, User4, Group4} = files_tester:get_owner(?TEST_ROOT ++ "/groups/" ++ Team1),
   ?assertEqual(ok, OwnStatus4),
   ?assertEqual(User0, User4),
   ?assertEqual(Group2, Group4),
 
-  {OwnStatus5, User5, Group5} = files_tester:get_owner(?TEST_ROOT2 ++ "/" ++ Login),
+  {OwnStatus5, User5, Group5} = files_tester:get_owner(?TEST_ROOT2 ++ "/users/" ++ Login),
   ?assertEqual(ok, OwnStatus5),
   ?assertEqual(User, User5),
   ?assertEqual(Group, Group5),
 
-  {OwnStatus6, User6, Group6} = files_tester:get_owner(?TEST_ROOT2 ++ "/" ++ Team1),
+  {OwnStatus6, User6, Group6} = files_tester:get_owner(?TEST_ROOT2 ++ "/groups/" ++ Team1),
   ?assertEqual(ok, OwnStatus6),
   ?assertEqual(User0, User6),
   ?assertEqual(Group2, Group6),
@@ -398,21 +434,21 @@ user_creation_test(Config) ->
   {CreateUserAns2, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
   ?assertEqual(ok, CreateUserAns2),
 
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/" ++ Login)),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/" ++ Login2)),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/" ++ Team1)),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/" ++ Team2)),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/users/" ++ Login)),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/users/" ++ Login2)),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/groups/" ++ Team1)),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/groups/" ++ Team2)),
 
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/" ++ Login)),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/" ++ Login2)),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/" ++ Team1)),
-  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/" ++ Team2)),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/users/" ++ Login)),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/users/" ++ Login2)),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/groups/" ++ Team1)),
+  ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/groups/" ++ Team2)),
 
-  {PermStatus7, Perms7} = files_tester:get_permissions(?TEST_ROOT ++ "/" ++ Login2),
+  {PermStatus7, Perms7} = files_tester:get_permissions(?TEST_ROOT ++ "/users/" ++ Login2),
   ?assertEqual(ok, PermStatus7),
   ?assertEqual(8#300, Perms7 rem 8#01000),
 
-  {PermStatus8, Perms8} = files_tester:get_permissions(?TEST_ROOT2 ++ "/" ++ Login2),
+  {PermStatus8, Perms8} = files_tester:get_permissions(?TEST_ROOT2 ++ "/users/" ++ Login2),
   ?assertEqual(ok, PermStatus8),
   ?assertEqual(8#300, Perms8 rem 8#01000),
 
@@ -428,17 +464,23 @@ user_creation_test(Config) ->
   RemoveUserAns2 = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN2}]),
   ?assertEqual(ok, RemoveUserAns2),
 
-  files_tester:delete(?TEST_ROOT ++ "/" ++ Login),
-  files_tester:delete(?TEST_ROOT ++ "/" ++ Login2),
-  files_tester:delete(?TEST_ROOT ++ "/" ++ Team1),
-  files_tester:delete(?TEST_ROOT ++ "/" ++ Team2),
+  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login),
+  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login2),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Team1),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Team2),
 
-  files_tester:delete(?TEST_ROOT2 ++ "/" ++ Login),
-  files_tester:delete(?TEST_ROOT2 ++ "/" ++ Login2),
-  files_tester:delete(?TEST_ROOT2 ++ "/" ++ Team1),
-  files_tester:delete(?TEST_ROOT2 ++ "/" ++ Team2),
+  files_tester:delete_dir(?TEST_ROOT2 ++ "/users/" ++ Login),
+  files_tester:delete_dir(?TEST_ROOT2 ++ "/users/" ++ Login2),
+  files_tester:delete_dir(?TEST_ROOT2 ++ "/groups/" ++ Team1),
+  files_tester:delete_dir(?TEST_ROOT2 ++ "/groups/" ++ Team2),
 
-  files_tester:delete(?TEST_ROOT ++ "/" ++ File).
+  files_tester:delete(?TEST_ROOT ++ "/" ++ File),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users"),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups"),
+
+  files_tester:delete_dir(?TEST_ROOT2 ++ "/users"),
+  files_tester:delete_dir(?TEST_ROOT2 ++ "/groups").
 
 %% Checks storage management functions
 %% The tests checks if functions used to manage user's files at storage (e.g. mv, mkdir) works well.
@@ -566,7 +608,13 @@ dir_mv_test(Config) ->
   ?assertEqual(ok, RemoveStorageAns),
 
   RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
-  ?assertEqual(ok, RemoveUserAns).
+  ?assertEqual(ok, RemoveUserAns),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users"),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
 
 %% Checks file sharing functions
 file_sharing_test(Config) ->
@@ -725,7 +773,13 @@ file_sharing_test(Config) ->
   ?assertEqual(ok, RemoveStorageAns),
 
   RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
-  ?assertEqual(ok, RemoveUserAns).
+  ?assertEqual(ok, RemoveUserAns),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users"),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
 
 %% Checks fslogic integration with dao and db
 fuse_requests_test(Config) ->
@@ -990,7 +1044,13 @@ fuse_requests_test(Config) ->
   ?assertEqual(ok, RemoveStorageAns),
 
   RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
-  ?assertEqual(ok, RemoveUserAns).
+  ?assertEqual(ok, RemoveUserAns),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users"),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
 
 %% Checks fslogic integration with dao and db
 %% This test also checks chown & chgrp behaviour
@@ -1209,7 +1269,15 @@ users_separation_test(Config) ->
   RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
   ?assertEqual(ok, RemoveUserAns),
   RemoveUserAns2 = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN2}]),
-  ?assertEqual(ok, RemoveUserAns2).
+  ?assertEqual(ok, RemoveUserAns2),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login),
+  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login2),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams2),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users"),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
 
 %% Checks files manager (manipulation on tmp files copies)
 files_manager_tmp_files_test(Config) ->
@@ -1463,7 +1531,10 @@ files_manager_standard_files_test(Config) ->
   ?assertEqual({logical_file_system_error, ?VEREMOTEIO}, AnsDirDelete2),
 
   RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
-  ?assertEqual(ok, RemoveStorageAns).
+  ?assertEqual(ok, RemoveStorageAns),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users"),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
 
 %% ====================================================================
 %% SetUp and TearDown functions

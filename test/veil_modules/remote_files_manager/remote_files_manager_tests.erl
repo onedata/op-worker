@@ -21,9 +21,6 @@
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao_vfs.hrl").
 
--define(SH, "DirectIO").
--define(TEST_ROOT, ["/tmp/veilfs"]). %% Root of test filesystem
-
 get_helper_and_id_test() ->
   Storage = 1,
   Id = "id1",

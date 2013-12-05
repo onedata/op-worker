@@ -1027,8 +1027,8 @@ get_new_file_id(File, UserDoc, Root, SHInfo, ProtocolVersion) ->
     _ ->
       {CountStatus, FilesCount} = get_files_number(UserDoc#veil_document.uuid, ProtocolVersion),
       case CountStatus of
-        ok -> create_dirs(FilesCount, ?FILE_COUNTING_BASE, SHInfo, Root ++ "/");
-        _ -> "/"
+        ok -> create_dirs(FilesCount, ?FILE_COUNTING_BASE, SHInfo, "/users/" ++ Root ++ "/");
+        _ -> "/users/" ++ Root ++ "/"
       end
   end,
 

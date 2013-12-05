@@ -26,6 +26,7 @@
 all() -> [storage_helpers_management_test, helper_requests_test].
 
 -define(TEST_ROOT, ["/tmp/veilfs"]). %% Root of test filesystem
+-define(TEST_ROOT2, ["/tmp/veilfs2"]).
 -define(ProtocolVersion, 1).
 
 %% ====================================================================
@@ -37,8 +38,7 @@ storage_helpers_management_test(Config) ->
   nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
-  ST_Helper1 = "ClusterProxy",
-  ST_Helper2 = "DirectIO",
+  ST_Helper = "DirectIO",
   TestFile = "storage_helpers_management_test_file",
 
   Cert = ?COMMON_FILE("peer.pem"),
@@ -68,30 +68,30 @@ storage_helpers_management_test(Config) ->
   ?assertEqual(ok, CreateUserAns),
 
   {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
-  FuseId1 = wss:handshakeInit(Socket, "hostname", []), %% Get first fuseId
-  FuseId2 = wss:handshakeInit(Socket, "hostname", []), %% Get second fuseId
+  FuseId1 = wss:handshakeInit(Socket, "hostname", [{testvar1, "testvalue1"}, {group_id, "group1"}]), %% Get first fuseId
+  FuseId2 = wss:handshakeInit(Socket, "hostname", [{testvar1, "testvalue1"}, {group_id, "group2"}]), %% Get second fuseId
   wss:close(Socket),
 
-  Fuse_groups = [#fuse_group_info{name = FuseId2, storage_helper = #storage_helper_info{name = ST_Helper2, init_args = ?TEST_ROOT}}],
-  {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, [ST_Helper1, [], Fuse_groups]),
+  Fuse_groups = [#fuse_group_info{name = "group2", storage_helper = #storage_helper_info{name = ST_Helper, init_args = ?TEST_ROOT2}}],
+  {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, [ST_Helper, ?TEST_ROOT, Fuse_groups]),
   ?assertEqual(ok, InsertStorageAns),
 
 
-  {Status, Helper, Id, _Validity, AnswerOpt0} = create_file(Host, Cert, Port, TestFile, FuseId1),
+  {Status, _, Helper, Id, _Validity, AnswerOpt0} = create_file(Host, Cert, Port, TestFile, FuseId1),
   ?assertEqual("ok", Status),
   ?assertEqual(?VOK, AnswerOpt0),
-  ?assertEqual(ST_Helper1, Helper),
+  ?assertEqual(?TEST_ROOT, Helper),
 
-  {Status2, Helper2, Id2, _Validity2, AnswerOpt2} = get_file_location(Host, Cert, Port, TestFile, FuseId1),
+  {Status2, _, Helper2, Id2, _Validity2, AnswerOpt2} = get_file_location(Host, Cert, Port, TestFile, FuseId1),
   ?assertEqual("ok", Status2),
   ?assertEqual(?VOK, AnswerOpt2),
-  ?assertEqual(ST_Helper1, Helper2),
+  ?assertEqual(?TEST_ROOT, Helper2),
   ?assertEqual(Id, Id2),
 
-  {Status3, Helper3, _Id3, _Validity3, AnswerOpt3} = get_file_location(Host, Cert, Port, TestFile, FuseId2),
+  {Status3, _, Helper3, _Id3, _Validity3, AnswerOpt3} = get_file_location(Host, Cert, Port, TestFile, FuseId2),
   ?assertEqual("ok", Status3),
   ?assertEqual(?VOK, AnswerOpt3),
-  ?assertEqual(ST_Helper2, Helper3),
+  ?assertEqual(?TEST_ROOT2, Helper3),
 
   {Status4, Answer4} = delete_file(Host, Cert, Port, TestFile, FuseId2),
   ?assertEqual("ok", Status4),
@@ -101,7 +101,17 @@ storage_helpers_management_test(Config) ->
   ?assertEqual(ok, RemoveStorageAns),
 
   RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
-  ?assertEqual(ok, RemoveUserAns).
+  ?assertEqual(ok, RemoveUserAns),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams),
+  files_tester:delete_dir(?TEST_ROOT2 ++ "/users/" ++ Login),
+  files_tester:delete_dir(?TEST_ROOT2 ++ "/groups/" ++ Teams),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users"),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups"),
+  files_tester:delete_dir(?TEST_ROOT2 ++ "/users"),
+  files_tester:delete_dir(?TEST_ROOT2 ++ "/groups").
 
 %% Checks if requests from helper "Cluster Proxy" are handled correctly
 helper_requests_test(Config) ->
@@ -161,7 +171,7 @@ helper_requests_test(Config) ->
   {ok, Socket2} = wss:connect(Host, Port, [{certfile, Cert2}, {cacertfile, Cert2}]),
   FuseId2 = wss:handshakeInit(Socket2, "hostname", []),
 
-  {User2_Status0, Helper0, User2_Id, _, User2_AnswerOpt0} = create_file(Host, Cert2, Port, TestFile, FuseId2),
+  {User2_Status0, Helper0, _, User2_Id, _, User2_AnswerOpt0} = create_file(Host, Cert2, Port, TestFile, FuseId2),
   ?assertEqual("ok", User2_Status0),
   ?assertEqual(?VOK, User2_AnswerOpt0),
   ?assertEqual(ST_Helper, Helper0),
@@ -174,24 +184,26 @@ helper_requests_test(Config) ->
   {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   FuseId = wss:handshakeInit(Socket, "hostname", []),
 
-  {Status, Helper, Id, _Validity, AnswerOpt} = create_file(Host, Cert, Port, TestFile, FuseId),
+  {Status, Helper, _, Id, _Validity, AnswerOpt} = create_file(Host, Cert, Port, TestFile, FuseId),
   ?assertEqual("ok", Status),
   ?assertEqual(?VOK, AnswerOpt),
   ?assertEqual(ST_Helper, Helper),
 
   Tokens = string:tokens(Id, "/"),
-  ?assertEqual(3, length(Tokens)),
+  ?assertEqual(4, length(Tokens)),
   [StorageNum | Path] = Tokens,
-  [Dir | NameEnding] = Path,
+  [MainDir | Path2] = Path,
+  [Dir | NameEnding] = Path2,
   ?assert(is_integer(list_to_integer(StorageNum))),
+  ?assertEqual("users", MainDir),
   ?assertEqual(Login, Dir),
 
   {Status2, Answer2} = create_file_on_storage(Host, Cert, Port, Id),
   ?assertEqual("ok", Status2),
   ?assertEqual(list_to_atom(?VOK), Answer2),
 
-  ?assert(files_tester:file_exists_storage(?TEST_ROOT ++ "/" ++ Dir ++ "/" ++ NameEnding)),
-  {OwnStatus, User, Group} = files_tester:get_owner(?TEST_ROOT ++ "/" ++ Dir ++ "/" ++ NameEnding),
+  ?assert(files_tester:file_exists_storage(?TEST_ROOT ++ "/users/" ++ Dir ++ "/" ++ NameEnding)),
+  {OwnStatus, User, Group} = files_tester:get_owner(?TEST_ROOT ++ "/users/" ++ Dir ++ "/" ++ NameEnding),
   ?assertEqual(ok, OwnStatus),
   ?assert(User /= 0),
   ?assert(Group /= 0),
@@ -250,7 +262,15 @@ helper_requests_test(Config) ->
   ?assertEqual(ok, RemoveUserAns),
 
   RemoveUserAns2 = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN2}]),
-  ?assertEqual(ok, RemoveUserAns2).
+  ?assertEqual(ok, RemoveUserAns2),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login),
+  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login2),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams2),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users"),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
 
 %% ====================================================================
 %% SetUp and TearDown functions
@@ -309,7 +329,7 @@ create_file(Host, Cert, Port, FileName, FuseID) ->
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Location = fuse_messages_pb:decode_filelocation(Bytes),
   Location2 = records_translator:translate(Location, "fuse_messages"),
-  {Status, Location2#filelocation.storage_helper_name, Location2#filelocation.file_id, Location2#filelocation.validity, Location2#filelocation.answer}.
+  {Status, Location2#filelocation.storage_helper_name, Location2#filelocation.storage_helper_args, Location2#filelocation.file_id, Location2#filelocation.validity, Location2#filelocation.answer}.
 
 %% Simulates request from FUSE
 get_file_location(Host, Cert, Port, FileName, FuseID) ->
@@ -337,7 +357,7 @@ get_file_location(Host, Cert, Port, FileName, FuseID) ->
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Location = fuse_messages_pb:decode_filelocation(Bytes),
   Location2 = records_translator:translate(Location, "fuse_messages"),
-  {Status, Location2#filelocation.storage_helper_name, Location2#filelocation.file_id, Location2#filelocation.validity, Location2#filelocation.answer}.
+  {Status, Location2#filelocation.storage_helper_name, Location2#filelocation.storage_helper_args, Location2#filelocation.file_id, Location2#filelocation.validity, Location2#filelocation.answer}.
 
 %% Simulates request from FUSE
 delete_file(Host, Cert, Port, FileName, FuseID) ->

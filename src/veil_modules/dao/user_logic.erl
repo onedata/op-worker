@@ -474,11 +474,12 @@ create_dirs_at_storage(Root, TeamsString) ->
   case ListStatus of
     ok ->
       CreateTeamsDirs = fun(Dir, {SHInfo, TmpAns}) ->
-        Ans = storage_files_manager:mkdir(SHInfo, Dir),
+        DirName = "groups/" ++ Dir,
+        Ans = storage_files_manager:mkdir(SHInfo, DirName),
         case Ans of
           ok ->
-            Ans2 = storage_files_manager:chown(SHInfo, Dir, "", Dir),
-            Ans3 = storage_files_manager:chmod(SHInfo, Dir, 8#730),
+            Ans2 = storage_files_manager:chown(SHInfo, DirName, "", Dir),
+            Ans3 = storage_files_manager:chmod(SHInfo, DirName, 8#730),
             case {Ans2, Ans3} of
               {ok, ok} ->
                 {SHInfo, TmpAns};
@@ -506,10 +507,11 @@ create_dirs_at_storage(Root, TeamsString) ->
           non ->
             ok;
           _ ->
-            Ans = storage_files_manager:mkdir(SHI, Root),
+            RootDirName = "users/" ++ Root,
+            Ans = storage_files_manager:mkdir(SHI, RootDirName),
             case Ans of
               ok ->
-                Ans3 = storage_files_manager:chown(SHI, Root, Root, Root),
+                Ans3 = storage_files_manager:chown(SHI, RootDirName, Root, Root),
                 case Ans3 of
                   ok ->
                     ok;
