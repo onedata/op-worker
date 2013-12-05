@@ -17,7 +17,7 @@
 %% ===================================================================
 %% API functions
 %% ===================================================================
--export([save_user/1, remove_user/1, get_user/1]). 
+-export([save_user/1, remove_user/1, get_user/1, get_user_files_number/1]).
 
 
 %% save_user/1
@@ -116,3 +116,33 @@ get_user({Key, Value}) ->
             lager:error("Invalid view response: ~p", [Other]),
             throw(invalid_data)
     end.
+
+%% get_user_files_number/1
+%% ====================================================================
+%% @doc Returns number of user's files
+%% @end
+-spec get_user_files_number(UUID :: uuid()) -> Result when
+  Result :: {ok, Sum} | {error, any()} | no_return(),
+  Sum :: integer().
+%% ====================================================================
+get_user_files_number(UUID) ->
+  dao:set_db(?FILES_DB_NAME),
+  View = ?FILES_NUMBER_VIEW,
+  QueryArgs = #view_query_args{keys = [dao_helper:name(UUID)], include_docs = false, group_level = 1, view_type = reduce, stale = update_after},
+
+  case dao:list_records(View, QueryArgs) of
+    {ok, #view_result{rows = [#view_row{value = Sum}]}} ->
+      {ok, Sum};
+    {ok, #view_result{rows = []}} ->
+      lager:error("Number of files of user ~p not found", [UUID]),
+      throw(files_number_not_found);
+    {ok, #view_result{rows = [#view_row{value = Sum} | Tail] = AllRows}} ->
+      case length(lists:usort(AllRows)) of
+        Count when Count > 1 -> lager:warning("To many rows in response during files number finding for user ~p. Others: ~p", [UUID, Tail]);
+        _ -> ok
+      end,
+      {ok, Sum};
+    Other ->
+      lager:error("Invalid view response: ~p", [Other]),
+      throw(invalid_data)
+  end.

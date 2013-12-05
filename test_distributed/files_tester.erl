@@ -20,8 +20,8 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([file_exists/1, read_file/2, get_file_location/1]).
--export([file_exists_storage/1, read_file_storage/2]).
+-export([file_exists/1, read_file/2, get_file_location/1, get_permissions/1, get_owner/1]).
+-export([file_exists_storage/1, read_file_storage/2, delete/1]).
 
 %% ====================================================================
 %% API functions
@@ -101,13 +101,15 @@ read_file(LogicalName, BytesNum) ->
   Reason :: term().
 %% ====================================================================
 file_exists_storage(File) ->
-  OpenAns = file:open(File, read),
-  case OpenAns of
-    {ok, IoDevice} ->
-      file:close(IoDevice),
-      true;
-    {error, enoent} -> false;
-    _ -> OpenAns
+  Check = filelib:is_file(File),
+  case Check of
+    true ->
+      Check2 = filelib:is_dir(File),
+      case Check2 of
+        true -> dir;
+        false -> true
+      end;
+    _ -> Check
   end.
 
 %% read_file_storage/2
@@ -127,6 +129,16 @@ read_file_storage(File, BytesNum) ->
       ReadAns;
     _ -> OpenAns
   end.
+
+%% delete/1
+%% ====================================================================
+%% @doc Deletes file or dir
+-spec delete(File :: string()) -> Result when
+  Result ::  ok | {error, Reason},
+  Reason :: term().
+%% ====================================================================
+delete(File) ->
+  file:delete(File).
 
 %% get_file_location/1
 %% ====================================================================
@@ -154,4 +166,39 @@ get_file_location(LogicalName) ->
       file_not_exists_in_db;
     {error, Reason} ->
       {get_file_error, Reason}
+  end.
+
+%% get_permissions/1
+%% ====================================================================
+%% @doc Returns file's permissions
+-spec get_permissions(File :: string()) -> Result when
+  Result ::  {ok, Permissions} | {error, Reason},
+  Permissions :: integer(),
+  Reason :: term().
+%% ====================================================================
+get_permissions(File) ->
+  {Status, Info} = file:read_file_info(File),
+  case Status of
+    ok ->
+      %% -include_lib("kernel/include/file.hrl"). can not be used because of records' names conflict
+      {ok, lists:nth(8,tuple_to_list(Info))};
+    _ -> {Status, Info}
+  end.
+
+%% get_owner/1
+%% ====================================================================
+%% @doc Returns file's owner
+-spec get_owner(File :: string()) -> Result when
+  Result ::  {ok, User, Group} | {error, Reason},
+  User :: integer(),
+  Group :: integer(),
+  Reason :: term().
+%% ====================================================================
+get_owner(File) ->
+  {Status, Info} = file:read_file_info(File),
+  case Status of
+    ok ->
+      %% -include_lib("kernel/include/file.hrl"). can not be used because of records' names conflict
+      {ok, lists:nth(13,tuple_to_list(Info)), lists:nth(14,tuple_to_list(Info))};
+    _ -> {Status, Info}
   end.

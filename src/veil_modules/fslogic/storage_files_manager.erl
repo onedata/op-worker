@@ -21,7 +21,8 @@
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
 
--define(NewFileStorageMode, 8#644).
+-define(NewFileStorageMode, 8#600).
+-define(NewDirStorageMode, 8#300).
 -define(S_IFREG, 8#100000).
 
 %% ====================================================================
@@ -29,7 +30,7 @@
 %% ====================================================================
 %% Physical files organization management (to better organize files on storage;
 %% the user does not see results of these operations)
--export([mkdir/0, mv/0, delete_dir/0]).
+-export([mkdir/2, mv/3, delete_dir/2, chmod/3, chown/4]).
 %% Physical files access (used to create temporary copies for remote files)
 -export([read/4, write/4, write/3, create/2, truncate/3, delete/2, ls/0]).
 
@@ -42,32 +43,129 @@
 %% the user does not see results of these operations)
 %% ====================================================================
 
-%% mkdir/0
+%% mkdir/2
 %% ====================================================================
 %% @doc Creates dir on storage
 %% @end
--spec mkdir() -> {error, not_implemented_yet}.
+-spec mkdir(Storage_helper_info :: record(), Dir :: string()) -> Result when
+  Result :: ok | {ErrorGeneral, ErrorDetail},
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
 %% ====================================================================
-mkdir() ->
-  {error, not_implemented_yet}.
+mkdir(Storage_helper_info, Dir) ->
+  {ErrorCode, Stat} = veilhelpers:exec(getattr, Storage_helper_info, [Dir]),
+  case ErrorCode of
+    0 -> {error, dir_or_file_exists};
+    error -> {ErrorCode, Stat};
+    _ ->
+      ErrorCode2 = veilhelpers:exec(mkdir, Storage_helper_info, [Dir, ?NewDirStorageMode]),
+      case ErrorCode2 of
+        0 ->
+          %% TODO pamiętać przy implementacji grup, żeby tutaj też zmienić
+          UserID = get(user_id),
 
-%% mv/0
+          case UserID of
+            undefined -> ok;
+            _ ->
+              {GetUserAns, User} = user_logic:get_user({dn, UserID}),
+              case GetUserAns of
+                ok ->
+                  UserRecord = User#veil_document.record,
+                  Login = UserRecord#user.login,
+                  ChownAns = storage_files_manager:chown(Storage_helper_info, Dir, Login, Login),
+                  case ChownAns of
+                    ok ->
+                      ok;
+                    _ ->
+                      {cannot_change_dir_owner, ChownAns}
+                  end;
+                _ -> {cannot_change_dir_owner, get_user_error}
+              end
+          end;
+        {error, 'NIF_not_loaded'} -> ErrorCode2;
+        _ ->
+          lager:error("Can not create dir %p, code: %p, helper info: %p, mode: %p%n", [Dir, ErrorCode2, Storage_helper_info, ?NewDirStorageMode]),
+          {wrong_mkdir_return_code, ErrorCode2}
+      end
+  end.
+
+%% mv/3
 %% ====================================================================
 %% @doc Moves file on storage
 %% @end
--spec mv() -> {error, not_implemented_yet}.
+-spec mv(Storage_helper_info :: record(), From :: string(), To :: string()) -> Result when
+  Result :: ok | {ErrorGeneral, ErrorDetail},
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
 %% ====================================================================
-mv() ->
-  {error, not_implemented_yet}.
+mv(Storage_helper_info, From, To) ->
+  ErrorCode = veilhelpers:exec(rename, Storage_helper_info, [From, To]),
+  case ErrorCode of
+    0 -> ok;
+    {error, 'NIF_not_loaded'} -> ErrorCode;
+    _ ->
+      lager:error("Can not move file from %p to %p, code: %p, helper info: %p%n", [From, To, ErrorCode, Storage_helper_info]),
+      {wrong_rename_return_code, ErrorCode}
+  end.
 
-%% delete_dir/0
+%% delete_dir/2
 %% ====================================================================
 %% @doc Deletes dir on storage
 %% @end
--spec delete_dir() -> {error, not_implemented_yet}.
+-spec delete_dir(Storage_helper_info :: record(), Dir :: string()) -> Result when
+  Result :: ok | {ErrorGeneral, ErrorDetail},
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
 %% ====================================================================
-delete_dir() ->
-  {error, not_implemented_yet}.
+delete_dir(Storage_helper_info, File) ->
+  {ErrorCode, Stat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
+  case ErrorCode of
+    0 ->
+      case veilhelpers:exec(is_dir, [Stat#st_stat.st_mode]) of
+        true ->
+          ErrorCode2 = veilhelpers:exec(rmdir, Storage_helper_info, [File]),
+          case ErrorCode2 of
+            0 -> ok;
+            {error, 'NIF_not_loaded'} -> ErrorCode2;
+            _ -> {wrong_rmdir_return_code, ErrorCode2}
+          end;
+        false -> {error, not_directory}
+      end;
+    error -> {ErrorCode, Stat};
+    _ -> {wrong_getatt_return_code, ErrorCode}
+  end.
+
+%% chmod/3
+%% ====================================================================
+%% @doc Change file mode at storage
+%% @end
+-spec chmod(Storage_helper_info :: record(), Dir :: string(), Mode :: integer()) -> Result when
+  Result :: ok | {ErrorGeneral, ErrorDetail},
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+chmod(Storage_helper_info, File, Mode) ->
+  ErrorCode = veilhelpers:exec(chmod, Storage_helper_info, [File, Mode]),
+  case ErrorCode of
+    0 -> ok;
+    _ -> {error, ErrorCode}
+  end.
+
+%% chown/4
+%% ====================================================================
+%% @doc Change file's owner (if user or group shouldn't be changed use "" as an argument)
+%% @end
+-spec chown(Storage_helper_info :: record(), Dir :: string(), User :: string(), Group :: string()) -> Result when
+  Result :: ok | {ErrorGeneral, ErrorDetail},
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+chown(Storage_helper_info, File, User, Group) ->
+  ErrorCode = veilhelpers:exec(chown_name, Storage_helper_info, [File, User, Group]),
+  case ErrorCode of
+    0 -> ok;
+    _ -> {error, ErrorCode}
+  end.
 
 %% ====================================================================
 %% Physical files access (used to create temporary copies for remote files)
@@ -226,13 +324,34 @@ create(Storage_helper_info, File) ->
         0 ->
           ErrorCode3 = veilhelpers:exec(truncate, Storage_helper_info, [File, 0]),
           case ErrorCode3 of
-            0 -> ok;
+            0 ->
+              %% TODO pamiętać przy implementacji grup, żeby tutaj też zmienić
+              UserID = get(user_id),
+
+              case UserID of
+                undefined -> ok;
+                _ ->
+                  {GetUserAns, User} = user_logic:get_user({dn, UserID}),
+                  case GetUserAns of
+                    ok ->
+                      UserRecord = User#veil_document.record,
+                      Login = UserRecord#user.login,
+                      ChownAns = storage_files_manager:chown(Storage_helper_info, File, Login, Login),
+                      case ChownAns of
+                        ok ->
+                          ok;
+                        _ ->
+                          {cannot_change_file_owner, ChownAns}
+                      end;
+                    _ -> {cannot_change_file_owner, get_user_error}
+                  end
+              end;
             {error, 'NIF_not_loaded'} -> ErrorCode3;
             _ -> {wrong_truncate_return_code, ErrorCode3}
           end;
         {error, 'NIF_not_loaded'} -> ErrorCode2;
         _ ->
-          lager:error("Can note create file %p, code: %p, helper info: %p, mode: %p%n", [File, ErrorCode2, Storage_helper_info, ?NewFileStorageMode bor ?S_IFREG]),
+          lager:error("Can not create file %p, code: %p, helper info: %p, mode: %p%n", [File, ErrorCode2, Storage_helper_info, ?NewFileStorageMode bor ?S_IFREG]),
           {wrong_mknod_return_code, ErrorCode2}
       end
   end.

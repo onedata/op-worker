@@ -232,28 +232,34 @@ remove_record(Id) when is_list(Id) ->
     {ok, QueryResult :: #view_result{}} | {error, term()}.
 %% ====================================================================
 list_records(#view_info{name = ViewName, design = DesignName, db_name = DbName}, QueryArgs) ->
-    {Total, Offset, Rows} =
+    FormatKey =  %% Recursive lambda:
+    fun(F, K) when is_list(K) -> [F(F, X) || X <- K];
+      (_F, K) when is_binary(K) -> binary_to_list(K);
+      (_F, K) -> K
+    end,
+    FormatDoc =
+    fun([{doc, {[ {_id, Id} | [ {_rev, RevInfo} | D ] ]}}]) ->
+      #veil_document{record = doc_to_term({D}), uuid = binary_to_list(Id), rev_info = dao_helper:revision(RevInfo)};
+      (_) -> none
+    end,
+
         case dao_helper:query_view(DbName, DesignName, ViewName, QueryArgs) of
-            {ok, [{total_and_offset, Total1, Offset1} | Rows1]} -> {Total1, Offset1, Rows1};
-            {error, _} = E -> throw(E);
+            {ok, [{total_and_offset, Total, Offset} | Rows]} ->
+              FormattedRows =
+                [#view_row{id = binary_to_list(Id), key = FormatKey(FormatKey, Key), value = Value, doc = FormatDoc(Doc)}
+                  || {row, {[ {id, Id} | [ {key, Key} | [ {value, Value} | Doc ] ] ]}} <- Rows],
+              {ok, #view_result{total = Total, offset = Offset, rows = FormattedRows}};
+
+            {ok, Rows2} when is_list(Rows2)->
+              FormattedRows2 =
+                [#view_row{id = non, key = FormatKey(FormatKey, Key), value = Value, doc = non}
+                  || {row, {[ {key, Key} | [ {value, Value} ] ]}} <- Rows2],
+              {ok, #view_result{total = length(Rows2), offset = 0, rows = FormattedRows2}};
+          {error, _} = E -> throw(E);
             Other ->
                 lager:error("dao_helper:query_view has returned unknown query result: ~p", [Other]),
                 throw({unknown_query_result, Other})
-        end,
-    FormatKey =  %% Recursive lambda:
-        fun(F, K) when is_list(K) -> [F(F, X) || X <- K];
-           (_F, K) when is_binary(K) -> binary_to_list(K);
-           (_F, K) -> K
-        end,
-    FormatDoc =
-        fun([{doc, {[ {_id, Id} | [ {_rev, RevInfo} | D ] ]}}]) ->
-                #veil_document{record = doc_to_term({D}), uuid = binary_to_list(Id), rev_info = dao_helper:revision(RevInfo)};
-           (_) -> none
-        end,
-    FormattedRows =
-        [#view_row{id = binary_to_list(Id), key = FormatKey(FormatKey, Key), value = Value, doc = FormatDoc(Doc)}
-        || {row, {[ {id, Id} | [ {key, Key} | [ {value, Value} | Doc ] ] ]}} <- Rows],
-    {ok, #view_result{total = Total, offset = Offset, rows = FormattedRows}}.
+        end.
 
 
 %% ===================================================================

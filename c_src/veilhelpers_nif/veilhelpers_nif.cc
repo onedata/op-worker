@@ -10,6 +10,9 @@
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <pwd.h>
+#include <grp.h>
 #include <vector>
 #include <boost/shared_ptr.hpp>
 
@@ -100,6 +103,26 @@ static ERL_NIF_TERM sh_chown(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]
         return BADARG;
 
     return enif_make_int(env, sh->sh_chown(get_string(env, argv[2]).c_str(), get_int(env, argv[3]), get_int(env, argv[4])));
+}
+
+static ERL_NIF_TERM sh_chown_name(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
+    INIT;
+
+    uid_t uid = -1;
+    gid_t gid = -1;
+
+    struct passwd *ownerInfo = getpwnam(get_string(env, argv[3]).c_str()); // Static buffer, do NOT free !
+    struct group  *groupInfo = getgrnam(get_string(env, argv[4]).c_str()); // Static buffer, do NOT free !
+
+    if(!ownerInfo && get_string(env, argv[3]).size() > 0) // User not found
+        return enif_make_int(env, -EINVAL);
+    if(!groupInfo && get_string(env, argv[4]).size() > 0) // Group not found
+        return enif_make_int(env, -EINVAL);
+
+    uid   = (ownerInfo ? ownerInfo->pw_uid : -1);
+    gid   = (groupInfo ? groupInfo->gr_gid : -1);
+
+    return enif_make_int(env, sh->sh_chown(get_string(env, argv[2]).c_str(), uid, gid));
 }
 
 static ERL_NIF_TERM sh_truncate(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]) {
@@ -203,6 +226,7 @@ static ErlNifFunc nif_funcs[] =
     {"rename",      4, sh_rename},
     {"chmod",       4, sh_chmod},
     {"chown",       5, sh_chown},
+    {"chown_name",  5, sh_chown_name},
     {"truncate",    4, sh_truncate},
     {"open",        4, sh_open},
     {"read",        6, sh_read},

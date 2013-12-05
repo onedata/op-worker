@@ -161,7 +161,7 @@
     is_sys_db = false
 }).
 
-
+%% TODO opisac znaczenie poszczegolnych pol
 -record(view_query_args, {
     start_key,
     end_key,

@@ -11,13 +11,14 @@
 
 -module(user_logic).
 
+-include("veil_modules/fslogic/fslogic.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
 -include_lib("public_key/include/public_key.hrl").
 
 
 %% ====================================================================
-%% API functions
+%% API
 %% ====================================================================
 -export([sign_in/1, create_user/5, get_user/1, remove_user/1]).
 -export([get_login/1, get_name/1, get_teams/1, update_teams/2]).
@@ -26,6 +27,17 @@
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
 
 -define(UserRootPerms, 8#600).
+
+%% ====================================================================
+%% Test API
+%% ====================================================================
+-ifdef(TEST).
+-export([create_dirs_at_storage/2]).
+-endif.
+
+%% ====================================================================
+%% API functions
+%% ====================================================================
 
 %% sign_in/1
 %% ====================================================================
@@ -95,7 +107,10 @@ create_user(Login, Name, Teams, Email, DnList) ->
 		ok ->
 			RootAns = create_root(Login, UserRec#veil_document.uuid),
 			case RootAns of
-				ok -> GetUserAns;
+				ok ->
+          %% TODO zastanowić się co zrobić jak nie uda się stworzyć jakiegoś katalogu (blokowanie rejestracji użytkownika to chyba zbyt dużo)
+          create_dirs_at_storage(Login, Teams),
+          GetUserAns;
 				_ -> {RootAns, UserRec}
 			end;
 		_ -> GetUserAns
@@ -200,7 +215,9 @@ get_teams(User) ->
 update_teams(#veil_document{record = UserInfo} = UserDoc, NewTeams) ->
 	NewDoc = UserDoc#veil_document{record = UserInfo#user{teams = NewTeams}},
 	case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
-		{ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
+		{ok, UUID} ->
+      create_dirs_at_storage(non, NewTeams),
+      dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
 		{error, Reason} -> {error, Reason}
 	end.
 
@@ -443,4 +460,74 @@ create_root(Dir, Uid) ->
                _Other -> dao_finding_error
              end;
     _Other2 -> root_exists
+  end.
+
+%% create_dirs_at_storage/2
+%% ====================================================================
+%% @doc Creates root dir for user and for its teams
+%% @end
+-spec create_dirs_at_storage(Root :: string(), Teams :: list()) -> ok | Error when
+  Error :: atom().
+%% ====================================================================
+create_dirs_at_storage(Root, TeamsString) ->
+  {ListStatus, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], 1),
+  case ListStatus of
+    ok ->
+      CreateTeamsDirs = fun(Dir, {SHInfo, TmpAns}) ->
+        Ans = storage_files_manager:mkdir(SHInfo, Dir),
+        case Ans of
+          ok ->
+            Ans2 = storage_files_manager:chown(SHInfo, Dir, "", Dir),
+            Ans3 = storage_files_manager:chmod(SHInfo, Dir, 8#730),
+            case {Ans2, Ans3} of
+              {ok, ok} ->
+                {SHInfo, TmpAns};
+              _ ->
+                lager:error("Can not change owner of dir ~p using storage helper ~p", [Dir, SHInfo#storage_helper_info.name]),
+                {SHInfo, error}
+            end;
+          _ ->
+            lager:error("Can not create dir ~p using storage helper ~p", [Dir, SHInfo#storage_helper_info.name]),
+            {SHInfo, error}
+        end
+      end,
+
+      TeamsTmp = string:tokens(TeamsString, ","),
+      Teams = lists:map(fun(T) ->
+        EndPos = string:chr(T, $(),
+        case EndPos of
+          0 -> T;
+          _ -> string:substr(T, 1, EndPos - 1)
+        end
+      end, TeamsTmp),
+      CreateDirsOnStorage = fun(Storage, TmpAns) ->
+        SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
+        Ans2 = case Root of
+          non ->
+            ok;
+          _ ->
+            Ans = storage_files_manager:mkdir(SHI, Root),
+            case Ans of
+              ok ->
+                Ans3 = storage_files_manager:chown(SHI, Root, Root, Root),
+                case Ans3 of
+                  ok ->
+                    ok;
+                  _ ->
+                    lager:error("Can not change owner of dir ~p using storage helper ~p", [Root, SHI#storage_helper_info.name])
+                end;
+              _ ->
+                lager:error("Can not create dir ~p using storage helper ~p", [Root, SHI#storage_helper_info.name])
+            end
+        end,
+
+        Ans4 = lists:foldl(CreateTeamsDirs, {SHI, ok}, Teams),
+        case {Ans2, Ans4} of
+          {ok, ok} -> TmpAns;
+          _ -> create_dir_error
+        end
+      end,
+
+      lists:foldl(CreateDirsOnStorage, ok, lists:map(fun(VeilDoc) -> VeilDoc#veil_document.record end, StorageList));
+    _ -> storage_listing_error
   end.

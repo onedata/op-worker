@@ -112,6 +112,7 @@ helper_requests_test(Config) ->
   TestFile = "helper_requests_test_file",
 
   Cert = ?COMMON_FILE("peer.pem"),
+  Cert2 = ?COMMON_FILE("peer2.pem"),
   Host = "localhost",
   Port = ?config(port, Config),
   [FSLogicNode | _] = NodesUp,
@@ -134,25 +135,66 @@ helper_requests_test(Config) ->
   ?assertEqual(ok, ConvertAns),
   DnList = [DN],
 
-  Login = "user1",
+  Login = "veilfstestuser",
   Name = "user1 user1",
-  Teams = "user1 team",
+  Teams = "veilfstestgroup",
   Email = "user1@email.net",
   {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
+
+  {ReadFileAns2, PemBin2} = file:read_file(Cert2),
+  ?assertEqual(ok, ReadFileAns2),
+  {ExtractAns2, RDNSequence2} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin2]),
+  ?assertEqual(rdnSequence, ExtractAns2),
+  {ConvertAns2, DN2} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence2]),
+  ?assertEqual(ok, ConvertAns2),
+  DnList2 = [DN2],
+
+  Login2 = "user2",
+  Name2 = "user2 user2",
+  Teams2 = "user2 team",
+  Email2 = "user2@email.net",
+  {CreateUserAns2, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
+  ?assertEqual(ok, CreateUserAns2),
+
+  %% Get FuseId
+  {ok, Socket2} = wss:connect(Host, Port, [{certfile, Cert2}, {cacertfile, Cert2}]),
+  FuseId2 = wss:handshakeInit(Socket2, "hostname", []),
+
+  {User2_Status0, Helper0, User2_Id, _, User2_AnswerOpt0} = create_file(Host, Cert2, Port, TestFile, FuseId2),
+  ?assertEqual("ok", User2_Status0),
+  ?assertEqual(?VOK, User2_AnswerOpt0),
+  ?assertEqual(ST_Helper, Helper0),
+
+  {User2_Status2, User2_Answer2} = create_file_on_storage(Host, Cert2, Port, User2_Id),
+  ?assertEqual("ok", User2_Status2),
+  ?assertEqual(list_to_atom(?VEREMOTEIO), User2_Answer2),
 
   %% Get FuseId
   {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   FuseId = wss:handshakeInit(Socket, "hostname", []),
 
-  {Status, Helper, Id, _Validity, AnswerOpt0} = create_file(Host, Cert, Port, TestFile, FuseId),
+  {Status, Helper, Id, _Validity, AnswerOpt} = create_file(Host, Cert, Port, TestFile, FuseId),
   ?assertEqual("ok", Status),
-  ?assertEqual(?VOK, AnswerOpt0),
+  ?assertEqual(?VOK, AnswerOpt),
   ?assertEqual(ST_Helper, Helper),
+
+  Tokens = string:tokens(Id, "/"),
+  ?assertEqual(3, length(Tokens)),
+  [StorageNum | Path] = Tokens,
+  [Dir | NameEnding] = Path,
+  ?assert(is_integer(list_to_integer(StorageNum))),
+  ?assertEqual(Login, Dir),
 
   {Status2, Answer2} = create_file_on_storage(Host, Cert, Port, Id),
   ?assertEqual("ok", Status2),
   ?assertEqual(list_to_atom(?VOK), Answer2),
+
+  ?assert(files_tester:file_exists_storage(?TEST_ROOT ++ "/" ++ Dir ++ "/" ++ NameEnding)),
+  {OwnStatus, User, Group} = files_tester:get_owner(?TEST_ROOT ++ "/" ++ Dir ++ "/" ++ NameEnding),
+  ?assertEqual(ok, OwnStatus),
+  ?assert(User /= 0),
+  ?assert(Group /= 0),
 
   {WriteStatus, WriteAnswer, BytesWritten} = write(Host, Cert, Port, Id, 0, list_to_binary("abcdefgh")),
   ?assertEqual("ok", WriteStatus),
@@ -205,7 +247,10 @@ helper_requests_test(Config) ->
   ?assertEqual(ok, RemoveStorageAns),
 
   RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
-  ?assertEqual(ok, RemoveUserAns).
+  ?assertEqual(ok, RemoveUserAns),
+
+  RemoveUserAns2 = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN2}]),
+  ?assertEqual(ok, RemoveUserAns2).
 
 %% ====================================================================
 %% SetUp and TearDown functions

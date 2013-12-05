@@ -13,7 +13,7 @@
 
 -include("veil_modules/fslogic/fslogic.hrl").
 
--export([start/1, getattr/3, access/4, mknod/5, unlink/3, rename/4, chmod/4, chown/5, truncate/4, 
+-export([start/1, getattr/3, access/4, mknod/5, unlink/3, rename/4, chmod/4, chown/5, chown_name/5, truncate/4,
          open/4, read/6, write/6, read/5, write/5, statfs/3, release/4, fsync/5, mkdir/4, rmdir/3]).
 %% TODO zaimplementować natsępujące funkcje
 -export([is_reg/1, is_dir/1, get_flag/1]).
@@ -133,6 +133,19 @@ chmod(_sh_name, _sh_args, _path, _mode) ->
 -spec chown(_sh_name :: string(), _sh_args :: [string()], _path :: string(), _uid :: integer(), _gid :: integer()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
 %% ====================================================================
 chown(_sh_name, _sh_args, _path, _uid, _gid) -> 
+    {error, 'NIF_not_loaded'}.
+
+
+%% chown_name/5
+%% ====================================================================
+%% @doc First 2 arguments of this method should come from #storage_helper_info{} record. <br/>
+%%      Those two arguments decide which Storage Helper shall be used for this operation. <br/>
+%%      ErrorCode return value shall be 0 if operation was succesfull, otherwise negated POSIX error code will be returned. <br/>
+%%      chown/5 changes file's uid and gid
+%% @end
+-spec chown_name(_sh_name :: string(), _sh_args :: [string()], _path :: string(), _uname :: string(), _gname :: string()) -> ErrorCode :: integer() | {error, 'NIF_not_loaded'}.
+%% ====================================================================
+chown_name(_sh_name, _sh_args, _path, _uname, _gname) ->
     {error, 'NIF_not_loaded'}.
 
 

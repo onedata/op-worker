@@ -126,18 +126,21 @@ signing_in_test_() ->
 					NewUserRecord = #veil_document { record = NewUser },
 
 					meck:expect(dao_lib, apply, 
-						fun (dao_users, get_user, [Key], _) -> 
-							case Key of 
-								{login, "new_user"} -> {error, user_not_found};
-								{uuid, "uuid"} -> {ok, NewUserRecord} 
-							end;			
-							(dao_users, save_user, [UserDoc], _) -> 
-							case UserDoc of 
-								NewUser -> {ok, "uuid"};
-								_ -> throw(error)
-							end;
-							(dao_vfs, get_file, _, _) -> {error, file_not_found};
-							(dao_vfs, save_file, _, _) -> {ok, "file_uuid"}
+						fun
+              (dao_users, get_user, [Key], _) ->
+                case Key of
+                  {login, "new_user"} -> {error, user_not_found};
+                  {uuid, "uuid"} -> {ok, NewUserRecord}
+                end;
+                (dao_users, save_user, [UserDoc], _) ->
+                case UserDoc of
+                  NewUser -> {ok, "uuid"};
+                  _ -> throw(error)
+                end;
+                (dao_vfs, get_file, _, _) -> {error, file_not_found};
+                (dao_vfs, save_file, _, _) -> {ok, "file_uuid"};
+              (dao_vfs, list_storage, [], _) ->
+                {ok, []}
 						end),
 
 					meck:expect(fslogic_utils, get_parent_and_name_from_path, 
@@ -210,7 +213,9 @@ signing_in_test_() ->
 									UserWithUpdatedEmailList -> {ok, "uuid_after_emails"}; 
 									SynchronizedUser -> {ok, "uuid_after_synchronization"};
 									_ -> throw(error)
-								end
+								end;
+              (dao_vfs, list_storage, [], _) ->
+                {ok, []}
 						end),
 
 					?assertEqual({"existing_user", SynchronizedUser}, user_logic:sign_in(ExistingUserInfoProplist)),

@@ -28,6 +28,8 @@
 %% Updates modification time for parent of X dir 
 -define(PARENT_CTIME(X, T),  gen_server:call(?Dispatcher_Name, {fslogic, 1, #veil_request{subject = get(user_id), request = {internal_call, #updatetimes{file_logic_name = fslogic_utils:strip_path_leaf(X), mtime = T}}}})).
 
+-define(FILE_COUNTING_BASE, 256).
+
 %% ====================================================================
 %% API
 %% ====================================================================
@@ -37,9 +39,13 @@
 %% ====================================================================
 %% Test API
 %% ====================================================================
+%% eunit
 -ifdef(TEST).
 -export([handle_fuse_message/3]).
 -endif.
+
+%% ct
+-export([get_files_number/2, create_dirs/4]).
 
 %% ====================================================================
 %% API functions
@@ -361,7 +367,10 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getf
     end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getnewfilelocation) ->
-    {FileNameFindingAns, File} = get_full_file_name(Record#getnewfilelocation.file_logic_name),
+    {UserDocStatus, UserDoc} = get_user_doc(),
+    {RootStatus, Root} = get_user_root(UserDocStatus, UserDoc),
+    FileBaseName = Record#getnewfilelocation.file_logic_name,
+    {FileNameFindingAns, File} = get_full_file_name(FileBaseName, {RootStatus, Root}),
     case FileNameFindingAns of
       ok ->
         {FindStatus, FindTmpAns} = get_file(ProtocolVersion, File, FuseID),
@@ -377,10 +386,16 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getn
                         {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], ProtocolVersion),
                         case fslogic_storage:select_storage(FuseID, StorageList) of
                             #veil_document{uuid = UUID, record = #storage_info{} = Storage} ->
-                                File_id = dao_helper:gen_uuid() ++ re:replace(File, "/", "___", [global, {return,list}]),
+                                SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
+                                File_id = get_new_file_id(FileBaseName, UserDoc, Root, SHI, ProtocolVersion),
                                 FileLocation = #file_location{storage_id = UUID, file_id = File_id},
 
-                                {UserIdStatus, UserId} = get_user_id(),
+                                {UserIdStatus, UserId} = case {UserDocStatus, UserDoc} of
+                                  {ok, _} -> {ok, UserDoc#veil_document.uuid};
+                                  {error, get_user_id_error} -> {ok, ?CLUSTER_USER_ID};
+                                  _ -> {UserDocStatus, UserDoc}
+                                end,
+
                                 case UserIdStatus of
                                   ok ->
                                     CTime = fslogic_utils:time(),
@@ -409,13 +424,16 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getn
                                           #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
                                     end;
                                   _ ->
+                                    lager:error([{mod, ?MODULE}], "Error: user doc error for file ~p, error ~p", [File, {UserDocStatus, UserDoc}]),
                                     #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
                                 end;
                             {error, SelectError} ->
                                 lager:error([{mod, ?MODULE}], "Error: can not get storage information: ~p", [SelectError]),
                                 #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
                         end;
-                    _ParentError -> #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
+                    _ParentError ->
+                      lager:error([{mod, ?MODULE}], "Error: can not get parent for file: ~p", [File]),
+                      #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
                 end;
               _Other ->
                 lager:error([{mod, ?MODULE}], "Error: can not create new file: ~s, can not chceck if file exists", [File]),
@@ -425,7 +443,9 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getn
               lager:error([{mod, ?MODULE}], "Error: can not create new file: ~s, can not chceck if file exists", [File]),
               #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
         end;
-      _  -> #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
+      _  ->
+        lager:error([{mod, ?MODULE}], "Error: can not get full file name: ~p, error ~p", [File, {FileNameFindingAns, File}]),
+        #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
     end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, filenotused) ->
@@ -821,6 +841,45 @@ get_user_root(UserDoc) ->
   UserRecord = UserDoc#veil_document.record,
   "/" ++ UserRecord#user.login.
 
+%% get_user_doc/0
+%% ====================================================================
+%% @doc Gets user's doc from db.
+%% @end
+-spec get_user_doc() -> Result when
+  Result :: {ok, UserDoc} | {error, ErrorDesc},
+  UserDoc :: term(),
+  ErrorDesc :: atom.
+%% ====================================================================
+
+get_user_doc() ->
+  UserId = get(user_id),
+  case UserId of
+    undefined -> {error, get_user_id_error};
+    DN ->
+      user_logic:get_user({dn, DN})
+  end.
+
+%% get_user_root/2
+%% ====================================================================
+%% @doc Gets user's root directory.
+%% @end
+-spec get_user_root(UserDocStatus :: atom(), UserDoc :: term()) -> Result when
+  Result :: {ok, RootDir} | {error, ErrorDesc},
+  RootDir :: string(),
+  ErrorDesc :: atom.
+%% ====================================================================
+
+get_user_root(UserDocStatus, UserDoc) ->
+  case UserDocStatus of
+    ok ->
+      {ok, get_user_root(UserDoc)};
+    _ ->
+      case UserDoc of
+        get_user_id_error -> {error, get_user_id_error};
+        _ -> {error, get_user_error}
+      end
+  end.
+
 %% get_user_root/0
 %% ====================================================================
 %% @doc Gets user's root directory.
@@ -832,17 +891,8 @@ get_user_root(UserDoc) ->
 %% ====================================================================
 
 get_user_root() ->
-  UserId = get(user_id),
-  case UserId of
-    undefined -> {error, get_user_id_error};
-    DN ->
-          {GetUserAns, User} = user_logic:get_user({dn, DN}),
-          case GetUserAns of
-            ok ->
-              {ok, get_user_root(User)};
-            _ -> {error, get_user_error}
-          end
-  end.
+  {UserDocStatus, UserDoc} = get_user_doc(),
+  get_user_root(UserDocStatus, UserDoc).
 
 %% get_user_id/0
 %% ====================================================================
@@ -877,19 +927,30 @@ get_user_id() ->
 %% ====================================================================
 
 get_full_file_name(FileName) ->
-  case get(user_id) of
-    undefined ->
-      {ok, FileName};
-    _ ->
+  get_full_file_name(FileName, get_user_root()).
+
+%% get_full_file_name/2
+%% ====================================================================
+%% @doc Gets file's full name (user's root is added to name).
+%% @end
+-spec get_full_file_name(FileName :: string(), {RootStatus :: atom(), Root :: string()}) -> Result when
+  Result :: {ok, FullFileName} | {error, ErrorDesc},
+  FullFileName :: string(),
+  ErrorDesc :: atom.
+%% ====================================================================
+
+get_full_file_name(FileName, {RootStatus, Root}) ->
+  case RootStatus of
+    ok ->
       [Beg | _] = FileName,
-      {RootAns, Root} = get_user_root(),
-      case RootAns of
-        ok ->
-          NewFileName = case Beg of
-                          $/ -> Root ++ FileName;
-                          _ -> Root ++ "/" ++ FileName
-                        end,
-          {ok, NewFileName};
+      NewFileName = case Beg of
+                      $/ -> Root ++ FileName;
+                      _ -> Root ++ "/" ++ FileName
+                    end,
+      {ok, NewFileName};
+    _ ->
+      case Root of
+        get_user_id_error -> {ok, FileName};
         _ -> {root_not_found, Root}
       end
   end.
@@ -937,4 +998,57 @@ get_sh_and_id(FuseID, Storage, File_id) ->
     true ->
       {SHI, integer_to_list(Storage#storage_info.id) ++ ?REMOTE_HELPER_SEPARATOR ++ File_id};
     false -> {SHI, File_id}
+  end.
+
+%% get_files_number/2
+%% ====================================================================
+%% @doc Returns number of user's files
+%% @end
+-spec get_files_number(UUID :: uuid(), ProtocolVersion :: integer()) -> Result when
+  Result :: {ok, Sum} | {error, any()},
+  Sum :: integer().
+%% ====================================================================
+get_files_number(UserUuid, ProtocolVersion) ->
+  Ans = dao_lib:apply(dao_users, get_user_files_number, [UserUuid], ProtocolVersion),
+  case Ans of
+    {error, files_number_not_found} -> {ok, 0};
+    _ -> Ans
+  end.
+
+%% get_new_file_id/5
+%% ====================================================================
+%% @doc Returns id for a new file
+%% @end
+-spec get_new_file_id(File :: string(), UserDoc :: term(), Root :: string(), SHInfo :: term(), ProtocolVersion :: integer()) -> string().
+%% ====================================================================
+get_new_file_id(File, UserDoc, Root, SHInfo, ProtocolVersion) ->
+  File_id_beg = case Root of
+    get_user_id_error -> "/";
+    _ ->
+      {CountStatus, FilesCount} = get_files_number(UserDoc#veil_document.uuid, ProtocolVersion),
+      case CountStatus of
+        ok -> create_dirs(FilesCount, ?FILE_COUNTING_BASE, SHInfo, Root ++ "/");
+        _ -> "/"
+      end
+  end,
+
+  File_id_beg ++ dao_helper:gen_uuid() ++ re:replace(File, "/", "___", [global, {return,list}]).
+
+%% create_dirs/4
+%% ====================================================================
+%% @doc Creates dir at storage for files (if needed). Returns the path
+%% that contains created dirs.
+%% @end
+-spec create_dirs(Count :: integer(), CountingBase :: integer(), SHInfo :: term(), TmpAns :: string()) -> string().
+%% ====================================================================
+create_dirs(Count, CountingBase, SHInfo, TmpAns) ->
+  case Count > CountingBase of
+    true ->
+      DirName = TmpAns ++ integer_to_list(random:uniform(CountingBase)) ++ "/",
+      case storage_files_manager:mkdir(SHInfo, DirName) of
+        ok -> create_dirs(Count div CountingBase, CountingBase, SHInfo, DirName);
+        {error, dir_or_file_exists} -> create_dirs(Count div CountingBase, CountingBase, SHInfo, DirName);
+        _ -> create_dirs(Count div CountingBase, CountingBase, SHInfo, TmpAns)
+      end;
+    false -> TmpAns
   end.

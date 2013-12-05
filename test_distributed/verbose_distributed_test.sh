@@ -10,7 +10,13 @@
 ## ===================================================================
 
 rm -rf /tmp/veilfs
+rm -rf /tmp/veilfs2
 mkdir /tmp/veilfs
+mkdir /tmp/veilfs2
+
+groupadd veilfstestgroup
+useradd veilfstestuser
+usermod -a -G veilfstestgroup veilfstestuser
 
 mkdir -p distributed_tests_out
 cp -R test_distributed/* distributed_tests_out
@@ -67,5 +73,9 @@ rm -rf c_lib
 rm -rf views
 rm -rf gui_static
 rm -f sys.config
+
+userdel -r veilfstestuser
+groupdel veilfstestgroup
+rm -rf /home/veilfstestuser
 
 cd ..
