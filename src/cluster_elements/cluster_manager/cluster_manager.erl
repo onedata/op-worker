@@ -159,7 +159,9 @@ handle_call({addCallback, FuseId, Node, Pid}, _From, State) ->
   try
     gen_server:call({?Node_Manager_Name, Node}, {addCallback, FuseId, Pid}, 500),
     CallbacksNum = case add_callback(Node, FuseId, State#cm_state.nodes, State#cm_state.callbacks_num) of
-      updated -> State#cm_state.callbacks_num + 1;
+      updated ->
+        save_state(),
+        State#cm_state.callbacks_num + 1;
       _ -> State#cm_state.callbacks_num
     end,
     {reply, ok, State#cm_state{callbacks_num = CallbacksNum}}
@@ -174,8 +176,13 @@ handle_call({delete_callback, FuseId, Node, Pid}, _From, State) ->
     Ans = gen_server:call({?Node_Manager_Name, Node}, {delete_callback, FuseId, Pid}, 500),
     CallbacksNum = case Ans of
       fuse_deleted ->
-        case delete_callback(Node, FuseId, State#cm_state.nodes, State#cm_state.callbacks_num) of
-          updated -> State#cm_state.callbacks_num + 1;
+        case delete_callback(Node, FuseId, State#cm_state.nodes, State#cm_state.callbacks_num, true) of
+          updated ->
+            save_state(),
+            State#cm_state.callbacks_num + 1;
+          deleted ->
+            save_state(),
+            State#cm_state.callbacks_num + 1;
           _ -> State#cm_state.callbacks_num
         end;
       _ -> State#cm_state.callbacks_num
@@ -255,15 +262,22 @@ handle_cast(update_dispatchers_and_dns, State) ->
   {noreply, NewState};
 
 handle_cast(get_state_from_db, State) ->
-  case State#cm_state.nodes =:= [] of
+  NewState2 = case (State#cm_state.nodes =:= []) or State#cm_state.state_loaded of
     true ->
-      Pid = self(),
-      erlang:send_after(1000, Pid, {timer, get_state_from_db}),
-      {noreply, State};
+      State;
     false ->
-      NewState = get_state_from_db(State),
-      {noreply, NewState}
-  end;
+      get_state_from_db(State)
+  end,
+
+  case State#cm_state.state_loaded of
+    true ->
+      ok;
+    false ->
+      Pid = self(),
+      erlang:send_after(1000, Pid, {timer, get_state_from_db})
+  end,
+
+  {noreply, NewState2};
 
 handle_cast(start_central_logger, State) ->
   case State#cm_state.nodes =:= [] of
@@ -276,11 +290,16 @@ handle_cast(start_central_logger, State) ->
       {noreply, NewState}
   end;
 
-handle_cast(save_state, State) ->
-  Ans = gen_server:call(?Dispatcher_Name, {dao, 1, {save_state, [State]}}, 500),
-  case Ans of
-    ok -> lager:info([{mod, ?MODULE}], "Save state message sent");
-    _ -> lager:error([{mod, ?MODULE}], "Save state error: ~p", [Ans])
+handle_cast({save_state, MergedState}, State) ->
+  case State#cm_state.state_loaded or MergedState of
+    true ->
+      Ans = gen_server:call(?Dispatcher_Name, {dao, 1, {save_state, [State]}}, 500),
+      case Ans of
+        ok -> lager:info([{mod, ?MODULE}], "Save state message sent");
+        _ -> lager:error([{mod, ?MODULE}], "Save state error: ~p", [Ans])
+      end;
+    false ->
+      ok
   end,
   {noreply, State};
 
@@ -317,10 +336,13 @@ handle_cast(update_monitoring_loop, State) ->
 handle_cast({worker_answer, cluster_state, Response}, State) ->
   NewState = case Response of
                {ok, SavedState} ->
-                 lager:info([{mod, ?MODULE}], "State read from DB"),
+                 lager:info([{mod, ?MODULE}], "State read from DB: ~p", [SavedState]),
                  merge_state(State, SavedState);
+               {error, {not_found,missing}} ->
+                 save_state(true),
+                 State;
                {error, Error} ->
-                 lager:info([{mod, ?MODULE}], "State cannot be read from DB: ~s", [Error]), %% info logging level because state may not be present in db and it's not an error
+                 lager:info([{mod, ?MODULE}], "State cannot be read from DB: ~p", [Error]), %% info logging level because state may not be present in db and it's not an error
                  State
              end,
   {noreply, NewState};
@@ -626,11 +648,11 @@ check_node(Node, State) ->
             end
           end, false, Callbacks),
 
-          CallbacksNum = case Changed of
-            true -> State#cm_state.callbacks_num + 1;
-            false -> State#cm_state.callbacks_num
+          {CallbacksNum, WorkersFound2} = case Changed of
+            true -> {State#cm_state.callbacks_num + 1, true};
+            false -> {State#cm_state.callbacks_num, WorkersFound}
           end,
-          {ok, State#cm_state{workers = NewWorkers, callbacks_num = CallbacksNum}, WorkersFound}
+          {ok, State#cm_state{workers = NewWorkers, callbacks_num = CallbacksNum}, WorkersFound2}
         catch
           _:_ ->
           lager:error([{mod, ?MODULE}], "Can not get fuses of node: ~s", [Node]),
@@ -685,12 +707,12 @@ node_down(Node, State) ->
   Nodes = State#cm_state.nodes,
   NewNodes = lists:foldl(CreateNewNodesList, [], Nodes),
 
-  CallbacksNum = case delete_all_callbacks(Node, State#cm_state.nodes, State#cm_state.callbacks_num) of
-    true -> State#cm_state.callbacks_num + 1;
-    false -> State#cm_state.callbacks_num
+  {CallbacksNum, WorkersFound2}  = case delete_all_callbacks(Node, State#cm_state.nodes, State#cm_state.callbacks_num) of
+    true -> {State#cm_state.callbacks_num + 1, true};
+    false -> {State#cm_state.callbacks_num, WorkersFound}
   end,
 
-  {State#cm_state{workers = NewWorkers, nodes = NewNodes, callbacks_num = CallbacksNum}, WorkersFound}.
+  {State#cm_state{workers = NewWorkers, nodes = NewNodes, callbacks_num = CallbacksNum}, WorkersFound2}.
 
 %% start_central_logger/1
 %% ====================================================================
@@ -755,8 +777,16 @@ get_state_from_db(State) ->
 -spec save_state() -> ok.
 %% ====================================================================
 save_state() ->
+  save_state(false).
+
+%% save_state/1
+%% ====================================================================
+%% @doc This function saves cluster state in DB.
+-spec save_state(MergedState :: boolean()) -> ok.
+%% ====================================================================
+save_state(MergedState) ->
   Pid = self(),
-  erlang:send_after(100, Pid, {timer, save_state}).
+  erlang:send_after(100, Pid, {timer, {save_state, MergedState}}).
 
 %% merge_state/2
 %% ====================================================================
@@ -766,8 +796,9 @@ save_state() ->
   NewState :: term().
 %% ====================================================================
 merge_state(State, SavedState) ->
-  StateNum = erlang:max(State#cm_state.state_num, SavedState#cm_state.state_num),
-  State1 = State#cm_state{state_num = StateNum},
+  StateNum = erlang:max(State#cm_state.state_num, SavedState#cm_state.state_num) + 1,
+  CallbacksNum = erlang:max(State#cm_state.callbacks_num, SavedState#cm_state.callbacks_num) + 1,
+  State1 = State#cm_state{state_num = StateNum, callbacks_num = CallbacksNum, state_loaded = true},
 
   NewNodes = lists:filter(fun(N) -> not lists:member(N, State1#cm_state.nodes) end, SavedState#cm_state.nodes),
 
@@ -792,7 +823,7 @@ merge_state(State, SavedState) ->
                    false -> MergedState
                  end,
 
-  save_state(),
+  save_state(true),
   MergedState2.
 
 %% get_workers_list/1
@@ -1234,13 +1265,13 @@ add_callback(Node, Fuse, Nodes, CallbacksNum) ->
       updated
   end.
 
-%% delete_callback/4
+%% delete_callback/5
 %% ====================================================================
 %% @doc Deletes callback
--spec delete_callback(Node :: term(), Fuse :: string(), Nodes :: list(), CallbacksNum :: integer()) -> Result when
+-spec delete_callback(Node :: term(), Fuse :: string(), Nodes :: list(), CallbacksNum :: integer(), ClearETS :: boolean()) -> Result when
   Result :: updated | not_exists.
 %% ====================================================================
-delete_callback(Node, Fuse, Nodes, CallbacksNum) ->
+delete_callback(Node, Fuse, Nodes, CallbacksNum, ClearETS) ->
   OldCallbacks = ets:lookup(?CALLBACKS_TABLE, Fuse),
   case OldCallbacks of
     [{Fuse, OldCallbacksList}] ->
@@ -1248,9 +1279,12 @@ delete_callback(Node, Fuse, Nodes, CallbacksNum) ->
         true ->
           case length(OldCallbacksList) of
             1 ->
-              ets:delete(?CALLBACKS_TABLE, Fuse),
+              case ClearETS of
+                true -> ets:delete(?CALLBACKS_TABLE, Fuse);
+                _ -> ok
+              end,
               update_dispatcher_callback(delete_callback, Nodes, Fuse, Node, CallbacksNum + 1),
-              updated;
+              deleted;
             _ ->
               ets:insert(?CALLBACKS_TABLE, {Fuse, lists:delete(Node, OldCallbacksList)}),
               update_dispatcher_callback(delete_callback, Nodes, Fuse, Node, CallbacksNum + 1),
@@ -1268,20 +1302,28 @@ delete_callback(Node, Fuse, Nodes, CallbacksNum) ->
   Result :: boolean().
 %% ====================================================================
 delete_all_callbacks(Node, Nodes, CallbacksNum) ->
-  delete_all_callbacks(Node, ets:first(?CALLBACKS_TABLE), false, Nodes, CallbacksNum).
+  delete_all_callbacks(Node, ets:first(?CALLBACKS_TABLE), false, Nodes, CallbacksNum, []).
 
-%% delete_all_callbacks/4
+%% delete_all_callbacks/6
 %% ====================================================================
 %% @doc Deletes all callbacks at node (helper function)
--spec delete_all_callbacks(Node :: term(), CurrentElement :: term(), Updated :: boolean(), Nodes :: list(), CallbacksNum :: integer()) -> Result when
+-spec delete_all_callbacks(Node :: term(), CurrentElement :: term(), Updated :: boolean(), Nodes :: list(), CallbacksNum :: integer(), ToBeDeleted :: list()) -> Result when
   Result :: boolean().
 %% ====================================================================
-delete_all_callbacks(_Node, '$end_of_table', Updated, _Nodes, _CallbacksNum) ->
+delete_all_callbacks(_Node, '$end_of_table', Updated, _Nodes, _CallbacksNum, ToBeDeleted) ->
+  UpdateETS = fun(Fuse) ->
+    ets:delete(?CALLBACKS_TABLE, Fuse)
+  end,
+  lists:foreach(UpdateETS, ToBeDeleted),
   Updated;
-delete_all_callbacks(Node, CurrentElement, Updated, Nodes, CallbacksNum) ->
-  case delete_callback(Node, CurrentElement, Nodes, CallbacksNum) of
-    updated -> delete_all_callbacks(Node, ets:next(?CALLBACKS_TABLE, CurrentElement), true, Nodes, CallbacksNum);
-    _ -> delete_all_callbacks(Node, ets:next(?CALLBACKS_TABLE, CurrentElement), Updated, Nodes, CallbacksNum)
+delete_all_callbacks(Node, CurrentElement, Updated, Nodes, CallbacksNum, ToBeDeleted) ->
+  case delete_callback(Node, CurrentElement, Nodes, CallbacksNum, false) of
+    updated ->
+      delete_all_callbacks(Node, ets:next(?CALLBACKS_TABLE, CurrentElement), true, Nodes, CallbacksNum, ToBeDeleted);
+    deleted ->
+      delete_all_callbacks(Node, ets:next(?CALLBACKS_TABLE, CurrentElement), true, Nodes, CallbacksNum, [CurrentElement | ToBeDeleted]);
+    _ ->
+      delete_all_callbacks(Node, ets:next(?CALLBACKS_TABLE, CurrentElement), Updated, Nodes, CallbacksNum, ToBeDeleted)
   end.
 
 %% update_dispatcher_callback/5

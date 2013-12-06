@@ -20,7 +20,6 @@
 new(_Id) -> 
     Hosts = basho_bench_config:get(cluster_hosts),
     CertFile = basho_bench_config:get(cert_file),
-    ssl:start(),
     Pong = #atom{value = "pong"},
     PongBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Pong)),
     PongAns = #answer{answer_status = "ok", worker_answer = PongBytes},
@@ -32,7 +31,7 @@ new(_Id) ->
 run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes}) ->
     Host = lists:nth((KeyGen() rem length(Hosts)) + 1 , Hosts),
     NewState = {Hosts, CertFile, PongAnsBytes},
-    case ssl:connect(Host, 5555, [binary, {active, false}, {packet, 4}, {certfile, CertFile}, {keyfile, CertFile}, {cacertfile, CertFile}, {reuse_sessions, true}], 5000) of
+    case wss:connect(Host, 5555, [{certfile, CertFile}]) of
         {ok, Socket} ->
             Res = 
                 try ping(Action, Socket, PongAnsBytes) of 
@@ -40,7 +39,7 @@ run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes}) ->
                 catch 
                     Reason -> {error, Reason, NewState}
                 end,
-            ssl:close(Socket), 
+            wss:close(Socket),
             Res;
         {error, Error} -> {error, {connect, Error}, NewState};
         Other -> {error, {unknown_error, Other}, NewState}
@@ -55,9 +54,9 @@ ping(Module, Socket, PongAnsBytes) ->
                             answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = PingBytes},
     Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-    ssl:send(Socket, Msg),
+    wss:send(Socket, Msg),
     Ans =
-        case ssl:recv(Socket, 0, 5000) of 
+        case wss:recv(Socket, 0, 5000) of
             {ok, Ans1} -> Ans1;
             {error, Reason} -> throw({recv, Reason})
         end,

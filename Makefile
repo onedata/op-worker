@@ -1,5 +1,6 @@
 BASHO_BENCH_DIR = "deps/basho_bench"
 STRESS_TESTS_SRC_DIR = "stress_test"
+DIST_TESTS_SRC_DIR = "test_distributed"
 
 .PHONY: releases deps test
 
@@ -107,6 +108,7 @@ start_node_console:
 ### Basho-Bench build (used by CI)
 basho_bench: deps compile
 	cp ${STRESS_TESTS_SRC_DIR}/**/*.erl ${BASHO_BENCH_DIR}/src
+	cp ${DIST_TESTS_SRC_DIR}/wss.erl ${BASHO_BENCH_DIR}/src
 	@mkdir -p ${BASHO_BENCH_DIR}/tests
 	@mkdir -p ${BASHO_BENCH_DIR}/ebin
 	@cp ${STRESS_TESTS_SRC_DIR}/**/*.config ${BASHO_BENCH_DIR}/tests

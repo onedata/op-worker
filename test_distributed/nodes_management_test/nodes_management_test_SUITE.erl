@@ -25,8 +25,7 @@
 %% export nodes' codes
 -export([ccm_code1/0, ccm_code2/0, worker_code/0]).
 
-all() -> [main_test %%, callbacks_test %% Test disabled until fixed: VFS-280
-].
+all() -> [main_test, callbacks_test].
 
 %% ====================================================================
 %% Code of nodes used during the test
@@ -113,10 +112,8 @@ main_test(Config) ->
       end
     end,
 
-    %% TODO sprawdzić czemu test się wywala jak zamykamy tutaj socket
-%%     wss:close(Socket),
-
     PongsNum = lists:foldl(CheckModules, 0, Jobs),
+    wss:close(Socket),
     S + PongsNum
   end,
 
@@ -241,9 +238,17 @@ callbacks_test(Config) ->
   Callbacks = lists:foldl(RegisterCallbacks, [], Ports),
   timer:sleep(1000),
 
+  CheckDispatcherAns = fun({DispatcherCorrectAnsList, DispatcherCorrectAnsNum}, {TestAnsList, TestAnsNum}) ->
+    ?assertEqual(DispatcherCorrectAnsNum, TestAnsNum),
+    ?assertEqual(length(DispatcherCorrectAnsList), length(TestAnsList)),
+    lists:foreach(fun(FuseNodes) ->
+      ?assert(lists:member(FuseNodes, TestAnsList))
+    end, DispatcherCorrectAnsList)
+  end,
+
   CheckCallbacks = fun({Node, {FusesList, Fuse1AnsLength, Fuse2AnsLength}}, DispatcherCorrectAns) ->
     Test1 = gen_server:call({?Dispatcher_Name, Node}, get_callbacks),
-    ?assertEqual(DispatcherCorrectAns, Test1),
+    CheckDispatcherAns(DispatcherCorrectAns, Test1),
     Test2 = gen_server:call({?Node_Manager_Name, Node}, get_fuses_list),
     ?assertEqual(FusesList, Test2),
     Test3 = gen_server:call({?Node_Manager_Name, Node}, {get_all_callbacks, FuseId1}),
@@ -257,7 +262,7 @@ callbacks_test(Config) ->
   DispatcherCorrectAns1 = {[{FuseId1, lists:reverse(NodesUp)}, {FuseId2, [CCM]}], 6},
   FuseInfo1 = [{[FuseId1, FuseId2], 2,1}, {[FuseId1], 1,0}, {[FuseId1], 1,0}, {[FuseId1], 1,0}],
   CCMTest1 = gen_server:call({global, ?CCM}, get_callbacks),
-  ?assertEqual(DispatcherCorrectAns1, CCMTest1),
+  CheckDispatcherAns(DispatcherCorrectAns1, CCMTest1),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns1, lists:zip(NodesUp, FuseInfo1)),
 
   [Node4Connection | Callbacks2] = Callbacks,
@@ -276,7 +281,7 @@ callbacks_test(Config) ->
   DispatcherCorrectAns2 = {[{FuseId1, [LastNode, CCM]}, {FuseId2, [CCM]}], 8},
   FuseInfo2 = [{[FuseId1, FuseId2], 1, 1}, {[], 0,0}, {[], 0,0}, {[FuseId1], 1,0}],
   CCMTest2 = gen_server:call({global, ?CCM}, get_callbacks),
-  ?assertEqual(DispatcherCorrectAns2, CCMTest2),
+  CheckDispatcherAns(DispatcherCorrectAns2, CCMTest2),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns2, lists:zip(NodesUp, FuseInfo2)),
 
   CallbackSendTest1 = rpc:call(LastNode, request_dispatcher, send_to_fuse, [FuseId2, #atom{value = "test_atom"}, "communication_protocol"]),
@@ -324,7 +329,7 @@ callbacks_test(Config) ->
   DispatcherCorrectAns3 = {[], 11},
   FuseInfo3 = [{[], 0, 0}, {[], 0, 0}, {[], 0, 0}, {[], 0, 0}],
   CCMTest3 = gen_server:call({global, ?CCM}, get_callbacks),
-  ?assertEqual(DispatcherCorrectAns3, CCMTest3),
+  CheckDispatcherAns(DispatcherCorrectAns3, CCMTest3),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns3, lists:zip(NodesUp, FuseInfo3)),
 
   rpc:call(Worker1, user_logic, remove_user, [{dn, DN}]).
