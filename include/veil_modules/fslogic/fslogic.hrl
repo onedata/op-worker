@@ -50,3 +50,6 @@
 -define(REMOTE_HELPER_SEPARATOR, "///").
 -define(CLUSTER_USER_ID, cluster_uid).
 -define(CLUSTER_FUSE_ID, "cluster_fid").
+
+%% Name of direcotry that contains all group dirs
+-define(GROUPS_BASE_DIR_NAME, "groups").

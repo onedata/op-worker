@@ -12,6 +12,7 @@
 -module(user_logic).
 
 -include("veil_modules/fslogic/fslogic.hrl").
+-include("logging.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
 -include_lib("public_key/include/public_key.hrl").
@@ -25,6 +26,7 @@
 -export([get_email_list/1, update_email_list/2, get_dn_list/1, update_dn_list/2]).
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
+-export([get_team_names/1]).
 
 -define(UserRootPerms, 8#600).
 
@@ -101,6 +103,8 @@ create_user(Login, Name, Teams, Email, DnList) ->
 	},
 	{ok, UUID} = dao_lib:apply(dao_users, save_user, [User], 1),
 	GetUserAns = get_user({uuid, UUID}),
+
+    [create_team_dir(Team) || Team <- get_team_names(User)], %% Create team dirs in DB if they dont exist
 
 	{GetUserFirstAns, UserRec} = GetUserAns,
 	case GetUserFirstAns of
@@ -214,6 +218,7 @@ get_teams(User) ->
 %% ====================================================================
 update_teams(#veil_document{record = UserInfo} = UserDoc, NewTeams) ->
 	NewDoc = UserDoc#veil_document{record = UserInfo#user{teams = NewTeams}},
+    [create_team_dir(Team) || Team <- get_team_names(NewDoc)], %% Create team dirs in DB if they dont exist
 	case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
 		{ok, UUID} ->
       create_dirs_at_storage(non, NewTeams),
@@ -512,6 +517,7 @@ create_dirs_at_storage(Root, TeamsString) ->
             case Ans of
               ok ->
                 Ans3 = storage_files_manager:chown(SHI, RootDirName, Root, Root),
+                storage_files_manager:chmod(SHI, RootDirName, 8#300),
                 case Ans3 of
                   ok ->
                     ok;
@@ -533,3 +539,52 @@ create_dirs_at_storage(Root, TeamsString) ->
       lists:foldl(CreateDirsOnStorage, ok, lists:map(fun(VeilDoc) -> VeilDoc#veil_document.record end, StorageList));
     _ -> storage_listing_error
   end.
+
+
+%% get_team_names/1
+%% ====================================================================
+%% @doc Returns list of group/team names for given user. UserQuery shall be either #user{} record
+%%      or query compatible with user_logic:get_user/1.
+%%      The method assumes that user exists therefore will fail with exception when it doesnt.
+%% @end
+-spec get_team_names(UserQuery :: term()) -> [string()] | no_return().
+%% ====================================================================
+get_team_names(#veil_document{record = #user{} = User}) ->
+    get_team_names(User);
+get_team_names(#user{} = User) ->
+    [string:strip(lists:nth(1, string:tokens(X, "("))) || X <- string:tokens(User#user.teams, ",")];
+get_team_names(UserQuery) ->
+    {ok, UserDoc} = user_logic:get_user(UserQuery),
+    get_team_names(UserDoc).
+
+
+%% create_team_dir/1
+%% ====================================================================
+%% @doc Creates directory (in DB) for given group/team name. If base group dir (/groups) doesnt exists, its created too.
+%%      Method will fail with exception error only when base group dir cannot be reached nor created.
+%%      Otherwise standard {ok, ...} and  {error, ...} tuples will be returned.
+%% @end
+-spec create_team_dir(Dir :: string()) -> {ok, UUID :: uuid()} | {error, Reason :: any()} | no_return().
+%% ====================================================================
+create_team_dir(TeamName) ->
+    CTime = fslogic_utils:time(),
+    GroupsBase =
+        case dao_lib:apply(dao_vfs, get_file, ["/" ++ ?GROUPS_BASE_DIR_NAME], 1) of
+            {error, file_not_found} ->
+                GFile = #file{type = ?DIR_TYPE, name = ?GROUPS_BASE_DIR_NAME, uid = "0", parent = "", perms = 8#555},
+                GFileDoc = fslogic_utils:update_meta_attr(GFile, times, {CTime, CTime, CTime}),
+                {ok, UUID} = dao_lib:apply(dao_vfs, save_file, [GFileDoc], 1),
+                UUID;
+            {ok, #veil_document{uuid = UUID1}} -> UUID1;
+            {error, Reason} ->
+                ?error("Error while getting groups base dir: ~p", [Reason]),
+                error({error, Reason})
+        end,
+    case dao_lib:apply(dao_vfs, get_file, ["/" ++ ?GROUPS_BASE_DIR_NAME ++ "/" ++ TeamName], 1) of
+        {ok, _}                 -> {error, dir_exists};
+        {error, file_not_found} ->
+            TFile = #file{type = ?DIR_TYPE, name = TeamName, uid = "0", gids = [TeamName], parent = GroupsBase, perms = 8#770},
+            TFileDoc = fslogic_utils:update_meta_attr(TFile, times, {CTime, CTime, CTime}),
+            dao_lib:apply(dao_vfs, save_file, [TFileDoc], 1);
+        {error, Reason1}         -> {error, Reason1}
+    end.

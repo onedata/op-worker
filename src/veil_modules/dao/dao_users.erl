@@ -17,7 +17,7 @@
 %% ===================================================================
 %% API functions
 %% ===================================================================
--export([save_user/1, remove_user/1, get_user/1, get_user_files_number/1]).
+-export([save_user/1, remove_user/1, get_user/1, get_files_number/2]).
 
 
 %% save_user/1
@@ -81,6 +81,8 @@ remove_user(Key) ->
                         {dn, DN :: string()}) -> 
     {ok, user_doc()} | {error, any()} | no_return().
 %% ====================================================================
+get_user({uuid, "0"}) ->
+    {ok, #veil_document{uuid = "0", record = #user{login = "root", name = "root"}}}; %% Return virtual "root" user
 get_user({uuid, UUID}) ->
     dao:set_db(?USERS_DB_NAME),
     dao:get_record(UUID);
@@ -117,28 +119,28 @@ get_user({Key, Value}) ->
             throw(invalid_data)
     end.
 
-%% get_user_files_number/1
+%% get_files_number/1
 %% ====================================================================
-%% @doc Returns number of user's files
+%% @doc Returns number of user's / group's files
 %% @end
--spec get_user_files_number(UUID :: uuid()) -> Result when
-  Result :: {ok, Sum} | {error, any()} | no_return(),
-  Sum :: integer().
+    -spec get_files_number(user | group, UUID :: uuid()) -> Result when
+Result :: {ok, Sum} | {error, any()} | no_return(),
+Sum :: integer().
 %% ====================================================================
-get_user_files_number(UUID) ->
+get_files_number(Type, UUID) ->
   dao:set_db(?FILES_DB_NAME),
-  View = ?FILES_NUMBER_VIEW,
+  View = case Type of user -> ?USER_FILES_NUMBER_VIEW; group -> ?GROUP_FILES_NUMBER_VIEW end,
   QueryArgs = #view_query_args{keys = [dao_helper:name(UUID)], include_docs = false, group_level = 1, view_type = reduce, stale = update_after},
 
   case dao:list_records(View, QueryArgs) of
     {ok, #view_result{rows = [#view_row{value = Sum}]}} ->
       {ok, Sum};
     {ok, #view_result{rows = []}} ->
-      lager:error("Number of files of user ~p not found", [UUID]),
+      lager:error("Number of files of ~p ~p not found", [Type, UUID]),
       throw(files_number_not_found);
     {ok, #view_result{rows = [#view_row{value = Sum} | Tail] = AllRows}} ->
       case length(lists:usort(AllRows)) of
-        Count when Count > 1 -> lager:warning("To many rows in response during files number finding for user ~p. Others: ~p", [UUID, Tail]);
+        Count when Count > 1 -> lager:warning("To many rows in response during files number finding for ~p ~p. Others: ~p", [Type, UUID, Tail]);
         _ -> ok
       end,
       {ok, Sum};

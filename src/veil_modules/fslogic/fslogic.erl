@@ -22,6 +22,7 @@
 -include("veil_modules/dao/dao_users.hrl").
 -include("veil_modules/dao/dao_types.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
+-include("logging.hrl").
 
 -define(LOCATION_VALIDITY, 60*15).
 
@@ -29,6 +30,12 @@
 -define(PARENT_CTIME(X, T),  gen_server:call(?Dispatcher_Name, {fslogic, 1, #veil_request{subject = get(user_id), request = {internal_call, #updatetimes{file_logic_name = fslogic_utils:strip_path_leaf(X), mtime = T}}}})).
 
 -define(FILE_COUNTING_BASE, 256).
+
+%% Which fuse operations (messages) are allowed to operate on base group directory ("/groups")
+-define(GROUPS_BASE_ALLOWED_ACTIONS,    [getfileattr, updatetimes, getfilechildren]).
+
+%% Which fuse operations (messages) are allowed to operate on second level group directory (e.g. "/groups/grpName")
+-define(GROUPS_ALLOWED_ACTIONS,         [getfileattr, getnewfilelocation, createdir, updatetimes, createlink, getfilechildren]).
 
 %% ====================================================================
 %% API
@@ -45,7 +52,7 @@
 -endif.
 
 %% ct
--export([get_files_number/2, create_dirs/4]).
+-export([get_files_number/3, create_dirs/4]).
 
 %% ====================================================================
 %% API functions
@@ -93,7 +100,20 @@ handle(ProtocolVersion, {delete_old_descriptors, Pid}) ->
   ok;
 
 handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
-  handle_fuse_message(ProtocolVersion, Record#fusemessage.input, get(fuse_id));
+    try
+        assert_group_access(Record#fusemessage.input), %% Check if requested operation is available on requested direcotry
+        handle_fuse_message(ProtocolVersion, Record#fusemessage.input, get(fuse_id))
+    catch
+        ErrorRet -> ErrorRet
+    end;
+
+handle(ProtocolVersion, {internal_call, Record}) ->
+    try
+        assert_group_access(Record), %% Check if requested operation is available on requested direcotry
+        handle_fuse_message(ProtocolVersion, Record, ?CLUSTER_FUSE_ID)
+    catch
+        ErrorRet -> ErrorRet
+    end;
 
 handle(_ProtocolVersion, Record) when is_record(Record, callback) ->
   Answer = case Record#callback.action of
@@ -113,9 +133,6 @@ handle(_ProtocolVersion, Record) when is_record(Record, callback) ->
       end
   end,
   #atom{value = atom_to_list(Answer)};
-
-handle(ProtocolVersion, {internal_call, Record}) ->
-  handle_fuse_message(ProtocolVersion, Record, ?CLUSTER_FUSE_ID);
 
 %% Handle requests that have wrong structure.
 handle(_ProtocolVersion, _Msg) ->
@@ -142,8 +159,8 @@ cleanup() ->
 %% ====================================================================
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, updatetimes) ->
     {FileNameFindingAns, FileName} = get_full_file_name(Record#updatetimes.file_logic_name),
-    case FileName of 
-        [?PATH_SEPARATOR] -> 
+    case FileName of
+        [?PATH_SEPARATOR] ->
             lager:warning("Trying to update times for root directory. FuseID: ~p, Request: ~p. Aborting.", [FuseID, Record]),
             throw(invalid_updatetimes_request);
         _ -> ok
@@ -155,7 +172,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, upda
                 {ok, #veil_document{record = #file{} = File} = Doc} ->
                     File1 = fslogic_utils:update_meta_attr(File, times, {Record#updatetimes.atime, Record#updatetimes.mtime}),
                     File2 = fslogic_utils:update_meta_attr(File1, ctime, Record#updatetimes.ctime),
-                    
+
                     Status = string:equal(File2#file.meta_doc, File#file.meta_doc),
                     if
                         Status -> #atom{value = ?VOK};
@@ -176,12 +193,12 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, chan
         case get_file(ProtocolVersion, FileName, FuseID) of
             {ok, #veil_document{record = #file{} = File} = Doc} ->
                 {Return, NewFile} =
-                    case dao_lib:apply(dao_users, get_user, [{login, Record#changefileowner.uname}], ProtocolVersion) of 
+                    case dao_lib:apply(dao_users, get_user, [{login, Record#changefileowner.uname}], ProtocolVersion) of
                         {ok, #veil_document{record = #user{}, uuid = UID}} ->
                             {?VOK, File#file{uid = UID}};
                         {error, user_not_found} ->
                             lager:warning("chown: cannot find user with name ~p. Trying UID (~p) lookup...", [Record#changefileowner.uname, Record#changefileowner.uid]),
-                            case dao_lib:apply(dao_users, get_user, [{uuid, integer_to_list(Record#changefileowner.uid)}], ProtocolVersion) of 
+                            case dao_lib:apply(dao_users, get_user, [{uuid, integer_to_list(Record#changefileowner.uid)}], ProtocolVersion) of
                                 {ok, #veil_document{record = #user{}, uuid = UID1}} ->
                                     {?VOK, File#file{uid = UID1}};
                                 {error, {not_found, missing}} ->
@@ -196,9 +213,9 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, chan
                             {?VEREMOTEIO, File}
                     end,
 
-                case Return of 
+                case Return of
                     ?VOK ->
-                        NewFile1 = fslogic_utils:update_meta_attr(NewFile, ctime, fslogic_utils:time()), 
+                        NewFile1 = fslogic_utils:update_meta_attr(NewFile, ctime, fslogic_utils:time()),
                         case dao_lib:apply(dao_vfs, save_file, [Doc#veil_document{record = NewFile1}], ProtocolVersion) of
                             {ok, _} -> #atom{value = ?VOK};
                             Other1 ->
@@ -224,9 +241,9 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, chan
             {ok, #veil_document{record = #file{} = File} = Doc} ->
                 {Return, NewFile} = {?VENOTSUP, File}, %% @TODO: not implemented
 
-                case Return of 
+                case Return of
                     ?VOK ->
-                        NewFile1 = fslogic_utils:update_meta_attr(NewFile, ctime, fslogic_utils:time()), 
+                        NewFile1 = fslogic_utils:update_meta_attr(NewFile, ctime, fslogic_utils:time()),
                         case dao_lib:apply(dao_vfs, save_file, [Doc#veil_document{record = NewFile1}], ProtocolVersion) of
                             {ok, _} -> #atom{value = ?VOK};
                             Other1 ->
@@ -250,7 +267,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, chan
       ok ->
         case get_file(ProtocolVersion, FileName, FuseID) of
             {ok, #veil_document{record = #file{} = File} = Doc} ->
-                File1 = fslogic_utils:update_meta_attr(File, ctime, fslogic_utils:time()), 
+                File1 = fslogic_utils:update_meta_attr(File, ctime, fslogic_utils:time()),
                 NewFile = Doc#veil_document{record = File1#file{perms = Record#changefileperms.perms}},
                 case dao_lib:apply(dao_vfs, save_file, [NewFile], ProtocolVersion) of
                     {ok, _} -> #atom{value = ?VOK};
@@ -276,13 +293,13 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getf
                 {Type, Size} =
                     case File#file.type of
                         ?DIR_TYPE -> {"DIR", 0};
-                        ?REG_TYPE -> 
+                        ?REG_TYPE ->
                             FileLoc = File#file.location,
-                            S = 
+                            S =
                                 case dao_lib:apply(dao_vfs, get_storage, [{uuid, FileLoc#file_location.storage_id}], ProtocolVersion) of
                                     {ok, #veil_document{record = Storage}} ->
                                         {SH, File_id} = get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
-                                        case veilhelpers:exec(getattr, SH, [File_id]) of 
+                                        case veilhelpers:exec(getattr, SH, [File_id]) of
                                             {0, #st_stat{st_size = ST_Size} = _Stat} ->
                                                 fslogic_utils:update_meta_attr(File, size, ST_Size),
                                                 ST_Size;
@@ -301,24 +318,29 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getf
 
                 %% Get owner
                 {UName, UID} =
-                    case dao_lib:apply(dao_users, get_user, [{uuid, File#file.uid}], ProtocolVersion) of 
+                    case dao_lib:apply(dao_users, get_user, [{uuid, File#file.uid}], ProtocolVersion) of
                         {ok, #veil_document{record = #user{}} = UserDoc} ->
                             {user_logic:get_login(UserDoc), list_to_integer(UserDoc#veil_document.uuid)};
                         {error, UError} ->
                             lager:error("Owner of file ~p not found due to error: ~p", [FileUUID, UError]),
                             {"", -1}
                     end,
+                GName = %% Get group name
+                    case File#file.gids of
+                        [GNam | _] -> GNam; %% Select first one as main group
+                        [] -> UName
+                    end,
 
                 %% Get attributes
-                {CTime, MTime, ATime, _SizeFromDB} = 
-                    case dao_lib:apply(dao_vfs, get_file_meta, [File#file.meta_doc], 1) of 
+                {CTime, MTime, ATime, _SizeFromDB} =
+                    case dao_lib:apply(dao_vfs, get_file_meta, [File#file.meta_doc], 1) of
                         {ok, #veil_document{record = FMeta}} ->
                             {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size};
                         {error, Error} ->
                             lager:warning("Cannot fetch file_meta for file (uuid ~p) due to error: ~p", [FileUUID, Error]),
                             {0, 0, 0, 0}
-                    end, 
-                #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime, type = Type, size = Size, uname = UName, gname = UName, uid = UID, gid = UID};
+                    end,
+                #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime, type = Type, size = Size, uname = UName, gname = GName, uid = UID, gid = UID};
             {error, file_not_found} ->
                 lager:debug("FileAttr: ENOENT"),
                 #fileattr{answer = ?VENOENT, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = ""};
@@ -400,7 +422,9 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getn
                                   ok ->
                                     CTime = fslogic_utils:time(),
 
-                                    FileRecordInit = #file{type = ?REG_TYPE, name = FileName, uid = UserId, parent = Parent, perms = Record#getnewfilelocation.mode, location = FileLocation},
+                                    Groups = get_group_owner(FileBaseName), %% Get owner group name based on file access path
+
+                                    FileRecordInit = #file{type = ?REG_TYPE, name = FileName, uid = UserId, gids = Groups, parent = Parent, perms = Record#getnewfilelocation.mode, location = FileLocation},
                                     %% Async *times update
                                     FileRecord = fslogic_utils:update_meta_attr(FileRecordInit, times, {CTime, CTime, CTime}),
 
@@ -513,7 +537,9 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, crea
                 {UserIdStatus, UserId} = get_user_id(),
                 case UserIdStatus of
                   ok ->
-                    FileInit = #file{type = ?DIR_TYPE, name = FileName, uid = UserId, parent = Parent, perms = Record#createdir.mode},
+                    Groups = get_group_owner(Record#createdir.dir_logic_name), %% Get owner group name based on file access path
+
+                    FileInit = #file{type = ?DIR_TYPE, name = FileName, uid = UserId, gids = Groups, parent = Parent, perms = Record#createdir.mode},
                     %% Async *times update
                     CTime = fslogic_utils:time(),
                     File = fslogic_utils:update_meta_attr(FileInit, times, {CTime, CTime, CTime}),
@@ -547,21 +573,39 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, crea
 
 handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, getfilechildren) ->
   {FileNameFindingAns, File} = get_full_file_name(Record#getfilechildren.dir_logic_name),
+  TokenizedPath = string:tokens(Record#getfilechildren.dir_logic_name, "/"),
   case FileNameFindingAns of
     ok ->
-      Num = Record#getfilechildren.children_num,
-      Offset = Record#getfilechildren.offset,
+    {Num, Offset} =
+        case {Record#getfilechildren.offset, TokenizedPath} of
+            {0 = Off0, []} -> %% First iteration over "/" dir has to contain "groups" folder, so fetch `num - 1` files instead `num`
+                {Record#getfilechildren.children_num - 1, Off0};
+            {Off1, []} -> %% Next iteration over "/" dir has start one entry earlier, so fetch `num` files starting on `offset - 1`
+                {Record#getfilechildren.children_num, Off1 - 1};
+            {Off2, _} -> %% Non-root dir -> proceed normally
+                {Record#getfilechildren.children_num, Off2}
+        end,
 
       {Status, TmpAns} = dao_lib:apply(dao_vfs, list_dir, [File, Num, Offset], ProtocolVersion),
       case Status of
         ok ->
-          Children = fslogic_utils:create_children_list(TmpAns),
-          #filechildren{child_logic_name = Children};
+            Children = fslogic_utils:create_children_list(TmpAns),
+            case {Record#getfilechildren.offset, TokenizedPath} of
+                {0, []}    -> %% When asking about root, add virtual ?GROUPS_BASE_DIR_NAME entry
+                    #filechildren{child_logic_name = Children ++ [?GROUPS_BASE_DIR_NAME]}; %% Only for offset = 0
+                {_, [?GROUPS_BASE_DIR_NAME]} -> %% For group list query ignore DB result and generate list based on user's teams
+                    Teams = user_logic:get_team_names({dn, get(user_id)}),
+                    {_Head, Tail} = lists:split(min(Offset, length(Teams)), Teams),
+                    {Ret, _} = lists:split(min(Num, length(Tail)), Tail),
+                    #filechildren{child_logic_name = Ret};
+                _ ->
+                    #filechildren{child_logic_name = Children}
+            end;
         _BadStatus ->
           lager:error([{mod, ?MODULE}], "Error: can not list files in dir: ~s", [File]),
-          #filechildren{answer = ?VEREMOTEIO, child_logic_name = [""]}
+          #filechildren{answer = ?VEREMOTEIO, child_logic_name = []}
       end;
-    _  -> #filechildren{answer = ?VEREMOTEIO, child_logic_name = [""]}
+    _  -> #filechildren{answer = ?VEREMOTEIO, child_logic_name = []}
   end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, deletefile) ->
@@ -624,19 +668,101 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, rena
                 false ->
                   case get_file(ProtocolVersion, NewDir, FuseID) of
                     {ok, #veil_document{uuid = NewParent}} ->
-                      RenamedFileInit = OldFile#file{parent = NewParent, name = fslogic_utils:basename(NewFileName)},
-                      RenamedFile = fslogic_utils:update_meta_attr(RenamedFileInit, ctime, fslogic_utils:time()),
-                      Renamed = OldDoc#veil_document{record = RenamedFile},
-                      case dao_lib:apply(dao_vfs, save_file, [Renamed], ProtocolVersion)  of
+                        MoveOnStorage =
+                            fun(#file{type = ?REG_TYPE}) -> %% Returns new file record with updated file_id field or throws excpetion
+                                {UserDocStatus, UserDoc} = get_user_doc(),
+                                {RootStatus, Root} = get_user_root(UserDocStatus, UserDoc),
+
+                                case {UserDocStatus, RootStatus} of %% Assert user doc && user root get status
+                                    {ok, ok} -> ok;
+                                    _ ->
+                                        ?error("Cannot fetch user doc or user root for file ~p.", [File]),
+                                        ?debug("get_user_doc response: ~p", [{UserDocStatus, UserDoc}]),
+                                        ?debug("get_user_root response: ~p", [{RootStatus, Root}]),
+                                        throw(gen_error_message(renamefile, ?VEREMOTEIO))
+                                end,
+
+                                %% Get storage info
+                                StorageID   = OldFile#file.location#file_location.storage_id,
+                                FileID      = OldFile#file.location#file_location.file_id,
+                                Storage = %% Storage info for the file
+                                    case dao_lib:apply(dao_vfs, get_storage, [{uuid, StorageID}], 1) of
+                                        {ok, #veil_document{record = #storage_info{} = S}} -> S;
+                                        {error, MReason} ->
+                                            ?error("Cannot fetch storage (ID: ~p) information for file ~p. Reason: ~p", [StorageID, File, MReason]),
+                                            throw(gen_error_message(renamefile, ?VEREMOTEIO))
+                                    end,
+                                SHInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage), %% Storage helper for cluster
+                                NewFileID = get_new_file_id(NewFileName, UserDoc, Root, SHInfo, ProtocolVersion),
+
+                                %% Change group owner if needed
+                                case get_group_owner(NewFileName) of
+                                    [] -> ok; %% Dont change group owner
+                                    [NewGroup | _] -> %% We are moving file to group folder -> change owner
+                                        case storage_files_manager:chown(SHInfo, FileID, "", NewGroup) of
+                                            ok -> ok;
+                                            MReason1 ->
+                                                ?error("Cannot change group owner for file (ID: ~p) to ~p due to: ~p.", [FileID, NewGroup, MReason1]),
+                                                throw(gen_error_message(renamefile, ?VEREMOTEIO))
+                                        end
+                                end,
+
+                                %% Move file to new location on storage
+                                ActionR = storage_files_manager:mv(SHInfo, FileID, NewFileID),
+                                _NewFile =
+                                    case ActionR of
+                                        ok -> OldFile#file{location = OldFile#file.location#file_location{file_id = NewFileID}};
+                                        MReason0 ->
+                                            ?error("Cannot move file (from ID ~p, to ID: ~p) on storage due to: ~p", [FileID, NewFileID, MReason0]),
+                                            throw(gen_error_message(renamefile, ?VEREMOTEIO))
+                                    end;
+                            (_) -> ok %% Dont move non-regular files
+                            end, %% end fun()
+
+                        %% Check if we need to move file on storage and do it when we do need it
+                        NewFile =
+                            case {string:tokens(Record#renamefile.from_file_logic_name, "/"), string:tokens(Record#renamefile.to_file_logic_name, "/")} of
+                                {_, [?GROUPS_BASE_DIR_NAME, _InvalidTarget]} -> %% Moving into ?GROUPS_BASE_DIR_NAME dir is not allowed
+                                    ?info("Attemt to move file to base group directory. Query: ~p", [Record]),
+                                    throw(gen_error_message(renamefile, ?VEPERM));
+                                {[?GROUPS_BASE_DIR_NAME, _InvalidSource], _} -> %% Moving from ?GROUPS_BASE_DIR_NAME dir is not allowed
+                                    ?info("Attemt to move base group directory. Query: ~p", [Record]),
+                                    throw(gen_error_message(renamefile, ?VEPERM));
+
+                                {[?GROUPS_BASE_DIR_NAME, X | _FromF0], [?GROUPS_BASE_DIR_NAME, X | _ToF0]} -> %% Local (group dir) move, no storage actions are required
+                                    OldFile;
+
+                                {[?GROUPS_BASE_DIR_NAME, _FromGrp0 | _FromF0], [?GROUPS_BASE_DIR_NAME, _ToGrp0 | _ToF0]} -> %% From group X to Y
+                                    MoveOnStorage(OldFile);
+                                {[?GROUPS_BASE_DIR_NAME, _FromGrp1 | _FromF1], _} ->
+                                    %% From group X user dir
+                                    MoveOnStorage(OldFile);
+                                {_, [?GROUPS_BASE_DIR_NAME, _ToGrp2 | _ToF2]} ->
+                                    %% From user dir to group X
+                                    MoveOnStorage(OldFile);
+
+                                {_, _} -> %% Local (user dir) move, no storage actions are required
+                                    OldFile
+                            end,
+
+                        RenamedFileInit =
+                            case get_group_owner(NewFileName) of %% Do we need to update group owner?
+                                [] -> NewFile#file{parent = NewParent, name = fslogic_utils:basename(NewFileName)}; %% Dont change group owner
+                                [_NewGroup | _] = GIDs -> %% We are moving file to group folder -> change owner
+                                    NewFile#file{parent = NewParent, name = fslogic_utils:basename(NewFileName), gids = GIDs}
+                            end,
+                        RenamedFile = fslogic_utils:update_meta_attr(RenamedFileInit, ctime, fslogic_utils:time()),
+                        Renamed = OldDoc#veil_document{record = RenamedFile},
+                        case dao_lib:apply(dao_vfs, save_file, [Renamed], ProtocolVersion) of
                         {ok, _} ->
-                          CTime = fslogic_utils:time(),
-                          ?PARENT_CTIME(Record#renamefile.from_file_logic_name, CTime),
-                          ?PARENT_CTIME(Record#renamefile.to_file_logic_name, CTime),
-                          #atom{value = ?VOK};
+                            CTime = fslogic_utils:time(),
+                            ?PARENT_CTIME(Record#renamefile.from_file_logic_name, CTime),
+                            ?PARENT_CTIME(Record#renamefile.to_file_logic_name, CTime),
+                            #atom{value = ?VOK};
                         Other ->
-                          lager:warning("Cannot save file document. Reason: ~p", [Other]),
-                          #atom{value = ?VEREMOTEIO}
-                      end;
+                            lager:warning("Cannot save file document. Reason: ~p", [Other]),
+                            #atom{value = ?VEREMOTEIO}
+                        end;
                     {error, file_not_found} ->
                       lager:warning("Cannot find destination dir: ~p", [NewDir]),
                       #atom{value = ?VENOENT};
@@ -669,14 +795,17 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, crea
           {error, file_not_found} ->
               case get_file(ProtocolVersion, fslogic_utils:strip_path_leaf(From), FuseID) of
                   {ok, #veil_document{uuid = Parent}} ->
-                      UserId = 
+                      UserId =
                         case get_user_id() of
                             {ok, Id} -> Id;
                             {error, Reason2} ->
                                 lager:error("Cannot get user ID while creating link due to: ~p. Link will belong to 'nobody'.", [Reason2]),
                                 -1
                         end,
-                      LinkDocInit = #file{type = ?LNK_TYPE, name = fslogic_utils:basename(From), uid = UserId, ref_file = To, parent = Parent},
+
+                      Groups = get_group_owner(Record#createlink.from_file_logic_name), %% Get owner group name based on file access path
+
+                      LinkDocInit = #file{type = ?LNK_TYPE, name = fslogic_utils:basename(From), uid = UserId, gids = Groups, ref_file = To, parent = Parent},
                       CTime = fslogic_utils:time(),
                       LinkDoc = fslogic_utils:update_meta_attr(LinkDocInit, times, {CTime, CTime, CTime}),
 
@@ -805,8 +934,17 @@ update_file_descriptor(Descriptor, Validity) ->
 %% ====================================================================
 
 get_file(ProtocolVersion, File, FuseID) ->
-  lager:debug("get_file(File: ~p, FuseID: ~p)", [File, FuseID]),
-  dao_lib:apply(dao_vfs, get_file, [File], ProtocolVersion).
+    lager:debug("get_file(File: ~p, FuseID: ~p)", [File, FuseID]),
+    case string:tokens(File, "/") of
+        [?GROUPS_BASE_DIR_NAME, GroupName | _] -> %% Check if group that user is tring to access is avaliable to him
+            Teams = user_logic:get_team_names({dn, get(user_id)}),
+            case lists:member(GroupName, Teams) of %% Does the user belong to the group?
+                true  -> dao_lib:apply(dao_vfs, get_file, [File], ProtocolVersion);
+                false -> {error, file_not_found} %% Assume that this file does not exists
+            end;
+        _ ->
+            dao_lib:apply(dao_vfs, get_file, [File], ProtocolVersion)
+    end.
 
 %% delete_old_descriptors/3
 %% ====================================================================
@@ -918,7 +1056,7 @@ get_user_id() ->
 
 %% get_full_file_name/1
 %% ====================================================================
-%% @doc Gets file's full name (user's root is added to name).
+%% @doc Gets file's full name (user's root is added to name, but only when asking about non-group dir).
 %% @end
 -spec get_full_file_name(FileName :: string()) -> Result when
   Result :: {ok, FullFileName} | {error, ErrorDesc},
@@ -931,7 +1069,7 @@ get_full_file_name(FileName) ->
 
 %% get_full_file_name/2
 %% ====================================================================
-%% @doc Gets file's full name (user's root is added to name).
+%% @doc Gets file's full name (user's root is added to name, but only when asking about non-group dir).
 %% @end
 -spec get_full_file_name(FileName :: string(), {RootStatus :: atom(), Root :: string()}) -> Result when
   Result :: {ok, FullFileName} | {error, ErrorDesc},
@@ -940,19 +1078,24 @@ get_full_file_name(FileName) ->
 %% ====================================================================
 
 get_full_file_name(FileName, {RootStatus, Root}) ->
-  case RootStatus of
-    ok ->
-      [Beg | _] = FileName,
-      NewFileName = case Beg of
-                      $/ -> Root ++ FileName;
-                      _ -> Root ++ "/" ++ FileName
-                    end,
-      {ok, NewFileName};
-    _ ->
-      case Root of
-        get_user_id_error -> {ok, FileName};
-        _ -> {root_not_found, Root}
-      end
+  case string:tokens(FileName, "/") of %% Map all /groups/* requests to root of the file system (i.e. dont add any prefix)
+      [?GROUPS_BASE_DIR_NAME | _] ->
+          {ok, FileName};
+      _ ->
+          case RootStatus of
+            ok ->
+              [Beg | _] = FileName,
+              NewFileName = case Beg of
+                              $/ -> Root ++ FileName;
+                              _ -> Root ++ "/" ++ FileName
+                            end,
+              {ok, NewFileName};
+            _ ->
+              case Root of
+                get_user_id_error -> {ok, FileName};
+                _ -> {root_not_found, Root}
+              end
+          end
   end.
 
 %% Function is not used anymore
@@ -1000,20 +1143,20 @@ get_sh_and_id(FuseID, Storage, File_id) ->
     false -> {SHI, File_id}
   end.
 
-%% get_files_number/2
+%% get_files_number/3
 %% ====================================================================
-%% @doc Returns number of user's files
+%% @doc Returns number of user's or group's files
 %% @end
--spec get_files_number(UUID :: uuid(), ProtocolVersion :: integer()) -> Result when
+-spec get_files_number(user | group, UUID :: uuid() | string(), ProtocolVersion :: integer()) -> Result when
   Result :: {ok, Sum} | {error, any()},
   Sum :: integer().
 %% ====================================================================
-get_files_number(UserUuid, ProtocolVersion) ->
-  Ans = dao_lib:apply(dao_users, get_user_files_number, [UserUuid], ProtocolVersion),
-  case Ans of
-    {error, files_number_not_found} -> {ok, 0};
-    _ -> Ans
-  end.
+get_files_number(Type, GroupName, ProtocolVersion) ->
+    Ans = dao_lib:apply(dao_users, get_files_number, [Type, GroupName], ProtocolVersion),
+    case Ans of
+        {error, files_number_not_found} -> {ok, 0};
+        _ -> Ans
+    end.
 
 %% get_new_file_id/5
 %% ====================================================================
@@ -1022,13 +1165,19 @@ get_files_number(UserUuid, ProtocolVersion) ->
 -spec get_new_file_id(File :: string(), UserDoc :: term(), Root :: string(), SHInfo :: term(), ProtocolVersion :: integer()) -> string().
 %% ====================================================================
 get_new_file_id(File, UserDoc, Root, SHInfo, ProtocolVersion) ->
-  File_id_beg = case Root of
+  {Root1, {CountStatus, FilesCount}} =
+      case {string:tokens(File, "/"), Root} of
+          {[?GROUPS_BASE_DIR_NAME, GroupName | _], _} -> %% Group dir context
+              {"/" ++ ?GROUPS_BASE_DIR_NAME ++ "/" ++ GroupName, get_files_number(group, GroupName, ProtocolVersion)};
+          {_, get_user_id_error} -> {"/", {error, get_user_id_error}}; %% Unknown context
+          _ -> {"/users/" ++ Root, get_files_number(user, UserDoc#veil_document.uuid, ProtocolVersion)}
+      end,
+  File_id_beg = case Root1 of
     get_user_id_error -> "/";
     _ ->
-      {CountStatus, FilesCount} = get_files_number(UserDoc#veil_document.uuid, ProtocolVersion),
       case CountStatus of
-        ok -> create_dirs(FilesCount, ?FILE_COUNTING_BASE, SHInfo, "/users/" ++ Root ++ "/");
-        _ -> "/users/" ++ Root ++ "/"
+        ok -> create_dirs(FilesCount, ?FILE_COUNTING_BASE, SHInfo, Root1 ++ "/");
+        _ -> Root1 ++ "/"
       end
   end,
 
@@ -1052,3 +1201,139 @@ create_dirs(Count, CountingBase, SHInfo, TmpAns) ->
       end;
     false -> TmpAns
   end.
+
+%% assert_group_access/1
+%% ====================================================================
+%% @doc Checks if operation given as parameter (one of fuse_messages) is allowed to be invoked in groups context.
+%%      If operation is not allowed, answer record with error is thrown. It shall be cought and send back to client.
+%% @end
+-spec assert_group_access(Record :: tuple()) -> ok | no_return().
+%% ====================================================================
+assert_group_access(Record) ->
+    RecordName = element(1, Record),
+    TokenizedPath =
+        try
+            LogicalPath = extract_logical_path(Record),
+            string:tokens(LogicalPath, "/")
+        catch
+            Type:Reason ->
+                ?error_stacktrace("Unable to assert group access due to ~p: ~p", [Type, Reason]),
+                throw(gen_error_message(RecordName, ?VEREMOTEIO))
+        end,
+    assert_group_access(RecordName, TokenizedPath).
+assert_group_access(RecordName, [?GROUPS_BASE_DIR_NAME]) ->
+    case lists:member(RecordName, ?GROUPS_BASE_ALLOWED_ACTIONS) of
+        false   -> throw(gen_error_message(RecordName, ?VEPERM));
+        true    -> ok
+    end;
+assert_group_access(RecordName, [?GROUPS_BASE_DIR_NAME, GroupName]) ->
+    case lists:member(RecordName, ?GROUPS_ALLOWED_ACTIONS) of
+        false   -> throw(gen_error_message(RecordName, ?VEPERM));
+        true    -> ok
+    end,
+    UserTeams = user_logic:get_team_names({dn, get(user_id)}),
+    case lists:member(GroupName, UserTeams) of
+        true    -> ok;
+        false   -> throw(gen_error_message(RecordName, ?VENOENT))
+    end;
+assert_group_access(_, _) ->
+    ok.
+
+
+%% extract_logical_path/1
+%% ====================================================================
+%% @doc Convinience method that returns logical file path affected by given operation.
+%%      E.g. for "create file" operation, its parent is the one considered "affected".
+%% @end
+-spec extract_logical_path(Record :: tuple()) -> string() | no_return().
+%% ====================================================================
+extract_logical_path(#getfileattr{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#getfilelocation{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#deletefile{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#renamefile{from_file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#getnewfilelocation{file_logic_name = Path}) ->
+   fslogic_utils:strip_path_leaf(Path);
+extract_logical_path(#filenotused{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#renewfilelocation{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#getfilechildren{dir_logic_name = Path}) ->
+    Path;
+extract_logical_path(#createdir{dir_logic_name = Path}) ->
+    fslogic_utils:strip_path_leaf(Path);
+extract_logical_path(#getlink{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#createlink{from_file_logic_name = Path}) ->
+    fslogic_utils:strip_path_leaf(Path);
+extract_logical_path(#changefileowner{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#changefilegroup{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#changefileperms{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#updatetimes{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(Record) ->
+    ?error("Unsupported record: ~p", [element(1, Record)]),
+    throw({unsupported_record, element(1, Record)}).
+
+
+%% gen_error_message/2
+%% ====================================================================
+%% @doc Convinience method that returns protobuf answer message that is build base on given error code
+%%      and type of request.
+%% @end
+-spec gen_error_message(RecordName :: atom(), VeilError :: string()) -> tuple() | no_return().
+%% ====================================================================
+gen_error_message(getfileattr, Error) ->
+    #fileattr{answer = Error, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = ""};
+gen_error_message(getfilelocation, Error) ->
+    #filelocation{answer = Error, storage_id = -1, file_id = "", validity = 0};
+gen_error_message(getnewfilelocation, Error) ->
+    #filelocation{answer = Error, storage_id = -1, file_id = "", validity = 0};
+gen_error_message(filenotused, Error) ->
+    #atom{value = Error};
+gen_error_message(renamefile, Error) ->
+    #atom{value = Error};
+gen_error_message(deletefile, Error) ->
+    #atom{value = Error};
+gen_error_message(createdir, Error) ->
+    #atom{value = Error};
+gen_error_message(changefileowner, Error) ->
+    #atom{value = Error};
+gen_error_message(changefilegroup, Error) ->
+    #atom{value = Error};
+gen_error_message(changefileperms, Error) ->
+    #atom{value = Error};
+gen_error_message(updatetimes, Error) ->
+    #atom{value = Error};
+gen_error_message(createlink, Error) ->
+    #atom{value = Error};
+gen_error_message(renewfilelocation, Error) ->
+    #filelocationvalidity{answer = Error, validity = 0};
+gen_error_message(getfilechildren, Error) ->
+    #filechildren{answer = Error, child_logic_name = []};
+gen_error_message(getlink, Error) ->
+    #linkinfo{answer = Error, file_logic_name = ""};
+gen_error_message(RecordName, _Error) ->
+    ?error("Unsupported record: ~p", [RecordName]),
+    throw({unsupported_record, RecordName}).
+
+
+%% get_group_owner/1
+%% ====================================================================
+%% @doc Convinience method that returns list of group name(s) that are considered as default owner of file
+%%      created with given path. E.g. when path like "/groups/gname/file1" is passed, the method will
+%%      return ["gname"].
+%% @end
+-spec get_group_owner(FileBasePath :: string()) -> [string()].
+%% ====================================================================
+get_group_owner(FileBasePath) ->
+    case string:tokens(FileBasePath, "/") of
+        [?GROUPS_BASE_DIR_NAME, GroupName | _] -> [GroupName];
+        _ -> []
+    end.

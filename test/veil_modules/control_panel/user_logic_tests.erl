@@ -214,9 +214,14 @@ signing_in_test_() ->
 									SynchronizedUser -> {ok, "uuid_after_synchronization"};
 									_ -> throw(error)
 								end;
-              (dao_vfs, list_storage, [], _) ->
-                {ok, []}
+                            (dao_vfs, get_file, _, _) -> {error, file_not_found};
+                            (dao_vfs, save_file, _, _) -> {ok, "file_uuid"};
+                            (dao_vfs, list_storage, [], _) -> {ok, []}
 						end),
+
+                    Tim = 12345677,
+                    meck:expect(fslogic_utils, time, fun() -> Tim end),
+                    meck:expect(fslogic_utils, update_meta_attr, fun(File, times, {Tim, Tim, Tim}) -> File end),
 
 					?assertEqual({"existing_user", SynchronizedUser}, user_logic:sign_in(ExistingUserInfoProplist)),
 					?assert(meck:validate(dao_lib))

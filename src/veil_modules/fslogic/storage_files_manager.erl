@@ -20,9 +20,10 @@
 -include("veil_modules/dao/dao_share.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
+-include("logging.hrl").
 
--define(NewFileStorageMode, 8#600).
--define(NewDirStorageMode, 8#300).
+-define(NewFileStorageMode, 8#640).
+-define(NewDirStorageMode, 8#330).
 -define(S_IFREG, 8#100000).
 
 %% ====================================================================
@@ -61,7 +62,8 @@ mkdir(Storage_helper_info, Dir) ->
       ErrorCode2 = veilhelpers:exec(mkdir, Storage_helper_info, [Dir, ?NewDirStorageMode]),
       case ErrorCode2 of
         0 ->
-          %% TODO pamiętać przy implementacji grup, żeby tutaj też zmienić
+          derive_gid_from_parent(Storage_helper_info, Dir),
+
           UserID = get(user_id),
 
           case UserID of
@@ -72,7 +74,7 @@ mkdir(Storage_helper_info, Dir) ->
                 ok ->
                   UserRecord = User#veil_document.record,
                   Login = UserRecord#user.login,
-                  ChownAns = storage_files_manager:chown(Storage_helper_info, Dir, Login, Login),
+                  ChownAns = storage_files_manager:chown(Storage_helper_info, Dir, Login, ""),
                   case ChownAns of
                     ok ->
                       ok;
@@ -98,13 +100,15 @@ mkdir(Storage_helper_info, Dir) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
+mv(_Storage_helper_info, From, From) ->
+    ok;
 mv(Storage_helper_info, From, To) ->
   ErrorCode = veilhelpers:exec(rename, Storage_helper_info, [From, To]),
   case ErrorCode of
     0 -> ok;
     {error, 'NIF_not_loaded'} -> ErrorCode;
     _ ->
-      lager:error("Can not move file from %p to %p, code: %p, helper info: %p%n", [From, To, ErrorCode, Storage_helper_info]),
+      lager:error("Can not move file from ~p to ~p, code: ~p, helper info: ~p", [From, To, ErrorCode, Storage_helper_info]),
       {wrong_rename_return_code, ErrorCode}
   end.
 
@@ -160,6 +164,12 @@ chmod(Storage_helper_info, File, Mode) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
+chown(Storage_helper_info, File, User, Group) when is_integer(User), is_integer(Group) ->
+    ErrorCode = veilhelpers:exec(chown, Storage_helper_info, [File, User, Group]),
+    case ErrorCode of
+        0 -> ok;
+        _ -> {error, ErrorCode}
+    end;
 chown(Storage_helper_info, File, User, Group) ->
   ErrorCode = veilhelpers:exec(chown_name, Storage_helper_info, [File, User, Group]),
   case ErrorCode of
@@ -325,7 +335,8 @@ create(Storage_helper_info, File) ->
           ErrorCode3 = veilhelpers:exec(truncate, Storage_helper_info, [File, 0]),
           case ErrorCode3 of
             0 ->
-              %% TODO pamiętać przy implementacji grup, żeby tutaj też zmienić
+              derive_gid_from_parent(Storage_helper_info, File),
+
               UserID = get(user_id),
 
               case UserID of
@@ -336,7 +347,7 @@ create(Storage_helper_info, File) ->
                     ok ->
                       UserRecord = User#veil_document.record,
                       Login = UserRecord#user.login,
-                      ChownAns = storage_files_manager:chown(Storage_helper_info, File, Login, Login),
+                      ChownAns = storage_files_manager:chown(Storage_helper_info, File, Login, ""),
                       case ChownAns of
                         ok ->
                           ok;
@@ -484,3 +495,23 @@ write_bytes(Storage_helper_info, File, Offset, Buf, FFI) ->
       lager:error("Write bytes error - wrong code: ~p", [ErrorCode]),
       {error, {wrong_write_return_code, ErrorCode}}
   end.
+
+%% ====================================================================
+%% Internal functions
+%% ====================================================================
+
+%% derive_gid_from_parent/2
+%% ====================================================================
+%% @doc Gets group owner form File's parent and sets same group owner for the File
+%% @end
+-spec derive_gid_from_parent(Storage_helper_info :: record(), File :: string()) -> ok | {error, ErrNo :: integer()}.
+derive_gid_from_parent(SHInfo, File) ->
+    case veilhelpers:exec(getattr, SHInfo, [fslogic_utils:strip_path_leaf(File)]) of
+        {0, #st_stat{st_gid = GID}} ->
+            Res = chown(SHInfo, File, -1, GID),
+            ?debug("Changing gid of file ~p to ~p. Status: ~p", [File, GID, Res]),
+            Res;
+        {ErrNo, _} ->
+            ?error("Cannot fetch parent dir ~p attrs. Error: ~p", [fslogic_utils:strip_path_leaf(File), ErrNo]),
+            {error, ErrNo}
+    end.

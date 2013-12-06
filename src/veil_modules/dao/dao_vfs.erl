@@ -495,7 +495,8 @@ file_path_analyze({absolute_path, Path}) when is_list(Path) ->
 file_path_analyze({relative_path, [?PATH_SEPARATOR | Path], Root}) when is_list(Path), is_list(Root) ->
     file_path_analyze({relative_path, Path, Root});
 file_path_analyze({relative_path, Path, Root}) when is_list(Path), is_list(Root) ->
-    {internal_path, string:tokens(Path, [?PATH_SEPARATOR]), Root};
+    TokenPath = string:tokens(Path, [?PATH_SEPARATOR]),
+    {internal_path, TokenPath, Root};
 file_path_analyze(Path) ->
     throw({invalid_file_path, Path}).
 

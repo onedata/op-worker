@@ -102,7 +102,8 @@
 -define(SHARE_BY_FILE_VIEW, #view_info{name = "share_by_file", design = ?SHARE_BY_FILE_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
 -define(SHARE_BY_USER_VIEW, #view_info{name = "share_by_user", design = ?SHARE_BY_USER_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
 
--define(FILES_NUMBER_VIEW, #view_info{name = "files_number", design = ?FILES_NUMBER_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
+-define(USER_FILES_NUMBER_VIEW, #view_info{name = "user_files_number", design = ?FILES_NUMBER_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
+-define(GROUP_FILES_NUMBER_VIEW, #view_info{name = "group_files_number", design = ?FILES_NUMBER_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
 
 %% Others
 -define(RECORD_INSTANCES_DOC_PREFIX, "record_instances_").
@@ -116,7 +117,8 @@
 -define(DB_LIST, [?SYSTEM_DB_NAME, ?FILES_DB_NAME, ?DESCRIPTORS_DB_NAME, ?USERS_DB_NAME]).
 %% List of all used views :: [#view_info]
 -define(VIEW_LIST, [?FILE_TREE_VIEW, ?FD_BY_FILE_VIEW, ?FD_BY_EXPIRED_BEFORE_VIEW, ?ALL_STORAGE_VIEW, 
-    ?USER_BY_EMAIL_VIEW, ?USER_BY_LOGIN_VIEW, ?USER_BY_DN_VIEW, ?USER_BY_UID_VIEW, ?STORAGE_BY_ID_VIEW, ?SHARE_BY_FILE_VIEW, ?SHARE_BY_USER_VIEW, ?FILES_NUMBER_VIEW]).
+                    ?USER_BY_EMAIL_VIEW, ?USER_BY_LOGIN_VIEW, ?USER_BY_DN_VIEW, ?USER_BY_UID_VIEW, ?STORAGE_BY_ID_VIEW,
+                    ?SHARE_BY_FILE_VIEW, ?SHARE_BY_USER_VIEW, ?USER_FILES_NUMBER_VIEW, ?GROUP_FILES_NUMBER_VIEW]).
 %% Default database name
 -define(DEFAULT_DB, lists:nth(1, ?DB_LIST)).
 
