@@ -937,10 +937,14 @@ get_file(ProtocolVersion, File, FuseID) ->
     lager:debug("get_file(File: ~p, FuseID: ~p)", [File, FuseID]),
     case string:tokens(File, "/") of
         [?GROUPS_BASE_DIR_NAME, GroupName | _] -> %% Check if group that user is tring to access is avaliable to him
-            Teams = user_logic:get_team_names({dn, get(user_id)}),
-            case lists:member(GroupName, Teams) of %% Does the user belong to the group?
-                true  -> dao_lib:apply(dao_vfs, get_file, [File], ProtocolVersion);
-                false -> {error, file_not_found} %% Assume that this file does not exists
+            case get(user_id) of %% Internal call, allow all group access
+                undefined   -> dao_lib:apply(dao_vfs, get_file, [File], ProtocolVersion);
+                UserDN      -> %% Check if user has access to this group
+                    Teams = user_logic:get_team_names({dn, UserDN}),
+                    case lists:member(GroupName, Teams) of %% Does the user belong to the group?
+                        true  -> dao_lib:apply(dao_vfs, get_file, [File], ProtocolVersion);
+                        false -> {error, file_not_found} %% Assume that this file does not exists
+                    end
             end;
         _ ->
             dao_lib:apply(dao_vfs, get_file, [File], ProtocolVersion)
@@ -1277,6 +1281,8 @@ extract_logical_path(#changefileperms{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#updatetimes{file_logic_name = Path}) ->
     Path;
+extract_logical_path(#testchannel{}) ->
+    "/";
 extract_logical_path(Record) ->
     ?error("Unsupported record: ~p", [element(1, Record)]),
     throw({unsupported_record, element(1, Record)}).
@@ -1319,6 +1325,8 @@ gen_error_message(getfilechildren, Error) ->
     #filechildren{answer = Error, child_logic_name = []};
 gen_error_message(getlink, Error) ->
     #linkinfo{answer = Error, file_logic_name = ""};
+gen_error_message(testchannel, Error) ->
+    #atom{value = Error};
 gen_error_message(RecordName, _Error) ->
     ?error("Unsupported record: ~p", [RecordName]),
     throw({unsupported_record, RecordName}).
