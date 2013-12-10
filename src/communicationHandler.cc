@@ -102,10 +102,11 @@ int CommunicationHandler::openConnection()
     }
     
     // (re)Initialize endpoint (io_service)
+    m_endpointConnection.reset();
     m_endpoint.reset(new ws_client());
     m_endpoint->clear_access_channels(websocketpp::log::alevel::all);
     m_endpoint->clear_error_channels(websocketpp::log::elevel::all);
-    m_endpoint->init_asio(new boost::asio::io_service(), ec);
+    m_endpoint->init_asio(ec);
     
     if(ec)
     {
@@ -175,7 +176,8 @@ void CommunicationHandler::closeConnection()
         
         try {
             LOG(INFO) << "WebSocket: Lowest layer socket closed.";
-            m_endpointConnection->get_socket().lowest_layer().close();  // Explicite close underlying socket to make sure that all ongoing operations will be canceld
+            m_endpointConnection->get_socket().lowest_layer().close(ec);
+            m_endpointConnection->get_socket().lowest_layer().cancel(ec);  // Explicite close underlying socket to make sure that all ongoing operations will be canceld
         } catch (boost::exception &e) {
             LOG(ERROR) << "WebSocket connection socket close error";
         }

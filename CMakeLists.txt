@@ -86,10 +86,10 @@ if(APPLE)
     set(SECTION_FRAGMENTATION_FLAGS "")
 else()
     set(PLATFORM_EXTRA_LIBS "${CMAKE_THREAD_LIBS_INIT};rt")
-    set(SECTION_FRAGMENTATION_FLAGS "-fdata-sections -ffunction-sections -Wl,--gc-sections")
+    set(SECTION_FRAGMENTATION_FLAGS "-fdata-sections -ffunction-sections -Wl,--gc-sections -Wl,-rpath,${CUSTOM_RPATH}")
 endif()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SECTION_FRAGMENTATION_FLAGS} -fPIC -O2 ${FUSE_DEFINITIONS} -DFUSE_USE_VERSION=29 -Wl,-rpath,${CUSTOM_RPATH}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SECTION_FRAGMENTATION_FLAGS} -fPIC -O2 ${FUSE_DEFINITIONS} -DFUSE_USE_VERSION=29")
 set(CMAKE_SKIP_RPATH TRUE) # Something is wrong with CMake RPATH config, we need to use old-fashion way
 
 # Define targets
@@ -106,7 +106,6 @@ set_target_properties(veilhelpersShared PROPERTIES OUTPUT_NAME veilhelpers)
 message(${WSPP_INCLUDE_DIR})
 
 target_link_libraries(veilhelpers
-    ${PLATFORM_EXTRA_LIBS}
     ${FUSE_LIBRARIES}
     ${Boost_LIBRARIES}
     ${GLOG_LIBRARIES}
@@ -116,10 +115,10 @@ target_link_libraries(veilhelpers
     veilprotocol
     dl
     z
+    ${PLATFORM_EXTRA_LIBS}
 )
 
 target_link_libraries(veilhelpersShared
-    ${PLATFORM_EXTRA_LIBS}
     ${FUSE_LIBRARIES}
     ${Boost_LIBRARIES_SHARED}
     ${GLOG_LIBRARIES}
@@ -129,6 +128,7 @@ target_link_libraries(veilhelpersShared
     veilprotocol
     dl
     z
+    ${PLATFORM_EXTRA_LIBS}
 )
 
 target_link_libraries(veilprotocol
@@ -174,7 +174,6 @@ foreach(file ${files})
     add_executable(${TEST_NAME} ${file})
     add_dependencies(${TEST_NAME} gtest gmock veilFuse veilhelpers veilclient veilprotocol)
     target_link_libraries(${TEST_NAME}
-        ${PLATFORM_EXTRA_LIBS}
         ${GTEST_LIBRARIES}
         ${Boost_LIBRARIES_SHARED}
         ${GMOCK_LIBRARIES}
@@ -182,6 +181,7 @@ foreach(file ${files})
         veilhelpers
         dl
         z
+        ${PLATFORM_EXTRA_LIBS}
     )    
     add_test(${TEST_NAME} ${TEST_NAME})
     run_test(${TEST_NAME})
