@@ -21,7 +21,7 @@
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
 
--define(NewFileLogicMode, 8#644).
+-define(NAMES_TABLE, names_map).
 
 %% ====================================================================
 %% API
@@ -29,10 +29,20 @@
 %% Logical file organization management (only db is used)
 -export([mkdir/1, rmdir/1, mv/2, chown/0, change_file_perm/2, ls/3, getfileattr/1]).
 %% File access (db and helper are used)
--export([read/3, write/3, write/2, create/1, truncate/2, delete/1]).
+-export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1]).
 
 %% File sharing
 -export([get_file_by_uuid/1, get_file_full_name_by_uuid/1, create_standard_share/1, create_share/2, get_share/1, remove_share/1]).
+
+%% ====================================================================
+%% Test API
+%% ====================================================================
+%% eunit
+-ifdef(TEST).
+-export([cache_size/2]).
+-endif.
+
+-export([doUploadTest/4]).
 
 %% ====================================================================
 %% API functions
@@ -52,16 +62,21 @@
   ErrorDetail :: term().
 %% ====================================================================
 mkdir(DirName) ->
-  Record = #createdir{dir_logic_name = DirName, mode = ?NewFileLogicMode},
-  {Status, TmpAns} = contact_fslogic(Record),
-  case Status of
+  {ModeStatus, NewFileLogicMode} = application:get_env(?APP_Name, new_file_logic_mode),
+  case ModeStatus of
     ok ->
-      Response = TmpAns#atom.value,
-      case Response of
-        ?VOK -> ok;
-        _ -> {logical_file_system_error, Response}
+      Record = #createdir{dir_logic_name = DirName, mode = NewFileLogicMode},
+      {Status, TmpAns} = contact_fslogic(Record),
+      case Status of
+        ok ->
+          Response = TmpAns#atom.value,
+          case Response of
+            ?VOK -> ok;
+            _ -> {logical_file_system_error, Response}
+          end;
+        _ -> {Status, TmpAns}
       end;
-    _ -> {Status, TmpAns}
+    _ -> {error, cannot_get_file_mode}
   end.
 
 %% rmdir/1
@@ -213,18 +228,12 @@ getfileattr(FileName) ->
   ErrorDetail :: term().
 %% ====================================================================
 read(File, Offset, Size) ->
-  Record = #getfilelocation{file_logic_name = File},
-  {Status, TmpAns} = contact_fslogic(Record),
-  case Status of
-    ok ->
-      Response = TmpAns#filelocation.answer,
+  {Response, Response2} = getfilelocation(File),
       case Response of
-        ?VOK ->
-          Storage_helper_info = #storage_helper_info{name = TmpAns#filelocation.storage_helper_name, init_args = TmpAns#filelocation.storage_helper_args},
-          storage_files_manager:read(Storage_helper_info, TmpAns#filelocation.file_id, Offset, Size);
-        _ -> {logical_file_system_error, Response}
-      end;
-    _ -> {Status, TmpAns}
+        ok ->
+          {Storage_helper_info, FileId} = Response2,
+          storage_files_manager:read(Storage_helper_info, FileId, Offset, Size);
+        _ -> {Response, Response2}
   end.
 
 %% write/2
@@ -240,18 +249,12 @@ read(File, Offset, Size) ->
   ErrorDetail :: term().
 %% ====================================================================
 write(File, Buf) ->
-  Record = #getfilelocation{file_logic_name = File},
-  {Status, TmpAns} = contact_fslogic(Record),
-  case Status of
-    ok ->
-      Response = TmpAns#filelocation.answer,
+  {Response, Response2} = getfilelocation(File),
       case Response of
-        ?VOK ->
-          Storage_helper_info = #storage_helper_info{name = TmpAns#filelocation.storage_helper_name, init_args = TmpAns#filelocation.storage_helper_args},
-          storage_files_manager:write(Storage_helper_info, TmpAns#filelocation.file_id, Buf);
-        _ -> {logical_file_system_error, Response}
-      end;
-    _ -> {Status, TmpAns}
+        ok ->
+          {Storage_helper_info, FileId} = Response2,
+          storage_files_manager:write(Storage_helper_info, FileId, Buf);
+        _ -> {Response, Response2}
   end.
 
 %% write/3
@@ -267,18 +270,34 @@ write(File, Buf) ->
   ErrorDetail :: term().
 %% ====================================================================
 write(File, Offset, Buf) ->
-  Record = #getfilelocation{file_logic_name = File},
-  {Status, TmpAns} = contact_fslogic(Record),
-  case Status of
-    ok ->
-      Response = TmpAns#filelocation.answer,
+  {Response, Response2} = getfilelocation(File),
       case Response of
-        ?VOK ->
-          Storage_helper_info = #storage_helper_info{name = TmpAns#filelocation.storage_helper_name, init_args = TmpAns#filelocation.storage_helper_args},
-          storage_files_manager:write(Storage_helper_info, TmpAns#filelocation.file_id, Offset, Buf);
-        _ -> {logical_file_system_error, Response}
-      end;
-    _ -> {Status, TmpAns}
+        ok ->
+          {Storage_helper_info, FileId} = Response2,
+          storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf);
+        _ -> {Response, Response2}
+      end.
+
+%% write_from_stream/2
+%% ====================================================================
+%% @doc Appends data to the end of file (uses logical name of file).
+%% First it gets information about storage helper and file id at helper.
+%% Next it uses storage helper to write data to file.
+%% @end
+-spec write_from_stream(File :: string(), Buf :: binary()) -> Result when
+  Result :: BytesWritten | {ErrorGeneral, ErrorDetail},
+  BytesWritten :: integer(),
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+write_from_stream(File, Buf) ->
+  {Response, Response2} = getfilelocation(File),
+  case Response of
+    ok ->
+      {Storage_helper_info, FileId} = Response2,
+      Offset = cache_size(File, byte_size(Buf)),
+      storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf);
+    _ -> {Response, Response2}
   end.
 
 %% create/1
@@ -293,18 +312,23 @@ write(File, Offset, Buf) ->
   ErrorDetail :: term().
 %% ====================================================================
 create(File) ->
-  Record = #getnewfilelocation{file_logic_name = File, mode = ?NewFileLogicMode},
-  {Status, TmpAns} = contact_fslogic(Record),
-  case Status of
+  {ModeStatus, NewFileLogicMode} = application:get_env(?APP_Name, new_file_logic_mode),
+  case ModeStatus of
     ok ->
-      Response = TmpAns#filelocation.answer,
-      case Response of
-        ?VOK ->
-          Storage_helper_info = #storage_helper_info{name = TmpAns#filelocation.storage_helper_name, init_args = TmpAns#filelocation.storage_helper_args},
-          storage_files_manager:create(Storage_helper_info, TmpAns#filelocation.file_id);
-        _ -> {logical_file_system_error, Response}
+      Record = #getnewfilelocation{file_logic_name = File, mode = NewFileLogicMode},
+      {Status, TmpAns} = contact_fslogic(Record),
+      case Status of
+        ok ->
+          Response = TmpAns#filelocation.answer,
+          case Response of
+            ?VOK ->
+              Storage_helper_info = #storage_helper_info{name = TmpAns#filelocation.storage_helper_name, init_args = TmpAns#filelocation.storage_helper_args},
+              storage_files_manager:create(Storage_helper_info, TmpAns#filelocation.file_id);
+            _ -> {logical_file_system_error, Response}
+          end;
+        _ -> {Status, TmpAns}
       end;
-    _ -> {Status, TmpAns}
+    _ -> {error, cannot_get_file_mode}
   end.
 
 %% truncate/2
@@ -319,18 +343,12 @@ create(File) ->
   ErrorDetail :: term().
 %% ====================================================================
 truncate(File, Size) ->
-  Record = #getfilelocation{file_logic_name = File},
-  {Status, TmpAns} = contact_fslogic(Record),
-  case Status of
-    ok ->
-      Response = TmpAns#filelocation.answer,
+  {Response, Response2} = getfilelocation(File),
       case Response of
-        ?VOK ->
-          Storage_helper_info = #storage_helper_info{name = TmpAns#filelocation.storage_helper_name, init_args = TmpAns#filelocation.storage_helper_args},
-          storage_files_manager:truncate(Storage_helper_info, TmpAns#filelocation.file_id, Size);
-        _ -> {logical_file_system_error, Response}
-      end;
-    _ -> {Status, TmpAns}
+        ok ->
+          {Storage_helper_info, FileId} = Response2,
+          storage_files_manager:truncate(Storage_helper_info, FileId, Size);
+        _ -> {Response, Response2}
   end.
 
 %% delete/1
@@ -346,15 +364,11 @@ truncate(File, Size) ->
   ErrorDetail :: term().
 %% ====================================================================
 delete(File) ->
-  Record = #getfilelocation{file_logic_name = File},
-  {Status, TmpAns} = contact_fslogic(Record),
-  case Status of
-    ok ->
-      Response = TmpAns#filelocation.answer,
+  {Response, Response2} = getfilelocation(File),
       case Response of
-        ?VOK ->
-          Storage_helper_info = #storage_helper_info{name = TmpAns#filelocation.storage_helper_name, init_args = TmpAns#filelocation.storage_helper_args},
-          TmpAns2 = storage_files_manager:delete(Storage_helper_info, TmpAns#filelocation.file_id),
+        ok ->
+          {Storage_helper_info, FileId} = Response2,
+          TmpAns2 = storage_files_manager:delete(Storage_helper_info, FileId),
 
           TmpAns2_2 = case TmpAns2 of
             {wrong_getatt_return_code, -2} -> ok;
@@ -367,20 +381,39 @@ delete(File) ->
               {Status3, TmpAns3} = contact_fslogic(Record2),
               case Status3 of
                 ok ->
-                  Response2 = TmpAns3#atom.value,
-                  case Response2 of
+                  Response3 = TmpAns3#atom.value,
+                  case Response3 of
                     ?VOK -> ok;
-                    _ -> {logical_file_system_error, Response2}
+                    _ -> {logical_file_system_error, Response3}
                   end;
                 _ -> {Status3, TmpAns3}
               end;
             _ -> TmpAns2_2
           end;
-        _ -> {logical_file_system_error, Response}
-      end;
-    _ -> {Status, TmpAns}
-  end.
+        _ -> {Response, Response2}
+      end.
 
+%% exists/1
+%% ====================================================================
+%% @doc Checks if file exists.
+%% @end
+-spec exists(File :: string()) -> Result when
+  Result :: boolean() | {ErrorGeneral, ErrorDetail},
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+exists(FileName) ->
+  {FileNameFindingAns, File} = fslogic:get_full_file_name(FileName),
+  case FileNameFindingAns of
+    ok ->
+      {Status, TmpAns} = fslogic:get_file(1, File, ?CLUSTER_FUSE_ID),
+      case {Status, TmpAns} of
+        {ok, _} -> true;
+        {error, file_not_found} -> false;
+        _ -> {Status, TmpAns}
+      end;
+    _  -> {full_name_finding_error, File}
+  end.
 
 
 %% ====================================================================
@@ -611,3 +644,160 @@ remove_share({file, File}) ->
 
 remove_share(Key) ->
   dao_lib:apply(dao_share, remove_file_share, [Key], 1).
+
+%% getfilelocation/1
+%% ====================================================================
+%% @doc Gets file location from fslogic or from cache
+%% @end
+-spec getfilelocation(File :: string()) -> Result when
+  Result :: {ok, {Helper, Id}} | {ErrorGeneral, ErrorDetail},
+  Helper :: term(),
+  Id :: term(),
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+getfilelocation(File) ->
+  CachedLocation = try
+    LookupAns = ets:lookup(?NAMES_TABLE, File),
+    case LookupAns of
+      [{File, {Location, ValidTo}}] ->
+        {Megaseconds, Seconds, _Microseconds} = os:timestamp(),
+        Time = 1000000*Megaseconds + Seconds,
+        case Time < ValidTo of
+          true -> Location;
+          false -> []
+        end;
+      _ -> []
+    end
+  catch
+    _:_ ->
+      ets:new(?NAMES_TABLE, [named_table, set]),
+      []
+  end,
+  case CachedLocation of
+    [] ->
+      Record = #getfilelocation{file_logic_name = File},
+      {Status, TmpAns} = contact_fslogic(Record),
+      case Status of
+        ok ->
+          Response = TmpAns#filelocation.answer,
+          case Response of
+            ?VOK ->
+              Storage_helper_info = #storage_helper_info{name = TmpAns#filelocation.storage_helper_name, init_args = TmpAns#filelocation.storage_helper_args},
+              {Megaseconds2, Seconds2, _Microseconds2} = os:timestamp(),
+              Time2 = 1000000*Megaseconds2 + Seconds2,
+              ets:insert(?NAMES_TABLE, {File, {{Storage_helper_info, TmpAns#filelocation.file_id}, Time2 + TmpAns#filelocation.validity}}),
+              {ok, {Storage_helper_info, TmpAns#filelocation.file_id}};
+            _ -> {logical_file_system_error, Response}
+          end;
+        _ -> {Status, TmpAns}
+      end;
+    _ -> {ok, CachedLocation}
+  end.
+
+%% cache_size/2
+%% ====================================================================
+%% @doc Gets and updates size of file.
+%% @end
+-spec cache_size(File :: string(), BuffSize :: integer()) -> Result when
+  Result :: integer().
+%% ====================================================================
+cache_size(File, BuffSize) ->
+  OldSize = try
+    LookupAns = ets:lookup(?NAMES_TABLE, {File, size}),
+    case LookupAns of
+      [{{File, size}, Size}] ->
+        Size;
+      _ -> 0
+    end
+  catch
+    _:_ ->
+      ets:new(?NAMES_TABLE, [named_table, set]),
+      0
+  end,
+
+  ets:insert(?NAMES_TABLE, {{File, size}, OldSize + BuffSize}),
+  OldSize.
+
+%% error_to_string/1
+%% ====================================================================
+%% @doc Translates error to text message.
+%% @end
+-spec error_to_string(Error :: term()) -> Result when
+  Result :: string().
+%% ====================================================================
+error_to_string(Error) ->
+  case Error of
+    {logical_file_system_error, _} -> "Cannot get data from db";
+    {error, timeout} -> "Conection between cluster machines error (timeout)";
+    {error, worker_not_found} -> "File management module is down";
+    {error, file_not_found} -> "File not found in DB";
+    {error, invalid_data} -> "DB invalid response";
+    {error, share_not_found} -> "File sharing info not found in DB";
+    {error, remove_file_share_error} -> "File sharing info cacnot be removed from DB";
+    {error, unsupported_record} -> "Data cannot be stored in DB";
+    {error, {get_file_by_uuid, _}} -> "Cannot find information about file in DB";
+    {error, 'NIF_not_loaded'} -> "Data access library not loaded";
+    {error, not_regular_file} -> "Cannot access to file at storage (not a regular file)";
+    {wrong_unlink_return_code, _} -> "Error during file operation at storage system";
+    {wrong_read_return_code, _} -> "Error during file operation at storage system";
+    {wrong_write_return_code, _} -> "Error during file operation at storage system";
+    {wrong_release_return_code, _} -> "Error during file operation at storage system";
+    {wrong_open_return_code, _} -> "Error during file operation at storage system";
+    {wrong_truncate_return_code, _} -> "Error during file operation at storage system";
+    {wrong_mknod_return_code, _} -> "Error during file operation at storage system";
+    {full_name_finding_error, _} -> "Error during translation of file name to DB internal form";
+    {error, cannot_get_file_mode} -> "Cannot get file mode for new file/dir";
+    _ -> "Unknown error"
+  end.
+
+%% doUploadTest/4
+%% ====================================================================
+%% @doc Tests upload speed
+%% @end
+-spec doUploadTest(File :: string(), WriteFunNum :: integer(), Size :: integer(), Times :: integer()) -> Result when
+  Result :: {BytesWritten, WriteTime},
+  BytesWritten :: integer(),
+  WriteTime :: integer().
+%% ====================================================================
+doUploadTest(File, WriteFunNum, Size, Times) ->
+  Write = fun(Buf, TmpAns) ->
+    write(File, Buf) + TmpAns
+  end,
+
+  Write2 = fun(Buf, TmpAns) ->
+    write_from_stream(File, Buf) + TmpAns
+  end,
+
+  WriteFun = case WriteFunNum of
+               1 -> Write;
+               _ -> Write2
+             end,
+
+  Bufs = generateData(Times, Size),
+  ok = create(File),
+
+  {Megaseconds,Seconds,Microseconds} = erlang:now(),
+  BytesWritten = lists:foldl(WriteFun, 0, Bufs),
+  {Megaseconds2,Seconds2,Microseconds2} = erlang:now(),
+  WriteTime = 1000000*1000000*(Megaseconds2-Megaseconds) + 1000000*(Seconds2-Seconds) + Microseconds2-Microseconds,
+  {BytesWritten, WriteTime}.
+
+%% generateData/2
+%% ====================================================================
+%% @doc Generates data for upload test
+%% @end
+-spec generateData(Size :: integer(), BufSize :: integer()) -> Result when
+  Result :: list().
+%% ====================================================================
+generateData(1, BufSize) -> [list_to_binary(generateRandomData(BufSize))];
+generateData(Size, BufSize) -> [list_to_binary(generateRandomData(BufSize)) | generateData(Size-1, BufSize)].
+
+%% generateRandomData/1
+%% ====================================================================
+%% @doc Generates list of random bytes
+%% @end
+-spec generateRandomData(Size :: integer()) -> Result when
+  Result :: list().
+generateRandomData(1) -> [random:uniform(255)];
+generateRandomData(Size) -> [random:uniform(255) | generateRandomData(Size-1)].

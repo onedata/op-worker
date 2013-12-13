@@ -195,6 +195,26 @@ veil_cluster_node_env:
 
 
 
+  # Files management
+  - parameter:
+      name: new_file_logic_mode
+      description: Default mode for new file (mode stored in db)
+      value: 8#644
+
+  - parameter:
+      name: new_file_storage_mode
+      description: Default mode for new file at storage system
+      value: 8#640
+
+  - parameter:
+      name: new_dir_storage_mode
+      description: Default mode for new directory at storage system
+      value: 8#330
+
+
+
+
+
   # DNS
   - parameter:
       name: dns_response_ttl

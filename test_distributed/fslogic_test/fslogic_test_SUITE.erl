@@ -1647,9 +1647,13 @@ files_manager_standard_files_test(Config) ->
   MkDirAns2 = rpc:call(Node1, logical_files_manager, mkdir, [DirName]),
   ?assertEqual({logical_file_system_error, ?VEEXIST}, MkDirAns2),
 
+  ?assertEqual(false, rpc:call(Node1, logical_files_manager, exists, [File])),
+
   AnsCreate = rpc:call(Node1, logical_files_manager, create, [File]),
   ?assertEqual(ok, AnsCreate),
   ?assert(rpc:call(Node1, files_tester, file_exists, [File])),
+
+  ?assert(rpc:call(Node1, logical_files_manager, exists, [File])),
 
   AnsCreate2 = rpc:call(Node1, logical_files_manager, create, [File]),
   ?assertEqual({logical_file_system_error, ?VEEXIST}, AnsCreate2),

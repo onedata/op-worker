@@ -15,20 +15,20 @@
 
 -export([start/1, getattr/3, access/4, mknod/5, unlink/3, rename/4, chmod/4, chown/5, chown_name/5, truncate/4,
          open/4, read/6, write/6, read/5, write/5, statfs/3, release/4, fsync/5, mkdir/4, rmdir/3]).
-%% TODO zaimplementować natsępujące funkcje
--export([is_reg/1, is_dir/1, get_flag/1]).
+%% TODO zaimplementować natsępujące funkcje (VFS-305)
+-export([is_reg/3, is_dir/3, get_flag/3]).
 %% ===================================================================
 %% API
 %% ===================================================================
 
 %% TODO this 2 functions should be implemented
-is_reg(_St_mode) ->
+is_reg(_sh_name, _sh_args, _St_mode) ->
   true.
 
-is_dir(_St_mode) ->
+is_dir(_sh_name, _sh_args, _St_mode) ->
   true.
 
-get_flag(Flag) ->
+get_flag(_sh_name, _sh_args, Flag) ->
   case Flag of
     o_rdonly -> 0;
     o_wronly -> 1;
