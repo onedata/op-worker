@@ -32,7 +32,7 @@
 -export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1]).
 
 %% File sharing
--export([get_file_by_uuid/1, get_file_full_name_by_uuid/1, create_standard_share/1, create_share/2, get_share/1, remove_share/1]).
+-export([get_file_by_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, create_standard_share/1, create_share/2, get_share/1, remove_share/1]).
 
 %% ====================================================================
 %% Test API
@@ -41,6 +41,9 @@
 -ifdef(TEST).
 -export([cache_size/2]).
 -endif.
+
+%% ct
+-export([getfilelocation/1]).
 
 -export([doUploadTest/4]).
 
@@ -187,9 +190,25 @@ ls(DirName, ChildrenNum, Offset) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
+getfileattr({uuid, UUID}) ->
+  getfileattr(getfileattr, UUID);
+
 getfileattr(FileName) ->
   Record = #getfileattr{file_logic_name = FileName},
-  {Status, TmpAns} = contact_fslogic(Record),
+  getfileattr(internal_call, Record).
+
+%% getfileattr/2
+%% ====================================================================
+%% @doc Returns file attributes
+%% @end
+-spec getfileattr(Message :: atom(), Value :: term()) -> Result when
+  Result :: {ok, Attributes} | {ErrorGeneral, ErrorDetail},
+  Attributes :: term(),
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+getfileattr(Message, Value) ->
+  {Status, TmpAns} = contact_fslogic(Message, Value),
   case Status of
     ok ->
       Response = TmpAns#fileattr.answer,
@@ -220,8 +239,9 @@ getfileattr(FileName) ->
 %% @doc Reads file (uses logical name of file). First it gets information
 %% about storage helper and file id at helper. Next it uses storage helper
 %% to read data from file.
+%% File can be string (path) or {uuid, UUID}.
 %% @end
--spec read(File :: string(), Offset :: integer(), Size :: integer()) -> Result when
+-spec read(File :: term(), Offset :: integer(), Size :: integer()) -> Result when
   Result :: {ok, Bytes} | {ErrorGeneral, ErrorDetail},
   Bytes :: binary(),
   ErrorGeneral :: atom(),
@@ -431,18 +451,35 @@ exists(FileName) ->
   ErrorDetail :: term().
 %% ====================================================================
 contact_fslogic(Record) ->
-  UserID = get(user_id),
+  contact_fslogic(internal_call, Record).
 
+%% contact_fslogic/2
+%% ====================================================================
+%% @doc Sends request to and receives answer from fslogic
+%% @end
+-spec contact_fslogic(Message :: atom(), Value :: term()) -> Result when
+  Result :: {ok, FSLogicAns} | {ErrorGeneral, ErrorDetail},
+  FSLogicAns :: record(),
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+contact_fslogic(Message, Value) ->
   MsgId = case get(files_manager_msg_id) of
             ID when is_integer(ID) ->
               put(files_manager_msg_id, ID + 1);
             _ -> put(files_manager_msg_id, 0)
           end,
 
-  CallAns = case UserID of
-              undefined -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {internal_call, Record}});
-              _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, #veil_request{subject = UserID, request = {internal_call, Record}}})
+  CallAns = case Message of
+    internal_call ->
+      UserID = get(user_id),
+      case UserID of
+        undefined -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {internal_call, Value}});
+        _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, #veil_request{subject = UserID, request = {internal_call, Value}}})
+      end;
+    _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {Message, Value}})
   end,
+
   case CallAns of
     ok ->
       receive
@@ -465,6 +502,22 @@ contact_fslogic(Record) ->
 %% ====================================================================
 get_file_by_uuid(UUID) ->
   dao_lib:apply(dao_vfs, get_file, [{uuid, UUID}], 1).
+
+%% get_file_name_by_uuid/1
+%% ====================================================================
+%% @doc Gets file name on the basis of uuid.
+%% @end
+-spec get_file_name_by_uuid(UUID :: string()) -> Result when
+  Result :: {ok, Name} | {ErrorGeneral, ErrorDetail},
+  Name :: term(),
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+get_file_name_by_uuid(UUID) ->
+  case get_file_by_uuid(UUID) of
+    {ok, #veil_document{record = FileRec}} -> {ok, FileRec#file.name};
+    _ -> {error, {get_file_by_uuid, UUID}}
+  end.
 
 %% get_file_full_name_by_uuid/1
 %% ====================================================================
@@ -647,9 +700,10 @@ remove_share(Key) ->
 
 %% getfilelocation/1
 %% ====================================================================
-%% @doc Gets file location from fslogic or from cache
+%% @doc Gets file location from fslogic or from cache.
+%% File can be string (path) or {uuid, UUID}.
 %% @end
--spec getfilelocation(File :: string()) -> Result when
+-spec getfilelocation(File :: term()) -> Result when
   Result :: {ok, {Helper, Id}} | {ErrorGeneral, ErrorDetail},
   Helper :: term(),
   Id :: term(),
@@ -676,8 +730,10 @@ getfilelocation(File) ->
   end,
   case CachedLocation of
     [] ->
-      Record = #getfilelocation{file_logic_name = File},
-      {Status, TmpAns} = contact_fslogic(Record),
+      {Status, TmpAns} = case File of
+        {uuid, UUID} -> contact_fslogic(getfilelocation_uuid, UUID);
+        _ -> contact_fslogic(#getfilelocation{file_logic_name = File})
+      end,
       case Status of
         ok ->
           Response = TmpAns#filelocation.answer,

@@ -24,11 +24,11 @@
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([files_manager_standard_files_test/1, files_manager_tmp_files_test/1, storage_management_test/1, permissions_management_test/1, user_creation_test/1,
-  fuse_requests_test/1, users_separation_test/1, file_sharing_test/1, dir_mv_test/1, user_file_counting_test/1, dirs_creating_test/1, groups_test/1]).
+  fuse_requests_test/1, users_separation_test/1, file_sharing_test/1, dir_mv_test/1, user_file_counting_test/1, dirs_creating_test/1, groups_test/1, get_by_uuid_test/1]).
 -export([create_standard_share/2, create_share/3, get_share/2]).
 
 all() -> [groups_test, files_manager_tmp_files_test, files_manager_standard_files_test, storage_management_test, permissions_management_test, user_creation_test,
-  fuse_requests_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test
+  fuse_requests_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test
 ].
 
 -define(SH, "DirectIO").
@@ -39,6 +39,83 @@ all() -> [groups_test, files_manager_tmp_files_test, files_manager_standard_file
 %% ====================================================================
 %% Test functions
 %% ====================================================================
+
+%% Test file and data getting by uuid (fslogic normally uses path instead of uuid)
+get_by_uuid_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+  [Node1 | _] = NodesUp,
+
+  gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
+  gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  timer:sleep(100),
+  gen_server:cast({global, ?CCM}, init_cluster),
+  timer:sleep(1500),
+
+  {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT]),
+  ?assertEqual(ok, InsertStorageAns),
+
+  TestFile = "get_by_uuid_test_file",
+
+  ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [TestFile])),
+  AnsCreate = rpc:call(Node1, logical_files_manager, create, [TestFile]),
+  ?assertEqual(ok, AnsCreate),
+  ?assert(rpc:call(Node1, files_tester, file_exists, [TestFile])),
+
+  {FileLocationAns, FileLocation} = rpc:call(Node1, files_tester, get_file_location, [TestFile]),
+  ?assertEqual(ok, FileLocationAns),
+
+  {DocFindStatus, FileDoc} = rpc:call(Node1, fslogic, get_file, [1, TestFile, ?CLUSTER_FUSE_ID]),
+  ?assertEqual(ok, DocFindStatus),
+  FileLocation2 = rpc:call(Node1, fslogic, handle, [1, {getfilelocation_uuid, FileDoc#veil_document.uuid}]),
+  ?assertEqual(?VOK, FileLocation2#filelocation.answer),
+  [Root | _] = ?TEST_ROOT,
+  ?assertEqual(FileLocation, Root ++ "/" ++ FileLocation2#filelocation.file_id),
+
+  {FileLocationAns3, {SHI3, FileLocation3}} = rpc:call(Node1, logical_files_manager, getfilelocation, [TestFile]),
+  ?assertEqual(ok, FileLocationAns3),
+  ?assertEqual("DirectIO", SHI3#storage_helper_info.name),
+  ?assertEqual(?TEST_ROOT, SHI3#storage_helper_info.init_args),
+  ?assertEqual(FileLocation, Root ++ "/" ++ FileLocation3),
+
+  {FileLocationAns4, {SHI4, FileLocation4}} = rpc:call(Node1, logical_files_manager, getfilelocation, [{uuid, FileDoc#veil_document.uuid}]),
+  ?assertEqual(ok, FileLocationAns4),
+  ?assertEqual(SHI3, SHI4),
+  ?assertEqual(FileLocation3, FileLocation4),
+
+  {FMStatys, FM_Attrs} = rpc:call(Node1, logical_files_manager, getfileattr, [TestFile]),
+  ?assertEqual(ok, FMStatys),
+
+  {FMStatys2, FM_Attrs2} = rpc:call(Node1, logical_files_manager, getfileattr, [{uuid, FileDoc#veil_document.uuid}]),
+  ?assertEqual(ok, FMStatys2),
+  ?assertEqual(FM_Attrs, FM_Attrs2),
+
+  {FNameAns, FName} = rpc:call(Node1, logical_files_manager, get_file_name_by_uuid, [FileDoc#veil_document.uuid]),
+  ?assertEqual(ok, FNameAns),
+  ?assertEqual(TestFile, FName),
+
+  AnsWrite1 = rpc:call(Node1, logical_files_manager, write, [TestFile, list_to_binary("abcdefgh")]),
+  ?assertEqual(8, AnsWrite1),
+  ?assertEqual({ok, "abcdefgh"}, rpc:call(Node1, files_tester, read_file, [TestFile, 100])),
+
+  {StatusRead1, AnsRead1} = rpc:call(Node1, logical_files_manager, read, [{uuid, FileDoc#veil_document.uuid}, 2, 2]),
+  ?assertEqual(ok, StatusRead1),
+  ?assertEqual("cd", binary_to_list(AnsRead1)),
+
+  {StatusRead2, AnsRead2} = rpc:call(Node1, logical_files_manager, read, [{uuid, FileDoc#veil_document.uuid}, 7, 2]),
+  ?assertEqual(ok, StatusRead2),
+  ?assertEqual("h", binary_to_list(AnsRead2)),
+
+  AnsDel = rpc:call(Node1, logical_files_manager, delete, [TestFile]),
+  ?assertEqual(ok, AnsDel),
+  ?assertEqual(false, files_tester:file_exists_storage(FileLocation)),
+  ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [TestFile])),
+
+  RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+  ?assertEqual(ok, RemoveStorageAns),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users"),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
 
 %% This test checks if groups are working as intended.
 %% I.e all users see files moved/created in theirs group directory and users see only their groups

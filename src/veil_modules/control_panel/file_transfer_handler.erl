@@ -131,7 +131,7 @@ handle_user_content_request(Req) ->
 % Checks if shared file download request is valid and serves a file
 handle_shared_file_request(Req) ->
     try
-        {Filepath, Size} = try_or_throw(
+        {FileID, FileName, Size} = try_or_throw(
             fun() ->
                 put(user_id, undefined),        
                 {Path, _} = cowboy_req:path(Req),
@@ -140,17 +140,17 @@ handle_shared_file_request(Req) ->
 
                 {ok, #veil_document { record=#share_desc { file=FileID } } } = 
                     logical_files_manager:get_share({uuid, binary_to_list(ShareID)}),
-                {ok, TryFilepath} = logical_files_manager:get_file_full_name_by_uuid(FileID),
-                {ok, Fileattr} = logical_files_manager:getfileattr(TryFilepath),
+                {ok, FileName} = logical_files_manager:get_file_name_by_uuid(FileID),
+                {ok, Fileattr} = logical_files_manager:getfileattr({uuid, FileID}),
                 "REG" = Fileattr#fileattributes.type,
                 TrySize = Fileattr#fileattributes.size,
-                {TryFilepath, TrySize}
+                {FileID, FileName, TrySize}
             end, file_not_found),
 
         {ok, NewReq} = try_or_throw(
             fun() ->
-                send_file(Req, Filepath, Size)
-            end, {sending_failed, Filepath}),
+                send_file(Req, FileID, FileName, Size)
+            end, {sending_failed, FileName}),
         {true, NewReq}
 
     catch Type:Message ->
@@ -164,38 +164,57 @@ handle_shared_file_request(Req) ->
     end.
 
 % Sends file as a http response
-send_file(Req, Filepath, Size) ->
-    Mimetype = mimetypes:path_to_mimes(Filepath),
+send_file(Req, FileID, FileName, Size) ->
+    Mimetype = mimetypes:path_to_mimes(FileName),
     Headers = simple_bridge_util:ensure_header([], {"Content-Type", Mimetype}),
-    Filename = filename:basename(Filepath),
 	Headers2 = simple_bridge_util:ensure_header(Headers, 
         {"Content-Disposition", "attachment;" ++
             % Replace spaces with underscores
-            " filename=" ++ re:replace(Filename, " ", "_", [global, {return, list}]) ++
+            " filename=" ++ re:replace(FileName, " ", "_", [global, {return, list}]) ++
             % Offer safely-encoded UTF-8 filename for browsers supporting it
-            "; filename*=UTF-8''" ++ http_uri:encode(Filename)
+            "; filename*=UTF-8''" ++ http_uri:encode(FileName)
             }),
 
 	StreamFun = fun(Socket, Transport) ->
-		stream_file(Socket, Transport, Filepath, Size, get_download_buffer_size())
+		stream_file(Socket, Transport, {uuid, FileID}, Size, get_download_buffer_size())
 	end,
 
 	Req2 = prepare_headers(Req, Headers2),
 	Req3 = cowboy_req:set_resp_body_fun(Size, StreamFun, Req2),
 	{ok, _FinReq} = cowboy_req:reply(200, Req3).
 
+% Sends file as a http response
+send_file(Req, Filepath, Size) ->
+  Mimetype = mimetypes:path_to_mimes(Filepath),
+  Headers = simple_bridge_util:ensure_header([], {"Content-Type", Mimetype}),
+  Filename = filename:basename(Filepath),
+  Headers2 = simple_bridge_util:ensure_header(Headers,
+    {"Content-Disposition", "attachment;" ++
+      % Replace spaces with underscores
+      " filename=" ++ re:replace(Filename, " ", "_", [global, {return, list}]) ++
+      % Offer safely-encoded UTF-8 filename for browsers supporting it
+      "; filename*=UTF-8''" ++ http_uri:encode(Filename)
+    }),
+
+  StreamFun = fun(Socket, Transport) ->
+    stream_file(Socket, Transport, Filepath, Size, get_download_buffer_size())
+  end,
+
+  Req2 = prepare_headers(Req, Headers2),
+  Req3 = cowboy_req:set_resp_body_fun(Size, StreamFun, Req2),
+  {ok, _FinReq} = cowboy_req:reply(200, Req3).
 
 % Streams file from cluster using logical_files_manager to http client (via socket)
-stream_file(Socket, Transport, Filepath, Size, BufferSize) ->
-		stream_file(Socket, Transport, Filepath, Size, 0, BufferSize).
+stream_file(Socket, Transport, File, Size, BufferSize) ->
+		stream_file(Socket, Transport, File, Size, 0, BufferSize).
 
-stream_file(Socket, Transport, Filepath, Size, Sent, BufferSize) ->
-		{ok, BytesRead} = logical_files_manager:read(Filepath, Sent, BufferSize),
+stream_file(Socket, Transport, File, Size, Sent, BufferSize) ->
+		{ok, BytesRead} = logical_files_manager:read(File, Sent, BufferSize),
         ok = Transport:send(Socket, BytesRead),
         NewSent = Sent + size(BytesRead),
         if
             NewSent =:= Size -> ok;
-            true -> stream_file(Socket, Transport, Filepath, Size, NewSent, BufferSize)
+            true -> stream_file(Socket, Transport, File, Size, NewSent, BufferSize)
 		end.
 
 

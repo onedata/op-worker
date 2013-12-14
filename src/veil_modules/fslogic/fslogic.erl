@@ -69,7 +69,7 @@ init(_Args) ->
   erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
   [].
 
-%% handle/1
+%% handle/2
 %% ====================================================================
 %% @doc {@link worker_plugin_behaviour} callback handle/1. <br/>
 %% Processes standard worker requests (e.g. ping) and requests from FUSE.
@@ -98,6 +98,14 @@ handle(ProtocolVersion, {delete_old_descriptors, Pid}) ->
   {ok, Interval} = application:get_env(veil_cluster_node, fslogic_cleaning_period),
   erlang:send_after(Interval * 1000, Pid, {timer, {asynch, ProtocolVersion, {delete_old_descriptors, Pid}}}),
   ok;
+
+handle(ProtocolVersion, {getfilelocation_uuid, UUID}) ->
+  {DocFindStatus, FileDoc} = dao_lib:apply(dao_vfs, get_file, [{uuid, UUID}], ProtocolVersion),
+  getfilelocation(ProtocolVersion, DocFindStatus, FileDoc, ?CLUSTER_FUSE_ID);
+
+handle(ProtocolVersion, {getfileattr, UUID}) ->
+  {DocFindStatus, FileDoc} = dao_lib:apply(dao_vfs, get_file, [{uuid, UUID}], ProtocolVersion),
+  getfileattr(ProtocolVersion, DocFindStatus, FileDoc);
 
 handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
     try
@@ -288,65 +296,8 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getf
     case FileNameFindingAns of
       ok ->
         lager:debug("FileAttr for ~p", [FileName]),
-        case get_file(ProtocolVersion, FileName, FuseID) of
-            {ok, #veil_document{record = #file{} = File, uuid = FileUUID}} ->
-                {Type, Size} =
-                    case File#file.type of
-                        ?DIR_TYPE -> {"DIR", 0};
-                        ?REG_TYPE ->
-                            FileLoc = File#file.location,
-                            S =
-                                case dao_lib:apply(dao_vfs, get_storage, [{uuid, FileLoc#file_location.storage_id}], ProtocolVersion) of
-                                    {ok, #veil_document{record = Storage}} ->
-                                        {SH, File_id} = get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
-                                        case veilhelpers:exec(getattr, SH, [File_id]) of
-                                            {0, #st_stat{st_size = ST_Size} = _Stat} ->
-                                                fslogic_utils:update_meta_attr(File, size, ST_Size),
-                                                ST_Size;
-                                            {Errno, _} ->
-                                                lager:error("Cannot fetch attributes for file: ~p, errno: ~p", [FileUUID, Errno]),
-                                                0
-                                        end;
-                                    Other ->
-                                        lager:error("Cannot fetch storage: ~p for file: ~p, reason: ~p", [FileLoc#file_location.storage_id, FileUUID, Other]),
-                                        0
-                                end,
-                            {"REG", S};
-                        ?LNK_TYPE -> {"LNK", 0};
-                        _ -> "UNK"
-                    end,
-
-                %% Get owner
-                {UName, UID} =
-                    case dao_lib:apply(dao_users, get_user, [{uuid, File#file.uid}], ProtocolVersion) of
-                        {ok, #veil_document{record = #user{}} = UserDoc} ->
-                            {user_logic:get_login(UserDoc), list_to_integer(UserDoc#veil_document.uuid)};
-                        {error, UError} ->
-                            lager:error("Owner of file ~p not found due to error: ~p", [FileUUID, UError]),
-                            {"", -1}
-                    end,
-                GName = %% Get group name
-                    case File#file.gids of
-                        [GNam | _] -> GNam; %% Select first one as main group
-                        [] -> UName
-                    end,
-
-                %% Get attributes
-                {CTime, MTime, ATime, _SizeFromDB} =
-                    case dao_lib:apply(dao_vfs, get_file_meta, [File#file.meta_doc], 1) of
-                        {ok, #veil_document{record = FMeta}} ->
-                            {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size};
-                        {error, Error} ->
-                            lager:warning("Cannot fetch file_meta for file (uuid ~p) due to error: ~p", [FileUUID, Error]),
-                            {0, 0, 0, 0}
-                    end,
-                #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime, type = Type, size = Size, uname = UName, gname = GName, uid = UID, gid = UID};
-            {error, file_not_found} ->
-                lager:debug("FileAttr: ENOENT"),
-                #fileattr{answer = ?VENOENT, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = ""};
-            _ ->
-                #fileattr{answer = ?VEREMOTEIO, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = ""}
-        end;
+        {DocFindStatus, FileDoc} = get_file(ProtocolVersion, FileName, FuseID),
+        getfileattr(ProtocolVersion, DocFindStatus, FileDoc);
       _  -> #fileattr{answer = ?VEREMOTEIO, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = ""}
     end;
 
@@ -354,37 +305,8 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getf
     {FileNameFindingAns, File} = get_full_file_name(Record#getfilelocation.file_logic_name),
     case FileNameFindingAns of
       ok ->
-        {Status, TmpAns} = get_file(ProtocolVersion, File, FuseID),
-        Validity = ?LOCATION_VALIDITY,
-        case {Status, TmpAns} of
-            {ok, _} ->
-            case TmpAns#veil_document.record#file.type of
-                ?REG_TYPE ->
-                    {Status2, TmpAns2} = save_file_descriptor(ProtocolVersion, File, TmpAns#veil_document.uuid, FuseID, Validity),
-                    case Status2 of
-                    ok ->
-                        FileDesc = TmpAns#veil_document.record,
-                        FileLoc = FileDesc#file.location,
-                        case dao_lib:apply(dao_vfs, get_storage, [{uuid, FileLoc#file_location.storage_id}], ProtocolVersion) of
-                            {ok, #veil_document{record = Storage}} ->
-                                {SH, File_id} = get_sh_and_id(FuseID, Storage, FileLoc#file_location.file_id),
-                                #filelocation{storage_id = Storage#storage_info.id, file_id = File_id, validity = Validity,
-                                              storage_helper_name = SH#storage_helper_info.name, storage_helper_args = SH#storage_helper_info.init_args};
-                            Other ->
-                                lager:error("Cannot fetch storage: ~p for file: ~p, reason: ~p", [FileLoc#file_location.storage_id, TmpAns#veil_document.uuid, Other]),
-                                #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
-                        end;
-                    _BadStatus2 ->
-                        lager:warning("Unknown fslogic error: ~p", [TmpAns2]),
-                        #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
-                    end;
-                _ -> #filelocation{answer = ?VENOTSUP, storage_id = -1, file_id = "", validity = 0}
-            end;
-        {error, file_not_found} -> #filelocation{answer = ?VENOENT, storage_id = -1, file_id = "", validity = 0};
-            _BadStatus ->
-              lager:warning("Unknown fslogic error: ~p", [_BadStatus]),
-              #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
-        end;
+        {DocFindStatus, FileDoc} = get_file(ProtocolVersion, File, FuseID),
+        getfilelocation(ProtocolVersion, DocFindStatus, FileDoc, FuseID);
       _  -> #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
     end;
 
@@ -433,7 +355,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getn
                                     case Status of
                                         {ok, FileUUID} ->
                                             ?PARENT_CTIME(Record#getnewfilelocation.file_logic_name, CTime),
-                                            {Status2, _TmpAns2} = save_file_descriptor(ProtocolVersion, File, FileUUID, FuseID, Validity),
+                                            {Status2, _TmpAns2} = save_file_descriptor(ProtocolVersion, FileUUID, FuseID, Validity),
                                             case Status2 of
                                               ok ->
                                                   {SH, File_id2} = get_sh_and_id(FuseID, Storage, File_id),
@@ -870,44 +792,44 @@ save_file_descriptor(ProtocolVersion, File, Validity) ->
   dao_lib:apply(dao_vfs, save_descriptor, [File#veil_document{record = Descriptor}], ProtocolVersion).
 
 
-%% save_file_descriptor/5
+%% save_file_descriptor/4
 %% ====================================================================
 %% @doc Saves in db information that a file is used by FUSE.
 %% @end
--spec save_file_descriptor(ProtocolVersion :: term(), File :: string(), Uuid::uuid(), FuseID :: string(), Validity :: integer()) -> Result when
+-spec save_file_descriptor(ProtocolVersion :: term(), Uuid::uuid(), FuseID :: string(), Validity :: integer()) -> Result when
   Result :: term().
 %% ====================================================================
 
-save_file_descriptor(ProtocolVersion, File, Uuid, FuseID, Validity) ->
+save_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
   case FuseID of
     ?CLUSTER_FUSE_ID -> {ok, ok};
     _ ->
-      Status = dao_lib:apply(dao_vfs, list_descriptors, [{by_file_n_owner, {File, FuseID}}, 10, 0], ProtocolVersion),
+      Status = dao_lib:apply(dao_vfs, list_descriptors, [{by_uuid_n_owner, {Uuid, FuseID}}, 10, 0], ProtocolVersion),
       case Status of
         {ok, TmpAns} ->
           case length(TmpAns) of
             0 ->
-              save_new_file_descriptor(ProtocolVersion, File, Uuid, FuseID, Validity);
+              save_new_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity);
             1 ->
               [VeilDoc | _] = TmpAns,
               save_file_descriptor(ProtocolVersion, VeilDoc, Validity);
             _Many ->
-              lager:error([{mod, ?MODULE}], "Error: to many file descriptors for file: ~s", [File]),
+              lager:error([{mod, ?MODULE}], "Error: to many file descriptors for file uuid: ~p", [Uuid]),
               {error, "Error: too many file descriptors"}
           end;
         _Other -> _Other
       end
   end.
 
-%% save_new_file_descriptor/5
+%% save_new_file_descriptor/4
 %% ====================================================================
 %% @doc Saves in db information that a file is used by FUSE.
 %% @end
--spec save_new_file_descriptor(ProtocolVersion :: term(), File :: string(), Uuid::uuid(), FuseID :: string(), Validity :: integer()) -> Result when
+-spec save_new_file_descriptor(ProtocolVersion :: term(), Uuid::uuid(), FuseID :: string(), Validity :: integer()) -> Result when
   Result :: term().
 %% ====================================================================
 
-save_new_file_descriptor(ProtocolVersion, _File, Uuid, FuseID, Validity) ->
+save_new_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
   Descriptor = update_file_descriptor(#file_descriptor{file = Uuid, fuse_id = FuseID}, Validity),
   dao_lib:apply(dao_vfs, save_descriptor, [Descriptor], ProtocolVersion).
 
@@ -1345,3 +1267,117 @@ get_group_owner(FileBasePath) ->
         [?GROUPS_BASE_DIR_NAME, GroupName | _] -> [GroupName];
         _ -> []
     end.
+
+%% getfilelocation/4
+%% ====================================================================
+%% @doc Returns information about storage helper used to
+%% access file and file id at storage.
+%% @end
+-spec getfilelocation(ProtocolVersion :: term(), DocFindStatus :: atom(), FileDoc :: term(), FuseID :: string()) -> Result when
+  Result :: {ok, FileLocation} | {ErrorGeneral, ErrorDetail},
+  FileLocation :: term(),
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+getfilelocation(ProtocolVersion, DocFindStatus, FileDoc, FuseID) ->
+  Validity = ?LOCATION_VALIDITY,
+  case {DocFindStatus, FileDoc} of
+    {ok, _} ->
+      case FileDoc#veil_document.record#file.type of
+        ?REG_TYPE ->
+          {Status2, TmpAns2} = save_file_descriptor(ProtocolVersion, FileDoc#veil_document.uuid, FuseID, Validity),
+          case Status2 of
+            ok ->
+              FileDesc = FileDoc#veil_document.record,
+              FileLoc = FileDesc#file.location,
+              case dao_lib:apply(dao_vfs, get_storage, [{uuid, FileLoc#file_location.storage_id}], ProtocolVersion) of
+                {ok, #veil_document{record = Storage}} ->
+                  {SH, File_id} = get_sh_and_id(FuseID, Storage, FileLoc#file_location.file_id),
+                  #filelocation{storage_id = Storage#storage_info.id, file_id = File_id, validity = Validity,
+                  storage_helper_name = SH#storage_helper_info.name, storage_helper_args = SH#storage_helper_info.init_args};
+                Other ->
+                  lager:error("Cannot fetch storage: ~p for file: ~p, reason: ~p", [FileLoc#file_location.storage_id, FileDoc#veil_document.uuid, Other]),
+                  #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
+              end;
+            _BadStatus2 ->
+              lager:warning("Unknown fslogic error during descriptor saving: ~p", [TmpAns2]),
+              #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
+          end;
+        _ -> #filelocation{answer = ?VENOTSUP, storage_id = -1, file_id = "", validity = 0}
+      end;
+    {error, file_not_found} -> #filelocation{answer = ?VENOENT, storage_id = -1, file_id = "", validity = 0};
+    _BadStatus ->
+      lager:warning("Unknown fslogic error during doc finding: ~p", [_BadStatus]),
+      #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
+  end.
+
+%% getfileattr/3
+%% ====================================================================
+%% @doc Returns file's attributes.
+%% @end
+-spec getfileattr(ProtocolVersion :: term(), DocFindStatus :: atom(), FileDoc :: term()) -> Result when
+  Result :: {ok, FileAttrs} | {ErrorGeneral, ErrorDetail},
+  FileAttrs :: term(),
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+getfileattr(ProtocolVersion, DocFindStatus, FileDoc) ->
+  case {DocFindStatus, FileDoc} of
+    {ok, #veil_document{record = #file{} = File, uuid = FileUUID}} ->
+      {Type, Size} =
+        case File#file.type of
+          ?DIR_TYPE -> {"DIR", 0};
+          ?REG_TYPE ->
+            FileLoc = File#file.location,
+            S =
+              case dao_lib:apply(dao_vfs, get_storage, [{uuid, FileLoc#file_location.storage_id}], ProtocolVersion) of
+                {ok, #veil_document{record = Storage}} ->
+                  {SH, File_id} = get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
+                  case veilhelpers:exec(getattr, SH, [File_id]) of
+                    {0, #st_stat{st_size = ST_Size} = _Stat} ->
+                      fslogic_utils:update_meta_attr(File, size, ST_Size),
+                      ST_Size;
+                    {Errno, _} ->
+                      lager:error("Cannot fetch attributes for file: ~p, errno: ~p", [FileUUID, Errno]),
+                      0
+                  end;
+                Other ->
+                  lager:error("Cannot fetch storage: ~p for file: ~p, reason: ~p", [FileLoc#file_location.storage_id, FileUUID, Other]),
+                  0
+              end,
+            {"REG", S};
+          ?LNK_TYPE -> {"LNK", 0};
+          _ -> "UNK"
+        end,
+
+      %% Get owner
+      {UName, UID} =
+        case dao_lib:apply(dao_users, get_user, [{uuid, File#file.uid}], ProtocolVersion) of
+          {ok, #veil_document{record = #user{}} = UserDoc} ->
+            {user_logic:get_login(UserDoc), list_to_integer(UserDoc#veil_document.uuid)};
+          {error, UError} ->
+            lager:error("Owner of file ~p not found due to error: ~p", [FileUUID, UError]),
+            {"", -1}
+        end,
+      GName = %% Get group name
+      case File#file.gids of
+        [GNam | _] -> GNam; %% Select first one as main group
+        [] -> UName
+      end,
+
+      %% Get attributes
+      {CTime, MTime, ATime, _SizeFromDB} =
+        case dao_lib:apply(dao_vfs, get_file_meta, [File#file.meta_doc], 1) of
+          {ok, #veil_document{record = FMeta}} ->
+            {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size};
+          {error, Error} ->
+            lager:warning("Cannot fetch file_meta for file (uuid ~p) due to error: ~p", [FileUUID, Error]),
+            {0, 0, 0, 0}
+        end,
+      #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime, type = Type, size = Size, uname = UName, gname = GName, uid = UID, gid = UID};
+    {error, file_not_found} ->
+      lager:debug("FileAttr: ENOENT"),
+      #fileattr{answer = ?VENOENT, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = ""};
+    _ ->
+      #fileattr{answer = ?VEREMOTEIO, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = ""}
+  end.

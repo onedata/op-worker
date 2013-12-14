@@ -116,6 +116,8 @@ list_descriptors({by_file, File}, N, Offset) when N > 0, Offset >= 0 ->
     list_descriptors({by_file_n_owner, {File, ""}}, N, Offset);
 list_descriptors({by_file_n_owner, {File, Owner}}, N, Offset) when N > 0, Offset >= 0 ->
     {ok, #veil_document{uuid = FileId}} = get_file(File),
+    list_descriptors({by_uuid_n_owner, {FileId, Owner}}, N, Offset);
+list_descriptors({by_uuid_n_owner, {FileId, Owner}}, N, Offset) when N > 0, Offset >= 0 ->
     StartKey = [dao_helper:name(FileId), dao_helper:name(Owner)],
     EndKey = case Owner of "" -> [dao_helper:name(uca_increment(FileId)), dao_helper:name("")]; _ -> [dao_helper:name((FileId)), dao_helper:name(uca_increment(Owner))] end,
     QueryArgs = #view_query_args{start_key = StartKey, end_key = EndKey, include_docs = true, limit = N, skip = Offset},
