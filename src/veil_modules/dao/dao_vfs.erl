@@ -19,7 +19,7 @@
 -include("logging.hrl").
 
 %% API - File system management
--export([list_dir/3, rename_file/2, lock_file/3, unlock_file/3]). %% High level API functions
+-export([list_dir/3, rename_file/2, lock_file/3, unlock_file/3, find_files/1]). %% High level API functions
 -export([save_descriptor/1, remove_descriptor/1, get_descriptor/1, list_descriptors/3]). %% Base descriptor management API functions
 -export([save_file/1, remove_file/1, get_file/1, get_path_info/1]). %% Base file management API function
 -export([save_storage/1, remove_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
@@ -477,11 +477,230 @@ list_storage() ->
             throw(inavlid_data)
     end.
 
+%% find_files/1
+%% @doc Returns list of uuids of files that matches to criteria passed as FileCriteria <br/>
+%% Current implementation does not support specifying ctime and mtime at the same time, other combinations of criterias
+%% are supported.
+%% @end
+%% ====================================================================
+-spec find_files(FileCriteria :: file_criteria()) -> {ok, [file_doc()]} | no_return().
+%% ====================================================================
+find_files(FileCriteria) when is_record(FileCriteria, file_criteria) ->
+  case are_name_or_uid_set(FileCriteria) of
+    true -> find_file_by_file_name_or_uuid(FileCriteria);
+    _ ->
+      case are_time_criteria_set(FileCriteria) of
+        true -> find_by_times(FileCriteria);
+
+        % no restrictions set - find_file_when_file_name_or_uuid_set handles this case
+        _ -> find_file_by_file_name_or_uuid(FileCriteria)
+      end
+  end.
+
 
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
 
+%% are_time_criteria_set/1
+%% @doc Returns true if any of time criteria (ctime or mtime) are set
+%% @end
+%% ====================================================================
+-spec are_time_criteria_set(FileCriteria :: file_criteria()) -> boolean().
+%% ====================================================================
+are_time_criteria_set(FileCriteria) when is_record(FileCriteria, file_criteria) ->
+  (FileCriteria#file_criteria.ctime /= #time_criteria{}) or (FileCriteria#file_criteria.mtime /= #time_criteria{}).
+
+%% are_name_or_uid_set/1
+%% @doc Returns true if name or uid is set.
+%% @end
+%% ====================================================================
+-spec are_name_or_uid_set(FileCriteria :: file_criteria()) -> boolean().
+%% ====================================================================
+are_name_or_uid_set(FileCriteria) when is_record(FileCriteria, file_criteria) ->
+  (FileCriteria#file_criteria.file_pattern /= "") or (FileCriteria#file_criteria.uid /= null).
+
+%% end_key_for_prefix/1
+%% @doc Returns given prefix concatenated with high value unicode character.
+%% Useful when finding by prefix.
+%% See more at http://wiki.apache.org/couchdb/View_collation (paragraph string ranges)
+%% @end
+%% ====================================================================
+-spec end_key_for_prefix(Prefix :: string()) -> binary().
+%% ====================================================================
+end_key_for_prefix(Prefix) ->
+  unicode:characters_to_binary(Prefix ++ unicode:characters_to_list(string:chars(255, 2))).
+
+%% get_desired_filetypes/1
+%% @doc Returns list of file types that should be included according to given file_criteria record.
+%% Elements of list are integers defined in files_common.hrl.
+%% @end
+%% ====================================================================
+-spec get_desired_filetypes(file_criteria()) -> binary().
+%% ====================================================================
+get_desired_filetypes(#file_criteria{include_dirs = IncludeDirs, include_files = IncludeFiles, include_links = IncludeLinks}) ->
+  Types = [{IncludeDirs, ?DIR_TYPE}, {IncludeFiles, ?REG_TYPE}, {IncludeLinks, ?LNK_TYPE}],
+  lists:filtermap(
+    fun({Included, Type}) ->
+      case Included of
+        true -> {Included, Type};
+        _ -> false
+      end
+    end, Types).
+
+%% fetch_rows/2
+%% @doc Query given view with given #view_query_args and results list of rows
+%% @end
+%% ====================================================================
+-spec fetch_rows(ViewName :: string(), QueryArgs :: #view_query_args{}) -> list(#view_row{}) | no_return().
+%% ====================================================================
+fetch_rows(ViewName, QueryArgs) ->
+  case dao:list_records(ViewName, QueryArgs) of
+    {ok, #view_result{rows = Rows}} ->
+      Rows;
+    Error ->
+      ?error("Invalid view response: ~p", [Error]),
+      throw(invalid_data)
+  end.
+
+%% get_filter_predicate_for_time/1
+%% @doc Returns predicate function for filtering by time according to given #file_criteria
+%% @end
+%% ====================================================================
+-spec get_filter_predicate_for_time(#file_criteria{}) -> fun((#view_row{}) -> boolean()).
+%% ====================================================================
+% TODO: introduce some macro to make it more concise
+get_filter_predicate_for_time(#file_criteria{ctime = #time_criteria{time = Time, time_relation = TimeRelation}, mtime = #time_criteria{time = 0}}) ->
+  case TimeRelation of
+    older_than ->
+      fun(#view_row{doc = FileMetaDoc}) ->
+        FileMetaDoc#veil_document.record#file_meta.ctime < Time
+      end;
+    newer_than ->
+      fun(#view_row{doc = FileMetaDoc}) ->
+        FileMetaDoc#veil_document.record#file_meta.ctime > Time
+      end
+  end;
+get_filter_predicate_for_time(#file_criteria{mtime = #time_criteria{time = Time, time_relation = TimeRelation}, ctime = #time_criteria{time = 0}}) ->
+  case TimeRelation of
+    older_than ->
+      fun(#view_row{doc = FileMetaDoc}) ->
+        FileMetaDoc#veil_document.record#file_meta.mtime < Time
+      end;
+    newer_than ->
+      fun(#view_row{doc = FileMetaDoc}) ->
+        FileMetaDoc#veil_document.record#file_meta.mtime > Time
+      end
+  end.
+
+%% find_file_by_file_name_or_uuid/1
+%% @doc Returns uuids of file documents found with given #file_criteria.
+%% Ignores ctime and mtime so should be called only if they are not set.
+%% @end
+%% ====================================================================
+-spec find_file_by_file_name_or_uuid(FileCriteria :: #file_criteria{}) -> {ok, [string()]} | no_return().
+%% ====================================================================
+find_file_by_file_name_or_uuid(FileCriteria) ->
+  FilePattern = FileCriteria#file_criteria.file_pattern,
+  UidBin = case FileCriteria#file_criteria.uid of
+             null -> null;
+             Uid when is_binary(Uid) -> Uid;
+             Uid when is_list(Uid) -> list_to_binary(Uid);
+             Uid when is_integer(Uid) -> list_to_binary(integer_to_list(Uid))
+           end,
+
+  QueryArgs = case FilePattern of
+                "" ->
+                  case UidBin of
+                    null -> #view_query_args{start_key = [<<"">>, null], end_key = [{}, {}]};
+                    _ -> #view_query_args{start_key = [UidBin, null], end_key = [UidBin, {}]}
+                  end;
+                _ ->
+                  case lists:nth(length(FilePattern), FilePattern) of
+                    $* ->
+                      Prefix = lists:sublist(FilePattern, length(FilePattern) - 1),
+                      #view_query_args{start_key = [UidBin, list_to_binary(Prefix)], end_key = [UidBin, end_key_for_prefix(Prefix)]};
+                    _ -> #view_query_args{keys = [[UidBin, list_to_binary(FilePattern)]]}
+                  end
+              end,
+
+  Rows = fetch_rows(?FILES_BY_UID_AND_FILENAME, QueryArgs#view_query_args{include_docs = true}),
+  Results = case are_time_criteria_set(FileCriteria) of
+  % if are_time_criteria_set then we need to additionally filter Rows
+              true ->
+                FilterPredicate = get_filter_predicate_for_time(FileCriteria),
+                lists:filter(FilterPredicate, Rows);
+              _ -> Rows
+            end,
+
+  DesiredTypes = get_desired_filetypes(FileCriteria),
+  FilteredByTypes = lists:filter(
+    fun(#view_row{value = V}) ->
+      {Value} = V,
+      Type = proplists:get_value(<<"type">>, Value),
+      lists:member(Type, DesiredTypes)
+    end,
+    Results),
+  {ok, lists:map(fun(#view_row{id = Id}) -> Id end, FilteredByTypes)}.
+
+%% find_by_times/1
+%% @doc Returns uuids of file documents found with given #file_criteria.
+%% @end
+%% ====================================================================
+-spec find_by_times(FileCriteria :: #file_criteria{}) -> {ok, [string()]} | no_return().
+%% ====================================================================
+find_by_times(FileCriteria) ->
+  MetaIds = get_file_meta_ids(FileCriteria),
+  DesiredTypes = get_desired_filetypes(FileCriteria),
+  MetaIdsBin = lists:merge(lists:map(
+    fun(MetaId) ->
+      lists:map(
+        fun(DesiredType) ->
+          [list_to_binary(MetaId), DesiredType]
+        end,
+        DesiredTypes)
+    end,
+    MetaIds)),
+
+  Rows = fetch_rows(?FILES_BY_META_DOC, #view_query_args{keys = MetaIdsBin, include_docs = true}),
+  Result = lists:filter(fun(#view_row{doc = FileDoc}) ->
+    lists:member(FileDoc#veil_document.record#file.type, DesiredTypes) end, Rows),
+  {ok, lists:map(fun(#view_row{id = Id}) -> Id end, Result)}.
+
+%% get_file_meta_ids/1
+%% ====================================================================
+%% @doc Get file_meta ids using file_meta_by_times view
+%% Function assumes that ctime and mtime are never used together at the same time
+%% @end
+-spec get_file_meta_ids(file_criteria()) -> list(string()) | no_return().
+%% ====================================================================
+get_file_meta_ids(FileCriteria) ->
+  QueryArgs1 = case FileCriteria#file_criteria.ctime of
+                 #time_criteria{time = Time, time_relation = older_than} ->
+                   #view_query_args{start_key = [0, null], end_key = [Time, {}]};
+                 #time_criteria{time = Time, time_relation = newer_than} ->
+                   #view_query_args{start_key = [Time + 1, null]};
+                 #time_criteria{} ->
+                   case FileCriteria#file_criteria.mtime of
+                     #time_criteria{time = Time, time_relation = older_than} ->
+                       #view_query_args{end_key = [null, Time]};
+                     #time_criteria{time = Time, time_relation = newer_than} ->
+                       #view_query_args{start_key = [null, Time + 1], end_key = [0, null]};
+                     #time_criteria{} -> null
+                   end
+               end,
+
+  case QueryArgs1 of
+    (QueryArgs) when is_record(QueryArgs, view_query_args) ->
+      case dao:list_records(?FILE_META_BY_TIMES, QueryArgs) of
+        {ok, #view_result{rows = Rows}} ->
+          lists:map(fun(#view_row{id = Id}) -> Id end, Rows);
+        Error ->
+          ?error("Invalid view response: ~p", [Error]),
+          throw(invalid_data)
+      end;
+    _ -> []
+  end.
 
 %% file_path_analyze/1
 %% ====================================================================

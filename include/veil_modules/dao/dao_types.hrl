@@ -22,6 +22,8 @@
 -type file_info() :: #file{}.
 -type file_doc() :: #veil_document{record :: #file{}}.
 
+-type file_criteria() :: #file_criteria{}.
+
 -type fd() :: uuid().
 -type fd_select() :: {by_file, File :: file()} | {by_file_n_owner, {File :: file(), Owner :: string()}}.
 -type fd_info() :: #file_descriptor{}.

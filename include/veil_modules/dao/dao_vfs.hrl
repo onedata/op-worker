@@ -25,6 +25,23 @@
 -record(file_tag, {key = "", value = []}).
 -record(file_meta, {tags = [], mime_type = "", size = 0, ctime = 0, atime = 0, mtime = 0, description = ""}).
 
+%% This type represents time relation, useful in time_criteria record
+-type time_relation() :: older_than | newer_than | the_same.
+
+%% This record desribes single time criteria, it consists of time_relation and time to compare to.
+-record(time_criteria, {time_relation :: time_relation(), time = 0}).
+
+%% This record describes criteria for searching files.
+%% It should be considered as a subject to change, in future more options will be added.
+-record(file_criteria,
+  {file_pattern = "",
+   uid = null,
+   ctime = #time_criteria{},
+   mtime = #time_criteria{},
+   include_files = true :: boolean(),
+   include_dirs = false :: boolean(),
+   include_links = false :: boolean()}).
+
 %% This record describes state of file for each user. #file_descriptor.file is an UUID of #file.
 %% For regular files can be used to mark file as used in order to block e.g. physical file transfer
 %% For dirs it should be used as FUSE's readdir state. Cursor says how many dir has been read by now
