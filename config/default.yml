@@ -238,6 +238,19 @@ veil_cluster_node_env:
 
 
 
+  # DAO
+  - parameter:
+      name: fuse_session_expire_time
+      description: |
+        This variable determinates how often FUSE sessions shall be checked (in seconds).
+        Note that session will be discarded only when there are no connections active for the session.
+      value: 10800 # 3h
+
+  - parameter:
+       name: dao_cache_loop_time
+       description: |
+         This variable determinates how often main DAO cache maintnance process shall fire up all its jobs (in seconds).
+       value: 1800 # 30min
 
 
 obsolete:

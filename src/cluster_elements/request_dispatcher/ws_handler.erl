@@ -25,7 +25,7 @@
 -include_lib("public_key/include/public_key.hrl").
 
 %% Holds state of websocket connection. peer_dn field contains DN of certificate of connected peer.
--record(hander_state, {peer_dn, peer_serial, dispatcher_timeout, fuse_id = ""}).
+-record(hander_state, {peer_dn, peer_serial, dispatcher_timeout, fuse_id = "", connection_id = ""}).
 
 %% ====================================================================
 %% API
@@ -75,7 +75,7 @@ websocket_init(TransportName, Req, _Opts) ->
                     [DER || [DER] <- ets:match(gsi_state, {{crl, '_'}, '$1', '_'})]]) of    %% cluster CRL store
                 {ok, 1} ->
                     {ok, EEC} = gsi_handler:find_eec_cert(OtpCert, Certs, gsi_handler:is_proxy_certificate(OtpCert)),
-                    ?info("Peer connected using certificate with subject: ~p ~n", [gsi_handler:proxy_subject(EEC)]),
+                    ?debug("Peer connected using certificate with subject: ~p ~n", [gsi_handler:proxy_subject(EEC)]),
                     {rdnSequence, Rdn} = gsi_handler:proxy_subject(EEC),
                     {ok, DnString} = user_logic:rdn_sequence_to_dn_string(Rdn),
                     {ok, Req, #hander_state{peer_dn = DnString, peer_serial = Serial, dispatcher_timeout = DispatcherTimeout}};
@@ -137,8 +137,8 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #handshakerequest{hostn
     EnvVars = [{list_to_atom(string:to_lower(Name)), Value} || #handshakerequest_envvariable{name = Name, value = Value} <- Vars],
 
     %% Save received data to DB
-    FuseEnv = #veil_document{uuid = NewFuseId, record = #fuse_env{uid = UID, hostname = Hostname, vars = EnvVars}},
-    case dao_lib:apply(dao_cluster, save_fuse_env, [FuseEnv], ProtocolVersion) of
+    FuseEnv = #veil_document{uuid = NewFuseId, record = #fuse_session{uid = UID, hostname = Hostname, env_vars = EnvVars}},
+    case dao_lib:apply(dao_cluster, save_fuse_session, [FuseEnv], ProtocolVersion) of
         {ok, _} -> ok;
         {error, Error1} ->
             ?error("VeilClient handshake failed. Cannot save FUSE env variables (~p) due to DAO error: ~p", [FuseEnv, Error1]),
@@ -149,7 +149,7 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #handshakerequest{hostn
     NewState = State#hander_state{fuse_id = NewFuseId},
     {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #handshakeresponse{fuse_id = NewFuseId})}, Req, NewState};
 
-%% Handle HandshakeACK message - set FUSE ID used in this session
+%% Handle HandshakeACK message - set FUSE ID used in this session, register connection
 handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type}, #hander_state{peer_dn = DnString} = State) ->
     UID = %% Fetch user's ID
         case dao_lib:apply(dao_users, get_user, [{dn, DnString}], ProtocolVersion) of
@@ -161,12 +161,24 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
         end,
 
     %% Fetch session data (using FUSE ID)
-    case dao_lib:apply(dao_cluster, get_fuse_env, [NewFuseId], ProtocolVersion) of
-        {ok, #veil_document{record = #fuse_env{uid = UID}}} ->
+    case dao_lib:apply(dao_cluster, get_fuse_session, [NewFuseId], ProtocolVersion) of
+        {ok, #veil_document{uuid = SessID, record = #fuse_session{uid = UID}}} ->
+            %% Save connection's location (node and pid) to DB or crash, sice failure leaves no way of recovering
+            {ok, ConnID} = dao_lib:apply(dao_cluster, save_connection_info, [#connection_info{session_id = SessID, controlling_node = node(), controlling_pid = self()}], ProtocolVersion),
+
+            %% Double check if session is valid. We cant leave any connections with invalid session ID. Zombies are bad. Really, really bad.
+            case dao_lib:apply(dao_cluster, get_fuse_session, [NewFuseId, {stale, update_before}], ProtocolVersion) of
+                {ok, _} -> ok;  %% Everything is fine, just continue
+                {error, Reason} ->      %% Session has been destroyed, let client know that it's invalidated
+                    ?info("Session has beed deleted (error: ~p) while HandshakeACK was in progress. Closing the connection.", [Reason]),
+                    dao_lib:apply(dao_cluster, remove_connection_info, [ConnID], ProtocolVersion),  %% Cleanup...
+                    throw({invalid_fuse_id, MsgId})                                                 %% ...and crash
+            end,
+
             %% Session data found, and its user ID matches -> send OK status and update current connection state
             ?debug("User ~p assigned FUSE ID ~p to the connection (PID: ~p)", [DnString, NewFuseId, self()]),
             {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req, State#hander_state{fuse_id = NewFuseId}};
-        {ok, #veil_document{record = #fuse_env{uid = OtherUID}}} ->
+        {ok, #veil_document{record = #fuse_session{uid = OtherUID}}} ->
             %% Current user does not match session owner
             ?warning("User ~p tried to access someone else's session (fuse ID: ~p, session owner UID: ~p)", [DnString, NewFuseId, OtherUID]),
             throw({invalid_fuse_id, MsgId});
@@ -233,6 +245,12 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
         Req :: term(),
         State :: #hander_state{}.
 %% ====================================================================
+websocket_info({Pid, get_session_id}, Req, State) ->
+    Pid ! {ok, State#hander_state.fuse_id}, %% Response with assigned FuseID, when cluster asks
+    {ok, Req, State};
+websocket_info({Pid, shutdown}, Req, State) -> %% Handler internal shutdown request - close the connection
+    Pid ! ok,
+    {shutdown, Req, State};
 websocket_info({ResponsePid, Message, MessageDecoder, MsgID}, Req, State) ->
     try
       [MessageType | _] = tuple_to_list(Message),
@@ -264,8 +282,9 @@ websocket_info(_Msg, Req, State) ->
         Req :: term(),
         State :: #hander_state{}.
 %% ====================================================================
-websocket_terminate(_Reason, _Req, #hander_state{peer_serial = _Serial} = _State) ->
+websocket_terminate(_Reason, _Req, #hander_state{peer_serial = _Serial, connection_id = ConnID} = _State) ->
     ?debug("WebSocket connection  terminate for peer ~p with reason: ~p", [_Serial, _Reason]),
+    dao_lib:apply(dao_cluster, remove_connection_info, [ConnID], 1),        %% Cleanup connection info.
     gen_server:cast(?Node_Manager_Name, {delete_callback_by_pid, self()}),
     ok.
 

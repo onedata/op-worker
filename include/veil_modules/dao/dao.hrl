@@ -31,20 +31,21 @@
 %% where 'record_name' is the name of the record. 'some_record' is an example.
 -define(dao_record_info(R),
     case R of
-        some_record -> ?record_info_gen(some_record);
-        cm_state -> ?record_info_gen(cm_state);
-        host_state -> ?record_info_gen(host_state);
-        node_state -> ?record_info_gen(node_state);
-        file -> ?record_info_gen(file);
-        file_location -> ?record_info_gen(file_location);
-        file_descriptor -> ?record_info_gen(file_descriptor);
-        file_meta -> ?record_info_gen(file_meta);
-        file_lock -> ?record_info_gen(file_lock);
-        storage_info -> ?record_info_gen(storage_info);
-        user -> ?record_info_gen(user);
-        share_desc -> ?record_info_gen(share_desc);
-        fuse_env -> ?record_info_gen(fuse_env);
-        %next_record -> ?record_info_gen(next_record);
+        some_record         -> ?record_info_gen(some_record);
+        cm_state            -> ?record_info_gen(cm_state);
+        host_state          -> ?record_info_gen(host_state);
+        node_state          -> ?record_info_gen(node_state);
+        file                -> ?record_info_gen(file);
+        file_location       -> ?record_info_gen(file_location);
+        file_descriptor     -> ?record_info_gen(file_descriptor);
+        file_meta           -> ?record_info_gen(file_meta);
+        file_lock           -> ?record_info_gen(file_lock);
+        storage_info        -> ?record_info_gen(storage_info);
+        user                -> ?record_info_gen(user);
+        share_desc          -> ?record_info_gen(share_desc);
+        fuse_session        -> ?record_info_gen(fuse_session);
+        connection_info     -> ?record_info_gen(connection_info);
+        %next_record        -> ?record_info_gen(next_record);
         _ -> {error, unsupported_record}
     end).
 
@@ -86,6 +87,7 @@
 -define(SHARE_BY_FILE_DESIGN_NAME, "share_by_file").
 -define(SHARE_BY_USER_DESIGN_NAME, "share_by_user").
 -define(FILES_NUMBER_DESIGN_NAME, "files_number").
+-define(FUSE_SESSIONS_DESIGN_NAME, "fuse_sessions").
 
 %% Views
 -define(FILE_TREE_VIEW, #view_info{name = "file_tree", design = ?VFS_BASE_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
@@ -108,6 +110,10 @@
 -define(USER_FILES_NUMBER_VIEW, #view_info{name = "user_files_number", design = ?FILES_NUMBER_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
 -define(GROUP_FILES_NUMBER_VIEW, #view_info{name = "group_files_number", design = ?FILES_NUMBER_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
 
+%% FUSE Sessions
+-define(FUSE_CONNECTIONS_VIEW, #view_info{name = "fuse_connections", design = ?FUSE_SESSIONS_DESIGN_NAME, db_name = ?SYSTEM_DB_NAME}).
+-define(EXPIRED_FUSE_SESSIONS_VIEW, #view_info{name = "expired_fuse_sessions", design = ?FUSE_SESSIONS_DESIGN_NAME, db_name = ?SYSTEM_DB_NAME}).
+
 %% Others
 -define(RECORD_INSTANCES_DOC_PREFIX, "record_instances_").
 -define(RECORD_FIELD_BINARY_PREFIX, "__bin__: ").
@@ -122,7 +128,8 @@
 -define(VIEW_LIST, [?FILE_TREE_VIEW, ?FD_BY_FILE_VIEW, ?FD_BY_EXPIRED_BEFORE_VIEW, ?ALL_STORAGE_VIEW,
                     ?FILES_BY_UID_AND_FILENAME, ?FILE_META_BY_TIMES, ?FILES_BY_META_DOC,
                     ?USER_BY_EMAIL_VIEW, ?USER_BY_LOGIN_VIEW, ?USER_BY_DN_VIEW, ?USER_BY_UID_VIEW, ?STORAGE_BY_ID_VIEW,
-                    ?SHARE_BY_FILE_VIEW, ?SHARE_BY_USER_VIEW, ?USER_FILES_NUMBER_VIEW, ?GROUP_FILES_NUMBER_VIEW]).
+                    ?SHARE_BY_FILE_VIEW, ?SHARE_BY_USER_VIEW, ?USER_FILES_NUMBER_VIEW, ?GROUP_FILES_NUMBER_VIEW,
+                    ?FUSE_CONNECTIONS_VIEW, ?EXPIRED_FUSE_SESSIONS_VIEW]).
 %% Default database name
 -define(DEFAULT_DB, lists:nth(1, ?DB_LIST)).
 

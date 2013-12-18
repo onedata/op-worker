@@ -19,8 +19,8 @@
 get_sh_for_fuse_test() ->
     meck:new([dao_lib]),
     meck:expect(dao_lib, apply, fun
-      (_, _, ["fuse1"], _) -> {ok, #veil_document{record = #fuse_env{vars = [{testvar1, "testvalue1"}, {group_id, "group1"}]}}};
-      (_, _, ["fuse2"], _) -> {ok, #veil_document{record = #fuse_env{vars = [{testvar1, "testvalue1"}, {group_id, "group2"}]}}};
+      (_, _, ["fuse1"], _) -> {ok, #veil_document{record = #fuse_session{env_vars = [{testvar1, "testvalue1"}, {group_id, "group1"}]}}};
+      (_, _, ["fuse2"], _) -> {ok, #veil_document{record = #fuse_session{env_vars = [{testvar1, "testvalue1"}, {group_id, "group2"}]}}};
       (_, _, [_], _) -> {error, some_error}
     end),
 

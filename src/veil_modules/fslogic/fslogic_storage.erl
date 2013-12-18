@@ -146,11 +146,11 @@ get_fuse_group(FuseID) ->
   case FuseID of
     ?CLUSTER_FUSE_ID -> ?CLUSTER_FUSE_ID;
     _ ->
-      {DAOStatus, DAOAns} = dao_lib:apply(dao_cluster, get_fuse_env, [FuseID], 1),
+      {DAOStatus, DAOAns} = dao_lib:apply(dao_cluster, get_fuse_session, [FuseID], 1),
       case DAOStatus of
         ok ->
           Record = DAOAns#veil_document.record,
-          proplists:get_value(group_id, Record#fuse_env.vars, default);
+          proplists:get_value(group_id, Record#fuse_session.env_vars, default);
         _ ->
           lager:error("Cannot get storage helper for fuse: ~p, reason: ~p", [FuseID, {DAOStatus, DAOAns}]),
           default

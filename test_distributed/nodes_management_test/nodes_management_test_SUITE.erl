@@ -20,12 +20,12 @@
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([main_test/1, callbacks_test/1]).
+-export([fuse_session_cleanup_test/1, main_test/1, callbacks_test/1]).
 
 %% export nodes' codes
 -export([ccm_code1/0, ccm_code2/0, worker_code/0]).
 
-all() -> [main_test, callbacks_test].
+all() -> [fuse_session_cleanup_test, main_test, callbacks_test].
 
 %% ====================================================================
 %% Code of nodes used during the test
@@ -48,6 +48,132 @@ worker_code() ->
 %% ====================================================================
 %% Test function
 %% ====================================================================
+
+
+%% This test checks if FUSE sessions are cleared properly
+fuse_session_cleanup_test(Config) ->
+    nodes_manager:check_start_assertions(Config),
+    NodesUp = ?config(nodes, Config),
+
+    [CCM | WorkerNodes] = NodesUp,
+
+    ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
+    timer:sleep(500),
+    RunWorkerCode = fun(Node) ->
+        ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, []))
+    end,
+    lists:foreach(RunWorkerCode, WorkerNodes),
+    timer:sleep(500),
+    ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
+    timer:sleep(1500),
+
+    %% Worker ports: 6666, 7777, 8888
+    Host = "localhost",
+
+    Cert1 = ?COMMON_FILE("peer.pem"),
+    _Cert2 = ?COMMON_FILE("peer2.pem"),
+
+    %% Add test users since cluster wont generate FuseId without full authentication
+    AddUser = fun(Login, Cert) ->
+        {ReadFileAns, PemBin} = file:read_file(Cert),
+        ?assertEqual(ok, ReadFileAns),
+        {ExtractAns, RDNSequence} = rpc:call(CCM, user_logic, extract_dn_from_cert, [PemBin]),
+        ?assertEqual(rdnSequence, ExtractAns),
+        {ConvertAns, DN} = rpc:call(CCM, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
+        ?assertEqual(ok, ConvertAns),
+        DnList = [DN],
+
+        Name = "user1 user1",
+        Teams = "user1 team",
+        Email = "user1@email.net",
+        {CreateUserAns, _} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+        ?assertEqual(ok, CreateUserAns)
+    end,
+    %% END Add user
+
+    AddUser("user1", Cert1),
+
+    %% Open connections for the user as session #1
+    {ok, Socket11} = wss:connect(Host, 6666, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #1
+    {ok, Socket12} = wss:connect(Host, 7777, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #2
+    {ok, Socket13} = wss:connect(Host, 7777, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #2
+    FuseID1 = wss:handshakeInit(Socket11, "hostname1", []),
+
+    ?assertEqual(ok, wss:handshakeAck(Socket11, FuseID1)),
+    ?assertEqual(ok, wss:handshakeAck(Socket12, FuseID1)),
+    ?assertEqual(ok, wss:handshakeAck(Socket13, FuseID1)),
+
+    %% Open connections for the user as session #2
+    {ok, Socket21} = wss:connect(Host, 7777, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #2
+    {ok, Socket22} = wss:connect(Host, 8888, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #3
+    FuseID2 = wss:handshakeInit(Socket21, "hostname2", []),
+
+    ?assertEqual(ok, wss:handshakeAck(Socket21, FuseID2)),
+    ?assertEqual(ok, wss:handshakeAck(Socket22, FuseID2)),
+
+    %% Check if everithing is fine in DB
+    {Status0, Ans0} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID1}], 1]),
+    {Status1, Ans1} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID2}], 1]),
+    {Status2, Ans2} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_fuse_sessions, [{by_valid_to, fslogic_utils:time() + 60}], 1]),
+    ?assertEqual([ok, ok, ok], [Status0, Status1, Status2]),
+
+    ?assertEqual(3, length(Ans0)),
+    ?assertEqual(2, length(Ans1)),
+    ?assertEqual(2, length(Ans2)),
+
+    %% Close some connections
+    wss:close(Socket11),
+    wss:close(Socket13),
+
+    timer:sleep(8000),
+
+    %% Check if everithing is fine in DB
+    {Status3, Ans3} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID1}], 1]),
+    {Status4, Ans4} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID2}], 1]),
+    {Status5, Ans5} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_fuse_sessions, [{by_valid_to, fslogic_utils:time() + 60}], 1]),
+    ?assertEqual([ok, ok, ok], [Status3, Status4, Status5]),
+
+    ?assertEqual(1, length(Ans3)),
+    ?assertEqual(2, length(Ans4)),
+    ?assertEqual(2, length(Ans5)),
+
+    %% Close last connection for session #1
+    wss:close(Socket12),
+
+    %% Session expire time is set to 2 secs
+    timer:sleep(8000),
+
+    %% Check if everithing is fine in DB
+    {Status6, Ans6} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID1}], 1]),
+    {Status7, Ans7} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID2}], 1]),
+    {Status8, Ans8} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_fuse_sessions, [{by_valid_to, fslogic_utils:time() + 60}], 1]),
+    ?assertEqual([ok, ok, ok], [Status6, Status7, Status8]),
+
+    ?assertEqual(0, length(Ans6)),
+    ?assertEqual(2, length(Ans7)),
+    ?assertEqual(1, length(Ans8)),
+
+
+    %% Close connections from session #2
+    wss:close(Socket21),
+    wss:close(Socket22),
+
+    %% Session expire time is set to 2 secs
+    timer:sleep(8000),
+
+    %% Check if everithing is fine in DB
+    {Status9, Ans9} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID1}], 1]),
+    {Status10, Ans10} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID2}], 1]),
+    {Status11, Ans11} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_fuse_sessions, [{by_valid_to, fslogic_utils:time() + 60}], 1]),
+    ?assertEqual([ok, ok, ok], [Status9, Status10, Status11]),
+
+    ?assertEqual(0, length(Ans9)),
+    ?assertEqual(0, length(Ans10)),
+    ?assertEqual(0, length(Ans11)),
+
+    %% Cleanup
+    rpc:call(CCM, user_logic, remove_user, [{login, "user1"}]),
+    rpc:call(CCM, user_logic, remove_user, [{login, "user2"}]).
 
 main_test(Config) ->
   nodes_manager:check_start_assertions(Config),
@@ -346,10 +472,11 @@ init_per_testcase(_, Config) ->
   [CCM | _] = NodesUp,
   DBNode = nodes_manager:get_db_node(),
 
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}],
-    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {db_nodes, [DBNode]}],
-    [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {db_nodes, [DBNode]}],
-    [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {db_nodes, [DBNode]}]]),
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [
+    [{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_cache_loop_time, 1}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_cache_loop_time, 1}],
+    [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_cache_loop_time, 1}],
+    [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_cache_loop_time, 1}]]),
 
   Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
   lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config).

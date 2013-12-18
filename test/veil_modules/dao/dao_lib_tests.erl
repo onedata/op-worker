@@ -50,17 +50,17 @@ apply_asynch_test() ->
 apply_synch_test() ->
   Module = dao,
   {MainAns, _} = dao_lib:apply(some_module, some_method, args, 1),
-  ?assertEqual(MainAns, error),
+  ?assertEqual(error, MainAns),
   {ok, _} = request_dispatcher:start_link(),
 
-  ?assertEqual(dao_lib:apply(some_module, some_method, args, 1), {error, worker_not_found}),
+  ?assertEqual({error, worker_not_found}, dao_lib:apply(some_module, some_method, args, 1)),
 
   worker_host:start_link(Module, [], 10),
   N1 = node(),
   WorkersList = [{N1, Module}],
   gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, 1, 1, 1, [Module | ?Modules]}),
 
-  ?assertEqual(dao_lib:apply(some_module, some_method, args, 1), {error, wrong_args}),
+  ?assertEqual({error, wrong_args}, dao_lib:apply(some_module, some_method, args, 1)),
 
   worker_host:stop(Module),
   request_dispatcher:stop().

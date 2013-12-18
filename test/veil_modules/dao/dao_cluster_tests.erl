@@ -21,10 +21,15 @@
 state_test_() ->
     {foreach, fun setup/0, fun teardown/1, [fun save_state/0, fun get_state/0, fun clear_state/0]}.
 
-fuse_env_test_() ->
-    {foreach, fun setup/0, fun teardown/1, [fun save_fuse_env/0, fun get_fuse_env/0, fun remove_fuse_env/0]}.
+fuse_session_test_() ->
+    {foreach, fun setup/0, fun teardown/1, [fun save_fuse_session/0, fun get_fuse_session/0, fun remove_fuse_session/0]}.
 
 setup() ->
+    case ets:info(dao_cache) of
+        undefined   -> ets:new(dao_cache, [named_table, public, ordered_set, {read_concurrency, true}]);
+        [_ | _]     -> ok
+    end,
+    ets:delete_all_objects(dao_cache),
     meck:new(dao).
 
 teardown(_) ->
@@ -45,19 +50,27 @@ clear_state() ->
     ?assertEqual(ok, dao_cluster:clear_state()),
     ?assert(meck:validate(dao)).
 
-save_fuse_env() ->
-    meck:expect(dao, save_record, fun(#veil_document{record = #fuse_env{}, uuid = "UUID"}) -> {ok, "UUID"} end),
-    ?assertEqual({ok, "UUID"}, dao_cluster:save_fuse_env(#veil_document{record = #fuse_env{}, uuid = "UUID"})),
+save_fuse_session() ->
+    meck:expect(dao, save_record, fun(#veil_document{record = #fuse_session{}, uuid = "UUID"}) -> {ok, "UUID"} end),
+    ?assertEqual({ok, "UUID"}, dao_cluster:save_fuse_session(#veil_document{record = #fuse_session{}, uuid = "UUID"})),
     ?assert(meck:validate(dao)).
 
-get_fuse_env() ->
-    meck:expect(dao, get_record, fun("UUID") -> {ok, #veil_document{record = #fuse_env{uid = 123}}} end),
-    ?assertMatch({ok, #veil_document{record = #fuse_env{uid = 123}}}, dao_cluster:get_fuse_env("UUID")),
+get_fuse_session() ->
+    meck:expect(dao, get_record, fun("UUID") -> {ok, #veil_document{record = #fuse_session{uid = 123}}} end),
+    ?assertMatch({ok, #veil_document{record = #fuse_session{uid = 123}}}, dao_cluster:get_fuse_session("UUID")),
+
+    %% Cache is used
+    meck:expect(dao, get_record, fun("UUID") -> {ok, #veil_document{record = #fuse_session{uid = 1234}}} end),
+    ?assertMatch({ok, #veil_document{record = #fuse_session{uid = 123}}}, dao_cluster:get_fuse_session("UUID")),
+
+    %% Update cache
+    ?assertMatch({ok, #veil_document{record = #fuse_session{uid = 1234}}}, dao_cluster:get_fuse_session("UUID", {stale, update_before})),
+
     ?assert(meck:validate(dao)).
 
-remove_fuse_env() ->
+remove_fuse_session() ->
     meck:expect(dao, remove_record, fun("UUID") -> ok end),
-    ?assertEqual(ok, dao_cluster:remove_fuse_env("UUID")),
+    ?assertEqual(ok, dao_cluster:remove_fuse_session("UUID")),
     ?assert(meck:validate(dao)).
 
 

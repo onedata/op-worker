@@ -303,10 +303,10 @@ veil_handshake_test(Config) ->
 
 
     %% Check if session data is correctly stored in DB
-    {DAOStatus, DAOAns} = rpc:call(CCM, dao_lib, apply, [dao_cluster, get_fuse_env, [FuseId11], 1]),
+    {DAOStatus, DAOAns} = rpc:call(CCM, dao_lib, apply, [dao_cluster, get_fuse_session, [FuseId11], 1]),
     ?assertEqual(ok, DAOStatus),
 
-    #veil_document{record = #fuse_env{hostname = Hostname, vars = Vars}} = DAOAns,
+    #veil_document{record = #fuse_session{hostname = Hostname, env_vars = Vars}} = DAOAns,
     ?assertEqual("hostname1", Hostname),
     ?assertEqual([{testname1, "testvalue1"}, {testname2, "testvalue2"}], Vars),
 
