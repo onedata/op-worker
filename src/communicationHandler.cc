@@ -175,9 +175,11 @@ void CommunicationHandler::closeConnection()
         m_endpoint->stop(); // If connection failed to close, make sure that io_service refuses to send/receive any further messages at this point
         
         try {
-            LOG(INFO) << "WebSocket: Lowest layer socket closed.";
-            m_endpointConnection->get_socket().lowest_layer().close(ec);
-            m_endpointConnection->get_socket().lowest_layer().cancel(ec);  // Explicite close underlying socket to make sure that all ongoing operations will be canceld
+            if(m_endpointConnection) {
+                LOG(INFO) << "WebSocket: Lowest layer socket closed.";
+                m_endpointConnection->get_socket().lowest_layer().close(ec);
+                m_endpointConnection->get_socket().lowest_layer().cancel(ec);  // Explicite close underlying socket to make sure that all ongoing operations will be canceld
+            }
         } catch (boost::exception &e) {
             LOG(ERROR) << "WebSocket connection socket close error";
         }
