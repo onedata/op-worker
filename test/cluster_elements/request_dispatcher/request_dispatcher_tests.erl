@@ -120,7 +120,7 @@ get_worker_node_test() ->
 
   N1 = node(),
   WorkersList = [{N1, fslogic}, {N1, dao}, {n2, fslogic}, {n3, fslogic}, {n3, dao}, {n4, gateway}, {N1, dns_worker}],
-  gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, 1, 1, 1}),
+  gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, [], 1, 1, 1}),
   Requests = [fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, dao, rtransfer, dao, dns_worker, dns_worker, gateway, gateway],
   ExpectedAns = [n3, n2, N1, N1, n2, n3, n3, n3, non, N1, N1, N1, n4, n4],
 
@@ -139,7 +139,7 @@ check_worker_node_ok_test() ->
 
   N1 = node(),
   WorkersList = [{N1, fslogic}, {N1, dao}, {n2, fslogic}, {n3, fslogic}, {n3, dao},{n3, gateway}, {n4, gateway}, {N1, dns_worker}],
-  gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, 1, 1, 1}),
+  gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, [], 1, 1, 1}),
   Requests = [fslogic, fslogic, fslogic, fslogic, dao, rtransfer, dao, dns_worker, dns_worker, gateway, gateway, gateway],
   ExpectedAns = [N1, N1, N1, N1, N1, non, N1, N1, N1, n4, n3, n3],
 
@@ -169,7 +169,7 @@ request_forward_test() ->
 
   N1 = node(),
   WorkersList = [{N1, Module}],
-  gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, 1, 1, 1, [Module | ?Modules]}),
+  gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, [], 1, 1, 1, [Module | ?Modules]}),
 
   ok = gen_server:call(?Dispatcher_Name, {Module, 1, self(), 11, {ok_request, 1}}),
   First =
@@ -224,7 +224,7 @@ check_worker_node_high_load_helper(Current, Avg) ->
 
   N1 = node(),
   WorkersList = [{N1, fslogic}, {N1, dao}, {n2, fslogic}, {n3, fslogic}, {n3, dao}, {n4, gateway}, {N1, dns_worker}],
-  gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, 1, Current, Avg}),
+  gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, [], 1, Current, Avg}),
   Requests = [fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, fslogic, dao, rtransfer, dao, dns_worker, dns_worker, gateway, gateway],
   ExpectedAns = [n3, n2, N1, N1, n2, n3, n3, n3, non, N1, N1, N1, n4, n4],
 

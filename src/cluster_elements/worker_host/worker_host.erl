@@ -13,13 +13,26 @@
 
 -module(worker_host).
 -behaviour(gen_server).
+
 -include("records.hrl").
+-include("registered_names.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
+
+-define(BORTER_CHILD_WAIT_TIME, 10000).
+-define(MAX_CHILD_WAIT_TIME, 60000000).
+-define(MAX_CALCULATION_WAIT_TIME, 10000000).
 
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_link/3, stop/1]).
+-export([start_link/3, stop/1, start_sub_proc/5, generate_sub_proc_list/1, generate_sub_proc_list/5]).
+
+%% ====================================================================
+%% Test API
+%% ====================================================================
+-ifdef(TEST).
+-export([stop_all_sub_proc/1]).
+-endif.
 
 %% ====================================================================
 %% gen_server callbacks
@@ -70,7 +83,20 @@ stop(PlugIn) ->
 %% ====================================================================
 init([PlugIn, PlugInArgs, LoadMemorySize]) ->
     process_flag(trap_exit, true),
-    {ok, #host_state{plug_in = PlugIn, plug_in_state = PlugIn:init(PlugInArgs), load_info = {[], [], 0, LoadMemorySize}}}.
+    InitAns = PlugIn:init(PlugInArgs),
+    case InitAns of
+      IDesc when is_record(IDesc, initial_host_description) ->
+        DispatcherRequestMapState = case InitAns#initial_host_description.request_map of
+          non -> true;
+          _ ->
+            Pid = self(),
+            erlang:send_after(200, Pid, {timer, register_disp_map}),
+            false
+        end,
+        {ok, #host_state{plug_in = PlugIn, request_map = InitAns#initial_host_description.request_map, sub_procs = InitAns#initial_host_description.sub_procs,
+        dispatcher_request_map = InitAns#initial_host_description.dispatcher_request_map, dispatcher_request_map_ok = DispatcherRequestMapState, plug_in_state = InitAns#initial_host_description.plug_in_state, load_info = {[], [], 0, LoadMemorySize}}};
+      _ -> {ok, #host_state{plug_in = PlugIn, plug_in_state = InitAns, load_info = {[], [], 0, LoadMemorySize}}}
+    end.
 
 %% handle_call/3
 %% ====================================================================
@@ -116,6 +142,24 @@ handle_call({test_call, ProtocolVersion, Msg}, _From, State) ->
   Reply = PlugIn:handle(ProtocolVersion, Msg),
   {reply, Reply, State};
 
+handle_call(dispatcher_map_unregistered, _From, State) ->
+  Pid = self(),
+  DMapState = case State#host_state.request_map of
+                non -> true;
+                _ ->
+                  erlang:send_after(200, Pid, {timer, register_disp_map}),
+                  false
+              end,
+  {reply, ok, State#host_state{dispatcher_request_map_ok = DMapState}};
+
+%% For tests
+handle_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM}, _From, State) ->
+  Pid = self(),
+  SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun),
+  erlang:send_after(200, Pid, {timer, register_disp_map}),
+  {reply, ok, State#host_state{request_map = RM, sub_procs = SubProcList,
+  dispatcher_request_map = DM, dispatcher_request_map_ok = false}};
+
 handle_call(Request, _From, State) when is_tuple(Request) -> %% Proxy call. Each cast can be achieved by instant proxy-call which ensures
                                                              %% that request was made, unlike cast because cast ignores state of node/gen_server
     {reply, gen_server:cast(State#host_state.plug_in, Request), State};
@@ -136,18 +180,18 @@ handle_call(_Request, _From, State) ->
 %% ====================================================================
 handle_cast({synch, ProtocolVersion, Msg, MsgId, ReplyTo}, State) ->
 	PlugIn = State#host_state.plug_in,
-	spawn(fun() -> proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) end),
-	{noreply, State};
+  NewSubProcList = proc_standard_request(State#host_state.request_map, State#host_state.sub_procs, PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo),
+	{noreply, State#host_state{sub_procs = NewSubProcList}};
 
 handle_cast({synch, ProtocolVersion, Msg, ReplyTo}, State) ->
   PlugIn = State#host_state.plug_in,
-  spawn(fun() -> proc_request(PlugIn, ProtocolVersion, Msg, non, ReplyTo) end),
-  {noreply, State};
+  NewSubProcList = proc_standard_request(State#host_state.request_map, State#host_state.sub_procs, PlugIn, ProtocolVersion, Msg, non, ReplyTo),
+  {noreply, State#host_state{sub_procs = NewSubProcList}};
 
 handle_cast({asynch, ProtocolVersion, Msg}, State) ->
 	PlugIn = State#host_state.plug_in,
-	spawn(fun() -> proc_request(PlugIn, ProtocolVersion, Msg, non, non) end),	
-	{noreply, State};
+  NewSubProcList = proc_standard_request(State#host_state.request_map, State#host_state.sub_procs, PlugIn, ProtocolVersion, Msg, non, non),
+	{noreply, State#host_state{sub_procs = NewSubProcList}};
 
 handle_cast({sequential_synch, ProtocolVersion, Msg, MsgId, ReplyTo}, State) ->
     PlugIn = State#host_state.plug_in,
@@ -191,6 +235,16 @@ handle_cast({progress_report, Report}, State) ->
 	NewLoadInfo = save_progress(Report, State#host_state.load_info),
     {noreply, State#host_state{load_info = NewLoadInfo}};
 
+handle_cast(register_disp_map, State) ->
+  case State#host_state.dispatcher_request_map_ok of
+    true -> ok;
+    _ ->
+     Pid = self(),
+     erlang:send_after(10000, Pid, {timer, register_disp_map}),
+     gen_server:cast({global, ?CCM}, {register_dispatcher_map, State#host_state.plug_in, State#host_state.dispatcher_request_map, Pid})
+  end,
+  {noreply, State};
+
 handle_cast(stop, State) ->
   {stop, normal, State};
 
@@ -214,6 +268,9 @@ handle_info({timer, Msg}, State) ->
   gen_server:cast(PlugIn, Msg),
   {noreply, State};
 
+handle_info(dispatcher_map_registered, State) ->
+  {noreply, State#host_state{dispatcher_request_map_ok = true}};
+
 handle_info(Info, State) ->
 	PlugIn = State#host_state.plug_in,
     {_Reply, NewPlugInState} = PlugIn:handle(Info, State#host_state.plug_in_state), %% TODO: fix me ! There's no such callback in worker_plugin
@@ -229,8 +286,9 @@ handle_info(Info, State) ->
 			| {shutdown, term()}
 			| term().
 %% ====================================================================
-terminate(_Reason, #host_state{plug_in = PlugIn}) ->
+terminate(_Reason, #host_state{plug_in = PlugIn, sub_procs = SubProcs}) ->
     PlugIn:cleanup(),
+    stop_all_sub_proc(SubProcs),
     ok.
 
 
@@ -258,39 +316,100 @@ code_change(_OldVsn, State, _Extra) ->
 %% ====================================================================
 proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
 	BeforeProcessingRequest = os:timestamp(),
-    Request =
-        case Msg of
-            #veil_request{subject = Subj, request = Msg1, fuse_id = FuseID} ->
-                put(user_id, Subj),
-                put(fuse_id, FuseID),
-                Msg1;
-            NotWrapped -> NotWrapped
-        end,
+  Request = preproccess_msg(Msg),
 	Response = 	try
-		PlugIn:handle(ProtocolVersion, Request)
+    PlugIn:handle(ProtocolVersion, Request)
 	catch
     Type:Error ->
       lager:error("Worker plug-in ~p error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
       worker_plug_in_error
 	end,
-	case ReplyTo of
-		non -> ok;
+  send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo).
+
+%% proc_request/7
+%% ====================================================================
+%% @doc Processes client request using PlugIn:handle function or delegates it request to sub proccess. Afterwards,
+%% it sends the answer to dispatcher and logs info about processing time.
+-spec proc_standard_request(RequestMap :: term(), SubProcs :: list(), PlugIn :: atom(), ProtocolVersion :: integer(), Msg :: term(), MsgId :: term(), ReplyDisp :: term()) -> Result when
+  Result ::  list().
+%% ====================================================================
+proc_standard_request(RequestMap, SubProcs, PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
+  case RequestMap of
+    non ->
+      spawn(fun() -> proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) end),
+      SubProcs;
+    _ ->
+      try
+        {SubProcArgs, SubProcPid} = proplists:get_value(RequestMap(Msg), SubProcs, {not_found, not_found}),
+        case SubProcArgs of
+          not_found ->
+            spawn(fun() -> proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) end),
+            SubProcs;
+          _ ->
+            SubProcPid ! {PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo},
+            %% check if chosen proc did not time out before message was delivered
+            case process_info(SubProcPid) of
+              undefined->
+                {Name, MaxDepth, MaxWidth, NewProcFun, NewMapFun} = SubProcArgs,
+                SubProcPid2 = start_sub_proc(Name, MaxDepth, MaxWidth, NewProcFun, NewMapFun),
+                SubProcPid2 ! {PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo},
+                SubProc2Desc = {Name, {SubProcArgs, SubProcPid2}},
+                [SubProc2Desc | proplists:delete(Name, SubProcs)];
+              _ ->
+                SubProcs
+            end
+        end
+      catch
+        Type:Error ->
+          spawn(fun() ->
+            BeforeProcessingRequest = os:timestamp(),
+            lager:error("Worker plug-in ~p sub proc error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
+            send_response(PlugIn, BeforeProcessingRequest, sub_proc_error, MsgId, ReplyTo)
+          end),
+          SubProcs
+      end
+  end.
+
+%% preproccess_msg/1
+%% ====================================================================
+%% @doc Preproccesses client request.
+-spec preproccess_msg(Msg :: term()) -> Result when
+  Result ::  term().
+%% ====================================================================
+preproccess_msg(Msg) ->
+    case Msg of
+      #veil_request{subject = Subj, request = Msg1, fuse_id = FuseID} ->
+        put(user_id, Subj),
+        put(fuse_id, FuseID),
+        Msg1;
+      NotWrapped -> NotWrapped
+    end.
+
+%% send_response/5
+%% ====================================================================
+%% @doc Sends responce to client
+-spec send_response(PlugIn :: atom(), BeforeProcessingRequest :: term(), Response :: term(), MsgId :: term(), ReplyDisp :: term()) -> Result when
+  Result ::  atom().
+%% ====================================================================
+send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo) ->
+  case ReplyTo of
+    non -> ok;
     {gen_serv, Serv} ->
       case MsgId of
         non -> gen_server:cast(Serv, Response);
         Id -> gen_server:cast(Serv, {worker_answer, Id, Response})
-      end; 
+      end;
     {proc, Pid} ->
       case MsgId of
         non -> Pid ! Response;
         Id -> Pid ! {worker_answer, Id, Response}
       end;
     Other -> lagger:error("Wrong reply type: ~s", [Other])
-	end,
+  end,
 
-	AfterProcessingRequest = os:timestamp(),
-	Time = timer:now_diff(AfterProcessingRequest, BeforeProcessingRequest),
-	gen_server:cast(PlugIn, {progress_report, {BeforeProcessingRequest, Time}}).
+  AfterProcessingRequest = os:timestamp(),
+  Time = timer:now_diff(AfterProcessingRequest, BeforeProcessingRequest),
+  gen_server:cast(PlugIn, {progress_report, {BeforeProcessingRequest, Time}}).
 
 %% save_progress/2
 %% ====================================================================
@@ -324,3 +443,229 @@ load_info({New, Old, NewListSize, Max}) ->
 		end	
 	end,
 	{Time, Load}.
+
+%% update_wait_time/2
+%% ====================================================================
+%% @doc Updates information about sub proc average waiting time.
+-spec update_wait_time(WaitFrom :: term(), AvgWaitTime :: term()) -> Result when
+  Result ::  {Now, NewAvgWaitTime},
+  Now ::  term(),
+  NewAvgWaitTime ::  term().
+%% ====================================================================
+update_wait_time(WaitFrom, AvgWaitTime) ->
+  Now = os:timestamp(),
+  TimeDifTmp = timer:now_diff(Now, WaitFrom),
+  TimeDif = case TimeDifTmp > ?MAX_CALCULATION_WAIT_TIME of
+    true -> ?MAX_CALCULATION_WAIT_TIME;
+    false -> TimeDifTmp
+  end,
+  NewAvgWaitTime = TimeDif / 10 + AvgWaitTime * 9 / 10,
+  {Now, NewAvgWaitTime}.
+
+%% start_sub_proc/5
+%% ====================================================================
+%% @doc Starts sub proc
+-spec start_sub_proc(Name :: atom(), MaxDepth :: integer(), MaxWidth :: integer(), ProcFun :: term(), MapFun :: term()) -> Result when
+  Result ::  pid().
+%% ====================================================================
+start_sub_proc(Name, MaxDepth, MaxWidth, ProcFun, MapFun) ->
+  spawn(fun() -> start_sub_proc(Name, 1, MaxDepth, MaxWidth, ProcFun, MapFun) end).
+
+%% start_sub_proc/6
+%% ====================================================================
+%% @doc Starts sub proc
+-spec start_sub_proc(Name :: atom(), SubProcDepth :: integer(), MaxDepth :: integer(), MaxWidth :: integer(), ProcFun :: term(), MapFun :: term()) -> Result when
+  Result ::  pid().
+%% ====================================================================
+start_sub_proc(Name, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun) ->
+  process_flag(trap_exit, true),
+  EtsName = list_to_atom(atom_to_list(Name) ++ atom_to_list(node())),
+  ets:new(EtsName, [named_table, set, private]),
+  sub_proc(Name, EtsName, proc, SubProcDepth, MaxDepth, MaxWidth, os:timestamp(), ?MAX_CALCULATION_WAIT_TIME, ProcFun, MapFun).
+
+%% sub_proc/10
+%% ====================================================================
+%% @doc Sub proc function
+-spec sub_proc(Name :: atom(), EtsName:: atom(), ProcType:: atom(), SubProcDepth :: integer(), MaxDepth :: integer(), MaxWidth :: integer(),
+    WaitFrom :: term(), AvgWaitTime :: term(), ProcFun :: term(), MapFun :: term()) -> Result when
+  Result ::  ok | end_sub_proc.
+%% ====================================================================
+sub_proc(Name, EtsName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun) ->
+  receive
+    {sub_proc_management, stop} ->
+      del_sub_procs(ets:first(EtsName), EtsName);
+
+    {'EXIT', ChildPid, _} ->
+      ChildDesc = ets:lookup(EtsName, ChildPid),
+      case ChildDesc of
+        [{ChildPid, ChildNum}] ->
+          ets:delete(EtsName, ChildPid),
+          ets:delete(EtsName, ChildNum);
+        _ ->
+          lager:error([{mod, ?MODULE}], "Exit of unknown sub proc"),
+          error
+      end,
+      sub_proc(Name, EtsName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
+    Request ->
+      {Now, NewAvgWaitTime} = update_wait_time(WaitFrom, AvgWaitTime),
+      NewProcType = case ProcType of
+                      proc ->
+                        case NewAvgWaitTime < ?BORTER_CHILD_WAIT_TIME of
+                          true ->
+                            case SubProcDepth < MaxDepth of
+                              true ->
+                                map;
+                              false ->
+                                proc
+                            end;
+                          false ->
+                            proc
+                        end;
+                      map ->
+                        case NewAvgWaitTime > ?BORTER_CHILD_WAIT_TIME * 10 of
+                          true ->
+                            proc;
+                          false ->
+                            map
+                        end
+                    end,
+
+      case NewProcType of
+        map ->
+          {ForwardNum, ForwardPid} = map_to_sub_proc(Name, EtsName, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request),
+          case ForwardNum of
+            error -> error;
+            _ ->
+              ForwardPid ! Request,
+              %% check if chosen proc did not time out before message was delivered
+              case process_info(ForwardPid) of
+                undefined->
+                  ets:delete(EtsName, ForwardPid),
+                  ets:delete(EtsName, ForwardNum),
+                  ForwardPid2 = map_to_sub_proc(Name, EtsName, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request),
+                  ForwardPid2 ! Request;
+                _ ->
+                  ok
+              end
+          end;
+        proc ->
+          ProcFun(Request)
+      end,
+
+      sub_proc(Name, EtsName, NewProcType, SubProcDepth, MaxDepth, MaxWidth, Now, NewAvgWaitTime, ProcFun, MapFun)
+  after ?MAX_CHILD_WAIT_TIME ->
+    end_sub_proc
+  end.
+
+%% map_to_sub_proc/8
+%% ====================================================================
+%% @doc Maps request to sub proc pid
+-spec map_to_sub_proc(Name :: atom(), EtsName:: atom(), SubProcDepth :: integer(), MaxDepth :: integer(), MaxWidth :: integer(),
+   ProcFun :: term(), MapFun :: term(), Request :: term()) -> Result when
+  Result ::  {SubProcNum, SubProcPid},
+  SubProcNum :: integer(),
+  SubProcPid :: term().
+%% ====================================================================
+map_to_sub_proc(Name, EtsName, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request) ->
+  try
+    RequestValue = calculate_proc_vale(SubProcDepth, MaxWidth, MapFun(Request)),
+    RequestProc = ets:lookup(EtsName, RequestValue),
+    case RequestProc of
+      [] ->
+        NewName = list_to_atom(atom_to_list(Name) ++ "_" ++ integer_to_list(RequestValue)),
+        NewPid = spawn(fun() -> start_sub_proc(NewName, SubProcDepth + 1, MaxDepth, MaxWidth, ProcFun, MapFun) end),
+        ets:insert(EtsName, {RequestValue, NewPid}),
+        ets:insert(EtsName, {NewPid, RequestValue}),
+        {RequestValue, NewPid};
+      [{RequestValue, RequestProcPid}] ->
+        {RequestValue, RequestProcPid};
+      _ ->
+        lager:error([{mod, ?MODULE}], "Sub proc error for request ~p", [Request]),
+        {error, error}
+    end
+  catch
+    _:_ ->
+      lager:error([{mod, ?MODULE}], "Sub proc error for request ~p", [Request]),
+      {error, error}
+  end.
+
+%% calculate_proc_vale/10
+%% ====================================================================
+%% @doc Calculates value used to identify sub proc
+-spec calculate_proc_vale(TmpDepth :: integer(), MaxWidth :: integer(), CurrentValue :: integer()) -> Result when
+  Result ::  integer().
+%% ====================================================================
+calculate_proc_vale(1, MaxWidth, CurrentValue) ->
+  trunc(CurrentValue) rem MaxWidth;
+
+calculate_proc_vale(TmpDepth, MaxWidth, CurrentValue) ->
+  calculate_proc_vale(TmpDepth - 1, MaxWidth, CurrentValue  / MaxWidth).
+
+%% generate_sub_proc_list/5
+%% ====================================================================
+%% @doc Generates the list that describes sub procs.
+-spec generate_sub_proc_list(Name :: atom(), MaxDepth :: integer(), MaxWidth :: integer(), ProcFun :: term(), MapFun :: term()) -> Result when
+  Result ::  list().
+%% ====================================================================
+generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun) ->
+  generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun}]).
+
+%% generate_sub_proc_list/5
+%% ====================================================================
+%% @doc Generates the list that describes sub procs.
+-spec generate_sub_proc_list([{Name :: atom(), MaxDepth :: integer(), MaxWidth :: integer(), ProcFun :: term(), MapFun :: term()}]) -> Result when
+  Result ::  list().
+%% ====================================================================
+generate_sub_proc_list([]) ->
+  [];
+
+generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun} | Tail]) ->
+  NewProcFun = fun({PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo}) ->
+    lager:info("Processing in sub proc: ~p ~n", [Name]),
+    BeforeProcessingRequest = os:timestamp(),
+    Request = preproccess_msg(Msg),
+    Response = 	try
+      ProcFun(ProtocolVersion, Request)
+                catch
+                  Type:Error ->
+                    lager:error("Worker plug-in ~p error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
+                    worker_plug_in_error
+                end,
+    send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo)
+  end,
+
+  NewMapFun = fun({_, _, Msg2, _, _}) ->
+    Request = preproccess_msg(Msg2),
+    MapFun(Request)
+  end,
+
+  StartArgs = {Name, MaxDepth, MaxWidth, NewProcFun, NewMapFun},
+  SubProc = {Name, {StartArgs, start_sub_proc(Name, MaxDepth, MaxWidth, NewProcFun, NewMapFun)}},
+  [SubProc | generate_sub_proc_list(Tail)].
+
+%% stop_all_sub_proc/10
+%% ====================================================================
+%% @doc Stops all sub procs
+-spec stop_all_sub_proc(SubProcs :: list()) -> ok.
+%% ====================================================================
+stop_all_sub_proc(SubProcs) ->
+  Keys = proplists:get_keys(SubProcs),
+  lists:foreach(fun(K) ->
+    {_, SubProcPid} = proplists:get_value(K, SubProcs),
+    SubProcPid ! {sub_proc_management, stop}
+  end, Keys).
+
+%% del_sub_procs/10
+%% ====================================================================
+%% @doc Sends stop signal to all processes found in ets table.
+-spec del_sub_procs(Key :: term(), Name :: atom()) -> ok.
+%% ====================================================================
+del_sub_procs('$end_of_table', _Name) ->
+  ok;
+del_sub_procs(Key, Name) ->
+  V = ets:lookup(Name, Key),
+  case V of
+    [{Int, EndPid}] when is_integer(Int) -> EndPid ! {sub_proc_management, stop};
+    _ -> ok
+  end,
+  del_sub_procs(ets:next(Name, Key), Name).

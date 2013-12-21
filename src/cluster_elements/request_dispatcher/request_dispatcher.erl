@@ -15,7 +15,7 @@
 -include("records.hrl").
 -include("modules_and_args.hrl").
 
--define(CALLBACKS_TABLE, dispatcher_callbacks_table).
+-define(CALLBACKS_TABLE, "dispatcher_callbacks_table").
 
 %% ====================================================================
 %% API
@@ -24,6 +24,10 @@
 
 %% TODO zmierzyć czy bardziej się opłaca przechowywać dane o modułach
 %% jako stan (jak teraz) czy jako ets i ewentualnie przejść na ets
+%% TODO - sprawdzić czy dispatcher wytrzyma obciążenie - alternatywą jest
+%% przejście z round robin na losowość co wyłacza updatowanie stanu
+%% Można też wyłączyć potwierdzenie znajdowania noda co
+%% da jeszcze większe przyspieszenie
 
 %% ====================================================================
 %% Test API
@@ -93,7 +97,7 @@ stop() ->
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 init(Modules) ->
-  ets:new(?CALLBACKS_TABLE, [named_table, set]),
+  ets:new(get_ets_name(), [named_table, set]),
   process_flag(trap_exit, true),
   try gsi_handler:init() of     %% Failed initialization of GSI should not disturb dispacher's startup
     ok -> ok;
@@ -102,7 +106,11 @@ init(Modules) ->
     throw:ccm_node -> lager:info("GSI Handler init interrupted due to wrong node type (CCM)");
     _:Except -> lager:error("GSI Handler init failed. Exception: ~p ~n ~p", [Except, erlang:get_stacktrace()])
   end,
-  {ok, initState(Modules)}.
+  NewState = initState(Modules),
+  ModulesConstList = lists:map(fun({M, {L1, L2}}) ->
+    {M, lists:append(L1, L2)}
+  end, NewState#dispatcher_state.modules),
+  {ok, NewState#dispatcher_state{modules_const_list = ModulesConstList}}.
 
 %% handle_call/3
 %% ====================================================================
@@ -125,7 +133,7 @@ handle_call({get_workers, Module}, _From, State) ->
   {reply, get_workers(Module, State), State};
 
 handle_call({Task, ProtocolVersion, AnsPid, MsgId, Request}, _From, State) ->
-  Ans = get_worker_node(Task, State),
+  Ans = get_worker_node(Task, Request, State),
   case Ans of
     {Node, NewState} ->
       case Node of
@@ -138,7 +146,7 @@ handle_call({Task, ProtocolVersion, AnsPid, MsgId, Request}, _From, State) ->
   end;
 
 handle_call({Task, ProtocolVersion, AnsPid, Request}, _From, State) ->
-  Ans = get_worker_node(Task, State),
+  Ans = get_worker_node(Task, Request, State),
   case Ans of
     {Node, NewState} ->
       case Node of
@@ -151,7 +159,7 @@ handle_call({Task, ProtocolVersion, AnsPid, Request}, _From, State) ->
   end;
 
 handle_call({Task, ProtocolVersion, Request}, _From, State) ->
-  Ans = get_worker_node(Task, State),
+  Ans = get_worker_node(Task, Request, State),
   case Ans of
     {Node, NewState} ->
       case Node of
@@ -164,7 +172,7 @@ handle_call({Task, ProtocolVersion, Request}, _From, State) ->
   end;
 
 handle_call({node_chosen, {Task, ProtocolVersion, AnsPid, Request}}, _From, State) ->
-  Ans = check_worker_node(Task, State),
+  Ans = check_worker_node(Task, Request, State),
   case Ans of
     {Node, NewState} ->
       case Node of
@@ -177,7 +185,7 @@ handle_call({node_chosen, {Task, ProtocolVersion, AnsPid, Request}}, _From, Stat
   end;
 
 handle_call({node_chosen, {Task, ProtocolVersion, AnsPid, MsgId, Request}}, _From, State) ->
-  Ans = check_worker_node(Task, State),
+  Ans = check_worker_node(Task, Request, State),
   case Ans of
     {Node, NewState} ->
       case Node of
@@ -190,7 +198,7 @@ handle_call({node_chosen, {Task, ProtocolVersion, AnsPid, MsgId, Request}}, _Fro
   end;
 
 handle_call({node_chosen, {Task, ProtocolVersion, Request}}, _From, State) ->
-  Ans = check_worker_node(Task, State),
+  Ans = check_worker_node(Task, Request, State),
   case Ans of
     {Node, NewState} ->
       case Node of
@@ -207,7 +215,7 @@ handle_call({get_callback, Fuse}, _From, State) ->
 
 %% test call
 handle_call({get_worker_node, Module}, _From, State) ->
-  Ans = get_worker_node(Module, State),
+  Ans = get_worker_node(Module, non, State),
   case Ans of
     {Node, NewState} -> {reply, Node, NewState};
     Other -> {reply, Other, State}
@@ -215,7 +223,7 @@ handle_call({get_worker_node, Module}, _From, State) ->
 
 %% test call
 handle_call({check_worker_node, Module}, _From, State) ->
-  Ans = check_worker_node(Module, State),
+  Ans = check_worker_node(Module, non, State),
   case Ans of
     {Node, NewState} -> {reply, Node, NewState};
     Other -> {reply, Other, State}
@@ -290,11 +298,13 @@ handle_cast({update_state, NewStateNum, NewCallbacksNum}, State) ->
       end
   end;
 
-handle_cast({update_workers, WorkersList, NewStateNum, CurLoad, AvgLoad}, _State) ->
-  {noreply, update_workers(WorkersList, NewStateNum, CurLoad, AvgLoad, ?Modules)};
+handle_cast({update_workers, WorkersList, RequestMap, NewStateNum, CurLoad, AvgLoad}, _State) ->
+  NewState = update_workers(WorkersList, NewStateNum, CurLoad, AvgLoad, ?Modules),
+  {noreply, NewState#dispatcher_state{request_map = RequestMap}};
 
-handle_cast({update_workers, WorkersList, NewStateNum, CurLoad, AvgLoad, Modules}, _State) ->
-  {noreply, update_workers(WorkersList, NewStateNum, CurLoad, AvgLoad, Modules)};
+handle_cast({update_workers, WorkersList, RequestMap, NewStateNum, CurLoad, AvgLoad, Modules}, _State) ->
+  NewState = update_workers(WorkersList, NewStateNum, CurLoad, AvgLoad, Modules),
+  {noreply, NewState#dispatcher_state{request_map = RequestMap}};
 
 handle_cast({update_loads, CurLoad, AvgLoad}, State) ->
   {noreply, State#dispatcher_state{current_load = CurLoad, avg_load = AvgLoad}};
@@ -406,55 +416,65 @@ update_nodes_list(Module, NewNodes, [{M, N} | T], Ans) ->
     false -> update_nodes_list(Module, NewNodes, T, [{M, N} | Ans])
   end.
 
-%% get_worker_node/2
+%% get_worker_node/3
 %% ====================================================================
 %% @doc Chooses one from nodes where module is working.
--spec get_worker_node(Module :: atom(), State :: term()) -> Result when
+-spec get_worker_node(Module :: atom(), Request :: term(), State :: term()) -> Result when
   Result ::  term().
 %% ====================================================================
-get_worker_node(Module, State) ->
-  Nodes = get_nodes(Module,State),
-  case Nodes of
-    {L1, L2} ->
-      {N, NewLists} = choose_worker(L1, L2),
-      {N, update_nodes(Module, NewLists, State)};
-    Other -> Other
+get_worker_node(Module, Request, State) ->
+  case choose_node_by_map(Module, Request, State) of
+    use_standard_mode ->
+      Nodes = get_nodes(Module,State),
+      case Nodes of
+        {L1, L2} ->
+          {N, NewLists} = choose_worker(L1, L2),
+          {N, update_nodes(Module, NewLists, State)};
+        Other -> Other
+      end;
+    Other2 ->
+      Other2
   end.
 
-%% get_worker_node/2
+%% check_worker_node/3
 %% ====================================================================
 %% @doc Checks if module is working on this node. If not, chooses other
 %% node from nodes where module is working.
--spec check_worker_node(Module :: atom(), State :: term()) -> Result when
+-spec check_worker_node(Module :: atom(), Request :: term(), State :: term()) -> Result when
   Result ::  term().
 %% ====================================================================
-check_worker_node(Module, State) ->
-  Nodes = get_nodes(Module,State),
-  case Nodes of
-    {L1, L2} ->
-      ThisNode = node(),
-      Check = (lists:member(ThisNode, lists:flatten([L1, L2]))),
-      case Check of
-        true ->
-          Check2 = ((State#dispatcher_state.current_load =< 3) and (State#dispatcher_state.current_load =< 2*State#dispatcher_state.avg_load)),
-          case Check2 of
-            true -> {ThisNode, State};
-            false ->
+check_worker_node(Module, Request, State) ->
+  case choose_node_by_map(Module, Request, State) of
+    use_standard_mode ->
+      Nodes = get_nodes(Module,State),
+      case Nodes of
+        {L1, L2} ->
+          ThisNode = node(),
+          Check = (lists:member(ThisNode, lists:flatten([L1, L2]))),
+          case Check of
+            true ->
+              Check2 = ((State#dispatcher_state.current_load =< 3) and (State#dispatcher_state.current_load =< 2*State#dispatcher_state.avg_load)),
+              case Check2 of
+                true -> {ThisNode, State};
+                false ->
 %%               lager:warning([{mod, ?MODULE}], "Load of node too high", [Module]),
+                  {N, NewLists} = choose_worker(L1, L2),
+                  {N, update_nodes(Module, NewLists, State)}
+              end;
+            false ->
+%%           lager:warning([{mod, ?MODULE}], "Module ~p does not work at this node", [Module]),
               {N, NewLists} = choose_worker(L1, L2),
               {N, update_nodes(Module, NewLists, State)}
           end;
-        false ->
-%%           lager:warning([{mod, ?MODULE}], "Module ~p does not work at this node", [Module]),
-          {N, NewLists} = choose_worker(L1, L2),
-          {N, update_nodes(Module, NewLists, State)}
+        Other -> Other
       end;
-    Other -> Other
+    Other2 ->
+      Other2
   end.
 
 %% choose_worker/2
 %% ====================================================================
-%% @doc Helper function used by get_worker_node/2. It chooses node and
+%% @doc Helper function used by get_worker_node/3. It chooses node and
 %% put it on recently used nodes list.
 -spec choose_worker(L1 :: term(), L2 :: term()) -> Result when
   Result ::  term().
@@ -496,7 +516,11 @@ update_workers(WorkersList, SNum, CLoad, ALoad, Modules) ->
       _Other -> TmpState
     end
   end,
-  lists:foldl(Update, initState(SNum, CLoad, ALoad, Modules), WorkersList).
+  NewState = lists:foldl(Update, initState(SNum, CLoad, ALoad, Modules), WorkersList),
+  ModulesConstList = lists:map(fun({M, {L1, L2}}) ->
+    {M, lists:append(L1, L2)}
+  end, NewState#dispatcher_state.modules),
+  NewState#dispatcher_state{modules_const_list = ModulesConstList}.
 
 %% pull_state/1
 %% ====================================================================
@@ -561,17 +585,18 @@ initState(SNum, CLoad, ALoad, Modules) ->
   Result :: ok | updated.
 %% ====================================================================
 add_callback(Node, Fuse) ->
-  OldCallbacks = ets:lookup(?CALLBACKS_TABLE, Fuse),
+  EtsName = get_ets_name(),
+  OldCallbacks = ets:lookup(EtsName, Fuse),
   case OldCallbacks of
     [{Fuse, OldCallbacksList}] ->
       case lists:member(Node, OldCallbacksList) of
         true -> ok;
         false ->
-          ets:insert(?CALLBACKS_TABLE, {Fuse, [Node | OldCallbacksList]}),
+          ets:insert(EtsName, {Fuse, [Node | OldCallbacksList]}),
           updated
       end;
     _ ->
-      ets:insert(?CALLBACKS_TABLE, {Fuse, [Node]}),
+      ets:insert(EtsName, {Fuse, [Node]}),
       updated
   end.
 
@@ -582,17 +607,18 @@ add_callback(Node, Fuse) ->
   Result :: updated | not_exists.
 %% ====================================================================
 delete_callback(Node, Fuse) ->
-  OldCallbacks = ets:lookup(?CALLBACKS_TABLE, Fuse),
+  EtsName = get_ets_name(),
+  OldCallbacks = ets:lookup(EtsName, Fuse),
   case OldCallbacks of
     [{Fuse, OldCallbacksList}] ->
       case lists:member(Node, OldCallbacksList) of
         true ->
           case length(OldCallbacksList) of
             1 ->
-              ets:delete(?CALLBACKS_TABLE, Fuse),
+              ets:delete(EtsName, Fuse),
               updated;
             _ ->
-              ets:insert(?CALLBACKS_TABLE, {Fuse, lists:delete(Node, OldCallbacksList)}),
+              ets:insert(EtsName, {Fuse, lists:delete(Node, OldCallbacksList)}),
               updated
           end;
         false -> not_exists
@@ -608,7 +634,7 @@ delete_callback(Node, Fuse) ->
   Result :: not_found | term().
 %% ====================================================================
 get_callback(Fuse) ->
-  Callbacks = ets:lookup(?CALLBACKS_TABLE, Fuse),
+  Callbacks = ets:lookup(get_ets_name(), Fuse),
   case Callbacks of
     [{Fuse, CallbacksList}] ->
       Num = random:uniform(length(CallbacksList)),
@@ -626,9 +652,10 @@ get_callback(Fuse) ->
 %% ====================================================================
 pull_callbacks() ->
   try
+    EtsName = get_ets_name(),
     {CallbacksList, CallbacksNum} = gen_server:call({global, ?CCM}, get_callbacks),
     UpdateCallbacks = fun({Fuse, NodesList}) ->
-      ets:insert(?CALLBACKS_TABLE, {Fuse, NodesList})
+      ets:insert(EtsName, {Fuse, NodesList})
     end,
     lists:foreach(UpdateCallbacks, CallbacksList),
     CallbacksNum
@@ -645,19 +672,20 @@ pull_callbacks() ->
   Result :: list().
 %% ====================================================================
 get_callbacks() ->
-  get_callbacks(ets:first(?CALLBACKS_TABLE)).
+  EtsName = get_ets_name(),
+  get_callbacks(EtsName, ets:first(EtsName)).
 
-%% get_callbacks/1
+%% get_callbacks/2
 %% ====================================================================
 %% @doc Gets information about all callbacks (helper function)
--spec get_callbacks(Fuse :: string()) -> Result when
+-spec get_callbacks(EtsName :: atom(), Fuse :: string()) -> Result when
   Result :: list().
 %% ====================================================================
-get_callbacks('$end_of_table') ->
+get_callbacks(_EtsName, '$end_of_table') ->
   [];
-get_callbacks(Fuse) ->
-  [Value] = ets:lookup(?CALLBACKS_TABLE, Fuse),
-  [Value | get_callbacks(ets:next(?CALLBACKS_TABLE, Fuse))].
+get_callbacks(EtsName, Fuse) ->
+  [Value] = ets:lookup(EtsName, Fuse),
+  [Value | get_callbacks(EtsName, ets:next(EtsName, Fuse))].
 
 %% send_to_fuse/3
 %% ====================================================================
@@ -719,3 +747,57 @@ send_to_fuse(Fuse, Message, MessageDecoder, SendNum) ->
           send_to_fuse(Fuse, Message, MessageDecoder, SendNum - 1)
       end
   end.
+
+%% choose_node_by_map/3
+%% ====================================================================
+%% @doc Chooses node for a request
+-spec choose_node_by_map(Module :: atom(), Msg :: term(), State :: term()) -> Result when
+  Result :: wrong_worker_type | use_standard_mode | {non, NewState} | {Node, NewState},
+  Node :: atom(),
+  NewState :: term().
+%% ====================================================================
+choose_node_by_map(Module, Msg, State) ->
+  ModulesConstList = proplists:get_value(Module, State#dispatcher_state.modules_const_list, wrong_worker_type),
+  case ModulesConstList of
+    wrong_worker_type -> wrong_worker_type;
+    _ ->
+      ModulesConstListLength = length(ModulesConstList),
+      case ModulesConstListLength of
+        0 -> {non, State};
+        1 ->
+          [M | _] = ModulesConstList,
+          {M, State};
+        _ ->
+          RequestMapList = State#dispatcher_state.request_map,
+          RequestMap = proplists:get_value(Module, RequestMapList, non),
+          case RequestMap of
+            non ->
+              use_standard_mode;
+            _ ->
+              try
+                RequestNum = RequestMap(Msg),
+                case RequestNum of
+                  Num when is_integer(Num) ->
+                    {lists:nth(Num rem ModulesConstListLength + 1, ModulesConstList), State};
+                  _ ->
+                    use_standard_mode
+                end
+              catch
+                Type:Error ->
+                  lager:error("Dispatcher error for module ~p and request ~p: ~p:~p ~n ~p", [Module, Msg, Type, Error, erlang:get_stacktrace()]),
+                  use_standard_mode
+              end
+          end
+      end
+  end.
+
+%% get_ets_name/1
+%% ====================================================================
+%% @doc Generates name of ets table for dispatcher
+%% @end
+-spec get_ets_name() -> Result when
+  Result :: atom().
+%% ====================================================================
+get_ets_name() ->
+  list_to_atom(?CALLBACKS_TABLE ++ atom_to_list(node()) ++ pid_to_list(self())).
+

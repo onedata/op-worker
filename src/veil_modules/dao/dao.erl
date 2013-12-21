@@ -52,12 +52,41 @@ init({_Args, {init_status, table_initialized}}) -> %% Final stage of initializat
     case application:get_env(veil_cluster_node, db_nodes) of
         {ok, Nodes} when is_list(Nodes) ->
             [dao_hosts:insert(Node) || Node <- Nodes, is_atom(Node)],
-            catch setup_views(?DATABASE_DESIGN_STRUCTURE),
-            ok;
+            catch setup_views(?DATABASE_DESIGN_STRUCTURE);
         _ ->
-            lager:warning("There are no DB hosts given in application env variable."),
-            ok
-    end;
+            lager:warning("There are no DB hosts given in application env variable.")
+    end,
+
+    ProcFun = fun(ProtocolVersion, {Target, Method, Args}) ->
+      handle(ProtocolVersion, {Target, Method, Args})
+    end,
+
+    MapFun = fun({_, _, [File, _]}) ->
+      lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, File)
+    end,
+
+    SubProcList = worker_host:generate_sub_proc_list(id_generation, 6, 10, ProcFun, MapFun),
+
+    RequestMap = fun
+      ({T, M, _}) ->
+        case {T, M} of
+          {dao_vfs, save_new_file} -> id_generation;
+          _ -> non
+        end;
+      (_) -> non
+    end,
+
+    DispMapFun = fun
+      ({T2, M2, [File, _]}) ->
+        case {T2, M2} of
+          {dao_vfs, save_new_file} ->
+            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, File);
+          _ -> non
+        end;
+      (_) -> non
+    end,
+
+    #initial_host_description{request_map = RequestMap, dispatcher_request_map = DispMapFun, sub_procs = SubProcList, plug_in_state = ok};
 init({Args, {init_status, _TableInfo}}) ->
     init({Args, {init_status, table_initialized}});
 init(Args) ->

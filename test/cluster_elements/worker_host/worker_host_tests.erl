@@ -162,6 +162,123 @@ error_request_test() ->
 
   worker_host:stop(Module).
 
+%% This test checks if worker host delegates messages to sub procs correctly
+sub_proc_simple_test() ->
+  ProcFun = fun({AnsPid, _MapNum}) ->
+    AnsPid ! self()
+  end,
+  MapFun = fun({_AnsPid, MapNum}) ->
+    MapNum
+  end,
+  Pid = worker_host:start_sub_proc(sub_proc_simple, 1, 1, ProcFun, MapFun),
+
+  Self = self(),
+  Request1 = {Self, 1000},
+  TestFun = fun() ->
+    spawn(fun() ->
+      Pid ! Request1
+    end)
+  end,
+
+  TestRequestsNum = 10000,
+  for(1, TestRequestsNum, TestFun),
+
+  Ans = count_answers(TestRequestsNum),
+  ?assertEqual(1, length(Ans)),
+  [{AnsKey, AnsVal} | _] = Ans,
+  ?assertEqual(Pid, AnsKey),
+  ?assertEqual(TestRequestsNum, AnsVal).
+
+%% This test checks if worker host delegates messages to sub procs correctly
+sub_proc_depth1_test() ->
+  ProcFun = fun({AnsPid, _MapNum}) ->
+    AnsPid ! self()
+  end,
+  MapFun = fun({_AnsPid, MapNum}) ->
+    MapNum
+  end,
+  Pid = worker_host:start_sub_proc(sub_proc_depth1, 2, 1, ProcFun, MapFun),
+
+  Self = self(),
+  Request1 = {Self, 1000},
+  TestFun = fun() ->
+    spawn(fun() ->
+      Pid ! Request1
+    end)
+  end,
+
+  TestRequestsNum = 10000,
+  for(1, TestRequestsNum, TestFun),
+
+  Ans = count_answers(TestRequestsNum),
+  ?assertEqual(2, length(Ans)),
+  Keys = proplists:get_keys(Ans),
+  ?assert(lists:member(Pid, Keys)),
+  ?assertEqual(TestRequestsNum, lists:foldl(fun(K, Sum) ->
+    Sum + proplists:get_value(K, Ans, 0)
+  end, 0, Keys)).
+
+%% This test checks if worker host delegates messages to sub procs correctly
+sub_proc_depth2_test() ->
+  ProcFun = fun({AnsPid, _MapNum}) ->
+    AnsPid ! self()
+  end,
+  MapFun = fun({_AnsPid, MapNum}) ->
+    MapNum
+  end,
+  Pid = worker_host:start_sub_proc(sub_proc_depth2, 4, 1, ProcFun, MapFun),
+
+  Self = self(),
+  Request1 = {Self, 1000},
+  TestFun = fun() ->
+    spawn(fun() ->
+      Pid ! Request1
+    end)
+  end,
+
+  TestRequestsNum = 10000,
+  for(1, TestRequestsNum, TestFun),
+
+  Ans = count_answers(TestRequestsNum),
+  ?assertEqual(4, length(Ans)),
+  Keys = proplists:get_keys(Ans),
+  ?assert(lists:member(Pid, Keys)),
+  ?assertEqual(TestRequestsNum, lists:foldl(fun(K, Sum) ->
+    Sum + proplists:get_value(K, Ans, 0)
+  end, 0, Keys)).
+
+%% This test checks if worker host delegates messages to sub procs correctly
+sub_proc_width_test() ->
+  ProcFun = fun({AnsPid, _MapNum}) ->
+    AnsPid ! self()
+  end,
+  MapFun = fun({_AnsPid, MapNum}) ->
+    MapNum
+  end,
+  Pid = worker_host:start_sub_proc(sub_proc_width, 2, 3, ProcFun, MapFun),
+
+  Self = self(),
+  TestFun = fun() ->
+    spawn(fun() ->
+      Pid ! {Self, 0},
+      Pid ! {Self, 1},
+      Pid ! {Self, 2},
+      Pid ! {Self, 3},
+      Pid ! {Self, 4}
+    end)
+  end,
+
+  TestRequestsNum = 2000,
+  for(1, TestRequestsNum, TestFun),
+
+  Ans = count_answers(5* TestRequestsNum),
+  ?assertEqual(4, length(Ans)),
+  Keys = proplists:get_keys(Ans),
+  ?assert(lists:member(Pid, Keys)),
+  ?assertEqual(5* TestRequestsNum, lists:foldl(fun(K, Sum) ->
+    Sum + proplists:get_value(K, Ans, 0)
+  end, 0, Keys)).
+
 %% ====================================================================
 %% Helper functions
 %% ====================================================================
@@ -171,5 +288,22 @@ startClients(ProcNum, Module) ->
 
 for(N, N, F) -> [F()];
 for(I, N, F) -> [F()|for(I+1, N, F)].
+
+count_answers(ExpectedNum) ->
+  count_answers(ExpectedNum, []).
+
+count_answers(0, TmpAns) ->
+  TmpAns;
+
+count_answers(ExpectedNum, TmpAns) ->
+  receive
+    {'EXIT', _, _} -> count_answers(ExpectedNum, TmpAns);
+    Msg ->
+      NewCounter = proplists:get_value(Msg, TmpAns, 0) + 1,
+      NewAns = [{Msg, NewCounter} | proplists:delete(Msg, TmpAns)],
+      count_answers(ExpectedNum - 1, NewAns)
+  after 1000 ->
+    TmpAns
+  end.
 
 -endif.

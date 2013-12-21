@@ -21,7 +21,7 @@
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
 
--define(NAMES_TABLE, names_map).
+-define(NAMES_TABLE, "names_map").
 
 %% ====================================================================
 %% API
@@ -33,6 +33,8 @@
 
 %% File sharing
 -export([get_file_by_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, create_standard_share/1, create_share/2, get_share/1, remove_share/1]).
+
+-export([get_ets_name/0]).
 
 %% ====================================================================
 %% Test API
@@ -75,6 +77,7 @@ mkdir(DirName) ->
           Response = TmpAns#atom.value,
           case Response of
             ?VOK -> ok;
+            ?VEEXIST -> {error, dir_exists};
             _ -> {logical_file_system_error, Response}
           end;
         _ -> {Status, TmpAns}
@@ -344,6 +347,7 @@ create(File) ->
             ?VOK ->
               Storage_helper_info = #storage_helper_info{name = TmpAns#filelocation.storage_helper_name, init_args = TmpAns#filelocation.storage_helper_args},
               storage_files_manager:create(Storage_helper_info, TmpAns#filelocation.file_id);
+            ?VEEXIST -> {error, file_exists};
             _ -> {logical_file_system_error, Response}
           end;
         _ -> {Status, TmpAns}
@@ -711,8 +715,9 @@ remove_share(Key) ->
   ErrorDetail :: term().
 %% ====================================================================
 getfilelocation(File) ->
+  EtsName = get_ets_name(),
   CachedLocation = try
-    LookupAns = ets:lookup(?NAMES_TABLE, File),
+    LookupAns = ets:lookup(EtsName, File),
     case LookupAns of
       [{File, {Location, ValidTo}}] ->
         {Megaseconds, Seconds, _Microseconds} = os:timestamp(),
@@ -725,7 +730,7 @@ getfilelocation(File) ->
     end
   catch
     _:_ ->
-      ets:new(?NAMES_TABLE, [named_table, set]),
+      ets:new(EtsName, [named_table, set]),
       []
   end,
   case CachedLocation of
@@ -742,7 +747,7 @@ getfilelocation(File) ->
               Storage_helper_info = #storage_helper_info{name = TmpAns#filelocation.storage_helper_name, init_args = TmpAns#filelocation.storage_helper_args},
               {Megaseconds2, Seconds2, _Microseconds2} = os:timestamp(),
               Time2 = 1000000*Megaseconds2 + Seconds2,
-              ets:insert(?NAMES_TABLE, {File, {{Storage_helper_info, TmpAns#filelocation.file_id}, Time2 + TmpAns#filelocation.validity}}),
+              ets:insert(EtsName, {File, {{Storage_helper_info, TmpAns#filelocation.file_id}, Time2 + TmpAns#filelocation.validity}}),
               {ok, {Storage_helper_info, TmpAns#filelocation.file_id}};
             _ -> {logical_file_system_error, Response}
           end;
@@ -759,8 +764,9 @@ getfilelocation(File) ->
   Result :: integer().
 %% ====================================================================
 cache_size(File, BuffSize) ->
+  EtsName = get_ets_name(),
   OldSize = try
-    LookupAns = ets:lookup(?NAMES_TABLE, {File, size}),
+    LookupAns = ets:lookup(EtsName, {File, size}),
     case LookupAns of
       [{{File, size}, Size}] ->
         Size;
@@ -768,11 +774,11 @@ cache_size(File, BuffSize) ->
     end
   catch
     _:_ ->
-      ets:new(?NAMES_TABLE, [named_table, set]),
+      ets:new(EtsName, [named_table, set]),
       0
   end,
 
-  ets:insert(?NAMES_TABLE, {{File, size}, OldSize + BuffSize}),
+  ets:insert(EtsName, {{File, size}, OldSize + BuffSize}),
   OldSize.
 
 %% error_to_string/1
@@ -788,6 +794,7 @@ error_to_string(Error) ->
     {error, timeout} -> "Conection between cluster machines error (timeout)";
     {error, worker_not_found} -> "File management module is down";
     {error, file_not_found} -> "File not found in DB";
+    {error, file_exists} -> "Cannot create file - file already exists";
     {error, invalid_data} -> "DB invalid response";
     {error, share_not_found} -> "File sharing info not found in DB";
     {error, remove_file_share_error} -> "File sharing info cacnot be removed from DB";
@@ -855,5 +862,16 @@ generateData(Size, BufSize) -> [list_to_binary(generateRandomData(BufSize)) | ge
 %% @end
 -spec generateRandomData(Size :: integer()) -> Result when
   Result :: list().
+%% ====================================================================
 generateRandomData(1) -> [random:uniform(255)];
 generateRandomData(Size) -> [random:uniform(255) | generateRandomData(Size-1)].
+
+%% get_ets_name/1
+%% ====================================================================
+%% @doc Generates name of ets table for proc
+%% @end
+-spec get_ets_name() -> Result when
+  Result :: atom().
+%% ====================================================================
+get_ets_name() ->
+  list_to_atom(?NAMES_TABLE ++ atom_to_list(node()) ++ pid_to_list(self())).

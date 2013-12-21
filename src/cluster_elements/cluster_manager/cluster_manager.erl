@@ -33,7 +33,7 @@
 %% Test API
 %% ====================================================================
 -ifdef(TEST).
--export([update_dns_state/3, update_dispatcher_state/5, calculate_load/2, calculate_worker_load/1, calculate_node_load/2]).
+-export([update_dns_state/3, update_dispatcher_state/6, calculate_load/2, calculate_worker_load/1, calculate_node_load/2]).
 -endif.
 
 %% ====================================================================
@@ -197,6 +197,15 @@ handle_call({delete_callback, FuseId, Node, Pid}, _From, State) ->
 handle_call(get_callbacks, _From, State) ->
   {reply, {get_callbacks(), State#cm_state.callbacks_num}, State};
 
+%% Test call
+handle_call({start_worker, Node, Module, WorkerArgs}, _From, State) ->
+  {Ans, NewState} = start_worker(Node, Module, WorkerArgs, State),
+  case Ans of
+    ok -> update_dispatchers_and_dns(NewState, true, true);
+    error -> NewState
+  end,
+  {reply, Ans, NewState};
+
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
 
@@ -237,12 +246,12 @@ handle_cast({node_is_up, Node}, State) ->
               end,
 
               NewState2 = NewState#cm_state{nodes = [Node | Nodes]},
-              save_state(),
 
               case WorkersFound of
                 true -> gen_server:cast({global, ?CCM}, update_dispatchers_and_dns);
                 false -> ok
               end,
+              save_state(),
 
               gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, State#cm_state.state_num, State#cm_state.callbacks_num}),
               {noreply, NewState2};
@@ -260,6 +269,26 @@ handle_cast(init_cluster, State) ->
 handle_cast(update_dispatchers_and_dns, State) ->
   NewState = update_dispatchers_and_dns(State, true, true),
   {noreply, NewState};
+
+handle_cast({update_dispatchers_and_dns, UpdateDNS, IncreaseNum}, State) ->
+  NewState = update_dispatchers_and_dns(State, UpdateDNS, IncreaseNum),
+  {noreply, NewState};
+
+handle_cast({register_dispatcher_map, Module, Map, AnsPid}, State) ->
+  Maps = State#cm_state.dispatcher_maps,
+  case proplists:get_value(Module, Maps, not_found) =:= Map of
+    true ->
+      AnsPid ! dispatcher_map_registered,
+      {noreply, State};
+    false ->
+      lager:info([{mod, ?MODULE}], "Registration of disp map for module ~p", [Module]),
+      NewMapsList = register_dispatcher_map(Module, Map, Maps),
+      NewState = State#cm_state{dispatcher_maps = NewMapsList},
+      NewState2 = update_dispatchers_and_dns(NewState, false, true),
+      AnsPid ! dispatcher_map_registered,
+      save_state(),
+      {noreply, NewState2}
+  end;
 
 handle_cast(get_state_from_db, State) ->
   NewState2 = case (State#cm_state.nodes =:= []) or State#cm_state.state_loaded of
@@ -293,7 +322,7 @@ handle_cast(start_central_logger, State) ->
 handle_cast({save_state, MergedState}, State) ->
   case State#cm_state.state_loaded or MergedState of
     true ->
-      Ans = gen_server:call(?Dispatcher_Name, {dao, 1, {save_state, [State]}}, 500),
+      Ans = gen_server:call(?Dispatcher_Name, {dao, 1, {save_state, [State#cm_state{dispatcher_maps = []}]}}, 500),
       case Ans of
         ok -> lager:info([{mod, ?MODULE}], "Save state message sent");
         _ -> lager:error([{mod, ?MODULE}], "Save state error: ~p", [Ans])
@@ -341,7 +370,7 @@ handle_cast({worker_answer, cluster_state, Response}, State) ->
                {error, {not_found,missing}} ->
                  save_state(true),
                  State;
-               {error, Error} ->
+               Error ->
                  lager:info([{mod, ?MODULE}], "State cannot be read from DB: ~p", [Error]), %% info logging level because state may not be present in db and it's not an error
                  State
              end,
@@ -523,10 +552,10 @@ check_cluster_state(State) ->
                                  lager:info([{mod, ?MODULE}], "Worker: ~s will be started at node: ~s", [MaxModule, MinNode]),
                                  {WorkerRuns, TmpState} = start_worker(MinNode, MaxModule, proplists:get_value(MaxModule, ?Modules_With_Args, []), State),
                                  case WorkerRuns of
-                                   true ->
+                                   ok ->
                                      save_state(),
                                      update_dispatchers_and_dns(TmpState, true, true);
-                                   false -> TmpState
+                                   error -> TmpState
                                  end;
                                false ->
                                  lager:info([{mod, ?MODULE}], "Worker: ~s will be stopped at node", [MaxModule, MaxNode]),
@@ -636,27 +665,31 @@ check_node(Node, State) ->
       pong ->
         Children = supervisor:which_children({?Supervisor_Name, Node}),
         Workers = State#cm_state.workers,
-        NewWorkers = add_children(Node, Children, Workers),
-        WorkersFound = length(NewWorkers) > length(Workers),
+        {AddState, NewWorkers} = add_children(Node, Children, Workers),
+        case AddState of
+          ok ->
+            WorkersFound = length(NewWorkers) > length(Workers),
 
-        try
-          Callbacks = gen_server:call({?Node_Manager_Name, Node}, get_fuses_list, 500),
-          Changed = lists:foldl(fun(Fuse, TmpAns) ->
-            case add_callback(Node, Fuse, State#cm_state.nodes, State#cm_state.callbacks_num) of
-              updated -> true;
-              _ -> TmpAns
-            end
-          end, false, Callbacks),
+            try
+              Callbacks = gen_server:call({?Node_Manager_Name, Node}, get_fuses_list, 500),
+              Changed = lists:foldl(fun(Fuse, TmpAns) ->
+                case add_callback(Node, Fuse, State#cm_state.nodes, State#cm_state.callbacks_num) of
+                  updated -> true;
+                  _ -> TmpAns
+                end
+              end, false, Callbacks),
 
-          {CallbacksNum, WorkersFound2} = case Changed of
-            true -> {State#cm_state.callbacks_num + 1, true};
-            false -> {State#cm_state.callbacks_num, WorkersFound}
-          end,
-          {ok, State#cm_state{workers = NewWorkers, callbacks_num = CallbacksNum}, WorkersFound2}
-        catch
-          _:_ ->
-          lager:error([{mod, ?MODULE}], "Can not get fuses of node: ~s", [Node]),
-            {error, State, false}
+              {CallbacksNum, WorkersFound2} = case Changed of
+                                                true -> {State#cm_state.callbacks_num + 1, true};
+                                                false -> {State#cm_state.callbacks_num, WorkersFound}
+                                              end,
+              {ok, State#cm_state{workers = NewWorkers, callbacks_num = CallbacksNum}, WorkersFound2}
+            catch
+              _:_ ->
+                lager:error([{mod, ?MODULE}], "Can not get fuses of node: ~s", [Node]),
+                {error, State, false}
+            end;
+          _ -> {error, State, false}
         end;
       pang -> {error, State, false}
     end
@@ -671,7 +704,7 @@ check_node(Node, State) ->
   NewWorkersList :: list().
 %% ====================================================================
 add_children(_Node, [], Workers) ->
-  Workers;
+  {ok, Workers};
 
 add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
   Jobs = ?Modules,
@@ -679,7 +712,21 @@ add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
     false -> add_children(Node, Children, Workers);
     true ->
       lager:info([{mod, ?MODULE}], "Worker ~p found at node ~s", [Id, Node]),
-      [{Node, Id, ChildPid} | add_children(Node, Children, Workers)]
+
+      MapState = try
+        ok = gen_server:call(ChildPid, dispatcher_map_unregistered, 500)
+      catch
+        _:_ ->
+          lager:error([{mod, ?MODULE}], "Error during contact with worker ~p found at node ~s", [Id, Node]),
+          error
+      end,
+
+      case MapState of
+        ok ->
+          {MapState2, Ans} = add_children(Node, Children, Workers),
+          {MapState2, [{Node, Id, ChildPid} | Ans]};
+        _ -> {error, Workers}
+      end
   end.
 
 %% node_down/2
@@ -860,7 +907,7 @@ update_dispatchers_and_dns(State, UpdateDNS, IncreaseStateNum) ->
       NewStateNum = State#cm_state.state_num + 1,
       WorkersList = get_workers_list(State),
       {NodesLoad2, AvgLoad2} = calculate_node_load(State#cm_state.nodes, short),
-      update_dispatcher_state(WorkersList, State#cm_state.nodes, NewStateNum, NodesLoad2, AvgLoad2),
+      update_dispatcher_state(WorkersList, State#cm_state.dispatcher_maps, State#cm_state.nodes, NewStateNum, NodesLoad2, AvgLoad2),
       State#cm_state{state_num = NewStateNum};
     false ->
       {NodesLoad2, AvgLoad2} = calculate_node_load(State#cm_state.nodes, short),
@@ -868,23 +915,24 @@ update_dispatchers_and_dns(State, UpdateDNS, IncreaseStateNum) ->
       State
   end.
 
-%% update_dispatcher_state/5
+%% update_dispatcher_state/6
 %% ====================================================================
 %% @doc Updates dispatchers' states.
 %% @end
--spec update_dispatcher_state(WorkersList, Nodes, NewStateNum, Loads, AvgLoad) -> ok when
+-spec update_dispatcher_state(WorkersList, DispatcherMaps, Nodes, NewStateNum, Loads, AvgLoad) -> ok when
   WorkersList :: list(),
+  DispatcherMaps :: list(),
   Nodes :: list(),
   NewStateNum :: integer(),
   Loads :: list(),
   AvgLoad :: integer().
 %% ====================================================================
-update_dispatcher_state(WorkersList, Nodes, NewStateNum, Loads, AvgLoad) ->
+update_dispatcher_state(WorkersList, DispatcherMaps, Nodes, NewStateNum, Loads, AvgLoad) ->
   UpdateNode = fun(Node) ->
-    gen_server:cast({?Dispatcher_Name, Node}, {update_workers, WorkersList, NewStateNum, proplists:get_value(Node, Loads, 0), AvgLoad})
+    gen_server:cast({?Dispatcher_Name, Node}, {update_workers, WorkersList, DispatcherMaps, NewStateNum, proplists:get_value(Node, Loads, 0), AvgLoad})
   end,
   lists:foreach(UpdateNode, Nodes),
-  gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, NewStateNum, 0, 0}).
+  gen_server:cast(?Dispatcher_Name, {update_workers, WorkersList, DispatcherMaps, NewStateNum, 0, 0}).
 
 %% update_dispatcher_state/3
 %% ====================================================================
@@ -1358,3 +1406,12 @@ get_callbacks('$end_of_table') ->
 get_callbacks(Fuse) ->
   [Value] = ets:lookup(?CALLBACKS_TABLE, Fuse),
   [Value | get_callbacks(ets:next(?CALLBACKS_TABLE, Fuse))].
+
+%% register_dispatcher_map/1
+%% ====================================================================
+%% @doc Registers information about map used by dispatcher
+-spec register_dispatcher_map(Module :: atom(), Map :: term(), MapsList :: list()) -> Result when
+  Result :: list().
+%% ====================================================================
+register_dispatcher_map(Module, Map, MapsList) ->
+  [{Module, Map} | proplists:delete(Module, MapsList)].

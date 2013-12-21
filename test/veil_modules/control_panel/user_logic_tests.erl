@@ -137,8 +137,7 @@ signing_in_test_() ->
                   NewUser -> {ok, "uuid"};
                   _ -> throw(error)
                 end;
-                (dao_vfs, get_file, _, _) -> {error, file_not_found};
-                (dao_vfs, save_file, _, _) -> {ok, "file_uuid"};
+              (dao_vfs, save_new_file, _, _) -> {ok, "file_uuid"};
               (dao_vfs, list_storage, [], _) ->
                 {ok, []}
 						end),
@@ -214,8 +213,7 @@ signing_in_test_() ->
 									SynchronizedUser -> {ok, "uuid_after_synchronization"};
 									_ -> throw(error)
 								end;
-                            (dao_vfs, get_file, _, _) -> {error, file_not_found};
-                            (dao_vfs, save_file, _, _) -> {ok, "file_uuid"};
+                            (dao_vfs, save_new_file, _, _) -> {ok, "file_uuid"};
                             (dao_vfs, list_storage, [], _) -> {ok, []}
 						end),
 

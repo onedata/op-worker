@@ -24,8 +24,6 @@
 
 -define(S_IFREG, 8#100000).
 
--define(NAMES_TABLE, names_map).
-
 %% ====================================================================
 %% API
 %% ====================================================================
@@ -561,11 +559,12 @@ get_cached_value(File, ValueName, Storage_helper_info) ->
     size -> size
   end,
 
+  EtsName = logical_files_manager:get_ets_name(),
   CachedValue = try
     LookupAns = case ValType of
-      file_type -> ets:lookup(?NAMES_TABLE, {File, ValueName});
-      flag -> ets:lookup(?NAMES_TABLE, {Storage_helper_info, ValueName});
-      size -> ets:lookup(?NAMES_TABLE, test_key)   %% check if table exists
+      file_type -> ets:lookup(EtsName, {File, ValueName});
+      flag -> ets:lookup(EtsName, {Storage_helper_info, ValueName});
+      size -> ets:lookup(EtsName, test_key)   %% check if table exists
     end,
     case LookupAns of
       [{{_, ValueName}, Value}] ->
@@ -574,7 +573,7 @@ get_cached_value(File, ValueName, Storage_helper_info) ->
     end
   catch
     _:_ ->
-      ets:new(?NAMES_TABLE, [named_table, set]),
+      ets:new(EtsName, [named_table, set]),
       []
   end,
 
@@ -586,21 +585,21 @@ get_cached_value(File, ValueName, Storage_helper_info) ->
           case ErrorCode of
             0 ->
               ReturnValue = veilhelpers:exec(ValueName, Storage_helper_info, [Stat#st_stat.st_mode]),
-              ets:insert(?NAMES_TABLE, {{File, ValueName}, ReturnValue}),
+              ets:insert(EtsName, {{File, ValueName}, ReturnValue}),
               {ok, ReturnValue};
             error -> {ErrorCode, Stat};
             _ -> {wrong_getatt_return_code, ErrorCode}
           end;
         flag ->
           ReturnValue2 = veilhelpers:exec(get_flag, Storage_helper_info, [ValueName]),
-          ets:insert(?NAMES_TABLE, {{Storage_helper_info, ValueName}, ReturnValue2}),
+          ets:insert(EtsName, {{Storage_helper_info, ValueName}, ReturnValue2}),
           {ok, ReturnValue2};
         size ->
           {ErrorCode2, Stat2} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
           case ErrorCode2 of
             0 ->
               ReturnValue3 = veilhelpers:exec(is_reg, Storage_helper_info, [Stat2#st_stat.st_mode]),
-              ets:insert(?NAMES_TABLE, {{File, is_reg}, ReturnValue3}),
+              ets:insert(EtsName, {{File, is_reg}, ReturnValue3}),
               {ok, {ReturnValue3, Stat2#st_stat.st_size}};
             error -> {ErrorCode2, Stat2};
             _ -> {wrong_getatt_return_code, ErrorCode2}

@@ -21,7 +21,7 @@
 %% API - File system management
 -export([list_dir/3, rename_file/2, lock_file/3, unlock_file/3, find_files/1]). %% High level API functions
 -export([save_descriptor/1, remove_descriptor/1, get_descriptor/1, list_descriptors/3]). %% Base descriptor management API functions
--export([save_file/1, remove_file/1, get_file/1, get_path_info/1]). %% Base file management API function
+-export([save_new_file/2, save_file/1, remove_file/1, get_file/1, get_path_info/1]). %% Base file management API function
 -export([save_storage/1, remove_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
 -export([save_file_meta/1, remove_file_meta/1, get_file_meta/1]).
 
@@ -194,6 +194,52 @@ get_file_meta(FMetaUUID) ->
 %% Files Management
 %% ===================================================================
 
+%% save_new_file/2
+%% ====================================================================
+%% @doc Saves new file to DB
+%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec save_new_file(FilePath :: string(), File :: file_info()) -> {ok, uuid()} | {error, any()} | no_return().
+%% ====================================================================
+save_new_file(FilePath, #file{} = File) ->
+  try
+    AnalyzedPath = file_path_analyze(FilePath),
+
+    {FindStatus, FindTmpAns} = try
+      get_file(AnalyzedPath)
+    catch
+      _:Error ->
+        {error, Error}
+    end,
+
+    case {FindStatus, FindTmpAns} of
+      {error, file_not_found} ->
+        SaveAns = save_file(File),
+        case SaveAns of
+          {ok, UUID} ->
+            try
+              get_file(AnalyzedPath, true),
+              {ok, UUID}
+            catch
+              _:file_duplicated ->
+                dao:remove_record(UUID),
+                {error, file_exists};
+              _:Error2 ->
+                {error, Error2}
+            end;
+          _ -> SaveAns
+        end;
+      {ok, _} ->
+        {error, file_exists};
+      _ ->
+        {FindStatus, FindTmpAns}
+    end
+  catch
+    _:Error3 ->
+      {error, Error3}
+  end.
+
 
 %% save_file/1
 %% ====================================================================
@@ -263,27 +309,7 @@ remove_file(File) ->
 get_file({internal_path, [], []}) -> %% Root dir query
     {ok, #veil_document{uuid = "", record = #file{type = ?DIR_TYPE, perms = ?RD_ALL_PERM bor ?WR_ALL_PERM bor ?EX_ALL_PERM}}};
 get_file({internal_path, [Dir | Path], Root}) ->
-    QueryArgs =
-        #view_query_args{keys = [[dao_helper:name(Root), dao_helper:name(Dir)]],
-            include_docs = case Path of [] -> true; _ -> false end}, %% Include doc representing leaf of our file path
-    {NewRoot, FileDoc} =
-        case dao:list_records(?FILE_TREE_VIEW, QueryArgs) of
-            {ok, #view_result{rows = [#view_row{id = Id, doc = FDoc}]}} ->
-                {Id, FDoc};
-            {ok, #view_result{rows = []}} ->
-                lager:error("File ~p not found (root = ~p)", [Dir, Root]),
-                throw(file_not_found);
-            {ok, #view_result{rows = [#view_row{id = Id, doc = FDoc} | _Tail]}} ->
-                lager:warning("File ~p (root = ~p) is duplicated. Returning first copy. Others: ~p", [Dir, Root, _Tail]),
-                {Id, FDoc};
-            _Other ->
-                lager:error("Invalid view response: ~p", [_Other]),
-                throw(invalid_data)
-        end,
-    case Path of
-        [] -> {ok, FileDoc};
-        _ -> get_file({internal_path, Path, NewRoot})
-    end;
+  get_file({internal_path, [Dir | Path], Root}, false);
 get_file({uuid, UUID}) ->
     dao:set_db(?FILES_DB_NAME),
     case dao:get_record(UUID) of
@@ -297,6 +323,39 @@ get_file({uuid, UUID}) ->
 get_file(Path) ->
     get_file(file_path_analyze(Path)).
 
+%% get_file/2
+%% ====================================================================
+%% @doc Gets file from DB. Argument should be file() - see dao_types.hrl for more details <br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec get_file(File :: file(), MultiError :: boolean()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
+%% ====================================================================
+get_file({internal_path, [Dir | Path], Root}, MultiError) ->
+  QueryArgs =
+    #view_query_args{keys = [[dao_helper:name(Root), dao_helper:name(Dir)]],
+    include_docs = case Path of [] -> true; _ -> false end}, %% Include doc representing leaf of our file path
+  {NewRoot, FileDoc} =
+    case dao:list_records(?FILE_TREE_VIEW, QueryArgs) of
+      {ok, #view_result{rows = [#view_row{id = Id, doc = FDoc}]}} ->
+        {Id, FDoc};
+      {ok, #view_result{rows = []}} ->
+        lager:error("File ~p not found (root = ~p)", [Dir, Root]),
+        throw(file_not_found);
+      {ok, #view_result{rows = [#view_row{id = Id, doc = FDoc} | _Tail]}} ->
+        case MultiError of
+          true -> throw(file_duplicated);
+          false ->
+            lager:warning("File ~p (root = ~p) is duplicated. Returning first copy. Others: ~p", [Dir, Root, _Tail]),
+            {Id, FDoc}
+        end;
+      _Other ->
+        lager:error("Invalid view response: ~p", [_Other]),
+        throw(invalid_data)
+    end,
+  case Path of
+    [] -> {ok, FileDoc};
+    _ -> get_file({internal_path, Path, NewRoot})
+  end.
 
 %% get_path_info/1
 %% ====================================================================

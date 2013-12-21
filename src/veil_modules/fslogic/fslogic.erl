@@ -317,77 +317,65 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getn
     {FileNameFindingAns, File} = get_full_file_name(FileBaseName, {RootStatus, Root}),
     case FileNameFindingAns of
       ok ->
-        {FindStatus, FindTmpAns} = get_file(ProtocolVersion, File, FuseID),
-        case FindStatus of
-            ok -> #filelocation{answer = ?VEEXIST, storage_id = -1, file_id = "", validity = 0};
-            error -> case FindTmpAns of
-                file_not_found ->
-                {ParentFound, ParentInfo} = fslogic_utils:get_parent_and_name_from_path(File, ProtocolVersion),
+        {ParentFound, ParentInfo} = fslogic_utils:get_parent_and_name_from_path(File, ProtocolVersion),
+        case ParentFound of
+          ok ->
+            {FileName, Parent} = ParentInfo,
+            {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], ProtocolVersion),
+            case fslogic_storage:select_storage(FuseID, StorageList) of
+              #veil_document{uuid = UUID, record = #storage_info{} = Storage} ->
+                SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
+                File_id = get_new_file_id(FileBaseName, UserDoc, Root, SHI, ProtocolVersion),
+                FileLocation = #file_location{storage_id = UUID, file_id = File_id},
 
-                case ParentFound of
-                    ok ->
-                        {FileName, Parent} = ParentInfo,
-                        {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], ProtocolVersion),
-                        case fslogic_storage:select_storage(FuseID, StorageList) of
-                            #veil_document{uuid = UUID, record = #storage_info{} = Storage} ->
-                                SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
-                                File_id = get_new_file_id(FileBaseName, UserDoc, Root, SHI, ProtocolVersion),
-                                FileLocation = #file_location{storage_id = UUID, file_id = File_id},
+                {UserIdStatus, UserId} = case {UserDocStatus, UserDoc} of
+                                           {ok, _} -> {ok, UserDoc#veil_document.uuid};
+                                           {error, get_user_id_error} -> {ok, ?CLUSTER_USER_ID};
+                                           _ -> {UserDocStatus, UserDoc}
+                                         end,
 
-                                {UserIdStatus, UserId} = case {UserDocStatus, UserDoc} of
-                                  {ok, _} -> {ok, UserDoc#veil_document.uuid};
-                                  {error, get_user_id_error} -> {ok, ?CLUSTER_USER_ID};
-                                  _ -> {UserDocStatus, UserDoc}
-                                end,
+                case UserIdStatus of
+                  ok ->
+                    CTime = fslogic_utils:time(),
 
-                                case UserIdStatus of
-                                  ok ->
-                                    CTime = fslogic_utils:time(),
+                    Groups = get_group_owner(FileBaseName), %% Get owner group name based on file access path
 
-                                    Groups = get_group_owner(FileBaseName), %% Get owner group name based on file access path
+                    FileRecordInit = #file{type = ?REG_TYPE, name = FileName, uid = UserId, gids = Groups, parent = Parent, perms = Record#getnewfilelocation.mode, location = FileLocation},
+                    %% Async *times update
+                    FileRecord = fslogic_utils:update_meta_attr(FileRecordInit, times, {CTime, CTime, CTime}),
 
-                                    FileRecordInit = #file{type = ?REG_TYPE, name = FileName, uid = UserId, gids = Groups, parent = Parent, perms = Record#getnewfilelocation.mode, location = FileLocation},
-                                    %% Async *times update
-                                    FileRecord = fslogic_utils:update_meta_attr(FileRecordInit, times, {CTime, CTime, CTime}),
-
-                                    Status = dao_lib:apply(dao_vfs, save_file, [FileRecord], ProtocolVersion),
-                                    Validity = ?LOCATION_VALIDITY,
-                                    case Status of
-                                        {ok, FileUUID} ->
-                                            ?PARENT_CTIME(Record#getnewfilelocation.file_logic_name, CTime),
-                                            {Status2, _TmpAns2} = save_file_descriptor(ProtocolVersion, FileUUID, FuseID, Validity),
-                                            case Status2 of
-                                              ok ->
-                                                  {SH, File_id2} = get_sh_and_id(FuseID, Storage, File_id),
-                                                  #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
-                                                  #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = SHName, storage_helper_args = SHArgs};
-                                              _BadStatus2 ->
-                                              lager:error([{mod, ?MODULE}], "Error: cannot save file_descriptor document: ~p", [_BadStatus2]),
-                                                #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
-                                            end;
-                                        _BadStatus ->
-                                          lager:error([{mod, ?MODULE}], "Error: cannot save file document: ~p", [_BadStatus]),
-                                          #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
-                                    end;
-                                  _ ->
-                                    lager:error([{mod, ?MODULE}], "Error: user doc error for file ~p, error ~p", [File, {UserDocStatus, UserDoc}]),
-                                    #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
-                                end;
-                            {error, SelectError} ->
-                                lager:error([{mod, ?MODULE}], "Error: can not get storage information: ~p", [SelectError]),
-                                #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
+                    Status = dao_lib:apply(dao_vfs, save_new_file, [File, FileRecord], ProtocolVersion),
+                    Validity = ?LOCATION_VALIDITY,
+                    case Status of
+                      {ok, FileUUID} ->
+                        ?PARENT_CTIME(Record#getnewfilelocation.file_logic_name, CTime),
+                        {Status2, _TmpAns2} = save_file_descriptor(ProtocolVersion, FileUUID, FuseID, Validity),
+                        case Status2 of
+                          ok ->
+                            {SH, File_id2} = get_sh_and_id(FuseID, Storage, File_id),
+                            #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
+                            #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = SHName, storage_helper_args = SHArgs};
+                          _BadStatus2 ->
+                            lager:error([{mod, ?MODULE}], "Error: cannot save file_descriptor document: ~p", [_BadStatus2]),
+                            #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
                         end;
-                    _ParentError ->
-                      lager:error([{mod, ?MODULE}], "Error: can not get parent for file: ~p", [File]),
-                      #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
+                      {error, file_exists} ->
+                        #filelocation{answer = ?VEEXIST, storage_id = -1, file_id = "", validity = 0};
+                      _BadStatus ->
+                        lager:error([{mod, ?MODULE}], "Error: cannot save file document: ~p", [_BadStatus]),
+                        #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
+                    end;
+                  _ ->
+                    lager:error([{mod, ?MODULE}], "Error: user doc error for file ~p, error ~p", [File, {UserDocStatus, UserDoc}]),
+                    #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
                 end;
-              _Other ->
-                lager:error([{mod, ?MODULE}], "Error: can not create new file: ~s, can not chceck if file exists", [File]),
+              {error, SelectError} ->
+                lager:error([{mod, ?MODULE}], "Error: can not get storage information: ~p", [SelectError]),
                 #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
             end;
-            _Other2 ->
-              lager:error([{mod, ?MODULE}], "Error: can not create new file: ~s, can not chceck if file exists", [File]),
-              #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
+          _ParentError ->
+            lager:error([{mod, ?MODULE}], "Error: can not get parent for file: ~p", [File]),
+            #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
         end;
       _  ->
         lager:error([{mod, ?MODULE}], "Error: can not get full file name: ~p, error ~p", [File, {FileNameFindingAns, File}]),
@@ -442,15 +430,10 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, rene
     _  -> #filelocationvalidity{answer = ?VEREMOTEIO, validity = 0}
   end;
 
-handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, createdir) ->
+handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, createdir) ->
   {FileNameFindingAns, Dir} = get_full_file_name(Record#createdir.dir_logic_name),
   case FileNameFindingAns of
     ok ->
-      {FindStatus, FindTmpAns} = get_file(ProtocolVersion, Dir, FuseID),
-      case FindStatus of
-        ok -> #atom{value = ?VEEXIST};
-        error -> case FindTmpAns of
-            file_not_found ->
             {ParentFound, ParentInfo} = fslogic_utils:get_parent_and_name_from_path(Dir, ProtocolVersion),
 
             case ParentFound of
@@ -466,11 +449,13 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, crea
                     CTime = fslogic_utils:time(),
                     File = fslogic_utils:update_meta_attr(FileInit, times, {CTime, CTime, CTime}),
 
-                    {Status, _TmpAns} = dao_lib:apply(dao_vfs, save_file, [File], ProtocolVersion),
-                    case Status of
-                      ok ->
+                    {Status, TmpAns} = dao_lib:apply(dao_vfs, save_new_file, [Dir, File], ProtocolVersion),
+                    case {Status, TmpAns} of
+                      {ok, _} ->
                         ?PARENT_CTIME(Record#createdir.dir_logic_name, CTime),
                         #atom{value = ?VOK};
+                      {error, file_exists} ->
+                        #atom{value = ?VEEXIST};
                       _BadStatus ->
                         lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s, error: ~p", [Dir, _BadStatus]),
                         #atom{value = ?VEREMOTEIO}
@@ -481,15 +466,6 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, crea
                 lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s, parentInfo: ~p", [Dir, _ParentError]),
                 #atom{value = ?VEREMOTEIO}
             end;
-
-           _Other ->
-            lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s, can not chceck if dir exists", [Dir]),
-             #atom{value = ?VEREMOTEIO}
-          end;
-        _Other2 ->
-          lager:error([{mod, ?MODULE}], "Error: can not create new dir: ~s, can not chceck if dir exists", [Dir]),
-          #atom{value = ?VEREMOTEIO}
-      end;
     _  -> #atom{value = ?VEREMOTEIO}
   end;
 
@@ -713,8 +689,6 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, crea
 %%     {ok, ok} ->
   case FileNameFindingAns of
     ok ->
-      case get_file(ProtocolVersion, From, FuseID) of
-          {error, file_not_found} ->
               case get_file(ProtocolVersion, fslogic_utils:strip_path_leaf(From), FuseID) of
                   {ok, #veil_document{uuid = Parent}} ->
                       UserId =
@@ -731,10 +705,13 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, crea
                       CTime = fslogic_utils:time(),
                       LinkDoc = fslogic_utils:update_meta_attr(LinkDocInit, times, {CTime, CTime, CTime}),
 
-                      case dao_lib:apply(dao_vfs, save_file, [LinkDoc], ProtocolVersion) of
+                      case dao_lib:apply(dao_vfs, save_new_file, [From, LinkDoc], ProtocolVersion) of
                           {ok, _} ->
                               ?PARENT_CTIME(Record#createlink.from_file_logic_name, CTime),
                               #atom{value = ?VOK};
+                          {error, file_exists} ->
+                              lager:error("Cannot create link - file already exists: ~p", [From]),
+                              #atom{value = ?VEEXIST};
                           {error, Reason} ->
                               lager:error("Cannot save link file (from ~p to ~p) due to error: ~p", [From, To, Reason]),
                               #atom{value = ?VEREMOTEIO}
@@ -746,11 +723,6 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, crea
                       lager:error("Cannot fetch file information for file ~p due to error: ~p", [fslogic_utils:strip_path_leaf(From), Reason1]),
                       #atom{value = ?VEREMOTEIO}
               end;
-          {ok, #veil_document{}} ->
-              lager:error("Cannot create link - file already exists: ~p", [From]),
-              #atom{value = ?VEEXIST};
-          _ -> #atom{value = ?VEREMOTEIO}
-      end;
     _  -> #atom{value = ?VEREMOTEIO}
   end;
 

@@ -445,26 +445,20 @@ shortname_to_oid_code(Shortname) ->
   Error :: atom().
 %% ====================================================================
 create_root(Dir, Uid) ->
-  {FindStatus, FindTmpAns} = dao_lib:apply(dao_vfs, get_file, [Dir], 1),
-  case FindStatus of
-    error -> case FindTmpAns of
-               file_not_found ->
-                 {ParentFound, ParentInfo} = fslogic_utils:get_parent_and_name_from_path(Dir, 1),
-
-                 case ParentFound of
-                   ok ->
-                     {FileName, Parent} = ParentInfo,
-                     File = #file{type = ?DIR_TYPE, name = FileName, uid = Uid, parent = Parent, perms = ?UserRootPerms},
-                     CTime = fslogic_utils:time(),
-                     FileDoc = fslogic_utils:update_meta_attr(File, times, {CTime, CTime, CTime}),
-                     dao_lib:apply(dao_vfs, save_file, [FileDoc], 1),
-                     ok;
-                   _ParentError -> parent_error
-                 end;
-
-               _Other -> dao_finding_error
-             end;
-    _Other2 -> root_exists
+  {ParentFound, ParentInfo} = fslogic_utils:get_parent_and_name_from_path(Dir, 1),
+  case ParentFound of
+    ok ->
+      {FileName, Parent} = ParentInfo,
+      File = #file{type = ?DIR_TYPE, name = FileName, uid = Uid, parent = Parent, perms = ?UserRootPerms},
+      CTime = fslogic_utils:time(),
+      FileDoc = fslogic_utils:update_meta_attr(File, times, {CTime, CTime, CTime}),
+      SaveAns = dao_lib:apply(dao_vfs, save_new_file, [Dir, FileDoc], 1),
+      case SaveAns of
+        {error, file_exists} ->
+          root_exists;
+        _ -> ok
+      end;
+    _ParentError -> parent_error
   end.
 
 %% create_dirs_at_storage/2
@@ -567,24 +561,27 @@ get_team_names(UserQuery) ->
 -spec create_team_dir(Dir :: string()) -> {ok, UUID :: uuid()} | {error, Reason :: any()} | no_return().
 %% ====================================================================
 create_team_dir(TeamName) ->
-    CTime = fslogic_utils:time(),
-    GroupsBase =
-        case dao_lib:apply(dao_vfs, get_file, ["/" ++ ?GROUPS_BASE_DIR_NAME], 1) of
-            {error, file_not_found} ->
-                GFile = #file{type = ?DIR_TYPE, name = ?GROUPS_BASE_DIR_NAME, uid = "0", parent = "", perms = 8#555},
-                GFileDoc = fslogic_utils:update_meta_attr(GFile, times, {CTime, CTime, CTime}),
-                {ok, UUID} = dao_lib:apply(dao_vfs, save_file, [GFileDoc], 1),
-                UUID;
-            {ok, #veil_document{uuid = UUID1}} -> UUID1;
-            {error, Reason} ->
-                ?error("Error while getting groups base dir: ~p", [Reason]),
-                error({error, Reason})
-        end,
-    case dao_lib:apply(dao_vfs, get_file, ["/" ++ ?GROUPS_BASE_DIR_NAME ++ "/" ++ TeamName], 1) of
-        {ok, _}                 -> {error, dir_exists};
-        {error, file_not_found} ->
-            TFile = #file{type = ?DIR_TYPE, name = TeamName, uid = "0", gids = [TeamName], parent = GroupsBase, perms = 8#770},
-            TFileDoc = fslogic_utils:update_meta_attr(TFile, times, {CTime, CTime, CTime}),
-            dao_lib:apply(dao_vfs, save_file, [TFileDoc], 1);
-        {error, Reason1}         -> {error, Reason1}
-    end.
+  CTime = fslogic_utils:time(),
+  GFile = #file{type = ?DIR_TYPE, name = ?GROUPS_BASE_DIR_NAME, uid = "0", parent = "", perms = 8#555},
+  GFileDoc = fslogic_utils:update_meta_attr(GFile, times, {CTime, CTime, CTime}),
+  {SaveStatus, UUID} = dao_lib:apply(dao_vfs, save_new_file, ["/" ++ ?GROUPS_BASE_DIR_NAME, GFileDoc], 1),
+  GroupsBase = case {SaveStatus, UUID} of
+                 {ok, _} -> UUID;
+                 {error, file_exists} ->
+                   case dao_lib:apply(dao_vfs, get_file, ["/" ++ ?GROUPS_BASE_DIR_NAME], 1) of
+                     {ok, #veil_document{uuid = UUID1}} -> UUID1;
+                     {error, Reason2} ->
+                       ?error("Error while getting groups base dir: ~p", [Reason2]),
+                       error({error, Reason2})
+                   end;
+                 {error, Reason} ->
+                   ?error("Error while getting groups base dir: ~p", [Reason]),
+                   error({error, Reason})
+               end,
+
+  TFile = #file{type = ?DIR_TYPE, name = TeamName, uid = "0", gids = [TeamName], parent = GroupsBase, perms = 8#770},
+  TFileDoc = fslogic_utils:update_meta_attr(TFile, times, {CTime, CTime, CTime}),
+  case dao_lib:apply(dao_vfs, save_new_file, ["/" ++ ?GROUPS_BASE_DIR_NAME ++ "/" ++ TeamName, TFileDoc], 1) of
+    {error, file_exists} -> {error, dir_exists};
+    Other -> Other
+  end.

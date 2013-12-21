@@ -75,10 +75,13 @@ modules_start_and_ping_test(Config) ->
 
   gen_server:cast({global, ?CCM}, get_state_from_db),
   timer:sleep(100),
+  ?assertEqual(2, gen_server:call({global, ?CCM}, get_state_num)),
   State = gen_server:call({global, ?CCM}, get_state),
   Workers = State#cm_state.workers,
   ?assertEqual(1, length(Workers)),
-  ?assertEqual(2, gen_server:call({global, ?CCM}, get_state_num)),
+
+  timer:sleep(500),
+  ?assertEqual(3, gen_server:call({global, ?CCM}, get_state_num)),
 
   gen_server:cast({global, ?CCM}, init_cluster),
   timer:sleep(100),
@@ -86,7 +89,7 @@ modules_start_and_ping_test(Config) ->
   Workers2 = State2#cm_state.workers,
   Jobs = ?Modules,
   ?assertEqual(length(Workers2), length(Jobs)),
-  ?assertEqual(3, gen_server:call({global, ?CCM}, get_state_num)),
+  ?assertEqual(4, gen_server:call({global, ?CCM}, get_state_num)),
 
   ProtocolVersion = 1,
   CheckModules = fun(M, Sum) ->

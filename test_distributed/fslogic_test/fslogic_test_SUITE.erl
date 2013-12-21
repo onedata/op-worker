@@ -24,11 +24,11 @@
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([files_manager_standard_files_test/1, files_manager_tmp_files_test/1, storage_management_test/1, permissions_management_test/1, user_creation_test/1,
-  fuse_requests_test/1, users_separation_test/1, file_sharing_test/1, dir_mv_test/1, user_file_counting_test/1, dirs_creating_test/1, groups_test/1, get_by_uuid_test/1]).
+  fuse_requests_test/1, users_separation_test/1, file_sharing_test/1, dir_mv_test/1, user_file_counting_test/1, dirs_creating_test/1, groups_test/1, get_by_uuid_test/1, concurrent_file_creation_test/1]).
 -export([create_standard_share/2, create_share/3, get_share/2]).
 
 all() -> [groups_test, files_manager_tmp_files_test, files_manager_standard_files_test, storage_management_test, permissions_management_test, user_creation_test,
-  fuse_requests_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test
+  fuse_requests_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test, concurrent_file_creation_test
 ].
 
 -define(SH, "DirectIO").
@@ -39,6 +39,62 @@ all() -> [groups_test, files_manager_tmp_files_test, files_manager_standard_file
 %% ====================================================================
 %% Test functions
 %% ====================================================================
+
+%% This test checks if creation of file works well when many concurrent creation requests are sent
+concurrent_file_creation_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+  [Node1 | _] = NodesUp,
+
+  gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
+  gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  timer:sleep(100),
+  gen_server:cast({global, ?CCM}, init_cluster),
+  timer:sleep(1500),
+
+  {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT]),
+  ?assertEqual(ok, InsertStorageAns),
+
+  TestFile = "concurrent_file_creation_test_file",
+
+  ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [TestFile])),
+
+  MainProc = self(),
+  TestFun = fun(File) ->
+    spawn(Node1, fun() ->
+      CreateAns = logical_files_manager:create(File),
+      MainProc ! CreateAns
+    end)
+  end,
+
+  TestFun(TestFile),
+  TestFun(TestFile),
+
+  Ans1 = receive
+    Msg -> Msg
+  after 2000 ->
+    timeout
+  end,
+  Ans2 = receive
+    Msg2 -> Msg2
+  after 2000 ->
+    timeout
+  end,
+
+  ?assert(rpc:call(Node1, files_tester, file_exists, [TestFile])),
+  CreateAns = [Ans1, Ans2],
+  ?assert(lists:member(ok, CreateAns)),
+  ?assert(lists:member({error, file_exists}, CreateAns)),
+
+  AnsDel = rpc:call(Node1, logical_files_manager, delete, [TestFile]),
+  ?assertEqual(ok, AnsDel),
+  ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [TestFile])),
+
+  RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+  ?assertEqual(ok, RemoveStorageAns),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users"),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
 
 %% Test file and data getting by uuid (fslogic normally uses path instead of uuid)
 get_by_uuid_test(Config) ->
@@ -1722,7 +1778,7 @@ files_manager_standard_files_test(Config) ->
   ?assertEqual(ok, MkDirAns),
 
   MkDirAns2 = rpc:call(Node1, logical_files_manager, mkdir, [DirName]),
-  ?assertEqual({logical_file_system_error, ?VEEXIST}, MkDirAns2),
+  ?assertEqual({error,dir_exists}, MkDirAns2),
 
   ?assertEqual(false, rpc:call(Node1, logical_files_manager, exists, [File])),
 
@@ -1733,7 +1789,7 @@ files_manager_standard_files_test(Config) ->
   ?assert(rpc:call(Node1, logical_files_manager, exists, [File])),
 
   AnsCreate2 = rpc:call(Node1, logical_files_manager, create, [File]),
-  ?assertEqual({logical_file_system_error, ?VEEXIST}, AnsCreate2),
+  ?assertEqual({error,file_exists}, AnsCreate2),
 
   AnsWrite1 = rpc:call(Node1, logical_files_manager, write, [File, list_to_binary("abcdefgh")]),
   ?assertEqual(8, AnsWrite1),
