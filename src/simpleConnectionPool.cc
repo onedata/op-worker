@@ -195,7 +195,8 @@ list<string> SimpleConnectionPool::dnsQuery(string hostname)
                 default:
                     break;
             }
-        }       
+        }
+        freeaddrinfo(result);
     }
 
     if(lst.size() == 0) {
