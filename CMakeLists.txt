@@ -33,7 +33,9 @@ message(STATUS "Checking for Protobuf...")
 find_package(Protobuf REQUIRED)
 
 if(${PREFER_STATIC_LINK})
-    find_library(PROTOBUF_LIBRARY NAMES libprotobuf.a protobuf)
+    find_library(PROTOBUF_LIBRARIES NAMES libprotobuf.a protobuf)
+else()
+    set(PROTOBUF_LIBRARIES ${PROTOBUF_LIBRARY})
 endif()
 
 include_directories(${PROTOBUF_INCLUDE_DIR})
@@ -161,7 +163,7 @@ set_target_properties(veilhelpersShared PROPERTIES OUTPUT_NAME veilhelpers)
 target_link_libraries(veilhelpers
     ${Boost_LIBRARIES}
     ${GLOG_LIBRARIES}
-    ${PROTOBUF_LIBRARY}
+    ${PROTOBUF_LIBRARIES}
     ${OPENSSL_LIBRARIES}
     ${GLOG_LIBRARIES}
     veilprotocol
@@ -171,7 +173,7 @@ target_link_libraries(veilhelpers
 target_link_libraries(veilhelpersShared
     ${Boost_LIBRARIES}
     ${GLOG_LIBRARIES}
-    ${PROTOBUF_LIBRARY}
+    ${PROTOBUF_LIBRARIES}
     ${OPENSSL_LIBRARIES}
     ${GLOG_LIBRARIES}
     veilprotocol
@@ -179,7 +181,7 @@ target_link_libraries(veilhelpersShared
 )
 
 target_link_libraries(veilprotocol
-    ${PROTOBUF_LIBRARY}
+    ${PROTOBUF_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
 )
 
