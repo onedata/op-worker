@@ -106,8 +106,7 @@ add_library(veilhelpers_obj OBJECT ${HELPER_SOURCES})
 add_library(veilhelpers STATIC $<TARGET_OBJECTS:veilhelpers_obj>)
 add_library(veilhelpersShared SHARED $<TARGET_OBJECTS:veilhelpers_obj>)
 
-add_dependencies(veilhelpers glog veilprotocol websocketpp)
-add_dependencies(veilhelpersShared glog veilprotocol websocketpp)
+add_dependencies(veilhelpers_obj glog veilprotocol websocketpp)
 
 set_target_properties(veilhelpersShared PROPERTIES OUTPUT_NAME veilhelpers)
 
