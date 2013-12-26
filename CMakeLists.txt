@@ -101,8 +101,10 @@ set(CMAKE_SKIP_RPATH TRUE) # Something is wrong with CMake RPATH config, we need
 # Define targets
 
 add_library(veilprotocol ${PROTO_SRCS})
-add_library(veilhelpersShared SHARED ${HELPER_SOURCES})
-add_library(veilhelpers STATIC ${HELPER_SOURCES})
+
+add_library(veilhelpers_obj OBJECT ${HELPER_SOURCES})
+add_library(veilhelpers STATIC $<TARGET_OBJECTS:veilhelpers_obj>)
+add_library(veilhelpersShared SHARED $<TARGET_OBJECTS:veilhelpers_obj>)
 
 add_dependencies(veilhelpers glog veilprotocol websocketpp)
 add_dependencies(veilhelpersShared glog veilprotocol websocketpp)
