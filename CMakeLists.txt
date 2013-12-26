@@ -126,6 +126,12 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 file(GLOB HELPER_SOURCES "src/[a-zA-Z]*.cc")
 
 # Setup compile flags
+if(${PREFER_STATIC_LINK})
+    execute_process(COMMAND g++ -print-file-name=libstdc++.a OUTPUT_VARIABLE LIBSTD_NAME)
+    string(REGEX REPLACE "(\r?\n)+$" "" LIBSTD_NAME "${LIBSTD_NAME}")
+    execute_process(COMMAND ln -sf "${LIBSTD_NAME}" WORKING_DIRECTORY ${PROJECT_BINARY_DIR})
+endif()
+
 set(CUSTOM_RPATH "${CMAKE_INSTALL_PREFIX}/${LIB_DIR}:${CMAKE_CURRENT_BINARY_DIR}:.:${LIB_DIR}:../${LIB_DIR}:./c_lib:../c_lib:$ORIGIN")
 
 if(APPLE)
@@ -138,6 +144,7 @@ endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SECTION_FRAGMENTATION_FLAGS} -fPIC -O2 ${FUSE_DEFINITIONS} -DFUSE_USE_VERSION=29")
 set(CMAKE_SKIP_RPATH TRUE) # Something is wrong with CMake RPATH config, we need to use old-fashion way
+
 
 # Define targets
 
@@ -152,7 +159,6 @@ add_dependencies(veilhelpers_obj glog veilprotocol websocketpp)
 set_target_properties(veilhelpersShared PROPERTIES OUTPUT_NAME veilhelpers)
 
 target_link_libraries(veilhelpers
-    ${FUSE_LIBRARIES}
     ${Boost_LIBRARIES}
     ${GLOG_LIBRARIES}
     ${PROTOBUF_LIBRARY}
@@ -163,7 +169,6 @@ target_link_libraries(veilhelpers
 )
 
 target_link_libraries(veilhelpersShared
-    ${FUSE_LIBRARIES}
     ${Boost_LIBRARIES}
     ${GLOG_LIBRARIES}
     ${PROTOBUF_LIBRARY}
