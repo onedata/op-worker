@@ -61,6 +61,12 @@ endif()
 link_directories(${Boost_LIBRARY_DIRS})
 include_directories(${Boost_INCLUDE_DIRS})
 
+# Utility libs
+find_library(LTDL_LIBRARY libltdl.a ltdl)
+find_library(RT_LIBRARY rt)
+find_library(ZLIB_LIBRARY libz.a z)
+find_library(DL_LIBRARY dl)
+
 # Pull git submodules
 message(STATUS "Pulling submodules using git...")
 execute_process(COMMAND ${GIT_EXECUTABLE} submodule init
@@ -82,10 +88,10 @@ file(GLOB HELPER_SOURCES "src/[a-zA-Z]*.cc")
 set(CUSTOM_RPATH "${CMAKE_INSTALL_PREFIX}/${LIB_DIR}:${CMAKE_CURRENT_BINARY_DIR}:.:${LIB_DIR}:../${LIB_DIR}:./c_lib:../c_lib")
 
 if(APPLE)
-    set(PLATFORM_EXTRA_LIBS "${CMAKE_THREAD_LIBS_INIT}")
-    set(SECTION_FRAGMENTATION_FLAGS "")
+    set(PLATFORM_EXTRA_LIBS "${CMAKE_THREAD_LIBS_INIT};${LTDL_LIBRARY};${ZLIB_LIBRARY};${DL_LIBRARY}")
+    set(SECTION_FRAGMENTATION_FLAGS "-Wno-deprecated-declarations")
 else()
-    set(PLATFORM_EXTRA_LIBS "${CMAKE_THREAD_LIBS_INIT};rt")
+    set(PLATFORM_EXTRA_LIBS "${CMAKE_THREAD_LIBS_INIT};${LTDL_LIBRARY};${ZLIB_LIBRARY};${DL_LIBRARY};${RT_LIBRARY}")
     set(SECTION_FRAGMENTATION_FLAGS "-fdata-sections -ffunction-sections -Wl,--gc-sections -Wl,-rpath,${CUSTOM_RPATH}")
 endif()
 
@@ -113,8 +119,6 @@ target_link_libraries(veilhelpers
     ${OPENSSL_LIBRARIES}
     ${GLOG_LIBRARIES}
     veilprotocol
-    dl
-    z
     ${PLATFORM_EXTRA_LIBS}
 )
 
@@ -126,8 +130,6 @@ target_link_libraries(veilhelpersShared
     ${OPENSSL_LIBRARIES}
     ${GLOG_LIBRARIES}
     veilprotocol
-    dl
-    z
     ${PLATFORM_EXTRA_LIBS}
 )
 
@@ -179,8 +181,6 @@ foreach(file ${files})
         ${GMOCK_LIBRARIES}
         ${FUSE_LIBRARIES}
         veilhelpers
-        dl
-        z
         ${PLATFORM_EXTRA_LIBS}
     )    
     add_test(${TEST_NAME} ${TEST_NAME})

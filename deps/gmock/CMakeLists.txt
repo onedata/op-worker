@@ -2,18 +2,32 @@ project(dep-gmock)
 
 include(ExternalProject)
 
-ExternalProject_Add(gmock
-    PREFIX "${CMAKE_CURRENT_BINARY_DIR}"
-    SVN_REPOSITORY http://googlemock.googlecode.com/svn/trunk/
-    INSTALL_COMMAND ""
-    UPDATE_COMMAND ""
-)
+find_library(GMOCK_FIND_LIBRARY libgmock.a)
+find_library(GTEST_FIND_LIBRARY libgtest.a)
+find_library(GMOCK_MAIN_FIND_LIBRARY libgmock_main.a)
+find_library(GTEST_MAIN_FIND_LIBRARY libgtest_main.a)
+if(${GMOCK_FIND_LIBRARY} MATCHES GMOCK_FIND_LIBRARY-NOTFOUND OR ${GTEST_FIND_LIBRARY} MATCHES GTEST_FIND_LIBRARY-NOTFOUND
+   OR ${GMOCK_MAIN_FIND_LIBRARY} MATCHES GMOCK_MAIN_FIND_LIBRARY-NOTFOUND OR ${GTEST_MAIN_FIND_LIBRARY} MATCHES GTEST_MAIN_FIND_LIBRARY-NOTFOUND)
 
-# Export dep includes and lib paths
-ExternalProject_Get_Property(gmock binary_dir)
-ExternalProject_Get_Property(gmock source_dir)
-set(GMOCK_INCLUDE_DIR ${source_dir}/include PARENT_SCOPE)
-set(GMOCK_LIBRARIES ${binary_dir}/libgmock.a  ${binary_dir}/libgmock_main.a PARENT_SCOPE)
+    ExternalProject_Add(gmock
+        PREFIX "${CMAKE_CURRENT_BINARY_DIR}"
+        SVN_REPOSITORY http://googlemock.googlecode.com/svn/trunk/
+        INSTALL_COMMAND ""
+        UPDATE_COMMAND ""
+    )
 
-set(GTEST_INCLUDE_DIR ${source_dir}/gtest/include PARENT_SCOPE)
-set(GTEST_LIBRARIES ${binary_dir}/gtest/libgtest.a  ${binary_dir}/gtest/libgtest_main.a PARENT_SCOPE)
+    # Export dep includes and lib paths
+    ExternalProject_Get_Property(gmock binary_dir)
+    ExternalProject_Get_Property(gmock source_dir)
+    set(GMOCK_INCLUDE_DIR ${source_dir}/include PARENT_SCOPE)
+    set(GMOCK_LIBRARIES ${binary_dir}/libgmock.a  ${binary_dir}/libgmock_main.a PARENT_SCOPE)
+
+    set(GTEST_INCLUDE_DIR ${source_dir}/gtest/include PARENT_SCOPE)
+    set(GTEST_LIBRARIES ${binary_dir}/gtest/libgtest.a  ${binary_dir}/gtest/libgtest_main.a PARENT_SCOPE)
+
+else()
+
+    set(GTEST_INCLUDE_DIR "" PARENT_SCOPE)
+    set(GTEST_LIBRARIES ${GMOCK_FIND_LIBRARY} ${GTEST_FIND_LIBRARY} ${GMOCK_MAIN_FIND_LIBRARY} ${GTEST_MAIN_FIND_LIBRARY} PARENT_SCOPE)
+
+endif()
