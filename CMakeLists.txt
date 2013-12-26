@@ -3,7 +3,7 @@ project (VeilHelpers)
 
 # The version number.
 set(VeilHelpers_VERSION_MAJOR 0)
-set(VeilHelpers_VERSION_MINOR 1)
+set(VeilHelpers_VERSION_MINOR 2)
 set(VeilHelpers_VERSION_PATCH 0)
 set(VeilHelpers_VERSION $(VeilHelpers_VERSION_MAJOR).$(VeilHelpers_VERSION_MINOR).$(VeilHelpers_VERSION_PATCH))
 
@@ -31,11 +31,32 @@ find_package(Git REQUIRED)
 # Setup ProtoBuf
 message(STATUS "Checking for Protobuf...")
 find_package(Protobuf REQUIRED)
+
+if(${PREFER_STATIC_LINK})
+    find_library(PROTOBUF_LIBRARY NAMES libprotobuf.a protobuf)
+endif()
+
 include_directories(${PROTOBUF_INCLUDE_DIR})
+
 
 # Setup OpenSSL
 message(STATUS "Checking for OpenSSL...")
 find_package(OpenSSL REQUIRED)
+
+if(${PREFER_STATIC_LINK})
+
+    find_library(SSL_LIBRARY NAMES libssl.a ssl)
+    find_library(CRYPTO_LIBRARY NAMES libcrypto.a crypto)
+
+    find_library(KRB5_LIBRARY krb5)
+    if(${KRB5_LIBRARY} MATCHES KRB5_LIBRARY-NOTFOUND)
+        set(OPENSSL_LIBRARIES "${SSL_LIBRARY};${CRYPTO_LIBRARY}")
+    else(${KRB5_LIBRARY} MATCHES KRB5_LIBRARY-NOTFOUND)
+        set(OPENSSL_LIBRARIES "${SSL_LIBRARY};${CRYPTO_LIBRARY};${KRB5_LIBRARY}")
+    endif(${KRB5_LIBRARY} MATCHES KRB5_LIBRARY-NOTFOUND)
+
+endif()
+
 include_directories(${OPENSSL_INCLUDE_DIR})
 
 # Setup pthreads
@@ -47,25 +68,45 @@ message(STATUS "Checking for FUSE...")
 find_package(FUSE REQUIRED)
 include_directories(${FUSE_INCLUDE_DIRS})
 
+
 # Setup Boost
-set(Boost_USE_STATIC_LIBS        ON)
+set(Boost_USE_STATIC_LIBS       OFF)
 set(Boost_USE_MULTITHREADED      ON)
 set(Boost_USE_STATIC_RUNTIME    OFF)
-find_package(Boost COMPONENTS system thread filesystem random REQUIRED)
-set(Boost_LIBRARIES             "boost_thread-mt.a;boost_filesystem-mt.a;boost_system-mt.a;boost_random-mt.a")
-if(APPLE)
-    set(Boost_LIBRARIES_SHARED  "boost_thread-mt.dylib;boost_filesystem-mt.dylib;boost_system-mt.dylib;boost_random.dylib")
-else()
-    set(Boost_LIBRARIES_SHARED  "boost_thread-mt.so;boost_filesystem-mt.so;boost_system-mt.so;boost_random-mt.so")
+find_package(Boost COMPONENTS thread filesystem system random REQUIRED)
+
+if(${PREFER_STATIC_LINK})
+
+    set(BOOST_LIBS boost_thread boost_filesystem boost_system boost_random)
+
+    foreach(LIB ${BOOST_LIBS})
+        find_library(BOOST_${LIB}_LIBRARY NAMES lib${LIB}-mt.a lib${LIB}.a ${LIB}-mt ${LIB})
+        if(${BOOST_${LIB}_LIBRARY} MATCHES .*_LIBRARY-NOTFOUND)
+            message( FATAL_ERROR "ERROR: ${LIB} NOT FOUND!")
+        endif()
+        set(BOOST_DEPS ${BOOST_DEPS};${BOOST_${LIB}_LIBRARY})
+    endforeach()
+    set(Boost_LIBRARIES ${BOOST_DEPS})
+
 endif()
+
+
 link_directories(${Boost_LIBRARY_DIRS})
 include_directories(${Boost_INCLUDE_DIRS})
 
+
 # Utility libs
-find_library(LTDL_LIBRARY libltdl.a ltdl)
+if(${PREFER_STATIC_LINK})
+    find_library(LTDL_LIBRARY libltdl.a ltdl)
+    find_library(ZLIB_LIBRARY libz.a z)
+else()
+    find_library(LTDL_LIBRARY ltdl)
+    find_library(ZLIB_LIBRARY z)
+endif()
+
 find_library(RT_LIBRARY rt)
-find_library(ZLIB_LIBRARY libz.a z)
 find_library(DL_LIBRARY dl)
+
 
 # Pull git submodules
 message(STATUS "Pulling submodules using git...")
@@ -85,7 +126,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 file(GLOB HELPER_SOURCES "src/[a-zA-Z]*.cc")
 
 # Setup compile flags
-set(CUSTOM_RPATH "${CMAKE_INSTALL_PREFIX}/${LIB_DIR}:${CMAKE_CURRENT_BINARY_DIR}:.:${LIB_DIR}:../${LIB_DIR}:./c_lib:../c_lib")
+set(CUSTOM_RPATH "${CMAKE_INSTALL_PREFIX}/${LIB_DIR}:${CMAKE_CURRENT_BINARY_DIR}:.:${LIB_DIR}:../${LIB_DIR}:./c_lib:../c_lib:$ORIGIN")
 
 if(APPLE)
     set(PLATFORM_EXTRA_LIBS "${CMAKE_THREAD_LIBS_INIT};${LTDL_LIBRARY};${ZLIB_LIBRARY};${DL_LIBRARY}")
@@ -110,8 +151,6 @@ add_dependencies(veilhelpers_obj glog veilprotocol websocketpp)
 
 set_target_properties(veilhelpersShared PROPERTIES OUTPUT_NAME veilhelpers)
 
-message(${WSPP_INCLUDE_DIR})
-
 target_link_libraries(veilhelpers
     ${FUSE_LIBRARIES}
     ${Boost_LIBRARIES}
@@ -125,7 +164,7 @@ target_link_libraries(veilhelpers
 
 target_link_libraries(veilhelpersShared
     ${FUSE_LIBRARIES}
-    ${Boost_LIBRARIES_SHARED}
+    ${Boost_LIBRARIES}
     ${GLOG_LIBRARIES}
     ${PROTOBUF_LIBRARY}
     ${OPENSSL_LIBRARIES}

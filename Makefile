@@ -10,7 +10,7 @@ build: configure
 
 configure:
 	@mkdir -p ${BUILD_DIR}
-	@cd ${BUILD_DIR} && ${CMAKE} ..
+	cd ${BUILD_DIR} && ${CMAKE} .. `if [[ "$$PREFER_STATIC_LINK" != ""  ]]; then echo "-DPREFER_STATIC_LINK=1"; fi`
 
 test: build
 	@cd ${BUILD_DIR} && make test

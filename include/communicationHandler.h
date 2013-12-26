@@ -139,13 +139,14 @@ public:
     virtual int32_t     getMsgId();                                         ///< Get next message id. Thread safe. All subsequents calls returns next integer value.
     virtual int         openConnection();                                   ///< Opens WebSoscket connection. Returns 0 on success, non-zero otherwise.
     virtual void        closeConnection();                                  ///< Closes active connection.
-    virtual int         sendMessage(const protocol::communication_protocol::ClusterMsg& message, int32_t msgID);             ///< Sends ClusterMsg using current WebSocket session. Will fail if there isnt one.
-    virtual int         receiveMessage(protocol::communication_protocol::Answer& answer, int32_t msgID, uint32_t timeout = RECV_TIMEOUT);                    ///< Receives Answer using current WebSocket session. Will fail if there isnt one.
-    virtual             protocol::communication_protocol::Answer communicate(protocol::communication_protocol::ClusterMsg &msg, uint8_t retry, uint32_t timeout = RECV_TIMEOUT);     ///< Sends ClusterMsg and receives answer. Same as running CommunicationHandler::sendMessage and CommunicationHandler::receiveMessage
+    virtual int         sendMessage(const protocol::communication_protocol::ClusterMsg& message, int32_t msgID = 0);             ///< Sends ClusterMsg using current WebSocket session. Will fail if there isn't one.
+                                                                                                                             ///< @return Positive - message ID that shall be used to receive response, negative - error ID
+    virtual int         receiveMessage(protocol::communication_protocol::Answer& answer, int32_t msgID, uint32_t timeout = RECV_TIMEOUT);                    ///< Receives Answer using current WebSocket session. Will fail if there isn't one.
+    virtual             protocol::communication_protocol::Answer communicate(protocol::communication_protocol::ClusterMsg &msg, uint8_t retry, uint32_t timeout = 0);     ///< Sends ClusterMsg and receives answer. Same as running CommunicationHandler::sendMessage and CommunicationHandler::receiveMessage
                                                                     ///< but this method also supports reconnect option. If something goes wrong during communication, new connection will be
                                                                     ///< estabilished and the whole process will be repeated.
                                                                     ///< @param retry How many times tries has to be made before returning error.
-                                                                    ///< @param timeout Timeout for recv operation.
+                                                                    ///< @param timeout Timeout for recv operation. By default timeout will be calculated base on frame size
                                                                     ///< @return Answer protobuf message. If error occures, empty Answer object will be returned.
 
     static int getInstancesCount();                                 ///< Returns number of CommunicationHander instances.

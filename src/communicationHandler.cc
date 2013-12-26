@@ -271,7 +271,11 @@ int CommunicationHandler::sendMessage(const ClusterMsg& msg, int32_t msgId)
 {
     if(m_connectStatus != CONNECTED)
         return m_connectStatus;
-    
+
+    // If message ID is not set, generate new one
+    if (!msgId)
+        msgId = getMsgId();
+
     ClusterMsg msgWithId = msg;
     msgWithId.set_message_id(msgId);
     
@@ -280,8 +284,9 @@ int CommunicationHandler::sendMessage(const ClusterMsg& msg, int32_t msgId)
     
     if(ec.value())
         ++m_errorCount;
-    
-    return ec.value();
+
+    // Return msg ID ot negative error code
+    return ec.value() == 0 ? msgId : (ec.value() > 0 ? -ec.value() : ec.value());
 }
     
 int32_t CommunicationHandler::getMsgId()
@@ -314,6 +319,13 @@ int CommunicationHandler::receiveMessage(Answer& answer, int32_t msgId, uint32_t
 Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_t timeout)
 {
     Answer answer;
+    if (timeout == 0)
+    {
+        timeout = msg.ByteSize() * 2; // 2ms for each byte (minimum of 500B/s)
+        if (timeout < RECV_TIMEOUT)   // Minimum timeout threshold
+            timeout = RECV_TIMEOUT;
+    }
+
     try
     {
         unsigned int msgId = getMsgId();
