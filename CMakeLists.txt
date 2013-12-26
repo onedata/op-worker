@@ -128,7 +128,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 file(GLOB HELPER_SOURCES "src/[a-zA-Z]*.cc")
 
 # Setup compile flags
-if(${PREFER_STATIC_LINK})
+if(${PREFER_STATIC_LINK}) # Try to link libstdc++.a
     execute_process(COMMAND g++ -print-file-name=libstdc++.a OUTPUT_VARIABLE LIBSTD_NAME)
     string(REGEX REPLACE "(\r?\n)+$" "" LIBSTD_NAME "${LIBSTD_NAME}")
     execute_process(COMMAND ln -sf "${LIBSTD_NAME}" WORKING_DIRECTORY ${PROJECT_BINARY_DIR})

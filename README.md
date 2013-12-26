@@ -18,27 +18,31 @@ Prerequisites
 In order to compile the project, you need to have fallowing additional libraries, its headers and all its prerequisites in include/ld path:
 Also you need cmake 2.8+.
 
-* libfuse
+* libfuse (only headers needed)
 * libboost
+* libprotobuf
 
 Use this command to install the required dependency packages:
 
 * Debian/Ubuntu Dependencies (.deb packages):
 
-        apt-get install libfuse-dev libboost-dev
+        apt-get install libfuse-dev libboost-dev libprotobuf-dev
 
 * RHEL/CentOS/Fedora Dependencies (.rpm packages):
 
-        yum install fuse-libs fuse-devel cmake28 boost-devel boost-static subversion
+        yum install fuse-libs fuse-devel cmake28 boost-devel boost-static subversion protobuf-devel
         
 Compilation
 -----------
+
+If 'PREFER_STATIC_LINK' env variable is set during compilation, shared library - libveilhelpers.so/dylib
+will be linked statically against protobuf, boost_ and openssl (if it's possible).
 
 #### Build
     
     make -s build
     
-after this step you should have your libveilhelpers.a in "build" subdirectory.
+after this step you should have your libveilhelpers.a and libveilhelpers.so/dylib in "build" subdirectory.
     
 
 #### Testing
