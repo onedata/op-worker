@@ -24,14 +24,14 @@ BufferAgent::~BufferAgent()
 int BufferAgent::onOpen(std::string path, ffi_type ffi)
 {
     unique_lock guard(m_loopMutex);
-    m_cacheMap.erase(ffi->fh_old);
+    m_cacheMap.erase(ffi->fh);
 
     buffer_ptr lCache(new LockableCache());
     lCache->fileName = path;
     lCache->buffer = newFileCache();
     lCache->ffi = *ffi;
 
-    m_cacheMap[ffi->fh_old] = lCache;
+    m_cacheMap[ffi->fh] = lCache;
 
     return 0;
 }
@@ -39,7 +39,7 @@ int BufferAgent::onOpen(std::string path, ffi_type ffi)
 int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, off_t offset, ffi_type ffi)
 {
     unique_lock guard(m_loopMutex);
-        buffer_ptr wrapper = m_cacheMap[ffi->fh_old];
+        buffer_ptr wrapper = m_cacheMap[ffi->fh];
     guard.unlock();
 
     unique_lock buff_guard(wrapper->mutex);
@@ -51,7 +51,7 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
     wrapper->buffer->writeData(offset, buf);
 
     guard.lock();
-    m_jobQueue.push_back(ffi->fh_old);
+    m_jobQueue.push_back(ffi->fh);
 
     return 0;
 }
@@ -65,7 +65,7 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
 int BufferAgent::onFlush(std::string path, ffi_type ffi)
 {
     unique_lock guard(m_loopMutex);
-        buffer_ptr wrapper = m_cacheMap[ffi->fh_old];
+        buffer_ptr wrapper = m_cacheMap[ffi->fh];
     guard.unlock();
 
     unique_lock buff_guard(wrapper->mutex);
@@ -85,7 +85,7 @@ int BufferAgent::onFlush(std::string path, ffi_type ffi)
     }
 
     guard.lock();
-    m_jobQueue.remove(ffi->fh_old);
+    m_jobQueue.remove(ffi->fh);
 
     return 0;
 }
@@ -93,7 +93,7 @@ int BufferAgent::onFlush(std::string path, ffi_type ffi)
 int BufferAgent::onRelease(std::string path, ffi_type ffi)
 {
     boost::unique_lock<boost::recursive_mutex> guard(m_loopMutex);
-    m_cacheMap.erase(ffi->fh_old);
+    m_cacheMap.erase(ffi->fh);
 
     return 0;
 }
