@@ -45,6 +45,10 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
     unique_lock buff_guard(wrapper->mutex);
 
     while(wrapper->buffer->byteSize() > 1024 * 1024 * 10) {
+        guard.lock();
+            m_jobQueue.push_front(ffi->fh);
+            m_loopCond.notify_all();
+        guard.unlock();
         wrapper->cond.wait(buff_guard);
     }
 
@@ -155,6 +159,7 @@ void BufferAgent::workerLoop()
                 wrapper->cond.notify_all();
             }
 
+            buff_guard.unlock();
             guard.lock();
             if(wrapper->buffer->blockCount() > 0)
             {
