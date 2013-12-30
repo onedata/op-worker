@@ -49,7 +49,7 @@ public:
 
 private:
 
-    bool                                m_agentActive;
+    volatile bool                       m_agentActive;
     boost::recursive_mutex                        m_loopMutex;
     boost::condition_variable_any           m_loopCond;
     std::vector<boost::shared_ptr<boost::thread> >          m_workers;

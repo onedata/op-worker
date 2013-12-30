@@ -114,6 +114,7 @@ void BufferAgent::agentStart(int worker_count)
 void BufferAgent::agentStop()
 {
     m_agentActive = false;
+    m_loopCond.notify_all();
     while(m_workers.size() > 0)
     {
         m_workers.back()->join();
@@ -126,8 +127,11 @@ void BufferAgent::workerLoop()
     unique_lock guard(m_loopMutex);
     while(m_agentActive)
     {
-        while(m_jobQueue.empty())
+        while(m_jobQueue.empty() && m_agentActive)
             m_loopCond.wait(guard);
+
+        if(m_agentActive)
+            return;
 
         fd_type file = m_jobQueue.front();
         buffer_ptr wrapper = m_cacheMap[file];
