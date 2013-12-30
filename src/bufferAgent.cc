@@ -21,24 +21,25 @@ BufferAgent::~BufferAgent()
     agentStop();
 }
 
-int BufferAgent::onOpen(std::string path, fd_type fd)
+int BufferAgent::onOpen(std::string path, ffi_type ffi)
 {
     unique_lock guard(m_loopMutex);
-    m_cacheMap.erase(fd);
+    m_cacheMap.erase(ffi->fh_old);
 
     buffer_ptr lCache(new LockableCache());
     lCache->fileName = path;
     lCache->buffer = newFileCache();
+    lCache->ffi = *ffi;
 
-    m_cacheMap[fd] = lCache;
+    m_cacheMap[ffi->fh_old] = lCache;
 
     return 0;
 }
 
-int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, off_t offset, fd_type fd)
+int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, off_t offset, ffi_type ffi)
 {
     unique_lock guard(m_loopMutex);
-        buffer_ptr wrapper = m_cacheMap[fd];
+        buffer_ptr wrapper = m_cacheMap[ffi->fh_old];
     guard.release();
 
     unique_lock buff_guard(wrapper->mutex);
@@ -50,21 +51,21 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
     wrapper->buffer->writeData(offset, buf);
 
     guard.lock();
-    m_jobQueue.push_back(fd);
+    m_jobQueue.push_back(ffi->fh_old);
 
     return EOPNOTSUPP;
 }
 
-int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t offset, fd_type file)
+int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t offset, ffi_type ffi)
 {
     boost::unique_lock<boost::recursive_mutex> guard(m_loopMutex);
     return EOPNOTSUPP;
 }
 
-int BufferAgent::onFlush(std::string path, fd_type file)
+int BufferAgent::onFlush(std::string path, ffi_type ffi)
 {
     unique_lock guard(m_loopMutex);
-        buffer_ptr wrapper = m_cacheMap[file];
+        buffer_ptr wrapper = m_cacheMap[ffi->fh_old];
     guard.release();
 
     unique_lock buff_guard(wrapper->mutex);
@@ -72,7 +73,7 @@ int BufferAgent::onFlush(std::string path, fd_type file)
     while(wrapper->buffer->blockCount() > 0) 
     {
         block_ptr block = wrapper->buffer->removeOldestBlock();
-        int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, file);
+        int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
         if(res < 0)
         {
             while(wrapper->buffer->blockCount() > 0)
@@ -84,15 +85,15 @@ int BufferAgent::onFlush(std::string path, fd_type file)
     }
 
     guard.lock();
-    m_jobQueue.remove(file);
+    m_jobQueue.remove(ffi->fh_old);
 
     return 0;
 }
 
-int BufferAgent::onRelease(std::string path, fd_type fd)
+int BufferAgent::onRelease(std::string path, ffi_type ffi)
 {
     boost::unique_lock<boost::recursive_mutex> guard(m_loopMutex);
-    m_cacheMap.erase(fd);
+    m_cacheMap.erase(ffi->fh_old);
 
     return 0;
 }
