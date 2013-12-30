@@ -320,7 +320,7 @@ int ClusterProxyHelper::sh_removexattr(const char *path, const char *name)
 
 #endif /* HAVE_SETXATTR */
 
-int ClusterProxyHelper::doWrite(std::string path, const std::string &buf, size_t, off_t offset, fd_type)
+int ClusterProxyHelper::doWrite(std::string path, const std::string &buf, size_t, off_t offset, ffi_type)
 {
     WriteFile msg;
     msg.set_file_id(path);
@@ -344,7 +344,7 @@ int ClusterProxyHelper::doWrite(std::string path, const std::string &buf, size_t
     return 0;
 }
 
-int ClusterProxyHelper::doRead(std::string path, std::string &buf, size_t, off_t, fd_type)
+int ClusterProxyHelper::doRead(std::string path, std::string &buf, size_t, off_t, ffi_type)
 {
     return 0;
 }

@@ -90,8 +90,8 @@ class ClusterProxyHelper : public IStorageHelper {
         std::string requestMessage(std::string inputType, std::string answerType, std::string inputData);                   ///< Creates & sends ClusterMsg with given types and input. Response is an serialized message od type "answerType".
         std::string requestAtom(std::string inputType, std::string inputData);                                              ///< Same as requestMessage except it always receives Atom. Return value is an strign value of Atom.
 
-        int doWrite(std::string path, const std::string &buf, size_t, off_t, fd_type);
-        int doRead(std::string path, std::string &buf, size_t, off_t, fd_type);
+        int doWrite(std::string path, const std::string &buf, size_t, off_t, ffi_type);
+        int doRead(std::string path, std::string &buf, size_t, off_t, ffi_type);
 
 };
 
