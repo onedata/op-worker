@@ -149,10 +149,12 @@ void BufferAgent::workerLoop()
         
         {
             guard.unlock();
+            block_ptr block;
+            {
+                unique_lock buff_guard(wrapper->mutex);
+                block = wrapper->buffer->removeOldestBlock();
+            } 
 
-            unique_lock buff_guard(wrapper->mutex);
-
-            block_ptr block = wrapper->buffer->removeOldestBlock();
             if(block) 
             {
                 int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
@@ -160,7 +162,6 @@ void BufferAgent::workerLoop()
                 wrapper->cond.notify_all();
             }
 
-            buff_guard.unlock();
             guard.lock();
             if(wrapper->buffer->blockCount() > 0)
             {
