@@ -155,10 +155,13 @@ void BufferAgent::workerLoop()
                 wrapper->cond.notify_all();
             }
 
+            guard.lock();
             if(wrapper->buffer->blockCount() > 0)
             {
                 m_jobQueue.push_back(file);
             }
+
+
         }
         
 
