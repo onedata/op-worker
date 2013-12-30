@@ -56,6 +56,7 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
 
     guard.lock();
     m_jobQueue.push_back(ffi->fh);
+    m_loopCond.notify_all();
 
     return size;
 }
