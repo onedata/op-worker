@@ -53,7 +53,7 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
     guard.lock();
     m_jobQueue.push_back(ffi->fh);
 
-    return 0;
+    return size;
 }
 
 int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t offset, ffi_type ffi)
