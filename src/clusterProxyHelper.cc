@@ -214,25 +214,7 @@ int ClusterProxyHelper::sh_write(const char *path, const char *buf, size_t size,
 {
     LOG(INFO) << "CluserProxyHelper write(path: " << string(path) << ", size: " << size << ", offset: " << offset << ")";
     
-    WriteFile msg;
-    msg.set_file_id(string(path));
-    msg.set_data(string(buf, size));
-    msg.set_offset(offset);
-
-    WriteInfo answer;
-
-    if(!answer.ParseFromString(
-        requestMessage(msg.GetDescriptor()->name(), answer.GetDescriptor()->name(), msg.SerializeAsString())))
-    {
-        LOG(WARNING) << "Cannot parse answer for file: " << string(path);
-        return translateError(VEIO);
-    }
-
-    LOG(INFO) << "CluserProxyHelper write answer_status: " << answer.answer_status() << ", write real size: " << answer.bytes_written();
-
-    int error = translateError(answer.answer_status());
-    if(error == 0) return answer.bytes_written();
-    else           return error;
+    return m_bufferAgent.onWrite(string(path), string(buf, size), size, offset, fi);
 }
 
 int ClusterProxyHelper::sh_release(const char *path, struct fuse_file_info *fi)
@@ -334,7 +316,39 @@ int ClusterProxyHelper::sh_removexattr(const char *path, const char *name)
 
 #endif /* HAVE_SETXATTR */
 
+int ClusterProxyHelper::doWrite(std::string path, const std::string &buf, size_t, off_t offset, fd_type)
+{
+    WriteFile msg;
+    msg.set_file_id(path);
+    msg.set_data(buf);
+    msg.set_offset(offset);
+
+    WriteInfo answer;
+
+    if(!answer.ParseFromString(
+        requestMessage(msg.GetDescriptor()->name(), answer.GetDescriptor()->name(), msg.SerializeAsString())))
+    {
+        LOG(WARNING) << "Cannot parse answer for file: " << string(path);
+        return translateError(VEIO);
+    }
+
+    LOG(INFO) << "CluserProxyHelper write answer_status: " << answer.answer_status() << ", write real size: " << answer.bytes_written();
+
+    int error = translateError(answer.answer_status());
+    if(error == 0) return answer.bytes_written();
+    else           return error;
+    return 0;
+}
+
+int ClusterProxyHelper::doRead(std::string path, std::string &buf, size_t, off_t, fd_type)
+{
+    return 0;
+}
+
 ClusterProxyHelper::ClusterProxyHelper(std::vector<std::string> args)
+  : m_bufferAgent(
+        boost::bind(&ClusterProxyHelper::doWrite, this, _1, _2, _3, _4, _5),
+        boost::bind(&ClusterProxyHelper::doRead, this, _1, _2, _3, _4, _5))
 {
     if(args.size() >= 3) { // If arguments are given, use them to establish connection instead default VeilHelpers configuration
         m_clusterHostname   = args[0];

@@ -15,6 +15,7 @@
 #include <string>
 #include "helpers/IStorageHelper.h"
 #include "simpleConnectionPool.h"
+#include "bufferAgent.h"
 
 #include "remote_file_management.pb.h"
 #include "communication_protocol.pb.h"
@@ -81,12 +82,15 @@ class ClusterProxyHelper : public IStorageHelper {
         unsigned int      m_clusterPort;
         std::string       m_proxyCert;
         std::string       m_clusterHostname;
+        BufferAgent       m_bufferAgent;
 
         protocol::communication_protocol::Answer sendCluserMessage(protocol::communication_protocol::ClusterMsg &msg);      ///< Sends ClusterMsg to cluster and receives Answer. This function handles connection selection and its releasing.
         protocol::communication_protocol::ClusterMsg commonClusterMsgSetup(std::string inputType, std::string inputData);   ///< Setups commonly used fields in ClusterMsg for RemoteFileManagement.
         std::string requestMessage(std::string inputType, std::string answerType, std::string inputData);                   ///< Creates & sends ClusterMsg with given types and input. Response is an serialized message od type "answerType".
         std::string requestAtom(std::string inputType, std::string inputData);                                              ///< Same as requestMessage except it always receives Atom. Return value is an strign value of Atom.
 
+        int doWrite(std::string path, const std::string &buf, size_t, off_t, fd_type);
+        int doRead(std::string path, std::string &buf, size_t, off_t, fd_type);
 
 };
 

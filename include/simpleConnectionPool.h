@@ -11,7 +11,7 @@
 
 #include <boost/thread.hpp>
 #include <list>
-#include <time.h>
+#include <ctime>
 #include <boost/shared_ptr.hpp>
 #include <boost/enable_shared_from_this.hpp>
 #include "communicationHandler.h"
