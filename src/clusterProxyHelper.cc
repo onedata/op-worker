@@ -166,6 +166,8 @@ int ClusterProxyHelper::sh_truncate(const char *path, off_t size)
 
 int ClusterProxyHelper::sh_open(const char *path, struct fuse_file_info *fi)
 {
+    LOG(INFO) << "CluserProxyHelper open(path: " << string(path) << ")";
+
     return m_bufferAgent.onOpen(string(path), fi);
 }
 
@@ -218,11 +220,13 @@ int ClusterProxyHelper::sh_write(const char *path, const char *buf, size_t size,
 
 int ClusterProxyHelper::sh_release(const char *path, struct fuse_file_info *fi)
 {
+    LOG(INFO) << "CluserProxyHelper release(path: " << string(path) << ")";
     return m_bufferAgent.onRelease(string(path), fi);;
 }
 
 int ClusterProxyHelper::sh_flush(const char *path, struct fuse_file_info *fi)
 {
+    LOG(INFO) << "CluserProxyHelper flush(path: " << string(path) << ")";
     return m_bufferAgent.onFlush(string(path), fi);
 }
 
