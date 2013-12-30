@@ -175,7 +175,7 @@ void BufferAgent::workerLoop()
 
 boost::shared_ptr<FileCache> BufferAgent::newFileCache()
 {
-    return boost::shared_ptr<FileCache>(new FileCache(100 * 1024));
+    return boost::shared_ptr<FileCache>(new FileCache(500 * 1024));
 }
 
 } // namespace helpers 

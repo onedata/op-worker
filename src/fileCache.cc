@@ -60,6 +60,7 @@ bool FileCache::writeData(off_t offset, const std::string &buff)
 
 void FileCache::debugPrint()
 {
+    return;
     cout << "BlockList:" << endl;
     list<block_ptr>::iterator it = m_fileBlocks.begin();
     while(it != m_fileBlocks.end())
@@ -79,7 +80,7 @@ block_ptr FileCache::removeOldestBlock()
 
     discardExpired();
 
-    cout << "Queue: " << m_blockExpire.size() << endl;
+    // cout << "Queue: " << m_blockExpire.size() << endl;
 
     block_ptr tmp = *m_blockExpire.begin();
     m_blockExpire.erase(m_blockExpire.begin());
@@ -99,10 +100,10 @@ bool FileCache::insertBlock(const FileBlock &block)
 
     do 
     {
-        cout << "do..." << endl;
+        // cout << "do..." << endl;
         list<block_ptr>::iterator it = upper_bound(m_fileBlocks.begin(), m_fileBlocks.end(), offset, OrderByOffset);
         list<block_ptr>::iterator next;
-        cout << "UpperBound: " << offset << " " << cBuff << endl;
+        // cout << "UpperBound: " << offset << " " << cBuff << endl;
         if(it != m_fileBlocks.begin())
             --it;
 
@@ -112,17 +113,17 @@ bool FileCache::insertBlock(const FileBlock &block)
             if((*it)->offset <= offset)
                 ++next;
 
-            cout << "FileCache: dbg_in: offset(" << offset << "), (*it)->offset(" << (*it)->offset << "), (*next)->offset(" << ( next != m_fileBlocks.end() ? (*next)->offset : -1) << ")" << endl;
+            // cout << "FileCache: dbg_in: offset(" << offset << "), (*it)->offset(" << (*it)->offset << "), (*next)->offset(" << ( next != m_fileBlocks.end() ? (*next)->offset : -1) << ")" << endl;
                 
 
             if( ((*it)->offset < offset && (*it)->offset + (*it)->size <= offset) || ((*it)->offset > offset) )
             {
                 size_t tmpSize = next == m_fileBlocks.end() ? cBuff.size() : min((size_t)((*next)->offset - offset ), cBuff.size());
                 block_ptr tmp = block_ptr(new FileBlock(offset, cBuff.substr(0, tmpSize)));
-                cout << "FileCache: ?: offset(" << offset << "), size(" << tmpSize << "), buff(" << cBuff.substr(0, tmpSize) << ")" << endl;
-                cout << "FileCache: dbg: offset(" << offset << "), (*it)->offset(" << (*it)->offset << "), (*next)->offset(" << ( next != m_fileBlocks.end() ? (*next)->offset : -1)<< ")" << endl;
+                // cout << "FileCache: ?: offset(" << offset << "), size(" << tmpSize << "), buff(" << cBuff.substr(0, tmpSize) << ")" << endl;
+                // cout << "FileCache: dbg: offset(" << offset << "), (*it)->offset(" << (*it)->offset << "), (*next)->offset(" << ( next != m_fileBlocks.end() ? (*next)->offset : -1)<< ")" << endl;
                 
-                cout << cBuff.size() << endl;
+                // cout << cBuff.size() << endl;
                 cBuff = cBuff.substr(tmpSize);
                 offset += tmpSize;
 
@@ -135,7 +136,7 @@ bool FileCache::insertBlock(const FileBlock &block)
                 off_t tStart = offset - (*it)->offset;
                 off_t sStart = 0;
                 size_t toCpy = min( (size_t)((*it)->offset + (*it)->size - offset), cBuff.size() );
-                cout << "FileCache: override: offset(" << offset << "), size(" << toCpy << "), buff(" << cBuff.substr(0, toCpy) << ")" << endl;
+                // cout << "FileCache: override: offset(" << offset << "), size(" << toCpy << "), buff(" << cBuff.substr(0, toCpy) << ")" << endl;
                 
                 (*it)->data.replace(tStart, toCpy, cBuff.substr(0, toCpy));
                 cBuff = cBuff.substr(toCpy);
@@ -149,11 +150,11 @@ bool FileCache::insertBlock(const FileBlock &block)
 
         if(it == m_fileBlocks.end()) 
         {
-            cout << "it is at the end" << endl;
+            // cout << "it is at the end" << endl;
             block_ptr tmp = block_ptr(new FileBlock(offset, cBuff));
             forceInsertBlock(tmp, it);
             
-            cout << "FileCache: push_back: offset(" << offset << "), size(" << cBuff.size() << "), buff(" << cBuff << ")" << endl;
+            // cout << "FileCache: push_back: offset(" << offset << "), size(" << cBuff.size() << "), buff(" << cBuff << ")" << endl;
             cBuff = "";
 
             
@@ -176,7 +177,7 @@ void FileCache::forceInsertBlock(block_ptr block, std::list<block_ptr>::iterator
     m_blockExpire.insert(block);
     m_byteSize += block->size;
 
-    cout << "Insert: " << block->data << endl;
+    // cout << "Insert: " << block->data << endl;
     debugPrint();
 
     if(m_blockExpire.size() == 1)

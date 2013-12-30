@@ -213,7 +213,7 @@ int ClusterProxyHelper::sh_read(const char *path, char *buf, size_t size, off_t 
 int ClusterProxyHelper::sh_write(const char *path, const char *buf, size_t size,
              off_t offset, struct fuse_file_info *fi)
 {
-    LOG(INFO) << "CluserProxyHelper write(path: " << string(path) << ", size: " << size << ", offset: " << offset << ")";
+    //LOG(INFO) << "CluserProxyHelper write(path: " << string(path) << ", size: " << size << ", offset: " << offset << ")";
     
     return m_bufferAgent.onWrite(string(path), string(buf, size), size, offset, fi);
 }
@@ -326,6 +326,8 @@ int ClusterProxyHelper::sh_removexattr(const char *path, const char *name)
 
 int ClusterProxyHelper::doWrite(std::string path, const std::string &buf, size_t, off_t offset, ffi_type)
 {
+    LOG(INFO) << "CluserProxyHelper doWrite(path: " << string(path) << ", size: " << size << ", offset: " << offset << ")";
+    
     WriteFile msg;
     msg.set_file_id(path);
     msg.set_data(buf);
