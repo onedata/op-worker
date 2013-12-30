@@ -330,7 +330,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
     {
         unsigned int msgId = getMsgId();
         
-        if(sendMessage(msg, msgId) != 0)
+        if(sendMessage(msg, msgId) < 0)
         {
             if(retry > 0) 
             {
