@@ -157,7 +157,7 @@ void BufferAgent::workerLoop()
 
             if(block) 
             {
-                int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
+                //int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
             
                 wrapper->cond.notify_all();
             }
