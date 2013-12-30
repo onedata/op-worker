@@ -62,6 +62,7 @@ class ClusterProxyHelper : public IStorageHelper {
         int sh_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) ;
         int sh_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) ;
         int sh_statfs(const char *path, struct statvfs *stbuf) ;
+        int sh_flush(const char *path, struct fuse_file_info *fi) ;
         int sh_release(const char *path, struct fuse_file_info *fi) ;
         int sh_fsync(const char *path, int isdatasync, struct fuse_file_info *fi);
 

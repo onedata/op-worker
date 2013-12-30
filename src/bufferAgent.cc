@@ -89,7 +89,7 @@ int BufferAgent::onFlush(std::string path, fd_type file)
     return 0;
 }
 
-int BufferAgent::onClose(std::string path, fd_type fd)
+int BufferAgent::onRelease(std::string path, fd_type fd)
 {
     boost::unique_lock<boost::recursive_mutex> guard(m_loopMutex);
     m_cacheMap.erase(fd);

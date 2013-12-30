@@ -166,8 +166,7 @@ int ClusterProxyHelper::sh_truncate(const char *path, off_t size)
 
 int ClusterProxyHelper::sh_open(const char *path, struct fuse_file_info *fi)
 {
-    /// TODO: cache & prefetching
-    return 0;
+    return m_bufferAgent.onOpen(string(path), fi);
 }
 
 int ClusterProxyHelper::sh_read(const char *path, char *buf, size_t size, off_t offset,
@@ -219,7 +218,12 @@ int ClusterProxyHelper::sh_write(const char *path, const char *buf, size_t size,
 
 int ClusterProxyHelper::sh_release(const char *path, struct fuse_file_info *fi)
 {
-    return 0;
+    return m_bufferAgent.onRelease(string(path), fi);;
+}
+
+int ClusterProxyHelper::sh_flush(const char *path, struct fuse_file_info *fi)
+{
+    return m_bufferAgent.onFlush(string(path), fi);
 }
 
 int ClusterProxyHelper::sh_fsync(const char *path, int isdatasync,

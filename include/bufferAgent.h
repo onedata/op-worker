@@ -38,7 +38,7 @@ public:
     virtual int onWrite(std::string path, const std::string &buf, size_t size, off_t offset, fd_type);
     virtual int onRead(std::string path, std::string &buf, size_t size, off_t offset, fd_type);
     virtual int onFlush(std::string path, fd_type);
-    virtual int onClose(std::string path, fd_type);
+    virtual int onRelease(std::string path, fd_type);
     virtual int onOpen(std::string path, fd_type);
 
     virtual void agentStart(int worker_count = 5);
