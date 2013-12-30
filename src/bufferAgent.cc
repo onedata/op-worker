@@ -130,7 +130,7 @@ void BufferAgent::workerLoop()
         while(m_jobQueue.empty() && m_agentActive)
             m_loopCond.wait(guard);
 
-        if(m_agentActive)
+        if(!m_agentActive)
             return;
 
         fd_type file = m_jobQueue.front();
