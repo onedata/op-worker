@@ -40,7 +40,7 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
 {
     unique_lock guard(m_loopMutex);
         buffer_ptr wrapper = m_cacheMap[ffi->fh_old];
-    guard.release();
+    guard.unlock();
 
     unique_lock buff_guard(wrapper->mutex);
 
@@ -66,7 +66,7 @@ int BufferAgent::onFlush(std::string path, ffi_type ffi)
 {
     unique_lock guard(m_loopMutex);
         buffer_ptr wrapper = m_cacheMap[ffi->fh_old];
-    guard.release();
+    guard.unlock();
 
     unique_lock buff_guard(wrapper->mutex);
 
@@ -139,7 +139,7 @@ void BufferAgent::workerLoop()
 
         
         {
-            guard.release();
+            guard.unlock();
 
             unique_lock buff_guard(wrapper->mutex);
 
