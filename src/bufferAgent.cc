@@ -127,8 +127,6 @@ void BufferAgent::workerLoop()
     unique_lock guard(m_loopMutex);
     while(m_agentActive)
     {
-        guard.lock();
-        
         while(m_jobQueue.empty() && m_agentActive)
             m_loopCond.wait(guard);
 
@@ -150,14 +148,13 @@ void BufferAgent::workerLoop()
             unique_lock buff_guard(wrapper->mutex);
 
             block_ptr block = wrapper->buffer->removeOldestBlock();
-            if(!block)
-                continue;
-
-            int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
+            if(block) 
+            {
+                int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
             
-            wrapper->cond.notify_all();
+                wrapper->cond.notify_all();
+            }
 
-            guard.lock();
             if(wrapper->buffer->blockCount() > 0)
             {
                 m_jobQueue.push_back(file);
