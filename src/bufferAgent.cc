@@ -144,7 +144,7 @@ void BufferAgent::workerLoop()
             unique_lock buff_guard(wrapper->mutex);
 
             block_ptr block = wrapper->buffer->removeOldestBlock();
-            int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, file);
+            int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
             
             wrapper->cond.notify_all();
 
