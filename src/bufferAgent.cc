@@ -44,7 +44,7 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
 
     unique_lock buff_guard(wrapper->mutex);
 
-    while(wrapper->buffer->byteSize() > 1024 * 1024 * 10) {
+    while(wrapper->buffer->byteSize() > 1024 * 1024 * 64) {
         guard.lock();
             m_jobQueue.push_front(ffi->fh);
             m_loopCond.notify_all();
@@ -177,7 +177,7 @@ void BufferAgent::workerLoop()
 
 boost::shared_ptr<FileCache> BufferAgent::newFileCache()
 {
-    return boost::shared_ptr<FileCache>(new FileCache(500 * 1024));
+    return boost::shared_ptr<FileCache>(new FileCache(1024 * 1024));
 }
 
 } // namespace helpers 
