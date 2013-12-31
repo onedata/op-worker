@@ -86,6 +86,8 @@ block_ptr FileCache::removeOldestBlock()
     m_blockExpire.erase(m_blockExpire.begin());
     m_fileBlocks.remove(tmp);
 
+    m_byteSize -= tmp->size;
+
     return tmp;
 }
 
@@ -241,6 +243,7 @@ void FileCache::discardExpired(bool rebuildQueue)
                 if((*it) == tmp) 
                 {
                     m_fileBlocks.erase(it);
+                    m_byteSize -= tmp->size;
                     break;
                 }
                 --it;
