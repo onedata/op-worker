@@ -42,18 +42,20 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
         buffer_ptr wrapper = m_cacheMap[ffi->fh];
     guard.unlock();
 
-    unique_lock buff_guard(wrapper->mutex);
+    {
+        unique_lock buff_guard(wrapper->mutex);
 
-    while(wrapper->buffer->byteSize() > 1024 * 1024 * 64) {
-        guard.lock();
-            m_jobQueue.push_front(ffi->fh);
-            m_loopCond.notify_all();
-        guard.unlock();
-        wrapper->cond.wait(buff_guard);
+        while(wrapper->buffer->byteSize() > 1024 * 1024 * 64) {
+            guard.lock();
+                m_jobQueue.push_front(ffi->fh);
+                m_loopCond.notify_all();
+            guard.unlock();
+            wrapper->cond.wait(buff_guard);
+        }
+
+        wrapper->buffer->writeData(offset, buf);
     }
-
-    wrapper->buffer->writeData(offset, buf);
-
+    
     guard.lock();
     m_jobQueue.push_back(ffi->fh);
     m_loopCond.notify_all();
@@ -99,6 +101,7 @@ int BufferAgent::onRelease(std::string path, ffi_type ffi)
 {
     boost::unique_lock<boost::recursive_mutex> guard(m_loopMutex);
     m_cacheMap.erase(ffi->fh);
+    m_jobQueue.remove(ffi->fh);
 
     return 0;
 }
@@ -146,9 +149,11 @@ void BufferAgent::workerLoop()
         if(!wrapper)
             continue;
 
-        
+        guard.unlock();
+
         {
-            guard.unlock();
+            unique_lock sendGuard(wrapper->sendMutex);
+
             block_ptr block;
             {
                 unique_lock buff_guard(wrapper->mutex);
@@ -162,16 +167,17 @@ void BufferAgent::workerLoop()
                 wrapper->cond.notify_all();
             }
 
-            guard.lock();
-            if(wrapper->buffer->blockCount() > 0)
             {
-                m_jobQueue.push_back(file);
-            }
-
-
+                unique_lock buff_guard(wrapper->mutex);
+                guard.lock();
+                if(wrapper->buffer->blockCount() > 0)
+                {
+                    m_jobQueue.push_back(file);
+                }
+            } 
         }
         
-
+        wrapper->cond.notify_all();
     }
 }
 

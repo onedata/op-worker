@@ -28,6 +28,7 @@ public:
     struct LockableCache {
         boost::shared_ptr<FileCache>    buffer;
         boost::recursive_mutex          mutex;
+        boost::recursive_mutex          sendMutex;
         boost::condition_variable_any   cond;
         std::string                     fileName;
         struct fuse_file_info           ffi;
