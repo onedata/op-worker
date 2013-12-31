@@ -41,7 +41,7 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
     unique_lock guard(m_loopMutex);
         buffer_ptr wrapper = m_cacheMap[ffi->fh];
     guard.unlock();
-    
+
     unique_lock buff_guard(wrapper->mutex);
 
     while(wrapper->buffer->byteSize() > 1024 * 1024 * 10) {
@@ -157,7 +157,7 @@ void BufferAgent::workerLoop()
 
             if(block) 
             {
-                //int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
+                int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
             
                 wrapper->cond.notify_all();
             }
