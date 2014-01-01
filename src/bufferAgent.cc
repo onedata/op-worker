@@ -63,7 +63,7 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
     if(!wrapper->opPending) 
     {
         wrapper->opPending = true;
-        m_jobQueue.push_back(ffi->fh);
+        //m_jobQueue.push_back(ffi->fh);
         m_loopCond.notify_one();
     }
 
