@@ -88,7 +88,12 @@ int BufferAgent::onFlush(std::string path, ffi_type ffi)
     while(wrapper->buffer->blockCount() > 0) 
     {
         block_ptr block = wrapper->buffer->removeOldestBlock();
+        uint64_t start = utils::mtime<uint64_t>();
         int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
+        uint64_t end = utils::mtime<uint64_t>();
+
+        LOG(INFO) << "Roundtrip: " << (end - start) << " for " << block->data.size() << " bytes";
+        
         if(res < 0)
         {
             while(wrapper->buffer->blockCount() > 0)
@@ -175,7 +180,7 @@ void BufferAgent::workerLoop()
                 uint64_t end = utils::mtime<uint64_t>();
 
                 LOG(INFO) << "Roundtrip: " << (end - start) << " for " << block->data.size() << " bytes";
-
+ 
                 wrapper->cond.notify_all();
             }
 
@@ -199,7 +204,7 @@ void BufferAgent::workerLoop()
 
 boost::shared_ptr<FileCache> BufferAgent::newFileCache()
 {
-    return boost::shared_ptr<FileCache>(new FileCache(1024 * 1024));
+    return boost::shared_ptr<FileCache>(new FileCache(10 * 1024 * 1024));
 }
 
 } // namespace helpers 
