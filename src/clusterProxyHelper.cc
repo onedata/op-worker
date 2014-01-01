@@ -42,7 +42,7 @@ namespace veil {
 namespace helpers {
 
 
-ClusterMsg ClusterProxyHelper::commonClusterMsgSetup(string inputType, string inputData) {
+ClusterMsg ClusterProxyHelper::commonClusterMsgSetup(string inputType, string &inputData) {
 
     RemoteFileMangement rfm;
     rfm.set_message_type(utils::tolower(inputType));
@@ -60,7 +60,7 @@ ClusterMsg ClusterProxyHelper::commonClusterMsgSetup(string inputType, string in
     return clm;
 }
 
-string ClusterProxyHelper::requestMessage(string inputType, string answerType, string inputData) {
+string ClusterProxyHelper::requestMessage(string inputType, string answerType, string &inputData) {
     ClusterMsg clm = commonClusterMsgSetup(inputType, inputData);
 
     clm.set_answer_type(utils::tolower(answerType));
