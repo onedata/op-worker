@@ -43,22 +43,27 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
     guard.unlock();
 
     {
-        unique_lock buff_guard(wrapper->mutex);
+        if(wrapper->buffer->byteSize() > 1024 * 1024 * 64) {
+            if(int fRet = onFlush(path, ffi)) {
+                return fRet;
+            }
+        }
 
-        while(wrapper->buffer->byteSize() > 1024 * 1024 * 64) {
-            guard.lock();
-                m_jobQueue.push_front(ffi->fh);
-                m_loopCond.notify_all();
-            guard.unlock();
-            wrapper->cond.wait(buff_guard);
+        if(wrapper->buffer->byteSize() > 1024 * 1024 * 64) {
+            return doWrite(path, buf, size, offset, ffi);
         }
 
         wrapper->buffer->writeData(offset, buf);
     }
     
+    unique_lock buffGuard(wrapper->mutex);
     guard.lock();
-    m_jobQueue.push_back(ffi->fh);
-    m_loopCond.notify_all();
+    if(!wrapper->opPending) 
+    {
+        wrapper->opPending = true;
+        m_jobQueue.push_back(ffi->fh);
+        m_loopCond.notify_all();
+    }
 
     return size;
 }
@@ -75,6 +80,7 @@ int BufferAgent::onFlush(std::string path, ffi_type ffi)
         buffer_ptr wrapper = m_cacheMap[ffi->fh];
     guard.unlock();
 
+    unique_lock sendGuard(wrapper->sendMutex);
     unique_lock buff_guard(wrapper->mutex);
 
     while(wrapper->buffer->blockCount() > 0) 
@@ -173,6 +179,10 @@ void BufferAgent::workerLoop()
                 if(wrapper->buffer->blockCount() > 0)
                 {
                     m_jobQueue.push_back(file);
+                } 
+                else 
+                {
+                    wrapper->opPending = false;
                 }
             } 
         }

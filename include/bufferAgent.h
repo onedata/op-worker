@@ -32,6 +32,12 @@ public:
         boost::condition_variable_any   cond;
         std::string                     fileName;
         struct fuse_file_info           ffi;
+        bool                            opPending;
+
+        LockableCache()
+          : opPending(false) 
+        {
+        }
     };
 
     typedef boost::shared_ptr<LockableCache> buffer_ptr;
