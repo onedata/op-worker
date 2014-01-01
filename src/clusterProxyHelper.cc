@@ -182,9 +182,10 @@ int ClusterProxyHelper::sh_read(const char *path, char *buf, size_t size, off_t 
     msg.set_offset(offset);
 
     FileData answer;
+    string inputData = msg.SerializeAsString();
 
     if(!answer.ParseFromString(
-        requestMessage(msg.GetDescriptor()->name(), answer.GetDescriptor()->name(), msg.SerializeAsString())))
+        requestMessage(msg.GetDescriptor()->name(), answer.GetDescriptor()->name(), inputData)))
     {
         LOG(WARNING) << "Cannot parse answer for file: " << string(path);
         return translateError(VEIO);
@@ -334,9 +335,10 @@ int ClusterProxyHelper::doWrite(std::string path, const std::string &buf, size_t
     msg.set_offset(offset);
 
     WriteInfo answer;
+    string inputData = msg.SerializeAsString();
 
     if(!answer.ParseFromString(
-        requestMessage(msg.GetDescriptor()->name(), answer.GetDescriptor()->name(), msg.SerializeAsString())))
+        requestMessage(msg.GetDescriptor()->name(), answer.GetDescriptor()->name(), inputData)))
     {
         LOG(WARNING) << "Cannot parse answer for file: " << string(path);
         return translateError(VEIO);
