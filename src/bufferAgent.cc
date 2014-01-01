@@ -144,7 +144,7 @@ void BufferAgent::workerLoop()
         fd_type file = m_jobQueue.front();
         buffer_ptr wrapper = m_cacheMap[file];
         m_jobQueue.pop_front();
-        m_loopCond.notify_all();
+        m_loopCond.notify_one();
 
         if(!wrapper)
             continue;
