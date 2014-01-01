@@ -1,4 +1,6 @@
 #include "bufferAgent.h"
+#include "helpers/storageHelperFactory.h"
+#include "glog/logging.h"
 
 using boost::shared_ptr;
 using boost::thread;
@@ -168,8 +170,12 @@ void BufferAgent::workerLoop()
 
             if(block) 
             {
-                //int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
-            
+                uint64_t start = utils::mtime<uint64_t>();
+                int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
+                uint64_t end = utils::mtime<uint64_t>();
+
+                LOG(INFO) << "Roundtrip: " << (end - start) << " for " << block->data.size() << " bytes";
+
                 wrapper->cond.notify_all();
             }
 
