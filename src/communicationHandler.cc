@@ -267,7 +267,7 @@ void CommunicationHandler::closePushChannel()
     Answer ans = communicate(msg, 0);    // Send PUSH channel close request
 }
 
-int CommunicationHandler::sendMessage(const ClusterMsg& msg, int32_t msgId)
+int CommunicationHandler::sendMessage(ClusterMsg& msg, int32_t msgId)
 {
     if(m_connectStatus != CONNECTED)
         return m_connectStatus;
@@ -276,11 +276,10 @@ int CommunicationHandler::sendMessage(const ClusterMsg& msg, int32_t msgId)
     if (!msgId)
         msgId = getMsgId();
 
-    ClusterMsg msgWithId = msg;
-    msgWithId.set_message_id(msgId);
+    msg.set_message_id(msgId);
     
     websocketpp::lib::error_code ec;
-    m_endpoint->send(m_endpointConnection, msgWithId.SerializeAsString(), websocketpp::frame::opcode::binary, ec); // Initialize send operation (async)
+    m_endpoint->send(m_endpointConnection, msg.SerializeAsString(), websocketpp::frame::opcode::binary, ec); // Initialize send operation (async)
     
     if(ec.value())
         ++m_errorCount;
