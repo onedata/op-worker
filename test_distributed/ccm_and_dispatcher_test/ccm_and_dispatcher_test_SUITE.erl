@@ -352,7 +352,7 @@ callbacks_list_actualization_test(Config) ->
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
   timer:sleep(100),
   gen_server:cast({global, ?CCM}, init_cluster),
-  timer:sleep(1500),
+  timer:sleep(2500),
 
   Ans1 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 1, #veil_request{subject = "DN", request = #callback{fuse = fuse1, pid = self(), node = CCM, action = channelregistration}}}}),
   ?assertEqual(ok, Ans1),

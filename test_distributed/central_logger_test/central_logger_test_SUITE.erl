@@ -96,7 +96,7 @@ init_and_cleanup_test(Config) ->
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
   gen_server:cast({global, ?CCM}, init_cluster),
-  timer:sleep(2000),
+  timer:sleep(3500),
 
   % Test logger's console loglevel switching functionalities
   ?assertEqual(ok, rpc:call(W, ?MODULE, check_console_loglevel_functionalities, [])),
@@ -144,7 +144,7 @@ logging_test(Config) ->
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
   gen_server:cast({global, ?CCM}, init_cluster),
-  timer:sleep(1000),
+  timer:sleep(3000),
 
   % Subscribe for log stream
   Pid = self(),

@@ -180,7 +180,7 @@ start_cluster(Node) ->
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
   timer:sleep(100),
   gen_server:cast({global, ?CCM}, init_cluster),
-  timer:sleep(1500).
+  timer:sleep(3500).
 
 create_file(Node, #path_with_times{path = FilePath, times = {ATime, MTime, CTime}}, Uid, FileType) ->
   {ParentFound, ParentInfo} = rpc:call(Node, fslogic_utils, get_parent_and_name_from_path , [FilePath, ?ProtocolVersion]),

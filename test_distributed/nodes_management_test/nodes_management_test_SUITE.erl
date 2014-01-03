@@ -65,7 +65,7 @@ fuse_session_cleanup_test(Config) ->
     lists:foreach(RunWorkerCode, WorkerNodes),
     timer:sleep(500),
     ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-    timer:sleep(1500),
+    timer:sleep(3500),
 
     %% Worker ports: 6666, 7777, 8888
     Host = "localhost",

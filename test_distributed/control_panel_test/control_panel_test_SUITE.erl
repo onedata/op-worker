@@ -33,7 +33,7 @@ connection_test(Config) ->
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
   gen_server:cast({global, ?CCM}, init_cluster),
-  timer:sleep(500),
+  timer:sleep(3500),
 
   {ok, Port} = rpc:call(CCM, application, get_env, [veil_cluster_node, control_panel_port]),
 
