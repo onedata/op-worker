@@ -106,6 +106,8 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
 
         buf += buf2;
 
+        DLOG(INFO) << "doRead ret: " << ret << " bufSize: " << buf2.size() << " globalBufSize: " << buf.size() ;
+
         {   
             unique_lock buffGuard(wrapper->mutex);
             wrapper->blockSize = std::min((size_t) 1024 * 1024, (size_t) std::max(size, 2*wrapper->blockSize));
