@@ -129,7 +129,7 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
             guard.unlock();
         }
     }
-    
+
     m_rdCond.notify_one();
 
     return buf.size();
@@ -248,6 +248,7 @@ void BufferAgent::readerLoop()
             }
         }
 
+        guard.lock();
     }
 }
 
