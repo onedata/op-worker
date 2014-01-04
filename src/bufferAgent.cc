@@ -100,10 +100,13 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
     wrapper->buffer->readData(offset, size, buf);
 
     if(buf.size() < size) {
+
         string buf2;
         int ret = doRead(path, buf2, size - buf.size(), offset + buf.size(), &wrapper->ffi);
         if(ret < 0)
             return ret;
+
+        wrapper->buffer->writeData(offset + buf.size(), buf2);
 
         buf += buf2;
 
