@@ -100,7 +100,7 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
 
     if(buf.size() < size) {
         string buf2;
-        int ret = doRead(path, buf2, buf.size() - size, offset + buf.size(), &wrapper->ffi);
+        int ret = doRead(path, buf2, size - buf.size(), offset + buf.size(), &wrapper->ffi);
         if(ret < 0)
             return ret;
 
