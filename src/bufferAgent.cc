@@ -250,7 +250,7 @@ void BufferAgent::readerLoop()
             {
                 string tmp;
                 int ret = doRead(wrapper->fileName, tmp, job.size - buff.size(), job.offset + buff.size(), &wrapper->ffi);
-                if(ret > 0 && buff.size() >= ret) {
+                if(ret > 0 && tmp.size() >= ret) {
                     wrapper->buffer->writeData(job.offset + buff.size(), tmp);
                 }
             }
