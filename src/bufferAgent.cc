@@ -110,7 +110,7 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
 
         buf += buf2;
 
-        DLOG(INFO) << "doRead ret: " << ret << " bufSize: " << buf2.size() << " globalBufSize: " << buf.size() ;
+        //DLOG(INFO) << "doRead ret: " << ret << " bufSize: " << buf2.size() << " globalBufSize: " << buf.size() ;
 
         {   
             unique_lock buffGuard(wrapper->mutex);
@@ -154,7 +154,7 @@ int BufferAgent::onFlush(std::string path, ffi_type ffi)
         int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
         uint64_t end = utils::mtime<uint64_t>();
 
-        LOG(INFO) << "Roundtrip: " << (end - start) << " for " << block->data.size() << " bytes";
+        //LOG(INFO) << "Roundtrip: " << (end - start) << " for " << block->data.size() << " bytes";
         
         if(res < 0)
         {
@@ -296,7 +296,7 @@ void BufferAgent::writerLoop()
                 int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
                 uint64_t end = utils::mtime<uint64_t>();
 
-                LOG(INFO) << "Roundtrip: " << (end - start) << " for " << block->data.size() << " bytes";
+                //LOG(INFO) << "Roundtrip: " << (end - start) << " for " << block->data.size() << " bytes";
  
                 wrapper->cond.notify_all();
             }

@@ -329,7 +329,7 @@ int ClusterProxyHelper::doRead(std::string path, std::string &buf, size_t size, 
         return translateError(VEIO);
     }
 
-    DLOG(INFO) << "CluserProxyHelper(offset: " << offset << ", size: " << size << ") read answer_status: " << answer.answer_status() << ", read real size: " << answer.data().size();
+    //DLOG(INFO) << "CluserProxyHelper(offset: " << offset << ", size: " << size << ") read answer_status: " << answer.answer_status() << ", read real size: " << answer.data().size();
  
     if(answer.answer_status() == VOK) {
         size_t readSize = (answer.data().size() > size ? size : answer.data().size());
