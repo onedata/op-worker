@@ -113,11 +113,6 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
 
         //DLOG(INFO) << "doRead ret: " << ret << " bufSize: " << buf2.size() << " globalBufSize: " << buf.size() ;
 
-        {   
-            unique_lock buffGuard(wrapper->mutex);
-            wrapper->blockSize = std::min((size_t) 1024 * 1024, (size_t) std::max(size, 2*wrapper->blockSize));
-        }
-
         guard.lock();
             m_rdJobQueue.push_back(PrefetchJob(wrapper->fileName, offset + buf.size(), wrapper->blockSize));
         guard.unlock();
@@ -132,6 +127,12 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
                 m_rdJobQueue.push_back(PrefetchJob(wrapper->fileName, offset + size + tmp.size() + wrapper->blockSize, wrapper->blockSize));
             guard.unlock();
         }
+    }
+
+    {   
+        unique_lock buffGuard(wrapper->mutex);
+        wrapper->lastBlock = offset;
+        wrapper->blockSize = std::min((size_t) 1024 * 1024, (size_t) std::max(size, 2*wrapper->blockSize));
     }
 
     m_rdCond.notify_one();
@@ -239,12 +240,13 @@ void BufferAgent::readerLoop()
         m_rdJobQueue.pop_front();
         m_rdCond.notify_one();
 
-        if(!wrapper)
+        if(!wrapper || wrapper->lastBlock >= job.offset)
             continue;
 
         guard.unlock();
 
         {
+
             string buff;
             wrapper->buffer->readData(job.offset, job.size, buff);
             if(buff.size() < job.size)
@@ -253,6 +255,9 @@ void BufferAgent::readerLoop()
                 int ret = doRead(wrapper->fileName, tmp, job.size - buff.size(), job.offset + buff.size(), &wrapper->ffi);
                 if(ret > 0 && tmp.size() >= ret) {
                     wrapper->buffer->writeData(job.offset + buff.size(), tmp);
+                    guard.lock();
+                        m_rdJobQueue.push_back(PrefetchJob(job.fileName, job.offset + buff.size() + ret, wrapper->blockSize));
+                    guard.unlock();
                 }
             }
         }

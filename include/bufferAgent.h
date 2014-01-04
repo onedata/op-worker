@@ -48,6 +48,7 @@ public:
         struct fuse_file_info           ffi;
         size_t                          blockSize;
         int                             openCount;
+        off_t                           lastBlock;
 
         ReadCache()
           : blockSize(512),
