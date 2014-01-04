@@ -233,7 +233,7 @@ size_t FileCache::blockCount()
 void FileCache::discardExpired(bool rebuildQueue)
 {
     boost::unique_lock<boost::recursive_mutex> guard(m_fileBlocksMutex);
-
+return; 
     while(!m_blockExpire.empty()) 
     {
         block_ptr tmp;
