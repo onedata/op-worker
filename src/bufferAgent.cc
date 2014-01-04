@@ -242,9 +242,14 @@ void BufferAgent::readerLoop()
 
         {
             string buff;
-            int ret = doRead(wrapper->fileName, buff, job.size, job.offset, &wrapper->ffi);
-            if(ret > 0 && buff.size() >= ret) {
-                wrapper->buffer->writeData(job.offset, buff);
+            wrapper->buffer->readData(job.offset, job.size, buff);
+            if(buff.size() < job.size)
+            {
+                string tmp;
+                int ret = doRead(wrapper->fileName, tmp, job.size - buff.size(), job.offset + buff.size(), &wrapper->ffi);
+                if(ret > 0 && buff.size() >= ret) {
+                    wrapper->buffer->writeData(job.offset + buff.size(), tmp);
+                }
             }
         }
 
