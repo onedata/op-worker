@@ -240,7 +240,7 @@ void BufferAgent::readerLoop()
         m_rdJobQueue.pop_front();
         m_rdCond.notify_one();
 
-        if(!wrapper || wrapper->lastBlock >= job.offset)
+        if(!wrapper || wrapper->lastBlock >= job.offset || (wrapper->endOfFile > 0 && wrapper->endOfFile < job.offset))
             continue;
 
         guard.unlock();
@@ -252,15 +252,22 @@ void BufferAgent::readerLoop()
             if(buff.size() < job.size)
             {
                 string tmp;
-
-                int ret = doRead(wrapper->fileName, tmp, job.size - buff.size(), job.offset + buff.size(), &wrapper->ffi);
+                off_t effectiveOffset = job.offset + buff.size();
+                int ret = doRead(wrapper->fileName, tmp, job.size - buff.size(), effectiveOffset, &wrapper->ffi);
                 LOG(INFO) << "Job: offset: " << job.offset << " size: " << job.size << " ret: " << ret;
+                
+                guard.lock();
+                unique_lock buffGuard(wrapper->mutex);
+
                 if(ret > 0 && tmp.size() >= ret) {
-                    wrapper->buffer->writeData(job.offset + buff.size(), tmp);
-                    guard.lock();
-                        m_rdJobQueue.push_back(PrefetchJob(job.fileName, job.offset + buff.size() + ret, wrapper->blockSize));
-                    guard.unlock();
+                    wrapper->buffer->writeData(effectiveOffset, tmp);
+                    m_rdJobQueue.push_back(PrefetchJob(job.fileName, effectiveOffset + ret, wrapper->blockSize));
+                    wrapper->endOfFile = std::max(wrapper->endOfFile, effectiveOffset + ret);
+                } else if(ret == 0) {
+                    wrapper->endOfFile = std::max(wrapper->endOfFile, effectiveOffset);
                 }
+
+                guard.unlock();
             }
         }
 

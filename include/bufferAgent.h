@@ -49,10 +49,12 @@ public:
         size_t                          blockSize;
         int                             openCount;
         off_t                           lastBlock;
+        off_t                           endOfFile;
 
         ReadCache()
           : blockSize(512),
-            openCount(0)
+            openCount(0),
+            endOfFile(0)
         {
         }
     };
