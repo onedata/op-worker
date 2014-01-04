@@ -321,9 +321,10 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
     if (timeout == 0)
     {
         timeout = msg.ByteSize() * 2; // 2ms for each byte (minimum of 500B/s)
-        if (timeout < RECV_TIMEOUT)   // Minimum timeout threshold
-            timeout = RECV_TIMEOUT;
     }
+
+    if (timeout < RECV_TIMEOUT)   // Minimum timeout threshold
+        timeout = RECV_TIMEOUT;
 
     try
     {

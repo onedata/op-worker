@@ -25,7 +25,7 @@ class BufferAgent
 {
 public:
 
-    struct LockableCache {
+    struct WriteCache {
         boost::shared_ptr<FileCache>    buffer;
         boost::recursive_mutex          mutex;
         boost::recursive_mutex          sendMutex;
@@ -34,13 +34,46 @@ public:
         struct fuse_file_info           ffi;
         bool                            opPending;
 
-        LockableCache()
+        WriteCache()
           : opPending(false) 
         {
         }
     };
 
-    typedef boost::shared_ptr<LockableCache> buffer_ptr;
+    struct ReadCache {
+        boost::shared_ptr<FileCache>    buffer;
+        boost::recursive_mutex          mutex;
+        boost::condition_variable_any   cond;
+        std::string                     fileName;
+        struct fuse_file_info           ffi;
+        size_t                          blockSize;
+        int                             openCount;
+
+        ReadCache()
+          : blockSize(512),
+            openCount(0)
+        {
+        }
+    };
+
+    struct PrefetchJob {
+        std::string     fileName;
+        off_t           offset;
+        size_t          size;
+
+        PrefetchJob(std::string &fileName, off_t offset, size_t size) 
+          : fileName(fileName),
+            offset(offset),
+            size(size)
+        {
+        }
+    };
+
+    typedef boost::shared_ptr<WriteCache> write_buffer_ptr;
+    typedef boost::shared_ptr<ReadCache> read_buffer_ptr;
+
+    typedef std::map<uint64_t, write_buffer_ptr> write_cache_map_t;
+    typedef std::map<std::string, read_buffer_ptr> read_cache_map_t;
 
     BufferAgent(write_fun, read_fun);
     virtual ~BufferAgent();
@@ -56,18 +89,26 @@ public:
 
 private:
 
-    volatile bool                       m_agentActive;
-    boost::recursive_mutex                        m_loopMutex;
-    boost::condition_variable_any           m_loopCond;
+    volatile bool                           m_agentActive;
     std::vector<boost::shared_ptr<boost::thread> >          m_workers;
-    std::map<fd_type, buffer_ptr>       m_cacheMap;
-    std::list<fd_type>                  m_jobQueue;
 
-    write_fun                           doWrite;
-    read_fun                            doRead;
+    boost::recursive_mutex                  m_wrMutex;
+    boost::condition_variable_any           m_wrCond;
+    write_cache_map_t                       m_wrCacheMap;
+    std::list<fd_type>                      m_wrJobQueue;
+
+    boost::recursive_mutex                  m_rdMutex;
+    boost::condition_variable_any           m_rdCond;
+    read_cache_map_t                        m_rdCacheMap;
+    std::list<PrefetchJob>                  m_rdJobQueue;
+
+    write_fun                               doWrite;
+    read_fun                                doRead;
     
-    virtual void workerLoop();
-    virtual boost::shared_ptr<FileCache> newFileCache();
+    virtual void writerLoop();
+    virtual void readerLoop();
+
+    virtual boost::shared_ptr<FileCache> newFileCache(bool isBuffer = true);
 };
 
 

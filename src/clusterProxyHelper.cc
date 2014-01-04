@@ -60,13 +60,13 @@ ClusterMsg ClusterProxyHelper::commonClusterMsgSetup(string inputType, string &i
     return clm;
 }
 
-string ClusterProxyHelper::requestMessage(string inputType, string answerType, string &inputData) {
+string ClusterProxyHelper::requestMessage(string inputType, string answerType, string &inputData, uint32_t timeout) {
     ClusterMsg clm = commonClusterMsgSetup(inputType, inputData);
 
     clm.set_answer_type(utils::tolower(answerType));
     clm.set_answer_decoder_name(RFM_DECODER);
 
-    Answer answer = sendCluserMessage(clm);
+    Answer answer = sendCluserMessage(clm, timeout);
 
     return answer.worker_answer();
 }   
@@ -88,7 +88,7 @@ string ClusterProxyHelper::requestAtom(string inputType, string inputData) {
     return "";
 }
 
-Answer ClusterProxyHelper::sendCluserMessage(ClusterMsg &msg) {
+Answer ClusterProxyHelper::sendCluserMessage(ClusterMsg &msg, uint32_t timeout) {
     boost::shared_ptr<CommunicationHandler> connection = m_connectionPool ? m_connectionPool->selectConnection(SimpleConnectionPool::DATA_POOL) : config::getConnectionPool()->selectConnection();
     if(!connection) 
     {
@@ -96,7 +96,7 @@ Answer ClusterProxyHelper::sendCluserMessage(ClusterMsg &msg) {
         return Answer();
     }
 
-    Answer answer = connection->communicate(msg, 2);
+    Answer answer = connection->communicate(msg, 2, timeout);
     if(answer.answer_status() != VEIO)
         config::getConnectionPool()->releaseConnection(connection);
 
@@ -174,41 +174,15 @@ int ClusterProxyHelper::sh_open(const char *path, struct fuse_file_info *fi)
 int ClusterProxyHelper::sh_read(const char *path, char *buf, size_t size, off_t offset,
             struct fuse_file_info *fi)
 {
-    LOG(INFO) << "CluserProxyHelper read(path: " << string(path) << ", size: " << size << ", offset: " << offset << ")";
-
-    ReadFile msg;
-    msg.set_file_id(string(path));
-    msg.set_size(size);
-    msg.set_offset(offset);
-
-    FileData answer;
-    string inputData = msg.SerializeAsString();
-
-    if(!answer.ParseFromString(
-        requestMessage(msg.GetDescriptor()->name(), answer.GetDescriptor()->name(), inputData)))
-    {
-        LOG(WARNING) << "Cannot parse answer for file: " << string(path);
-        return translateError(VEIO);
+    //LOG(INFO) << "CluserProxyHelper read(path: " << string(path) << ", size: " << size << ", offset: " << offset << ")";
+    
+    string tmpBuff;
+    int ret = m_bufferAgent.onRead(string(path), tmpBuff, size, offset, fi);
+    if(ret > 0) {
+        memcpy(buf, tmpBuff.c_str(), ret);
     }
 
-    LOG(INFO) << "CluserProxyHelper read answer_status: " << answer.answer_status() << ", read real size: " << answer.data().size();
- 
-    if(answer.answer_status() == VOK) {
-        size_t readSize = (answer.data().size() > size ? size : answer.data().size());
-
-        memcpy(buf, answer.data().data(), readSize);
-
-        if(answer.data().size() != size)
-            LOG(WARNING) << "read for file: " << string(path) << " returned " << answer.data().size() << "bytes. Expected: " << size;
-
-        return readSize;
-
-    } else if(answer.answer_status() == "ok:TODO2") {
-        /// TODO: implement big read
-        LOG(ERROR) << "Cluster requested to read file (" << string(path) << ") directly over TCP/IP which is not implemented yet";
-        return -ENOTSUP;
-    } else
-        return translateError(answer.answer_status());
+    return ret;
 }
 
 int ClusterProxyHelper::sh_write(const char *path, const char *buf, size_t size,
@@ -352,8 +326,43 @@ int ClusterProxyHelper::doWrite(std::string path, const std::string &buf, size_t
     return 0;
 }
 
-int ClusterProxyHelper::doRead(std::string path, std::string &buf, size_t, off_t, ffi_type)
+int ClusterProxyHelper::doRead(std::string path, std::string &buf, size_t size, off_t offset, ffi_type)
 {
+    ReadFile msg;
+    msg.set_file_id(string(path));
+    msg.set_size(size);
+    msg.set_offset(offset);
+
+    FileData answer;
+    string inputData = msg.SerializeAsString();
+
+    uint64_t timeout = timeout = size * 2; // 2ms for each byte (minimum of 500B/s);
+
+    if(!answer.ParseFromString(
+        requestMessage(msg.GetDescriptor()->name(), answer.GetDescriptor()->name(), inputData, timeout)))
+    {
+        LOG(WARNING) << "Cannot parse answer for file: " << string(path);
+        return translateError(VEIO);
+    }
+
+    LOG(INFO) << "CluserProxyHelper read answer_status: " << answer.answer_status() << ", read real size: " << answer.data().size();
+ 
+    if(answer.answer_status() == VOK) {
+        size_t readSize = (answer.data().size() > size ? size : answer.data().size());
+
+        buf = answer.data().data();
+
+        if(answer.data().size() != size)
+            LOG(WARNING) << "read for file: " << string(path) << " returned " << answer.data().size() << "bytes. Expected: " << size;
+
+        return readSize;
+
+    } else if(answer.answer_status() == "ok:TODO2") {
+        /// TODO: implement big read
+        LOG(ERROR) << "Cluster requested to read file (" << string(path) << ") directly over TCP/IP which is not implemented yet";
+        return -ENOTSUP;
+    } else
+        return translateError(answer.answer_status());
     return 0;
 }
 

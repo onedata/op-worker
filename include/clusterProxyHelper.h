@@ -85,9 +85,9 @@ class ClusterProxyHelper : public IStorageHelper {
         std::string       m_clusterHostname;
         BufferAgent       m_bufferAgent;
 
-        inline protocol::communication_protocol::Answer sendCluserMessage(protocol::communication_protocol::ClusterMsg &msg);      ///< Sends ClusterMsg to cluster and receives Answer. This function handles connection selection and its releasing.
+        inline protocol::communication_protocol::Answer sendCluserMessage(protocol::communication_protocol::ClusterMsg &msg, uint32_t timeout = 0);      ///< Sends ClusterMsg to cluster and receives Answer. This function handles connection selection and its releasing.
         inline protocol::communication_protocol::ClusterMsg commonClusterMsgSetup(std::string inputType, std::string& inputData);   ///< Setups commonly used fields in ClusterMsg for RemoteFileManagement.
-        inline std::string requestMessage(std::string inputType, std::string answerType, std::string& inputData);                   ///< Creates & sends ClusterMsg with given types and input. Response is an serialized message od type "answerType".
+        inline std::string requestMessage(std::string inputType, std::string answerType, std::string& inputData, uint32_t timeout = 0);                   ///< Creates & sends ClusterMsg with given types and input. Response is an serialized message od type "answerType".
         inline std::string requestAtom(std::string inputType, std::string inputData);                                              ///< Same as requestMessage except it always receives Atom. Return value is an strign value of Atom.
 
         int doWrite(std::string path, const std::string &buf, size_t, off_t, ffi_type);

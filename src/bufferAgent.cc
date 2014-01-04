@@ -25,23 +25,41 @@ BufferAgent::~BufferAgent()
 
 int BufferAgent::onOpen(std::string path, ffi_type ffi)
 {
-    unique_lock guard(m_loopMutex);
-    m_cacheMap.erase(ffi->fh);
+    {
+        unique_lock guard(m_wrMutex);
+        m_wrCacheMap.erase(ffi->fh);
 
-    buffer_ptr lCache(new LockableCache());
-    lCache->fileName = path;
-    lCache->buffer = newFileCache();
-    lCache->ffi = *ffi;
+        write_buffer_ptr lCache(new WriteCache());
+        lCache->fileName = path;
+        lCache->buffer = newFileCache(true);
+        lCache->ffi = *ffi;
 
-    m_cacheMap[ffi->fh] = lCache;
+        m_wrCacheMap[ffi->fh] = lCache;
+    }
+
+    {
+        unique_lock guard(m_rdMutex);
+        read_cache_map_t::iterator it;
+        if(( it = m_rdCacheMap.find(path) ) != m_rdCacheMap.end()) {
+            it->second->openCount++;
+        } else {
+            read_buffer_ptr lCache(new ReadCache());
+            lCache->fileName = path;
+            lCache->openCount = 1;
+            lCache->ffi = *ffi;
+            lCache->buffer = newFileCache(false);
+        }
+
+        m_rdJobQueue.push_front(PrefetchJob(path, 0, 512));
+    }
 
     return 0;
 }
 
 int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, off_t offset, ffi_type ffi)
 {
-    unique_lock guard(m_loopMutex);
-        buffer_ptr wrapper = m_cacheMap[ffi->fh];
+    unique_lock guard(m_wrMutex);
+        write_buffer_ptr wrapper = m_wrCacheMap[ffi->fh];
     guard.unlock();
 
     {
@@ -63,8 +81,8 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
     if(!wrapper->opPending) 
     {
         wrapper->opPending = true;
-        m_jobQueue.push_back(ffi->fh);
-        m_loopCond.notify_one();
+        m_wrJobQueue.push_back(ffi->fh);
+        m_wrCond.notify_one();
     }
 
     return size;
@@ -72,14 +90,49 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
 
 int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t offset, ffi_type ffi)
 {
-    boost::unique_lock<boost::recursive_mutex> guard(m_loopMutex);
-    return EOPNOTSUPP;
+    unique_lock guard(m_rdMutex);
+        read_buffer_ptr wrapper = m_rdCacheMap[path];
+    guard.unlock();
+
+    wrapper->buffer->readData(offset, size, buf);
+
+    if(buf.size() < size) {
+        string buf2;
+        int ret = doRead(path, buf2, buf.size() - size, offset + buf.size(), &wrapper->ffi);
+        if(ret < 0)
+            return ret;
+
+        buf += buf2;
+
+        {   
+            unique_lock buffGuard(wrapper->mutex);
+            wrapper->blockSize = std::min((size_t) 1024 * 1024, (size_t) std::max(size, 2*wrapper->blockSize));
+        }
+
+        guard.lock();
+            m_rdJobQueue.push_back(PrefetchJob(wrapper->fileName, buf.size(), wrapper->blockSize));
+        guard.unlock();
+    } else {
+        string tmp;
+        size_t prefSize = std::max(2*size, wrapper->blockSize);
+        wrapper->buffer->readData(offset + size, prefSize, tmp);
+
+        if(tmp.size() != prefSize) {
+            guard.lock();
+                m_rdJobQueue.push_back(PrefetchJob(wrapper->fileName, offset + size + tmp.size(), wrapper->blockSize));
+                m_rdJobQueue.push_back(PrefetchJob(wrapper->fileName, offset + size + tmp.size() + wrapper->blockSize, wrapper->blockSize));
+            guard.unlock();
+        }
+    }
+
+
+    return buf.size();
 }
 
 int BufferAgent::onFlush(std::string path, ffi_type ffi)
 {
-    unique_lock guard(m_loopMutex);
-        buffer_ptr wrapper = m_cacheMap[ffi->fh];
+    unique_lock guard(m_wrMutex);
+        write_buffer_ptr wrapper = m_wrCacheMap[ffi->fh];
     guard.unlock();
 
     unique_lock sendGuard(wrapper->sendMutex);
@@ -105,16 +158,30 @@ int BufferAgent::onFlush(std::string path, ffi_type ffi)
     }
 
     guard.lock();
-    m_jobQueue.remove(ffi->fh);
+    m_wrJobQueue.remove(ffi->fh);
 
     return 0;
 }
 
 int BufferAgent::onRelease(std::string path, ffi_type ffi)
 {
-    boost::unique_lock<boost::recursive_mutex> guard(m_loopMutex);
-    m_cacheMap.erase(ffi->fh);
-    m_jobQueue.remove(ffi->fh);
+    {
+        unique_lock guard(m_wrMutex);
+        m_wrCacheMap.erase(ffi->fh);
+        m_wrJobQueue.remove(ffi->fh);
+    }
+
+    {
+        unique_lock guard(m_rdMutex);
+
+        read_cache_map_t::iterator it;
+        if(( it = m_rdCacheMap.find(path) ) != m_rdCacheMap.end()) {
+            it->second->openCount--;
+            if(it->second->openCount <= 0) {
+                m_rdCacheMap.erase(it);
+            }
+        }
+    }
 
     return 0;
 }
@@ -128,14 +195,17 @@ void BufferAgent::agentStart(int worker_count)
 
     while(worker_count--)
     {
-        m_workers.push_back(shared_ptr<thread>(new thread(bind(&BufferAgent::workerLoop, this))));
+        m_workers.push_back(shared_ptr<thread>(new thread(bind(&BufferAgent::writerLoop, this))));
+        m_workers.push_back(shared_ptr<thread>(new thread(bind(&BufferAgent::readerLoop, this))));
     }
 }
 
 void BufferAgent::agentStop()
 {
     m_agentActive = false;
-    m_loopCond.notify_all();
+    m_wrCond.notify_all();
+    m_rdCond.notify_all();
+
     while(m_workers.size() > 0)
     {
         m_workers.back()->join();
@@ -143,21 +213,53 @@ void BufferAgent::agentStop()
     }
 }
 
-void BufferAgent::workerLoop()
+void BufferAgent::readerLoop() 
 {
-    unique_lock guard(m_loopMutex);
+    unique_lock guard(m_rdMutex);
     while(m_agentActive)
     {
-        while(m_jobQueue.empty() && m_agentActive)
-            m_loopCond.wait(guard);
+        while(m_rdJobQueue.empty() && m_agentActive)
+            m_rdCond.wait(guard);
 
         if(!m_agentActive)
             return;
 
-        fd_type file = m_jobQueue.front();
-        buffer_ptr wrapper = m_cacheMap[file];
-        m_jobQueue.pop_front();
-        m_loopCond.notify_one();
+        PrefetchJob job = m_rdJobQueue.front();
+        read_buffer_ptr wrapper = m_rdCacheMap[job.fileName];
+        m_rdJobQueue.pop_front();
+        m_rdCond.notify_one();
+
+        if(!wrapper)
+            continue;
+
+        guard.unlock();
+
+        {
+            string buff;
+            int ret = doRead(wrapper->fileName, buff, job.size, job.offset, &wrapper->ffi);
+            if(ret > 0 && buff.size() >= ret) {
+                wrapper->buffer->writeData(job.offset, buff);
+            }
+        }
+
+    }
+}
+
+void BufferAgent::writerLoop()
+{
+    unique_lock guard(m_wrMutex);
+    while(m_agentActive)
+    {
+        while(m_wrJobQueue.empty() && m_agentActive)
+            m_wrCond.wait(guard);
+
+        if(!m_agentActive)
+            return;
+
+        fd_type file = m_wrJobQueue.front();
+        write_buffer_ptr wrapper = m_wrCacheMap[file];
+        m_wrJobQueue.pop_front();
+        m_wrCond.notify_one();
 
         if(!wrapper)
             continue;
@@ -189,7 +291,7 @@ void BufferAgent::workerLoop()
                 guard.lock();
                 if(wrapper->buffer->blockCount() > 0)
                 {
-                    m_jobQueue.push_back(file);
+                    m_wrJobQueue.push_back(file);
                 } 
                 else 
                 {
@@ -202,9 +304,9 @@ void BufferAgent::workerLoop()
     }
 }
 
-boost::shared_ptr<FileCache> BufferAgent::newFileCache()
+boost::shared_ptr<FileCache> BufferAgent::newFileCache(bool isBuffer)
 {
-    return boost::shared_ptr<FileCache>(new FileCache(10 * 1024 * 1024));
+    return boost::shared_ptr<FileCache>(new FileCache(10 * 1024 * 1024, isBuffer));
 }
 
 } // namespace helpers 
