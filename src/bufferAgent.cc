@@ -98,7 +98,7 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
     guard.unlock();
 
     wrapper->buffer->readData(offset, size, buf);
-    DLOG(INFO) << "Found: " << buf.size();
+    LOG(INFO) << "Found: " << buf.size();
 
     if(buf.size() < size) {
 
