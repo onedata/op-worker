@@ -1,13 +1,15 @@
 #ifndef VEILCONFIG_H
 #define VEILCONFIG_H
 
-#define VeilClient_VERSION_MAJOR    @VeilHelpers_VERSION_MAJOR@
-#define VeilClient_VERSION_MINOR    @VeilHelpers_VERSION_MINOR@
-#define VeilClient_VERSION_PATCH    @VeilHelpers_VERSION_PATCH@
+#define VeilHelpers_VERSION_MAJOR    @VeilHelpers_VERSION_MAJOR@
+#define VeilHelpers_VERSION_MINOR    @VeilHelpers_VERSION_MINOR@
+#define VeilHelpers_VERSION_PATCH    @VeilHelpers_VERSION_PATCH@
 
-#define DEBUG   @DEBUG@
-#if DEBUG == 1
-    #define NDEBUG 1    # turn on google-log debug macros
+#define VeilHelpers_DEBUG   @VeilHelpers_DEBUG@
+#if VeilHelpers_DEBUG == 1
+    #define DEBUG
+#else
+    #define NDEBUG
 #endif
 
 #endif // VEILCONFIG_H
