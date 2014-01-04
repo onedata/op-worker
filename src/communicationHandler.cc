@@ -362,7 +362,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
         }
         uint64_t lap3 = helpers::utils::mtime<uint64_t>();
 
-        LOG(INFO) << "lap3 - lap2: " << (lap3 - lap2) << " lap2 - lap1: " << (lap2 - lap1) ; 
+        //LOG(INFO) << "lap3 - lap2: " << (lap3 - lap2) << " lap2 - lap1: " << (lap2 - lap1) ; 
 
         if(answer.answer_status() != VOK) 
         {
