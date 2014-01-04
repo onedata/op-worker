@@ -102,13 +102,9 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
     if(buf.size() < size) {
 
         string buf2;
-        if(offset + buf.size() < 10 * 1024 * 1024)
-        {
-            buf2.resize(size - buf.size());
-        }
-        // int ret = doRead(path, buf2, size - buf.size(), offset + buf.size(), &wrapper->ffi);
-        // if(ret < 0)
-        //     return ret;
+        int ret = doRead(path, buf2, size - buf.size(), offset + buf.size(), &wrapper->ffi);
+        if(ret < 0)
+            return ret;
 
         wrapper->buffer->writeData(offset + buf.size(), buf2);
 
@@ -253,14 +249,9 @@ void BufferAgent::readerLoop()
             if(buff.size() < job.size)
             {
                 string tmp;
-                if(job.offset < 10 * 1024 * 1024)
-                {
-                    tmp.resize(job.size);
-                    int ret  = job.size;
-                    //int ret = doRead(wrapper->fileName, tmp, job.size - buff.size(), job.offset + buff.size(), &wrapper->ffi);
-                    if(ret > 0 && tmp.size() >= ret) {
-                        wrapper->buffer->writeData(job.offset + buff.size(), tmp);
-                    }
+                int ret = doRead(wrapper->fileName, tmp, job.size - buff.size(), job.offset + buff.size(), &wrapper->ffi);
+                if(ret > 0 && tmp.size() >= ret) {
+                    wrapper->buffer->writeData(job.offset + buff.size(), tmp);
                 }
             }
         }
