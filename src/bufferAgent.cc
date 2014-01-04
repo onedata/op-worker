@@ -14,7 +14,9 @@ namespace helpers {
 BufferAgent::BufferAgent(write_fun w, read_fun r)
   : m_agentActive(false),
     doWrite(w),
-    doRead(r)
+    doRead(r),
+    m_wrJobQueue(m_wrMutex, m_wrCond),
+    m_rdJobQueue(m_rdMutex, m_rdCond)
 {
     agentStart();
 }
@@ -53,6 +55,7 @@ int BufferAgent::onOpen(std::string path, ffi_type ffi)
         }
 
         m_rdJobQueue.push_front(PrefetchJob(path, 0, 512));
+
     }
 
     return 0;
@@ -84,7 +87,6 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
     {
         wrapper->opPending = true;
         m_wrJobQueue.push_back(ffi->fh);
-        m_wrCond.notify_one();
     }
 
     return size;
@@ -228,10 +230,8 @@ void BufferAgent::readerLoop()
         if(!m_agentActive)
             return;
 
-        PrefetchJob job = m_rdJobQueue.front();
+        PrefetchJob job = m_rdJobQueue.get_front();
         read_buffer_ptr wrapper = m_rdCacheMap[job.fileName];
-        m_rdJobQueue.pop_front();
-        m_rdCond.notify_one();
 
         if(!wrapper)
             continue;
@@ -260,10 +260,8 @@ void BufferAgent::writerLoop()
         if(!m_agentActive)
             return;
 
-        fd_type file = m_wrJobQueue.front();
+        fd_type file = m_wrJobQueue.get_front();
         write_buffer_ptr wrapper = m_wrCacheMap[file];
-        m_wrJobQueue.pop_front();
-        m_wrCond.notify_one();
 
         if(!wrapper)
             continue;
