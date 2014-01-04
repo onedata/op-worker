@@ -336,8 +336,8 @@ int ClusterProxyHelper::doRead(std::string path, std::string &buf, size_t size, 
 
         buf = answer.data();
 
-        if(answer.data().size() != size)
-            LOG(WARNING) << "read for file: " << string(path) << " returned " << answer.data().size() << "bytes. Expected: " << size;
+        // if(answer.data().size() != size)
+        //     LOG(WARNING) << "read for file: " << string(path) << " returned " << answer.data().size() << "bytes. Expected: " << size;
 
         return readSize;
 

@@ -67,6 +67,11 @@ public:
             size(size)
         {
         }
+
+        bool operator< (const PrefetchJob &other) 
+        {
+            return (offset < other.offset) || (offset == other.offset && size < other.size);
+        }
     };
 
     typedef boost::shared_ptr<WriteCache> write_buffer_ptr;
