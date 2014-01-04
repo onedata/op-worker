@@ -132,6 +132,9 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
     {   
         unique_lock buffGuard(wrapper->mutex);
         wrapper->lastBlock = offset;
+        if(offset + buf.size() > wrapper->endOfFile)
+            wrapper->endOfFile = 0;
+        
         wrapper->blockSize = std::min((size_t) 1024 * 1024, (size_t) std::max(size, 2*wrapper->blockSize));
     }
 
@@ -262,7 +265,6 @@ void BufferAgent::readerLoop()
                 if(ret > 0 && tmp.size() >= ret) {
                     wrapper->buffer->writeData(effectiveOffset, tmp);
                     m_rdJobQueue.push_back(PrefetchJob(job.fileName, effectiveOffset + ret, wrapper->blockSize));
-                    wrapper->endOfFile = std::max(wrapper->endOfFile, effectiveOffset + ret);
                 } else if(ret == 0) {
                     wrapper->endOfFile = std::max(wrapper->endOfFile, effectiveOffset);
                 }
