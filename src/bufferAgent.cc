@@ -115,7 +115,7 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
         }
 
         guard.lock();
-            m_rdJobQueue.push_back(PrefetchJob(wrapper->fileName, buf.size(), wrapper->blockSize));
+            m_rdJobQueue.push_back(PrefetchJob(wrapper->fileName, offset + buf.size(), wrapper->blockSize));
         guard.unlock();
     } else {
         string tmp;
