@@ -52,7 +52,7 @@ int BufferAgent::onOpen(std::string path, ffi_type ffi)
             m_rdCacheMap[path] = lCache;
         }
 
-        m_rdJobQueue.push_front(PrefetchJob(path, 0, 512));
+        m_rdJobQueue.push_front(PrefetchJob(path, 0, 10 * 1024 * 1024));
         m_rdCond.notify_one();
     }
 
