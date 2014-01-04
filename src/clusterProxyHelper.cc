@@ -5,23 +5,7 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifdef linux
-/* For pread()/pwrite()/utimensat() */
-#define _XOPEN_SOURCE 700
-#endif /* linux */
-
-#include <fuse.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <errno.h>
-#include <sys/time.h>
-#include <cstring>
-#ifdef HAVE_SETXATTR
-#include <sys/xattr.h>
-#endif
-
+#include "veilConfig.h"
 #include <limits.h>
 
 #include <boost/algorithm/string.hpp>
@@ -318,7 +302,7 @@ int ClusterProxyHelper::doWrite(std::string path, const std::string &buf, size_t
         return translateError(VEIO);
     }
 
-    LOG(INFO) << "CluserProxyHelper write answer_status: " << answer.answer_status() << ", write real size: " << answer.bytes_written();
+    DLOG(INFO) << "CluserProxyHelper write answer_status: " << answer.answer_status() << ", write real size: " << answer.bytes_written();
 
     int error = translateError(answer.answer_status());
     if(error == 0) return answer.bytes_written();
@@ -345,7 +329,7 @@ int ClusterProxyHelper::doRead(std::string path, std::string &buf, size_t size, 
         return translateError(VEIO);
     }
 
-    LOG(INFO) << "CluserProxyHelper read answer_status: " << answer.answer_status() << ", read real size: " << answer.data().size();
+    DLOG(INFO) << "CluserProxyHelper(offset: " << offset << ", size: " << size << ") read answer_status: " << answer.answer_status() << ", read real size: " << answer.data().size();
  
     if(answer.answer_status() == VOK) {
         size_t readSize = (answer.data().size() > size ? size : answer.data().size());
