@@ -9,6 +9,9 @@
 
 #include "fileCache.h"
 
+namespace veil {
+namespace helpers {
+
 typedef struct fuse_file_info*  ffi_type;
 typedef uint64_t                fd_type;
 
@@ -16,10 +19,6 @@ typedef boost::function<int(std::string path, const std::string &buf, size_t, of
 typedef boost::function<int(std::string path, std::string &buf, size_t, off_t, ffi_type)>          read_fun;
 
 typedef boost::unique_lock<boost::recursive_mutex> unique_lock;
-
-
-namespace veil {
-namespace helpers {
 
 class BufferAgent
 {
@@ -69,11 +68,11 @@ public:
         }
     };
 
-    typedef boost::shared_ptr<WriteCache> write_buffer_ptr;
-    typedef boost::shared_ptr<ReadCache> read_buffer_ptr;
+    typedef boost::shared_ptr<WriteCache>           write_buffer_ptr;
+    typedef boost::shared_ptr<ReadCache>            read_buffer_ptr;
 
-    typedef std::map<uint64_t, write_buffer_ptr> write_cache_map_t;
-    typedef std::map<std::string, read_buffer_ptr> read_cache_map_t;
+    typedef std::map<uint64_t, write_buffer_ptr>    write_cache_map_t;
+    typedef std::map<std::string, read_buffer_ptr>  read_cache_map_t;
 
     BufferAgent(write_fun, read_fun);
     virtual ~BufferAgent();
@@ -101,7 +100,7 @@ private:
 
         job_t get_front() 
         {
-            unique_lock guard(m_mutex);
+            helpers::unique_lock guard(m_mutex);
             job_t tmp = m_jobQueue.front();
             m_jobQueue.pop_front();
 
@@ -112,7 +111,7 @@ private:
 
         void push_front(job_t job) 
         {
-            unique_lock guard(m_mutex);
+            helpers::unique_lock guard(m_mutex);
             m_jobQueue.push_front(job);
 
             m_cond.notify_one();
@@ -120,7 +119,7 @@ private:
 
         void push_back(job_t job) 
         {
-            unique_lock guard(m_mutex);
+            helpers::unique_lock guard(m_mutex);
             m_jobQueue.push_back(job);
 
             m_cond.notify_one();
@@ -133,7 +132,7 @@ private:
 
         size_t size() 
         {
-            unique_lock guard(m_mutex);
+            helpers::unique_lock guard(m_mutex);
             return m_jobQueue.size();
         }
 
