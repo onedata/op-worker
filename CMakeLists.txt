@@ -13,6 +13,17 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 set(DEPS_DIR "deps")
 link_directories(${PROJECT_BINARY_DIR})
 
+if(CMAKE_BUILD_TYPE MATCHES DEBUG) 
+    set(DEBUG 1)
+else() 
+    set(DEBUG 0)
+endif() 
+
+configure_file (
+    "${PROJECT_SOURCE_DIR}/include/veilConfig.h.in"
+    "${PROJECT_BINARY_DIR}/veilConfig.h"
+)
+
 # Deps
 add_subdirectory(${DEPS_DIR}/gmock)
 add_subdirectory(${DEPS_DIR}/glog)
@@ -144,7 +155,10 @@ else()
     set(SECTION_FRAGMENTATION_FLAGS "-fdata-sections -ffunction-sections -Wl,--gc-sections -Wl,-rpath,${CUSTOM_RPATH}")
 endif()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SECTION_FRAGMENTATION_FLAGS} -fPIC -g ${FUSE_DEFINITIONS} -DFUSE_USE_VERSION=29")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SECTION_FRAGMENTATION_FLAGS} -fPIC ${FUSE_DEFINITIONS} -DFUSE_USE_VERSION=29")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -Wall -g")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE} -O2")
+
 set(CMAKE_SKIP_RPATH TRUE) # Something is wrong with CMake RPATH config, we need to use old-fashion way
 
 

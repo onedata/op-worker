@@ -1,22 +1,37 @@
-BUILD_DIR = build
+RELEASE_DIR = release
+DEBUG_DIR = debug
 
 CMAKE = $(shell which cmake || which cmake28)
 CPACK = $(shell which cpack || which cpack28)
 
-all: build test
+.PHONY: build release debug clean all
+all: release test
 
-build: configure
-	@(cd ${BUILD_DIR} && make -j`nproc`)
+## Obsolete target, use 'make release' instead
+build: release 
+	@echo "*****************************************************"
+	@echo "'build' target is obsolete, use 'release' instead !"
+	@echo "*****************************************************"
+	@ln -sf ${RELEASE_DIR} build
 
-configure:
-	@mkdir -p ${BUILD_DIR}
-	@cd ${BUILD_DIR} && ${CMAKE} .. `if [[ "$$PREFER_STATIC_LINK" != ""  ]]; then echo "-DPREFER_STATIC_LINK=1"; fi`
+release: 
+	mkdir -p ${RELEASE_DIR}
+	cd ${RELEASE_DIR} && ${CMAKE} -DCMAKE_BUILD_TYPE=release `if [[ "$$PREFER_STATIC_LINK" != ""  ]]; then echo "-DPREFER_STATIC_LINK=1"; fi` ..
+	(cd ${RELEASE_DIR} && make -j`nproc`)
 
-test: build
-	@cd ${BUILD_DIR} && make test
+debug: 
+	@mkdir -p ${DEBUG_DIR}
+	@cd ${DEBUG_DIR} && ${CMAKE} -DCMAKE_BUILD_TYPE=debug `if [[ "$$PREFER_STATIC_LINK" != ""  ]]; then echo "-DPREFER_STATIC_LINK=1"; fi` ..
+	@(cd ${DEBUG_DIR} && make -j`nproc`)
 
-cunit: build
-	@cd ${BUILD_DIR} && make cunit
+test: release
+	@cd ${RELEASE_DIR} && make test
+
+cunit: release
+	@cd ${RELEASE_DIR} && make cunit
+
+install: release
+	@cd ${RELEASE_DIR} && make install
 
 clean: 
-	@rm -rf ${BUILD_DIR} 
+	@rm -rf ${DEBUG_DIR} ${RELEASE_DIR} build
