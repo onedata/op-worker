@@ -241,8 +241,9 @@ void FileCache::discardExpired(bool rebuildQueue)
             tmp = *m_blockExpire.begin();
         
         if(tmp && (!m_isBuffer && tmp->valid_to < utils::mtime<uint64_t>() ) ) {
-            list<block_ptr>::iterator it = upper_bound(m_fileBlocks.begin(), m_fileBlocks.end(), tmp->offset, OrderByOffset);
-            while(it != m_fileBlocks.begin() && (*it)->offset >= tmp->offset) {
+            list<block_ptr>::iterator it = lower_bound(m_fileBlocks.begin(), m_fileBlocks.end(), tmp->offset, OrderByOffset);
+
+            if(it != m_fileBlocks.end() && (*it)->offset <= tmp->offset) {
                 if((*it) == tmp) 
                 {
                     m_fileBlocks.erase(it);

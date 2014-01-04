@@ -9,6 +9,10 @@
 
 #include "fileCache.h"
 
+
+namespace veil {
+namespace helpers {
+
 typedef struct fuse_file_info*  ffi_type;
 typedef uint64_t                fd_type;
 
@@ -16,10 +20,6 @@ typedef boost::function<int(std::string path, const std::string &buf, size_t, of
 typedef boost::function<int(std::string path, std::string &buf, size_t, off_t, ffi_type)>          read_fun;
 
 typedef boost::unique_lock<boost::recursive_mutex> unique_lock;
-
-
-namespace veil {
-namespace helpers {
 
 class BufferAgent
 {

@@ -68,6 +68,11 @@ static struct _OrderByOffset
     { 
         return a < b->offset;
     }
+
+    bool operator() (block_ptr const &b, off_t a) 
+    { 
+        return a < b->offset;
+    }
 } OrderByOffset;
 
 class FileCache
