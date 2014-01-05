@@ -165,6 +165,8 @@ bool FileCache::insertBlock(const FileBlock &block)
 
     } while (cBuff.size() > 0);
 
+    debugPrint();
+
     return true;
 }
 
