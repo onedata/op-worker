@@ -52,7 +52,7 @@ int BufferAgent::onOpen(std::string path, ffi_type ffi)
             m_rdCacheMap[path] = lCache;
         }
 
-        m_rdJobQueue.push_front(PrefetchJob(path, 0, 10 * 1024 * 1024));
+        m_rdJobQueue.insert(PrefetchJob(path, 0, 10 * 1024 * 1024));
         m_rdCond.notify_one();
     }
 
@@ -114,7 +114,7 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
         //DLOG(INFO) << "doRead ret: " << ret << " bufSize: " << buf2.size() << " globalBufSize: " << buf.size() ;
 
         guard.lock();
-            m_rdJobQueue.push_back(PrefetchJob(wrapper->fileName, offset + buf.size(), wrapper->blockSize));
+            m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, offset + buf.size(), wrapper->blockSize));
         guard.unlock();
     } else {
         string tmp;
@@ -123,8 +123,8 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
 
         if(tmp.size() != prefSize) {
             guard.lock();
-                m_rdJobQueue.push_back(PrefetchJob(wrapper->fileName, offset + size + tmp.size(), wrapper->blockSize));
-                m_rdJobQueue.push_back(PrefetchJob(wrapper->fileName, offset + size + tmp.size() + wrapper->blockSize, wrapper->blockSize));
+                m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, offset + size + tmp.size(), wrapper->blockSize));
+                m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, offset + size + tmp.size() + wrapper->blockSize, wrapper->blockSize));
             guard.unlock();
         }
     }
@@ -238,9 +238,9 @@ void BufferAgent::readerLoop()
         if(!m_agentActive)
             return;
 
-        PrefetchJob job = m_rdJobQueue.front();
+        PrefetchJob job = *m_rdJobQueue.begin();
         read_buffer_ptr wrapper = m_rdCacheMap[job.fileName];
-        m_rdJobQueue.pop_front();
+        m_rdJobQueue.erase(m_rdJobQueue.begin());
         m_rdCond.notify_one();
 
         if(!wrapper || wrapper->lastBlock >= job.offset || (wrapper->endOfFile > 0 && wrapper->endOfFile <= job.offset))
@@ -264,7 +264,7 @@ void BufferAgent::readerLoop()
 
                 if(ret > 0 && tmp.size() >= ret) {
                     wrapper->buffer->writeData(effectiveOffset, tmp);
-                    m_rdJobQueue.push_back(PrefetchJob(job.fileName, effectiveOffset + ret, wrapper->blockSize));
+                    m_rdJobQueue.insert(PrefetchJob(job.fileName, effectiveOffset + ret, wrapper->blockSize));
                 } else if(ret == 0) {
                     wrapper->endOfFile = std::max(wrapper->endOfFile, effectiveOffset);
                 }

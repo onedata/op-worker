@@ -97,6 +97,14 @@ public:
 
 private:
 
+    struct PrefetchJobCompare
+    {
+        bool operator() (const PrefetchJob &a, const PrefetchJob &b) 
+        {
+            return a.offset < b.offset || (a.offset == b.offset && a.size < b.size);
+        }
+    };
+
     volatile bool                           m_agentActive;
     std::vector<boost::shared_ptr<boost::thread> >          m_workers;
 
@@ -108,7 +116,7 @@ private:
     boost::recursive_mutex                  m_rdMutex;
     boost::condition_variable_any           m_rdCond;
     read_cache_map_t                        m_rdCacheMap;
-    std::list<PrefetchJob>                  m_rdJobQueue;
+    std::multiset<PrefetchJob, PrefetchJobCompare> m_rdJobQueue;
 
     write_fun                               doWrite;
     read_fun                                doRead;
