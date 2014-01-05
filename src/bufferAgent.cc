@@ -98,6 +98,12 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
         read_buffer_ptr wrapper = m_rdCacheMap[path];
     guard.unlock();
 
+    {   
+        unique_lock buffGuard(wrapper->mutex);
+        
+        wrapper->lastBlock = offset;
+        wrapper->blockSize = std::min((size_t) 1024 * 1024, (size_t) std::max(size, 2*wrapper->blockSize));
+    }
 
     wrapper->buffer->readData(offset, size, buf);
     LOG(INFO) << "Found: " << buf.size() << "bcount: " << wrapper->buffer->blockCount(); 
@@ -133,11 +139,8 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
 
     {   
         unique_lock buffGuard(wrapper->mutex);
-        wrapper->lastBlock = offset;
         if(offset + buf.size() > wrapper->endOfFile)
             wrapper->endOfFile = 0;
-
-        wrapper->blockSize = std::min((size_t) 1024 * 1024, (size_t) std::max(size, 2*wrapper->blockSize));
     }
 
     m_rdCond.notify_one();
@@ -194,7 +197,7 @@ int BufferAgent::onRelease(std::string path, ffi_type ffi)
         if(( it = m_rdCacheMap.find(path) ) != m_rdCacheMap.end()) {
             it->second->openCount--;
             if(it->second->openCount <= 0) {
-                m_rdCacheMap.erase(it);
+                //m_rdCacheMap.erase(it);
             }
         }
     }
@@ -271,7 +274,7 @@ void BufferAgent::readerLoop()
                     wrapper->endOfFile = std::max(wrapper->endOfFile, effectiveOffset);
                 }
 
-                wrapper->buffer->debugPrint();
+                wrapper->cond.notify_all();
 
                 guard.unlock();
             }

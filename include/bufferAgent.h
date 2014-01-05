@@ -52,7 +52,7 @@ public:
         off_t                           endOfFile;
 
         ReadCache()
-          : blockSize(512),
+          : blockSize(4096),
             openCount(0),
             endOfFile(0)
         {
@@ -77,6 +77,14 @@ public:
         }
     };
 
+    struct PrefetchJobCompare
+    {
+        bool operator() (const PrefetchJob &a, const PrefetchJob &b) 
+        {
+            return a.offset < b.offset || (a.offset == b.offset && a.size < b.size);
+        }
+    };
+
     typedef boost::shared_ptr<WriteCache> write_buffer_ptr;
     typedef boost::shared_ptr<ReadCache> read_buffer_ptr;
 
@@ -96,14 +104,6 @@ public:
     virtual void agentStop();
 
 private:
-
-    struct PrefetchJobCompare
-    {
-        bool operator() (const PrefetchJob &a, const PrefetchJob &b) 
-        {
-            return a.offset < b.offset || (a.offset == b.offset && a.size < b.size);
-        }
-    };
 
     volatile bool                           m_agentActive;
     std::vector<boost::shared_ptr<boost::thread> >          m_workers;
