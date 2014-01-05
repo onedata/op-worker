@@ -174,6 +174,9 @@ void FileCache::forceInsertBlock(block_ptr block, std::list<block_ptr>::iterator
 {
     boost::unique_lock<boost::recursive_mutex> guard(m_fileBlocksMutex);
 
+    if(block->size == 0)
+        return;
+
     if(block->valid_to == 0)
         block->valid_to = m_isBuffer ? ++m_curBlockNo : utils::mtime<uint64_t>() + 1000;
     
