@@ -2,6 +2,7 @@
 #include <boost/thread.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/weak_ptr.hpp>
+#include <boost/unordered_map.hpp>
 #include <string>
 #include <fuse.h>
 #include <unistd.h>
@@ -48,7 +49,7 @@ public:
         struct fuse_file_info           ffi;
         size_t                          blockSize;
         int                             openCount;
-        off_t                           lastBlock;
+        boost::unordered_map <fd_type, off_t> lastBlock;
         off_t                           endOfFile;
 
         ReadCache()
