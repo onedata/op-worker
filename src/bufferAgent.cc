@@ -105,7 +105,7 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
     if(buf.size() < size) {
 
         string buf2;
-        int ret = doRead(path, buf2, wrapper->blockSize, offset + buf.size(), &wrapper->ffi);
+        int ret = doRead(path, buf2, size - buf.size(), offset + buf.size(), &wrapper->ffi);
         if(ret < 0)
             return ret;
 
@@ -245,7 +245,12 @@ void BufferAgent::readerLoop()
         m_rdJobQueue.erase(m_rdJobQueue.begin());
         m_rdCond.notify_one();
 
-        if(!wrapper || wrapper->lastBlock >= job.offset || (wrapper->endOfFile > 0 && wrapper->endOfFile <= job.offset))
+        while(!m_rdJobQueue.empty() && m_rdJobQueue.begin()->offset < job.offset + job.size)
+        {
+            m_rdJobQueue.erase(m_rdJobQueue.begin());
+        }
+
+        if(!wrapper || wrapper->lastBlock >= job.offset + job.size || (wrapper->endOfFile > 0 && wrapper->endOfFile <= job.offset))
             continue;
 
         guard.unlock();
@@ -291,6 +296,8 @@ void BufferAgent::writerLoop()
 
         if(!m_agentActive)
             return;
+
+        std::multiset<PrefetchJob, PrefetchJobCompare>::iterator it;
 
         fd_type file = m_wrJobQueue.front();
         write_buffer_ptr wrapper = m_wrCacheMap[file];
