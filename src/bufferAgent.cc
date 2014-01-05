@@ -256,7 +256,7 @@ void BufferAgent::readerLoop()
             {
                 string tmp;
                 off_t effectiveOffset = job.offset + buff.size();
-                int ret = doRead(wrapper->fileName, tmp, job.size - buff.size(), effectiveOffset, &wrapper->ffi);
+                int ret = doRead(wrapper->fileName, tmp, job.size, effectiveOffset, &wrapper->ffi);
                 LOG(INFO) << "Job: offset: " << job.offset << " size: " << job.size << " ret: " << ret;
                 
                 guard.lock();
@@ -268,6 +268,8 @@ void BufferAgent::readerLoop()
                 } else if(ret == 0) {
                     wrapper->endOfFile = std::max(wrapper->endOfFile, effectiveOffset);
                 }
+
+                wrapper->buffer->debugPrint();
 
                 guard.unlock();
             }
