@@ -102,7 +102,7 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
         unique_lock buffGuard(wrapper->mutex);
         
         wrapper->lastBlock = offset;
-        wrapper->blockSize = std::min((size_t) 1024 * 1024, (size_t) std::max(size, 2*wrapper->blockSize));
+        wrapper->blockSize = std::min((size_t) 100 * 1024, (size_t) std::max(size, 2*wrapper->blockSize));
     }
 
     wrapper->buffer->readData(offset, size, buf);
@@ -126,13 +126,13 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
         guard.unlock();
     } else {
         string tmp;
-        size_t prefSize = std::max(wrapper->blockSize, std::max(2*size, (size_t)1024 * 100));
+        size_t prefSize = std::max(2*size, wrapper->blockSize);
         wrapper->buffer->readData(offset + size, prefSize, tmp);
 
         if(tmp.size() != prefSize) {
             guard.lock();
                 m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, offset + size + tmp.size(), wrapper->blockSize));
-                m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, offset + size + tmp.size() + wrapper->blockSize, prefSize));
+                m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, offset + size + tmp.size() + wrapper->blockSize, wrapper->blockSize));
             guard.unlock();
         }
     }
