@@ -52,7 +52,8 @@ int BufferAgent::onOpen(std::string path, ffi_type ffi)
             m_rdCacheMap[path] = lCache;
         }
 
-        m_rdJobQueue.insert(PrefetchJob(path, 0, 10 * 1024 * 1024));
+        m_rdJobQueue.insert(PrefetchJob(path, 0, 512));
+        m_rdJobQueue.insert(PrefetchJob(path, 512, 4096));
         m_rdCond.notify_one();
     }
 
@@ -97,13 +98,14 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
         read_buffer_ptr wrapper = m_rdCacheMap[path];
     guard.unlock();
 
+
     wrapper->buffer->readData(offset, size, buf);
     LOG(INFO) << "Found: " << buf.size() << "bcount: " << wrapper->buffer->blockCount(); 
 
     if(buf.size() < size) {
 
         string buf2;
-        int ret = doRead(path, buf2, size - buf.size(), offset + buf.size(), &wrapper->ffi);
+        int ret = doRead(path, buf2, wrapper->blockSize, offset + buf.size(), &wrapper->ffi);
         if(ret < 0)
             return ret;
 
