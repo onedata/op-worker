@@ -99,6 +99,7 @@ bool FileCache::insertBlock(const FileBlock &block)
 
     string cBuff = block.data;
     off_t offset = block.offset;
+    cout << "AddBlock offset: " << offset << " size: " << cBuff.size() << endl;
 
     do 
     {
