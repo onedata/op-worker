@@ -245,11 +245,6 @@ void BufferAgent::readerLoop()
         m_rdJobQueue.erase(m_rdJobQueue.begin());
         m_rdCond.notify_one();
 
-        while(!m_rdJobQueue.empty() && m_rdJobQueue.begin()->offset < job.offset + job.size)
-        {
-            m_rdJobQueue.erase(m_rdJobQueue.begin());
-        }
-
         if(!wrapper || wrapper->lastBlock >= job.offset + job.size || (wrapper->endOfFile > 0 && wrapper->endOfFile <= job.offset))
             continue;
 
