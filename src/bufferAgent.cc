@@ -16,7 +16,7 @@ BufferAgent::BufferAgent(write_fun w, read_fun r)
     doWrite(w),
     doRead(r)
 {
-    agentStart();
+    agentStart(1);
 }
 BufferAgent::~BufferAgent()
 {
@@ -134,7 +134,7 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
         wrapper->lastBlock = offset;
         if(offset + buf.size() > wrapper->endOfFile)
             wrapper->endOfFile = 0;
-        
+
         wrapper->blockSize = std::min((size_t) 1024 * 1024, (size_t) std::max(size, 2*wrapper->blockSize));
     }
 
@@ -243,7 +243,7 @@ void BufferAgent::readerLoop()
         m_rdJobQueue.pop_front();
         m_rdCond.notify_one();
 
-        if(!wrapper || wrapper->lastBlock >= job.offset || (wrapper->endOfFile > 0 && wrapper->endOfFile < job.offset))
+        if(!wrapper || wrapper->lastBlock >= job.offset || (wrapper->endOfFile > 0 && wrapper->endOfFile <= job.offset))
             continue;
 
         guard.unlock();
