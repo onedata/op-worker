@@ -24,7 +24,7 @@ FileCache::~FileCache()
 bool FileCache::readData(off_t offset, size_t size, std::string &buff)
 {
     boost::unique_lock<boost::recursive_mutex> guard(m_fileBlocksMutex);
-    debugPrint();
+    //debugPrint();
     discardExpired();
     buff.resize(0);
 
@@ -60,7 +60,7 @@ bool FileCache::writeData(off_t offset, const std::string &buff)
 
 void FileCache::debugPrint()
 {
-    return;
+    //return;
     cout << "BlockList:" << endl;
     list<block_ptr>::iterator it = m_fileBlocks.begin();
     while(it != m_fileBlocks.end())
@@ -180,7 +180,7 @@ void FileCache::forceInsertBlock(block_ptr block, std::list<block_ptr>::iterator
     m_byteSize += block->size;
 
     // cout << "Insert: " << block->data << endl;
-    debugPrint();
+    //debugPrint();
 
     if(m_blockExpire.size() == 1)
         return;
