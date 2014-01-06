@@ -66,7 +66,3 @@ event(login) ->
 					wf:redirect(URL)
 			end
 	end.
-
-
-
-%% c("../../../src/veil_modules/control_panel/gui_files/login.erl").

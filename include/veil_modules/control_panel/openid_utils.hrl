@@ -9,8 +9,8 @@
 %% @end
 %% ===================================================================
 
--ifndef(OPENID_HRL).
--define(OPENID_HRL, 1).
+-ifndef(OPENID_UTILS_HRL).
+-define(OPENID_UTILS_HRL, 1).
 
 %% Macros used for checkid_setup phase
 -define(xrds_url, "https://openid.plgrid.pl/gateway").

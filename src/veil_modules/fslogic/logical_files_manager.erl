@@ -32,7 +32,8 @@
 -export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1]).
 
 %% File sharing
--export([get_file_by_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, create_standard_share/1, create_share/2, get_share/1, remove_share/1]).
+-export([get_file_by_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, get_file_user_dependent_name_by_uuid/1]).
+-export([create_standard_share/1, create_share/2, get_share/1, remove_share/1]).
 
 -export([get_ets_name/0]).
 
@@ -46,7 +47,6 @@
 
 %% ct
 -export([getfilelocation/1]).
-
 -export([doUploadTest/4]).
 
 %% ====================================================================
@@ -507,6 +507,34 @@ contact_fslogic(Message, Value) ->
 get_file_by_uuid(UUID) ->
   dao_lib:apply(dao_vfs, get_file, [{uuid, UUID}], 1).
 
+%% get_file_user_dependent_name_by_uuid/1
+%% ====================================================================
+%% @doc Gets file full name relative to user's dir on the basis of uuid.
+%% @end
+-spec get_file_user_dependent_name_by_uuid(UUID :: string()) -> Result when
+  Result :: {ok, FullPath} | {ErrorGeneral, ErrorDetail},
+  FullPath :: string(),
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+get_file_user_dependent_name_by_uuid(UUID) ->
+  case get_file_full_name_by_uuid(UUID) of
+    {ok, FullPath} ->
+      case get(user_id) of
+        undefined -> 
+          {ok, FullPath};
+        UserDN ->
+          case dao_lib:apply(dao_users, get_user, [{dn, UserDN}], 1) of
+            {ok, #veil_document { record=#user { login=Login } } } ->
+              {ok, string:sub_string(FullPath, length(Login ++ "/") + 1)};
+            {ErrorGeneral, ErrorDetail} ->
+              {ErrorGeneral, ErrorDetail}
+          end
+      end;
+    {ErrorGeneral, ErrorDetail} ->
+      {ErrorGeneral, ErrorDetail}
+  end.
+  
 %% get_file_name_by_uuid/1
 %% ====================================================================
 %% @doc Gets file name on the basis of uuid.

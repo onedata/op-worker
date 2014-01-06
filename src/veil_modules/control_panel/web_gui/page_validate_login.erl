@@ -56,5 +56,3 @@ body() ->
 					end	
 			end
 	end.
-
-%% c("../../../src/veil_modules/control_panel/gui_files/validate_login.erl").

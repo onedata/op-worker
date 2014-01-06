@@ -9,6 +9,9 @@
 %% @end
 %% ===================================================================
 
+-ifndef(NITROGEN_RECORDS_HRL).
+-define(NITROGEN_RECORDS_HRL, 1).
+
 % Button with additional fields
 -record(bootstrap_button, {?ELEMENT_BASE(bootstrap_button), 
     text="", 
@@ -59,3 +62,5 @@
     multiple=false,
     target_dir="/"
 }).
+
+-endif.

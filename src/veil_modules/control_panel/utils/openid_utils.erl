@@ -14,7 +14,7 @@
 
 -include_lib("xmerl/include/xmerl.hrl"). 
 -include_lib("ibrowse/include/ibrowse.hrl").
--include("veil_modules/control_panel/openid.hrl").
+-include("veil_modules/control_panel/openid_utils.hrl").
 
 
 %% ====================================================================

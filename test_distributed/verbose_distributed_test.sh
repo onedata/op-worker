@@ -31,7 +31,7 @@ cd distributed_tests_out
 cp -R ../cacerts .
 cp -R ../c_lib/ .
 cp -R ../src/veil_modules/dao/views .
-cp -R ../src/veil_modules/control_panel/gui_files/gui_static .
+cp -R ../src/gui_static .
 cp -R ../config/sys.config .
 
 if [ $# -gt 0 ]
@@ -61,6 +61,10 @@ do
         TEST_NAME=`basename "$TEST" ".spec"`
         echo "{ct_hooks, [{cth_surefire, [{path,\"TEST-$TEST_NAME-report.xml\"}]}]}." >> $TEST
     fi
+    rm -rf /tmp/veilfs
+    rm -rf /tmp/veilfs2
+    mkdir /tmp/veilfs
+    mkdir /tmp/veilfs2
     ct_run -pa ../deps/**/ebin -pa ../ebin -pa ./ -noshell -name tester -setcookie $COOKIE -spec  $TEST
 done
 
