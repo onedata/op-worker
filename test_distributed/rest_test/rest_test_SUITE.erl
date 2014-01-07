@@ -23,6 +23,10 @@
 -define(SH, "DirectIO").
 -define(TEST_ROOT, ["/tmp/veilfs"]). %% Root of test filesystem
 
+-define(REST_FILES_SUBPATH, "files/").
+-define(REST_ATTRS_SUBPATH, "attrs/").
+-define(REST_SHARE_SUBPATH, "shares/").
+
 
 all() -> [main_test].
 
@@ -50,8 +54,8 @@ main_test(Config) ->
     ibrowse:start(),
 
     % Test if REST requests return what is expected
-    test_rest_files_content_dirs(),
-    test_rest_files_content_regulars(),
+    test_rest_files_dirs(),
+    test_rest_files_regulars(),
     test_rest_files_attr(),
     test_rest_shares(),
 
@@ -65,101 +69,101 @@ main_test(Config) ->
 %% ====================================================================
 
 % Tests the functionality of rest_files_content module, concerning dirs as resources
-test_rest_files_content_dirs() ->
-    {Code1, Headers1, Response1} = do_request("files/content/", get, [], []),
+test_rest_files_dirs() ->
+    {Code1, Headers1, Response1} = do_request(?REST_FILES_SUBPATH, get, [], []),
     ?assertEqual(Code1, "200"),
     ?assertEqual(proplists:get_value("content-type", Headers1), "application/json"),
     ?assertEqual(Response1, "[\"dir1\",\"groups\"]"),
 
-    {Code2, Headers2, Response2} = do_request("files/content/dir1", get, [], []),
+    {Code2, Headers2, Response2} = do_request(?REST_FILES_SUBPATH ++ "dir1", get, [], []),
     ?assertEqual(Code2, "200"),
     ?assertEqual(proplists:get_value("content-type", Headers2), "application/json"),
     ?assertEqual(Response2, "[\"file.txt\"]"),
 
-    {Code3, Headers3, Response3} = do_request("files/content/dir1gfhdfgh", get, [], []),
+    {Code3, Headers3, Response3} = do_request(?REST_FILES_SUBPATH ++ "dir1gfhdfgh", get, [], []),
     ?assertEqual(Code3, "404"),
     ?assertEqual(proplists:get_value("content-type", Headers3), "application/json"),
     ?assertEqual(Response3, []),
 
-    {Code4, _Headers4, Response4} = do_request("files/content/dir1", put, [], []),
+    {Code4, _Headers4, Response4} = do_request(?REST_FILES_SUBPATH ++ "dir1", put, [], []),
     ?assertEqual(Code4, "405"),
     ?assertEqual(Response4, []),
 
-    {Code5, _Headers5, Response5} = do_request("files/content/", post, [], []),
+    {Code5, _Headers5, Response5} = do_request(?REST_FILES_SUBPATH, post, [], []),
     ?assertEqual(Code5, "405"),
     ?assertEqual(Response5, []),
 
-    {Code6, _Headers6, Response6} = do_request("files/content/dir1", delete, [], []),
+    {Code6, _Headers6, Response6} = do_request(?REST_FILES_SUBPATH ++ "dir1", delete, [], []),
     ?assertEqual(Code6, "405"),
     ?assertEqual(Response6, []).
 
 
 % Tests the functionality of rest_files_content module, concerning regular files as resources
-test_rest_files_content_regulars() ->
-    {Code3, _Headers3, Response3} = do_request("files/content/somefile.txt", get, [], []),
+test_rest_files_regulars() ->
+    {Code3, _Headers3, Response3} = do_request(?REST_FILES_SUBPATH ++ "somefile.txt", get, [], []),
     ?assertEqual(Code3, "404"),
     ?assertEqual(Response3, []),
 
-    {Code4, Headers4, Response4} = do_request("files/content/dir1%2Ffile.txt", get, [], []),
+    {Code4, Headers4, Response4} = do_request(?REST_FILES_SUBPATH ++ "dir1%2Ffile.txt", get, [], []),
     ?assertEqual(Code4, "200"),
     ?assertEqual(proplists:get_value("content-type", Headers4), "text/plain"),
     ?assert(proplists:get_value("content-disposition", Headers4) /= undefined),
     ?assertEqual(Response4, ""),
 
-    {Code5, _Headers5, Response5} = do_request("files/content/dir1%2Ffile.txt", post, [], []),
+    {Code5, _Headers5, Response5} = do_request(?REST_FILES_SUBPATH ++ "dir1%2Ffile.txt", post, [], []),
     ?assertEqual(Code5, "405"),
     ?assertEqual(Response5, []),
 
-    {Code6, _Headers6, Response6} = do_request("files/content/dir1%2Ffile.txt", delete, [], []),
+    {Code6, _Headers6, Response6} = do_request(?REST_FILES_SUBPATH ++ "dir1%2Ffile.txt", delete, [], []),
     ?assertEqual(Code6, "405"),
     ?assertEqual(Response6, []),
 
-    {Code7, _Headers7, Response7} = do_request("files/content/dir1%2Ffile.txt", put, [], []),
+    {Code7, _Headers7, Response7} = do_request(?REST_FILES_SUBPATH ++ "dir1%2Ffile.txt", put, [], []),
     ?assertEqual(Code7, "405"),
     ?assertEqual(Response7, []).
 
 
 % Tests the functionality of rest_attr module
 test_rest_files_attr() ->
-    {Code1, _Headers1, Response1} = do_request("files/attr/", get, [], []),
+    {Code1, _Headers1, Response1} = do_request(?REST_ATTRS_SUBPATH, get, [], []),
     ?assertEqual(Code1, "405"),
     ?assertEqual(Response1, []),
 
-    {Code2, Headers2, Response2} = do_request("files/attr/dir1", get, [], []),
+    {Code2, Headers2, Response2} = do_request(?REST_ATTRS_SUBPATH ++ "dir1", get, [], []),
     ?assertEqual(Code2, "200"),
     ?assertEqual(proplists:get_value("content-type", Headers2), "application/json"),
     ?assert(Response2 /= []),
 
-    {Code3, Headers3, Response3} = do_request("files/attr/dir1gfhdfgh", get, [], []),
+    {Code3, Headers3, Response3} = do_request(?REST_ATTRS_SUBPATH ++ "dir1gfhdfgh", get, [], []),
     ?assertEqual(Code3, "404"),
     ?assertEqual(proplists:get_value("content-type", Headers3), "application/json"),
     ?assertEqual(Response3, []),
 
-    {Code4, _Headers4, Response4} = do_request("files/attr/dir1", put, [], []),
+    {Code4, _Headers4, Response4} = do_request(?REST_ATTRS_SUBPATH ++ "dir1", put, [], []),
     ?assertEqual(Code4, "405"),
     ?assertEqual(Response4, []),
 
-    {Code5, _Headers5, Response5} = do_request("files/attr/", post, [], []),
+    {Code5, _Headers5, Response5} = do_request(?REST_ATTRS_SUBPATH, post, [], []),
     ?assertEqual(Code5, "405"),
     ?assertEqual(Response5, []),
 
-    {Code6, _Headers6, Response6} = do_request("files/attr/dir1", delete, [], []),
+    {Code6, _Headers6, Response6} = do_request(?REST_ATTRS_SUBPATH ++ "dir1", delete, [], []),
     ?assertEqual(Code6, "405"),
     ?assertEqual(Response6, []).
     
 
 % Tests the functionality of rest_shares module
 test_rest_shares() ->
-    {Code1, Headers1, Response1} = do_request("shares/", get, [], []),
+    {Code1, Headers1, Response1} = do_request(?REST_SHARE_SUBPATH, get, [], []),
     ?assertEqual(Code1, "200"),
     ?assertEqual(proplists:get_value("content-type", Headers1), "application/json"),
     ?assertEqual(Response1, "[]"),
 
-    {Code2, _Headers2, Response2} = do_request("shares/", post, [{"content-type", "application/json"}], [<<"\"dir1/file.txt\"">>]),
+    {Code2, _Headers2, Response2} = do_request(?REST_SHARE_SUBPATH, post, [{"content-type", "application/json"}], [<<"\"dir1/file.txt\"">>]),
     ?assertEqual(Code2, "303"),
     ?assertEqual(Response2, []),
 
-    {Code3, Headers3, Response3} = do_request("shares/", get, [], []),
+    {Code3, Headers3, Response3} = do_request(?REST_SHARE_SUBPATH, get, [], []),
     ?assertEqual(Code3, "200"),
     ?assertEqual(proplists:get_value("content-type", Headers3), "application/json"),
     ?assert(Response3 /= []),
@@ -168,7 +172,7 @@ test_rest_shares() ->
     "]\"" ++ ReversedShareID = lists:reverse(ShareIDWithBracket), 
     ShareID = lists:reverse(ReversedShareID),
 
-    {Code4, Headers4, Response4} = do_request("shares/" ++ ShareID, get, [], []),
+    {Code4, Headers4, Response4} = do_request(?REST_SHARE_SUBPATH ++ ShareID, get, [], []),
     ?assertEqual(Code4, "200"),
     ?assertEqual(proplists:get_value("content-type", Headers4), "application/json"),
     {ok, Port} = rpc:call(get(ccm), application, get_env, [veil_cluster_node, control_panel_port]),
@@ -179,17 +183,17 @@ test_rest_shares() ->
     DlPath = Hostname ++ ?shared_files_download_path ++ ShareID,
     ?assertEqual(Response4, "{\"file_path\":\"dir1/file.txt\",\"download_path\":\"" ++ DlPath ++ "\"}"),
 
-    {Code5, Headers5, Response5} = do_request("shares/" ++ ShareID, delete, [], []),
+    {Code5, Headers5, Response5} = do_request(?REST_SHARE_SUBPATH ++ ShareID, delete, [], []),
     ?assertEqual(Code5, "204"),
     ?assertEqual(proplists:get_value("content-type", Headers5), "application/json"),
     ?assertEqual(Response5, []),
 
-    {Code6, Headers6, Response6} = do_request("shares/" ++ ShareID, delete, [], []),
+    {Code6, Headers6, Response6} = do_request(?REST_SHARE_SUBPATH ++ ShareID, delete, [], []),
     ?assertEqual(Code6, "404"),
     ?assertEqual(proplists:get_value("content-type", Headers6), "application/json"),
     ?assertEqual(Response6, []),
 
-    {Code7, _Headers7, Response7} = do_request("shares/dir1", put, [], []),
+    {Code7, _Headers7, Response7} = do_request(?REST_SHARE_SUBPATH ++ "dir1", put, [], []),
     ?assertEqual(Code7, "405"),
     ?assertEqual(Response7, []).
     
