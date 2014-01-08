@@ -52,8 +52,8 @@ int BufferAgent::onOpen(std::string path, ffi_type ffi)
             m_rdCacheMap[path] = lCache;
         }
 
-        m_rdJobQueue.insert(PrefetchJob(path, 0, 512));
-        m_rdJobQueue.insert(PrefetchJob(path, 512, 4096));
+        m_rdJobQueue.insert(PrefetchJob(path, 0, 512, ffi->fh));
+        m_rdJobQueue.insert(PrefetchJob(path, 512, 4096, ffi->fh));
         m_rdCond.notify_one();
     }
 
@@ -101,7 +101,7 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
     {   
         unique_lock buffGuard(wrapper->mutex);
         
-        wrapper->lastBlock = offset;
+        wrapper->lastBlock[ffi->fh] = offset;
         wrapper->blockSize = std::min((size_t) 100 * 1024, (size_t) std::max(size, 2*wrapper->blockSize));
     }
 
@@ -122,7 +122,7 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
         //DLOG(INFO) << "doRead ret: " << ret << " bufSize: " << buf2.size() << " globalBufSize: " << buf.size() ;
 
         guard.lock();
-            m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, offset + buf.size(), wrapper->blockSize));
+            m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, offset + buf.size(), wrapper->blockSize, ffi->fh));
         guard.unlock();
     } else {
         string tmp;
@@ -131,8 +131,8 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
 
         if(tmp.size() != prefSize) {
             guard.lock();
-                m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, offset + size + tmp.size(), wrapper->blockSize));
-                m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, offset + size + tmp.size() + wrapper->blockSize, wrapper->blockSize));
+                m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, offset + size + tmp.size(), wrapper->blockSize, ffi->fh));
+                m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, offset + size + tmp.size() + wrapper->blockSize, wrapper->blockSize, ffi->fh));
             guard.unlock();
         }
     }
@@ -186,6 +186,7 @@ int BufferAgent::onRelease(std::string path, ffi_type ffi)
 {
     {
         unique_lock guard(m_wrMutex);
+        
         m_wrCacheMap.erase(ffi->fh);
         m_wrJobQueue.remove(ffi->fh);
     }
@@ -249,7 +250,7 @@ void BufferAgent::readerLoop()
         m_rdJobQueue.erase(m_rdJobQueue.begin());
         m_rdCond.notify_one();
 
-        if(!wrapper || wrapper->lastBlock >= job.offset + job.size || (wrapper->endOfFile > 0 && wrapper->endOfFile <= job.offset))
+        if(!wrapper || wrapper->lastBlock[job.fh] >= job.offset + job.size || (wrapper->endOfFile > 0 && wrapper->endOfFile <= job.offset))
             continue;
 
         guard.unlock();
@@ -270,7 +271,7 @@ void BufferAgent::readerLoop()
 
                 if(ret > 0 && tmp.size() >= ret) {
                     wrapper->buffer->writeData(effectiveOffset, tmp);
-                    m_rdJobQueue.insert(PrefetchJob(job.fileName, effectiveOffset + ret, wrapper->blockSize));
+                    m_rdJobQueue.insert(PrefetchJob(job.fileName, effectiveOffset + ret, wrapper->blockSize, job.fh));
                 } else if(ret == 0) {
                     wrapper->endOfFile = std::max(wrapper->endOfFile, effectiveOffset);
                 }

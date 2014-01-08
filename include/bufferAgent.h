@@ -64,11 +64,13 @@ public:
         std::string     fileName;
         off_t           offset;
         size_t          size;
+        fd_type         fh;
 
-        PrefetchJob(std::string &fileName, off_t offset, size_t size) 
+        PrefetchJob(std::string &fileName, off_t offset, size_t size, fd_type fh) 
           : fileName(fileName),
             offset(offset),
-            size(size)
+            size(size),
+            fh(fh)
         {
         }
 
