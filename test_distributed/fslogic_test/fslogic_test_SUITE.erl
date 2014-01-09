@@ -191,7 +191,7 @@ groups_test(Config) ->
     gen_server:cast({global, ?CCM}, {set_monitoring, on}),
     timer:sleep(100),
     gen_server:cast({global, ?CCM}, init_cluster),
-    timer:sleep(1500),
+    timer:sleep(3500),
 
     %% files_manager call with given user's DN
     FM = fun(M, A, DN) ->

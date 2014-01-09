@@ -88,7 +88,7 @@ main_test(Config) ->
   ?assertEqual(PongsNum, length(Jobs) * length(Ports)),
 
   nodes_manager:stop_node(CCM),
-  timer:sleep(7000),
+  timer:sleep(9000),
   ?assertEqual(CCM2, gen_server:call({global, ?CCM}, get_ccm_node)),
 
   {Workers2, StateNum2} = gen_server:call({global, ?CCM}, get_workers),
