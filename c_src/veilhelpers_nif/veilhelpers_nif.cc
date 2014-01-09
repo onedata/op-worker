@@ -158,6 +158,8 @@ static ERL_NIF_TERM sh_read(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
     char *tmp = (char *) enif_make_new_binary(env, (ret > 0 ? ret : 0), &bin);
     memcpy(tmp, buff, (ret > 0 ? ret : 0));
 
+    delete[] buff;
+
     return enif_make_tuple2(env, enif_make_int(env, ret), bin);
 }
 
