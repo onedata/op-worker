@@ -18,12 +18,12 @@
 -include("registered_names.hrl").
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([dns_worker_env_test/1, dns_udp_handler_responds_to_dns_queries/1, dns_ranch_tcp_handler_responds_to_dns_queries/1]).
+-export([dns_worker_env_test/1, dns_udp_handler_responds_to_dns_queries/1, dns_ranch_tcp_handler_responds_to_dns_queries/1, distributed_test/1]).
 
 %% export nodes' codes
--export([dns_worker_env_test_code/0]).
+-export([dns_worker_env_test_code/0, ccm_code1/0, ccm_code2/0, worker_code/0]).
 
-all() -> [dns_worker_env_test, dns_ranch_tcp_handler_responds_to_dns_queries, dns_udp_handler_responds_to_dns_queries].
+all() -> [dns_worker_env_test, dns_ranch_tcp_handler_responds_to_dns_queries, dns_udp_handler_responds_to_dns_queries, distributed_test].
 
 
 %% ====================================================================
@@ -91,9 +91,98 @@ dns_ranch_tcp_handler_responds_to_dns_queries(Config) ->
     gen_tcp:close(Socket)
   end.
 
+%% This test checks if dns works well with multi-node cluster
+distributed_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+
+  [CCM | WorkerNodes] = NodesUp,
+  DNS_Port = 1308,
+  Host = get_host(CCM),
+
+  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
+  timer:sleep(500),
+  RunWorkerCode = fun(Node) ->
+    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, []))
+  end,
+  lists:foreach(RunWorkerCode, WorkerNodes),
+  timer:sleep(500),
+  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
+  timer:sleep(1500),
+
+  {Workers, _} = gen_server:call({global, ?CCM}, get_workers),
+  StartAdditionalWorker = fun(Node) ->
+    case lists:member({Node, fslogic}, Workers) of
+      true -> ok;
+      false ->
+        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, fslogic, []}),
+        ?assertEqual(ok, StartAns)
+    end
+  end,
+  lists:foreach(StartAdditionalWorker, NodesUp),
+  timer:sleep(1000),
+
+  {ConAns, Socket} = gen_tcp:connect(Host, DNS_Port, [{active, false}, binary, {packet, 2}]),
+  ?assertEqual(ok, ConAns),
+
+  Request = create_request("dns_worker.veilfs.plgrid.pl"),
+  Sender = fun () -> gen_tcp:send(Socket, Request) end,
+
+  Request2 = create_request("control_panel.veilfs.plgrid.pl"),
+  Sender2 = fun () -> gen_tcp:send(Socket, Request2) end,
+
+  Request3 = create_request("fslogic.veilfs.plgrid.pl"),
+  Sender3 = fun () -> gen_tcp:send(Socket, Request3) end,
+
+  Request4 = create_request("veilfs.plgrid.pl"),
+  Sender4 = fun () -> gen_tcp:send(Socket, Request4) end,
+
+  Request5 = create_request("www.veilfs.plgrid.pl"),
+  Sender5 = fun () -> gen_tcp:send(Socket, Request5) end,
+
+  Request6 = create_request("xxx.cluster.veilfs.plgrid.pl"),
+  Sender6 = fun () -> gen_tcp:send(Socket, Request6) end,
+
+  Receiver = fun () -> gen_tcp:recv(Socket, 0, infinity) end,
+
+  try
+    send_message_and_assert_results(Sender, Receiver, 2),
+    send_message_and_assert_results(Sender2, Receiver),
+    send_message_and_assert_results(Sender3, Receiver, 4),
+    send_message_and_assert_results(Sender4, Receiver),
+    send_message_and_assert_results(Sender5, Receiver),
+    send_message_and_assert_results(Sender6, Receiver, any),
+
+    send_message_and_assert_results(Sender, Receiver, 2),
+    send_message_and_assert_results(Sender2, Receiver),
+    send_message_and_assert_results(Sender3, Receiver, 4),
+    send_message_and_assert_results(Sender4, Receiver),
+    send_message_and_assert_results(Sender5, Receiver),
+    send_message_and_assert_results(Sender6, Receiver, any)
+  after
+    gen_tcp:close(Socket)
+  end.
+
 %% ====================================================================
 %% SetUp and TearDown functions
 %% ====================================================================
+
+init_per_testcase(distributed_test, Config) ->
+  ?INIT_DIST_TEST,
+  nodes_manager:start_deps_for_tester_node(),
+
+  NodesUp = nodes_manager:start_test_on_nodes(4),
+  [CCM | _] = NodesUp,
+  DBNode = nodes_manager:get_db_node(),
+
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [
+    [{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}],
+    [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}],
+    [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}]]),
+
+  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
+  lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config);
 
 init_per_testcase(_, Config) ->
   ?INIT_DIST_TEST,
@@ -109,6 +198,15 @@ init_per_testcase(_, Config) ->
   Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
   lists:append([{dns_port, DNS_Port}, {nodes, NodesUp}, {assertions, Assertions}], Config).
 
+
+end_per_testcase(distributed_test, Config) ->
+  Nodes = ?config(nodes, Config),
+  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
+  StopAns = nodes_manager:stop_nodes(Nodes),
+  nodes_manager:stop_deps_for_tester_node(),
+
+  ?assertEqual(false, lists:member(error, StopLog)),
+  ?assertEqual(ok, StopAns);
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
@@ -155,8 +253,9 @@ get_host(Node) ->
 
 %% Helper function creating sample binary dns request
 create_request() ->
-  SupportedDomain = "dns_worker",
+  create_request("dns_worker").
 
+create_request(SupportedDomain) ->
   RequestHeader = #dns_header{id = 1, qr = false, opcode = ?QUERY, rd = 1},
   RequestQuery = #dns_query{domain=SupportedDomain, type=?T_A,class=?C_IN},
   Request = #dns_rec{header=RequestHeader, qdlist=[RequestQuery], anlist=[], nslist=[], arlist=[]},
@@ -166,6 +265,9 @@ create_request() ->
 
 %% Helper function sending request and asserting returned response
 send_message_and_assert_results(Sender, Receiver) ->
+  send_message_and_assert_results(Sender, Receiver, 1).
+
+send_message_and_assert_results(Sender, Receiver, IPsNum) ->
   SendAns = Sender(),
   ?assertEqual(ok, SendAns),
 
@@ -176,7 +278,14 @@ send_message_and_assert_results(Sender, Receiver) ->
   ?assertEqual(ok, DecodeAns),
 
   Header = Response#dns_rec.header,
-  ?assertEqual(?NOERROR, Header#dns_header.rcode).
+  ?assertEqual(?NOERROR, Header#dns_header.rcode),
+
+  case IPsNum of
+    any ->
+      ?assert(length(Response#dns_rec.anlist) >= 1);
+    _ ->
+      ?assertEqual(IPsNum, length(Response#dns_rec.anlist))
+  end.
 
 
 %% Helper function returning type of expression
@@ -211,3 +320,20 @@ assert_all_deps_are_met(Application, Module) when is_atom(Module) ->
 
   Dependencies = Module:env_dependencies(),
   assert_all_deps_are_met(Application, Dependencies).
+
+%% ====================================================================
+%% Code of nodes used during the test
+%% ====================================================================
+
+ccm_code1() ->
+  gen_server:cast(?Node_Manager_Name, do_heart_beat),
+  gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  ok.
+
+ccm_code2() ->
+  gen_server:cast({global, ?CCM}, init_cluster),
+  ok.
+
+worker_code() ->
+  gen_server:cast(?Node_Manager_Name, do_heart_beat),
+  ok.

@@ -1091,6 +1091,8 @@ get_new_file_id(File, UserDoc, Root, SHInfo, ProtocolVersion) ->
 create_dirs(Count, CountingBase, SHInfo, TmpAns) ->
   case Count > CountingBase of
     true ->
+      {S1,S2,S3} = now(),
+      random:seed(S1,S2,S3),
       DirName = TmpAns ++ integer_to_list(random:uniform(CountingBase)) ++ "/",
       case storage_files_manager:mkdir(SHInfo, DirName) of
         ok -> create_dirs(Count div CountingBase, CountingBase, SHInfo, DirName);

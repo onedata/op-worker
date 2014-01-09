@@ -97,7 +97,7 @@ update_dns_state__one_dns_worker() ->
   Load = [{'node@127.0.0.1', 3, [{dns_worker, 1}]}],
   Avg = 3,
 
-	expect_update_state(DNS_Gen_Server, [{dns_worker, [{{127,0,0,1}, 1}]}]),
+	expect_update_state(DNS_Gen_Server, [{dns_worker, [{{127,0,0,1}, 1}]}], [{{127,0,0,1}, 3}]),
 
 	try
 		cluster_manager:update_dns_state(OneDnsWorker, Load, Avg)
@@ -177,7 +177,7 @@ update_dns_state__many_non_dns_workers_one_dns_worker() ->
 		{module, [{{192,168,0,50}, 1}, {{192,168,0,40}, 1}, {{192,168,0,30}, 1}, {{192,168,0,20}, 1}, {{192,168,0,10}, 1}]}
 	],
 
-	expect_update_state(DNS_Worker, Expected_DNS_State),
+	expect_update_state(DNS_Worker, Expected_DNS_State, [{{192,168,0,60}, 3}, {{192,168,0,10}, 3}, {{192,168,0,20}, 3}, {{192,168,0,30}, 3}, {{192,168,0,40}, 3}, {{192,168,0,50}, 3}]),
 
 	try
 		cluster_manager:update_dns_state(Workers, Load2, Avg)
@@ -217,7 +217,9 @@ update_dns_state__many_non_dns_workers_one_dns_worker_errors() ->
     {module3, [{{192,168,1,1}, 1}]}
   ],
 
-  expect_update_state(DNS_Worker, Expected_DNS_State),
+  ExpectedNodes = [{{192,168,1,1}, error}, {{192,168,0,60}, 3}, {{192,168,0,10}, 3}, {{192,168,0,20}, 3}, {{192,168,0,30}, 3}, {{192,168,0,40}, 3}, {{192,168,0,50}, 3}],
+
+  expect_update_state(DNS_Worker, Expected_DNS_State, ExpectedNodes),
 
   try
     cluster_manager:update_dns_state(Workers, Load2, Avg)
@@ -294,7 +296,10 @@ update_dns_state__many_non_dns_workers_many_dns_workers() ->
     {module, [{{192,168,0,50}, 1}, {{192,168,0,40}, 1}, {{192,168,0,30}, 1}, {{192,168,0,20}, 1}, {{192,168,0,10}, 1}]}
   ],
 
-  expect_update_state(DNS_Workers, Expected_DNS_State),
+  ExpectedNodes = [{{192,168,0,10}, 3}, {{192,168,0,20}, 3}, {{192,168,0,30}, 3}, {{192,168,0,40}, 3}, {{192,168,0,50}, 3},
+    {{192,168,0,60}, 3}, {{192,168,0,70}, 3}, {{192,168,0,80}, 3}, {{192,168,0,90}, 3}, {{192,168,0,100}, 3}],
+
+  expect_update_state(DNS_Workers, Expected_DNS_State, ExpectedNodes),
 
   try
     cluster_manager:update_dns_state(Workers, Load, Avg)
@@ -359,7 +364,7 @@ update_dns_state_with_wrong_ip_address(NodeName) ->
   Load = [{NodeName, 3, [{dns_worker, 1}]}],
   Avg = 3,
 
-	expect_update_state(DNS_Gen_Server, []),
+	expect_update_state(DNS_Gen_Server, [], []),
 
 	cluster_manager:update_dns_state(OneDnsWorker, Load, Avg),
 
@@ -381,14 +386,15 @@ expect_load_info(Gen_Server) ->
 	expect_load_info(Gen_Server, 1000).
 
 %% Helper function for setting update_state mock expectation with specified state.
-expect_update_state(Gen_Servers, Expected_State)  when is_list(Gen_Servers) ->
+expect_update_state(Gen_Servers, Expected_State, ExpectedNodes)  when is_list(Gen_Servers) ->
 	lists:foreach(fun(Gen_Server) ->
-		expect_update_state(Gen_Server, Expected_State)
+		expect_update_state(Gen_Server, Expected_State, ExpectedNodes)
 	end, Gen_Servers);
 
-expect_update_state(Gen_Server, Expected_State) ->
-	gen_server_mock:expect_cast(Gen_Server,	fun({asynch, 1, {update_state, Actual_State}}, _State) ->
-		?assertEqual(Expected_State, Actual_State)
+expect_update_state(Gen_Server, Expected_State, ExpectedNodes) ->
+	gen_server_mock:expect_cast(Gen_Server,	fun({asynch, 1, {update_state, Actual_State, Nodes, _}}, _State) ->
+		?assertEqual(Expected_State, Actual_State),
+    ?assertEqual(ExpectedNodes, Nodes)
 	end).
 
 %% Helper function - shortcut for gen_server_mock:assert_expectations and gen_server_mock:stop.

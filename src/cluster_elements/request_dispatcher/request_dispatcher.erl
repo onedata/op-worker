@@ -14,6 +14,7 @@
 -include("registered_names.hrl").
 -include("records.hrl").
 -include("modules_and_args.hrl").
+-include("logging.hrl").
 
 -define(CALLBACKS_TABLE, "dispatcher_callbacks_table").
 
@@ -137,7 +138,12 @@ handle_call({Task, ProtocolVersion, AnsPid, MsgId, Request}, _From, State) ->
   case Ans of
     {Node, NewState} ->
       case Node of
-        non -> {reply, worker_not_found, State};
+        non ->
+          case Task of
+            central_logger -> ok;
+            _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+          end,
+          {reply, worker_not_found, State};
         _N ->
           gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}),
           {reply, ok, NewState}
@@ -150,7 +156,12 @@ handle_call({Task, ProtocolVersion, AnsPid, Request}, _From, State) ->
   case Ans of
     {Node, NewState} ->
       case Node of
-        non -> {reply, worker_not_found, State};
+        non ->
+          case Task of
+            central_logger -> ok;
+            _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+          end,
+          {reply, worker_not_found, State};
         _N ->
           gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, {proc, AnsPid}}),
           {reply, ok, NewState}
@@ -163,7 +174,12 @@ handle_call({Task, ProtocolVersion, Request}, _From, State) ->
   case Ans of
     {Node, NewState} ->
       case Node of
-        non -> {reply, worker_not_found, State};
+        non ->
+          case Task of
+            central_logger -> ok;
+            _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+          end,
+          {reply, worker_not_found, State};
         _N ->
           gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request}),
           {reply, ok, NewState}
@@ -176,7 +192,12 @@ handle_call({node_chosen, {Task, ProtocolVersion, AnsPid, Request}}, _From, Stat
   case Ans of
     {Node, NewState} ->
       case Node of
-        non -> {reply, worker_not_found, State};
+        non ->
+          case Task of
+            central_logger -> ok;
+            _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+          end,
+          {reply, worker_not_found, State};
         _N ->
           gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, {proc, AnsPid}}),
           {reply, ok, NewState}
@@ -189,7 +210,12 @@ handle_call({node_chosen, {Task, ProtocolVersion, AnsPid, MsgId, Request}}, _Fro
   case Ans of
     {Node, NewState} ->
       case Node of
-        non -> {reply, worker_not_found, State};
+        non ->
+          case Task of
+            central_logger -> ok;
+            _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+          end,
+          {reply, worker_not_found, State};
         _N ->
           gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}),
           {reply, ok, NewState}
@@ -202,7 +228,12 @@ handle_call({node_chosen, {Task, ProtocolVersion, Request}}, _From, State) ->
   case Ans of
     {Node, NewState} ->
       case Node of
-        non -> {reply, worker_not_found, State};
+        non ->
+          case Task of
+            central_logger -> ok;
+            _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+          end,
+          {reply, worker_not_found, State};
         _N ->
           gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request}),
           {reply, ok, NewState}
@@ -637,7 +668,7 @@ get_callback(Fuse) ->
   Callbacks = ets:lookup(get_ets_name(), Fuse),
   case Callbacks of
     [{Fuse, CallbacksList}] ->
-      Num = random:uniform(length(CallbacksList)),
+      Num = random:uniform(length(CallbacksList)), %% if it will be moved to other proc than dispatcher the seed shoud be initialized
       lists:nth(Num, CallbacksList);
     _ ->
       not_found

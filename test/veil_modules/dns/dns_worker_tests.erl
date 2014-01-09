@@ -35,6 +35,8 @@ dns_test_() ->
 		{inorder, [
 					?_test(get_workers()),
           ?_test(get_workers_mamy_times()),
+          ?_test(get_control_panel_mamy_times()),
+          ?_test(get_nodes_mamy_times()),
 					?_test(update_state())
 				  ]
 		}
@@ -46,34 +48,80 @@ dns_test_() ->
 
 %% Checks if dns worker can handle get_workers message with different initial states
 get_workers() ->
-	OneModule = {[{sample_module, [{{127,0,0,1}, 1, 1}, {{192,168,0,1}, 1, 1}]}],
+	OneModule = {[{sample_module, [{{127,0,0,1}, 1, 1}, {{192,168,0,1}, 1, 1}]}], [{{127,0,0,1}, 3}, {{192,168,0,1}, 3}], 3,
 				   sample_module, [{192,168,0,1}, {127,0,0,1}]},
 
-	ModuleWithNoWorkers = {[{sample_module, []}],
+	ModuleWithNoWorkers = {[{sample_module, []}], [], 0,
 								sample_module, []},
 
-	NonExistingModule = {[{sample_module, [{{127,0,0,1}, 1, 1}]}],
+	NonExistingModule = {[{sample_module, [{{127,0,0,1}, 1, 1}]}], [{{127,0,0,1}, 3}], 3,
 						   different_sample_module, []},
 
 	ManyModules = {[{sample_module, [{{127,0,0,1}, 1, 1}]},
 					{sample_module2, [{{192,168,0,1}, 1, 1}]}
-				   ], sample_module, [{127,0,0,1}]},
+				   ], [{{127,0,0,1}, 3}, {{192,168,0,1}, 3}], 3,
+          sample_module, [{127,0,0,1}, any]},
 
 	TestCases = [OneModule, ModuleWithNoWorkers, NonExistingModule, ManyModules],
 
-	lists:foreach(fun ({InitialState, Module, ExpectedResults}) ->
-			get_workers_with_initial_state_and_expected_response(#dns_worker_state{workers_list = InitialState}, [{Module, {ok, ExpectedResults}}])
+	lists:foreach(fun ({InitialState, NLoads, AvgLoad, Module, ExpectedResults}) ->
+			get_workers_with_initial_state_and_expected_response(#dns_worker_state{workers_list = InitialState, nodes_list = NLoads, avg_load = AvgLoad},
+        [{Module, {ok, ExpectedResults}}])
 		end, TestCases).
 
 %% Checks if dns worker can handle get_workers message many times
 get_workers_mamy_times() ->
   InitialState = [{sample_module, [{{127,0,0,1}, 3, 3}, {{192,168,0,1}, 1, 1}, {{150,100,0,1}, 2, 2}]}, {sample_module2, [{{127,0,0,1}, 1, 1}]}],
-  TestCases = [{sample_module, {ok, [{150,100,0,1}, {192,168,0,1}, {127,0,0,1}]}}, {sample_module, {ok, [{192,168,0,1}]}},
+  NLoads = [{{127,0,0,1}, 4}, {{192,168,0,1}, 1}, {{150,100,0,1}, 2}],
+  AvgLoad = 7/3,
+  TestCases = [{sample_module, {ok, [{150,100,0,1}, {192,168,0,1}, {127,0,0,1}]}}, {sample_module, {ok, [{192,168,0,1}, any]}},
     {sample_module, {ok, [{150,100,0,1}, {192,168,0,1}]}}, {sample_module, {ok, [{127,0,0,1}, {192,168,0,1}]}},
-    {sample_module, {ok, [{150,100,0,1}, {192,168,0,1}]}}, {sample_module, {ok, [{192,168,0,1}]}},
-    {sample_module, {ok, [{150,100,0,1}, {192,168,0,1}, {127,0,0,1}]}}, {sample_module2, {ok, [{127,0,0,1}]}}],
+    {sample_module, {ok, [{150,100,0,1}, {192,168,0,1}]}}, {sample_module, {ok, [{192,168,0,1}, any]}},
+    {sample_module, {ok, [{150,100,0,1}, {192,168,0,1}, {127,0,0,1}]}}, {sample_module2, {ok, [{127,0,0,1}, any]}}],
 
-  get_workers_with_initial_state_and_expected_response(#dns_worker_state{workers_list = InitialState}, TestCases).
+  get_workers_with_initial_state_and_expected_response(#dns_worker_state{workers_list = InitialState, nodes_list = NLoads, avg_load = AvgLoad}, TestCases).
+
+%% Checks if dns worker can handle get_workers message for control_panel many times
+get_control_panel_mamy_times() ->
+  InitialState = [{control_panel, [{{127,0,0,1}, 3, 3}, {{192,168,0,1}, 1, 1}, {{150,100,0,1}, 2, 2}]}, {sample_module2, [{{127,0,0,1}, 1, 1}]}],
+  NLoads = [{{127,0,0,1}, 4}, {{192,168,0,1}, 1}, {{150,100,0,1}, 2}],
+  AvgLoad = 7/3,
+  TestCases = [{control_panel, {ok, [{150,100,0,1}, {192,168,0,1}, {127,0,0,1}]}}, {control_panel, {ok, [{192,168,0,1}]}},
+    {control_panel, {ok, [{150,100,0,1}, {192,168,0,1}]}}, {control_panel, {ok, [{127,0,0,1}, {192,168,0,1}]}},
+    {control_panel, {ok, [{150,100,0,1}, {192,168,0,1}]}}, {control_panel, {ok, [{192,168,0,1}]}},
+    {control_panel, {ok, [{150,100,0,1}, {192,168,0,1}, {127,0,0,1}]}}, {sample_module2, {ok, [{127,0,0,1}, any]}}],
+
+  get_workers_with_initial_state_and_expected_response(#dns_worker_state{workers_list = InitialState, nodes_list = NLoads, avg_load = AvgLoad}, TestCases).
+
+%% Checks if dns worker can handle get_nodes message many times
+get_nodes_mamy_times() ->
+  InitialState = [{sample_module, [{{127,0,0,1}, 3, 3}, {{192,168,0,1}, 1, 1}, {{150,100,0,1}, 2, 2}]}, {sample_module2, [{{127,0,0,1}, 1, 1}]}],
+  NLoads = [{{127,0,0,1}, 4}, {{192,168,0,1}, 1}, {{150,100,0,1}, 2}],
+  AvgLoad = 7/3,
+
+  {ok, Worker} = worker_host:start_link(dns_worker, #dns_worker_state{workers_list = InitialState, nodes_list = NLoads, avg_load = AvgLoad}, 1000),
+  TestFun = fun(ExpectedResponse) ->
+    gen_server:cast(Worker, {synch, 1, get_nodes, non, {proc, self()}}),
+    receive_get_nodes_with_default_timeout(ExpectedResponse)
+  end,
+  try
+    for(1, 10, fun() -> TestFun({ok, [{150,100,0,1}, {192,168,0,1}]}) end),
+
+    NewState = [{sample_module, [{{127,0,0,1}, 3}, {{192,168,0,1}, 1}, {{150,100,0,1}, 2}]}, {sample_module2, [{{127,0,0,1}, 1}]}],
+    SampleUpdateStateRequest = {update_state, NewState, [{{127,0,0,1}, 1}, {{192,168,0,1}, 1}, {{150,100,0,1}, 1}], 1},
+    gen_server:cast(Worker, {synch, 1, SampleUpdateStateRequest, non, {proc, self()}}),
+    receive_with_default_timeout(ok),
+
+    for(1, 10, fun() -> TestFun({ok, [{127,0,0,1}, {150,100,0,1}, {192,168,0,1}]}) end),
+
+    SampleUpdateStateRequest2 = {update_state, NewState, [{{127,0,0,1}, 1}, {{192,168,0,1}, 1}, {{150,100,0,1}, 1}], 0},
+    gen_server:cast(Worker, {synch, 1, SampleUpdateStateRequest2, non, {proc, self()}}),
+    receive_with_default_timeout(ok),
+
+    for(1, 10, fun() -> TestFun({ok, [{127,0,0,1}, {150,100,0,1}, {192,168,0,1}]}) end)
+  after
+    kill_worker_host_with_timeout(Worker)
+  end.
 
 %% Checks if dns worker updates state
 update_state() ->
@@ -85,7 +133,7 @@ update_state() ->
 
 	SampleUpdateStateRequest = {update_state, [{sample_plugin, [{{127,0,0,1}, 1}]},
     {sample_plugin2, [{{192,168,0,1}, 1},
-      {{192,168,0,2}, 2}]}]},
+      {{192,168,0,2}, 2}]}], [{{127,0,0,1}, 1}], 1},
 
 	try
 		gen_server:cast(Worker, {synch, 1, SampleUpdateStateRequest, non, {proc, self()}}),
@@ -122,7 +170,7 @@ update_state_works_with_current_worker_host_implementation() ->
 	ok = meck:new(?SAMPLE_PLUGIN),
 
 	try
-		SampleUpdateStateRequest = {update_state, [{dns_worker, [{127,0,0,1}, {192,168,0,1}]}]},
+		SampleUpdateStateRequest = {update_state, [{dns_worker, [{127,0,0,1}, {192,168,0,1}]}], [{{127,0,0,1}, 1}, {{192,168,0,1}, 1}], 1},
 
 		meck:expect(?SAMPLE_PLUGIN, handle, fun(_PluginVersion, ActualRequest) ->
 				?assertEqual(SampleUpdateStateRequest, ActualRequest)
@@ -163,13 +211,53 @@ get_worker_works_with_current_worker_host_implementation() ->
 %% Helping functions
 %% ====================================================================
 
-%% Shortcut for receive ... after construction
+%% Receive and check message
 receive_with_default_timeout(ExpectedAnswer) ->
-	receive
-		ExpectedAnswer -> true
-	after
-		?MAX_RESPONSE_TIME -> error(timeout)
-	end.
+  case ExpectedAnswer of
+    {ok, ExpectedIPS} ->
+      receive
+        {ok, IPS} ->
+          ?assertEqual(length(ExpectedIPS), length(IPS)),
+          Zipped = lists:zip(ExpectedIPS, IPS),
+          lists:foreach(fun({ExpectedIP, IP}) ->
+            case ExpectedIP of
+              any ->
+                true;
+              _ ->
+                ?assertEqual(ExpectedIP, IP)
+            end
+          end, Zipped)
+      after
+        ?MAX_RESPONSE_TIME -> error(timeout)
+      end;
+    _ ->
+      receive
+        ExpectedAnswer -> true
+      after
+        ?MAX_RESPONSE_TIME -> error(timeout)
+      end
+  end.
+
+%% Receive and check get_nodes message
+receive_get_nodes_with_default_timeout(ExpectedAnswer) ->
+  case ExpectedAnswer of
+    {ok, ExpectedIPS} ->
+      receive
+        {ok, IPS} ->
+          ?assert(length(ExpectedIPS) =< length(IPS)),
+          lists:foreach(fun(ExpectedIP) ->
+            ?assert(lists:member(ExpectedIP, IPS))
+          end, ExpectedIPS)
+      after
+        ?MAX_RESPONSE_TIME -> error(timeout)
+      end;
+    _ ->
+      receive
+        ExpectedAnswer -> true
+      after
+        ?MAX_RESPONSE_TIME -> error(timeout)
+      end
+  end.
 
 %% Helping function for checking get_worker request with specified conditions
 get_workers_with_initial_state_and_expected_response(InitialState, TestCases) ->
@@ -185,10 +273,13 @@ get_workers_with_initial_state_and_expected_response(InitialState, TestCases) ->
     kill_worker_host_with_timeout(Worker)
   end.
 
-
 %% Helping function for killing worker host
 kill_worker_host_with_timeout(Worker) ->
 	exit(Worker, normal),
 	receive_with_default_timeout({'EXIT', Worker, normal}).
+
+%% for loop
+for(N, N, F) -> [F()];
+for(I, N, F) -> [F()|for(I+1, N, F)].
 
 -endif.

@@ -549,13 +549,20 @@ check_cluster_state(State) ->
                              MinWorkers = [Module || {Module, _MLoad} <- MinNodeModulesLoads, Module == MaxModule],
                              case MinWorkers =:= [] of
                                true ->
-                                 lager:info([{mod, ?MODULE}], "Worker: ~s will be started at node: ~s", [MaxModule, MinNode]),
-                                 {WorkerRuns, TmpState} = start_worker(MinNode, MaxModule, proplists:get_value(MaxModule, ?Modules_With_Args, []), State),
-                                 case WorkerRuns of
-                                   ok ->
-                                     save_state(),
-                                     update_dispatchers_and_dns(TmpState, true, true);
-                                   error -> TmpState
+                                 case MaxModule of
+                                   control_panel ->
+                                     State;
+                                   central_logger ->
+                                     State;
+                                   _ ->
+                                     lager:info([{mod, ?MODULE}], "Worker: ~s will be started at node: ~s", [MaxModule, MinNode]),
+                                     {WorkerRuns, TmpState} = start_worker(MinNode, MaxModule, proplists:get_value(MaxModule, ?Modules_With_Args, []), State),
+                                     case WorkerRuns of
+                                       ok ->
+                                         save_state(),
+                                         update_dispatchers_and_dns(TmpState, true, true);
+                                       error -> TmpState
+                                     end
                                  end;
                                false ->
                                  lager:info([{mod, ?MODULE}], "Worker: ~s will be stopped at node", [MaxModule, MaxNode]),
@@ -1025,9 +1032,13 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
 
   FilteredModulesToNodes = [{Module, Nodes} || {Module, Nodes} <- ModulesToNodes, Nodes =/= []],
 
+  NLoads = lists:map(
+    fun({Node, NodeLoad, _}) ->
+      {NodeToIPWithLogging(Node), NodeLoad}
+    end, NodeToLoad),
   UpdateDnsWorker = fun ({_Node, Module, Pid}) ->
     case Module of
-      dns_worker -> gen_server:cast(Pid, {asynch, 1, {update_state, FilteredModulesToNodes}});
+      dns_worker -> gen_server:cast(Pid, {asynch, 1, {update_state, FilteredModulesToNodes, [{N_IP, N_Load} || {N_IP, N_Load} <- NLoads, N_IP =/= unknownaddress], AvgLoad}});
       _ -> ok
     end
   end,

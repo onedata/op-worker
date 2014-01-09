@@ -65,8 +65,9 @@ init(_) ->
 %% ====================================================================
 -spec handle(ProtocolVersion :: term(), Request) -> Result when
 	Request :: ping | get_version |
-	{update_state, [{atom(),  [inet:ip4_address()]}]} |
-	{get_worker, atom()},
+	{update_state, list(), list()} |
+	{get_worker, atom()} |
+  get_nodes,
 	Result :: ok | {ok, Response} | {error, Error} | pong | Version,
 	Response :: [inet:ip4_address()],
 	Version :: term(),
@@ -78,19 +79,20 @@ handle(_ProtocolVersion, ping) ->
 handle(_ProtocolVersion, get_version) ->
 	node_manager:check_vsn();
 
-handle(_ProtocolVersion, {update_state, ModulesToNodes}) ->
+handle(_ProtocolVersion, {update_state, ModulesToNodes, NLoads, AvgLoad}) ->
   ModulesToNodes2 = lists:map(fun ({Module, Nodes}) ->
     GetLoads = fun({Node, V}) ->
       {Node, V, V}
     end,
     {Module, lists:map(GetLoads, Nodes)}
   end, ModulesToNodes),
-	New_DNS_State = #dns_worker_state{workers_list = ModulesToNodes2},
+	New_DNS_State = #dns_worker_state{workers_list = ModulesToNodes2, nodes_list = NLoads, avg_load = AvgLoad},
 	ok = gen_server:call(?MODULE, {updatePlugInState, New_DNS_State});
 
 handle(_ProtocolVersion, {get_worker, Module}) ->
 	DNS_State = gen_server:call(?MODULE, getPlugInState),
 	WorkerList = DNS_State#dns_worker_state.workers_list,
+  NodesList = DNS_State#dns_worker_state.nodes_list,
 	Result = proplists:get_value(Module, WorkerList, []),
 
   PrepareResult = fun({Node, V, C}, {TmpAns, TmpWorkers}) ->
@@ -114,9 +116,60 @@ handle(_ProtocolVersion, {get_worker, Module}) ->
   end,
   NewWorkersList = lists:foldl(PrepareState, [], WorkerList),
 
-  New_DNS_State = #dns_worker_state{workers_list = NewWorkersList},
+  New_DNS_State = DNS_State#dns_worker_state{workers_list = NewWorkersList},
   ok = gen_server:call(?MODULE, {updatePlugInState, New_DNS_State}),
-	{ok, Result2};
+
+	case Module of
+    control_panel ->
+      {ok, Result2};
+    _ ->
+      case (length(Result2) > 1) or (length(NodesList) =< 1)  of
+        true -> {ok, Result2};
+        false ->
+          {S1,S2,S3} = now(),
+          random:seed(S1,S2,S3),
+          NodeNum = random:uniform(length(NodesList)),
+          {NewNode, _} = lists:nth(NodeNum, NodesList),
+          case Result2 =:= [NewNode] of
+            true ->
+              {NewNode2, _} = lists:nth((NodeNum rem length(NodesList) + 1) , NodesList),
+              {ok, Result2 ++ [NewNode2]};
+            false ->
+              {ok, Result2 ++ [NewNode]}
+          end
+      end
+  end;
+
+handle(_ProtocolVersion, get_nodes) ->
+  DNS_State = gen_server:call(?MODULE, getPlugInState),
+  NodesList = DNS_State#dns_worker_state.nodes_list,
+  AvgLoad = DNS_State#dns_worker_state.avg_load,
+
+  case AvgLoad of
+    0 ->
+      {ok, lists:map(
+        fun({Node, _}) ->
+          Node
+        end, NodesList)};
+    _ ->
+      {S1,S2,S3} = now(),
+      random:seed(S1,S2,S3),
+      ChooseNodes = fun({Node, NodeLoad}, TmpAns) ->
+        case is_number(NodeLoad) and (NodeLoad > 0) of
+          true ->
+            Ratio = AvgLoad / NodeLoad,
+            case Ratio >= random:uniform() of
+              true ->
+                [Node | TmpAns];
+              false ->
+                TmpAns
+            end;
+          false ->
+            [Node | TmpAns]
+        end
+      end,
+      {ok, lists:foldl(ChooseNodes, [], NodesList)}
+  end;
 
 handle(ProtocolVersion, Msg) ->
 	throw({unsupported_request, ProtocolVersion, Msg}).
