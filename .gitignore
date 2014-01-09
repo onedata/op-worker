@@ -25,3 +25,5 @@ distributed_tests_out
 c_lib
 c_src/gpv_nif/*.o
 c_src/veilhelpers_nif/*.o
+
+docs/_build/

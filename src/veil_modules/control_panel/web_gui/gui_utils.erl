@@ -152,6 +152,8 @@ top_menu(ActiveTabID, SubMenuBody) ->
 			url="/manage_account", body=[user_logic:get_name(wf:session(user_doc)) , #span{ class="fui-user", style="margin-left: 10px;" }] } } },
 		%{contact_support_tab, #listitem { body=#link{ style="padding: 18px;", title="Contact & Support",
 		%	url="/contact_support", body=#span{ class="fui-question" } } } },
+    {about_tab, #listitem { body=#link{ style="padding: 18px;", title="About",
+      url="/about", body=#span{ class="fui-info" } } } },
 		{logout_button,  #listitem { body=#link{ style="padding: 18px;", title="Log out",
 			url="/logout", body=#span{ class="fui-power" } } } }
 	],

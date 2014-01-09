@@ -11,6 +11,7 @@
 %% ===================================================================
 
 -module(file_transfer_handler).
+-include("logging.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao_share.hrl").
 -include("veil_modules/control_panel/common.hrl").
@@ -30,7 +31,7 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([maybe_handle_request/1, handle_upload_request/2]).
+-export([maybe_handle_request/1, handle_upload_request/2, get_download_buffer_size/0]).
 
 
 %% maybe_handle_request/1
@@ -44,11 +45,11 @@
 maybe_handle_request(Req) ->
     {Path, _} = cowboy_req:path(Req),
     {Qs, _} = cowboy_req:qs(Req),
-	case {Path, Qs} of
+    case {Path, Qs} of
         {<<?user_content_download_path>>, <<"f=", _/binary>>} -> handle_user_content_request(Req);
         {<<?shared_files_download_path, _/binary>>, _} -> handle_shared_file_request(Req);
-		_ -> {false, Req}
-	end.
+        _ -> {false, Req}
+    end.
 
 
 %% handle_upload_request/2
@@ -112,7 +113,7 @@ handle_user_content_request(Req) ->
 
         {ok, NewReq} = try_or_throw(
             fun() ->
-                send_file(Req, Filepath, Size)
+                send_file_by_path(Req, Filepath, Size)
             end, {sending_failed, Filepath}),
         {true, NewReq}
 
@@ -149,7 +150,7 @@ handle_shared_file_request(Req) ->
 
         {ok, NewReq} = try_or_throw(
             fun() ->
-                send_file(Req, FileID, FileName, Size)
+                send_file_by_uuid(Req, FileID, FileName, Size)
             end, {sending_failed, FileName}),
         {true, NewReq}
 
@@ -163,9 +164,9 @@ handle_shared_file_request(Req) ->
         {false, _RedirectReq} = page_error:shared_file_request_error(Message, Req)
     end.
 
-% Sends file as a http response
-send_file(Req, FileID, FileName, Size) ->
-    Mimetype = mimetypes:path_to_mimes(FileName),
+% Sends file as a http response, file is given by uuid
+send_file_by_uuid(Req, FileID, FileName, Size) ->
+    [Mimetype] = mimetypes:path_to_mimes(FileName),
     Headers = simple_bridge_util:ensure_header([], {"Content-Type", Mimetype}),
 	Headers2 = simple_bridge_util:ensure_header(Headers, 
         {"Content-Disposition", "attachment;" ++
@@ -179,30 +180,30 @@ send_file(Req, FileID, FileName, Size) ->
 		stream_file(Socket, Transport, {uuid, FileID}, Size, get_download_buffer_size())
 	end,
 
-	Req2 = prepare_headers(Req, Headers2),
-	Req3 = cowboy_req:set_resp_body_fun(Size, StreamFun, Req2),
-	{ok, _FinReq} = cowboy_req:reply(200, Req3).
+    Req2 = prepare_headers(Req, Headers2),
+    Req3 = cowboy_req:set_resp_body_fun(Size, StreamFun, Req2),
+    {ok, _FinReq} = cowboy_req:reply(200, Req3).
 
-% Sends file as a http response
-send_file(Req, Filepath, Size) ->
-  Mimetype = mimetypes:path_to_mimes(Filepath),
-  Headers = simple_bridge_util:ensure_header([], {"Content-Type", Mimetype}),
-  Filename = filename:basename(Filepath),
-  Headers2 = simple_bridge_util:ensure_header(Headers,
-    {"Content-Disposition", "attachment;" ++
-      % Replace spaces with underscores
-      " filename=" ++ re:replace(Filename, " ", "_", [global, {return, list}]) ++
-      % Offer safely-encoded UTF-8 filename for browsers supporting it
-      "; filename*=UTF-8''" ++ http_uri:encode(Filename)
-    }),
+% Sends file as a http response, file is given by logical path
+send_file_by_path(Req, Filepath, Size) ->
+    [Mimetype] = mimetypes:path_to_mimes(Filepath),
+    Headers = simple_bridge_util:ensure_header([], {"Content-Type", Mimetype}),
+    Filename = filename:basename(Filepath),
+    Headers2 = simple_bridge_util:ensure_header(Headers,
+        {"Content-Disposition", "attachment;" ++
+            % Replace spaces with underscores
+            " filename=" ++ re:replace(Filename, " ", "_", [global, {return, list}]) ++
+            % Offer safely-encoded UTF-8 filename for browsers supporting it
+            "; filename*=UTF-8''" ++ http_uri:encode(Filename)
+        }),
 
-  StreamFun = fun(Socket, Transport) ->
-    stream_file(Socket, Transport, Filepath, Size, get_download_buffer_size())
-  end,
+    StreamFun = fun(Socket, Transport) ->
+        stream_file(Socket, Transport, Filepath, Size, get_download_buffer_size())
+    end,
 
-  Req2 = prepare_headers(Req, Headers2),
-  Req3 = cowboy_req:set_resp_body_fun(Size, StreamFun, Req2),
-  {ok, _FinReq} = cowboy_req:reply(200, Req3).
+    Req2 = prepare_headers(Req, Headers2),
+    Req3 = cowboy_req:set_resp_body_fun(Size, StreamFun, Req2),
+    {ok, _FinReq} = cowboy_req:reply(200, Req3).
 
 % Streams file from cluster using logical_files_manager to http client (via socket)
 stream_file(Socket, Transport, File, Size, BufferSize) ->
@@ -220,7 +221,7 @@ stream_file(Socket, Transport, File, Size, Sent, BufferSize) ->
 
 % Sets headers to a cowboy req record
 prepare_headers(Req, Headers) ->
-		lists:foldl(fun({Header, Value}, R) -> cowboy_req:set_resp_header(Header, Value, R) end, Req, Headers).
+    lists:foldl(fun({Header, Value}, R) -> cowboy_req:set_resp_header(Header, Value, R) end, Req, Headers).
 
 
 

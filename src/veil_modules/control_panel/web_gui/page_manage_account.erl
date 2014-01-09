@@ -273,6 +273,3 @@ show_dn_adding(Flag) ->
 	      wf:wire(new_dn_submit, #hide{ })
 	end.
 
-
-%% c("../../../src/veil_modules/control_panel/gui_files/manage_account.erl").
-  

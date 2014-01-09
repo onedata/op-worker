@@ -15,7 +15,6 @@
 -include("logging.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
--include_lib("public_key/include/public_key.hrl").
 
 
 %% ====================================================================
@@ -483,11 +482,13 @@ create_dirs_at_storage(Root, TeamsString) ->
               {ok, ok} ->
                 {SHInfo, TmpAns};
               _ ->
-                lager:error("Can not change owner of dir ~p using storage helper ~p", [Dir, SHInfo#storage_helper_info.name]),
+                lager:error("Can not change owner of dir ~p using storage helper ~p. Make sure group '~s' is defined in the system.", 
+                	[Dir, SHInfo#storage_helper_info.name, Dir]),
                 {SHInfo, error}
             end;
           _ ->
-            lager:error("Can not create dir ~p using storage helper ~p", [Dir, SHInfo#storage_helper_info.name]),
+            lager:error("Can not create dir ~p using storage helper ~p. Make sure group '~s' is defined in the system.", 
+            	[Dir, SHInfo#storage_helper_info.name, Dir]),
             {SHInfo, error}
         end
       end,
@@ -516,10 +517,12 @@ create_dirs_at_storage(Root, TeamsString) ->
                   ok ->
                     ok;
                   _ ->
-                    lager:error("Can not change owner of dir ~p using storage helper ~p", [Root, SHI#storage_helper_info.name])
+                    lager:error("Can not change owner of dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.", 
+                    	[Root, SHI#storage_helper_info.name, Root])
                 end;
               _ ->
-                lager:error("Can not create dir ~p using storage helper ~p", [Root, SHI#storage_helper_info.name])
+                lager:error("Can not create dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.", 
+                	[Root, SHI#storage_helper_info.name, Root])
             end
         end,
 

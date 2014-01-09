@@ -9,6 +9,8 @@
 %% @end
 %% ===================================================================
 
+-include_lib("public_key/include/public_key.hrl").
+
 -ifndef(DAO_USERS).
 -define(DAO_USERS, 1).
 
