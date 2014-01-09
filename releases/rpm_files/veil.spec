@@ -1,3 +1,4 @@
+%define __prelink_undo_cmd %{nil}
 %define _topdir     /tmp/veil_rpmbuild
 %define _tmppath    %{_topdir}/tmp
 %define _prefix     /opt/veil
