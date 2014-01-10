@@ -56,7 +56,8 @@ main_test(Config) ->
     % Test if REST requests return what is expected
     test_rest_files_dirs(),
     test_rest_files_regulars(),
-    test_rest_files_attr(),
+    test_rest_upload(),
+    test_rest_attrs(),
     test_rest_shares(),
 
 
@@ -68,78 +69,111 @@ main_test(Config) ->
 %% Internal functions
 %% ====================================================================
 
-% Tests the functionality of rest_files_content module, concerning dirs as resources
+% Tests the functionality of rest_files module, concerning dirs as resources
 test_rest_files_dirs() ->
     {Code1, Headers1, Response1} = do_request(?REST_FILES_SUBPATH, get, [], []),
     ?assertEqual(Code1, "200"),
     ?assertEqual(proplists:get_value("content-type", Headers1), "application/json"),
-    ?assertEqual(Response1, "[\"dir1\",\"groups\"]"),
+    ?assertEqual(Response1, "[\"dir\",\"groups\"]"),
 
-    {Code2, Headers2, Response2} = do_request(?REST_FILES_SUBPATH ++ "dir1", get, [], []),
+    {Code2, Headers2, Response2} = do_request(?REST_FILES_SUBPATH ++ "dir", get, [], []),
     ?assertEqual(Code2, "200"),
     ?assertEqual(proplists:get_value("content-type", Headers2), "application/json"),
     ?assertEqual(Response2, "[\"file.txt\"]"),
 
-    {Code3, Headers3, Response3} = do_request(?REST_FILES_SUBPATH ++ "dir1gfhdfgh", get, [], []),
+    {Code3, Headers3, Response3} = do_request(?REST_FILES_SUBPATH ++ "dirgfhdfgh", get, [], []),
     ?assertEqual(Code3, "404"),
     ?assertEqual(proplists:get_value("content-type", Headers3), "application/json"),
     ?assertEqual(Response3, []),
 
-    {Code4, _Headers4, Response4} = do_request(?REST_FILES_SUBPATH ++ "dir1", put, [], []),
-    ?assertEqual(Code4, "405"),
+    {Code4, _Headers4, Response4} = do_request(?REST_FILES_SUBPATH ++ "dir", put, [], []),
+    ?assertEqual(Code4, "415"),
     ?assertEqual(Response4, []),
 
     {Code5, _Headers5, Response5} = do_request(?REST_FILES_SUBPATH, post, [], []),
     ?assertEqual(Code5, "405"),
     ?assertEqual(Response5, []),
 
-    {Code6, _Headers6, Response6} = do_request(?REST_FILES_SUBPATH ++ "dir1", delete, [], []),
-    ?assertEqual(Code6, "405"),
+    {Code6, _Headers6, Response6} = do_request(?REST_FILES_SUBPATH ++ "dir", delete, [], []),
+    ?assertEqual(Code6, "500"),
     ?assertEqual(Response6, []).
 
 
-% Tests the functionality of rest_files_content module, concerning regular files as resources
+% Tests the functionality of rest_files module, concerning regular files as resources
 test_rest_files_regulars() ->
     {Code3, _Headers3, Response3} = do_request(?REST_FILES_SUBPATH ++ "somefile.txt", get, [], []),
     ?assertEqual(Code3, "404"),
     ?assertEqual(Response3, []),
 
-    {Code4, Headers4, Response4} = do_request(?REST_FILES_SUBPATH ++ "dir1%2Ffile.txt", get, [], []),
+    {Code4, Headers4, Response4} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", get, [], []),
     ?assertEqual(Code4, "200"),
     ?assertEqual(proplists:get_value("content-type", Headers4), "text/plain"),
     ?assert(proplists:get_value("content-disposition", Headers4) /= undefined),
     ?assertEqual(Response4, ""),
 
-    {Code5, _Headers5, Response5} = do_request(?REST_FILES_SUBPATH ++ "dir1%2Ffile.txt", post, [], []),
-    ?assertEqual(Code5, "405"),
+    {Code5, _Headers5, Response5} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", post, [{"content-type", "multipart/form-data"}], []),
+    ?assertEqual(Code5, "422"),
     ?assertEqual(Response5, []),
 
-    {Code6, _Headers6, Response6} = do_request(?REST_FILES_SUBPATH ++ "dir1%2Ffile.txt", delete, [], []),
-    ?assertEqual(Code6, "405"),
+    {Code6, _Headers6, Response6} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", put, [{"content-type", "multipart/form-data"}], []),
+    ?assertEqual(Code6, "422"),
     ?assertEqual(Response6, []),
 
-    {Code7, _Headers7, Response7} = do_request(?REST_FILES_SUBPATH ++ "dir1%2Ffile.txt", put, [], []),
-    ?assertEqual(Code7, "405"),
-    ?assertEqual(Response7, []).
+    {Code7, _Headers7, Response7} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", delete, [], []),
+    ?assertEqual(Code7, "204"),
+    ?assertEqual(Response7, []),
+
+    {Code8, _Headers8, Response8} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", delete, [], []),
+    ?assertEqual(Code8, "404"),
+    ?assertEqual(Response8, []).
+
+
+% Tests the functionality of rest_files module, concerning files upload
+test_rest_upload() ->
+    Data1 = "123456789",
+    {Header1, Body1} = format_multipart_request(Data1),
+    {Code1, _Headers1, Response1} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", post, [Header1], [Body1]),
+    ?assertEqual(Code1, "204"),
+    ?assertEqual(Response1, []),
+    File1 = rpc:call(get(ccm), logical_files_manager, read, ["veilfstestuser/dir/file.txt", 0, 9]),
+    ?assertEqual(File1, {ok, list_to_binary(Data1)}),
+
+    {Header2, Body2} = format_multipart_request(Data1),
+    {Code2, _Headers2, Response2} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", post, [Header2], [Body2]),
+    ?assertEqual(Code2, "422"),
+    ?assertEqual(Response2, []),
+
+    Data2 = "00000000",
+    {Header3, Body3} = format_multipart_request(Data2),
+    {Code3, _Headers3, Response3} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", put, [Header3], [Body3]),
+    ?assertEqual(Code3, "204"),
+    ?assertEqual(Response3, []),
+    File3 = rpc:call(get(ccm), logical_files_manager, read, ["veilfstestuser/dir/file.txt", 0, 9]),
+    ?assertEqual(File3, {ok, list_to_binary(Data2)}),
+
+    {Header4, Body4} = format_multipart_request(Data2),
+    {Code4, _Headers4, Response4} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt/file1.txt", put, [Header4], [Body4]),
+    ?assertEqual(Code4, "422"),
+    ?assertEqual(Response4, []).
 
 
 % Tests the functionality of rest_attr module
-test_rest_files_attr() ->
+test_rest_attrs() ->
     {Code1, _Headers1, Response1} = do_request(?REST_ATTRS_SUBPATH, get, [], []),
     ?assertEqual(Code1, "405"),
     ?assertEqual(Response1, []),
 
-    {Code2, Headers2, Response2} = do_request(?REST_ATTRS_SUBPATH ++ "dir1", get, [], []),
+    {Code2, Headers2, Response2} = do_request(?REST_ATTRS_SUBPATH ++ "dir", get, [], []),
     ?assertEqual(Code2, "200"),
     ?assertEqual(proplists:get_value("content-type", Headers2), "application/json"),
     ?assert(Response2 /= []),
 
-    {Code3, Headers3, Response3} = do_request(?REST_ATTRS_SUBPATH ++ "dir1gfhdfgh", get, [], []),
+    {Code3, Headers3, Response3} = do_request(?REST_ATTRS_SUBPATH ++ "dirgfhdfgh", get, [], []),
     ?assertEqual(Code3, "404"),
     ?assertEqual(proplists:get_value("content-type", Headers3), "application/json"),
     ?assertEqual(Response3, []),
 
-    {Code4, _Headers4, Response4} = do_request(?REST_ATTRS_SUBPATH ++ "dir1", put, [], []),
+    {Code4, _Headers4, Response4} = do_request(?REST_ATTRS_SUBPATH ++ "dir", put, [], []),
     ?assertEqual(Code4, "405"),
     ?assertEqual(Response4, []),
 
@@ -147,7 +181,7 @@ test_rest_files_attr() ->
     ?assertEqual(Code5, "405"),
     ?assertEqual(Response5, []),
 
-    {Code6, _Headers6, Response6} = do_request(?REST_ATTRS_SUBPATH ++ "dir1", delete, [], []),
+    {Code6, _Headers6, Response6} = do_request(?REST_ATTRS_SUBPATH ++ "dir", delete, [], []),
     ?assertEqual(Code6, "405"),
     ?assertEqual(Response6, []).
     
@@ -159,7 +193,7 @@ test_rest_shares() ->
     ?assertEqual(proplists:get_value("content-type", Headers1), "application/json"),
     ?assertEqual(Response1, "[]"),
 
-    {Code2, _Headers2, Response2} = do_request(?REST_SHARE_SUBPATH, post, [{"content-type", "application/json"}], [<<"\"dir1/file.txt\"">>]),
+    {Code2, _Headers2, Response2} = do_request(?REST_SHARE_SUBPATH, post, [{"content-type", "application/json"}], [<<"\"dir/file.txt\"">>]),
     ?assertEqual(Code2, "303"),
     ?assertEqual(Response2, []),
 
@@ -181,7 +215,7 @@ test_rest_shares() ->
         false -> "https://localhost:" ++ integer_to_list(Port)
     end,
     DlPath = Hostname ++ ?shared_files_download_path ++ ShareID,
-    ?assertEqual(Response4, "{\"file_path\":\"dir1/file.txt\",\"download_path\":\"" ++ DlPath ++ "\"}"),
+    ?assertEqual(Response4, "{\"file_path\":\"dir/file.txt\",\"download_path\":\"" ++ DlPath ++ "\"}"),
 
     {Code5, Headers5, Response5} = do_request(?REST_SHARE_SUBPATH ++ ShareID, delete, [], []),
     ?assertEqual(Code5, "204"),
@@ -193,7 +227,7 @@ test_rest_shares() ->
     ?assertEqual(proplists:get_value("content-type", Headers6), "application/json"),
     ?assertEqual(Response6, []),
 
-    {Code7, _Headers7, Response7} = do_request(?REST_SHARE_SUBPATH ++ "dir1", put, [], []),
+    {Code7, _Headers7, Response7} = do_request(?REST_SHARE_SUBPATH ++ "dir", put, [], []),
     ?assertEqual(Code7, "405"),
     ?assertEqual(Response7, []).
     
@@ -219,6 +253,31 @@ do_request(RestSubpath, Method, Headers, Body) ->
     ]),
     {Code, RespHeaders, Response}.
 
+format_multipart_request(Data) ->
+    Boundary = "------------a450glvjfEoqerAc1p431paQlfDac152cadADfd",
+    Body = format_multipart_formdata(Boundary, [], [{file, "file", Data}]),
+    Header = {"content-type", lists:concat(["multipart/form-data; boundary=", Boundary])},
+    {Header, Body}.
+
+format_multipart_formdata(Boundary, Fields, Files) ->
+    FieldParts = lists:map(fun({FieldName, FieldContent}) ->
+        [lists:concat(["--", Boundary]),
+            lists:concat(["Content-Disposition: form-data; name=\"",atom_to_list(FieldName),"\""]),
+            "",
+            FieldContent]
+    end, Fields),
+    FieldParts2 = lists:append(FieldParts),
+    FileParts = lists:map(fun({FieldName, FileName, FileContent}) ->
+        [lists:concat(["--", Boundary]),
+            lists:concat(["Content-Disposition: format-data; name=\"",atom_to_list(FieldName),"\"; filename=\"",FileName,"\""]),
+            lists:concat(["Content-Type: ", "application/octet-stream"]),
+            "",
+            FileContent]
+    end, Files),
+    FileParts2 = lists:append(FileParts),
+    EndingParts = [lists:concat(["--", Boundary, "--"]), ""],
+    Parts = lists:append([FieldParts2, FileParts2, EndingParts]),
+    string:join(Parts, "\r\n").
 
 % Populates the database with one user and some files
 setup_user_in_db() ->
@@ -251,11 +310,11 @@ setup_user_in_db() ->
 
 
     put(user_id, DN),
-    Ans6 = rpc:call(CCM, logical_files_manager, mkdir, ["veilfstestuser/dir1"]), 
+    Ans6 = rpc:call(CCM, logical_files_manager, mkdir, ["veilfstestuser/dir"]), 
     ?assertEqual(ok, Ans6),
 
 
-    Ans7 = rpc:call(CCM, logical_files_manager, create, ["veilfstestuser/dir1/file.txt"]), 
+    Ans7 = rpc:call(CCM, logical_files_manager, create, ["veilfstestuser/dir/file.txt"]), 
     ?assertEqual(ok, Ans7),
 
     DN.

@@ -19,7 +19,9 @@
 -include("logging.hrl").
 
 -export([allowed_methods/3, content_types_provided/2, content_types_provided/3]).
--export([exists/3, get/2, get/3, delete/3, validate/4, post/3, put/4]).
+-export([exists/3, get/2, get/3, delete/3, validate/4, post/4, put/4]).
+% optional callback
+-export([handle_multipart_data/4]).
 
 
 %% ====================================================================
@@ -34,9 +36,12 @@
 %% @end
 -spec allowed_methods(req(), binary(), binary()) -> {[binary()], req()}.
 %% ====================================================================
-allowed_methods(Req, _Version, _Id) ->
-    {[<<"GET">>], Req}.
-
+allowed_methods(Req, _Version, Id) ->
+  Answer = case Id of
+             undefined -> [<<"GET">>];
+             _ -> [<<"GET">>, <<"PUT">>, <<"POST">>, <<"DELETE">>]
+           end,
+  {Answer, Req}.
 
 %% content_types_provided/2
 %% ====================================================================
@@ -183,7 +188,7 @@ get(Req, _Version, Id) ->
 -spec validate(req(), binary(), binary(), term()) -> {boolean(), req()}.
 %% ====================================================================
 validate(Req, _Version, _Id, _Data) ->
-    {false, Req}.
+    {true, Req}.
 
 
 %% delete/3
@@ -194,20 +199,34 @@ validate(Req, _Version, _Id, _Data) ->
 %% @end
 -spec delete(req(), binary(), binary()) -> {boolean(), req()}.
 %% ====================================================================
-delete(Req, _Version, _Id) -> 
-    {false, Req}.
+delete(Req, _Version, Id) ->
+    Filepath = binary_to_list(Id),
+    case logical_files_manager:exists(Filepath) of
+        true ->
+            case logical_files_manager:getfileattr(Filepath) of
+                {ok, Attr} ->
+                    case Attr#fileattributes.type of
+                        "REG" -> case logical_files_manager:delete(Filepath) of
+                                     ok -> {true, Req};
+                                     {_, _Error} -> {false, Req}
+                                 end;
+                        _ -> {false, Req}
+                    end;
+                _ -> {false, Req}
+            end;
+        _ -> {false, Req}
+    end.
 
-
-%% post/3
+%% post/4
 %% ====================================================================
 %% @doc Will be called for POST request, after the request has been validated. 
 %% Should handle the request and return true/false indicating the result.
 %% Should always return false if the method is not supported.
 %% Returning {true, URL} will cause the reply to contain 201 redirect to given URL.
 %% @end
--spec post(req(), binary(), term()) -> {boolean() | {true, binary()}, req()}.
+-spec post(req(), binary(), binary(), term()) -> {boolean() | {true, binary()}, req()}.
 %% ====================================================================
-post(Req, _Version, _Data) -> 
+post(Req, _Version, _Id, _Data) -> 
     {false, Req}.
 
 
@@ -221,6 +240,23 @@ post(Req, _Version, _Data) ->
 %% ====================================================================
 put(Req, _Version, _Id, _Data) ->
     {false, Req}.
+
+
+%% handle_multipart_data/4
+%% ====================================================================
+%% @doc Optional callback to handle multipart requests. Data should be streamed
+%% in handling module with use of cowboy_multipart module. Method can be `<<"POST">> or <<"PUT">>'.
+%% Should handle the request and return true/false indicating the result.
+%% Should always return false if the method is not supported.
+%% @end
+-spec handle_multipart_data(req(), binary(), binary(), term()) -> {boolean(), req()}.
+%% ====================================================================
+handle_multipart_data(Req, _Version, Method, Id) ->
+    case Method of
+        <<"POST">> -> file_transfer_handler:handle_rest_upload(Req, Id, false);
+        <<"PUT">> -> file_transfer_handler:handle_rest_upload(Req, Id, true);
+        _ -> {false, Req}
+    end.
 
 
 %% ====================================================================

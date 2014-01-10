@@ -20,7 +20,7 @@
 -include("logging.hrl").
 
 -export([allowed_methods/3, content_types_provided/2, content_types_provided/3]).
--export([exists/3, get/2, get/3, delete/3, validate/4, post/3, put/4]).
+-export([exists/3, get/2, get/3, delete/3, validate/4, post/4, put/4]).
 
 
 %% ====================================================================
@@ -155,16 +155,16 @@ delete(Req, _Version, _Id) ->
     {false, Req}.
 
 
-%% post/3
+%% post/4
 %% ====================================================================
 %% @doc Will be called for POST request, after the request has been validated. 
 %% Should handle the request and return true/false indicating the result.
 %% Should always return false if the method is not supported.
 %% Returning {true, URL} will cause the reply to contain 201 redirect to given URL.
 %% @end
--spec post(req(), binary(), term()) -> {boolean() | {true, binary()}, req()}.
+-spec post(req(), binary(), binary(), term()) -> {boolean() | {true, binary()}, req()}.
 %% ====================================================================
-post(Req, _Version, _Data) -> 
+post(Req, _Version, _Id, _Data) -> 
     {false, Req}.
 
 

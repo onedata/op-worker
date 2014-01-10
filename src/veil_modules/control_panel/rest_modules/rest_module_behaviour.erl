@@ -34,7 +34,7 @@ behaviour_info(callbacks) ->
 	    {get, 3},
 	    {delete, 3}, % true | false
 		{validate, 4},
-	    {post, 3}, % true | false
+	    {post, 4}, % true | false
 	    {put, 4} % true | false
 	];
 
@@ -54,6 +54,12 @@ behaviour_info(_Other) ->
 %% Another argument passed to every callback is version of API. This is
 %% either string denoting API version (e. g. <<"1.0">>) or keyword 
 %% <<"latest">> which should be interpreted as highest available version.
+
+
+%% NOTE!
+%% There is an optional callback - handle_multipart_data/4. It will be called 
+%% only if a rest_module implements it. It is designed to handle multipart requests.
+%% See description at the end of file
 
 
 %% allowed_methods/3
@@ -136,9 +142,9 @@ behaviour_info(_Other) ->
 %% ====================================================================
 
 
-%% post/3
+%% post/4
 %% ====================================================================
-%% Function: post(req(), binary(), term()) -> {boolean() | {true, binary()}, req()}.
+%% Function: post(req(), binary(), binary(), term()) -> {boolean() | {true, binary()}, req()}.
 %% Desription: Will be called for POST request, after the request has been validated. 
 %% Should handle the request and return true/false indicating the result.
 %% Should always return false if the method is not supported.
@@ -150,6 +156,16 @@ behaviour_info(_Other) ->
 %% ====================================================================
 %% Function: put(req(), binary(), binary(), term()) -> {boolean(), req()}.
 %% Desription: Will be called for PUT request on given ID, after the request has been validated. 
+%% Should handle the request and return true/false indicating the result.
+%% Should always return false if the method is not supported.
+%% ====================================================================
+
+
+%% handle_multipart_data/4
+%% ====================================================================
+%% Function: handle_multipart_data(req(), binary(), binary(), term()) -> {boolean(), req()}.
+%% Desription: Optional callback to handle multipart requests. Data should be streamed
+%% in handling module with use of cowboy_multipart module. Method can be `<<"POST">> or <<"PUT">>'.
 %% Should handle the request and return true/false indicating the result.
 %% Should always return false if the method is not supported.
 %% ====================================================================
