@@ -183,22 +183,7 @@ handle(ProtocolVersion, Msg) ->
 	Result :: ok.
 %% ====================================================================
 cleanup() ->
-	SafelyExecute = fun (Invoke, Log) ->
-		try
-			Invoke()
-		catch
-			_:Error -> lager:warning(Log, [Error])
-		end
-	end,
-
-	SafelyExecute(fun () -> ok = supervisor:terminate_child(?Supervisor_Name, ?DNS_UDP),
-			supervisor:delete_child(?Supervisor_Name, ?DNS_UDP)
-		end,
-		"Error stopping dns udp listener, status ~p"),
-
-	SafelyExecute(fun () -> ok = ranch:stop_listener(dns_tcp_listener)
-		end,
-		"Error stopping dns tcp listener, status ~p"),
+  spawn(fun() -> clear_children_and_listeners() end),
 	ok.
 
 
@@ -222,13 +207,27 @@ start_listening() ->
 			{dns_tcp_timeout, TcpTimeout}, {keepalive, true}],
 
 		proc_lib:init_ack({ok, self()}),
+
+    try
+      supervisor:delete_child(?Supervisor_Name, ?DNS_UDP),
+      lager:warning("DNS UDP child has existed")
+    catch
+      _:_ -> ok
+    end,
+
+    try
+      ranch:stop_listener(dns_tcp_listener),
+      lager:warning("dns_tcp_listener has existed")
+    catch
+      _:_ -> ok
+    end,
+
 		{ok, Pid} = supervisor:start_child(?Supervisor_Name, UDP_Child),
 		start_tcp_listener(TcpAcceptorPool, DNSPort, DNS_TCP_Transport_Options, Pid)
 	catch
-		_:Reason -> lager:warning("Error during starting listeners, ~p", [Reason]),
+		_:Reason -> lager:error("DNS Error during starting listeners, ~p", [Reason]),
 			gen_server:cast({global, ?CCM}, {stop_worker, node(), ?MODULE}),
 			lager:info("Terminating ~p", [?MODULE])
-
 	end,
 	ok.
 
@@ -255,3 +254,29 @@ start_tcp_listener(AcceptorPool, Port, TransportOpts, Pid) ->
 			throw(RanchError)
 	end,
 	ok.
+
+%% clear_children_and_listeners/0
+%% ====================================================================
+%% @doc Clears listeners and created children
+%% @end
+%% ====================================================================
+-spec clear_children_and_listeners() -> ok.
+%% ====================================================================
+clear_children_and_listeners() ->
+  SafelyExecute = fun (Invoke, Log) ->
+    try
+      Invoke()
+    catch
+      _:Error -> lager:error(Log, [Error])
+    end
+  end,
+
+  SafelyExecute(fun () -> ok = supervisor:terminate_child(?Supervisor_Name, ?DNS_UDP),
+    supervisor:delete_child(?Supervisor_Name, ?DNS_UDP)
+  end,
+    "Error stopping dns udp listener, status ~p"),
+
+  SafelyExecute(fun () -> ok = ranch:stop_listener(dns_tcp_listener)
+  end,
+    "Error stopping dns tcp listener, status ~p"),
+  ok.
