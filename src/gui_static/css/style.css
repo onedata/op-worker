@@ -109,3 +109,9 @@ a:focus
 	color: rgb(22, 160, 133);
 	text-decoration: none;
 }
+
+tr.log_row:hover
+{
+    cursor: pointer;
+	background-color: rgba(26, 188, 156, 0.2) !important;
+}

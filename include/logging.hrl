@@ -9,6 +9,8 @@
 %% @end
 %% ===================================================================
 
+% List of available loglevels
+-define(LOGLEVEL_LIST, [debug, info, notice, warning, error, critical, alert, emergency]).
 
 %% ===================================================================
 % Macros that should be used in code for logging
