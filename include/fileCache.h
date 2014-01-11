@@ -18,31 +18,39 @@ namespace helpers {
 struct FileBlock
 {
     off_t               offset;
-    size_t              size;
+    size_t              _size;
     std::string         data;
 
     uint64_t            valid_to;
 
     FileBlock() 
-      : size(0),
+      : _size(0),
         valid_to(0),
         offset(0)
     {
     }
 
+    FileBlock(off_t off) 
+      : _size(0),
+        valid_to(0),
+        offset(off)
+    {
+    }
+
     FileBlock(off_t off, const std::string &buff, uint64_t valid = 0) 
-      : size(buff.size()),
+      : _size(buff.size()),
         offset(off),
         data(buff),
         valid_to(valid)
     {
     }
-
-    bool operator== ( FileBlock const &q) const { return offset == q.offset && size == q.size; }
-    bool operator< ( FileBlock const &q) const 
+ 
+    size_t size() const
     {
-        return (offset + size < q.offset + q.size) || (offset + size == q.offset + q.size && offset < q.offset);
+        return data.size();
     }
+
+    bool operator== ( FileBlock const &q) const { return offset == q.offset && size() == q.size(); }
     
 };
 
@@ -64,6 +72,11 @@ static struct _OrderByValidTo
 
 static struct _OrderByOffset
 {
+    bool operator() (block_ptr const &a, block_ptr const &b) 
+    {
+        return a->offset < b->offset;
+    }
+
     bool operator() (off_t a, block_ptr const &b) 
     { 
         return a < b->offset;
@@ -97,13 +110,13 @@ private:
     uint64_t                                        m_curBlockNo;
     uint32_t                                        m_blockSize;
     boost::recursive_mutex                          m_fileBlocksMutex;
-    std::list<block_ptr>                            m_fileBlocks;
+    std::multiset<block_ptr, _OrderByOffset>        m_fileBlocks;
     size_t                                          m_byteSize;
 
     std::multiset<block_ptr, _OrderByValidTo> m_blockExpire;
 
-    virtual void discardExpired(bool rebuildQueue = false);
-    virtual void forceInsertBlock(block_ptr block, std::list<block_ptr>::iterator whereTo);
+    virtual void discardExpired();
+    virtual void forceInsertBlock(block_ptr block, std::multiset<block_ptr>::iterator whereTo);
 };
 
 } // namespace helpers 

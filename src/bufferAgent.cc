@@ -132,6 +132,7 @@ int BufferAgent::onOpen(std::string path, ffi_type ffi)
 
 int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, off_t offset, ffi_type ffi)
 {
+    DLOG(INFO) << "BufferAgent::onWrite(path: " << path << ", size: " << size << ", offset: " << offset <<")";
     unique_lock guard(m_wrMutex);
         write_buffer_ptr wrapper = m_wrCacheMap[ffi->fh];
 
@@ -147,6 +148,7 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
         // If memory limit is exceeded, force flush
         if(wrapper->buffer->byteSize() > config::buffers::writeBufferPerFileSizeLimit ||
            getWriteBufferSize() > config::buffers::writeBufferGlobalSizeLimit) {
+            DLOG(INFO) << "Write Buffer memory limit exceeded, force flush";
             if(int fRet = onFlush(path, ffi)) {
                 return fRet;
             }
@@ -191,8 +193,8 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
 
     wrapper->buffer->readData(offset, size, buf);
     updateRdBufferSize(path, wrapper->buffer->byteSize());
-    LOG(INFO) << "Found: " << buf.size() << "bcount: " << wrapper->buffer->blockCount(); 
 
+    // If cached file block is not complete, read it from server and save to cache
     if(buf.size() < size) {
 
         string buf2;
@@ -203,8 +205,6 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
         wrapper->buffer->writeData(offset + buf.size(), buf2);
 
         buf += buf2;
-
-        //DLOG(INFO) << "doRead ret: " << ret << " bufSize: " << buf2.size() << " globalBufSize: " << buf.size() ;
 
         guard.lock();
             m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, offset + buf.size() + config::buffers::preferedBlockSize, wrapper->blockSize, ffi->fh));
@@ -242,6 +242,7 @@ int BufferAgent::onFlush(std::string path, ffi_type ffi)
     unique_lock sendGuard(wrapper->sendMutex);
     unique_lock buff_guard(wrapper->mutex);
 
+    // Send all pending blocks to server
     while(wrapper->buffer->blockCount() > 0) 
     {
         block_ptr block = wrapper->buffer->removeOldestBlock();
@@ -249,16 +250,16 @@ int BufferAgent::onFlush(std::string path, ffi_type ffi)
         int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
         uint64_t end = utils::mtime<uint64_t>();
 
-        //LOG(INFO) << "Roundtrip: " << (end - start) << " for " << block->data.size() << " bytes";
-        
         if(res < 0)
         {
+            // Skip all blocks after receiving error
             while(wrapper->buffer->blockCount() > 0)
             {
                 (void) wrapper->buffer->removeOldestBlock();
             }
             return res;
         } else if(res < block->data.size()) {
+            // Send wasn't complete
             block->offset += res;
             block->data = block->data.substr(res);
             wrapper->buffer->insertBlock(*block);
@@ -290,7 +291,7 @@ int BufferAgent::onRelease(std::string path, ffi_type ffi)
             it->second->openCount--;
             if(it->second->openCount <= 0) {
                 it->second->buffer->debugPrint();
-                //m_rdCacheMap.erase(it);
+                m_rdCacheMap.erase(it);
             }
         }
     }

@@ -28,7 +28,7 @@ bool FileCache::readData(off_t offset, size_t size, std::string &buff)
     discardExpired();
     buff.resize(0);
 
-    list<block_ptr>::const_iterator it = upper_bound(m_fileBlocks.begin(), m_fileBlocks.end(), offset, OrderByOffset);
+    multiset<block_ptr>::const_iterator it = m_fileBlocks.upper_bound(block_ptr(new FileBlock(offset)));
     
     if(it == m_fileBlocks.begin())
         return false;
@@ -39,8 +39,8 @@ bool FileCache::readData(off_t offset, size_t size, std::string &buff)
             break;
 
         off_t startFrom = offset + buff.size() - (*it)->offset;
-        if(startFrom < (*it)->size) {
-            buff += (*it)->data.substr( startFrom ,  min( (size_t)size - buff.size(), (size_t)startFrom - (*it)->size ));
+        if(startFrom < (*it)->size()) {
+            buff += (*it)->data.substr( startFrom ,  min( (size_t)size - buff.size(), (size_t)startFrom - (*it)->size() ));
         }
     }
 
@@ -62,10 +62,10 @@ void FileCache::debugPrint()
 {
     return;
     cout << "BlockList:" << endl;
-    list<block_ptr>::iterator it = m_fileBlocks.begin();
+    multiset<block_ptr>::iterator it = m_fileBlocks.begin();
     while(it != m_fileBlocks.end())
     {
-        printf("\t Offset: %d, Size: %d, Data: %s, valid_to: %lld\n", (*it)->offset, (*it)->size, (*it)->data.c_str(), (*it)->valid_to);
+        printf("\t Offset: %d, Size: %d, Data: %s, valid_to: %lld\n", (*it)->offset, (*it)->size(), (*it)->data.c_str(), (*it)->valid_to);
         ++it;
     }
 }
@@ -84,9 +84,9 @@ block_ptr FileCache::removeOldestBlock()
 
     block_ptr tmp = *m_blockExpire.begin();
     m_blockExpire.erase(m_blockExpire.begin());
-    m_fileBlocks.remove(tmp);
+    m_fileBlocks.erase(tmp);
 
-    m_byteSize -= tmp->size;
+    m_byteSize -= tmp->size();
 
     return tmp;
 }
@@ -99,14 +99,11 @@ bool FileCache::insertBlock(const FileBlock &block)
 
     string cBuff = block.data;
     off_t offset = block.offset;
-    cout << "AddBlock offset: " << offset << " size: " << cBuff.size() << endl;
 
     do 
     {
-        // cout << "do..." << endl;
-        list<block_ptr>::iterator it = upper_bound(m_fileBlocks.begin(), m_fileBlocks.end(), offset, OrderByOffset);
-        list<block_ptr>::iterator next;
-        // cout << "UpperBound: " << offset << " " << cBuff << endl;
+        multiset<block_ptr>::iterator it = m_fileBlocks.upper_bound(block_ptr(new FileBlock(offset)));
+        multiset<block_ptr>::iterator next;
         if(it != m_fileBlocks.begin())
             --it;
 
@@ -116,36 +113,26 @@ bool FileCache::insertBlock(const FileBlock &block)
             if((*it)->offset <= offset)
                 ++next;
 
-            // cout << "FileCache: dbg_in: offset(" << offset << "), (*it)->offset(" << (*it)->offset << "), (*next)->offset(" << ( next != m_fileBlocks.end() ? (*next)->offset : -1) << ")" << endl;
-                
-
-            if( ((*it)->offset < offset && (*it)->offset + (*it)->size <= offset) || ((*it)->offset > offset) )
+            if( ((*it)->offset < offset && (*it)->offset + (*it)->size() <= offset) || ((*it)->offset > offset) )
             {
                 size_t tmpSize = next == m_fileBlocks.end() ? cBuff.size() : min((size_t)((*next)->offset - offset ), cBuff.size());
                 block_ptr tmp = block_ptr(new FileBlock(offset, cBuff.substr(0, tmpSize)));
-                // cout << "FileCache: ?: offset(" << offset << "), size(" << tmpSize << "), buff(" << cBuff.substr(0, tmpSize) << ")" << endl;
-                // cout << "FileCache: dbg: offset(" << offset << "), (*it)->offset(" << (*it)->offset << "), (*next)->offset(" << ( next != m_fileBlocks.end() ? (*next)->offset : -1)<< ")" << endl;
-                
-                // cout << cBuff.size() << endl;
+
                 cBuff = cBuff.substr(tmpSize);
                 offset += tmpSize;
 
                 forceInsertBlock(tmp, next);
-
                 break;
             }
-            else if ( (*it)->offset <= offset && (*it)->offset + (*it)->size > offset) 
+            else if ( (*it)->offset <= offset && (*it)->offset + (*it)->size() > offset) 
             {
                 off_t tStart = offset - (*it)->offset;
                 off_t sStart = 0;
-                size_t toCpy = min( (size_t)((*it)->offset + (*it)->size - offset), cBuff.size() );
-                // cout << "FileCache: override: offset(" << offset << "), size(" << toCpy << "), buff(" << cBuff.substr(0, toCpy) << ")" << endl;
+                size_t toCpy = min( (size_t)((*it)->offset + (*it)->size() - offset), cBuff.size() );
                 
                 (*it)->data.replace(tStart, toCpy, cBuff.substr(0, toCpy));
                 cBuff = cBuff.substr(toCpy);
                 offset += toCpy;
-
-                //continue;
             }
 
             ++it;
@@ -153,14 +140,10 @@ bool FileCache::insertBlock(const FileBlock &block)
 
         if(it == m_fileBlocks.end()) 
         {
-            // cout << "it is at the end" << endl;
             block_ptr tmp = block_ptr(new FileBlock(offset, cBuff));
             forceInsertBlock(tmp, it);
             
-            // cout << "FileCache: push_back: offset(" << offset << "), size(" << cBuff.size() << "), buff(" << cBuff << ")" << endl;
             cBuff = "";
-
-            
         }
 
     } while (cBuff.size() > 0);
@@ -170,28 +153,25 @@ bool FileCache::insertBlock(const FileBlock &block)
     return true;
 }
 
-void FileCache::forceInsertBlock(block_ptr block, std::list<block_ptr>::iterator whereTo) 
+void FileCache::forceInsertBlock(block_ptr block, std::multiset<block_ptr>::iterator whereTo) 
 {
     boost::unique_lock<boost::recursive_mutex> guard(m_fileBlocksMutex);
 
-    if(block->size == 0)
+    if(block->size() == 0)
         return;
 
     if(block->valid_to == 0)
-        block->valid_to = m_isBuffer ? ++m_curBlockNo : utils::mtime<uint64_t>() + 1000;
+        block->valid_to = m_isBuffer ? ++m_curBlockNo : utils::mtime<uint64_t>() + 5000;
     
-    list<block_ptr>::iterator it, next, origNext;
+    multiset<block_ptr>::iterator it, next, origNext, tmp;
     it = next = origNext = m_fileBlocks.insert(whereTo, block);
     m_blockExpire.insert(block);
-    m_byteSize += block->size;
-
-    // cout << "Insert: " << block->data << endl;
-    //debugPrint();
+    m_byteSize += block->size();
 
     if(m_blockExpire.size() == 1)
         return;
 
-    if(it != m_fileBlocks.begin()){
+    if(it != m_fileBlocks.begin()) {
         --it;
     } else {
         ++next;
@@ -200,19 +180,19 @@ void FileCache::forceInsertBlock(block_ptr block, std::list<block_ptr>::iterator
     ++origNext;
 
     do {
-        if((*it)->offset + (*it)->size == (*next)->offset && (*it)->size < m_blockSize)
+        if((*it)->offset + (*it)->size() == (*next)->offset && (*it)->size() < m_blockSize)
         {
-            size_t toCpy = min(m_blockSize - (*it)->size, (*next)->size);
+            size_t toCpy = min(m_blockSize - (*it)->size(), (*next)->size());
             (*it)->data += (*next)->data.substr(0, toCpy);
             (*next)->data = (*next)->data.substr(toCpy);
-            (*next)->size = (*next)->data.size();
             (*next)->offset += toCpy;
-            (*it)->size += toCpy;
 
-            if((*next)->size == 0) {
+            if((*next)->size() == 0) 
+            {
                 m_blockExpire.erase(*next);
-                next = m_fileBlocks.erase(next);
-
+                tmp = next, tmp++;
+                m_fileBlocks.erase(next);
+                next = tmp;
             }
         } else if(next != origNext) {
             break;
@@ -236,33 +216,17 @@ size_t FileCache::blockCount()
 }
 
 
-void FileCache::discardExpired(bool rebuildQueue)
+void FileCache::discardExpired()
 {
     boost::unique_lock<boost::recursive_mutex> guard(m_fileBlocksMutex);
-return; 
     while(!m_blockExpire.empty()) 
     {
-        block_ptr tmp;
-        if(m_blockExpire.begin() != m_blockExpire.end())
-            tmp = *m_blockExpire.begin();
+        block_ptr tmp = *m_blockExpire.begin();
+
+        m_blockExpire.erase(tmp);
+        m_fileBlocks.erase(tmp);
         
-        if(tmp && (!m_isBuffer && tmp->valid_to < utils::mtime<uint64_t>() ) ) {
-            list<block_ptr>::iterator it = lower_bound(m_fileBlocks.begin(), m_fileBlocks.end(), tmp->offset, OrderByOffset);
-
-            if(it != m_fileBlocks.end() && (*it)->offset <= tmp->offset) {
-                if((*it) == tmp) 
-                {
-                    m_fileBlocks.erase(it);
-                    m_byteSize -= tmp->size;
-                    break;
-                }
-                --it;
-            }
-
-            m_blockExpire.erase(m_blockExpire.begin());
-        } else {
-            break;
-        }
+        m_byteSize -= tmp->size();
 
     }
 }
