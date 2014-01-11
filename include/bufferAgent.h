@@ -22,6 +22,9 @@ typedef boost::function<int(std::string path, std::string &buf, size_t, off_t, f
 
 typedef boost::unique_lock<boost::recursive_mutex> unique_lock;
 
+typedef boost::unordered_map<fd_type, size_t>       wrbuf_size_mem_t;
+typedef boost::unordered_map<std::string, size_t>   rdbuf_size_mem_t;
+
 class BufferAgent
 {
 public:
@@ -34,9 +37,11 @@ public:
         std::string                     fileName;
         struct fuse_file_info           ffi;
         bool                            opPending;
+        int                             lastError;
 
         WriteCache()
-          : opPending(false) 
+          : opPending(false),
+            lastError(0)
         {
         }
     };
@@ -128,6 +133,18 @@ private:
     virtual void readerLoop();
 
     virtual boost::shared_ptr<FileCache> newFileCache(bool isBuffer = true);
+
+    static boost::recursive_mutex           m_bufferSizeMutex;
+
+    volatile static size_t              m_rdBufferTotalSize;
+    volatile static size_t              m_wrBufferTotalSize;
+    static rdbuf_size_mem_t             m_rdBufferSizeMem;
+    static wrbuf_size_mem_t             m_wrBufferSizeMem;
+
+    static void updateWrBufferSize(fd_type, size_t);
+    static void updateRdBufferSize(std::string, size_t);
+    static size_t getWriteBufferSize();
+    static size_t getReadBufferSize();
 };
 
 

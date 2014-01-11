@@ -11,6 +11,12 @@ using std::string;
 namespace veil {
 namespace helpers {
 
+boost::recursive_mutex BufferAgent::m_bufferSizeMutex;
+volatile size_t         BufferAgent::m_rdBufferTotalSize;
+volatile size_t         BufferAgent::m_wrBufferTotalSize;
+rdbuf_size_mem_t        BufferAgent::m_rdBufferSizeMem;
+wrbuf_size_mem_t        BufferAgent::m_wrBufferSizeMem;
+
 BufferAgent::BufferAgent(write_fun w, read_fun r)
   : m_agentActive(false),
     doWrite(w),
@@ -18,10 +24,69 @@ BufferAgent::BufferAgent(write_fun w, read_fun r)
 {
     agentStart(1);
 }
+
 BufferAgent::~BufferAgent()
 {
     agentStop();
 }
+
+void BufferAgent::updateWrBufferSize(fd_type key, size_t size)
+{
+    unique_lock guard(m_bufferSizeMutex);
+    wrbuf_size_mem_t::iterator it = m_wrBufferSizeMem.find(key);
+
+    if(it == m_wrBufferSizeMem.end()) {
+        m_wrBufferSizeMem[key] = size;
+        m_rdBufferTotalSize += size;
+    } else {
+        if(size < it->second && (it->second - size) >= m_wrBufferTotalSize) {
+            m_wrBufferTotalSize = 0;
+        } else {
+            m_wrBufferTotalSize += (size - it->second);
+        }
+
+        if(size == 0) {
+            m_wrBufferSizeMem.erase(key);
+        } else {
+            m_wrBufferSizeMem[key] = size;
+        }
+    }
+}
+
+void BufferAgent::updateRdBufferSize(std::string key, size_t size) 
+{
+    unique_lock guard(m_bufferSizeMutex);
+    rdbuf_size_mem_t::iterator it = m_rdBufferSizeMem.find(key);
+
+    if(it == m_rdBufferSizeMem.end()) {
+        m_rdBufferSizeMem[key] = size;
+        m_rdBufferTotalSize += size;
+    } else {
+        if(size < it->second && (it->second - size) >= m_rdBufferTotalSize) {
+            m_rdBufferTotalSize = 0;
+        } else {
+            m_rdBufferTotalSize += (size - it->second);
+        }
+
+        if(size == 0) {
+            m_rdBufferSizeMem.erase(key);
+        } else {
+            m_rdBufferSizeMem[key] = size;
+        }
+    }
+}
+
+size_t BufferAgent::getWriteBufferSize()
+{
+    unique_lock guard(m_bufferSizeMutex);
+    return m_wrBufferTotalSize;
+}
+
+size_t BufferAgent::getReadBufferSize()
+{
+    unique_lock guard(m_bufferSizeMutex);
+    return m_rdBufferTotalSize;
+}   
 
 int BufferAgent::onOpen(std::string path, ffi_type ffi)
 {
@@ -64,20 +129,29 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
 {
     unique_lock guard(m_wrMutex);
         write_buffer_ptr wrapper = m_wrCacheMap[ffi->fh];
+
+        if(wrapper->lastError < 0) {
+            wrapper->lastError = 0;
+            return wrapper->lastError;
+        }
+
     guard.unlock();
 
     {
-        if(wrapper->buffer->byteSize() > 1024 * 1024 * 64) {
+        if(wrapper->buffer->byteSize() > config::buffers::writeBufferPerFileSizeLimit ||
+           getWriteBufferSize() > config::buffers::writeBufferGlobalSizeLimit) {
             if(int fRet = onFlush(path, ffi)) {
                 return fRet;
             }
         }
 
-        if(wrapper->buffer->byteSize() > 1024 * 1024 * 64) {
+        if(wrapper->buffer->byteSize() > config::buffers::writeBufferPerFileSizeLimit ||
+           getWriteBufferSize() > config::buffers::writeBufferGlobalSizeLimit) {
             return doWrite(path, buf, size, offset, ffi);
         }
 
         wrapper->buffer->writeData(offset, buf);
+        updateWrBufferSize(ffi->fh, wrapper->buffer->byteSize());
     }
     
     unique_lock buffGuard(wrapper->mutex);
@@ -102,10 +176,11 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
         unique_lock buffGuard(wrapper->mutex);
         
         wrapper->lastBlock[ffi->fh] = offset;
-        wrapper->blockSize = std::min((size_t) 100 * 1024, (size_t) std::max(size, 2*wrapper->blockSize));
+        wrapper->blockSize = std::min((size_t) config::buffers::preferedBlockSize, (size_t) std::max(size, 2*wrapper->blockSize));
     }
 
     wrapper->buffer->readData(offset, size, buf);
+    updateRdBufferSize(path, wrapper->buffer->byteSize());
     LOG(INFO) << "Found: " << buf.size() << "bcount: " << wrapper->buffer->blockCount(); 
 
     if(buf.size() < size) {
@@ -122,7 +197,7 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
         //DLOG(INFO) << "doRead ret: " << ret << " bufSize: " << buf2.size() << " globalBufSize: " << buf.size() ;
 
         guard.lock();
-            m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, offset + buf.size(), wrapper->blockSize, ffi->fh));
+            m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, offset + buf.size() + config::buffers::preferedBlockSize, wrapper->blockSize, ffi->fh));
         guard.unlock();
     } else {
         string tmp;
@@ -173,8 +248,14 @@ int BufferAgent::onFlush(std::string path, ffi_type ffi)
                 (void) wrapper->buffer->removeOldestBlock();
             }
             return res;
+        } else if(res < block->data.size()) {
+            block->offset += res;
+            block->data = block->data.substr(res);
+            wrapper->buffer->insertBlock(*block);
         }
     }
+
+    updateWrBufferSize(ffi->fh, wrapper->buffer->byteSize());
 
     guard.lock();
     m_wrJobQueue.remove(ffi->fh);
@@ -250,7 +331,7 @@ void BufferAgent::readerLoop()
         m_rdJobQueue.erase(m_rdJobQueue.begin());
         m_rdCond.notify_one();
 
-        if(!wrapper || wrapper->lastBlock[job.fh] >= job.offset + job.size || (wrapper->endOfFile > 0 && wrapper->endOfFile <= job.offset))
+        if(!wrapper || wrapper->lastBlock[job.fh] + config::buffers::preferedBlockSize >= job.offset + job.size || (wrapper->endOfFile > 0 && wrapper->endOfFile <= job.offset))
             continue;
 
         guard.unlock();
@@ -271,7 +352,8 @@ void BufferAgent::readerLoop()
 
                 if(ret > 0 && tmp.size() >= ret) {
                     wrapper->buffer->writeData(effectiveOffset, tmp);
-                    m_rdJobQueue.insert(PrefetchJob(job.fileName, effectiveOffset + ret, wrapper->blockSize, job.fh));
+                    updateRdBufferSize(job.fileName, wrapper->buffer->byteSize());
+                    //m_rdJobQueue.insert(PrefetchJob(job.fileName, effectiveOffset + ret, wrapper->blockSize, job.fh));
                 } else if(ret == 0) {
                     wrapper->endOfFile = std::max(wrapper->endOfFile, effectiveOffset);
                 }
@@ -318,10 +400,11 @@ void BufferAgent::writerLoop()
                 block = wrapper->buffer->removeOldestBlock();
             } 
 
+            int writeRes;
             if(block) 
             {
                 uint64_t start = utils::mtime<uint64_t>();
-                int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
+                writeRes = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
                 uint64_t end = utils::mtime<uint64_t>();
 
                 //LOG(INFO) << "Roundtrip: " << (end - start) << " for " << block->data.size() << " bytes";
@@ -332,6 +415,26 @@ void BufferAgent::writerLoop()
             {
                 unique_lock buff_guard(wrapper->mutex);
                 guard.lock();
+
+                if(block) 
+                {
+                    if(writeRes < 0) 
+                    {
+                        while(wrapper->buffer->blockCount() > 0) 
+                        {
+                            wrapper->buffer->removeOldestBlock();
+                        }
+
+                        wrapper->lastError = writeRes;
+                    } 
+                    else if(writeRes < block->data.size()) 
+                    {
+                        block->offset += writeRes;
+                        block->data = block->data.substr(writeRes);
+                        wrapper->buffer->insertBlock(*block);
+                    }
+                }
+
                 if(wrapper->buffer->blockCount() > 0)
                 {
                     m_wrJobQueue.push_back(file);
@@ -340,6 +443,8 @@ void BufferAgent::writerLoop()
                 {
                     wrapper->opPending = false;
                 }
+
+                updateWrBufferSize(file, wrapper->buffer->byteSize());
             } 
         }
         
@@ -349,7 +454,7 @@ void BufferAgent::writerLoop()
 
 boost::shared_ptr<FileCache> BufferAgent::newFileCache(bool isBuffer)
 {
-    return boost::shared_ptr<FileCache>(new FileCache(10 * 1024 * 1024, isBuffer));
+    return boost::shared_ptr<FileCache>(new FileCache(config::buffers::preferedBlockSize, isBuffer));
 }
 
 } // namespace helpers 

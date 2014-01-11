@@ -35,6 +35,18 @@ namespace config {
     void setConnectionPool(boost::shared_ptr<SimpleConnectionPool> pool);
     boost::shared_ptr<SimpleConnectionPool> getConnectionPool();
 
+namespace buffers {
+
+    extern size_t writeBufferGlobalSizeLimit;
+    extern size_t readBufferGlobalSizeLimit;
+
+    extern size_t writeBufferPerFileSizeLimit;
+    extern size_t readBufferPerFileSizeLimit;
+
+    extern size_t preferedBlockSize;
+
+} // namespace buffers
+
 
 } // namespace config   
 
