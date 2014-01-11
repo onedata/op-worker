@@ -223,6 +223,9 @@ void FileCache::discardExpired()
     {
         block_ptr tmp = *m_blockExpire.begin();
 
+        if(tmp->valid_to > utils::mtime<uint64_t>())
+            break;
+        
         m_blockExpire.erase(tmp);
         m_fileBlocks.erase(tmp);
         
