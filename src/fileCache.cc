@@ -60,7 +60,7 @@ bool FileCache::writeData(off_t offset, const std::string &buff)
 
 void FileCache::debugPrint()
 {
-    //return;
+    return;
     cout << "BlockList:" << endl;
     list<block_ptr>::iterator it = m_fileBlocks.begin();
     while(it != m_fileBlocks.end())

@@ -35,10 +35,12 @@ void BufferAgent::updateWrBufferSize(fd_type key, size_t size)
     unique_lock guard(m_bufferSizeMutex);
     wrbuf_size_mem_t::iterator it = m_wrBufferSizeMem.find(key);
 
+    // If entry for this key doesn't exist, just create one
     if(it == m_wrBufferSizeMem.end()) {
         m_wrBufferSizeMem[key] = size;
         m_rdBufferTotalSize += size;
     } else {
+    // If key exists, update total bytes size according to diff between last size and current 
         if(size < it->second && (it->second - size) >= m_wrBufferTotalSize) {
             m_wrBufferTotalSize = 0;
         } else {
@@ -61,6 +63,7 @@ void BufferAgent::updateRdBufferSize(std::string key, size_t size)
     if(it == m_rdBufferSizeMem.end()) {
         m_rdBufferSizeMem[key] = size;
         m_rdBufferTotalSize += size;
+    // If key exists, update total bytes size according to diff between last size and current 
     } else {
         if(size < it->second && (it->second - size) >= m_rdBufferTotalSize) {
             m_rdBufferTotalSize = 0;
@@ -90,6 +93,8 @@ size_t BufferAgent::getReadBufferSize()
 
 int BufferAgent::onOpen(std::string path, ffi_type ffi)
 {
+    DLOG(INFO) << "BufferAgent::onOpen(" << path << ")";
+    // Initialize write buffer's holder
     {
         unique_lock guard(m_wrMutex);
         m_wrCacheMap.erase(ffi->fh);
@@ -102,7 +107,7 @@ int BufferAgent::onOpen(std::string path, ffi_type ffi)
         m_wrCacheMap[ffi->fh] = lCache;
     }
 
-    {
+    {   // Initialize read buffer's holder
         unique_lock guard(m_rdMutex);
         read_cache_map_t::iterator it;
         if(( it = m_rdCacheMap.find(path) ) != m_rdCacheMap.end()) {
@@ -117,8 +122,8 @@ int BufferAgent::onOpen(std::string path, ffi_type ffi)
             m_rdCacheMap[path] = lCache;
         }
 
+        // Prefetch first 512B block
         m_rdJobQueue.insert(PrefetchJob(path, 0, 512, ffi->fh));
-        m_rdJobQueue.insert(PrefetchJob(path, 512, 4096, ffi->fh));
         m_rdCond.notify_one();
     }
 
@@ -130,6 +135,7 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
     unique_lock guard(m_wrMutex);
         write_buffer_ptr wrapper = m_wrCacheMap[ffi->fh];
 
+        // If there was an error while sending cached data, return this error 
         if(wrapper->lastError < 0) {
             wrapper->lastError = 0;
             return wrapper->lastError;
@@ -138,6 +144,7 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
     guard.unlock();
 
     {
+        // If memory limit is exceeded, force flush
         if(wrapper->buffer->byteSize() > config::buffers::writeBufferPerFileSizeLimit ||
            getWriteBufferSize() > config::buffers::writeBufferGlobalSizeLimit) {
             if(int fRet = onFlush(path, ffi)) {
@@ -145,11 +152,13 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
             }
         }
 
+        // If memory limit is still exceeded, send the block without using buffer
         if(wrapper->buffer->byteSize() > config::buffers::writeBufferPerFileSizeLimit ||
            getWriteBufferSize() > config::buffers::writeBufferGlobalSizeLimit) {
             return doWrite(path, buf, size, offset, ffi);
         }
 
+        // Save the block in write buffer
         wrapper->buffer->writeData(offset, buf);
         updateWrBufferSize(ffi->fh, wrapper->buffer->byteSize());
     }
@@ -158,6 +167,7 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
     guard.lock();
     if(!wrapper->opPending) 
     {
+        // Notify workers if needed
         wrapper->opPending = true;
         m_wrJobQueue.push_back(ffi->fh);
         m_wrCond.notify_one();
