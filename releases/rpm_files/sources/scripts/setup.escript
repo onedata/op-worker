@@ -1,7 +1,11 @@
-
-
-% Default cookie used for communication with cluster 
+% Default cookie used for communication with cluster
 -define(default_cookie, veil_cluster_node).
+
+% Default bigcouch port
+-define(default_port,"5986").
+
+% Curl options
+-define(curl_opts,"--connect-timeout 5 -s").
 
 % Installation directory of veil RPM
 -define(prefix, "/opt/veil/").
@@ -21,8 +25,10 @@
 
 % Install path for nodes
 -define(default_nodes_install_path, ?prefix ++ "nodes/").
+-define(default_bigcouch_install_path,"/opt/bigcouch"). %should not be changed, unless you've configured bigcouch realease properly (the one from files/database_node)
 -define(default_ccm_name, "ccm").
 -define(default_worker_name, "worker").
+-define(default_db_name,"db").
 
 % Paths relative to veil_cluster_node release
 -define(config_args_path, "bin/config.args").
@@ -139,7 +145,13 @@ setup_get_db_nodes() ->
 			setup_new_ccm_plus_worker(true);
 		BadNode ->
 			warn("Could not establish connection with " ++ BadNode),
-			setup_get_db_nodes()
+			%do not ask again in batch mode
+			case get(batch_file) of
+				undefined ->
+					setup_get_db_nodes();
+				_ ->
+					error
+			end
 	end,
 	ok.
 
@@ -186,14 +198,20 @@ setup_extend_cluster() ->
 	case discover_cluster(IPOrHostname) of
 		no_connection -> 
 			warn("No node at [" ++ IPOrHostname ++ "] is available. Make sure there is a viable connection between hosts."),
-			WantRetry = interaction_choose_option(retry, "Do you want to try again?",
-				[
-					{yes, "Yes"},
-					{no, "No"}
-				]),
-			case WantRetry of 
-				yes -> setup_extend_cluster();
-				no -> setup_manage_veil()
+			%do not ask again in batch mode
+			case get(batch_file) of
+				undefined ->
+					WantRetry = interaction_choose_option(retry, "Do you want to try again?",
+						[
+							{yes, "Yes"},
+							{no, "No"}
+						]),
+					case WantRetry of
+						yes -> setup_extend_cluster();
+						no -> setup_manage_veil()
+					end;
+				_ ->
+					error
 			end;
 			
 		{[MainCCM|OptCCMS], DBNodes} ->
@@ -267,24 +285,24 @@ to_space_delimited_list(List) ->
 % List currently installed nodes and ask for confirmation
 setup_remove_veil_nodes() ->
 	case get_nodes_from_config(veil) of
-		{none, []} -> 
+		{none, []} ->
 			warn("There are no nodes configured on this machine"),
 			setup_manage_veil();
-		{worker, {worker, WorkerName, _}} ->	
+		{worker, {worker, WorkerName, _}} ->
 			info("Nodes currently configured on this machine:"),
 			li(atom_to_list(WorkerName) ++ get(hostname));
-		{ccm_plus_worker, {{ccm, CCMName,  _}, {worker, WorkerName, _}}} ->	
+		{ccm_plus_worker, {{ccm, CCMName,  _}, {worker, WorkerName, _}}} ->
 			info("Currently configured on this machine:"),
 			li(atom_to_list(CCMName) ++ get(hostname)),
 			li(atom_to_list(WorkerName) ++ get(hostname))
 	end,
 
-	Option = interaction_choose_option(confirm_veil_nodes_deletion, "Do you wish to remove current configuration?", 
+	Option = interaction_choose_option(confirm_veil_nodes_deletion, "Do you wish to remove current configuration?",
 		[
 			{yes, "Yes"},
 			{no, "No"}
 		]),
-	case Option of 
+	case Option of
 		no -> setup_start();
 		yes -> do_remove_veil_nodes()
 	end.
@@ -295,11 +313,11 @@ do_remove_veil_nodes() ->
 	info("Stopping node(s)..."),
 	os:cmd(?init_d_script_path ++ " stop_veil"),
 	case get_nodes_from_config(veil) of
-		{worker, {worker, Name, Path}} ->	
+		{worker, {worker, Name, Path}} ->
 			info("Removing " ++ atom_to_list(Name) ++ get(hostname)),
 			os:cmd("rm -rf " ++ Path ++ atom_to_list(Name)),
 			remove_node_from_config(Name);
-		{ccm_plus_worker, {{ccm, CCMName,  CCMPath}, {worker, WorkerName, WorkerPath}}} ->	
+		{ccm_plus_worker, {{ccm, CCMName,  CCMPath}, {worker, WorkerName, WorkerPath}}} ->
 			info("Removing " ++ atom_to_list(CCMName)),
 			os:cmd("rm -rf " ++ CCMPath ++ atom_to_list(CCMName)),
 			remove_node_from_config(CCMName),
@@ -309,10 +327,156 @@ do_remove_veil_nodes() ->
 	end.
 
 
-% TODO
 setup_manage_db() ->
-	info("Not yet implemented").
+	OptionList = case get_nodes_from_config(database) of
+		{none, []} ->
+		 [
+			 {new_cluster, "Set up a new db custer"},
+			 {extend_cluster, "Extend existing db cluster"},
+			 {go_back, "Go back"}
+		 ];
+		_ ->
+		 [
+			 {remove_node, "Remove node configured on this machine"},
+			 {go_back, "Go back"}
+		 ]
+		end,
+	Option = interaction_choose_option(what_to_do_db, "What do you want to do?", OptionList),
+	case Option of
+		new_cluster -> setup_install_db();
+		extend_cluster -> setup_extend_db();
+		remove_node -> setup_remove_db();
+		go_back -> setup_start()
+	end.
 
+setup_install_db()->
+	DbName = ?default_db_name,
+	DbPath = ?default_bigcouch_install_path,
+	h2("Following node will be installed:"),
+	li(DbName ++ get(hostname)),
+	Option = interaction_choose_option(settings_ok_db, "Confirm:",
+		[
+			{ok, "Continue"},
+			{back, "Go back"}
+		]),
+	case Option of
+		back ->
+			setup_manage_db();
+		ok ->
+			install_db_node(DbName,DbPath)
+	end.
+
+setup_extend_db()->
+	DbName = ?default_db_name,
+	DbPath = ?default_bigcouch_install_path,
+	%connect with some db node
+	h2("Specify IP/hostname of any host with running database node:"),
+	OtherNode = interaction_get_string(define_node_to_extend, "Running DB node: "),
+	AllDocsAddress="http://"++OtherNode++":"++?default_port++"/nodes/_all_docs",
+	ConnectionTestResult = os:cmd("curl "++?curl_opts++" -X GET "++AllDocsAddress),
+	case ConnectionTestResult of
+		"" ->
+			warn("Could not establish connection with " ++ OtherNode),
+			%do not ask again in batch mode
+			case get(batch_file) of
+				undefined ->
+					setup_extend_db();
+				_ ->
+					error
+			end;
+		_ ->
+			h2("Connection has been confirmed"),
+			%install
+			h2("Following node will be installed:"),
+			li(DbName ++ get(hostname)),
+			Option = interaction_choose_option(settings_ok_extend_db, "Confirm:",
+				[
+					{ok, "Continue"},
+					{back, "Go back"}
+				]),
+			case Option of
+				back ->
+					setup_manage_db();
+				ok ->
+					install_db_node(DbName,DbPath),
+					add_db_to_cluster(DbName,OtherNode)
+			end
+	end.
+
+% Install and start db release
+install_db_node(Name, Path) ->
+	LongName = Name ++ get(hostname),
+
+	info("Installing " ++ LongName ++ "..."),
+	os:cmd("mkdir -p " ++ Path),
+	os:cmd("cp -R " ++ ?db_release ++ "/* " ++ Path),
+	add_node_to_config(db_node, list_to_atom(Name), Path),
+	info("installation complete"),
+
+	info("Starting node..."),
+	open_port({spawn, ?init_d_script_path ++ " start_db"}, [out]).
+
+% add configured db node to existing cluster
+add_db_to_cluster(DbName,OtherNodeHost) ->
+	LocalNodeAddress="http://"++OtherNodeHost++":"++?default_port++"/nodes/"++DbName++get(hostname),
+	PutRequestResult = os:cmd("curl "++?curl_opts++" -X PUT "++LocalNodeAddress++" -d '{}'"),
+	case string:str(PutRequestResult,"\"ok\":true") of
+		0 ->
+			warn("Error, could not add node to cluster:"),
+			warn(PutRequestResult);
+		_ ->
+			info("Sucessfully added node to cluster")
+	end.
+
+% stop and remove db node
+setup_remove_db() ->
+	case get_nodes_from_config(database) of
+		{db_node, {db_node, Name, Path}} ->
+			h2("Following node will be removed:"),
+			li(atom_to_list(Name) ++ get(hostname)),
+			h2(" (!) Remember that if you remove this node you will lost all data stored on it."),
+			Option = interaction_choose_option(settings_ok_remove_db, "Confirm:",
+				[
+					{ok, "Continue"},
+					{back, "Go back"}
+				]),
+			case Option of
+				ok ->
+					info("Deleting from cluster"),
+					remove_db_from_cluster(Name),
+					info("Stopping db..."),
+					os:cmd(?init_d_script_path ++ " stop_db"),
+					info("Removing " ++ atom_to_list(Name) ++ get(hostname)),
+					info("Deleting from disc"),
+					os:cmd("rm -rf " ++ Path),
+					info("Deleting from config"),
+					remove_node_from_config(Name);
+				back ->
+					setup_manage_db()
+			end;
+		_ ->
+			warn("Nothing to delete")
+	end.
+
+remove_db_from_cluster(Name) ->
+	LocalHost=string:sub_string(get(hostname),2),
+	LongName=atom_to_list(Name)++get(hostname),
+  LocalNodeAddress="http://"++LocalHost++":"++?default_port++"/nodes/"++LongName,
+	REV=os:cmd("curl  "++?curl_opts++" -X GET "++LocalNodeAddress++" | grep -o '[0-9]*-[0-9a-f]*'"),
+	case REV of
+	"" ->
+		warn("Already deleted!");
+	_ ->
+		LocalNodeAddressWithRev = LocalNodeAddress++"?rev="++REV,
+		Result = os:cmd("curl "++?curl_opts++" -X DELETE "++LocalNodeAddressWithRev),
+		case string:str(Result,"\"ok\":true") of
+			0 ->
+				warn("Error, could not delete node from cluster:"),
+				warn(Result);
+			_ ->
+				info("Sucessfully deleted node from cluster")
+		end
+	end.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -344,7 +508,7 @@ discover_cluster(IPOrHostname) ->
 		end
 	end.
 
-    
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Function used to process config file used by veil_cluster script
@@ -353,16 +517,16 @@ discover_cluster(IPOrHostname) ->
 % Overwrite a parameter in config.args
 overwrite_config_args(Path, Parameter, NewValue) ->
 	FileContent = case file:read_file(Path) of
-        {ok, DataRead} -> 
-            binary_to_list(DataRead);
-        _ ->
-            ?error("Could not read config.args file")
+				{ok, DataRead} ->
+						binary_to_list(DataRead);
+				_ ->
+						?error("Could not read config.args file")
 	end,
 
-    {match, [{From, Through}]} = re:run(FileContent, Parameter ++ ":.*\n"),
-    Beginning = string:substr(FileContent, 1, From),
-    End = string:substr(FileContent, From + Through, length(FileContent) - From - Through + 1),
-    file:write_file(Path, list_to_binary(Beginning ++ Parameter ++ ": " ++ NewValue ++ End)).
+		{match, [{From, Through}]} = re:run(FileContent, Parameter ++ ":.*\n"),
+		Beginning = string:substr(FileContent, 1, From),
+		End = string:substr(FileContent, From + Through, length(FileContent) - From - Through + 1),
+		file:write_file(Path, list_to_binary(Beginning ++ Parameter ++ ": " ++ NewValue ++ End)).
 
 
 
@@ -534,7 +698,6 @@ warn(Text) ->
 
 info(Text) ->
 	io:format("~~ ~s~n", [Text]).
-
 
 
 
