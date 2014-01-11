@@ -148,13 +148,31 @@ create_response_params(A_In_Queries, AllQueries, ArList, Dispatcher, DispatcherT
 %% ====================================================================
 create_workers_response_params(#dns_query{domain = Domain,type = Type, class = Class}, Dispatcher, DispatcherTimeout, ResponseTTL) ->
 	LoweredDomain = string:to_lower(Domain),
-	[StrModule | _Domain_Suffix] = string:tokens(LoweredDomain, "."),
+	[StrModule | Domain_Suffix] = string:tokens(LoweredDomain, "."),
 	Module = list_to_atom(StrModule),
 
 	case lists:member(Module, ?EXTERNALLY_VISIBLE_MODULES) of
-		true -> DispatcherResponse = get_workers(Module, Dispatcher, DispatcherTimeout),
-									 translate_dispatcher_response_to_params(DispatcherResponse, Domain, Type, Class, ResponseTTL);
-		false -> [{rc, ?NXDOMAIN}]
+		true ->
+      DispatcherResponse = get_workers(Module, Dispatcher, DispatcherTimeout),
+			translate_dispatcher_response_to_params(DispatcherResponse, Domain, Type, Class, ResponseTTL);
+		false ->
+      case Module of
+        www ->
+          DispatcherResponse2 = get_workers(control_panel, Dispatcher, DispatcherTimeout),
+          translate_dispatcher_response_to_params(DispatcherResponse2, Domain, Type, Class, ResponseTTL);
+        veilfs ->
+          DispatcherResponse3 = get_workers(control_panel, Dispatcher, DispatcherTimeout),
+          translate_dispatcher_response_to_params(DispatcherResponse3, Domain, Type, Class, ResponseTTL);
+        _ ->
+          [StrModule2 | _] = Domain_Suffix,
+          case StrModule2 of
+            "cluster" ->
+              DispatcherResponse4 = get_nodes(Dispatcher, DispatcherTimeout),
+              translate_dispatcher_response_to_params(DispatcherResponse4, Domain, Type, Class, ResponseTTL);
+            _ ->
+              [{rc, ?NXDOMAIN}]
+          end
+      end
 	end.
 
 
@@ -185,6 +203,31 @@ get_workers(Module, Dispatcher, DispatcherTimeout) ->
 		_:Error -> lager:error("Dispatcher not responding ~p", [Error]), {error, dispatcher_not_responding}
 	end.
 
+%% get_nodes/2
+%% ====================================================================
+%% @doc Returns nodes rom dns_worker.
+%% @end
+%% ====================================================================
+-spec get_nodes(Dispatcher, DispatcherTimeout) -> Result when
+  Dispatcher :: term(),
+  DispatcherTimeout :: non_neg_integer(),
+  Result :: {ok, list()} | {erorr, term()}.
+%% ====================================================================
+get_nodes(Dispatcher, DispatcherTimeout) ->
+  try
+    Pid = self(),
+    DispatcherAns = gen_server:call(Dispatcher, {dns_worker, 1, Pid, get_nodes}),
+    case DispatcherAns of
+      ok -> receive
+              {ok, ListOfIPs} -> {ok, ListOfIPs}
+            after
+              DispatcherTimeout -> lager:error("Unexpected dispatcher timeout"), {error, timeout}
+            end;
+      worker_not_found -> lager:error("Dispatcher error - worker not found"), {error, worker_not_found}
+    end
+  catch
+    _:Error -> lager:error("Dispatcher not responding ~p", [Error]), {error, dispatcher_not_responding}
+  end.
 
 %% translate_dispatcher_response_to_params/5
 %% ====================================================================

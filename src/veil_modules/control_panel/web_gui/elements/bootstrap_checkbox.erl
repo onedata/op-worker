@@ -25,8 +25,8 @@ render_element(Record) ->
         A -> A
     end,
     CheckedOrNot = case Record#bootstrap_checkbox.checked of
-        true -> checked;
-        _ -> not_checked
+        true -> "checked";
+        false -> ""
     end,
     case Record#bootstrap_checkbox.postback of
         undefined -> ignore;
@@ -36,10 +36,10 @@ render_element(Record) ->
     wf_tags:emit_tag(input, [""], [
         {name, Record#bootstrap_checkbox.html_name},
         {id,   Anchor},
-        {type, checkbox},
+        {type, "checkbox"},
         {class, [bootstrap_checkbox, Record#bootstrap_checkbox.class]},
         {style, Record#bootstrap_checkbox.style},
         {value, Record#bootstrap_checkbox.value},
         {'data-toggle', Record#bootstrap_checkbox.data_toggle},
-        {CheckedOrNot, true}
+        {checked, CheckedOrNot}
     ]).

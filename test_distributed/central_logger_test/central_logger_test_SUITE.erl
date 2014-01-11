@@ -199,10 +199,10 @@ count_logs(UnknownSourceLogs, ErrorLoggerLogs, LagerLogs, Expected, StartTime) -
           {UnknownSourceLogs, ErrorLoggerLogs, LagerLogs};
         _ ->
           receive 
-            {log, {"test_log", _, _, [{source, unknown}, {node, _}]}} -> 
+            {log, {"test_log", _, _, [{node, _}, {source, unknown}]}} -> 
               count_logs(UnknownSourceLogs + 1, ErrorLoggerLogs, LagerLogs, Expected, StartTime);
 
-            {log, {"test_log", _, _, [{pid, _}, {source, error_logger}, {node, _}]}} -> 
+            {log, {"test_log", _, _, [{node, _}, {source, error_logger}, {pid, _}]}} -> 
               count_logs(UnknownSourceLogs, ErrorLoggerLogs + 1, LagerLogs, Expected, StartTime);
 
             {log, {"test_log", _, _, Metadata}} -> 

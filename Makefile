@@ -118,6 +118,7 @@ basho_bench: deps compile
 	@cp ${STRESS_TESTS_SRC_DIR}/**/*.config ${BASHO_BENCH_DIR}/tests
 	@cp -R include/* ${BASHO_BENCH_DIR}/include/
 	@cp -R deps/protobuffs/ebin/* ${BASHO_BENCH_DIR}/ebin/
+	@cp -R deps/websocket_client/ebin/* ${BASHO_BENCH_DIR}/ebin/
 	@cp -R ebin/* ${BASHO_BENCH_DIR}/ebin/
 	cd ${BASHO_BENCH_DIR} && make all
 	@cp ${STRESS_TESTS_SRC_DIR}/*.escript ${BASHO_BENCH_DIR}/

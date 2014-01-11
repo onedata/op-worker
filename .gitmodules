@@ -4,3 +4,6 @@
 [submodule "veilhelpers"]
 	path = veilhelpers
 	url = ssh://git@git.plgrid.pl:7999/vfs/veilhelpers.git
+[submodule "bigcouchdb"]
+	path = bigcouchdb
+	url = ssh://git@git.plgrid.pl:7999/vfs/bigcouchdb.git

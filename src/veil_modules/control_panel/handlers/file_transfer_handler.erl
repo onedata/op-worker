@@ -31,7 +31,7 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([maybe_handle_request/1, handle_upload_request/2, get_download_buffer_size/0]).
+-export([maybe_handle_request/1, handle_upload_request/2, handle_rest_upload/3, get_download_buffer_size/0]).
 
 
 %% maybe_handle_request/1
@@ -79,6 +79,21 @@ handle_upload_request(Req, UserDoc) ->
             end
     end.
 
+%% handle_rest_upload/3
+%% ====================================================================
+%% @doc Asserts the validity of mutlipart POST request and proceeds with
+%% parsing and writing its data to a file at specified path. Returns
+%% true for successful upload anf false otherwise.
+%% @end
+handle_rest_upload(Req, Path, Overwrite) ->
+    case cowboy_req:parse_header(<<"content-length">>, Req) of
+        {ok, Length, NewReq} when is_integer(Length) ->
+            case try_to_create_file(binary_to_list(Path), Overwrite) of
+                ok -> parse_rest_upload(NewReq, binary_to_list(Path));
+                {error, _Error} -> {false, NewReq}
+            end;
+        _ -> {false, Req}
+    end.
 
 %% ====================================================================
 %% INTERNAL FUNCTIONS
@@ -230,6 +245,88 @@ prepare_headers(Req, Headers) ->
 %% File upload (upload requests)
 %% ====================================================================
 
+% parses a multipart data POST request and write its data to a file
+% at specified path
+parse_rest_upload(Req, Path) ->
+  Part = try multipart_data(Req) catch _:_ -> {false, Req} end,
+  case Part of
+    {eof, NewReq} ->
+      {true, NewReq};
+    {headers, Headers, NewReq} ->
+      case (length(Headers) == 1) of
+        true -> {true, NewReq};
+        false -> NewReq2 = try
+          stream_file_to_fslogic(NewReq, Path, get_upload_buffer_size())
+                           catch _:_ ->
+                             logical_files_manager:delete(Path),
+                             {false, NewReq}
+                           end,
+          {true, NewReq2}
+      end;
+    _ -> {false, Req}
+  end.
+
+% try to create empty file at specified path if it doesn't exist
+% or truncate its size to 0 if it exists and "overwrite" is set
+try_to_create_file(Path, Overwrite) ->
+  try_to_create_file("/", string:tokens(Path, "/"), Overwrite).
+
+% checkig if file can be created at specified path
+% namely path is a valid filesystem path compose of directories
+% except last regular file
+try_to_create_file(Path, [Subdir | Subdirs], Overwrite) ->
+  case logical_files_manager:exists(Path) of
+    true -> case logical_files_manager:getfileattr(Path) of
+              {ok, Attr} ->
+                case Attr#fileattributes.type of
+                  "DIR" -> try_to_create_file(Path ++ Subdir ++ "/", Subdirs, Overwrite);
+                  _ -> {error, illegal_path}
+                end;
+              {_, Error} -> {error, Error}
+            end;
+    false -> create_file_and_required_parent_dirs(Path, [Subdir | Subdirs]);
+    {_, Error} -> {error, Error}
+  end;
+
+% check if file exists at specified path and truncate its
+% to 0 if "overwrite" is set
+try_to_create_file(Path, [], Overwrite) ->
+  case logical_files_manager:exists(Path) of
+    true -> case logical_files_manager:getfileattr(Path) of
+              {ok, Attr} ->
+                case Attr#fileattributes.type of
+                  "REG" ->
+                    case Overwrite of
+                      true ->
+                        case logical_files_manager:truncate(Path, 0) of
+                          ok -> ok;
+                          {_, Error} -> {error, Error}
+                        end;
+                      false -> {error, file_exists}
+                    end;
+                  _ -> {error, illegal_path}
+                end;
+              {_, Error} -> {error, Error}
+            end;
+    false -> create_file_and_required_parent_dirs(Path, []);
+    {_, Error} -> {error, Error}
+  end.
+
+% create all required parent directories to create a file
+% specified as the last element on the list of subdirectories
+create_file_and_required_parent_dirs(Path, [Subdir | Subdirs]) ->
+  case logical_files_manager:mkdir(Path) of
+    ok -> create_file_and_required_parent_dirs(Path ++ Subdir ++ "/", Subdirs);
+    {_, Error} -> {error, Error}
+  end;
+
+% create empty file at specified path
+create_file_and_required_parent_dirs(Path, []) ->
+  case logical_files_manager:create(Path) of
+    ok -> ok;
+    {_, Error} -> {error, Error}
+  end.
+
 % Parses a multipart data POST request and returns set of field values and file body
 parse_multipart(Req, Params, Files) ->
     case parse_part(Req, Params) of
@@ -335,10 +432,10 @@ ensure_unique_filename(RequestedPath, Counter) ->
 % Streams a chunk of data to file from socket (incoming multipart data)
 stream_file_to_fslogic(Req, FullPath, BufferSize) ->
     case accumulate_multipart_data(Req, BufferSize) of
-        {done, Binary, NewReq} -> 
+        {done, Binary, NewReq} ->
             write_to_file(Binary, FullPath),
             NewReq;
-        {more, Binary, NewReq} -> 
+        {more, Binary, NewReq} ->
             write_to_file(Binary, FullPath),
             stream_file_to_fslogic(NewReq, FullPath, BufferSize)
     end. 

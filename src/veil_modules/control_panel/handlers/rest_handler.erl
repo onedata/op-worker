@@ -19,7 +19,7 @@
 -record(state, {handler_module = undefined :: atom(), version = <<"latest">> :: binary(), resource_id = undefined :: binary()}).
 
 -export([init/3, rest_init/2, resource_exists/2, allowed_methods/2, content_types_provided/2, get_resource/2]).
--export([content_types_accepted/2, delete_resource/2, handle_urlencoded_data/2, handle_json_data/2]).
+-export([content_types_accepted/2, delete_resource/2, handle_urlencoded_data/2, handle_json_data/2, handle_multipart_data/2]).
 
 
 %% ====================================================================
@@ -157,7 +157,8 @@ get_resource(Req, #state{handler_module = Mod, version = Version, resource_id = 
 content_types_accepted(Req, State) -> 
     {[
         {<<"application/x-www-form-urlencoded">>, handle_urlencoded_data},
-        {<<"application/json">>, handle_json_data}
+        {<<"application/json">>, handle_json_data},
+        {{<<"multipart">>, <<"form-data">>, '*'}, handle_multipart_data}
     ], Req, State}.
 
 
@@ -189,6 +190,23 @@ handle_json_data(Req, #state{handler_module = Mod, version = Version, resource_i
     {Result, NewReq, State}.
 
 
+%% handle_multipart_data/2
+%% ====================================================================
+%% @doc Function handling "multipart/form-data" requests.
+%% @end
+-spec handle_multipart_data(req(), #state{}) -> {boolean(), req(), #state{}}.
+%% ====================================================================
+handle_multipart_data(Req, #state{handler_module = Mod, version = Version, resource_id = Id} = State) ->
+    {Result, NewReq} = case erlang:function_exported(Mod, handle_multipart_data, 4) of
+        true -> 
+            {Method, _} = cowboy_req:method(Req),
+            Mod:handle_multipart_data(Req, Version, Method, Id);
+        false ->
+            {false, Req}
+    end,
+    {Result, NewReq, State}.
+
+
 %% delete_resource/2
 %% ====================================================================
 %% @doc Cowboy callback function
@@ -215,11 +233,13 @@ delete_resource(Req, #state{handler_module = Mod, version = Version, resource_id
 %% ====================================================================
 handle_data(Req, Mod, Version, Id, Data) ->
     {_Result, _NewReq} = case Mod:validate(Req, Version, Id, Data) of
-        {true, Req2} -> case Id of 
-                undefined -> 
-                    Mod:post(Req2, Version, Data); 
-                _ -> 
-                    Mod:put(Req2, Version, Id, Data) 
+        {true, Req2} -> case cowboy_req:method(Req) of 
+                {<<"POST">>, _} -> 
+                    Mod:post(Req2, Version, Id, Data);
+                {<<"PUT">>, _} -> 
+                    Mod:put(Req2, Version, Id, Data);
+                _ ->
+                    {false, Req2}
             end;
         {false, Req2} -> {false, Req2} 
     end.

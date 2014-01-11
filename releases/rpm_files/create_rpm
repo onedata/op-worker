@@ -3,6 +3,9 @@
 # Path, where rpm building will take place
 RPM_BUILD_DIRECTORY=/tmp/veil_rpmbuild
 
+# Bigcouch release submodule
+BIGCOUCH_RELEASE_DIRECTORY=`git rev-parse --show-toplevel`/bigcouchdb
+
 ##############################
 # Exit on any failure
 set -e
@@ -29,6 +32,9 @@ cp $RUNNER_SCRIPT_DIR/veil.spec SPECS/
 mkdir -p $RPM_BUILD_DIRECTORY/SOURCES/veil/files/veil_cluster_node
 cp -R $RUNNER_SCRIPT_DIR/sources/* $RPM_BUILD_DIRECTORY/SOURCES/veil
 cp -R $RUNNER_SCRIPT_DIR/../veil_cluster_node/* $RPM_BUILD_DIRECTORY/SOURCES/veil/files/veil_cluster_node
+
+# Attach bigcouch release
+cp -R $BIGCOUCH_RELEASE_DIRECTORY/*  $RPM_BUILD_DIRECTORY/SOURCES/veil/files
 
 cd $RPM_BUILD_DIRECTORY/SOURCES
 tar zcf veil.tar.gz veil

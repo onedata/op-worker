@@ -70,6 +70,7 @@ REMSH_REMSH_ARG="-remsh $REMSH_NAME"
 
 # Extract the target cookie
 COOKIE_ARG=`grep '^-setcookie' $VMARGS_PATH`
+COOKIE_ARG=${COOKIE_ARG//\'/}
 if [ -z "$COOKIE_ARG" ]; then
     echo "vm.args needs to have a -setcookie parameter."
     exit 1

@@ -20,7 +20,9 @@
 -define(veil_cluster_script_path, "bin/veil_cluster").
 -define(start_command_suffix, "bin/veil_cluster_node start").
 
-
+%Paths relative to database_node release
+-define(db_start_command_suffix,"bin/bigcouch").
+-define (nohup_output,"var/log/nohup.out").
 
 % Print error message to ?error_dump_file with formatting and halt
 -define(error(Fmt, Args), 
@@ -91,11 +93,30 @@ main(Args) ->
 	end.
 
 start_db_node() ->
-	not_yet_implemented.
+	case get_nodes_from_config(database) of
+		{none, []} ->
+			nothing_to_start;
+
+		{db_node, Db} ->
+			start_db(Db)
+	end.
 
 stop_db_node() ->
-	not_yet_implemented.
+	case get_nodes_from_config(database) of
+		{none, []} ->
+			nothing_to_stop;
 
+		{db_node, Db} ->
+			stop_db(Db)
+	end.
+
+start_db({db_node, _Name, Path}) ->
+	BigcouchStartScript = Path++"/"++?db_start_command_suffix,
+	NohupOut = Path++"/"++?nohup_output,
+	open_port({spawn, "nohup "++BigcouchStartScript++" > "++NohupOut++" 2>&1 &"}, [out]).
+
+stop_db({db_node, _Name, Path}) ->
+	os:cmd("kill -TERM `ps aux | grep beam | grep "++Path++" | cut -d'\t' -f2 | awk '{print $2}'`").
 
 start_veil_nodes() ->
 	case get_nodes_from_config(veil) of
@@ -336,33 +357,33 @@ get_veil_nodes_from_config(Entries) ->
 % Read config.args file for value of a specific parameter
 read_config_args(Path, Parameter, ExpectingList) ->
 	FileContent = case file:read_file(Path) of
-        {ok, DataRead} -> 
-            binary_to_list(DataRead);
-        _ ->
-            ?error("Could not read config.args file")
+				{ok, DataRead} ->
+						binary_to_list(DataRead);
+				_ ->
+						?error("Could not read config.args file")
 	end,
 
-    {match, [{From, Through}]} = re:run(FileContent, Parameter ++ ":.*\n"),
-    Result = string:substr(FileContent, From + length(Parameter) + 3, Through - length(Parameter) - 3),
-    case ExpectingList of
-    	false -> Result;
-    	true -> string:tokens(Result, " ")
-    end.
+		{match, [{From, Through}]} = re:run(FileContent, Parameter ++ ":.*\n"),
+		Result = string:substr(FileContent, From + length(Parameter) + 3, Through - length(Parameter) - 3),
+		case ExpectingList of
+			false -> Result;
+			true -> string:tokens(Result, " ")
+		end.
 
 
 % Overwrite a parameter in config.args
 overwrite_config_args(Path, Parameter, NewValue) ->
 	FileContent = case file:read_file(Path) of
-        {ok, DataRead} -> 
-            binary_to_list(DataRead);
-        _ ->
-            ?error("Could not read config.args file")
+				{ok, DataRead} ->
+						binary_to_list(DataRead);
+				_ ->
+						?error("Could not read config.args file")
 	end,
 
-    {match, [{From, Through}]} = re:run(FileContent, Parameter ++ ":.*\n"),
-    Beginning = string:substr(FileContent, 1, From),
-    End = string:substr(FileContent, From + Through, length(FileContent) - From - Through + 1),
-    file:write_file(Path, list_to_binary(Beginning ++ Parameter ++ ": " ++ NewValue ++ End)).
+		{match, [{From, Through}]} = re:run(FileContent, Parameter ++ ":.*\n"),
+		Beginning = string:substr(FileContent, 1, From),
+		End = string:substr(FileContent, From + Through, length(FileContent) - From - Through + 1),
+		file:write_file(Path, list_to_binary(Beginning ++ Parameter ++ ": " ++ NewValue ++ End)).
 
 
 % List to space-delimited-string list
