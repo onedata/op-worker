@@ -197,27 +197,33 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
     // If cached file block is not complete, read it from server and save to cache
     if(buf.size() < size) {
 
+        // Do read missing data from filesystem
         string buf2;
         int ret = doRead(path, buf2, size - buf.size(), offset + buf.size(), &wrapper->ffi);
         if(ret < 0)
             return ret;
 
+        // Save received data to cache for further use
         wrapper->buffer->writeData(offset + buf.size(), buf2);
 
         buf += buf2;
 
         guard.lock();
+            // Insert some prefetch job
             m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, offset + buf.size() + config::buffers::preferedBlockSize, wrapper->blockSize, ffi->fh));
         guard.unlock();
     } else {
+        // All data could be fetch from cache, lets chceck if next calls would read form cache too
         string tmp;
         size_t prefSize = std::max(2*size, wrapper->blockSize);
-        wrapper->buffer->readData(offset + size, prefSize, tmp);
+        off_t prefFrom = offset + size + config::buffers::preferedBlockSize;
+        wrapper->buffer->readData(prefFrom, prefSize, tmp);
 
+        // If they wouldn't schedule prefetch job
         if(tmp.size() != prefSize) {
             guard.lock();
-                m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, offset + size + tmp.size(), wrapper->blockSize, ffi->fh));
-                m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, offset + size + tmp.size() + wrapper->blockSize, wrapper->blockSize, ffi->fh));
+                m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, prefFrom + tmp.size(), wrapper->blockSize, ffi->fh));
+                m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, prefFrom + tmp.size() + wrapper->blockSize, wrapper->blockSize, ffi->fh));
             guard.unlock();
         }
     }
@@ -361,9 +367,10 @@ void BufferAgent::readerLoop()
                 unique_lock buffGuard(wrapper->mutex);
 
                 if(ret > 0 && tmp.size() >= ret) {
+                
                     wrapper->buffer->writeData(effectiveOffset, tmp);
                     updateRdBufferSize(job.fileName, wrapper->buffer->byteSize());
-                    m_rdJobQueue.insert(PrefetchJob(job.fileName, effectiveOffset + ret, wrapper->blockSize, job.fh));
+                
                 } else if(ret == 0) {
                     wrapper->endOfFile = std::max(wrapper->endOfFile, effectiveOffset);
                 }
@@ -417,8 +424,6 @@ void BufferAgent::writerLoop()
                 writeRes = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
                 uint64_t end = utils::mtime<uint64_t>();
 
-                //LOG(INFO) << "Roundtrip: " << (end - start) << " for " << block->data.size() << " bytes";
- 
                 wrapper->cond.notify_all();
             }
 
