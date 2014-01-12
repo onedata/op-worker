@@ -363,7 +363,7 @@ void BufferAgent::readerLoop()
                 if(ret > 0 && tmp.size() >= ret) {
                     wrapper->buffer->writeData(effectiveOffset, tmp);
                     updateRdBufferSize(job.fileName, wrapper->buffer->byteSize());
-                    //m_rdJobQueue.insert(PrefetchJob(job.fileName, effectiveOffset + ret, wrapper->blockSize, job.fh));
+                    m_rdJobQueue.insert(PrefetchJob(job.fileName, effectiveOffset + ret, wrapper->blockSize, job.fh));
                 } else if(ret == 0) {
                     wrapper->endOfFile = std::max(wrapper->endOfFile, effectiveOffset);
                 }
