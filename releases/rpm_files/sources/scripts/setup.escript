@@ -151,7 +151,7 @@ setup_get_db_nodes() ->
 				undefined ->
 					setup_get_db_nodes();
 				_ ->
-					error
+					halt(1)
 			end
 	end,
 	ok.
@@ -285,7 +285,7 @@ setup_extend_cluster() ->
 						no -> setup_manage_veil()
 					end;
 				_ ->
-					error
+					halt(1)
 			end;
 			
 		{[MainCCM|OptCCMS], DBNodes} ->
@@ -456,7 +456,7 @@ setup_extend_db()->
 				undefined ->
 					setup_extend_db();
 				_ ->
-					error
+					halt(1)
 			end;
 		_ ->
 			h2("Connection has been confirmed"),
