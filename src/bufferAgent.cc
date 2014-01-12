@@ -11,18 +11,20 @@ using std::string;
 namespace veil {
 namespace helpers {
 
+// Static declarations
 boost::recursive_mutex BufferAgent::m_bufferSizeMutex;
 volatile size_t         BufferAgent::m_rdBufferTotalSize;
 volatile size_t         BufferAgent::m_wrBufferTotalSize;
 rdbuf_size_mem_t        BufferAgent::m_rdBufferSizeMem;
 wrbuf_size_mem_t        BufferAgent::m_wrBufferSizeMem;
 
+
 BufferAgent::BufferAgent(write_fun w, read_fun r)
   : m_agentActive(false),
     doWrite(w),
     doRead(r)
 {
-    agentStart(1);
+    agentStart(1); // Start agent with only 2 * 1 threads
 }
 
 BufferAgent::~BufferAgent()
@@ -282,6 +284,7 @@ int BufferAgent::onFlush(std::string path, ffi_type ffi)
 
 int BufferAgent::onRelease(std::string path, ffi_type ffi)
 {
+    // Cleanup
     {
         unique_lock guard(m_wrMutex);
         
@@ -332,7 +335,8 @@ void BufferAgent::agentStop()
 }
 
 void BufferAgent::readerLoop() 
-{
+{ 
+    // Read workers' loop
     unique_lock guard(m_rdMutex);
     while(m_agentActive)
     {
@@ -342,11 +346,13 @@ void BufferAgent::readerLoop()
         if(!m_agentActive)
             return;
 
+        // Get the prefetch job
         PrefetchJob job = *m_rdJobQueue.begin();
         read_buffer_ptr wrapper = m_rdCacheMap[job.fileName];
         m_rdJobQueue.erase(m_rdJobQueue.begin());
         m_rdCond.notify_one();
 
+        // If this download doesn't make sense in this moment, skip this job
         if(!wrapper || wrapper->lastBlock[job.fh] + config::buffers::preferedBlockSize >= job.offset + job.size || (wrapper->endOfFile > 0 && wrapper->endOfFile <= job.offset))
             continue;
 
@@ -354,6 +360,8 @@ void BufferAgent::readerLoop()
 
         {
 
+            // Check how many bytes do we have available in cache
+            // Download only those that aren't available
             string buff;
             wrapper->buffer->readData(job.offset, job.size, buff);
             if(buff.size() < job.size)
@@ -361,17 +369,17 @@ void BufferAgent::readerLoop()
                 string tmp;
                 off_t effectiveOffset = job.offset + buff.size();
                 int ret = doRead(wrapper->fileName, tmp, job.size, effectiveOffset, &wrapper->ffi);
-                LOG(INFO) << "Job: offset: " << job.offset << " size: " << job.size << " ret: " << ret;
                 
                 guard.lock();
                 unique_lock buffGuard(wrapper->mutex);
 
                 if(ret > 0 && tmp.size() >= ret) {
-                
+                    // Save dowloaded bytes in cache
                     wrapper->buffer->writeData(effectiveOffset, tmp);
                     updateRdBufferSize(job.fileName, wrapper->buffer->byteSize());
                 
                 } else if(ret == 0) {
+                    // End of file detected, remember it
                     wrapper->endOfFile = std::max(wrapper->endOfFile, effectiveOffset);
                 }
 
@@ -387,6 +395,7 @@ void BufferAgent::readerLoop()
 
 void BufferAgent::writerLoop()
 {
+    // Write workers' loop
     unique_lock guard(m_wrMutex);
     while(m_agentActive)
     {
@@ -396,8 +405,8 @@ void BufferAgent::writerLoop()
         if(!m_agentActive)
             return;
 
+        // Get first send job
         std::multiset<PrefetchJob, PrefetchJobCompare>::iterator it;
-
         fd_type file = m_wrJobQueue.front();
         write_buffer_ptr wrapper = m_wrCacheMap[file];
         m_wrJobQueue.pop_front();
@@ -413,6 +422,7 @@ void BufferAgent::writerLoop()
 
             block_ptr block;
             {
+                // Get oldest block
                 unique_lock buff_guard(wrapper->mutex);
                 block = wrapper->buffer->removeOldestBlock();
             } 
@@ -420,6 +430,7 @@ void BufferAgent::writerLoop()
             int writeRes;
             if(block) 
             {
+                // Write data to filesystem
                 uint64_t start = utils::mtime<uint64_t>();
                 writeRes = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
                 uint64_t end = utils::mtime<uint64_t>();
@@ -433,6 +444,7 @@ void BufferAgent::writerLoop()
 
                 if(block) 
                 {
+                    // Handle error or incomplete writes
                     if(writeRes < 0) 
                     {
                         while(wrapper->buffer->blockCount() > 0) 
@@ -450,6 +462,7 @@ void BufferAgent::writerLoop()
                     }
                 }
 
+                // If it wasn't last block, lets plan another write job
                 if(wrapper->buffer->blockCount() > 0)
                 {
                     m_wrJobQueue.push_back(file);
