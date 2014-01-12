@@ -22,7 +22,7 @@ BufferAgent::BufferAgent(write_fun w, read_fun r)
     doWrite(w),
     doRead(r)
 {
-    agentStart();
+    agentStart(1);
 }
 
 BufferAgent::~BufferAgent()
