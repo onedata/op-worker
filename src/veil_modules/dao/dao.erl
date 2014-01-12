@@ -20,8 +20,13 @@
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/couch_db.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
+-include_lib("veil_modules/dao/dao_vfs.hrl").
+-include_lib("veil_modules/fslogic/fslogic.hrl").
 
 -import(dao_helper, [name/1]).
+
+-define(storage_info_file,"storage_info.cfg").
+-define(init_storage_after_seconds,1).
 
 -ifdef(TEST).
 -compile([export_all]).
@@ -32,7 +37,7 @@
 
 %% API
 -export([save_record/1, get_record/1, remove_record/1, list_records/2, load_view_def/2, set_db/1]).
--export([doc_to_term/1]).
+-export([doc_to_term/1,init_storage/0]).
 
 %% ===================================================================
 %% Behaviour callback functions
@@ -85,6 +90,8 @@ init({_Args, {init_status, table_initialized}}) -> %% Final stage of initializat
         end;
       (_) -> non
     end,
+
+		erlang:send_after(?init_storage_after_seconds * 1000, self(), {timer, {asynch, 1, {utils,init_storage,[]}}}),
 
     #initial_host_description{request_map = RequestMap, dispatcher_request_map = DispMapFun, sub_procs = SubProcList, plug_in_state = ok};
 init({Args, {init_status, _TableInfo}}) ->
@@ -551,3 +558,63 @@ cache_guard(Timeout) ->
     spawn(dao_cluster, clear_sessions, []), %% Clear FUSE session
 
     cache_guard(Timeout).
+
+%% init_storage/1
+%% ====================================================================
+%% @doc Inserts storage defined during worker instalation to database (if db already has defined storage,
+%% the function only replaces StorageConfigFile with that definition)
+%% @end
+-spec init_storage() -> no_return().
+%% ====================================================================
+init_storage() ->
+	% todo figure out how to get file location
+	StorageFilePath = "/opt/veil/nodes/worker/bin/"++?storage_info_file,
+	try
+		%override installator configuration with existing db storage(if exists)
+		{ok,ActualDbStorageFiles} = dao:handle(1,{dao_vfs, list_storage, []}),
+		ActualDbStorages = [X#veil_document.record || X <- ActualDbStorageFiles],
+		case ActualDbStorages of
+			[] ->
+				config_ok;
+			List->
+				file:write_file(StorageFilePath,io_lib:fwrite("~p.\n", [ActualDbStorages]))
+		end,
+
+		%create storage based on installator configuration, override this config with created storage
+		{ok,[StoragePreferences]} = file:consult(StorageFilePath),
+		case StoragePreferences of
+			StorageInfoList when is_record(hd(StorageInfoList),storage_info) ->
+				ok;
+			PreferencesList ->
+				UserPreferenceToGroupInfo = fun (GroupPreference) ->
+					case GroupPreference of
+						[{name,cluster_fuse_id},{root,Root}] ->
+							#fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}};
+						[{name,Name},{root,Root}] ->
+							#fuse_group_info{name = Name, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}}
+					end
+				end,
+				FuseGroups = lists:map(UserPreferenceToGroupInfo,PreferencesList),
+				{ok, _StorageUUID} = apply(fslogic_storage, insert_storage, ["ClusterProxy", [], FuseGroups]),
+				{ok,[AddedVeilDoc]} = dao:handle(1,{dao_vfs, list_storage, []}),
+				AddedStorageList = [AddedVeilDoc#veil_document.record],
+				file:write_file(StorageFilePath,io_lib:fwrite("~p.\n", [AddedStorageList]))
+		end,
+
+		%insert storage to database if it is still empty
+		{ok,FinalDbStorageFiles} = dao:handle(1,{dao_vfs, list_storage, []}),
+		FinalDbStorages = [Y#veil_document.record || Y <- FinalDbStorageFiles],
+		case FinalDbStorages of
+			[]->
+				{ok,[ConfiguredStorageList]} = file:consult(StorageFilePath),
+				InsertStorage = fun (StorageInfo) when is_record(StorageInfo,storage_info) ->
+					dao:handle(1, {dao_vfs, save_storage, [StorageInfo]})
+				end,
+				lists:foreach(InsertStorage,ConfiguredStorageList);
+			_ ->
+				ok_all_configured
+		end,
+	catch
+		_Type:Error ->
+			lager:error("Error during storage init: ~p",[Error])
+	end.
