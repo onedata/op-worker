@@ -290,7 +290,6 @@ int BufferAgent::onRelease(std::string path, ffi_type ffi)
         if(( it = m_rdCacheMap.find(path) ) != m_rdCacheMap.end()) {
             it->second->openCount--;
             if(it->second->openCount <= 0) {
-                it->second->buffer->debugPrint();
                 m_rdCacheMap.erase(it);
             }
         }
