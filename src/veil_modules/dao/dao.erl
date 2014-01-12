@@ -559,7 +559,7 @@ cache_guard(Timeout) ->
 
     cache_guard(Timeout).
 
-%% init_storage/1
+%% init_storage/0
 %% ====================================================================
 %% @doc Inserts storage defined during worker instalation to database (if db already has defined storage,
 %% the function only replaces StorageConfigFile with that definition)
@@ -613,7 +613,7 @@ init_storage() ->
 				lists:foreach(InsertStorage,ConfiguredStorageList);
 			_ ->
 				ok_all_configured
-		end,
+		end
 	catch
 		_Type:Error ->
 			lager:error("Error during storage init: ~p",[Error])
