@@ -25,7 +25,6 @@
 
 -import(dao_helper, [name/1]).
 
--define(storage_info_file,"storage_info.cfg").
 -define(init_storage_after_seconds,1).
 
 -ifdef(TEST).
@@ -567,9 +566,8 @@ cache_guard(Timeout) ->
 -spec init_storage() -> no_return().
 %% ====================================================================
 init_storage() ->
-	% todo figure out how to get file location
-	StorageFilePath = "/opt/veil/nodes/worker/bin/"++?storage_info_file,
 	try
+		{ok,StorageFilePath} = application:get_env(veil_cluster_node,storage_config_path),
 		%override installator configuration with existing db storage(if exists)
 		{ok,ActualDbStorageFiles} = dao:handle(1,{dao_vfs, list_storage, []}),
 		ActualDbStorages = [X#veil_document.record || X <- ActualDbStorageFiles],
@@ -613,8 +611,10 @@ init_storage() ->
 				lists:foreach(InsertStorage,ConfiguredStorageList);
 			_ ->
 				ok_all_configured
-		end
+		end,
+		ok
 	catch
 		_Type:Error ->
-			lager:error("Error during storage init: ~p",[Error])
+			lager:error("Error during storage init: ~p",[Error]),
+			{error,Error}
 	end.
