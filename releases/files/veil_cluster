@@ -22,10 +22,11 @@ Setting parameters
 
 List of parameters that can be set:
 
-    name       -> name of the node (erlang long name)
-    main_ccm   -> main CCM name (of the cluster this node operates in)
-    opt_ccms   -> list of optional CCMs (this parameter is not mandatory)
-    db_nodes   -> list of DBMS nodes
+    name                -> name of the node (erlang long name)
+    main_ccm            -> main CCM name (of the cluster this node operates in)
+    opt_ccms            -> list of optional CCMs (this parameter is not mandatory)
+    db_nodes            -> list of DBMS nodes
+    storage_config_path -> path to file containing information about storage
 
 Primarily, these parameters are retrieved from 'config.args' file. It should contain these parameters in following manner:
 
@@ -288,6 +289,22 @@ do
 done
 DB_NODES_LIST="${DB_NODES_LIST%?}]"
 
+#####################################
+# STORAGE CONFIG PATH
+
+# Check for storage_config_path name in script args
+get_parameter_from_args "$*" -storage_config_path single
+STORAGE_CONFIG_PATH=$RESULT
+
+# If there was none specified...
+if [[ $STORAGE_CONFIG_PATH == "-no_param" ]]; then
+	# ... retrieve storage_config_path from config file
+	get_parameter_from_file storage_config_path: single
+	STORAGE_CONFIG_PATH=$RESULT
+fi
+
+# Format properly
+STORAGE_CONFIG_PATH_FORMATTED=\"\\\\\'$STORAGE_CONFIG_PATH\\\\\'\"
 
 #####################################
 # PUT CONFIGURATION INTO 'VM.ARGS' AND 'SYS.CONFIG'
@@ -296,11 +313,12 @@ echo " "
 echo "-------"
 echo "Applying configuration:"
 echo " "
-echo "NODE_NAME = $NODE_NAME"
-echo "NODE_TYPE = $NODE_TYPE"
-echo " MAIN_CCM = $MAIN_CCM"
-echo " OPT_CCMS = $OPT_CCMS"
-echo " DB_NODES = $DB_NODES"
+echo "NODE_NAME           = $NODE_NAME"
+echo "NODE_TYPE           = $NODE_TYPE"
+echo "MAIN_CCM            = $MAIN_CCM"
+echo "OPT_CCMS            = $OPT_CCMS"
+echo "DB_NODES            = $DB_NODES"
+echo "STORAGE_CONFIG_PATH = $STORAGE_CONFIG_PATH"
 
 # Get application version
 START_ERL=`cat ../releases/start_erl.data`
@@ -317,6 +335,9 @@ sed $SED_OPTS "s/-veil_cluster_node ccm_nodes.*/-veil_cluster_node ccm_nodes $CC
 
 # Replace DBMS nodes
 sed $SED_OPTS "s/-veil_cluster_node db_nodes.*/-veil_cluster_node db_nodes $DB_NODES_LIST/g" ../releases/$APP_VSN/vm.args
+
+# Replace STORAGE_CONFIG_PATH
+sed $SED_OPTS "s@-veil_cluster_node storage_config_path.*@-veil_cluster_node storage_config_path $STORAGE_CONFIG_PATH_FORMATTED@g" ../releases/$APP_VSN/vm.args
 
 # Remove config for distributed application from sys.config
 sed -n $SED_OPTS '1h;1!H;${;g;s/\[.*%% SASL/ %% SASL/g;p;}' ../releases/$APP_VSN/sys.config

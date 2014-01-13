@@ -33,7 +33,7 @@
 % Paths relative to veil_cluster_node release
 -define(config_args_path, "bin/config.args").
 -define(veil_cluster_script_path, "bin/veil_cluster").
--define(storage_info_path,"bin/storage_info.cfg").
+-define(storage_config_path,"bin/storage_info.cfg").
 
 % Print error message with formatting and finish
 -define(error(Fmt, Args), 
@@ -174,9 +174,9 @@ setup_create_storage() ->
 % Gets storage groups from user (I is used to determine different groups during -batch installation)
 get_fuse_groups_from_user(CurrentGroups,I) ->
 	%interacion IDs used by batch file
-	ConfirmInteractionId = list_to_atom(atom_to_list(want_to_create_groups) ++ integer_to_list(I)),
-	GroupNameInteractionId = list_to_atom(atom_to_list(group_name) ++ integer_to_list(I)),
-	GroupRootInteractionId = list_to_atom(atom_to_list(group_root) ++ integer_to_list(I)),
+	ConfirmInteractionId = list_to_atom(atom_to_list(want_to_create_storage) ++ integer_to_list(I)),
+	GroupNameInteractionId = list_to_atom(atom_to_list(storage_group_name) ++ integer_to_list(I)),
+	GroupRootInteractionId = list_to_atom(atom_to_list(storage_group_directory) ++ integer_to_list(I)),
 
 	WantToCrate = interaction_choose_option(ConfirmInteractionId, "Do you wish to create new storage?",
 	[
@@ -197,7 +197,7 @@ get_fuse_groups_from_user(CurrentGroups,I) ->
 				false ->
 					AllGroupsString=groups_to_string(CurrentGroups)
 			end,
-			Option = interaction_choose_option(accept_created_groups,
+			Option = interaction_choose_option(accept_created_storage,
 				"Is this all?\n"++AllGroupsString,
 				[
 					{yes, "Yes, continue instalation"},
@@ -338,11 +338,13 @@ install_veil_node(Type, Name, Path) ->
 	MainCCM = get(main_ccm),
 	OptCCMs = get(opt_ccms),
 	DBNodes = get(db_nodes),
+	StorageConfigPath = Path ++ Name ++ "/" ++ ?storage_config_path,
 
 	overwrite_config_args(Path ++ Name ++ "/" ++ ?config_args_path, "name", LongName),
 	overwrite_config_args(Path ++ Name ++ "/" ++ ?config_args_path, "main_ccm", atom_to_list(MainCCM)),
 	overwrite_config_args(Path ++ Name ++ "/" ++ ?config_args_path, "opt_ccms", to_space_delimited_list(OptCCMs)),
 	overwrite_config_args(Path ++ Name ++ "/" ++ ?config_args_path, "db_nodes", to_space_delimited_list(DBNodes)),	
+	overwrite_config_args(Path ++ Name ++ "/" ++ ?config_args_path, "storage_config_path", StorageConfigPath),
 
 	os:cmd(Path ++ Name ++ "/" ++ ?veil_cluster_script_path),
 	add_node_to_config(Type, list_to_atom(Name), Path).
@@ -680,7 +682,7 @@ save_nodes_in_config(NodeList) ->
 	end.
 
 save_storage_in_config(Storage) ->
-	StorageFilePath= ?default_nodes_install_path ++ ?default_worker_name ++ "/" ++?storage_info_path,
+	StorageFilePath= ?default_nodes_install_path ++ ?default_worker_name ++ "/" ++?storage_config_path,
 	file:write_file(StorageFilePath,io_lib:fwrite("~p.\n", [Storage])).
 
 
