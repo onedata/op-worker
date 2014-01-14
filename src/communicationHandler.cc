@@ -153,6 +153,9 @@ int CommunicationHandler::openConnection()
 
     if(m_connectStatus == 0 && m_isPushChannel && m_pushCallback && m_fuseID.size() > 0)
         registerPushChannel(m_pushCallback);
+
+    if(m_connectStatus < 0)
+        m_errorCount += MAX_CONNECTION_ERROR_COUNT;
         
     return m_connectStatus;
 }
