@@ -16,7 +16,11 @@
 -include("veil_modules/control_panel/common.hrl").
 -include("logging.hrl").
 
--record(state, {handler_module = undefined :: atom(), version = <<"latest">> :: binary(), resource_id = undefined :: binary()}).
+-record(state, {
+    version = <<"latest">> :: binary(),
+    method = <<"GET">> | <<"PUT">> | <<"DELETE">> | <<"POST">> :: binary(),
+    handler_module = undefined :: atom(), 
+    resource_id = undefined :: binary()}).
 
 -export([init/3, rest_init/2, resource_exists/2, allowed_methods/2, content_types_provided/2, get_resource/2]).
 -export([content_types_accepted/2, delete_resource/2, handle_urlencoded_data/2, handle_json_data/2, handle_multipart_data/2]).
@@ -35,7 +39,6 @@
 -spec init(any(), any(), any()) -> {upgrade, protocol, cowboy_rest}.
 %% ====================================================================
 init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
-
 
 %% rest_init/2
 %% ====================================================================
@@ -81,6 +84,31 @@ rest_init(Req, _Opts) ->
     end.
 
 
+%% allowed_methods/2
+%% ====================================================================
+%% @doc Cowboy callback function
+%% Returns methods that are allowed for request URL.
+%% Will call allowed_methods/2 from rest_module_behaviour.
+%% @end
+-spec allowed_methods(req(), #state{}) -> {[binary()], req(), #state{}}.
+%% ====================================================================
+allowed_methods(Req, #state{ version = Version, handler_module = Mod, resource_id = Id} = State) -> 
+    {MethodsVersionInfo, NewReq} = Mod:methods_and_version_info(Req, Id),
+    {RequestedVersion, AllowedMethods} = case MethodsVersionInfo of
+        [] ->
+            {Version, []};
+        InfoList when is_list(List) ->
+            case Version of
+                <<"latest">> ->
+                    lists:last(InfoList);
+                Ver ->
+                    {Ver, proplists:get_value(Ver, InfoList, [])}
+            end,
+            
+    end,
+    {AllowedMethods, NewReq, State#state{ version=RequestedVersion }}.
+
+
 %% resource_exists/2
 %% ====================================================================
 %% @doc Cowboy callback function
@@ -95,22 +123,9 @@ resource_exists(Req, #state{handler_module = undefined} = State) ->
 resource_exists(Req, #state{resource_id = undefined} = State) -> 
     {true, Req, State};
 
-resource_exists(Req, #state{handler_module = Mod, version = Version, resource_id = Id} = S) -> 
+resource_exists(Req, #state{handler_module = Mod, version = Version, resource_id = Id} = State) -> 
     {Exists, NewReq} = Mod:exists(Req, Version, Id),
-    {Exists, NewReq, S}.
-
-
-%% allowed_methods/2
-%% ====================================================================
-%% @doc Cowboy callback function
-%% Returns methods that are allowed for request URL.
-%% Will call allowed_methods/2 from rest_module_behaviour.
-%% @end
--spec allowed_methods(req(), #state{}) -> {[binary()], req(), #state{}}.
-%% ====================================================================
-allowed_methods(Req, #state{handler_module = Mod, version = Version, resource_id = Id} = State) -> 
-    {Methods, NewReq} = Mod:allowed_methods(Req, Version, Id),
-    {Methods, NewReq, State}.
+    {Exists, NewReq, State}.
 
 
 %% content_types_provided/2
@@ -121,11 +136,8 @@ allowed_methods(Req, #state{handler_module = Mod, version = Version, resource_id
 %% @end
 -spec content_types_provided(req(), #state{}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
-content_types_provided(Req, #state{handler_module = Mod, version = Version, resource_id = Id} = State) -> 
-    {ContentTypes, NewRew} = case Id of
-        undefined -> Mod:content_types_provided(Req, Version);
-        _ -> Mod:content_types_provided(Req, Version, Id)
-    end,
+content_types_provided(Req, #state{ version = Version, method=Method, handler_module = Mod, resource_id = Id} = State) -> 
+    {ContentTypes, NewRew} = Mod:content_types_provided(Req, Version, Method, Id),
     ContentTypesProvided = lists:zip(ContentTypes, lists:duplicate(length(ContentTypes), get_resource)),
     {ContentTypesProvided, NewRew, State}.
 
@@ -253,11 +265,12 @@ handle_data(Req, Mod, Version, Id, Data) ->
 %% ====================================================================
 do_init(Req) ->
     {Version, _} = cowboy_req:binding(version, Req), % :version in cowboy router
+    {Method, _} = cowboy_req:method(Req),
     {PathInfo, _} = cowboy_req:path_info(Req),
     {Module, Id} = case rest_routes:route(PathInfo) of 
         undefined -> {undefined, undefined}; 
         {Mod, ID} -> {Mod, ID} 
     end,
     Req2 = cowboy_req:set_resp_header(<<"Access-Control-Allow-Origin">>, <<"*">>, Req),
-    {ok, Req2, #state{handler_module = Module, version = Version, resource_id = Id}}. 
+    {ok, Req2, #state{ version = Version, handler_module = Module, method=Method, resource_id = Id}}. 
 

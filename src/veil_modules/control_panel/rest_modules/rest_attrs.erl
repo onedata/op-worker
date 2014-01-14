@@ -27,6 +27,17 @@
 %% Behaviour callback functions
 %% ====================================================================
 
+methods_and_versions_info(Req, Id) ->
+    Info = case Id of
+        undefined -> 
+            [];
+        _ ->
+            [
+                {<<"1.0">>, [<<"GET">>]}
+            ]
+    end,
+    {Req, Info}.
+
 %% allowed_methods/3
 %% ====================================================================
 %% @doc Should return list of methods that are allowed and directed at specific Id.

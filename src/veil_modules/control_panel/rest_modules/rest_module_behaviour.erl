@@ -26,14 +26,11 @@
 %% ====================================================================
 behaviour_info(callbacks) -> 
 	[
-		{allowed_methods, 3},
-		{content_types_provided, 2},
-		{content_types_provided, 3},
+		{methods_and_versions_info, 2},
+		{content_types_provided, 4},
 	    {exists, 3},
-	    {get, 2},
 	    {get, 3},
 	    {delete, 3}, % true | false
-		{validate, 4},
 	    {post, 4}, % true | false
 	    {put, 4} % true | false
 	];
