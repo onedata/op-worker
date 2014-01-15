@@ -18,22 +18,22 @@
 %% ====================================================================
 %% @doc Defines the behaviour (lists the callbacks and their arity)
 -spec behaviour_info(Arg) -> Result when
-	Arg :: callbacks | Other,
-	Result ::  [Fun_def] 
-			| undefined,
-	Fun_def :: tuple(),
-	Other :: any().
+    Arg :: callbacks | Other,
+    Result :: [Fun_def]
+    | undefined,
+    Fun_def :: tuple(),
+    Other :: any().
 %% ====================================================================
-behaviour_info(callbacks) -> 
-	[
-		{methods_and_versions_info, 2},
-		{content_types_provided, 4},
-	    {exists, 3},
-	    {get, 3},
-	    {delete, 3}, % true | false
-	    {post, 4}, % true | false
-	    {put, 4} % true | false
-	];
+behaviour_info(callbacks) ->
+    [
+        {methods_and_versions_info, 1},
+        {content_types_provided, 3},
+        {exists, 3},
+        {get, 3},
+        {delete, 3}, % true | false
+        {post, 4}, % true | false
+        {put, 4} % true | false
+    ];
 
 behaviour_info(_Other) ->
     undefined.
@@ -48,9 +48,11 @@ behaviour_info(_Other) ->
 %% The request record must be returned from every callback, and if it
 %% has been altered, the changed version should be returned for
 %% the modifications to persist.
-%% Another argument passed to every callback is version of API. This is
-%% either string denoting API version (e. g. <<"1.0">>) or keyword 
-%% <<"latest">> which should be interpreted as highest available version.
+%% Another argument passed to every callback (besides methods_and_versions_info/1)
+%% is version of API. It is a string denoting API version (e. g. <<"1.0">>)
+%% When <<"latest">> is used in request, it will contain the highest available version.
+%% Requested ID is passed to most of callbacks. It will contain binary representation of
+%% ID that was found in requested URI, or 'undefined' for empty ID.
 
 
 %% NOTE!
@@ -59,32 +61,44 @@ behaviour_info(_Other) ->
 %% See description at the end of file
 
 
-%% allowed_methods/3
-%% ====================================================================
-%% Function: allowed_methods(req(), binary(), binary()) -> {[binary()], req()}.
-%% Desription: Should return list of methods that are allowed and directed at specific Id.
-%% e.g.: if Id =:= undefined -> `[<<"GET">>, <<"POST">>]'
-%%       if Id  /= undefined -> `[<<"GET">>, <<"PUT">>, <<"DELETE">>]'
-%% ====================================================================
+%% Returned values from get/put/delete/post callbacks:
+%% Above callbacks should all return one of the following:
+%% 1. {ok, Req} - upon success,
+%%    when there is no content to return (code 204)
+%%
+%% 2. {{body, ResponseBody}, Req} - upon success,
+%%    when there is some content to be sent back (code 200)
+%%
+%% 3. {{stream, Size, Fun}, Req} - upon success,
+%%    when large body has to be sent back by cowboy-like streaming function (code 200)
+%%
+%% 4. {error, Req} - upon failure,
+%%    when no content should be returned (code 500)
+%%
+%% 5. {{error, ErrorDesc}, Req} - upon failure,
+%%    when there is some content to be sent back (code 500)
+%%
+%% For content returned from GET requests, it's type should be the same as specified in
+%% content_types_provided. "application/json" will be assumed for any other returned content.
 
 
-%% content_types_provided/2
+%% methods_and_versions_info/1
 %% ====================================================================
-%% Function: content_types_provided(req(), binary()) -> {[binary()], req()}.
-%% Desription: Should return list of provided content-types
-%% without specified ID (e.g. ".../rest/resource/"). 
-%% Should take into account different types of methods (PUT, GET etc.), if needed.
-%% Should return empty list if method is not supported.
+%% Function: methods_and_versions_info(req()) -> {[{binary(), [binary()]}], req()}.
+%% Desription: Should return list of tuples, where each tuple consists of version of API version and
+%% list of methods available in the API version.
+%% e.g.: `[{<<"1.0">>, [<<"GET">>, <<"POST">>]}]'
 %% ====================================================================
 
 
 %% content_types_provided/3
 %% ====================================================================
 %% Function: content_types_provided(req(), binary(), binary()) -> {[binary()], req()}.
-%% Desription: Should return list of provided content-types
-%% with specified ID (e.g. ".../rest/resource/some_id"). Should take into
-%% account different types of methods (PUT, GET etc.), if needed.
-%% Should return empty list if method is not supported.
+%% Desription: Will be called when processing a GET request.
+%% Should return list of provided content-types, taking into account (if needed):
+%%   - version
+%%   - requested ID
+%% Should return empty list if given request cannot be processed.
 %% ====================================================================
 
 
@@ -96,73 +110,47 @@ behaviour_info(_Other) ->
 %% ====================================================================
 
 
-%% get/2
-%% ====================================================================
-%% Function: get(req(), binary()) -> {term() | {stream, integer(), function()} | halt, req(), req()}.
-%% Desription: Will be called for GET request without specified ID 
-%% (e.g. ".../rest/resource/"). Should return one of the following:
-%% 1. ResponseBody, of the same type as content_types_provided/1 returned 
-%%    for this request
-%% 2. Cowboy type stream function, serving content of the same type as 
-%%    content_types_provided/1 returned for this request
-%% 3. 'halt' atom if method is not supported
-%% ====================================================================
-
 %% get/3
 %% ====================================================================
-%% Function: get(req(), binary(), binary()) -> {term() | {stream, integer(), function()} | halt, req(), req()}.
-%% Desription: Will be called for GET request with specified ID
-%% (e.g. ".../rest/resource/some_id"). Should return one of the following:
-%% 1. ResponseBody, of the same type as content_types_provided/2 returned 
-%%    for this request
-%% 2. Cowboy type stream function, serving content of the same type as 
-%%    content_types_provided/2 returned for this request
-%% 3. 'halt' atom if method is not supported
-%% ====================================================================
-
-
-%% validate/4
-%% ====================================================================
-%% Function: validate(req(), binary(), binary(), term()) -> {boolean(), req()}.
-%% Desription: Should return true/false depending on whether the request is valid
-%% in terms of the handling module. Will be called before POST or PUT,
-%% should discard unprocessable requests.
+%% Function: get(req(), binary(), binary()) -> {Response, req()} when
+%%     Response :: ok | {body, binary()} | {stream, integer(), function()} | error | {error, binary()}.
+%% Desription: Will be called for GET requests. Must return one of answers
+%% described in rest_module_behaviour.
 %% ====================================================================
 
 
 %% delete/3
 %% ====================================================================
-%% Function: delete(req(), binary(), binary()) -> {boolean(), req()}.
-%% Desription: Will be called for DELETE request on given ID. Should try to remove 
-%% specified resource and return true/false indicating the result.
-%% Should always return false if the method is not supported.
+%% Function: delete(req(), binary(), binary()) -> {Response, req()} when
+%%     Response :: ok | {body, binary()} | {stream, integer(), function()} | error | {error, binary()}.
+%% Desription: Will be called for DELETE request on given ID. Must return one of answers
+%% described in rest_module_behaviour.
 %% ====================================================================
 
 
 %% post/4
 %% ====================================================================
-%% Function: post(req(), binary(), binary(), term()) -> {boolean() | {true, binary()}, req()}.
-%% Desription: Will be called for POST request, after the request has been validated. 
-%% Should handle the request and return true/false indicating the result.
-%% Should always return false if the method is not supported.
-%% Returning {true, URL} will cause the reply to contain 201 redirect to given URL.
+%% Function: post(req(), binary(), binary(), term()) -> {Response, req()} when
+%%     Response :: ok | {body, binary()} | {stream, integer(), function()} | error | {error, binary()}.
+%% Desription: Will be called for POST request. Must return one of answers
+%% described in rest_module_behaviour.
 %% ====================================================================
 
 
 %% put/4
 %% ====================================================================
-%% Function: put(req(), binary(), binary(), term()) -> {boolean(), req()}.
-%% Desription: Will be called for PUT request on given ID, after the request has been validated. 
-%% Should handle the request and return true/false indicating the result.
-%% Should always return false if the method is not supported.
+%% Function: put(req(), binary(), binary(), term()) -> {Response, req()} when
+%%     Response :: ok | {body, binary()} | {stream, integer(), function()} | error | {error, binary()}.
+%% Desription: Will be called for PUT request on given ID. Must return one of answers
+%% described in rest_module_behaviour.
 %% ====================================================================
 
 
 %% handle_multipart_data/4
 %% ====================================================================
-%% Function: handle_multipart_data(req(), binary(), binary(), term()) -> {boolean(), req()}.
+%% Function: handle_multipart_data(req(), binary(), binary(), term()) -> {Response, req()} when
+%%     Response :: ok | {body, binary()} | {stream, integer(), function()} | error | {error, binary()}.
 %% Desription: Optional callback to handle multipart requests. Data should be streamed
 %% in handling module with use of cowboy_multipart module. Method can be `<<"POST">> or <<"PUT">>'.
-%% Should handle the request and return true/false indicating the result.
-%% Should always return false if the method is not supported.
+%% Must return one of answers described in rest_module_behaviour.
 %% ====================================================================

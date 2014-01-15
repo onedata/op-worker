@@ -19,8 +19,8 @@
 -record(state, {
     version = <<"latest">> :: binary(),
     method = <<"GET">> | <<"PUT">> | <<"DELETE">> | <<"POST">> :: binary(),
-    handler_module = undefined :: atom(), 
-    resource_id = undefined :: binary()}).
+handler_module = undefined :: atom(),
+resource_id = undefined :: binary()}).
 
 -export([init/3, rest_init/2, resource_exists/2, allowed_methods/2, content_types_provided/2, get_resource/2]).
 -export([content_types_accepted/2, delete_resource/2, handle_urlencoded_data/2, handle_json_data/2, handle_multipart_data/2]).
@@ -49,17 +49,18 @@ init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 %% @end
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
 %% ====================================================================
-rest_init(Req, _Opts) ->   
+rest_init(Req, _Opts) ->
     {OtpCert, Certs} = try
         {ok, PeerCert} = ssl:peercert(cowboy_req:get(socket, Req)),
         {ok, {Serial, Issuer}} = public_key:pkix_issuer_id(PeerCert, self),
-        [{_, [TryOtpCert | TryCerts], _}] = ets:lookup(gsi_state, {Serial, Issuer}), 
+        [{_, [TryOtpCert | TryCerts], _}] = ets:lookup(gsi_state, {Serial, Issuer}),
         {TryOtpCert, TryCerts}
-    catch _:_->
-        ?error("[REST] Peer connected but cerificate chain was not found. Please check if GSI validation is enabled."),
-        erlang:error(invalid_cert)
-    end,
-            
+                       catch
+                           _:_ ->
+                               ?error("[REST] Peer connected but cerificate chain was not found. Please check if GSI validation is enabled."),
+                               erlang:error(invalid_cert)
+                       end,
+
     case gsi_handler:call(gsi_nif, verify_cert_c,
         [public_key:pkix_encode('OTPCertificate', OtpCert, otp),                    %% peer certificate
             [public_key:pkix_encode('OTPCertificate', Cert, otp) || Cert <- Certs], %% peer CA chain
@@ -92,21 +93,34 @@ rest_init(Req, _Opts) ->
 %% @end
 -spec allowed_methods(req(), #state{}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
-allowed_methods(Req, #state{ version = Version, handler_module = Mod, resource_id = Id} = State) -> 
-    {MethodsVersionInfo, NewReq} = Mod:methods_and_version_info(Req, Id),
+allowed_methods(Req, #state{version = Version, handler_module = Mod} = State) ->
+    {MethodsVersionInfo, NewReq} = Mod:methods_and_version_info(Req),
     {RequestedVersion, AllowedMethods} = case MethodsVersionInfo of
-        [] ->
-            {Version, []};
-        InfoList when is_list(List) ->
-            case Version of
-                <<"latest">> ->
-                    lists:last(InfoList);
-                Ver ->
-                    {Ver, proplists:get_value(Ver, InfoList, [])}
-            end,
-            
-    end,
-    {AllowedMethods, NewReq, State#state{ version=RequestedVersion }}.
+                                             [] ->
+                                                 {Version, []};
+                                             InfoList when is_list(List) ->
+                                                 case Version of
+                                                     <<"latest">> ->
+                                                         lists:last(InfoList);
+                                                     Ver ->
+                                                         {Ver, proplists:get_value(Ver, InfoList, [])}
+                                                 end
+                                         end,
+    {AllowedMethods, NewReq, State#state{version = RequestedVersion}}.
+
+
+%% content_types_provided/2
+%% ====================================================================
+%% @doc Cowboy callback function
+%% Returns content types that can be provided for GET request.
+%% Will call content_types_provided/3 from rest_module_behaviour.
+%% @end
+-spec content_types_provided(req(), #state{}) -> {[binary()], req(), #state{}}.
+%% ====================================================================
+content_types_provided(Req, #state{version = Version, handler_module = Mod, resource_id = Id} = State) ->
+    {ContentTypes, NewRew} = Mod:content_types_provided(Req, Version, Id),
+    ContentTypesProvided = lists:zip(ContentTypes, lists:duplicate(length(ContentTypes), get_resource)),
+    {ContentTypesProvided, NewRew, State}.
 
 
 %% resource_exists/2
@@ -117,29 +131,15 @@ allowed_methods(Req, #state{ version = Version, handler_module = Mod, resource_i
 %% @end
 -spec resource_exists(req(), #state{}) -> {boolean(), req(), #state{}}.
 %% ====================================================================
-resource_exists(Req, #state{handler_module = undefined} = State) -> 
+resource_exists(Req, #state{handler_module = undefined} = State) ->
     {false, Req, State};
 
-resource_exists(Req, #state{resource_id = undefined} = State) -> 
+resource_exists(Req, #state{resource_id = undefined} = State) ->
     {true, Req, State};
 
-resource_exists(Req, #state{handler_module = Mod, version = Version, resource_id = Id} = State) -> 
+resource_exists(Req, #state{version = Version, handler_module = Mod, resource_id = Id} = State) ->
     {Exists, NewReq} = Mod:exists(Req, Version, Id),
     {Exists, NewReq, State}.
-
-
-%% content_types_provided/2
-%% ====================================================================
-%% @doc Cowboy callback function
-%% Returns content types that can be provided for the request.
-%% Will call content_types_provided/1|2 from rest_module_behaviour.
-%% @end
--spec content_types_provided(req(), #state{}) -> {[binary()], req(), #state{}}.
-%% ====================================================================
-content_types_provided(Req, #state{ version = Version, method=Method, handler_module = Mod, resource_id = Id} = State) -> 
-    {ContentTypes, NewRew} = Mod:content_types_provided(Req, Version, Method, Id),
-    ContentTypesProvided = lists:zip(ContentTypes, lists:duplicate(length(ContentTypes), get_resource)),
-    {ContentTypesProvided, NewRew, State}.
 
 
 %% get_resource/2
@@ -152,9 +152,9 @@ content_types_provided(Req, #state{ version = Version, method=Method, handler_mo
 %% ====================================================================
 get_resource(Req, #state{handler_module = Mod, version = Version, resource_id = Id} = State) ->
     {Resp, NewReq} = case Id of
-        undefined -> Mod:get(Req, Version);
-        _ -> Mod:get(Req, Version, Id)
-    end,
+                         undefined -> Mod:get(Req, Version);
+                         _ -> Mod:get(Req, Version, Id)
+                     end,
     {Resp, NewReq, State}.
 
 
@@ -166,7 +166,7 @@ get_resource(Req, #state{handler_module = Mod, version = Version, resource_id = 
 %% @end
 -spec content_types_accepted(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-content_types_accepted(Req, State) -> 
+content_types_accepted(Req, State) ->
     {[
         {<<"application/x-www-form-urlencoded">>, handle_urlencoded_data},
         {<<"application/json">>, handle_json_data},
@@ -194,10 +194,10 @@ handle_urlencoded_data(Req, #state{handler_module = Mod, version = Version, reso
 %% ====================================================================
 handle_json_data(Req, #state{handler_module = Mod, version = Version, resource_id = Id} = State) ->
     {ok, Binary, Req2} = cowboy_req:body(Req),
-    Data = case rest_utils:decode_from_json(Binary) of 
-        {_Type, Struct} -> Struct; 
-        Other -> Other 
-    end,
+    Data = case rest_utils:decode_from_json(Binary) of
+               {_Type, Struct} -> Struct;
+               Other -> Other
+           end,
     {Result, NewReq} = handle_data(Req2, Mod, Version, Id, Data),
     {Result, NewReq, State}.
 
@@ -210,12 +210,12 @@ handle_json_data(Req, #state{handler_module = Mod, version = Version, resource_i
 %% ====================================================================
 handle_multipart_data(Req, #state{handler_module = Mod, version = Version, resource_id = Id} = State) ->
     {Result, NewReq} = case erlang:function_exported(Mod, handle_multipart_data, 4) of
-        true -> 
-            {Method, _} = cowboy_req:method(Req),
-            Mod:handle_multipart_data(Req, Version, Method, Id);
-        false ->
-            {false, Req}
-    end,
+                           true ->
+                               {Method, _} = cowboy_req:method(Req),
+                               Mod:handle_multipart_data(Req, Version, Method, Id);
+                           false ->
+                               {false, Req}
+                       end,
     {Result, NewReq, State}.
 
 
@@ -227,7 +227,7 @@ handle_multipart_data(Req, #state{handler_module = Mod, version = Version, resou
 %% @end
 -spec delete_resource(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-delete_resource(Req, #state{handler_module = Mod, version = Version, resource_id = Id} = State) -> 
+delete_resource(Req, #state{handler_module = Mod, version = Version, resource_id = Id} = State) ->
     {Result, NewReq} = Mod:delete(Req, Version, Id),
     {Result, NewReq, State}.
 
@@ -244,17 +244,14 @@ delete_resource(Req, #state{handler_module = Mod, version = Version, resource_id
 -spec handle_data(req(), atom(), binary(), binary(), term()) -> {boolean(), req()}.
 %% ====================================================================
 handle_data(Req, Mod, Version, Id, Data) ->
-    {_Result, _NewReq} = case Mod:validate(Req, Version, Id, Data) of
-        {true, Req2} -> case cowboy_req:method(Req) of 
-                {<<"POST">>, _} -> 
-                    Mod:post(Req2, Version, Id, Data);
-                {<<"PUT">>, _} -> 
-                    Mod:put(Req2, Version, Id, Data);
-                _ ->
-                    {false, Req2}
-            end;
-        {false, Req2} -> {false, Req2} 
-    end.
+    {_Result, _NewReq} = case cowboy_req:method(Req) of
+                             {<<"POST">>, _} ->
+                                 Mod:post(Req2, Version, Id, Data);
+                             {<<"PUT">>, _} ->
+                                 Mod:put(Req2, Version, Id, Data);
+                             _ ->
+                                 {false, Req2}
+                         end.
 
 
 %% do_init/1
@@ -267,10 +264,10 @@ do_init(Req) ->
     {Version, _} = cowboy_req:binding(version, Req), % :version in cowboy router
     {Method, _} = cowboy_req:method(Req),
     {PathInfo, _} = cowboy_req:path_info(Req),
-    {Module, Id} = case rest_routes:route(PathInfo) of 
-        undefined -> {undefined, undefined}; 
-        {Mod, ID} -> {Mod, ID} 
-    end,
+    {Module, Id} = case rest_routes:route(PathInfo) of
+                       undefined -> {undefined, undefined};
+                       {Mod, ID} -> {Mod, ID}
+                   end,
     Req2 = cowboy_req:set_resp_header(<<"Access-Control-Allow-Origin">>, <<"*">>, Req),
-    {ok, Req2, #state{ version = Version, handler_module = Module, method=Method, resource_id = Id}}. 
+    {ok, Req2, #state{version = Version, handler_module = Module, method = Method, resource_id = Id}}.
 
