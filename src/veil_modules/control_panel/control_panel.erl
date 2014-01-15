@@ -61,8 +61,7 @@ init(_Args) ->
             {port, GuiPort},
             {certfile, CertString},
             {keyfile, CertString},
-            {password, ""},
-            {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}}
+            {password, ""}
         ],
         [
             {env, [{dispatch, Dispatch}]},
