@@ -118,13 +118,9 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(P
     
     ConnectionPoolInfo &poolInfo = m_connectionPools[type];
     
-    LOG(INFO) << "Pool size: " <<poolInfo.connections.size();
-
     // Delete first connection in pool if its error counter is way to big
-    if(poolInfo.connections.size() > 0 && poolInfo.connections.front().first->getErrorCount() >= MAX_CONNECTION_ERROR_COUNT)
+    if(poolInfo.connections.size() > 0 && poolInfo.connections.front().first->getErrorCount() > MAX_CONNECTION_ERROR_COUNT)
         poolInfo.connections.pop_front();
-    else if(poolInfo.connections.size() > 0)
-        LOG(INFO) << "Getting connection with error count: " << poolInfo.connections.front().first->getErrorCount();
     
     // Remove redundant connections
     while(poolInfo.connections.size() > poolInfo.size)
