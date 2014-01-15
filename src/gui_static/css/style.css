@@ -34,6 +34,7 @@
 .login-page
 {
 	width: 500px;
+	max-width: 80%;
 	margin: auto;
 	margin-top: 150px;
 	padding: 16px 30px 10px 30px;

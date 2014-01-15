@@ -216,13 +216,14 @@ top_menu(ActiveTabID, SubMenuBody) ->
 %% ====================================================================
 logotype_footer(MarginTop) ->
     [
-        #panel { style="text-align: center; position: absolute; bottom: 20px; left: 0; right: 0; z-index: -1;", 
-            body=[
-            #image { style="position: absolute; left: 40px; top: 0;", image="/images/innow-gosp-logo.png" },
-            #image { style="margin: 2px;", image="/images/plgrid-plus-logo.png" },
-            #image { style="position: absolute; right: 40px; top: 14px;", image="/images/unia-logo.png" }
-        ]},
-        #panel { style=wf:f("height: ~Bpx;", [MarginTop + 82]) }
+        #panel { style=wf:f("position: relative; height: ~Bpx;", [MarginTop + 82]), body=[ 
+            #panel { style=wf:f("text-align: center; z-index: -1; margin-top: ~Bpx;", [MarginTop]), 
+                body=[
+                #image { style="margin: 10px 100px;", image="/images/innow-gosp-logo.png" },
+                #image { style="margin: 10px 100px;", image="/images/plgrid-plus-logo.png" },
+                #image { style="margin: 10px 100px;", image="/images/unia-logo.png" }
+            ]}
+        ]}
     ].
 
 
