@@ -130,7 +130,7 @@ int CommunicationHandler::openConnection()
     ws_client::connection_ptr con = m_endpoint->get_connection(URL, ec); // Initialize WebSocket handshake
     if(ec.value() != 0) {
         LOG(ERROR) << "Cannot connect to " << URL << " due to: " << ec.message();
-        m_errorCount += MAX_CONNECTION_ERROR_COUNT + 1; // Forece connection reinitialization
+        m_errorCount += MAX_CONNECTION_ERROR_COUNT + 1; // Force connection reinitialization
         return ec.value();
     } else {
         LOG(INFO) << "Trying to connect to: " << URL;
@@ -155,8 +155,14 @@ int CommunicationHandler::openConnection()
     if(m_connectStatus == 0 && m_isPushChannel && m_pushCallback && m_fuseID.size() > 0)
         registerPushChannel(m_pushCallback);
 
-    if(m_connectStatus < 0) {
+    if(m_connectStatus == HANDSHAKE_ERROR) {
+        m_errorCount += MAX_CONNECTION_ERROR_COUNT + 1;
+    } else if(m_connectStatus < 0) {
         ++m_errorCount;
+    }
+
+    if(m_connectStatus < 0) {
+        LOG(INFO) << "Connection failes with error counter's value: " << m_errorCount;
     }
         
     return m_connectStatus;
@@ -463,6 +469,9 @@ void CommunicationHandler::onClose(websocketpp::connection_hdl hdl)
 void CommunicationHandler::onFail(websocketpp::connection_hdl hdl)
 {
     boost::unique_lock<boost::mutex> lock(m_connectMutex);
+    
+    ++m_errorCount;
+    
     m_connectStatus = HANDSHAKE_ERROR;
     m_connectCond.notify_all();
     
