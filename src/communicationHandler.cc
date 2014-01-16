@@ -165,10 +165,6 @@ int CommunicationHandler::openConnection()
     } else if(m_connectStatus < 0) {
         ++m_errorCount;
     }
-
-    if(m_connectStatus < 0) {
-        LOG(INFO) << "Connection failes with error counter's value: " << m_errorCount;
-    }
         
     return m_connectStatus;
 }
