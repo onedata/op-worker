@@ -162,7 +162,7 @@ private:
     virtual boost::shared_ptr<FileCache> newFileCache(bool isBuffer = true);
 
 
-    // Memory management. Memory current state.
+    // Memory management. Memory current state update/check.
     static boost::recursive_mutex           m_bufferSizeMutex;
 
     volatile static size_t              m_rdBufferTotalSize;

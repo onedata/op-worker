@@ -152,15 +152,18 @@ int ClusterProxyHelper::sh_open(const char *path, struct fuse_file_info *fi)
 {
     LOG(INFO) << "CluserProxyHelper open(path: " << string(path) << ")";
 
+    // Proxy this call to Buffer Agent
     return m_bufferAgent.onOpen(string(path), fi);
 }
 
 int ClusterProxyHelper::sh_read(const char *path, char *buf, size_t size, off_t offset,
             struct fuse_file_info *fi)
 {
-    //LOG(INFO) << "CluserProxyHelper read(path: " << string(path) << ", size: " << size << ", offset: " << offset << ")";
+    DLOG(INFO) << "CluserProxyHelper read(path: " << string(path) << ", size: " << size << ", offset: " << offset << ")";
     
     string tmpBuff;
+
+    // Proxy this call to Buffer Agent
     int ret = m_bufferAgent.onRead(string(path), tmpBuff, size, offset, fi);
     if(ret > 0) {
         memcpy(buf, tmpBuff.c_str(), ret);
@@ -172,20 +175,25 @@ int ClusterProxyHelper::sh_read(const char *path, char *buf, size_t size, off_t 
 int ClusterProxyHelper::sh_write(const char *path, const char *buf, size_t size,
              off_t offset, struct fuse_file_info *fi)
 {
-    //LOG(INFO) << "CluserProxyHelper write(path: " << string(path) << ", size: " << size << ", offset: " << offset << ")";
+    DLOG(INFO) << "CluserProxyHelper write(path: " << string(path) << ", size: " << size << ", offset: " << offset << ")";
     
+    // Proxy this call to Buffer Agent
     return m_bufferAgent.onWrite(string(path), string(buf, size), size, offset, fi);
 }
 
 int ClusterProxyHelper::sh_release(const char *path, struct fuse_file_info *fi)
 {
     LOG(INFO) << "CluserProxyHelper release(path: " << string(path) << ")";
-    return m_bufferAgent.onRelease(string(path), fi);;
+
+    // Proxy this call to Buffer Agent
+    return m_bufferAgent.onRelease(string(path), fi);
 }
 
 int ClusterProxyHelper::sh_flush(const char *path, struct fuse_file_info *fi)
 {
     LOG(INFO) << "CluserProxyHelper flush(path: " << string(path) << ")";
+
+    // Proxy this call to Buffer Agent
     return m_bufferAgent.onFlush(string(path), fi);
 }
 
