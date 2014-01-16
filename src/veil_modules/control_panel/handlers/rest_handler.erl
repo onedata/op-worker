@@ -14,6 +14,7 @@
 
 -include_lib("public_key/include/public_key.hrl").
 -include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/control_panel/rest_messages.hrl").
 -include("logging.hrl").
 
 -record(state, {
@@ -71,15 +72,7 @@ rest_init(Req, _Opts) ->
             {ok, EEC} = gsi_handler:find_eec_cert(OtpCert, Certs, gsi_handler:is_proxy_certificate(OtpCert)),
             {rdnSequence, Rdn} = gsi_handler:proxy_subject(EEC),
             {ok, DnString} = user_logic:rdn_sequence_to_dn_string(Rdn),
-            case user_logic:get_user({dn, DnString}) of
-                {ok, _} ->
-                    ?info("[REST] Peer connected using certificate with subject: ~p ~n", [DnString]),
-                    put(user_id, DnString),
-                    {ok, _NewReq, _State} = do_init(Req);
-                _ ->
-                    ?notice("[REST] Peer connected, but was not found in database. Subject: ~p ~n", [DnString]),
-                    erlang:error(user_not_existent_in_db)
-            end;
+            {ok, _Req, _State} = do_init(Req, DnString);
         {ok, 0, Errno} ->
             ?info("[REST] Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
             erlang:error({gsi_error_code, Errno});
@@ -101,19 +94,21 @@ rest_init(Req, _Opts) ->
 -spec allowed_methods(req(), #state{}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
 allowed_methods(Req, #state{version = Version, handler_module = Mod} = State) ->
-    {MethodsVersionInfo, NewReq} = Mod:methods_and_versions_info(Req),
-    {RequestedVersion, AllowedMethods} = case MethodsVersionInfo of
-                                             [] ->
-                                                 {Version, []};
-                                             InfoList when is_list(InfoList) ->
-                                                 case Version of
-                                                     <<"latest">> ->
-                                                         lists:last(InfoList);
-                                                     Ver ->
-                                                         {Ver, proplists:get_value(Ver, InfoList, [])}
-                                                 end
-                                         end,
-    {AllowedMethods, NewReq, State#state{version = RequestedVersion}}.
+    {MethodsVersionInfo, Req2} = Mod:methods_and_versions_info(Req),
+    RequestedVersion = case Version of
+                           <<"latest">> ->
+                               {Ver, _} = lists:last(MethodsVersionInfo),
+                               Ver;
+                           Ver ->
+                               Ver
+                       end,
+    case proplists:get_value(RequestedVersion, MethodsVersionInfo, undefined) of
+        undefined ->
+            NewReq = reply_with_error(Req, ?error_version_unsupported),
+            {halt, NewReq, State#state{version = RequestedVersion}};
+        AllowedMethods ->
+            {AllowedMethods, Req2, State#state{version = RequestedVersion}}
+    end.
 
 
 %% content_types_provided/2
@@ -274,22 +269,34 @@ handle_data(Req, Mod, Version, Id, Data) ->
     process_callback_answer(Answer, Req2).
 
 
-%% do_init/1
+%% do_init/2
 %% ====================================================================
-%% Initializes request context after the peer has been validated.
+%% Initializes request context after the peer has been validated. Checks if user
+%% exists in the database and requested URI is supported.
 %% @end
--spec do_init(req()) -> {ok, req(), #state{}}.
+-spec do_init(req(), string()) -> {ok, req(), #state{}}.
 %% ====================================================================
-do_init(Req) ->
-    {Version, _} = cowboy_req:binding(version, Req), % :version in cowboy router
-    {Method, _} = cowboy_req:method(Req),
-    {PathInfo, _} = cowboy_req:path_info(Req),
-    {Module, Id} = case rest_routes:route(PathInfo) of
-                       undefined -> {undefined, undefined};
-                       {Mod, ID} -> {Mod, ID}
-                   end,
-    Req2 = cowboy_req:set_resp_header(<<"Access-Control-Allow-Origin">>, <<"*">>, Req),
-    {ok, Req2, #state{version = Version, handler_module = Module, method = Method, resource_id = Id}}.
+do_init(Req, DnString) ->
+    case user_logic:get_user({dn, DnString}) of
+        {ok, _} ->
+            ?info("[REST] Peer connected using certificate with subject: ~p ~n", [DnString]),
+            put(user_id, DnString),
+            {PathInfo, _} = cowboy_req:path_info(Req),
+            case rest_routes:route(PathInfo) of
+                undefined ->
+                    NewReq = reply_with_error(Req, ?error_path_unknown),
+                    {ok, NewReq, []};
+                {Module, Id} ->
+                    {Version, _} = cowboy_req:binding(version, Req), % :version in cowboy router
+                    {Method, _} = cowboy_req:method(Req),
+                    Req2 = cowboy_req:set_resp_header(<<"Access-Control-Allow-Origin">>, <<"*">>, Req),
+                    {ok, Req2, #state{version = Version, handler_module = Module, method = Method, resource_id = Id}}
+            end;
+        _ ->
+            ?notice("[REST] Peer connected, but was not found in database. Subject: ~p ~n", [DnString]),
+            NewReq = reply_with_error(Req, ?error_user_unknown),
+            {ok, NewReq, []}
+    end.
 
 
 %% process_callback_answer/1
@@ -317,3 +324,16 @@ process_callback_answer(Answer, Req) ->
             {false, Req2}
     end.
 
+
+%% reply_with_error/2
+%% ====================================================================
+%% Replies with 500 error cose, content-type set to application/json and
+%% an error message
+%% @end
+-spec reply_with_error(req(), binary()) -> req().
+%% ====================================================================
+reply_with_error(Req, ErrorDesc) ->
+    Req2 = cowboy_req:set_resp_header(<<"content-type">>, <<"application/json">>, Req),
+    Req3 = cowboy_req:set_resp_body(rest_utils:error_reply(ErrorDesc), Req2),
+    {ok, Req4} = cowboy_req:reply(500, Req3),
+    Req4.

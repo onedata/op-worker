@@ -125,7 +125,7 @@ delete(Req, <<"1.0">>, Id) ->
     Filepath = binary_to_list(Id),
     Response = case erlang:get(file_type) of
                    dir ->
-                       {error, rest_utils:error_reply(?error_cannot_delete_dir)};
+                       {error, rest_utils:error_reply(?error_dir_cannot_delete)};
                    reg ->
                        case logical_files_manager:delete(Filepath) of
                            ok ->
