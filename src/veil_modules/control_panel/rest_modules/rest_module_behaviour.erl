@@ -27,7 +27,6 @@
 behaviour_info(callbacks) ->
     [
         {methods_and_versions_info, 1},
-        {content_types_provided, 3},
         {exists, 3},
         {get, 3},
         {delete, 3}, % true | false
@@ -49,7 +48,7 @@ behaviour_info(_Other) ->
 %% has been altered, the changed version should be returned for
 %% the modifications to persist.
 %% Another argument passed to every callback (besides methods_and_versions_info/1)
-%% is version of API. It is a string denoting API version (e. g. <<"1.0">>)
+%% is version of API. It is a binary string denoting API version (e. g. <<"1.0">>)
 %% When <<"latest">> is used in request, it will contain the highest available version.
 %% Requested ID is passed to most of callbacks. It will contain binary representation of
 %% ID that was found in requested URI, or 'undefined' for empty ID.
@@ -61,6 +60,7 @@ behaviour_info(_Other) ->
 %% See description at the end of file
 
 
+%% NOTE!
 %% Returned values from get/put/delete/post callbacks:
 %% Above callbacks should all return one of the following:
 %% 1. {ok, Req} - upon success,
@@ -69,7 +69,7 @@ behaviour_info(_Other) ->
 %% 2. {{body, ResponseBody}, Req} - upon success,
 %%    when there is some content to be sent back (code 200)
 %%
-%% 3. {{stream, Size, Fun}, Req} - upon success,
+%% 3. {{stream, Size, Fun, ContentType}, Req} - upon success,
 %%    when large body has to be sent back by cowboy-like streaming function (code 200)
 %%
 %% 4. {error, Req} - upon failure,
@@ -78,27 +78,18 @@ behaviour_info(_Other) ->
 %% 5. {{error, ErrorDesc}, Req} - upon failure,
 %%    when there is some content to be sent back (code 500)
 %%
-%% For content returned from GET requests, it's type should be the same as specified in
-%% content_types_provided. "application/json" will be assumed for any other returned content.
+%% "application/json" will be assumed for any content returned as ResponseBody or ErrorDesc.
+%% To return short reply describing operation success/failure, success_reply/1 and error_reply/1 can be used.
+%% When returning large body with a streaming function, it is required to specify
+%% ContentType (binary()), which will set response "content-type" header to desired.
 
 
 %% methods_and_versions_info/1
 %% ====================================================================
 %% Function: methods_and_versions_info(req()) -> {[{binary(), [binary()]}], req()}.
 %% Desription: Should return list of tuples, where each tuple consists of version of API version and
-%% list of methods available in the API version.
+%% list of methods available in the API version. Latest version must be at the end of list.
 %% e.g.: `[{<<"1.0">>, [<<"GET">>, <<"POST">>]}]'
-%% ====================================================================
-
-
-%% content_types_provided/3
-%% ====================================================================
-%% Function: content_types_provided(req(), binary(), binary()) -> {[binary()], req()}.
-%% Desription: Will be called when processing a GET request.
-%% Should return list of provided content-types, taking into account (if needed):
-%%   - version
-%%   - requested ID
-%% Should return empty list if given request cannot be processed.
 %% ====================================================================
 
 

@@ -16,13 +16,14 @@
 
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/control_panel/rest_utils.hrl").
+-include("veil_modules/control_panel/rest_messages.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao_share.hrl").
 -include("veil_modules/dao/dao_users.hrl").
 -include("logging.hrl").
 
--export([methods_and_versions_info/1, content_types_provided/3]).
--export([exists/3, get/2, get/3, delete/3, validate/4, post/4, put/4]).
+-export([methods_and_versions_info/1, exists/3]).
+-export([get/3, delete/3, post/4, put/4]).
 
 
 %% ====================================================================
@@ -33,27 +34,13 @@
 %% methods_and_versions_info/2
 %% ====================================================================
 %% @doc Should return list of tuples, where each tuple consists of version of API version and
-%% list of methods available in the API version.
+%% list of methods available in the API version. Latest version must be at the end of list.
 %% e.g.: `[{<<"1.0">>, [<<"GET">>, <<"POST">>]}]'
 %% @end
 -spec methods_and_versions_info(req()) -> {[{binary(), [binary()]}], req()}.
 %% ====================================================================
-methods_and_versions_info(Req, Id) ->
-    {[{<<"1.0">>, [<<"GET">>, <<"POST">>, <<"DELETE">>]]}], Req}.
-
-
-%% content_types_provided/3
-%% ====================================================================
-%% @doc Will be called when processing a GET request.
-%% Should return list of provided content-types, taking into account (if needed):
-%%   - version
-%%   - requested ID
-%% Should return empty list if given request cannot be processed.
-%% @end
--spec content_types_provided(req(), binary(), binary()) -> {[binary()], req()}.
-%% ====================================================================
-content_types_provided(Req, _Version, _Id) ->
-    {[<<"application/json">>], Req}.
+methods_and_versions_info(Req) ->
+    {[{<<"1.0">>, [<<"GET">>, <<"POST">>, <<"DELETE">>]}], Req}.
 
 
 %% exists/3
@@ -66,7 +53,9 @@ content_types_provided(Req, _Version, _Id) ->
 exists(Req, _Version, Id) ->
     ShareID = binary_to_list(Id),
     case logical_files_manager:get_share({uuid, ShareID}) of
-        {ok, _} ->
+        {ok, ShareInfo} ->
+            % Cache for later use
+            erlang:put(share_info, ShareInfo),
             {true, Req};
         _ ->
             {false, Req}
@@ -98,16 +87,17 @@ get(Req, <<"1.0">>, Id) ->
                        {body, Body};
                    _ ->
                        try
-                           ShareID = binary_to_list(Id),
-                           {ok, #veil_document{record = #share_desc{file = FileID}}} = logical_files_manager:get_share({uuid, ShareID}),
+                           % Share info was cached in exists/3
+                           #veil_document{record = #share_desc{file = FileID}} = erlang:get(share_info),
                            {ok, Filepath} = logical_files_manager:get_file_user_dependent_name_by_uuid(FileID),
                            BinFilepath = list_to_binary(Filepath),
                            DownloadPath = share_id_to_download_path(Req, Id),
-                           Response = rest_utils:encode_to_json({struct, [{file_path, BinFilepath}, {download_path, DownloadPath}]}),
+                           Body = rest_utils:encode_to_json({struct, [{file_path, BinFilepath}, {download_path, DownloadPath}]}),
                            {body, Body}
                        catch
                            _:_ ->
-                               {error, <<"unknown error">>}
+                               ?error("[REST] unable to retrieve dowload path based on share doc: ~p", [erlang:get(share_info)]),
+                               {error, rest_utils:error_reply(?error_unknown)}
                        end
                end,
     {Response, Req}.
@@ -125,9 +115,10 @@ delete(Req, <<"1.0">>, Id) ->
     ShareID = binary_to_list(Id),
     case logical_files_manager:remove_share({uuid, ShareID}) of
         ok ->
-            {ok, Req};
+            {{body, rest_utils:success_reply(?success_share_deleted)}, Req};
         _ ->
-            {error, <<"unknown">>}
+            ?error("[REST] unable to delete a share, uuid: ~p", [ShareID]),
+            {{error, rest_utils:error_reply(?error_unknown)}, Req}
     end.
 
 
@@ -149,9 +140,11 @@ post(Req, <<"1.0">>, undefined, Data) ->
                                 {ok, NewUUID} = logical_files_manager:create_standard_share(Filepath),
                                 {ok, list_to_binary(NewUUID)}
                         end,
-        {{ok, share_id_to_download_path(Req, ShareID)}, Req}
+        DownloadPath = share_id_to_download_path(Req, ShareID),
+        {{body, <<"\"", DownloadPath/binary, "\"">>}, Req}
     catch _:_ ->
-        {{error, <<"unknown error">>}, Req}
+        ?error("[REST] unable to create a share, filepath: ~p", [binary_to_list(Data)]),
+        {{error, rest_utils:error_reply(?error_share_cannot_create)}, Req}
     end.
 
 

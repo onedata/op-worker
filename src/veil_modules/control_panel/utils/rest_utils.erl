@@ -13,6 +13,7 @@
 -module(rest_utils).
 
 -export([map/2, unmap/3, encode_to_json/1, decode_from_json/1]).
+-export([success_reply/1, error_reply/1]).
 
 %% ====================================================================
 %% API functions
@@ -90,4 +91,26 @@ encode_to_json(Term) ->
 -spec decode_from_json(term()) -> binary().
 %% ====================================================================
 decode_from_json(JSON) ->
-	mochijson2:decode(JSON).
+    mochijson2:decode(JSON).
+
+
+%% success_reply/1
+%% ====================================================================
+%% @doc Produces a standarized JSON return message, indicating success of an operation.
+%% It can be inserted directly into response body.
+%% @end
+-spec success_reply(binary()) -> binary().
+%% ====================================================================
+success_reply(Message) ->
+    <<"{\"status\":\"ok\",\"description\":\"", Message/binary, "\"}">>.
+
+
+%% error_reply/1
+%% ====================================================================
+%% @doc Produces a standarized JSON return message, indicating failure of an operation.
+%% It can be inserted directly into response body.
+%% @end
+    -spec error_reply(binary()) -> binary().
+%% ====================================================================
+error_reply(Message) ->
+    <<"{\"status\":\"error\",\"description\":\"", Message/binary, "\"}">>.

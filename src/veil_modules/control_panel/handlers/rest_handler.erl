@@ -18,9 +18,10 @@
 
 -record(state, {
     version = <<"latest">> :: binary(),
-    method = <<"GET">> | <<"PUT">> | <<"DELETE">> | <<"POST">> :: binary(),
-handler_module = undefined :: atom(),
-resource_id = undefined :: binary()}).
+    method = <<"GET">>,
+    handler_module = undefined :: atom(),
+    resource_id = undefined :: binary()
+}).
 
 -export([init/3, rest_init/2, resource_exists/2, allowed_methods/2, content_types_provided/2, get_resource/2]).
 -export([content_types_accepted/2, delete_resource/2, handle_urlencoded_data/2, handle_json_data/2, handle_multipart_data/2]).
@@ -70,9 +71,15 @@ rest_init(Req, _Opts) ->
             {ok, EEC} = gsi_handler:find_eec_cert(OtpCert, Certs, gsi_handler:is_proxy_certificate(OtpCert)),
             {rdnSequence, Rdn} = gsi_handler:proxy_subject(EEC),
             {ok, DnString} = user_logic:rdn_sequence_to_dn_string(Rdn),
-            ?info("[REST] Peer connected using certificate with subject: ~p ~n", [DnString]),
-            put(user_id, DnString),
-            {ok, _NewReq, _State} = do_init(Req);
+            case user_logic:get_user({dn, DnString}) of
+                {ok, _} ->
+                    ?info("[REST] Peer connected using certificate with subject: ~p ~n", [DnString]),
+                    put(user_id, DnString),
+                    {ok, _NewReq, _State} = do_init(Req);
+                _ ->
+                    ?notice("[REST] Peer connected, but was not found in database. Subject: ~p ~n", [DnString]),
+                    erlang:error(user_not_existent_in_db)
+            end;
         {ok, 0, Errno} ->
             ?info("[REST] Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
             erlang:error({gsi_error_code, Errno});
@@ -88,17 +95,17 @@ rest_init(Req, _Opts) ->
 %% allowed_methods/2
 %% ====================================================================
 %% @doc Cowboy callback function
-%% Returns methods that are allowed for request URL.
-%% Will call allowed_methods/2 from rest_module_behaviour.
+%% Returns methods that are allowed, based on version specified in URI.
+%% Will call methods_and_version_info/1 from rest_module_behaviour.
 %% @end
 -spec allowed_methods(req(), #state{}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
 allowed_methods(Req, #state{version = Version, handler_module = Mod} = State) ->
-    {MethodsVersionInfo, NewReq} = Mod:methods_and_version_info(Req),
+    {MethodsVersionInfo, NewReq} = Mod:methods_and_versions_info(Req),
     {RequestedVersion, AllowedMethods} = case MethodsVersionInfo of
                                              [] ->
                                                  {Version, []};
-                                             InfoList when is_list(List) ->
+                                             InfoList when is_list(InfoList) ->
                                                  case Version of
                                                      <<"latest">> ->
                                                          lists:last(InfoList);
@@ -112,22 +119,20 @@ allowed_methods(Req, #state{version = Version, handler_module = Mod} = State) ->
 %% content_types_provided/2
 %% ====================================================================
 %% @doc Cowboy callback function
-%% Returns content types that can be provided for GET request.
-%% Will call content_types_provided/3 from rest_module_behaviour.
+%% Returns content types that can be provided. "application/json" is default.
+%% It can be changed later by cowbyoy_req:set_resp_header/3.
 %% @end
 -spec content_types_provided(req(), #state{}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
-content_types_provided(Req, #state{version = Version, handler_module = Mod, resource_id = Id} = State) ->
-    {ContentTypes, NewRew} = Mod:content_types_provided(Req, Version, Id),
-    ContentTypesProvided = lists:zip(ContentTypes, lists:duplicate(length(ContentTypes), get_resource)),
-    {ContentTypesProvided, NewRew, State}.
+content_types_provided(Req, State) ->
+    {[{<<"application/json">>, get_resource}], Req, State}.
 
 
 %% resource_exists/2
 %% ====================================================================
 %% @doc Cowboy callback function
-%% Determines if resource identified by URL exists.
-%% Will call exists/2 from rest_module_behaviour.
+%% Determines if resource identified by URI exists.
+%% Will call exists/3 from rest_module_behaviour.
 %% @end
 -spec resource_exists(req(), #state{}) -> {boolean(), req(), #state{}}.
 %% ====================================================================
@@ -146,14 +151,28 @@ resource_exists(Req, #state{version = Version, handler_module = Mod, resource_id
 %% ====================================================================
 %% @doc Cowboy callback function
 %% Handles GET requests. 
-%% Will call get/1|2 from rest_module_behaviour.
+%% Will call get/3 from rest_module_behaviour.
 %% @end
 -spec get_resource(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-get_resource(Req, #state{handler_module = Mod, version = Version, resource_id = Id} = State) ->
-    {Resp, NewReq} = case Id of
-                         undefined -> Mod:get(Req, Version);
-                         _ -> Mod:get(Req, Version, Id)
+get_resource(Req, #state{version = Version, handler_module = Mod, resource_id = Id} = State) ->
+    {Answer, Req2} = Mod:get(Req, Version, Id),
+    % process_callback_answer/2 cannot be used here as cowboy expects other returned values
+    {Resp, NewReq} = case Answer of
+                         ok ->
+                             {halt, Req2};
+                         {body, ResponseBody} ->
+                             {ResponseBody, Req2};
+                         {stream, Size, Fun, ContentType} ->
+                             Req3 = cowboy_req:set_resp_header(<<"content-type">>, ContentType, Req2),
+                             {{stream, Size, Fun}, Req3};
+                         error ->
+                             {ok, Req3} = cowboy_req:reply(500, Req2),
+                             {halt, Req3};
+                         {error, ErrorDesc} ->
+                             Req3 = cowboy_req:set_resp_body(ErrorDesc, Req2),
+                             {ok, Req4} = cowboy_req:reply(500, Req3),
+                             {halt, Req4}
                      end,
     {Resp, NewReq, State}.
 
@@ -212,7 +231,8 @@ handle_multipart_data(Req, #state{handler_module = Mod, version = Version, resou
     {Result, NewReq} = case erlang:function_exported(Mod, handle_multipart_data, 4) of
                            true ->
                                {Method, _} = cowboy_req:method(Req),
-                               Mod:handle_multipart_data(Req, Version, Method, Id);
+                               {Answer, Req2} = Mod:handle_multipart_data(Req, Version, Method, Id),
+                               process_callback_answer(Answer, Req2);
                            false ->
                                {false, Req}
                        end,
@@ -228,8 +248,9 @@ handle_multipart_data(Req, #state{handler_module = Mod, version = Version, resou
 -spec delete_resource(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 delete_resource(Req, #state{handler_module = Mod, version = Version, resource_id = Id} = State) ->
-    {Result, NewReq} = Mod:delete(Req, Version, Id),
-    {Result, NewReq, State}.
+    {Answer, Req2} = Mod:delete(Req, Version, Id),
+    {Result, Req3} = process_callback_answer(Answer, Req2),
+    {Result, Req3, State}.
 
 
 %% ====================================================================
@@ -244,14 +265,13 @@ delete_resource(Req, #state{handler_module = Mod, version = Version, resource_id
 -spec handle_data(req(), atom(), binary(), binary(), term()) -> {boolean(), req()}.
 %% ====================================================================
 handle_data(Req, Mod, Version, Id, Data) ->
-    {_Result, _NewReq} = case cowboy_req:method(Req) of
-                             {<<"POST">>, _} ->
-                                 Mod:post(Req2, Version, Id, Data);
-                             {<<"PUT">>, _} ->
-                                 Mod:put(Req2, Version, Id, Data);
-                             _ ->
-                                 {false, Req2}
-                         end.
+    {Answer, Req2} = case cowboy_req:method(Req) of
+                         {<<"POST">>, _} ->
+                             Mod:post(Req, Version, Id, Data);
+                         {<<"PUT">>, _} ->
+                             Mod:put(Req, Version, Id, Data)
+                     end,
+    process_callback_answer(Answer, Req2).
 
 
 %% do_init/1
@@ -270,4 +290,30 @@ do_init(Req) ->
                    end,
     Req2 = cowboy_req:set_resp_header(<<"Access-Control-Allow-Origin">>, <<"*">>, Req),
     {ok, Req2, #state{version = Version, handler_module = Module, method = Method, resource_id = Id}}.
+
+
+%% process_callback_answer/1
+%% ====================================================================
+%% Unifies replying from PUT / POST / DELETE requests - first argument is response
+%% from a callback, that should conform to rules specified in rest_module_behaviour
+%% @end
+-spec process_callback_answer(term(), req()) -> {true | false, req()}.
+%% ====================================================================
+process_callback_answer(Answer, Req) ->
+    case Answer of
+        ok ->
+            {true, Req};
+        {body, ResponseBody} ->
+            NewReq = cowboy_req:set_resp_body(ResponseBody, Req),
+            {true, NewReq};
+        {stream, Size, Fun, ContentType} ->
+            Req2 = cowboy_req:set_resp_header(<<"content-type">>, ContentType, Req),
+            Req3 = cowboy_req:set_resp_body_fun(Size, Fun, Req2),
+            {true, Req3};
+        error ->
+            {false, Req};
+        {error, ErrorDesc} ->
+            Req2 = cowboy_req:set_resp_body(ErrorDesc, Req),
+            {false, Req2}
+    end.
 

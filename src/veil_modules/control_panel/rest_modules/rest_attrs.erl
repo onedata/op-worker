@@ -16,11 +16,12 @@
 
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/control_panel/rest_utils.hrl").
+-include("veil_modules/control_panel/rest_messages.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("logging.hrl").
 
--export([methods_and_versions_info/1, content_types_provided/3]).
--export([exists/3, get/3, delete/3, post/4, put/4]).
+-export([methods_and_versions_info/1, exists/3]).
+-export([get/3, delete/3, post/4, put/4]).
 
 
 %% ====================================================================
@@ -31,27 +32,13 @@
 %% methods_and_versions_info/2
 %% ====================================================================
 %% @doc Should return list of tuples, where each tuple consists of version of API version and
-%% list of methods available in the API version.
+%% list of methods available in the API version. Latest version must be at the end of list.
 %% e.g.: `[{<<"1.0">>, [<<"GET">>, <<"POST">>]}]'
 %% @end
 -spec methods_and_versions_info(req()) -> {[{binary(), [binary()]}], req()}.
 %% ====================================================================
-methods_and_versions_info(Req, Id) ->
+methods_and_versions_info(Req) ->
     {[{<<"1.0">>, [<<"GET">>]}], Req}.
-
-
-%% content_types_provided/3
-%% ====================================================================
-%% @doc Will be called when processing a GET request.
-%% Should return list of provided content-types, taking into account (if needed):
-%%   - version
-%%   - requested ID
-%% Should return empty list if given request cannot be processed.
-%% @end
--spec content_types_provided(req(), binary(), binary()) -> {[binary()], req()}.
-%% ====================================================================
-content_types_provided(Req, _Version, _Id) ->
-    {[<<"application/json">>], Req}.
 
 
 %% exists/3
@@ -64,10 +51,13 @@ content_types_provided(Req, _Version, _Id) ->
 exists(Req, _Version, Id) ->
     try
         Filepath = binary_to_list(Id),
-        {ok, _} = logical_files_manager:getfileattr(Filepath),
+        {ok, Attr} = logical_files_manager:getfileattr(Filepath),
+        % Remember file attrs for later use
+        erlang:put(file_attr, Attr),
         {true, Req}
-    catch _:_ ->
-        {false, Req}
+    catch
+        _:_ ->
+            {false, Req}
     end.
 
 
@@ -82,18 +72,12 @@ exists(Req, _Version, Id) ->
 get(Req, <<"1.0">>, Id) ->
     case Id of
         undefined ->
-            {{error, <<"dupa">>}, Req};
+            {{error, rest_utils:error_reply(?error_no_id_in_uri)}, Req};
         _ ->
-            try
-                Filepath = binary_to_list(Id),
-                {ok, Fileattr} = logical_files_manager:getfileattr(Filepath),
-                MappedFileattr = map(Fileattr),
-                Response = rest_utils:encode_to_json({struct, MappedFileattr}),
-                {{ok, Response}, Req}
-            catch
-                _:_ ->
-                    {{error, <<"cycki">>}, Req}
-            end
+            Attr = erlang:get(file_attr),
+            MappedFileattr = map(Attr),
+            Response = rest_utils:encode_to_json({struct, MappedFileattr}),
+            {{body, Response}, Req}
     end.
 
 
@@ -130,7 +114,7 @@ post(Req, <<"1.0">>, _Id, _Data) ->
     Response :: ok | {body, binary()} | {stream, integer(), function()} | error | {error, binary()}.
 %% ====================================================================
 put(Req, <<"1.0">>, _Id, _Data) ->
-    {false, Req}.
+    {error, Req}.
 
 
 %% ====================================================================

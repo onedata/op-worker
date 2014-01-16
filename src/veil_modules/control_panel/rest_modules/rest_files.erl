@@ -15,11 +15,12 @@
 -behaviour(rest_module_behaviour).
 
 -include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/control_panel/rest_messages.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("logging.hrl").
 
--export([methods_and_versions_info/1, content_types_provided/3]).
--export([exists/3, get/2, get/3, delete/3, validate/4, post/4, put/4]).
+-export([methods_and_versions_info/1, exists/3]).
+-export([get/3, delete/3, post/4, put/4]).
 % optional callback
 -export([handle_multipart_data/4]).
 
@@ -32,67 +33,43 @@
 %% methods_and_versions_info/2
 %% ====================================================================
 %% @doc Should return list of tuples, where each tuple consists of version of API version and
-%% list of methods available in the API version.
+%% list of methods available in the API version. Latest version must be at the end of list.
 %% e.g.: `[{<<"1.0">>, [<<"GET">>, <<"POST">>]}]'
 %% @end
 -spec methods_and_versions_info(req()) -> {[{binary(), [binary()]}], req()}.
 %% ====================================================================
-methods_and_versions_info(Req, Id) ->
+methods_and_versions_info(Req) ->
     {[{<<"1.0">>, [<<"GET">>, <<"PUT">>, <<"POST">>, <<"DELETE">>]}], Req}.
-
-
-%% content_types_provided/3
-%% ====================================================================
-%% @doc Will be called when processing a GET request.
-%% Should return list of provided content-types, taking into account (if needed):
-%%   - version
-%%   - requested ID
-%% Should return empty list if given request cannot be processed.
-%% @end
--spec content_types_provided(req(), binary(), binary()) -> {[binary()], req()}.
-%% ====================================================================
-content_types_provided(Req, _Version, Id) ->
-    Answer = case Id of
-                 undefined ->
-                     erlang:put(file_type, dir),
-                     [<<"application/json">>];
-                 _ ->
-                     Filepath = binary_to_list(Id),
-                     case logical_files_manager:getfileattr(Filepath) of
-                         {ok, Attr} ->
-                             % Remember file attrs not to ask DB again later
-                             erlang:put(file_attr, Attr),
-                             case Attr#fileattributes.type of
-                                 "REG" ->
-                                     % As the existence is checked here, the result might be remembered and reused
-                                     erlang:put(file_type, reg),
-                                     _Mimetypes = mimetypes:path_to_mimes(Filepath);
-                                 "DIR" ->
-                                     % As the existence is checked here, the result might be remembered and reused
-                                     erlang:put(file_type, dir),
-                                     [<<"application/json">>]
-                             end;
-                         _ ->
-                             % getfileattr returned error, resource does not exist
-                             erlang:put(file_type, none),
-                             % return some content-type so exists function is called and reply returns 404 not found
-                             [<<"application/json">>]
-                     end,
-             end,
-    {Answer, Req}.
 
 
 %% exists/3
 %% ====================================================================
 %% @doc Should return whether resource specified by given ID exists.
-%% Will be called for GET, PUT and DELETE when ID is contained in the URL. 
+%% Will be called for GET, PUT and DELETE when ID is contained in the URL (is NOT undefined).
 %% @end
 -spec exists(req(), binary(), binary()) -> {boolean(), req()}.
 %% ====================================================================
-exists(Req, _Version, _Id) ->
-    % Use the knowledge gathered in content_types_provided
-    % so as not to repeat code
-    {erlang:get(file_type) /= none, Req}.
+exists(Req, _Version, Id) ->
+    Filepath = binary_to_list(Id),
+    Answer = case logical_files_manager:getfileattr(Filepath) of
+                 {ok, Attr} ->
+                     % File exists, cache retireved info so as not to ask DB later
+                     case Attr#fileattributes.type of
+                         "REG" ->
+                             % Remember that path is a file
+                             erlang:put(file_type, reg),
+                             % Remember file attrs
+                             erlang:put(file_attr, Attr);
+                         "DIR" ->
+                             % Remember that path is a dir
+                             erlang:put(file_type, dir)
+                     end,
+                     true;
+                 _ ->
+                     % getfileattr returned error, resource does not exist
+                     false
+             end,
+    {Answer, Req}.
 
 
 %% get/3
@@ -105,35 +82,34 @@ exists(Req, _Version, _Id) ->
 %% ====================================================================
 get(Req, <<"1.0">>, Id) ->
     FilePath = case Id of
-                   undefined -> "/";
-                   P -> binary_to_list(P)
+                   undefined ->
+                       % Empty ID lists user's root, so it's a dir
+                       erlang:put(file_type, dir),
+                       "/";
+                   Path ->
+                       binary_to_list(Path)
                end,
+    case erlang:get(file_type) of
+        dir ->
+            {list_dir_to_json(FilePath), Req};
+        reg ->
+            % File attrs were cached in exists/3
+            Fileattr = erlang:get(file_attr),
+            Size = Fileattr#fileattributes.size,
+            BufferSize = file_transfer_handler:get_download_buffer_size(),
+            StreamFun = fun(Socket, Transport) ->
+                stream_file(Socket, Transport, FilePath, Size, BufferSize)
+            end,
+            Filename = filename:basename(FilePath),
+            HeaderValue = "attachment;" ++
+                % Replace spaces with underscores
+                " filename=" ++ re:replace(Filename, " ", "_", [global, {return, list}]) ++
+                % Offer safely-encoded UTF-8 filename for browsers supporting it
+                "; filename*=UTF-8''" ++ http_uri:encode(Filename),
 
-    case user_logic:get_user({dn, erlang:get(user_id)}) of
-        {ok, _} ->
-            case erlang:get(file_type) of
-                dir ->
-                    {{body, list_dir_to_json(FilePath)}, Req};
-                reg ->
-                    % File attrs were cached in content_types_provided
-                    Fileattr = erlang:get(file_attr),
-                    Size = Fileattr#fileattributes.size,
-                    BufferSize = file_transfer_handler:get_download_buffer_size(),
-                    StreamFun = fun(Socket, Transport) ->
-                        stream_file(Socket, Transport, FilePath, Size, BufferSize)
-                    end,
-                    Filename = filename:basename(FilePath),
-                    HeaderValue = "attachment;" ++
-                        % Replace spaces with underscores
-                        " filename=" ++ re:replace(Filename, " ", "_", [global, {return, list}]) ++
-                        % Offer safely-encoded UTF-8 filename for browsers supporting it
-                        "; filename*=UTF-8''" ++ http_uri:encode(Filename),
-
-                    NewReq = cowboy_req:set_resp_header("content-disposition", HeaderValue, Req),
-                    {{stream, Size, StreamFun}, NewReq}
-            end;
-        _ ->
-            {{error, <<"error: user non-existent in database">>}, Req}
+            NewReq = cowboy_req:set_resp_header("content-disposition", HeaderValue, Req),
+            Mimetype = list_to_binary(mimetypes:path_to_mimes(FilePath)),
+            {{stream, Size, StreamFun, Mimetype}, NewReq}
     end.
 
 
@@ -149,11 +125,14 @@ delete(Req, <<"1.0">>, Id) ->
     Filepath = binary_to_list(Id),
     Response = case erlang:get(file_type) of
                    dir ->
-                       {error, <<"its a dir">>};
+                       {error, rest_utils:error_reply(?error_cannot_delete_dir)};
                    reg ->
                        case logical_files_manager:delete(Filepath) of
-                           ok -> {ok, Req};
-                           _ -> {error, <<"unknown">>}
+                           ok ->
+                               {body, rest_utils:success_reply(?success_file_deleted)};
+                           _ ->
+                               ?error("[REST] unable to delete regular file ~p", [Filepath]),
+                               {error, rest_utils:error_reply(?error_unknown)}
                        end
                end,
     {Response, Req}.
@@ -226,22 +205,22 @@ stream_file(Socket, Transport, Filepath, Size, Sent, BufferSize) ->
 
 %% list_dir_to_json/1
 %% ====================================================================
-%% @doc Lists the directory and returns response in JSON.
+%% @doc Lists the directory and returns response in JSON (content or error).
 %% @end
--spec list_dir_to_json(string()) -> ok.
+-spec list_dir_to_json(string()) -> {body, binary()} | {error, binary()}.
 %% ====================================================================
 list_dir_to_json(Path) ->
-    Result = case list_dir(Path) of
-                 {error, not_a_dir} ->
-                     <<"error: not a dir">>;
-                 DirList ->
-                     DirListBin = lists:map(
-                         fun(Dir) ->
-                             list_to_binary(Dir)
-                         end, DirList),
-                     {array, DirListBin}
-             end,
-    rest_utils:encode_to_json(Result).
+    case list_dir(Path) of
+        {error, not_a_dir} ->
+            {error, <<"error: not a dir">>};
+        DirList ->
+            DirListBin = lists:map(
+                fun(Dir) ->
+                    list_to_binary(Dir)
+                end, DirList),
+            Body = {array, DirListBin},
+            {body, rest_utils:encode_to_json(Body)}
+    end.
 
 
 %% list_dir/1
