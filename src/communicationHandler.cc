@@ -41,6 +41,11 @@ CommunicationHandler::CommunicationHandler(string hostname, int port, string cer
     boost::unique_lock<boost::mutex> lock(m_instanceMutex);
     ++instancesCount;
 }
+
+void CommunicationHandler::setCertFun(get_cert_path_fun certFun)
+{
+    m_certFun = certFun;
+}
     
     
 CommunicationHandler::~CommunicationHandler()
@@ -408,8 +413,9 @@ context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
                          boost::asio::ssl::context::no_sslv2 |
                          boost::asio::ssl::context::single_dh_use);
             
-        ctx->use_certificate_chain_file(m_certPath);
-        ctx->use_private_key_file(m_certPath, boost::asio::ssl::context::pem);
+        string certPath = m_certFun ? m_certFun() : m_certPath;
+        ctx->use_certificate_chain_file(certPath);
+        ctx->use_private_key_file(certPath, boost::asio::ssl::context::pem);
         
         return ctx;
         

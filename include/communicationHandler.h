@@ -43,6 +43,8 @@ typedef boost::asio::ssl::stream<boost::asio::ip::tcp::socket>          socket_t
 typedef websocketpp::lib::shared_ptr<boost::asio::ssl::context>         context_ptr;
 typedef boost::function<void(const veil::protocol::communication_protocol::Answer)>    push_callback;
 
+typedef boost::function<std::string()> get_cert_path_fun;
+
 template<typename T>
 std::string toString(T in) {
     std::ostringstream ss;
@@ -76,6 +78,7 @@ protected:
     std::string                 m_hostname;
     int                         m_port;
     std::string                 m_certPath;
+    get_cert_path_fun           m_certFun;
     
     // Container that gathers all incoming messages
     boost::unordered_map<long long, std::string> m_incomingMessages;
@@ -126,6 +129,7 @@ public:
     CommunicationHandler(std::string hostname, int port, std::string certPath);
     virtual ~CommunicationHandler();
 
+    virtual void setCertFun(get_cert_path_fun certFun);
     virtual void setFuseID(std::string);                                    ///< Setter for field m_fuseID.
     virtual void setPushCallback(push_callback);                            ///< Setter for field m_pushCallback.
     virtual void enablePushChannel();                                       ///< Enables PUSH channel on this connection. 

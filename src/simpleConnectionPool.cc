@@ -33,6 +33,19 @@ SimpleConnectionPool::SimpleConnectionPool(string hostname, int port, string cer
 
 SimpleConnectionPool::~SimpleConnectionPool() {}
 
+string SimpleConnectionPool::getPeerCertificatePath() 
+{
+    if(updateCertCB) 
+    {
+        if(!updateCertCB())
+        {
+            LOG(ERROR) << "Could not find valid certificate.";
+        }
+    }
+
+    return m_certPath;
+}
+
 void SimpleConnectionPool::resetAllConnections(PoolType type)
 {
     m_connectionPools[type].connections.clear();
@@ -85,7 +98,8 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(Pool
         
         lock.unlock();
 
-        conn.reset(new CommunicationHandler(connectTo, m_port, m_certPath));
+        conn.reset(new CommunicationHandler(connectTo, m_port, getPeerCertificatePath()));
+        conn->setCertFun(boost::bind(&SimpleConnectionPool::getPeerCertificatePath, this));
         conn->setFuseID(m_fuseId);  // Set FuseID that shall be used by this connection as session ID
         if(m_pushCallback)                          // Set callback that shall be used for PUSH messages and error messages
             conn->setPushCallback(m_pushCallback);  // Note that this doesnt enable/register PUSH channel !

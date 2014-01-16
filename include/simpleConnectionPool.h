@@ -44,6 +44,7 @@ public:
     SimpleConnectionPool(std::string hostname, int port, std::string certPath, bool (*updateCert)());
     virtual ~SimpleConnectionPool();
     
+    virtual std::string getPeerCertificatePath();
     virtual void setPoolSize(PoolType type, unsigned int);                  ///< Sets size of connection pool. Default for each pool is: 2
     virtual void setPushCallback(std::string fuseId, push_callback);        ///< Sets fuseID and callback function that will be registered for
                                                                             ///< PUSH channel for every new META connection
