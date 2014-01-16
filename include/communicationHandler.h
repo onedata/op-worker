@@ -129,7 +129,7 @@ public:
     CommunicationHandler(std::string hostname, int port, std::string certPath);
     virtual ~CommunicationHandler();
 
-    virtual void setCertFun(get_cert_path_fun certFun);
+    virtual void setCertFun(get_cert_path_fun certFun);                     ///< Setter for function that returns certiificate file path.
     virtual void setFuseID(std::string);                                    ///< Setter for field m_fuseID.
     virtual void setPushCallback(push_callback);                            ///< Setter for field m_pushCallback.
     virtual void enablePushChannel();                                       ///< Enables PUSH channel on this connection. 

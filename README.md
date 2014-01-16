@@ -38,11 +38,15 @@ Compilation
 If 'PREFER_STATIC_LINK' env variable is set during compilation, shared library - libveilhelpers.so/dylib
 will be linked statically against protobuf, boost_ and openssl (if it's possible).
 
-#### Build
+#### Build Release binaries
     
-    make -s build
+    make -s release
+
+#### Build Debug binaries
     
-after this step you should have your libveilhelpers.a and libveilhelpers.so/dylib in "build" subdirectory.
+    make -s release
+    
+after this step you should have your libveilhelpers.a and libveilhelpers.so/dylib in "release" or "debug" subdirectory.
     
 
 #### Testing

@@ -160,8 +160,8 @@ int CommunicationHandler::openConnection()
     if(m_connectStatus == 0 && m_isPushChannel && m_pushCallback && m_fuseID.size() > 0)
         registerPushChannel(m_pushCallback);
 
-    if(m_connectStatus == HANDSHAKE_ERROR) {
-        m_errorCount += MAX_CONNECTION_ERROR_COUNT + 1;
+    if(m_connectStatus == HANDSHAKE_ERROR) { // Force connection reinitialization on websocket handshake error
+        m_errorCount += MAX_CONNECTION_ERROR_COUNT + 1; 
     } else if(m_connectStatus < 0) {
         ++m_errorCount;
     }
