@@ -143,7 +143,8 @@ setup_get_db_nodes() ->
 					list_to_atom(Node)
 				end, DBNodes),
 			put(db_nodes, DBNodesAtoms),
-			setup_create_storage();
+			ConfiguredStorage = setup_create_storage(),
+			setup_new_ccm_plus_worker(true,ConfiguredStorage);
 		BadNode ->
 			warn("Could not establish connection with " ++ BadNode),
 			%do not ask again in batch mode
@@ -168,7 +169,8 @@ setup_create_storage() ->
 
 	CreateDir=fun ([{name,_},{root,Root}]) -> os:cmd("mkdir -p "++Root) end,
 	lists:foreach(CreateDir,AllGroups),
-	setup_new_ccm_plus_worker(true,AllGroups).
+	AllGroups.
+
 
 
 % Gets storage groups from user (I is used to determine different groups during -batch installation)

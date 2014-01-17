@@ -563,27 +563,43 @@ cache_guard(Timeout) ->
 %% @doc Inserts storage defined during worker instalation to database (if db already has defined storage,
 %% the function only replaces StorageConfigFile with that definition)
 %% @end
--spec init_storage() -> no_return().
+-spec init_storage() -> ok | {error, Error :: term()}.
 %% ====================================================================
 init_storage() ->
 	try
-		{ok,StorageFilePath} = application:get_env(veil_cluster_node,storage_config_path),
-		%override installator configuration with existing db storage(if exists)
-		{ok,ActualDbStorageFiles} = dao:handle(1,{dao_vfs, list_storage, []}),
-		ActualDbStorages = [X#veil_document.record || X <- ActualDbStorageFiles],
-		case ActualDbStorages of
-			[] ->
-				config_ok;
-			List->
-				file:write_file(StorageFilePath,io_lib:fwrite("~p.\n", [ActualDbStorages]))
+		%get storage config file path
+		GetEnvResult = application:get_env(veil_cluster_node,storage_config_path),
+		case GetEnvResult of
+			{ok,_} -> ok;
+			undefined ->
+				lager:error("Could not get 'storage_config_path' environment variable"),
+				throw(get_env_error)
 		end,
+		{ok,StorageFilePath} = GetEnvResult,
 
-		%create storage based on installator configuration, override this config with created storage
-		{ok,[StoragePreferences]} = file:consult(StorageFilePath),
-		case StoragePreferences of
-			StorageInfoList when is_record(hd(StorageInfoList),storage_info) ->
-				ok;
-			PreferencesList ->
+		%get storage list from db
+		{Status1,ListStorageValue} = dao_lib:apply(dao_vfs, list_storage, [],1),
+		case Status1 of
+			ok -> ok;
+			error ->
+				lager:error("Could not list existing storages"),
+				throw(ListStorageValue)
+		end,
+		ActualDbStorages = [X#veil_document.record || X <- ListStorageValue],
+
+		case ActualDbStorages of
+			[] -> %db empty, insert storage
+				%read from file
+				{Status2,FileConsultValue} = file:consult(StorageFilePath),
+				case Status2 of
+					ok -> ok;
+					error ->
+						lager:error("Could not read storage config file"),
+						throw(FileConsultValue)
+				end,
+				[StoragePreferences] = FileConsultValue,
+
+				%parse storage preferences
 				UserPreferenceToGroupInfo = fun (GroupPreference) ->
 					case GroupPreference of
 						[{name,cluster_fuse_id},{root,Root}] ->
@@ -592,29 +608,30 @@ init_storage() ->
 							#fuse_group_info{name = Name, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}}
 					end
 				end,
-				FuseGroups = lists:map(UserPreferenceToGroupInfo,PreferencesList),
-				{ok, _StorageUUID} = apply(fslogic_storage, insert_storage, ["ClusterProxy", [], FuseGroups]),
-				{ok,[AddedVeilDoc]} = dao:handle(1,{dao_vfs, list_storage, []}),
-				AddedStorageList = [AddedVeilDoc#veil_document.record],
-				file:write_file(StorageFilePath,io_lib:fwrite("~p.\n", [AddedStorageList]))
-		end,
-
-		%insert storage to database if it is still empty
-		{ok,FinalDbStorageFiles} = dao:handle(1,{dao_vfs, list_storage, []}),
-		FinalDbStorages = [Y#veil_document.record || Y <- FinalDbStorageFiles],
-		case FinalDbStorages of
-			[]->
-				{ok,[ConfiguredStorageList]} = file:consult(StorageFilePath),
-				InsertStorage = fun (StorageInfo) when is_record(StorageInfo,storage_info) ->
-					dao:handle(1, {dao_vfs, save_storage, [StorageInfo]})
+				FuseGroups=try
+					lists:map(UserPreferenceToGroupInfo,StoragePreferences)
+				catch
+					_Type:Err ->
+						lager:error("Wrong format of storage config file"),
+						throw(Err)
 				end,
-				lists:foreach(InsertStorage,ConfiguredStorageList);
-			_ ->
-				ok_all_configured
-		end,
-		ok
+
+				%create storage
+				{Status3, Value} = apply(fslogic_storage, insert_storage, ["ClusterProxy", [], FuseGroups]),
+				case Status3 of
+					ok ->
+						ok;
+					error ->
+						lager:error("Error during inserting storage to db"),
+						throw(Value)
+				end;
+
+			_NotEmptyList -> %db not empty
+				ok
+		end
 	catch
-		_Type:Error ->
-			lager:error("Error during storage init: ~p",[Error]),
+		Type:Error ->
+			lager:error("Error during storage init: ~p:~p",[Type,Error]),
 			{error,Error}
-	end.
+	end,
+	ok.
