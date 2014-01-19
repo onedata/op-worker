@@ -27,7 +27,7 @@
 -define(openid_ext1_type_dn1, "openid.ext1.type.dn1=http://openid.plgrid.pl/certificate/dn1").
 -define(openid_ext1_type_dn2, "openid.ext1.type.dn2=http://openid.plgrid.pl/certificate/dn2").
 -define(openid_ext1_type_dn3, "openid.ext1.type.dn3=http://openid.plgrid.pl/certificate/dn3").
--define(openid_ext1_type_teams, "openid.ext1.type.teams=http://openid.plgrid.pl/userTeams").
+-define(openid_ext1_type_teams, "openid.ext1.type.teams=http://openid.plgrid.pl/userTeamsXML").
 -define(openid_ext1_if_available, "openid.ext1.if_available=dn1,dn2,dn3,teams").
 
 

@@ -74,13 +74,13 @@
 % Convienience macros for development purposes
 
 % Prints a single variable
--define(dump(Arg), io:format("[DUMP] ~s: ~p~n~n", [??Arg, Arg])).
+-define(dump(Arg), io:format(user, "[DUMP] ~s: ~p~n~n", [??Arg, Arg])).
 
 % Prints a list of variables
 -define(dump_all(ListOfVariables), 
 	lists:foreach(
 		fun({Name, Value}) -> 
-			io:format("[DUMP] ~s: ~p~n~n", [Name, Value]) 
+			io:format(user, "[DUMP] ~s: ~p~n~n", [Name, Value])
 		end, lists:zip(string:tokens(??ListOfVariables, "[] ,"), ListOfVariables))
 ).
 
