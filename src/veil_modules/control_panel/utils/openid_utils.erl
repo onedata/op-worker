@@ -172,34 +172,50 @@ nitrogen_retrieve_user_info() ->
 %% Internal functions
 %% ====================================================================
 
-
-% Retrieve and parse an XRDS document 
+%% discover_op_endpoint/1
+%% ====================================================================
+%% @doc
+%% Retrieves an XRDS document from given endpoint URL and parses out the URI which will
+%% be used for OpenID login redirect.
+%% @end
+-spec discover_op_endpoint(string()) -> string().
+%% ====================================================================
 discover_op_endpoint(EndpointURL) ->
     XRDS = get_xrds(EndpointURL),
     {Xml, _} = xmerl_scan:string(XRDS),
     xml_extract_value("URI", Xml).
 
 
-% Extract value having a certain key
+%% xml_extract_value/2
+%% ====================================================================
+%% @doc
+%% Extracts value from under a certain key
+%% @end
+-spec xml_extract_value(string(), #xmlElement{}) -> string().
+%% ====================================================================
 xml_extract_value(KeyName, Xml) ->
     [#xmlElement{content = [#xmlText{value = Value} | _]}] = xmerl_xpath:string("//" ++ KeyName, Xml),
     Value.
 
 
-% Get xrds file
+%% get_xrds/1
+%% ====================================================================
+%% @doc
+%% Downloads an XRDS document from given URL.
+%% @end
+-spec get_xrds(string()) -> string().
+%% ====================================================================
 get_xrds(URL) ->
     % Maximum redirection count = 5
     {ok, 200, _, Body} = get_xrds(URL, 5),
     Body.
 
-
-% Get xrds file performing GET on provided URL
+% Gets xrds file performing GET on provided URL. Supports redirects.
 get_xrds(URL, Redirects) ->
     ReqHeaders =
         [
             {"Accept", "application/xrds+xml;level=1, */*"},
-            {"Connection", "close"},
-            {"User-Agent", "Erlang/erl_openid"}
+            {"Connection", "close"}
         ],
     ResponseRaw = ibrowse:send_req(URL, ReqHeaders, get),
     Response = normalise_response(ResponseRaw),
@@ -214,7 +230,13 @@ get_xrds(URL, Redirects) ->
     end.
 
 
-% Parse out redirect URL from response
+%% get_redirect_url/1
+%% ====================================================================
+%% @doc
+%% Retrieves redirect URL from a HTTP response.
+%% @end
+-spec get_redirect_url(string(), list()) -> string().
+%% ====================================================================
 get_redirect_url(OldURL, Headers) ->
     Location = proplists:get_value("location", Headers),
     case Location of
@@ -232,7 +254,13 @@ get_redirect_url(OldURL, Headers) ->
     end.
 
 
-% Make the response more readable
+%% normalise_response/1
+%% ====================================================================
+%% @doc
+%% Standarizes HTTP response, e.g. transforms header names to lower case.
+%% @end
+-spec normalise_response({ok, string(), list(), list()}) -> {ok, integer(), list(), list()}.
+%% ====================================================================
 normalise_response({ok, RcodeList, Headers, Body}) ->
     RcodeInt = list_to_integer(RcodeList),
     LowHeaders = [{string:to_lower(K), V} || {K, V} <- Headers],
@@ -241,7 +269,13 @@ normalise_response({ok, RcodeList, Headers, Body}) ->
 normalise_response(X) -> X.
 
 
-% Parse teams from XML into list of strings
+%% parse_teams/1
+%% ====================================================================
+%% @doc
+%% Parses user's teams from XML to a list of strings.
+%% @end
+-spec parse_teams(string()) -> [string()].
+%% ====================================================================
 parse_teams(XMLContent) ->
     {XML, _} = xmerl_scan:string(XMLContent),
     #xmlElement{content = TeamList} = find_XML_node(teams, XML),
@@ -251,7 +285,14 @@ parse_teams(XMLContent) ->
         end, TeamList).
 
 
-% Find certain XML node in one parent -> one children hierarchy
+%% find_XML_node/2
+%% ====================================================================
+%% @doc
+%% Finds certain XML node. Assumes that node exists, and checks only
+%% the first child of every node going deeper and deeper.
+%% @end
+-spec find_XML_node(atom(), #xmlElement{}) -> [string()].
+%% ====================================================================
 find_XML_node(NodeName, #xmlElement{name = NodeName} = XMLElement) ->
     XMLElement;
 
