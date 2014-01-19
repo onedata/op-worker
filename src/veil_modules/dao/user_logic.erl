@@ -115,7 +115,7 @@ create_user(Login, Name, Teams, Email, DnList) ->
             case RootAns of
                 ok ->
                     %% TODO zastanowić się co zrobić jak nie uda się stworzyć jakiegoś katalogu (blokowanie rejestracji użytkownika to chyba zbyt dużo)
-                    create_dirs_at_storage(Login, Teams),
+                    create_dirs_at_storage(Login, get_team_names(User)),
                     GetUserAns;
                 _ -> {RootAns, UserRec}
             end;
@@ -223,7 +223,7 @@ update_teams(#veil_document{record = UserInfo} = UserDoc, NewTeams) ->
     [create_team_dir(Team) || Team <- get_team_names(NewDoc)], %% Create team dirs in DB if they dont exist
     case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
         {ok, UUID} ->
-            create_dirs_at_storage(non, NewTeams),
+            create_dirs_at_storage(non, get_team_names(NewDoc)),
             dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
         {error, Reason} -> {error, Reason}
     end.
@@ -465,10 +465,10 @@ create_root(Dir, Uid) ->
 %% ====================================================================
 %% @doc Creates root dir for user and for its teams
 %% @end
--spec create_dirs_at_storage(Root :: string(), Teams :: list()) -> ok | Error when
+-spec create_dirs_at_storage(Root :: string(), Teams :: [string()]) -> ok | Error when
     Error :: atom().
 %% ====================================================================
-create_dirs_at_storage(Root, TeamsString) ->
+create_dirs_at_storage(Root, Teams) ->
     {ListStatus, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], 1),
     case ListStatus of
         ok ->
@@ -494,14 +494,6 @@ create_dirs_at_storage(Root, TeamsString) ->
                 end
             end,
 
-            TeamsTmp = string:tokens(TeamsString, ","),
-            Teams = lists:map(fun(T) ->
-                EndPos = string:chr(T, $(),
-                case EndPos of
-                    0 -> T;
-                    _ -> string:substr(T, 1, EndPos - 1)
-                end
-            end, TeamsTmp),
             CreateDirsOnStorage = fun(Storage, TmpAns) ->
                 SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
                 Ans2 = case Root of

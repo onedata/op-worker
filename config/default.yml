@@ -50,7 +50,7 @@ veil_cluster_node_env:
   - parameter:
       name: initialization_time
       description: How long should ccm wait for workers before it initializes cluster
-      value: 10
+      value: 5
 
   - parameter:
       name: heart_beat
@@ -179,8 +179,8 @@ veil_cluster_node_env:
 
   - parameter:
       name: multipart_max_length_mb
-      description: Maximum post body size for a file upload (data/multipart) in MB
-      value: 1000
+      description: Maximum post body size for a file upload (data/multipart) in Bytes
+      value: 10737418240 # 10GB
 
   - parameter:
       name: control_panel_download_buffer
