@@ -13,6 +13,7 @@
 -compile(export_all).
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/dao/dao_share.hrl").
+-include("logging.hrl").
 
 %% Template points to the template file, which will be filled with content
 main() -> #template{file = "./gui_static/templates/bare.html"}.
@@ -36,43 +37,60 @@ render_body() ->
 
 % Main table   
 main_panel() ->
-    %ShareEntries = lists:map(),
-
-    TableRows = lists:map(
-        fun(#veil_document{uuid = UUID, record = #share_desc{file = FileID}}) ->
-            case logical_files_manager:get_file_full_name_by_uuid(FileID) of
+    put(user_id, gui_utils:get_user_dn()),
+    ShareEntries = lists:foldl(
+        fun(#veil_document{uuid = UUID, record = #share_desc{file = FileID}}, Acc) ->
+            case logical_files_manager:get_file_user_dependent_name_by_uuid(FileID) of
                 {ok, FilePath} ->
                     Filename = filename:basename(FilePath),
+                    % Remember if certain filename is duplicated in process dictionary
+                    case get(Filename) of
+                        undefined -> put(Filename, not_duplicated);
+                        _ -> put(Filename, duplicated)
+                    end,
                     AddressPrefix = "https://" ++ gui_utils:get_requested_hostname() ++
                         ?shared_files_download_path,
-                    _TableRow = #tablerow{cells = [
-                        #tablecell{body = #span{class = "table-cell", body = [
-                            #panel{style = "display: inline-block; vertical-align: middle;", body = [
-                                #image{class = "list-icon", image = "/images/file32.png"}
-                            ]},
-                            #panel{class = "filename_row", style = "word-wrap: break-word; display: inline-block;vertical-align: middle;", body = [
-                                #link{text = Filename, new = true, url = AddressPrefix ++ UUID}
-                            ]}
-                        ]}},
-                        #tablecell{style = "width: 80px;", body = #span{class = "table-cell", body = [
-                            #panel{style = "margin: 5px 0; display: inline-block; vertical-align: middle;", body = [
-                                #link{class = "glyph-link", style = "margin-right: 25px;",
-                                postback = {action, show_link, [UUID]}, body = #span{class = "fui-link",
-                                style = "font-size: 24px; margin: -4px 0px 0px; position: relative; top: 4px;"}},
-                                #link{class = "glyph-link", postback = {action, remove_link_prompt, [UUID, Filename]},
-                                body = #span{class = "fui-cross", style = "font-size: 24px;
-                                        margin: -4px 0px 0px; position: relative; top: 4px;"}}
-                            ]}
-                        ]}}
-                    ]};
-                _ -> broken_link
+                    Acc ++ [{FilePath, AddressPrefix, UUID}];
+                _ ->
+                    Acc
             end
-        end, get_shared_files()),
-    FilteredTableRows = lists:filter(
-        fun(Row) ->
-            Row /= broken_link
-        end, TableRows),
-    PanelBody = case FilteredTableRows of
+        end, [], get_shared_files()),
+
+    % Transfrom shares in which corresponding filenames are not unique
+    FilteredShareEntries = lists:map(
+        fun({FilePath, AddressPrefix, UUID}) ->
+            Filename = filename:basename(FilePath),
+            Text = case get(Filename) of
+                not_duplicated -> Filename;
+                duplicated -> Filename ++ " [~/" ++ FilePath ++ "]"
+            end,
+            {Text, Filename, AddressPrefix, UUID}
+        end, ShareEntries),
+
+    TableRows = lists:map(
+        fun({LinkText, Filename, AddressPrefix, UUID}) ->
+            _TableRow = #tablerow{cells = [
+                #tablecell{body = #span{class = "table-cell", body = [
+                    #panel{style = "display: inline-block; vertical-align: middle;", body = [
+                        #image{class = "list-icon", image = "/images/file32.png"}
+                    ]},
+                    #panel{class = "filename_row", style = "word-wrap: break-word; display: inline-block;vertical-align: middle;", body = [
+                        #link{text = LinkText, new = true, url = AddressPrefix ++ UUID}
+                    ]}
+                ]}},
+                #tablecell{style = "width: 80px;", body = #span{class = "table-cell", body = [
+                    #panel{style = "margin: 5px 0; display: inline-block; vertical-align: middle;", body = [
+                        #link{class = "glyph-link", style = "margin-right: 25px;",
+                        postback = {action, show_link, [UUID]}, body = #span{class = "fui-link",
+                        style = "font-size: 24px; margin: -4px 0px 0px; position: relative; top: 4px;"}},
+                        #link{class = "glyph-link", postback = {action, remove_link_prompt, [UUID, Filename]},
+                        body = #span{class = "fui-cross", style = "font-size: 24px;
+                                        margin: -4px 0px 0px; position: relative; top: 4px;"}}
+                    ]}
+                ]}}
+            ]}
+        end, lists:usort(FilteredShareEntries)),  % Sort link names alphabetically
+    PanelBody = case TableRows of
                     [] ->
                         #p{style = "padding: 15px;", text = "No shared files"};
                     _ ->
