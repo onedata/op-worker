@@ -659,9 +659,9 @@ user_creation_test(Config) ->
 
   Login = "veilfstestuser",
   Name = "user1 user1",
-  Team1 = "veilfstestgroup(G1)",
+  Team1 = "veilfstestgroup",
   Team2 = "plgteam2",
-  Teams = [Team1, Team2],
+  Teams = [Team1 ++ "(G1)", Team2],
   Email = "user1@email.net",
 
   Login2 = "plgtestuser2",
