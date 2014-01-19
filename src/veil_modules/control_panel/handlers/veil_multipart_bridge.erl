@@ -15,8 +15,8 @@
 % request_cache record for simple_bridge
 -record(request_cache, {request, docroot="", body=""}).
 
-% Maximum size of posted data in MB. Override with multipart_max_length_mb in config
--define (MAX_POST_SIZE, 1000).
+% Maximum size of posted data in Bytes. Override with multipart_max_length_mb in config
+-define (MAX_POST_SIZE, 10737418240).  % 10GB
 
 %% ====================================================================
 %% API function
@@ -82,9 +82,8 @@ parse_multipart(ReqBridge) ->
 
 % Returns maximum acceptable post size, either default or set in app.src.
 get_max_post_size() -> 
-    Size = case application:get_env(veil_cluster_node, multipart_max_length_mb) of
+    case application:get_env(veil_cluster_node, multipart_max_length_mb) of
         {ok, Value} -> Value;
         _ -> ?MAX_POST_SIZE
-    end,
-    Size * 1024 * 1024.
+    end.
     
