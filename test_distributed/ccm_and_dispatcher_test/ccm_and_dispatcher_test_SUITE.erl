@@ -190,7 +190,7 @@ veil_handshake_test(Config) ->
         DnList = [DN],
 
         Name = "user1 user1",
-        Teams = "user1 team",
+        Teams = ["user1 team"],
         Email = "user1@email.net",
         {CreateUserAns, _} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
         ?assertEqual(ok, CreateUserAns)

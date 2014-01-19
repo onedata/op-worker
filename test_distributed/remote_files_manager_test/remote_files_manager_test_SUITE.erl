@@ -62,7 +62,7 @@ storage_helpers_management_test(Config) ->
 
   Login = "user1",
   Name = "user1 user1",
-  Teams = "user1 team",
+  Teams = ["user1 team"],
   Email = "user1@email.net",
   {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
@@ -147,8 +147,8 @@ helper_requests_test(Config) ->
 
   Login = "veilfstestuser",
   Name = "user1 user1",
-  Teams = "veilfstestgroup",
-  Email = "user1@email.net",
+  Teams = ["veilfstestgroup",
+  Email = "user1@email.net"],
   {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
 
@@ -162,7 +162,7 @@ helper_requests_test(Config) ->
 
   Login2 = "user2",
   Name2 = "user2 user2",
-  Teams2 = "user2 team",
+  Teams2 = ["user2 team"],
   Email2 = "user2@email.net",
   {CreateUserAns2, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
   ?assertEqual(ok, CreateUserAns2),

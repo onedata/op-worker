@@ -296,7 +296,7 @@ setup_user_in_db() ->
     DnList = [DN],
     Login = "veilfstestuser",
     Name = "user user",
-    Teams = "veilfstestgroup",
+    Teams = ["veilfstestgroup"],
     Email = "user@email.net",
 
     % Cleanup data from other tests
@@ -327,7 +327,7 @@ init_per_testcase(main_test, Config) ->
     ?INIT_DIST_TEST,
     nodes_manager:start_deps_for_tester_node(),
 
-    Nodes = nodes_manager:start_test_on_nodes(1),
+    Nodes = nodes_manager:start_test_on_nodes(1, true),
     [Node1 | _] = Nodes,
 
 
