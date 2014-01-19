@@ -57,7 +57,7 @@ veil_cluster_node_env:
   - parameter:
       name: initialization_time
       description: How long should ccm wait for workers before it initializes cluster
-      value: 5
+      value: 10
 
   - parameter:
       name: heart_beat
