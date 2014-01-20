@@ -187,7 +187,7 @@ veil_cluster_node_env:
   - parameter:
       name: multipart_max_length_mb
       description: Maximum post body size for a file upload (data/multipart) in Bytes
-      value: 10737418240 # 10GB
+      value: 107374182400 # 100GB
 
   - parameter:
       name: control_panel_download_buffer
