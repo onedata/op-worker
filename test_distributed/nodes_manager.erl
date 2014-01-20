@@ -23,6 +23,8 @@
 -export([start_test_on_nodes_with_dist_app/2, start_test_on_nodes_with_dist_app/3, start_node/2, stop_node/1]).
 -export([start_deps/0, start_app/2, start_app_local/1, stop_deps/0, stop_app/1, stop_app_local/0, start_deps_for_tester_node/0, stop_deps_for_tester_node/0, get_db_node/0]).
 
+-export([wait_for_cluster_cast/0, wait_for_nodes_registration/1, wait_for_cluster_init/0]).
+
 %% ====================================================================
 %% API functions
 %% ====================================================================
@@ -515,3 +517,61 @@ set_env_vars([]) ->
 set_env_vars([{Variable, Value} | Vars]) ->
   application:set_env(?APP_Name, Variable, Value),
   set_env_vars(Vars).
+
+wait_for_cluster_cast() ->
+  timer:sleep(100),
+  Ans = try
+    gen_server:call({global, ?CCM}, check_ccm, 10000)
+  catch
+    E1:E2 ->
+      {exception, E1, E2}
+  end,
+  ?assertEqual(ok, Ans).
+
+wait_for_nodes_registration(NodesNum) ->
+  wait_for_nodes_registration(NodesNum, 20).
+
+check_nodes() ->
+  try
+    lentht(gen_server:call({global, ?CCM}, get_nodes, 10000))
+  catch
+    E1:E2 ->
+      {exception, E1, E2}
+  end.
+
+wait_for_nodes_registration(NodesNum, 0) ->
+  ?assertEqual(NodesNum, check_nodes()),
+  ok;
+
+wait_for_nodes_registration(NodesNum, TriesNum) ->
+  case check_nodes() of
+    NodesNum -> ok;
+    _ ->
+      timer:sleep(500),
+      wait_for_nodes_registration(NodesNum, TriesNum - 1)
+  end.
+
+check_init() ->
+  try
+    {WList, _} = gen_server:call({global, ?CCM}, get_workers, 10000),
+    JobsAndArgs = ?Modules_With_Args,
+    lentht(WList) >= length(JobsAndArgs)
+  catch
+    E1:E2 ->
+      {exception, E1, E2}
+  end.
+
+wait_for_cluster_init() ->
+  wait_for_cluster_init(20).
+
+wait_for_cluster_init(0) ->
+  ?assert(check_init()),
+  ok;
+
+wait_for_cluster_init(TriesNum) ->
+  case check_init() of
+    true -> ok;
+    _ ->
+      timer:sleep(500),
+      wait_for_cluster_init(TriesNum - 1)
+  end.
