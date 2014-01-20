@@ -14,7 +14,7 @@
 
 -include_lib("public_key/include/public_key.hrl").
 -include("veil_modules/control_panel/common.hrl").
--include("veil_modules/control_panel/rest_messages.hrl").
+-include("error_codes.hrl").
 -include("logging.hrl").
 
 -record(state, {

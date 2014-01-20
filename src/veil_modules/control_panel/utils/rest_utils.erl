@@ -12,6 +12,8 @@
 
 -module(rest_utils).
 
+-include("error_codes.hrl").
+
 -export([map/2, unmap/3, encode_to_json/1, decode_from_json/1]).
 -export([success_reply/1, error_reply/1]).
 
@@ -100,9 +102,10 @@ decode_from_json(JSON) ->
 %% It can be inserted directly into response body. Macros from rest_messages.hrl should
 %% be used as an argument to this function.
 %% @end
--spec success_reply({binary(), binary()}) -> binary().
+-spec success_reply(binary()) -> binary().
 %% ====================================================================
-success_reply({Code, Message}) ->
+success_reply(Code) ->
+    Message = ?code_to_message(Code),
     <<"{\"status\":\"ok\",\"code\":\"", Code/binary , "\",\"description\":\"", Message/binary, "\"}">>.
 
 
@@ -112,7 +115,8 @@ success_reply({Code, Message}) ->
 %% It can be inserted directly into response body. Macros from rest_messages.hrl should
 %% be used as an argument to this function.
 %% @end
-    -spec error_reply({binary(), binary()}) -> binary().
+    -spec error_reply(binary()) -> binary().
 %% ====================================================================
-error_reply({Code, Message}) ->
+error_reply(Code) ->
+    Message = ?code_to_message(Code),
     <<"{\"status\":\"error\",\"code\":\"", Code/binary , "\",\"description\":\"", Message/binary, "\"}">>.

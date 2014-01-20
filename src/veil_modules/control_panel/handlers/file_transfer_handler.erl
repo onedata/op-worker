@@ -15,7 +15,7 @@
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao_share.hrl").
 -include("veil_modules/control_panel/common.hrl").
--include("veil_modules/control_panel/rest_messages.hrl").
+-include("error_codes.hrl").
 
 % Buffer size used to send file to a client. Override with control_panel_download_buffer.
 -define(DOWNLOAD_BUFFER_SIZE, 1048576). % 1MB

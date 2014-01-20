@@ -16,10 +16,10 @@
 
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/control_panel/rest_utils.hrl").
--include("veil_modules/control_panel/rest_messages.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao_share.hrl").
 -include("veil_modules/dao/dao_users.hrl").
+-include("error_codes.hrl").
 -include("logging.hrl").
 
 -export([methods_and_versions_info/1, exists/3]).
