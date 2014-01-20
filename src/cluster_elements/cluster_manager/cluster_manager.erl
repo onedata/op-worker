@@ -206,6 +206,10 @@ handle_call({start_worker, Node, Module, WorkerArgs}, _From, State) ->
   end,
   {reply, Ans, NewState};
 
+%% Test call
+handle_call(check_ccm, _From, State) ->
+  {reply, ok, State};
+
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
 
@@ -568,10 +572,10 @@ check_cluster_state(State) ->
                                  lager:info([{mod, ?MODULE}], "Worker: ~s will be stopped at node", [MaxModule, MaxNode]),
                                  {WorkerStopped, TmpState2} = stop_worker(MaxNode, MaxModule, State),
                                  case WorkerStopped of
-                                   true ->
+                                   ok ->
                                      save_state(),
                                      update_dispatchers_and_dns(TmpState2, true, true);
-                                   false -> TmpState2
+                                   _ -> TmpState2
                                  end
                              end;
                            false -> State
