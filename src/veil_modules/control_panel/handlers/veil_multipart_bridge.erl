@@ -11,6 +11,7 @@
 %% ===================================================================
 -module(veil_multipart_bridge).
 -include("veil_modules/control_panel/common.hrl").
+-include("logging.hrl").
 
 % request_cache record for simple_bridge
 -record(request_cache, {request, docroot="", body=""}).
@@ -82,8 +83,10 @@ parse_multipart(ReqBridge) ->
 
 % Returns maximum acceptable post size, either default or set in app.src.
 get_max_post_size() -> 
-    case application:get_env(veil_cluster_node, multipart_max_length_mb) of
+    case application:get_env(veil_cluster_node, multipart_max_length) of
         {ok, Value} -> Value;
-        _ -> ?MAX_POST_SIZE
+        _ ->
+            ?error("Could not read 'multipart_max_length' from config. Make sure it is present in config.yml and .app.src."),
+            ?MAX_POST_SIZE
     end.
     

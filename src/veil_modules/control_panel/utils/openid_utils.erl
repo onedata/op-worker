@@ -210,7 +210,14 @@ get_xrds(URL) ->
     {ok, 200, _, Body} = get_xrds(URL, 5),
     Body.
 
-% Gets xrds file performing GET on provided URL. Supports redirects.
+
+%% get_xrds/2
+%% ====================================================================
+%% @doc
+%% Downloads xrds file performing GET on provided URL. Supports redirects.
+%% @end
+-spec get_xrds(string(), integer()) -> string().
+%% ====================================================================
 get_xrds(URL, Redirects) ->
     ReqHeaders =
         [
