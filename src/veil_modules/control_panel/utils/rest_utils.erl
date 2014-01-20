@@ -97,20 +97,22 @@ decode_from_json(JSON) ->
 %% success_reply/1
 %% ====================================================================
 %% @doc Produces a standarized JSON return message, indicating success of an operation.
-%% It can be inserted directly into response body.
+%% It can be inserted directly into response body. Macros from rest_messages.hrl should
+%% be used as an argument to this function.
 %% @end
--spec success_reply(binary()) -> binary().
+-spec success_reply({binary(), binary()}) -> binary().
 %% ====================================================================
-success_reply(Message) ->
-    <<"{\"status\":\"ok\",\"description\":\"", Message/binary, "\"}">>.
+success_reply({Code, Message}) ->
+    <<"{\"status\":\"ok\",\"code\":\"", Code/binary , "\",\"description\":\"", Message/binary, "\"}">>.
 
 
 %% error_reply/1
 %% ====================================================================
 %% @doc Produces a standarized JSON return message, indicating failure of an operation.
-%% It can be inserted directly into response body.
+%% It can be inserted directly into response body. Macros from rest_messages.hrl should
+%% be used as an argument to this function.
 %% @end
-    -spec error_reply(binary()) -> binary().
+    -spec error_reply({binary(), binary()}) -> binary().
 %% ====================================================================
-error_reply(Message) ->
-    <<"{\"status\":\"error\",\"description\":\"", Message/binary, "\"}">>.
+error_reply({Code, Message}) ->
+    <<"{\"status\":\"error\",\"code\":\"", Code/binary , "\",\"description\":\"", Message/binary, "\"}">>.
