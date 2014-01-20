@@ -43,29 +43,13 @@ main_panel() ->
             case logical_files_manager:get_file_user_dependent_name_by_uuid(FileID) of
                 {ok, FilePath} ->
                     Filename = filename:basename(FilePath),
-                    % Remember if certain filename is duplicated in process dictionary
-                    case get(Filename) of
-                        undefined -> put(Filename, not_duplicated);
-                        _ -> put(Filename, duplicated)
-                    end,
                     AddressPrefix = "https://" ++ gui_utils:get_requested_hostname() ++
                         ?shared_files_download_path,
-                    Acc ++ [{FilePath, AddressPrefix, UUID}];
+                    Acc ++ [{FilePath, Filename, AddressPrefix, UUID}];
                 _ ->
                     Acc
             end
         end, [], get_shared_files()),
-
-    % Transfrom shares in which corresponding filenames are not unique
-    FilteredShareEntries = lists:map(
-        fun({FilePath, AddressPrefix, UUID}) ->
-            Filename = filename:basename(FilePath),
-            Text = case get(Filename) of
-                not_duplicated -> Filename;
-                duplicated -> Filename ++ " [~/" ++ FilePath ++ "]"
-            end,
-            {Text, Filename, AddressPrefix, UUID}
-        end, ShareEntries),
 
     TableRows = lists:map(
         fun({LinkText, Filename, AddressPrefix, UUID}) ->
@@ -89,7 +73,8 @@ main_panel() ->
                     ]}
                 ]}}
             ]}
-        end, lists:usort(FilteredShareEntries)),  % Sort link names alphabetically
+        end, lists:usort(ShareEntries)),  % Sort link names alphabetically
+
     PanelBody = case TableRows of
                     [] ->
                         #p{style = "padding: 15px;", text = "No shared files"};
