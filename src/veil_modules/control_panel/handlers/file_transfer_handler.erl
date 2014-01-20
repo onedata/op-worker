@@ -504,7 +504,9 @@ try_or_throw(Fun, ThrowWhat) ->
 get_download_buffer_size() ->
     _Size = case application:get_env(veil_cluster_node, control_panel_download_buffer) of
                 {ok, Value} -> Value;
-                _ -> ?DOWNLOAD_BUFFER_SIZE
+                _ ->
+                    ?error("Could not read 'control_panel_download_buffer' from config. Make sure it is present in config.yml and .app.src."),
+                    ?DOWNLOAD_BUFFER_SIZE
             end.
 
 
@@ -512,7 +514,9 @@ get_download_buffer_size() ->
 get_upload_buffer_size() ->
     _Size = case application:get_env(veil_cluster_node, control_panel_upload_buffer) of
                 {ok, Value} -> Value;
-                _ -> ?UPLOAD_BUFFER_SIZE
+                _ ->
+                    ?error("Could not read 'control_panel_upload_buffer' from config. Make sure it is present in config.yml and .app.src."),
+                    ?UPLOAD_BUFFER_SIZE
             end.
 
 
