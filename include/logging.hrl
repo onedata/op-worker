@@ -79,8 +79,8 @@
 % Prints a list of variables
 -define(dump_all(ListOfVariables), 
 	lists:foreach(
-		fun({Name, Value}) -> 
-			io:format(user, "[DUMP] ~s: ~p~n~n", [Name, Value])
+		fun({__Name, __Value}) ->
+			io:format(user, "[DUMP] ~s: ~p~n~n", [__Name, __Value])
 		end, lists:zip(string:tokens(??ListOfVariables, "[] ,"), ListOfVariables))
 ).
 
