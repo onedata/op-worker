@@ -70,11 +70,11 @@ modules_start_and_ping_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  timer:sleep(100),
+  nodes_manager:wait_for_cluster_cast(),
   ?assertEqual(1, gen_server:call({global, ?CCM}, get_state_num)),
 
   gen_server:cast({global, ?CCM}, get_state_from_db),
-  timer:sleep(100),
+  nodes_manager:wait_for_cluster_cast(),
   ?assertEqual(2, gen_server:call({global, ?CCM}, get_state_num)),
   State = gen_server:call({global, ?CCM}, get_state),
   Workers = State#cm_state.workers,
@@ -84,7 +84,7 @@ modules_start_and_ping_test(Config) ->
   ?assertEqual(3, gen_server:call({global, ?CCM}, get_state_num)),
 
   gen_server:cast({global, ?CCM}, init_cluster),
-  timer:sleep(100),
+  nodes_manager:wait_for_cluster_init(),
   State2 = gen_server:call({global, ?CCM}, get_state),
   Workers2 = State2#cm_state.workers,
   Jobs = ?Modules,
