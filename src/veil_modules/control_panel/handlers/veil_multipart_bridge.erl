@@ -16,7 +16,7 @@
 -record(request_cache, {request, docroot="", body=""}).
 
 % Maximum size of posted data in Bytes. Override with multipart_max_length_mb in config
--define (MAX_POST_SIZE, 10737418240).  % 10GB
+-define (MAX_POST_SIZE, 107374182400).  % 100GB
 
 %% ====================================================================
 %% API function
