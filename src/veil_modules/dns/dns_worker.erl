@@ -119,25 +119,14 @@ handle(_ProtocolVersion, {get_worker, Module}) ->
   New_DNS_State = DNS_State#dns_worker_state{workers_list = NewWorkersList},
   ok = gen_server:call(?MODULE, {updatePlugInState, New_DNS_State}),
 
+  {S1,S2,S3} = now(),
+  random:seed(S1,S2,S3),
+  Result3 = make_ans_random(Result2),
 	case Module of
     control_panel ->
-      {ok, Result2};
+      {ok, Result3};
     _ ->
-      case (length(Result2) > 1) or (length(NodesList) =< 1)  of
-        true -> {ok, Result2};
-        false ->
-          {S1,S2,S3} = now(),
-          random:seed(S1,S2,S3),
-          NodeNum = random:uniform(length(NodesList)),
-          {NewNode, _} = lists:nth(NodeNum, NodesList),
-          case Result2 =:= [NewNode] of
-            true ->
-              {NewNode2, _} = lists:nth((NodeNum rem length(NodesList) + 1) , NodesList),
-              {ok, Result2 ++ [NewNode2]};
-            false ->
-              {ok, Result2 ++ [NewNode]}
-          end
-      end
+      create_ans(Result3, NodesList)
   end;
 
 handle(_ProtocolVersion, get_nodes) ->
@@ -147,10 +136,11 @@ handle(_ProtocolVersion, get_nodes) ->
 
   case AvgLoad of
     0 ->
-      {ok, lists:map(
+      Res = make_ans_random(lists:map(
         fun({Node, _}) ->
           Node
-        end, NodesList)};
+        end, NodesList)),
+      {ok, Res};
     _ ->
       {S1,S2,S3} = now(),
       random:seed(S1,S2,S3),
@@ -168,7 +158,9 @@ handle(_ProtocolVersion, get_nodes) ->
             [Node | TmpAns]
         end
       end,
-      {ok, lists:foldl(ChooseNodes, [], NodesList)}
+      Result = lists:foldl(ChooseNodes, [], NodesList),
+      Result2 = make_ans_random(Result),
+      create_ans(Result2, NodesList)
   end;
 
 handle(ProtocolVersion, Msg) ->
@@ -280,3 +272,29 @@ clear_children_and_listeners() ->
   end,
     "Error stopping dns tcp listener, status ~p"),
   ok.
+
+create_ans(Result, NodesList) ->
+  case (length(Result) > 1) or (length(NodesList) =< 1)  of
+    true -> {ok, Result};
+    false ->
+      NodeNum = random:uniform(length(NodesList)),
+      {NewNode, _} = lists:nth(NodeNum, NodesList),
+      case Result =:= [NewNode] of
+        true ->
+          {NewNode2, _} = lists:nth((NodeNum rem length(NodesList) + 1) , NodesList),
+          {ok, Result ++ [NewNode2]};
+        false ->
+          {ok, Result ++ [NewNode]}
+      end
+  end.
+
+make_ans_random(Result) ->
+  Len = length(Result),
+  case Len of
+    0 -> [];
+    1 -> Result;
+    _ ->
+      NodeNum = random:uniform(),
+      NewRes = lists:sublist(Result, 1, NodeNum) ++ lists:sublist(Result, NodeNum + 1, Len),
+      [lists:nth(NodeNum, Result) | NewRes]
+  end.
