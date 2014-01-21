@@ -564,6 +564,7 @@ check_init(ModulesNum) ->
     {WList, StateNum} = gen_server:call({global, ?CCM}, get_workers, 1000),
     case length(WList) >= ModulesNum of
       true ->
+        timer:sleep(500),
         Nodes = gen_server:call({global, ?CCM}, get_nodes, 1000),
         {_, CStateNum} = gen_server:call({global, ?CCM}, get_callbacks, 1000),
         CheckNode = fun(Node, TmpAns) ->
