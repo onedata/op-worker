@@ -69,6 +69,7 @@ modules_start_and_ping_test(Config) ->
   [CCM | _] = NodesUp,
 
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
+  nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, CCM}),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
   nodes_manager:wait_for_cluster_cast(),
   ?assertEqual(1, gen_server:call({global, ?CCM}, get_state_num)),
@@ -80,8 +81,9 @@ modules_start_and_ping_test(Config) ->
   Workers = State#cm_state.workers,
   ?assertEqual(1, length(Workers)),
 
-  timer:sleep(500),
-  ?assertEqual(3, gen_server:call({global, ?CCM}, get_state_num)),
+  %% registration of dao dispatcher map
+%%   timer:sleep(500),
+%%   ?assertEqual(3, gen_server:call({global, ?CCM}, get_state_num)),
 
   gen_server:cast({global, ?CCM}, init_cluster),
   nodes_manager:wait_for_cluster_init(),
@@ -114,8 +116,9 @@ dispatcher_connection_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  nodes_manager:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  timer:sleep(1500),
+  nodes_manager:wait_for_cluster_init(),
 
   {ConAns, Socket} = wss:connect('localhost', Port, [{certfile, PeerCert}]),
   ?assertEqual(ok, ConAns),
@@ -150,28 +153,17 @@ veil_handshake_test(Config) ->
     nodes_manager:check_start_assertions(Config),
     NodesUp = ?config(nodes, Config),
 
-    Jobs = ?Modules,
     [CCM | _] = NodesUp,
 
     gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
     gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-    timer:sleep(100),
+    nodes_manager:wait_for_cluster_cast(),
     gen_server:cast({global, ?CCM}, init_cluster),
-    timer:sleep(1500),
+    nodes_manager:wait_for_cluster_init(),
 
 
     nodes_manager:check_start_assertions(Config),
     NodesUp = ?config(nodes, Config),
-
-    Jobs = ?Modules,
-    [CCM | _] = NodesUp,
-
-    gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
-    gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-    timer:sleep(100),
-    gen_server:cast({global, ?CCM}, init_cluster),
-    timer:sleep(1500),
-
 
     Port = ?config(port, Config),
     Host = "localhost",
@@ -328,9 +320,9 @@ workers_list_actualization_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  timer:sleep(100),
+  nodes_manager:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  timer:sleep(1500),
+  nodes_manager:wait_for_cluster_init(),
 
   CheckModules = fun(M, Sum) ->
     Workers = gen_server:call({?Dispatcher_Name, CCM}, {get_workers, M}),
@@ -350,9 +342,9 @@ callbacks_list_actualization_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  timer:sleep(100),
+  nodes_manager:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  timer:sleep(1500),
+  nodes_manager:wait_for_cluster_init(),
 
   Ans1 = gen_server:call({?Dispatcher_Name, CCM}, {node_chosen, {fslogic, 1, self(), 1, #veil_request{subject = "DN", request = #callback{fuse = fuse1, pid = self(), node = CCM, action = channelregistration}}}}),
   ?assertEqual(ok, Ans1),
@@ -467,9 +459,9 @@ validation_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  timer:sleep(100),
+  nodes_manager:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  timer:sleep(1500),
+  nodes_manager:wait_for_cluster_init(),
 
   {ConAns1, _} = wss:connect('localhost', Port, [{certfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
   ?assertEqual(error, ConAns1),
@@ -494,9 +486,9 @@ ping_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  timer:sleep(100),
+  nodes_manager:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  timer:sleep(1500),
+  nodes_manager:wait_for_cluster_init(),
 
   {ConAns, Socket} = wss:connect('localhost', Port, [{certfile, PeerCert}]),
   ?assertEqual(ok, ConAns),
