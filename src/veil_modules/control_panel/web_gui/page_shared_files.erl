@@ -45,7 +45,7 @@ main_panel() ->
                     Filename = filename:basename(FilePath),
                     AddressPrefix = "https://" ++ gui_utils:get_requested_hostname() ++
                         ?shared_files_download_path,
-                    Acc ++ [{FilePath, Filename, AddressPrefix, UUID}];
+                    Acc ++ [{"~/" ++ FilePath, Filename, AddressPrefix, UUID}];
                 _ ->
                     Acc
             end
