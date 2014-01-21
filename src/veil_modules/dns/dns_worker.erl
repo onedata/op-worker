@@ -273,6 +273,15 @@ clear_children_and_listeners() ->
     "Error stopping dns tcp listener, status ~p"),
   ok.
 
+%% create_ans/2
+%% ====================================================================
+%% @doc Creates answer from results list (adds additional node if needed).
+%% @end
+%% ====================================================================
+-spec create_ans(Result :: list(), NodesList :: list()) -> Ans when
+  Ans :: {ok, IPs},
+  IPs :: list().
+%% ====================================================================
 create_ans(Result, NodesList) ->
   case (length(Result) > 1) or (length(NodesList) =< 1)  of
     true -> {ok, Result};
@@ -288,13 +297,21 @@ create_ans(Result, NodesList) ->
       end
   end.
 
+%% make_ans_random/1
+%% ====================================================================
+%% @doc Makes order of nodes in answer random.
+%% @end
+%% ====================================================================
+-spec make_ans_random(Result :: list()) -> IPs when
+  IPs :: list().
+%% ====================================================================
 make_ans_random(Result) ->
   Len = length(Result),
   case Len of
     0 -> [];
     1 -> Result;
     _ ->
-      NodeNum = random:uniform(),
-      NewRes = lists:sublist(Result, 1, NodeNum) ++ lists:sublist(Result, NodeNum + 1, Len),
-      [lists:nth(NodeNum, Result) | NewRes]
+      NodeNum = random:uniform(Len),
+      NewRes = lists:sublist(Result, 1, NodeNum - 1) ++ lists:sublist(Result, NodeNum + 1, Len),
+      [lists:nth(NodeNum, Result) | make_ans_random(NewRes)]
   end.
