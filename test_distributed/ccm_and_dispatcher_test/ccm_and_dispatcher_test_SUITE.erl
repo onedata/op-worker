@@ -85,6 +85,9 @@ modules_start_and_ping_test(Config) ->
 %%   timer:sleep(500),
 %%   ?assertEqual(3, gen_server:call({global, ?CCM}, get_state_num)),
 
+  %% registration of dao dispatcher map
+  nodes_manager:wait_for_db_reaction(),
+
   gen_server:cast({global, ?CCM}, init_cluster),
   nodes_manager:wait_for_cluster_init(),
   State2 = gen_server:call({global, ?CCM}, get_state),
