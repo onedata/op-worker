@@ -296,7 +296,7 @@ setup_user_in_db() ->
     DnList = [DN],
     Login = "veilfstestuser",
     Name = "user user",
-    Teams = "veilfstestgroup",
+    Teams = ["veilfstestgroup"],
     Email = "user@email.net",
 
     % Cleanup data from other tests
