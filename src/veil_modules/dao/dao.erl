@@ -20,6 +20,7 @@
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/couch_db.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
+-include_lib("logging.hrl").
 
 -import(dao_helper, [name/1]).
 
@@ -462,7 +463,17 @@ term_to_doc(Field) when is_tuple(Field) ->
             case IsRec of                 %% and adds to Accumulator object
                 true ->
                     {_, Fields, _} = ?dao_record_info(RecName),
-                    {Poz + 1, dao_json:mk_field(AccIn, atom_to_list(lists:nth(Poz, Fields)), term_to_doc(Elem))};
+
+                    % TODO temporary fix that enables use of diacritic chars in file names
+                    Value = case {RecName, lists:nth(Poz, Fields)} of
+                                % Exclusively for filenames, apply conversion to binary
+                                {file, name} -> list_to_binary(Elem);
+                                % Standard conversion
+                                _ -> term_to_doc(Elem)
+                            end,
+                    % </endfix>
+
+                    {Poz + 1, dao_json:mk_field(AccIn, atom_to_list(lists:nth(Poz, Fields)), Value)};
                 false ->
                     {Poz + 1, dao_json:mk_field(AccIn, ?RECORD_TUPLE_FIELD_NAME_PREFIX ++ integer_to_list(Poz), term_to_doc(Elem))}
             end
