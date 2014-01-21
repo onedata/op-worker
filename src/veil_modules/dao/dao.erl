@@ -644,5 +644,4 @@ init_storage() ->
 		Type:Error ->
 			lager:error("Error during storage init: ~p:~p",[Type,Error]),
 			{error,Error}
-	end,
-	ok.
+	end.
