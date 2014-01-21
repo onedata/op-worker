@@ -101,14 +101,14 @@ distributed_test(Config) ->
   Host = get_host(CCM),
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  timer:sleep(500),
+  nodes_manager:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
-    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, []))
+    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
+    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
-  timer:sleep(500),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  timer:sleep(1500),
+  nodes_manager:wait_for_cluster_cast(),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers),
   StartAdditionalWorker = fun(Node) ->
@@ -120,7 +120,7 @@ distributed_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  timer:sleep(1000),
+  nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
 
   {ConAns, Socket} = gen_tcp:connect(Host, DNS_Port, [{active, false}, binary, {packet, 2}]),
   ?assertEqual(ok, ConAns),
@@ -225,7 +225,7 @@ prepare_test_and_start_cluster(Config) ->
   ct:timetrap({seconds, 30}),
   nodes_manager:check_start_assertions(Config),
   start_cluster(Config),
-  timer:sleep(2000).
+  nodes_manager:wait_for_cluster_init().
 
 
 %% Helper function for starting cluster
@@ -233,6 +233,7 @@ start_cluster(Config) ->
   [Node | _] = ?config(nodes, Config),
   gen_server:cast({?Node_Manager_Name, Node}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  nodes_manager:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
   ok.
 

@@ -15,6 +15,11 @@
 
 -include("registered_names.hrl").
 -include("nodes_manager.hrl").
+-include("modules_and_args.hrl").
+
+-define(VIEW_REBUILDING_TIME, 2000).
+-define(FUSE_SESSION_EXP_TIME, 8000).
+-define(REQUEST_HANDLING_TIME, 1000).
 
 %% ====================================================================
 %% API
@@ -23,7 +28,7 @@
 -export([start_test_on_nodes_with_dist_app/2, start_test_on_nodes_with_dist_app/3, start_node/2, stop_node/1]).
 -export([start_deps/0, start_app/2, start_app_local/1, stop_deps/0, stop_app/1, stop_app_local/0, start_deps_for_tester_node/0, stop_deps_for_tester_node/0, get_db_node/0]).
 
--export([wait_for_cluster_cast/0, wait_for_nodes_registration/1, wait_for_cluster_init/0]).
+-export([wait_for_cluster_cast/0, wait_for_cluster_cast/1, wait_for_nodes_registration/1, wait_for_cluster_init/0, wait_for_cluster_init/1, wait_for_state_loading/0, wait_for_db_reaction/0, wait_for_fuse_session_exp/0, wait_for_request_handling/0]).
 
 %% ====================================================================
 %% API functions
@@ -519,9 +524,12 @@ set_env_vars([{Variable, Value} | Vars]) ->
   set_env_vars(Vars).
 
 wait_for_cluster_cast() ->
+  wait_for_cluster_cast({global, ?CCM}).
+
+wait_for_cluster_cast(GenServ) ->
   timer:sleep(100),
   Ans = try
-    gen_server:call({global, ?CCM}, check_ccm, 10000)
+    gen_server:call(GenServ, check, 10000)
   catch
     E1:E2 ->
       {exception, E1, E2}
@@ -533,7 +541,7 @@ wait_for_nodes_registration(NodesNum) ->
 
 check_nodes() ->
   try
-    lentht(gen_server:call({global, ?CCM}, get_nodes, 10000))
+    length(gen_server:call({global, ?CCM}, get_nodes, 1000))
   catch
     E1:E2 ->
       {exception, E1, E2}
@@ -551,27 +559,75 @@ wait_for_nodes_registration(NodesNum, TriesNum) ->
       wait_for_nodes_registration(NodesNum, TriesNum - 1)
   end.
 
-check_init() ->
+check_init(ModulesNum) ->
   try
-    {WList, _} = gen_server:call({global, ?CCM}, get_workers, 10000),
-    JobsAndArgs = ?Modules_With_Args,
-    lentht(WList) >= length(JobsAndArgs)
+    {WList, StateNum} = gen_server:call({global, ?CCM}, get_workers, 1000),
+    case length(WList) >= ModulesNum of
+      true ->
+        Nodes = gen_server:call({global, ?CCM}, get_nodes, 1000),
+        {_, CStateNum} = gen_server:call({global, ?CCM}, get_callbacks, 1000),
+        CheckNode = fun(Node, TmpAns) ->
+          StateNum2 = gen_server:call({?Dispatcher_Name, Node}, get_state_num, 1000),
+          {_, CStateNum2} = gen_server:call({?Dispatcher_Name, Node}, get_callbacks, 1000),
+          case (StateNum == StateNum2) and (CStateNum == CStateNum2) of
+            true -> TmpAns;
+            false -> false
+          end
+        end,
+        lists:foldl(CheckNode, true, Nodes);
+      false ->
+        false
+    end
   catch
     E1:E2 ->
       {exception, E1, E2}
   end.
 
 wait_for_cluster_init() ->
-  wait_for_cluster_init(20).
+  wait_for_cluster_init(0).
 
-wait_for_cluster_init(0) ->
-  ?assert(check_init()),
-  ok;
+wait_for_cluster_init(ModulesNum) ->
+  wait_for_cluster_init(ModulesNum + length(?Modules_With_Args), 20).
 
-wait_for_cluster_init(TriesNum) ->
-  case check_init() of
-    true -> ok;
+wait_for_cluster_init(ModulesNum, 0) ->
+%%   ?assert(check_init(ModulesNum))
+  check_init(ModulesNum);
+
+wait_for_cluster_init(ModulesNum, TriesNum) ->
+  case check_init(ModulesNum) of
+    true -> true;
     _ ->
       timer:sleep(500),
-      wait_for_cluster_init(TriesNum - 1)
+      wait_for_cluster_init(ModulesNum, TriesNum - 1)
+  end.
+
+wait_for_db_reaction() ->
+  timer:sleep(?VIEW_REBUILDING_TIME).
+
+wait_for_fuse_session_exp() ->
+  timer:sleep(?FUSE_SESSION_EXP_TIME).
+
+wait_for_request_handling() ->
+  timer:sleep(?REQUEST_HANDLING_TIME).
+
+wait_for_state_loading() ->
+  wait_for_state_loading(20).
+
+check_state_loading() ->
+  try
+    gen_server:call({global, ?CCM}, check_state_loaded, 1000)
+  catch
+    E1:E2 ->
+      {exception, E1, E2}
+  end.
+
+wait_for_state_loading(0) ->
+  ?assert(check_state_loading());
+
+wait_for_state_loading(TriesNum) ->
+  case check_state_loading() of
+    true -> true;
+    _ ->
+      timer:sleep(500),
+      wait_for_state_loading(TriesNum - 1)
   end.

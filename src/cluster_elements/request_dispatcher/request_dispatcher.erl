@@ -264,6 +264,10 @@ handle_call({check_worker_node, Module}, _From, State) ->
 handle_call(get_callbacks, _From, State) ->
   {reply, {get_callbacks(), State#dispatcher_state.callbacks_num}, State};
 
+%% test call
+handle_call(get_state_num, _From, State) ->
+  {reply, State#dispatcher_state.state_num, State};
+
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
 

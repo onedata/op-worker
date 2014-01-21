@@ -182,6 +182,10 @@ handle_call({get_callback, FuseId}, _From, State) ->
   {Callback, NewState} = get_callback(State, FuseId),
   {reply, Callback, NewState};
 
+%% Test call
+handle_call(check, _From, State) ->
+  {reply, ok, State};
+
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
 
