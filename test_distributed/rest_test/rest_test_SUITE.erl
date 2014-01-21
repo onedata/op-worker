@@ -13,7 +13,7 @@
 -module(rest_test_SUITE).
 -include("nodes_manager.hrl").
 -include("veil_modules/control_panel/common.hrl").
--include("veil_modules/control_panel/rest_messages.hrl").
+-include("error_codes.hrl").
 -include("registered_names.hrl").
 
 %% export for ct
