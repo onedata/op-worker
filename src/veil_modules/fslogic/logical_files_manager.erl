@@ -902,4 +902,4 @@ generateRandomData(Size) -> [random:uniform(255) | generateRandomData(Size-1)].
   Result :: atom().
 %% ====================================================================
 get_ets_name() ->
-  list_to_atom(?NAMES_TABLE ++ atom_to_list(node()) ++ pid_to_list(self())).
+  list_to_atom(?NAMES_TABLE ++ pid_to_list(self())).

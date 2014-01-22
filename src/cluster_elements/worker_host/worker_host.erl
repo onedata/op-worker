@@ -483,33 +483,33 @@ start_sub_proc(Name, MaxDepth, MaxWidth, ProcFun, MapFun) ->
 %% ====================================================================
 start_sub_proc(Name, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun) ->
   process_flag(trap_exit, true),
-  EtsName = list_to_atom(atom_to_list(Name) ++ atom_to_list(node())),
-  ets:new(EtsName, [named_table, set, private]),
-  sub_proc(Name, EtsName, proc, SubProcDepth, MaxDepth, MaxWidth, os:timestamp(), ?MAX_CALCULATION_WAIT_TIME, ProcFun, MapFun).
+  ets:new(Name, [named_table, set, private]),
+  sub_proc(Name, proc, SubProcDepth, MaxDepth, MaxWidth, os:timestamp(), ?MAX_CALCULATION_WAIT_TIME, ProcFun, MapFun).
 
-%% sub_proc/10
+%% sub_proc/9
 %% ====================================================================
 %% @doc Sub proc function
--spec sub_proc(Name :: atom(), EtsName:: atom(), ProcType:: atom(), SubProcDepth :: integer(), MaxDepth :: integer(), MaxWidth :: integer(),
+-spec sub_proc(Name :: atom(), ProcType:: atom(), SubProcDepth :: integer(), MaxDepth :: integer(), MaxWidth :: integer(),
     WaitFrom :: term(), AvgWaitTime :: term(), ProcFun :: term(), MapFun :: term()) -> Result when
   Result ::  ok | end_sub_proc.
 %% ====================================================================
-sub_proc(Name, EtsName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun) ->
+%% TODO Add memory clearing for old data
+sub_proc(Name, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun) ->
   receive
     {sub_proc_management, stop} ->
-      del_sub_procs(ets:first(EtsName), EtsName);
+      del_sub_procs(ets:first(Name), Name);
 
     {'EXIT', ChildPid, _} ->
-      ChildDesc = ets:lookup(EtsName, ChildPid),
+      ChildDesc = ets:lookup(Name, ChildPid),
       case ChildDesc of
         [{ChildPid, ChildNum}] ->
-          ets:delete(EtsName, ChildPid),
-          ets:delete(EtsName, ChildNum);
+          ets:delete(Name, ChildPid),
+          ets:delete(Name, ChildNum);
         _ ->
           lager:error([{mod, ?MODULE}], "Exit of unknown sub proc"),
           error
       end,
-      sub_proc(Name, EtsName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
+      sub_proc(Name, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
     Request ->
       {Now, NewAvgWaitTime} = update_wait_time(WaitFrom, AvgWaitTime),
       NewProcType = case ProcType of
@@ -536,7 +536,7 @@ sub_proc(Name, EtsName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, Av
 
       case NewProcType of
         map ->
-          {ForwardNum, ForwardPid} = map_to_sub_proc(Name, EtsName, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request),
+          {ForwardNum, ForwardPid} = map_to_sub_proc(Name, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request),
           case ForwardNum of
             error -> error;
             _ ->
@@ -544,9 +544,9 @@ sub_proc(Name, EtsName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, Av
               %% check if chosen proc did not time out before message was delivered
               case process_info(ForwardPid) of
                 undefined->
-                  ets:delete(EtsName, ForwardPid),
-                  ets:delete(EtsName, ForwardNum),
-                  ForwardPid2 = map_to_sub_proc(Name, EtsName, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request),
+                  ets:delete(Name, ForwardPid),
+                  ets:delete(Name, ForwardNum),
+                  ForwardPid2 = map_to_sub_proc(Name, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request),
                   ForwardPid2 ! Request;
                 _ ->
                   ok
@@ -556,30 +556,30 @@ sub_proc(Name, EtsName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, Av
           ProcFun(Request)
       end,
 
-      sub_proc(Name, EtsName, NewProcType, SubProcDepth, MaxDepth, MaxWidth, Now, NewAvgWaitTime, ProcFun, MapFun)
+      sub_proc(Name, NewProcType, SubProcDepth, MaxDepth, MaxWidth, Now, NewAvgWaitTime, ProcFun, MapFun)
   after ?MAX_CHILD_WAIT_TIME ->
     end_sub_proc
   end.
 
-%% map_to_sub_proc/8
+%% map_to_sub_proc/7
 %% ====================================================================
 %% @doc Maps request to sub proc pid
--spec map_to_sub_proc(Name :: atom(), EtsName:: atom(), SubProcDepth :: integer(), MaxDepth :: integer(), MaxWidth :: integer(),
+-spec map_to_sub_proc(Name :: atom(), SubProcDepth :: integer(), MaxDepth :: integer(), MaxWidth :: integer(),
    ProcFun :: term(), MapFun :: term(), Request :: term()) -> Result when
   Result ::  {SubProcNum, SubProcPid},
   SubProcNum :: integer(),
   SubProcPid :: term().
 %% ====================================================================
-map_to_sub_proc(Name, EtsName, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request) ->
+map_to_sub_proc(Name, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request) ->
   try
     RequestValue = calculate_proc_vale(SubProcDepth, MaxWidth, MapFun(Request)),
-    RequestProc = ets:lookup(EtsName, RequestValue),
+    RequestProc = ets:lookup(Name, RequestValue),
     case RequestProc of
       [] ->
         NewName = list_to_atom(atom_to_list(Name) ++ "_" ++ integer_to_list(RequestValue)),
         NewPid = spawn(fun() -> start_sub_proc(NewName, SubProcDepth + 1, MaxDepth, MaxWidth, ProcFun, MapFun) end),
-        ets:insert(EtsName, {RequestValue, NewPid}),
-        ets:insert(EtsName, {NewPid, RequestValue}),
+        ets:insert(Name, {RequestValue, NewPid}),
+        ets:insert(Name, {NewPid, RequestValue}),
         {RequestValue, NewPid};
       [{RequestValue, RequestProcPid}] ->
         {RequestValue, RequestProcPid};
