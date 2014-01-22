@@ -4,6 +4,9 @@
 % Default bigcouch port
 -define(default_port,"5986").
 
+%Ports that needs to be free
+-define(ports_to_check,["53","443","5555"]).
+
 % Curl options
 -define(curl_opts,"--connect-timeout 5 -s").
 
@@ -107,6 +110,7 @@ setup_manage_veil() ->
 
 % Executed before the proper installation to inform about installation conditions
 setup_confirm_new_cluster() ->
+	check_open_ports(?ports_to_check),
 	info("Installing a new cluster beside a running one may cause unpredictable behaviour."),
 	info("It is required that all database nodes are installed prior to the cluster."),
 	Option = interaction_choose_option(db_nodes_installed, "Do you wish to continue?", 
@@ -270,6 +274,7 @@ setup_new_ccm_plus_worker(IsThisMainCCM,FuseGroups) ->
 
 % Firstly check connection to an existing cluster, then ask to choose installation variant
 setup_extend_cluster() ->
+	check_open_ports(?ports_to_check),
 	IPOrHostname = interaction_get_string(ip_or_hostname, "Specify IP/hostname of any host with running veil node(s): "),
 	case discover_cluster(IPOrHostname) of
 		no_connection -> 
@@ -760,6 +765,33 @@ interaction_get_string(Id, Prompt) ->
 			end
 	end.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Functions to check port usage
+%
+
+check_open_ports(Ports) ->
+	case ports_are_free(Ports) of
+		true ->
+			ok;
+		false ->
+			warn("All following ports needs to be open: "++io_lib:fwrite("~p", [Ports])),
+			warn("Terminating installation"),
+			halt(1)
+	end.
+
+ports_are_free([])->
+	true;
+ports_are_free([FirstPort | Rest])->
+	port_is_free(FirstPort) and ports_are_free(Rest).
+
+port_is_free(Port) ->
+	Result = os:cmd("netstat -na | tail -n +3 | cut -d\\t -f2 | awk '{print $4}' | grep :"++Port++"$"),
+	case Result of
+		"" ->
+			true;
+		_ ->
+			false
+	end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Convinience functions to print headers, prompts etc.
