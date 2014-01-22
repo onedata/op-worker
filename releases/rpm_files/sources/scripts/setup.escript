@@ -5,7 +5,7 @@
 -define(default_port,"5986").
 
 %Ports that needs to be free
--define(ports_to_check,["53","443","5555"]).
+-define(ports_to_check,[53,443,5555]).
 
 % Curl options
 -define(curl_opts,"--connect-timeout 5 -s").
@@ -785,11 +785,12 @@ ports_are_free([FirstPort | Rest])->
 	port_is_free(FirstPort) and ports_are_free(Rest).
 
 port_is_free(Port) ->
-	Result = os:cmd("netstat -na | tail -n +3 | cut -d\\t -f2 | awk '{print $4}' | grep :"++Port++"$"),
-	case Result of
-		"" ->
+	{Status, Socket} = gen_tcp:listen(Port, []),
+	case Status of
+		ok ->
+			gen_tcp:close(Socket),
 			true;
-		_ ->
+		error ->
 			false
 	end.
 
