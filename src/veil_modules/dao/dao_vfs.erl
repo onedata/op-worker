@@ -480,7 +480,6 @@ remove_storage({id, StorageID}) when is_integer(StorageID) ->
     {ok, SData} = get_storage({id, StorageID}),
     dao:remove_record(SData#veil_document.uuid).
 
-
 %% get_storage/1
 %% ====================================================================
 %% @doc Gets storage info from DB. Argument should be uuid() of storage document or ID of storage. <br/>
@@ -490,7 +489,25 @@ remove_storage({id, StorageID}) when is_integer(StorageID) ->
 %% @end
 -spec get_storage({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) -> {ok, storage_doc()} | {error, any()} | no_return().
 %% ====================================================================
-get_storage({uuid, DocUUID}) when is_list(DocUUID) ->
+get_storage(Key) ->
+  case ets:lookup(storage_cache, Key) of
+    [] -> %% Cached document not found. Fetch it from DB and save in cache
+      get_storage_from_db(Key);
+    [{_, Ans}] -> %% Return document from cache
+      {ok, Ans}
+  end.
+
+
+%% get_storage_from_db/1
+%% ====================================================================
+%% @doc Gets storage info from DB. Argument should be uuid() of storage document or ID of storage. <br/>
+%% Non-error return value is always {ok, #veil_document{record = #storage_info{}}.
+%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec get_storage_from_db({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) -> {ok, storage_doc()} | {error, any()} | no_return().
+%% ====================================================================
+get_storage_from_db({uuid, DocUUID}) when is_list(DocUUID) ->
     dao:set_db(?SYSTEM_DB_NAME),
     case dao:get_record(DocUUID) of
         {ok, #veil_document{record = #storage_info{}} = Doc} ->
@@ -500,7 +517,7 @@ get_storage({uuid, DocUUID}) when is_list(DocUUID) ->
         Other ->
             Other
     end;
-get_storage({id, StorageID}) when is_integer(StorageID) ->
+get_storage_from_db({id, StorageID}) when is_integer(StorageID) ->
     QueryArgs =
         #view_query_args{keys = [StorageID], include_docs = true}, 
     case dao:list_records(?STORAGE_BY_ID_VIEW, QueryArgs) of
