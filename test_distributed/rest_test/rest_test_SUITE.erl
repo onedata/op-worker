@@ -45,8 +45,9 @@ main_test(Config) ->
 
     gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
     gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+    nodes_manager:wait_for_cluster_cast(),
     gen_server:cast({global, ?CCM}, init_cluster),
-    timer:sleep(2500),
+    nodes_manager:wait_for_cluster_init(),
 
 
     % Create a user in db with some files

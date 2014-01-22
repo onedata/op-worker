@@ -58,14 +58,14 @@ fuse_session_cleanup_test(Config) ->
     [CCM | WorkerNodes] = NodesUp,
 
     ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-    timer:sleep(500),
+    nodes_manager:wait_for_cluster_cast(),
     RunWorkerCode = fun(Node) ->
-        ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, []))
+      ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
+      nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
     end,
     lists:foreach(RunWorkerCode, WorkerNodes),
-    timer:sleep(500),
     ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-    timer:sleep(1500),
+    nodes_manager:wait_for_cluster_init(),
 
     %% Worker ports: 6666, 7777, 8888
     Host = "localhost",
@@ -125,7 +125,7 @@ fuse_session_cleanup_test(Config) ->
     wss:close(Socket11),
     wss:close(Socket13),
 
-    timer:sleep(8000),
+    nodes_manager:wait_for_fuse_session_exp(),
 
     %% Check if everithing is fine in DB
     {Status3, Ans3} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID1}], 1]),
@@ -140,8 +140,7 @@ fuse_session_cleanup_test(Config) ->
     %% Close last connection for session #1
     wss:close(Socket12),
 
-    %% Session expire time is set to 2 secs
-    timer:sleep(8000),
+    nodes_manager:wait_for_fuse_session_exp(),
 
     %% Check if everithing is fine in DB
     {Status6, Ans6} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID1}], 1]),
@@ -158,8 +157,7 @@ fuse_session_cleanup_test(Config) ->
     wss:close(Socket21),
     wss:close(Socket22),
 
-    %% Session expire time is set to 2 secs
-    timer:sleep(8000),
+    nodes_manager:wait_for_fuse_session_exp(),
 
     %% Check if everithing is fine in DB
     {Status9, Ans9} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID1}], 1]),
@@ -183,14 +181,14 @@ sub_proc_test(Config) ->
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  timer:sleep(500),
+  nodes_manager:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
-    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, []))
+    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
+    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
-  timer:sleep(500),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  timer:sleep(500),
+  nodes_manager:wait_for_cluster_init(),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers),
   StartAdditionalWorker = fun(Node) ->
@@ -202,7 +200,7 @@ sub_proc_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  timer:sleep(1000),
+  nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
 
   ProcFun = fun(_ProtocolVersion, {sub_proc_test, _, AnsPid}) ->
     Pid = self(),
@@ -228,10 +226,10 @@ sub_proc_test(Config) ->
 
   RegisterSubProc = fun(Node) ->
     RegAns = gen_server:call({fslogic, Node}, {register_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun}, 500),
-    ?assertEqual(ok, RegAns)
+    ?assertEqual(ok, RegAns),
+    nodes_manager:wait_for_cluster_cast({fslogic, Node})
   end,
   lists:foreach(RegisterSubProc, NodesUp),
-  timer:sleep(1000),
 
   Self = self(),
   TestFun = fun() ->
@@ -277,18 +275,18 @@ main_test(Config) ->
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  timer:sleep(500),
+  nodes_manager:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
-    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, []))
+    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
+    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
-  timer:sleep(500),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  timer:sleep(500),
+  nodes_manager:wait_for_cluster_init(),
 
   NotExistingNodes = ['n1@localhost', 'n2@localhost', 'n3@localhost'],
   lists:foreach(fun(Node) -> gen_server:cast({global, ?CCM}, {node_is_up, Node}) end, NotExistingNodes),
-  timer:sleep(100),
+  nodes_manager:wait_for_cluster_cast(),
   Nodes = gen_server:call({global, ?CCM}, get_nodes),
   ?assertEqual(length(Nodes), length(NodesUp)),
     lists:foreach(fun(Node) ->
@@ -296,7 +294,7 @@ main_test(Config) ->
     end, NodesUp),
 
   lists:foreach(fun(Node) -> gen_server:cast({global, ?CCM}, {node_is_up, Node}) end, NodesUp),
-  timer:sleep(100),
+  nodes_manager:wait_for_cluster_cast(),
   Nodes2 = gen_server:call({global, ?CCM}, get_nodes),
   ?assertEqual(length(Nodes2), length(NodesUp)),
 
@@ -348,14 +346,14 @@ callbacks_test(Config) ->
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  timer:sleep(500),
+  nodes_manager:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
-    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, []))
+    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
+    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
-  timer:sleep(500),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  timer:sleep(1500),
+  nodes_manager:wait_for_cluster_init(),
 
   [Worker1 | _] = WorkerNodes,
 
@@ -457,7 +455,7 @@ callbacks_test(Config) ->
   end,
 
   Callbacks = lists:foldl(RegisterCallbacks, [], Ports),
-  timer:sleep(1000),
+  nodes_manager:wait_for_request_handling(),
 
   CheckDispatcherAns = fun({DispatcherCorrectAnsList, DispatcherCorrectAnsNum}, {TestAnsList, TestAnsNum}) ->
     ?assertEqual(DispatcherCorrectAnsNum, TestAnsNum),
@@ -496,7 +494,7 @@ callbacks_test(Config) ->
     ?assertEqual(RegAnsBytes, SendAns)
   end,
   lists:foreach(UnregisterCallbacks, UnRegCallbacks2),
-  timer:sleep(1000),
+  nodes_manager:wait_for_request_handling(),
 
   [LastNode | _] = lists:reverse(NodesUp),
   DispatcherCorrectAns2 = {[{FuseId1, [LastNode, CCM]}, {FuseId2, [CCM]}], 8},
@@ -545,7 +543,7 @@ callbacks_test(Config) ->
     wss:close(Callback)
   end,
   lists:foreach(CloseCallbacks, Callbacks),
-  timer:sleep(1000),
+  nodes_manager:wait_for_request_handling(),
 
   DispatcherCorrectAns3 = {[], 11},
   FuseInfo3 = [{[], 0, 0}, {[], 0, 0}, {[], 0, 0}, {[], 0, 0}],

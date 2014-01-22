@@ -164,6 +164,10 @@ handle_call(Request, _From, State) when is_tuple(Request) -> %% Proxy call. Each
                                                              %% that request was made, unlike cast because cast ignores state of node/gen_server
     {reply, gen_server:cast(State#host_state.plug_in, Request), State};
 
+%% Test call
+handle_call(check, _From, State) ->
+  {reply, ok, State};
+
 handle_call(_Request, _From, State) ->
     {reply, wrong_request, State}.
 
