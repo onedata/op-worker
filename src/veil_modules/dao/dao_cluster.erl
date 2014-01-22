@@ -150,7 +150,7 @@ save_fuse_session(#veil_document{record = #fuse_session{valid_to = OldTime}} = D
     %% Save given document
     NewDoc = Doc#veil_document{record = Doc#veil_document.record#fuse_session{valid_to = NewTime}},
     case dao:save_record(NewDoc) of %% Clear cache, just in case
-        {ok, UUID}  -> ets:delete(dao_cache, UUID), {ok, UUID};
+        {ok, UUID}  -> ets:delete(dao_fuse_cache, UUID), {ok, UUID};
         Other       -> Other
     end.
 
@@ -168,16 +168,16 @@ save_fuse_session(#veil_document{record = #fuse_session{valid_to = OldTime}} = D
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 get_fuse_session(FuseId, {stale, update_before}) ->
-    ets:delete(dao_cache, FuseId), %% Delete cached entry
+    ets:delete(dao_fuse_cache, FuseId), %% Delete cached entry
     get_fuse_session(FuseId);
 get_fuse_session(FuseId, {stale, ok}) ->
     get_fuse_session(FuseId).
 get_fuse_session(FuseId) ->
-    case ets:lookup(dao_cache, FuseId) of
+    case ets:lookup(dao_fuse_cache, FuseId) of
         [] -> %% Cached document not found. Fetch it from DB and save in cache
             case dao:get_record(FuseId) of
                 {ok, Doc} ->
-                    ets:insert(dao_cache, {FuseId, Doc}),
+                    ets:insert(dao_fuse_cache, {FuseId, Doc}),
                     {ok, Doc};
                 Other -> Other
             end;
@@ -196,7 +196,7 @@ get_fuse_session(FuseId) ->
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 remove_fuse_session(FuseId) ->
-    ets:delete(dao_cache, FuseId), %% Delete cached entry
+    ets:delete(dao_fuse_cache, FuseId), %% Delete cached entry
     dao:remove_record(FuseId).
 
 

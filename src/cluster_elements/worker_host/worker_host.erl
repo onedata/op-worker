@@ -26,6 +26,7 @@
 %% API
 %% ====================================================================
 -export([start_link/3, stop/1, start_sub_proc/5, generate_sub_proc_list/1, generate_sub_proc_list/5]).
+-export([create_simple_cache/3, create_simple_cache/4, create_simple_cache/5]).
 
 %% ====================================================================
 %% Test API
@@ -270,6 +271,17 @@ handle_cast(_Msg, State) ->
 handle_info({timer, Msg}, State) ->
   PlugIn = State#host_state.plug_in,
   gen_server:cast(PlugIn, Msg),
+  {noreply, State};
+
+handle_info({clear_sipmle_cache, LoopTime, Fun, StrongCacheConnection}, State) ->
+  Pid = self(),
+  erlang:send_after(LoopTime, Pid, {clear_sipmle_cache, LoopTime, Fun}),
+  case StrongCacheConnection of
+    true ->
+      spawn_link(fun() -> Fun() end);
+    _ ->
+      spawn(fun() -> Fun() end)
+  end,
   {noreply, State};
 
 handle_info(dispatcher_map_registered, State) ->
@@ -673,3 +685,35 @@ del_sub_procs(Key, Name) ->
     _ -> ok
   end,
   del_sub_procs(ets:next(Name, Key), Name).
+
+create_simple_cache(Name, CacheLoop, ClearFun) ->
+  create_simple_cache(Name, CacheLoop, ClearFun, true).
+
+create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection) ->
+  Pid = self(),
+  create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Pid).
+
+create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Pid) ->
+  %% Init Cache-ETS. Ignore the fact that other DAO worker could have created this table. In this case, this call will
+  %% fail, but table is present anyway, so everyone is happy.
+  case ets:info(Name) of
+    undefined   -> ets:new(Name, [named_table, public, set, {read_concurrency, true}]);
+    [_ | _]     -> ok
+  end,
+
+  LoopTime = case CacheLoop of
+    non -> non;
+    Atom when is_atom(Atom) ->
+      case application:get_env(veil_cluster_node, CacheLoop) of
+        {ok, Interval1} -> Interval1;
+        _               -> loop_time_load_error
+      end;
+    _ -> CacheLoop
+  end,
+
+  case LoopTime of
+    Time when is_integer(Time) ->
+      erlang:send_after(1000 * Time, Pid, {clear_sipmle_cache, 1000 * Time, ClearFun, StrongCacheConnection}),
+      ok;
+    _ -> loop_time_not_a_number_error
+  end.

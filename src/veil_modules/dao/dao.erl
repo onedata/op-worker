@@ -97,22 +97,18 @@ init({_Args, {init_status, table_initialized}}) -> %% Final stage of initializat
 init({Args, {init_status, _TableInfo}}) ->
     init({Args, {init_status, table_initialized}});
 init(Args) ->
-    %% Init Cache-ETS. Ignore the fact that other DAO worker could have created this table. In this case, this call will
-    %% fail, but table is present anyway, so everyone is happy.
-    case ets:info(dao_cache) of
-        undefined   -> ets:new(dao_cache, [named_table, public, set, {read_concurrency, true}]);
-        [_ | _]     -> ok
-    end,
-
-    %% Start linked process that will maintain cache status
-    Interval =
-        case application:get_env(veil_cluster_node, dao_cache_loop_time) of
-            {ok, Interval1} -> Interval1;
-            _               -> 30*60 %% Hardcoded 30min, just in case
-        end,
-    spawn_link(fun() -> cache_guard(Interval * 1000) end),
-
-    init({Args, {init_status, ets:info(db_host_store)}}).
+    ClearFun = fun() -> cache_guard() end,
+    Cache1 = worker_host:create_simple_cache(dao_fuse_cache, dao_fuse_cache_loop_time, ClearFun),
+    case Cache1 of
+      ok ->
+        Cache2 = worker_host:create_simple_cache(storage_cache, non, ClearFun),
+        case Cache2 of
+          ok ->
+            init({Args, {init_status, ets:info(db_host_store)}});
+          _ -> {error, {storage_cache_error, Cache2}}
+        end;
+      _ -> {error, {dao_fuse_cache_error, Cache1}}
+    end.
 
 %% handle/1
 %% ====================================================================
@@ -554,20 +550,13 @@ doc_to_term(_) ->
 %%          - FUSE session cleanup
 %%      When used in newly spawned process, the process will infinitly fire up the the tasks while
 %%      sleeping 'Timeout' ms between subsequent loops.
-%%      NOTE: The function crashes is 'dao_cache' ETS is not available.
+%%      NOTE: The function crashes is 'dao_fuse_cache' ETS is not available.
 %% @end
--spec cache_guard(Timeout :: non_neg_integer()) -> no_return().
+-spec cache_guard() -> no_return().
 %% ====================================================================
-cache_guard(Timeout) ->
-    timer:sleep(Timeout),
-
-    [_ | _] = ets:info(dao_cache), %% Crash this process if dao_cache ETS doesn't exist
-                                   %% Because this process is linked to DAO's worker, whole DAO will crash
-
-    %% Run all tasks (async)
-    spawn(dao_cluster, clear_sessions, []), %% Clear FUSE session
-
-    cache_guard(Timeout).
+cache_guard() ->
+    [_ | _] = ets:info(dao_fuse_cache),
+    dao_cluster:clear_sessions(). %% Clear FUSE session
 
 %% init_storage/0
 %% ====================================================================
