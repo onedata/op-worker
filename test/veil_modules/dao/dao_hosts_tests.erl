@@ -36,7 +36,8 @@ setup() ->
     meck:new(rpc, [unstick, passthrough]),
     meck:new(net_adm, [unstick, passthrough]),
     put(db_host, undefined),
-    worker_host:start_link(dao, [], 10).
+    application:set_env(veil_cluster_node, dao_fuse_cache_loop_time, 30*60),
+    {ok, _} = worker_host:start_link(dao, [], 10).
 
 teardown({ok, Pid}) ->
     Unload = meck:unload([rpc, net_adm]),
