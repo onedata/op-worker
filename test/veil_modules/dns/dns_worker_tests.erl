@@ -218,15 +218,14 @@ receive_with_default_timeout(ExpectedAnswer) ->
       receive
         {ok, IPS} ->
           ?assertEqual(length(ExpectedIPS), length(IPS)),
-          Zipped = lists:zip(ExpectedIPS, IPS),
-          lists:foreach(fun({ExpectedIP, IP}) ->
+          lists:foreach(fun(ExpectedIP) ->
             case ExpectedIP of
               any ->
                 true;
               _ ->
-                ?assertEqual(ExpectedIP, IP)
+                ?assert(lists:member(ExpectedIP, IPS))
             end
-          end, Zipped)
+          end, ExpectedIPS)
       after
         ?MAX_RESPONSE_TIME -> error(timeout)
       end;
