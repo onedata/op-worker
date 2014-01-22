@@ -769,6 +769,7 @@ interaction_get_string(Id, Prompt) ->
 % Functions to check port usage
 %
 
+%if any of listed ports is in use - print warning ang exit
 check_open_ports(Ports) ->
 	case ports_are_free(Ports) of
 		true ->
@@ -779,12 +780,12 @@ check_open_ports(Ports) ->
 			halt(1)
 	end.
 
-ports_are_free([])->
+% Returns true if all listed ports are free
+ports_are_free([]) ->
 	true;
 ports_are_free([FirstPort | Rest])->
-	port_is_free(FirstPort) and ports_are_free(Rest).
-
-port_is_free(Port) ->
+	ports_are_free(FirstPort) and ports_are_free(Rest);
+ports_are_free(Port)->
 	{Status, Socket} = gen_tcp:listen(Port, []),
 	case Status of
 		ok ->
