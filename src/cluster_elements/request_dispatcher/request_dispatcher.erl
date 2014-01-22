@@ -16,7 +16,7 @@
 -include("modules_and_args.hrl").
 -include("logging.hrl").
 
--define(CALLBACKS_TABLE, "dispatcher_callbacks_table").
+-define(CALLBACKS_TABLE, dispatcher_callbacks_table).
 
 %% ====================================================================
 %% API
