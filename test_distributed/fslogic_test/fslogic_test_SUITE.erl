@@ -233,8 +233,8 @@ groups_test(Config) ->
         DnList
     end,
 
-    DN1 = AddUser("veilfstestuser", "veilfstestgroup(Grp)", Cert1),
-    DN2 = AddUser("veilfstestuser2", "veilfstestgroup(Grp),veilfstestgroup2(Grp2)", Cert2),
+    DN1 = AddUser("veilfstestuser", ["veilfstestgroup(Grp)"], Cert1),
+    DN2 = AddUser("veilfstestuser2", ["veilfstestgroup(Grp)", "veilfstestgroup2(Grp2)"], Cert2),
     %% END init users
 
     %% Init connections
@@ -481,7 +481,7 @@ user_file_counting_test(Config) ->
 
   Login = "user1",
   Name = "user1 user1",
-  Teams = "user1 team",
+  Teams = ["user1 team"],
   Email = "user1@email.net",
   {CreateUserAns, #veil_document{uuid = UserID1}} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
@@ -496,7 +496,7 @@ user_file_counting_test(Config) ->
 
   Login2 = "user2",
   Name2 = "user2 user2",
-  Teams2 = "user2 team",
+  Teams2 = ["user2 team"],
   Email2 = "user2@email.net",
   {CreateUserAns2, #veil_document{uuid = UserID2}} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
   ?assertEqual(ok, CreateUserAns2),
@@ -661,7 +661,7 @@ user_creation_test(Config) ->
   Name = "user1 user1",
   Team1 = "veilfstestgroup",
   Team2 = "plgteam2",
-  Teams = Team1 ++ "(G1)," ++ Team2,
+  Teams = [Team1 ++ "(G1)", Team2],
   Email = "user1@email.net",
 
   Login2 = "plgtestuser2",
@@ -953,7 +953,7 @@ dir_mv_test(Config) ->
 
   Login = "user1",
   Name = "user1 user1",
-  Teams = "user1 team",
+  Teams = ["user1 team"],
   Email = "user1@email.net",
   {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
@@ -1034,7 +1034,7 @@ file_sharing_test(Config) ->
 
   Login = "user1",
   Name = "user1 user1",
-  Teams = "user1 team",
+  Teams = ["user1 team"],
   Email = "user1@email.net",
   {CreateUserAns, User_Doc} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
@@ -1204,7 +1204,7 @@ fuse_requests_test(Config) ->
 
   Login = "user1",
   Name = "user1 user1",
-  Teams = "user1 team",
+  Teams = ["user1 team"],
   Email = "user1@email.net",
   {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
@@ -1470,7 +1470,7 @@ users_separation_test(Config) ->
 
   Login = "user1",
   Name = "user1 user1",
-  Teams = "user1 team",
+  Teams = ["user1 team"],
   Email = "user1@email.net",
   {CreateUserAns, #veil_document{uuid = UserID1}} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
@@ -1485,7 +1485,7 @@ users_separation_test(Config) ->
 
   Login2 = "user2",
   Name2 = "user2 user2",
-  Teams2 = "user2 team",
+  Teams2 = ["user2 team"],
   Email2 = "user2@email.net",
   {CreateUserAns2, #veil_document{uuid = UserID2}} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
   ?assertEqual(ok, CreateUserAns2),

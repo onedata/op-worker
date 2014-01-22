@@ -84,7 +84,7 @@ fuse_session_cleanup_test(Config) ->
         DnList = [DN],
 
         Name = "user1 user1",
-        Teams = "user1 team",
+        Teams = ["user1 team"],
         Email = "user1@email.net",
         {CreateUserAns, _} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
         ?assertEqual(ok, CreateUserAns)
@@ -370,7 +370,7 @@ callbacks_test(Config) ->
 
   Login = "user1",
   Name = "user1 user1",
-  Teams = "user1 team",
+  Teams = ["user1 team"],
   Email = "user1@email.net",
   {CreateUserAns, _} = rpc:call(Worker1, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),

@@ -62,7 +62,8 @@ storage_helpers_management_test(Config) ->
 
   Login = "user1",
   Name = "user1 user1",
-  Teams = "user1 team",
+  Team1 = "user1 team",
+  Teams = [Team1],
   Email = "user1@email.net",
   {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
@@ -104,9 +105,9 @@ storage_helpers_management_test(Config) ->
   ?assertEqual(ok, RemoveUserAns),
 
   files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login),
-  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Team1),
   files_tester:delete_dir(?TEST_ROOT2 ++ "/users/" ++ Login),
-  files_tester:delete_dir(?TEST_ROOT2 ++ "/groups/" ++ Teams),
+  files_tester:delete_dir(?TEST_ROOT2 ++ "/groups/" ++ Team1),
 
   files_tester:delete_dir(?TEST_ROOT ++ "/users"),
   files_tester:delete_dir(?TEST_ROOT ++ "/groups"),
@@ -147,9 +148,10 @@ helper_requests_test(Config) ->
 
   Login = "veilfstestuser",
   Name = "user1 user1",
-  Teams = "veilfstestgroup",
+  Team1 = "veilfstestgroup",
+  Teams1 = [Team1],
   Email = "user1@email.net",
-  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams1, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
 
   {ReadFileAns2, PemBin2} = file:read_file(Cert2),
@@ -162,7 +164,8 @@ helper_requests_test(Config) ->
 
   Login2 = "user2",
   Name2 = "user2 user2",
-  Teams2 = "user2 team",
+  Team2 = ["user2 team"],
+  Teams2 = [Team2],
   Email2 = "user2@email.net",
   {CreateUserAns2, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
   ?assertEqual(ok, CreateUserAns2),
@@ -266,8 +269,8 @@ helper_requests_test(Config) ->
 
   files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login),
   files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login2),
-  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams),
-  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams2),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Team1),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Team2),
 
   files_tester:delete_dir(?TEST_ROOT ++ "/users"),
   files_tester:delete_dir(?TEST_ROOT ++ "/groups").
