@@ -26,7 +26,7 @@
 %% API
 %% ====================================================================
 -export([start_link/3, stop/1, start_sub_proc/5, generate_sub_proc_list/1, generate_sub_proc_list/5]).
--export([create_simple_cache/3, create_simple_cache/4, create_simple_cache/5]).
+-export([create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5]).
 
 %% ====================================================================
 %% Test API
@@ -686,6 +686,9 @@ del_sub_procs(Key, Name) ->
   end,
   del_sub_procs(ets:next(Name, Key), Name).
 
+create_simple_cache(Name) ->
+  create_simple_cache(Name, non, non).
+
 create_simple_cache(Name, CacheLoop, ClearFun) ->
   create_simple_cache(Name, CacheLoop, ClearFun, true).
 
@@ -715,5 +718,6 @@ create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Pid) ->
     Time when is_integer(Time) ->
       erlang:send_after(1000 * Time, Pid, {clear_sipmle_cache, 1000 * Time, ClearFun, StrongCacheConnection}),
       ok;
+    non -> ok;
     _ -> loop_time_not_a_number_error
   end.

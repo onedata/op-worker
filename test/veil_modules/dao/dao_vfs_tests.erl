@@ -47,10 +47,12 @@ setup() ->
     meck:expect(dao, save_record, fun(_) -> {ok, "uuid"} end),
     meck:expect(dao, get_record, fun(_) -> {ok, #veil_document{}} end),
     meck:expect(dao, remove_record, fun(_) -> ok end),
-    meck:expect(dao_helper, name, fun(Arg) -> Arg end).
+    meck:expect(dao_helper, name, fun(Arg) -> Arg end),
+    ets:new(storage_cache, [named_table, public, set, {read_concurrency, true}]).
 
 
 teardown(_) ->
+    ets:delete(storage_cache),
     ok = meck:unload([dao, dao_helper]).
 
 
