@@ -48,6 +48,13 @@ veil_cluster_node_env:
         ['db1@127.0.0.1']
 
   - parameter:
+      name: storage_config_path
+      description: Path to storage config file
+      value: |
+        "\'/opt/veil/worker/bin/storage_info.cfg\'"
+      erlang_term: "'/opt/veil/nodes/worker/bin/storage_info.cfg'"
+
+  - parameter:
       name: initialization_time
       description: How long should ccm wait for workers before it initializes cluster
       value: 10
