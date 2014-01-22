@@ -193,7 +193,7 @@ get_fuse_groups_from_user(CurrentGroups,I) ->
 		yes ->
 			h2("Type following attributes:"),
 			Name = interaction_get_string(GroupNameInteractionId, "Group name: "),
-			Root = interaction_get_string(GroupRootInteractionId, "Storage directory (i.e. /veil/dir1: "),
+			Root = interaction_get_string(GroupRootInteractionId, "Storage directory (i.e. /veil/dir1): "),
 			NewGroup = [{name, Name},{root,Root}],
 			get_fuse_groups_from_user(lists:append(CurrentGroups,[NewGroup]),I+1);
 		no ->
