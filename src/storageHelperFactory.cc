@@ -42,6 +42,18 @@ namespace config {
         return connectionPool;
     }
 
+namespace buffers {
+
+    size_t writeBufferGlobalSizeLimit       = 0;
+    size_t readBufferGlobalSizeLimit        = 0;
+
+    size_t writeBufferPerFileSizeLimit      = 0;
+    size_t readBufferPerFileSizeLimit       = 0;
+
+    size_t preferedBlockSize                = 4 * 1024;
+
+} // namespace buffers
+
 } // namespace config
     
 

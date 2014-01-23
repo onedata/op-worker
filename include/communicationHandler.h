@@ -43,6 +43,8 @@ typedef boost::asio::ssl::stream<boost::asio::ip::tcp::socket>          socket_t
 typedef websocketpp::lib::shared_ptr<boost::asio::ssl::context>         context_ptr;
 typedef boost::function<void(const veil::protocol::communication_protocol::Answer)>    push_callback;
 
+typedef boost::function<std::string()> get_cert_path_fun;
+
 template<typename T>
 std::string toString(T in) {
     std::ostringstream ss;
@@ -76,6 +78,7 @@ protected:
     std::string                 m_hostname;
     int                         m_port;
     std::string                 m_certPath;
+    get_cert_path_fun           m_certFun;
     
     // Container that gathers all incoming messages
     boost::unordered_map<long long, std::string> m_incomingMessages;
@@ -126,6 +129,7 @@ public:
     CommunicationHandler(std::string hostname, int port, std::string certPath);
     virtual ~CommunicationHandler();
 
+    virtual void setCertFun(get_cert_path_fun certFun);                     ///< Setter for function that returns certiificate file path.
     virtual void setFuseID(std::string);                                    ///< Setter for field m_fuseID.
     virtual void setPushCallback(push_callback);                            ///< Setter for field m_pushCallback.
     virtual void enablePushChannel();                                       ///< Enables PUSH channel on this connection. 
@@ -139,14 +143,23 @@ public:
     virtual int32_t     getMsgId();                                         ///< Get next message id. Thread safe. All subsequents calls returns next integer value.
     virtual int         openConnection();                                   ///< Opens WebSoscket connection. Returns 0 on success, non-zero otherwise.
     virtual void        closeConnection();                                  ///< Closes active connection.
-    virtual int         sendMessage(const protocol::communication_protocol::ClusterMsg& message, int32_t msgID);             ///< Sends ClusterMsg using current WebSocket session. Will fail if there isnt one.
-    virtual int         receiveMessage(protocol::communication_protocol::Answer& answer, int32_t msgID, uint32_t timeout = RECV_TIMEOUT);                    ///< Receives Answer using current WebSocket session. Will fail if there isnt one.
-    virtual             protocol::communication_protocol::Answer communicate(protocol::communication_protocol::ClusterMsg &msg, uint8_t retry, uint32_t timeout = RECV_TIMEOUT);     ///< Sends ClusterMsg and receives answer. Same as running CommunicationHandler::sendMessage and CommunicationHandler::receiveMessage
-                                                                    ///< but this method also supports reconnect option. If something goes wrong during communication, new connection will be
-                                                                    ///< estabilished and the whole process will be repeated.
-                                                                    ///< @param retry How many times tries has to be made before returning error.
-                                                                    ///< @param timeout Timeout for recv operation.
-                                                                    ///< @return Answer protobuf message. If error occures, empty Answer object will be returned.
+    
+    /// Sends ClusterMsg using current WebSocket session. Will fail if there isn't one.
+    /// @return Positive - message ID that shall be used to receive response, negative - error ID
+    virtual int         sendMessage(protocol::communication_protocol::ClusterMsg& message, int32_t msgID = 0);
+    
+    /// Receives Answer using current WebSocket session. Will fail if there isn't one.
+    virtual int         receiveMessage(protocol::communication_protocol::Answer& answer, int32_t msgID, uint32_t timeout = RECV_TIMEOUT);
+    
+    /**
+     * Sends ClusterMsg and receives answer. Same as running CommunicationHandler::sendMessage and CommunicationHandler::receiveMessage
+     * but this method also supports reconnect option. If something goes wrong during communication, new connection will be
+     * estabilished and the whole process will be repeated.
+     * @param retry How many times tries has to be made before returning error.
+     * @param timeout Timeout for recv operation. By default timeout will be calculated base on frame size
+     * @return Answer protobuf message. If error occures, empty Answer object will be returned.
+     */
+    virtual             protocol::communication_protocol::Answer communicate(protocol::communication_protocol::ClusterMsg &msg, uint8_t retry, uint32_t timeout = 0);
 
     static int getInstancesCount();                                 ///< Returns number of CommunicationHander instances.
 

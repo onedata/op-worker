@@ -14,6 +14,7 @@
 #include <boost/shared_ptr.hpp>
 #include "helpers/IStorageHelper.h"
 #include "simpleConnectionPool.h"
+#include <boost/thread/thread_time.hpp>
 
 #define PROTOCOL_VERSION 1
 
@@ -34,6 +35,18 @@ namespace config {
     void setConnectionPool(boost::shared_ptr<SimpleConnectionPool> pool);
     boost::shared_ptr<SimpleConnectionPool> getConnectionPool();
 
+namespace buffers {
+
+    extern size_t writeBufferGlobalSizeLimit;
+    extern size_t readBufferGlobalSizeLimit;
+
+    extern size_t writeBufferPerFileSizeLimit;
+    extern size_t readBufferPerFileSizeLimit;
+
+    extern size_t preferedBlockSize;
+
+} // namespace buffers
+
 
 } // namespace config   
 
@@ -48,6 +61,16 @@ namespace utils {
         iss >> out;
         return out;
     }
+
+    template<typename T>
+    T mtime()
+    {
+        boost::posix_time::ptime time_t_epoch(boost::gregorian::date(1970,1,1)); 
+        boost::posix_time::ptime now = boost::posix_time::microsec_clock::local_time();
+        boost::posix_time::time_duration diff = now - time_t_epoch;
+
+        return diff.total_milliseconds();
+    } 
     
 } // namespace utils
 

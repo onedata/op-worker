@@ -11,7 +11,7 @@
 
 #include <boost/thread.hpp>
 #include <list>
-#include <time.h>
+#include <ctime>
 #include <boost/shared_ptr.hpp>
 #include <boost/enable_shared_from_this.hpp>
 #include "communicationHandler.h"
@@ -44,6 +44,7 @@ public:
     SimpleConnectionPool(std::string hostname, int port, std::string certPath, bool (*updateCert)());
     virtual ~SimpleConnectionPool();
     
+    virtual std::string getPeerCertificatePath();                           ///< Updates proxy certificate file if needed and returns its path.
     virtual void setPoolSize(PoolType type, unsigned int);                  ///< Sets size of connection pool. Default for each pool is: 2
     virtual void setPushCallback(std::string fuseId, push_callback);        ///< Sets fuseID and callback function that will be registered for
                                                                             ///< PUSH channel for every new META connection
@@ -55,7 +56,6 @@ public:
      * This method uses simple round-robin selection for all connections in pool.
      * It also creates new instances of CommunicationHandler if needed.
      */
-    
     virtual boost::shared_ptr<CommunicationHandler> selectConnection(PoolType = META_POOL);
     virtual void releaseConnection(boost::shared_ptr<CommunicationHandler> conn);       ///< Returns CommunicationHandler's pointer ownership back to connection pool.
                                                                                         ///< @deprecated Since selectConnection does not pass connection ownership, this

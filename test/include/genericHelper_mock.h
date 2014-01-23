@@ -35,6 +35,7 @@ public:
         MOCK_METHOD2(sh_truncate, int(const char *path, off_t size));
 
         MOCK_METHOD2(sh_open, int(const char *path, struct fuse_file_info *fi));
+        MOCK_METHOD2(sh_flush, int(const char *path, struct fuse_file_info *fi));
         MOCK_METHOD5(sh_read, int(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi));
         MOCK_METHOD5(sh_write, int(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi));
         MOCK_METHOD2(sh_statfs, int(const char *path, struct statvfs *stbuf));

@@ -15,6 +15,7 @@
 #include <string>
 #include "helpers/IStorageHelper.h"
 #include "simpleConnectionPool.h"
+#include "bufferAgent.h"
 
 #include "remote_file_management.pb.h"
 #include "communication_protocol.pb.h"
@@ -58,9 +59,15 @@ class ClusterProxyHelper : public IStorageHelper {
         #endif // HAVE_UTIMENSAT
 
         int sh_open(const char *path, struct fuse_file_info *fi) ;
+    
+        /// This callback uses BufferAgent in order to improve read preformance. For real read operation impl. see ClusterProxyHelper::doRead.
         int sh_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) ;
-        int sh_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) ;
+    
+        /// This callback uses BufferAgent in order to improve write preformance. For real write operation impl. see ClusterProxyHelper::doWrite.
+        int sh_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi);
+    
         int sh_statfs(const char *path, struct statvfs *stbuf) ;
+        int sh_flush(const char *path, struct fuse_file_info *fi) ;
         int sh_release(const char *path, struct fuse_file_info *fi) ;
         int sh_fsync(const char *path, int isdatasync, struct fuse_file_info *fi);
 
@@ -81,12 +88,15 @@ class ClusterProxyHelper : public IStorageHelper {
         unsigned int      m_clusterPort;
         std::string       m_proxyCert;
         std::string       m_clusterHostname;
+        BufferAgent       m_bufferAgent;
 
-        protocol::communication_protocol::Answer sendCluserMessage(protocol::communication_protocol::ClusterMsg &msg);      ///< Sends ClusterMsg to cluster and receives Answer. This function handles connection selection and its releasing.
-        protocol::communication_protocol::ClusterMsg commonClusterMsgSetup(std::string inputType, std::string inputData);   ///< Setups commonly used fields in ClusterMsg for RemoteFileManagement.
-        std::string requestMessage(std::string inputType, std::string answerType, std::string inputData);                   ///< Creates & sends ClusterMsg with given types and input. Response is an serialized message od type "answerType".
+        protocol::communication_protocol::Answer sendCluserMessage(protocol::communication_protocol::ClusterMsg &msg, uint32_t timeout = 0);      ///< Sends ClusterMsg to cluster and receives Answer. This function handles connection selection and its releasing.
+        protocol::communication_protocol::ClusterMsg commonClusterMsgSetup(std::string inputType, std::string& inputData);   ///< Setups commonly used fields in ClusterMsg for RemoteFileManagement.
+        std::string requestMessage(std::string inputType, std::string answerType, std::string& inputData, uint32_t timeout = 0);                   ///< Creates & sends ClusterMsg with given types and input. Response is an serialized message od type "answerType".
         std::string requestAtom(std::string inputType, std::string inputData);                                              ///< Same as requestMessage except it always receives Atom. Return value is an strign value of Atom.
 
+        int doWrite(std::string path, const std::string &buf, size_t, off_t, ffi_type);             ///< Real implementation of write operation.
+        int doRead(std::string path, std::string &buf, size_t, off_t, ffi_type);                    ///< Real implementation of read operation.
 
 };
 

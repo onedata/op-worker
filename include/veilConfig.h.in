@@ -1,0 +1,17 @@
+#ifndef VEILCONFIG_H
+#define VEILCONFIG_H
+
+#define VeilHelpers_VERSION_MAJOR    @VeilHelpers_VERSION_MAJOR@
+#define VeilHelpers_VERSION_MINOR    @VeilHelpers_VERSION_MINOR@
+#define VeilHelpers_VERSION_PATCH    @VeilHelpers_VERSION_PATCH@
+
+#define VeilHelpers_DEBUG   @VeilHelpers_DEBUG@
+#if VeilHelpers_DEBUG == 1
+    #define DEBUG
+#else
+#ifndef NDEBUG
+    #define NDEBUG
+#endif
+#endif
+
+#endif // VEILCONFIG_H

@@ -40,6 +40,17 @@ public:
         return ClusterProxyHelper::requestAtom(inputType, inputData);
     }
 
+    int doWrite(std::string path, const std::string &buf, size_t size, off_t offset, ffi_type ffi)
+    {
+        return ClusterProxyHelper::doWrite(path, buf, size, offset, ffi);
+    }
+
+    int doRead(std::string path, std::string &buf, size_t size, off_t offset, ffi_type ffi)
+    {
+        return ClusterProxyHelper::doRead(path, buf, size, offset, ffi);
+    }
+
+
 };
 
 #endif // CLUSTER_PROXY_HELPER_PROXY_H

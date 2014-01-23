@@ -120,10 +120,10 @@ TEST_F(ClusterProxyHelperTest, read)
     FileData resp;
     Answer answer;
     ClusterMsg msg;
-
+    std::string sbuf;
 
     EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
-    EXPECT_EQ(-EIO, proxy->sh_read("file_id", buf, 10, 2, &ffi));
+    EXPECT_EQ(-EIO, proxy->doRead("file_id", sbuf, 10, 2, &ffi));
 
     answer.set_answer_status(VOK);
 
@@ -133,14 +133,14 @@ TEST_F(ClusterProxyHelperTest, read)
     resp.set_data(strRaw);
     answer.set_worker_answer(resp.SerializeAsString());
     EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
-    EXPECT_EQ(9, proxy->sh_read("file_id", buf, 10, 2, &ffi));    
+    EXPECT_EQ(9, proxy->doRead("file_id", sbuf, 10, 2, &ffi));    
     for(int i = 0; i < 9; ++i )
-        EXPECT_EQ(str[i], buf[i]);
+        EXPECT_EQ(str[i], sbuf[i]);
 
     resp.set_answer_status(VENOENT);
     answer.set_worker_answer(resp.SerializeAsString());
     EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
-    EXPECT_EQ(-ENOENT, proxy->sh_read("file_id", buf, 10, 2, &ffi));
+    EXPECT_EQ(-ENOENT, proxy->doRead("file_id", sbuf, 10, 2, &ffi));
 
     RemoteFileMangement rfm;
 
@@ -172,11 +172,12 @@ TEST_F(ClusterProxyHelperTest, write)
     Answer answer;
     ClusterMsg msg;
     char str[] = {0, 1, 45, 34, 0, 0, 0, 34, 56, 2};
-    memcpy(buf, str, 10);
     string strRaw(str, 10);
+    string sbuf;
+    sbuf = strRaw;
 
     EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
-    EXPECT_EQ(-EIO, proxy->sh_write("file_id", buf, 10, 2, &ffi));
+    EXPECT_EQ(-EIO, proxy->doWrite("file_id", sbuf, 10, 2, &ffi));
 
     answer.set_answer_status(VOK);
 
@@ -184,12 +185,12 @@ TEST_F(ClusterProxyHelperTest, write)
     resp.set_bytes_written(9);
     answer.set_worker_answer(resp.SerializeAsString());
     EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
-    EXPECT_EQ(9, proxy->sh_write("file_id", buf, 10, 2, &ffi));    
+    EXPECT_EQ(9, proxy->doWrite("file_id", sbuf, 10, 2, &ffi));    
 
     resp.set_answer_status(VENOENT);
     answer.set_worker_answer(resp.SerializeAsString());
     EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
-    EXPECT_EQ(-ENOENT, proxy->sh_write("file_id", buf, 10, 2, &ffi));
+    EXPECT_EQ(-ENOENT, proxy->doWrite("file_id", sbuf, 10, 2, &ffi));
 
     RemoteFileMangement rfm;
 

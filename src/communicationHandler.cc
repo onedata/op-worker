@@ -41,6 +41,11 @@ CommunicationHandler::CommunicationHandler(string hostname, int port, string cer
     boost::unique_lock<boost::mutex> lock(m_instanceMutex);
     ++instancesCount;
 }
+
+void CommunicationHandler::setCertFun(get_cert_path_fun certFun)
+{
+    m_certFun = certFun;
+}
     
     
 CommunicationHandler::~CommunicationHandler()
@@ -130,6 +135,7 @@ int CommunicationHandler::openConnection()
     ws_client::connection_ptr con = m_endpoint->get_connection(URL, ec); // Initialize WebSocket handshake
     if(ec.value() != 0) {
         LOG(ERROR) << "Cannot connect to " << URL << " due to: " << ec.message();
+        m_errorCount += MAX_CONNECTION_ERROR_COUNT + 1; // Force connection reinitialization
         return ec.value();
     } else {
         LOG(INFO) << "Trying to connect to: " << URL;
@@ -153,6 +159,12 @@ int CommunicationHandler::openConnection()
 
     if(m_connectStatus == 0 && m_isPushChannel && m_pushCallback && m_fuseID.size() > 0)
         registerPushChannel(m_pushCallback);
+
+    if(m_connectStatus == HANDSHAKE_ERROR) { // Force connection reinitialization on websocket handshake error
+        m_errorCount += MAX_CONNECTION_ERROR_COUNT + 1; 
+    } else if(m_connectStatus < 0) {
+        ++m_errorCount;
+    }
         
     return m_connectStatus;
 }
@@ -175,9 +187,11 @@ void CommunicationHandler::closeConnection()
         m_endpoint->stop(); // If connection failed to close, make sure that io_service refuses to send/receive any further messages at this point
         
         try {
-            LOG(INFO) << "WebSocket: Lowest layer socket closed.";
-            m_endpointConnection->get_socket().lowest_layer().close(ec);
-            m_endpointConnection->get_socket().lowest_layer().cancel(ec);  // Explicite close underlying socket to make sure that all ongoing operations will be canceld
+            if(m_endpointConnection) {
+                LOG(INFO) << "WebSocket: Lowest layer socket closed.";
+                m_endpointConnection->get_socket().lowest_layer().cancel(ec);  // Explicite close underlying socket to make sure that all ongoing operations will be canceld
+                m_endpointConnection->get_socket().lowest_layer().close(ec);
+            }
         } catch (boost::exception &e) {
             LOG(ERROR) << "WebSocket connection socket close error";
         }
@@ -265,21 +279,25 @@ void CommunicationHandler::closePushChannel()
     Answer ans = communicate(msg, 0);    // Send PUSH channel close request
 }
 
-int CommunicationHandler::sendMessage(const ClusterMsg& msg, int32_t msgId)
+int CommunicationHandler::sendMessage(ClusterMsg& msg, int32_t msgId)
 {
     if(m_connectStatus != CONNECTED)
         return m_connectStatus;
-    
-    ClusterMsg msgWithId = msg;
-    msgWithId.set_message_id(msgId);
+
+    // If message ID is not set, generate new one
+    if (!msgId)
+        msgId = getMsgId();
+
+    msg.set_message_id(msgId);
     
     websocketpp::lib::error_code ec;
-    m_endpoint->send(m_endpointConnection, msgWithId.SerializeAsString(), websocketpp::frame::opcode::binary, ec); // Initialize send operation (async)
+    m_endpoint->send(m_endpointConnection, msg.SerializeAsString(), websocketpp::frame::opcode::binary, ec); // Initialize send operation (async)
     
     if(ec.value())
         ++m_errorCount;
-    
-    return ec.value();
+
+    // Return msg ID ot negative error code
+    return ec.value() == 0 ? msgId : (ec.value() > 0 ? -ec.value() : ec.value());
 }
     
 int32_t CommunicationHandler::getMsgId()
@@ -312,11 +330,20 @@ int CommunicationHandler::receiveMessage(Answer& answer, int32_t msgId, uint32_t
 Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_t timeout)
 {
     Answer answer;
+    if (timeout == 0)
+    {
+        timeout = msg.ByteSize() * 2; // 2ms for each byte (minimum of 500B/s)
+    }
+
+    if (timeout < RECV_TIMEOUT)   // Minimum timeout threshold
+        timeout = RECV_TIMEOUT;
+
     try
     {
         unsigned int msgId = getMsgId();
         
-        if(sendMessage(msg, msgId) != 0)
+        uint64_t lap1 = helpers::utils::mtime<uint64_t>();
+        if(sendMessage(msg, msgId) < 0)
         {
             if(retry > 0) 
             {
@@ -331,7 +358,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
 
             return answer;
         }
-
+        uint64_t lap2 = helpers::utils::mtime<uint64_t>();
         if(receiveMessage(answer, msgId, timeout) != 0)
         {
             if(retry > 0) 
@@ -345,6 +372,9 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
             LOG(ERROR) << "WebSocket communication error";
             answer.set_answer_status(VEIO);
         }
+        uint64_t lap3 = helpers::utils::mtime<uint64_t>();
+
+        //LOG(INFO) << "lap3 - lap2: " << (lap3 - lap2) << " lap2 - lap1: " << (lap2 - lap1) ; 
 
         if(answer.answer_status() != VOK) 
         {
@@ -372,20 +402,24 @@ int CommunicationHandler::getInstancesCount()
 context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
 {
     // Setup TLS connection (i.e. certificates)
-    context_ptr ctx(new boost::asio::ssl::context(boost::asio::ssl::context::sslv3));
-        
     try {
+        context_ptr ctx(new boost::asio::ssl::context(boost::asio::ssl::context::sslv3));
+        
         ctx->set_options(boost::asio::ssl::context::default_workarounds |
                          boost::asio::ssl::context::no_sslv2 |
                          boost::asio::ssl::context::single_dh_use);
             
-        ctx->use_certificate_chain_file(m_certPath);
-        ctx->use_private_key_file(m_certPath, boost::asio::ssl::context::pem);
+        string certPath = m_certFun ? m_certFun() : m_certPath;
+        ctx->use_certificate_chain_file(certPath);
+        ctx->use_private_key_file(certPath, boost::asio::ssl::context::pem);
+        
+        return ctx;
+        
     } catch (std::exception& e) {
         LOG(ERROR) << "Cannot initialize TLS socket due to:" << e.what();
     }
         
-    return ctx;
+    return context_ptr();
 }
     
 void CommunicationHandler::onSocketInit(websocketpp::connection_hdl hdl,socket_type &socket)
@@ -437,6 +471,9 @@ void CommunicationHandler::onClose(websocketpp::connection_hdl hdl)
 void CommunicationHandler::onFail(websocketpp::connection_hdl hdl)
 {
     boost::unique_lock<boost::mutex> lock(m_connectMutex);
+    
+    ++m_errorCount;
+    
     m_connectStatus = HANDSHAKE_ERROR;
     m_connectCond.notify_all();
     

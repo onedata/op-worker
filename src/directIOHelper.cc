@@ -392,6 +392,11 @@ int DirectIOHelper::sh_fsync(const char *path, int isdatasync,
     return 0;
 }
 
+int DirectIOHelper::sh_flush(const char *path, struct fuse_file_info *fi)
+{
+    return 0;
+}
+
 #ifdef HAVE_POSIX_FALLOCATE
 int DirectIOHelper::sh_fallocate(const char *path, int mode,
             off_t offset, off_t length, struct fuse_file_info *fi)
