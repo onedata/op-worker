@@ -196,6 +196,7 @@ get_fuse_session(FuseId) ->
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 remove_fuse_session(FuseId) ->
+    %% This fuse id will not be added later so we do not have to clear cache globally
     ets:delete(dao_fuse_cache, FuseId), %% Delete cached entry
     dao:remove_record(FuseId).
 

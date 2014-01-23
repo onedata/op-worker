@@ -98,11 +98,13 @@ init({Args, {init_status, _TableInfo}}) ->
     init({Args, {init_status, table_initialized}});
 init(Args) ->
     ClearFun = fun() -> cache_guard() end,
+    ClearFun2 = fun() -> ets:delete_all_objects(storage_cache) end,
     %% TODO - check if simple cache is enough for users and fuses; if not, change to advanced cache (sub processes)
+    %% We assume that cached data do not change!
     Cache1 = worker_host:create_simple_cache(dao_fuse_cache, dao_fuse_cache_loop_time, ClearFun),
     case Cache1 of
       ok ->
-        Cache2 = worker_host:create_simple_cache(storage_cache),
+        Cache2 = worker_host:create_simple_cache(storage_cache, 60 *60 *24, ClearFun2),
         case Cache2 of
           ok ->
             init({Args, {init_status, ets:info(db_host_store)}});
