@@ -22,11 +22,15 @@ main_test_() ->
     {foreach,
         fun() ->
             meck:new(dao),
-            meck:new(lager)
+            meck:new(lager),
+            meck:new(worker_host),
+            ets:new(users_cache, [named_table, public, set, {read_concurrency, true}])
         end,
         fun(_) ->
+            ets:delete(users_cache),
             ok = meck:unload(dao),
-            ok = meck:unload(lager)
+            ok = meck:unload(lager),
+            ok = meck:unload(worker_host)
         end,
         [
             {"save user doc",
@@ -50,8 +54,13 @@ main_test_() ->
                             {ok, #view_result{rows = []}}
                         end), 
                     ?assertEqual({ok, LowestUUID}, dao_users:save_user(#user{})),
+
+                    meck:expect(worker_host, clear_cache, fun
+                      ({users_cache, _}) -> ok
+                    end),
                     ?assertEqual({ok, "existing_uuid"}, dao_users:save_user(#veil_document{record = #user{}, uuid = "existing_uuid"})),
-                    ?assert(meck:validate(dao))
+                    ?assert(meck:validate(dao)),
+                    ?assert(meck:validate(worker_host))
                 end},
 
             {"remove & get user doc by uuid",
@@ -60,8 +69,13 @@ main_test_() ->
                     meck:expect(dao, get_record, fun(_UUID) -> {ok, #veil_document{ record = #user{}, uuid = "existing_uuid" }} end),
                     meck:expect(dao, remove_record, fun(_UUID) -> ok end),
                     ?assertEqual({ok, #veil_document{ record = #user{}, uuid = "existing_uuid" }}, dao_users:get_user({uuid, "existing_uuid"})),
+
+                    meck:expect(worker_host, clear_cache, fun
+                      ({users_cache, _}) -> ok
+                    end),
                     ?assertEqual(ok, dao_users:remove_user({uuid, "existing_uuid"})),
-                    ?assert(meck:validate(dao))
+                    ?assert(meck:validate(dao)),
+                    ?assert(meck:validate(worker_host))
                 end},
 
             {"remove & get user doc from views",
@@ -86,10 +100,16 @@ main_test_() ->
                     ?assertEqual({ok, UserByLogin}, dao_users:get_user({login, "login"})),
                     ?assertEqual({ok, UserByEmail}, dao_users:get_user({email, "email"})),
                     ?assertEqual({ok, UserByDn}, dao_users:get_user({dn, "dn"})),
+
+                    meck:expect(worker_host, clear_cache, fun
+                      ({users_cache, _}) -> ok
+                    end),
+
                     ?assertEqual(ok, dao_users:remove_user({login, "login"})),
                     ?assertEqual(ok, dao_users:remove_user({email, "email"})),
                     ?assertEqual(ok, dao_users:remove_user({dn, "dn"})),
-                    ?assert(meck:validate(dao))
+                    ?assert(meck:validate(dao)),
+                    ?assert(meck:validate(worker_host))
                 end},
 
             {"empty, duplicated or invalid view response",
