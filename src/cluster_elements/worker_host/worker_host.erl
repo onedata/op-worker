@@ -626,7 +626,7 @@ calculate_proc_vale(TmpDepth, MaxWidth, CurrentValue) ->
 generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun) ->
   generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun}]).
 
-%% generate_sub_proc_list/5
+%% generate_sub_proc_list/1
 %% ====================================================================
 %% @doc Generates the list that describes sub procs.
 -spec generate_sub_proc_list([{Name :: atom(), MaxDepth :: integer(), MaxWidth :: integer(), ProcFun :: term(), MapFun :: term()}]) -> Result when
@@ -659,7 +659,7 @@ generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun} | Tail]) ->
   SubProc = {Name, {StartArgs, start_sub_proc(Name, MaxDepth, MaxWidth, NewProcFun, NewMapFun)}},
   [SubProc | generate_sub_proc_list(Tail)].
 
-%% stop_all_sub_proc/10
+%% stop_all_sub_proc/1
 %% ====================================================================
 %% @doc Stops all sub procs
 -spec stop_all_sub_proc(SubProcs :: list()) -> ok.
@@ -671,7 +671,7 @@ stop_all_sub_proc(SubProcs) ->
     SubProcPid ! {sub_proc_management, stop}
   end, Keys).
 
-%% del_sub_procs/10
+%% del_sub_procs/2
 %% ====================================================================
 %% @doc Sends stop signal to all processes found in ets table.
 -spec del_sub_procs(Key :: term(), Name :: atom()) -> ok.
@@ -686,16 +686,43 @@ del_sub_procs(Key, Name) ->
   end,
   del_sub_procs(ets:next(Name, Key), Name).
 
+%% create_simple_cache/1
+%% ====================================================================
+%% @doc Creates simple cache.
+-spec create_simple_cache(Name :: atom()) -> Result when
+  Result :: ok | error_during_cache_registration.
+%% ====================================================================
 create_simple_cache(Name) ->
   create_simple_cache(Name, non, non).
 
+%% create_simple_cache/3
+%% ====================================================================
+%% @doc Creates simple cache.
+-spec create_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term()) -> Result when
+  Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
+  CacheLoop :: integer() | atom().
+%% ====================================================================
 create_simple_cache(Name, CacheLoop, ClearFun) ->
   create_simple_cache(Name, CacheLoop, ClearFun, true).
 
+%% create_simple_cache/4
+%% ====================================================================
+%% @doc Creates simple cache.
+-spec create_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean()) -> Result when
+  Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
+  CacheLoop :: integer() | atom().
+%% ====================================================================
 create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection) ->
   Pid = self(),
   create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Pid).
 
+%% create_simple_cache/5
+%% ====================================================================
+%% @doc Creates simple cache.
+-spec create_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean(), Pid :: pid()) -> Result when
+  Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
+  CacheLoop :: integer() | atom().
+%% ====================================================================
 create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Pid) ->
   %% Init Cache-ETS. Ignore the fact that other DAO worker could have created this table. In this case, this call will
   %% fail, but table is present anyway, so everyone is happy.
@@ -729,6 +756,11 @@ create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Pid) ->
     error_during_cache_registration
   end.
 
+%% clear_cache/1
+%% ====================================================================
+%% @doc Clears chosen caches at all nodes
+-spec clear_cache(Cache :: term()) -> ok.
+%% ====================================================================
 clear_cache(Cache) ->
   Pid = self(),
   gen_server:cast({global, ?CCM}, {clear_cache, Cache, Pid}),

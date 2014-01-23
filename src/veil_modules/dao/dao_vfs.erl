@@ -462,6 +462,17 @@ save_storage(#storage_info{} = Storage) ->
     save_storage(#veil_document{record = Storage}, false);
 save_storage(StorageDoc) ->
   save_storage(StorageDoc, true).
+
+%% save_storage/2
+%% ====================================================================
+%% @doc Saves storage info to DB. Argument should be either #storage_info{} record
+%% (if you want to save it as new document) <br/>
+%% or #veil_document{} that wraps #storage_info{} if you want to update storage info in DB. <br/>
+%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec save_storage(Storage :: #storage_info{} | #veil_document{}, ClearCache :: boolean()) -> {ok, uuid()} | {error, any()} | no_return().
+%% ====================================================================
 save_storage(#veil_document{record = #storage_info{}} = StorageDoc, ClearCache) ->
     case ClearCache of
       true ->
@@ -501,13 +512,6 @@ remove_storage({id, StorageID}) when is_integer(StorageID) ->
         dao:remove_record(SData#veil_document.uuid);
       _ -> {Ans, SData}
     end.
-
-clear_cache(Key) ->
-  ets:delete(storage_cache, Key),
-  case worker_host:clear_cache({storage_cache, Key}) of
-    ok -> ok;
-    Error -> throw({error_during_global_cache_clearing, Error})
-  end.
 
 %% get_storage/1
 %% ====================================================================
@@ -612,6 +616,18 @@ find_files(FileCriteria) when is_record(FileCriteria, file_criteria) ->
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
+
+%% clear_cache/1
+%% ====================================================================
+%% @doc Deletes key from storage caches at all nodes
+-spec clear_cache(Key :: term()) -> ok.
+%% ====================================================================
+clear_cache(Key) ->
+  ets:delete(storage_cache, Key),
+  case worker_host:clear_cache({storage_cache, Key}) of
+    ok -> ok;
+    Error -> throw({error_during_global_cache_clearing, Error})
+  end.
 
 %% are_time_criteria_set/1
 %% @doc Returns true if any of time criteria (ctime or mtime) are set
