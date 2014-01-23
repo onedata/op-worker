@@ -20,8 +20,13 @@
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/couch_db.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
+-include_lib("veil_modules/dao/dao_vfs.hrl").
+-include_lib("veil_modules/fslogic/fslogic.hrl").
+-include_lib("logging.hrl").
 
 -import(dao_helper, [name/1]).
+
+-define(init_storage_after_seconds,1).
 
 -ifdef(TEST).
 -compile([export_all]).
@@ -32,7 +37,7 @@
 
 %% API
 -export([save_record/1, get_record/1, remove_record/1, list_records/2, load_view_def/2, set_db/1]).
--export([doc_to_term/1]).
+-export([doc_to_term/1,init_storage/0]).
 
 %% ===================================================================
 %% Behaviour callback functions
@@ -85,6 +90,8 @@ init({_Args, {init_status, table_initialized}}) -> %% Final stage of initializat
         end;
       (_) -> non
     end,
+
+		erlang:send_after(?init_storage_after_seconds * 1000, self(), {timer, {asynch, 1, {utils,init_storage,[]}}}),
 
     #initial_host_description{request_map = RequestMap, dispatcher_request_map = DispMapFun, sub_procs = SubProcList, plug_in_state = ok};
 init({Args, {init_status, _TableInfo}}) ->
@@ -462,7 +469,17 @@ term_to_doc(Field) when is_tuple(Field) ->
             case IsRec of                 %% and adds to Accumulator object
                 true ->
                     {_, Fields, _} = ?dao_record_info(RecName),
-                    {Poz + 1, dao_json:mk_field(AccIn, atom_to_list(lists:nth(Poz, Fields)), term_to_doc(Elem))};
+
+                    % TODO temporary fix that enables use of diacritic chars in file names
+                    Value = case {RecName, lists:nth(Poz, Fields)} of
+                                % Exclusively for filenames, apply conversion to binary
+                                {file, name} -> list_to_binary(Elem);
+                                % Standard conversion
+                                _ -> term_to_doc(Elem)
+                            end,
+                    % </endfix>
+
+                    {Poz + 1, dao_json:mk_field(AccIn, atom_to_list(lists:nth(Poz, Fields)), Value)};
                 false ->
                     {Poz + 1, dao_json:mk_field(AccIn, ?RECORD_TUPLE_FIELD_NAME_PREFIX ++ integer_to_list(Poz), term_to_doc(Elem))}
             end
@@ -551,3 +568,80 @@ cache_guard(Timeout) ->
     spawn(dao_cluster, clear_sessions, []), %% Clear FUSE session
 
     cache_guard(Timeout).
+
+%% init_storage/0
+%% ====================================================================
+%% @doc Inserts storage defined during worker instalation to database (if db already has defined storage,
+%% the function only replaces StorageConfigFile with that definition)
+%% @end
+-spec init_storage() -> ok | {error, Error :: term()}.
+%% ====================================================================
+init_storage() ->
+	try
+		%get storage config file path
+		GetEnvResult = application:get_env(veil_cluster_node,storage_config_path),
+		case GetEnvResult of
+			{ok,_} -> ok;
+			undefined ->
+				lager:error("Could not get 'storage_config_path' environment variable"),
+				throw(get_env_error)
+		end,
+		{ok,StorageFilePath} = GetEnvResult,
+
+		%get storage list from db
+		{Status1,ListStorageValue} = dao_lib:apply(dao_vfs, list_storage, [],1),
+		case Status1 of
+			ok -> ok;
+			error ->
+				lager:error("Could not list existing storages"),
+				throw(ListStorageValue)
+		end,
+		ActualDbStorages = [X#veil_document.record || X <- ListStorageValue],
+
+		case ActualDbStorages of
+			[] -> %db empty, insert storage
+				%read from file
+				{Status2,FileConsultValue} = file:consult(StorageFilePath),
+				case Status2 of
+					ok -> ok;
+					error ->
+						lager:error("Could not read storage config file"),
+						throw(FileConsultValue)
+				end,
+				[StoragePreferences] = FileConsultValue,
+
+				%parse storage preferences
+				UserPreferenceToGroupInfo = fun (GroupPreference) ->
+					case GroupPreference of
+						[{name,cluster_fuse_id},{root,Root}] ->
+							#fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}};
+						[{name,Name},{root,Root}] ->
+							#fuse_group_info{name = Name, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}}
+					end
+				end,
+				FuseGroups=try
+					lists:map(UserPreferenceToGroupInfo,StoragePreferences)
+				catch
+					_Type:Err ->
+						lager:error("Wrong format of storage config file"),
+						throw(Err)
+				end,
+
+				%create storage
+				{Status3, Value} = apply(fslogic_storage, insert_storage, ["ClusterProxy", [], FuseGroups]),
+				case Status3 of
+					ok ->
+						ok;
+					error ->
+						lager:error("Error during inserting storage to db"),
+						throw(Value)
+				end;
+
+			_NotEmptyList -> %db not empty
+				ok
+		end
+	catch
+		Type:Error ->
+			lager:error("Error during storage init: ~p:~p",[Type,Error]),
+			{error,Error}
+	end.

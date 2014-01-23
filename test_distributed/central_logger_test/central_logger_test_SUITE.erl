@@ -95,8 +95,9 @@ init_and_cleanup_test(Config) ->
   % Init cluster
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  nodes_manager:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  timer:sleep(3500),
+  nodes_manager:wait_for_cluster_init(),
 
   % Test logger's console loglevel switching functionalities
   ?assertEqual(ok, rpc:call(W, ?MODULE, check_console_loglevel_functionalities, [])),
@@ -118,7 +119,7 @@ init_and_cleanup_test(Config) ->
 
   % Terminate central_logger worker
   gen_server:cast({global, ?CCM}, {stop_worker, W, central_logger}),
-  timer:sleep(500),
+  nodes_manager:wait_for_cluster_cast(),
 
   % Check if traces were reset to default
   TracesAfterCleanup = rpc:call(W, ?MODULE, get_lager_traces, []),
@@ -143,8 +144,10 @@ logging_test(Config) ->
   % Init cluster
   gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  nodes_manager:wait_for_cluster_cast(),
+  nodes_manager:wait_for_nodes_registration(length(NodesUp) - 1),
   gen_server:cast({global, ?CCM}, init_cluster),
-  timer:sleep(3000),
+  nodes_manager:wait_for_cluster_init(),
 
   % Subscribe for log stream
   Pid = self(),

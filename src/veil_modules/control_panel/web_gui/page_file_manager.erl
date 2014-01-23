@@ -1171,10 +1171,14 @@ fs_remove_dir(DirPath) ->
 
 fs_list_dir(Dir) ->
     DirContent = fs_list_dir(Dir, 0, 10, []),
-    _ItemList = lists:map(
-        fun(File) ->
-            item_new(Dir, File)
-        end, DirContent).
+    _ItemList = lists:foldl(
+        fun(File, Acc) ->
+            try
+                Acc ++ [item_new(Dir, File)]
+            catch _:_ ->
+                Acc
+            end
+        end, [], DirContent).
 
 
 fs_list_dir(Path, Offset, Count, Result) ->
