@@ -480,8 +480,18 @@ unlock_file(_UserID, _FileID, _Mode) ->
 -spec save_storage(Storage :: #storage_info{} | #veil_document{}) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
 save_storage(#storage_info{} = Storage) ->
-    save_storage(#veil_document{record = Storage});
-save_storage(#veil_document{record = #storage_info{}} = StorageDoc) ->
+    save_storage(#veil_document{record = Storage}, false);
+save_storage(StorageDoc) ->
+  save_storage(StorageDoc, true).
+save_storage(#veil_document{record = #storage_info{}} = StorageDoc, ClearCache) ->
+    case ClearCache of
+      true ->
+        clear_cache({uuid, StorageDoc#veil_document.uuid}),
+        Doc = StorageDoc#veil_document.record,
+        clear_cache({id, Doc#storage_info.id});
+      false ->
+        ok
+    end,
     dao:set_db(?SYSTEM_DB_NAME),
     dao:save_record(StorageDoc).
 
