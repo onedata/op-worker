@@ -26,7 +26,7 @@
 %% API
 %% ====================================================================
 -export([start_link/3, stop/1, start_sub_proc/5, generate_sub_proc_list/1, generate_sub_proc_list/5]).
--export([create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5]).
+-export([create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1]).
 
 %% ====================================================================
 %% Test API
@@ -704,20 +704,36 @@ create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Pid) ->
     [_ | _]     -> ok
   end,
 
-  LoopTime = case CacheLoop of
-    non -> non;
-    Atom when is_atom(Atom) ->
-      case application:get_env(veil_cluster_node, CacheLoop) of
-        {ok, Interval1} -> Interval1;
-        _               -> loop_time_load_error
-      end;
-    _ -> CacheLoop
-  end,
+  Pid = self(),
+  gen_server:cast(?Node_Manager_Name, {register_simple_cache, Name, Pid}),
+  receive
+    simple_cache_registered ->
+      LoopTime = case CacheLoop of
+                   non -> non;
+                   Atom when is_atom(Atom) ->
+                     case application:get_env(veil_cluster_node, CacheLoop) of
+                       {ok, Interval1} -> Interval1;
+                       _               -> loop_time_load_error
+                     end;
+                   _ -> CacheLoop
+                 end,
 
-  case LoopTime of
-    Time when is_integer(Time) ->
-      erlang:send_after(1000 * Time, Pid, {clear_sipmle_cache, 1000 * Time, ClearFun, StrongCacheConnection}),
-      ok;
-    non -> ok;
-    _ -> loop_time_not_a_number_error
+      case LoopTime of
+        Time when is_integer(Time) ->
+          erlang:send_after(1000 * Time, Pid, {clear_sipmle_cache, 1000 * Time, ClearFun, StrongCacheConnection}),
+          ok;
+        non -> ok;
+        _ -> loop_time_not_a_number_error
+      end
+  after 500 ->
+    error_during_cache_registration
+  end.
+
+clear_cache(Cache) ->
+  Pid = self(),
+  gen_server:cast({global, ?CCM}, {clear_cache, Cache, Pid}),
+  receive
+    cache_cleared -> ok
+  after 500 ->
+    error_during_contact_witch_ccm
   end.

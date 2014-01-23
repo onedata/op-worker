@@ -182,6 +182,15 @@ handle_call({get_callback, FuseId}, _From, State) ->
   {Callback, NewState} = get_callback(State, FuseId),
   {reply, Callback, NewState};
 
+handle_call({clear_cache, Cache}, _From, State) ->
+  case Cache of
+    CacheName when is_atom(CacheName) ->
+      ets:delete_all_objects(Cache);
+    {CacheName2, Key} ->
+      ets:delete(CacheName2, Key)
+  end,
+  {reply, ok, State};
+
 %% Test call
 handle_call(check, _From, State) ->
   {reply, ok, State};
@@ -241,6 +250,15 @@ handle_cast({delete_callback_by_pid, Pid}, State) ->
       end)
   end,
   {noreply, State};
+
+handle_cast({register_simple_cache, Cache, ReturnPid}, State) ->
+  Caches = State#node_state.simple_caches,
+  NewCaches = case lists:member(Cache, Caches) of
+    true -> Caches;
+    false -> [Cache | Caches]
+  end,
+  ReturnPid ! simple_cache_registered,
+  {noreply, State#node_state{simple_caches = NewCaches}};
 
 handle_cast(_Msg, State) ->
   {noreply, State}.
@@ -349,6 +367,12 @@ heart_beat(Conn_status, State, ShortPeriod) ->
 %% ====================================================================
 heart_beat_response(New_state_num, CallbacksNum, State) ->
   lager:info([{mod, ?MODULE}], "Heart beat on node: ~s: answered, new state_num: ~b, new callback_num", [node(), New_state_num, CallbacksNum]),
+
+  case (New_state_num == State#node_state.state_num) of
+    true -> ok;
+    false ->
+      clear_simple_caches(State#node_state.simple_caches)
+  end,
 
   case (New_state_num == State#node_state.state_num) and (New_state_num == State#node_state.dispatcher_state) and (CallbacksNum == State#node_state.callbacks_num) and (CallbacksNum == State#node_state.callbacks_state)
   of
@@ -644,3 +668,5 @@ get_fuse_by_callback_pid_helper(Pid, [{F, {CList1, CList2}} | T]) ->
     false -> get_fuse_by_callback_pid_helper(Pid, T)
   end.
 
+clear_simple_caches(Caches) ->
+  lists:foreach(fun(Cache) -> ets:delete_all_objects(Cache) end, Caches).

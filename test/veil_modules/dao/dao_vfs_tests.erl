@@ -42,7 +42,7 @@ storage_test_() ->
 
 
 setup() ->
-    meck:new([dao, dao_helper]),
+    meck:new([dao, dao_helper, worker_host]),
     meck:expect(dao, set_db, fun(_) -> ok end),
     meck:expect(dao, save_record, fun(_) -> {ok, "uuid"} end),
     meck:expect(dao, get_record, fun(_) -> {ok, #veil_document{}} end),
@@ -53,7 +53,7 @@ setup() ->
 
 teardown(_) ->
     ets:delete(storage_cache),
-    ok = meck:unload([dao, dao_helper]).
+    ok = meck:unload([dao, dao_helper, worker_host]).
 
 
 file_path_analyze_test() ->
@@ -242,10 +242,11 @@ save_storage() ->
 
 
 remove_storage() ->
+    meck:expect(worker_host, clear_cache, fun(_) -> ok end),
     ?assertMatch(ok, dao_vfs:remove_storage({uuid, "uuid"})),
     ?assert(meck:called(dao, set_db, [?SYSTEM_DB_NAME])),
     ?assert(meck:called(dao, remove_record, ["uuid"])),
-    ?assert(meck:validate([dao, dao_helper])).
+    ?assert(meck:validate([dao, dao_helper, worker_host])).
 
 
 get_storage() ->

@@ -567,7 +567,7 @@ update_workers(WorkersList, SNum, CLoad, ALoad, Modules) ->
 %% ====================================================================
 pull_state(State) ->
   try
-    {WorkersList, StateNum} = gen_server:call({global, ?CCM}, get_workers),
+    {WorkersList, StateNum} = gen_server:call({global, ?CCM}, get_workers, 1000),
     NewState = update_workers(WorkersList, State#dispatcher_state.state_num, State#dispatcher_state.current_load, State#dispatcher_state.avg_load, ?Modules),
     {ok, NewState#dispatcher_state{state_num = StateNum}}
   catch
@@ -685,7 +685,7 @@ get_callback(Fuse) ->
 %% ====================================================================
 pull_callbacks() ->
   try
-    {CallbacksList, CallbacksNum} = gen_server:call({global, ?CCM}, get_callbacks),
+    {CallbacksList, CallbacksNum} = gen_server:call({global, ?CCM}, get_callbacks, 1000),
     UpdateCallbacks = fun({Fuse, NodesList}) ->
       ets:insert(?CALLBACKS_TABLE, {Fuse, NodesList})
     end,
