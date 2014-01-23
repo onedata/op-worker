@@ -663,9 +663,19 @@ get_fuse_by_callback_pid_helper(Pid, [{F, {CList1, CList2}} | T]) ->
     false -> get_fuse_by_callback_pid_helper(Pid, T)
   end.
 
+%% clear_simple_caches/1
+%% ====================================================================
+%% @doc Clears all caches at node
+-spec clear_simple_caches(Caches :: list()) -> ok.
+%% ====================================================================
 clear_simple_caches(Caches) ->
   lists:foreach(fun(Cache) -> ets:delete_all_objects(Cache) end, Caches).
 
+%% clear_cache/1
+%% ====================================================================
+%% @doc Clears chosen caches at node
+-spec clear_cache(Cache :: term()) -> ok.
+%% ====================================================================
 clear_cache(Cache) ->
   case Cache of
     CacheName when is_atom(CacheName) ->

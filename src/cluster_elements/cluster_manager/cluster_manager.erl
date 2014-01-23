@@ -1441,6 +1441,12 @@ get_callbacks(Fuse) ->
 register_dispatcher_map(Module, Map, MapsList) ->
   [{Module, Map} | proplists:delete(Module, MapsList)].
 
+%% clear_cache/2
+%% ====================================================================
+%% @doc Clears chosen caches on all nodes
+-spec clear_cache(State :: term(), Cache :: term()) -> NewState when
+  NewState :: term().
+%% ====================================================================
 clear_cache(State, Cache) ->
   Clear = fun(Node, {TmpState, TmpWorkersFound}) ->
     try
