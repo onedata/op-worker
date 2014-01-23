@@ -183,12 +183,7 @@ handle_call({get_callback, FuseId}, _From, State) ->
   {reply, Callback, NewState};
 
 handle_call({clear_cache, Cache}, _From, State) ->
-  case Cache of
-    CacheName when is_atom(CacheName) ->
-      ets:delete_all_objects(Cache);
-    {CacheName2, Key} ->
-      ets:delete(CacheName2, Key)
-  end,
+  clear_cache(Cache),
   {reply, ok, State};
 
 %% Test call
@@ -670,3 +665,16 @@ get_fuse_by_callback_pid_helper(Pid, [{F, {CList1, CList2}} | T]) ->
 
 clear_simple_caches(Caches) ->
   lists:foreach(fun(Cache) -> ets:delete_all_objects(Cache) end, Caches).
+
+clear_cache(Cache) ->
+  case Cache of
+    CacheName when is_atom(CacheName) ->
+      ets:delete_all_objects(Cache);
+    {CacheName2, Key} ->
+      ets:delete(CacheName2, Key);
+    [] -> ok;
+    [H | T] ->
+      clear_cache(H),
+      clear_cache(T)
+  end,
+  ok.

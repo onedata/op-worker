@@ -465,9 +465,8 @@ save_storage(StorageDoc) ->
 save_storage(#veil_document{record = #storage_info{}} = StorageDoc, ClearCache) ->
     case ClearCache of
       true ->
-        clear_cache({uuid, StorageDoc#veil_document.uuid}),
         Doc = StorageDoc#veil_document.record,
-        clear_cache({id, Doc#storage_info.id});
+        clear_cache([{uuid, StorageDoc#veil_document.uuid}, {id, Doc#storage_info.id}]);
       false ->
         ok
     end,
@@ -483,14 +482,25 @@ save_storage(#veil_document{record = #storage_info{}} = StorageDoc, ClearCache) 
 -spec remove_storage({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) -> ok | {error, any()} | no_return().
 %% ====================================================================
 remove_storage({uuid, DocUUID}) when is_list(DocUUID) ->
-    clear_cache({uuid, DocUUID}),
-    dao:set_db(?SYSTEM_DB_NAME),
-    dao:remove_record(DocUUID);
+    {Ans, SData} = get_storage({uuid, DocUUID}),
+    case Ans of
+      ok ->
+        Doc = SData#veil_document.record,
+        clear_cache([{uuid, DocUUID}, {id, Doc#storage_info.id}]),
+
+        dao:set_db(?SYSTEM_DB_NAME),
+        dao:remove_record(DocUUID);
+      _ -> {Ans, SData}
+    end;
 remove_storage({id, StorageID}) when is_integer(StorageID) ->
-    clear_cache({id, StorageID}),
     dao:set_db(?SYSTEM_DB_NAME),
-    {ok, SData} = get_storage({id, StorageID}),
-    dao:remove_record(SData#veil_document.uuid).
+    {Ans, SData} = get_storage({id, StorageID}),
+    case Ans of
+      ok ->
+        clear_cache([{uuid, SData#veil_document.uuid}, {id, StorageID}]),
+        dao:remove_record(SData#veil_document.uuid);
+      _ -> {Ans, SData}
+    end.
 
 clear_cache(Key) ->
   ets:delete(storage_cache, Key),

@@ -233,8 +233,7 @@ rename_file() ->
 
 save_storage() ->
     meck:expect(worker_host, clear_cache, fun
-      ({storage_cache, {uuid, _}}) -> ok;
-      ({storage_cache, {id, _}}) -> ok
+      ({storage_cache, [{uuid, _}, {id, _}]}) -> ok
     end),
     Doc = #veil_document{record = #storage_info{}},
     ?assertMatch({ok, "uuid"}, dao_vfs:save_storage(Doc)),
@@ -246,7 +245,10 @@ save_storage() ->
 
 
 remove_storage() ->
-    meck:expect(worker_host, clear_cache, fun({storage_cache, {uuid, "uuid"}}) -> ok end),
+    meck:expect(worker_host, clear_cache, fun
+      ({storage_cache, [{uuid, "uuid"}, {id, _}]}) -> ok
+    end),
+    meck:expect(dao, get_record, fun("uuid") -> {ok, #veil_document{uuid="uuid", record = #storage_info{}}} end),
     ?assertMatch(ok, dao_vfs:remove_storage({uuid, "uuid"})),
     ?assert(meck:called(dao, set_db, [?SYSTEM_DB_NAME])),
     ?assert(meck:called(dao, remove_record, ["uuid"])),
