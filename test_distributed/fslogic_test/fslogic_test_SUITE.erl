@@ -1936,7 +1936,7 @@ get_file_links_test(Config) ->
     gen_server:cast({global, ?CCM}, init_cluster),
     nodes_manager:wait_for_cluster_init(),
 
-    {InsertStorageAns, _StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT]),
+    {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT]),
     ?assertEqual(ok, InsertStorageAns),
 
     DirName = "base_dir",
@@ -1996,7 +1996,10 @@ get_file_links_test(Config) ->
     ?assertEqual(ok, AnsDel5),
 
     AnsDel6 = rpc:call(Node1, logical_files_manager, rmdir, [DirName]),
-    ?assertEqual(ok, AnsDel6).
+    ?assertEqual(ok, AnsDel6),
+
+    RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+    ?assertEqual(ok, RemoveStorageAns).
 
 
 %% ====================================================================
