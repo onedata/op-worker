@@ -275,7 +275,7 @@ handle_info({timer, Msg}, State) ->
 
 handle_info({clear_sipmle_cache, LoopTime, Fun, StrongCacheConnection}, State) ->
   Pid = self(),
-  erlang:send_after(LoopTime, Pid, {clear_sipmle_cache, LoopTime, Fun}),
+  erlang:send_after(LoopTime, Pid, {clear_sipmle_cache, LoopTime, Fun, StrongCacheConnection}),
   case StrongCacheConnection of
     true ->
       spawn_link(fun() -> Fun() end);

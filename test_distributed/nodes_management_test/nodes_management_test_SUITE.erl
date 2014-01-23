@@ -18,6 +18,8 @@
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 
+-define(ProtocolVersion, 1).
+
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([fuse_session_cleanup_test/1, main_test/1, callbacks_test/1, sub_proc_test/1]).
@@ -54,7 +56,7 @@ worker_code() ->
 fuse_session_cleanup_test(Config) ->
     nodes_manager:check_start_assertions(Config),
     NodesUp = ?config(nodes, Config),
-
+    DBNode = ?config(dbnode, Config),
     [CCM | WorkerNodes] = NodesUp,
 
     ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
@@ -153,9 +155,17 @@ fuse_session_cleanup_test(Config) ->
     ?assertEqual(1, length(Ans8)),
 
 
+    %% Stop dao - info will not be cleared from DB during socket closing (check if cache clearing procedure will clear it)
+    DaoStop = rpc:call(CCM, dao_lib, apply, [dao_hosts, delete, [DBNode], ?ProtocolVersion]),
+    ?assertEqual(ok, DaoStop),
+
     %% Close connections from session #2
     wss:close(Socket21),
     wss:close(Socket22),
+
+    nodes_manager:wait_for_request_handling(),
+    DaoStart = rpc:call(CCM, dao_lib, apply, [dao_hosts, insert, [DBNode], ?ProtocolVersion]),
+    ?assertEqual(ok, DaoStart),
 
     nodes_manager:wait_for_fuse_session_exp(),
 
@@ -572,7 +582,7 @@ init_per_testcase(_, Config) ->
     [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}]]),
 
   Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
-  lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config).
+  lists:append([{nodes, NodesUp}, {assertions, Assertions}, {dbnode, DBNode}], Config).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
