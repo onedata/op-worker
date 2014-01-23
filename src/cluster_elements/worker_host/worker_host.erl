@@ -287,10 +287,11 @@ handle_info({clear_sipmle_cache, LoopTime, Fun, StrongCacheConnection}, State) -
 handle_info(dispatcher_map_registered, State) ->
   {noreply, State#host_state{dispatcher_request_map_ok = true}};
 
-handle_info(Info, State) ->
-	PlugIn = State#host_state.plug_in,
-    {_Reply, NewPlugInState} = PlugIn:handle(Info, State#host_state.plug_in_state), %% TODO: fix me ! There's no such callback in worker_plugin
-    {noreply, State#host_state{plug_in_state = NewPlugInState}}.
+handle_info(_Info, State) ->
+%% 	PlugIn = State#host_state.plug_in,
+%%     {_Reply, NewPlugInState} = PlugIn:handle(Info, State#host_state.plug_in_state), %% TODO: fix me ! There's no such callback in worker_plugin
+%%     {noreply, State#host_state{plug_in_state = NewPlugInState}}.
+  {noreply, State}.
 
 
 %% terminate/2
