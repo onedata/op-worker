@@ -46,7 +46,7 @@ init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 %% @end
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
 %% ====================================================================
-rest_init(Req, _Opts) ->
+rest_init(Req, _Opts) ->   
     {OtpCert, Certs} = try
         {ok, PeerCert} = ssl:peercert(cowboy_req:get(socket, Req)),
         {ok, {Serial, Issuer}} = public_key:pkix_issuer_id(PeerCert, self),
