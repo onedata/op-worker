@@ -514,11 +514,11 @@ remove_storage({uuid, DocUUID}) when is_list(DocUUID) ->
       _ -> {Ans, SData}
     end;
 remove_storage({id, StorageID}) when is_integer(StorageID) ->
-    dao:set_db(?SYSTEM_DB_NAME),
     {Ans, SData} = get_storage({id, StorageID}),
     case Ans of
       ok ->
         clear_cache([{uuid, SData#veil_document.uuid}, {id, StorageID}]),
+        dao:set_db(?SYSTEM_DB_NAME),
         dao:remove_record(SData#veil_document.uuid);
       _ -> {Ans, SData}
     end.

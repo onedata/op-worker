@@ -69,6 +69,7 @@ save_user(#veil_document{record = #user{}} = UserDoc) ->
 remove_user(Key) ->
     {ok, FDoc} = get_user(Key),
     clear_all_data_from_cache(FDoc),
+    dao:set_db(?USERS_DB_NAME),
     dao:remove_record(FDoc#veil_document.uuid).
 
 clear_cache(Key) ->
