@@ -55,8 +55,11 @@ teardown(_) ->
 
 
 ping() ->
-    meck:expect(net_adm, ping, fun('test@host1.lan') -> receive after 10000 -> pang end;
-        ('real@host.lan') -> pong end),
+    meck:expect(net_adm, ping, fun
+      ('test@host1.lan') -> receive after 10000 -> pang end;
+      ('real@host.lan') -> pong;
+      (_) -> pang
+    end),
     ?assertEqual(pang, dao_hosts:ping('test@host1.lan', 50)),
     ?assertEqual(pong, dao_hosts:ping('real@host.lan', 50)),
     ?assert(meck:validate(net_adm)).
