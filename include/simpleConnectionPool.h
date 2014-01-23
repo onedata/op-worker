@@ -56,7 +56,6 @@ public:
      * This method uses simple round-robin selection for all connections in pool.
      * It also creates new instances of CommunicationHandler if needed.
      */
-    
     virtual boost::shared_ptr<CommunicationHandler> selectConnection(PoolType = META_POOL);
     virtual void releaseConnection(boost::shared_ptr<CommunicationHandler> conn);       ///< Returns CommunicationHandler's pointer ownership back to connection pool.
                                                                                         ///< @deprecated Since selectConnection does not pass connection ownership, this

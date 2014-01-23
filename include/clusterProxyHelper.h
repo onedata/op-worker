@@ -59,8 +59,13 @@ class ClusterProxyHelper : public IStorageHelper {
         #endif // HAVE_UTIMENSAT
 
         int sh_open(const char *path, struct fuse_file_info *fi) ;
+    
+        /// This callback uses BufferAgent in order to improve read preformance. For real read operation impl. see ClusterProxyHelper::doRead.
         int sh_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi) ;
-        int sh_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) ;
+    
+        /// This callback uses BufferAgent in order to improve write preformance. For real write operation impl. see ClusterProxyHelper::doWrite.
+        int sh_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi);
+    
         int sh_statfs(const char *path, struct statvfs *stbuf) ;
         int sh_flush(const char *path, struct fuse_file_info *fi) ;
         int sh_release(const char *path, struct fuse_file_info *fi) ;

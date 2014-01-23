@@ -1,0 +1,42 @@
+{
+	"build_systems":
+	[
+		{
+			"cmd":
+			[
+				"make build"
+			],
+			"name": "cmake"
+		}
+	],
+	"folders":
+	[
+		{
+			"name": "VeilHelpers",
+			"path": "/Users/RoXeon/Projekty/veilhelpers"
+		},
+		{
+			"path": "/Users/RoXeon/Dropbox/AGH/Symboliczne"
+		},
+		{
+			"path": "/Users/RoXeon/Dropbox/AGH/OS"
+		}
+	],
+	"settings":
+	{
+		"sublimeclang_options":
+		[
+			"-I${folder:${project_path:veilhelpers.sublime-project}}/include",
+			"-I${folder:${project_path:veilhelpers.sublime-project}}/src",
+			"-I${folder:${project_path:veilhelpers.sublime-project}}/build/deps/glog/src/glog/src",
+			"-I${folder:${project_path:veilhelpers.sublime-project}}/build/deps/gmock/src/gmock/include",
+			"-I${folder:${project_path:veilhelpers.sublime-project}}/build/deps/gmock/src/gmock/gtest/include",
+			"-I${folder:${project_path:veilhelpers.sublime-project}}/test/include",
+			"-I${folder:${project_path:veilhelpers.sublime-project}}/build/include",
+			"-I${folder:${project_path:veilhelpers.sublime-project}}/build",
+			"-D_FILE_OFFSET_BITS=64",
+			"-DFUSE_USE_VERSION=29",
+			"-ferror-limit=0"
+		]
+	}
+}

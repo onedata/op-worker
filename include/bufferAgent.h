@@ -28,7 +28,12 @@ typedef boost::function<int(std::string path, std::string &buf, size_t, off_t, f
 
 /**
  * BufferAgent gives replacement methods for read and write operations that acts as proxy for real ones.
- * The BufferAgent decides if and when, real read/write operation will be used. 
+ * The BufferAgent decides if and when, real read/write operation will be used in order to improve theirs preformance.
+ * For write operations BufferAgent will accumulate date to increase block size in for write operations.
+ * For read calls, BufferAgent will try to prefetch data before they are actually needed.
+ * In order to use BufferAgent, open, release, write, read and flush methods of Storage Helper shall be replaced with the class 
+ * onOpen, onRelease, onWrite, onRead and onFlush methods respectively. Also real Storage helpers callback shall be provided with the
+ * BufferAgent constructor.
  */
 class BufferAgent
 {
@@ -36,14 +41,14 @@ public:
 
     /// State holder for write operations for the file 
     struct WriteCache {
-        boost::shared_ptr<FileCache>    buffer;
+        boost::shared_ptr<FileCache>    buffer;     ///< Actual buffer object.
         boost::recursive_mutex          mutex;    
         boost::recursive_mutex          sendMutex;
         boost::condition_variable_any   cond;
         std::string                     fileName;
-        struct fuse_file_info           ffi;
+        struct fuse_file_info           ffi;         ///< Saved fuse_file_info struct that we need to pass for each storage helpers' call.
         bool                            opPending;
-        int                             lastError;
+        int                             lastError;  ///< Last write error
 
         WriteCache()
           : opPending(false),
@@ -54,15 +59,15 @@ public:
 
     /// State holder for read operations for the file 
     struct ReadCache {
-        boost::shared_ptr<FileCache>    buffer;
+        boost::shared_ptr<FileCache>    buffer;         ///< Actual buffer object.
         boost::recursive_mutex          mutex;
         boost::condition_variable_any   cond;
         std::string                     fileName;
-        struct fuse_file_info           ffi;
-        size_t                          blockSize;      // Current prefered block size
-        int                             openCount;      // How many file descriptors is opened to the file atm
-        boost::unordered_map <fd_type, off_t> lastBlock;// Last requested block (per file descriptor)
-        off_t                           endOfFile;      // Last detected end of file (its offset)
+        struct fuse_file_info           ffi;            ///< Saved fuse_file_info struct that we need to pass for each storage helpers' call.
+        size_t                          blockSize;      ///< Current prefered block size
+        int                             openCount;      ///< How many file descriptors is opened to the file atm
+        boost::unordered_map <fd_type, off_t> lastBlock;///< Last requested block (per file descriptor)
+        off_t                           endOfFile;      ///< Last detected end of file (its offset)
 
         ReadCache()
           : blockSize(4096),
@@ -73,6 +78,8 @@ public:
     };
 
     /// Internal type of Prefetching workers' job
+    /// Every time that BufferAgent thinks data prefetch is needed, the PrefetchJob
+    /// object end up in worker threads' job queue 
     struct PrefetchJob {
         std::string     fileName;
         off_t           offset;
@@ -87,6 +94,7 @@ public:
         {
         }
 
+        /// Orders PrefetchJob by its offset and size.
         bool operator< (const PrefetchJob &other) 
         {
             return (offset < other.offset) || (offset == other.offset && size < other.size);
@@ -108,16 +116,23 @@ public:
     typedef std::map<uint64_t, write_buffer_ptr> write_cache_map_t;
     typedef std::map<std::string, read_buffer_ptr> read_cache_map_t;
 
+    /**
+     * BufferAgent constructor.
+     * @param write_fun Write function that writes data to filesystem. This shall be storage helpers' write callback. See write_fun type for signature.
+     * @param read_fun Read function that provides filesystems' data. This shall be storage helpers' read callback. See read_fun type for signature.
+     */
     BufferAgent(write_fun, read_fun);
     virtual ~BufferAgent();
 
-    /// onWrite shall be called on each write operation that filesystem user requests
+    /// onWrite shall be called on each write operation that filesystem user requests - accumulates data while sending it asynchronously.
     virtual int onWrite(std::string path, const std::string &buf, size_t size, off_t offset, ffi_type);
     
-    /// onRead shall be called on each read operation that filesystem user requests
+    /// onRead shall be called on each read operation that filesystem user requests.
+    /// onRead returns buffered data if available.
     virtual int onRead(std::string path, std::string &buf, size_t size, off_t offset, ffi_type);
     
-    /// onFlush shall be called on each flush operation that filesystem user requests
+    /// onFlush shall be called on each flush operation that filesystem user requests.
+    /// This metod flushes all buffered data.
     virtual int onFlush(std::string path, ffi_type);
     
     /// onRelease shall be called on each release operation that filesystem user requests
@@ -127,6 +142,7 @@ public:
     virtual int onOpen(std::string path, ffi_type);
 
     /// Starts BufferAgent worker threads
+    /// @param worker_count How many worker threads shall be stared to process prefetch request and send buffored data.
     virtual void agentStart(int worker_count = 5);
 
     /// Stops BufferAgent worker threads
@@ -134,8 +150,8 @@ public:
 
 private:
 
-    volatile bool                                   m_agentActive;
-    std::vector<boost::shared_ptr<boost::thread> >  m_workers;     /// Worker threads list
+    volatile bool                                   m_agentActive; ///< Status of worker threads. Setting this to false exits workers' main loop.
+    std::vector<boost::shared_ptr<boost::thread> >  m_workers;     ///< Worker threads list
 
     // State holders and job queues for write operations
     boost::recursive_mutex                  m_wrMutex;
@@ -149,31 +165,35 @@ private:
     read_cache_map_t                        m_rdCacheMap;
     std::multiset<PrefetchJob, PrefetchJobCompare> m_rdJobQueue;
 
-    /// Real write function pointer
+    /// Real write function pointer (storage helpers' write method)
     write_fun                               doWrite;
 
-    /// Real read function pointer
+    /// Real read function pointer (storage helpers' read method)
     read_fun                                doRead;
     
-    virtual void writerLoop();
-    virtual void readerLoop();
+    virtual void writerLoop();  ///< Main loop for worker thread that sends buffored data.
+    virtual void readerLoop();  ///< Main loop for worker thread that prefetches data.
 
     /// Instantiate FileCache class. Useful in tests for mocking
+    /// @param isBuffer Set this argument to false if data in buffer shall be automatically cleared after same short time.
     virtual boost::shared_ptr<FileCache> newFileCache(bool isBuffer = true);
 
 
     // Memory management. Memory current state update/check.
     static boost::recursive_mutex           m_bufferSizeMutex;
 
-    volatile static size_t              m_rdBufferTotalSize;
-    volatile static size_t              m_wrBufferTotalSize;
-    static rdbuf_size_mem_t             m_rdBufferSizeMem;
-    static wrbuf_size_mem_t             m_wrBufferSizeMem;
+    volatile static size_t              m_rdBufferTotalSize;    ///< Current total size of prefetched data.
+    volatile static size_t              m_wrBufferTotalSize;    ///< Current total size of buffored data.
+    static rdbuf_size_mem_t             m_rdBufferSizeMem;      ///< Current sizes of prefetched data for each file individually.
+    static wrbuf_size_mem_t             m_wrBufferSizeMem;      ///< Current sizes of buffored data for each file individually.
 
-    static void updateWrBufferSize(fd_type, size_t);
-    static void updateRdBufferSize(std::string, size_t);
-    static size_t getWriteBufferSize();
-    static size_t getReadBufferSize();
+    static void updateWrBufferSize(fd_type, size_t size);       ///< Updates size of buffored data for the specified file.
+                                                                ///< @param size Shall be set to current buffer size.
+    static void updateRdBufferSize(std::string, size_t size);   ///< Updates size of prefetched data for the specified file.
+                                                                ///< @param size Shall be set to current buffer size.
+    
+    static size_t getWriteBufferSize();                         ///< Returns current total size of buffored data.
+    static size_t getReadBufferSize();                          ///< Returns current total size of prefetched data.
 };
 
 

@@ -394,11 +394,7 @@ int DirectIOHelper::sh_fsync(const char *path, int isdatasync,
 
 int DirectIOHelper::sh_flush(const char *path, struct fuse_file_info *fi)
 {
-    if(fi->fh > 0) {
-        return fflush(fdopen(fi->fh, "rw") );
-    } else {
-        return 0;
-    }
+    return 0;
 }
 
 #ifdef HAVE_POSIX_FALLOCATE
