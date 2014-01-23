@@ -93,7 +93,7 @@ init(Args) ->
     %% Init Cache-ETS. Ignore the fact that other DAO worker could have created this table. In this case, this call will
     %% fail, but table is present anyway, so everyone is happy.
     case ets:info(dao_cache) of
-        undefined   -> ets:new(dao_cache, [named_table, public, ordered_set, {read_concurrency, true}]);
+        undefined   -> ets:new(dao_cache, [named_table, public, set, {read_concurrency, true}]);
         [_ | _]     -> ok
     end,
 

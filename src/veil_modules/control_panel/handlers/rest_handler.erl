@@ -47,10 +47,6 @@ init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
 %% ====================================================================
 rest_init(Req, _Opts) ->
-    Opts = [{verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}}],
-    Socket = cowboy_req:get(socket, Req),
-    ssl:setopts(Socket, Opts),
-    ok = ssl:renegotiate(Socket),
     {OtpCert, Certs} = try
         {ok, PeerCert} = ssl:peercert(cowboy_req:get(socket, Req)),
         {ok, {Serial, Issuer}} = public_key:pkix_issuer_id(PeerCert, self),
