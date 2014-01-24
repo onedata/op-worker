@@ -1,0 +1,25 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="dir_68267d1309a1af8e8297ef4c3efbcdba" kind="dir">
+    <compoundname>src</compoundname>
+    <innerdir refid="dir_c556ccb22da8b6f1d4c3adfafaa813c2">src/globus-proxy-utils</innerdir>
+    <innerfile refid="config_8cc">config.cc</innerfile>
+    <innerfile refid="fslogicProxy_8cc">fslogicProxy.cc</innerfile>
+    <innerfile refid="gsiHandler_8cc">gsiHandler.cc</innerfile>
+    <innerfile refid="ISchedulable_8cc">ISchedulable.cc</innerfile>
+    <innerfile refid="jobScheduler_8cc">jobScheduler.cc</innerfile>
+    <innerfile refid="lock_8cc">lock.cc</innerfile>
+    <innerfile refid="messageBuilder_8cc">messageBuilder.cc</innerfile>
+    <innerfile refid="metaCache_8cc">metaCache.cc</innerfile>
+    <innerfile refid="pushListener_8cc">pushListener.cc</innerfile>
+    <innerfile refid="storageMapper_8cc">storageMapper.cc</innerfile>
+    <innerfile refid="veilException_8cc">veilException.cc</innerfile>
+    <innerfile refid="veilfs_8cc">veilfs.cc</innerfile>
+    <innerfile refid="veilFuse_8cc">veilFuse.cc</innerfile>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+    </detaileddescription>
+    <location file="/home/krzysztof/Desktop/veilclient/src/"/>
+  </compounddef>
+</doxygen>

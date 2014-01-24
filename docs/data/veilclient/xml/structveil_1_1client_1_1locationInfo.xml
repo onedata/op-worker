@@ -1,0 +1,112 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="structveil_1_1client_1_1locationInfo" kind="struct" prot="public">
+    <compoundname>veil::client::locationInfo</compoundname>
+    <includes refid="storageMapper_8h" local="no">include/storageMapper.h</includes>
+      <sectiondef kind="public-attrib">
+      <memberdef kind="variable" id="structveil_1_1client_1_1locationInfo_1a796797a492217ed14a0ee08de5bc925f" prot="public" static="no" mutable="no">
+        <type>int</type>
+        <definition>int veil::client::locationInfo::storageId</definition>
+        <argsstring></argsstring>
+        <name>storageId</name>
+        <briefdescription>
+<para>Storage identificator. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ref refid="classveil_1_1client_1_1StorageMapper_1aa0fba5e494f633184f94ee367fa3f3a8" kindref="member">StorageMapper::m_storageMapping</ref> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" line="31" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" bodystart="31" bodyend="-1"/>
+        <referencedby refid="structveil_1_1client_1_1locationInfo_1a9b1518f2e388a81a088e592efb213007" compoundref="storageMapper_8h" startline="39" endline="42">isValid</referencedby>
+        <referencedby refid="classveil_1_1client_1_1StorageMapper_1a24fde125b0005d945deb54a12fefe687" compoundref="storageMapper_8cc" startline="33" endline="61">veil::client::StorageMapper::getLocationInfo</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="structveil_1_1client_1_1locationInfo_1af3e064ffb277c4a4cf7e9f4e955574b2" prot="public" static="no" mutable="no">
+        <type>std::string</type>
+        <definition>std::string veil::client::locationInfo::fileId</definition>
+        <argsstring></argsstring>
+        <name>fileId</name>
+        <briefdescription>
+<para>File identificator. </para>        </briefdescription>
+        <detaileddescription>
+<para>This ID should be recognisable by <emphasis>storage helper</emphasis>. Most commonly it&apos;s just file path relative to the <emphasis>storage</emphasis> <simplesect kind="see"><para><ref refid="classveil_1_1client_1_1StorageMapper_1a2d8904d09425bc6cd989a2f9f2bd0e69" kindref="member">StorageMapper::m_fileMapping</ref> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" line="32" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" bodystart="32" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1StorageMapper_1a24fde125b0005d945deb54a12fefe687" compoundref="storageMapper_8cc" startline="33" endline="61">veil::client::StorageMapper::getLocationInfo</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="structveil_1_1client_1_1locationInfo_1ac27768fe7cfe3d4013badeedc2a94739" prot="public" static="no" mutable="no">
+        <type>time_t</type>
+        <definition>time_t veil::client::locationInfo::validTo</definition>
+        <argsstring></argsstring>
+        <name>validTo</name>
+        <briefdescription>
+<para>Mapping expiration time. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" line="36" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" bodystart="36" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1StorageMapper_1ae03feeacef81b0cf5f6418f926897aef" compoundref="storageMapper_8cc" startline="79" endline="105">veil::client::StorageMapper::addLocation</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="structveil_1_1client_1_1locationInfo_1a7c4fc771ccc1263c9ada6dd20671d2d4" prot="public" static="no" mutable="no">
+        <type>int</type>
+        <definition>int veil::client::locationInfo::opened</definition>
+        <argsstring></argsstring>
+        <name>opened</name>
+        <briefdescription>
+<para>How many files are currently opened using this mapping. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" line="37" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" bodystart="37" bodyend="-1"/>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="public-func">
+      <memberdef kind="function" id="structveil_1_1client_1_1locationInfo_1a9b1518f2e388a81a088e592efb213007" prot="public" static="no" const="no" explicit="no" inline="yes" virt="non-virtual">
+        <type>bool</type>
+        <definition>bool veil::client::locationInfo::isValid</definition>
+        <argsstring>()</argsstring>
+        <name>isValid</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" line="39" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" bodystart="39" bodyend="42"/>
+        <references refid="structveil_1_1client_1_1locationInfo_1a796797a492217ed14a0ee08de5bc925f" compoundref="storageMapper_8h" startline="31">storageId</references>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+<para>Structure containing file mapping base information. </para>    </briefdescription>
+    <detaileddescription>
+    </detaileddescription>
+    <collaborationgraph>
+      <node id="144">
+        <label>std::basic_string&lt; char &gt;</label>
+      </node>
+      <node id="142">
+        <label>veil::client::locationInfo</label>
+        <link refid="structveil_1_1client_1_1locationInfo"/>
+        <childnode refid="143" relation="usage">
+          <edgelabel>fileId</edgelabel>
+        </childnode>
+      </node>
+      <node id="143">
+        <label>std::string</label>
+        <childnode refid="144" relation="public-inheritance">
+        </childnode>
+      </node>
+    </collaborationgraph>
+    <location file="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" line="30" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" bodystart="30" bodyend="43"/>
+    <listofallmembers>
+      <member refid="structveil_1_1client_1_1locationInfo_1af3e064ffb277c4a4cf7e9f4e955574b2" prot="public" virt="non-virtual"><scope>veil::client::locationInfo</scope><name>fileId</name></member>
+      <member refid="structveil_1_1client_1_1locationInfo_1a9b1518f2e388a81a088e592efb213007" prot="public" virt="non-virtual"><scope>veil::client::locationInfo</scope><name>isValid</name></member>
+      <member refid="structveil_1_1client_1_1locationInfo_1a7c4fc771ccc1263c9ada6dd20671d2d4" prot="public" virt="non-virtual"><scope>veil::client::locationInfo</scope><name>opened</name></member>
+      <member refid="structveil_1_1client_1_1locationInfo_1a796797a492217ed14a0ee08de5bc925f" prot="public" virt="non-virtual"><scope>veil::client::locationInfo</scope><name>storageId</name></member>
+      <member refid="structveil_1_1client_1_1locationInfo_1ac27768fe7cfe3d4013badeedc2a94739" prot="public" virt="non-virtual"><scope>veil::client::locationInfo</scope><name>validTo</name></member>
+    </listofallmembers>
+  </compounddef>
+</doxygen>

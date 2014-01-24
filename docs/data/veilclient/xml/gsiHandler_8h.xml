@@ -1,0 +1,82 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="gsiHandler_8h" kind="file">
+    <compoundname>gsiHandler.h</compoundname>
+    <includes local="no">iostream</includes>
+    <includedby refid="gsiHandler_8cc" local="yes">src/gsiHandler.cc</includedby>
+    <includedby refid="veilFuse_8cc" local="yes">src/veilFuse.cc</includedby>
+    <incdepgraph>
+      <node id="988">
+        <label>include/gsiHandler.h</label>
+        <link refid="gsiHandler.h"/>
+        <childnode refid="989" relation="include">
+        </childnode>
+      </node>
+      <node id="989">
+        <label>iostream</label>
+      </node>
+    </incdepgraph>
+    <invincdepgraph>
+      <node id="991">
+        <label>src/gsiHandler.cc</label>
+        <link refid="gsiHandler_8cc"/>
+      </node>
+      <node id="990">
+        <label>include/gsiHandler.h</label>
+        <link refid="gsiHandler.h"/>
+        <childnode refid="991" relation="include">
+        </childnode>
+        <childnode refid="992" relation="include">
+        </childnode>
+      </node>
+      <node id="992">
+        <label>src/veilFuse.cc</label>
+        <link refid="veilFuse_8cc"/>
+      </node>
+    </invincdepgraph>
+    <innernamespace refid="namespaceveil">veil</innernamespace>
+    <innernamespace refid="namespaceveil_1_1client">veil::client</innernamespace>
+    <innernamespace refid="namespaceveil_1_1client_1_1gsi">veil::client::gsi</innernamespace>
+      <sectiondef kind="define">
+      <memberdef kind="define" id="gsiHandler_8h_1accdf260dc00db0384a5019e229fc8f62" prot="public" static="no">
+        <name>GSI_INIT_COMMAND</name>
+        <initializer>string(&quot;grid-proxy-init&quot;)</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/gsiHandler.h" line="14" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/gsiHandler.h" bodystart="14" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="define" id="gsiHandler_8h_1a3ad4b183419c1e34b6b99869b04bb5be" prot="public" static="no">
+        <name>GSI_INFO_COMMAND</name>
+        <initializer>string(&quot;grid-proxy-info&quot;)</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/gsiHandler.h" line="15" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/gsiHandler.h" bodystart="15" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="define" id="gsiHandler_8h_1a937fccdfac23758674bd21e77fa5a8a9" prot="public" static="no">
+        <name>BASE_DOMAIN</name>
+        <initializer>&quot;cluster.veilfs.com&quot;</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/gsiHandler.h" line="17" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/gsiHandler.h" bodystart="17" bodyend="-1"/>
+        <referencedby refid="namespaceveil_1_1client_1_1gsi_1aa7c45638e1247fbf9441177dad15d9d2" compoundref="gsiHandler_8cc" startline="438" endline="472">veil::client::gsi::getClusterHostname</referencedby>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+    </detaileddescription>
+    <location file="/home/krzysztof/Desktop/veilclient/include/gsiHandler.h"/>
+  </compounddef>
+</doxygen>

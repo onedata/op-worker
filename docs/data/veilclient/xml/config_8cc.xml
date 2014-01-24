@@ -1,0 +1,352 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="config_8cc" kind="file">
+    <compoundname>config.cc</compoundname>
+    <includes refid="config_8h" local="yes">config.h</includes>
+    <includes refid="veilfs_8h" local="yes">veilfs.h</includes>
+    <includes local="yes">communication_protocol.pb.h</includes>
+    <includes local="yes">fuse_messages.pb.h</includes>
+    <includes local="no">fstream</includes>
+    <includes local="no">boost/filesystem.hpp</includes>
+    <includes local="no">boost/algorithm/string/predicate.hpp</includes>
+    <includes local="no">google/protobuf/descriptor.h</includes>
+    <incdepgraph>
+      <node id="1270">
+        <label>sys/stat.h</label>
+      </node>
+      <node id="1260">
+        <label>communication_protocol.pb.h</label>
+      </node>
+      <node id="1256">
+        <label>list</label>
+      </node>
+      <node id="1274">
+        <label>boost/thread/mutex.hpp</label>
+      </node>
+      <node id="1267">
+        <label>queue</label>
+      </node>
+      <node id="1243">
+        <label>boost/shared_ptr.hpp</label>
+      </node>
+      <node id="1245">
+        <label>glog/logging.h</label>
+      </node>
+      <node id="1241">
+        <label>veilConfig.h</label>
+      </node>
+      <node id="1264">
+        <label>storageMapper.h</label>
+        <link refid="storageMapper_8h"/>
+        <childnode refid="1239" relation="include">
+        </childnode>
+        <childnode refid="1236" relation="include">
+        </childnode>
+        <childnode refid="1247" relation="include">
+        </childnode>
+        <childnode refid="1259" relation="include">
+        </childnode>
+        <childnode refid="1254" relation="include">
+        </childnode>
+        <childnode refid="1242" relation="include">
+        </childnode>
+        <childnode refid="1246" relation="include">
+        </childnode>
+        <childnode refid="1265" relation="include">
+        </childnode>
+      </node>
+      <node id="1262">
+        <label>messageBuilder.h</label>
+        <link refid="messageBuilder_8h"/>
+        <childnode refid="1236" relation="include">
+        </childnode>
+        <childnode refid="1259" relation="include">
+        </childnode>
+        <childnode refid="1260" relation="include">
+        </childnode>
+      </node>
+      <node id="1249">
+        <label>errno.h</label>
+      </node>
+      <node id="1250">
+        <label>fcntl.h</label>
+      </node>
+      <node id="1236">
+        <label>string</label>
+      </node>
+      <node id="1271">
+        <label>helpers/storageHelperFactory.h</label>
+      </node>
+      <node id="1239">
+        <label>map</label>
+      </node>
+      <node id="1276">
+        <label>boost/thread.hpp</label>
+      </node>
+      <node id="1248">
+        <label>veilfs.h</label>
+        <link refid="veilfs_8h"/>
+        <childnode refid="1249" relation="include">
+        </childnode>
+        <childnode refid="1250" relation="include">
+        </childnode>
+        <childnode refid="1251" relation="include">
+        </childnode>
+        <childnode refid="1238" relation="include">
+        </childnode>
+        <childnode refid="1252" relation="include">
+        </childnode>
+        <childnode refid="1253" relation="include">
+        </childnode>
+        <childnode refid="1243" relation="include">
+        </childnode>
+        <childnode refid="1254" relation="include">
+        </childnode>
+        <childnode refid="1235" relation="include">
+        </childnode>
+        <childnode refid="1264" relation="include">
+        </childnode>
+        <childnode refid="1266" relation="include">
+        </childnode>
+        <childnode refid="1269" relation="include">
+        </childnode>
+        <childnode refid="1271" relation="include">
+        </childnode>
+        <childnode refid="1263" relation="include">
+        </childnode>
+        <childnode refid="1242" relation="include">
+        </childnode>
+        <childnode refid="1272" relation="include">
+        </childnode>
+        <childnode refid="1256" relation="include">
+        </childnode>
+      </node>
+      <node id="1278">
+        <label>fstream</label>
+      </node>
+      <node id="1265">
+        <label>veilException.h</label>
+        <link refid="veilException_8h"/>
+        <childnode refid="1236" relation="include">
+        </childnode>
+      </node>
+      <node id="1280">
+        <label>boost/algorithm/string/predicate.hpp</label>
+      </node>
+      <node id="1263">
+        <label>simpleConnectionPool.h</label>
+      </node>
+      <node id="1237">
+        <label>yaml-cpp/yaml.h</label>
+      </node>
+      <node id="1247">
+        <label>pthread.h</label>
+      </node>
+      <node id="1252">
+        <label>sys/types.h</label>
+      </node>
+      <node id="1275">
+        <label>boost/thread/condition.hpp</label>
+      </node>
+      <node id="1277">
+        <label>boost/unordered_map.hpp</label>
+      </node>
+      <node id="1238">
+        <label>unistd.h</label>
+      </node>
+      <node id="1255">
+        <label>vector</label>
+      </node>
+      <node id="1281">
+        <label>google/protobuf/descriptor.h</label>
+      </node>
+      <node id="1266">
+        <label>jobScheduler.h</label>
+        <link refid="jobScheduler_8h"/>
+        <childnode refid="1267" relation="include">
+        </childnode>
+        <childnode refid="1236" relation="include">
+        </childnode>
+        <childnode refid="1268" relation="include">
+        </childnode>
+        <childnode refid="1247" relation="include">
+        </childnode>
+        <childnode refid="1243" relation="include">
+        </childnode>
+        <childnode refid="1242" relation="include">
+        </childnode>
+      </node>
+      <node id="1235">
+        <label>config.h</label>
+        <link refid="config_8h"/>
+        <childnode refid="1236" relation="include">
+        </childnode>
+        <childnode refid="1237" relation="include">
+        </childnode>
+        <childnode refid="1238" relation="include">
+        </childnode>
+        <childnode refid="1239" relation="include">
+        </childnode>
+        <childnode refid="1240" relation="include">
+        </childnode>
+        <childnode refid="1241" relation="include">
+        </childnode>
+        <childnode refid="1242" relation="include">
+        </childnode>
+        <childnode refid="1245" relation="include">
+        </childnode>
+        <childnode refid="1246" relation="include">
+        </childnode>
+      </node>
+      <node id="1279">
+        <label>boost/filesystem.hpp</label>
+      </node>
+      <node id="1240">
+        <label>sstream</label>
+      </node>
+      <node id="1269">
+        <label>metaCache.h</label>
+        <link refid="metaCache_8h"/>
+        <childnode refid="1239" relation="include">
+        </childnode>
+        <childnode refid="1236" relation="include">
+        </childnode>
+        <childnode refid="1270" relation="include">
+        </childnode>
+        <childnode refid="1268" relation="include">
+        </childnode>
+        <childnode refid="1242" relation="include">
+        </childnode>
+        <childnode refid="1246" relation="include">
+        </childnode>
+      </node>
+      <node id="1244">
+        <label>boost/enable_shared_from_this.hpp</label>
+      </node>
+      <node id="1257">
+        <label>google/protobuf/repeated_field.h</label>
+      </node>
+      <node id="1268">
+        <label>time.h</label>
+      </node>
+      <node id="1272">
+        <label>pushListener.h</label>
+        <link refid="pushListener_8h"/>
+        <childnode refid="1273" relation="include">
+        </childnode>
+        <childnode refid="1243" relation="include">
+        </childnode>
+        <childnode refid="1244" relation="include">
+        </childnode>
+        <childnode refid="1274" relation="include">
+        </childnode>
+        <childnode refid="1275" relation="include">
+        </childnode>
+        <childnode refid="1276" relation="include">
+        </childnode>
+        <childnode refid="1277" relation="include">
+        </childnode>
+        <childnode refid="1256" relation="include">
+        </childnode>
+        <childnode refid="1259" relation="include">
+        </childnode>
+        <childnode refid="1260" relation="include">
+        </childnode>
+      </node>
+      <node id="1251">
+        <label>cstdlib</label>
+      </node>
+      <node id="1234">
+        <label>src/config.cc</label>
+        <link refid="config.cc"/>
+        <childnode refid="1235" relation="include">
+        </childnode>
+        <childnode refid="1248" relation="include">
+        </childnode>
+        <childnode refid="1260" relation="include">
+        </childnode>
+        <childnode refid="1259" relation="include">
+        </childnode>
+        <childnode refid="1278" relation="include">
+        </childnode>
+        <childnode refid="1279" relation="include">
+        </childnode>
+        <childnode refid="1280" relation="include">
+        </childnode>
+        <childnode refid="1281" relation="include">
+        </childnode>
+      </node>
+      <node id="1273">
+        <label>iostream</label>
+      </node>
+      <node id="1253">
+        <label>sys/xattr.h</label>
+      </node>
+      <node id="1254">
+        <label>fslogicProxy.h</label>
+        <link refid="fslogicProxy_8h"/>
+        <childnode refid="1255" relation="include">
+        </childnode>
+        <childnode refid="1256" relation="include">
+        </childnode>
+        <childnode refid="1257" relation="include">
+        </childnode>
+        <childnode refid="1243" relation="include">
+        </childnode>
+        <childnode refid="1258" relation="include">
+        </childnode>
+        <childnode refid="1259" relation="include">
+        </childnode>
+        <childnode refid="1260" relation="include">
+        </childnode>
+        <childnode refid="1261" relation="include">
+        </childnode>
+        <childnode refid="1262" relation="include">
+        </childnode>
+        <childnode refid="1246" relation="include">
+        </childnode>
+        <childnode refid="1242" relation="include">
+        </childnode>
+        <childnode refid="1263" relation="include">
+        </childnode>
+      </node>
+      <node id="1261">
+        <label>communicationHandler.h</label>
+      </node>
+      <node id="1246">
+        <label>lock.h</label>
+        <link refid="lock_8h"/>
+        <childnode refid="1247" relation="include">
+        </childnode>
+      </node>
+      <node id="1259">
+        <label>fuse_messages.pb.h</label>
+      </node>
+      <node id="1242">
+        <label>ISchedulable.h</label>
+        <link refid="ISchedulable_8h"/>
+        <childnode refid="1236" relation="include">
+        </childnode>
+        <childnode refid="1243" relation="include">
+        </childnode>
+        <childnode refid="1244" relation="include">
+        </childnode>
+      </node>
+      <node id="1258">
+        <label>memory</label>
+      </node>
+    </incdepgraph>
+    <innernamespace refid="namespaceveil">veil</innernamespace>
+    <innernamespace refid="namespaceveil_1_1client">veil::client</innernamespace>
+    <innernamespace refid="namespaceboost">boost</innernamespace>
+    <innernamespace refid="namespaceveil_1_1protocol_1_1communication__protocol">veil::protocol::communication_protocol</innernamespace>
+    <innernamespace refid="namespaceveil_1_1protocol_1_1fuse__messages">veil::protocol::fuse_messages</innernamespace>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+<para><simplesect kind="author"><para>Rafal Slota </para></simplesect>
+<simplesect kind="copyright"><para>(C) 2013 ACK CYFRONET AGH </para><simplesectsep/><para>This software is released under the MIT Licence. </para></simplesect>
+</para>    </detaileddescription>
+    <location file="/home/krzysztof/Desktop/veilclient/src/config.cc"/>
+  </compounddef>
+</doxygen>

@@ -1,0 +1,215 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="classveil_1_1client_1_1MessageBuilder" kind="class" prot="public">
+    <compoundname>veil::client::MessageBuilder</compoundname>
+    <includes refid="messageBuilder_8h" local="no">include/messageBuilder.h</includes>
+      <sectiondef kind="public-func">
+      <memberdef kind="function" id="classveil_1_1client_1_1MessageBuilder_1ae4d947433100e3f97deb55925288d6c9" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type></type>
+        <definition>veil::client::MessageBuilder::MessageBuilder</definition>
+        <argsstring>()</argsstring>
+        <name>MessageBuilder</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/messageBuilder.h" line="34" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/messageBuilder.cc" bodystart="30" bodyend="32"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1MessageBuilder_1aa58946a8b66bc2974633867caddfafd4" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type></type>
+        <definition>veil::client::MessageBuilder::~MessageBuilder</definition>
+        <argsstring>()</argsstring>
+        <name>~MessageBuilder</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/messageBuilder.h" line="35" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/messageBuilder.cc" bodystart="34" bodyend="36"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1MessageBuilder_1a7cdadc34245e2f2cb2172ab61ff87da5" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>protocol::fuse_messages::FuseMessage</type>
+        <definition>FuseMessage veil::client::MessageBuilder::createFuseMessage</definition>
+        <argsstring>(std::string id, std::string messageType, std::string messageInput)</argsstring>
+        <name>createFuseMessage</name>
+        <param>
+          <type>std::string</type>
+          <declname>id</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>messageType</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>messageInput</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/messageBuilder.h" line="36" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/messageBuilder.cc" bodystart="38" bodyend="46"/>
+        <references refid="messageBuilder_8cc_1a0fcc4bcc87042bfcc0dc12addbd0a7af" compoundref="messageBuilder_8cc" startline="22" endline="25">tolower</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1MessageBuilder_1a2db2328f3d973a126f96a5fb88800799" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>protocol::communication_protocol::ClusterMsg</type>
+        <definition>ClusterMsg veil::client::MessageBuilder::createClusterMessage</definition>
+        <argsstring>(std::string moduleName, std::string messageType, std::string answerType, std::string answerDecoderName, bool synch, std::string input)</argsstring>
+        <name>createClusterMessage</name>
+        <param>
+          <type>std::string</type>
+          <declname>moduleName</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>messageType</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>answerType</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>answerDecoderName</declname>
+        </param>
+        <param>
+          <type>bool</type>
+          <declname>synch</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>input</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/messageBuilder.h" line="37" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/messageBuilder.cc" bodystart="48" bodyend="53"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1a55bf15af04fbc0d0c58546d207c3c723" compoundref="config_8cc" startline="178" endline="258">veil::client::Config::runTask</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1MessageBuilder_1a8f707226f8b86ff658f8a3838ffd462c" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>protocol::communication_protocol::ClusterMsg</type>
+        <definition>ClusterMsg veil::client::MessageBuilder::createClusterMessage</definition>
+        <argsstring>(std::string moduleName, std::string messageType, std::string answerType, std::string answerDecoderName, bool synch)</argsstring>
+        <name>createClusterMessage</name>
+        <param>
+          <type>std::string</type>
+          <declname>moduleName</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>messageType</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>answerType</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>answerDecoderName</declname>
+        </param>
+        <param>
+          <type>bool</type>
+          <declname>synch</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/messageBuilder.h" line="38" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/messageBuilder.cc" bodystart="55" bodyend="66"/>
+        <references refid="config_8h_1a277f7abca2044f354abe265252cb9252" compoundref="config_8h" startline="43">PROTOCOL_VERSION</references>
+        <references refid="messageBuilder_8cc_1a0fcc4bcc87042bfcc0dc12addbd0a7af" compoundref="messageBuilder_8cc" startline="22" endline="25">tolower</references>
+        <references refid="messageBuilder_8h_1ac70a564001777967993520bb573118fa" compoundref="messageBuilder_8h" startline="16">FUSE_MESSAGES</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1MessageBuilder_1a4c7ad4a8c9d3a95d26dca0073b8d2e0b" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>protocol::communication_protocol::ClusterMsg</type>
+        <definition>ClusterMsg veil::client::MessageBuilder::packFuseMessage</definition>
+        <argsstring>(std::string messageType, std::string answerType, std::string answerDecoderName, std::string messageInput)</argsstring>
+        <name>packFuseMessage</name>
+        <param>
+          <type>std::string</type>
+          <declname>messageType</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>answerType</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>answerDecoderName</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>messageInput</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/messageBuilder.h" line="39" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/messageBuilder.cc" bodystart="68" bodyend="80"/>
+        <references refid="fslogicProxy_8h_1a052ae7304b2b339a5ae6d1ecabdbbf6d" compoundref="fslogicProxy_8h" startline="50">FSLOGIC</references>
+        <references refid="fslogicProxy_8h_1a85c643f0d5db8d611c58f4199318fbf8" compoundref="fslogicProxy_8h" startline="47">FUSE_MESSAGE</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1MessageBuilder_1a60095971dcd8416cc545e20947fca84a" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>protocol::fuse_messages::FuseMessage</type>
+        <definition>FuseMessage veil::client::MessageBuilder::decodeFuseAnswer</definition>
+        <argsstring>(protocol::communication_protocol::Answer &amp;answer)</argsstring>
+        <name>decodeFuseAnswer</name>
+        <param>
+          <type>protocol::communication_protocol::Answer &amp;</type>
+          <declname>answer</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/messageBuilder.h" line="40" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/messageBuilder.cc" bodystart="82" bodyend="91"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1MessageBuilder_1a9a650f6ad59844e72d0ffc37e2c02f77" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>std::string</type>
+        <definition>string veil::client::MessageBuilder::decodeAtomAnswer</definition>
+        <argsstring>(protocol::communication_protocol::Answer &amp;answer)</argsstring>
+        <name>decodeAtomAnswer</name>
+        <param>
+          <type>protocol::communication_protocol::Answer &amp;</type>
+          <declname>answer</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/messageBuilder.h" line="41" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/messageBuilder.cc" bodystart="93" bodyend="105"/>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+<para>The <ref refid="classveil_1_1client_1_1MessageBuilder" kindref="compound">MessageBuilder</ref> class. </para>    </briefdescription>
+    <detaileddescription>
+<para>This class can be used to build protobuf messages used to communicate with cluster. Theres encode and decode method for each base message type used by VeilClient. Arguments matches proto specification of their messages. </para>    </detaileddescription>
+    <location file="/home/krzysztof/Desktop/veilclient/include/messageBuilder.h" line="32" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/messageBuilder.h" bodystart="31" bodyend="43"/>
+    <listofallmembers>
+      <member refid="classveil_1_1client_1_1MessageBuilder_1a2db2328f3d973a126f96a5fb88800799" prot="public" virt="virtual"><scope>veil::client::MessageBuilder</scope><name>createClusterMessage</name></member>
+      <member refid="classveil_1_1client_1_1MessageBuilder_1a8f707226f8b86ff658f8a3838ffd462c" prot="public" virt="virtual"><scope>veil::client::MessageBuilder</scope><name>createClusterMessage</name></member>
+      <member refid="classveil_1_1client_1_1MessageBuilder_1a7cdadc34245e2f2cb2172ab61ff87da5" prot="public" virt="virtual"><scope>veil::client::MessageBuilder</scope><name>createFuseMessage</name></member>
+      <member refid="classveil_1_1client_1_1MessageBuilder_1a9a650f6ad59844e72d0ffc37e2c02f77" prot="public" virt="virtual"><scope>veil::client::MessageBuilder</scope><name>decodeAtomAnswer</name></member>
+      <member refid="classveil_1_1client_1_1MessageBuilder_1a60095971dcd8416cc545e20947fca84a" prot="public" virt="virtual"><scope>veil::client::MessageBuilder</scope><name>decodeFuseAnswer</name></member>
+      <member refid="classveil_1_1client_1_1MessageBuilder_1ae4d947433100e3f97deb55925288d6c9" prot="public" virt="non-virtual"><scope>veil::client::MessageBuilder</scope><name>MessageBuilder</name></member>
+      <member refid="classveil_1_1client_1_1MessageBuilder_1a4c7ad4a8c9d3a95d26dca0073b8d2e0b" prot="public" virt="virtual"><scope>veil::client::MessageBuilder</scope><name>packFuseMessage</name></member>
+      <member refid="classveil_1_1client_1_1MessageBuilder_1aa58946a8b66bc2974633867caddfafd4" prot="public" virt="virtual"><scope>veil::client::MessageBuilder</scope><name>~MessageBuilder</name></member>
+    </listofallmembers>
+  </compounddef>
+</doxygen>
