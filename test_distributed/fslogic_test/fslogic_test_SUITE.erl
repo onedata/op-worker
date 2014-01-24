@@ -2010,7 +2010,7 @@ init_per_testcase(_, Config) ->
   ?INIT_DIST_TEST,
   nodes_manager:start_deps_for_tester_node(),
 
-  NodesUp = nodes_manager:start_test_on_nodes(1, true),
+  NodesUp = nodes_manager:start_test_on_nodes(1),
   [FSLogicNode | _] = NodesUp,
 
   DB_Node = nodes_manager:get_db_node(),
@@ -2023,13 +2023,14 @@ init_per_testcase(_, Config) ->
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
   [FSLogicNode | _] = Nodes,
-  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  StopAns = nodes_manager:stop_nodes(Nodes),
-  nodes_manager:stop_deps_for_tester_node(),
 
   %% Remove users
   rpc:call(FSLogicNode, user_logic, remove_user, [{login, "user1"}]),
   rpc:call(FSLogicNode, user_logic, remove_user, [{login, "user2"}]),
+
+  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
+  StopAns = nodes_manager:stop_nodes(Nodes),
+  nodes_manager:stop_deps_for_tester_node(),
 
   %% Clear test dir
   os:cmd("rm -rf " ++ ?TEST_ROOT ++ "/*"),
