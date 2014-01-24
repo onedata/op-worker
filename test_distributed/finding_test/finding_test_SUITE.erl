@@ -178,9 +178,9 @@ test_find_usage(Node, FileCriteria, ExpectedUuids) ->
 start_cluster(Node) ->
   gen_server:cast({?Node_Manager_Name, Node}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  timer:sleep(100),
+  nodes_manager:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  timer:sleep(1500).
+  nodes_manager:wait_for_cluster_init().
 
 create_file(Node, #path_with_times{path = FilePath, times = {ATime, MTime, CTime}}, Uid, FileType) ->
   {ParentFound, ParentInfo} = rpc:call(Node, fslogic_utils, get_parent_and_name_from_path , [FilePath, ?ProtocolVersion]),

@@ -25,11 +25,11 @@ fuse_session_test_() ->
     {foreach, fun setup/0, fun teardown/1, [fun save_fuse_session/0, fun get_fuse_session/0, fun remove_fuse_session/0]}.
 
 setup() ->
-    case ets:info(dao_cache) of
-        undefined   -> ets:new(dao_cache, [named_table, public, ordered_set, {read_concurrency, true}]);
+    case ets:info(dao_fuse_cache) of
+        undefined   -> ets:new(dao_fuse_cache, [named_table, public, set, {read_concurrency, true}]);
         [_ | _]     -> ok
     end,
-    ets:delete_all_objects(dao_cache),
+    ets:delete_all_objects(dao_fuse_cache),
     meck:new(dao).
 
 teardown(_) ->

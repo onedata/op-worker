@@ -20,8 +20,13 @@
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/couch_db.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
+-include_lib("veil_modules/dao/dao_vfs.hrl").
+-include_lib("veil_modules/fslogic/fslogic.hrl").
+-include_lib("logging.hrl").
 
 -import(dao_helper, [name/1]).
+
+-define(init_storage_after_seconds,1).
 
 -ifdef(TEST).
 -compile([export_all]).
@@ -32,7 +37,7 @@
 
 %% API
 -export([save_record/1, get_record/1, remove_record/1, list_records/2, load_view_def/2, set_db/1]).
--export([doc_to_term/1]).
+-export([doc_to_term/1,init_storage/0]).
 
 %% ===================================================================
 %% Behaviour callback functions
@@ -86,26 +91,33 @@ init({_Args, {init_status, table_initialized}}) -> %% Final stage of initializat
       (_) -> non
     end,
 
+		erlang:send_after(?init_storage_after_seconds * 1000, self(), {timer, {asynch, 1, {utils,init_storage,[]}}}),
+
     #initial_host_description{request_map = RequestMap, dispatcher_request_map = DispMapFun, sub_procs = SubProcList, plug_in_state = ok};
 init({Args, {init_status, _TableInfo}}) ->
     init({Args, {init_status, table_initialized}});
 init(Args) ->
-    %% Init Cache-ETS. Ignore the fact that other DAO worker could have created this table. In this case, this call will
-    %% fail, but table is present anyway, so everyone is happy.
-    case ets:info(dao_cache) of
-        undefined   -> ets:new(dao_cache, [named_table, public, ordered_set, {read_concurrency, true}]);
-        [_ | _]     -> ok
-    end,
-
-    %% Start linked process that will maintain cache status
-    Interval =
-        case application:get_env(veil_cluster_node, dao_cache_loop_time) of
-            {ok, Interval1} -> Interval1;
-            _               -> 30*60 %% Hardcoded 30min, just in case
-        end,
-    spawn_link(fun() -> cache_guard(Interval * 1000) end),
-
-    init({Args, {init_status, ets:info(db_host_store)}}).
+    ClearFun = fun() -> cache_guard() end,
+    ClearFun2 = fun() -> ets:delete_all_objects(storage_cache) end,
+    ClearFun3 = fun() -> ets:delete_all_objects(users_cache) end,
+    %% TODO - check if simple cache is enough for users and fuses; if not, change to advanced cache (sub processes)
+    %% We assume that cached data do not change!
+    Cache1 = worker_host:create_simple_cache(dao_fuse_cache, dao_fuse_cache_loop_time, ClearFun),
+    case Cache1 of
+      ok ->
+        Cache2 = worker_host:create_simple_cache(storage_cache, 60 *60 *24, ClearFun2),
+        case Cache2 of
+          ok ->
+            Cache3 = worker_host:create_simple_cache(users_cache, 60 *60 *24, ClearFun3),
+            case Cache3 of
+              ok ->
+                init({Args, {init_status, ets:info(db_host_store)}});
+              _ -> throw({error, {users_cache_error, Cache3}})
+            end;
+          _ -> throw({error, {storage_cache_error, Cache2}})
+        end;
+      _ -> throw({error, {dao_fuse_cache_error, Cache1}})
+    end.
 
 %% handle/1
 %% ====================================================================
@@ -462,7 +474,17 @@ term_to_doc(Field) when is_tuple(Field) ->
             case IsRec of                 %% and adds to Accumulator object
                 true ->
                     {_, Fields, _} = ?dao_record_info(RecName),
-                    {Poz + 1, dao_json:mk_field(AccIn, atom_to_list(lists:nth(Poz, Fields)), term_to_doc(Elem))};
+
+                    % TODO temporary fix that enables use of diacritic chars in file names
+                    Value = case {RecName, lists:nth(Poz, Fields)} of
+                                % Exclusively for filenames, apply conversion to binary
+                                {file, name} -> list_to_binary(Elem);
+                                % Standard conversion
+                                _ -> term_to_doc(Elem)
+                            end,
+                    % </endfix>
+
+                    {Poz + 1, dao_json:mk_field(AccIn, atom_to_list(lists:nth(Poz, Fields)), Value)};
                 false ->
                     {Poz + 1, dao_json:mk_field(AccIn, ?RECORD_TUPLE_FIELD_NAME_PREFIX ++ integer_to_list(Poz), term_to_doc(Elem))}
             end
@@ -537,17 +559,87 @@ doc_to_term(_) ->
 %%          - FUSE session cleanup
 %%      When used in newly spawned process, the process will infinitly fire up the the tasks while
 %%      sleeping 'Timeout' ms between subsequent loops.
-%%      NOTE: The function crashes is 'dao_cache' ETS is not available.
+%%      NOTE: The function crashes is 'dao_fuse_cache' ETS is not available.
 %% @end
--spec cache_guard(Timeout :: non_neg_integer()) -> no_return().
+-spec cache_guard() -> no_return().
 %% ====================================================================
-cache_guard(Timeout) ->
-    timer:sleep(Timeout),
+cache_guard() ->
+    [_ | _] = ets:info(dao_fuse_cache),
+    dao_cluster:clear_sessions(). %% Clear FUSE session
 
-    [_ | _] = ets:info(dao_cache), %% Crash this process if dao_cache ETS doesn't exist
-                                   %% Because this process is linked to DAO's worker, whole DAO will crash
+%% init_storage/0
+%% ====================================================================
+%% @doc Inserts storage defined during worker instalation to database (if db already has defined storage,
+%% the function only replaces StorageConfigFile with that definition)
+%% @end
+-spec init_storage() -> ok | {error, Error :: term()}.
+%% ====================================================================
+init_storage() ->
+	try
+		%get storage config file path
+		GetEnvResult = application:get_env(veil_cluster_node,storage_config_path),
+		case GetEnvResult of
+			{ok,_} -> ok;
+			undefined ->
+				lager:error("Could not get 'storage_config_path' environment variable"),
+				throw(get_env_error)
+		end,
+		{ok,StorageFilePath} = GetEnvResult,
 
-    %% Run all tasks (async)
-    spawn(dao_cluster, clear_sessions, []), %% Clear FUSE session
+		%get storage list from db
+		{Status1,ListStorageValue} = dao_lib:apply(dao_vfs, list_storage, [],1),
+		case Status1 of
+			ok -> ok;
+			error ->
+				lager:error("Could not list existing storages"),
+				throw(ListStorageValue)
+		end,
+		ActualDbStorages = [X#veil_document.record || X <- ListStorageValue],
 
-    cache_guard(Timeout).
+		case ActualDbStorages of
+			[] -> %db empty, insert storage
+				%read from file
+				{Status2,FileConsultValue} = file:consult(StorageFilePath),
+				case Status2 of
+					ok -> ok;
+					error ->
+						lager:error("Could not read storage config file"),
+						throw(FileConsultValue)
+				end,
+				[StoragePreferences] = FileConsultValue,
+
+				%parse storage preferences
+				UserPreferenceToGroupInfo = fun (GroupPreference) ->
+					case GroupPreference of
+						[{name,cluster_fuse_id},{root,Root}] ->
+							#fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}};
+						[{name,Name},{root,Root}] ->
+							#fuse_group_info{name = Name, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}}
+					end
+				end,
+				FuseGroups=try
+					lists:map(UserPreferenceToGroupInfo,StoragePreferences)
+				catch
+					_Type:Err ->
+						lager:error("Wrong format of storage config file"),
+						throw(Err)
+				end,
+
+				%create storage
+				{Status3, Value} = apply(fslogic_storage, insert_storage, ["ClusterProxy", [], FuseGroups]),
+				case Status3 of
+					ok ->
+						ok;
+					error ->
+						lager:error("Error during inserting storage to db"),
+						throw(Value)
+				end;
+
+			_NotEmptyList -> %db not empty
+				ok
+		end
+	catch
+		Type:Error ->
+			lager:error("Error during storage init: ~p:~p",[Type,Error]),
+			{error,Error}
+	end.

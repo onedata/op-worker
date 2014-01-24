@@ -4,6 +4,9 @@
 % Default bigcouch port
 -define(default_port,"5986").
 
+%Ports that needs to be free
+-define(ports_to_check,[53,443,5555]).
+
 % Curl options
 -define(curl_opts,"--connect-timeout 5 -s").
 
@@ -33,6 +36,7 @@
 % Paths relative to veil_cluster_node release
 -define(config_args_path, "bin/config.args").
 -define(veil_cluster_script_path, "bin/veil_cluster").
+-define(storage_config_path,"bin/storage_info.cfg").
 
 % Print error message with formatting and finish
 -define(error(Fmt, Args), 
@@ -106,6 +110,7 @@ setup_manage_veil() ->
 
 % Executed before the proper installation to inform about installation conditions
 setup_confirm_new_cluster() ->
+	check_open_ports(?ports_to_check),
 	info("Installing a new cluster beside a running one may cause unpredictable behaviour."),
 	info("It is required that all database nodes are installed prior to the cluster."),
 	Option = interaction_choose_option(db_nodes_installed, "Do you wish to continue?", 
@@ -142,7 +147,8 @@ setup_get_db_nodes() ->
 					list_to_atom(Node)
 				end, DBNodes),
 			put(db_nodes, DBNodesAtoms),
-			setup_new_ccm_plus_worker(true);
+			ConfiguredStorage = setup_create_storage(),
+			setup_new_ccm_plus_worker(true,ConfiguredStorage);
 		BadNode ->
 			warn("Could not establish connection with " ++ BadNode),
 			%do not ask again in batch mode
@@ -150,14 +156,82 @@ setup_get_db_nodes() ->
 				undefined ->
 					setup_get_db_nodes();
 				_ ->
-					error
+					halt(1)
 			end
 	end,
 	ok.
 
+setup_create_storage() ->
+	h2("Storage setup"),
+	VeilRoot = interaction_get_string(veilfs_storage_root, "Select path where veil can store his files (i.e. /veil/veil_files): "),
+	VeilGroup = [{name, cluster_fuse_id},{root,VeilRoot}],
+	warn("IMPORTANT"),
+	warn("Configuring user storage"),
+	warn("If you don't create any storage now, all the data will go throught proxy\n and it will work really slow!"),
+	UserDefinedGroups = get_fuse_groups_from_user([],1),
+	AllGroups = [VeilGroup | UserDefinedGroups],
+
+	CreateDir=fun ([{name,_},{root,Root}]) -> os:cmd("mkdir -p "++Root) end,
+	lists:foreach(CreateDir,AllGroups),
+	AllGroups.
+
+
+
+% Gets storage groups from user (I is used to determine different groups during -batch installation)
+get_fuse_groups_from_user(CurrentGroups,I) ->
+	%interacion IDs used by batch file
+	ConfirmInteractionId = list_to_atom(atom_to_list(want_to_create_storage) ++ integer_to_list(I)),
+	GroupNameInteractionId = list_to_atom(atom_to_list(storage_group_name) ++ integer_to_list(I)),
+	GroupRootInteractionId = list_to_atom(atom_to_list(storage_group_directory) ++ integer_to_list(I)),
+
+	WantToCrate = interaction_choose_option(ConfirmInteractionId, "Do you wish to create new storage?",
+	[
+		{yes, "Yes"},
+		{no, "No"}
+	]),
+	case WantToCrate of
+		yes ->
+			h2("Type following attributes:"),
+			Name = interaction_get_string(GroupNameInteractionId, "Group name: "),
+			Root = interaction_get_string(GroupRootInteractionId, "Storage directory (i.e. /veil/dir1): "),
+			NewGroup = [{name, Name},{root,Root}],
+			get_fuse_groups_from_user(lists:append(CurrentGroups,[NewGroup]),I+1);
+		no ->
+			case CurrentGroups =:= [] of
+				true ->
+					AllGroupsString="!!! You should create at least one storage to achieve better performance !!!";
+				false ->
+					AllGroupsString=groups_to_string(CurrentGroups)
+			end,
+			Option = interaction_choose_option(accept_created_storage,
+				"Is this all?\n"++AllGroupsString,
+				[
+					{yes, "Yes, continue instalation"},
+					{add_another, "Add another"},
+					{reconfigure, "Delete all and configure them again"}
+				]),
+			case Option of
+				yes ->
+					CurrentGroups;
+				add_another ->
+					get_fuse_groups_from_user(CurrentGroups,I+1);
+				reconfigure ->
+					get_fuse_groups_from_user([],1)
+			end
+	end.
+
+groups_to_string([]) ->
+	"";
+groups_to_string([FirstGroup|Rest]) ->
+	group_to_string(FirstGroup)++"\n"++groups_to_string(Rest).
+
+group_to_string(Group) ->
+	[{name, Name},{root,Root}]=Group,
+	"==> group_name: "++Name++", root: "++Root.
+
 
 % Install ccm along with a worker
-setup_new_ccm_plus_worker(IsThisMainCCM) ->	
+setup_new_ccm_plus_worker(IsThisMainCCM,FuseGroups) ->
 	CCMName = ?default_ccm_name,
 	CCMPath = ?default_nodes_install_path,
 
@@ -187,6 +261,12 @@ setup_new_ccm_plus_worker(IsThisMainCCM) ->
 			end,
 			install_veil_node(ccm, CCMName, CCMPath),
 			install_veil_node(worker, WorkerName, WorkerPath),
+			case IsThisMainCCM of
+				true ->
+					save_storage_in_config(FuseGroups);
+				false ->
+					ok_storage_defined_in_main
+			end,
 			info("Starting node(s)..."),
 			os:cmd(?init_d_script_path ++ " start_veil")
 	end.
@@ -194,6 +274,7 @@ setup_new_ccm_plus_worker(IsThisMainCCM) ->
 
 % Firstly check connection to an existing cluster, then ask to choose installation variant
 setup_extend_cluster() ->
+	check_open_ports(?ports_to_check),
 	IPOrHostname = interaction_get_string(ip_or_hostname, "Specify IP/hostname of any host with running veil node(s): "),
 	case discover_cluster(IPOrHostname) of
 		no_connection -> 
@@ -211,7 +292,7 @@ setup_extend_cluster() ->
 						no -> setup_manage_veil()
 					end;
 				_ ->
-					error
+					halt(1)
 			end;
 			
 		{[MainCCM|OptCCMS], DBNodes} ->
@@ -225,7 +306,7 @@ setup_extend_cluster() ->
 					{worker, "Worker node"}
 				]),
 			case Option of 
-				ccm_plus_worker -> setup_new_ccm_plus_worker(false);
+				ccm_plus_worker -> setup_new_ccm_plus_worker(false,[]);
 				worker -> setup_new_worker()
 			end
 	end.
@@ -264,11 +345,13 @@ install_veil_node(Type, Name, Path) ->
 	MainCCM = get(main_ccm),
 	OptCCMs = get(opt_ccms),
 	DBNodes = get(db_nodes),
+	StorageConfigPath = Path ++ Name ++ "/" ++ ?storage_config_path,
 
 	overwrite_config_args(Path ++ Name ++ "/" ++ ?config_args_path, "name", LongName),
 	overwrite_config_args(Path ++ Name ++ "/" ++ ?config_args_path, "main_ccm", atom_to_list(MainCCM)),
 	overwrite_config_args(Path ++ Name ++ "/" ++ ?config_args_path, "opt_ccms", to_space_delimited_list(OptCCMs)),
 	overwrite_config_args(Path ++ Name ++ "/" ++ ?config_args_path, "db_nodes", to_space_delimited_list(DBNodes)),	
+	overwrite_config_args(Path ++ Name ++ "/" ++ ?config_args_path, "storage_config_path", StorageConfigPath),
 
 	os:cmd(Path ++ Name ++ "/" ++ ?veil_cluster_script_path),
 	add_node_to_config(Type, list_to_atom(Name), Path).
@@ -382,7 +465,7 @@ setup_extend_db()->
 				undefined ->
 					setup_extend_db();
 				_ ->
-					error
+					halt(1)
 			end;
 		_ ->
 			h2("Connection has been confirmed"),
@@ -605,6 +688,9 @@ save_nodes_in_config(NodeList) ->
 		?error("Error while writing to ~s", [?configured_nodes_path])
 	end.
 
+save_storage_in_config(Storage) ->
+	StorageFilePath= ?default_nodes_install_path ++ ?default_worker_name ++ "/" ++?storage_config_path,
+	file:write_file(StorageFilePath,io_lib:fwrite("~p.\n", [Storage])).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -679,6 +765,35 @@ interaction_get_string(Id, Prompt) ->
 			end
 	end.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Functions to check port usage
+%
+
+%if any of listed ports is in use - print warning ang exit
+check_open_ports(Ports) ->
+	case ports_are_free(Ports) of
+		true ->
+			ok;
+		false ->
+			warn("All following ports needs to be open: "++io_lib:fwrite("~p", [Ports])),
+			warn("Terminating installation"),
+			halt(1)
+	end.
+
+% Returns true if all listed ports are free
+ports_are_free([]) ->
+	true;
+ports_are_free([FirstPort | Rest])->
+	ports_are_free(FirstPort) and ports_are_free(Rest);
+ports_are_free(Port)->
+	{Status, Socket} = gen_tcp:listen(Port, []),
+	case Status of
+		ok ->
+			gen_tcp:close(Socket),
+			true;
+		error ->
+			false
+	end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Convinience functions to print headers, prompts etc.

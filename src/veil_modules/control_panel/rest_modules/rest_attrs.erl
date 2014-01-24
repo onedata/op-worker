@@ -132,4 +132,4 @@ put(Req, <<"1.0">>, _Id, _Data) ->
 -spec map(#fileattributes{}) -> [{binary(), binary()}].
 %% ==================================================================== 
 map(Record) ->
-    rest_utils:map(Record, [mode, uid, gid, atime, mtime, ctime, type, size, uname, gname]).
+    rest_utils:map(Record, [mode, uid, gid, atime, mtime, ctime, type, size, uname, gname, links]).

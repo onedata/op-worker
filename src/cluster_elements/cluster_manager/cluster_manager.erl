@@ -206,6 +206,14 @@ handle_call({start_worker, Node, Module, WorkerArgs}, _From, State) ->
   end,
   {reply, Ans, NewState};
 
+%% Test call
+handle_call(check, _From, State) ->
+  {reply, ok, State};
+
+%% Test call
+handle_call(check_state_loaded, _From, State) ->
+  {reply, State#cm_state.state_loaded, State};
+
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
 
@@ -382,6 +390,11 @@ handle_cast({stop_worker, Node, Module}, State) ->
 
 handle_cast(stop, State) ->
   {stop, normal, State};
+
+handle_cast({clear_cache, Cache, ReturnPid}, State) ->
+  New_State = clear_cache(State, Cache),
+  ReturnPid ! cache_cleared,
+  {noreply, New_State};
 
 handle_cast(_Msg, State) ->
   {noreply, State}.
@@ -568,10 +581,10 @@ check_cluster_state(State) ->
                                  lager:info([{mod, ?MODULE}], "Worker: ~s will be stopped at node", [MaxModule, MaxNode]),
                                  {WorkerStopped, TmpState2} = stop_worker(MaxNode, MaxModule, State),
                                  case WorkerStopped of
-                                   true ->
+                                   ok ->
                                      save_state(),
                                      update_dispatchers_and_dns(TmpState2, true, true);
-                                   false -> TmpState2
+                                   _ -> TmpState2
                                  end
                              end;
                            false -> State
@@ -739,8 +752,9 @@ add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
 %% node_down/2
 %% ====================================================================
 %% @doc Clears information about workers on node that is down.
--spec node_down(Node :: atom(), State :: term()) -> NewState when
-  NewState :: term().
+-spec node_down(Node :: atom(), State :: term()) -> {NewState, WorkersFound} when
+  NewState :: term(),
+  WorkersFound :: boolean().
 %% ====================================================================
 node_down(Node, State) ->
   CreateNewWorkersList = fun({N, M, Child}, {Workers, Found}) ->
@@ -1426,3 +1440,34 @@ get_callbacks(Fuse) ->
 %% ====================================================================
 register_dispatcher_map(Module, Map, MapsList) ->
   [{Module, Map} | proplists:delete(Module, MapsList)].
+
+%% clear_cache/2
+%% ====================================================================
+%% @doc Clears chosen caches on all nodes
+-spec clear_cache(State :: term(), Cache :: term()) -> NewState when
+  NewState :: term().
+%% ====================================================================
+clear_cache(State, Cache) ->
+  Clear = fun(Node, {TmpState, TmpWorkersFound}) ->
+    try
+      ok = gen_server:call({?Node_Manager_Name, Node}, {clear_cache, Cache}, 500),
+      {TmpState, TmpWorkersFound}
+    catch
+      _:_ ->
+        lager:error([{mod, ?MODULE}], "Can not clear cahce ~p of node: ~p", [Cache, Node]),
+        {NewState, WorkersFound} = node_down(Node, State),
+        {NewState, TmpWorkersFound or WorkersFound}
+    end
+  end,
+
+  {State2, WF} = lists:foldl(Clear, {State, false}, State#cm_state.nodes),
+
+  %% If workers were running on node that is down,
+  %% upgrade state.
+  State3 = case WF of
+                true -> update_dispatchers_and_dns(State2, true, true);
+                false -> State2
+              end,
+
+  save_state(),
+  State3.

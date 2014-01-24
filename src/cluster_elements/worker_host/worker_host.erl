@@ -26,6 +26,7 @@
 %% API
 %% ====================================================================
 -export([start_link/3, stop/1, start_sub_proc/5, generate_sub_proc_list/1, generate_sub_proc_list/5]).
+-export([create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1]).
 
 %% ====================================================================
 %% Test API
@@ -164,6 +165,10 @@ handle_call(Request, _From, State) when is_tuple(Request) -> %% Proxy call. Each
                                                              %% that request was made, unlike cast because cast ignores state of node/gen_server
     {reply, gen_server:cast(State#host_state.plug_in, Request), State};
 
+%% Test call
+handle_call(check, _From, State) ->
+  {reply, ok, State};
+
 handle_call(_Request, _From, State) ->
     {reply, wrong_request, State}.
 
@@ -268,13 +273,25 @@ handle_info({timer, Msg}, State) ->
   gen_server:cast(PlugIn, Msg),
   {noreply, State};
 
+handle_info({clear_sipmle_cache, LoopTime, Fun, StrongCacheConnection}, State) ->
+  Pid = self(),
+  erlang:send_after(LoopTime, Pid, {clear_sipmle_cache, LoopTime, Fun, StrongCacheConnection}),
+  case StrongCacheConnection of
+    true ->
+      spawn_link(fun() -> Fun() end);
+    _ ->
+      spawn(fun() -> Fun() end)
+  end,
+  {noreply, State};
+
 handle_info(dispatcher_map_registered, State) ->
   {noreply, State#host_state{dispatcher_request_map_ok = true}};
 
-handle_info(Info, State) ->
-	PlugIn = State#host_state.plug_in,
-    {_Reply, NewPlugInState} = PlugIn:handle(Info, State#host_state.plug_in_state), %% TODO: fix me ! There's no such callback in worker_plugin
-    {noreply, State#host_state{plug_in_state = NewPlugInState}}.
+handle_info(_Info, State) ->
+%% 	PlugIn = State#host_state.plug_in,
+%%     {_Reply, NewPlugInState} = PlugIn:handle(Info, State#host_state.plug_in_state), %% TODO: fix me ! There's no such callback in worker_plugin
+%%     {noreply, State#host_state{plug_in_state = NewPlugInState}}.
+  {noreply, State}.
 
 
 %% terminate/2
@@ -479,33 +496,33 @@ start_sub_proc(Name, MaxDepth, MaxWidth, ProcFun, MapFun) ->
 %% ====================================================================
 start_sub_proc(Name, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun) ->
   process_flag(trap_exit, true),
-  EtsName = list_to_atom(atom_to_list(Name) ++ atom_to_list(node())),
-  ets:new(EtsName, [named_table, set, private]),
-  sub_proc(Name, EtsName, proc, SubProcDepth, MaxDepth, MaxWidth, os:timestamp(), ?MAX_CALCULATION_WAIT_TIME, ProcFun, MapFun).
+  ets:new(Name, [named_table, set, private]),
+  sub_proc(Name, proc, SubProcDepth, MaxDepth, MaxWidth, os:timestamp(), ?MAX_CALCULATION_WAIT_TIME, ProcFun, MapFun).
 
-%% sub_proc/10
+%% sub_proc/9
 %% ====================================================================
 %% @doc Sub proc function
--spec sub_proc(Name :: atom(), EtsName:: atom(), ProcType:: atom(), SubProcDepth :: integer(), MaxDepth :: integer(), MaxWidth :: integer(),
+-spec sub_proc(Name :: atom(), ProcType:: atom(), SubProcDepth :: integer(), MaxDepth :: integer(), MaxWidth :: integer(),
     WaitFrom :: term(), AvgWaitTime :: term(), ProcFun :: term(), MapFun :: term()) -> Result when
   Result ::  ok | end_sub_proc.
 %% ====================================================================
-sub_proc(Name, EtsName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun) ->
+%% TODO Add memory clearing for old data
+sub_proc(Name, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun) ->
   receive
     {sub_proc_management, stop} ->
-      del_sub_procs(ets:first(EtsName), EtsName);
+      del_sub_procs(ets:first(Name), Name);
 
     {'EXIT', ChildPid, _} ->
-      ChildDesc = ets:lookup(EtsName, ChildPid),
+      ChildDesc = ets:lookup(Name, ChildPid),
       case ChildDesc of
         [{ChildPid, ChildNum}] ->
-          ets:delete(EtsName, ChildPid),
-          ets:delete(EtsName, ChildNum);
+          ets:delete(Name, ChildPid),
+          ets:delete(Name, ChildNum);
         _ ->
           lager:error([{mod, ?MODULE}], "Exit of unknown sub proc"),
           error
       end,
-      sub_proc(Name, EtsName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
+      sub_proc(Name, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
     Request ->
       {Now, NewAvgWaitTime} = update_wait_time(WaitFrom, AvgWaitTime),
       NewProcType = case ProcType of
@@ -532,7 +549,7 @@ sub_proc(Name, EtsName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, Av
 
       case NewProcType of
         map ->
-          {ForwardNum, ForwardPid} = map_to_sub_proc(Name, EtsName, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request),
+          {ForwardNum, ForwardPid} = map_to_sub_proc(Name, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request),
           case ForwardNum of
             error -> error;
             _ ->
@@ -540,9 +557,9 @@ sub_proc(Name, EtsName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, Av
               %% check if chosen proc did not time out before message was delivered
               case process_info(ForwardPid) of
                 undefined->
-                  ets:delete(EtsName, ForwardPid),
-                  ets:delete(EtsName, ForwardNum),
-                  ForwardPid2 = map_to_sub_proc(Name, EtsName, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request),
+                  ets:delete(Name, ForwardPid),
+                  ets:delete(Name, ForwardNum),
+                  ForwardPid2 = map_to_sub_proc(Name, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request),
                   ForwardPid2 ! Request;
                 _ ->
                   ok
@@ -552,30 +569,30 @@ sub_proc(Name, EtsName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, Av
           ProcFun(Request)
       end,
 
-      sub_proc(Name, EtsName, NewProcType, SubProcDepth, MaxDepth, MaxWidth, Now, NewAvgWaitTime, ProcFun, MapFun)
+      sub_proc(Name, NewProcType, SubProcDepth, MaxDepth, MaxWidth, Now, NewAvgWaitTime, ProcFun, MapFun)
   after ?MAX_CHILD_WAIT_TIME ->
     end_sub_proc
   end.
 
-%% map_to_sub_proc/8
+%% map_to_sub_proc/7
 %% ====================================================================
 %% @doc Maps request to sub proc pid
--spec map_to_sub_proc(Name :: atom(), EtsName:: atom(), SubProcDepth :: integer(), MaxDepth :: integer(), MaxWidth :: integer(),
+-spec map_to_sub_proc(Name :: atom(), SubProcDepth :: integer(), MaxDepth :: integer(), MaxWidth :: integer(),
    ProcFun :: term(), MapFun :: term(), Request :: term()) -> Result when
   Result ::  {SubProcNum, SubProcPid},
   SubProcNum :: integer(),
   SubProcPid :: term().
 %% ====================================================================
-map_to_sub_proc(Name, EtsName, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request) ->
+map_to_sub_proc(Name, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request) ->
   try
     RequestValue = calculate_proc_vale(SubProcDepth, MaxWidth, MapFun(Request)),
-    RequestProc = ets:lookup(EtsName, RequestValue),
+    RequestProc = ets:lookup(Name, RequestValue),
     case RequestProc of
       [] ->
         NewName = list_to_atom(atom_to_list(Name) ++ "_" ++ integer_to_list(RequestValue)),
         NewPid = spawn(fun() -> start_sub_proc(NewName, SubProcDepth + 1, MaxDepth, MaxWidth, ProcFun, MapFun) end),
-        ets:insert(EtsName, {RequestValue, NewPid}),
-        ets:insert(EtsName, {NewPid, RequestValue}),
+        ets:insert(Name, {RequestValue, NewPid}),
+        ets:insert(Name, {NewPid, RequestValue}),
         {RequestValue, NewPid};
       [{RequestValue, RequestProcPid}] ->
         {RequestValue, RequestProcPid};
@@ -610,7 +627,7 @@ calculate_proc_vale(TmpDepth, MaxWidth, CurrentValue) ->
 generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun) ->
   generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun}]).
 
-%% generate_sub_proc_list/5
+%% generate_sub_proc_list/1
 %% ====================================================================
 %% @doc Generates the list that describes sub procs.
 -spec generate_sub_proc_list([{Name :: atom(), MaxDepth :: integer(), MaxWidth :: integer(), ProcFun :: term(), MapFun :: term()}]) -> Result when
@@ -643,7 +660,7 @@ generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun} | Tail]) ->
   SubProc = {Name, {StartArgs, start_sub_proc(Name, MaxDepth, MaxWidth, NewProcFun, NewMapFun)}},
   [SubProc | generate_sub_proc_list(Tail)].
 
-%% stop_all_sub_proc/10
+%% stop_all_sub_proc/1
 %% ====================================================================
 %% @doc Stops all sub procs
 -spec stop_all_sub_proc(SubProcs :: list()) -> ok.
@@ -655,7 +672,7 @@ stop_all_sub_proc(SubProcs) ->
     SubProcPid ! {sub_proc_management, stop}
   end, Keys).
 
-%% del_sub_procs/10
+%% del_sub_procs/2
 %% ====================================================================
 %% @doc Sends stop signal to all processes found in ets table.
 -spec del_sub_procs(Key :: term(), Name :: atom()) -> ok.
@@ -669,3 +686,87 @@ del_sub_procs(Key, Name) ->
     _ -> ok
   end,
   del_sub_procs(ets:next(Name, Key), Name).
+
+%% create_simple_cache/1
+%% ====================================================================
+%% @doc Creates simple cache.
+-spec create_simple_cache(Name :: atom()) -> Result when
+  Result :: ok | error_during_cache_registration.
+%% ====================================================================
+create_simple_cache(Name) ->
+  create_simple_cache(Name, non, non).
+
+%% create_simple_cache/3
+%% ====================================================================
+%% @doc Creates simple cache.
+-spec create_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term()) -> Result when
+  Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
+  CacheLoop :: integer() | atom().
+%% ====================================================================
+create_simple_cache(Name, CacheLoop, ClearFun) ->
+  create_simple_cache(Name, CacheLoop, ClearFun, true).
+
+%% create_simple_cache/4
+%% ====================================================================
+%% @doc Creates simple cache.
+-spec create_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean()) -> Result when
+  Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
+  CacheLoop :: integer() | atom().
+%% ====================================================================
+create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection) ->
+  Pid = self(),
+  create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Pid).
+
+%% create_simple_cache/5
+%% ====================================================================
+%% @doc Creates simple cache.
+-spec create_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean(), Pid :: pid()) -> Result when
+  Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
+  CacheLoop :: integer() | atom().
+%% ====================================================================
+create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Pid) ->
+  %% Init Cache-ETS. Ignore the fact that other DAO worker could have created this table. In this case, this call will
+  %% fail, but table is present anyway, so everyone is happy.
+  case ets:info(Name) of
+    undefined   -> ets:new(Name, [named_table, public, set, {read_concurrency, true}]);
+    [_ | _]     -> ok
+  end,
+
+  Pid = self(),
+  gen_server:cast(?Node_Manager_Name, {register_simple_cache, Name, Pid}),
+  receive
+    simple_cache_registered ->
+      LoopTime = case CacheLoop of
+                   non -> non;
+                   Atom when is_atom(Atom) ->
+                     case application:get_env(veil_cluster_node, CacheLoop) of
+                       {ok, Interval1} -> Interval1;
+                       _               -> loop_time_load_error
+                     end;
+                   _ -> CacheLoop
+                 end,
+
+      case LoopTime of
+        Time when is_integer(Time) ->
+          erlang:send_after(1000 * Time, Pid, {clear_sipmle_cache, 1000 * Time, ClearFun, StrongCacheConnection}),
+          ok;
+        non -> ok;
+        _ -> loop_time_not_a_number_error
+      end
+  after 500 ->
+    error_during_cache_registration
+  end.
+
+%% clear_cache/1
+%% ====================================================================
+%% @doc Clears chosen caches at all nodes
+-spec clear_cache(Cache :: term()) -> ok.
+%% ====================================================================
+clear_cache(Cache) ->
+  Pid = self(),
+  gen_server:cast({global, ?CCM}, {clear_cache, Cache, Pid}),
+  receive
+    cache_cleared -> ok
+  after 500 ->
+    error_during_contact_witch_ccm
+  end.
