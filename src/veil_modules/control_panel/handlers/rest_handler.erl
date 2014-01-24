@@ -90,7 +90,7 @@ rest_init(Req, _Opts) ->
 %% Returns methods that are allowed, based on version specified in URI.
 %% Will call methods_and_version_info/1 from rest_module_behaviour.
 %% @end
--spec allowed_methods(req(), #state{}) -> {[binary()], req(), #state{}}.
+-spec allowed_methods(req(), #state{} | {error, Type}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
 allowed_methods(Req, #state{version = Version, handler_module = Mod} = State) ->
     {MethodsVersionInfo, Req2} = Mod:methods_and_versions_info(Req),
@@ -126,6 +126,9 @@ allowed_methods(Req, #state{version = Version, handler_module = Mod} = State) ->
             end
     end;
 
+% Some errors could have been detected in do_init/2. If so, State contains
+% an {error, Type} tuple. These errors shall be handled here,
+% because cowboy doesn't allow returning errors in rest_init.
 allowed_methods(Req, {error, Type}) ->
     NewReq = case Type of
                  path_invalid -> reply_with_error(Req, warning, ?error_path_invalid, []);
