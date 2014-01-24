@@ -29,7 +29,7 @@ import os
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 sys.path.append(os.path.abspath('extensions'))
-extensions = ['sphinxcontrib.httpdomain']
+extensions = ['sphinxcontrib.httpdomain', 'sphinxcontrib.erlangdomain', 'breathe']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -107,7 +107,7 @@ html_theme = 'sphinx_rtd_theme'
 #html_theme_options = {}
 
 # Add any paths that contain custom themes here, relative to this directory.
-html_theme_path = ['themes']
+html_theme_path = ['themes/sphinx_rtd_theme']
 
 # The name for this set of Sphinx documents.  If None, it defaults to
 # "<project> v<release> documentation".
@@ -257,3 +257,9 @@ texinfo_documents = [
 
 # If true, do not generate a @detailmenu in the "Top" node's menu.
 #texinfo_no_detailmenu = False
+
+# -- Breathe ---------------------------------------------------------------
+
+breathe_projects = {
+    "veilclient" : "data/veilclient/xml/",
+}
