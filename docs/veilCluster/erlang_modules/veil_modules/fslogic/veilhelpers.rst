@@ -10,21 +10,20 @@ veilhelpers
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`exec/2 <veilhelpers;exec/2>`
-	* :ref:`exec/3 <veilhelpers;exec/3>`
+	* :ref:`exec/2 <veilhelpers:exec/2>`
+	* :ref:`exec/3 <veilhelpers:exec/3>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: veilhelpers
+	.. _`veilhelpers:exec/2`:
 
-	.. _`veilhelpers;exec/2`:
+	.. _`veilhelpers:exec/3`:
 
-	.. _`veilhelpers;exec/3`:
-
-	.. erl:function:: exec(Method :: atom(), SHInfo :: #storage_helper_info{}, [Arg :: term()]) -> {error, Reason :: term()} | Response
+	.. function:: exec(Method :: atom(), SHInfo :: #storage_helper_info{}, [Arg :: term()]) -> {error, Reason :: term()} | Response
+		:noindex:
 
 	* **Response:** term()
 
-	Executes apply(veilhelper_nif, Method, Args) through slave node. Before executing, fields from struct SHInfo are preappend to Args list. You can also skip SHInfo argument in order to pass exact Args into target Method.
+	Executes apply(veilhelper_nif, Method, Args) through slave node. <br/> Before executing, fields from struct SHInfo are preappend to Args list. <br/> You can also skip SHInfo argument in order to pass exact Args into target Method.
 

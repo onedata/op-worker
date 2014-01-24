@@ -10,32 +10,32 @@ ws_handler
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`checkMessage/2 <ws_handler;checkMessage/2>`
-	* :ref:`decode_protocol_buffer/2 <ws_handler;decode_protocol_buffer/2>`
-	* :ref:`encode_answer/2 <ws_handler;encode_answer/2>`
-	* :ref:`encode_answer/5 <ws_handler;encode_answer/5>`
-	* :ref:`init/3 <ws_handler;init/3>`
-	* :ref:`websocket_handle/3 <ws_handler;websocket_handle/3>`
-	* :ref:`websocket_info/3 <ws_handler;websocket_info/3>`
-	* :ref:`websocket_init/3 <ws_handler;websocket_init/3>`
-	* :ref:`websocket_terminate/3 <ws_handler;websocket_terminate/3>`
+	* :ref:`checkMessage/2 <ws_handler:checkMessage/2>`
+	* :ref:`decode_protocol_buffer/2 <ws_handler:decode_protocol_buffer/2>`
+	* :ref:`encode_answer/2 <ws_handler:encode_answer/2>`
+	* :ref:`encode_answer/5 <ws_handler:encode_answer/5>`
+	* :ref:`init/3 <ws_handler:init/3>`
+	* :ref:`websocket_handle/3 <ws_handler:websocket_handle/3>`
+	* :ref:`websocket_info/3 <ws_handler:websocket_info/3>`
+	* :ref:`websocket_init/3 <ws_handler:websocket_init/3>`
+	* :ref:`websocket_terminate/3 <ws_handler:websocket_terminate/3>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: ws_handler
+	.. _`ws_handler:checkMessage/2`:
 
-	.. _`ws_handler;checkMessage/2`:
-
-	.. erl:function:: checkMessage(Msg :: term(), DN :: string()) -> Result
+	.. function:: checkMessage(Msg :: term(), DN :: string()) -> Result
+		:noindex:
 
 	* **Result:** boolean()
 
 	Checks if message can be processed by cluster.
 
-	.. _`ws_handler;decode_protocol_buffer/2`:
+	.. _`ws_handler:decode_protocol_buffer/2`:
 
-	.. erl:function:: decode_protocol_buffer(MsgBytes :: binary(), DN :: string()) -> Result
+	.. function:: decode_protocol_buffer(MsgBytes :: binary(), DN :: string()) -> Result
+		:noindex:
 
 	* **Answer_type:** string()
 	* **ModuleName:** atom()
@@ -46,58 +46,65 @@ Function Details
 
 	Decodes the message using protocol buffers records_translator.
 
-	.. _`ws_handler;encode_answer/2`:
+	.. _`ws_handler:encode_answer/2`:
 
-	.. erl:function:: encode_answer(Main_Answer :: atom(), MsgId :: integer()) -> Result
-
-	* **Result:** binary()
-
-	Encodes answer using protocol buffers records_translator.
-
-	.. _`ws_handler;encode_answer/5`:
-
-	.. erl:function:: encode_answer(Main_Answer :: atom(), MsgId :: integer(), AnswerType :: string(), Answer_decoder_name :: string(), Worker_Answer :: term()) -> Result
+	.. function:: encode_answer(Main_Answer :: atom(), MsgId :: integer()) -> Result
+		:noindex:
 
 	* **Result:** binary()
 
 	Encodes answer using protocol buffers records_translator.
 
-	.. _`ws_handler;init/3`:
+	.. _`ws_handler:encode_answer/5`:
 
-	.. erl:function:: init(Proto :: term(), Req :: term(), Opts :: term()) -> {upgrade, protocol, cowboy_websocket}
+	.. function:: encode_answer(Main_Answer :: atom(), MsgId :: integer(), AnswerType :: string(), Answer_decoder_name :: string(), Worker_Answer :: term()) -> Result
+		:noindex:
+
+	* **Result:** binary()
+
+	Encodes answer using protocol buffers records_translator.
+
+	.. _`ws_handler:init/3`:
+
+	.. function:: init(Proto :: term(), Req :: term(), Opts :: term()) -> {upgrade, protocol, cowboy_websocket}
+		:noindex:
 
 	Switches protocol to WebSocket
 
-	.. _`ws_handler;websocket_handle/3`:
+	.. _`ws_handler:websocket_handle/3`:
 
-	.. erl:function:: websocket_handle({Type :: atom(), Data :: term()}, Req, State) -> {reply, {Type :: atom(), Data :: term()}, Req, State} | {ok, Req, State} | {shutdown, Req, State}
-
-	* **Req:** term()
-	* **State:** #hander_state{}
-
-	Cowboy's webscoket_handle callback. Binary data was received on socket. For more information please refer Cowboy's user manual.
-
-	.. _`ws_handler;websocket_info/3`:
-
-	.. erl:function:: websocket_info(Msg :: term(), Req, State) -> {reply, {Type :: atom(), Data :: term()}, Req, State} | {ok, Req, State} | {shutdown, Req, State}
+	.. function:: websocket_handle({Type :: atom(), Data :: term()}, Req, State) -> {reply, {Type :: atom(), Data :: term()}, Req, State} | {ok, Req, State} | {shutdown, Req, State}
+		:noindex:
 
 	* **Req:** term()
 	* **State:** #hander_state{}
 
-	Cowboy's webscoket_info callback. Erlang message received. For more information please refer Cowboy's user manual.
+	Cowboy's webscoket_handle callback. Binary data was received on socket. <br/> For more information please refer Cowboy's user manual.
 
-	.. _`ws_handler;websocket_init/3`:
+	.. _`ws_handler:websocket_info/3`:
 
-	.. erl:function:: websocket_init(TransportName :: atom(), Req :: term(), Opts :: list()) -> {ok, Req :: term(), State :: term()} | {shutdown, Req :: term()}
-
-	Cowboy's webscoket_init callback. Initialize connection, proceed with TLS-GSI authentication. If GSI validation fails, connection will be closed. Currently validation is handled by Globus NIF library loaded on erlang slave nodes.
-
-	.. _`ws_handler;websocket_terminate/3`:
-
-	.. erl:function:: websocket_terminate(Reason :: term(), Req, State) -> ok
+	.. function:: websocket_info(Msg :: term(), Req, State) -> {reply, {Type :: atom(), Data :: term()}, Req, State} | {ok, Req, State} | {shutdown, Req, State}
+		:noindex:
 
 	* **Req:** term()
 	* **State:** #hander_state{}
 
-	Cowboy's webscoket_info callback. Connection was closed. For more information please refer Cowboy's user manual.
+	Cowboy's webscoket_info callback. Erlang message received. <br/> For more information please refer Cowboy's user manual.
+
+	.. _`ws_handler:websocket_init/3`:
+
+	.. function:: websocket_init(TransportName :: atom(), Req :: term(), Opts :: list()) -> {ok, Req :: term(), State :: term()} | {shutdown, Req :: term()}
+		:noindex:
+
+	Cowboy's webscoket_init callback. Initialize connection, proceed with TLS-GSI authentication. <br/> If GSI validation fails, connection will be closed. <br/> Currently validation is handled by Globus NIF library loaded on erlang slave nodes.
+
+	.. _`ws_handler:websocket_terminate/3`:
+
+	.. function:: websocket_terminate(Reason :: term(), Req, State) -> ok
+		:noindex:
+
+	* **Req:** term()
+	* **State:** #hander_state{}
+
+	Cowboy's webscoket_info callback. Connection was closed. <br/> For more information please refer Cowboy's user manual.
 

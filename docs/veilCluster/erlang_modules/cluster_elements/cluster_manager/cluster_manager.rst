@@ -11,66 +11,69 @@ cluster_manager
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`calculate_load/2 <cluster_manager;calculate_load/2>`
-	* :ref:`calculate_node_load/2 <cluster_manager;calculate_node_load/2>`
-	* :ref:`calculate_worker_load/1 <cluster_manager;calculate_worker_load/1>`
-	* :ref:`code_change/3 <cluster_manager;code_change/3>`
-	* :ref:`handle_call/3 <cluster_manager;handle_call/3>`
-	* :ref:`handle_cast/2 <cluster_manager;handle_cast/2>`
-	* :ref:`handle_info/2 <cluster_manager;handle_info/2>`
-	* :ref:`init/1 <cluster_manager;init/1>`
-	* :ref:`monitoring_loop/1 <cluster_manager;monitoring_loop/1>`
-	* :ref:`monitoring_loop/2 <cluster_manager;monitoring_loop/2>`
-	* :ref:`start_link/0 <cluster_manager;start_link/0>`
-	* :ref:`start_link/1 <cluster_manager;start_link/1>`
-	* :ref:`start_monitoring_loop/2 <cluster_manager;start_monitoring_loop/2>`
-	* :ref:`stop/0 <cluster_manager;stop/0>`
-	* :ref:`terminate/2 <cluster_manager;terminate/2>`
-	* :ref:`update_dispatcher_state/6 <cluster_manager;update_dispatcher_state/6>`
-	* :ref:`update_dns_state/3 <cluster_manager;update_dns_state/3>`
+	* :ref:`calculate_load/2 <cluster_manager:calculate_load/2>`
+	* :ref:`calculate_node_load/2 <cluster_manager:calculate_node_load/2>`
+	* :ref:`calculate_worker_load/1 <cluster_manager:calculate_worker_load/1>`
+	* :ref:`code_change/3 <cluster_manager:code_change/3>`
+	* :ref:`handle_call/3 <cluster_manager:handle_call/3>`
+	* :ref:`handle_cast/2 <cluster_manager:handle_cast/2>`
+	* :ref:`handle_info/2 <cluster_manager:handle_info/2>`
+	* :ref:`init/1 <cluster_manager:init/1>`
+	* :ref:`monitoring_loop/1 <cluster_manager:monitoring_loop/1>`
+	* :ref:`monitoring_loop/2 <cluster_manager:monitoring_loop/2>`
+	* :ref:`start_link/0 <cluster_manager:start_link/0>`
+	* :ref:`start_link/1 <cluster_manager:start_link/1>`
+	* :ref:`start_monitoring_loop/2 <cluster_manager:start_monitoring_loop/2>`
+	* :ref:`stop/0 <cluster_manager:stop/0>`
+	* :ref:`terminate/2 <cluster_manager:terminate/2>`
+	* :ref:`update_dispatcher_state/6 <cluster_manager:update_dispatcher_state/6>`
+	* :ref:`update_dns_state/3 <cluster_manager:update_dns_state/3>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: cluster_manager
+	.. _`cluster_manager:calculate_load/2`:
 
-	.. _`cluster_manager;calculate_load/2`:
-
-	.. erl:function:: calculate_load(NodesLoad :: list(), WorkersLoad :: list()) -> Result
+	.. function:: calculate_load(NodesLoad :: list(), WorkersLoad :: list()) -> Result
+		:noindex:
 
 	* **Result:** list()
 
 	Merges nodes' and workers' loads to more useful form
 
-	.. _`cluster_manager;calculate_node_load/2`:
+	.. _`cluster_manager:calculate_node_load/2`:
 
-	.. erl:function:: calculate_node_load(Nodes :: list(), Period :: atom()) -> Result
+	.. function:: calculate_node_load(Nodes :: list(), Period :: atom()) -> Result
+		:noindex:
 
 	* **Result:** list()
 
 	Calculates load of all nodes in cluster
 
-	.. _`cluster_manager;calculate_worker_load/1`:
+	.. _`cluster_manager:calculate_worker_load/1`:
 
-	.. erl:function:: calculate_worker_load(Workers :: list()) -> Result
+	.. function:: calculate_worker_load(Workers :: list()) -> Result
+		:noindex:
 
 	* **Result:** list()
 
 	Calculates load of all workers in cluster
 
-	.. _`cluster_manager;code_change/3`:
+	.. _`cluster_manager:code_change/3`:
 
-	.. erl:function:: code_change(OldVsn, State :: term(), Extra :: term()) -> Result
+	.. function:: code_change(OldVsn, State :: term(), Extra :: term()) -> Result
+		:noindex:
 
 	* **OldVsn:** Vsn | {down, Vsn}
 	* **Result:** {ok, NewState :: term()} | {error, Reason :: term()}
 	* **Vsn:** term()
 
-	 gen_server:code_change/3 
+	<a href="http://www.erlang.org/doc/man/gen_server.html#Module:code_change-3">gen_server:code_change/3</a>
 
-	.. _`cluster_manager;handle_call/3`:
+	.. _`cluster_manager:handle_call/3`:
 
-	.. erl:function:: handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result
+	.. function:: handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result
+		:noindex:
 
 	* **NewState:** term()
 	* **Reason:** term()
@@ -78,58 +81,64 @@ Function Details
 	* **Result:** {reply, Reply, NewState} | {reply, Reply, NewState, Timeout} | {reply, Reply, NewState, hibernate} | {noreply, NewState} | {noreply, NewState, Timeout} | {noreply, NewState, hibernate} | {stop, Reason, Reply, NewState} | {stop, Reason, NewState}
 	* **Timeout:** non_neg_integer() | infinity
 
-	 gen_server:handle_call/3 
+	<a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_call-3">gen_server:handle_call/3</a>
 
-	.. _`cluster_manager;handle_cast/2`:
+	.. _`cluster_manager:handle_cast/2`:
 
-	.. erl:function:: handle_cast(Request :: term(), State :: term()) -> Result
-
-	* **NewState:** term()
-	* **Result:** {noreply, NewState} | {noreply, NewState, Timeout} | {noreply, NewState, hibernate} | {stop, Reason :: term(), NewState}
-	* **Timeout:** non_neg_integer() | infinity
-
-	 gen_server:handle_cast/2 
-
-	.. _`cluster_manager;handle_info/2`:
-
-	.. erl:function:: handle_info(Info :: timeout | term(), State :: term()) -> Result
+	.. function:: handle_cast(Request :: term(), State :: term()) -> Result
+		:noindex:
 
 	* **NewState:** term()
 	* **Result:** {noreply, NewState} | {noreply, NewState, Timeout} | {noreply, NewState, hibernate} | {stop, Reason :: term(), NewState}
 	* **Timeout:** non_neg_integer() | infinity
 
-	 gen_server:handle_info/2 
+	<a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_cast-2">gen_server:handle_cast/2</a>
 
-	.. _`cluster_manager;init/1`:
+	.. _`cluster_manager:handle_info/2`:
 
-	.. erl:function:: init(Args :: term()) -> Result
+	.. function:: handle_info(Info :: timeout | term(), State :: term()) -> Result
+		:noindex:
+
+	* **NewState:** term()
+	* **Result:** {noreply, NewState} | {noreply, NewState, Timeout} | {noreply, NewState, hibernate} | {stop, Reason :: term(), NewState}
+	* **Timeout:** non_neg_integer() | infinity
+
+	<a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_info-2">gen_server:handle_info/2</a>
+
+	.. _`cluster_manager:init/1`:
+
+	.. function:: init(Args :: term()) -> Result
+		:noindex:
 
 	* **Result:** {ok, State} | {ok, State, Timeout} | {ok, State, hibernate} | {stop, Reason :: term()} | ignore
 	* **State:** term()
 	* **Timeout:** non_neg_integer() | infinity
 
-	 gen_server:init/1 
+	<a href="http://www.erlang.org/doc/man/gen_server.html#Module:init-1">gen_server:init/1</a>
 
-	.. _`cluster_manager;monitoring_loop/1`:
+	.. _`cluster_manager:monitoring_loop/1`:
 
-	.. erl:function:: monitoring_loop(Flag) -> ok
+	.. function:: monitoring_loop(Flag) -> ok
+		:noindex:
 
 	* **Flag:** on | off
 
 	Loop that monitors if nodes are alive.
 
-	.. _`cluster_manager;monitoring_loop/2`:
+	.. _`cluster_manager:monitoring_loop/2`:
 
-	.. erl:function:: monitoring_loop(Flag, Nodes) -> ok
+	.. function:: monitoring_loop(Flag, Nodes) -> ok
+		:noindex:
 
 	* **Flag:** on | off
 	* **Nodes:** list()
 
 	Beginning of loop that monitors if nodes are alive.
 
-	.. _`cluster_manager;start_link/0`:
+	.. _`cluster_manager:start_link/0`:
 
-	.. erl:function:: start_link() -> Result
+	.. function:: start_link() -> Result
+		:noindex:
 
 	* **Error:** {already_started, Pid} | term()
 	* **Pid:** pid()
@@ -137,9 +146,10 @@ Function Details
 
 	Starts cluster manager
 
-	.. _`cluster_manager;start_link/1`:
+	.. _`cluster_manager:start_link/1`:
 
-	.. erl:function:: start_link(Mode) -> Result
+	.. function:: start_link(Mode) -> Result
+		:noindex:
 
 	* **Error:** {already_started,Pid} | term()
 	* **Mode:** test | normal
@@ -148,32 +158,36 @@ Function Details
 
 	Starts cluster manager
 
-	.. _`cluster_manager;start_monitoring_loop/2`:
+	.. _`cluster_manager:start_monitoring_loop/2`:
 
-	.. erl:function:: start_monitoring_loop(Flag, Nodes) -> ok
+	.. function:: start_monitoring_loop(Flag, Nodes) -> ok
+		:noindex:
 
 	* **Flag:** on | off
 	* **Nodes:** list()
 
 	Starts loop that monitors if nodes are alive.
 
-	.. _`cluster_manager;stop/0`:
+	.. _`cluster_manager:stop/0`:
 
-	.. erl:function:: stop() -> ok
+	.. function:: stop() -> ok
+		:noindex:
 
 	Stops the server
 
-	.. _`cluster_manager;terminate/2`:
+	.. _`cluster_manager:terminate/2`:
 
-	.. erl:function:: terminate(Reason, State :: term()) -> Any :: term()
+	.. function:: terminate(Reason, State :: term()) -> Any :: term()
+		:noindex:
 
 	* **Reason:** normal | shutdown | {shutdown, term()} | term()
 
-	 gen_server:terminate/2 
+	<a href="http://www.erlang.org/doc/man/gen_server.html#Module:terminate-2">gen_server:terminate/2</a>
 
-	.. _`cluster_manager;update_dispatcher_state/6`:
+	.. _`cluster_manager:update_dispatcher_state/6`:
 
-	.. erl:function:: update_dispatcher_state(WorkersList, DispatcherMaps, Nodes, NewStateNum, Loads, AvgLoad) -> ok
+	.. function:: update_dispatcher_state(WorkersList, DispatcherMaps, Nodes, NewStateNum, Loads, AvgLoad) -> ok
+		:noindex:
 
 	* **AvgLoad:** integer()
 	* **DispatcherMaps:** list()
@@ -184,5 +198,5 @@ Function Details
 
 	Updates dispatchers' states.
 
-	.. _`cluster_manager;update_dns_state/3`:
+	.. _`cluster_manager:update_dns_state/3`:
 

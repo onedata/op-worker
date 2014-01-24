@@ -10,18 +10,16 @@ veil_upload
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`event/1 <veil_upload;event/1>`
-	* :ref:`reflect/0 <veil_upload;reflect/0>`
-	* :ref:`render_element/1 <veil_upload;render_element/1>`
+	* :ref:`event/1 <veil_upload:event/1>`
+	* :ref:`reflect/0 <veil_upload:reflect/0>`
+	* :ref:`render_element/1 <veil_upload:render_element/1>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: veil_upload
+	.. _`veil_upload:event/1`:
 
-	.. _`veil_upload;event/1`:
+	.. _`veil_upload:reflect/0`:
 
-	.. _`veil_upload;reflect/0`:
-
-	.. _`veil_upload;render_element/1`:
+	.. _`veil_upload:render_element/1`:
 

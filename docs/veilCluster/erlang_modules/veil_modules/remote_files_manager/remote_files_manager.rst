@@ -11,29 +11,29 @@ remote_files_manager
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`cleanup/0 <remote_files_manager;cleanup/0>`
-	* :ref:`get_storage_and_id/1 <remote_files_manager;get_storage_and_id/1>`
-	* :ref:`handle/2 <remote_files_manager;handle/2>`
-	* :ref:`init/1 <remote_files_manager;init/1>`
+	* :ref:`cleanup/0 <remote_files_manager:cleanup/0>`
+	* :ref:`get_storage_and_id/1 <remote_files_manager:get_storage_and_id/1>`
+	* :ref:`handle/2 <remote_files_manager:handle/2>`
+	* :ref:`init/1 <remote_files_manager:init/1>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: remote_files_manager
+	.. _`remote_files_manager:cleanup/0`:
 
-	.. _`remote_files_manager;cleanup/0`:
+	.. function:: cleanup() -> ok
+		:noindex:
 
-	.. erl:function:: cleanup() -> ok
+	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback cleanup/0
 
-	:ref:`worker_plugin_behaviour` callback cleanup/0
+	.. _`remote_files_manager:get_storage_and_id/1`:
 
-	.. _`remote_files_manager;get_storage_and_id/1`:
+	.. _`remote_files_manager:handle/2`:
 
-	.. _`remote_files_manager;handle/2`:
+	.. _`remote_files_manager:init/1`:
 
-	.. _`remote_files_manager;init/1`:
+	.. function:: init(Args :: term()) -> list()
+		:noindex:
 
-	.. erl:function:: init(Args :: term()) -> list()
-
-	:ref:`worker_plugin_behaviour` callback init/1
+	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback init/1
 

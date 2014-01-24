@@ -11,18 +11,16 @@ gateway
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`cleanup/0 <gateway;cleanup/0>`
-	* :ref:`handle/2 <gateway;handle/2>`
-	* :ref:`init/1 <gateway;init/1>`
+	* :ref:`cleanup/0 <gateway:cleanup/0>`
+	* :ref:`handle/2 <gateway:handle/2>`
+	* :ref:`init/1 <gateway:init/1>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: gateway
+	.. _`gateway:cleanup/0`:
 
-	.. _`gateway;cleanup/0`:
+	.. _`gateway:handle/2`:
 
-	.. _`gateway;handle/2`:
-
-	.. _`gateway;init/1`:
+	.. _`gateway:init/1`:
 

@@ -11,19 +11,18 @@ veil_cluster_node_app
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`start/2 <veil_cluster_node_app;start/2>`
-	* :ref:`stop/1 <veil_cluster_node_app;stop/1>`
+	* :ref:`start/2 <veil_cluster_node_app:start/2>`
+	* :ref:`stop/1 <veil_cluster_node_app:stop/1>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: veil_cluster_node_app
+	.. _`veil_cluster_node_app:start/2`:
 
-	.. _`veil_cluster_node_app;start/2`:
+	.. _`veil_cluster_node_app:stop/1`:
 
-	.. _`veil_cluster_node_app;stop/1`:
-
-	.. erl:function:: stop(_State :: any()) -> Result
+	.. function:: stop(_State :: any()) -> Result
+		:noindex:
 
 	* **Result:** ok
 

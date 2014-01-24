@@ -10,16 +10,15 @@ rest_routes
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`route/1 <rest_routes;route/1>`
+	* :ref:`route/1 <rest_routes:route/1>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: rest_routes
+	.. _`rest_routes:route/1`:
 
-	.. _`rest_routes;route/1`:
+	.. function:: route([binary()]) -> {atom(), binary()}
+		:noindex:
 
-	.. erl:function:: route([binary()]) -> {atom(), binary()}
-
-	 This function returns handler module and resource ID based on REST request path. The argument is a list of binaries - result of splitting request subpath on "/". Subpath is all that occurs after `" /rest/ /"' in request path. Should return a tuple: - the module that will be called to handle requested REST resource (atom) - resource id or undefined if none was specified (binary or atom (undefined)) or undefined if no module was matched
+	 This function returns handler module and resource ID based on REST request path. The argument is a list of binaries - result of splitting request subpath on "/". Subpath is all that occurs after '"<host>/rest/<version>/"' in request path. Should return a tuple: - the module that will be called to handle requested REST resource (atom) - resource id or undefined if none was specified (binary or atom (undefined)) or undefined if no module was matched
 

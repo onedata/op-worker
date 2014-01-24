@@ -10,17 +10,16 @@ dns_udp_handler
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`loop/3 <dns_udp_handler;loop/3>`
-	* :ref:`start_link/3 <dns_udp_handler;start_link/3>`
+	* :ref:`loop/3 <dns_udp_handler:loop/3>`
+	* :ref:`start_link/3 <dns_udp_handler:start_link/3>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: dns_udp_handler
+	.. _`dns_udp_handler:loop/3`:
 
-	.. _`dns_udp_handler;loop/3`:
-
-	.. erl:function:: loop(Socket, ResponseTTL, DispatcherTimeout) -> no_return()
+	.. function:: loop(Socket, ResponseTTL, DispatcherTimeout) -> no_return()
+		:noindex:
 
 	* **DispatcherTimeout:** non_neg_integer()
 	* **ResponseTTL:** non_neg_integer()
@@ -28,9 +27,10 @@ Function Details
 
 	Loop maintaining state.
 
-	.. _`dns_udp_handler;start_link/3`:
+	.. _`dns_udp_handler:start_link/3`:
 
-	.. erl:function:: start_link(Port, ResponseTTLInSecs, DispatcherTimeout) -> {ok, pid()}
+	.. function:: start_link(Port, ResponseTTLInSecs, DispatcherTimeout) -> {ok, pid()}
+		:noindex:
 
 	* **DispatcherTimeout:** non_neg_integer()
 	* **Port:** non_neg_integer()

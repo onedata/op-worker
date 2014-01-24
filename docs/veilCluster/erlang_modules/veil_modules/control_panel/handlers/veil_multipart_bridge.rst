@@ -10,16 +10,15 @@ veil_multipart_bridge
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`parse/1 <veil_multipart_bridge;parse/1>`
+	* :ref:`parse/1 <veil_multipart_bridge:parse/1>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: veil_multipart_bridge
+	.. _`veil_multipart_bridge:parse/1`:
 
-	.. _`veil_multipart_bridge;parse/1`:
-
-	.. erl:function:: parse(ReqBridge :: record()) -> {ok, not_multipart} | {ok, Params :: [tuple()], Files :: [#uploaded_file{}]} | {error, any()}
+	.. function:: parse(ReqBridge :: record()) -> {ok, not_multipart} | {ok, Params :: [tuple()], Files :: [#uploaded_file{}]} | {error, any()}
+		:noindex:
 
 	Try to parse the request encapsulated in request bridge if it is a multipart POST request.
 

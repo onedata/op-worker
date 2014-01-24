@@ -11,18 +11,16 @@ rule_manager
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`cleanup/0 <rule_manager;cleanup/0>`
-	* :ref:`handle/2 <rule_manager;handle/2>`
-	* :ref:`init/1 <rule_manager;init/1>`
+	* :ref:`cleanup/0 <rule_manager:cleanup/0>`
+	* :ref:`handle/2 <rule_manager:handle/2>`
+	* :ref:`init/1 <rule_manager:init/1>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: rule_manager
+	.. _`rule_manager:cleanup/0`:
 
-	.. _`rule_manager;cleanup/0`:
+	.. _`rule_manager:handle/2`:
 
-	.. _`rule_manager;handle/2`:
-
-	.. _`rule_manager;init/1`:
+	.. _`rule_manager:init/1`:
 

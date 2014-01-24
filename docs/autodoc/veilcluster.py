@@ -104,7 +104,7 @@ class ErlangDocLexer(object):
 		return functions
 
 	def lex_links(self, string):
-		pattern = re.compile(r'\s*<.*?>\s*')
+		pattern = re.compile(r'\s*<^[<]*?>\s*')
 		string = re.sub(pattern, ' ', string)
 		links = []
 		pattern = re.compile(r'{@link (.*?)}')
@@ -112,11 +112,7 @@ class ErlangDocLexer(object):
 		for match in iterator:
 			links.append(match.group(1))
 		for link in links:
-			if ':' in link:
-				semicolon_link = link.replace(':', ';')
-				string = string.replace('{@link ' + link + '}', ':ref:`' + link + ' <' + semicolon_link + '>`')
-			else:
-				string = string.replace('{@link ' + link + '}', ':ref:`' + link + '`')
+			string = string.replace('{@link ' + link + '}', ':ref:`' + link + ' <' + link + '>`')
 		return string
 
 	def lex_spec(self, function):
@@ -180,16 +176,17 @@ class ErlangDocWriter(Sphinx):
 			self.w_section(file, '\nFunction Index', '~')
 			self.lexer.functions.sort()
 			for function in self.lexer.functions:
-				file.write('\t* :ref:`' + function + ' <' + self.lexer.module + ';' + function + '>`\n')
+				file.write('\t* :ref:`' + function + ' <' + self.lexer.module + ':' + function + '>`\n')
 
 	def w_function_details(self, file):
 		if self.lexer.functions:
 			self.w_section(file, '\nFunction Details', '~')
-			file.write('\t.. erl:module:: ' + self.lexer.module + '\n\n')
+			# file.write('\t.. erl:module:: ' + self.lexer.module + '\n\n')
 			for function in self.lexer.functions:
-				file.write('\t.. _`' + self.lexer.module + ';' + function + '`:\n\n')
+				file.write('\t.. _`' + self.lexer.module + ':' + function + '`:\n\n')
 				if self.lexer.details[function].declaration:
-					file.write('\t.. erl:function:: ' + self.lexer.details[function].declaration + '\n\n')
+					file.write('\t.. function:: ' + self.lexer.details[function].declaration + '\n')
+					file.write('\t\t:noindex:\n\n')
 				if self.lexer.details[function].parameters:
 					for name, value in sorted(self.lexer.details[function].parameters.iteritems()):
 						file.write('\t* **' + name + ':** ' + value + '\n')

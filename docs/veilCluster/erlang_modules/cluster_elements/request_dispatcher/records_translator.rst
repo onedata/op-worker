@@ -10,25 +10,25 @@ records_translator
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`translate/2 <records_translator;translate/2>`
-	* :ref:`translate_to_record/1 <records_translator;translate_to_record/1>`
+	* :ref:`translate/2 <records_translator:translate/2>`
+	* :ref:`translate_to_record/1 <records_translator:translate_to_record/1>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: records_translator
+	.. _`records_translator:translate/2`:
 
-	.. _`records_translator;translate/2`:
-
-	.. erl:function:: translate(Record :: tuple(), DecoderName :: string()) -> Result
+	.. function:: translate(Record :: tuple(), DecoderName :: string()) -> Result
+		:noindex:
 
 	* **Result:** term()
 
 	Translates record to simpler terms if possible.
 
-	.. _`records_translator;translate_to_record/1`:
+	.. _`records_translator:translate_to_record/1`:
 
-	.. erl:function:: translate_to_record(Value :: term()) -> Result
+	.. function:: translate_to_record(Value :: term()) -> Result
+		:noindex:
 
 	* **Result:** tuple() | term()
 

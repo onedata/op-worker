@@ -10,15 +10,13 @@ form
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`reflect/0 <form;reflect/0>`
-	* :ref:`render_element/1 <form;render_element/1>`
+	* :ref:`reflect/0 <form:reflect/0>`
+	* :ref:`render_element/1 <form:render_element/1>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: form
+	.. _`form:reflect/0`:
 
-	.. _`form;reflect/0`:
-
-	.. _`form;render_element/1`:
+	.. _`form:render_element/1`:
 

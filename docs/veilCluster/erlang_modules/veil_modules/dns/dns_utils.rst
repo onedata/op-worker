@@ -10,12 +10,10 @@ dns_utils
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`generate_answer/5 <dns_utils;generate_answer/5>`
+	* :ref:`generate_answer/5 <dns_utils:generate_answer/5>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: dns_utils
-
-	.. _`dns_utils;generate_answer/5`:
+	.. _`dns_utils:generate_answer/5`:
 

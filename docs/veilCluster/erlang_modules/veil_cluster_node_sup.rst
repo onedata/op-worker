@@ -11,17 +11,16 @@ veil_cluster_node_sup
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`init/1 <veil_cluster_node_sup;init/1>`
-	* :ref:`start_link/1 <veil_cluster_node_sup;start_link/1>`
+	* :ref:`init/1 <veil_cluster_node_sup:init/1>`
+	* :ref:`start_link/1 <veil_cluster_node_sup:start_link/1>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: veil_cluster_node_sup
+	.. _`veil_cluster_node_sup:init/1`:
 
-	.. _`veil_cluster_node_sup;init/1`:
-
-	.. erl:function:: init(Args :: term()) -> Result
+	.. function:: init(Args :: term()) -> Result
+		:noindex:
 
 	* **ChildSpec:** {Id :: term(), StartFunc, RestartPolicy, Type :: worker | supervisor, Modules}
 	* **Modules:** [module()] | dynamic
@@ -31,11 +30,12 @@ Function Details
 	* **StartFunc:** {M :: module(), F :: atom(), A :: [term()] | undefined}
 	* **SupervisionPolicy:** {RestartStrategy, MaxR :: non_neg_integer(), MaxT :: pos_integer()}
 
-	 supervisor:init/1 
+	<a href="http://www.erlang.org/doc/man/supervisor.html#Module:init-1">supervisor:init/1</a>
 
-	.. _`veil_cluster_node_sup;start_link/1`:
+	.. _`veil_cluster_node_sup:start_link/1`:
 
-	.. erl:function:: start_link(Args :: term()) -> Result
+	.. function:: start_link(Args :: term()) -> Result
+		:noindex:
 
 	* **Error:** {already_started, pid()} | {shutdown, term()} | term()
 	* **Result:** {ok, pid()} | ignore | {error, Error}

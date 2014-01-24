@@ -10,16 +10,15 @@ worker_plugin_behaviour
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`behaviour_info/1 <worker_plugin_behaviour;behaviour_info/1>`
+	* :ref:`behaviour_info/1 <worker_plugin_behaviour:behaviour_info/1>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: worker_plugin_behaviour
+	.. _`worker_plugin_behaviour:behaviour_info/1`:
 
-	.. _`worker_plugin_behaviour;behaviour_info/1`:
-
-	.. erl:function:: behaviour_info(Arg) -> Result
+	.. function:: behaviour_info(Arg) -> Result
+		:noindex:
 
 	* **Arg:** callbacks | Other
 	* **Fun_def:** tuple()

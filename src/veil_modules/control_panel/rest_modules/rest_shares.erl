@@ -6,7 +6,7 @@
 %% @end
 %% ===================================================================
 %% @doc: This module implements rest_module_behaviour and handles all
-%% REST requests directed at /rest/shares/* (creating and deleting shares,
+%% REST requests directed at /rest/shares/(path) (creating and deleting shares,
 %% listing shares and retrieving share details).
 %% @end
 %% ===================================================================
@@ -32,8 +32,8 @@
 %% allowed_methods/3
 %% ====================================================================
 %% @doc Should return list of methods that are allowed and directed at specific Id.
-%% e.g.: if Id =:= undefined -> `[<<"GET">>, <<"POST">>]'
-%%       if Id  /= undefined -> `[<<"GET">>, <<"PUT">>, <<"DELETE">>]'
+%% e.g.: if Id =:= undefined -> '[<<"GET">>, <<"POST">>]'
+%%       if Id  /= undefined -> '[<<"GET">>, <<"PUT">>, <<"DELETE">>]'
 %% @end
 -spec allowed_methods(req(), binary(), binary()) -> {[binary()], req()}.
 %% ====================================================================

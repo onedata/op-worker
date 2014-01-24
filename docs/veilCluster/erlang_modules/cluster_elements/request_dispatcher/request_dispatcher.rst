@@ -11,35 +11,35 @@ request_dispatcher
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`code_change/3 <request_dispatcher;code_change/3>`
-	* :ref:`handle_call/3 <request_dispatcher;handle_call/3>`
-	* :ref:`handle_cast/2 <request_dispatcher;handle_cast/2>`
-	* :ref:`handle_info/2 <request_dispatcher;handle_info/2>`
-	* :ref:`init/1 <request_dispatcher;init/1>`
-	* :ref:`send_to_fuse/3 <request_dispatcher;send_to_fuse/3>`
-	* :ref:`start_link/0 <request_dispatcher;start_link/0>`
-	* :ref:`start_link/1 <request_dispatcher;start_link/1>`
-	* :ref:`stop/0 <request_dispatcher;stop/0>`
-	* :ref:`terminate/2 <request_dispatcher;terminate/2>`
+	* :ref:`code_change/3 <request_dispatcher:code_change/3>`
+	* :ref:`handle_call/3 <request_dispatcher:handle_call/3>`
+	* :ref:`handle_cast/2 <request_dispatcher:handle_cast/2>`
+	* :ref:`handle_info/2 <request_dispatcher:handle_info/2>`
+	* :ref:`init/1 <request_dispatcher:init/1>`
+	* :ref:`send_to_fuse/3 <request_dispatcher:send_to_fuse/3>`
+	* :ref:`start_link/0 <request_dispatcher:start_link/0>`
+	* :ref:`start_link/1 <request_dispatcher:start_link/1>`
+	* :ref:`stop/0 <request_dispatcher:stop/0>`
+	* :ref:`terminate/2 <request_dispatcher:terminate/2>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: request_dispatcher
+	.. _`request_dispatcher:code_change/3`:
 
-	.. _`request_dispatcher;code_change/3`:
-
-	.. erl:function:: code_change(OldVsn, State :: term(), Extra :: term()) -> Result
+	.. function:: code_change(OldVsn, State :: term(), Extra :: term()) -> Result
+		:noindex:
 
 	* **OldVsn:** Vsn | {down, Vsn}
 	* **Result:** {ok, NewState :: term()} | {error, Reason :: term()}
 	* **Vsn:** term()
 
-	 gen_server:code_change/3 
+	<a href="http://www.erlang.org/doc/man/gen_server.html#Module:code_change-3">gen_server:code_change/3</a>
 
-	.. _`request_dispatcher;handle_call/3`:
+	.. _`request_dispatcher:handle_call/3`:
 
-	.. erl:function:: handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result
+	.. function:: handle_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result
+		:noindex:
 
 	* **NewState:** term()
 	* **Reason:** term()
@@ -47,59 +47,54 @@ Function Details
 	* **Result:** {reply, Reply, NewState} | {reply, Reply, NewState, Timeout} | {reply, Reply, NewState, hibernate} | {noreply, NewState} | {noreply, NewState, Timeout} | {noreply, NewState, hibernate} | {stop, Reason, Reply, NewState} | {stop, Reason, NewState}
 	* **Timeout:** non_neg_integer() | infinity
 
-	 gen_server:handle_call/3 
+	<a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_call-3">gen_server:handle_call/3</a>
 
-	.. _`request_dispatcher;handle_cast/2`:
+	.. _`request_dispatcher:handle_cast/2`:
 
-	.. erl:function:: handle_cast(Request :: term(), State :: term()) -> Result
-
-	* **NewState:** term()
-	* **Result:** {noreply, NewState} | {noreply, NewState, Timeout} | {noreply, NewState, hibernate} | {stop, Reason :: term(), NewState}
-	* **Timeout:** non_neg_integer() | infinity
-
-	 gen_server:handle_cast/2 
-
-	.. _`request_dispatcher;handle_info/2`:
-
-	.. erl:function:: handle_info(Info :: timeout | term(), State :: term()) -> Result
+	.. function:: handle_cast(Request :: term(), State :: term()) -> Result
+		:noindex:
 
 	* **NewState:** term()
 	* **Result:** {noreply, NewState} | {noreply, NewState, Timeout} | {noreply, NewState, hibernate} | {stop, Reason :: term(), NewState}
 	* **Timeout:** non_neg_integer() | infinity
 
-	 gen_server:handle_info/2 
+	<a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_cast-2">gen_server:handle_cast/2</a>
 
-	.. _`request_dispatcher;init/1`:
+	.. _`request_dispatcher:handle_info/2`:
 
-	.. erl:function:: init(Args :: term()) -> Result
+	.. function:: handle_info(Info :: timeout | term(), State :: term()) -> Result
+		:noindex:
+
+	* **NewState:** term()
+	* **Result:** {noreply, NewState} | {noreply, NewState, Timeout} | {noreply, NewState, hibernate} | {stop, Reason :: term(), NewState}
+	* **Timeout:** non_neg_integer() | infinity
+
+	<a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_info-2">gen_server:handle_info/2</a>
+
+	.. _`request_dispatcher:init/1`:
+
+	.. function:: init(Args :: term()) -> Result
+		:noindex:
 
 	* **Result:** {ok, State} | {ok, State, Timeout} | {ok, State, hibernate} | {stop, Reason :: term()} | ignore
 	* **State:** term()
 	* **Timeout:** non_neg_integer() | infinity
 
-	 gen_server:init/1 
+	<a href="http://www.erlang.org/doc/man/gen_server.html#Module:init-1">gen_server:init/1</a>
 
-	.. _`request_dispatcher;send_to_fuse/3`:
+	.. _`request_dispatcher:send_to_fuse/3`:
 
-	.. erl:function:: send_to_fuse(FuseId :: string(), Message :: term(), MessageDecoder :: string()) -> Result
+	.. function:: send_to_fuse(FuseId :: string(), Message :: term(), MessageDecoder :: string()) -> Result
+		:noindex:
 
 	* **Result:** callback_node_not_found | node_manager_error | dispatcher_error | ok | term()
 
 	Sends message to fuse
 
-	.. _`request_dispatcher;start_link/0`:
+	.. _`request_dispatcher:start_link/0`:
 
-	.. erl:function:: start_link() -> Result
-
-	* **Error:** {already_started,Pid} | term()
-	* **Pid:** pid()
-	* **Result:** {ok,Pid} | ignore | {error,Error}
-
-	Starts the server
-
-	.. _`request_dispatcher;start_link/1`:
-
-	.. erl:function:: start_link(Modules :: list()) -> Result
+	.. function:: start_link() -> Result
+		:noindex:
 
 	* **Error:** {already_started,Pid} | term()
 	* **Pid:** pid()
@@ -107,17 +102,30 @@ Function Details
 
 	Starts the server
 
-	.. _`request_dispatcher;stop/0`:
+	.. _`request_dispatcher:start_link/1`:
 
-	.. erl:function:: stop() -> ok
+	.. function:: start_link(Modules :: list()) -> Result
+		:noindex:
+
+	* **Error:** {already_started,Pid} | term()
+	* **Pid:** pid()
+	* **Result:** {ok,Pid} | ignore | {error,Error}
+
+	Starts the server
+
+	.. _`request_dispatcher:stop/0`:
+
+	.. function:: stop() -> ok
+		:noindex:
 
 	Stops the server
 
-	.. _`request_dispatcher;terminate/2`:
+	.. _`request_dispatcher:terminate/2`:
 
-	.. erl:function:: terminate(Reason, State :: term()) -> Any :: term()
+	.. function:: terminate(Reason, State :: term()) -> Any :: term()
+		:noindex:
 
 	* **Reason:** normal | shutdown | {shutdown, term()} | term()
 
-	 gen_server:terminate/2 
+	<a href="http://www.erlang.org/doc/man/gen_server.html#Module:terminate-2">gen_server:terminate/2</a>
 

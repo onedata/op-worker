@@ -6,7 +6,7 @@
 %% @end
 %% ===================================================================
 %% @doc: This module implements rest_module_behaviour and handles all
-%% REST requests directed at /rest/file/*. Essentially, it serves 
+%% REST requests directed at /rest/files/(path). Essentially, it serves 
 %% user content (files) via HTTP.
 %% @end
 %% ===================================================================
@@ -31,8 +31,8 @@
 %% allowed_methods/3
 %% ====================================================================
 %% @doc Should return list of methods that are allowed and directed at specific Id.
-%% e.g.: if Id =:= undefined -> `[<<"GET">>, <<"POST">>]'
-%%       if Id  /= undefined -> `[<<"GET">>, <<"PUT">>, <<"DELETE">>]'
+%% e.g.: if Id =:= undefined -> '[<<"GET">>, <<"POST">>]'
+%%       if Id  /= undefined -> '[<<"GET">>, <<"PUT">>, <<"DELETE">>]'
 %% @end
 -spec allowed_methods(req(), binary(), binary()) -> {[binary()], req()}.
 %% ====================================================================
@@ -69,7 +69,7 @@ content_types_provided(Req, _Version) ->
 %% Should return empty list if method is not supported.
 %%
 %% Id is a dir -> application/json
-%% Id is a regular file -> `<mimetype>'
+%% Id is a regular file -> '<mimetype>'
 %% Id does not exist -> []
 %% @end
 -spec content_types_provided(req(), binary(), binary()) -> {[binary()], req()}.
@@ -245,7 +245,7 @@ put(Req, _Version, _Id, _Data) ->
 %% handle_multipart_data/4
 %% ====================================================================
 %% @doc Optional callback to handle multipart requests. Data should be streamed
-%% in handling module with use of cowboy_multipart module. Method can be `<<"POST">> or <<"PUT">>'.
+%% in handling module with use of cowboy_multipart module. Method can be '<<"POST">> or <<"PUT">>'.
 %% Should handle the request and return true/false indicating the result.
 %% Should always return false if the method is not supported.
 %% @end

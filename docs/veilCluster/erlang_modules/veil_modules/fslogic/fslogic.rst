@@ -11,54 +11,57 @@ fslogic
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`cleanup/0 <fslogic;cleanup/0>`
-	* :ref:`create_dirs/4 <fslogic;create_dirs/4>`
-	* :ref:`get_file/3 <fslogic;get_file/3>`
-	* :ref:`get_files_number/3 <fslogic;get_files_number/3>`
-	* :ref:`get_full_file_name/1 <fslogic;get_full_file_name/1>`
-	* :ref:`get_user_id/0 <fslogic;get_user_id/0>`
-	* :ref:`get_user_root/1 <fslogic;get_user_root/1>`
-	* :ref:`handle/2 <fslogic;handle/2>`
-	* :ref:`handle_fuse_message/3 <fslogic;handle_fuse_message/3>`
-	* :ref:`init/1 <fslogic;init/1>`
+	* :ref:`cleanup/0 <fslogic:cleanup/0>`
+	* :ref:`create_dirs/4 <fslogic:create_dirs/4>`
+	* :ref:`get_file/3 <fslogic:get_file/3>`
+	* :ref:`get_files_number/3 <fslogic:get_files_number/3>`
+	* :ref:`get_full_file_name/1 <fslogic:get_full_file_name/1>`
+	* :ref:`get_user_id/0 <fslogic:get_user_id/0>`
+	* :ref:`get_user_root/1 <fslogic:get_user_root/1>`
+	* :ref:`handle/2 <fslogic:handle/2>`
+	* :ref:`handle_fuse_message/3 <fslogic:handle_fuse_message/3>`
+	* :ref:`init/1 <fslogic:init/1>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: fslogic
+	.. _`fslogic:cleanup/0`:
 
-	.. _`fslogic;cleanup/0`:
+	.. function:: cleanup() -> ok
+		:noindex:
 
-	.. erl:function:: cleanup() -> ok
+	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback cleanup/0
 
-	:ref:`worker_plugin_behaviour` callback cleanup/0
+	.. _`fslogic:create_dirs/4`:
 
-	.. _`fslogic;create_dirs/4`:
-
-	.. erl:function:: create_dirs(Count :: integer(), CountingBase :: integer(), SHInfo :: term(), TmpAns :: string()) -> string()
+	.. function:: create_dirs(Count :: integer(), CountingBase :: integer(), SHInfo :: term(), TmpAns :: string()) -> string()
+		:noindex:
 
 	Creates dir at storage for files (if needed). Returns the path that contains created dirs.
 
-	.. _`fslogic;get_file/3`:
+	.. _`fslogic:get_file/3`:
 
-	.. erl:function:: get_file(ProtocolVersion :: term(), File :: string(), FuseID :: string()) -> Result
+	.. function:: get_file(ProtocolVersion :: term(), File :: string(), FuseID :: string()) -> Result
+		:noindex:
 
 	* **Result:** term()
 
 	Gets file info from DB
 
-	.. _`fslogic;get_files_number/3`:
+	.. _`fslogic:get_files_number/3`:
 
-	.. erl:function:: get_files_number(user | group, UUID :: uuid() | string(), ProtocolVersion :: integer()) -> Result
+	.. function:: get_files_number(user | group, UUID :: uuid() | string(), ProtocolVersion :: integer()) -> Result
+		:noindex:
 
 	* **Result:** {ok, Sum} | {error, any()}
 	* **Sum:** integer()
 
 	Returns number of user's or group's files
 
-	.. _`fslogic;get_full_file_name/1`:
+	.. _`fslogic:get_full_file_name/1`:
 
-	.. erl:function:: get_full_file_name(FileName :: string()) -> Result
+	.. function:: get_full_file_name(FileName :: string()) -> Result
+		:noindex:
 
 	* **ErrorDesc:** atom
 	* **FullFileName:** string()
@@ -66,9 +69,10 @@ Function Details
 
 	Gets file's full name (user's root is added to name, but only when asking about non-group dir).
 
-	.. _`fslogic;get_user_id/0`:
+	.. _`fslogic:get_user_id/0`:
 
-	.. erl:function:: get_user_id() -> Result
+	.. function:: get_user_id() -> Result
+		:noindex:
 
 	* **ErrorDesc:** atom
 	* **Result:** {ok, UserID} | {error, ErrorDesc}
@@ -76,9 +80,10 @@ Function Details
 
 	Gets user's id.
 
-	.. _`fslogic;get_user_root/1`:
+	.. _`fslogic:get_user_root/1`:
 
-	.. erl:function:: get_user_root(UserDoc :: term()) -> Result
+	.. function:: get_user_root(UserDoc :: term()) -> Result
+		:noindex:
 
 	* **ErrorDesc:** atom
 	* **Result:** {ok, RootDir} | {error, ErrorDesc}
@@ -86,25 +91,28 @@ Function Details
 
 	Gets user's root directory.
 
-	.. _`fslogic;handle/2`:
+	.. _`fslogic:handle/2`:
 
-	.. erl:function:: handle(ProtocolVersion :: term(), Request :: term()) -> Result
+	.. function:: handle(ProtocolVersion :: term(), Request :: term()) -> Result
+		:noindex:
 
 	* **Result:** term()
 
-	:ref:`worker_plugin_behaviour` callback handle/1. Processes standard worker requests (e.g. ping) and requests from FUSE.
+	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback handle/1. <br/> Processes standard worker requests (e.g. ping) and requests from FUSE.
 
-	.. _`fslogic;handle_fuse_message/3`:
+	.. _`fslogic:handle_fuse_message/3`:
 
-	.. erl:function:: handle_fuse_message(ProtocolVersion :: term(), Record :: tuple(), FuseID :: string()) -> Result
+	.. function:: handle_fuse_message(ProtocolVersion :: term(), Record :: tuple(), FuseID :: string()) -> Result
+		:noindex:
 
 	* **Result:** term()
 
 	Processes requests from FUSE.
 
-	.. _`fslogic;init/1`:
+	.. _`fslogic:init/1`:
 
-	.. erl:function:: init(Args :: term()) -> list()
+	.. function:: init(Args :: term()) -> list()
+		:noindex:
 
-	:ref:`worker_plugin_behaviour` callback init/1
+	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback init/1
 

@@ -11,17 +11,16 @@ dns_ranch_tcp_handler
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`loop/5 <dns_ranch_tcp_handler;loop/5>`
-	* :ref:`start_link/4 <dns_ranch_tcp_handler;start_link/4>`
+	* :ref:`loop/5 <dns_ranch_tcp_handler:loop/5>`
+	* :ref:`start_link/4 <dns_ranch_tcp_handler:start_link/4>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: dns_ranch_tcp_handler
+	.. _`dns_ranch_tcp_handler:loop/5`:
 
-	.. _`dns_ranch_tcp_handler;loop/5`:
-
-	.. erl:function:: loop(Socket, Transport, ResponseTTL, TCPIdleTime, DispatcherTimeout) -> ok
+	.. function:: loop(Socket, Transport, ResponseTTL, TCPIdleTime, DispatcherTimeout) -> ok
+		:noindex:
 
 	* **DispatcherTimeout:** non_neg_integer()
 	* **ResponseTTL:** non_neg_integer()
@@ -31,9 +30,10 @@ Function Details
 
 	Main handler loop.
 
-	.. _`dns_ranch_tcp_handler;start_link/4`:
+	.. _`dns_ranch_tcp_handler:start_link/4`:
 
-	.. erl:function:: start_link(Ref :: term(), Socket :: term(), Transport :: term(), Opts :: term()) -> Result
+	.. function:: start_link(Ref :: term(), Socket :: term(), Transport :: term(), Opts :: term()) -> Result
+		:noindex:
 
 	* **Pid:** pid()
 	* **Result:** {ok, Pid}

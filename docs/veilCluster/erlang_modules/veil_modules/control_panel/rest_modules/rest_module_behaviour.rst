@@ -10,16 +10,15 @@ rest_module_behaviour
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`behaviour_info/1 <rest_module_behaviour;behaviour_info/1>`
+	* :ref:`behaviour_info/1 <rest_module_behaviour:behaviour_info/1>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: rest_module_behaviour
+	.. _`rest_module_behaviour:behaviour_info/1`:
 
-	.. _`rest_module_behaviour;behaviour_info/1`:
-
-	.. erl:function:: behaviour_info(Arg) -> Result
+	.. function:: behaviour_info(Arg) -> Result
+		:noindex:
 
 	* **Arg:** callbacks | Other
 	* **Fun_def:** tuple()

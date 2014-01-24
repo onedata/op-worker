@@ -6,7 +6,7 @@
 %% @end
 %% ===================================================================
 %% @doc: This module implements rest_module_behaviour and handles all
-%% REST requests directed at /rest/attr/*. It returns file attributes,
+%% REST requests directed at /rest/attrs/(path). It returns file attributes,
 %% if possible.
 %% @end
 %% ===================================================================
@@ -30,8 +30,8 @@
 %% allowed_methods/3
 %% ====================================================================
 %% @doc Should return list of methods that are allowed and directed at specific Id.
-%% e.g.: if Id =:= undefined -> `[<<"GET">>, <<"POST">>]'
-%%       if Id  /= undefined -> `[<<"GET">>, <<"PUT">>, <<"DELETE">>]'
+%% e.g.: if Id =:= undefined -> '[<<"GET">>, <<"POST">>]'
+%%       if Id  /= undefined -> '[<<"GET">>, <<"PUT">>, <<"DELETE">>]'
 %% @end
 -spec allowed_methods(req(), binary(), binary()) -> {[binary()], req()}.
 %% ====================================================================

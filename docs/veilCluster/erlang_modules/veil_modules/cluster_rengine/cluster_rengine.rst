@@ -11,18 +11,16 @@ cluster_rengine
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`cleanup/0 <cluster_rengine;cleanup/0>`
-	* :ref:`handle/2 <cluster_rengine;handle/2>`
-	* :ref:`init/1 <cluster_rengine;init/1>`
+	* :ref:`cleanup/0 <cluster_rengine:cleanup/0>`
+	* :ref:`handle/2 <cluster_rengine:handle/2>`
+	* :ref:`init/1 <cluster_rengine:init/1>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: cluster_rengine
+	.. _`cluster_rengine:cleanup/0`:
 
-	.. _`cluster_rengine;cleanup/0`:
+	.. _`cluster_rengine:handle/2`:
 
-	.. _`cluster_rengine;handle/2`:
-
-	.. _`cluster_rengine;init/1`:
+	.. _`cluster_rengine:init/1`:
 

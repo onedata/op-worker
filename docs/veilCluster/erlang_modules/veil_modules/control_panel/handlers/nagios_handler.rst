@@ -10,30 +10,31 @@ nagios_handler
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`handle/2 <nagios_handler;handle/2>`
-	* :ref:`init/3 <nagios_handler;init/3>`
-	* :ref:`terminate/3 <nagios_handler;terminate/3>`
+	* :ref:`handle/2 <nagios_handler:handle/2>`
+	* :ref:`init/3 <nagios_handler:init/3>`
+	* :ref:`terminate/3 <nagios_handler:terminate/3>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
 
-	.. erl:module:: nagios_handler
+	.. _`nagios_handler:handle/2`:
 
-	.. _`nagios_handler;handle/2`:
-
-	.. erl:function:: handle(term(), term()) -> {ok, term(), term()}
+	.. function:: handle(term(), term()) -> {ok, term(), term()}
+		:noindex:
 
 	Handles a request producing an XML response
 
-	.. _`nagios_handler;init/3`:
+	.. _`nagios_handler:init/3`:
 
-	.. erl:function:: init(any(), term(), any()) -> {ok, term(), []}
+	.. function:: init(any(), term(), any()) -> {ok, term(), []}
+		:noindex:
 
 	Cowboy handler callback, no state is required
 
-	.. _`nagios_handler;terminate/3`:
+	.. _`nagios_handler:terminate/3`:
 
-	.. erl:function:: terminate(term(), term(), term()) -> ok
+	.. function:: terminate(term(), term(), term()) -> ok
+		:noindex:
 
 	Cowboy handler callback, no cleanup needed
 
