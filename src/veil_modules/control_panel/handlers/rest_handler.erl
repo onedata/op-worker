@@ -90,7 +90,7 @@ rest_init(Req, _Opts) ->
 %% Returns methods that are allowed, based on version specified in URI.
 %% Will call methods_and_version_info/1 from rest_module_behaviour.
 %% @end
--spec allowed_methods(req(), #state{} | {error, Type}) -> {[binary()], req(), #state{}}.
+-spec allowed_methods(req(), #state{} | {error, term()}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
 allowed_methods(Req, #state{version = Version, handler_module = Mod} = State) ->
     {MethodsVersionInfo, Req2} = Mod:methods_and_versions_info(Req),
