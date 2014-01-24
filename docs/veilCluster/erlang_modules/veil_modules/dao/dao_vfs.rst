@@ -104,7 +104,7 @@ Function Details
 
 	.. erl:function:: remove_descriptor(Fd :: fd() | fd_select()) -> ok | {error, any()} | no_return()
 
-	Removes file descriptor from DB. Argument should be uuid() of #file_descriptor or same as in :ref:`list_descriptors/3`. Should not be used directly, use :ref:`dao:handle/2 <dao;handle/2>` instead (See :ref:`dao:handle/2 <dao;handle/2>` for more details).
+	Removes file descriptor from DB. Argument should be uuid() of #file_descriptor or same as in :ref:`dao_vfs:list_descriptors/3 <dao_vfs;list_descriptors/3>` . Should not be used directly, use :ref:`dao:handle/2 <dao;handle/2>` instead (See :ref:`dao:handle/2 <dao;handle/2>` for more details).
 
 	.. _`dao_vfs;remove_file/1`:
 

@@ -5,7 +5,7 @@ dao
 
 	:Authors: Rafal Slota
 	:Copyright: This software is released under the :ref:`license`.
-	:Descritpion: This module implements :ref:`worker_plugin_behaviour` callbacks and contains utility API methods. DAO API functions are implemented in DAO sub-modules like: :ref:`dao_cluster`, :ref:`dao_vfs`. All DAO API functions Should not be used directly, use :ref:`dao:handle/2 <dao;handle/2>` instead. Module :: atom() is module suffix (prefix is 'dao_'), MethodName :: atom() is the method name and ListOfArgs :: [term()] is list of argument for the method. If you want to call utility methods from this module - use Module = utils See :ref:`handle/2` for more details.
+	:Descritpion: This module implements :ref:`worker_plugin_behaviour` callbacks and contains utility API methods. DAO API functions are implemented in DAO sub-modules like: :ref:`dao_cluster`, :ref:`dao_vfs`. All DAO API functions Should not be used directly, use :ref:`dao:handle/2 <dao;handle/2>` instead. Module :: atom() is module suffix (prefix is 'dao_'), MethodName :: atom() is the method name and ListOfArgs :: [term()] is list of argument for the method. If you want to call utility methods from this module - use Module = utils See :ref:`dao:handle/2 <dao;handle/2>` for more details.
 	:Behaviours: :ref:`worker_plugin_behaviour`
 
 Function Index
@@ -50,6 +50,18 @@ Function Details
 	Retrieves record with UUID = Id from DB. Returns whole #veil_document record containing UUID, Revision Info and demanded record inside. #veil_document{}.uuid and #veil_document{}.rev_info should not be ever changed. You can strip wrappers if you do not need them using API functions of dao_lib module. See #veil_document{} structure for more info. Should not be used directly, use :ref:`dao:handle/2 <dao;handle/2>` instead.
 
 	.. _`dao;handle/2`:
+
+	.. erl:function:: handle(ProtocolVersion :: term(), Request) -> Result
+
+	* **Args:** list()
+	* **Error:** term()
+	* **Method:** atom()
+	* **Request:** {Method, Args} | {Mod :: atom(), Method, Args} | ping | get_version
+	* **Response:** term()
+	* **Result:** ok | {ok, Response} | {error, Error} | pong | Version
+	* **Version:** term()
+
+	:ref:`worker_plugin_behaviour` callback handle/1. All {Module, Method, Args} requests (second argument), executes Method with Args in {@type dao_Module} module, but with one exception: If Module = utils, then dao module will be used. E.g calling dao:handle(_, {vfs, some_method, [some_arg]}) will call dao_vfs:some_method(some_arg) but calling dao:handle(_, {utils, some_method, [some_arg]}) will call dao:some_method(some_arg) You can omit Module atom in order to use default module which is dao_cluster. E.g calling dao:handle(_, {some_method, [some_arg]}) will call dao_cluster:some_method(some_arg) Additionally all exceptions from called API method will be caught and converted into {error, Exception} tuple. E.g. calling handle(_, {save_record, [Id, Rec]}) will execute dao_cluster:save_record(Id, Rec) and normalize return value.
 
 	.. _`dao;init/1`:
 

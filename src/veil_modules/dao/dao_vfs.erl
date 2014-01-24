@@ -57,7 +57,7 @@ save_descriptor(#veil_document{record = #file_descriptor{}} = FdDoc) ->
 
 %% remove_descriptor/1
 %% ====================================================================
-%% @doc Removes file descriptor from DB. Argument should be uuid() of #file_descriptor or same as in {@link list_descriptors/3}.
+%% @doc Removes file descriptor from DB. Argument should be uuid() of #file_descriptor or same as in {@link dao_vfs:list_descriptors/3} .
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec remove_descriptor(Fd :: fd() | fd_select()) -> ok | {error, any()} | no_return().
