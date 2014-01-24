@@ -35,7 +35,8 @@ SimpleConnectionPool::~SimpleConnectionPool() {}
 
 string SimpleConnectionPool::getPeerCertificatePath() 
 {
-    if(updateCertCB) 
+    //                 Disable certificate update for now (due to globus memory leak)
+    if(updateCertCB && false) 
     {
         if(!updateCertCB())
         {
@@ -60,7 +61,8 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(Pool
     boost::shared_ptr<CommunicationHandler> conn;
     
     // Check if certificate is OK and generate new one if needed and possible
-    if(updateCertCB) {
+    //                 Disable certificate update for now (due to globus memory leak)
+    if(updateCertCB && false) {
         if(!updateCertCB())
         {
             LOG(ERROR) << "Could not find valid certificate.";
