@@ -21,13 +21,6 @@ Function Details
 
 	.. _`veil_cluster_node_app;start/2`:
 
-	.. erl:function:: start(_StartType :: any(), _StartArgs :: any()) -> Result
-
-	* **Error:** {already_started, pid()} | {shutdown, term()} | term()
-	* **Result:** {ok, pid()} | ignore | {error, Error}
-
-	Starts application by supervisor initialization.
-
 	.. _`veil_cluster_node_app;stop/1`:
 
 	.. erl:function:: stop(_State :: any()) -> Result
