@@ -16,11 +16,12 @@
 
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/control_panel/rest_utils.hrl").
+-include("veil_modules/control_panel/rest_messages.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao_share.hrl").
 -include("veil_modules/dao/dao_users.hrl").
--include("error_codes.hrl").
--include("logging.hrl").
+-include("err.hrl").
+
 
 -export([methods_and_versions_info/1, exists/3]).
 -export([get/3, delete/3, post/4, put/4]).
@@ -96,8 +97,8 @@ get(Req, <<"1.0">>, Id) ->
                            {body, Body}
                        catch
                            _:_ ->
-                               ?error("[REST] unable to retrieve dowload path based on share doc: ~p", [erlang:get(share_info)]),
-                               {error, rest_utils:error_reply(?error_unknown)}
+                               ErrorRec = ?report_error(?error_share_cannot_retrieve, [binary_to_list(Id)]),
+                               {error, rest_utils:error_reply(ErrorRec)}
                        end
                end,
     {Response, Req}.
@@ -117,8 +118,8 @@ delete(Req, <<"1.0">>, Id) ->
         ok ->
             {{body, rest_utils:success_reply(?success_share_deleted)}, Req};
         _ ->
-            ?error("[REST] unable to delete a share, uuid: ~p", [ShareID]),
-            {{error, rest_utils:error_reply(?error_unknown)}, Req}
+            ErrorRec = ?report_error(?error_share_cannot_delete, [binary_to_list(Id)]),
+            {{error, rest_utils:error_reply(ErrorRec)}, Req}
     end.
 
 
@@ -143,8 +144,8 @@ post(Req, <<"1.0">>, undefined, Data) ->
         DownloadPath = share_id_to_download_path(Req, ShareID),
         {{body, <<"\"", DownloadPath/binary, "\"">>}, Req}
     catch _:_ ->
-        ?error("[REST] unable to create a share, filepath: ~p", [binary_to_list(Data)]),
-        {{error, rest_utils:error_reply(?error_share_cannot_create)}, Req}
+        ErrorRec = ?report_warning(?error_share_cannot_create, [binary_to_list(Data)]),
+        {{error, rest_utils:error_reply(ErrorRec)}, Req}
     end.
 
 

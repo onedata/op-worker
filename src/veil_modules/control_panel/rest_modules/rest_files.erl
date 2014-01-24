@@ -15,9 +15,10 @@
 -behaviour(rest_module_behaviour).
 
 -include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/control_panel/rest_messages.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
--include("error_codes.hrl").
--include("logging.hrl").
+-include("err.hrl").
+
 
 -export([methods_and_versions_info/1, exists/3]).
 -export([get/3, delete/3, post/4, put/4]).
@@ -125,14 +126,15 @@ delete(Req, <<"1.0">>, Id) ->
     Filepath = binary_to_list(Id),
     Response = case erlang:get(file_type) of
                    dir ->
-                       {error, rest_utils:error_reply(?error_dir_cannot_delete)};
+                       ErrorRec = ?report_warning(?error_dir_cannot_delete),
+                       {error, rest_utils:error_reply(ErrorRec)};
                    reg ->
                        case logical_files_manager:delete(Filepath) of
                            ok ->
                                {body, rest_utils:success_reply(?success_file_deleted)};
                            _ ->
-                               ?error("[REST] unable to delete regular file ~p", [Filepath]),
-                               {error, rest_utils:error_reply(?error_unknown)}
+                               ErrorRec = ?report_error(?error_reg_file_cannot_delete, [Filepath]),
+                               {error, rest_utils:error_reply(ErrorRec)}
                        end
                end,
     {Response, Req}.
@@ -147,7 +149,10 @@ delete(Req, <<"1.0">>, Id) ->
     Response :: ok | {body, binary()} | {stream, integer(), function()} | error | {error, binary()}.
 %% ====================================================================
 post(Req, <<"1.0">>, _Id, _Data) ->
-    {error, Req}.
+    % Return 422 unprocessable, because no "mulitpart/form-data" header was found
+    % otherwise handle_multipart_data/4 would be called
+    ErrorRec = ?report_error(?error_upload_unprocessable),
+    {{error, rest_utils:error_reply(ErrorRec)}, Req}.
 
 
 %% put/4
@@ -159,7 +164,10 @@ post(Req, <<"1.0">>, _Id, _Data) ->
     Response :: ok | {body, binary()} | {stream, integer(), function()} | error | {error, binary()}.
 %% ====================================================================
 put(Req, <<"1.0">>, _Id, _Data) ->
-    {error, Req}.
+    % Return 422 unprocessable, because no "mulitpart/form-data" header was found
+    % otherwise handle_multipart_data/4 would be called
+    ErrorRec = ?report_error(?error_upload_unprocessable),
+    {{error, rest_utils:error_reply(ErrorRec)}, Req}.
 
 
 %% handle_multipart_data/4

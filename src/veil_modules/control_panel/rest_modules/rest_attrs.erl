@@ -16,9 +16,10 @@
 
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/control_panel/rest_utils.hrl").
+-include("veil_modules/control_panel/rest_messages.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
--include("error_codes.hrl").
--include("logging.hrl").
+-include("err.hrl").
+
 
 -export([methods_and_versions_info/1, exists/3]).
 -export([get/3, delete/3, post/4, put/4]).
@@ -72,7 +73,8 @@ exists(Req, _Version, Id) ->
 get(Req, <<"1.0">>, Id) ->
     case Id of
         undefined ->
-            {{error, rest_utils:error_reply(?error_no_id_in_uri)}, Req};
+            ErrorRec = ?report_warning(?error_no_id_in_uri),
+            {{error, rest_utils:error_reply(ErrorRec)}, Req};
         _ ->
             Attr = erlang:get(file_attr),
             MappedFileattr = map(Attr),

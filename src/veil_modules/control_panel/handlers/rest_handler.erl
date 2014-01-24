@@ -14,12 +14,11 @@
 
 -include_lib("public_key/include/public_key.hrl").
 -include("veil_modules/control_panel/common.hrl").
--include("error_codes.hrl").
--include("logging.hrl").
+-include("err.hrl").
 
 -record(state, {
     version = <<"latest">> :: binary(),
-    method = <<"GET">>,
+    method = <<"GET">> :: binary(),
     handler_module = undefined :: atom(),
     resource_id = undefined :: binary()
 }).
@@ -102,13 +101,37 @@ allowed_methods(Req, #state{version = Version, handler_module = Mod} = State) ->
                            Ver ->
                                Ver
                        end,
+    % Check if requested version is supported
     case proplists:get_value(RequestedVersion, MethodsVersionInfo, undefined) of
         undefined ->
-            NewReq = reply_with_error(Req, ?error_version_unsupported),
-            {halt, NewReq, State#state{version = RequestedVersion}};
+            NewReq = reply_with_error(Req2, warning, ?error_version_unsupported, [binary_to_list(RequestedVersion)]),
+            {halt, NewReq, State};
         AllowedMethods ->
-            {AllowedMethods, Req2, State#state{version = RequestedVersion}}
-    end.
+            {Method, _} = cowboy_req:method(Req2),
+            % Check if requested method is allowed
+            case lists:member(Method, AllowedMethods) of
+                false ->
+                    ErrorRec = ?report_warning(?error_method_unsupported, [binary_to_list(Method)]),
+                    NewReq = cowboy_req:set_resp_body(rest_utils:error_reply(ErrorRec), Req2),
+                    {AllowedMethods, NewReq, State};
+                true ->
+                    % Check if content-type is acceptable (for PUT or POST)
+                    case (Method =/= <<"POST">> andalso Method =/= <<"PUT">>) orelse (content_type_supported(Req2)) of
+                        false ->
+                            NewReq = reply_with_error(Req2, warning, ?error_media_type_unsupported, []),
+                            {halt, NewReq, State};
+                        true ->
+                            {AllowedMethods, Req2, State#state{version = RequestedVersion}}
+                    end
+            end
+    end;
+
+allowed_methods(Req, {error, Type}) ->
+    NewReq = case Type of
+                 path_invalid -> reply_with_error(Req, warning, ?error_path_invalid, []);
+                 {user_unknown, DnString} -> reply_with_error(Req, error, ?error_user_unknown, [DnString])
+             end,
+    {halt, NewReq, error}.
 
 
 %% content_types_provided/2
@@ -139,7 +162,15 @@ resource_exists(Req, #state{resource_id = undefined} = State) ->
 
 resource_exists(Req, #state{version = Version, handler_module = Mod, resource_id = Id} = State) ->
     {Exists, NewReq} = Mod:exists(Req, Version, Id),
-    {Exists, NewReq, State}.
+    case Exists of
+        false ->
+            ErrorRec = ?report_warning(?error_not_found, [binary_to_list(Id)]),
+            Req2 = cowboy_req:set_resp_body(rest_utils:error_reply(ErrorRec), NewReq),
+            {false, Req2, State};
+        true ->
+            {true, NewReq, State}
+    end
+.
 
 
 %% get_resource/2
@@ -182,8 +213,8 @@ get_resource(Req, #state{version = Version, handler_module = Mod, resource_id = 
 %% ====================================================================
 content_types_accepted(Req, State) ->
     {[
-        {<<"application/x-www-form-urlencoded">>, handle_urlencoded_data},
-        {<<"application/json">>, handle_json_data},
+        {{<<"application">>, <<"x-www-form-urlencoded">>, '*'}, handle_urlencoded_data},
+        {{<<"application">>, <<"json">>, '*'}, handle_json_data},
         {{<<"multipart">>, <<"form-data">>, '*'}, handle_multipart_data}
     ], Req, State}.
 
@@ -208,9 +239,14 @@ handle_urlencoded_data(Req, #state{handler_module = Mod, version = Version, reso
 %% ====================================================================
 handle_json_data(Req, #state{handler_module = Mod, version = Version, resource_id = Id} = State) ->
     {ok, Binary, Req2} = cowboy_req:body(Req),
-    Data = case rest_utils:decode_from_json(Binary) of
-               {_Type, Struct} -> Struct;
-               Other -> Other
+    Data = case Binary of
+               <<"">> ->
+                   <<"">>;
+               _ ->
+                   case rest_utils:decode_from_json(Binary) of
+                       {_Type, Struct} -> Struct;
+                       Other -> Other
+                   end
            end,
     {Result, NewReq} = handle_data(Req2, Mod, Version, Id, Data),
     {Result, NewReq, State}.
@@ -274,28 +310,26 @@ handle_data(Req, Mod, Version, Id, Data) ->
 %% Initializes request context after the peer has been validated. Checks if user
 %% exists in the database and requested URI is supported.
 %% @end
--spec do_init(req(), string()) -> {ok, req(), #state{}}.
+-spec do_init(req(), string()) -> {ok, req(), #state{} | {error, term()}}.
 %% ====================================================================
 do_init(Req, DnString) ->
+    Req2 = cowboy_req:set_resp_header(<<"content-type">>, <<"application/json">>, Req),
     case user_logic:get_user({dn, DnString}) of
         {ok, _} ->
-            ?info("[REST] Peer connected using certificate with subject: ~p ~n", [DnString]),
             put(user_id, DnString),
-            {PathInfo, _} = cowboy_req:path_info(Req),
+            ?info("[REST] Peer connected using certificate with subject: ~p ~n", [DnString]),
+            {PathInfo, _} = cowboy_req:path_info(Req2),
             case rest_routes:route(PathInfo) of
                 undefined ->
-                    NewReq = reply_with_error(Req, ?error_path_unknown),
-                    {ok, NewReq, []};
+                    {ok, Req2, {error, path_invalid}};
                 {Module, Id} ->
-                    {Version, _} = cowboy_req:binding(version, Req), % :version in cowboy router
-                    {Method, _} = cowboy_req:method(Req),
-                    Req2 = cowboy_req:set_resp_header(<<"Access-Control-Allow-Origin">>, <<"*">>, Req),
-                    {ok, Req2, #state{version = Version, handler_module = Module, method = Method, resource_id = Id}}
+                    {Method, _} = cowboy_req:method(Req2),
+                    {Version, _} = cowboy_req:binding(version, Req2), % :version in cowboy router
+                    Req3 = cowboy_req:set_resp_header(<<"Access-Control-Allow-Origin">>, <<"*">>, Req2),
+                    {ok, Req3, #state{version = Version, handler_module = Module, method = Method, resource_id = Id}}
             end;
         _ ->
-            ?notice("[REST] Peer connected, but was not found in database. Subject: ~p ~n", [DnString]),
-            NewReq = reply_with_error(Req, ?error_user_unknown),
-            {ok, NewReq, []}
+            {ok, Req2, {error, {user_unknown, DnString}}}
     end.
 
 
@@ -330,10 +364,37 @@ process_callback_answer(Answer, Req) ->
 %% Replies with 500 error cose, content-type set to application/json and
 %% an error message
 %% @end
--spec reply_with_error(req(), binary()) -> req().
+-spec reply_with_error(req(), atom(), {string(), string()}, list()) -> req().
 %% ====================================================================
-reply_with_error(Req, ErrorDesc) ->
-    Req2 = cowboy_req:set_resp_header(<<"content-type">>, <<"application/json">>, Req),
-    Req3 = cowboy_req:set_resp_body(rest_utils:error_reply(ErrorDesc), Req2),
-    {ok, Req4} = cowboy_req:reply(500, Req3),
-    Req4.
+reply_with_error(Req, Severity, ErrorDesc, Args) ->
+    ErrorRec = case Severity of
+                   warning -> ?report_warning(ErrorDesc, Args);
+                   error -> ?report_error(ErrorDesc, Args);
+                   alert -> ?report_alert(ErrorDesc, Args)
+               end,
+    Req2 = cowboy_req:set_resp_body(rest_utils:error_reply(ErrorRec), Req),
+    {ok, Req3} = cowboy_req:reply(500, Req2),
+    Req3.
+
+
+%% content_type_supported/2
+%% ====================================================================
+%% Checks if request content-type is supported by rest modules.
+%% @end
+-spec content_type_supported(req()) -> boolean().
+%% ====================================================================
+content_type_supported(Req) ->
+    {CTA, _, _} = content_types_accepted(Req, []),
+    {Ans, ContentType, _} = cowboy_req:parse_header(<<"content-type">>, Req),
+    case Ans of
+        ok ->
+            lists:foldl(
+                fun({{Type, Subtype, _}, _}, Acc) ->
+                    case ContentType of
+                        {Type, Subtype, _} -> Acc orelse true;
+                        _ -> Acc orelse false
+                    end
+                end, false, CTA);
+        _ ->
+            false
+    end.

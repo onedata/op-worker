@@ -69,7 +69,6 @@
 -define(emergency_stacktrace(Format, Args), ?do_log(7, Format, Args, true)).
 
 
-
 %% ===================================================================
 % Convienience macros for development purposes
 
@@ -77,33 +76,36 @@
 -define(dump(Arg), io:format("[DUMP] ~s: ~p~n~n", [??Arg, Arg])).
 
 % Prints a list of variables
--define(dump_all(ListOfVariables), 
-	lists:foreach(
-		fun({Name, Value}) -> 
-			io:format("[DUMP] ~s: ~p~n~n", [Name, Value]) 
-		end, lists:zip(string:tokens(??ListOfVariables, "[] ,"), ListOfVariables))
+-define(dump_all(ListOfVariables),
+    lists:foreach(
+        fun({Name, Value}) ->
+            io:format("[DUMP] ~s: ~p~n~n", [Name, Value])
+        end, lists:zip(string:tokens(??ListOfVariables, "[] ,"), ListOfVariables))
 ).
-
 
 
 %% ===================================================================
 %% Macros used internally
 
 -define(do_log(LoglevelAsInt, Message, IncludeStackTrace),
-	?do_log(LoglevelAsInt, Message, [], IncludeStackTrace)
+    ?do_log(LoglevelAsInt, Message, [], IncludeStackTrace)
 ).
 
--define(do_log(LoglevelAsInt, Format, Args, IncludeStackTrace),	
-	case logger:should_log(LoglevelAsInt) of
-		false -> ok;
-		true -> logger:dispatch_log(LoglevelAsInt, ?gather_metadata, Format, Args, IncludeStackTrace)
-	end
+-define(do_log(LoglevelAsInt, Format, Args, IncludeStackTrace),
+    case logger:should_log(LoglevelAsInt) of
+        false -> ok;
+        true -> logger:dispatch_log(LoglevelAsInt, ?gather_metadata, Format, Args, IncludeStackTrace)
+    end
 ).
 
 % Resolves current process's state and returns it as metadata proplist
 % Must be called from original function where the log is,
 % so that the process info makes sense
 -define(gather_metadata,
-	[{node, node()}, {pid, self()}, {line, ?LINE}] ++ 
-		logger:parse_process_info(process_info(self(), current_function))
+    [{node, node()}, {pid, self()}, {line, ?LINE}] ++
+        logger:parse_process_info(process_info(self(), current_function)) ++
+        case get(user_id) of
+            undefined -> [];
+            _ -> [{dn, get(user_id)}]
+        end
 ).

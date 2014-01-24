@@ -11,11 +11,11 @@
 %% ===================================================================
 
 -module(file_transfer_handler).
--include("logging.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao_share.hrl").
 -include("veil_modules/control_panel/common.hrl").
--include("error_codes.hrl").
+-include("veil_modules/control_panel/rest_messages.hrl").
+-include("err.hrl").
 
 % Buffer size used to send file to a client. Override with control_panel_download_buffer.
 -define(DOWNLOAD_BUFFER_SIZE, 1048576). % 1MB
@@ -92,13 +92,19 @@ handle_rest_upload(Req, Path, Overwrite) ->
             case try_to_create_file(binary_to_list(Path), Overwrite) of
                 ok ->
                     case parse_rest_upload(NewReq, binary_to_list(Path)) of
-                        {true, NewReq2} -> {{body, rest_utils:success_reply(?success_file_uploaded)}, NewReq};
-                        {false, NewReq2} -> {{error, rest_utils:error_reply(?error_upload_unprocessable)}, NewReq}
+                        {true, NewReq2} ->
+                            {{body, rest_utils:success_reply(?success_file_uploaded)}, NewReq2};
+                        {false, NewReq2} ->
+                            ErrorRec = ?report_error(?error_upload_unprocessable),
+                            {{error, rest_utils:error_reply(ErrorRec)}, NewReq2}
                     end;
                 {error, _Error} ->
-                    {{error, rest_utils:error_reply(?error_upload_cannot_create)}, NewReq}
+                    ErrorRec = ?report_error(?error_upload_cannot_create),
+                    {{error, rest_utils:error_reply(ErrorRec)}, NewReq}
             end;
-        _ -> {{error, rest_utils:error_reply(?error_upload_unprocessable)}, Req}
+        _ ->
+            ErrorRec = ?report_error(?error_upload_unprocessable),
+            {{error, rest_utils:error_reply(ErrorRec)}, Req}
     end.
 
 %% ====================================================================
