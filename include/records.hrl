@@ -16,7 +16,7 @@
 %% This record is used by node_manager (it contains its state). 
 %% It describes node type (ccm or worker) and status of connection
 %% with ccm (connected or not_connected).
--record(node_state, {node_type = worker, ccm_con_status = not_connected, state_num = 0, callbacks_num = 0, dispatcher_state = ok, callbacks_state = ok, memory_and_network_info = [], callbacks = []}).
+-record(node_state, {node_type = worker, ccm_con_status = not_connected, state_num = 0, callbacks_num = 0, dispatcher_state = ok, callbacks_state = ok, memory_and_network_info = [], callbacks = [], simple_caches = []}).
 
 %% This record is used by ccm (it contains its state). It describes 
 %% nodes, dispatchers and workers in cluster. It also contains reference
