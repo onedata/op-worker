@@ -36,7 +36,7 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% API
--export([save_record/1, get_record/1, remove_record/1, list_records/2, load_view_def/2, set_db/1]).
+-export([save_record/1, exist_record/1, get_record/1, remove_record/1, list_records/2, load_view_def/2, set_db/1]).
 -export([doc_to_term/1,init_storage/0]).
 
 %% ===================================================================
@@ -119,7 +119,7 @@ init(Args) ->
       _ -> throw({error, {dao_fuse_cache_error, Cache1}})
     end.
 
-%% handle/1
+%% handle/2
 %% ====================================================================
 %% @doc {@link worker_plugin_behaviour} callback handle/1. <br/>
 %% All {Module, Method, Args} requests (second argument), executes Method with Args in {@type dao_Module} module, but with one exception:
@@ -234,6 +234,22 @@ save_record(#veil_document{uuid = Id, rev_info = RevInfo, record = Rec, force_up
     end;
 save_record(Rec) when is_tuple(Rec) ->
     save_record(#veil_document{record = Rec}).
+
+
+%% exist_record/1
+%% ====================================================================
+%% @doc Checks whether record with UUID = Id exists in DB.
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec exist_record(Id :: atom() | string()) -> true | false.
+%% ====================================================================
+exist_record(Id) when is_atom(Id) ->
+    exist_record(atom_to_list(Id));
+exist_record(Id) when is_list(Id) ->
+    case dao_helper:open_doc(get_db(), Id) of
+        {ok, _} -> true;
+        _ -> false
+    end.
 
 
 %% get_record/1

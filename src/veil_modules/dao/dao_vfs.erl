@@ -21,7 +21,7 @@
 %% API - File system management
 -export([list_dir/3, count_subdirs/1, rename_file/2, lock_file/3, unlock_file/3, find_files/1]). %% High level API functions
 -export([save_descriptor/1, remove_descriptor/1, get_descriptor/1, list_descriptors/3]). %% Base descriptor management API functions
--export([save_new_file/2, save_file/1, remove_file/1, get_file/1, get_path_info/1]). %% Base file management API function
+-export([save_new_file/2, save_file/1, remove_file/1, get_file/1, exist_file/1, get_path_info/1]). %% Base file management API function
 -export([save_storage/1, remove_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
 -export([save_file_meta/1, remove_file_meta/1, get_file_meta/1]).
 
@@ -298,6 +298,17 @@ remove_file(File) ->
     end,
 
     dao:remove_record(FData#veil_document.uuid).
+
+%% exist_file/1
+%% ====================================================================
+%% @doc Checks whether record with UUID = Id exists in DB.
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec get_file({uuid, UUID :: uuid()}) -> true | false.
+%% ====================================================================
+exist_file({uuid, UUID}) ->
+    dao:set_db(?FILES_DB_NAME),
+    dao:exist_record(UUID).
 
 %% get_file/1
 %% ====================================================================
