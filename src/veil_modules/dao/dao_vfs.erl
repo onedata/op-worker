@@ -480,8 +480,28 @@ unlock_file(_UserID, _FileID, _Mode) ->
 -spec save_storage(Storage :: #storage_info{} | #veil_document{}) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
 save_storage(#storage_info{} = Storage) ->
-    save_storage(#veil_document{record = Storage});
-save_storage(#veil_document{record = #storage_info{}} = StorageDoc) ->
+    save_storage(#veil_document{record = Storage}, false);
+save_storage(StorageDoc) ->
+  save_storage(StorageDoc, true).
+
+%% save_storage/2
+%% ====================================================================
+%% @doc Saves storage info to DB. Argument should be either #storage_info{} record
+%% (if you want to save it as new document) <br/>
+%% or #veil_document{} that wraps #storage_info{} if you want to update storage info in DB. <br/>
+%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec save_storage(Storage :: #storage_info{} | #veil_document{}, ClearCache :: boolean()) -> {ok, uuid()} | {error, any()} | no_return().
+%% ====================================================================
+save_storage(#veil_document{record = #storage_info{}} = StorageDoc, ClearCache) ->
+    case ClearCache of
+      true ->
+        Doc = StorageDoc#veil_document.record,
+        clear_cache([{uuid, StorageDoc#veil_document.uuid}, {id, Doc#storage_info.id}]);
+      false ->
+        ok
+    end,
     dao:set_db(?SYSTEM_DB_NAME),
     dao:save_record(StorageDoc).
 
@@ -494,13 +514,25 @@ save_storage(#veil_document{record = #storage_info{}} = StorageDoc) ->
 -spec remove_storage({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) -> ok | {error, any()} | no_return().
 %% ====================================================================
 remove_storage({uuid, DocUUID}) when is_list(DocUUID) ->
-    dao:set_db(?SYSTEM_DB_NAME),
-    dao:remove_record(DocUUID);
-remove_storage({id, StorageID}) when is_integer(StorageID) ->
-    dao:set_db(?SYSTEM_DB_NAME),
-    {ok, SData} = get_storage({id, StorageID}),
-    dao:remove_record(SData#veil_document.uuid).
+    {Ans, SData} = get_storage({uuid, DocUUID}),
+    case Ans of
+      ok ->
+        Doc = SData#veil_document.record,
+        clear_cache([{uuid, DocUUID}, {id, Doc#storage_info.id}]),
 
+        dao:set_db(?SYSTEM_DB_NAME),
+        dao:remove_record(DocUUID);
+      _ -> {Ans, SData}
+    end;
+remove_storage({id, StorageID}) when is_integer(StorageID) ->
+    {Ans, SData} = get_storage({id, StorageID}),
+    case Ans of
+      ok ->
+        clear_cache([{uuid, SData#veil_document.uuid}, {id, StorageID}]),
+        dao:set_db(?SYSTEM_DB_NAME),
+        dao:remove_record(SData#veil_document.uuid);
+      _ -> {Ans, SData}
+    end.
 
 %% get_storage/1
 %% ====================================================================
@@ -511,7 +543,31 @@ remove_storage({id, StorageID}) when is_integer(StorageID) ->
 %% @end
 -spec get_storage({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) -> {ok, storage_doc()} | {error, any()} | no_return().
 %% ====================================================================
-get_storage({uuid, DocUUID}) when is_list(DocUUID) ->
+get_storage(Key) ->
+  case ets:lookup(storage_cache, Key) of
+    [] -> %% Cached document not found. Fetch it from DB and save in cache
+      DBAns = get_storage_from_db(Key),
+      case DBAns of
+        {ok, Doc} ->
+          ets:insert(storage_cache, {Key, Doc}),
+          {ok, Doc};
+        Other -> Other
+      end;
+    [{_, Ans}] -> %% Return document from cache
+      {ok, Ans}
+  end.
+
+
+%% get_storage_from_db/1
+%% ====================================================================
+%% @doc Gets storage info from DB. Argument should be uuid() of storage document or ID of storage. <br/>
+%% Non-error return value is always {ok, #veil_document{record = #storage_info{}}.
+%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec get_storage_from_db({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) -> {ok, storage_doc()} | {error, any()} | no_return().
+%% ====================================================================
+get_storage_from_db({uuid, DocUUID}) when is_list(DocUUID) ->
     dao:set_db(?SYSTEM_DB_NAME),
     case dao:get_record(DocUUID) of
         {ok, #veil_document{record = #storage_info{}} = Doc} ->
@@ -521,7 +577,7 @@ get_storage({uuid, DocUUID}) when is_list(DocUUID) ->
         Other ->
             Other
     end;
-get_storage({id, StorageID}) when is_integer(StorageID) ->
+get_storage_from_db({id, StorageID}) when is_integer(StorageID) ->
     QueryArgs =
         #view_query_args{keys = [StorageID], include_docs = true}, 
     case dao:list_records(?STORAGE_BY_ID_VIEW, QueryArgs) of
@@ -581,6 +637,18 @@ find_files(FileCriteria) when is_record(FileCriteria, file_criteria) ->
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
+
+%% clear_cache/1
+%% ====================================================================
+%% @doc Deletes key from storage caches at all nodes
+-spec clear_cache(Key :: term()) -> ok.
+%% ====================================================================
+clear_cache(Key) ->
+  ets:delete(storage_cache, Key),
+  case worker_host:clear_cache({storage_cache, Key}) of
+    ok -> ok;
+    Error -> throw({error_during_global_cache_clearing, Error})
+  end.
 
 %% are_time_criteria_set/1
 %% @doc Returns true if any of time criteria (ctime or mtime) are set

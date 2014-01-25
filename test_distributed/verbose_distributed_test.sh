@@ -14,6 +14,15 @@ rm -rf /tmp/veilfs2
 mkdir /tmp/veilfs
 mkdir /tmp/veilfs2
 
+userdel -r veilfstestuser 2>/dev/null
+userdel -r veilfstestuser2 2>/dev/null
+groupdel veilfstestgroup 2>/dev/null
+groupdel veilfstestgroup2 2>/dev/null
+groupdel veilfstestuser 2>/dev/null
+groupdel veilfstestuser2 2>/dev/null
+rm -rf /home/veilfstestuser
+rm -rf /home/veilfstestuser2
+
 # User 1
 groupadd veilfstestgroup
 useradd veilfstestuser

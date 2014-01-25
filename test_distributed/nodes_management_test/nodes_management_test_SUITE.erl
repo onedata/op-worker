@@ -18,6 +18,8 @@
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 
+-define(ProtocolVersion, 1).
+
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([fuse_session_cleanup_test/1, main_test/1, callbacks_test/1, sub_proc_test/1]).
@@ -54,7 +56,7 @@ worker_code() ->
 fuse_session_cleanup_test(Config) ->
     nodes_manager:check_start_assertions(Config),
     NodesUp = ?config(nodes, Config),
-
+    DBNode = ?config(dbnode, Config),
     [CCM | WorkerNodes] = NodesUp,
 
     ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
@@ -153,9 +155,17 @@ fuse_session_cleanup_test(Config) ->
     ?assertEqual(1, length(Ans8)),
 
 
+    %% Stop dao - info will not be cleared from DB during socket closing (check if cache clearing procedure will clear it)
+    DaoStop = rpc:call(CCM, dao_lib, apply, [dao_hosts, delete, [DBNode], ?ProtocolVersion]),
+    ?assertEqual(ok, DaoStop),
+
     %% Close connections from session #2
     wss:close(Socket21),
     wss:close(Socket22),
+
+    nodes_manager:wait_for_request_handling(),
+    DaoStart = rpc:call(CCM, dao_lib, apply, [dao_hosts, insert, [DBNode], ?ProtocolVersion]),
+    ?assertEqual(ok, DaoStart),
 
     nodes_manager:wait_for_fuse_session_exp(),
 
@@ -190,6 +200,11 @@ sub_proc_test(Config) ->
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
   nodes_manager:wait_for_cluster_init(),
 
+  %% TODO !!! Check why late answer from gen_server sometimes appear !!!
+  %% Late answer: If no reply is received within the specified time, the function call fails.
+  %% If the caller catches the failure and continues running, and the server is just late with the reply,
+  %% it may arrive at any time later into the caller's message queue. The caller must in this case be
+  %% prepared for this and discard any such garbage messages that are two element tuples with a reference as the first element.
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers),
   StartAdditionalWorker = fun(Node) ->
     case lists:member({Node, fslogic}, Workers) of
@@ -247,6 +262,7 @@ sub_proc_test(Config) ->
   for(1, TestRequestsNum, TestFun),
 
   Ans = count_answers(6 * TestRequestsNum),
+%%   ct:print("Ans: ~p~n", [Ans]),
   ?assertEqual(10, length(Ans)),
   Keys = proplists:get_keys(Ans),
   ?assertEqual(6* TestRequestsNum, lists:foldl(fun(K, Sum) ->
@@ -566,13 +582,13 @@ init_per_testcase(_, Config) ->
   DBNode = nodes_manager:get_db_node(),
 
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, [
-    [{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_cache_loop_time, 1}],
-    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_cache_loop_time, 1}],
-    [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_cache_loop_time, 1}],
-    [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_cache_loop_time, 1}]]),
+    [{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}],
+    [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}],
+    [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}]]),
 
   Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
-  lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config).
+  lists:append([{nodes, NodesUp}, {assertions, Assertions}, {dbnode, DBNode}], Config).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
@@ -594,9 +610,9 @@ count_answers(0, TmpAns) ->
 
 count_answers(ExpectedNum, TmpAns) ->
   receive
-    Msg ->
-      NewCounter = proplists:get_value(Msg, TmpAns, 0) + 1,
-      NewAns = [{Msg, NewCounter} | proplists:delete(Msg, TmpAns)],
+    {Msg1, Msg2} when is_atom(Msg2) ->
+      NewCounter = proplists:get_value({Msg1, Msg2}, TmpAns, 0) + 1,
+      NewAns = [{{Msg1, Msg2}, NewCounter} | proplists:delete({Msg1, Msg2}, TmpAns)],
       count_answers(ExpectedNum - 1, NewAns)
   after 5000 ->
     TmpAns

@@ -33,6 +33,8 @@
 save_user(#user{} = User) ->
     save_user(#veil_document{record = User});
 save_user(#veil_document{record = #user{}, uuid = UUID} = UserDoc) when is_list(UUID), UUID =/= "" ->
+    clear_all_data_from_cache(UserDoc),
+
     dao:set_db(?USERS_DB_NAME),
     dao:save_record(UserDoc);
 save_user(#veil_document{record = #user{}} = UserDoc) ->
@@ -48,8 +50,9 @@ save_user(#veil_document{record = #user{}} = UserDoc) ->
                 lager:error("Invalid view response: ~p", [Other]),
                 throw(invalid_data)   
         end,
-    save_user(UserDoc#veil_document{uuid = NewUUID}).
 
+    dao:set_db(?USERS_DB_NAME),
+    dao:save_record(UserDoc#veil_document{uuid = NewUUID}).
 
 
 %% remove_user/1
@@ -65,8 +68,9 @@ save_user(#veil_document{record = #user{}} = UserDoc) ->
 %% ====================================================================
 remove_user(Key) ->
     {ok, FDoc} = get_user(Key),
+    clear_all_data_from_cache(FDoc),
+    dao:set_db(?USERS_DB_NAME),
     dao:remove_record(FDoc#veil_document.uuid).
-
 
 %% get_user/1
 %% ====================================================================
@@ -75,19 +79,46 @@ remove_user(Key) ->
 %% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec get_user(Key::    {login, Login :: string()} | 
+-spec get_user(Key::    {login, Login :: string()} |
+{email, Email :: string()} |
+{uuid, UUID :: uuid()} |
+{dn, DN :: string()}) ->
+  {ok, user_doc()} | {error, any()} | no_return().
+%% ====================================================================
+get_user(Key) ->
+  case ets:lookup(users_cache, Key) of
+    [] -> %% Cached document not found. Fetch it from DB and save in cache
+      DBAns = get_user_from_db(Key),
+      case DBAns of
+        {ok, Doc} ->
+          ets:insert(users_cache, {Key, Doc}),
+          {ok, Doc};
+        Other -> Other
+      end;
+    [{_, Ans}] -> %% Return document from cache
+      {ok, Ans}
+  end.
+
+%% get_user_from_db/1
+%% ====================================================================
+%% @doc Gets user from DB by login, e-mail, uuid or dn.
+%% Non-error return value is always {ok, #veil_document{record = #user}.
+%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec get_user_from_db(Key::    {login, Login :: string()} |
                         {email, Email :: string()} | 
                         {uuid, UUID :: uuid()} | 
                         {dn, DN :: string()}) -> 
     {ok, user_doc()} | {error, any()} | no_return().
 %% ====================================================================
-get_user({uuid, "0"}) ->
+get_user_from_db({uuid, "0"}) ->
     {ok, #veil_document{uuid = "0", record = #user{login = "root", name = "root"}}}; %% Return virtual "root" user
-get_user({uuid, UUID}) ->
+get_user_from_db({uuid, UUID}) ->
     dao:set_db(?USERS_DB_NAME),
     dao:get_record(UUID);
 
-get_user({Key, Value}) ->
+get_user_from_db({Key, Value}) ->
     dao:set_db(?USERS_DB_NAME),
 
     {View, QueryArgs} = case Key of
@@ -119,7 +150,7 @@ get_user({Key, Value}) ->
             throw(invalid_data)
     end.
 
-%% get_files_number/2
+%% get_files_number/1
 %% ====================================================================
 %% @doc Returns number of user's / group's files
 %% @end
@@ -148,3 +179,27 @@ get_files_number(Type, UUID) ->
       lager:error("Invalid view response: ~p", [Other]),
       throw(invalid_data)
   end.
+
+%% clear_cache/1
+%% ====================================================================
+%% @doc Deletes key from user caches at all nodes
+-spec clear_cache(Key :: term()) -> ok.
+%% ====================================================================
+clear_cache(Key) ->
+  ets:delete(users_cache, Key),
+  case worker_host:clear_cache({users_cache, Key}) of
+    ok -> ok;
+    Error -> throw({error_during_global_cache_clearing, Error})
+  end.
+
+%% clear_all_data_from_cache/1
+%% ====================================================================
+%% @doc Deletes all data connected with user from user caches at all nodes
+-spec clear_all_data_from_cache(UserDoc :: term()) -> ok.
+%% ====================================================================
+clear_all_data_from_cache(UserDoc) ->
+  Doc = UserDoc#veil_document.record,
+  Caches = [{uuid, UserDoc#veil_document.uuid}, {login, Doc#user.login}],
+  Caches2 = lists:foldl(fun(EMail, TmpAns) -> [{email, EMail} | TmpAns] end, Caches, Doc#user.email_list),
+  Caches3 = lists:foldl(fun(DN, TmpAns) -> [{dn, DN} | TmpAns] end, Caches2, Doc#user.dn_list),
+  clear_cache(Caches3).

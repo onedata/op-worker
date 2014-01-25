@@ -249,9 +249,9 @@ veil_cluster_node_env:
       value: 10800 # 3h
 
   - parameter:
-       name: dao_cache_loop_time
+       name: dao_fuse_cache_loop_time
        description: |
-         This variable determinates how often main DAO cache maintnance process shall fire up all its jobs (in seconds).
+         This variable determinates how often DAO fuse cache maintnance process shall fire up all its jobs (in seconds).
        value: 1800 # 30min
 
 

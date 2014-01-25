@@ -16,7 +16,7 @@
 -include("modules_and_args.hrl").
 -include("logging.hrl").
 
--define(CALLBACKS_TABLE, "dispatcher_callbacks_table").
+-define(CALLBACKS_TABLE, dispatcher_callbacks_table).
 
 %% ====================================================================
 %% API
@@ -98,7 +98,7 @@ stop() ->
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 init(Modules) ->
-  ets:new(get_ets_name(), [named_table, set]),
+  ets:new(?CALLBACKS_TABLE, [named_table, set]),
   process_flag(trap_exit, true),
   try gsi_handler:init() of     %% Failed initialization of GSI should not disturb dispacher's startup
     ok -> ok;
@@ -567,7 +567,7 @@ update_workers(WorkersList, SNum, CLoad, ALoad, Modules) ->
 %% ====================================================================
 pull_state(State) ->
   try
-    {WorkersList, StateNum} = gen_server:call({global, ?CCM}, get_workers),
+    {WorkersList, StateNum} = gen_server:call({global, ?CCM}, get_workers, 1000),
     NewState = update_workers(WorkersList, State#dispatcher_state.state_num, State#dispatcher_state.current_load, State#dispatcher_state.avg_load, ?Modules),
     {ok, NewState#dispatcher_state{state_num = StateNum}}
   catch
@@ -620,18 +620,17 @@ initState(SNum, CLoad, ALoad, Modules) ->
   Result :: ok | updated.
 %% ====================================================================
 add_callback(Node, Fuse) ->
-  EtsName = get_ets_name(),
-  OldCallbacks = ets:lookup(EtsName, Fuse),
+  OldCallbacks = ets:lookup(?CALLBACKS_TABLE, Fuse),
   case OldCallbacks of
     [{Fuse, OldCallbacksList}] ->
       case lists:member(Node, OldCallbacksList) of
         true -> ok;
         false ->
-          ets:insert(EtsName, {Fuse, [Node | OldCallbacksList]}),
+          ets:insert(?CALLBACKS_TABLE, {Fuse, [Node | OldCallbacksList]}),
           updated
       end;
     _ ->
-      ets:insert(EtsName, {Fuse, [Node]}),
+      ets:insert(?CALLBACKS_TABLE, {Fuse, [Node]}),
       updated
   end.
 
@@ -642,18 +641,17 @@ add_callback(Node, Fuse) ->
   Result :: updated | not_exists.
 %% ====================================================================
 delete_callback(Node, Fuse) ->
-  EtsName = get_ets_name(),
-  OldCallbacks = ets:lookup(EtsName, Fuse),
+  OldCallbacks = ets:lookup(?CALLBACKS_TABLE, Fuse),
   case OldCallbacks of
     [{Fuse, OldCallbacksList}] ->
       case lists:member(Node, OldCallbacksList) of
         true ->
           case length(OldCallbacksList) of
             1 ->
-              ets:delete(EtsName, Fuse),
+              ets:delete(?CALLBACKS_TABLE, Fuse),
               updated;
             _ ->
-              ets:insert(EtsName, {Fuse, lists:delete(Node, OldCallbacksList)}),
+              ets:insert(?CALLBACKS_TABLE, {Fuse, lists:delete(Node, OldCallbacksList)}),
               updated
           end;
         false -> not_exists
@@ -669,7 +667,7 @@ delete_callback(Node, Fuse) ->
   Result :: not_found | term().
 %% ====================================================================
 get_callback(Fuse) ->
-  Callbacks = ets:lookup(get_ets_name(), Fuse),
+  Callbacks = ets:lookup(?CALLBACKS_TABLE, Fuse),
   case Callbacks of
     [{Fuse, CallbacksList}] ->
       Num = random:uniform(length(CallbacksList)), %% if it will be moved to other proc than dispatcher the seed shoud be initialized
@@ -687,10 +685,9 @@ get_callback(Fuse) ->
 %% ====================================================================
 pull_callbacks() ->
   try
-    EtsName = get_ets_name(),
-    {CallbacksList, CallbacksNum} = gen_server:call({global, ?CCM}, get_callbacks),
+    {CallbacksList, CallbacksNum} = gen_server:call({global, ?CCM}, get_callbacks, 1000),
     UpdateCallbacks = fun({Fuse, NodesList}) ->
-      ets:insert(EtsName, {Fuse, NodesList})
+      ets:insert(?CALLBACKS_TABLE, {Fuse, NodesList})
     end,
     lists:foreach(UpdateCallbacks, CallbacksList),
     CallbacksNum
@@ -707,20 +704,19 @@ pull_callbacks() ->
   Result :: list().
 %% ====================================================================
 get_callbacks() ->
-  EtsName = get_ets_name(),
-  get_callbacks(EtsName, ets:first(EtsName)).
+  get_callbacks(ets:first(?CALLBACKS_TABLE)).
 
-%% get_callbacks/2
+%% get_callbacks/1
 %% ====================================================================
 %% @doc Gets information about all callbacks (helper function)
--spec get_callbacks(EtsName :: atom(), Fuse :: string()) -> Result when
+-spec get_callbacks(Fuse :: string()) -> Result when
   Result :: list().
 %% ====================================================================
-get_callbacks(_EtsName, '$end_of_table') ->
+get_callbacks('$end_of_table') ->
   [];
-get_callbacks(EtsName, Fuse) ->
-  [Value] = ets:lookup(EtsName, Fuse),
-  [Value | get_callbacks(EtsName, ets:next(EtsName, Fuse))].
+get_callbacks(Fuse) ->
+  [Value] = ets:lookup(?CALLBACKS_TABLE, Fuse),
+  [Value | get_callbacks(ets:next(?CALLBACKS_TABLE, Fuse))].
 
 %% send_to_fuse/3
 %% ====================================================================
@@ -826,13 +822,4 @@ choose_node_by_map(Module, Msg, State) ->
       end
   end.
 
-%% get_ets_name/1
-%% ====================================================================
-%% @doc Generates name of ets table for dispatcher
-%% @end
--spec get_ets_name() -> Result when
-  Result :: atom().
-%% ====================================================================
-get_ets_name() ->
-  list_to_atom(?CALLBACKS_TABLE ++ atom_to_list(node()) ++ pid_to_list(self())).
 
