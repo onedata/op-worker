@@ -1,8 +1,10 @@
 Structs
 =======
 
+**Files**
+
 .. toctree::
-	:maxdepth: 2
+	:maxdepth: 1
 
 	fmem
 	veil.client.Job

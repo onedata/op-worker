@@ -1,8 +1,10 @@
 Utils
 =====
 
+**Files**
+
 .. toctree::
-	:maxdepth: 2
+	:maxdepth: 1
 
 	openid_utils
 	rest_utils

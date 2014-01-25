@@ -1,8 +1,10 @@
 Classes
 =======
 
+**Files**
+
 .. toctree::
-	:maxdepth: 2
+	:maxdepth: 1
 
 	veil.client.AutoLock
 	veil.client.Config

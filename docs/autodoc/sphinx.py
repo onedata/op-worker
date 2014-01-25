@@ -15,9 +15,9 @@ class Sphinx(object):
 	def w_reference(self, file, name, depth):
 		file.write('\t' * depth + '.. _' + name + ':\n\n')
 
-	def w_toctree(self, file, depth):
+	def w_toctree(self, file, depth, maxdepth=2):
 		file.write('\t' * depth + '.. toctree::\n')
-		file.write('\t' * (depth + 1) + ':maxdepth: 2\n\n')
+		file.write('\t' * (depth + 1) + ':maxdepth: ' + str(maxdepth) + '\n\n')
 
 	def w_include(self, file, name, depth):
 		file.write('\t' * depth + '.. include:: ' + name + '\n')
@@ -85,9 +85,14 @@ class Sphinx(object):
 
 		with open(path + '/index.rst', 'w') as f:
 			self.w_section(f, name, '=')
-			self.w_toctree(f, 0)
-			for file in sorted(files):
-				f.write('\t' + file[:-4] + '\n')
-			for dir in sorted(dirs):
-				f.write('\t' + dir + '/index\n')
-				self.create_toctree(path + '/' + dir, lowerbound)
+			if files:
+				f.write("**Files**\n\n")
+				self.w_toctree(f, 0, 1)
+				for file in sorted(files):
+					f.write('\t' + file[:-4] + '\n')
+			if dirs:
+				f.write("\n**Submodules**\n\n")
+				self.w_toctree(f, 0)
+				for dir in sorted(dirs):
+					f.write('\t' + dir + '/index\n')
+					self.create_toctree(path + '/' + dir, lowerbound)

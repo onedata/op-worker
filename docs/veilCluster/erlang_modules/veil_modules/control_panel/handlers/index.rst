@@ -1,8 +1,10 @@
 Handlers
 ========
 
+**Files**
+
 .. toctree::
-	:maxdepth: 2
+	:maxdepth: 1
 
 	file_transfer_handler
 	nagios_handler

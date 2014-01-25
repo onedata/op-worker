@@ -20,5 +20,5 @@ Function Details
 	.. function:: route([binary()]) -> {atom(), binary()}
 		:noindex:
 
-	 This function returns handler module and resource ID based on REST request path. The argument is a list of binaries - result of splitting request subpath on "/". Subpath is all that occurs after '"<host>/rest/<version>/"' in request path. Should return a tuple: - the module that will be called to handle requested REST resource (atom) - resource id or undefined if none was specified (binary or atom (undefined)) or undefined if no module was matched
+	 This function returns handler module and resource ID based on REST request path. The argument is a list of binaries - result of splitting request subpath on "/". Subpath is all that occurs after ''"<host>/rest/<version>/"'' in request path. Should return a tuple: - the module that will be called to handle requested REST resource (atom) - resource id or undefined if none was specified (binary or atom (undefined)) or undefined if no module was matched
 

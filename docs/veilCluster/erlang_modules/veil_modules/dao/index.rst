@@ -1,8 +1,10 @@
 Dao
 ===
 
+**Files**
+
 .. toctree::
-	:maxdepth: 2
+	:maxdepth: 1
 
 	dao
 	dao_cluster

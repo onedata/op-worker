@@ -1,8 +1,10 @@
 Fslogic
 =======
 
+**Files**
+
 .. toctree::
-	:maxdepth: 2
+	:maxdepth: 1
 
 	fslogic
 	fslogic_storage

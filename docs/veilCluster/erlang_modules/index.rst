@@ -1,10 +1,18 @@
 Erlang modules
 ==============
 
+**Files**
+
 .. toctree::
-	:maxdepth: 2
+	:maxdepth: 1
 
 	veil_cluster_node_app
 	veil_cluster_node_sup
+
+**Submodules**
+
+.. toctree::
+	:maxdepth: 2
+
 	cluster_elements/index
 	veil_modules/index

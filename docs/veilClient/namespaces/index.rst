@@ -1,8 +1,10 @@
 Namespaces
 ==========
 
+**Files**
+
 .. toctree::
-	:maxdepth: 2
+	:maxdepth: 1
 
 	veil.client.gsi
 	veil.client

@@ -1,10 +1,18 @@
 VeilClient
 ==========
 
+**Files**
+
+.. toctree::
+	:maxdepth: 1
+
+	about
+
+**Submodules**
+
 .. toctree::
 	:maxdepth: 2
 
-	about
 	classes/index
 	files/index
 	namespaces/index

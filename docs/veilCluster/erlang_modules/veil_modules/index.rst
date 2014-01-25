@@ -1,8 +1,10 @@
 Veil modules
 ============
 
+**Files**
+
 .. toctree::
-	:maxdepth: 2
+	:maxdepth: 1
 
 	cluster_rengine/cluster_rengine
 	gateway/gateway
@@ -10,6 +12,12 @@ Veil modules
 	rtransfer/rtransfer
 	rule_manager/rule_manager
 	worker_plugin_behaviour
+
+**Submodules**
+
+.. toctree::
+	:maxdepth: 2
+
 	central_logger/index
 	control_panel/index
 	dao/index

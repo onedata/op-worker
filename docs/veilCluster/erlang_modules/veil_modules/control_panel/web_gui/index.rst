@@ -1,8 +1,10 @@
 Web gui
 =======
 
+**Files**
+
 .. toctree::
-	:maxdepth: 2
+	:maxdepth: 1
 
 	gui_utils
 	page_about
@@ -22,4 +24,10 @@ Web gui
 	page_system_state
 	page_validate_login
 	web_404
+
+**Submodules**
+
+.. toctree::
+	:maxdepth: 2
+
 	elements/index

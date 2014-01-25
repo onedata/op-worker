@@ -1,8 +1,10 @@
 Elements
 ========
 
+**Files**
+
 .. toctree::
-	:maxdepth: 2
+	:maxdepth: 1
 
 	bootstrap_button
 	bootstrap_checkbox

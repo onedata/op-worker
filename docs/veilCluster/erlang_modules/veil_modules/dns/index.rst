@@ -1,8 +1,10 @@
 Dns
 ===
 
+**Files**
+
 .. toctree::
-	:maxdepth: 2
+	:maxdepth: 1
 
 	dns_ranch_tcp_handler
 	dns_udp_handler

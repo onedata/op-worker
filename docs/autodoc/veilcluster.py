@@ -106,6 +106,7 @@ class ErlangDocLexer(object):
 	def lex_links(self, string):
 		pattern = re.compile(r'\s*<^[<]*?>\s*')
 		string = re.sub(pattern, ' ', string)
+		string = string.replace('`', '\'')
 		links = []
 		pattern = re.compile(r'{@link (.*?)}')
 		iterator = pattern.finditer(string)

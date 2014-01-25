@@ -1,8 +1,10 @@
 Rest modules
 ============
 
+**Files**
+
 .. toctree::
-	:maxdepth: 2
+	:maxdepth: 1
 
 	rest_attrs
 	rest_files

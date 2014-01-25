@@ -31,7 +31,7 @@ Function Details
 	.. function:: allowed_methods(req(), binary(), binary()) -> {[binary()], req()}
 		:noindex:
 
-	Should return list of methods that are allowed and directed at specific Id. e.g.: if Id =:= undefined -> '[<<"GET">>, <<"POST">>]' if Id /= undefined -> '[<<"GET">>, <<"PUT">>, <<"DELETE">>]'
+	Should return list of methods that are allowed and directed at specific Id. e.g.: if Id =:= undefined -> ''[<<"GET">>, <<"POST">>]'' if Id /= undefined -> ''[<<"GET">>, <<"PUT">>, <<"DELETE">>]''
 
 	.. _`rest_files:content_types_provided/2`:
 

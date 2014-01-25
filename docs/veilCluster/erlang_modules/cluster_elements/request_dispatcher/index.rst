@@ -1,8 +1,10 @@
 Request dispatcher
 ==================
 
+**Files**
+
 .. toctree::
-	:maxdepth: 2
+	:maxdepth: 1
 
 	gsi_handler
 	gsi_nif
