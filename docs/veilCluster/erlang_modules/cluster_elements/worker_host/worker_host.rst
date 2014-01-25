@@ -11,7 +11,12 @@ worker_host
 Function Index
 ~~~~~~~~~~~~~~~
 
+	* :ref:`clear_cache/1 <worker_host:clear_cache/1>`
 	* :ref:`code_change/3 <worker_host:code_change/3>`
+	* :ref:`create_simple_cache/1 <worker_host:create_simple_cache/1>`
+	* :ref:`create_simple_cache/3 <worker_host:create_simple_cache/3>`
+	* :ref:`create_simple_cache/4 <worker_host:create_simple_cache/4>`
+	* :ref:`create_simple_cache/5 <worker_host:create_simple_cache/5>`
 	* :ref:`generate_sub_proc_list/1 <worker_host:generate_sub_proc_list/1>`
 	* :ref:`generate_sub_proc_list/5 <worker_host:generate_sub_proc_list/5>`
 	* :ref:`handle_call/3 <worker_host:handle_call/3>`
@@ -26,6 +31,13 @@ Function Index
 Function Details
 ~~~~~~~~~~~~~~~~~
 
+	.. _`worker_host:clear_cache/1`:
+
+	.. function:: clear_cache(Cache :: term()) -> ok
+		:noindex:
+
+	Clears chosen caches at all nodes
+
 	.. _`worker_host:code_change/3`:
 
 	.. function:: code_change(OldVsn, State :: term(), Extra :: term()) -> Result
@@ -37,7 +49,53 @@ Function Details
 
 	<a href="http://www.erlang.org/doc/man/gen_server.html#Module:code_change-3">gen_server:code_change/3</a>
 
+	.. _`worker_host:create_simple_cache/1`:
+
+	.. function:: create_simple_cache(Name :: atom()) -> Result
+		:noindex:
+
+	* **Result:** ok | error_during_cache_registration
+
+	Creates simple cache.
+
+	.. _`worker_host:create_simple_cache/3`:
+
+	.. function:: create_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term()) -> Result
+		:noindex:
+
+	* **CacheLoop:** integer() | atom()
+	* **Result:** ok | error_during_cache_registration | loop_time_not_a_number_error
+
+	Creates simple cache.
+
+	.. _`worker_host:create_simple_cache/4`:
+
+	.. function:: create_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean()) -> Result
+		:noindex:
+
+	* **CacheLoop:** integer() | atom()
+	* **Result:** ok | error_during_cache_registration | loop_time_not_a_number_error
+
+	Creates simple cache.
+
+	.. _`worker_host:create_simple_cache/5`:
+
+	.. function:: create_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean(), Pid :: pid()) -> Result
+		:noindex:
+
+	* **CacheLoop:** integer() | atom()
+	* **Result:** ok | error_during_cache_registration | loop_time_not_a_number_error
+
+	Creates simple cache.
+
 	.. _`worker_host:generate_sub_proc_list/1`:
+
+	.. function:: generate_sub_proc_list([{Name :: atom(), MaxDepth :: integer(), MaxWidth :: integer(), ProcFun :: term(), MapFun :: term()}]) -> Result
+		:noindex:
+
+	* **Result:** list()
+
+	Generates the list that describes sub procs.
 
 	.. _`worker_host:generate_sub_proc_list/5`:
 
