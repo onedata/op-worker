@@ -18,6 +18,7 @@ deps:
 	git submodule update
 
 clean:
+	make -C docs clean
 	./rebar clean
 
 distclean: clean
