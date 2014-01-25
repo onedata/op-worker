@@ -301,14 +301,30 @@ remove_file(File) ->
 
 %% exist_file/1
 %% ====================================================================
-%% @doc Checks whether record with UUID = Id exists in DB.
+%% @doc Checks whether file is in DB. Argument should be file() - see dao_types.hrl for more details. <br/>
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
--spec get_file({uuid, UUID :: uuid()}) -> true | false.
+-spec exist_file(File :: file()) -> true | false.
 %% ====================================================================
+exist_file({internal_path, [], []}) ->
+    true;
+exist_file({internal_path, [Dir | Path], Root}) ->
+    QueryArgs =
+        #view_query_args{keys = [[dao_helper:name(Root), dao_helper:name(Dir)]],
+        include_docs = case Path of [] -> true; _ -> false end},
+    case dao:list_records(?FILE_TREE_VIEW, QueryArgs) of
+        {ok, #view_result{rows = [#view_row{id = Id, doc = _Doc} | _Tail]}} ->
+            case Path of
+                [] -> true;
+                _ -> exist_file({internal_path, Path, Id})
+            end;
+        _ -> false
+    end;
 exist_file({uuid, UUID}) ->
     dao:set_db(?FILES_DB_NAME),
-    dao:exist_record(UUID).
+    dao:exist_record(UUID);
+exist_file(Path) ->
+    exist_file(file_path_analyze(Path)).
 
 %% get_file/1
 %% ====================================================================
