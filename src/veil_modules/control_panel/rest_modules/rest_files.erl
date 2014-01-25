@@ -69,7 +69,7 @@ content_types_provided(Req, _Version) ->
 %% Should return empty list if method is not supported.
 %%
 %% Id is a dir -> application/json
-%% Id is a regular file -> '<mimetype>'
+%% Id is a regular file -> `<mimetype>'
 %% Id does not exist -> []
 %% @end
 -spec content_types_provided(req(), binary(), binary()) -> {[binary()], req()}.
