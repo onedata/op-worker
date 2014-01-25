@@ -245,7 +245,7 @@ put(Req, _Version, _Id, _Data) ->
 %% handle_multipart_data/4
 %% ====================================================================
 %% @doc Optional callback to handle multipart requests. Data should be streamed
-%% in handling module with use of cowboy_multipart module. Method can be '<<"POST">> or <<"PUT">>'.
+%% in handling module with use of cowboy_multipart module. Method can be `<<"POST">> or <<"PUT">>'.
 %% Should handle the request and return true/false indicating the result.
 %% Should always return false if the method is not supported.
 %% @end
