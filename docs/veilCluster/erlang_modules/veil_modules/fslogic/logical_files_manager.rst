@@ -10,7 +10,6 @@ logical_files_manager
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`cache_size/2 <logical_files_manager:cache_size/2>`
 	* :ref:`change_file_perm/2 <logical_files_manager:change_file_perm/2>`
 	* :ref:`chown/0 <logical_files_manager:chown/0>`
 	* :ref:`create/1 <logical_files_manager:create/1>`
@@ -41,15 +40,6 @@ Function Index
 
 Function Details
 ~~~~~~~~~~~~~~~~~
-
-	.. _`logical_files_manager:cache_size/2`:
-
-	.. function:: cache_size(File :: string(), BuffSize :: integer()) -> Result
-		:noindex:
-
-	* **Result:** integer()
-
-	Gets and updates size of file.
 
 	.. _`logical_files_manager:change_file_perm/2`:
 
@@ -147,6 +137,13 @@ Function Details
 	Checks if file exists.
 
 	.. _`logical_files_manager:get_ets_name/0`:
+
+	.. function:: get_ets_name() -> Result
+		:noindex:
+
+	* **Result:** atom()
+
+	Generates name of ets table for proc
 
 	.. _`logical_files_manager:get_file_by_uuid/1`:
 

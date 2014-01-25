@@ -67,7 +67,7 @@ ban(Host, BanTime) ->
         _ -> ok
     end.
 
-%% reactivate/2
+%% reactivate/1
 %% ====================================================================
 %% @doc Reactivate banned db host name
 %% If given Host wasn't banned, nothing happens and will return 'ok'

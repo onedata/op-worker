@@ -20,6 +20,14 @@ Function Details
 
 	.. _`dao_users:get_files_number/2`:
 
+	.. function:: get_files_number(user | group, UUID :: uuid()) -> Result
+		:noindex:
+
+	* **Result:** {ok, Sum} | {error, any()} | no_return()
+	* **Sum:** integer()
+
+	Returns number of user's / group's files
+
 	.. _`dao_users:get_user/1`:
 
 	.. function:: get_user(Key:: {login, Login :: string()} | {email, Email :: string()} | {uuid, UUID :: uuid()} | {dn, DN :: string()}) -> {ok, user_doc()} | {error, any()} | no_return()

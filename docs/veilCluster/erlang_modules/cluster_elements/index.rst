@@ -1,7 +1,7 @@
 Cluster elements
 ================
 
-**Files**
+**Documents**
 
 .. toctree::
 	:maxdepth: 1

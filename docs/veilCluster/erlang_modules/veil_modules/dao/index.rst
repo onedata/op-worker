@@ -1,7 +1,7 @@
 Dao
 ===
 
-**Files**
+**Documents**
 
 .. toctree::
 	:maxdepth: 1

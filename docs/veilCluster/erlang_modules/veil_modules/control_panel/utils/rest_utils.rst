@@ -20,7 +20,17 @@ Function Details
 
 	.. _`rest_utils:decode_from_json/1`:
 
+	.. function:: decode_from_json(term()) -> binary()
+		:noindex:
+
+	Convinience function that convert JSON binary to an erlang term.
+
 	.. _`rest_utils:encode_to_json/1`:
+
+	.. function:: encode_to_json(term()) -> binary()
+		:noindex:
+
+	Convinience function that convert an erlang term to JSON, producing binary result. Possible terms, can be nested: {struct, Props} - Props is a structure as a proplist, e.g.: [{id, 13}, {message, "mess"}] {Props} - alias for above {array, Array} - Array is a list, e.g.: [13, "mess"]
 
 	.. _`rest_utils:map/2`:
 

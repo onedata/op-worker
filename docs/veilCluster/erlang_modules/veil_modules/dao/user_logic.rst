@@ -10,7 +10,6 @@ user_logic
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`create_dirs_at_storage/2 <user_logic:create_dirs_at_storage/2>`
 	* :ref:`create_user/5 <user_logic:create_user/5>`
 	* :ref:`extract_dn_from_cert/1 <user_logic:extract_dn_from_cert/1>`
 	* :ref:`get_dn_list/1 <user_logic:get_dn_list/1>`
@@ -32,15 +31,6 @@ Function Index
 
 Function Details
 ~~~~~~~~~~~~~~~~~
-
-	.. _`user_logic:create_dirs_at_storage/2`:
-
-	.. function:: create_dirs_at_storage(Root :: string(), Teams :: [string()]) -> ok | Error
-		:noindex:
-
-	* **Error:** atom()
-
-	Creates root dir for user and for its teams
 
 	.. _`user_logic:create_user/5`:
 

@@ -56,14 +56,24 @@ Function Details
 
 	.. _`logger:get_include_stacktrace/0`:
 
+	.. function:: get_include_stacktrace() -> boolean()
+		:noindex:
+
+	Returns get_include_stacktrace env value
+
 	.. _`logger:loglevel_atom_to_int/1`:
+
+	.. function:: loglevel_atom_to_int(LoglevelAsAtom :: atom()) -> integer()
+		:noindex:
+
+	Returns loglevel number associated with loglevel name
+
+	.. _`logger:loglevel_int_to_atom/1`:
 
 	.. function:: loglevel_int_to_atom(LoglevelAsInt :: integer()) -> atom()
 		:noindex:
 
 	Returns loglevel name associated with loglevel number
-
-	.. _`logger:loglevel_int_to_atom/1`:
 
 	.. _`logger:parse_process_info/1`:
 

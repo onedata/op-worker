@@ -119,7 +119,7 @@ get_user({Key, Value}) ->
             throw(invalid_data)
     end.
 
-%% get_files_number/1
+%% get_files_number/2
 %% ====================================================================
 %% @doc Returns number of user's / group's files
 %% @end

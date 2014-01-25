@@ -68,6 +68,11 @@ Function Details
 
 	.. _`dao_hosts:reactivate/1`:
 
+	.. function:: reactivate(Host :: atom()) -> ok | {error, no_host} | {error, timeout}
+		:noindex:
+
+	Reactivate banned db host name If given Host wasn't banned, nothing happens and will return 'ok' If given Host wasn't inserted, returns {error, no_host}
+
 	.. _`dao_hosts:store_exec/2`:
 
 	.. function:: store_exec(sequential, Msg :: term()) -> ok | {error, Error :: term()}

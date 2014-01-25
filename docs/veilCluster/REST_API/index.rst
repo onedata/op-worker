@@ -1,11 +1,13 @@
 REST API
 ========
 
-	.. toctree::
-		:maxdepth: 2
+**Documents**
 
-		authentication
-		errors
-		getting_started
-		resources
-		structure
+.. toctree::
+	:maxdepth: 1
+
+	authentication
+	errors
+	getting_started
+	resources
+	structure

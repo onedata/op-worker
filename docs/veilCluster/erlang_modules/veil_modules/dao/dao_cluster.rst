@@ -48,6 +48,11 @@ Function Details
 
 	.. _`dao_cluster:clear_state/1`:
 
+	.. function:: clear_state(Id :: atom()) -> ok | no_return()
+		:noindex:
+
+	Removes cluster state with given Id Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead.
+
 	.. _`dao_cluster:close_connection/1`:
 
 	.. function:: close_connection(SessID :: uuid()) -> ok | no_return()

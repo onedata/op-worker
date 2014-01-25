@@ -104,7 +104,7 @@ clear_state()->
     clear_state(cluster_state).
 
 
-%% clear_state/2
+%% clear_state/1
 %% ====================================================================
 %% @doc Removes cluster state with given Id
 %% Should not be used directly, use {@link dao:handle/2} instead.

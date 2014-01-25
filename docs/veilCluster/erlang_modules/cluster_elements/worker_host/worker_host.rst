@@ -21,7 +21,6 @@ Function Index
 	* :ref:`start_link/3 <worker_host:start_link/3>`
 	* :ref:`start_sub_proc/5 <worker_host:start_sub_proc/5>`
 	* :ref:`stop/1 <worker_host:stop/1>`
-	* :ref:`stop_all_sub_proc/1 <worker_host:stop_all_sub_proc/1>`
 	* :ref:`terminate/2 <worker_host:terminate/2>`
 
 Function Details
@@ -126,13 +125,6 @@ Function Details
 	* **PlugIn:** atom()
 
 	Stops the server
-
-	.. _`worker_host:stop_all_sub_proc/1`:
-
-	.. function:: stop_all_sub_proc(SubProcs :: list()) -> ok
-		:noindex:
-
-	Stops all sub procs
 
 	.. _`worker_host:terminate/2`:
 

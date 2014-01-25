@@ -36,6 +36,13 @@ Function Details
 
 	.. _`dao_json:get_fields/1`:
 
+	.. function:: get_fields(DocOrObj) -> [{FieldName :: string(), FieldValue :: any()}] | {error, not_found} | {error, invalid_object}
+		:noindex:
+
+	* **DocOrObj:** #doc{} | json_object()
+
+	Returns field's values from given document or JSON object
+
 	.. _`dao_json:mk_bin/1`:
 
 	.. function:: mk_bin(Term :: term()) -> binary()

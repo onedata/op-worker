@@ -1,7 +1,7 @@
 Web gui
 =======
 
-**Files**
+**Documents**
 
 .. toctree::
 	:maxdepth: 1

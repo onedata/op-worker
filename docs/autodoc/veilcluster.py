@@ -97,8 +97,10 @@ class ErlangDocLexer(object):
 
 	def lex_functions(self):
 		functions = []
+		pattern = re.compile(r'-ifdef\(TEST\).*?-endif', re.DOTALL)
+		content = re.sub(pattern, '', self.content)
 		pattern = re.compile(r'-export\(\[(.*?)\]\)', re.DOTALL)
-		iterator = pattern.finditer(self.content)
+		iterator = pattern.finditer(content)
 		for match in iterator:
 			functions = functions + re.split(r'[\s,]+', match.group(1).strip())
 		return functions
