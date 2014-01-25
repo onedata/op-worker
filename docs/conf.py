@@ -29,6 +29,7 @@ import os
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 sys.path.append(os.path.abspath('extensions'))
+sys.path.append(os.path.abspath('extensions/breathe'))
 extensions = ['sphinxcontrib.httpdomain', 'breathe']
 
 # Add any paths that contain templates here, relative to this directory.
