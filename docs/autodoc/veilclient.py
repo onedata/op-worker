@@ -85,28 +85,28 @@ class VeilClient(Sphinx):
 
 		with open(self.path + '/files/index.rst', 'w') as index:
 			self.w_section(index, 'Files', '=')
-			self.w_section(index, 'Source code', '-')
-			self.w_toctree(index, 1)
+			index.write('**Source code**\n\n')
+			self.w_toctree(index, 0)
 			for name in src:
-				index.write('\t\t' + name.replace('::', '.') + '\n')
+				index.write('\t' + name.replace('::', '.') + '\n')
 				with open(self.path + '/files/' + name.replace('::', '.') + '.rst', 'w') as f:
 					self.w_section(f, name, '=')
 					self.w_file(f, name, 1)
 			index.write('\n')
 
-			self.w_section(index, 'Headers', '-')
-			self.w_toctree(index, 1)
+			index.write('**Headers**\n\n')
+			self.w_toctree(index, 0)
 			for name in include:
-				index.write('\t\t' + name.replace('::', '.') + '\n')
+				index.write('\t' + name.replace('::', '.') + '\n')
 				with open(self.path + '/files/' + name.replace('::', '.') + '.rst', 'w') as f:
 					self.w_section(f, name, '=')
 					self.w_file(f, name, 1)
 			index.write('\n')
 
-			self.w_section(index, 'Globus proxy utils', '-')
-			self.w_toctree(index, 1)
+			index.write('**Globus proxy utils**\n\n')
+			self.w_toctree(index, 0)
 			for name in globusProxyUtilsMembers:
-				index.write('\t\t' + name.replace('::', '.') + '\n')
+				index.write('\t' + name.replace('::', '.') + '\n')
 				with open(self.path + '/files/' + name.replace('::', '.') + '.rst', 'w') as f:
 					self.w_section(f, name, '=')
 					self.w_file(f, name, 1)
