@@ -46,7 +46,6 @@ generate: compile
 
 docs:
 	make -C docs html
-	make -C docs latexpdf
 	./rebar doc skip_deps=true
 
 upgrade:
