@@ -1,8 +1,8 @@
 C modules
 =========
 
-	.. toctree::
-		:maxdepth: 2
+.. toctree::
+	:maxdepth: 2
 
-		gpv_nif/README
-		veilhelpers_nif/README
+	gpv_nif/README
+	veilhelpers_nif/README

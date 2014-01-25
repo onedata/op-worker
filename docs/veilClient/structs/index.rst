@@ -1,10 +1,10 @@
 Structs
 =======
 
-	.. toctree::
-		:maxdepth: 2
+.. toctree::
+	:maxdepth: 2
 
-		fmem
-		veil.client.Job
-		veil.client.locationInfo
-		veil.client.storageInfo
+	fmem
+	veil.client.Job
+	veil.client.locationInfo
+	veil.client.storageInfo

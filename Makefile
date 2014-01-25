@@ -2,7 +2,7 @@ BASHO_BENCH_DIR = "deps/basho_bench"
 STRESS_TESTS_SRC_DIR = "stress_test"
 DIST_TESTS_SRC_DIR = "test_distributed"
 
-.PHONY: releases deps test
+.PHONY: releases deps test docs
 
 all: deps generate docs
 
@@ -45,6 +45,8 @@ generate: compile
 	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster_node
 
 docs:
+	make -C docs html
+	make -C docs latexpdf
 	./rebar doc skip_deps=true
 
 upgrade:

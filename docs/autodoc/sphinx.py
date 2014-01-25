@@ -85,9 +85,9 @@ class Sphinx(object):
 
 		with open(path + '/index.rst', 'w') as f:
 			self.w_section(f, name, '=')
-			self.w_toctree(f, 1)
+			self.w_toctree(f, 0)
 			for file in sorted(files):
-				f.write('\t\t' + file[:-4] + '\n')
+				f.write('\t' + file[:-4] + '\n')
 			for dir in sorted(dirs):
-				f.write('\t\t' + dir + '/index\n')
+				f.write('\t' + dir + '/index\n')
 				self.create_toctree(path + '/' + dir, lowerbound)

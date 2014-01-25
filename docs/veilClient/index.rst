@@ -1,11 +1,11 @@
 VeilClient
 ==========
 
-	.. toctree::
-		:maxdepth: 2
+.. toctree::
+	:maxdepth: 2
 
-		about
-		classes/index
-		files/index
-		namespaces/index
-		structs/index
+	about
+	classes/index
+	files/index
+	namespaces/index
+	structs/index

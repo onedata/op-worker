@@ -181,7 +181,6 @@ class ErlangDocWriter(Sphinx):
 	def w_function_details(self, file):
 		if self.lexer.functions:
 			self.w_section(file, '\nFunction Details', '~')
-			# file.write('\t.. erl:module:: ' + self.lexer.module + '\n\n')
 			for function in self.lexer.functions:
 				file.write('\t.. _`' + self.lexer.module + ':' + function + '`:\n\n')
 				if self.lexer.details[function].declaration:

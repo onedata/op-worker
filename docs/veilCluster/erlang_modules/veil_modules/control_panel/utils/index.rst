@@ -1,8 +1,8 @@
 Utils
 =====
 
-	.. toctree::
-		:maxdepth: 2
+.. toctree::
+	:maxdepth: 2
 
-		openid_utils
-		rest_utils
+	openid_utils
+	rest_utils
