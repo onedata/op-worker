@@ -10,10 +10,6 @@ ws_handler
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`checkMessage/2 <ws_handler:checkMessage/2>`
-	* :ref:`decode_protocol_buffer/2 <ws_handler:decode_protocol_buffer/2>`
-	* :ref:`encode_answer/2 <ws_handler:encode_answer/2>`
-	* :ref:`encode_answer/5 <ws_handler:encode_answer/5>`
 	* :ref:`init/3 <ws_handler:init/3>`
 	* :ref:`websocket_handle/3 <ws_handler:websocket_handle/3>`
 	* :ref:`websocket_info/3 <ws_handler:websocket_info/3>`
@@ -22,47 +18,6 @@ Function Index
 
 Function Details
 ~~~~~~~~~~~~~~~~~
-
-	.. _`ws_handler:checkMessage/2`:
-
-	.. function:: checkMessage(Msg :: term(), DN :: string()) -> Result
-		:noindex:
-
-	* **Result:** boolean()
-
-	Checks if message can be processed by cluster.
-
-	.. _`ws_handler:decode_protocol_buffer/2`:
-
-	.. function:: decode_protocol_buffer(MsgBytes :: binary(), DN :: string()) -> Result
-		:noindex:
-
-	* **Answer_type:** string()
-	* **ModuleName:** atom()
-	* **Msg:** term()
-	* **MsgId:** integer()
-	* **Result:** {Synch, ModuleName, Msg, MsgId, Answer_type}
-	* **Synch:** boolean()
-
-	Decodes the message using protocol buffers records_translator.
-
-	.. _`ws_handler:encode_answer/2`:
-
-	.. function:: encode_answer(Main_Answer :: atom(), MsgId :: integer()) -> Result
-		:noindex:
-
-	* **Result:** binary()
-
-	Encodes answer using protocol buffers records_translator.
-
-	.. _`ws_handler:encode_answer/5`:
-
-	.. function:: encode_answer(Main_Answer :: atom(), MsgId :: integer(), AnswerType :: string(), Answer_decoder_name :: string(), Worker_Answer :: term()) -> Result
-		:noindex:
-
-	* **Result:** binary()
-
-	Encodes answer using protocol buffers records_translator.
 
 	.. _`ws_handler:init/3`:
 

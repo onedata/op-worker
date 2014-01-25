@@ -15,7 +15,6 @@ Function Index
 	* :ref:`create/2 <storage_files_manager:create/2>`
 	* :ref:`delete/2 <storage_files_manager:delete/2>`
 	* :ref:`delete_dir/2 <storage_files_manager:delete_dir/2>`
-	* :ref:`get_cached_value/3 <storage_files_manager:get_cached_value/3>`
 	* :ref:`ls/0 <storage_files_manager:ls/0>`
 	* :ref:`mkdir/2 <storage_files_manager:mkdir/2>`
 	* :ref:`mv/3 <storage_files_manager:mv/3>`
@@ -82,18 +81,6 @@ Function Details
 
 	Deletes dir on storage
 
-	.. _`storage_files_manager:get_cached_value/3`:
-
-	.. function:: get_cached_value(File :: string(), ValueName :: atom(), Storage_helper_info :: record()) -> Result
-		:noindex:
-
-	* **ErrorDetail:** term()
-	* **ErrorGeneral:** atom()
-	* **Result:** {ok, Value} | {ErrorGeneral, ErrorDetail}
-	* **Value:** term()
-
-	Checks value using storage helper or gets its from cache
-
 	.. _`storage_files_manager:ls/0`:
 
 	.. function:: ls() -> {error, not_implemented_yet}
@@ -136,6 +123,15 @@ Function Details
 	Reads file (operates only on storage). First it checks file attributes (file type and file size). If everything is ok, it reads data from file.
 
 	.. _`storage_files_manager:truncate/3`:
+
+	.. function:: truncate(Storage_helper_info :: record(), File :: string(), Size :: integer()) -> Result
+		:noindex:
+
+	* **ErrorDetail:** term()
+	* **ErrorGeneral:** atom()
+	* **Result:** ok | {ErrorGeneral, ErrorDetail}
+
+	Truncates file (operates only on storage). First it checks if file exists and is regular file. If everything is ok, it truncates file.
 
 	.. _`storage_files_manager:write/3`:
 

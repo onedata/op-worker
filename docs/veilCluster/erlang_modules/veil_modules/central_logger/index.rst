@@ -1,7 +1,7 @@
 Central logger
 ==============
 
-**Files**
+**Documents**
 
 .. toctree::
 	:maxdepth: 1

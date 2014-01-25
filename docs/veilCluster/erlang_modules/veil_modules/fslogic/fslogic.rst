@@ -19,7 +19,6 @@ Function Index
 	* :ref:`get_user_id/0 <fslogic:get_user_id/0>`
 	* :ref:`get_user_root/1 <fslogic:get_user_root/1>`
 	* :ref:`handle/2 <fslogic:handle/2>`
-	* :ref:`handle_fuse_message/3 <fslogic:handle_fuse_message/3>`
 	* :ref:`init/1 <fslogic:init/1>`
 
 Function Details
@@ -99,15 +98,6 @@ Function Details
 	* **Result:** term()
 
 	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback handle/1. <br/> Processes standard worker requests (e.g. ping) and requests from FUSE.
-
-	.. _`fslogic:handle_fuse_message/3`:
-
-	.. function:: handle_fuse_message(ProtocolVersion :: term(), Record :: tuple(), FuseID :: string()) -> Result
-		:noindex:
-
-	* **Result:** term()
-
-	Processes requests from FUSE.
 
 	.. _`fslogic:init/1`:
 

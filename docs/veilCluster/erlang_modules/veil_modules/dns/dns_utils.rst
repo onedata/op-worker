@@ -17,3 +17,15 @@ Function Details
 
 	.. _`dns_utils:generate_answer/5`:
 
+	.. function:: generate_answer(Packet, Dispatcher, DispatcherTimeout, ResponseTTL, Protocol) -> Result
+		:noindex:
+
+	* **Dispatcher:** term()
+	* **DispatcherTimeout:** non_neg_integer()
+	* **Packet:** binary()
+	* **Protocol:** udp | tcp
+	* **ResponseTTL:** non_neg_integer()
+	* **Result:** {ok, binary()} | {error, term()}
+
+	Generates binary dns response for given binary dns request, non protocol agnostic.
+

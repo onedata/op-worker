@@ -1,7 +1,7 @@
 Utils
 =====
 
-**Files**
+**Documents**
 
 .. toctree::
 	:maxdepth: 1

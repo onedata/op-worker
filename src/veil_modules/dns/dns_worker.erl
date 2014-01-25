@@ -54,7 +54,7 @@ init(_) ->
 	throw(unknown_initial_state).
 
 
-%% handle/1
+%% handle/2
 %% ====================================================================
 %% @doc {@link worker_plugin_behaviour} callback handle/1. <br/>
 %% Calling handle(_, ping) returns pong.

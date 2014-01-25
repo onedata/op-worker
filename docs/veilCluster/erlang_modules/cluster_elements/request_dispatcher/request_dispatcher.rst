@@ -18,7 +18,6 @@ Function Index
 	* :ref:`init/1 <request_dispatcher:init/1>`
 	* :ref:`send_to_fuse/3 <request_dispatcher:send_to_fuse/3>`
 	* :ref:`start_link/0 <request_dispatcher:start_link/0>`
-	* :ref:`start_link/1 <request_dispatcher:start_link/1>`
 	* :ref:`stop/0 <request_dispatcher:stop/0>`
 	* :ref:`terminate/2 <request_dispatcher:terminate/2>`
 
@@ -94,17 +93,6 @@ Function Details
 	.. _`request_dispatcher:start_link/0`:
 
 	.. function:: start_link() -> Result
-		:noindex:
-
-	* **Error:** {already_started,Pid} | term()
-	* **Pid:** pid()
-	* **Result:** {ok,Pid} | ignore | {error,Error}
-
-	Starts the server
-
-	.. _`request_dispatcher:start_link/1`:
-
-	.. function:: start_link(Modules :: list()) -> Result
 		:noindex:
 
 	* **Error:** {already_started,Pid} | term()

@@ -1,7 +1,7 @@
 Request dispatcher
 ==================
 
-**Files**
+**Documents**
 
 .. toctree::
 	:maxdepth: 1

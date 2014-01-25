@@ -11,9 +11,6 @@ cluster_manager
 Function Index
 ~~~~~~~~~~~~~~~
 
-	* :ref:`calculate_load/2 <cluster_manager:calculate_load/2>`
-	* :ref:`calculate_node_load/2 <cluster_manager:calculate_node_load/2>`
-	* :ref:`calculate_worker_load/1 <cluster_manager:calculate_worker_load/1>`
 	* :ref:`code_change/3 <cluster_manager:code_change/3>`
 	* :ref:`handle_call/3 <cluster_manager:handle_call/3>`
 	* :ref:`handle_cast/2 <cluster_manager:handle_cast/2>`
@@ -26,38 +23,9 @@ Function Index
 	* :ref:`start_monitoring_loop/2 <cluster_manager:start_monitoring_loop/2>`
 	* :ref:`stop/0 <cluster_manager:stop/0>`
 	* :ref:`terminate/2 <cluster_manager:terminate/2>`
-	* :ref:`update_dispatcher_state/6 <cluster_manager:update_dispatcher_state/6>`
-	* :ref:`update_dns_state/3 <cluster_manager:update_dns_state/3>`
 
 Function Details
 ~~~~~~~~~~~~~~~~~
-
-	.. _`cluster_manager:calculate_load/2`:
-
-	.. function:: calculate_load(NodesLoad :: list(), WorkersLoad :: list()) -> Result
-		:noindex:
-
-	* **Result:** list()
-
-	Merges nodes' and workers' loads to more useful form
-
-	.. _`cluster_manager:calculate_node_load/2`:
-
-	.. function:: calculate_node_load(Nodes :: list(), Period :: atom()) -> Result
-		:noindex:
-
-	* **Result:** list()
-
-	Calculates load of all nodes in cluster
-
-	.. _`cluster_manager:calculate_worker_load/1`:
-
-	.. function:: calculate_worker_load(Workers :: list()) -> Result
-		:noindex:
-
-	* **Result:** list()
-
-	Calculates load of all workers in cluster
 
 	.. _`cluster_manager:code_change/3`:
 
@@ -183,20 +151,4 @@ Function Details
 	* **Reason:** normal | shutdown | {shutdown, term()} | term()
 
 	<a href="http://www.erlang.org/doc/man/gen_server.html#Module:terminate-2">gen_server:terminate/2</a>
-
-	.. _`cluster_manager:update_dispatcher_state/6`:
-
-	.. function:: update_dispatcher_state(WorkersList, DispatcherMaps, Nodes, NewStateNum, Loads, AvgLoad) -> ok
-		:noindex:
-
-	* **AvgLoad:** integer()
-	* **DispatcherMaps:** list()
-	* **Loads:** list()
-	* **NewStateNum:** integer()
-	* **Nodes:** list()
-	* **WorkersList:** list()
-
-	Updates dispatchers' states.
-
-	.. _`cluster_manager:update_dns_state/3`:
 

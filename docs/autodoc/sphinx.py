@@ -86,7 +86,7 @@ class Sphinx(object):
 		with open(path + '/index.rst', 'w') as f:
 			self.w_section(f, name, '=')
 			if files:
-				f.write("**Files**\n\n")
+				f.write("**Documents**\n\n")
 				self.w_toctree(f, 0, 1)
 				for file in sorted(files):
 					f.write('\t' + file[:-4] + '\n')

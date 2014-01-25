@@ -19,6 +19,14 @@ Function Details
 
 	.. _`veil_cluster_node_app:start/2`:
 
+	.. function:: start(_StartType :: any(), _StartArgs :: any()) -> Result
+		:noindex:
+
+	* **Error:** {already_started, pid()} | {shutdown, term()} | term()
+	* **Result:** {ok, pid()} | ignore | {error, Error}
+
+	Starts application by supervisor initialization.
+
 	.. _`veil_cluster_node_app:stop/1`:
 
 	.. function:: stop(_State :: any()) -> Result

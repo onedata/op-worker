@@ -30,6 +30,22 @@ Function Details
 
 	.. _`central_logger:handle/2`:
 
+	.. function:: handle(ProtocolVersion :: term(), Request) -> Result
+		:noindex:
+
+	* **Error:** term()
+	* **Message:** string()
+	* **Metadata:** list()
+	* **Request:** ping | get_version | {subscribe, Subscriber} | {unsubscribe, Subscriber} | {dispatch_log, Message, Timestamp, Severity, Metadata}
+	* **Response:** term()
+	* **Result:** ok | {ok, Response} | {error, Error} | pong | Version
+	* **Severity:** atom()
+	* **Subscriber:** pid()
+	* **Timestamp:** term()
+	* **Version:** term()
+
+	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback handle/1
+
 	.. _`central_logger:init/1`:
 
 	.. function:: init(Args :: term()) -> Result

@@ -30,6 +30,17 @@ Function Details
 
 	.. _`control_panel:handle/2`:
 
+	.. function:: handle(ProtocolVersion :: term(), Request) -> Result
+		:noindex:
+
+	* **Error:** term()
+	* **Request:** ping | get_version
+	* **Response:** term()
+	* **Result:** ok | {ok, Response} | {error, Error} | pong | Version
+	* **Version:** term()
+
+	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback handle/1
+
 	.. _`control_panel:init/1`:
 
 	.. function:: init(Args :: term()) -> Result

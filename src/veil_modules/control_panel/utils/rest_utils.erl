@@ -67,7 +67,7 @@ unmap([{KeyBin, Val}|Proplist], RecordTuple, Fields) ->
 	unmap(Proplist, setelement(Index, RecordTuple, Value), Fields).
 
 
-%% encode_to_json/3
+%% encode_to_json/1
 %% ====================================================================
 %% @doc Convinience function that convert an erlang term to JSON, producing
 %% binary result.
@@ -83,7 +83,7 @@ encode_to_json(Term) ->
 	iolist_to_binary(mochijson2:encode(Term)).
 
 
-%% decode_from_json/3
+%% decode_from_json/1
 %% ====================================================================
 %% @doc Convinience function that convert JSON binary to an erlang term.
 %% @end

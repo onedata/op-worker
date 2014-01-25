@@ -1,7 +1,7 @@
 Rest modules
 ============
 
-**Files**
+**Documents**
 
 .. toctree::
 	:maxdepth: 1

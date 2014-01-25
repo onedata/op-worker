@@ -1,7 +1,7 @@
 C modules
 =========
 
-**Files**
+**Documents**
 
 .. toctree::
 	:maxdepth: 1

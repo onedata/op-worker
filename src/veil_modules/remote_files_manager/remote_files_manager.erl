@@ -45,7 +45,7 @@ init(_Args) ->
   erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
   [].
 
-%% handle/1
+%% handle/2
 %% ====================================================================
 %% @doc {@link worker_plugin_behaviour} callback handle/1. <br/>
 %% Processes standard worker requests (e.g. ping) and requests from FUSE.

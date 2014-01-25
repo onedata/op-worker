@@ -20,6 +20,13 @@ Function Details
 
 	.. _`openid_utils:get_login_url/2`:
 
+	.. function:: get_login_url(HostName :: string(), RedirectParams :: string()) -> Result
+		:noindex:
+
+	* **Result:** ok | {error, endpoint_unavailable}
+
+	 Produces an URL with proper GET parameters, used to redirect the user to OpenID Provider login page. RedirectParams are parameters concatenated to return_to field.
+
 	.. _`openid_utils:nitrogen_prepare_validation_parameters/0`:
 
 	.. function:: nitrogen_prepare_validation_parameters() -> Result

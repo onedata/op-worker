@@ -1,7 +1,7 @@
 Control panel
 =============
 
-**Files**
+**Documents**
 
 .. toctree::
 	:maxdepth: 1

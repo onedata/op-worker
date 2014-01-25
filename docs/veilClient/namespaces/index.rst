@@ -1,7 +1,7 @@
 Namespaces
 ==========
 
-**Files**
+**Documents**
 
 .. toctree::
 	:maxdepth: 1
