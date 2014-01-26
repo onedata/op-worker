@@ -35,50 +35,15 @@
                 | term().
 %% ====================================================================
 start(_StartType, _StartArgs) ->
-  Free_ports_info = are_ports_free([55,443,5555]),
-  case Free_ports_info of
-    {ok, free} ->
-        {ok, NodeType} = application:get_env(?APP_Name, node_type),
-        fprof:start(), %% Start fprof server. It doesnt do enything unless it's used.
-        veil_cluster_node_sup:start_link(NodeType);
-    {_,_} ->
-        {error, "Some ports are in use."}
-  end.
+	case ports_ok() of
+		true ->
+			{ok, NodeType} = application:get_env(?APP_Name, node_type),
+			fprof:start(), %% Start fprof server. It doesnt do enything unless it's used.
+			veil_cluster_node_sup:start_link(NodeType);
+		false ->
+			{error, "Not all ports are free"}
+	end.
 
-%% are_ports_free/1
-%% ====================================================================
-%% @doc Checks if ports are free. If some ports are in use, logs and writes to stderr.
--spec are_ports_free(Ports :: list()) -> Result when
-    Result :: {ok, free}
-                | {error, occupied}.
-%% ====================================================================
-are_ports_free([]) ->
-    {ok, free};
-are_ports_free([Port|Ports])->
-    Port_result = is_port_free(Port),
-    case Port_result of
-        {ok, free} -> are_ports_free(Ports);
-        {error,_} ->
-            lager:error("Port ~w is in use. Starting aborted.~n", [Port]),
-            io:fwrite(standard_error, "Port ~w is in use.~n", [Port]),
-            {error, occupied}
-    end.
-
-%% is_port_free/1
-%% ====================================================================
-%% @doc Checks if port is free.
--spec is_port_free(Ports :: integer()) -> Result when
-    Result :: {ok, free}
-                | {error, occupied}.
-%% ====================================================================
-is_port_free(Port) ->
-    Cmd_result = os:cmd("netstat -tlun | awk '{print $4}' | tail -n +3 | grep -E -o ':[0-9]+' | cut -d: -f 2 | grep ^" ++ integer_to_list(Port) ++ "$"),
-    case Cmd_result of
-        "" ->
-            {ok, free};
-        _ ->
-            {error, occupied}
-    end.
 
 %% stop/1
 %% ====================================================================
@@ -88,3 +53,43 @@ is_port_free(Port) ->
 %% ====================================================================
 stop(_State) ->
   ok.
+
+%% ports_ok/0
+%% ====================================================================
+%% @doc Get port list from environment and check if they're free
+-spec ports_ok() -> Result when
+	Result :: true | false.
+%% ====================================================================
+ports_ok() ->
+	GetEnvResult = application:get_env(veil_cluster_node,ports_in_use),
+	case GetEnvResult of
+		{ok,PortList} ->
+			ports_are_free(PortList);
+		undefined ->
+			lager:error("Could not get 'ports_in_use' environment variable."),
+			io:format(standard_error, "Could not get 'ports_in_use' environment variable.~n"),
+			false
+	end.
+
+%% ports_are_free/1
+%% ====================================================================
+%% @doc Returns true if all listed ports are free, if not - log error
+%% and print to stderr
+-spec ports_are_free(Ports :: list() | integer()) -> Result when
+	Result :: true | false.
+%% ====================================================================
+ports_are_free([]) ->
+	true;
+ports_are_free([FirstPort | Rest])->
+	ports_are_free(FirstPort) and ports_are_free(Rest);
+ports_are_free(Port)->
+	{Status, Socket} = gen_tcp:listen(Port, []),
+	case Status of
+		ok ->
+			gen_tcp:close(Socket),
+			true;
+		error ->
+			lager:error("Port ~w is in use. Starting aborted.~n", [Port]),
+			io:format(standard_error, "Port ~w is in use. Starting aborted.~n", [Port]),
+			false
+	end.
