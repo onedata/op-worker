@@ -418,7 +418,7 @@ list_dir(Dir, N, Offset) ->
             throw(inavlid_data)
     end.
 
-%% get_subdirs/1
+%% count_subdirs/1
 %% ====================================================================
 %% @doc Returns number of first level subdirectories for specified directory.
 %% @end
