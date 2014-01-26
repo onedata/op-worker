@@ -101,12 +101,19 @@ veil_cluster_node_env:
       value: 15
 
   - parameter:
-        name: nif_prefix
-        description: Prefix to c_lib directory containing NIF libs
-        value: |
+      name: nif_prefix
+      description: Prefix to c_lib directory containing NIF libs
+      value: |
           "\'.\'"
-        erlang_term: "'.'"
+      erlang_term: "'.'"
 
+  - parameter:
+      name: ports_in_use
+      description: Ports used by application, that need to be free before veil can start
+      value: |
+          ["53","443","5555","8443"]
+      erlang_term: |
+          [53,443,5555,8443]
 
   # LOGGING
   - parameter:
