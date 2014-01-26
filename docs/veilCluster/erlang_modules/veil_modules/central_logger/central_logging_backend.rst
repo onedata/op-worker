@@ -30,7 +30,7 @@ Function Details
 	* **Result:** {ok, NewState :: term()} | {error, Reason :: term()}
 	* **Vsn:** term()
 
-	<a href="http://www.erlang.org/doc/man/gen_event.html#Module:code_change-3">gen_event:code_change/3</a>
+	 gen_event:code_change/3 
 
 	.. _`central_logging_backend:handle_call/2`:
 
@@ -41,7 +41,7 @@ Function Details
 	* **Reply:** term()
 	* **Result:** {ok, Reply, NewState}
 
-	<a href="http://www.erlang.org/doc/man/gen_event.html#Module:handle_call-2">gen_event:handle_call/2</a>
+	 gen_event:handle_call/2 
 
 	.. _`central_logging_backend:handle_event/2`:
 
@@ -51,7 +51,7 @@ Function Details
 	* **NewState:** term()
 	* **Result:** {ok, NewState}
 
-	<a href="http://www.erlang.org/doc/man/gen_event.html#Module:handle_event-2">gen_event:handle_event/2</a>
+	 gen_event:handle_event/2 
 
 	.. _`central_logging_backend:handle_info/2`:
 
@@ -61,7 +61,7 @@ Function Details
 	* **NewState:** term()
 	* **Result:** {ok, NewState}
 
-	<a href="http://www.erlang.org/doc/man/gen_event.html#Module:handle_info-2">gen_event:handle_info/2</a>
+	 gen_event:handle_info/2 
 
 	.. _`central_logging_backend:init/1`:
 
@@ -70,7 +70,7 @@ Function Details
 
 	* **Result:** {ok, term()}
 
-	gen_event callback init/1 <br /> Called after installing this handler into lager_event. Returns its loglevel ( {mask, 255} ) as Status.
+	gen_event callback init/1 Called after installing this handler into lager_event. Returns its loglevel ( {mask, 255} ) as Status.
 
 	.. _`central_logging_backend:terminate/2`:
 
@@ -79,5 +79,5 @@ Function Details
 
 	* **Reason:** normal | shutdown | {shutdown, term()} | term()
 
-	<a href="http://www.erlang.org/doc/man/gen_event.html#Module:terminate-2">gen_event:terminate/2</a>
+	 gen_event:terminate/2 
 

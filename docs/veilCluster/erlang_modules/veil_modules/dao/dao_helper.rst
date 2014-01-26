@@ -199,7 +199,7 @@ Function Details
 	.. function:: query_view(DbName :: string(), DesignName :: string(), ViewName :: string(), QueryArgs :: #view_query_args{}) -> {ok, QueryResult :: term()} | {error, term()}
 		:noindex:
 
-	Execute a given view. There are many additional query args that can be passed to a view, see <a href="http://wiki.apache.org/couchdb/HTTP_view_API#Querying_Options"> query args</a> for details.
+	Execute a given view. There are many additional query args that can be passed to a view, see query args for details.
 
 	.. _`dao_helper:revision/1`:
 

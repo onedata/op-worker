@@ -26,7 +26,7 @@ Function Details
 	* **Error:** timeout | term()
 	* **Result:** ok | {error, Error}
 
-	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback cleanup/0 <br /> Stops cowboy listener and terminates
+	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback cleanup/0 Stops cowboy listener and terminates
 
 	.. _`control_panel:handle/2`:
 
@@ -49,5 +49,5 @@ Function Details
 	* **Error:** term()
 	* **Result:** ok | {error, Error}
 
-	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback init/1 <br /> Sets up cowboy dispatch with nitrogen handler and starts cowboy service on desired port.
+	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback init/1 Sets up cowboy dispatch with nitrogen handler and starts cowboy service on desired port.
 

@@ -26,7 +26,7 @@ Function Details
 	* **Error:** timeout | term()
 	* **Result:** ok | {error, Error}
 
-	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback cleanup/0 <br /> Reconfigures lager back to standard
+	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback cleanup/0 Reconfigures lager back to standard
 
 	.. _`central_logger:handle/2`:
 
@@ -53,5 +53,5 @@ Function Details
 
 	* **Result:** {ok, term()}
 
-	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback init/1 <br /> Sets up the worker for propagating logs to CMT sessions and configures lager trace files.
+	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback init/1 Sets up the worker for propagating logs to CMT sessions and configures lager trace files.
 

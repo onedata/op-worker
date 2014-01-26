@@ -38,68 +38,73 @@ Function Details
 
 	.. _`dao_vfs:count_subdirs/1`:
 
+	.. function:: count_subdirs({uuid, UUID :: uuid()}) -> {ok, non_neg_integer()}
+		:noindex:
+
+	Returns number of first level subdirectories for specified directory.
+
 	.. _`dao_vfs:find_files/1`:
 
 	.. function:: find_files(FileCriteria :: file_criteria()) -> {ok, [file_doc()]} | no_return()
 		:noindex:
 
-	Returns list of uuids of files that matches to criteria passed as FileCriteria <br/> Current implementation does not support specifying ctime and mtime at the same time, other combinations of criterias are supported.
+	Returns list of uuids of files that matches to criteria passed as FileCriteria Current implementation does not support specifying ctime and mtime at the same time, other combinations of criterias are supported.
 
 	.. _`dao_vfs:get_descriptor/1`:
 
 	.. function:: get_descriptor(Fd :: fd()) -> {ok, fd_doc()} | {error, any()} | no_return()
 		:noindex:
 
-	Gets file descriptor from DB. Argument should be uuid() of #file_descriptor record Non-error return value is always {ok, #veil_document{record = #file_descriptor}. See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper.<br/> Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
+	Gets file descriptor from DB. Argument should be uuid() of #file_descriptor record Non-error return value is always {ok, #veil_document{record = #file_descriptor}. See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper. Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
 
 	.. _`dao_vfs:get_file/1`:
 
 	.. function:: get_file(File :: file()) -> {ok, file_doc()} | {error, any()} | no_return()
 		:noindex:
 
-	Gets file from DB. Argument should be file() - see dao_types.hrl for more details <br/> Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
+	Gets file from DB. Argument should be file() - see dao_types.hrl for more details Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
 
 	.. _`dao_vfs:get_file_meta/1`:
 
 	.. function:: get_file_meta(Fd :: fd()) -> {ok, fd_doc()} | {error, any()} | no_return()
 		:noindex:
 
-	Gets file meta from DB. Argument should be uuid() of #file_meta record Non-error return value is always {ok, #veil_document{record = #file_meta}. See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper.<br/> Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
+	Gets file meta from DB. Argument should be uuid() of #file_meta record Non-error return value is always {ok, #veil_document{record = #file_meta}. See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper. Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
 
 	.. _`dao_vfs:get_path_info/1`:
 
 	.. function:: get_path_info(File :: file_path()) -> {ok, [file_doc()]} | {error, any()} | no_return()
 		:noindex:
 
-	Gets all files existing in given path from DB. Argument should be file_path() - see dao_types.hrl for more details <br/> Similar to get_file/1 but returns list containing file_doc() for every file within given path(), not only the last one<br/> Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
+	Gets all files existing in given path from DB. Argument should be file_path() - see dao_types.hrl for more details Similar to get_file/1 but returns list containing file_doc() for every file within given path(), not only the last one Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
 
 	.. _`dao_vfs:get_storage/1`:
 
 	.. function:: get_storage({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) -> {ok, storage_doc()} | {error, any()} | no_return()
 		:noindex:
 
-	Gets storage info from DB. Argument should be uuid() of storage document or ID of storage. <br/> Non-error return value is always {ok, #veil_document{record = #storage_info{}}. See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper.<br/> Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
+	Gets storage info from DB. Argument should be uuid() of storage document or ID of storage. Non-error return value is always {ok, #veil_document{record = #storage_info{}}. See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper. Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
 
 	.. _`dao_vfs:list_descriptors/3`:
 
 	.. function:: list_descriptors(MatchCriteria :: fd_select(), N :: pos_integer(), Offset :: non_neg_integer()) -> {ok, fd_doc()} | {error, any()} | no_return()
 		:noindex:
 
-	Lists file descriptor from DB. <br/> First argument is a two-element tuple containing type of resource used to filter descriptors and resource itself<br/> Currently only {by_file, File :: file()} is supported. <br/> Second argument limits number of rows returned. 3rd argument sets offset of query (skips first Offset rows) <br/> Non-error return value is always {ok, [#veil_document{record = #file_descriptor]}. See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper.<br/> Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
+	Lists file descriptor from DB. First argument is a two-element tuple containing type of resource used to filter descriptors and resource itself Currently only {by_file, File :: file()} is supported. Second argument limits number of rows returned. 3rd argument sets offset of query (skips first Offset rows) Non-error return value is always {ok, [#veil_document{record = #file_descriptor]}. See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper. Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
 
 	.. _`dao_vfs:list_dir/3`:
 
 	.. function:: list_dir(Dir :: file(), N :: pos_integer(), Offset :: non_neg_integer()) -> {ok, [file_doc()]}
 		:noindex:
 
-	Lists N files from specified directory starting from Offset. <br/> Non-error return value is always list of #veil_document{record = #file{}} records.<br/> Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
+	Lists N files from specified directory starting from Offset. Non-error return value is always list of #veil_document{record = #file{}} records. Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
 
 	.. _`dao_vfs:list_storage/0`:
 
 	.. function:: list_storage() -> {ok, [storage_doc()]} | no_return()
 		:noindex:
 
-	Lists all storage docs. <br/> Non-error return value is always list of #veil_document{record = #storage_info{}} records.<br/> Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
+	Lists all storage docs. Non-error return value is always list of #veil_document{record = #storage_info{}} records. Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
 
 	.. _`dao_vfs:lock_file/3`:
 
@@ -120,21 +125,21 @@ Function Details
 	.. function:: remove_file(File :: file()) -> ok | {error, any()} | no_return()
 		:noindex:
 
-	Removes file from DB. Argument should be file() - see dao_types.hrl for more details <br/> Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
+	Removes file from DB. Argument should be file() - see dao_types.hrl for more details Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
 
 	.. _`dao_vfs:remove_file_meta/1`:
 
 	.. function:: remove_file_meta(FMeta :: uuid()) -> ok | {error, any()} | no_return()
 		:noindex:
 
-	Removes file_meta from DB. Argument should be uuid() of veil_document - see dao_types.hrl for more details <br/> Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
+	Removes file_meta from DB. Argument should be uuid() of veil_document - see dao_types.hrl for more details Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
 
 	.. _`dao_vfs:remove_storage/1`:
 
 	.. function:: remove_storage({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) -> ok | {error, any()} | no_return()
 		:noindex:
 
-	Removes storage info from DB. Argument should be uuid() of storage document or ID of storage <br/> Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
+	Removes storage info from DB. Argument should be uuid() of storage document or ID of storage Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
 
 	.. _`dao_vfs:rename_file/2`:
 
@@ -148,35 +153,35 @@ Function Details
 	.. function:: save_descriptor(Fd :: fd_info() | fd_doc()) -> {ok, uuid()} | {error, any()} | no_return()
 		:noindex:
 
-	Saves file descriptor to DB. Argument should be either #file_descriptor{} record (if you want to save it as new document) <br/> or #veil_document{} that wraps #file_descriptor{} if you want to update descriptor in DB. <br/> See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper.<br/> Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
+	Saves file descriptor to DB. Argument should be either #file_descriptor{} record (if you want to save it as new document) or #veil_document{} that wraps #file_descriptor{} if you want to update descriptor in DB. See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper. Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
 
 	.. _`dao_vfs:save_file/1`:
 
 	.. function:: save_file(File :: file_info() | file_doc()) -> {ok, uuid()} | {error, any()} | no_return()
 		:noindex:
 
-	Saves file to DB. Argument should be either #file{} record (if you want to save it as new document) <br/> or #veil_document{} that wraps #file{} if you want to update file in DB. <br/> See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper.<br/> Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
+	Saves file to DB. Argument should be either #file{} record (if you want to save it as new document) or #veil_document{} that wraps #file{} if you want to update file in DB. See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper. Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
 
 	.. _`dao_vfs:save_file_meta/1`:
 
 	.. function:: save_file_meta(FMeta :: #file_meta{} | #veil_document{}) -> {ok, uuid()} | {error, any()} | no_return()
 		:noindex:
 
-	Saves file_meta to DB. Argument should be either #file_meta{} record (if you want to save it as new document) <br/> or #veil_document{} that wraps #file_meta{} if you want to update file meta in DB. <br/> See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper.<br/> Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
+	Saves file_meta to DB. Argument should be either #file_meta{} record (if you want to save it as new document) or #veil_document{} that wraps #file_meta{} if you want to update file meta in DB. See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper. Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
 
 	.. _`dao_vfs:save_new_file/2`:
 
 	.. function:: save_new_file(FilePath :: string(), File :: file_info()) -> {ok, uuid()} | {error, any()} | no_return()
 		:noindex:
 
-	Saves new file to DB See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper.<br/> Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
+	Saves new file to DB See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper. Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
 
 	.. _`dao_vfs:save_storage/1`:
 
 	.. function:: save_storage(Storage :: #storage_info{} | #veil_document{}) -> {ok, uuid()} | {error, any()} | no_return()
 		:noindex:
 
-	Saves storage info to DB. Argument should be either #storage_info{} record (if you want to save it as new document) <br/> or #veil_document{} that wraps #storage_info{} if you want to update storage info in DB. <br/> See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper.<br/> Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
+	Saves storage info to DB. Argument should be either #storage_info{} record (if you want to save it as new document) or #veil_document{} that wraps #storage_info{} if you want to update storage info in DB. See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper. Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
 
 	.. _`dao_vfs:unlock_file/3`:
 

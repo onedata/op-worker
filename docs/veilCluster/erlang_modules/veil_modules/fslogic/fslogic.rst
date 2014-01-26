@@ -97,7 +97,7 @@ Function Details
 
 	* **Result:** term()
 
-	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback handle/1. <br/> Processes standard worker requests (e.g. ping) and requests from FUSE.
+	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback handle/1. Processes standard worker requests (e.g. ping) and requests from FUSE.
 
 	.. _`fslogic:init/1`:
 

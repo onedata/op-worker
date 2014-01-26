@@ -23,7 +23,7 @@ Function Details
 	.. function:: get_sh_for_fuse(FuseID :: string(), Storage :: #storage_info{}) -> #storage_helper_info{}
 		:noindex:
 
-	Returns #storage_helper_info{} record which describes storage helper that is connected with given <br/> storage (described with #storage_info{} record). Each storage can have multiple storage helpers, <br/> that varies between FUSE groups, so that different FUSE clients (with different FUSE_ID) could select different storage helper.
+	Returns #storage_helper_info{} record which describes storage helper that is connected with given storage (described with #storage_info{} record). Each storage can have multiple storage helpers, that varies between FUSE groups, so that different FUSE clients (with different FUSE_ID) could select different storage helper.
 
 	.. _`fslogic_storage:insert_storage/2`:
 
@@ -44,5 +44,5 @@ Function Details
 	.. function:: select_storage(FuseID :: string(), StorageList :: [#storage_info{}]) -> #storage_info{}
 		:noindex:
 
-	Chooses and returns one storage_info from given list of #storage_info records. <br/> TODO: This method is an mock method that shall be replaced in future. <br/> Currently returns random #storage_info{}.
+	Chooses and returns one storage_info from given list of #storage_info records. TODO: This method is an mock method that shall be replaced in future. Currently returns random #storage_info{}.
 

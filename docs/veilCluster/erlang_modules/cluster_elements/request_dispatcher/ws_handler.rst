@@ -34,7 +34,7 @@ Function Details
 	* **Req:** term()
 	* **State:** #hander_state{}
 
-	Cowboy's webscoket_handle callback. Binary data was received on socket. <br/> For more information please refer Cowboy's user manual.
+	Cowboy's webscoket_handle callback. Binary data was received on socket. For more information please refer Cowboy's user manual.
 
 	.. _`ws_handler:websocket_info/3`:
 
@@ -44,14 +44,14 @@ Function Details
 	* **Req:** term()
 	* **State:** #hander_state{}
 
-	Cowboy's webscoket_info callback. Erlang message received. <br/> For more information please refer Cowboy's user manual.
+	Cowboy's webscoket_info callback. Erlang message received. For more information please refer Cowboy's user manual.
 
 	.. _`ws_handler:websocket_init/3`:
 
 	.. function:: websocket_init(TransportName :: atom(), Req :: term(), Opts :: list()) -> {ok, Req :: term(), State :: term()} | {shutdown, Req :: term()}
 		:noindex:
 
-	Cowboy's webscoket_init callback. Initialize connection, proceed with TLS-GSI authentication. <br/> If GSI validation fails, connection will be closed. <br/> Currently validation is handled by Globus NIF library loaded on erlang slave nodes.
+	Cowboy's webscoket_init callback. Initialize connection, proceed with TLS-GSI authentication. If GSI validation fails, connection will be closed. Currently validation is handled by Globus NIF library loaded on erlang slave nodes.
 
 	.. _`ws_handler:websocket_terminate/3`:
 
@@ -61,5 +61,5 @@ Function Details
 	* **Req:** term()
 	* **State:** #hander_state{}
 
-	Cowboy's webscoket_info callback. Connection was closed. <br/> For more information please refer Cowboy's user manual.
+	Cowboy's webscoket_info callback. Connection was closed. For more information please refer Cowboy's user manual.
 

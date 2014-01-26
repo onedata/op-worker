@@ -25,5 +25,5 @@ Function Details
 
 	* **Response:** term()
 
-	Executes apply(veilhelper_nif, Method, Args) through slave node. <br/> Before executing, fields from struct SHInfo are preappend to Args list. <br/> You can also skip SHInfo argument in order to pass exact Args into target Method.
+	Executes apply(veilhelper_nif, Method, Args) through slave node. Before executing, fields from struct SHInfo are preappend to Args list. You can also skip SHInfo argument in order to pass exact Args into target Method.
 

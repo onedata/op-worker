@@ -27,7 +27,7 @@ Function Details
 	.. function:: call(Module :: atom(), Method :: atom(), Args :: [term()]) -> ok | no_return()
 		:noindex:
 
-	Calls apply(Module, Method, Args) on one of started slave nodes. If slave node is down, initializes restart procedure and tries to use another node. <br/> However is all nodes are down, error is returned and GSI action is interrupted (e.g. peer verification fails).
+	Calls apply(Module, Method, Args) on one of started slave nodes. If slave node is down, initializes restart procedure and tries to use another node. However is all nodes are down, error is returned and GSI action is interrupted (e.g. peer verification fails).
 
 	.. _`gsi_handler:find_eec_cert/3`:
 
@@ -55,7 +55,7 @@ Function Details
 	.. function:: load_certs(CADir :: string()) -> ok | no_return()
 		:noindex:
 
-	Loads all PEM encoded CA certificates from given directory along with their CRL certificates (if any). <br/> Note that CRL certificates should also be PEM encoded and the CRL filename should match their CA filename but with '.crl' extension.
+	Loads all PEM encoded CA certificates from given directory along with their CRL certificates (if any). Note that CRL certificates should also be PEM encoded and the CRL filename should match their CA filename but with '.crl' extension.
 
 	.. _`gsi_handler:proxy_subject/1`:
 
@@ -69,12 +69,12 @@ Function Details
 	.. function:: update_crls(CADir :: string()) -> ok | no_return()
 		:noindex:
 
-	Updates CRL certificates based on their distribution point (x509 CA extension). <br/> Not yet fully implemented.
+	Updates CRL certificates based on their distribution point (x509 CA extension). Not yet fully implemented.
 
 	.. _`gsi_handler:verify_callback/3`:
 
 	.. function:: verify_callback(OtpCert :: #'OTPCertificate'{}, Status :: term(), Certs :: [#'OTPCertificate'{}]) -> {valid, UserState :: any()} | {fail, Reason :: term()}
 		:noindex:
 
-	This method is an registered callback, called foreach peer certificate. <br/> This callback saves whole certificate chain in GSI ETS based state for further use.
+	This method is an registered callback, called foreach peer certificate. This callback saves whole certificate chain in GSI ETS based state for further use.
 

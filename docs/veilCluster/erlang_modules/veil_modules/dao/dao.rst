@@ -5,7 +5,7 @@ dao
 
 	:Authors: Rafal Slota
 	:Copyright: This software is released under the :ref:`license`.
-	:Descritpion: This module implements :ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callbacks and contains utility API methods. <br/> DAO API functions are implemented in DAO sub-modules like: :ref:`dao_cluster <dao_cluster>`, :ref:`dao_vfs <dao_vfs>`. <br/> All DAO API functions Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead. Module :: atom() is module suffix (prefix is 'dao_'), MethodName :: atom() is the method name and ListOfArgs :: [term()] is list of argument for the method. <br/> If you want to call utility methods from this module - use Module = utils See :ref:`dao:handle/2 <dao:handle/2>` for more details.
+	:Descritpion: This module implements :ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callbacks and contains utility API methods. DAO API functions are implemented in DAO sub-modules like: :ref:`dao_cluster <dao_cluster>`, :ref:`dao_vfs <dao_vfs>`. All DAO API functions Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead. Module :: atom() is module suffix (prefix is 'dao_'), MethodName :: atom() is the method name and ListOfArgs :: [term()] is list of argument for the method. If you want to call utility methods from this module - use Module = utils See :ref:`dao:handle/2 <dao:handle/2>` for more details.
 	:Behaviours: :ref:`worker_plugin_behaviour`
 
 Function Index
@@ -48,7 +48,7 @@ Function Details
 	.. function:: get_record(Id :: atom() | string()) -> {ok,#veil_document{record :: tuple()}} | {error, Error :: term()} | no_return()
 		:noindex:
 
-	Retrieves record with UUID = Id from DB. Returns whole #veil_document record containing UUID, Revision Info and demanded record inside. #veil_document{}.uuid and #veil_document{}.rev_info should not be ever changed. <br/> You can strip wrappers if you do not need them using API functions of dao_lib module. See #veil_document{} structure for more info.<br/> Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead.
+	Retrieves record with UUID = Id from DB. Returns whole #veil_document record containing UUID, Revision Info and demanded record inside. #veil_document{}.uuid and #veil_document{}.rev_info should not be ever changed. You can strip wrappers if you do not need them using API functions of dao_lib module. See #veil_document{} structure for more info. Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead.
 
 	.. _`dao:handle/2`:
 
@@ -63,7 +63,7 @@ Function Details
 	* **Result:** ok | {ok, Response} | {error, Error} | pong | Version
 	* **Version:** term()
 
-	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback handle/1. <br/> All {Module, Method, Args} requests (second argument), executes Method with Args in {@type dao_Module} module, but with one exception: If Module = utils, then dao module will be used. <br/> E.g calling dao:handle(_, {vfs, some_method, [some_arg]}) will call dao_vfs:some_method(some_arg) <br/> but calling dao:handle(_, {utils, some_method, [some_arg]}) will call dao:some_method(some_arg) <br/> You can omit Module atom in order to use default module which is dao_cluster. <br/> E.g calling dao:handle(_, {some_method, [some_arg]}) will call dao_cluster:some_method(some_arg) <br/> Additionally all exceptions from called API method will be caught and converted into {error, Exception} tuple. <br/> E.g. calling handle(_, {save_record, [Id, Rec]}) will execute dao_cluster:save_record(Id, Rec) and normalize return value.
+	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback handle/1. All {Module, Method, Args} requests (second argument), executes Method with Args in {@type dao_Module} module, but with one exception: If Module = utils, then dao module will be used. E.g calling dao:handle(_, {vfs, some_method, [some_arg]}) will call dao_vfs:some_method(some_arg) but calling dao:handle(_, {utils, some_method, [some_arg]}) will call dao:some_method(some_arg) You can omit Module atom in order to use default module which is dao_cluster. E.g calling dao:handle(_, {some_method, [some_arg]}) will call dao_cluster:some_method(some_arg) Additionally all exceptions from called API method will be caught and converted into {error, Exception} tuple. E.g. calling handle(_, {save_record, [Id, Rec]}) will execute dao_cluster:save_record(Id, Rec) and normalize return value.
 
 	.. _`dao:init/1`:
 
@@ -87,7 +87,7 @@ Function Details
 	.. function:: list_records(ViewInfo :: #view_info{}, QueryArgs :: #view_query_args{}) -> {ok, QueryResult :: #view_result{}} | {error, term()}
 		:noindex:
 
-	Executes view query and parses returned result into #view_result{} record. <br/> Strings from #view_query_args{} are not transformed by :ref:`dao_helper:name/1 <dao_helper:name/1>`, the caller has to do it by himself.
+	Executes view query and parses returned result into #view_result{} record. Strings from #view_query_args{} are not transformed by :ref:`dao_helper:name/1 <dao_helper:name/1>`, the caller has to do it by himself.
 
 	.. _`dao:load_view_def/2`:
 
@@ -108,7 +108,7 @@ Function Details
 	.. function:: save_record(term() | #veil_document{uuid :: string(), rev_info :: term(), record :: term(), force_update :: boolean()}) -> {ok, DocId :: string()} | {error, conflict} | no_return()
 		:noindex:
 
-	Saves record to DB. Argument has to be either Record :: term() which will be saved<br/> with random UUID as completely new document or #veil_document record. If #veil_document record is passed <br/> caller may set UUID and revision info in order to update this record in DB.<br/> If you got #veil_document{} via :ref:`dao:get_record/1 <dao:get_record/1>`, uuid and rev_info are in place and you shouldn't touch them<br/> Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead.
+	Saves record to DB. Argument has to be either Record :: term() which will be saved with random UUID as completely new document or #veil_document record. If #veil_document record is passed caller may set UUID and revision info in order to update this record in DB. If you got #veil_document{} via :ref:`dao:get_record/1 <dao:get_record/1>`, uuid and rev_info are in place and you shouldn't touch them Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead.
 
 	.. _`dao:set_db/1`:
 

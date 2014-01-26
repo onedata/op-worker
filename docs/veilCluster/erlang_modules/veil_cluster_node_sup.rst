@@ -30,7 +30,7 @@ Function Details
 	* **StartFunc:** {M :: module(), F :: atom(), A :: [term()] | undefined}
 	* **SupervisionPolicy:** {RestartStrategy, MaxR :: non_neg_integer(), MaxT :: pos_integer()}
 
-	<a href="http://www.erlang.org/doc/man/supervisor.html#Module:init-1">supervisor:init/1</a>
+	 supervisor:init/1 
 
 	.. _`veil_cluster_node_sup:start_link/1`:
 

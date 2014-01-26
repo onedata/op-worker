@@ -25,7 +25,7 @@ Function Details
 	.. function:: get_user(Key:: {login, Login :: string()} | {email, Email :: string()} | {uuid, UUID :: uuid()} | {dn, DN :: string()}) -> {ok, user_doc()} | {error, any()} | no_return()
 		:noindex:
 
-	Gets user from DB by login, e-mail, uuid or dn. Non-error return value is always {ok, #veil_document{record = #user}. See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper.<br/> Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
+	Gets user from DB by login, e-mail, uuid or dn. Non-error return value is always {ok, #veil_document{record = #user}. See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper. Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
 
 	.. _`dao_users:remove_user/1`:
 
@@ -39,5 +39,5 @@ Function Details
 	.. function:: save_user(User :: user_info() | user_doc()) -> {ok, user()} | {error, any()} | no_return()
 		:noindex:
 
-	Saves user to DB. Argument should be either #user{} record (if you want to save it as new document) <br/> or #veil_document{} that wraps #user{} if you want to update descriptor in DB. <br/> See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper.<br/> Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
+	Saves user to DB. Argument should be either #user{} record (if you want to save it as new document) or #veil_document{} that wraps #user{} if you want to update descriptor in DB. See :ref:`dao:save_record/1 <dao:save_record/1>` and :ref:`dao:get_record/1 <dao:get_record/1>` for more details about #veil_document{} wrapper. Should not be used directly, use :ref:`dao:handle/2 <dao:handle/2>` instead (See :ref:`dao:handle/2 <dao:handle/2>` for more details).
 

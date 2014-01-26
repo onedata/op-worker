@@ -42,7 +42,7 @@ Function Details
 	* **Result:** ok | {ok, Response} | {error, Error} | pong | Version
 	* **Version:** term()
 
-	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback handle/1. <br/> Calling handle(_, ping) returns pong. Calling handle(_, get_version) returns current version of application. Calling handle(_. {update_state, _}) updates plugin state. Calling handle(_, {get_worker, Name}) returns list of ipv4 addresses of workers with specified name.
+	:ref:`worker_plugin_behaviour <worker_plugin_behaviour>` callback handle/1. Calling handle(_, ping) returns pong. Calling handle(_, get_version) returns current version of application. Calling handle(_. {update_state, _}) updates plugin state. Calling handle(_, {get_worker, Name}) returns list of ipv4 addresses of workers with specified name.
 
 	.. _`dns_worker:init/1`:
 

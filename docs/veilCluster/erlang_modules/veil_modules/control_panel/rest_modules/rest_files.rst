@@ -31,7 +31,7 @@ Function Details
 	.. function:: allowed_methods(req(), binary(), binary()) -> {[binary()], req()}
 		:noindex:
 
-	Should return list of methods that are allowed and directed at specific Id. e.g.: if Id =:= undefined -> ''[<<"GET">>, <<"POST">>]'' if Id /= undefined -> ''[<<"GET">>, <<"PUT">>, <<"DELETE">>]''
+	Should return list of methods that are allowed and directed at specific Id. e.g.: if Id =:= undefined -> ''[< >, < >]'' if Id /= undefined -> ''[< >, < >, < >]''
 
 	.. _`rest_files:content_types_provided/2`:
 
@@ -45,7 +45,7 @@ Function Details
 	.. function:: content_types_provided(req(), binary(), binary()) -> {[binary()], req()}
 		:noindex:
 
-	Should return list of provided content-types with specified ID (e.g. ".../rest/resource/some_id"). Should take into account different types of methods (PUT, GET etc.), if needed. Should return empty list if method is not supported. Id is a dir -> application/json Id is a regular file -> '<mimetype>' Id does not exist -> []
+	Should return list of provided content-types with specified ID (e.g. ".../rest/resource/some_id"). Should take into account different types of methods (PUT, GET etc.), if needed. Should return empty list if method is not supported. Id is a dir -> application/json Id is a regular file -> ' ' Id does not exist -> []
 
 	.. _`rest_files:delete/3`:
 
@@ -80,7 +80,7 @@ Function Details
 	.. function:: handle_multipart_data(req(), binary(), binary(), term()) -> {boolean(), req()}
 		:noindex:
 
-	Optional callback to handle multipart requests. Data should be streamed in handling module with use of cowboy_multipart module. Method can be '<<"POST">> or <<"PUT">>'. Should handle the request and return true/false indicating the result. Should always return false if the method is not supported.
+	Optional callback to handle multipart requests. Data should be streamed in handling module with use of cowboy_multipart module. Method can be '< > or < >'. Should handle the request and return true/false indicating the result. Should always return false if the method is not supported.
 
 	.. _`rest_files:post/4`:
 

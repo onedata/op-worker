@@ -47,7 +47,7 @@ Function Details
 	* **Result:** {ok, NewState :: term()} | {error, Reason :: term()}
 	* **Vsn:** term()
 
-	<a href="http://www.erlang.org/doc/man/gen_server.html#Module:code_change-3">gen_server:code_change/3</a>
+	 gen_server:code_change/3 
 
 	.. _`worker_host:create_simple_cache/1`:
 
@@ -117,7 +117,7 @@ Function Details
 	* **Result:** {reply, Reply, NewState} | {reply, Reply, NewState, Timeout} | {reply, Reply, NewState, hibernate} | {noreply, NewState} | {noreply, NewState, Timeout} | {noreply, NewState, hibernate} | {stop, Reason, Reply, NewState} | {stop, Reason, NewState}
 	* **Timeout:** non_neg_integer() | infinity
 
-	<a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_call-3">gen_server:handle_call/3</a>
+	 gen_server:handle_call/3 
 
 	.. _`worker_host:handle_cast/2`:
 
@@ -128,7 +128,7 @@ Function Details
 	* **Result:** {noreply, NewState} | {noreply, NewState, Timeout} | {noreply, NewState, hibernate} | {stop, Reason :: term(), NewState}
 	* **Timeout:** non_neg_integer() | infinity
 
-	<a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_cast-2">gen_server:handle_cast/2</a>
+	 gen_server:handle_cast/2 
 
 	.. _`worker_host:handle_info/2`:
 
@@ -139,7 +139,7 @@ Function Details
 	* **Result:** {noreply, NewState} | {noreply, NewState, Timeout} | {noreply, NewState, hibernate} | {stop, Reason :: term(), NewState}
 	* **Timeout:** non_neg_integer() | infinity
 
-	<a href="http://www.erlang.org/doc/man/gen_server.html#Module:handle_info-2">gen_server:handle_info/2</a>
+	 gen_server:handle_info/2 
 
 	.. _`worker_host:init/1`:
 
@@ -150,7 +150,7 @@ Function Details
 	* **State:** term()
 	* **Timeout:** non_neg_integer() | infinity
 
-	<a href="http://www.erlang.org/doc/man/gen_server.html#Module:init-1">gen_server:init/1</a>
+	 gen_server:init/1 
 
 	.. _`worker_host:start_link/3`:
 
@@ -191,5 +191,5 @@ Function Details
 
 	* **Reason:** normal | shutdown | {shutdown, term()} | term()
 
-	<a href="http://www.erlang.org/doc/man/gen_server.html#Module:terminate-2">gen_server:terminate/2</a>
+	 gen_server:terminate/2 
 
