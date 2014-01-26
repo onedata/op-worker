@@ -49,9 +49,9 @@ Tests
 ^^^^^
 
 It should contain the same subdirectories as 'src'. Each test name
-should be constructed as follows: 'name of tested file'\ *tests.erl,
-e.g. 'node*\ manager\_tests.erl' should contain functions that test code
-from 'node\_manager.erl' file.
+should be constructed as follows: 'name of tested file'\_tests.erl, e.g.
+'node\_manager\_tests.erl' should contain functions that test code from
+'node\_manager.erl' file.
 
 Eunit is used during tests so each test file should:
 
