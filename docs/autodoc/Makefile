@@ -12,16 +12,19 @@ main:
 
 veilclient:
 	@printf "\rVeilClient\t(%3d%%)" 0
-	@pandoc --from=markdown --to=rst --output=$(VEILCLIENT)/about.rst $(MAIN)/data/veilclient/README.md
+	@#pandoc --from=markdown --to=rst --output=$(VEILCLIENT)/about.rst $(MAIN)/data/veilclient/README.md
+	@cp $(MAIN)/data/veilclient/README.txt $(VEILCLIENT)/about.rst
 	@printf "\rVeilClient\t(%3d%%)" 50
 	@python veilclient.py $(MAIN) $(VEILCLIENT)
 	@printf "\rVeilClient\t(%3d%%)\n" 100
 
 veilcluster:
 	@printf "\rVeilCluster\t(%3d%%)" 0
-	@pandoc --from=markdown --to=rst --output=$(VEILCLUSTER)/about.rst $(ROOT)/README.md
+	@#pandoc --from=markdown --to=rst --output=$(VEILCLUSTER)/about.rst $(ROOT)/README.md
+	@cp $(ROOT)/README.rst $(VEILCLUSTER)/about.rst
 	@printf "\rVeilCluster\t(%3d%%)" 33
-	@pandoc --from=markdown --to=rst --output=$(VEILCLUSTER)/development.rst $(ROOT)/README-DEVELOPER.md
+	@#pandoc --from=markdown --to=rst --output=$(VEILCLUSTER)/development.rst $(ROOT)/README-DEVELOPER.md
+	@cp $(ROOT)/README-DEVELOPER.rst $(VEILCLUSTER)/development.rst
 	@printf "\rVeilCluster\t(%3d%%)" 67
 	@python veilcluster.py $(ROOT) $(VEILCLUSTER)
 	@printf "\rVeilCluster\t(%3d%%)\n" 100
