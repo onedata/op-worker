@@ -14,29 +14,27 @@ main:
 
 veilclient:
 	@printf "\rVeilClient\t(%3d%%)" 0
+	@mkdir -p $(VEILCLIENT)
 	@#pandoc --from=markdown --to=rst --output=$(VEILCLIENT)/about.rst $(MAIN)/data/veilclient/README.md
-	@sudo cp $(MAIN)/data/veilclient/README.txt $(VEILCLIENT)/about.rst
+	@cp $(MAIN)/data/veilclient/README.txt $(VEILCLIENT)/about.rst
 	@printf "\rVeilClient\t(%3d%%)" 50
 	@python veilclient.py $(MAIN) $(VEILCLIENT)
 	@printf "\rVeilClient\t(%3d%%)\n" 100
 
 veilcluster:
 	@printf "\rVeilCluster\t(%3d%%)" 0
+	@mkdir -p $(VEILCLUSTER)
 	@#pandoc --from=markdown --to=rst --output=$(VEILCLUSTER)/about.rst $(ROOT)/README.md
-	@sudo cp $(MAIN)/data/veilcluster/README.txt $(VEILCLUSTER)/about.rst
+	@cp $(MAIN)/data/veilcluster/README.txt $(VEILCLUSTER)/about.rst
 	@printf "\rVeilCluster\t(%3d%%)" 33
 	@#pandoc --from=markdown --to=rst --output=$(VEILCLUSTER)/development.rst $(ROOT)/README-DEVELOPER.md
-	@sudo cp $(MAIN)/data/veilcluster/README-DEVELOPER.txt $(VEILCLUSTER)/development.rst
+	@cp $(MAIN)/data/veilcluster/README-DEVELOPER.txt $(VEILCLUSTER)/development.rst
 	@printf "\rVeilCluster\t(%3d%%)" 67
 	@python veilcluster.py $(ROOT) $(VEILCLUSTER)
 	@printf "\rVeilCluster\t(%3d%%)\n" 100
 
 clean:
-	rm -f $(VEILCLIENT)/classes/*.rst
-	rm -f $(VEILCLIENT)/structs/*.rst
-	rm -f $(VEILCLIENT)/namespaces/*.rst
-	rm -f $(VEILCLIENT)/files/*.rst
-	rm -f $(VEILCLIENT)/*.rst
+	rm -rf $(VEILCLIENT)
 
 	rm -f $(VEILCLUSTER)/*.rst
 	rm -f $(VEILCLUSTER)/REST_API/index.rst
