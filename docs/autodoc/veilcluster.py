@@ -50,9 +50,8 @@ class VeilCluster(Sphinx):
 					if not os.path.exists(path):
 						os.makedirs(path)
 					# TODO: uncomment when pandoc is installed
-					process = subprocess.Popen(['pandoc', '--from=markdown', '--to=rst', '--output=' + path + '/' + file[:-3] + '.rst', root + '/' + file], stdout=sys.stdout, stderr=sys.stderr)
-
-					process.wait()
+					# process = subprocess.Popen(['pandoc', '--from=markdown', '--to=rst', '--output=' + path + '/' + file[:-3] + '.rst', root + '/' + file], stdout=sys.stdout, stderr=sys.stderr)
+					# process.wait()
 
 
 class Details(object):
