@@ -111,9 +111,9 @@ veil_cluster_node_env:
       name: ports_in_use
       description: Ports used by application, that need to be free before veil can start
       value: |
-          ["53","5555","8443"]
+          ["control_panel_port","dns_port","dispatcher_port","rest_port"]
       erlang_term: |
-          [53,5555,8443]
+          [control_panel_port,dns_port,dispatcher_port,rest_port]
 
   # LOGGING
   - parameter:
@@ -261,6 +261,12 @@ veil_cluster_node_env:
          This variable determinates how often DAO fuse cache maintnance process shall fire up all its jobs (in seconds).
        value: 1800 # 30min
 
+  # REST
+  - parameter:
+       name: rest_port
+       description: |
+         REST port.
+       value: 8443
 
 obsolete:
   - parameter:

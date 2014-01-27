@@ -35,7 +35,7 @@
                 | term().
 %% ====================================================================
 start(_StartType, _StartArgs) ->
-	case ports_ok() of
+	case its_ccm() orelse ports_ok() of
 		true ->
 			{ok, NodeType} = application:get_env(?APP_Name, node_type),
 			fprof:start(), %% Start fprof server. It doesnt do enything unless it's used.
@@ -54,6 +54,43 @@ start(_StartType, _StartArgs) ->
 stop(_State) ->
   ok.
 
+%% ===================================================================
+%% Internal functions
+%% ===================================================================
+
+%% get_env/1
+%% ====================================================================
+%% @doc Gets environment variable, prints error logs if it's udefined
+-spec get_env(Name :: atom()) -> Result when
+	Result :: {Status, Value :: term()},
+	Status :: ok | error.
+%% ====================================================================
+get_env(Name) ->
+	GetEnvResult = application:get_env(?APP_Name,Name),
+	case GetEnvResult of
+		{ok,Value} ->
+			{ok,Value};
+		undefined ->
+			lager:error("Could not get '~p' environment variable.",[Name]),
+			io:format(standard_error, "Could not get '~p' environment variable.~n",[Name]),
+			{error,undefined}
+	end.
+
+%% its_ccm/0
+%% ====================================================================
+%% @doc Returns true if actual node is ccm
+-spec its_ccm() -> Result when
+	Result :: true | false.
+%% ====================================================================
+its_ccm() ->
+	GetEnvResult = get_env(node_type),
+	case GetEnvResult of
+		{ok, ccm} ->
+			true;
+		_ ->
+			false
+	end.
+
 %% ports_ok/0
 %% ====================================================================
 %% @doc Get port list from environment and check if they're free
@@ -61,13 +98,19 @@ stop(_State) ->
 	Result :: true | false.
 %% ====================================================================
 ports_ok() ->
-	GetEnvResult = application:get_env(veil_cluster_node,ports_in_use),
+	GetEnvResult = get_env(ports_in_use),
 	case GetEnvResult of
-		{ok,PortList} ->
-			ports_are_free(PortList);
-		undefined ->
-			lager:error("Could not get 'ports_in_use' environment variable."),
-			io:format(standard_error, "Could not get 'ports_in_use' environment variable.~n"),
+		{ok,PortEnvNames} ->
+			GetEnvResultList = lists:map(fun(X) -> get_env(X) end, PortEnvNames),
+			CorrectPortsNumbers = [ Number || {ok,Number} <- GetEnvResultList],
+			Errors = [ Error || {error,Error} <- GetEnvResultList],
+			case Errors of
+				[] ->
+					ports_are_free(CorrectPortsNumbers);
+				_ ->
+					false
+			end;
+		_ ->
 			false
 	end.
 
