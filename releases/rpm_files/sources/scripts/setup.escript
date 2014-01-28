@@ -70,7 +70,7 @@ main(Args) ->
 
 setup_start() ->
 	h1("Veil SETUP"),
-	info("Nodes configured on this machine will use his hostname: " ++ get(hostname)),
+	info("Nodes configured on this machine will use its hostname: " ++ get(hostname)),
 	warn("Make sure it is resolvable by other hosts in the network"),
 	Option = interaction_choose_option(what_to_do, "What do you want to do?", 
 		[
