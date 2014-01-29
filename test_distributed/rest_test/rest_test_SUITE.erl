@@ -247,7 +247,7 @@ test_rest_shares() ->
     {Code4, Headers4, Response4} = do_request(?REST_SHARE_SUBPATH ++ ShareID, get, [], []),
     ?assertEqual(Code4, "200"),
     ?assertEqual(proplists:get_value("content-type", Headers4), "application/json"),
-    {ok, Port} = rpc:call(get(ccm), application, get_env, [veil_cluster_node, control_panel_port]),
+    {ok, Port} = rpc:call(get(ccm), application, get_env, [veil_cluster_node, rest_port]),
     Hostname = case (Port =:= 80) or (Port =:= 443) of
                    true -> "https://localhost";
                    false -> "https://localhost:" ++ integer_to_list(Port)
@@ -282,7 +282,7 @@ do_request(APIVersion, RestSubpath, Method, Headers, Body) ->
     Cert = ?COMMON_FILE("peer.pem"),
     CCM = get(ccm),
 
-    {ok, Port} = rpc:call(CCM, application, get_env, [veil_cluster_node, control_panel_port]),
+    {ok, Port} = rpc:call(CCM, application, get_env, [veil_cluster_node, rest_port]),
     Hostname = case (Port =:= 80) or (Port =:= 443) of
                    true -> "https://localhost";
                    false -> "https://localhost:" ++ integer_to_list(Port)
@@ -380,7 +380,7 @@ init_per_testcase(main_test, Config) ->
     ?INIT_DIST_TEST,
     nodes_manager:start_deps_for_tester_node(),
 
-    Nodes = nodes_manager:start_test_on_nodes(1),
+    Nodes = nodes_manager:start_test_on_nodes(1, true),
     [Node1 | _] = Nodes,
 
 
