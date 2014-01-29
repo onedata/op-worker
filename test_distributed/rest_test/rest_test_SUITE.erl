@@ -247,7 +247,7 @@ test_rest_shares() ->
     {Code4, Headers4, Response4} = do_request(?REST_SHARE_SUBPATH ++ ShareID, get, [], []),
     ?assertEqual(Code4, "200"),
     ?assertEqual(proplists:get_value("content-type", Headers4), "application/json"),
-    {ok, Port} = rpc:call(get(ccm), application, get_env, [veil_cluster_node, rest_port]),
+    {ok, Port} = rpc:call(get(ccm), application, get_env, [veil_cluster_node, control_panel_port]),
     Hostname = case (Port =:= 80) or (Port =:= 443) of
                    true -> "https://localhost";
                    false -> "https://localhost:" ++ integer_to_list(Port)
