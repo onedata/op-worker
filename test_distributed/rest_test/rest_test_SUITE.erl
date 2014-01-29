@@ -53,7 +53,7 @@ main_test(Config) ->
 
 
     % Create a user in db with some files
-    DN = setup_user_in_db(),    
+    {DN, StorageUUID} = setup_user_in_db(),
     ibrowse:start(),
 
     % Test if REST requests return what is expected
@@ -65,6 +65,9 @@ main_test(Config) ->
 
 
     % DB cleanup
+    RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+    ?assertEqual(ok, RemoveStorageAns)
+
     ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/veilfstestgroup"], ?ProtocolVersion])),
     ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups"], ?ProtocolVersion])),
 
@@ -309,7 +312,7 @@ setup_user_in_db() ->
     % TODO Usunac jak wreszcie baza bedzie czyszczona miedzy testami
     rpc:call(CCM, user_logic, remove_user, [{dn, DN}]),
 
-    {Ans1, _} = rpc:call(CCM, fslogic_storage, insert_storage, [?SH, ?TEST_ROOT]),
+    {Ans1, StorageUUID} = rpc:call(CCM, fslogic_storage, insert_storage, [?SH, ?TEST_ROOT]),
     ?assertEqual(ok, Ans1),
     {Ans5, _} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
     ?assertEqual(ok, Ans5),
@@ -323,7 +326,7 @@ setup_user_in_db() ->
     Ans7 = rpc:call(CCM, logical_files_manager, create, ["veilfstestuser/dir/file.txt"]), 
     ?assertEqual(ok, Ans7),
 
-    DN.
+    {DN, StorageUUID}.
 
 
 %% ====================================================================
