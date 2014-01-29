@@ -364,14 +364,14 @@ callbacks_test(Config) ->
 
   [CCM | WorkerNodes] = NodesUp,
 
-  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
+  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [], 2000)),
   nodes_manager:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
-    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
+    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [], 2000)),
     nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
-  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
+  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [], 2000)),
   nodes_manager:wait_for_cluster_init(),
 
   [Worker1 | _] = WorkerNodes,
@@ -381,9 +381,9 @@ callbacks_test(Config) ->
   %% Add test users since cluster wont generate FuseId without full authentication
   {ReadFileAns, PemBin} = file:read_file(PeerCert),
   ?assertEqual(ok, ReadFileAns),
-  {ExtractAns, RDNSequence} = rpc:call(Worker1, user_logic, extract_dn_from_cert, [PemBin]),
+  {ExtractAns, RDNSequence} = rpc:call(Worker1, user_logic, extract_dn_from_cert, [PemBin], 2000),
   ?assertEqual(rdnSequence, ExtractAns),
-  {ConvertAns, DN} = rpc:call(Worker1, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
+  {ConvertAns, DN} = rpc:call(Worker1, user_logic, rdn_sequence_to_dn_string, [RDNSequence], 2000),
   ?assertEqual(ok, ConvertAns),
   DnList = [DN],
 
@@ -391,7 +391,7 @@ callbacks_test(Config) ->
   Name = "user1 user1",
   Teams = ["user1 team"],
   Email = "user1@email.net",
-  {CreateUserAns, _} = rpc:call(Worker1, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+  {CreateUserAns, _} = rpc:call(Worker1, user_logic, create_user, [Login, Name, Teams, Email, DnList], 2000),
   ?assertEqual(ok, CreateUserAns),
   %% END Add user
 
@@ -522,7 +522,7 @@ callbacks_test(Config) ->
   CheckDispatcherAns(DispatcherCorrectAns2, CCMTest2),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns2, lists:zip(NodesUp, FuseInfo2)),
 
-  CallbackSendTest1 = rpc:call(LastNode, request_dispatcher, send_to_fuse, [FuseId2, #atom{value = "test_atom"}, "communication_protocol"]),
+  CallbackSendTest1 = rpc:call(LastNode, request_dispatcher, send_to_fuse, [FuseId2, #atom{value = "test_atom"}, "communication_protocol"], 2000),
   ?assertEqual(ok, CallbackSendTest1),
   {CallbackSendTestRecvAns, CallbackSendTestSendAns} = wss:recv(Fuse2Callback, 5000),
   ?assertEqual(ok, CallbackSendTestRecvAns),
@@ -570,7 +570,7 @@ callbacks_test(Config) ->
   CheckDispatcherAns(DispatcherCorrectAns3, CCMTest3),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns3, lists:zip(NodesUp, FuseInfo3)),
 
-  rpc:call(Worker1, user_logic, remove_user, [{dn, DN}]).
+  rpc:call(Worker1, user_logic, remove_user, [{dn, DN}], 2000).
 
 %% ====================================================================
 %% SetUp and TearDown functions
