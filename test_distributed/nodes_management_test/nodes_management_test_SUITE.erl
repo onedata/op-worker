@@ -71,6 +71,7 @@ fuse_session_cleanup_test(Config) ->
 
     %% Worker ports: 6666, 7777, 8888
     Host = "localhost",
+    TeamName = "user1 team",
 
     Cert1 = ?COMMON_FILE("peer.pem"),
     _Cert2 = ?COMMON_FILE("peer2.pem"),
@@ -86,7 +87,7 @@ fuse_session_cleanup_test(Config) ->
         DnList = [DN],
 
         Name = "user1 user1",
-        Teams = ["user1 team"],
+        Teams = [TeamName],
         Email = "user1@email.net",
         {CreateUserAns, _} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
         ?assertEqual(ok, CreateUserAns)
@@ -180,8 +181,10 @@ fuse_session_cleanup_test(Config) ->
     ?assertEqual(0, length(Ans11)),
 
     %% Cleanup
-    rpc:call(CCM, user_logic, remove_user, [{login, "user1"}]),
-    rpc:call(CCM, user_logic, remove_user, [{login, "user2"}]).
+    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ TeamName], ?ProtocolVersion])),
+    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
+
+    ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{login, "user1"}])).
 
 %% This test checks sub procs management (if requests are forwarded to apropriate sub procs)
 sub_proc_test(Config) ->

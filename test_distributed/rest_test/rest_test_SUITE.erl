@@ -15,6 +15,8 @@
 -include("veil_modules/control_panel/common.hrl").
 -include("registered_names.hrl").
 
+-define(ProtocolVersion, 1).
+
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([main_test/1]).
@@ -63,7 +65,10 @@ main_test(Config) ->
 
 
     % DB cleanup
-    rpc:call(CCM, user_logic, remove_user, [{dn, DN}]).
+    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/veilfstestgroup"], ?ProtocolVersion])),
+    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups"], ?ProtocolVersion])),
+
+    ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{dn, DN}])).
 
 
 %% ====================================================================

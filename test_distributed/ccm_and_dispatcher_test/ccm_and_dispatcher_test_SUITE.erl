@@ -21,6 +21,8 @@
 -include("veil_modules/dao/dao.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 
+-define(ProtocolVersion, 1).
+
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([modules_start_and_ping_test/1, dispatcher_connection_test/1, workers_list_actualization_test/1, ping_test/1, application_start_test1/1,
          veil_handshake_test/1, application_start_test2/1, validation_test/1, callbacks_list_actualization_test/1]).
@@ -96,9 +98,8 @@ modules_start_and_ping_test(Config) ->
   ?assertEqual(length(Workers2), length(Jobs)),
   ?assertEqual(4, gen_server:call({global, ?CCM}, get_state_num)),
 
-  ProtocolVersion = 1,
   CheckModules = fun(M, Sum) ->
-    Ans = gen_server:call({M, CCM}, {test_call, ProtocolVersion, ping}),
+    Ans = gen_server:call({M, CCM}, {test_call, ?ProtocolVersion, ping}),
     case Ans of
       pong -> Sum + 1;
       _Other -> Sum
@@ -170,6 +171,7 @@ veil_handshake_test(Config) ->
 
     Port = ?config(port, Config),
     Host = "localhost",
+    TeamName = "user1 team",
 
     Cert1 = ?COMMON_FILE("peer.pem"),
     Cert2 = ?COMMON_FILE("peer2.pem"),
@@ -185,7 +187,7 @@ veil_handshake_test(Config) ->
         DnList = [DN],
 
         Name = "user1 user1",
-        Teams = ["user1 team"],
+        Teams = [TeamName],
         Email = "user1@email.net",
         {CreateUserAns, _} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
         ?assertEqual(ok, CreateUserAns)
@@ -309,8 +311,11 @@ veil_handshake_test(Config) ->
     ?assertEqual([{testname1, "testvalue1"}, {testname2, "testvalue2"}], Vars),
 
     %% Cleanup
-    rpc:call(CCM, user_logic, remove_user, [{login, "user1"}]),
-    rpc:call(CCM, user_logic, remove_user, [{login, "user2"}]).
+    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ TeamName], ?ProtocolVersion])),
+    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
+
+    ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{login, "user1"}])),
+    ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{login, "user2"}])).
 
 
 %% This test checks if workers list inside dispatcher is refreshed correctly.

@@ -23,6 +23,8 @@
 
 all() -> [main_test, callbacks_test].
 
+-define(ProtocolVersion, 1).
+
 %% ====================================================================
 %% Test function
 %% ====================================================================
@@ -179,7 +181,8 @@ callbacks_test(Config) ->
 
   Login = "user1",
   Name = "user1 user1",
-  Teams = ["user1 team"],
+  TeamName = "user1 team",
+  Teams = [TeamName],
   Email = "user1@email.net",
   {CreateUserAns, _} = rpc:call(Worker1, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
@@ -359,7 +362,11 @@ callbacks_test(Config) ->
   CheckDispatcherAns(DispatcherCorrectAns4, CCMTest7),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns4, lists:zip(Worker2, FuseInfo4)),
 
-  rpc:call(CCM, user_logic, remove_user, [{dn, DN}]).
+  %% Cleanup
+  ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ TeamName], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
+
+  ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{dn, DN}])).
 
 %% ====================================================================
 %% SetUp and TearDown functions
