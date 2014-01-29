@@ -17,6 +17,8 @@
 -include("err.hrl").
 -include("registered_names.hrl").
 
+-define(ProtocolVersion, 1).
+
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([main_test/1]).
@@ -57,7 +59,7 @@ main_test(Config) ->
     rest_test_user_unknown(),
 
     % Create a user in db with some files
-    setup_user_in_db(DN),
+    StorageUUID = setup_user_in_db(DN),
 
     % Test if REST requests return what is expected
     test_rest_error_messages(),
@@ -69,6 +71,12 @@ main_test(Config) ->
 
 
     % DB cleanup
+    RemoveStorageAns = rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+    ?assertEqual(ok, RemoveStorageAns),
+
+    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/veilfstestgroup"], ?ProtocolVersion])),
+    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups"], ?ProtocolVersion])),
+
     rpc:call(CCM, user_logic, remove_user, [{dn, DN}]).
 
 
@@ -356,7 +364,7 @@ setup_user_in_db(DN) ->
     % TODO Usunac jak wreszcie baza bedzie czyszczona miedzy testami
     rpc:call(CCM, user_logic, remove_user, [{dn, DN}]),
 
-    {Ans1, _} = rpc:call(CCM, fslogic_storage, insert_storage, [?SH, ?TEST_ROOT]),
+    {Ans1, StorageUUID} = rpc:call(CCM, fslogic_storage, insert_storage, [?SH, ?TEST_ROOT]),
     ?assertEqual(ok, Ans1),
     {Ans5, _} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
     ?assertEqual(ok, Ans5),
@@ -370,7 +378,7 @@ setup_user_in_db(DN) ->
     Ans7 = rpc:call(CCM, logical_files_manager, create, ["veilfstestuser/dir/file.txt"]),
     ?assertEqual(ok, Ans7),
 
-    DN.
+    StorageUUID.
 
 
 %% ====================================================================
