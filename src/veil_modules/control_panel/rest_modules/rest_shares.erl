@@ -175,7 +175,7 @@ share_id_to_download_path(Req, ShareID) ->
     {Headers, _} = cowboy_req:headers(Req),
     FullHostname = proplists:get_value(<<"host">>, Headers),
     RequestedHostname = case string:tokens(binary_to_list(FullHostname), ":") of
-                            [Hostname, Port] -> list_to_binary(Hostname);
+                            [Hostname, _Port] -> list_to_binary(Hostname);
                             [Hostname] -> list_to_binary(Hostname)
                         end,
     SharedFilesPath = list_to_binary(?shared_files_download_path),
