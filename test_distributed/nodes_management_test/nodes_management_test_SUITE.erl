@@ -208,12 +208,12 @@ sub_proc_test(Config) ->
   %% If the caller catches the failure and continues running, and the server is just late with the reply,
   %% it may arrive at any time later into the caller's message queue. The caller must in this case be
   %% prepared for this and discard any such garbage messages that are two element tuples with a reference as the first element.
-  {Workers, _} = gen_server:call({global, ?CCM}, get_workers),
+  {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
     case lists:member({Node, fslogic}, Workers) of
       true -> ok;
       false ->
-        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, fslogic, []}),
+        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, fslogic, []}, 3000),
         ?assertEqual(ok, StartAns)
     end
   end,
@@ -243,7 +243,7 @@ sub_proc_test(Config) ->
   end,
 
   RegisterSubProc = fun(Node) ->
-    RegAns = gen_server:call({fslogic, Node}, {register_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun}, 500),
+    RegAns = gen_server:call({fslogic, Node}, {register_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun}, 1000),
     ?assertEqual(ok, RegAns),
     nodes_manager:wait_for_cluster_cast({fslogic, Node})
   end,
@@ -306,7 +306,7 @@ main_test(Config) ->
   NotExistingNodes = ['n1@localhost', 'n2@localhost', 'n3@localhost'],
   lists:foreach(fun(Node) -> gen_server:cast({global, ?CCM}, {node_is_up, Node}) end, NotExistingNodes),
   nodes_manager:wait_for_cluster_cast(),
-  Nodes = gen_server:call({global, ?CCM}, get_nodes),
+  Nodes = gen_server:call({global, ?CCM}, get_nodes, 500),
   ?assertEqual(length(Nodes), length(NodesUp)),
     lists:foreach(fun(Node) ->
       ?assert(lists:member(Node, Nodes))
@@ -314,10 +314,10 @@ main_test(Config) ->
 
   lists:foreach(fun(Node) -> gen_server:cast({global, ?CCM}, {node_is_up, Node}) end, NodesUp),
   nodes_manager:wait_for_cluster_cast(),
-  Nodes2 = gen_server:call({global, ?CCM}, get_nodes),
+  Nodes2 = gen_server:call({global, ?CCM}, get_nodes, 500),
   ?assertEqual(length(Nodes2), length(NodesUp)),
 
-  {Workers, _StateNum} = gen_server:call({global, ?CCM}, get_workers),
+  {Workers, _StateNum} = gen_server:call({global, ?CCM}, get_workers, 1000),
   Jobs = ?Modules,
   ?assertEqual(length(Workers), length(Jobs)),
 
@@ -485,13 +485,13 @@ callbacks_test(Config) ->
   end,
 
   CheckCallbacks = fun({Node, {FusesList, Fuse1AnsLength, Fuse2AnsLength}}, DispatcherCorrectAns) ->
-    Test1 = gen_server:call({?Dispatcher_Name, Node}, get_callbacks),
+    Test1 = gen_server:call({?Dispatcher_Name, Node}, get_callbacks, 1000),
     CheckDispatcherAns(DispatcherCorrectAns, Test1),
-    Test2 = gen_server:call({?Node_Manager_Name, Node}, get_fuses_list),
+    Test2 = gen_server:call({?Node_Manager_Name, Node}, get_fuses_list, 1000),
     ?assertEqual(FusesList, Test2),
-    Test3 = gen_server:call({?Node_Manager_Name, Node}, {get_all_callbacks, FuseId1}),
+    Test3 = gen_server:call({?Node_Manager_Name, Node}, {get_all_callbacks, FuseId1}, 1000),
     ?assertEqual(Fuse1AnsLength, length(Test3)),
-    Test4 = gen_server:call({?Node_Manager_Name, Node}, {get_all_callbacks, FuseId2}),
+    Test4 = gen_server:call({?Node_Manager_Name, Node}, {get_all_callbacks, FuseId2}, 1000),
     ?assertEqual(Fuse2AnsLength, length(Test4)),
 
     DispatcherCorrectAns
@@ -499,7 +499,7 @@ callbacks_test(Config) ->
 
   DispatcherCorrectAns1 = {[{FuseId1, lists:reverse(NodesUp)}, {FuseId2, [CCM]}], 6},
   FuseInfo1 = [{[FuseId1, FuseId2], 2,1}, {[FuseId1], 1,0}, {[FuseId1], 1,0}, {[FuseId1], 1,0}],
-  CCMTest1 = gen_server:call({global, ?CCM}, get_callbacks),
+  CCMTest1 = gen_server:call({global, ?CCM}, get_callbacks, 1000),
   CheckDispatcherAns(DispatcherCorrectAns1, CCMTest1),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns1, lists:zip(NodesUp, FuseInfo1)),
 
@@ -518,7 +518,7 @@ callbacks_test(Config) ->
   [LastNode | _] = lists:reverse(NodesUp),
   DispatcherCorrectAns2 = {[{FuseId1, [LastNode, CCM]}, {FuseId2, [CCM]}], 8},
   FuseInfo2 = [{[FuseId1, FuseId2], 1, 1}, {[], 0,0}, {[], 0,0}, {[FuseId1], 1,0}],
-  CCMTest2 = gen_server:call({global, ?CCM}, get_callbacks),
+  CCMTest2 = gen_server:call({global, ?CCM}, get_callbacks, 1000),
   CheckDispatcherAns(DispatcherCorrectAns2, CCMTest2),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns2, lists:zip(NodesUp, FuseInfo2)),
 
@@ -566,7 +566,7 @@ callbacks_test(Config) ->
 
   DispatcherCorrectAns3 = {[], 11},
   FuseInfo3 = [{[], 0, 0}, {[], 0, 0}, {[], 0, 0}, {[], 0, 0}],
-  CCMTest3 = gen_server:call({global, ?CCM}, get_callbacks),
+  CCMTest3 = gen_server:call({global, ?CCM}, get_callbacks, 1000),
   CheckDispatcherAns(DispatcherCorrectAns3, CCMTest3),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns3, lists:zip(NodesUp, FuseInfo3)),
 

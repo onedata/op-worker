@@ -2375,7 +2375,7 @@ chgrp(Socket, FileName, GID, GName) ->
 clear_old_descriptors(Node) ->
   {Megaseconds,Seconds, _Microseconds} = os:timestamp(),
   Time = 1000000*Megaseconds + Seconds + 60*15 + 1,
-  gen_server:call({?Dispatcher_Name, Node}, {fslogic, 1, {delete_old_descriptors_test, Time}}),
+  gen_server:call({?Dispatcher_Name, Node}, {fslogic, 1, {delete_old_descriptors_test, Time}}, 1000),
   nodes_manager:wait_for_db_reaction().
 
 create_standard_share(TestFile, DN) ->

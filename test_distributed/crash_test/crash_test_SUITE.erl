@@ -50,7 +50,7 @@ main_test(Config) ->
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
   nodes_manager:wait_for_state_loading(),
   nodes_manager:wait_for_cluster_init(),
-  ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node)),
+  ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
   Jobs = ?Modules,
   PeerCert = ?COMMON_FILE("peer.pem"),
@@ -86,7 +86,7 @@ main_test(Config) ->
     S + TmpPongsNum
   end,
 
-  {Workers, InitialStateNum} = gen_server:call({global, ?CCM}, get_workers),
+  {Workers, InitialStateNum} = gen_server:call({global, ?CCM}, get_workers, 1000),
   ?assertEqual(length(Workers), length(Jobs)),
   PongsNum = lists:foldl(CheckNodes, 0, Ports),
   ?assertEqual(PongsNum, length(Jobs) * length(Ports)),
@@ -95,9 +95,9 @@ main_test(Config) ->
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
   nodes_manager:wait_for_state_loading(),
   nodes_manager:wait_for_cluster_init(),
-  ?assertEqual(CCM2, gen_server:call({global, ?CCM}, get_ccm_node)),
+  ?assertEqual(CCM2, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
-  {Workers2, StateNum2} = gen_server:call({global, ?CCM}, get_workers),
+  {Workers2, StateNum2} = gen_server:call({global, ?CCM}, get_workers, 1000),
   ?assertEqual(InitialStateNum + 1, StateNum2),
   ?assertEqual(length(Workers2), length(Jobs)),
   PongsNum2 = lists:foldl(CheckNodes, 0, Ports),
@@ -112,9 +112,9 @@ main_test(Config) ->
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
   nodes_manager:wait_for_state_loading(),
   nodes_manager:wait_for_cluster_init(),
-  ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node)),
+  ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
-  {Workers3, StateNum3} = gen_server:call({global, ?CCM}, get_workers),
+  {Workers3, StateNum3} = gen_server:call({global, ?CCM}, get_workers, 1000),
   ?assertEqual(InitialStateNum + 2, StateNum3),
   ?assertEqual(length(Workers3), length(Jobs)),
   PongsNum3 = lists:foldl(CheckNodes, 0, Ports),
@@ -125,7 +125,7 @@ main_test(Config) ->
   nodes_manager:wait_for_cluster_init(),
 
   Ports2 = [8888],
-  {Workers4, StateNum4} = gen_server:call({global, ?CCM}, get_workers),
+  {Workers4, StateNum4} = gen_server:call({global, ?CCM}, get_workers, 1000),
   ?assertEqual(InitialStateNum + 4, StateNum4),
   ?assertEqual(length(Workers4), length(Jobs)),
   PongsNum4 = lists:foldl(CheckNodes, 0, Ports2),
@@ -139,7 +139,7 @@ main_test(Config) ->
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
   nodes_manager:wait_for_cluster_init(),
 
-  {Workers5, StateNum5} = gen_server:call({global, ?CCM}, get_workers),
+  {Workers5, StateNum5} = gen_server:call({global, ?CCM}, get_workers, 1000),
   ?assertEqual(InitialStateNum + 4, StateNum5),
   ?assertEqual(length(Workers5), length(Jobs)),
   PongsNum5 = lists:foldl(CheckNodes, 0, Ports),
@@ -166,7 +166,7 @@ callbacks_test(Config) ->
 
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
   nodes_manager:wait_for_cluster_init(),
-  ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node)),
+  ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
   PeerCert = ?COMMON_FILE("peer.pem"),
 
@@ -212,7 +212,7 @@ callbacks_test(Config) ->
   RegAns = #answer{answer_status = "ok", worker_answer = AnsBytes},
   RegAnsBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(RegAns)),
 
-  {_, InitialCallbacksNum} = gen_server:call({global, ?CCM}, get_callbacks),
+  {_, InitialCallbacksNum} = gen_server:call({global, ?CCM}, get_callbacks, 1000),
 
   Ports = [7777, 8888],
   RegisterCallbacks = fun(Port, Sockets) ->
@@ -271,13 +271,13 @@ callbacks_test(Config) ->
   end,
 
   CheckCallbacks = fun({Node, {FusesList, Fuse1AnsLength, Fuse2AnsLength}}, DispatcherCorrectAns) ->
-    Test1 = gen_server:call({?Dispatcher_Name, Node}, get_callbacks),
+    Test1 = gen_server:call({?Dispatcher_Name, Node}, get_callbacks, 1000),
     CheckDispatcherAns(DispatcherCorrectAns, Test1),
-    Test2 = gen_server:call({?Node_Manager_Name, Node}, get_fuses_list),
+    Test2 = gen_server:call({?Node_Manager_Name, Node}, get_fuses_list, 1000),
     ?assertEqual(FusesList, Test2),
-    Test3 = gen_server:call({?Node_Manager_Name, Node}, {get_all_callbacks, FuseId1}),
+    Test3 = gen_server:call({?Node_Manager_Name, Node}, {get_all_callbacks, FuseId1}, 1000),
     ?assertEqual(Fuse1AnsLength, length(Test3)),
-    Test4 = gen_server:call({?Node_Manager_Name, Node}, {get_all_callbacks, FuseId2}),
+    Test4 = gen_server:call({?Node_Manager_Name, Node}, {get_all_callbacks, FuseId2}, 1000),
     ?assertEqual(Fuse2AnsLength, length(Test4)),
 
     DispatcherCorrectAns
@@ -285,7 +285,7 @@ callbacks_test(Config) ->
 
   DispatcherCorrectAns1 = {[{FuseId1, lists:reverse(WorkerNodes)}, {FuseId2, [Worker1]}], InitialCallbacksNum + 3},
   FuseInfo1 = [{[FuseId1, FuseId2], 2,1}, {[FuseId1], 1,0}],
-  CCMTest1 = gen_server:call({global, ?CCM}, get_callbacks),
+  CCMTest1 = gen_server:call({global, ?CCM}, get_callbacks, 1000),
   CheckDispatcherAns(DispatcherCorrectAns1, CCMTest1),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns1, lists:zip(WorkerNodes, FuseInfo1)),
 
@@ -293,10 +293,10 @@ callbacks_test(Config) ->
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
   nodes_manager:wait_for_state_loading(),
   nodes_manager:wait_for_cluster_init(),
-  ?assertEqual(CCM2, gen_server:call({global, ?CCM}, get_ccm_node)),
+  ?assertEqual(CCM2, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
   DispatcherCorrectAns2 = {[{FuseId1, lists:reverse(WorkerNodes)}, {FuseId2, [Worker1]}], InitialCallbacksNum + 4},
-  CCMTest2 = gen_server:call({global, ?CCM}, get_callbacks),
+  CCMTest2 = gen_server:call({global, ?CCM}, get_callbacks, 1000),
   CheckDispatcherAns(DispatcherCorrectAns2, CCMTest2),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns2, lists:zip(WorkerNodes, FuseInfo1)),
 
@@ -309,10 +309,10 @@ callbacks_test(Config) ->
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
   nodes_manager:wait_for_state_loading(),
   nodes_manager:wait_for_cluster_init(),
-  ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node)),
+  ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
   DispatcherCorrectAns3 = {[{FuseId1, lists:reverse(WorkerNodes)}, {FuseId2, [Worker1]}], InitialCallbacksNum + 5},
-  CCMTest3 = gen_server:call({global, ?CCM}, get_callbacks),
+  CCMTest3 = gen_server:call({global, ?CCM}, get_callbacks, 1000),
   CheckDispatcherAns(DispatcherCorrectAns3, CCMTest3),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns3, lists:zip(WorkerNodes, FuseInfo1)),
 
@@ -324,7 +324,7 @@ callbacks_test(Config) ->
 
   DispatcherCorrectAns4 = {[{FuseId1, Worker2}], InitialCallbacksNum + 6},
   FuseInfo4 = [{[FuseId1], 1,0}],
-  CCMTest4 = gen_server:call({global, ?CCM}, get_callbacks),
+  CCMTest4 = gen_server:call({global, ?CCM}, get_callbacks, 1000),
   CheckDispatcherAns(DispatcherCorrectAns4, CCMTest4),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns4, lists:zip(Worker2, FuseInfo4)),
 
@@ -338,7 +338,7 @@ callbacks_test(Config) ->
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
   nodes_manager:wait_for_cluster_init(),
 
-  CCMTest5 = gen_server:call({global, ?CCM}, get_callbacks),
+  CCMTest5 = gen_server:call({global, ?CCM}, get_callbacks, 1000),
   CheckDispatcherAns(DispatcherCorrectAns4, CCMTest5),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns4, lists:zip(Worker2, FuseInfo4)),
 
@@ -346,7 +346,7 @@ callbacks_test(Config) ->
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes) - 1),
   nodes_manager:wait_for_cluster_init(),
 
-  CCMTest6 = gen_server:call({global, ?CCM}, get_callbacks),
+  CCMTest6 = gen_server:call({global, ?CCM}, get_callbacks, 1000),
   CheckDispatcherAns(DispatcherCorrectAns4, CCMTest6),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns4, lists:zip(Worker2, FuseInfo4)),
 
@@ -358,7 +358,7 @@ callbacks_test(Config) ->
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
   nodes_manager:wait_for_cluster_init(),
 
-  CCMTest7 = gen_server:call({global, ?CCM}, get_callbacks),
+  CCMTest7 = gen_server:call({global, ?CCM}, get_callbacks, 1000),
   CheckDispatcherAns(DispatcherCorrectAns4, CCMTest7),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns4, lists:zip(Worker2, FuseInfo4)),
 
