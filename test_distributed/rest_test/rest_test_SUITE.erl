@@ -282,7 +282,7 @@ do_request(APIVersion, RestSubpath, Method, Headers, Body) ->
     Cert = ?COMMON_FILE("peer.pem"),
     CCM = get(ccm),
 
-    {ok, Port} = rpc:call(CCM, application, get_env, [veil_cluster_node, control_panel_port]),
+    {ok, Port} = rpc:call(CCM, application, get_env, [veil_cluster_node, rest_port]),
     Hostname = case (Port =:= 80) or (Port =:= 443) of
                    true -> "https://localhost";
                    false -> "https://localhost:" ++ integer_to_list(Port)
