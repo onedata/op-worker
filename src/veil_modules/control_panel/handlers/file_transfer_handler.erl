@@ -11,10 +11,11 @@
 %% ===================================================================
 
 -module(file_transfer_handler).
--include("logging.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao_share.hrl").
 -include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/control_panel/rest_messages.hrl").
+-include("err.hrl").
 
 % Buffer size used to send file to a client. Override with control_panel_download_buffer.
 -define(DOWNLOAD_BUFFER_SIZE, 1048576). % 1MB
@@ -83,16 +84,27 @@ handle_upload_request(Req, UserDoc) ->
 %% ====================================================================
 %% @doc Asserts the validity of mutlipart POST request and proceeds with
 %% parsing and writing its data to a file at specified path. Returns
-%% true for successful upload anf false otherwise.
+%% values conforming to rest_module_behaviour requirements.
 %% @end
 handle_rest_upload(Req, Path, Overwrite) ->
     case cowboy_req:parse_header(<<"content-length">>, Req) of
         {ok, Length, NewReq} when is_integer(Length) ->
             case try_to_create_file(binary_to_list(Path), Overwrite) of
-                ok -> parse_rest_upload(NewReq, binary_to_list(Path));
-                {error, _Error} -> {false, NewReq}
+                ok ->
+                    case parse_rest_upload(NewReq, binary_to_list(Path)) of
+                        {true, NewReq2} ->
+                            {{body, rest_utils:success_reply(?success_file_uploaded)}, NewReq2};
+                        {false, NewReq2} ->
+                            ErrorRec = ?report_error(?error_upload_unprocessable),
+                            {{error, rest_utils:error_reply(ErrorRec)}, NewReq2}
+                    end;
+                {error, _Error} ->
+                    ErrorRec = ?report_error(?error_upload_cannot_create),
+                    {{error, rest_utils:error_reply(ErrorRec)}, NewReq}
             end;
-        _ -> {false, Req}
+        _ ->
+            ErrorRec = ?report_error(?error_upload_unprocessable),
+            {{error, rest_utils:error_reply(ErrorRec)}, Req}
     end.
 
 %% ====================================================================
