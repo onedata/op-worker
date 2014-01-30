@@ -13,6 +13,8 @@ Index
 		* :ref:`/attrs/(path)` [:ref:`GET <GET /attrs/(path)>` ]
 	* :ref:`/shares` [:ref:`GET <GET /shares>`, :ref:`POST <POST /shares>` ]
 		* :ref:`/shares/(guid)` [:ref:`GET <GET /shares/(guid)>`, :ref:`DELETE <DELETE /shares/(guid)>` ]
+	* :ref:`rest_common_errors`
+
 
 ..  _`/files`:
 
@@ -102,9 +104,8 @@ Index
 		:param path: path where file will be uploaded
 		:type path: string
 		:reqheader Content-Type: multipart/form-data
-		:resheader Content-Type: application/octet-stream
-		:status 100: Continue
-		:status 204: No Content
+		:resheader Content-Type: application/json
+		:status 200: OK
 		:status 422: Unprocessable Entity
 
 		An example `curl <http://curl.haxx.se/>`_ request to upload file 'file.txt', that is located in current directory, to remote location */dir/file.txt* would be:
@@ -126,15 +127,16 @@ Index
 	
 		.. sourcecode:: http
 
-			HTTP/1.1 100 Continue
-
-			HTTP/1.1 204 No Content
+			HTTP/1.1 200 OK
 			connection: close
 			server: Cowboy
 			date: Fri, 24 Jan 2014 08:43:05 GMT
 			content-length: 0
 			Access-Control-Allow-Origin: *
-			content-type: application/octet-stream
+			content-type: application/json
+
+			{"status":"ok","code":"UploadSuccess","description":"upload successful"}
+
 
 	..  _`PUT /files/(path)`:
 	.. http:put:: /rest/latest/files/(path)
@@ -144,9 +146,8 @@ Index
 		:param path: path where file will be uploaded
 		:type path: string
 		:reqheader Content-Type: multipart/form-data
-		:resheader Content-Type: application/octet-stream
-		:status 100: Continue
-		:status 204: No Content
+		:resheader Content-Type: application/json
+		:status 200: No Content
 		:status 422: Unprocessable Entity
 
 		An example `curl <http://curl.haxx.se/>`_ request to upload file 'file.txt', that is located in current directory, to remote location */dir/file.txt* would be:
@@ -168,15 +169,16 @@ Index
 	
 		.. sourcecode:: http
 
-			HTTP/1.1 100 Continue
-
-			HTTP/1.1 204 No Content
+			HTTP/1.1 200 OK
 			connection: close
 			server: Cowboy
 			date: Fri, 24 Jan 2014 08:43:05 GMT
 			content-length: 0
 			Access-Control-Allow-Origin: *
-			content-type: application/octet-stream
+			content-type: application/json
+
+			{"status":"ok","code":"UploadSuccess","description":"upload successful"}
+
 
 	..  _`DELETE /files/(path)`:
 	.. http:delete:: /rest/latest/files/(path)
@@ -186,8 +188,8 @@ Index
 		:param path: path to file or directory
 		:type path: string
 		:resheader Content-Type: application/json
-		:resheader Content-Type: application/octet-stream
-		:status 204: No Content
+		:resheader Content-Type: application/json
+		:status 200: OK
 		:status 404: Not Found
 
 		**Example request**:
@@ -209,6 +211,8 @@ Index
 			content-length: 0
 			Access-Control-Allow-Origin: *
 			content-type: application/json
+
+			{"status":"ok","code":"FileDeleteSuccess","description":"file deleted successfully"}
 
 
 ..  _`/attrs/(path)`:
@@ -278,7 +282,6 @@ Index
 
 		:resheader Content-Type: application/json
 		:status 200: OK
-		:status 404: Not Found
 		:status 500: Internal Server Error
 
 		**Example request**:
@@ -313,7 +316,7 @@ Index
 		:reqheader Content-Type: application/json
 		:resheader Content-Type: application/json
 		:resheader Location: redirect link to shared file
-		:status 303: See Other
+		:status 200: OK
 		:status 422: Unprocessable Entity
 		:status 500: Internal Server Error
 
@@ -336,7 +339,7 @@ Index
 	
 		.. sourcecode:: http
 
-			HTTP/1.1 303 See Other
+			HTTP/1.1 200 OK
 			connection: close
 			server: Cowboy
 			date: Sun, 05 Jan 2014 18:38:17 GMT
@@ -399,8 +402,7 @@ Index
 		:param guid: shared files globally unique identifier
 		:type guid: string
 		:resheader Content-Type: application/json
-		:status 204: No Content
-		:status 405: Method Not Allowed
+		:status 200: OK
 		:status 500: Internal Server Error
 
 		**Example request**:
@@ -415,10 +417,59 @@ Index
 	
 		.. sourcecode:: http
 
-			HTTP/1.1 204 No Content
+			HTTP/1.1 200 OK
 			connection: close
 			server: Cowboy
 			date: Sun, 05 Jan 2014 17:58:05 GMT
 			content-length: 0
 			Access-Control-Allow-Origin: *
 			content-type: application/json
+
+			{"status":"ok","code":"ShareDeleteSuccess","description":"share deleted successfully"}
+
+.. _`rest_common_errors`:
+
+Common errors
+-------------
+
+	* Certificate owner doesn't exist in database
+
+		.. sourcecode:: http
+
+			HTTP/1.1 500 Internal Server Error
+			connection: close
+			server: Cowboy
+			date: Sun, 05 Jan 2014 17:58:05 GMT
+			content-length: 0
+			Access-Control-Allow-Origin: *
+			content-type: application/json
+
+			{"status":"error","code":"UserNonExistentInDB","description":"the owner of supplied certificate doesn't exists in the database: <certificate's DN>"}
+
+	* Specified path doesn't correspond with any resource
+
+		.. sourcecode:: http
+
+			HTTP/1.1 500 Internal Server Error
+			connection: close
+			server: Cowboy
+			date: Sun, 05 Jan 2014 17:58:05 GMT
+			content-length: 0
+			Access-Control-Allow-Origin: *
+			content-type: application/json
+
+			 {"status":"warning","code":"InvalidPath","description":"requested path does not point to anything"}
+
+	* Unsupported API version
+
+		.. sourcecode:: http
+
+			HTTP/1.1 500 Internal Server Error
+			connection: close
+			server: Cowboy
+			date: Sun, 05 Jan 2014 17:58:05 GMT
+			content-length: 0
+			Access-Control-Allow-Origin: *
+			content-type: application/json
+
+			 {"status":"warning","code":"APIVersionNotSupported","description":"API version is not supported"}

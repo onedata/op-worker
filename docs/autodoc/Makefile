@@ -41,7 +41,6 @@ clean:
 	rm -rf $(VEILCLIENT)
 
 	rm -f $(VEILCLUSTER)/*.rst
-	rm -f $(VEILCLUSTER)/REST_API/index.rst
 	rm -rf $(VEILCLUSTER)/erlang_modules
 	rm -rf $(VEILCLUSTER)/c_modules
 
