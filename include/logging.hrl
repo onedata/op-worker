@@ -20,90 +20,92 @@
 % Compilation with skip_debug flag will remove all debug messages from code
 
 -ifdef(skip_debug).
--define(debug(Message), ok).
--define(debug(Format, Args), ok).
--define(debug_stacktrace(Message), ok).
--define(debug_stacktrace(Format, Args), ok).
+-define(debug(_Message), ok).
+-define(debug(_Format, _Args), ok).
+-define(debug_stacktrace(_Message), ok).
+-define(debug_stacktrace(_Format, _Args), ok).
 -endif.
 
 -ifndef(skip_debug).
--define(debug(Message), ?do_log(0, Message, false)).
--define(debug(Format, Args), ?do_log(0, Format, Args, false)).
--define(debug_stacktrace(Message), ?do_log(0, Message, true)).
--define(debug_stacktrace(Format, Args), ?do_log(0, Format, Args, true)).
+-define(debug(_Message), ?do_log(0, _Message, false)).
+-define(debug(_Format, _Args), ?do_log(0, _Format, _Args, false)).
+-define(debug_stacktrace(_Message), ?do_log(0, _Message, true)).
+-define(debug_stacktrace(_Format, _Args), ?do_log(0, _Format, _Args, true)).
 -endif.
 
--define(info(Message), ?do_log(1, Message, false)).
--define(info(Format, Args), ?do_log(1, Format, Args, false)).
--define(info_stacktrace(Message), ?do_log(1, Message, true)).
--define(info_stacktrace(Format, Args), ?do_log(1, Format, Args, true)).
+-define(info(_Message), ?do_log(1, _Message, false)).
+-define(info(_Format, _Args), ?do_log(1, _Format, _Args, false)).
+-define(info_stacktrace(_Message), ?do_log(1, _Message, true)).
+-define(info_stacktrace(_Format, _Args), ?do_log(1, _Format, _Args, true)).
 
--define(notice(Message), ?do_log(2, Message, false)).
--define(notice(Format, Args), ?do_log(2, Format, Args, false)).
--define(notice_stacktrace(Message), ?do_log(2, Message, true)).
--define(notice_stacktrace(Format, Args), ?do_log(2, Format, Args, true)).
+-define(notice(_Message), ?do_log(2, _Message, false)).
+-define(notice(_Format, _Args), ?do_log(2, _Format, _Args, false)).
+-define(notice_stacktrace(_Message), ?do_log(2, _Message, true)).
+-define(notice_stacktrace(_Format, _Args), ?do_log(2, _Format, _Args, true)).
 
--define(warning(Message), ?do_log(3, Message, false)).
--define(warning(Format, Args), ?do_log(3, Format, Args, false)).
--define(warning_stacktrace(Message), ?do_log(3, Message, true)).
--define(warning_stacktrace(Format, Args), ?do_log(3, Format, Args, true)).
+-define(warning(_Message), ?do_log(3, _Message, false)).
+-define(warning(_Format, _Args), ?do_log(3, _Format, _Args, false)).
+-define(warning_stacktrace(_Message), ?do_log(3, _Message, true)).
+-define(warning_stacktrace(_Format, _Args), ?do_log(3, _Format, _Args, true)).
 
--define(error(Message), ?do_log(4, Message, false)).
--define(error(Format, Args), ?do_log(4, Format, Args, false)).
--define(error_stacktrace(Message), ?do_log(4, Message, true)).
--define(error_stacktrace(Format, Args), ?do_log(4, Format, Args, true)).
+-define(error(_Message), ?do_log(4, _Message, false)).
+-define(error(_Format, _Args), ?do_log(4, _Format, _Args, false)).
+-define(error_stacktrace(_Message), ?do_log(4, _Message, true)).
+-define(error_stacktrace(_Format, _Args), ?do_log(4, _Format, _Args, true)).
 
--define(critical(Message), ?do_log(5, Message, false)).
--define(critical(Format, Args), ?do_log(5, Format, Args, false)).
--define(critical_stacktrace(Message), ?do_log(5, Message, true)).
--define(critical_stacktrace(Format, Args), ?do_log(5, Format, Args, true)).
+-define(critical(_Message), ?do_log(5, _Message, false)).
+-define(critical(_Format, _Args), ?do_log(5, _Format, _Args, false)).
+-define(critical_stacktrace(_Message), ?do_log(5, _Message, true)).
+-define(critical_stacktrace(_Format, _Args), ?do_log(5, _Format, _Args, true)).
 
--define(alert(Message), ?do_log(6, Message, false)).
--define(alert(Format, Args), ?do_log(6, Format, Args, false)).
--define(alert_stacktrace(Message), ?do_log(6, Message, true)).
--define(alert_stacktrace(Format, Args), ?do_log(6, Format, Args, true)).
+-define(alert(_Message), ?do_log(6, _Message, false)).
+-define(alert(_Format, _Args), ?do_log(6, _Format, _Args, false)).
+-define(alert_stacktrace(_Message), ?do_log(6, _Message, true)).
+-define(alert_stacktrace(_Format, _Args), ?do_log(6, _Format, _Args, true)).
 
--define(emergency(Message), ?do_log(7, Message, false)).
--define(emergency(Format, Args), ?do_log(7, Format, Args, false)).
--define(emergency_stacktrace(Message), ?do_log(7, Message, true)).
--define(emergency_stacktrace(Format, Args), ?do_log(7, Format, Args, true)).
-
+-define(emergency(_Message), ?do_log(7, _Message, false)).
+-define(emergency(_Format, _Args), ?do_log(7, _Format, _Args, false)).
+-define(emergency_stacktrace(_Message), ?do_log(7, _Message, true)).
+-define(emergency_stacktrace(_Format, _Args), ?do_log(7, _Format, _Args, true)).
 
 
 %% ===================================================================
 % Convienience macros for development purposes
 
 % Prints a single variable
--define(dump(Arg), io:format(user, "[DUMP] ~s: ~p~n~n", [??Arg, Arg])).
+-define(dump(_Arg), io:format(user, "[DUMP] ~s: ~p~n~n", [??_Arg, _Arg])).
 
 % Prints a list of variables
--define(dump_all(ListOfVariables), 
+-define(dump_all(_ListOfVariables),
 	lists:foreach(
-		fun({__Name, __Value}) ->
-			io:format(user, "[DUMP] ~s: ~p~n~n", [__Name, __Value])
-		end, lists:zip(string:tokens(??ListOfVariables, "[] ,"), ListOfVariables))
+		fun({_Name, _Value}) ->
+			io:format(user, "[DUMP] ~s: ~p~n~n", [_Name, _Value])
+		end, lists:zip(string:tokens(??_ListOfVariables, "[] ,"), _ListOfVariables))
 ).
-
 
 
 %% ===================================================================
 %% Macros used internally
 
--define(do_log(LoglevelAsInt, Message, IncludeStackTrace),
-	?do_log(LoglevelAsInt, Message, [], IncludeStackTrace)
+-define(do_log(_LoglevelAsInt, _Message, _IncludeStackTrace),
+    ?do_log(_LoglevelAsInt, _Message, [], _IncludeStackTrace)
 ).
 
--define(do_log(LoglevelAsInt, Format, Args, IncludeStackTrace),	
-	case logger:should_log(LoglevelAsInt) of
-		false -> ok;
-		true -> logger:dispatch_log(LoglevelAsInt, ?gather_metadata, Format, Args, IncludeStackTrace)
-	end
+-define(do_log(_LoglevelAsInt, _Format, _Args, _IncludeStackTrace),
+    case logger:should_log(_LoglevelAsInt) of
+        false -> ok;
+        true -> logger:dispatch_log(_LoglevelAsInt, ?gather_metadata, _Format, _Args, _IncludeStackTrace)
+    end
 ).
 
 % Resolves current process's state and returns it as metadata proplist
 % Must be called from original function where the log is,
 % so that the process info makes sense
 -define(gather_metadata,
-	[{node, node()}, {pid, self()}, {line, ?LINE}] ++ 
-		logger:parse_process_info(process_info(self(), current_function))
+    [{node, node()}, {pid, self()}, {line, ?LINE}] ++
+        logger:parse_process_info(process_info(self(), current_function)) ++
+        case get(user_id) of
+            undefined -> [];
+            _ -> [{dn, get(user_id)}]
+        end
 ).
