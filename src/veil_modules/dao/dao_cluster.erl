@@ -335,9 +335,6 @@ clear_sessions() ->
     CurrentTime = fslogic_utils:time(),
     ?info("FUSE session cleanup started. Time: ~p", [CurrentTime]),
 
-    %% Clear whole cache
-    ets:delete_all_objects(dao_cache),
-
     %% List of worker processes that validates sessions in background
     PidList =
         case list_fuse_sessions({by_valid_to, CurrentTime}) of
