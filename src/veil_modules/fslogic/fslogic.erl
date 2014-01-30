@@ -185,6 +185,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, upda
                     if
                         Status -> #atom{value = ?VOK};
                         true ->
+                            %% TODO it may cause a problem with other operations (confilicts in DB) - it should be checked
                             dao_lib:apply(dao_vfs, {asynch, save_file}, [Doc#veil_document{record = File2}], ProtocolVersion),
                             #atom{value = ?VOK}
                     end;

@@ -404,25 +404,27 @@ groups_test(Config) ->
 
 
     %% Cleanup
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/veilfstestuser/file"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup/f1"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup/f2"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup2/f1"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup2/f2"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup/file"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup/file2"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup2/file"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup2/file2"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup2/testDir"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup2"], ?ProtocolVersion]),
+    ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete, ["/veilfstestuser/file"])),
+    ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete, ["/groups/veilfstestgroup/f1"])),
+    ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete,["/groups/veilfstestgroup/f2"])),
+    ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete, ["/groups/veilfstestgroup/file"])),
+    ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete, ["/groups/veilfstestgroup/file2"])),
+    ?assertEqual(ok, rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup/dir"], ?ProtocolVersion])),
+    ?assertEqual(ok, rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup"], ?ProtocolVersion])),
+    ?assertEqual(ok, rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup2"], ?ProtocolVersion])),
+    ?assertEqual(ok, rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
 
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
-    rpc:call(Node, user_logic, remove_user, [{login, "veilfstestuser"}]),
-    rpc:call(Node, user_logic, remove_user, [{login, "veilfstestuser2"}]),
+    ?assertEqual(ok, rpc:call(Node, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion])),
+    ?assertEqual(ok, rpc:call(Node, user_logic, remove_user, [{login, "veilfstestuser"}])),
+    ?assertEqual(ok, rpc:call(Node, user_logic, remove_user, [{login, "veilfstestuser2"}])),
 
-    files_tester:delete_dir(?TEST_ROOT ++ "/users"),
-    files_tester:delete_dir(?TEST_ROOT ++ "/groups").
+    ?assertEqual(ok, files_tester:delete_dir(?TEST_ROOT ++ "/users/veilfstestuser")),
+    ?assertEqual(ok, files_tester:delete_dir(?TEST_ROOT ++ "/users/veilfstestuser2")),
+    ?assertEqual(ok, files_tester:delete_dir(?TEST_ROOT ++ "/groups/veilfstestgroup")),
+    ?assertEqual(ok, files_tester:delete_dir(?TEST_ROOT ++ "/groups/veilfstestgroup2")),
+
+    ?assertEqual(ok, files_tester:delete_dir(?TEST_ROOT ++ "/users")),
+    ?assertEqual(ok, files_tester:delete_dir(?TEST_ROOT ++ "/groups")).
 
 %% Checks creating of directories at storage for users' files.
 %% The test creates path for a new file that contains 2 directories
@@ -842,6 +844,10 @@ user_creation_test(Config) ->
 
   RemoveStorageAns2 = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID2}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns2),
+
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team1], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team2], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
 
   RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
   ?assertEqual(ok, RemoveUserAns),
@@ -2023,13 +2029,18 @@ init_per_testcase(_, Config) ->
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
   [FSLogicNode | _] = Nodes,
-  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  StopAns = nodes_manager:stop_nodes(Nodes),
-  nodes_manager:stop_deps_for_tester_node(),
+
+  rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/user1 team"], ?ProtocolVersion]),
+  rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/user2 team"], ?ProtocolVersion]),
+  rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion]),
 
   %% Remove users
   rpc:call(FSLogicNode, user_logic, remove_user, [{login, "user1"}]),
   rpc:call(FSLogicNode, user_logic, remove_user, [{login, "user2"}]),
+
+  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
+  StopAns = nodes_manager:stop_nodes(Nodes),
+  nodes_manager:stop_deps_for_tester_node(),
 
   %% Clear test dir
   os:cmd("rm -rf " ++ ?TEST_ROOT ++ "/*"),
@@ -2364,7 +2375,7 @@ chgrp(Socket, FileName, GID, GName) ->
 clear_old_descriptors(Node) ->
   {Megaseconds,Seconds, _Microseconds} = os:timestamp(),
   Time = 1000000*Megaseconds + Seconds + 60*15 + 1,
-  gen_server:call({?Dispatcher_Name, Node}, {fslogic, 1, {delete_old_descriptors_test, Time}}),
+  gen_server:call({?Dispatcher_Name, Node}, {fslogic, 1, {delete_old_descriptors_test, Time}}, 1000),
   nodes_manager:wait_for_db_reaction().
 
 create_standard_share(TestFile, DN) ->

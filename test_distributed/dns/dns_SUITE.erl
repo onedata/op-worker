@@ -110,12 +110,12 @@ distributed_test(Config) ->
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
   nodes_manager:wait_for_cluster_cast(),
 
-  {Workers, _} = gen_server:call({global, ?CCM}, get_workers),
+  {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
     case lists:member({Node, fslogic}, Workers) of
       true -> ok;
       false ->
-        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, fslogic, []}),
+        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, fslogic, []}, 1000),
         ?assertEqual(ok, StartAns)
     end
   end,
