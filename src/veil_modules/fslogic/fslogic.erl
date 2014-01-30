@@ -185,6 +185,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, upda
                     if
                         Status -> #atom{value = ?VOK};
                         true ->
+                            %% TODO it may cause a problem with other operations (confilicts in DB) - it should be checked
                             dao_lib:apply(dao_vfs, {asynch, save_file}, [Doc#veil_document{record = File2}], ProtocolVersion),
                             #atom{value = ?VOK}
                     end;
@@ -1348,10 +1349,23 @@ getfileattr(ProtocolVersion, DocFindStatus, FileDoc) ->
             lager:warning("Cannot fetch file_meta for file (uuid ~p) due to error: ~p", [FileUUID, Error]),
             {0, 0, 0, 0}
         end,
-      #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime, type = Type, size = Size, uname = UName, gname = GName, uid = UID, gid = UID};
+
+      %% Get file links
+      Links = case Type of
+                  "DIR" -> case dao_lib:apply(dao_vfs, count_subdirs, [{uuid, FileUUID}], ProtocolVersion) of
+                               {ok, Sum} -> Sum + 2;
+                               _Other ->
+                                   lager:error([{mod, ?MODULE}], "Error: can not get number of links for file: ~s", [File]),
+                                   -1
+                           end;
+                  "REG" -> 1;
+                  _ -> -1
+              end,
+
+      #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime, type = Type, size = Size, uname = UName, gname = GName, uid = UID, gid = UID, links = Links};
     {error, file_not_found} ->
       lager:debug("FileAttr: ENOENT"),
-      #fileattr{answer = ?VENOENT, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = ""};
+      #fileattr{answer = ?VENOENT, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = "", links = -1};
     _ ->
-      #fileattr{answer = ?VEREMOTEIO, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = ""}
+      #fileattr{answer = ?VEREMOTEIO, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = "", links = -1}
   end.

@@ -12,7 +12,10 @@
 
 -module(rest_utils).
 
+-include("err.hrl").
+
 -export([map/2, unmap/3, encode_to_json/1, decode_from_json/1]).
+-export([success_reply/1, error_reply/1]).
 
 %% ====================================================================
 %% API functions
@@ -32,8 +35,8 @@
 -spec map(record(), [atom()]) -> [tuple()].
 %% ====================================================================
 map(RecordToMap, Fields) ->
-    Y = [ try N=lists:nth(1, B), if is_number(N) -> wf:to_binary(B); true -> B end catch _:_ -> B end
-          || B <- tl(tuple_to_list(RecordToMap)) ],
+    Y = [try N = lists:nth(1, B), if is_number(N) -> wf:to_binary(B); true -> B end catch _:_ -> B end
+        || B <- tl(tuple_to_list(RecordToMap))],
     lists:zip(Fields, Y).
 
 
@@ -53,18 +56,18 @@ map(RecordToMap, Fields) ->
 -spec unmap([tuple()], record(), [atom()]) -> [tuple()].
 %% ====================================================================
 unmap([], RecordTuple, _) ->
-	RecordTuple;
+    RecordTuple;
 
-unmap([{KeyBin, Val}|Proplist], RecordTuple, Fields) ->
-	Key = wf:to_atom(KeyBin),
-	Value = case Val of
-		I when is_integer(I) -> Val;
-		A when is_atom(A) -> Val;
-		_ -> wf:to_list(Val)
-	end,
-	Index = string:str(Fields, [Key]) + 1,
-	true = (Index > 1),
-	unmap(Proplist, setelement(Index, RecordTuple, Value), Fields).
+unmap([{KeyBin, Val} | Proplist], RecordTuple, Fields) ->
+    Key = wf:to_atom(KeyBin),
+    Value = case Val of
+                I when is_integer(I) -> Val;
+                A when is_atom(A) -> Val;
+                _ -> wf:to_list(Val)
+            end,
+    Index = string:str(Fields, [Key]) + 1,
+    true = (Index > 1),
+    unmap(Proplist, setelement(Index, RecordTuple, Value), Fields).
 
 
 %% encode_to_json/3
@@ -80,7 +83,7 @@ unmap([{KeyBin, Val}|Proplist], RecordTuple, Fields) ->
 -spec encode_to_json(term()) -> binary().
 %% ====================================================================
 encode_to_json(Term) ->
-	iolist_to_binary(mochijson2:encode(Term)).
+    iolist_to_binary(mochijson2:encode(Term)).
 
 
 %% decode_from_json/3
@@ -90,4 +93,28 @@ encode_to_json(Term) ->
 -spec decode_from_json(term()) -> binary().
 %% ====================================================================
 decode_from_json(JSON) ->
-	mochijson2:decode(JSON).
+    mochijson2:decode(JSON).
+
+
+%% success_reply/1
+%% ====================================================================
+%% @doc Produces a standarized JSON return message, indicating success of an operation.
+%% It can be inserted directly into response body. Macros from rest_messages.hrl should
+%% be used as an argument to this function.
+%% @end
+-spec success_reply(binary()) -> binary().
+%% ====================================================================
+success_reply({Code, Message}) ->
+    <<"{\"status\":\"ok\",\"code\":\"", Code/binary, "\",\"description\":\"", Message/binary, "\"}">>.
+
+
+%% error_reply/1
+%% ====================================================================
+%% @doc Produces a standarized JSON return message, indicating failure of an operation.
+%% It can be inserted directly into response body. #error_rec{} from err.hrl should
+%% be used as an argument to this function.
+%% @end
+-spec error_reply(#error_rec{}) -> binary().
+%% ====================================================================
+error_reply(Record) ->
+    rest_utils:encode_to_json({struct, rest_utils:map(Record, [status, code, description])}).

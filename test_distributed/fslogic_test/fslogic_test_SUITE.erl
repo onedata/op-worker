@@ -23,12 +23,12 @@
 -include("veil_modules/dao/dao_share.hrl").
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([files_manager_standard_files_test/1, files_manager_tmp_files_test/1, storage_management_test/1, permissions_management_test/1, user_creation_test/1,
+-export([files_manager_standard_files_test/1, files_manager_tmp_files_test/1, storage_management_test/1, permissions_management_test/1, user_creation_test/1, get_file_links_test/1,
   fuse_requests_test/1, users_separation_test/1, file_sharing_test/1, dir_mv_test/1, user_file_counting_test/1, dirs_creating_test/1, groups_test/1, get_by_uuid_test/1, concurrent_file_creation_test/1]).
 -export([create_standard_share/2, create_share/3, get_share/2]).
 
 all() -> [groups_test, files_manager_tmp_files_test, files_manager_standard_files_test, storage_management_test, permissions_management_test, user_creation_test,
-  fuse_requests_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test, concurrent_file_creation_test
+  fuse_requests_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test, concurrent_file_creation_test, get_file_links_test
 ].
 
 -define(SH, "DirectIO").
@@ -404,25 +404,27 @@ groups_test(Config) ->
 
 
     %% Cleanup
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/veilfstestuser/file"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup/f1"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup/f2"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup2/f1"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup2/f2"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup/file"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup/file2"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup2/file"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup2/file2"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup2/testDir"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup"], ?ProtocolVersion]),
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup2"], ?ProtocolVersion]),
+    ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete, ["/veilfstestuser/file"])),
+    ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete, ["/groups/veilfstestgroup/f1"])),
+    ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete,["/groups/veilfstestgroup/f2"])),
+    ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete, ["/groups/veilfstestgroup/file"])),
+    ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete, ["/groups/veilfstestgroup/file2"])),
+    ?assertEqual(ok, rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup/dir"], ?ProtocolVersion])),
+    ?assertEqual(ok, rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup"], ?ProtocolVersion])),
+    ?assertEqual(ok, rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["/groups/veilfstestgroup2"], ?ProtocolVersion])),
+    ?assertEqual(ok, rpc:call(Node, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
 
-    rpc:call(Node, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
-    rpc:call(Node, user_logic, remove_user, [{login, "veilfstestuser"}]),
-    rpc:call(Node, user_logic, remove_user, [{login, "veilfstestuser2"}]),
+    ?assertEqual(ok, rpc:call(Node, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion])),
+    ?assertEqual(ok, rpc:call(Node, user_logic, remove_user, [{login, "veilfstestuser"}])),
+    ?assertEqual(ok, rpc:call(Node, user_logic, remove_user, [{login, "veilfstestuser2"}])),
 
-    files_tester:delete_dir(?TEST_ROOT ++ "/users"),
-    files_tester:delete_dir(?TEST_ROOT ++ "/groups").
+    ?assertEqual(ok, files_tester:delete_dir(?TEST_ROOT ++ "/users/veilfstestuser")),
+    ?assertEqual(ok, files_tester:delete_dir(?TEST_ROOT ++ "/users/veilfstestuser2")),
+    ?assertEqual(ok, files_tester:delete_dir(?TEST_ROOT ++ "/groups/veilfstestgroup")),
+    ?assertEqual(ok, files_tester:delete_dir(?TEST_ROOT ++ "/groups/veilfstestgroup2")),
+
+    ?assertEqual(ok, files_tester:delete_dir(?TEST_ROOT ++ "/users")),
+    ?assertEqual(ok, files_tester:delete_dir(?TEST_ROOT ++ "/groups")).
 
 %% Checks creating of directories at storage for users' files.
 %% The test creates path for a new file that contains 2 directories
@@ -660,11 +662,11 @@ user_creation_test(Config) ->
   Login = "veilfstestuser",
   Name = "user1 user1",
   Team1 = "veilfstestgroup",
-  Team2 = "plgteam2",
+  Team2 = "veilfstestgroup2",
   Teams = [Team1 ++ "(G1)", Team2],
   Email = "user1@email.net",
 
-  Login2 = "plgtestuser2",
+  Login2 = "veilfstestuser2",
   Name2 = "user2 user2",
   Teams2 = Teams,
   Email2 = "user2@email.net",
@@ -842,6 +844,10 @@ user_creation_test(Config) ->
 
   RemoveStorageAns2 = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID2}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns2),
+
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team1], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team2], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
 
   RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
   ?assertEqual(ok, RemoveUserAns),
@@ -1925,6 +1931,83 @@ files_manager_standard_files_test(Config) ->
   files_tester:delete_dir(?TEST_ROOT ++ "/users"),
   files_tester:delete_dir(?TEST_ROOT ++ "/groups").
 
+get_file_links_test(Config) ->
+    nodes_manager:check_start_assertions(Config),
+    NodesUp = ?config(nodes, Config),
+    [Node1 | _] = NodesUp,
+
+    gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
+    gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+    nodes_manager:wait_for_cluster_cast(),
+    gen_server:cast({global, ?CCM}, init_cluster),
+    nodes_manager:wait_for_cluster_init(),
+
+    {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT]),
+    ?assertEqual(ok, InsertStorageAns),
+
+    DirName = "base_dir",
+
+    AnsDirCreate1 = rpc:call(Node1, logical_files_manager, mkdir, [DirName]),
+    ?assertEqual(ok, AnsDirCreate1),
+
+    %% Check number of links for empty directory
+    {AttrAns1, Attrs1} = rpc:call(Node1, logical_files_manager, getfileattr, [DirName]),
+    ?assertEqual(ok, AttrAns1),
+    ?assertEqual(2, Attrs1#fileattributes.links),
+
+    AnsFileCreate1 = rpc:call(Node1, logical_files_manager, create, [DirName ++ "/file"]),
+    ?assertEqual(ok, AnsFileCreate1),
+
+    %% Check number of links for directory with one regular file
+    {AttrAns2, Attrs2} = rpc:call(Node1, logical_files_manager, getfileattr, [DirName]),
+    ?assertEqual(ok, AttrAns2),
+    ?assertEqual(2, Attrs2#fileattributes.links),
+
+    %% Check number of links for regular file
+    {AttrAns3, Attrs3} = rpc:call(Node1, logical_files_manager, getfileattr, [DirName ++ "/file"]),
+    ?assertEqual(ok, AttrAns3),
+    ?assertEqual(1, Attrs3#fileattributes.links),
+
+    AnsDirCreate2 = rpc:call(Node1, logical_files_manager, mkdir, [DirName ++ "/dir1"]),
+    ?assertEqual(ok, AnsDirCreate2),
+
+    AnsDirCreate3 = rpc:call(Node1, logical_files_manager, mkdir, [DirName ++ "/dir2"]),
+    ?assertEqual(ok, AnsDirCreate3),
+
+    AnsDirCreate4 = rpc:call(Node1, logical_files_manager, mkdir, [DirName ++ "/dir1/dir11"]),
+    ?assertEqual(ok, AnsDirCreate4),
+
+    AnsFileCreate2 = rpc:call(Node1, logical_files_manager, create, [DirName ++ "/dir2/file"]),
+    ?assertEqual(ok, AnsFileCreate2),
+
+    %% Check number of links for directory with more complicated structure
+    {AttrAns4, Attrs4} = rpc:call(Node1, logical_files_manager, getfileattr, [DirName]),
+    ?assertEqual(ok, AttrAns4),
+    ?assertEqual(4, Attrs4#fileattributes.links),
+
+    %% Remove created files
+    AnsDel1 = rpc:call(Node1, logical_files_manager, delete, [DirName ++ "/file"]),
+    ?assertEqual(ok, AnsDel1),
+
+    AnsDel2 = rpc:call(Node1, logical_files_manager, delete, [DirName ++ "/dir2/file"]),
+    ?assertEqual(ok, AnsDel2),
+
+    AnsDel3 = rpc:call(Node1, logical_files_manager, rmdir, [DirName ++ "/dir1/dir11"]),
+    ?assertEqual(ok, AnsDel3),
+
+    AnsDel4 = rpc:call(Node1, logical_files_manager, rmdir, [DirName ++ "/dir1"]),
+    ?assertEqual(ok, AnsDel4),
+
+    AnsDel5 = rpc:call(Node1, logical_files_manager, rmdir, [DirName ++ "/dir2"]),
+    ?assertEqual(ok, AnsDel5),
+
+    AnsDel6 = rpc:call(Node1, logical_files_manager, rmdir, [DirName]),
+    ?assertEqual(ok, AnsDel6),
+
+    RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+    ?assertEqual(ok, RemoveStorageAns).
+
+
 %% ====================================================================
 %% SetUp and TearDown functions
 %% ====================================================================
@@ -1946,13 +2029,18 @@ init_per_testcase(_, Config) ->
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
   [FSLogicNode | _] = Nodes,
-  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  StopAns = nodes_manager:stop_nodes(Nodes),
-  nodes_manager:stop_deps_for_tester_node(),
+
+  rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/user1 team"], ?ProtocolVersion]),
+  rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/user2 team"], ?ProtocolVersion]),
+  rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion]),
 
   %% Remove users
   rpc:call(FSLogicNode, user_logic, remove_user, [{login, "user1"}]),
   rpc:call(FSLogicNode, user_logic, remove_user, [{login, "user2"}]),
+
+  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
+  StopAns = nodes_manager:stop_nodes(Nodes),
+  nodes_manager:stop_deps_for_tester_node(),
 
   %% Clear test dir
   os:cmd("rm -rf " ++ ?TEST_ROOT ++ "/*"),
@@ -2287,7 +2375,7 @@ chgrp(Socket, FileName, GID, GName) ->
 clear_old_descriptors(Node) ->
   {Megaseconds,Seconds, _Microseconds} = os:timestamp(),
   Time = 1000000*Megaseconds + Seconds + 60*15 + 1,
-  gen_server:call({?Dispatcher_Name, Node}, {fslogic, 1, {delete_old_descriptors_test, Time}}),
+  gen_server:call({?Dispatcher_Name, Node}, {fslogic, 1, {delete_old_descriptors_test, Time}}, 1000),
   nodes_manager:wait_for_db_reaction().
 
 create_standard_share(TestFile, DN) ->

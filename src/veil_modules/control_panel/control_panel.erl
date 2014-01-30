@@ -24,6 +24,7 @@
 
 % Cowboy listener reference
 -define(https_listener, http).
+-define(rest_listener, rest).
 
 %% ===================================================================
 %% Behaviour callback functions
@@ -54,15 +55,14 @@ init(_Args) ->
 
     % Set prefix of nitrogen page modules. This cannot be set in sys.config, 
     % because nitrogen does not start as an application.
-    application:set_env(nitrogen, module_prefix, "page"), 
-    % Start the listener for web gui, nagios handler and REST handler
+    application:set_env(nitrogen, module_prefix, "page"),
+    % Start the listener for web gui and nagios handler
     {ok, _} = cowboy:start_https(?https_listener, GuiNbAcceptors,
         [
             {port, GuiPort},
             {certfile, CertString},
             {keyfile, CertString},
-            {password, ""},
-            {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}}
+            {password, ""}
         ],
         [
             {env, [{dispatch, Dispatch}]},
@@ -70,6 +70,29 @@ init(_Args) ->
             {timeout, Timeout}
         ]),
 
+    ok,
+
+    % Get REST port from env and setup dispatch opts for cowboy
+    {ok, RestPort} = application:get_env(veil_cluster_node, rest_port),
+    RestDispatch = [
+        {'_', [
+            {"/rest/:version/[...]", rest_handler, []}
+        ]}
+    ],
+    % Start the listener for REST handler
+    {ok, _} = cowboy:start_https(?rest_listener, GuiNbAcceptors,
+        [
+            {port, RestPort},
+            {certfile, CertString},
+            {keyfile, CertString},
+            {password, ""},
+            {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}}
+        ],
+        [
+            {env, [{dispatch, cowboy_router:compile(RestDispatch)}]},
+            {max_keepalive, MaxKeepAlive},
+            {timeout, Timeout}
+        ]),
     ok.
 
 
@@ -117,49 +140,48 @@ init_dispatch(DocRoot, StaticPaths) ->
         Path = reformat_path(Dir),
         Opts = [
             {mimetypes, {fun mimetypes:path_to_mimes/2, default}}
-                | localized_dir_file(DocRoot, Dir)
+            | localized_dir_file(DocRoot, Dir)
         ],
-        {Path,Handler,Opts}
+        {Path, Handler, Opts}
     end, StaticPaths),
 
     % Set up dispatch
     Dispatch = [
-    % Nitrogen will handle everything that's not handled in the StaticDispatches
+        % Nitrogen will handle everything that's not handled in the StaticDispatches
         {'_', StaticDispatches ++ [
             {"/nagios/[...]", nagios_handler, []},
-            {"/rest/:version/[...]", rest_handler, []},
-            {'_', nitrogen_handler , []}
+            {'_', nitrogen_handler, []}
         ]}
     ],
     cowboy_router:compile(Dispatch).
 
 
-localized_dir_file(DocRoot,Path) ->
+localized_dir_file(DocRoot, Path) ->
     NewPath = case hd(Path) of
-        $/ -> DocRoot ++ Path;
-        _ -> DocRoot ++ "/" ++ Path
-    end,
+                  $/ -> DocRoot ++ Path;
+                  _ -> DocRoot ++ "/" ++ Path
+              end,
     _NewPath2 = case lists:last(Path) of
-        $/ -> [{directory, NewPath}];
-        _ ->
-            Dir = filename:dirname(NewPath),
-            File = filename:basename(NewPath),
-            [
-                {directory,Dir},
-                {file,File}
-            ]
-    end.
+                    $/ -> [{directory, NewPath}];
+                    _ ->
+                        Dir = filename:dirname(NewPath),
+                        File = filename:basename(NewPath),
+                        [
+                            {directory, Dir},
+                            {file, File}
+                        ]
+                end.
 
 % Ensure the paths start with /, and if a path ends with /, then add "[...]" to it
 reformat_path(Path) ->
     Path2 = case hd(Path) of
-        $/ -> Path;
-        $\ -> Path;
-        _ -> [$/|Path]
-    end,
+                $/ -> Path;
+                $\ -> Path;
+                _ -> [$/ | Path]
+            end,
     Path3 = case lists:last(Path) of
-        $/ -> Path2 ++ "[...]";
-        $\ -> Path2 ++ "[...]";
-        _ -> Path2
-    end,
+                $/ -> Path2 ++ "[...]";
+                $\ -> Path2 ++ "[...]";
+                _ -> Path2
+            end,
     Path3.

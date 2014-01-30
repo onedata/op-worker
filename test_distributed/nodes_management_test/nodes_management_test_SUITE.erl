@@ -18,6 +18,8 @@
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 
+-define(ProtocolVersion, 1).
+
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([fuse_session_cleanup_test/1, main_test/1, callbacks_test/1, sub_proc_test/1]).
@@ -54,7 +56,7 @@ worker_code() ->
 fuse_session_cleanup_test(Config) ->
     nodes_manager:check_start_assertions(Config),
     NodesUp = ?config(nodes, Config),
-
+    DBNode = ?config(dbnode, Config),
     [CCM | WorkerNodes] = NodesUp,
 
     ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
@@ -69,6 +71,7 @@ fuse_session_cleanup_test(Config) ->
 
     %% Worker ports: 6666, 7777, 8888
     Host = "localhost",
+    TeamName = "user1 team",
 
     Cert1 = ?COMMON_FILE("peer.pem"),
     _Cert2 = ?COMMON_FILE("peer2.pem"),
@@ -84,7 +87,7 @@ fuse_session_cleanup_test(Config) ->
         DnList = [DN],
 
         Name = "user1 user1",
-        Teams = ["user1 team"],
+        Teams = [TeamName],
         Email = "user1@email.net",
         {CreateUserAns, _} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
         ?assertEqual(ok, CreateUserAns)
@@ -153,9 +156,17 @@ fuse_session_cleanup_test(Config) ->
     ?assertEqual(1, length(Ans8)),
 
 
+    %% Stop dao - info will not be cleared from DB during socket closing (check if cache clearing procedure will clear it)
+    DaoStop = rpc:call(CCM, dao_lib, apply, [dao_hosts, delete, [DBNode], ?ProtocolVersion]),
+    ?assertEqual(ok, DaoStop),
+
     %% Close connections from session #2
     wss:close(Socket21),
     wss:close(Socket22),
+
+    nodes_manager:wait_for_request_handling(),
+    DaoStart = rpc:call(CCM, dao_lib, apply, [dao_hosts, insert, [DBNode], ?ProtocolVersion]),
+    ?assertEqual(ok, DaoStart),
 
     nodes_manager:wait_for_fuse_session_exp(),
 
@@ -170,8 +181,10 @@ fuse_session_cleanup_test(Config) ->
     ?assertEqual(0, length(Ans11)),
 
     %% Cleanup
-    rpc:call(CCM, user_logic, remove_user, [{login, "user1"}]),
-    rpc:call(CCM, user_logic, remove_user, [{login, "user2"}]).
+    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ TeamName], ?ProtocolVersion])),
+    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
+
+    ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{login, "user1"}])).
 
 %% This test checks sub procs management (if requests are forwarded to apropriate sub procs)
 sub_proc_test(Config) ->
@@ -190,12 +203,17 @@ sub_proc_test(Config) ->
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
   nodes_manager:wait_for_cluster_init(),
 
-  {Workers, _} = gen_server:call({global, ?CCM}, get_workers),
+  %% TODO !!! Check why late answer from gen_server sometimes appear !!!
+  %% Late answer: If no reply is received within the specified time, the function call fails.
+  %% If the caller catches the failure and continues running, and the server is just late with the reply,
+  %% it may arrive at any time later into the caller's message queue. The caller must in this case be
+  %% prepared for this and discard any such garbage messages that are two element tuples with a reference as the first element.
+  {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
     case lists:member({Node, fslogic}, Workers) of
       true -> ok;
       false ->
-        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, fslogic, []}),
+        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, fslogic, []}, 3000),
         ?assertEqual(ok, StartAns)
     end
   end,
@@ -225,7 +243,7 @@ sub_proc_test(Config) ->
   end,
 
   RegisterSubProc = fun(Node) ->
-    RegAns = gen_server:call({fslogic, Node}, {register_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun}, 500),
+    RegAns = gen_server:call({fslogic, Node}, {register_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun}, 1000),
     ?assertEqual(ok, RegAns),
     nodes_manager:wait_for_cluster_cast({fslogic, Node})
   end,
@@ -247,6 +265,7 @@ sub_proc_test(Config) ->
   for(1, TestRequestsNum, TestFun),
 
   Ans = count_answers(6 * TestRequestsNum),
+%%   ct:print("Ans: ~p~n", [Ans]),
   ?assertEqual(10, length(Ans)),
   Keys = proplists:get_keys(Ans),
   ?assertEqual(6* TestRequestsNum, lists:foldl(fun(K, Sum) ->
@@ -287,7 +306,7 @@ main_test(Config) ->
   NotExistingNodes = ['n1@localhost', 'n2@localhost', 'n3@localhost'],
   lists:foreach(fun(Node) -> gen_server:cast({global, ?CCM}, {node_is_up, Node}) end, NotExistingNodes),
   nodes_manager:wait_for_cluster_cast(),
-  Nodes = gen_server:call({global, ?CCM}, get_nodes),
+  Nodes = gen_server:call({global, ?CCM}, get_nodes, 500),
   ?assertEqual(length(Nodes), length(NodesUp)),
     lists:foreach(fun(Node) ->
       ?assert(lists:member(Node, Nodes))
@@ -295,10 +314,10 @@ main_test(Config) ->
 
   lists:foreach(fun(Node) -> gen_server:cast({global, ?CCM}, {node_is_up, Node}) end, NodesUp),
   nodes_manager:wait_for_cluster_cast(),
-  Nodes2 = gen_server:call({global, ?CCM}, get_nodes),
+  Nodes2 = gen_server:call({global, ?CCM}, get_nodes, 500),
   ?assertEqual(length(Nodes2), length(NodesUp)),
 
-  {Workers, _StateNum} = gen_server:call({global, ?CCM}, get_workers),
+  {Workers, _StateNum} = gen_server:call({global, ?CCM}, get_workers, 1000),
   Jobs = ?Modules,
   ?assertEqual(length(Workers), length(Jobs)),
 
@@ -345,14 +364,14 @@ callbacks_test(Config) ->
 
   [CCM | WorkerNodes] = NodesUp,
 
-  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
+  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [], 2000)),
   nodes_manager:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
-    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
+    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [], 2000)),
     nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
-  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
+  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [], 2000)),
   nodes_manager:wait_for_cluster_init(),
 
   [Worker1 | _] = WorkerNodes,
@@ -362,9 +381,9 @@ callbacks_test(Config) ->
   %% Add test users since cluster wont generate FuseId without full authentication
   {ReadFileAns, PemBin} = file:read_file(PeerCert),
   ?assertEqual(ok, ReadFileAns),
-  {ExtractAns, RDNSequence} = rpc:call(Worker1, user_logic, extract_dn_from_cert, [PemBin]),
+  {ExtractAns, RDNSequence} = rpc:call(Worker1, user_logic, extract_dn_from_cert, [PemBin], 2000),
   ?assertEqual(rdnSequence, ExtractAns),
-  {ConvertAns, DN} = rpc:call(Worker1, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
+  {ConvertAns, DN} = rpc:call(Worker1, user_logic, rdn_sequence_to_dn_string, [RDNSequence], 2000),
   ?assertEqual(ok, ConvertAns),
   DnList = [DN],
 
@@ -372,7 +391,7 @@ callbacks_test(Config) ->
   Name = "user1 user1",
   Teams = ["user1 team"],
   Email = "user1@email.net",
-  {CreateUserAns, _} = rpc:call(Worker1, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+  {CreateUserAns, _} = rpc:call(Worker1, user_logic, create_user, [Login, Name, Teams, Email, DnList], 2000),
   ?assertEqual(ok, CreateUserAns),
   %% END Add user
 
@@ -466,13 +485,13 @@ callbacks_test(Config) ->
   end,
 
   CheckCallbacks = fun({Node, {FusesList, Fuse1AnsLength, Fuse2AnsLength}}, DispatcherCorrectAns) ->
-    Test1 = gen_server:call({?Dispatcher_Name, Node}, get_callbacks),
+    Test1 = gen_server:call({?Dispatcher_Name, Node}, get_callbacks, 1000),
     CheckDispatcherAns(DispatcherCorrectAns, Test1),
-    Test2 = gen_server:call({?Node_Manager_Name, Node}, get_fuses_list),
+    Test2 = gen_server:call({?Node_Manager_Name, Node}, get_fuses_list, 1000),
     ?assertEqual(FusesList, Test2),
-    Test3 = gen_server:call({?Node_Manager_Name, Node}, {get_all_callbacks, FuseId1}),
+    Test3 = gen_server:call({?Node_Manager_Name, Node}, {get_all_callbacks, FuseId1}, 1000),
     ?assertEqual(Fuse1AnsLength, length(Test3)),
-    Test4 = gen_server:call({?Node_Manager_Name, Node}, {get_all_callbacks, FuseId2}),
+    Test4 = gen_server:call({?Node_Manager_Name, Node}, {get_all_callbacks, FuseId2}, 1000),
     ?assertEqual(Fuse2AnsLength, length(Test4)),
 
     DispatcherCorrectAns
@@ -480,7 +499,7 @@ callbacks_test(Config) ->
 
   DispatcherCorrectAns1 = {[{FuseId1, lists:reverse(NodesUp)}, {FuseId2, [CCM]}], 6},
   FuseInfo1 = [{[FuseId1, FuseId2], 2,1}, {[FuseId1], 1,0}, {[FuseId1], 1,0}, {[FuseId1], 1,0}],
-  CCMTest1 = gen_server:call({global, ?CCM}, get_callbacks),
+  CCMTest1 = gen_server:call({global, ?CCM}, get_callbacks, 1000),
   CheckDispatcherAns(DispatcherCorrectAns1, CCMTest1),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns1, lists:zip(NodesUp, FuseInfo1)),
 
@@ -499,11 +518,11 @@ callbacks_test(Config) ->
   [LastNode | _] = lists:reverse(NodesUp),
   DispatcherCorrectAns2 = {[{FuseId1, [LastNode, CCM]}, {FuseId2, [CCM]}], 8},
   FuseInfo2 = [{[FuseId1, FuseId2], 1, 1}, {[], 0,0}, {[], 0,0}, {[FuseId1], 1,0}],
-  CCMTest2 = gen_server:call({global, ?CCM}, get_callbacks),
+  CCMTest2 = gen_server:call({global, ?CCM}, get_callbacks, 1000),
   CheckDispatcherAns(DispatcherCorrectAns2, CCMTest2),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns2, lists:zip(NodesUp, FuseInfo2)),
 
-  CallbackSendTest1 = rpc:call(LastNode, request_dispatcher, send_to_fuse, [FuseId2, #atom{value = "test_atom"}, "communication_protocol"]),
+  CallbackSendTest1 = rpc:call(LastNode, request_dispatcher, send_to_fuse, [FuseId2, #atom{value = "test_atom"}, "communication_protocol"], 2000),
   ?assertEqual(ok, CallbackSendTest1),
   {CallbackSendTestRecvAns, CallbackSendTestSendAns} = wss:recv(Fuse2Callback, 5000),
   ?assertEqual(ok, CallbackSendTestRecvAns),
@@ -547,11 +566,11 @@ callbacks_test(Config) ->
 
   DispatcherCorrectAns3 = {[], 11},
   FuseInfo3 = [{[], 0, 0}, {[], 0, 0}, {[], 0, 0}, {[], 0, 0}],
-  CCMTest3 = gen_server:call({global, ?CCM}, get_callbacks),
+  CCMTest3 = gen_server:call({global, ?CCM}, get_callbacks, 1000),
   CheckDispatcherAns(DispatcherCorrectAns3, CCMTest3),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns3, lists:zip(NodesUp, FuseInfo3)),
 
-  rpc:call(Worker1, user_logic, remove_user, [{dn, DN}]).
+  rpc:call(Worker1, user_logic, remove_user, [{dn, DN}], 2000).
 
 %% ====================================================================
 %% SetUp and TearDown functions
@@ -566,13 +585,13 @@ init_per_testcase(_, Config) ->
   DBNode = nodes_manager:get_db_node(),
 
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, [
-    [{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_cache_loop_time, 1}],
-    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_cache_loop_time, 1}],
-    [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_cache_loop_time, 1}],
-    [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_cache_loop_time, 1}]]),
+    [{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}],
+    [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}],
+    [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}]]),
 
   Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
-  lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config).
+  lists:append([{nodes, NodesUp}, {assertions, Assertions}, {dbnode, DBNode}], Config).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
@@ -594,9 +613,9 @@ count_answers(0, TmpAns) ->
 
 count_answers(ExpectedNum, TmpAns) ->
   receive
-    Msg ->
-      NewCounter = proplists:get_value(Msg, TmpAns, 0) + 1,
-      NewAns = [{Msg, NewCounter} | proplists:delete(Msg, TmpAns)],
+    {Msg1, Msg2} when is_atom(Msg2) ->
+      NewCounter = proplists:get_value({Msg1, Msg2}, TmpAns, 0) + 1,
+      NewAns = [{{Msg1, Msg2}, NewCounter} | proplists:delete({Msg1, Msg2}, TmpAns)],
       count_answers(ExpectedNum - 1, NewAns)
   after 5000 ->
     TmpAns

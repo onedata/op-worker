@@ -41,7 +41,8 @@
   type = 0,
   size = 0,
   uname = [],
-  gname = []
+  gname = [],
+  links = 0
 }).
 
 % Callbacks management

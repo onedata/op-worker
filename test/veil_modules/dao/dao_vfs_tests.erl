@@ -42,16 +42,18 @@ storage_test_() ->
 
 
 setup() ->
-    meck:new([dao, dao_helper]),
+    meck:new([dao, dao_helper, worker_host]),
     meck:expect(dao, set_db, fun(_) -> ok end),
     meck:expect(dao, save_record, fun(_) -> {ok, "uuid"} end),
     meck:expect(dao, get_record, fun(_) -> {ok, #veil_document{}} end),
     meck:expect(dao, remove_record, fun(_) -> ok end),
-    meck:expect(dao_helper, name, fun(Arg) -> Arg end).
+    meck:expect(dao_helper, name, fun(Arg) -> Arg end),
+    ets:new(storage_cache, [named_table, public, set, {read_concurrency, true}]).
 
 
 teardown(_) ->
-    ok = meck:unload([dao, dao_helper]).
+    ets:delete(storage_cache),
+    ok = meck:unload([dao, dao_helper, worker_host]).
 
 
 file_path_analyze_test() ->
@@ -230,20 +232,27 @@ rename_file() ->
 
 
 save_storage() ->
+    meck:expect(worker_host, clear_cache, fun
+      ({storage_cache, [{uuid, _}, {id, _}]}) -> ok
+    end),
     Doc = #veil_document{record = #storage_info{}},
     ?assertMatch({ok, "uuid"}, dao_vfs:save_storage(Doc)),
     ?assertMatch({ok, "uuid"}, dao_vfs:save_storage(#storage_info{})),
 
     ?assertEqual(2, meck:num_calls(dao, set_db, [?SYSTEM_DB_NAME])),
     ?assertEqual(2, meck:num_calls(dao, save_record, [Doc])),
-    ?assert(meck:validate([dao, dao_helper])).
+    ?assert(meck:validate([dao, dao_helper, worker_host])).
 
 
 remove_storage() ->
+    meck:expect(worker_host, clear_cache, fun
+      ({storage_cache, [{uuid, "uuid"}, {id, _}]}) -> ok
+    end),
+    meck:expect(dao, get_record, fun("uuid") -> {ok, #veil_document{uuid="uuid", record = #storage_info{}}} end),
     ?assertMatch(ok, dao_vfs:remove_storage({uuid, "uuid"})),
     ?assert(meck:called(dao, set_db, [?SYSTEM_DB_NAME])),
     ?assert(meck:called(dao, remove_record, ["uuid"])),
-    ?assert(meck:validate([dao, dao_helper])).
+    ?assert(meck:validate([dao, dao_helper, worker_host])).
 
 
 get_storage() ->
