@@ -135,7 +135,7 @@ get_field({Fields}, Name) ->
         _ -> {error, invalid_object}
     end.
 
-%% get_fields/2
+%% get_fields/1
 %% ====================================================================
 %% @doc Returns field's values from given document or JSON object
 -spec get_fields(DocOrObj) -> [{FieldName :: string(), FieldValue :: any()}] | {error, not_found} | {error, invalid_object} when

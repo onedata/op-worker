@@ -1,0 +1,116 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="veilException_8h" kind="file">
+    <compoundname>veilException.h</compoundname>
+    <includes local="no">string</includes>
+    <includedby refid="storageMapper_8h" local="yes">include/storageMapper.h</includedby>
+    <includedby refid="veilException_8cc" local="yes">src/veilException.cc</includedby>
+    <incdepgraph>
+      <node id="1158">
+        <label>string</label>
+      </node>
+      <node id="1157">
+        <label>include/veilException.h</label>
+        <link refid="veilException.h"/>
+        <childnode refid="1158" relation="include">
+        </childnode>
+      </node>
+    </incdepgraph>
+    <invincdepgraph>
+      <node id="1168">
+        <label>src/pushListener.cc</label>
+        <link refid="pushListener_8cc"/>
+      </node>
+      <node id="1165">
+        <label>src/ISchedulable.cc</label>
+        <link refid="ISchedulable_8cc"/>
+      </node>
+      <node id="1160">
+        <label>include/storageMapper.h</label>
+        <link refid="storageMapper_8h"/>
+        <childnode refid="1161" relation="include">
+        </childnode>
+        <childnode refid="1169" relation="include">
+        </childnode>
+      </node>
+      <node id="1167">
+        <label>src/metaCache.cc</label>
+        <link refid="metaCache_8cc"/>
+      </node>
+      <node id="1170">
+        <label>src/veilException.cc</label>
+        <link refid="veilException_8cc"/>
+      </node>
+      <node id="1164">
+        <label>src/gsiHandler.cc</label>
+        <link refid="gsiHandler_8cc"/>
+      </node>
+      <node id="1161">
+        <label>include/veilfs.h</label>
+        <link refid="veilfs_8h"/>
+        <childnode refid="1162" relation="include">
+        </childnode>
+        <childnode refid="1163" relation="include">
+        </childnode>
+        <childnode refid="1164" relation="include">
+        </childnode>
+        <childnode refid="1165" relation="include">
+        </childnode>
+        <childnode refid="1166" relation="include">
+        </childnode>
+        <childnode refid="1167" relation="include">
+        </childnode>
+        <childnode refid="1168" relation="include">
+        </childnode>
+        <childnode refid="1169" relation="include">
+        </childnode>
+        <childnode refid="1170" relation="include">
+        </childnode>
+        <childnode refid="1171" relation="include">
+        </childnode>
+        <childnode refid="1172" relation="include">
+        </childnode>
+      </node>
+      <node id="1163">
+        <label>src/fslogicProxy.cc</label>
+        <link refid="fslogicProxy_8cc"/>
+      </node>
+      <node id="1159">
+        <label>include/veilException.h</label>
+        <link refid="veilException.h"/>
+        <childnode refid="1160" relation="include">
+        </childnode>
+        <childnode refid="1170" relation="include">
+        </childnode>
+      </node>
+      <node id="1171">
+        <label>src/veilfs.cc</label>
+        <link refid="veilfs_8cc"/>
+      </node>
+      <node id="1172">
+        <label>src/veilFuse.cc</label>
+        <link refid="veilFuse_8cc"/>
+      </node>
+      <node id="1162">
+        <label>src/config.cc</label>
+        <link refid="config_8cc"/>
+      </node>
+      <node id="1166">
+        <label>src/messageBuilder.cc</label>
+        <link refid="messageBuilder_8cc"/>
+      </node>
+      <node id="1169">
+        <label>src/storageMapper.cc</label>
+        <link refid="storageMapper_8cc"/>
+      </node>
+    </invincdepgraph>
+    <innerclass refid="classveil_1_1client_1_1VeilException" prot="public">veil::client::VeilException</innerclass>
+    <innernamespace refid="namespaceveil">veil</innernamespace>
+    <innernamespace refid="namespaceveil_1_1client">veil::client</innernamespace>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+    </detaileddescription>
+    <location file="/home/krzysztof/Desktop/veilclient/include/veilException.h"/>
+  </compounddef>
+</doxygen>

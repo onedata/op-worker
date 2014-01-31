@@ -1,0 +1,161 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="jobScheduler_8h" kind="file">
+    <compoundname>jobScheduler.h</compoundname>
+    <includes local="no">queue</includes>
+    <includes local="no">string</includes>
+    <includes local="no">time.h</includes>
+    <includes local="no">pthread.h</includes>
+    <includes local="no">boost/shared_ptr.hpp</includes>
+    <includes refid="ISchedulable_8h" local="yes">ISchedulable.h</includes>
+    <includedby refid="veilfs_8h" local="yes">include/veilfs.h</includedby>
+    <includedby refid="jobScheduler_8cc" local="yes">src/jobScheduler.cc</includedby>
+    <includedby refid="metaCache_8cc" local="yes">src/metaCache.cc</includedby>
+    <includedby refid="pushListener_8cc" local="yes">src/pushListener.cc</includedby>
+    <incdepgraph>
+      <node id="1017">
+        <label>queue</label>
+      </node>
+      <node id="1021">
+        <label>boost/shared_ptr.hpp</label>
+      </node>
+      <node id="1018">
+        <label>string</label>
+      </node>
+      <node id="1020">
+        <label>pthread.h</label>
+      </node>
+      <node id="1016">
+        <label>include/jobScheduler.h</label>
+        <link refid="jobScheduler.h"/>
+        <childnode refid="1017" relation="include">
+        </childnode>
+        <childnode refid="1018" relation="include">
+        </childnode>
+        <childnode refid="1019" relation="include">
+        </childnode>
+        <childnode refid="1020" relation="include">
+        </childnode>
+        <childnode refid="1021" relation="include">
+        </childnode>
+        <childnode refid="1022" relation="include">
+        </childnode>
+      </node>
+      <node id="1023">
+        <label>boost/enable_shared_from_this.hpp</label>
+      </node>
+      <node id="1019">
+        <label>time.h</label>
+      </node>
+      <node id="1022">
+        <label>ISchedulable.h</label>
+        <link refid="ISchedulable_8h"/>
+        <childnode refid="1018" relation="include">
+        </childnode>
+        <childnode refid="1021" relation="include">
+        </childnode>
+        <childnode refid="1023" relation="include">
+        </childnode>
+      </node>
+    </incdepgraph>
+    <invincdepgraph>
+      <node id="1032">
+        <label>src/pushListener.cc</label>
+        <link refid="pushListener_8cc"/>
+      </node>
+      <node id="1029">
+        <label>src/ISchedulable.cc</label>
+        <link refid="ISchedulable_8cc"/>
+      </node>
+      <node id="1031">
+        <label>src/metaCache.cc</label>
+        <link refid="metaCache_8cc"/>
+      </node>
+      <node id="1034">
+        <label>src/veilException.cc</label>
+        <link refid="veilException_8cc"/>
+      </node>
+      <node id="1028">
+        <label>src/gsiHandler.cc</label>
+        <link refid="gsiHandler_8cc"/>
+      </node>
+      <node id="1025">
+        <label>include/veilfs.h</label>
+        <link refid="veilfs_8h"/>
+        <childnode refid="1026" relation="include">
+        </childnode>
+        <childnode refid="1027" relation="include">
+        </childnode>
+        <childnode refid="1028" relation="include">
+        </childnode>
+        <childnode refid="1029" relation="include">
+        </childnode>
+        <childnode refid="1030" relation="include">
+        </childnode>
+        <childnode refid="1031" relation="include">
+        </childnode>
+        <childnode refid="1032" relation="include">
+        </childnode>
+        <childnode refid="1033" relation="include">
+        </childnode>
+        <childnode refid="1034" relation="include">
+        </childnode>
+        <childnode refid="1035" relation="include">
+        </childnode>
+        <childnode refid="1036" relation="include">
+        </childnode>
+      </node>
+      <node id="1027">
+        <label>src/fslogicProxy.cc</label>
+        <link refid="fslogicProxy_8cc"/>
+      </node>
+      <node id="1024">
+        <label>include/jobScheduler.h</label>
+        <link refid="jobScheduler.h"/>
+        <childnode refid="1025" relation="include">
+        </childnode>
+        <childnode refid="1037" relation="include">
+        </childnode>
+        <childnode refid="1031" relation="include">
+        </childnode>
+        <childnode refid="1032" relation="include">
+        </childnode>
+      </node>
+      <node id="1035">
+        <label>src/veilfs.cc</label>
+        <link refid="veilfs_8cc"/>
+      </node>
+      <node id="1036">
+        <label>src/veilFuse.cc</label>
+        <link refid="veilFuse_8cc"/>
+      </node>
+      <node id="1026">
+        <label>src/config.cc</label>
+        <link refid="config_8cc"/>
+      </node>
+      <node id="1037">
+        <label>src/jobScheduler.cc</label>
+        <link refid="jobScheduler_8cc"/>
+      </node>
+      <node id="1030">
+        <label>src/messageBuilder.cc</label>
+        <link refid="messageBuilder_8cc"/>
+      </node>
+      <node id="1033">
+        <label>src/storageMapper.cc</label>
+        <link refid="storageMapper_8cc"/>
+      </node>
+    </invincdepgraph>
+    <innerclass refid="structveil_1_1client_1_1Job" prot="public">veil::client::Job</innerclass>
+    <innerclass refid="classveil_1_1client_1_1JobScheduler" prot="public">veil::client::JobScheduler</innerclass>
+    <innernamespace refid="namespaceveil">veil</innernamespace>
+    <innernamespace refid="namespaceveil_1_1client">veil::client</innernamespace>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+<para><simplesect kind="author"><para>Rafal Slota </para></simplesect>
+<simplesect kind="copyright"><para>(C) 2013 ACK CYFRONET AGH </para><simplesectsep/><para>This software is released under the MIT Licence. </para></simplesect>
+</para>    </detaileddescription>
+    <location file="/home/krzysztof/Desktop/veilclient/include/jobScheduler.h"/>
+  </compounddef>
+</doxygen>

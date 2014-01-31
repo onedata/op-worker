@@ -1,0 +1,183 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="classveil_1_1client_1_1VeilException" kind="class" prot="public">
+    <compoundname>veil::client::VeilException</compoundname>
+    <basecompoundref prot="public" virt="non-virtual">std::exception</basecompoundref>
+    <includes refid="veilException_8h" local="no">include/veilException.h</includes>
+      <sectiondef kind="private-attrib">
+      <memberdef kind="variable" id="classveil_1_1client_1_1VeilException_1a01c5136370cccf10fd1f6e0d9dc424b5" prot="private" static="no" mutable="no">
+        <type>std::string</type>
+        <definition>std::string veil::client::VeilException::m_logMessage</definition>
+        <argsstring></argsstring>
+        <name>m_logMessage</name>
+        <briefdescription>
+<para>Human readable excpetion reason message. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilException.h" line="22" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilException.h" bodystart="22" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1VeilException_1a3264980284a0d9151a2f42956e552320" compoundref="veilException_8cc" startline="31" endline="34">what</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1VeilException_1a0e02acb36009d689792c3c13bb0a53b4" prot="private" static="no" mutable="no">
+        <type>std::string</type>
+        <definition>std::string veil::client::VeilException::m_veilError</definition>
+        <argsstring></argsstring>
+        <name>m_veilError</name>
+        <briefdescription>
+<para>POSIX error name. </para>        </briefdescription>
+        <detaileddescription>
+<para>This error string should be compatibile with VeilFS::translateError. <simplesect kind="see"><para>VeilFS::translateError </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilException.h" line="23" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilException.h" bodystart="23" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1VeilException_1a09a362356fc441c8399570f579a1ab1c" compoundref="veilException_8cc" startline="36" endline="39">veilError</referencedby>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="public-func">
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilException_1adc7ebef7c940f634c772a38487fd5b9a" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type></type>
+        <definition>veil::client::VeilException::VeilException</definition>
+        <argsstring>()</argsstring>
+        <name>VeilException</name>
+        <briefdescription>
+<para>Default, empty constuctor. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilException.h" line="27" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilException.cc" bodystart="15" bodyend="17"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilException_1a4eb17ec9a5bcc3fd47271aee22c84434" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type></type>
+        <definition>veil::client::VeilException::VeilException</definition>
+        <argsstring>(std::string veilError, std::string logMsg=&quot;&quot;)</argsstring>
+        <name>VeilException</name>
+        <param>
+          <type>std::string</type>
+          <declname>veilError</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>logMsg</declname>
+          <defval>&quot;&quot;</defval>
+        </param>
+        <briefdescription>
+<para><ref refid="classveil_1_1client_1_1VeilException" kindref="compound">VeilException</ref> main constructor. </para>        </briefdescription>
+        <detaileddescription>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>veilError</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>POSIX error name. Should be compatibile with VeilFS::translateError </para></parameterdescription>
+</parameteritem>
+<parameteritem>
+<parameternamelist>
+<parametername>logMsg</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>Human readable excpetion reason message. </para></parameterdescription>
+</parameteritem>
+</parameterlist>
+<simplesect kind="see"><para>VeilFS::translateError </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilException.h" line="35" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilException.cc" bodystart="19" bodyend="25"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilException_1a2a51e118cf18f44ca41714da3a180269" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type></type>
+        <definition>veil::client::VeilException::~VeilException</definition>
+        <argsstring>()</argsstring>
+        <name>~VeilException</name>
+        <exceptions> throw ()</exceptions>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilException.h" line="36" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilException.cc" bodystart="27" bodyend="29"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilException_1a3264980284a0d9151a2f42956e552320" prot="public" static="no" const="yes" explicit="no" inline="no" virt="non-virtual">
+        <type>const char *</type>
+        <definition>const char * veil::client::VeilException::what</definition>
+        <argsstring>() const </argsstring>
+        <name>what</name>
+        <exceptions> throw ()</exceptions>
+        <briefdescription>
+<para>Returns <ref refid="classveil_1_1client_1_1VeilException_1a01c5136370cccf10fd1f6e0d9dc424b5" kindref="member">VeilException::m_logMessage</ref>. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilException.h" line="38" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilException.cc" bodystart="31" bodyend="34"/>
+        <references refid="classveil_1_1client_1_1VeilException_1a01c5136370cccf10fd1f6e0d9dc424b5" compoundref="veilException_8h" startline="22">m_logMessage</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilException_1a09a362356fc441c8399570f579a1ab1c" prot="public" static="no" const="yes" explicit="no" inline="no" virt="non-virtual">
+        <type>std::string</type>
+        <definition>std::string veil::client::VeilException::veilError</definition>
+        <argsstring>() const </argsstring>
+        <name>veilError</name>
+        <briefdescription>
+<para>Returns <ref refid="classveil_1_1client_1_1VeilException_1a0e02acb36009d689792c3c13bb0a53b4" kindref="member">VeilException::m_veilError</ref>. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilException.h" line="39" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilException.cc" bodystart="36" bodyend="39"/>
+        <references refid="classveil_1_1client_1_1VeilException_1a0e02acb36009d689792c3c13bb0a53b4" compoundref="veilException_8h" startline="23">m_veilError</references>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+<para>Base class of all VeilClient exceptions. </para>    </briefdescription>
+    <detaileddescription>
+    </detaileddescription>
+    <inheritancegraph>
+      <node id="185">
+        <label>veil::client::VeilException</label>
+        <link refid="classveil_1_1client_1_1VeilException"/>
+        <childnode refid="186" relation="public-inheritance">
+        </childnode>
+      </node>
+      <node id="186">
+        <label>std::exception</label>
+      </node>
+    </inheritancegraph>
+    <collaborationgraph>
+      <node id="187">
+        <label>veil::client::VeilException</label>
+        <link refid="classveil_1_1client_1_1VeilException"/>
+        <childnode refid="188" relation="public-inheritance">
+        </childnode>
+        <childnode refid="189" relation="usage">
+          <edgelabel>m_veilError</edgelabel>
+          <edgelabel>m_logMessage</edgelabel>
+        </childnode>
+      </node>
+      <node id="190">
+        <label>std::basic_string&lt; char &gt;</label>
+      </node>
+      <node id="188">
+        <label>std::exception</label>
+      </node>
+      <node id="189">
+        <label>std::string</label>
+        <childnode refid="190" relation="public-inheritance">
+        </childnode>
+      </node>
+    </collaborationgraph>
+    <location file="/home/krzysztof/Desktop/veilclient/include/veilException.h" line="20" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilException.h" bodystart="19" bodyend="40"/>
+    <listofallmembers>
+      <member refid="classveil_1_1client_1_1VeilException_1a01c5136370cccf10fd1f6e0d9dc424b5" prot="private" virt="non-virtual"><scope>veil::client::VeilException</scope><name>m_logMessage</name></member>
+      <member refid="classveil_1_1client_1_1VeilException_1a0e02acb36009d689792c3c13bb0a53b4" prot="private" virt="non-virtual"><scope>veil::client::VeilException</scope><name>m_veilError</name></member>
+      <member refid="classveil_1_1client_1_1VeilException_1a09a362356fc441c8399570f579a1ab1c" prot="public" virt="non-virtual"><scope>veil::client::VeilException</scope><name>veilError</name></member>
+      <member refid="classveil_1_1client_1_1VeilException_1adc7ebef7c940f634c772a38487fd5b9a" prot="public" virt="non-virtual"><scope>veil::client::VeilException</scope><name>VeilException</name></member>
+      <member refid="classveil_1_1client_1_1VeilException_1a4eb17ec9a5bcc3fd47271aee22c84434" prot="public" virt="non-virtual"><scope>veil::client::VeilException</scope><name>VeilException</name></member>
+      <member refid="classveil_1_1client_1_1VeilException_1a3264980284a0d9151a2f42956e552320" prot="public" virt="non-virtual"><scope>veil::client::VeilException</scope><name>what</name></member>
+      <member refid="classveil_1_1client_1_1VeilException_1a2a51e118cf18f44ca41714da3a180269" prot="public" virt="virtual"><scope>veil::client::VeilException</scope><name>~VeilException</name></member>
+    </listofallmembers>
+  </compounddef>
+</doxygen>

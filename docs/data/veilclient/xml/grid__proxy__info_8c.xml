@@ -1,0 +1,382 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="grid__proxy__info_8c" kind="file">
+    <compoundname>grid_proxy_info.c</compoundname>
+    <includes refid="gsi__utils_8h" local="yes">gsi_utils.h</includes>
+    <includes local="no">globus/globus_common.h</includes>
+    <includes local="no">globus/globus_error.h</includes>
+    <includes local="no">globus/globus_gsi_cert_utils.h</includes>
+    <includes local="no">globus/globus_gsi_system_config.h</includes>
+    <includes local="no">globus/globus_gsi_proxy.h</includes>
+    <includes local="no">globus/globus_gsi_credential.h</includes>
+    <includes local="no">globus/globus_openssl.h</includes>
+    <incdepgraph>
+      <node id="1354">
+        <label>globus/globus_error.h</label>
+      </node>
+      <node id="1356">
+        <label>globus/globus_gsi_system_config.h</label>
+      </node>
+      <node id="1358">
+        <label>globus/globus_gsi_credential.h</label>
+      </node>
+      <node id="1357">
+        <label>globus/globus_gsi_proxy.h</label>
+      </node>
+      <node id="1359">
+        <label>globus/globus_openssl.h</label>
+      </node>
+      <node id="1353">
+        <label>globus/globus_common.h</label>
+      </node>
+      <node id="1351">
+        <label>gsi_utils.h</label>
+        <link refid="gsi__utils_8h"/>
+        <childnode refid="1352" relation="include">
+        </childnode>
+      </node>
+      <node id="1355">
+        <label>globus/globus_gsi_cert_utils.h</label>
+      </node>
+      <node id="1352">
+        <label>stdio.h</label>
+      </node>
+      <node id="1350">
+        <label>src/globus-proxy-utils/grid_proxy_info.c</label>
+        <link refid="grid_proxy_info.c"/>
+        <childnode refid="1351" relation="include">
+        </childnode>
+        <childnode refid="1353" relation="include">
+        </childnode>
+        <childnode refid="1354" relation="include">
+        </childnode>
+        <childnode refid="1355" relation="include">
+        </childnode>
+        <childnode refid="1356" relation="include">
+        </childnode>
+        <childnode refid="1357" relation="include">
+        </childnode>
+        <childnode refid="1358" relation="include">
+        </childnode>
+        <childnode refid="1359" relation="include">
+        </childnode>
+      </node>
+    </incdepgraph>
+      <sectiondef kind="define">
+      <memberdef kind="define" id="grid__proxy__info_8c_1a2637c8e255c345d8f45588910c9c7193" prot="public" static="no">
+        <name>SHORT_USAGE_FORMAT</name>
+        <initializer>&quot;\nSyntax: %s [-help][-f proxyfile][-subject][...][-e [-h H][-b B]]\n&quot;</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" line="43" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" bodystart="43" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="define" id="grid__proxy__info_8c_1a77c13c1cc27cf1ddaeee5560a8facdcd" prot="public" static="no">
+        <name>args_show_short_help</name>
+        <param></param>
+        <initializer>{ \
+        fprintf(<ref refid="gsi__utils_8h_1a8883fb3d3eebea7a58c806c67a74212e" kindref="member">verr</ref>, \
+                <ref refid="grid__proxy__init_8c_1a2637c8e255c345d8f45588910c9c7193" kindref="member">SHORT_USAGE_FORMAT</ref> \
+                &quot;\nUse -help to display full usage.\n&quot;, \
+                program); \
+        globus_module_deactivate_all(); \
+    }</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" line="75" column="12" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" bodystart="75" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="define" id="grid__proxy__info_8c_1a16d5a229b3c74b18cd7140ca13650da9" prot="public" static="no">
+        <name>args_show_full_usage</name>
+        <param></param>
+        <initializer>{ \
+        fprintf(<ref refid="gsi__utils_8h_1a8883fb3d3eebea7a58c806c67a74212e" kindref="member">verr</ref>, <ref refid="grid__proxy__init_8c_1a2637c8e255c345d8f45588910c9c7193" kindref="member">SHORT_USAGE_FORMAT</ref> \
+                &quot;%s&quot;, \
+                program, \
+                <ref refid="grid__proxy__init_8c_1a3b2ddc1e3f8b6d76b81109c36b0a9ee0" kindref="member">LONG_USAGE</ref>); \
+        globus_module_deactivate_all(); \
+        return 0; \
+    }</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" line="84" column="12" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" bodystart="84" bodyend="-1"/>
+        <referencedby refid="gsi__utils_8h_1aa812c1843879f051ad49659c4b022e0d" compoundref="grid__proxy__info_8c" startline="130" endline="713">proxy_info</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="grid__proxy__info_8c_1accca3d97e303995f791dde81e1458116" prot="public" static="no">
+        <name>args_error_message</name>
+        <param><defname>errmsg</defname></param>
+        <initializer>{ \
+        fprintf(<ref refid="gsi__utils_8h_1a8883fb3d3eebea7a58c806c67a74212e" kindref="member">verr</ref>, &quot;\nERROR: %s\n&quot;, errmsg); \
+        <ref refid="grid__proxy__init_8c_1a77c13c1cc27cf1ddaeee5560a8facdcd" kindref="member">args_show_short_help</ref>(); \
+        globus_module_deactivate_all(); \
+        return 1; \
+    }</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" line="94" column="12" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" bodystart="94" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="define" id="grid__proxy__info_8c_1a7bd8a91b0cdb3a17df3ea3fb59387630" prot="public" static="no">
+        <name>args_error</name>
+        <param><defname>argp</defname></param>
+        <param><defname>errmsg</defname></param>
+        <initializer>{ \
+        char buf[1024]; \
+        sprintf(buf, &quot;option %s : %s&quot;, argp, errmsg); \
+        <ref refid="grid__proxy__init_8c_1accca3d97e303995f791dde81e1458116" kindref="member">args_error_message</ref>(buf); \
+    }</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" line="102" column="12" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" bodystart="102" bodyend="-1"/>
+        <referencedby refid="gsi__utils_8h_1aa812c1843879f051ad49659c4b022e0d" compoundref="grid__proxy__info_8c" startline="130" endline="713">proxy_info</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="grid__proxy__info_8c_1ac1e2fcb44d59a91472a6cfd036986aae" prot="public" static="no">
+        <name>GLOBUS_I_GSI_PROXY_UTILS_PRINT_ERROR</name>
+        <initializer>return <ref refid="grid__proxy__init_8c_1aa86c9f9b155e82d1f5c50f4844e0414c" kindref="member">globus_i_gsi_proxy_utils_print_error</ref>(result, <ref refid="grid__proxy__init_8c_1ac3e1795766a80ec63b157951b4b9a7d4" kindref="member">debug</ref>, __FILE__, __LINE__, NULL)</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" line="118" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" bodystart="118" bodyend="-1"/>
+        <referencedby refid="gsi__utils_8h_1aa812c1843879f051ad49659c4b022e0d" compoundref="grid__proxy__info_8c" startline="130" endline="713">proxy_info</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="grid__proxy__info_8c_1a2403320c41f08e7567cb169de5db66b3" prot="public" static="no">
+        <name>STATUS_OK</name>
+        <initializer>0</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" line="121" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" bodystart="121" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="define" id="grid__proxy__info_8c_1af55d03b822d30af5c8031f1a369a5101" prot="public" static="no">
+        <name>STATUS_EXPIRED</name>
+        <initializer>1</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" line="122" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" bodystart="122" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="define" id="grid__proxy__info_8c_1ac345972a587e6779b3c5d40874080e51" prot="public" static="no">
+        <name>STATUS_NOT_FOUND</name>
+        <initializer>2</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" line="123" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" bodystart="123" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="define" id="grid__proxy__info_8c_1a7a3fa1c86a0c8eca9bcc5a7e7afca5c3" prot="public" static="no">
+        <name>STATUS_CANT_LOAD</name>
+        <initializer>3</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" line="124" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" bodystart="124" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="define" id="grid__proxy__info_8c_1a822f9d4cb8ccb79b2e21159e1927017a" prot="public" static="no">
+        <name>STATUS_NO_NAME</name>
+        <initializer>4</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" line="125" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" bodystart="125" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="define" id="grid__proxy__info_8c_1ad5b3ab4165df7d93bb80dfa9ea3e8d41" prot="public" static="no">
+        <name>STATUS_BAD_OPTS</name>
+        <initializer>5</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" line="126" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" bodystart="126" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="define" id="grid__proxy__info_8c_1abe29b03f0c4932368d0bd5f5fbeb9f79" prot="public" static="no">
+        <name>STATUS_INTERNAL</name>
+        <initializer>6</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" line="127" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" bodystart="127" bodyend="-1"/>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="var">
+      <memberdef kind="variable" id="grid__proxy__info_8c_1ac3e1795766a80ec63b157951b4b9a7d4" prot="public" static="no" mutable="no">
+        <type>int</type>
+        <definition>int debug</definition>
+        <argsstring></argsstring>
+        <name>debug</name>
+        <initializer>= 0</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" line="41" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" bodystart="41" bodyend="-1"/>
+        <referencedby refid="gsi__utils_8h_1aa812c1843879f051ad49659c4b022e0d" compoundref="grid__proxy__info_8c" startline="130" endline="713">proxy_info</referencedby>
+        <referencedby refid="namespaceveil_1_1client_1_1gsi_1aa58c8ad97ba2c1ff1a27a1e96b5ddb6a" compoundref="gsiHandler_8cc" startline="235" endline="416">veil::client::gsi::validateProxyCert</referencedby>
+        <referencedby refid="namespaceveil_1_1client_1_1gsi_1af488f7115eb8fc251de1689cd107eceb" compoundref="gsiHandler_8cc" startline="418" endline="436">veil::client::gsi::getProxyCertPath</referencedby>
+        <referencedby refid="veilFuse_8cc_1adedb285b02c41bde2158ded9cc9fd7ac" compoundref="veilFuse_8cc" startline="210" endline="379">main</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="grid__proxy__info_8c_1a3b2ddc1e3f8b6d76b81109c36b0a9ee0" prot="public" static="yes" mutable="no">
+        <type>char *</type>
+        <definition>char* LONG_USAGE</definition>
+        <argsstring></argsstring>
+        <name>LONG_USAGE</name>
+        <initializer>= 
+&quot;\n&quot; 
+&quot;    Options\n&quot; 
+&quot;    -help, -usage             Displays usage\n&quot; 
+&quot;    -version                  Displays version\n&quot; 
+&quot;    -<ref refid="grid__proxy__init_8c_1ac3e1795766a80ec63b157951b4b9a7d4" kindref="member">debug</ref>                    Displays debugging output\n&quot; 
+&quot;    -file &lt;proxyfile&gt;  (-f)   Non-standard location of proxy\n&quot; 
+&quot;    [printoptions]            Prints information about proxy\n&quot; 
+&quot;    -exists [options]  (-e)   Returns 0 if valid proxy exists, 1 otherwise\n&quot;
+&quot;\n&quot; 
+&quot;    [printoptions]\n&quot; 
+&quot;        -subject       (-s)   Distinguished name (DN) of subject\n&quot; 
+&quot;        -issuer        (-i)   DN of issuer (certificate signer)\n&quot; 
+&quot;        -identity             DN of the identity represented by the proxy\n&quot; 
+&quot;        -type                 Type of proxy (full or limited)\n&quot; 
+&quot;        -timeleft             Time (<ref refid="src_2globus-proxy-utils_2CMakeLists_8txt_1a05c6fac5943ba55ca20e262c8147a578" kindref="member">in</ref> seconds) until proxy expires\n&quot; 
+&quot;        -strength             Key size (<ref refid="src_2globus-proxy-utils_2CMakeLists_8txt_1a05c6fac5943ba55ca20e262c8147a578" kindref="member">in</ref> bits)\n&quot; 
+&quot;        -all                  All above options <ref refid="src_2globus-proxy-utils_2CMakeLists_8txt_1a05c6fac5943ba55ca20e262c8147a578" kindref="member">in</ref> <ref refid="src_2globus-proxy-utils_2CMakeLists_8txt_1a3d8b308e88187aa9e7522225616a011c" kindref="member">a</ref> human readable format\n&quot;
+&quot;        -text                 All of the certificate\n&quot;
+&quot;        -path                 Pathname of proxy file\n&quot;
+&quot;        -rfc2253              Print X.509 names <ref refid="src_2globus-proxy-utils_2CMakeLists_8txt_1a05c6fac5943ba55ca20e262c8147a578" kindref="member">in</ref> RFC-2253 form\n&quot;
+&quot;\n&quot; 
+&quot;    [options to -exists]      (if none are given, H = B = 0 are assumed)\n&quot; 
+&quot;        -valid H:M     (-v)   time requirement for proxy to be valid\n&quot; 
+&quot;        -hours H       (-h)   time requirement for proxy to be valid\n&quot; 
+&quot;                              (deprecated, <ref refid="LICENSE_8txt_1addf81b89cb163875fcfaffc4b3a132b9" kindref="member">use</ref> -valid instead)\n&quot;
+&quot;        -bits  B       (-b)   strength requirement for proxy to be valid\n&quot; 
+&quot;\n&quot;</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" line="46" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" bodystart="46" bodyend="-1"/>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="func">
+      <memberdef kind="function" id="grid__proxy__info_8c_1aa86c9f9b155e82d1f5c50f4844e0414c" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int globus_i_gsi_proxy_utils_print_error</definition>
+        <argsstring>(globus_result_t result, int debug, const char *filename, int line, const char *fmt,...)</argsstring>
+        <name>globus_i_gsi_proxy_utils_print_error</name>
+        <param>
+          <type>globus_result_t</type>
+          <declname>result</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>debug</declname>
+        </param>
+        <param>
+          <type>const char *</type>
+          <declname>filename</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>line</declname>
+        </param>
+        <param>
+          <type>const char *</type>
+          <declname>fmt</declname>
+        </param>
+        <param>
+          <type>...</type>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" line="110" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_init.c" bodystart="1110" bodyend="1153"/>
+        <references refid="grid__proxy__init_8c_1a8883fb3d3eebea7a58c806c67a74212e" compoundref="grid__proxy__init_8c" startline="49">verr</references>
+        <referencedby refid="gsi__utils_8h_1a39505458a13ff88c7f6f8600c833d74b" compoundref="grid__proxy__init_8c" startline="150" endline="1078">proxy_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="grid__proxy__info_8c_1aa812c1843879f051ad49659c4b022e0d" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int proxy_info</definition>
+        <argsstring>(int argc, char **argv, FILE *_vout, FILE *_verr)</argsstring>
+        <name>proxy_info</name>
+        <param>
+          <type>int</type>
+          <declname>argc</declname>
+        </param>
+        <param>
+          <type>char **</type>
+          <declname>argv</declname>
+        </param>
+        <param>
+          <type>FILE *</type>
+          <declname>_vout</declname>
+        </param>
+        <param>
+          <type>FILE *</type>
+          <declname>_verr</declname>
+        </param>
+        <briefdescription>
+<para>This function replaces standard &quot;main&quot; of grid-proxy-info tool. </para>        </briefdescription>
+        <detaileddescription>
+<para>First two arguments are standard &quot;main&apos;s&quot; arugments. The others are used to capture standard output and standard error steams. </para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" line="130" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c" bodystart="130" bodyend="713"/>
+        <references refid="grid__proxy__init_8c_1afa81bba6e5de1fc5deb547245a7dfa33" compoundref="grid__proxy__init_8c" startline="48">vout</references>
+        <references refid="grid__proxy__init_8c_1a8883fb3d3eebea7a58c806c67a74212e" compoundref="grid__proxy__init_8c" startline="49">verr</references>
+        <references refid="grid__proxy__info_8c_1a7bd8a91b0cdb3a17df3ea3fb59387630" compoundref="grid__proxy__info_8c" startline="102">args_error</references>
+        <references refid="grid__proxy__info_8c_1a16d5a229b3c74b18cd7140ca13650da9" compoundref="grid__proxy__info_8c" startline="84">args_show_full_usage</references>
+        <references refid="grid__proxy__info_8c_1ac3e1795766a80ec63b157951b4b9a7d4" compoundref="grid__proxy__info_8c" startline="41">debug</references>
+        <references refid="grid__proxy__info_8c_1ac1e2fcb44d59a91472a6cfd036986aae" compoundref="grid__proxy__info_8c" startline="118">GLOBUS_I_GSI_PROXY_UTILS_PRINT_ERROR</references>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+    </detaileddescription>
+    <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/grid_proxy_info.c"/>
+  </compounddef>
+</doxygen>

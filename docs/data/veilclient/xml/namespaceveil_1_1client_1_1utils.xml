@@ -1,0 +1,62 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="namespaceveil_1_1client_1_1utils" kind="namespace">
+    <compoundname>veil::client::utils</compoundname>
+      <sectiondef kind="func">
+      <memberdef kind="function" id="namespaceveil_1_1client_1_1utils_1ab10fa67c1503c2cdb54671172e1685a1" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <templateparamlist>
+          <param>
+            <type>typename T</type>
+          </param>
+        </templateparamlist>
+        <type>std::string</type>
+        <definition>std::string veil::client::utils::toString</definition>
+        <argsstring>(T in)</argsstring>
+        <name>toString</name>
+        <param>
+          <type>T</type>
+          <declname>in</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="54" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="54" bodyend="58"/>
+        <references refid="src_2globus-proxy-utils_2CMakeLists_8txt_1a05c6fac5943ba55ca20e262c8147a578" compoundref="src_2globus-proxy-utils_2CMakeLists_8txt" startline="23">in</references>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a4348d05f055631458917d3fad712f47d" compoundref="veilfs_8cc" startline="464" endline="471">veil::client::VeilFS::utime</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a2d8808ab5d257071af8d0d28eab709de" compoundref="veilfs_8cc" startline="473" endline="502">veil::client::VeilFS::open</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a9fea1cb6f2d8e3bcdd52241e44393bd4" compoundref="veilfs_8cc" startline="587" endline="594">veil::client::VeilFS::opendir</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1ae721d86abb9618d17b723dcdb7c77b55" compoundref="veilfs_8cc" startline="718" endline="763">veil::client::VeilFS::runTask</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="namespaceveil_1_1client_1_1utils_1a2114d387d7c3991a06310b88723ff678" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <templateparamlist>
+          <param>
+            <type>typename T</type>
+          </param>
+        </templateparamlist>
+        <type>T</type>
+        <definition>T veil::client::utils::fromString</definition>
+        <argsstring>(std::string in)</argsstring>
+        <name>fromString</name>
+        <param>
+          <type>std::string</type>
+          <declname>in</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="61" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="61" bodyend="66"/>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+    </detaileddescription>
+    <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="51" column="1"/>
+  </compounddef>
+</doxygen>
