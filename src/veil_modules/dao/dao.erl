@@ -11,7 +11,7 @@
 %% Module :: atom() is module suffix (prefix is 'dao_'), MethodName :: atom() is the method name
 %% and ListOfArgs :: [term()] is list of argument for the method. <br/>
 %% If you want to call utility methods from this module - use Module = utils
-%% See {@link handle/2} for more details.
+%% See {@link dao:handle/2} for more details.
 %% @end
 %% ===================================================================
 -module(dao).
@@ -119,7 +119,7 @@ init(Args) ->
       _ -> throw({error, {dao_fuse_cache_error, Cache1}})
     end.
 
-%% handle/1
+%% handle/2
 %% ====================================================================
 %% @doc {@link worker_plugin_behaviour} callback handle/1. <br/>
 %% All {Module, Method, Args} requests (second argument), executes Method with Args in {@type dao_Module} module, but with one exception:

@@ -390,7 +390,7 @@ create(Storage_helper_info, File) ->
     _ -> {error, cannot_get_file_mode}
   end.
 
-%% truncate/2
+%% truncate/3
 %% ====================================================================
 %% @doc Truncates file (operates only on storage). First it checks if file
 %% exists and is regular file. If everything is ok, it truncates file.

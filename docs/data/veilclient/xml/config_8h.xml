@@ -1,0 +1,435 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="config_8h" kind="file">
+    <compoundname>config.h</compoundname>
+    <includes local="no">string</includes>
+    <includes local="no">yaml-cpp/yaml.h</includes>
+    <includes local="no">unistd.h</includes>
+    <includes local="no">map</includes>
+    <includes local="no">sstream</includes>
+    <includes local="yes">veilConfig.h</includes>
+    <includes refid="ISchedulable_8h" local="yes">ISchedulable.h</includes>
+    <includes local="yes">glog/logging.h</includes>
+    <includes refid="lock_8h" local="yes">lock.h</includes>
+    <includedby refid="veilfs_8h" local="yes">include/veilfs.h</includedby>
+    <includedby refid="config_8cc" local="yes">src/config.cc</includedby>
+    <includedby refid="messageBuilder_8cc" local="yes">src/messageBuilder.cc</includedby>
+    <includedby refid="metaCache_8cc" local="yes">src/metaCache.cc</includedby>
+    <includedby refid="veilFuse_8cc" local="yes">src/veilFuse.cc</includedby>
+    <incdepgraph>
+      <node id="940">
+        <label>boost/shared_ptr.hpp</label>
+      </node>
+      <node id="942">
+        <label>glog/logging.h</label>
+      </node>
+      <node id="938">
+        <label>veilConfig.h</label>
+      </node>
+      <node id="933">
+        <label>string</label>
+      </node>
+      <node id="936">
+        <label>map</label>
+      </node>
+      <node id="934">
+        <label>yaml-cpp/yaml.h</label>
+      </node>
+      <node id="944">
+        <label>pthread.h</label>
+      </node>
+      <node id="935">
+        <label>unistd.h</label>
+      </node>
+      <node id="932">
+        <label>include/config.h</label>
+        <link refid="config.h"/>
+        <childnode refid="933" relation="include">
+        </childnode>
+        <childnode refid="934" relation="include">
+        </childnode>
+        <childnode refid="935" relation="include">
+        </childnode>
+        <childnode refid="936" relation="include">
+        </childnode>
+        <childnode refid="937" relation="include">
+        </childnode>
+        <childnode refid="938" relation="include">
+        </childnode>
+        <childnode refid="939" relation="include">
+        </childnode>
+        <childnode refid="942" relation="include">
+        </childnode>
+        <childnode refid="943" relation="include">
+        </childnode>
+      </node>
+      <node id="937">
+        <label>sstream</label>
+      </node>
+      <node id="941">
+        <label>boost/enable_shared_from_this.hpp</label>
+      </node>
+      <node id="943">
+        <label>lock.h</label>
+        <link refid="lock_8h"/>
+        <childnode refid="944" relation="include">
+        </childnode>
+      </node>
+      <node id="939">
+        <label>ISchedulable.h</label>
+        <link refid="ISchedulable_8h"/>
+        <childnode refid="933" relation="include">
+        </childnode>
+        <childnode refid="940" relation="include">
+        </childnode>
+        <childnode refid="941" relation="include">
+        </childnode>
+      </node>
+    </incdepgraph>
+    <invincdepgraph>
+      <node id="953">
+        <label>src/pushListener.cc</label>
+        <link refid="pushListener_8cc"/>
+      </node>
+      <node id="950">
+        <label>src/ISchedulable.cc</label>
+        <link refid="ISchedulable_8cc"/>
+      </node>
+      <node id="952">
+        <label>src/metaCache.cc</label>
+        <link refid="metaCache_8cc"/>
+      </node>
+      <node id="955">
+        <label>src/veilException.cc</label>
+        <link refid="veilException_8cc"/>
+      </node>
+      <node id="949">
+        <label>src/gsiHandler.cc</label>
+        <link refid="gsiHandler_8cc"/>
+      </node>
+      <node id="946">
+        <label>include/veilfs.h</label>
+        <link refid="veilfs_8h"/>
+        <childnode refid="947" relation="include">
+        </childnode>
+        <childnode refid="948" relation="include">
+        </childnode>
+        <childnode refid="949" relation="include">
+        </childnode>
+        <childnode refid="950" relation="include">
+        </childnode>
+        <childnode refid="951" relation="include">
+        </childnode>
+        <childnode refid="952" relation="include">
+        </childnode>
+        <childnode refid="953" relation="include">
+        </childnode>
+        <childnode refid="954" relation="include">
+        </childnode>
+        <childnode refid="955" relation="include">
+        </childnode>
+        <childnode refid="956" relation="include">
+        </childnode>
+        <childnode refid="957" relation="include">
+        </childnode>
+      </node>
+      <node id="948">
+        <label>src/fslogicProxy.cc</label>
+        <link refid="fslogicProxy_8cc"/>
+      </node>
+      <node id="945">
+        <label>include/config.h</label>
+        <link refid="config.h"/>
+        <childnode refid="946" relation="include">
+        </childnode>
+        <childnode refid="947" relation="include">
+        </childnode>
+        <childnode refid="951" relation="include">
+        </childnode>
+        <childnode refid="952" relation="include">
+        </childnode>
+        <childnode refid="957" relation="include">
+        </childnode>
+      </node>
+      <node id="956">
+        <label>src/veilfs.cc</label>
+        <link refid="veilfs_8cc"/>
+      </node>
+      <node id="957">
+        <label>src/veilFuse.cc</label>
+        <link refid="veilFuse_8cc"/>
+      </node>
+      <node id="947">
+        <label>src/config.cc</label>
+        <link refid="config_8cc"/>
+      </node>
+      <node id="951">
+        <label>src/messageBuilder.cc</label>
+        <link refid="messageBuilder_8cc"/>
+      </node>
+      <node id="954">
+        <label>src/storageMapper.cc</label>
+        <link refid="storageMapper_8cc"/>
+      </node>
+    </invincdepgraph>
+    <innerclass refid="classveil_1_1client_1_1Config" prot="public">veil::client::Config</innerclass>
+    <innernamespace refid="namespaceveil">veil</innernamespace>
+    <innernamespace refid="namespaceveil_1_1client">veil::client</innernamespace>
+    <innernamespace refid="namespaceveil_1_1client_1_1utils">veil::client::utils</innernamespace>
+      <sectiondef kind="define">
+      <memberdef kind="define" id="config_8h_1a1b50353628cb03485db2a717ff710895" prot="public" static="no">
+        <name>CLUSTER_HOSTNAME_OPT</name>
+        <initializer>&quot;cluster_hostname&quot;</initializer>
+        <briefdescription>
+<para>Config option names. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="23" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="23" bodyend="-1"/>
+        <referencedby refid="namespaceveil_1_1client_1_1gsi_1aa7c45638e1247fbf9441177dad15d9d2" compoundref="gsiHandler_8cc" startline="438" endline="472">veil::client::gsi::getClusterHostname</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="config_8h_1ab46273b9a858794af4f4100c2877c34b" prot="public" static="no">
+        <name>CLUSTER_PORT_OPT</name>
+        <initializer>&quot;cluster_port&quot;</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="24" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="24" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1ac4c4a87a57ff923f59d4ff7d57906e4b" compoundref="config_8h" startline="138" endline="151">veil::client::Config::setupDefaults</referencedby>
+        <referencedby refid="veilFuse_8cc_1adedb285b02c41bde2158ded9cc9fd7ac" compoundref="veilFuse_8cc" startline="210" endline="379">main</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="config_8h_1a7f265a0ba16e7d53e4812576bb17f125" prot="public" static="no">
+        <name>LOG_DIR_OPT</name>
+        <initializer>&quot;log_dir&quot;</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="25" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="25" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1ac4c4a87a57ff923f59d4ff7d57906e4b" compoundref="config_8h" startline="138" endline="151">veil::client::Config::setupDefaults</referencedby>
+        <referencedby refid="veilFuse_8cc_1adedb285b02c41bde2158ded9cc9fd7ac" compoundref="veilFuse_8cc" startline="210" endline="379">main</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="config_8h_1a77c81d72a0a69577b2719c228f784655" prot="public" static="no">
+        <name>PEER_CERTIFICATE_FILE_OPT</name>
+        <initializer>&quot;peer_certificate_file&quot;</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="26" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="26" bodyend="-1"/>
+        <referencedby refid="namespaceveil_1_1client_1_1gsi_1aa58c8ad97ba2c1ff1a27a1e96b5ddb6a" compoundref="gsiHandler_8cc" startline="235" endline="416">veil::client::gsi::validateProxyCert</referencedby>
+        <referencedby refid="namespaceveil_1_1client_1_1gsi_1af488f7115eb8fc251de1689cd107eceb" compoundref="gsiHandler_8cc" startline="418" endline="436">veil::client::gsi::getProxyCertPath</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="config_8h_1a191d80319f47247f03355583e7bee92e" prot="public" static="no">
+        <name>ENABLE_ATTR_CACHE_OPT</name>
+        <initializer>&quot;enable_attr_cache&quot;</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="27" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="27" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1ac4c4a87a57ff923f59d4ff7d57906e4b" compoundref="config_8h" startline="138" endline="151">veil::client::Config::setupDefaults</referencedby>
+        <referencedby refid="classveil_1_1client_1_1MetaCache_1ad4f78d13b8fd4b07a50d759334bafe00" compoundref="metaCache_8cc" startline="33" endline="51">veil::client::MetaCache::addAttr</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1add9108b324f1c6eae48fa1180ea5da25" compoundref="veilfs_8cc" startline="139" endline="236">veil::client::VeilFS::getattr</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1ab6e3fbfba6aff36dbc9a9fd5e3456cf6" compoundref="veilfs_8cc" startline="596" endline="627">veil::client::VeilFS::readdir</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1ae721d86abb9618d17b723dcdb7c77b55" compoundref="veilfs_8cc" startline="718" endline="763">veil::client::VeilFS::runTask</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="config_8h_1abc476da9d9b1ecef3504080ca2ff0210" prot="public" static="no">
+        <name>ATTR_CACHE_EXPIRATION_TIME_OPT</name>
+        <initializer>&quot;attr_cache_expiration_time&quot;</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="28" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="28" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1ac4c4a87a57ff923f59d4ff7d57906e4b" compoundref="config_8h" startline="138" endline="151">veil::client::Config::setupDefaults</referencedby>
+        <referencedby refid="classveil_1_1client_1_1MetaCache_1ad4f78d13b8fd4b07a50d759334bafe00" compoundref="metaCache_8cc" startline="33" endline="51">veil::client::MetaCache::addAttr</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="config_8h_1affa80cae809d488fc982512a059cee17" prot="public" static="no">
+        <name>ENABLE_LOCATION_CACHE_OPT</name>
+        <initializer>&quot;enable_location_cache&quot;</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="29" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="29" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="define" id="config_8h_1a9ca8d6d7aacea9cb5ccbab22d30b3ddb" prot="public" static="no">
+        <name>ENABLE_ENV_OPTION_OVERRIDE</name>
+        <initializer>&quot;enable_env_option_override&quot;</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="30" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="30" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1ac4c4a87a57ff923f59d4ff7d57906e4b" compoundref="config_8h" startline="138" endline="151">veil::client::Config::setupDefaults</referencedby>
+        <referencedby refid="classveil_1_1client_1_1Config_1a44551df4f724eec68eeebf8665e7d1af" compoundref="config_8h" startline="184" endline="207">veil::client::Config::getValue</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="config_8h_1ae15e4581c248f54055a7816867f3b78b" prot="public" static="no">
+        <name>FUSE_ID_OPT</name>
+        <initializer>&quot;fuse_id&quot;</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="31" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="31" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1affff6b7014d3e25cbe7872f2d6fd2366" compoundref="config_8cc" startline="48" endline="51">veil::client::Config::getFuseID</referencedby>
+        <referencedby refid="classveil_1_1client_1_1Config_1a55bf15af04fbc0d0c58546d207c3c723" compoundref="config_8cc" startline="178" endline="258">veil::client::Config::runTask</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="config_8h_1ab6d6b4b4b6538391baf5fed476cfbba0" prot="public" static="no">
+        <name>CLUSTER_PING_INTERVAL_OPT</name>
+        <initializer>&quot;cluster_ping_interval&quot;</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="32" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="32" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1ac4c4a87a57ff923f59d4ff7d57906e4b" compoundref="config_8h" startline="138" endline="151">veil::client::Config::setupDefaults</referencedby>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1a699d40e88b822371a2120d862ccb6237" compoundref="fslogicProxy_8cc" startline="345" endline="377">veil::client::FslogicProxy::pingCluster</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="config_8h_1a1d9c111137bb167d8e05f9620ed0c466" prot="public" static="no">
+        <name>JOBSCHEDULER_THREADS_OPT</name>
+        <initializer>&quot;jobscheduler_threads&quot;</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="33" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="33" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1ac4c4a87a57ff923f59d4ff7d57906e4b" compoundref="config_8h" startline="138" endline="151">veil::client::Config::setupDefaults</referencedby>
+        <referencedby refid="veilFuse_8cc_1adedb285b02c41bde2158ded9cc9fd7ac" compoundref="veilFuse_8cc" startline="210" endline="379">main</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="config_8h_1a0a46ab50d49c1acf4b61cf4100ff0d41" prot="public" static="no">
+        <name>ALIVE_META_CONNECTIONS_COUNT_OPT</name>
+        <initializer>&quot;alive_meta_connections_count&quot;</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="34" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="34" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1ac4c4a87a57ff923f59d4ff7d57906e4b" compoundref="config_8h" startline="138" endline="151">veil::client::Config::setupDefaults</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a19bc3787cccc8ff63abb971252d4cc8b" compoundref="veilfs_8cc" startline="73" endline="112">veil::client::VeilFS::VeilFS</referencedby>
+        <referencedby refid="veilFuse_8cc_1adedb285b02c41bde2158ded9cc9fd7ac" compoundref="veilFuse_8cc" startline="210" endline="379">main</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="config_8h_1a6372eb9d42b6fa9aad1ab6e0dd4d5ca5" prot="public" static="no">
+        <name>ALIVE_DATA_CONNECTIONS_COUNT_OPT</name>
+        <initializer>&quot;alive_data_connections_count&quot;</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="35" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="35" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1ac4c4a87a57ff923f59d4ff7d57906e4b" compoundref="config_8h" startline="138" endline="151">veil::client::Config::setupDefaults</referencedby>
+        <referencedby refid="veilFuse_8cc_1adedb285b02c41bde2158ded9cc9fd7ac" compoundref="veilFuse_8cc" startline="210" endline="379">main</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="config_8h_1a58ba53631e23e6d05158a7ca250c21e9" prot="public" static="no">
+        <name>ENABLE_DIR_PREFETCH_OPT</name>
+        <initializer>&quot;enable_dir_prefetch&quot;</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="36" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="36" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1ac4c4a87a57ff923f59d4ff7d57906e4b" compoundref="config_8h" startline="138" endline="151">veil::client::Config::setupDefaults</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1add9108b324f1c6eae48fa1180ea5da25" compoundref="veilfs_8cc" startline="139" endline="236">veil::client::VeilFS::getattr</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="config_8h_1aa70b62c26701fe4f36910912caba63bd" prot="public" static="no">
+        <name>ENABLE_PARALLEL_GETATTR_OPT</name>
+        <initializer>&quot;enable_parallel_getattr&quot;</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="37" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="37" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1ac4c4a87a57ff923f59d4ff7d57906e4b" compoundref="config_8h" startline="138" endline="151">veil::client::Config::setupDefaults</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1ab6e3fbfba6aff36dbc9a9fd5e3456cf6" compoundref="veilfs_8cc" startline="596" endline="627">veil::client::VeilFS::readdir</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="config_8h_1a9c2e6095a5e7b351a6f13ffc706c5972" prot="public" static="no">
+        <name>FUSE_OPT_PREFIX</name>
+        <initializer>&quot;fuse_opt_&quot;</initializer>
+        <briefdescription>
+<para>Prefix for all env variables that will be send to cluster. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="41" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="41" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1a55bf15af04fbc0d0c58546d207c3c723" compoundref="config_8cc" startline="178" endline="258">veil::client::Config::runTask</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="config_8h_1a277f7abca2044f354abe265252cb9252" prot="public" static="no">
+        <name>PROTOCOL_VERSION</name>
+        <initializer>1</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="43" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="43" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1a699d40e88b822371a2120d862ccb6237" compoundref="fslogicProxy_8cc" startline="345" endline="377">veil::client::FslogicProxy::pingCluster</referencedby>
+        <referencedby refid="classveil_1_1client_1_1MessageBuilder_1a8f707226f8b86ff658f8a3838ffd462c" compoundref="messageBuilder_8cc" startline="55" endline="66">veil::client::MessageBuilder::createClusterMessage</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="config_8h_1aa387b18d58ae83d62a86786721b3bda3" prot="public" static="no">
+        <name>ATTR_DEFAULT_EXPIRATION_TIME</name>
+        <initializer>60</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="44" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="44" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1ac4c4a87a57ff923f59d4ff7d57906e4b" compoundref="config_8h" startline="138" endline="151">veil::client::Config::setupDefaults</referencedby>
+        <referencedby refid="classveil_1_1client_1_1MetaCache_1ad4f78d13b8fd4b07a50d759334bafe00" compoundref="metaCache_8cc" startline="33" endline="51">veil::client::MetaCache::addAttr</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="config_8h_1abdda66effc23e4a3614aecec03998e8b" prot="public" static="no">
+        <name>DECLARE_DEFAULT</name>
+        <param><defname>KEY</defname></param>
+        <param><defname>VALUE</defname></param>
+        <initializer>m_defaultsNode[KEY] = VALUE</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="46" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="46" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1ac4c4a87a57ff923f59d4ff7d57906e4b" compoundref="config_8h" startline="138" endline="151">veil::client::Config::setupDefaults</referencedby>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+    </detaileddescription>
+    <location file="/home/krzysztof/Desktop/veilclient/include/config.h"/>
+  </compounddef>
+</doxygen>

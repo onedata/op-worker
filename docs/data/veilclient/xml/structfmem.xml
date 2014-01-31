@@ -1,0 +1,67 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="structfmem" kind="struct" prot="public">
+    <compoundname>fmem</compoundname>
+      <sectiondef kind="public-attrib">
+      <memberdef kind="variable" id="structfmem_1a5bd49f56467813a44d613a1425931eca" prot="public" static="no" mutable="no">
+        <type>size_t</type>
+        <definition>size_t fmem::pos</definition>
+        <argsstring></argsstring>
+        <name>pos</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c" line="24" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c" bodystart="24" bodyend="-1"/>
+        <referencedby refid="fmemopen_8c_1a307e31d9468eca4c24e20a380865fcf9" compoundref="fmemopen_8c" startline="30" endline="41">readfn</referencedby>
+        <referencedby refid="fmemopen_8c_1a6bcff750932dc0b5d33e473869f2be4b" compoundref="fmemopen_8c" startline="43" endline="54">writefn</referencedby>
+        <referencedby refid="fmemopen_8c_1a8274c47f6acbb2e01d6536f094336807" compoundref="fmemopen_8c" startline="56" endline="73">seekfn</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="structfmem_1a8393fad020c142e2de643af2d0dba9fb" prot="public" static="no" mutable="no">
+        <type>size_t</type>
+        <definition>size_t fmem::size</definition>
+        <argsstring></argsstring>
+        <name>size</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c" line="25" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c" bodystart="25" bodyend="-1"/>
+        <referencedby refid="fmemopen_8c_1a307e31d9468eca4c24e20a380865fcf9" compoundref="fmemopen_8c" startline="30" endline="41">readfn</referencedby>
+        <referencedby refid="fmemopen_8c_1a6bcff750932dc0b5d33e473869f2be4b" compoundref="fmemopen_8c" startline="43" endline="54">writefn</referencedby>
+        <referencedby refid="fmemopen_8c_1a8274c47f6acbb2e01d6536f094336807" compoundref="fmemopen_8c" startline="56" endline="73">seekfn</referencedby>
+        <referencedby refid="fmemopen_8h_1a6b2efc6515c53ab5f0c9800c35f65789" compoundref="fmemopen_8c" startline="80" endline="92">fmemopen</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="structfmem_1aa8140f9002162674e50499e6d676364b" prot="public" static="no" mutable="no">
+        <type>char *</type>
+        <definition>char* fmem::buffer</definition>
+        <argsstring></argsstring>
+        <name>buffer</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c" line="26" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c" bodystart="26" bodyend="-1"/>
+        <referencedby refid="fmemopen_8c_1a307e31d9468eca4c24e20a380865fcf9" compoundref="fmemopen_8c" startline="30" endline="41">readfn</referencedby>
+        <referencedby refid="fmemopen_8c_1a6bcff750932dc0b5d33e473869f2be4b" compoundref="fmemopen_8c" startline="43" endline="54">writefn</referencedby>
+        <referencedby refid="fmemopen_8h_1a6b2efc6515c53ab5f0c9800c35f65789" compoundref="fmemopen_8c" startline="80" endline="92">fmemopen</referencedby>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+    </detaileddescription>
+    <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c" line="23" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c" bodystart="23" bodyend="27"/>
+    <listofallmembers>
+      <member refid="structfmem_1aa8140f9002162674e50499e6d676364b" prot="public" virt="non-virtual"><scope>fmem</scope><name>buffer</name></member>
+      <member refid="structfmem_1a5bd49f56467813a44d613a1425931eca" prot="public" virt="non-virtual"><scope>fmem</scope><name>pos</name></member>
+      <member refid="structfmem_1a8393fad020c142e2de643af2d0dba9fb" prot="public" virt="non-virtual"><scope>fmem</scope><name>size</name></member>
+    </listofallmembers>
+  </compounddef>
+</doxygen>

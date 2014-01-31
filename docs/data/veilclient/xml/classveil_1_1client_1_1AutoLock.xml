@@ -1,0 +1,191 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="classveil_1_1client_1_1AutoLock" kind="class" prot="public">
+    <compoundname>veil::client::AutoLock</compoundname>
+    <includes refid="lock_8h" local="no">include/lock.h</includes>
+      <sectiondef kind="private-attrib">
+      <memberdef kind="variable" id="classveil_1_1client_1_1AutoLock_1a30046ee954d9c3ba204e695cdb7e8015" prot="private" static="no" mutable="no">
+        <type><ref refid="classveil_1_1client_1_1ReadWriteLock" kindref="compound">ReadWriteLock</ref> &amp;</type>
+        <definition>ReadWriteLock&amp; veil::client::AutoLock::m_lock</definition>
+        <argsstring></argsstring>
+        <name>m_lock</name>
+        <briefdescription>
+<para>The wrapped lock. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/lock.h" line="75" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/lock.h" bodystart="75" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1AutoLock_1a7d95d6c91bec1806728a9ef6d65c2c15" compoundref="lock_8cc" startline="28" endline="42">changeType</referencedby>
+        <referencedby refid="classveil_1_1client_1_1AutoLock_1a1c941a2b476c9869537e3e6690b1baf3" compoundref="lock_8cc" startline="44" endline="53">release</referencedby>
+        <referencedby refid="classveil_1_1client_1_1AutoLock_1ad99d6f0e4a8b61f58127d9bba3924d6a" compoundref="lock_8cc" startline="55" endline="64">lock</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1AutoLock_1a07fa67b35aa9fea11a2c79134959edb2" prot="private" static="no" mutable="no">
+        <type><ref refid="namespaceveil_1_1client_1a86124671530b503e3884741ce6c8b128" kindref="member">LockType</ref></type>
+        <definition>LockType veil::client::AutoLock::m_type</definition>
+        <argsstring></argsstring>
+        <name>m_type</name>
+        <briefdescription>
+<para>Type of this lock. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ref refid="namespaceveil_1_1client_1a86124671530b503e3884741ce6c8b128" kindref="member">LockType</ref> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/lock.h" line="76" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/lock.h" bodystart="76" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1AutoLock_1a7d95d6c91bec1806728a9ef6d65c2c15" compoundref="lock_8cc" startline="28" endline="42">changeType</referencedby>
+        <referencedby refid="classveil_1_1client_1_1AutoLock_1a1c941a2b476c9869537e3e6690b1baf3" compoundref="lock_8cc" startline="44" endline="53">release</referencedby>
+        <referencedby refid="classveil_1_1client_1_1AutoLock_1ad99d6f0e4a8b61f58127d9bba3924d6a" compoundref="lock_8cc" startline="55" endline="64">lock</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1AutoLock_1a25d784fffaefaac3e0dcb6e3be9252c6" prot="private" static="no" mutable="no">
+        <type>bool</type>
+        <definition>bool veil::client::AutoLock::m_released</definition>
+        <argsstring></argsstring>
+        <name>m_released</name>
+        <briefdescription>
+<para>Flag saying if lock is released right now. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/lock.h" line="77" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/lock.h" bodystart="77" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1AutoLock_1a1c941a2b476c9869537e3e6690b1baf3" compoundref="lock_8cc" startline="44" endline="53">release</referencedby>
+        <referencedby refid="classveil_1_1client_1_1AutoLock_1ad99d6f0e4a8b61f58127d9bba3924d6a" compoundref="lock_8cc" startline="55" endline="64">lock</referencedby>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="public-func">
+      <memberdef kind="function" id="classveil_1_1client_1_1AutoLock_1a0237a69c349115c7b1ca10fd431a1830" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type></type>
+        <definition>veil::client::AutoLock::AutoLock</definition>
+        <argsstring>(ReadWriteLock &amp;lock, LockType type)</argsstring>
+        <name>AutoLock</name>
+        <param>
+          <type><ref refid="classveil_1_1client_1_1ReadWriteLock" kindref="compound">ReadWriteLock</ref> &amp;</type>
+          <declname>lock</declname>
+        </param>
+        <param>
+          <type><ref refid="namespaceveil_1_1client_1a86124671530b503e3884741ce6c8b128" kindref="member">LockType</ref></type>
+          <declname>type</declname>
+        </param>
+        <briefdescription>
+<para>Create auto <ref refid="classveil_1_1client_1_1ReadWriteLock" kindref="compound">ReadWriteLock</ref>. </para>        </briefdescription>
+        <detaileddescription>
+<para>Also locks for read/write depending on <ref refid="namespaceveil_1_1client_1a86124671530b503e3884741ce6c8b128" kindref="member">LockType</ref> param. </para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/lock.h" line="80" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/lock.cc" bodystart="15" bodyend="21"/>
+        <references refid="classveil_1_1client_1_1AutoLock_1ad99d6f0e4a8b61f58127d9bba3924d6a" compoundref="lock_8cc" startline="55" endline="64">lock</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1AutoLock_1a14d6ddb8bbdc8851f75dc075ad993688" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type></type>
+        <definition>veil::client::AutoLock::~AutoLock</definition>
+        <argsstring>()</argsstring>
+        <name>~AutoLock</name>
+        <briefdescription>
+<para>Unlocks wrapped <ref refid="classveil_1_1client_1_1ReadWriteLock" kindref="compound">ReadWriteLock</ref> lock, but only if it wasn&apos;t released manually. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/lock.h" line="82" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/lock.cc" bodystart="23" bodyend="26"/>
+        <references refid="classveil_1_1client_1_1AutoLock_1a1c941a2b476c9869537e3e6690b1baf3" compoundref="lock_8cc" startline="44" endline="53">release</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1AutoLock_1a7d95d6c91bec1806728a9ef6d65c2c15" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>void</type>
+        <definition>void veil::client::AutoLock::changeType</definition>
+        <argsstring>(LockType type)</argsstring>
+        <name>changeType</name>
+        <param>
+          <type><ref refid="namespaceveil_1_1client_1a86124671530b503e3884741ce6c8b128" kindref="member">LockType</ref></type>
+          <declname>type</declname>
+        </param>
+        <briefdescription>
+<para>Changle lock type. </para>        </briefdescription>
+        <detaileddescription>
+<para>Releases current lock and locks for diffrent operation type. </para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/lock.h" line="84" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/lock.cc" bodystart="28" bodyend="42"/>
+        <references refid="namespaceveil_1_1client_1a86124671530b503e3884741ce6c8b128a378617bc95058da3e7787e260ee8b922" compoundref="lock_8h" startline="37">veil::client::READ_LOCK</references>
+        <references refid="classveil_1_1client_1_1AutoLock_1a07fa67b35aa9fea11a2c79134959edb2" compoundref="lock_8h" startline="76">m_type</references>
+        <references refid="namespaceveil_1_1client_1a86124671530b503e3884741ce6c8b128a74a5d68dec5afbdd21d9e18d2e6da9b6" compoundref="lock_8h" startline="38">veil::client::WRITE_LOCK</references>
+        <references refid="classveil_1_1client_1_1AutoLock_1a30046ee954d9c3ba204e695cdb7e8015" compoundref="lock_8h" startline="75">m_lock</references>
+        <references refid="classveil_1_1client_1_1ReadWriteLock_1ae0f828f776cab85c7ab455f240c87bfe" compoundref="lock_8cc" startline="111" endline="117">veil::client::ReadWriteLock::writeUnlock</references>
+        <references refid="classveil_1_1client_1_1ReadWriteLock_1ab5417066b530662f3c95c69f9a8a43e2" compoundref="lock_8cc" startline="80" endline="89">veil::client::ReadWriteLock::readLock</references>
+        <references refid="classveil_1_1client_1_1ReadWriteLock_1aea77ddf8d924ebcef0558478a6f02d85" compoundref="lock_8cc" startline="91" endline="99">veil::client::ReadWriteLock::readUnlock</references>
+        <references refid="classveil_1_1client_1_1ReadWriteLock_1adee8b77278d87c9d9c064a09bef67f2f" compoundref="lock_8cc" startline="101" endline="109">veil::client::ReadWriteLock::writeLock</references>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a5e23647ea0b7267b04a9a8009e4a7e7e" compoundref="veilfs_8cc" startline="238" endline="269">veil::client::VeilFS::readlink</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1AutoLock_1a1c941a2b476c9869537e3e6690b1baf3" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>void</type>
+        <definition>void veil::client::AutoLock::release</definition>
+        <argsstring>()</argsstring>
+        <name>release</name>
+        <briefdescription>
+<para>Release current lock. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/lock.h" line="86" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/lock.cc" bodystart="44" bodyend="53"/>
+        <references refid="classveil_1_1client_1_1AutoLock_1a25d784fffaefaac3e0dcb6e3be9252c6" compoundref="lock_8h" startline="77">m_released</references>
+        <references refid="classveil_1_1client_1_1AutoLock_1a07fa67b35aa9fea11a2c79134959edb2" compoundref="lock_8h" startline="76">m_type</references>
+        <references refid="namespaceveil_1_1client_1a86124671530b503e3884741ce6c8b128a378617bc95058da3e7787e260ee8b922" compoundref="lock_8h" startline="37">veil::client::READ_LOCK</references>
+        <references refid="classveil_1_1client_1_1AutoLock_1a30046ee954d9c3ba204e695cdb7e8015" compoundref="lock_8h" startline="75">m_lock</references>
+        <references refid="classveil_1_1client_1_1ReadWriteLock_1aea77ddf8d924ebcef0558478a6f02d85" compoundref="lock_8cc" startline="91" endline="99">veil::client::ReadWriteLock::readUnlock</references>
+        <references refid="classveil_1_1client_1_1ReadWriteLock_1ae0f828f776cab85c7ab455f240c87bfe" compoundref="lock_8cc" startline="111" endline="117">veil::client::ReadWriteLock::writeUnlock</references>
+        <referencedby refid="classveil_1_1client_1_1AutoLock_1a14d6ddb8bbdc8851f75dc075ad993688" compoundref="lock_8cc" startline="23" endline="26">~AutoLock</referencedby>
+        <referencedby refid="classveil_1_1client_1_1StorageMapper_1a24fde125b0005d945deb54a12fefe687" compoundref="storageMapper_8cc" startline="33" endline="61">veil::client::StorageMapper::getLocationInfo</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1AutoLock_1ad99d6f0e4a8b61f58127d9bba3924d6a" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>void</type>
+        <definition>void veil::client::AutoLock::lock</definition>
+        <argsstring>()</argsstring>
+        <name>lock</name>
+        <briefdescription>
+<para>Locks current lock. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/lock.h" line="87" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/lock.cc" bodystart="55" bodyend="64"/>
+        <references refid="classveil_1_1client_1_1AutoLock_1a25d784fffaefaac3e0dcb6e3be9252c6" compoundref="lock_8h" startline="77">m_released</references>
+        <references refid="classveil_1_1client_1_1AutoLock_1a07fa67b35aa9fea11a2c79134959edb2" compoundref="lock_8h" startline="76">m_type</references>
+        <references refid="namespaceveil_1_1client_1a86124671530b503e3884741ce6c8b128a378617bc95058da3e7787e260ee8b922" compoundref="lock_8h" startline="37">veil::client::READ_LOCK</references>
+        <references refid="classveil_1_1client_1_1AutoLock_1a30046ee954d9c3ba204e695cdb7e8015" compoundref="lock_8h" startline="75">m_lock</references>
+        <references refid="classveil_1_1client_1_1ReadWriteLock_1ab5417066b530662f3c95c69f9a8a43e2" compoundref="lock_8cc" startline="80" endline="89">veil::client::ReadWriteLock::readLock</references>
+        <references refid="classveil_1_1client_1_1ReadWriteLock_1adee8b77278d87c9d9c064a09bef67f2f" compoundref="lock_8cc" startline="101" endline="109">veil::client::ReadWriteLock::writeLock</references>
+        <referencedby refid="classveil_1_1client_1_1AutoLock_1a0237a69c349115c7b1ca10fd431a1830" compoundref="lock_8cc" startline="15" endline="21">AutoLock</referencedby>
+        <referencedby refid="classveil_1_1client_1_1StorageMapper_1a24fde125b0005d945deb54a12fefe687" compoundref="storageMapper_8cc" startline="33" endline="61">veil::client::StorageMapper::getLocationInfo</referencedby>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+<para>The <ref refid="classveil_1_1client_1_1AutoLock" kindref="compound">AutoLock</ref> class. </para>    </briefdescription>
+    <detaileddescription>
+<para>Object of this class provides auto-unlocking <ref refid="classveil_1_1client_1_1ReadWriteLock" kindref="compound">ReadWriteLock</ref>. </para>    </detaileddescription>
+    <collaborationgraph>
+      <node id="102">
+        <label>veil::client::AutoLock</label>
+        <link refid="classveil_1_1client_1_1AutoLock"/>
+        <childnode refid="103" relation="usage">
+          <edgelabel>m_lock</edgelabel>
+        </childnode>
+      </node>
+      <node id="103">
+        <label>veil::client::ReadWriteLock</label>
+        <link refid="classveil_1_1client_1_1ReadWriteLock"/>
+      </node>
+    </collaborationgraph>
+    <location file="/home/krzysztof/Desktop/veilclient/include/lock.h" line="73" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/lock.h" bodystart="72" bodyend="88"/>
+    <listofallmembers>
+      <member refid="classveil_1_1client_1_1AutoLock_1a0237a69c349115c7b1ca10fd431a1830" prot="public" virt="non-virtual"><scope>veil::client::AutoLock</scope><name>AutoLock</name></member>
+      <member refid="classveil_1_1client_1_1AutoLock_1a7d95d6c91bec1806728a9ef6d65c2c15" prot="public" virt="non-virtual"><scope>veil::client::AutoLock</scope><name>changeType</name></member>
+      <member refid="classveil_1_1client_1_1AutoLock_1ad99d6f0e4a8b61f58127d9bba3924d6a" prot="public" virt="non-virtual"><scope>veil::client::AutoLock</scope><name>lock</name></member>
+      <member refid="classveil_1_1client_1_1AutoLock_1a30046ee954d9c3ba204e695cdb7e8015" prot="private" virt="non-virtual"><scope>veil::client::AutoLock</scope><name>m_lock</name></member>
+      <member refid="classveil_1_1client_1_1AutoLock_1a25d784fffaefaac3e0dcb6e3be9252c6" prot="private" virt="non-virtual"><scope>veil::client::AutoLock</scope><name>m_released</name></member>
+      <member refid="classveil_1_1client_1_1AutoLock_1a07fa67b35aa9fea11a2c79134959edb2" prot="private" virt="non-virtual"><scope>veil::client::AutoLock</scope><name>m_type</name></member>
+      <member refid="classveil_1_1client_1_1AutoLock_1a1c941a2b476c9869537e3e6690b1baf3" prot="public" virt="non-virtual"><scope>veil::client::AutoLock</scope><name>release</name></member>
+      <member refid="classveil_1_1client_1_1AutoLock_1a14d6ddb8bbdc8851f75dc075ad993688" prot="public" virt="non-virtual"><scope>veil::client::AutoLock</scope><name>~AutoLock</name></member>
+    </listofallmembers>
+  </compounddef>
+</doxygen>

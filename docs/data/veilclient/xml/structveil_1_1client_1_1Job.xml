@@ -1,0 +1,220 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="structveil_1_1client_1_1Job" kind="struct" prot="public">
+    <compoundname>veil::client::Job</compoundname>
+    <includes refid="jobScheduler_8h" local="no">include/jobScheduler.h</includes>
+      <sectiondef kind="public-attrib">
+      <memberdef kind="variable" id="structveil_1_1client_1_1Job_1ac795a8871e2655201e6d4d39eb56b74a" prot="public" static="no" mutable="no">
+        <type>time_t</type>
+        <definition>time_t veil::client::Job::when</definition>
+        <argsstring></argsstring>
+        <name>when</name>
+        <briefdescription>
+<para>Time when <ref refid="structveil_1_1client_1_1Job" kindref="compound">Job</ref> should be processed. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/jobScheduler.h" line="29" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/jobScheduler.h" bodystart="29" bodyend="-1"/>
+        <referencedby refid="structveil_1_1client_1_1Job_1acbe30acea6d99f38070e13eb3be21a9e" compoundref="jobScheduler_8cc" startline="48" endline="51">operator&lt;</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="structveil_1_1client_1_1Job_1ad9b6cd9467659cf735ac8888a7694428" prot="public" static="no" mutable="no">
+        <type>boost::shared_ptr&lt; <ref refid="classveil_1_1client_1_1ISchedulable" kindref="compound">ISchedulable</ref> &gt;</type>
+        <definition>boost::shared_ptr&lt;ISchedulable&gt; veil::client::Job::subject</definition>
+        <argsstring></argsstring>
+        <name>subject</name>
+        <briefdescription>
+<para>Pointer to object being context of <ref refid="structveil_1_1client_1_1Job" kindref="compound">Job</ref> execution. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/jobScheduler.h" line="30" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/jobScheduler.h" bodystart="30" bodyend="-1"/>
+        <referencedby refid="structveil_1_1client_1_1Job_1afb904dbdab9d70467c6d4ac66f4ffd08" compoundref="jobScheduler_8cc" startline="42" endline="46">operator==</referencedby>
+        <referencedby refid="classveil_1_1client_1_1JobScheduler_1af5191fabb82553ee4c1f1da29c0e1ac8" compoundref="jobScheduler_8cc" startline="142" endline="147">veil::client::JobScheduler::runJob</referencedby>
+        <referencedby refid="classveil_1_1client_1_1JobScheduler_1a5138d9d8438edc69a21a70d105cd1907" compoundref="jobScheduler_8cc" startline="159" endline="178">veil::client::JobScheduler::deleteJobs</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="structveil_1_1client_1_1Job_1abefcce42cb2d63b36832c02b71e3b532" prot="public" static="no" mutable="no">
+        <type><ref refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68c" kindref="member">ISchedulable::TaskID</ref></type>
+        <definition>ISchedulable::TaskID veil::client::Job::task</definition>
+        <argsstring></argsstring>
+        <name>task</name>
+        <briefdescription>
+<para>ID of task. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ref refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68c" kindref="member">ISchedulable::TaskID</ref> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/jobScheduler.h" line="31" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/jobScheduler.h" bodystart="31" bodyend="-1"/>
+        <referencedby refid="structveil_1_1client_1_1Job_1afb904dbdab9d70467c6d4ac66f4ffd08" compoundref="jobScheduler_8cc" startline="42" endline="46">operator==</referencedby>
+        <referencedby refid="classveil_1_1client_1_1JobScheduler_1af5191fabb82553ee4c1f1da29c0e1ac8" compoundref="jobScheduler_8cc" startline="142" endline="147">veil::client::JobScheduler::runJob</referencedby>
+        <referencedby refid="classveil_1_1client_1_1JobScheduler_1a09912dc05eaa1b3297853fd5d43adf86" compoundref="jobScheduler_8cc" startline="149" endline="157">veil::client::JobScheduler::addTask</referencedby>
+        <referencedby refid="classveil_1_1client_1_1JobScheduler_1a5138d9d8438edc69a21a70d105cd1907" compoundref="jobScheduler_8cc" startline="159" endline="178">veil::client::JobScheduler::deleteJobs</referencedby>
+        <referencedby refid="classveil_1_1client_1_1JobScheduler_1a8f7c5df5c6e3b9c9f79564d02cbd15cf" compoundref="jobScheduler_8cc" startline="180" endline="205">veil::client::JobScheduler::hasTask</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="structveil_1_1client_1_1Job_1ae9b9270eae5ca60b9e59f361ac79b8c1" prot="public" static="no" mutable="no">
+        <type>std::string</type>
+        <definition>std::string veil::client::Job::arg0</definition>
+        <argsstring></argsstring>
+        <name>arg0</name>
+        <briefdescription>
+<para>Task&apos;s first argument. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/jobScheduler.h" line="32" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/jobScheduler.h" bodystart="32" bodyend="-1"/>
+        <referencedby refid="structveil_1_1client_1_1Job_1afb904dbdab9d70467c6d4ac66f4ffd08" compoundref="jobScheduler_8cc" startline="42" endline="46">operator==</referencedby>
+        <referencedby refid="classveil_1_1client_1_1JobScheduler_1af5191fabb82553ee4c1f1da29c0e1ac8" compoundref="jobScheduler_8cc" startline="142" endline="147">veil::client::JobScheduler::runJob</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="structveil_1_1client_1_1Job_1a2cc69db0da90342d392d75192afd0d6a" prot="public" static="no" mutable="no">
+        <type>std::string</type>
+        <definition>std::string veil::client::Job::arg1</definition>
+        <argsstring></argsstring>
+        <name>arg1</name>
+        <briefdescription>
+<para>Task&apos;s second argument. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/jobScheduler.h" line="33" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/jobScheduler.h" bodystart="33" bodyend="-1"/>
+        <referencedby refid="structveil_1_1client_1_1Job_1afb904dbdab9d70467c6d4ac66f4ffd08" compoundref="jobScheduler_8cc" startline="42" endline="46">operator==</referencedby>
+        <referencedby refid="classveil_1_1client_1_1JobScheduler_1af5191fabb82553ee4c1f1da29c0e1ac8" compoundref="jobScheduler_8cc" startline="142" endline="147">veil::client::JobScheduler::runJob</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="structveil_1_1client_1_1Job_1af637fb4df0fcb4b02ecfbfabb35a536e" prot="public" static="no" mutable="no">
+        <type>std::string</type>
+        <definition>std::string veil::client::Job::arg2</definition>
+        <argsstring></argsstring>
+        <name>arg2</name>
+        <briefdescription>
+<para>Task&apos;s third argument. </para>        </briefdescription>
+        <detaileddescription>
+<para>Default constructor </para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/jobScheduler.h" line="34" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/jobScheduler.h" bodystart="34" bodyend="-1"/>
+        <referencedby refid="structveil_1_1client_1_1Job_1afb904dbdab9d70467c6d4ac66f4ffd08" compoundref="jobScheduler_8cc" startline="42" endline="46">operator==</referencedby>
+        <referencedby refid="classveil_1_1client_1_1JobScheduler_1af5191fabb82553ee4c1f1da29c0e1ac8" compoundref="jobScheduler_8cc" startline="142" endline="147">veil::client::JobScheduler::runJob</referencedby>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="public-func">
+      <memberdef kind="function" id="structveil_1_1client_1_1Job_1ad04781b98b2898b8a363f987296241fb" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type></type>
+        <definition>veil::client::Job::Job</definition>
+        <argsstring>(time_t when, boost::shared_ptr&lt; ISchedulable &gt; subject, ISchedulable::TaskID task, std::string arg0=&quot;&quot;, std::string arg1=&quot;&quot;, std::string arg2=&quot;&quot;)</argsstring>
+        <name>Job</name>
+        <param>
+          <type>time_t</type>
+          <declname>when</declname>
+        </param>
+        <param>
+          <type>boost::shared_ptr&lt; <ref refid="classveil_1_1client_1_1ISchedulable" kindref="compound">ISchedulable</ref> &gt;</type>
+          <declname>subject</declname>
+        </param>
+        <param>
+          <type><ref refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68c" kindref="member">ISchedulable::TaskID</ref></type>
+          <declname>task</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>arg0</declname>
+          <defval>&quot;&quot;</defval>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>arg1</declname>
+          <defval>&quot;&quot;</defval>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>arg2</declname>
+          <defval>&quot;&quot;</defval>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/jobScheduler.h" line="37" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/jobScheduler.cc" bodystart="32" bodyend="40"/>
+      </memberdef>
+      <memberdef kind="function" id="structveil_1_1client_1_1Job_1acbe30acea6d99f38070e13eb3be21a9e" prot="public" static="no" const="yes" explicit="no" inline="no" virt="non-virtual">
+        <type>bool</type>
+        <definition>bool veil::client::Job::operator&lt;</definition>
+        <argsstring>(const Job &amp;other) const </argsstring>
+        <name>operator&lt;</name>
+        <param>
+          <type>const <ref refid="structveil_1_1client_1_1Job" kindref="compound">Job</ref> &amp;</type>
+          <declname>other</declname>
+        </param>
+        <briefdescription>
+<para>Compare operator for priority queue. </para>        </briefdescription>
+        <detaileddescription>
+<para>It compares tasks by it&apos;s <ref refid="structveil_1_1client_1_1Job_1ac795a8871e2655201e6d4d39eb56b74a" kindref="member">Job::when</ref> field </para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/jobScheduler.h" line="39" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/jobScheduler.cc" bodystart="48" bodyend="51"/>
+        <references refid="structveil_1_1client_1_1Job_1ac795a8871e2655201e6d4d39eb56b74a" compoundref="jobScheduler_8h" startline="29">when</references>
+      </memberdef>
+      <memberdef kind="function" id="structveil_1_1client_1_1Job_1afb904dbdab9d70467c6d4ac66f4ffd08" prot="public" static="no" const="yes" explicit="no" inline="no" virt="non-virtual">
+        <type>bool</type>
+        <definition>bool veil::client::Job::operator==</definition>
+        <argsstring>(const Job &amp;other) const </argsstring>
+        <name>operator==</name>
+        <param>
+          <type>const <ref refid="structveil_1_1client_1_1Job" kindref="compound">Job</ref> &amp;</type>
+          <declname>other</declname>
+        </param>
+        <briefdescription>
+<para>Compares equal all fields excpet <ref refid="structveil_1_1client_1_1Job_1ac795a8871e2655201e6d4d39eb56b74a" kindref="member">Job::when</ref>. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/jobScheduler.h" line="41" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/jobScheduler.cc" bodystart="42" bodyend="46"/>
+        <references refid="structveil_1_1client_1_1Job_1ad9b6cd9467659cf735ac8888a7694428" compoundref="jobScheduler_8h" startline="30">subject</references>
+        <references refid="structveil_1_1client_1_1Job_1abefcce42cb2d63b36832c02b71e3b532" compoundref="jobScheduler_8h" startline="31">task</references>
+        <references refid="structveil_1_1client_1_1Job_1ae9b9270eae5ca60b9e59f361ac79b8c1" compoundref="jobScheduler_8h" startline="32">arg0</references>
+        <references refid="structveil_1_1client_1_1Job_1a2cc69db0da90342d392d75192afd0d6a" compoundref="jobScheduler_8h" startline="33">arg1</references>
+        <references refid="structveil_1_1client_1_1Job_1af637fb4df0fcb4b02ecfbfabb35a536e" compoundref="jobScheduler_8h" startline="34">arg2</references>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+<para>The <ref refid="structveil_1_1client_1_1Job" kindref="compound">Job</ref> struct Used by <ref refid="classveil_1_1client_1_1JobScheduler" kindref="compound">JobScheduler</ref> to describe scheduled tasks. </para>    </briefdescription>
+    <detaileddescription>
+    </detaileddescription>
+    <collaborationgraph>
+      <node id="132">
+        <label>veil::client::Job</label>
+        <link refid="structveil_1_1client_1_1Job"/>
+        <childnode refid="133" relation="usage">
+          <edgelabel>arg0</edgelabel>
+          <edgelabel>arg1</edgelabel>
+          <edgelabel>arg2</edgelabel>
+        </childnode>
+      </node>
+      <node id="134">
+        <label>std::basic_string&lt; char &gt;</label>
+      </node>
+      <node id="133">
+        <label>std::string</label>
+        <childnode refid="134" relation="public-inheritance">
+        </childnode>
+      </node>
+    </collaborationgraph>
+    <location file="/home/krzysztof/Desktop/veilclient/include/jobScheduler.h" line="28" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/jobScheduler.h" bodystart="27" bodyend="42"/>
+    <listofallmembers>
+      <member refid="structveil_1_1client_1_1Job_1ae9b9270eae5ca60b9e59f361ac79b8c1" prot="public" virt="non-virtual"><scope>veil::client::Job</scope><name>arg0</name></member>
+      <member refid="structveil_1_1client_1_1Job_1a2cc69db0da90342d392d75192afd0d6a" prot="public" virt="non-virtual"><scope>veil::client::Job</scope><name>arg1</name></member>
+      <member refid="structveil_1_1client_1_1Job_1af637fb4df0fcb4b02ecfbfabb35a536e" prot="public" virt="non-virtual"><scope>veil::client::Job</scope><name>arg2</name></member>
+      <member refid="structveil_1_1client_1_1Job_1ad04781b98b2898b8a363f987296241fb" prot="public" virt="non-virtual"><scope>veil::client::Job</scope><name>Job</name></member>
+      <member refid="structveil_1_1client_1_1Job_1acbe30acea6d99f38070e13eb3be21a9e" prot="public" virt="non-virtual"><scope>veil::client::Job</scope><name>operator&lt;</name></member>
+      <member refid="structveil_1_1client_1_1Job_1afb904dbdab9d70467c6d4ac66f4ffd08" prot="public" virt="non-virtual"><scope>veil::client::Job</scope><name>operator==</name></member>
+      <member refid="structveil_1_1client_1_1Job_1ad9b6cd9467659cf735ac8888a7694428" prot="public" virt="non-virtual"><scope>veil::client::Job</scope><name>subject</name></member>
+      <member refid="structveil_1_1client_1_1Job_1abefcce42cb2d63b36832c02b71e3b532" prot="public" virt="non-virtual"><scope>veil::client::Job</scope><name>task</name></member>
+      <member refid="structveil_1_1client_1_1Job_1ac795a8871e2655201e6d4d39eb56b74a" prot="public" virt="non-virtual"><scope>veil::client::Job</scope><name>when</name></member>
+    </listofallmembers>
+  </compounddef>
+</doxygen>

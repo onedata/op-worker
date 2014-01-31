@@ -1,0 +1,144 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="namespaceveil_1_1client_1_1gsi" kind="namespace">
+    <compoundname>veil::client::gsi</compoundname>
+      <sectiondef kind="var">
+      <memberdef kind="variable" id="namespaceveil_1_1client_1_1gsi_1ad20419d4f560c085d335458ae64ed997" prot="public" static="no" mutable="no">
+        <type>bool</type>
+        <definition>bool veil::client::gsi::debug</definition>
+        <argsstring></argsstring>
+        <name>debug</name>
+        <initializer>= false</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/gsiHandler.h" line="23" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/gsiHandler.cc" bodystart="55" bodyend="-1"/>
+        <referencedby refid="gsi__utils_8h_1aa812c1843879f051ad49659c4b022e0d" compoundref="grid__proxy__info_8c" startline="130" endline="713">proxy_info</referencedby>
+        <referencedby refid="namespaceveil_1_1client_1_1gsi_1aa58c8ad97ba2c1ff1a27a1e96b5ddb6a" compoundref="gsiHandler_8cc" startline="235" endline="416">validateProxyCert</referencedby>
+        <referencedby refid="namespaceveil_1_1client_1_1gsi_1af488f7115eb8fc251de1689cd107eceb" compoundref="gsiHandler_8cc" startline="418" endline="436">getProxyCertPath</referencedby>
+        <referencedby refid="veilFuse_8cc_1adedb285b02c41bde2158ded9cc9fd7ac" compoundref="veilFuse_8cc" startline="210" endline="379">main</referencedby>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="func">
+      <memberdef kind="function" id="namespaceveil_1_1client_1_1gsi_1a7975c118ead1eb04890ee9d9b0140997" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>bool</type>
+        <definition>bool veil::client::gsi::validateProxyConfig</definition>
+        <argsstring>()</argsstring>
+        <name>validateProxyConfig</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/gsiHandler.h" line="25" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/gsiHandler.cc" bodystart="230" bodyend="233"/>
+        <references refid="namespaceveil_1_1client_1_1gsi_1aa58c8ad97ba2c1ff1a27a1e96b5ddb6a" compoundref="gsiHandler_8cc" startline="235" endline="416">validateProxyCert</references>
+        <referencedby refid="veilFuse_8cc_1adedb285b02c41bde2158ded9cc9fd7ac" compoundref="veilFuse_8cc" startline="210" endline="379">main</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="namespaceveil_1_1client_1_1gsi_1aa58c8ad97ba2c1ff1a27a1e96b5ddb6a" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>bool</type>
+        <definition>bool veil::client::gsi::validateProxyCert</definition>
+        <argsstring>()</argsstring>
+        <name>validateProxyCert</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/gsiHandler.h" line="26" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/gsiHandler.cc" bodystart="235" bodyend="416"/>
+        <references refid="grid__proxy__info_8c_1ac3e1795766a80ec63b157951b4b9a7d4" compoundref="grid__proxy__info_8c" startline="41">debug</references>
+        <references refid="config_8h_1a77c81d72a0a69577b2719c228f784655" compoundref="config_8h" startline="26">PEER_CERTIFICATE_FILE_OPT</references>
+        <references refid="namespaceveil_1_1client_1_1gsi_1a3f95d9f2cb3eddd2106fd38b073a8fb8" compoundref="gsiHandler_8cc" startline="204" endline="215">findUserCert</references>
+        <references refid="namespaceveil_1_1client_1_1gsi_1a5f7127be1d07aa6f7076f929add9760b" compoundref="gsiHandler_8cc" startline="217" endline="228">findUserKey</references>
+        <references refid="gsiHandler_8cc_1a6bfad56ecc5470d62049a2c68b2317a2" compoundref="gsiHandler_8cc" startline="32">PROXY_INFO</references>
+        <references refid="gsiHandler_8cc_1a67f2104e3064415008213ff0c3713662" compoundref="gsiHandler_8cc" startline="34">X509_USER_CERT_ENV</references>
+        <references refid="gsiHandler_8cc_1afc5eb0e9a252b4b91ac7a599c162c340" compoundref="gsiHandler_8cc" startline="38">GLOBUS_PEM_CERT_PATH</references>
+        <references refid="gsiHandler_8cc_1a47be23512fe752b964cb8b1a3d94228f" compoundref="gsiHandler_8cc" startline="37">GLOBUS_P12_PATH</references>
+        <references refid="gsiHandler_8cc_1a969037e7966019cb4754c262b99cd6a1" compoundref="gsiHandler_8cc" startline="35">X509_USER_KEY_ENV</references>
+        <references refid="gsiHandler_8cc_1abedae671689d55a72c399f49b7a43ffb" compoundref="gsiHandler_8cc" startline="39">GLOBUS_PEM_KEY_PATH</references>
+        <references refid="gsiHandler_8cc_1a7a1bfb654544318d472373fa10416c40" compoundref="gsiHandler_8cc" startline="43">CRYPTO_FREE</references>
+        <references refid="gsiHandler_8cc_1af7980e63d48805bf3f1391172edad60e" compoundref="gsiHandler_8cc" startline="41">MSG_DEBUG_INFO</references>
+        <references refid="gsiHandler_8cc_1a7ad6f195a1e86f72db5e2e74cad70406" compoundref="gsiHandler_8cc" startline="31">PROXY_INIT</references>
+        <referencedby refid="namespaceveil_1_1client_1_1gsi_1a7975c118ead1eb04890ee9d9b0140997" compoundref="gsiHandler_8cc" startline="230" endline="233">validateProxyConfig</referencedby>
+        <referencedby refid="veilFuse_8cc_1adedb285b02c41bde2158ded9cc9fd7ac" compoundref="veilFuse_8cc" startline="210" endline="379">main</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="namespaceveil_1_1client_1_1gsi_1af488f7115eb8fc251de1689cd107eceb" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>std::string</type>
+        <definition>string veil::client::gsi::getProxyCertPath</definition>
+        <argsstring>()</argsstring>
+        <name>getProxyCertPath</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/gsiHandler.h" line="27" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/gsiHandler.cc" bodystart="418" bodyend="436"/>
+        <references refid="grid__proxy__info_8c_1ac3e1795766a80ec63b157951b4b9a7d4" compoundref="grid__proxy__info_8c" startline="41">debug</references>
+        <references refid="config_8h_1a77c81d72a0a69577b2719c228f784655" compoundref="config_8h" startline="26">PEER_CERTIFICATE_FILE_OPT</references>
+        <references refid="gsiHandler_8cc_1a6bfad56ecc5470d62049a2c68b2317a2" compoundref="gsiHandler_8cc" startline="32">PROXY_INFO</references>
+        <referencedby refid="veilFuse_8cc_1adedb285b02c41bde2158ded9cc9fd7ac" compoundref="veilFuse_8cc" startline="210" endline="379">main</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="namespaceveil_1_1client_1_1gsi_1aa7c45638e1247fbf9441177dad15d9d2" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>std::string</type>
+        <definition>std::string veil::client::gsi::getClusterHostname</definition>
+        <argsstring>()</argsstring>
+        <name>getClusterHostname</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/gsiHandler.h" line="28" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/gsiHandler.cc" bodystart="438" bodyend="472"/>
+        <references refid="config_8h_1a1b50353628cb03485db2a717ff710895" compoundref="config_8h" startline="23">CLUSTER_HOSTNAME_OPT</references>
+        <references refid="gsiHandler_8cc_1a6bfad56ecc5470d62049a2c68b2317a2" compoundref="gsiHandler_8cc" startline="32">PROXY_INFO</references>
+        <references refid="gsiHandler_8h_1a937fccdfac23758674bd21e77fa5a8a9" compoundref="gsiHandler_8h" startline="17">BASE_DOMAIN</references>
+        <referencedby refid="veilFuse_8cc_1adedb285b02c41bde2158ded9cc9fd7ac" compoundref="veilFuse_8cc" startline="210" endline="379">main</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="namespaceveil_1_1client_1_1gsi_1a3f95d9f2cb3eddd2106fd38b073a8fb8" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>string</type>
+        <definition>string veil::client::gsi::findUserCert</definition>
+        <argsstring>()</argsstring>
+        <name>findUserCert</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/gsiHandler.cc" line="204" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/gsiHandler.cc" bodystart="204" bodyend="215"/>
+        <references refid="gsiHandler_8cc_1a67f2104e3064415008213ff0c3713662" compoundref="gsiHandler_8cc" startline="34">X509_USER_CERT_ENV</references>
+        <references refid="gsiHandler_8cc_1afc5eb0e9a252b4b91ac7a599c162c340" compoundref="gsiHandler_8cc" startline="38">GLOBUS_PEM_CERT_PATH</references>
+        <references refid="gsiHandler_8cc_1a47be23512fe752b964cb8b1a3d94228f" compoundref="gsiHandler_8cc" startline="37">GLOBUS_P12_PATH</references>
+        <referencedby refid="namespaceveil_1_1client_1_1gsi_1aa58c8ad97ba2c1ff1a27a1e96b5ddb6a" compoundref="gsiHandler_8cc" startline="235" endline="416">validateProxyCert</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="namespaceveil_1_1client_1_1gsi_1a5f7127be1d07aa6f7076f929add9760b" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>string</type>
+        <definition>string veil::client::gsi::findUserKey</definition>
+        <argsstring>()</argsstring>
+        <name>findUserKey</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/gsiHandler.cc" line="217" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/gsiHandler.cc" bodystart="217" bodyend="228"/>
+        <references refid="gsiHandler_8cc_1a969037e7966019cb4754c262b99cd6a1" compoundref="gsiHandler_8cc" startline="35">X509_USER_KEY_ENV</references>
+        <references refid="gsiHandler_8cc_1abedae671689d55a72c399f49b7a43ffb" compoundref="gsiHandler_8cc" startline="39">GLOBUS_PEM_KEY_PATH</references>
+        <references refid="gsiHandler_8cc_1a47be23512fe752b964cb8b1a3d94228f" compoundref="gsiHandler_8cc" startline="37">GLOBUS_P12_PATH</references>
+        <referencedby refid="namespaceveil_1_1client_1_1gsi_1aa58c8ad97ba2c1ff1a27a1e96b5ddb6a" compoundref="gsiHandler_8cc" startline="235" endline="416">validateProxyCert</referencedby>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+    </detaileddescription>
+    <location file="/home/krzysztof/Desktop/veilclient/include/gsiHandler.h" line="21" column="1"/>
+  </compounddef>
+</doxygen>
