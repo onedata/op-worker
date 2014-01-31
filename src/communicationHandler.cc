@@ -405,11 +405,17 @@ context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
     // Setup TLS connection (i.e. certificates)
     string certPath = m_certFun ? m_certFun() : m_certPath;
     try {
+        LOG(INFO) << "Creating CTX";
         context_ptr ctx(new boost::asio::ssl::context(boost::asio::ssl::context::sslv3));
         
-        ctx->set_options(boost::asio::ssl::context::default_workarounds |
+        try {
+            ctx->set_options(boost::asio::ssl::context::default_workarounds |
                          boost::asio::ssl::context::no_sslv2 |
-                         boost::asio::ssl::context::single_dh_use);  
+                         boost::asio::ssl::context::single_dh_use); 
+        } catch (boost::system::system_error& e) {
+            LOG(ERROR) << "Cannot set TLS options due to: " << e.what() << " with cert file: " << certPath;
+            ERR_print_errors_fp(stderr);
+        }
         
         try {
             ctx->use_certificate_chain_file(certPath);
