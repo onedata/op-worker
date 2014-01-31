@@ -176,7 +176,7 @@ helper_requests_test(Config) ->
   %% Get FuseId
   {ok, Socket2} = wss:connect(Host, Port, [{certfile, Cert2}, {cacertfile, Cert2}]),
   FuseId2 = wss:handshakeInit(Socket2, "hostname", []),
-
+	wss:close(Socket2),
   {User2_Status0, Helper0, _, User2_Id, _, User2_AnswerOpt0} = create_file(Host, Cert2, Port, TestFile, FuseId2),
   ?assertEqual("ok", User2_Status0),
   ?assertEqual(?VOK, User2_AnswerOpt0),
@@ -189,6 +189,7 @@ helper_requests_test(Config) ->
   %% Get FuseId
   {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   FuseId = wss:handshakeInit(Socket, "hostname", []),
+	wss:close(Socket),
 
   {Status, Helper, _, Id, _Validity, AnswerOpt} = create_file(Host, Cert, Port, TestFile, FuseId),
   ?assertEqual("ok", Status),
@@ -334,6 +335,7 @@ create_file(Host, Cert, Port, FileName, FuseID) ->
 
   wss:send(Socket, MessageBytes),
   {SendAns, Ans} = wss:recv(Socket, 5000),
+	wss:close(Socket),
   ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -362,6 +364,7 @@ get_file_location(Host, Cert, Port, FileName, FuseID) ->
 
   wss:send(Socket, MessageBytes),
   {SendAns, Ans} = wss:recv(Socket, 5000),
+  wss:close(Socket),
   ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -390,6 +393,7 @@ delete_file(Host, Cert, Port, FileName, FuseID) ->
 
   wss:send(Socket, MessageBytes),
   {SendAns, Ans} = wss:recv(Socket, 5000),
+  wss:close(Socket),
   ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -414,6 +418,7 @@ create_file_on_storage(Host, Cert, Port, FileID) ->
   ?assertEqual(ok, ConAns),
   wss:send(Socket, MessageBytes),
   {SendAns, Ans} = wss:recv(Socket, 5000),
+	wss:close(Socket),
   ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -437,6 +442,7 @@ delete_file_on_storage(Host, Cert, Port, FileID) ->
   ?assertEqual(ok, ConAns),
   wss:send(Socket, MessageBytes),
   {SendAns, Ans} = wss:recv(Socket, 5000),
+	wss:close(Socket),
   ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -460,6 +466,7 @@ truncate_file_on_storage(Host, Cert, Port, FileID, Length) ->
   ?assertEqual(ok, ConAns),
   wss:send(Socket, MessageBytes),
   {SendAns, Ans} = wss:recv(Socket, 5000),
+	wss:close(Socket),
   ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -483,6 +490,7 @@ read(Host, Cert, Port, FileID, Offset, Size) ->
   ?assertEqual(ok, ConAns),
   wss:send(Socket, MessageBytes),
   {SendAns, Ans} = wss:recv(Socket, 5000),
+	wss:close(Socket),
   ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
@@ -506,6 +514,7 @@ write(Host, Cert, Port, FileID, Offset, WriteData) ->
   ?assertEqual(ok, ConAns),
   wss:send(Socket, MessageBytes),
   {SendAns, Ans} = wss:recv(Socket, 5000),
+	wss:close(Socket),
   ?assertEqual(ok, SendAns),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
