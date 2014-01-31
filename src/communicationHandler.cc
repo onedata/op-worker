@@ -15,6 +15,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <openssl/evp.h>
 #include <openssl/err.h>
 
 using namespace std;
@@ -403,6 +404,10 @@ int CommunicationHandler::getInstancesCount()
 context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
 {
     // Setup TLS connection (i.e. certificates)
+    EVP_cleanup();
+    OpenSSL_add_all_algorithms();
+    OpenSSL_add_all_ciphers();
+    OpenSSL_add_all_digests();
     string certPath = m_certFun ? m_certFun() : m_certPath;
     try {
         LOG(INFO) << "Creating CTX";
