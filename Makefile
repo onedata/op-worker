@@ -49,6 +49,9 @@ docs:
 	make -C docs html
 	./rebar doc skip_deps=true
 
+pdf:
+	make -C docs latexpdf
+
 upgrade:
 	./rebar generate-appups previous_release=${PREV}
 	./rebar generate-upgrade previous_release=${PREV}
