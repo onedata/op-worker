@@ -1,0 +1,111 @@
+.page-container
+{
+	padding: 60px 20px 20px 20px;
+	overflow: hidden;
+}
+
+.floating-menu
+{
+	position: fixed;
+	width: 200px;
+	float: left;
+}
+
+.page-content
+{
+	margin-top: 50px;
+}
+
+.wide
+{
+	width: 100%;
+}
+
+.no-margin
+{
+	margin: 0 !important;
+}
+
+.indent-10
+{
+	margin-left: 10px;
+}
+
+.login-page
+{
+	width: 500px;
+	margin: auto;
+	margin-top: 150px;
+	padding: 16px 30px 10px 30px;
+	text-align: center;
+}
+
+.login-info
+{
+	margin-top: 20px;
+	margin-bottom: 30px;
+}
+
+.search-bar
+{
+	width: 250px;
+}
+
+
+.table-cell
+{
+	display: table-cell;
+  	vertical-align: middle !important;
+}
+
+.list-icon
+{
+	vertical-align: middle !important;
+	margin-right: 5px;
+	height: 32px;
+}
+
+.breadcrumb-background
+{
+	border-radius: 6px 6px 6px 6px;
+	border: 2px solid rgb(189, 195, 199);
+	background-color: white;
+	margin-right: 325px;
+	position:relative;
+	margin-bottom: 0;
+}
+
+.breadcrumb-content
+{
+	font-size: 16px !important;
+	margin: 0 !important;
+	min-height: 21px;
+	max-height: 21px;
+	overflow-y: scroll;
+	line-height: 21px;
+	padding: 8px 12px 8px 5px;
+}
+
+.selected-item
+{
+	background-color: rgba(26, 188, 156, 0.2);
+}
+
+a.glyph-link
+{
+	color: rgb(82, 100, 118);
+}
+
+a.glyph-link:hover 
+{
+	color: rgb(26, 188, 156) !important;
+	text-decoration: none;
+	background-color: transparent !important;
+	z-index: 1;
+}
+
+a:focus
+{
+	color: rgb(22, 160, 133);
+	text-decoration: none;
+}
