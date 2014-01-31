@@ -411,8 +411,19 @@ context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
                          boost::asio::ssl::context::no_sslv2 |
                          boost::asio::ssl::context::single_dh_use);  
         
-        ctx->use_certificate_chain_file(certPath);
-        ctx->use_private_key_file(certPath, boost::asio::ssl::context::pem);
+        try {
+            ctx->use_certificate_chain_file(certPath);
+        } catch (boost::system::system_error& e) {
+            LOG(ERROR) << "Cannot use_certificate_chain_file due to: " << e.what() << " with cert file: " << certPath;
+            ERR_print_errors_fp(stderr);
+        }
+        
+        try {
+            ctx->use_private_key_file(certPath, boost::asio::ssl::context::pem);
+        } catch (boost::system::system_error& e) {
+            LOG(ERROR) << "Cannot use_private_key_file due to: " << e.what() << " with cert file: " << certPath;
+            ERR_print_errors_fp(stderr);
+        }
         
         return ctx;
         
