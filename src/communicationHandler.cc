@@ -410,37 +410,19 @@ context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
     OpenSSL_add_all_digests();
     string certPath = m_certFun ? m_certFun() : m_certPath;
     try {
-        LOG(INFO) << "Creating CTX";
         context_ptr ctx(new boost::asio::ssl::context(boost::asio::ssl::context::sslv3));
         
-        try {
-            ctx->set_options(boost::asio::ssl::context::default_workarounds |
+        ctx->set_options(boost::asio::ssl::context::default_workarounds |
                          boost::asio::ssl::context::no_sslv2 |
                          boost::asio::ssl::context::single_dh_use); 
-        } catch (boost::system::system_error& e) {
-            LOG(ERROR) << "Cannot set TLS options due to: " << e.what() << " with cert file: " << certPath;
-            ERR_print_errors_fp(stderr);
-        }
         
-        try {
-            ctx->use_certificate_chain_file(certPath);
-        } catch (boost::system::system_error& e) {
-            LOG(ERROR) << "Cannot use_certificate_chain_file due to: " << e.what() << " with cert file: " << certPath;
-            ERR_print_errors_fp(stderr);
-        }
-        
-        try {
-            ctx->use_private_key_file(certPath, boost::asio::ssl::context::pem);
-        } catch (boost::system::system_error& e) {
-            LOG(ERROR) << "Cannot use_private_key_file due to: " << e.what() << " with cert file: " << certPath;
-            ERR_print_errors_fp(stderr);
-        }
+        ctx->use_certificate_chain_file(certPath);
+        ctx->use_private_key_file(certPath, boost::asio::ssl::context::pem);
         
         return ctx;
         
     } catch (boost::system::system_error& e) {
         LOG(ERROR) << "Cannot initialize TLS socket due to: " << e.what() << " with cert file: " << certPath;
-        ERR_print_errors_fp(stderr);
     }
         
     return context_ptr();
