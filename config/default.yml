@@ -170,6 +170,11 @@ veil_cluster_node_env:
       value: 443
 
   - parameter:
+      name: rest_port
+      description: Port on which REST API is available
+      value: 8443
+
+  - parameter:
       name: control_panel_static_files_root
       description: Directory in release where static gui files are stored
       value: |

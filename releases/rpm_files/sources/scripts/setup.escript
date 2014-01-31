@@ -5,7 +5,7 @@
 -define(default_port,"5986").
 
 %Ports that needs to be free
--define(ports_to_check,[53,443,5555]).
+-define(ports_to_check,[53,443,5555,8443]).
 
 % Curl options
 -define(curl_opts,"--connect-timeout 5 -s").
@@ -197,11 +197,11 @@ get_fuse_groups_from_user(CurrentGroups,I) ->
 			NewGroup = [{name, Name},{root,Root}],
 			get_fuse_groups_from_user(lists:append(CurrentGroups,[NewGroup]),I+1);
 		no ->
-			case CurrentGroups =:= [] of
+			AllGroupsString = case CurrentGroups =:= [] of
 				true ->
-					AllGroupsString="!!! You should create at least one storage to achieve better performance !!!";
+					"!!! You should create at least one storage to achieve better performance !!!";
 				false ->
-					AllGroupsString=groups_to_string(CurrentGroups)
+					groups_to_string(CurrentGroups)
 			end,
 			Option = interaction_choose_option(accept_created_storage,
 				"Is this all?\n"++AllGroupsString,
@@ -496,6 +496,10 @@ install_db_node(Name, Path) ->
 	add_node_to_config(db_node, list_to_atom(Name), Path),
 	info("installation complete"),
 
+	%prepare db arguments
+	set_db_cookie(Path,atom_to_list(?default_cookie)),
+	actualize_db_hostname(Path,Name),
+
 	info("Starting node..."),
 	open_port({spawn, ?init_d_script_path ++ " start_db"}, [out]).
 
@@ -592,6 +596,18 @@ discover_cluster(IPOrHostname) ->
 	end.
 
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Functions used to manipulate bigcouch etc files
+
+% Set cookie in etc/vm.args from given bigcouch installation path
+set_db_cookie(BigcouchInstallationPath,Cookie) ->
+	os:cmd("sed -i -e \"s/^\\-setcookie .*/\\-setcookie "++Cookie++"/g\" "++BigcouchInstallationPath++"/etc/vm.args").
+
+% Set hostname and bind_address in etc/vm.args and etc/default.ini from given bigcouch installation path
+actualize_db_hostname(BigcouchInstallationPath,NodeName) ->
+	[_At | Hostname] = get(hostname),
+	os:cmd("sed -i -e \"s/^\\-name .*/\\-name "++NodeName++get(hostname)++"/g\" "++BigcouchInstallationPath++"/etc/vm.args"),
+	os:cmd("sed -i -e \"s/bind_address = [0-9\.]*/bind_address = "++Hostname++"/\" "++BigcouchInstallationPath++"/etc/default.ini").
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Function used to process config file used by veil_cluster script
@@ -775,7 +791,7 @@ check_open_ports(Ports) ->
 		true ->
 			ok;
 		false ->
-			warn("All following ports needs to be open: "++io_lib:fwrite("~p", [Ports])),
+			warn("All following ports needs to be free: "++io_lib:fwrite("~p", [Ports])),
 			warn("Terminating installation"),
 			halt(1)
 	end.

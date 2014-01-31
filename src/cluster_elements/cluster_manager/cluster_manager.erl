@@ -392,8 +392,8 @@ handle_cast(stop, State) ->
   {stop, normal, State};
 
 handle_cast({clear_cache, Cache, ReturnPid}, State) ->
+  ReturnPid ! {cache_cleared, Cache},
   New_State = clear_cache(State, Cache),
-  ReturnPid ! cache_cleared,
   {noreply, New_State};
 
 handle_cast(_Msg, State) ->
