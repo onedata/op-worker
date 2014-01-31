@@ -416,7 +416,7 @@ context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
         
         return ctx;
         
-    } catch (std::exception& e) {
+    } catch (boost::system::system_error& e) {
         LOG(ERROR) << "Cannot initialize TLS socket due to: " << e.what() << " with cert file: " << certPath;
         ERR_print_errors_fp(stderr);
     }
