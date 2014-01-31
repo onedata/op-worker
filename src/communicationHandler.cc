@@ -15,6 +15,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <openssl/err.h>
 
 using namespace std;
 using namespace boost;
@@ -416,7 +417,8 @@ context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
         return ctx;
         
     } catch (std::exception& e) {
-        LOG(ERROR) << "Cannot initialize TLS socket due to:" << e.what();
+        LOG(ERROR) << "Cannot initialize TLS socket due to: " << e.what();
+        ERR_print_errors_fp(stderr);
     }
         
     return context_ptr();
