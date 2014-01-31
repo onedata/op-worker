@@ -62,7 +62,7 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(Pool
     
     // Check if certificate is OK and generate new one if needed and possible
     //                 Disable certificate update for now (due to globus memory leak)
-    if(updateCertCB) {
+    if(updateCertCB && false) {
         if(!updateCertCB())
         {
             LOG(ERROR) << "Could not find valid certificate.";
