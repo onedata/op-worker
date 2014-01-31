@@ -404,6 +404,8 @@ groups_test(Config) ->
 
 
     %% Cleanup
+		wss:close(Socket1),
+		wss:close(Socket2),
     ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete, ["/veilfstestuser/file"])),
     ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete, ["/groups/veilfstestgroup/f1"])),
     ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete,["/groups/veilfstestgroup/f2"])),
