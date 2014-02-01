@@ -15,6 +15,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <openssl/evp.h>
+#include <openssl/err.h>
 
 using namespace std;
 using namespace boost;
@@ -402,21 +404,25 @@ int CommunicationHandler::getInstancesCount()
 context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
 {
     // Setup TLS connection (i.e. certificates)
+    EVP_cleanup();
+    OpenSSL_add_all_algorithms();
+    OpenSSL_add_all_ciphers();
+    OpenSSL_add_all_digests();
+    string certPath = m_certFun ? m_certFun() : m_certPath;
     try {
         context_ptr ctx(new boost::asio::ssl::context(boost::asio::ssl::context::sslv3));
         
         ctx->set_options(boost::asio::ssl::context::default_workarounds |
                          boost::asio::ssl::context::no_sslv2 |
-                         boost::asio::ssl::context::single_dh_use);
-            
-        string certPath = m_certFun ? m_certFun() : m_certPath;
+                         boost::asio::ssl::context::single_dh_use); 
+        
         ctx->use_certificate_chain_file(certPath);
         ctx->use_private_key_file(certPath, boost::asio::ssl::context::pem);
         
         return ctx;
         
-    } catch (std::exception& e) {
-        LOG(ERROR) << "Cannot initialize TLS socket due to:" << e.what();
+    } catch (boost::system::system_error& e) {
+        LOG(ERROR) << "Cannot initialize TLS socket due to: " << e.what() << " with cert file: " << certPath;
     }
         
     return context_ptr();
