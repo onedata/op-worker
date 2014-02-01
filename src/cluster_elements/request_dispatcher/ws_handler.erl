@@ -130,7 +130,7 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #handshakerequest{hostn
                 UID1;
             {error, Error} ->
                 ?error("VeilClient handshake failed. User ~p data is not available due to DAO error: ~p", [DnString, Error]),
-                throw({handshake_error, Error, MsgId})
+                throw({no_user_found_error, Error, MsgId})
         end,
 
     %% Env Vars list. Entry format: {Name :: atom(), value :: string()}
