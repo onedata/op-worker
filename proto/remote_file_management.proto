@@ -45,3 +45,8 @@ message WriteInfo {
     optional string new_data_listener = 4;
 }
 
+message ChangePermsAtStorage {
+    required string file_id = 1;
+    required int32 perms = 2;
+}
+
