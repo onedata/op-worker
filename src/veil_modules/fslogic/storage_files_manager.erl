@@ -33,6 +33,9 @@
 %% Physical files access (used to create temporary copies for remote files)
 -export([read/4, write/4, write/3, create/2, truncate/3, delete/2, ls/0]).
 
+%% Helper functions
+-export([check_perms/2]).
+
 %% ====================================================================
 %% Test API
 %% ====================================================================
@@ -519,26 +522,7 @@ write_bytes(Storage_helper_info, File, Offset, Buf, FFI) ->
       {error, {wrong_write_return_code, ErrorCode}}
   end.
 
-%% ====================================================================
-%% Internal functions
-%% ====================================================================
 
-%% derive_gid_from_parent/2
-%% ====================================================================
-%% @doc Gets group owner form File's parent and sets same group owner for the File
-%% @end
--spec derive_gid_from_parent(Storage_helper_info :: record(), File :: string()) -> ok | {error, ErrNo :: integer()}.
-%% ====================================================================
-derive_gid_from_parent(SHInfo, File) ->
-    case veilhelpers:exec(getattr, SHInfo, [fslogic_utils:strip_path_leaf(File)]) of
-        {0, #st_stat{st_gid = GID}} ->
-            Res = chown(SHInfo, File, -1, GID),
-            ?debug("Changing gid of file ~p to ~p. Status: ~p", [File, GID, Res]),
-            Res;
-        {ErrNo, _} ->
-            ?error("Cannot fetch parent dir ~p attrs. Error: ~p", [fslogic_utils:strip_path_leaf(File), ErrNo]),
-            {error, ErrNo}
-    end.
 
 %% get_cached_value/3
 %% ====================================================================
@@ -552,8 +536,10 @@ derive_gid_from_parent(SHInfo, File) ->
 %% ====================================================================
 get_cached_value(File, ValueName, Storage_helper_info) ->
   ValType = case ValueName of
-    is_reg -> file_type;
-    is_dir -> file_type;
+    is_reg -> file_stats;
+    is_dir -> file_stats;
+    grp_wr -> file_stats;
+    owner -> file_stats;
     o_wronly -> flag;
     o_rdonly -> flag;
     size -> size
@@ -562,7 +548,7 @@ get_cached_value(File, ValueName, Storage_helper_info) ->
   EtsName = logical_files_manager:get_ets_name(),
   CachedValue = try
     LookupAns = case ValType of
-      file_type -> ets:lookup(EtsName, {File, ValueName});
+      file_stats -> ets:lookup(EtsName, {File, ValueName});
       flag -> ets:lookup(EtsName, {Storage_helper_info, ValueName});
       size -> ets:lookup(EtsName, test_key)   %% check if table exists
     end,
@@ -580,11 +566,33 @@ get_cached_value(File, ValueName, Storage_helper_info) ->
   case CachedValue of
     [] ->
       case ValType of
-        file_type ->
-          {ErrorCode, Stat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
+        file_stats ->
+          {ErrorCode, Stat} = case ets:lookup(EtsName, {File, stats}) of
+            [{{_, stats}, StatsValue}] ->
+              {0, StatsValue};
+            _ ->
+              {TmpErrorCode, TmpStat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
+              case TmpErrorCode of
+                0 ->
+                  ets:insert(EtsName, {{File, stats}, TmpStat});
+                _ ->
+                  ok
+              end,
+              {TmpErrorCode, TmpStat}
+          end,
           case ErrorCode of
             0 ->
-              ReturnValue = veilhelpers:exec(ValueName, Storage_helper_info, [Stat#st_stat.st_mode]),
+              ReturnValue = case ValueName of
+                grp_wr ->
+                  case Stat#st_stat.st_mode band ?WR_GRP_PERM
+                    0 -> false;
+                    _ -> true
+                  end;
+                owner ->
+                  integer_to_list(Stat#st_stat.st_uid);
+                _ ->
+                  veilhelpers:exec(ValueName, Storage_helper_info, [Stat#st_stat.st_mode])
+              end,
               ets:insert(EtsName, {{File, ValueName}, ReturnValue}),
               {ok, ReturnValue};
             error -> {ErrorCode, Stat};
@@ -606,4 +614,98 @@ get_cached_value(File, ValueName, Storage_helper_info) ->
           end
       end;
     _ -> {ok, CachedValue}
+  end.
+
+check_perms(File, Storage_helper_info) ->
+  check_perms(File, Storage_helper_info, write).
+
+check_perms(File, Storage_helper_info, CheckType) ->
+  SHI_Name = Storage_helper_info#storage_helper_info.name,
+  SHI_Args = Storage_helper_info#storage_helper_info.init_args,
+  FileBegLen = case SHI_Name of
+    "DirectIO" ->
+      [Root | _] = SHI_Args,
+      length(string:tokens(Root, "/"));
+    _ -> 0
+  end,
+  FileTokens = string:tokens(File, "/"),
+  FileTokensLen = length(FileTokens),
+  case FileTokensLen - FileBegLen > 2 of
+    true ->
+      case lists:nth(FileBegLen + 1, FileTokens) of
+        "users" ->
+          {UsrStatus, UserRoot} = fslogic:get_user_root(),
+          case UsrStatus of
+            ok ->
+              [CleanUserRoot | _] = string:tokens(UserRoot, "/"),
+              {ok, CleanUserRoot =:= lists:nth(FileBegLen + 2, FileTokens)};
+            _ -> {error, can_not_get_user_root}
+          end;
+        "groups" ->
+          {UserDocStatus, UserDoc} = get_user_doc(),
+          {UsrStatus2, UserGroups} = fslogic:get_user_groups(UserDocStatus, UserDoc),
+          case UsrStatus2 of
+            ok ->
+              Grp = lists:nth(FileBegLen + 2, FileTokens),
+              case lists:member(Grp, UserGroups) of
+                true ->
+                  case CheckType of
+                    read ->
+                      {ok, true};
+                    _ ->
+                      {Status, CheckOk} = case CheckType of
+                        write -> get_cached_value(File, grp_wr, Storage_helper_info);
+                        _ -> {ok, false} %perms
+                      end,
+                      case Status of
+                        ok ->
+                          case CheckOk of
+                            true -> {ok, true};
+                            false ->
+                              UserRecord = UserDoc#veil_document.record,
+                              IdFromSystem = os:cmd("id -u " ++ UserRecord#user.login),
+                              IdFromSystem2 = string:substr(IdFromSystem, 1, length(IdFromSystem) - 1),
+                              {OwnWrStatus, Own} = get_cached_value(File, owner, Storage_helper_info),
+                              case OwnWrStatus of
+                                ok ->
+                                  {ok, IdFromSystem2 =:= Own};
+                                _ ->
+                                  {error, can_not_check_file_owner}
+                              end
+                          end;
+                        _ ->
+                          {error, can_not_check_grp_perms}
+                      end
+                  end;
+                false ->
+                  {ok, false}
+              end;
+            _ -> {error, can_not_get_user_groups}
+          end;
+        _ ->
+          {error, wrong_path_format}
+      end;
+    false ->
+      {error, too_short_path}
+  end.
+
+%% ====================================================================
+%% Internal functions
+%% ====================================================================
+
+%% derive_gid_from_parent/2
+%% ====================================================================
+%% @doc Gets group owner form File's parent and sets same group owner for the File
+%% @end
+-spec derive_gid_from_parent(Storage_helper_info :: record(), File :: string()) -> ok | {error, ErrNo :: integer()}.
+%% ====================================================================
+derive_gid_from_parent(SHInfo, File) ->
+  case veilhelpers:exec(getattr, SHInfo, [fslogic_utils:strip_path_leaf(File)]) of
+    {0, #st_stat{st_gid = GID}} ->
+      Res = chown(SHInfo, File, -1, GID),
+      ?debug("Changing gid of file ~p to ~p. Status: ~p", [File, GID, Res]),
+      Res;
+    {ErrNo, _} ->
+      ?error("Cannot fetch parent dir ~p attrs. Error: ~p", [fslogic_utils:strip_path_leaf(File), ErrNo]),
+      {error, ErrNo}
   end.

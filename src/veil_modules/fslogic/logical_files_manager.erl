@@ -27,9 +27,9 @@
 %% API
 %% ====================================================================
 %% Logical file organization management (only db is used)
--export([mkdir/1, rmdir/1, mv/2, chown/0, change_file_perm/2, ls/3, getfileattr/1]).
+-export([mkdir/1, rmdir/1, mv/2, chown/0, ls/3, getfileattr/1]).
 %% File access (db and helper are used)
--export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1]).
+-export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1, change_file_perm/2]).
 
 %% File sharing
 -export([get_file_by_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, get_file_user_dependent_name_by_uuid/1]).
@@ -137,28 +137,6 @@ mv(From, To) ->
 %% ====================================================================
 chown() ->
   {error, not_implemented_yet}.
-
-%% change_file_perm/2
-%% ====================================================================
-%% @doc Changes file's permissions in db
-%% @end
--spec change_file_perm(FileName :: string(), NewPerms :: integer()) -> Result when
-  Result :: ok | {ErrorGeneral, ErrorDetail},
-  ErrorGeneral :: atom(),
-  ErrorDetail :: term().
-%% ====================================================================
-change_file_perm(FileName, NewPerms) ->
-  Record = #changefileperms{file_logic_name = FileName, perms = NewPerms},
-  {Status, TmpAns} = contact_fslogic(Record),
-  case Status of
-    ok ->
-      Response = TmpAns#atom.value,
-      case Response of
-        ?VOK -> ok;
-        _ -> {logical_file_system_error, Response}
-      end;
-    _ -> {Status, TmpAns}
-  end.
 
 %% ls/3
 %% ====================================================================
@@ -417,6 +395,35 @@ delete(File) ->
           end;
         _ -> {Response, Response2}
       end.
+
+%% change_file_perm/2
+%% ====================================================================
+%% @doc Changes file's permissions in db
+%% @end
+-spec change_file_perm(FileName :: string(), NewPerms :: integer()) -> Result when
+  Result :: ok | {ErrorGeneral, ErrorDetail},
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+change_file_perm(FileName, NewPerms) ->
+  Record = #changefileperms{file_logic_name = FileName, perms = NewPerms},
+  {Status, TmpAns} = contact_fslogic(Record),
+  case Status of
+    ok ->
+      Response = TmpAns#atom.value,
+      case Response of
+        ?VOK ->
+          {LocStatus, Response2} = getfilelocation(FileName),
+          case LocStatus of
+            ok ->
+              {Storage_helper_info, FileId} = Response2,
+              storage_files_manager:chmod(Storage_helper_info, FileId, NewPerms);
+            _ -> {LocStatus, Response2}
+          end;
+        _ -> {logical_file_system_error, Response}
+      end;
+    _ -> {Status, TmpAns}
+  end.
 
 %% exists/1
 %% ====================================================================

@@ -208,13 +208,13 @@ veil_cluster_node_env:
   # Files management
   - parameter:
       name: new_file_logic_mode
-      description: Default mode for new file (mode stored in db) (8#644)
-      value: 420
+      description: Default mode for new file (mode stored in db) (8#640)
+      value: 432
 
   - parameter:
       name: new_file_storage_mode
       description: Default mode for new file at storage system (8#640)
-      value: 416
+      value: 432
 
   - parameter:
       name: new_dir_storage_mode
