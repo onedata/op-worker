@@ -20,10 +20,10 @@
 
 %% API - File system management
 -export([list_dir/3, count_subdirs/1, rename_file/2, lock_file/3, unlock_file/3, find_files/1]). %% High level API functions
--export([save_descriptor/1, remove_descriptor/1, get_descriptor/1, list_descriptors/3]). %% Base descriptor management API functions
--export([save_new_file/2, save_file/1, remove_file/1, get_file/1, exist_file/1, get_path_info/1]). %% Base file management API function
--export([save_storage/1, remove_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
--export([save_file_meta/1, remove_file_meta/1, get_file_meta/1]).
+-export([save_descriptor/1, remove_descriptor/1, exist_descriptor/1, get_descriptor/1, list_descriptors/3]). %% Base descriptor management API functions
+-export([save_new_file/2, save_file/1, remove_file/1, exist_file/1, get_file/1, get_path_info/1]). %% Base file management API function
+-export([save_storage/1, remove_storage/1, exist_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
+-export([save_file_meta/1, remove_file_meta/1, exist_file_meta/1, get_file_meta/1]).
 
 
 -ifdef(TEST).
@@ -77,6 +77,16 @@ remove_descriptor3(ListSpec, BatchSize, Offset) ->
         Other -> Other
     end.
 
+%% exist_descriptor/1
+%% ====================================================================
+%% @doc Checks whether file descriptor exists in DB.
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec exist_descriptor(Fd :: fd()) -> {ok, true | false} | {error, any()}.
+%% ====================================================================
+exist_descriptor(Fd) ->
+    dao:set_db(?DESCRIPTORS_DB_NAME),
+    dao:exist_record(Fd).
 
 %% get_descriptor/1
 %% ====================================================================
@@ -97,7 +107,6 @@ get_descriptor(Fd) ->
         Other ->
             Other
     end.
-
 
 %% list_descriptors/3
 %% ====================================================================
@@ -175,6 +184,16 @@ remove_file_meta(FMeta) ->
     dao:set_db(?FILES_DB_NAME),
     dao:remove_record(FMeta).
 
+%% exist_file_meta/1
+%% ====================================================================
+%% @doc Checks whether file meta exists in DB.
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec exist_file_meta(Fd :: fd()) -> {ok, true | false} | {error, any()}.
+%% ====================================================================
+exist_file_meta(FMetaUUID) ->
+    dao:set_db(?FILES_DB_NAME),
+    dao:exist_record(FMetaUUID).
 
 %% get_file_meta/1
 %% ====================================================================
@@ -301,13 +320,13 @@ remove_file(File) ->
 
 %% exist_file/1
 %% ====================================================================
-%% @doc Checks whether file is in DB. Argument should be file() - see dao_types.hrl for more details. <br/>
+%% @doc Checks whether file exists in DB. Argument should be file() - see dao_types.hrl for more details. <br/>
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
--spec exist_file(File :: file()) -> true | false.
+-spec exist_file(File :: file()) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_file({internal_path, [], []}) ->
-    true;
+    {ok, true};
 exist_file({internal_path, [Dir | Path], Root}) ->
     QueryArgs =
         #view_query_args{keys = [[dao_helper:name(Root), dao_helper:name(Dir)]],
@@ -315,10 +334,11 @@ exist_file({internal_path, [Dir | Path], Root}) ->
     case dao:list_records(?FILE_TREE_VIEW, QueryArgs) of
         {ok, #view_result{rows = [#view_row{id = Id, doc = _Doc} | _Tail]}} ->
             case Path of
-                [] -> true;
+                [] -> {ok, true};
                 _ -> exist_file({internal_path, Path, Id})
             end;
-        _ -> false
+        {ok, #view_result{rows = []}} -> {ok, false};
+        Other -> Other
     end;
 exist_file({uuid, UUID}) ->
     dao:set_db(?FILES_DB_NAME),
@@ -561,6 +581,20 @@ remove_storage({id, StorageID}) when is_integer(StorageID) ->
       _ -> {Ans, SData}
     end.
 
+%% exist_storage/1
+%% ====================================================================
+%% @doc Checks whether storage exists in DB. Argument should be uuid() of storage document or ID of storage. <br/>
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec exist_storage({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) ->
+    {ok, true | false} | {error, any()}.
+%% ====================================================================
+exist_storage(Key) ->
+    case ets:lookup(storage_cache, Key) of
+        [] -> exist_storage_in_db(Key);
+        [{_, _Ans}] -> {ok, true}
+    end.
+
 %% get_storage/1
 %% ====================================================================
 %% @doc Gets storage info from DB. Argument should be uuid() of storage document or ID of storage. <br/>
@@ -583,6 +617,28 @@ get_storage(Key) ->
     [{_, Ans}] -> %% Return document from cache
       {ok, Ans}
   end.
+
+
+%% exist_storage_in_db/1
+%% ====================================================================
+%% @doc Checks whether storage exists in DB. Argument should be uuid() of storage document or ID of storage. <br/>
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec get_storage_from_db({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) ->
+    {ok, true | false} | {error, any()}.
+%% ====================================================================
+exist_storage_in_db({uuid, DocUUID}) when is_list(DocUUID) ->
+    dao:set_db(?SYSTEM_DB_NAME),
+    dao:exist_record(DocUUID);
+exist_storage_in_db({id, StorageID}) when is_integer(StorageID) ->
+    QueryArgs = #view_query_args{keys = [StorageID], include_docs = true},
+    case dao:list_records(?STORAGE_BY_ID_VIEW, QueryArgs) of
+        {ok, #view_result{rows = [#view_row{doc = #veil_document{record = #storage_info{}} = _Doc} | _Tail]}} ->
+            {ok, true};
+        {ok, #view_result{rows = []}} ->
+            {ok, false};
+        Other -> Other
+    end.
 
 
 %% get_storage_from_db/1

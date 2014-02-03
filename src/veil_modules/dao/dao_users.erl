@@ -17,7 +17,7 @@
 %% ===================================================================
 %% API functions
 %% ===================================================================
--export([save_user/1, remove_user/1, get_user/1, get_files_number/2]).
+-export([save_user/1, remove_user/1, exist_user/1, get_user/1, get_files_number/2]).
 
 
 %% save_user/1
@@ -72,6 +72,20 @@ remove_user(Key) ->
     dao:set_db(?USERS_DB_NAME),
     dao:remove_record(FDoc#veil_document.uuid).
 
+%% exist_user/1
+%% ====================================================================
+%% @doc Checks whether user exists in DB. Arguments should be login, e-mail, uuid or dn.
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec exist_user(Key :: {login, Login :: string()} | {email, Email :: string()} |
+{uuid, UUID :: uuid()} | {dn, DN :: string()}) -> {ok, true | false} | {error, any()}.
+%% ====================================================================
+exist_user(Key) ->
+    case ets:lookup(users_cache, Key) of
+        [] -> exist_user_in_db(Key);
+        [{_, _Ans}] -> {ok, true}
+    end.
+
 %% get_user/1
 %% ====================================================================
 %% @doc Gets user from DB by login, e-mail, uuid or dn.
@@ -79,11 +93,8 @@ remove_user(Key) ->
 %% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec get_user(Key::    {login, Login :: string()} |
-{email, Email :: string()} |
-{uuid, UUID :: uuid()} |
-{dn, DN :: string()}) ->
-  {ok, user_doc()} | {error, any()} | no_return().
+-spec get_user(Key :: {login, Login :: string()} | {email, Email :: string()} |
+{uuid, UUID :: uuid()} | {dn, DN :: string()}) -> {ok, user_doc()} | {error, any()} | no_return().
 %% ====================================================================
 get_user(Key) ->
   case ets:lookup(users_cache, Key) of
@@ -98,6 +109,40 @@ get_user(Key) ->
     [{_, Ans}] -> %% Return document from cache
       {ok, Ans}
   end.
+
+%% exist_user_in_db/1
+%% ====================================================================
+%% @doc Checks whether user exists in DB. Arguments should be login, e-mail, uuid or dn.
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec exist_user_in_db(Key :: {login, Login :: string()} | {email, Email :: string()} |
+{uuid, UUID :: uuid()} | {dn, DN :: string()}) -> {ok, true | false} | {error, any()}.
+%% ====================================================================
+exist_user_in_db({uuid, "0"}) ->
+    {ok, true};
+exist_user_in_db({uuid, UUID}) ->
+    dao:set_db(?USERS_DB_NAME),
+    dao:exist_record(UUID);
+exist_user_in_db({Key, Value}) ->
+    dao:set_db(?USERS_DB_NAME),
+    {View, QueryArgs} = case Key of
+                            login ->
+                                {?USER_BY_LOGIN_VIEW, #view_query_args{keys =
+                                [dao_helper:name(Value)], include_docs = true}};
+                            email ->
+                                {?USER_BY_EMAIL_VIEW, #view_query_args{keys =
+                                [dao_helper:name(Value)], include_docs = true}};
+                            dn ->
+                                {?USER_BY_DN_VIEW, #view_query_args{keys =
+                                [dao_helper:name(Value)], include_docs = true}}
+                        end,
+    case dao:list_records(View, QueryArgs) of
+        {ok, #view_result{rows = [#view_row{doc = _FDoc} | _Tail]}} ->
+            {ok, true};
+        {ok, #view_result{rows = []}} ->
+            {ok, false};
+        Other -> Other
+    end.
 
 %% get_user_from_db/1
 %% ====================================================================

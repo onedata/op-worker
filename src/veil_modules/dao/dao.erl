@@ -241,14 +241,15 @@ save_record(Rec) when is_tuple(Rec) ->
 %% @doc Checks whether record with UUID = Id exists in DB.
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
--spec exist_record(Id :: atom() | string()) -> true | false.
+-spec exist_record(Id :: atom() | string()) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_record(Id) when is_atom(Id) ->
     exist_record(atom_to_list(Id));
 exist_record(Id) when is_list(Id) ->
     case dao_helper:open_doc(get_db(), Id) of
-        {ok, _} -> true;
-        _ -> false
+        {ok, _} -> {ok, true};
+        {error, {not_found, missing}} -> {ok, false};
+        Other -> Other
     end.
 
 
