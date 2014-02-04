@@ -67,7 +67,7 @@
   ErrorDetail :: term().
 %% ====================================================================
 mkdir(DirName) ->
-  {ModeStatus, NewFileLogicMode} = get_modeFileName(DirName),
+  {ModeStatus, NewFileLogicMode} = get_mode(DirName),
   case ModeStatus of
     ok ->
       Record = #createdir{dir_logic_name = DirName, mode = NewFileLogicMode},
@@ -314,7 +314,7 @@ write_from_stream(File, Buf) ->
   ErrorDetail :: term().
 %% ====================================================================
 create(File) ->
-  {ModeStatus, NewFileLogicMode} = get_modeFileName(File),
+  {ModeStatus, NewFileLogicMode} = get_mode(File),
   case ModeStatus of
     ok ->
       Record = #getnewfilelocation{file_logic_name = File, mode = NewFileLogicMode},
@@ -912,7 +912,7 @@ generateRandomData(Size) -> [random:uniform(255) | generateRandomData(Size-1)].
 get_ets_name() ->
   list_to_atom(?NAMES_TABLE ++ pid_to_list(self())).
 
-get_modeFileName(FileName) ->
+get_mode(FileName) ->
   case string:tokens(FileName, "/") of
     [?GROUPS_BASE_DIR_NAME | _] ->
       application:get_env(?APP_Name, new_group_file_logic_mode);

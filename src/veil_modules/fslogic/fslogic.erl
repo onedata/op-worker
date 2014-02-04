@@ -203,7 +203,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, chan
       ok ->
         case get_file(ProtocolVersion, FileName, FuseID) of
             {ok, #veil_document{record = #file{} = File} = Doc} ->
-              {PermsStat, PermsOK} = check_file_perms(UserDocStatus, UserDoc, Doc),
+              {PermsStat, PermsOK} = check_file_perms(FileName, UserDocStatus, UserDoc, Doc),
               case PermsStat of
                 ok ->
                   case PermsOK of
@@ -293,7 +293,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, chan
       ok ->
         case get_file(ProtocolVersion, FileName, FuseID) of
             {ok, #veil_document{record = #file{} = File} = Doc} ->
-              {PermsStat, PermsOK} = check_file_perms(UserDocStatus, UserDoc, Doc),
+              {PermsStat, PermsOK} = check_file_perms(FileName, UserDocStatus, UserDoc, Doc),
               case PermsStat of
                 ok ->
                   case PermsOK of
@@ -547,7 +547,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, dele
 
       case FindStatus of
         ok ->
-          {PermsStat, PermsOK} = check_file_perms(UserDocStatus, UserDoc, FindTmpAns),
+          {PermsStat, PermsOK} = check_file_perms(File, UserDocStatus, UserDoc, FindTmpAns),
           case PermsStat of
             ok ->
               case PermsOK of
@@ -604,7 +604,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, rena
     {ok, ok} ->
       case get_file(ProtocolVersion, File, FuseID) of
         {ok, #veil_document{record = #file{} = OldFile} = OldDoc} ->
-          {PermsStat, PermsOK} = check_file_perms(UserDocStatus, UserDoc, OldDoc),
+          {PermsStat, PermsOK} = check_file_perms(File, UserDocStatus, UserDoc, OldDoc),
           case PermsStat of
             ok ->
               case PermsOK of
@@ -1449,13 +1449,13 @@ getfileattr(ProtocolVersion, DocFindStatus, FileDoc) ->
       #fileattr{answer = ?VEREMOTEIO, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = "", links = -1}
   end.
 
-check_file_perms(UserDocStatus, UserDoc, FileDoc) ->
-  check_file_perms(UserDocStatus, UserDoc, FileDoc, perms).
+check_file_perms(FileName, UserDocStatus, UserDoc, FileDoc) ->
+  check_file_perms(FileName, UserDocStatus, UserDoc, FileDoc, perms).
 
-check_file_perms(UserDocStatus, UserDoc, FileDoc, CheckType) ->
-  FileRecord = FileDoc#veil_document.record,
-  case string:tokens(FileRecord#file.name, "/") of
+check_file_perms(FileName, UserDocStatus, UserDoc, FileDoc, CheckType) ->
+  case string:tokens(FileName, "/") of
     [?GROUPS_BASE_DIR_NAME | _] ->
+      FileRecord = FileDoc#veil_document.record,
       CheckOwn = case CheckType of
         perms -> true;
         _ -> %write

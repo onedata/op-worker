@@ -23,12 +23,12 @@
 -include("veil_modules/dao/dao_share.hrl").
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([files_manager_standard_files_test/1, files_manager_tmp_files_test/1, storage_management_test/1, permissions_management_test/1, user_creation_test/1, get_file_links_test/1,
+-export([groups_permissions_test/1, files_manager_standard_files_test/1, files_manager_tmp_files_test/1, storage_management_test/1, permissions_management_test/1, user_creation_test/1, get_file_links_test/1,
   fuse_requests_test/1, users_separation_test/1, file_sharing_test/1, dir_mv_test/1, user_file_counting_test/1, dirs_creating_test/1, groups_test/1, get_by_uuid_test/1, concurrent_file_creation_test/1]).
 -export([create_standard_share/2, create_share/3, get_share/2]).
 
 all() -> [groups_test, files_manager_tmp_files_test, files_manager_standard_files_test, storage_management_test, permissions_management_test, user_creation_test,
-  fuse_requests_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test, concurrent_file_creation_test, get_file_links_test
+  fuse_requests_test, groups_permissions_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test, concurrent_file_creation_test, get_file_links_test
 ].
 
 -define(SH, "DirectIO").
@@ -39,6 +39,124 @@ all() -> [groups_test, files_manager_tmp_files_test, files_manager_standard_file
 %% ====================================================================
 %% Test functions
 %% ====================================================================
+
+%% Tests if not permitted operations can not be executed by fslogic
+groups_permissions_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+
+  Cert = ?COMMON_FILE("peer.pem"),
+  Cert2 = ?COMMON_FILE("peer2.pem"),
+  Host = "localhost",
+  Port = ?config(port, Config),
+  [FSLogicNode | _] = NodesUp,
+
+  gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
+  gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  nodes_manager:wait_for_cluster_cast(),
+  gen_server:cast({global, ?CCM}, init_cluster),
+  nodes_manager:wait_for_cluster_init(),
+
+  Team = "team1",
+  TestFile = "groups/" ++ Team ++ "/groups_permissions_test_file",
+  TestFileNewName = TestFile ++ "2",
+
+  {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT]),
+  ?assertEqual(ok, InsertStorageAns),
+
+  {ReadFileAns, PemBin} = file:read_file(Cert),
+  ?assertEqual(ok, ReadFileAns),
+  {ExtractAns, RDNSequence} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
+  ?assertEqual(rdnSequence, ExtractAns),
+  {ConvertAns, DN} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
+  ?assertEqual(ok, ConvertAns),
+  DnList = [DN],
+
+  Login = "user1",
+  Name = "user1 user1",
+  Teams = [Team],
+  Email = "user1@email.net",
+  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+  ?assertEqual(ok, CreateUserAns),
+
+  {ReadFileAns2, PemBin2} = file:read_file(Cert2),
+  ?assertEqual(ok, ReadFileAns2),
+  {ExtractAns2, RDNSequence2} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin2]),
+  ?assertEqual(rdnSequence, ExtractAns2),
+  {ConvertAns2, DN2} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence2]),
+  ?assertEqual(ok, ConvertAns2),
+  DnList2 = [DN2],
+
+  Login2 = "user2",
+  Name2 = "user2 user2",
+  Email2 = "user2@email.net",
+  {CreateUserAns2, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams, Email2, DnList2]),
+  ?assertEqual(ok, CreateUserAns2),
+
+  %% Connect to cluster
+  {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}, auto_handshake]),
+  ?assertEqual(ok, ConAns),
+  {ConAns2, Socket2} = wss:connect(Host, Port, [{certfile, Cert2}, {cacertfile, Cert2}, auto_handshake]),
+  ?assertEqual(ok, ConAns2),
+
+  {Status, _, _, _, AnswerOpt} = create_file(Socket, TestFile),
+  ?assertEqual("ok", Status),
+  ?assertEqual(?VOK, AnswerOpt),
+
+  {Status2, _, _, _, AnswerOpt2} = get_file_location(Socket2, TestFile),
+  ?assertEqual("ok", Status2),
+  ?assertEqual(?VOK, AnswerOpt2),
+
+  {Status3, _, _, _, AnswerOpt3} = get_file_location(Socket, TestFile),
+  ?assertEqual("ok", Status3),
+  ?assertEqual(?VOK, AnswerOpt3),
+
+  {Status4, Answer4} = rename_file(Socket2, TestFile, TestFileNewName),
+  ?assertEqual("ok", Status4),
+  ?assertEqual(list_to_atom(?VEPERM), Answer4),
+
+  {Status5, Answer5} = rename_file(Socket, TestFile, TestFileNewName),
+  ?assertEqual("ok", Status5),
+  ?assertEqual(list_to_atom(?VOK), Answer5),
+
+  {Status6, Answer6} = change_file_perms(Socket2, TestFileNewName, 8#400),
+  ?assertEqual("ok", Status6),
+  ?assertEqual(list_to_atom(?VEPERM), Answer6),
+
+  {Status7, Answer7} = change_file_perms(Socket, TestFileNewName, 8#400),
+  ?assertEqual("ok", Status7),
+  ?assertEqual(list_to_atom(?VOK), Answer7),
+
+  {Status8, Answer8} = chown(Socket2, TestFileNewName, 0, Login2),
+  ?assertEqual("ok", Status8),
+  ?assertEqual(list_to_atom(?VEPERM), Answer8),
+
+  {Status9, Answer9} = chown(Socket, TestFileNewName, 0, Login2),
+  ?assertEqual("ok", Status9),
+  ?assertEqual(list_to_atom(?VOK), Answer9),
+
+  {Status10, Answer10} = delete_file(Socket, TestFileNewName),
+  ?assertEqual("ok", Status10),
+  ?assertEqual(list_to_atom(?VEPERM), Answer10),
+
+  {Status11, Answer11} = delete_file(Socket2, TestFileNewName),
+  ?assertEqual("ok", Status11),
+  ?assertEqual(list_to_atom(?VOK), Answer11),
+
+  wss:close(Socket),
+  wss:close(Socket2),
+
+  rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team], ?ProtocolVersion]),
+  rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion]),
+  rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["users/"], ?ProtocolVersion]),
+
+  RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+  ?assertEqual(ok, RemoveStorageAns),
+
+  RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
+  ?assertEqual(ok, RemoveUserAns),
+  RemoveUserAns2 = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN2}]),
+  ?assertEqual(ok, RemoveUserAns2).
 
 %% This test checks if creation of file works well when many concurrent creation requests are sent
 concurrent_file_creation_test(Config) ->
@@ -604,7 +722,7 @@ permissions_management_test(Config) ->
 
   {PermStatus, Perms} = files_tester:get_permissions(?TEST_ROOT ++ "/" ++ File),
   ?assertEqual(ok, PermStatus),
-  ?assertEqual(8#640, Perms rem 8#01000),
+  ?assertEqual(8#600, Perms rem 8#01000),
 
   {OwnStatus, User, Group} = files_tester:get_owner(?TEST_ROOT ++ "/" ++ File),
   ?assertEqual(ok, OwnStatus),

@@ -345,7 +345,7 @@ write(Storage_helper_info, File, Buf) ->
   ErrorDetail :: term().
 %% ====================================================================
 create(Storage_helper_info, File) ->
-  {ModeStatus, NewFileStorageMode} = get_modeFileName(File, Storage_helper_info),
+  {ModeStatus, NewFileStorageMode} = get_mode(File),
   case ModeStatus of
     ok ->
       {ErrorCode, Stat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
@@ -620,7 +620,7 @@ check_perms(File, Storage_helper_info) ->
   check_perms(File, Storage_helper_info, write).
 
 check_perms(File, Storage_helper_info, CheckType) ->
-  {AccessTypeStatus, AccessAns} = check_access_type(File, Storage_helper_info),
+  {AccessTypeStatus, AccessAns} = check_access_type(File),
   case AccessTypeStatus of
     ok ->
       {AccesType, AccessName} = AccessAns,
@@ -699,8 +699,8 @@ derive_gid_from_parent(SHInfo, File) ->
       {error, ErrNo}
   end.
 
-get_modeFileName(File, Storage_helper_info) ->
-  {AccessTypeStatus, AccesType} = check_access_type(File, Storage_helper_info),
+get_mode(File) ->
+  {AccessTypeStatus, AccesType} = check_access_type(File),
   case AccessTypeStatus of
     ok ->
       case AccesType of
@@ -710,27 +710,19 @@ get_modeFileName(File, Storage_helper_info) ->
           application:get_env(?APP_Name, new_group_file_storage_mode)
       end;
     _ ->
-      {AccessTypeStatus, AccesType}
+      application:get_env(?APP_Name, new_file_storage_mode) %% operation performed by cluster
   end.
 
-check_access_type(File, Storage_helper_info) ->
-  SHI_Name = Storage_helper_info#storage_helper_info.name,
-  SHI_Args = Storage_helper_info#storage_helper_info.init_args,
-  FileBegLen = case SHI_Name of
-                 "DirectIO" ->
-                   [Root | _] = SHI_Args,
-                   length(string:tokens(Root, "/"));
-                 _ -> 0
-               end,
+check_access_type(File) ->
   FileTokens = string:tokens(File, "/"),
   FileTokensLen = length(FileTokens),
-  case FileTokensLen - FileBegLen > 2 of
+  case FileTokensLen > 2 of
     true ->
-      case lists:nth(FileBegLen + 1, FileTokens) of
+      case lists:nth(1, FileTokens) of
         "users" ->
-          {ok, {user, lists:nth(FileBegLen + 2, FileTokens)}};
+          {ok, {user, lists:nth(2, FileTokens)}};
         "groups" ->
-          {ok, {group, lists:nth(FileBegLen + 2, FileTokens)}};
+          {ok, {group, lists:nth(2, FileTokens)}};
         _ ->
           {error, wrong_path_format}
       end;
