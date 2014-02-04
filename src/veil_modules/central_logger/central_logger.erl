@@ -56,7 +56,7 @@ init(_) ->
   ok.
 
 
-%% handle/1
+%% handle/2
 %% ====================================================================
 %% @doc {@link worker_plugin_behaviour} callback handle/1
 -spec handle(ProtocolVersion :: term(), Request) -> Result when

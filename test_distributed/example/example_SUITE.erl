@@ -46,7 +46,7 @@ distributed_test(Config) ->
   ?assertEqual(ok, rpc:call(Node1, ?MODULE, node1_code2, [])),
   nodes_manager:wait_for_cluster_init(),
 
-  NodesListFromCCM = gen_server:call({global, ?CCM}, get_nodes),
+  NodesListFromCCM = gen_server:call({global, ?CCM}, get_nodes, 500),
   ?assertEqual(length(Nodes), length(NodesListFromCCM)),
   lists:foreach(fun(Node) ->
     ?assert(lists:member(Node, NodesListFromCCM))
@@ -81,7 +81,7 @@ local_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   nodes_manager:wait_for_cluster_init(),
 
-  NodesListFromCCM = gen_server:call({global, ?CCM}, get_nodes),
+  NodesListFromCCM = gen_server:call({global, ?CCM}, get_nodes, 500),
   ?assertEqual(1, length(NodesListFromCCM)).
 
 

@@ -766,7 +766,7 @@ clear_cache(Cache) ->
   Pid = self(),
   gen_server:cast({global, ?CCM}, {clear_cache, Cache, Pid}),
   receive
-    cache_cleared -> ok
+    {cache_cleared, Cache} -> ok
   after 500 ->
     error_during_contact_witch_ccm
   end.

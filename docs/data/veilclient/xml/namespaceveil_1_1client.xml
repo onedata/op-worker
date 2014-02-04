@@ -1,0 +1,96 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="namespaceveil_1_1client" kind="namespace">
+    <compoundname>veil::client</compoundname>
+    <innerclass refid="classveil_1_1client_1_1Config" prot="public">veil::client::Config</innerclass>
+    <innerclass refid="classveil_1_1client_1_1FslogicProxy" prot="public">veil::client::FslogicProxy</innerclass>
+    <innerclass refid="classveil_1_1client_1_1ISchedulable" prot="public">veil::client::ISchedulable</innerclass>
+    <innerclass refid="structveil_1_1client_1_1Job" prot="public">veil::client::Job</innerclass>
+    <innerclass refid="classveil_1_1client_1_1JobScheduler" prot="public">veil::client::JobScheduler</innerclass>
+    <innerclass refid="classveil_1_1client_1_1ReadWriteLock" prot="public">veil::client::ReadWriteLock</innerclass>
+    <innerclass refid="classveil_1_1client_1_1AutoLock" prot="public">veil::client::AutoLock</innerclass>
+    <innerclass refid="classveil_1_1client_1_1MessageBuilder" prot="public">veil::client::MessageBuilder</innerclass>
+    <innerclass refid="classveil_1_1client_1_1MetaCache" prot="public">veil::client::MetaCache</innerclass>
+    <innerclass refid="classveil_1_1client_1_1PushListener" prot="public">veil::client::PushListener</innerclass>
+    <innerclass refid="structveil_1_1client_1_1locationInfo" prot="public">veil::client::locationInfo</innerclass>
+    <innerclass refid="structveil_1_1client_1_1storageInfo" prot="public">veil::client::storageInfo</innerclass>
+    <innerclass refid="classveil_1_1client_1_1StorageMapper" prot="public">veil::client::StorageMapper</innerclass>
+    <innerclass refid="classveil_1_1client_1_1VeilException" prot="public">veil::client::VeilException</innerclass>
+    <innerclass refid="classveil_1_1client_1_1VeilFS" prot="public">veil::client::VeilFS</innerclass>
+    <innernamespace refid="namespaceveil_1_1client_1_1gsi">veil::client::gsi</innernamespace>
+    <innernamespace refid="namespaceveil_1_1client_1_1utils">veil::client::utils</innernamespace>
+      <sectiondef kind="enum">
+      <memberdef kind="enum" id="namespaceveil_1_1client_1a86124671530b503e3884741ce6c8b128" prot="public" static="no">
+        <name>LockType</name>
+        <enumvalue id="namespaceveil_1_1client_1a86124671530b503e3884741ce6c8b128a378617bc95058da3e7787e260ee8b922" prot="public">
+          <name>READ_LOCK</name>
+          <briefdescription>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <enumvalue id="namespaceveil_1_1client_1a86124671530b503e3884741ce6c8b128a74a5d68dec5afbdd21d9e18d2e6da9b6" prot="public">
+          <name>WRITE_LOCK</name>
+          <briefdescription>
+          </briefdescription>
+          <detaileddescription>
+          </detaileddescription>
+        </enumvalue>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ref refid="classveil_1_1client_1_1AutoLock_1a0237a69c349115c7b1ca10fd431a1830" kindref="member">AutoLock::AutoLock</ref> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/lock.h" line="36" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/lock.h" bodystart="35" bodyend="39"/>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="typedef">
+      <memberdef kind="typedef" id="namespaceveil_1_1client_1ad96dece4572433825f3a8f2ad52b8fa4" prot="public" static="no">
+        <type>boost::function&lt; bool(const protocol::communication_protocol::Answer &amp;)&gt;</type>
+        <definition>typedef boost::function&lt;bool(const protocol::communication_protocol::Answer&amp;)&gt; veil::client::listener_fun</definition>
+        <argsstring></argsstring>
+        <name>listener_fun</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/pushListener.h" line="26" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/pushListener.h" bodystart="26" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="typedef" id="namespaceveil_1_1client_1a401628419b3cb117d9e27bc1edde9984" prot="public" static="no">
+        <type>struct <ref refid="structveil_1_1client_1_1locationInfo" kindref="compound">veil::client::locationInfo</ref></type>
+        <definition>typedef struct veil::client::locationInfo  veil::client::locationInfo</definition>
+        <argsstring></argsstring>
+        <name>locationInfo</name>
+        <briefdescription>
+<para>Structure containing file mapping base information. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" line="43" column="1"/>
+      </memberdef>
+      <memberdef kind="typedef" id="namespaceveil_1_1client_1a39294936fec0c21b3fccf23ed0abbbf5" prot="public" static="no">
+        <type>struct <ref refid="structveil_1_1client_1_1storageInfo" kindref="compound">veil::client::storageInfo</ref></type>
+        <definition>typedef struct veil::client::storageInfo  veil::client::storageInfo</definition>
+        <argsstring></argsstring>
+        <name>storageInfo</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" line="55" column="1"/>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+    </detaileddescription>
+    <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="49" column="1"/>
+  </compounddef>
+</doxygen>

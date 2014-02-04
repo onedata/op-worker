@@ -1,0 +1,450 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="veilfs_8h" kind="file">
+    <compoundname>veilfs.h</compoundname>
+    <includes local="no">errno.h</includes>
+    <includes local="no">fcntl.h</includes>
+    <includes local="no">cstdlib</includes>
+    <includes local="no">unistd.h</includes>
+    <includes local="no">sys/types.h</includes>
+    <includes local="no">sys/xattr.h</includes>
+    <includes local="no">boost/shared_ptr.hpp</includes>
+    <includes refid="fslogicProxy_8h" local="yes">fslogicProxy.h</includes>
+    <includes refid="config_8h" local="yes">config.h</includes>
+    <includes refid="storageMapper_8h" local="yes">storageMapper.h</includes>
+    <includes refid="jobScheduler_8h" local="yes">jobScheduler.h</includes>
+    <includes refid="metaCache_8h" local="yes">metaCache.h</includes>
+    <includes local="yes">helpers/storageHelperFactory.h</includes>
+    <includes local="yes">simpleConnectionPool.h</includes>
+    <includes refid="ISchedulable_8h" local="yes">ISchedulable.h</includes>
+    <includes refid="pushListener_8h" local="yes">pushListener.h</includes>
+    <includes local="no">list</includes>
+    <includedby refid="config_8cc" local="yes">src/config.cc</includedby>
+    <includedby refid="fslogicProxy_8cc" local="yes">src/fslogicProxy.cc</includedby>
+    <includedby refid="gsiHandler_8cc" local="yes">src/gsiHandler.cc</includedby>
+    <includedby refid="ISchedulable_8cc" local="yes">src/ISchedulable.cc</includedby>
+    <includedby refid="messageBuilder_8cc" local="yes">src/messageBuilder.cc</includedby>
+    <includedby refid="metaCache_8cc" local="yes">src/metaCache.cc</includedby>
+    <includedby refid="pushListener_8cc" local="yes">src/pushListener.cc</includedby>
+    <includedby refid="storageMapper_8cc" local="yes">src/storageMapper.cc</includedby>
+    <includedby refid="veilException_8cc" local="yes">src/veilException.cc</includedby>
+    <includedby refid="veilfs_8cc" local="yes">src/veilfs.cc</includedby>
+    <includedby refid="veilFuse_8cc" local="yes">src/veilFuse.cc</includedby>
+    <incdepgraph>
+      <node id="1208">
+        <label>sys/stat.h</label>
+      </node>
+      <node id="1187">
+        <label>communication_protocol.pb.h</label>
+      </node>
+      <node id="1183">
+        <label>list</label>
+      </node>
+      <node id="1212">
+        <label>boost/thread/mutex.hpp</label>
+      </node>
+      <node id="1205">
+        <label>queue</label>
+      </node>
+      <node id="1180">
+        <label>boost/shared_ptr.hpp</label>
+      </node>
+      <node id="1201">
+        <label>glog/logging.h</label>
+      </node>
+      <node id="1200">
+        <label>veilConfig.h</label>
+      </node>
+      <node id="1202">
+        <label>storageMapper.h</label>
+        <link refid="storageMapper_8h"/>
+        <childnode refid="1198" relation="include">
+        </childnode>
+        <childnode refid="1190" relation="include">
+        </childnode>
+        <childnode refid="1192" relation="include">
+        </childnode>
+        <childnode refid="1186" relation="include">
+        </childnode>
+        <childnode refid="1181" relation="include">
+        </childnode>
+        <childnode refid="1193" relation="include">
+        </childnode>
+        <childnode refid="1191" relation="include">
+        </childnode>
+        <childnode refid="1203" relation="include">
+        </childnode>
+      </node>
+      <node id="1189">
+        <label>messageBuilder.h</label>
+        <link refid="messageBuilder_8h"/>
+        <childnode refid="1190" relation="include">
+        </childnode>
+        <childnode refid="1186" relation="include">
+        </childnode>
+        <childnode refid="1187" relation="include">
+        </childnode>
+      </node>
+      <node id="1174">
+        <label>errno.h</label>
+      </node>
+      <node id="1175">
+        <label>fcntl.h</label>
+      </node>
+      <node id="1190">
+        <label>string</label>
+      </node>
+      <node id="1209">
+        <label>helpers/storageHelperFactory.h</label>
+      </node>
+      <node id="1198">
+        <label>map</label>
+      </node>
+      <node id="1214">
+        <label>boost/thread.hpp</label>
+      </node>
+      <node id="1173">
+        <label>include/veilfs.h</label>
+        <link refid="veilfs.h"/>
+        <childnode refid="1174" relation="include">
+        </childnode>
+        <childnode refid="1175" relation="include">
+        </childnode>
+        <childnode refid="1176" relation="include">
+        </childnode>
+        <childnode refid="1177" relation="include">
+        </childnode>
+        <childnode refid="1178" relation="include">
+        </childnode>
+        <childnode refid="1179" relation="include">
+        </childnode>
+        <childnode refid="1180" relation="include">
+        </childnode>
+        <childnode refid="1181" relation="include">
+        </childnode>
+        <childnode refid="1196" relation="include">
+        </childnode>
+        <childnode refid="1202" relation="include">
+        </childnode>
+        <childnode refid="1204" relation="include">
+        </childnode>
+        <childnode refid="1207" relation="include">
+        </childnode>
+        <childnode refid="1209" relation="include">
+        </childnode>
+        <childnode refid="1195" relation="include">
+        </childnode>
+        <childnode refid="1193" relation="include">
+        </childnode>
+        <childnode refid="1210" relation="include">
+        </childnode>
+        <childnode refid="1183" relation="include">
+        </childnode>
+      </node>
+      <node id="1203">
+        <label>veilException.h</label>
+        <link refid="veilException_8h"/>
+        <childnode refid="1190" relation="include">
+        </childnode>
+      </node>
+      <node id="1195">
+        <label>simpleConnectionPool.h</label>
+      </node>
+      <node id="1197">
+        <label>yaml-cpp/yaml.h</label>
+      </node>
+      <node id="1192">
+        <label>pthread.h</label>
+      </node>
+      <node id="1178">
+        <label>sys/types.h</label>
+      </node>
+      <node id="1213">
+        <label>boost/thread/condition.hpp</label>
+      </node>
+      <node id="1215">
+        <label>boost/unordered_map.hpp</label>
+      </node>
+      <node id="1177">
+        <label>unistd.h</label>
+      </node>
+      <node id="1182">
+        <label>vector</label>
+      </node>
+      <node id="1204">
+        <label>jobScheduler.h</label>
+        <link refid="jobScheduler_8h"/>
+        <childnode refid="1205" relation="include">
+        </childnode>
+        <childnode refid="1190" relation="include">
+        </childnode>
+        <childnode refid="1206" relation="include">
+        </childnode>
+        <childnode refid="1192" relation="include">
+        </childnode>
+        <childnode refid="1180" relation="include">
+        </childnode>
+        <childnode refid="1193" relation="include">
+        </childnode>
+      </node>
+      <node id="1196">
+        <label>config.h</label>
+        <link refid="config_8h"/>
+        <childnode refid="1190" relation="include">
+        </childnode>
+        <childnode refid="1197" relation="include">
+        </childnode>
+        <childnode refid="1177" relation="include">
+        </childnode>
+        <childnode refid="1198" relation="include">
+        </childnode>
+        <childnode refid="1199" relation="include">
+        </childnode>
+        <childnode refid="1200" relation="include">
+        </childnode>
+        <childnode refid="1193" relation="include">
+        </childnode>
+        <childnode refid="1201" relation="include">
+        </childnode>
+        <childnode refid="1191" relation="include">
+        </childnode>
+      </node>
+      <node id="1199">
+        <label>sstream</label>
+      </node>
+      <node id="1207">
+        <label>metaCache.h</label>
+        <link refid="metaCache_8h"/>
+        <childnode refid="1198" relation="include">
+        </childnode>
+        <childnode refid="1190" relation="include">
+        </childnode>
+        <childnode refid="1208" relation="include">
+        </childnode>
+        <childnode refid="1206" relation="include">
+        </childnode>
+        <childnode refid="1193" relation="include">
+        </childnode>
+        <childnode refid="1191" relation="include">
+        </childnode>
+      </node>
+      <node id="1194">
+        <label>boost/enable_shared_from_this.hpp</label>
+      </node>
+      <node id="1184">
+        <label>google/protobuf/repeated_field.h</label>
+      </node>
+      <node id="1206">
+        <label>time.h</label>
+      </node>
+      <node id="1210">
+        <label>pushListener.h</label>
+        <link refid="pushListener_8h"/>
+        <childnode refid="1211" relation="include">
+        </childnode>
+        <childnode refid="1180" relation="include">
+        </childnode>
+        <childnode refid="1194" relation="include">
+        </childnode>
+        <childnode refid="1212" relation="include">
+        </childnode>
+        <childnode refid="1213" relation="include">
+        </childnode>
+        <childnode refid="1214" relation="include">
+        </childnode>
+        <childnode refid="1215" relation="include">
+        </childnode>
+        <childnode refid="1183" relation="include">
+        </childnode>
+        <childnode refid="1186" relation="include">
+        </childnode>
+        <childnode refid="1187" relation="include">
+        </childnode>
+      </node>
+      <node id="1176">
+        <label>cstdlib</label>
+      </node>
+      <node id="1211">
+        <label>iostream</label>
+      </node>
+      <node id="1179">
+        <label>sys/xattr.h</label>
+      </node>
+      <node id="1181">
+        <label>fslogicProxy.h</label>
+        <link refid="fslogicProxy_8h"/>
+        <childnode refid="1182" relation="include">
+        </childnode>
+        <childnode refid="1183" relation="include">
+        </childnode>
+        <childnode refid="1184" relation="include">
+        </childnode>
+        <childnode refid="1180" relation="include">
+        </childnode>
+        <childnode refid="1185" relation="include">
+        </childnode>
+        <childnode refid="1186" relation="include">
+        </childnode>
+        <childnode refid="1187" relation="include">
+        </childnode>
+        <childnode refid="1188" relation="include">
+        </childnode>
+        <childnode refid="1189" relation="include">
+        </childnode>
+        <childnode refid="1191" relation="include">
+        </childnode>
+        <childnode refid="1193" relation="include">
+        </childnode>
+        <childnode refid="1195" relation="include">
+        </childnode>
+      </node>
+      <node id="1188">
+        <label>communicationHandler.h</label>
+      </node>
+      <node id="1191">
+        <label>lock.h</label>
+        <link refid="lock_8h"/>
+        <childnode refid="1192" relation="include">
+        </childnode>
+      </node>
+      <node id="1186">
+        <label>fuse_messages.pb.h</label>
+      </node>
+      <node id="1193">
+        <label>ISchedulable.h</label>
+        <link refid="ISchedulable_8h"/>
+        <childnode refid="1190" relation="include">
+        </childnode>
+        <childnode refid="1180" relation="include">
+        </childnode>
+        <childnode refid="1194" relation="include">
+        </childnode>
+      </node>
+      <node id="1185">
+        <label>memory</label>
+      </node>
+    </incdepgraph>
+    <invincdepgraph>
+      <node id="1223">
+        <label>src/pushListener.cc</label>
+        <link refid="pushListener_8cc"/>
+      </node>
+      <node id="1220">
+        <label>src/ISchedulable.cc</label>
+        <link refid="ISchedulable_8cc"/>
+      </node>
+      <node id="1222">
+        <label>src/metaCache.cc</label>
+        <link refid="metaCache_8cc"/>
+      </node>
+      <node id="1225">
+        <label>src/veilException.cc</label>
+        <link refid="veilException_8cc"/>
+      </node>
+      <node id="1219">
+        <label>src/gsiHandler.cc</label>
+        <link refid="gsiHandler_8cc"/>
+      </node>
+      <node id="1216">
+        <label>include/veilfs.h</label>
+        <link refid="veilfs.h"/>
+        <childnode refid="1217" relation="include">
+        </childnode>
+        <childnode refid="1218" relation="include">
+        </childnode>
+        <childnode refid="1219" relation="include">
+        </childnode>
+        <childnode refid="1220" relation="include">
+        </childnode>
+        <childnode refid="1221" relation="include">
+        </childnode>
+        <childnode refid="1222" relation="include">
+        </childnode>
+        <childnode refid="1223" relation="include">
+        </childnode>
+        <childnode refid="1224" relation="include">
+        </childnode>
+        <childnode refid="1225" relation="include">
+        </childnode>
+        <childnode refid="1226" relation="include">
+        </childnode>
+        <childnode refid="1227" relation="include">
+        </childnode>
+      </node>
+      <node id="1218">
+        <label>src/fslogicProxy.cc</label>
+        <link refid="fslogicProxy_8cc"/>
+      </node>
+      <node id="1226">
+        <label>src/veilfs.cc</label>
+        <link refid="veilfs_8cc"/>
+      </node>
+      <node id="1227">
+        <label>src/veilFuse.cc</label>
+        <link refid="veilFuse_8cc"/>
+      </node>
+      <node id="1217">
+        <label>src/config.cc</label>
+        <link refid="config_8cc"/>
+      </node>
+      <node id="1221">
+        <label>src/messageBuilder.cc</label>
+        <link refid="messageBuilder_8cc"/>
+      </node>
+      <node id="1224">
+        <label>src/storageMapper.cc</label>
+        <link refid="storageMapper_8cc"/>
+      </node>
+    </invincdepgraph>
+    <innerclass refid="classveil_1_1client_1_1VeilFS" prot="public">veil::client::VeilFS</innerclass>
+    <innernamespace refid="namespaceveil">veil</innernamespace>
+    <innernamespace refid="namespaceveil_1_1client">veil::client</innernamespace>
+      <sectiondef kind="define">
+      <memberdef kind="define" id="veilfs_8h_1ab17bbdfd0ce8fd015a9d29bec2e1a9bd" prot="public" static="no">
+        <name>GLOBAL_CONFIG_FILE</name>
+        <initializer>&quot;veilFuse.conf&quot;</initializer>
+        <briefdescription>
+<para>The name of default global config file. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="30" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilfs.h" bodystart="30" bodyend="-1"/>
+        <referencedby refid="veilFuse_8cc_1adedb285b02c41bde2158ded9cc9fd7ac" compoundref="veilFuse_8cc" startline="210" endline="379">main</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="veilfs_8h_1a7d172529a5da1ff3f8791e858b569b47" prot="public" static="no">
+        <name>CONFIG_ARGV_OPT_NAME</name>
+        <initializer>&quot;--config=&quot;</initializer>
+        <briefdescription>
+<para>The command line pattern used to find user config path ARGV. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="33" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilfs.h" bodystart="33" bodyend="-1"/>
+        <referencedby refid="veilFuse_8cc_1a015c211810b72a309fcab4ff4bdb6d0d" compoundref="veilFuse_8cc" startline="145" endline="152">vfs_opt_proc</referencedby>
+        <referencedby refid="veilFuse_8cc_1adedb285b02c41bde2158ded9cc9fd7ac" compoundref="veilFuse_8cc" startline="210" endline="379">main</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="veilfs_8h_1afd436a0652d61346811247403f0ea4b4" prot="public" static="no">
+        <name>DIR_BATCH_SIZE</name>
+        <initializer>10</initializer>
+        <briefdescription>
+<para>How many dirent should be fetch from cluster at once. </para>        </briefdescription>
+        <detaileddescription>
+<para>Note that each opendir syscall will query at least DIR_BATCH_SIZE dirents </para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="39" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilfs.h" bodystart="39" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1ab6e3fbfba6aff36dbc9a9fd5e3456cf6" compoundref="veilfs_8cc" startline="596" endline="627">veil::client::VeilFS::readdir</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1ae721d86abb9618d17b723dcdb7c77b55" compoundref="veilfs_8cc" startline="718" endline="763">veil::client::VeilFS::runTask</referencedby>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+<para><simplesect kind="author"><para>Rafal Slota </para></simplesect>
+<simplesect kind="copyright"><para>(C) 2013 ACK CYFRONET AGH </para><simplesectsep/><para>This software is released under the MIT Licence. </para></simplesect>
+</para>    </detaileddescription>
+    <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h"/>
+  </compounddef>
+</doxygen>

@@ -1,0 +1,51 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="indexpage" kind="page">
+    <compoundname>index</compoundname>
+    <title>VeilClient</title>
+    <detaileddescription>
+<para>VeilClient is a part of a meta file system, called VeilFS, which unifies access to different storage systems and provides a POSIX compatible interface.</para><para><heading level="2">Goals </heading>
+</para><para>The main goal of VeilClient is to provision a file system to different, heterogeneous storage systems, which will work in the user space, e.g. Lustre, GPFS, DPM, iRODS. VeilClient intends to reduce the complexity of accessing various storage systems by providing a standard, POSIX compatible interface. Furthermore, storage systems connected to VeilClient can be geographically distributed, and operated by different organizations. The end user may operate on data from the storage systems as if they were stored at a local file system.</para><para><heading level="2">Getting Started </heading>
+</para><para>VeilClient is built with CMake. More informations about compiling the project in &quot;Compilation&quot; section. Sources are put in &apos;src&apos;. The &apos;src&apos; includes subdirectories: &apos;fuse&apos; and &apos;helpers&apos;. The &apos;fuse&apos; directory contains sources of the user space file system while the &apos;helpers&apos; directory includes storage helpers used by FUSE.</para><para><heading level="2">Prerequisites </heading>
+</para><para>In order to compile the project, you need to have fallowing additional libraries, its headers and all its prerequisites in include/ld path: Also you need cmake 2.8+.</para><para><itemizedlist>
+<listitem><para>fuse</para></listitem><listitem><para>protobuf</para></listitem><listitem><para>ssl</para></listitem><listitem><para>crypto</para></listitem><listitem><para>boost ( &gt;= 1.49)</para></listitem><listitem><para>ltdl</para></listitem><listitem><para>globus_common</para></listitem><listitem><para>globus_oldgaa</para></listitem><listitem><para>globus_openssl</para></listitem><listitem><para>globus_gsi_callback</para></listitem><listitem><para>globus_gsi_cert_utils</para></listitem><listitem><para>globus_gsi_sysconfig</para></listitem><listitem><para>globus_proxy_ssl</para></listitem><listitem><para>globus_gsi_proxy_core</para></listitem><listitem><para>globus_gsi_credential</para></listitem><listitem><para>globus_openssl_error</para></listitem></itemizedlist>
+</para><para>Use this command to install the required dependency packages:</para><para><itemizedlist>
+<listitem><para>Debian/Ubuntu Dependencies (.deb packages): <verbatim>  apt-get install libprotobuf-dev libfuse-dev fuse libboost-dev libglobus-*-dev libtool
+</verbatim></para></listitem><listitem><para>RHEL/CentOS/Fedora Dependencies (.rpm packages): <verbatim>  yum install fuse fuse-libs fuse-devel protobuf-devel openssl-devel cmake28 boost-devel boost-static rpm-build subversion zlib-devel libglobus-*-devel libtool
+</verbatim></para></listitem></itemizedlist>
+</para><para><heading level="2">Compilation </heading>
+</para><para><heading level="3">&quot;The fast way&quot;</heading>
+</para><para>If you just need an RPM package, you can just type: <verbatim>make -s rpm
+</verbatim></para><para>If there was no errors, you will get list of generated packages (rpm or dep).</para><para><heading level="3">&quot;The standard way&quot;</heading>
+</para><para>VeilClient uses cmake as a build tool thus building process is same as for most cmake-based projects. However you can use Makefile-proxy with following interface: (Note that -s flag is optional - it&apos;s a silent mode which makes output much prettier, because it leaves only cmakes&apos; stdout/stderr)</para><para><heading level="4">Configure</heading>
+</para><para><verbatim>make -s configure
+</verbatim></para><para><heading level="4">Build</heading>
+</para><para><verbatim>make -s build
+</verbatim></para><para><heading level="4">Install</heading>
+</para><para><verbatim>make -s install
+</verbatim></para><para><heading level="4">RPM/DEB packages</heading>
+</para><para><verbatim>make -s rpm
+</verbatim></para><para><heading level="4">Testing</heading>
+</para><para>There are two testing targets: <verbatim>make -s test
+</verbatim></para><para>which has summarized output (per test case) and: <verbatim>make -s cunit
+</verbatim></para><para>which shows detailed test results.</para><para><heading level="2">Using VeilClient </heading>
+</para><para><heading level="3">Configuration</heading>
+</para><para>First of all you should tune up some config settings. Configuration file can be found in {INSTALL_PREFIX}/etc/veilFuse.conf. In most linux distros deafault {INSTALL_PREFIX} is /usr/local. Configuration options are described in configuration file itself. In most cases you want to stick with default values although there are 2 options that requires special care:</para><para><itemizedlist>
+<listitem><para>cluster_hostname - hostname of VeilCluster used by client</para></listitem><listitem><para>peer_certificate_file - path to proxy certificate (.pem file) used in SSL session. Paths are relative to HOME env unless absolute path is specified.</para></listitem></itemizedlist>
+</para><para>You don&apos;t edit this global config file if you don&apos;t want to. You can also create new file, type options that shall be overriden and pass &apos;<ndash/>config=/path/to/your/config/file&apos; option while starting VeilClient. Also its possible to override options by setting env variable with the same name (only uppercase): <verbatim>CLUSTER_HOSTNAME=&quot;some.hostname.com&quot; veilFuse /mount/point 
+</verbatim></para><para><heading level="3">Mounting the filesystem</heading>
+</para><para><heading level="4">Prerequisites</heading>
+</para><para>In order to use VeilClient, you need to have fallowing additional libraries in ld path:</para><para><itemizedlist>
+<listitem><para>libfuse</para></listitem><listitem><para>libprotobuf</para></listitem><listitem><para>libssl</para></listitem></itemizedlist>
+</para><para>Use this command to install the required dependency packages:</para><para><itemizedlist>
+<listitem><para>Debian/Ubuntu Dependencies (.deb packages): <verbatim>  apt-get install libprotobuf libfuse fuse
+</verbatim></para></listitem><listitem><para>RHEL/CentOS/Fedora Dependencies (.rpm packages): <verbatim>  yum install fuse fuse-libs protobuf openssl
+</verbatim></para></listitem></itemizedlist>
+</para><para><heading level="4">Starting</heading>
+</para><para>In order to mount VeilFS just enter: <verbatim>veilFuse /mount/point 
+</verbatim></para><para>Additionally you can add &apos;-d&apos; option which enables debug mode. In debug mode application will remain running, displaing all logs and debug informations, also in this mode ctrl+c unmount filesystem. If not in debug mode, application will go background as daemon.</para><para><heading level="3">Unmounting the filesystem</heading>
+</para><para>If veilFuse was started with &apos;-d&apos; option, just hit ctrl+c. If not: <verbatim>fusermount -u /mount/point
+</verbatim></para><para><heading level="2">Support </heading>
+</para><para>For more information visit project Confluence or write to &apos;<ulink url="mailto:wrzeszcz@agh.edu.pl">wrzeszcz@agh.edu.pl</ulink>&apos;. </para>    </detaileddescription>
+  </compounddef>
+</doxygen>

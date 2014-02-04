@@ -1,0 +1,710 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="classveil_1_1client_1_1Config" kind="class" prot="public">
+    <compoundname>veil::client::Config</compoundname>
+    <basecompoundref refid="classveil_1_1client_1_1ISchedulable" prot="public" virt="non-virtual">veil::client::ISchedulable</basecompoundref>
+    <includes refid="config_8h" local="no">include/config.h</includes>
+      <sectiondef kind="friend">
+      <memberdef kind="friend" id="classveil_1_1client_1_1Config_1a4d2b1d6f4d9add977e837114f058c70b" prot="private" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>friend class</type>
+        <definition>friend class IVeilFactory</definition>
+        <argsstring></argsstring>
+        <name>IVeilFactory</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="76" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="76" bodyend="-1"/>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="protected-attrib">
+      <memberdef kind="variable" id="classveil_1_1client_1_1Config_1ae0d94f509f4c86764c76ce9ff6e0842e" prot="protected" static="no" mutable="no">
+        <type>bool</type>
+        <definition>bool veil::client::Config::defaultsLoaded</definition>
+        <argsstring></argsstring>
+        <name>defaultsLoaded</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="114" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="114" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1ad9893478846d1d3aedc572517591a02a" compoundref="config_8h" startline="156" endline="181">get</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1Config_1a57497b20c7478b3252752bad32e564c6" prot="protected" static="no" mutable="no">
+        <type><ref refid="classveil_1_1client_1_1ReadWriteLock" kindref="compound">ReadWriteLock</ref></type>
+        <definition>ReadWriteLock veil::client::Config::m_access</definition>
+        <argsstring></argsstring>
+        <name>m_access</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="115" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="115" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1Config_1a64346a65924a9d4ba30d5b65c00f5bdc" prot="protected" static="no" mutable="no">
+        <type>std::string</type>
+        <definition>std::string veil::client::Config::m_globalConfigPath</definition>
+        <argsstring></argsstring>
+        <name>m_globalConfigPath</name>
+        <briefdescription>
+<para>Path to global config file. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ref refid="classveil_1_1client_1_1Config_1a0b8eee4bbb66c8f06c01c073fbb7461e" kindref="member">Config::setGlobalConfigFile</ref> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="122" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="122" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1Config_1aa6f0ce12081862922560d22dc5321327" prot="protected" static="no" mutable="no">
+        <type>std::string</type>
+        <definition>std::string veil::client::Config::m_userConfigPath</definition>
+        <argsstring></argsstring>
+        <name>m_userConfigPath</name>
+        <briefdescription>
+<para>Path to user config file. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ref refid="classveil_1_1client_1_1Config_1a98b2a5ea981c2d5b74b4b2484db77ff0" kindref="member">Config::setUserConfigFile</ref> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="123" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="123" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1Config_1a7676296e90096535d064f203bec99b2d" prot="protected" static="no" mutable="no">
+        <type>YAML::Node</type>
+        <definition>YAML::Node veil::client::Config::m_globalNode</definition>
+        <argsstring></argsstring>
+        <name>m_globalNode</name>
+        <briefdescription>
+<para>Global config object. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="125" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="125" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1ad9893478846d1d3aedc572517591a02a" compoundref="config_8h" startline="156" endline="181">get</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1Config_1a348d59de7af32de444d74308177c5aa9" prot="protected" static="no" mutable="no">
+        <type>YAML::Node</type>
+        <definition>YAML::Node veil::client::Config::m_userNode</definition>
+        <argsstring></argsstring>
+        <name>m_userNode</name>
+        <briefdescription>
+<para>User config object. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="126" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="126" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1ad9893478846d1d3aedc572517591a02a" compoundref="config_8h" startline="156" endline="181">get</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1Config_1a56a219849a99e895f1ade7e52675d154" prot="protected" static="no" mutable="no">
+        <type>YAML::Node</type>
+        <definition>YAML::Node veil::client::Config::m_envNode</definition>
+        <argsstring></argsstring>
+        <name>m_envNode</name>
+        <briefdescription>
+<para>Temp config object used to manipulate env settings. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="127" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="127" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1a44551df4f724eec68eeebf8665e7d1af" compoundref="config_8h" startline="184" endline="207">getValue</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1Config_1a3c92e410a8bb834a591f00c4db558849" prot="protected" static="no" mutable="no">
+        <type>YAML::Node</type>
+        <definition>YAML::Node veil::client::Config::m_defaultsNode</definition>
+        <argsstring></argsstring>
+        <name>m_defaultsNode</name>
+        <briefdescription>
+<para>Default configs. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="128" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="128" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1Config_1ad9893478846d1d3aedc572517591a02a" compoundref="config_8h" startline="156" endline="181">get</referencedby>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="protected-static-attrib">
+      <memberdef kind="variable" id="classveil_1_1client_1_1Config_1aabdd61ccc76f5e0fa458b1ff710d818d" prot="protected" static="yes" mutable="no">
+        <type>std::string</type>
+        <definition>string veil::client::Config::m_requiredOpts</definition>
+        <argsstring>[]</argsstring>
+        <name>m_requiredOpts</name>
+        <initializer>= {
+
+}</initializer>
+        <briefdescription>
+<para>Array containing required options names. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="117" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="117" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1Config_1a40339e55a3e433181928526e36974508" prot="protected" static="yes" mutable="no">
+        <type>std::string</type>
+        <definition>string veil::client::Config::m_envCWD</definition>
+        <argsstring></argsstring>
+        <name>m_envCWD</name>
+        <briefdescription>
+<para>Saved CWD env variable. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="118" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="118" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1Config_1a524c693f867e22b3ec94a7fc86c2b1b3" prot="protected" static="yes" mutable="no">
+        <type>std::string</type>
+        <definition>string veil::client::Config::m_envHOME</definition>
+        <argsstring></argsstring>
+        <name>m_envHOME</name>
+        <briefdescription>
+<para>Saved HOME env variable. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="119" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="119" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1Config_1ac0b5e974a2afe3830b1a75243325bf06" prot="protected" static="yes" mutable="no">
+        <type>std::map&lt; std::string, std::string &gt;</type>
+        <definition>map&lt; string, string &gt; veil::client::Config::m_envAll</definition>
+        <argsstring></argsstring>
+        <name>m_envAll</name>
+        <briefdescription>
+<para>All saved env variables. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="120" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="120" bodyend="-1"/>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="public-func">
+      <memberdef kind="function" id="classveil_1_1client_1_1Config_1affff6b7014d3e25cbe7872f2d6fd2366" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>std::string</type>
+        <definition>string veil::client::Config::getFuseID</definition>
+        <argsstring>()</argsstring>
+        <name>getFuseID</name>
+        <briefdescription>
+<para>Returns current FuseID. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="79" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/config.cc" bodystart="48" bodyend="51"/>
+        <references refid="config_8h_1ae15e4581c248f54055a7816867f3b78b" compoundref="config_8h" startline="31">FUSE_ID_OPT</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1Config_1ac0031c4741440dbd942e988e74c0aa68" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>void</type>
+        <definition>void veil::client::Config::negotiateFuseID</definition>
+        <argsstring>(time_t delay=0)</argsstring>
+        <name>negotiateFuseID</name>
+        <param>
+          <type>time_t</type>
+          <declname>delay</declname>
+          <defval>0</defval>
+        </param>
+        <briefdescription>
+<para>Starts FuseID negotiation process. </para>        </briefdescription>
+        <detaileddescription>
+<para><parameterlist kind="param"><parameteritem>
+<parameternamelist>
+<parametername>delay</parametername>
+</parameternamelist>
+<parameterdescription>
+<para>Since this is async actions, you can specify execution delay in seconds. </para></parameterdescription>
+</parameteritem>
+</parameterlist>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="80" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/config.cc" bodystart="171" bodyend="176"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1Config_1a26c06c825fa2f74e8a5a99291c6fb793" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>std::string</type>
+        <definition>string veil::client::Config::getString</definition>
+        <argsstring>(std::string opt)</argsstring>
+        <name>getString</name>
+        <param>
+          <type>std::string</type>
+          <declname>opt</declname>
+        </param>
+        <briefdescription>
+<para>Returns string value of requested option. </para>        </briefdescription>
+        <detaileddescription>
+<para>Before using this function you should check is option exists, but it&apos;s not required. <simplesect kind="see"><para><ref refid="classveil_1_1client_1_1Config_1a493a2d436cf3169add0b528dd7a04102" kindref="member">Config::isSet</ref> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="83" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/config.cc" bodystart="151" bodyend="154"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1Config_1a4f7f7fb07778d58ab8bd852bd6f3f25b" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>int</type>
+        <definition>int veil::client::Config::getInt</definition>
+        <argsstring>(std::string opt)</argsstring>
+        <name>getInt</name>
+        <param>
+          <type>std::string</type>
+          <declname>opt</declname>
+        </param>
+        <briefdescription>
+<para>Returns int value of requested option. </para>        </briefdescription>
+        <detaileddescription>
+<para>Before using this function you should check is option exists, but it&apos;s not required. <simplesect kind="see"><para><ref refid="classveil_1_1client_1_1Config_1a493a2d436cf3169add0b528dd7a04102" kindref="member">Config::isSet</ref> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="86" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/config.cc" bodystart="156" bodyend="159"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1Config_1acca5fbd9e7f07b939af6190cc820b10c" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>double</type>
+        <definition>double veil::client::Config::getDouble</definition>
+        <argsstring>(std::string opt)</argsstring>
+        <name>getDouble</name>
+        <param>
+          <type>std::string</type>
+          <declname>opt</declname>
+        </param>
+        <briefdescription>
+<para>Returns double value of requested option. </para>        </briefdescription>
+        <detaileddescription>
+<para>Before using this function you should check is option exists, but it&apos;s not required. <simplesect kind="see"><para><ref refid="classveil_1_1client_1_1Config_1a493a2d436cf3169add0b528dd7a04102" kindref="member">Config::isSet</ref> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="89" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/config.cc" bodystart="166" bodyend="169"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1Config_1a43717652639a71a1d84e294c8291717c" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>bool</type>
+        <definition>bool veil::client::Config::getBool</definition>
+        <argsstring>(std::string opt)</argsstring>
+        <name>getBool</name>
+        <param>
+          <type>std::string</type>
+          <declname>opt</declname>
+        </param>
+        <briefdescription>
+<para>Returns boolean value of requested option. </para>        </briefdescription>
+        <detaileddescription>
+<para>Before using this function you should check is option exists, but it&apos;s not required. <simplesect kind="see"><para><ref refid="classveil_1_1client_1_1Config_1a493a2d436cf3169add0b528dd7a04102" kindref="member">Config::isSet</ref> </para></simplesect>
+<simplesect kind="warning"><para>If given opition wasn&apos;t set, you&apos;ll get empty object of given type T ( T() ) </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="92" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/config.cc" bodystart="161" bodyend="164"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1Config_1a493a2d436cf3169add0b528dd7a04102" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>bool</type>
+        <definition>bool veil::client::Config::isSet</definition>
+        <argsstring>(std::string)</argsstring>
+        <name>isSet</name>
+        <param>
+          <type>std::string</type>
+          <defname>opt</defname>
+        </param>
+        <briefdescription>
+<para>Checks if given option is set. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ref refid="classveil_1_1client_1_1Config_1a44551df4f724eec68eeebf8665e7d1af" kindref="member">Config::getValue</ref> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="97" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/config.cc" bodystart="72" bodyend="91"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1Config_1a0b8eee4bbb66c8f06c01c073fbb7461e" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>void</type>
+        <definition>void veil::client::Config::setGlobalConfigFile</definition>
+        <argsstring>(std::string path)</argsstring>
+        <name>setGlobalConfigFile</name>
+        <param>
+          <type>std::string</type>
+          <declname>path</declname>
+        </param>
+        <briefdescription>
+<para>Sets path to global config file. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ref refid="classveil_1_1client_1_1Config_1a8fd7a68deb0c107f28524c823b419a01" kindref="member">Config::parseConfig</ref> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="103" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/config.cc" bodystart="53" bodyend="59"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1Config_1a98b2a5ea981c2d5b74b4b2484db77ff0" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>void</type>
+        <definition>void veil::client::Config::setUserConfigFile</definition>
+        <argsstring>(std::string path)</argsstring>
+        <name>setUserConfigFile</name>
+        <param>
+          <type>std::string</type>
+          <declname>path</declname>
+        </param>
+        <briefdescription>
+<para>Sets path to user config file. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ref refid="classveil_1_1client_1_1Config_1a8fd7a68deb0c107f28524c823b419a01" kindref="member">Config::parseConfig</ref> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="104" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/config.cc" bodystart="61" bodyend="64"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1Config_1a84150af0152ff29548e5fdaaf2eeb425" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>void</type>
+        <definition>void veil::client::Config::setEnv</definition>
+        <argsstring>()</argsstring>
+        <name>setEnv</name>
+        <briefdescription>
+<para>Saves current CWD and HOME env viariables. This is required as FUSE changes them after non-debug start. This is also done automatically in <ref refid="classveil_1_1client_1_1Config_1ad00b943821b04b8bdde1a9c09347960a" kindref="member">Config::Config</ref>. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="105" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/config.cc" bodystart="66" bodyend="70"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1Config_1a8fd7a68deb0c107f28524c823b419a01" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>bool</type>
+        <definition>bool veil::client::Config::parseConfig</definition>
+        <argsstring>()</argsstring>
+        <name>parseConfig</name>
+        <briefdescription>
+<para>Parses config from files set by <ref refid="classveil_1_1client_1_1Config_1a0b8eee4bbb66c8f06c01c073fbb7461e" kindref="member">Config::setGlobalConfigFile</ref> and <ref refid="classveil_1_1client_1_1Config_1a98b2a5ea981c2d5b74b4b2484db77ff0" kindref="member">Config::setUserConfigFile</ref>. </para>        </briefdescription>
+        <detaileddescription>
+<para>User config overides global settings. If user config declares all required options, global config file isn&apos;t required, otherwise it has exists. </para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="106" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/config.cc" bodystart="93" bodyend="133"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1Config_1ad00b943821b04b8bdde1a9c09347960a" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type></type>
+        <definition>veil::client::Config::Config</definition>
+        <argsstring>()</argsstring>
+        <name>Config</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="110" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/config.cc" bodystart="33" bodyend="37"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1Config_1a2406a8b1bc149fc886fbec13bcb81fd0" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type></type>
+        <definition>veil::client::Config::~Config</definition>
+        <argsstring>()</argsstring>
+        <name>~Config</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="111" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/config.cc" bodystart="39" bodyend="41"/>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="public-static-func">
+      <memberdef kind="function" id="classveil_1_1client_1_1Config_1a03e3722a480fceaa21fea2390c88ce5b" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>std::string</type>
+        <definition>string veil::client::Config::absPathRelToCWD</definition>
+        <argsstring>(std::string)</argsstring>
+        <name>absPathRelToCWD</name>
+        <param>
+          <type>std::string</type>
+          <defname>path</defname>
+        </param>
+        <briefdescription>
+<para>Converts relative path, to absolute using CWD env as base prefix. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="99" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/config.cc" bodystart="135" bodyend="141"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1Config_1adbd0f7c2add49ec755be9d72fd8a3b9a" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>std::string</type>
+        <definition>string veil::client::Config::absPathRelToHOME</definition>
+        <argsstring>(std::string)</argsstring>
+        <name>absPathRelToHOME</name>
+        <param>
+          <type>std::string</type>
+          <defname>path</defname>
+        </param>
+        <briefdescription>
+<para>Converts relative path, to absolute using HOME env as base prefix. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="100" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/config.cc" bodystart="143" bodyend="149"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1Config_1ad6dac3b8ed12c7b47f6b5e5906c38392" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>void</type>
+        <definition>void veil::client::Config::putEnv</definition>
+        <argsstring>(std::string, std::string)</argsstring>
+        <name>putEnv</name>
+        <param>
+          <type>std::string</type>
+          <defname>name</defname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <defname>value</defname>
+        </param>
+        <briefdescription>
+<para>Saves given env variable. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="101" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/config.cc" bodystart="43" bodyend="46"/>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="protected-func">
+      <memberdef kind="function" id="classveil_1_1client_1_1Config_1ad9893478846d1d3aedc572517591a02a" prot="protected" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <templateparamlist>
+          <param>
+            <type>typename T</type>
+          </param>
+        </templateparamlist>
+        <type>T</type>
+        <definition>T veil::client::Config::get</definition>
+        <argsstring>(std::string opt)</argsstring>
+        <name>get</name>
+        <param>
+          <type>std::string</type>
+          <declname>opt</declname>
+        </param>
+        <briefdescription>
+<para>Internal implementation of <ref refid="classveil_1_1client_1_1Config_1a44551df4f724eec68eeebf8665e7d1af" kindref="member">Config::getValue</ref>. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ref refid="classveil_1_1client_1_1Config_1a44551df4f724eec68eeebf8665e7d1af" kindref="member">Config::getValue</ref> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="131" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="156" bodyend="181"/>
+        <references refid="classveil_1_1client_1_1Config_1ae0d94f509f4c86764c76ce9ff6e0842e" compoundref="config_8h" startline="114">defaultsLoaded</references>
+        <references refid="classveil_1_1client_1_1Config_1ac4c4a87a57ff923f59d4ff7d57906e4b" compoundref="config_8h" startline="138" endline="151">setupDefaults</references>
+        <references refid="classveil_1_1client_1_1Config_1a348d59de7af32de444d74308177c5aa9" compoundref="config_8h" startline="126">m_userNode</references>
+        <references refid="classveil_1_1client_1_1Config_1a7676296e90096535d064f203bec99b2d" compoundref="config_8h" startline="125">m_globalNode</references>
+        <references refid="classveil_1_1client_1_1Config_1a3c92e410a8bb834a591f00c4db558849" compoundref="config_8h" startline="128">m_defaultsNode</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1Config_1a44551df4f724eec68eeebf8665e7d1af" prot="protected" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <templateparamlist>
+          <param>
+            <type>typename T</type>
+          </param>
+        </templateparamlist>
+        <type>T</type>
+        <definition>T veil::client::Config::getValue</definition>
+        <argsstring>(std::string opt)</argsstring>
+        <name>getValue</name>
+        <param>
+          <type>std::string</type>
+          <declname>opt</declname>
+        </param>
+        <briefdescription>
+<para>Returns type-specialized value of given config option. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="134" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="184" bodyend="207"/>
+        <references refid="config_8h_1a9ca8d6d7aacea9cb5ccbab22d30b3ddb" compoundref="config_8h" startline="30">ENABLE_ENV_OPTION_OVERRIDE</references>
+        <references refid="classveil_1_1client_1_1Config_1a56a219849a99e895f1ade7e52675d154" compoundref="config_8h" startline="127">m_envNode</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1Config_1a55bf15af04fbc0d0c58546d207c3c723" prot="protected" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>bool</type>
+        <definition>bool veil::client::Config::runTask</definition>
+        <argsstring>(TaskID taskId, std::string arg0, std::string arg1, std::string arg3)</argsstring>
+        <name>runTask</name>
+        <reimplements refid="classveil_1_1client_1_1ISchedulable_1ac81de45c4664e8aec85d42a6992c23e0">runTask</reimplements>
+        <param>
+          <type><ref refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68c" kindref="member">TaskID</ref></type>
+          <declname>taskId</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>arg0</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>arg1</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>arg3</declname>
+        </param>
+        <briefdescription>
+<para>Task runner derived from <ref refid="classveil_1_1client_1_1ISchedulable" kindref="compound">ISchedulable</ref>. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ref refid="classveil_1_1client_1_1ISchedulable_1ac81de45c4664e8aec85d42a6992c23e0" kindref="member">ISchedulable::runTask</ref> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="136" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/config.cc" bodystart="178" bodyend="258"/>
+        <references refid="namespaceveil_1_1client_1a86124671530b503e3884741ce6c8b128a74a5d68dec5afbdd21d9e18d2e6da9b6" compoundref="lock_8h" startline="38">veil::client::WRITE_LOCK</references>
+        <references refid="config_8h_1a9c2e6095a5e7b351a6f13ffc706c5972" compoundref="config_8h" startline="41">FUSE_OPT_PREFIX</references>
+        <references refid="classveil_1_1client_1_1MessageBuilder_1a2db2328f3d973a126f96a5fb88800799" compoundref="messageBuilder_8cc" startline="48" endline="53">veil::client::MessageBuilder::createClusterMessage</references>
+        <references refid="fslogicProxy_8h_1a052ae7304b2b339a5ae6d1ecabdbbf6d" compoundref="fslogicProxy_8h" startline="50">FSLOGIC</references>
+        <references refid="messageBuilder_8h_1ac70a564001777967993520bb573118fa" compoundref="messageBuilder_8h" startline="16">FUSE_MESSAGES</references>
+        <references refid="config_8h_1ae15e4581c248f54055a7816867f3b78b" compoundref="config_8h" startline="31">FUSE_ID_OPT</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1Config_1ac4c4a87a57ff923f59d4ff7d57906e4b" prot="protected" static="no" const="no" explicit="no" inline="yes" virt="non-virtual">
+        <type>void</type>
+        <definition>void veil::client::Config::setupDefaults</definition>
+        <argsstring>()</argsstring>
+        <name>setupDefaults</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+<para>Here declare default values of config </para>        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="138" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="138" bodyend="151"/>
+        <references refid="config_8h_1abdda66effc23e4a3614aecec03998e8b" compoundref="config_8h" startline="46">DECLARE_DEFAULT</references>
+        <references refid="config_8h_1a9ca8d6d7aacea9cb5ccbab22d30b3ddb" compoundref="config_8h" startline="30">ENABLE_ENV_OPTION_OVERRIDE</references>
+        <references refid="config_8h_1ab46273b9a858794af4f4100c2877c34b" compoundref="config_8h" startline="24">CLUSTER_PORT_OPT</references>
+        <references refid="config_8h_1ab6d6b4b4b6538391baf5fed476cfbba0" compoundref="config_8h" startline="32">CLUSTER_PING_INTERVAL_OPT</references>
+        <references refid="config_8h_1a1d9c111137bb167d8e05f9620ed0c466" compoundref="config_8h" startline="33">JOBSCHEDULER_THREADS_OPT</references>
+        <references refid="config_8h_1abc476da9d9b1ecef3504080ca2ff0210" compoundref="config_8h" startline="28">ATTR_CACHE_EXPIRATION_TIME_OPT</references>
+        <references refid="config_8h_1aa387b18d58ae83d62a86786721b3bda3" compoundref="config_8h" startline="44">ATTR_DEFAULT_EXPIRATION_TIME</references>
+        <references refid="config_8h_1a191d80319f47247f03355583e7bee92e" compoundref="config_8h" startline="27">ENABLE_ATTR_CACHE_OPT</references>
+        <references refid="config_8h_1a0a46ab50d49c1acf4b61cf4100ff0d41" compoundref="config_8h" startline="34">ALIVE_META_CONNECTIONS_COUNT_OPT</references>
+        <references refid="config_8h_1a6372eb9d42b6fa9aad1ab6e0dd4d5ca5" compoundref="config_8h" startline="35">ALIVE_DATA_CONNECTIONS_COUNT_OPT</references>
+        <references refid="config_8h_1aa70b62c26701fe4f36910912caba63bd" compoundref="config_8h" startline="37">ENABLE_PARALLEL_GETATTR_OPT</references>
+        <references refid="config_8h_1a58ba53631e23e6d05158a7ca250c21e9" compoundref="config_8h" startline="36">ENABLE_DIR_PREFETCH_OPT</references>
+        <references refid="config_8h_1a7f265a0ba16e7d53e4812576bb17f125" compoundref="config_8h" startline="25">LOG_DIR_OPT</references>
+        <referencedby refid="classveil_1_1client_1_1Config_1ad9893478846d1d3aedc572517591a02a" compoundref="config_8h" startline="156" endline="181">get</referencedby>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+<para>The <ref refid="classveil_1_1client_1_1Config" kindref="compound">Config</ref>. </para>    </briefdescription>
+    <detaileddescription>
+<para>Parses config files and provides safe access to configuration map. </para>    </detaileddescription>
+    <inheritancegraph>
+      <node id="104">
+        <label>veil::client::Config</label>
+        <link refid="classveil_1_1client_1_1Config"/>
+        <childnode refid="105" relation="public-inheritance">
+        </childnode>
+      </node>
+      <node id="106">
+        <label>boost::enable_shared_from_this&lt; ISchedulable &gt;</label>
+      </node>
+      <node id="105">
+        <label>veil::client::ISchedulable</label>
+        <link refid="classveil_1_1client_1_1ISchedulable"/>
+        <childnode refid="106" relation="public-inheritance">
+        </childnode>
+      </node>
+    </inheritancegraph>
+    <collaborationgraph>
+      <node id="107">
+        <label>veil::client::Config</label>
+        <link refid="classveil_1_1client_1_1Config"/>
+        <childnode refid="108" relation="public-inheritance">
+        </childnode>
+        <childnode refid="110" relation="usage">
+          <edgelabel>m_access</edgelabel>
+        </childnode>
+        <childnode refid="111" relation="usage">
+          <edgelabel>m_envAll</edgelabel>
+        </childnode>
+        <childnode refid="112" relation="usage">
+          <edgelabel>m_globalConfigPath</edgelabel>
+          <edgelabel>m_userConfigPath</edgelabel>
+          <edgelabel>m_envHOME</edgelabel>
+          <edgelabel>m_requiredOpts</edgelabel>
+          <edgelabel>m_envCWD</edgelabel>
+        </childnode>
+      </node>
+      <node id="109">
+        <label>boost::enable_shared_from_this&lt; ISchedulable &gt;</label>
+      </node>
+      <node id="113">
+        <label>std::basic_string&lt; char &gt;</label>
+      </node>
+      <node id="111">
+        <label>std::map&lt; std::string, std::string &gt;</label>
+        <childnode refid="112" relation="usage">
+          <edgelabel>keys</edgelabel>
+          <edgelabel>elements</edgelabel>
+        </childnode>
+      </node>
+      <node id="108">
+        <label>veil::client::ISchedulable</label>
+        <link refid="classveil_1_1client_1_1ISchedulable"/>
+        <childnode refid="109" relation="public-inheritance">
+        </childnode>
+      </node>
+      <node id="110">
+        <label>veil::client::ReadWriteLock</label>
+        <link refid="classveil_1_1client_1_1ReadWriteLock"/>
+      </node>
+      <node id="112">
+        <label>std::string</label>
+        <childnode refid="113" relation="public-inheritance">
+        </childnode>
+      </node>
+    </collaborationgraph>
+    <location file="/home/krzysztof/Desktop/veilclient/include/config.h" line="75" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/config.h" bodystart="74" bodyend="153"/>
+    <listofallmembers>
+      <member refid="classveil_1_1client_1_1Config_1a03e3722a480fceaa21fea2390c88ce5b" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>absPathRelToCWD</name></member>
+      <member refid="classveil_1_1client_1_1Config_1adbd0f7c2add49ec755be9d72fd8a3b9a" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>absPathRelToHOME</name></member>
+      <member refid="classveil_1_1client_1_1Config_1ad00b943821b04b8bdde1a9c09347960a" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>Config</name></member>
+      <member refid="classveil_1_1client_1_1Config_1ae0d94f509f4c86764c76ce9ff6e0842e" prot="protected" virt="non-virtual"><scope>veil::client::Config</scope><name>defaultsLoaded</name></member>
+      <member refid="classveil_1_1client_1_1Config_1ad9893478846d1d3aedc572517591a02a" prot="protected" virt="non-virtual"><scope>veil::client::Config</scope><name>get</name></member>
+      <member refid="classveil_1_1client_1_1Config_1a43717652639a71a1d84e294c8291717c" prot="public" virt="virtual"><scope>veil::client::Config</scope><name>getBool</name></member>
+      <member refid="classveil_1_1client_1_1Config_1acca5fbd9e7f07b939af6190cc820b10c" prot="public" virt="virtual"><scope>veil::client::Config</scope><name>getDouble</name></member>
+      <member refid="classveil_1_1client_1_1Config_1affff6b7014d3e25cbe7872f2d6fd2366" prot="public" virt="virtual"><scope>veil::client::Config</scope><name>getFuseID</name></member>
+      <member refid="classveil_1_1client_1_1Config_1a4f7f7fb07778d58ab8bd852bd6f3f25b" prot="public" virt="virtual"><scope>veil::client::Config</scope><name>getInt</name></member>
+      <member refid="classveil_1_1client_1_1Config_1a26c06c825fa2f74e8a5a99291c6fb793" prot="public" virt="virtual"><scope>veil::client::Config</scope><name>getString</name></member>
+      <member refid="classveil_1_1client_1_1Config_1a44551df4f724eec68eeebf8665e7d1af" prot="protected" virt="non-virtual"><scope>veil::client::Config</scope><name>getValue</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a1971032ea8f78ff6345864c4e40d86bd" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>ISchedulable</name></member>
+      <member refid="classveil_1_1client_1_1Config_1a493a2d436cf3169add0b528dd7a04102" prot="public" virt="virtual"><scope>veil::client::Config</scope><name>isSet</name></member>
+      <member refid="classveil_1_1client_1_1Config_1a4d2b1d6f4d9add977e837114f058c70b" prot="private" virt="non-virtual"><scope>veil::client::Config</scope><name>IVeilFactory</name></member>
+      <member refid="classveil_1_1client_1_1Config_1a57497b20c7478b3252752bad32e564c6" prot="protected" virt="non-virtual"><scope>veil::client::Config</scope><name>m_access</name></member>
+      <member refid="classveil_1_1client_1_1Config_1a3c92e410a8bb834a591f00c4db558849" prot="protected" virt="non-virtual"><scope>veil::client::Config</scope><name>m_defaultsNode</name></member>
+      <member refid="classveil_1_1client_1_1Config_1ac0b5e974a2afe3830b1a75243325bf06" prot="protected" virt="non-virtual"><scope>veil::client::Config</scope><name>m_envAll</name></member>
+      <member refid="classveil_1_1client_1_1Config_1a40339e55a3e433181928526e36974508" prot="protected" virt="non-virtual"><scope>veil::client::Config</scope><name>m_envCWD</name></member>
+      <member refid="classveil_1_1client_1_1Config_1a524c693f867e22b3ec94a7fc86c2b1b3" prot="protected" virt="non-virtual"><scope>veil::client::Config</scope><name>m_envHOME</name></member>
+      <member refid="classveil_1_1client_1_1Config_1a56a219849a99e895f1ade7e52675d154" prot="protected" virt="non-virtual"><scope>veil::client::Config</scope><name>m_envNode</name></member>
+      <member refid="classveil_1_1client_1_1Config_1a64346a65924a9d4ba30d5b65c00f5bdc" prot="protected" virt="non-virtual"><scope>veil::client::Config</scope><name>m_globalConfigPath</name></member>
+      <member refid="classveil_1_1client_1_1Config_1a7676296e90096535d064f203bec99b2d" prot="protected" virt="non-virtual"><scope>veil::client::Config</scope><name>m_globalNode</name></member>
+      <member refid="classveil_1_1client_1_1Config_1aabdd61ccc76f5e0fa458b1ff710d818d" prot="protected" virt="non-virtual"><scope>veil::client::Config</scope><name>m_requiredOpts</name></member>
+      <member refid="classveil_1_1client_1_1Config_1aa6f0ce12081862922560d22dc5321327" prot="protected" virt="non-virtual"><scope>veil::client::Config</scope><name>m_userConfigPath</name></member>
+      <member refid="classveil_1_1client_1_1Config_1a348d59de7af32de444d74308177c5aa9" prot="protected" virt="non-virtual"><scope>veil::client::Config</scope><name>m_userNode</name></member>
+      <member refid="classveil_1_1client_1_1Config_1ac0031c4741440dbd942e988e74c0aa68" prot="public" virt="virtual"><scope>veil::client::Config</scope><name>negotiateFuseID</name></member>
+      <member refid="classveil_1_1client_1_1Config_1a8fd7a68deb0c107f28524c823b419a01" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>parseConfig</name></member>
+      <member refid="classveil_1_1client_1_1Config_1ad6dac3b8ed12c7b47f6b5e5906c38392" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>putEnv</name></member>
+      <member refid="classveil_1_1client_1_1Config_1a55bf15af04fbc0d0c58546d207c3c723" prot="protected" virt="virtual"><scope>veil::client::Config</scope><name>runTask</name></member>
+      <member refid="classveil_1_1client_1_1Config_1a84150af0152ff29548e5fdaaf2eeb425" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>setEnv</name></member>
+      <member refid="classveil_1_1client_1_1Config_1a0b8eee4bbb66c8f06c01c073fbb7461e" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>setGlobalConfigFile</name></member>
+      <member refid="classveil_1_1client_1_1Config_1ac4c4a87a57ff923f59d4ff7d57906e4b" prot="protected" virt="non-virtual"><scope>veil::client::Config</scope><name>setupDefaults</name></member>
+      <member refid="classveil_1_1client_1_1Config_1a98b2a5ea981c2d5b74b4b2484db77ff0" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>setUserConfigFile</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca5d7a79cedeac53743c9ca3e4f0a83246" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>TASK_ASYNC_GET_FILE_LOCATION</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68cac37d99797b742148014ece1b04070abd" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>TASK_ASYNC_GETATTR</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68caecf889af461568a10f6ecb5494d6287a" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>TASK_ASYNC_READDIR</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca6266ee7d508841ea9fc2418b40b47678" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>TASK_ASYNC_UPDATE_TIMES</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca8e8d2679b3902b3d4adb3afc265ae593" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>TASK_CLEAR_ATTR</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68cab491b54b9730aaf11720b9847b0184c3" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>TASK_CLEAR_FILE_ATTR</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca9ba4bbf3c2c44cfcf351216bf7e4c42f" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>TASK_CONNECTION_HANDSHAKE</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68cae14315bcb7937f992b1d6b503981ff18" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>TASK_LAST_ID</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca64e79be1054c363dd73740130b88aa53" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>TASK_PING_CLUSTER</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68cac62e13997a39b21ee57c98efdbc12826" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>TASK_REMOVE_EXPIRED_LOCATON_MAPPING</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca5ff3ad4ffdf1a48962fa88c183ddd253" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>TASK_RENEW_LOCATION_MAPPING</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68cac335b02a928670de1ce08a81b2c581db" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>TASK_SEND_FILE_NOT_USED</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68c" prot="public" virt="non-virtual"><scope>veil::client::Config</scope><name>TaskID</name></member>
+      <member refid="classveil_1_1client_1_1Config_1a2406a8b1bc149fc886fbec13bcb81fd0" prot="public" virt="virtual"><scope>veil::client::Config</scope><name>~Config</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a1769e067935e32f90656086090a78548" prot="public" virt="virtual"><scope>veil::client::Config</scope><name>~ISchedulable</name></member>
+    </listofallmembers>
+  </compounddef>
+</doxygen>
