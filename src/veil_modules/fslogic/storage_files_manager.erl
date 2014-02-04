@@ -34,7 +34,7 @@
 -export([read/4, write/4, write/3, create/2, truncate/3, delete/2, ls/0]).
 
 %% Helper functions
--export([check_perms/2]).
+-export([check_perms/2, check_perms/3]).
 
 %% ====================================================================
 %% Test API
@@ -663,7 +663,7 @@ check_perms(File, Storage_helper_info, CheckType) ->
                             true -> {ok, true};
                             false ->
                               UserRecord = UserDoc#veil_document.record,
-                              IdFromSystem = os:cmd("id -u " ++ UserRecord#user.login),
+                              IdFromSystem = fslogic_utils:get_user_id_from_system(UserRecord#user.login),
                               IdFromSystem2 = string:substr(IdFromSystem, 1, length(IdFromSystem) - 1),
                               {OwnWrStatus, Own} = get_cached_value(File, owner, Storage_helper_info),
                               case OwnWrStatus of

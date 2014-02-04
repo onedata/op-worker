@@ -14,7 +14,7 @@
 -include("veil_modules/dao/dao.hrl").
 
 %% API
--export([strip_path_leaf/1, basename/1, get_parent_and_name_from_path/2, create_children_list/1, create_children_list/2, update_meta_attr/3, time/0]).
+-export([strip_path_leaf/1, basename/1, get_parent_and_name_from_path/2, create_children_list/1, create_children_list/2, update_meta_attr/3, time/0, get_user_id_from_system/1]).
 
 %% ====================================================================
 %% API functions
@@ -200,3 +200,6 @@ init_file_meta(#file{} = File) ->
             lager:error("Cannot save file_meta record for file (name = ~p, parent = ~p) due to: ~p", [File#file.name, File#file.parent, Error]),
             {File, undefined}
     end.
+
+get_user_id_from_system(User) ->
+  os:cmd("id -u " ++ User).
