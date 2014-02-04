@@ -89,7 +89,7 @@ handle_message(ProtocolVersion, Record) when is_record(Record, createfile) ->
   SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
   case SH_And_ID of
     {Storage_helper_info, File} ->
-      {PermsStatus, Perms} = storage_files_manager:check_perms(FileId, Storage_helper_info, read),
+      {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info, read),
       case PermsStatus of
         ok ->
           case Perms of
@@ -105,7 +105,7 @@ handle_message(ProtocolVersion, Record) when is_record(Record, createfile) ->
               #atom{value = ?VEPERM}
           end;
         _ ->
-          lager:warning("createfile error: can not check permissions, shi: ~p, file: ~p", [Storage_helper_info, File]),
+          lager:warning("createfile error: can not check permissions, shi: ~p, file: ~p, error: ~p", [Storage_helper_info, File, {PermsStatus, Perms}]),
           #atom{value = ?VEREMOTEIO}
       end;
     _ -> #atom{value = ?VEREMOTEIO}
@@ -116,7 +116,7 @@ handle_message(ProtocolVersion, Record) when is_record(Record, deletefileatstora
   SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
   case SH_And_ID of
     {Storage_helper_info, File} ->
-      {PermsStatus, Perms} = storage_files_manager:check_perms(FileId, Storage_helper_info),
+      {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info),
       case PermsStatus of
         ok ->
           case Perms of
@@ -144,7 +144,7 @@ handle_message(ProtocolVersion, Record) when is_record(Record, truncatefile) ->
   SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
   case SH_And_ID of
     {Storage_helper_info, File} ->
-      {PermsStatus, Perms} = storage_files_manager:check_perms(FileId, Storage_helper_info),
+      {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info),
       case PermsStatus of
         ok ->
           case Perms of
@@ -173,7 +173,7 @@ handle_message(ProtocolVersion, Record) when is_record(Record, readfile) ->
   SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
   case SH_And_ID of
     {Storage_helper_info, File} ->
-      {PermsStatus, Perms} = storage_files_manager:check_perms(FileId, Storage_helper_info, read),
+      {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info, read),
       case PermsStatus of
         ok ->
           case Perms of
@@ -202,7 +202,7 @@ handle_message(ProtocolVersion, Record) when is_record(Record, writefile) ->
   SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
   case SH_And_ID of
     {Storage_helper_info, File} ->
-      {PermsStatus, Perms} = storage_files_manager:check_perms(FileId, Storage_helper_info),
+      {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info),
       case PermsStatus of
         ok ->
           case Perms of
@@ -230,7 +230,7 @@ handle_message(ProtocolVersion, Record) when is_record(Record, changepermsatstor
   SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
   case SH_And_ID of
     {Storage_helper_info, File} ->
-      {PermsStatus, Perms} = storage_files_manager:check_perms(FileId, Storage_helper_info, perms),
+      {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info, perms),
       case PermsStatus of
         ok ->
           case Perms of
