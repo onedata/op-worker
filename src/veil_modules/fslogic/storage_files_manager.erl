@@ -345,7 +345,7 @@ write(Storage_helper_info, File, Buf) ->
   ErrorDetail :: term().
 %% ====================================================================
 create(Storage_helper_info, File) ->
-  {ModeStatus, NewFileStorageMode} = application:get_env(?APP_Name, new_file_storage_mode),
+  {ModeStatus, NewFileStorageMode} = get_modeFileName(File, Storage_helper_info),
   case ModeStatus of
     ok ->
       {ErrorCode, Stat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
@@ -620,43 +620,34 @@ check_perms(File, Storage_helper_info) ->
   check_perms(File, Storage_helper_info, write).
 
 check_perms(File, Storage_helper_info, CheckType) ->
-  SHI_Name = Storage_helper_info#storage_helper_info.name,
-  SHI_Args = Storage_helper_info#storage_helper_info.init_args,
-  FileBegLen = case SHI_Name of
-    "DirectIO" ->
-      [Root | _] = SHI_Args,
-      length(string:tokens(Root, "/"));
-    _ -> 0
-  end,
-  FileTokens = string:tokens(File, "/"),
-  FileTokensLen = length(FileTokens),
-  case FileTokensLen - FileBegLen > 2 of
-    true ->
-      case lists:nth(FileBegLen + 1, FileTokens) of
-        "users" ->
+  {AccessTypeStatus, AccessAns} = check_access_type(File, Storage_helper_info),
+  case AccessTypeStatus of
+    ok ->
+      {AccesType, AccessName} = AccessAns,
+      case AccesType of
+        user ->
           {UsrStatus, UserRoot} = fslogic:get_user_root(),
           case UsrStatus of
             ok ->
               [CleanUserRoot | _] = string:tokens(UserRoot, "/"),
-              {ok, CleanUserRoot =:= lists:nth(FileBegLen + 2, FileTokens)};
+              {ok, CleanUserRoot =:= AccessName};
             _ -> {error, can_not_get_user_root}
           end;
-        "groups" ->
+        group ->
           {UserDocStatus, UserDoc} = fslogic:get_user_doc(),
           {UsrStatus2, UserGroups} = fslogic:get_user_groups(UserDocStatus, UserDoc),
           case UsrStatus2 of
             ok ->
-              Grp = lists:nth(FileBegLen + 2, FileTokens),
-              case lists:member(Grp, UserGroups) of
+              case lists:member(AccessName, UserGroups) of
                 true ->
                   case CheckType of
                     read ->
                       {ok, true};
                     _ ->
                       {Status, CheckOk} = case CheckType of
-                        write -> get_cached_value(File, grp_wr, Storage_helper_info);
-                        _ -> {ok, false} %perms
-                      end,
+                                            write -> get_cached_value(File, grp_wr, Storage_helper_info);
+                                            _ -> {ok, false} %perms
+                                          end,
                       case Status of
                         ok ->
                           case CheckOk of
@@ -681,12 +672,10 @@ check_perms(File, Storage_helper_info, CheckType) ->
                   {ok, false}
               end;
             _ -> {error, can_not_get_user_groups}
-          end;
-        _ ->
-          {error, wrong_path_format}
+          end
       end;
-    false ->
-      {error, too_short_path}
+    _ ->
+      {AccessTypeStatus, AccessAns}
   end.
 
 %% ====================================================================
@@ -708,4 +697,43 @@ derive_gid_from_parent(SHInfo, File) ->
     {ErrNo, _} ->
       ?error("Cannot fetch parent dir ~p attrs. Error: ~p", [fslogic_utils:strip_path_leaf(File), ErrNo]),
       {error, ErrNo}
+  end.
+
+get_modeFileName(File, Storage_helper_info) ->
+  {AccessTypeStatus, AccesType} = check_access_type(File, Storage_helper_info),
+  case AccessTypeStatus of
+    ok ->
+      case AccesType of
+        {user, _} ->
+          application:get_env(?APP_Name, new_file_storage_mode);
+        {group, _} ->
+          application:get_env(?APP_Name, new_group_file_storage_mode)
+      end;
+    _ ->
+      {AccessTypeStatus, AccesType}
+  end.
+
+check_access_type(File, Storage_helper_info) ->
+  SHI_Name = Storage_helper_info#storage_helper_info.name,
+  SHI_Args = Storage_helper_info#storage_helper_info.init_args,
+  FileBegLen = case SHI_Name of
+                 "DirectIO" ->
+                   [Root | _] = SHI_Args,
+                   length(string:tokens(Root, "/"));
+                 _ -> 0
+               end,
+  FileTokens = string:tokens(File, "/"),
+  FileTokensLen = length(FileTokens),
+  case FileTokensLen - FileBegLen > 2 of
+    true ->
+      case lists:nth(FileBegLen + 1, FileTokens) of
+        "users" ->
+          {ok, {user, lists:nth(FileBegLen + 2, FileTokens)}};
+        "groups" ->
+          {ok, {group, lists:nth(FileBegLen + 2, FileTokens)}};
+        _ ->
+          {error, wrong_path_format}
+      end;
+    false ->
+      {error, too_short_path}
   end.
