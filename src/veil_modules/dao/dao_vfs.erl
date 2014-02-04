@@ -224,16 +224,8 @@ get_file_meta(FMetaUUID) ->
 save_new_file(FilePath, #file{} = File) ->
   try
     AnalyzedPath = file_path_analyze(FilePath),
-
-    {FindStatus, FindTmpAns} = try
-      get_file(AnalyzedPath)
-    catch
-      _:Error ->
-        {error, Error}
-    end,
-
-    case {FindStatus, FindTmpAns} of
-      {error, file_not_found} ->
+    case exist_file(AnalyzedPath) of
+      {ok, false} ->
         SaveAns = save_file(File),
         case SaveAns of
           {ok, UUID} ->
@@ -249,10 +241,9 @@ save_new_file(FilePath, #file{} = File) ->
             end;
           _ -> SaveAns
         end;
-      {ok, _} ->
+      {ok, true} ->
         {error, file_exists};
-      _ ->
-        {FindStatus, FindTmpAns}
+      Other -> Other
     end
   catch
     _:Error3 ->
@@ -624,7 +615,7 @@ get_storage(Key) ->
 %% @doc Checks whether storage exists in DB. Argument should be uuid() of storage document or ID of storage. <br/>
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
--spec get_storage_from_db({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) ->
+-spec exist_storage_in_db({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) ->
     {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_storage_in_db({uuid, DocUUID}) when is_list(DocUUID) ->

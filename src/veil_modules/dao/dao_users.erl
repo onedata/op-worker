@@ -182,7 +182,7 @@ get_user_from_db({Key, Value}) ->
         {ok, #view_result{rows = [#view_row{doc = FDoc}]}} ->
             {ok, FDoc};
         {ok, #view_result{rows = []}} ->
-            lager:error("User by ~p: ~p not found", [Key, Value]),
+            lager:warning("User by ~p: ~p not found", [Key, Value]),
             throw(user_not_found);
         {ok, #view_result{rows = [#view_row{doc = FDoc} | Tail] = AllRows}} ->
             case length(lists:usort(AllRows)) of 
