@@ -26,9 +26,6 @@
 
 -define(LOCATION_VALIDITY, 60*15).
 
-%% Updates modification time for parent of X dir 
--define(PARENT_CTIME(X, T),  gen_server:call(?Dispatcher_Name, {fslogic, 1, #veil_request{subject = get(user_id), request = {internal_call, #updatetimes{file_logic_name = fslogic_utils:strip_path_leaf(X), mtime = T}}}})).
-
 -define(FILE_COUNTING_BASE, 256).
 
 %% Which fuse operations (messages) are allowed to operate on base group directory ("/groups")
@@ -349,7 +346,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getn
                     Validity = ?LOCATION_VALIDITY,
                     case Status of
                       {ok, FileUUID} ->
-                        ?PARENT_CTIME(Record#getnewfilelocation.file_logic_name, CTime),
+                        update_parent_ctime(Record#getnewfilelocation.file_logic_name, CTime),
                         {Status2, _TmpAns2} = save_file_descriptor(ProtocolVersion, FileUUID, FuseID, Validity),
                         case Status2 of
                           ok ->
@@ -453,7 +450,7 @@ handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, cre
                     {Status, TmpAns} = dao_lib:apply(dao_vfs, save_new_file, [Dir, File], ProtocolVersion),
                     case {Status, TmpAns} of
                       {ok, _} ->
-                        ?PARENT_CTIME(Record#createdir.dir_logic_name, CTime),
+                        update_parent_ctime(Record#createdir.dir_logic_name, CTime),
                         #atom{value = ?VOK};
                       {error, file_exists} ->
                         #atom{value = ?VEEXIST};
@@ -529,7 +526,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, dele
                   Status = dao_lib:apply(dao_vfs, remove_file, [File], ProtocolVersion),
                   case Status of
                     ok ->
-                      ?PARENT_CTIME(Record#deletefile.file_logic_name, fslogic_utils:time()),
+                      update_parent_ctime(Record#deletefile.file_logic_name, fslogic_utils:time()),
                       #atom{value = ?VOK};
                     _BadStatus ->
                       lager:error([{mod, ?MODULE}], "Error: can not remove file: ~s", [File]),
@@ -655,8 +652,8 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, rena
                         case dao_lib:apply(dao_vfs, save_file, [Renamed], ProtocolVersion) of
                         {ok, _} ->
                             CTime = fslogic_utils:time(),
-                            ?PARENT_CTIME(Record#renamefile.from_file_logic_name, CTime),
-                            ?PARENT_CTIME(Record#renamefile.to_file_logic_name, CTime),
+                            update_parent_ctime(Record#renamefile.from_file_logic_name, CTime),
+                            update_parent_ctime(Record#renamefile.to_file_logic_name, CTime),
                             #atom{value = ?VOK};
                         Other ->
                             lager:warning("Cannot save file document. Reason: ~p", [Other]),
@@ -708,7 +705,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, crea
 
                       case dao_lib:apply(dao_vfs, save_new_file, [From, LinkDoc], ProtocolVersion) of
                           {ok, _} ->
-                              ?PARENT_CTIME(Record#createlink.from_file_logic_name, CTime),
+                              update_parent_ctime(Record#createlink.from_file_logic_name, CTime),
                               #atom{value = ?VOK};
                           {error, file_exists} ->
                               lager:error("Cannot create link - file already exists: ~p", [From]),
@@ -1369,3 +1366,14 @@ getfileattr(ProtocolVersion, DocFindStatus, FileDoc) ->
     _ ->
       #fileattr{answer = ?VEREMOTEIO, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = "", links = -1}
   end.
+
+%% ====================================================================
+%% Internal functions
+%% ====================================================================
+
+%% Updates modification time for parent of Dir
+update_parent_ctime(Dir, CTime) ->
+    case fslogic_utils:strip_path_leaf(Dir) of
+        [?PATH_SEPARATOR] -> ok;
+        ParentPath -> gen_server:call(?Dispatcher_Name, {fslogic, 1, #veil_request{subject = get(user_id), request = {internal_call, #updatetimes{file_logic_name = ParentPath, mtime = CTime}}}})
+    end.
