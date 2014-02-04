@@ -584,7 +584,7 @@ get_cached_value(File, ValueName, Storage_helper_info) ->
             0 ->
               ReturnValue = case ValueName of
                 grp_wr ->
-                  case Stat#st_stat.st_mode band ?WR_GRP_PERM
+                  case Stat#st_stat.st_mode band ?WR_GRP_PERM of
                     0 -> false;
                     _ -> true
                   end;
@@ -642,7 +642,7 @@ check_perms(File, Storage_helper_info, CheckType) ->
             _ -> {error, can_not_get_user_root}
           end;
         "groups" ->
-          {UserDocStatus, UserDoc} = get_user_doc(),
+          {UserDocStatus, UserDoc} = fslogic:get_user_doc(),
           {UsrStatus2, UserGroups} = fslogic:get_user_groups(UserDocStatus, UserDoc),
           case UsrStatus2 of
             ok ->

@@ -226,7 +226,7 @@ handle_message(ProtocolVersion, Record) when is_record(Record, writefile) ->
 
 handle_message(ProtocolVersion, Record) when is_record(Record, changepermsatstorage) ->
   FileId = Record#changepermsatstorage.file_id,
-  Perms = Record#truncatefile.perms,
+  Perms = Record#changepermsatstorage.perms,
   SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
   case SH_And_ID of
     {Storage_helper_info, File} ->

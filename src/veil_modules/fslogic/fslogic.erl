@@ -41,7 +41,7 @@
 %% API
 %% ====================================================================
 -export([init/1, handle/2, cleanup/0]).
--export([get_full_file_name/1, get_file/3, get_user_id/0, get_user_root/0, get_user_root/1, get_user_groups/2]).
+-export([get_full_file_name/1, get_file/3, get_user_id/0, get_user_root/0, get_user_root/1, get_user_groups/2, get_user_doc/0]).
 
 %% ====================================================================
 %% Test API
@@ -992,7 +992,7 @@ get_user_root() ->
 %% ====================================================================
 %% @doc Gets user's group
 %% @end
--spec get_user_groups() -> Result when
+-spec get_user_groups(UserDocStatus :: atom(), UserDoc :: term()) -> Result when
   Result :: {ok, Groups} | {error, ErrorDesc},
   Groups :: list(),
   ErrorDesc :: atom.
