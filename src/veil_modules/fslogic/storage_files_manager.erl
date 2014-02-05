@@ -616,9 +616,29 @@ get_cached_value(File, ValueName, Storage_helper_info) ->
     _ -> {ok, CachedValue}
   end.
 
+%% check_perms/2
+%% ====================================================================
+%% @doc Checks if the user has permission to modify file (e,g. change owner).
+%% @end
+-spec check_perms(File :: string(), Storage_helper_info :: record()) -> Result when
+  Result :: {ok, Value} | {ErrorGeneral, ErrorDetail},
+  Value :: boolean(),
+  ErrorGeneral :: atom(),
+  ErrorDetail :: atom().
+%% ====================================================================
 check_perms(File, Storage_helper_info) ->
   check_perms(File, Storage_helper_info, write).
 
+%% check_perms/3
+%% ====================================================================
+%% @doc Checks if the user has permission to modify file (e,g. change owner).
+%% @end
+-spec check_perms(File :: string(), Storage_helper_info :: record(), CheckType :: boolean()) -> Result when
+  Result :: {ok, Value} | {ErrorGeneral, ErrorDetail},
+  Value :: boolean(),
+  ErrorGeneral :: atom(),
+  ErrorDetail :: atom().
+%% ====================================================================
 check_perms(File, Storage_helper_info, CheckType) ->
   {AccessTypeStatus, AccessAns} = check_access_type(File),
   case AccessTypeStatus of
@@ -699,20 +719,44 @@ derive_gid_from_parent(SHInfo, File) ->
       {error, ErrNo}
   end.
 
+%% get_mode/1
+%% ====================================================================
+%% @doc Gets mode for a newly created file.
+%% @end
+-spec get_mode(FileName :: string()) -> Result when
+  Result :: {ok, integer()} | {error, undefined}.
+%% ====================================================================
 get_mode(File) ->
   {AccessTypeStatus, AccesType} = check_access_type(File),
   case AccessTypeStatus of
     ok ->
-      case AccesType of
+      TmpAns = case AccesType of
         {user, _} ->
           application:get_env(?APP_Name, new_file_storage_mode);
         {group, _} ->
           application:get_env(?APP_Name, new_group_file_storage_mode)
+      end,
+      case TmpAns of
+        undefined -> {error, undefined};
+        _ -> TmpAns
       end;
     _ ->
-      application:get_env(?APP_Name, new_file_storage_mode) %% operation performed by cluster
+      case application:get_env(?APP_Name, new_file_storage_mode) of %% operation performed by cluster
+        undefined -> {error, undefined};
+        TmpAns2 -> TmpAns2
+      end
   end.
 
+%% check_access_type/1
+%% ====================================================================
+%% @doc Checks if the file belongs to user or group
+%% @end
+-spec check_access_type(FileName :: string()) -> Result when
+  Result :: {ok, {Type, OwnerName}} | {error, ErrorDesc},
+  Type :: atom(),
+  OwnerName :: string(),
+  ErrorDesc :: atom().
+%% ====================================================================
 check_access_type(File) ->
   FileTokens = string:tokens(File, "/"),
   FileTokensLen = length(FileTokens),

@@ -398,7 +398,7 @@ delete(File) ->
 
 %% change_file_perm/2
 %% ====================================================================
-%% @doc Changes file's permissions in db
+%% @doc Changes file's permissions in db and at storage
 %% @end
 -spec change_file_perm(FileName :: string(), NewPerms :: integer()) -> Result when
   Result :: ok | {ErrorGeneral, ErrorDetail},
@@ -912,10 +912,21 @@ generateRandomData(Size) -> [random:uniform(255) | generateRandomData(Size-1)].
 get_ets_name() ->
   list_to_atom(?NAMES_TABLE ++ pid_to_list(self())).
 
+%% get_mode/1
+%% ====================================================================
+%% @doc Gets mode for a newly created file.
+%% @end
+-spec get_mode(FileName :: string()) -> Result when
+  Result :: {ok, integer()} | {error, undefined}.
+%% ====================================================================
 get_mode(FileName) ->
-  case string:tokens(FileName, "/") of
+  TmpAns = case string:tokens(FileName, "/") of
     [?GROUPS_BASE_DIR_NAME | _] ->
       application:get_env(?APP_Name, new_group_file_logic_mode);
     _ ->
       application:get_env(?APP_Name, new_file_logic_mode)
+  end,
+  case TmpAns of
+    undefined -> {error, undefined};
+    _ -> TmpAns
   end.

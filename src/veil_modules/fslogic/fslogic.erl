@@ -1449,9 +1449,25 @@ getfileattr(ProtocolVersion, DocFindStatus, FileDoc) ->
       #fileattr{answer = ?VEREMOTEIO, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = "", links = -1}
   end.
 
+%% check_file_perms/4
+%% ====================================================================
+%% @doc Checks if the user has permission to modify file (e,g. change owner).
+%% @end
+-spec check_file_perms(FileName :: string(), UserDocStatus :: atom(), UserDoc :: term(), FileDoc :: term()) -> Result when
+  Result :: {ok, boolean()} | {error, ErrorDetail},
+  ErrorDetail :: term().
+%% ====================================================================
 check_file_perms(FileName, UserDocStatus, UserDoc, FileDoc) ->
   check_file_perms(FileName, UserDocStatus, UserDoc, FileDoc, perms).
 
+%% check_file_perms/5
+%% ====================================================================
+%% @doc Checks if the user has permission to modify file (e,g. change owner).
+%% @end
+-spec check_file_perms(FileName :: string(), UserDocStatus :: atom(), UserDoc :: term(), FileDoc :: term(), CheckType :: atom()) -> Result when
+  Result :: {ok, boolean()} | {error, ErrorDetail},
+  ErrorDetail :: term().
+%% ====================================================================
 check_file_perms(FileName, UserDocStatus, UserDoc, FileDoc, CheckType) ->
   case string:tokens(FileName, "/") of
     [?GROUPS_BASE_DIR_NAME | _] ->

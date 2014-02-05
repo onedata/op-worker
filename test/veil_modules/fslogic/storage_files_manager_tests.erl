@@ -59,6 +59,7 @@ file_name_cache_test() ->
   Ans5 = storage_files_manager:get_cached_value(TestFile, owner, shi),
   ?assertEqual({ok, "0"}, Ans5).
 
+%% Tests if permissions in users dir are checked correctly
 check_perms_user_file_test(SHInfo) ->
   meck:new(fslogic),
 
@@ -74,6 +75,7 @@ check_perms_user_file_test(SHInfo) ->
   ?assert(meck:validate(fslogic)),
   meck:unload(fslogic).
 
+%% Tests if read permissions in groups dir are checked correctly
 check_perms_read_group_file_test(SHInfo) ->
   meck:new(fslogic),
 
@@ -90,6 +92,7 @@ check_perms_read_group_file_test(SHInfo) ->
   ?assert(meck:validate(fslogic)),
   meck:unload(fslogic).
 
+%% Tests if permissions to modify file's attributes in groups dir are checked correctly
 check_perms_group_perms_file_test(SHInfo) ->
   meck:new(fslogic),
   meck:new(veilhelpers),
@@ -125,11 +128,13 @@ check_perms_group_perms_file_test(SHInfo) ->
   ?assert(meck:validate(veilhelpers)),
   meck:unload(veilhelpers).
 
+%% Tests if wrong format of path is found correctly
 wrong_path_format_test() ->
   SHInfo = #storage_helper_info{name = ?SH, init_args = [?TEST_ROOT]},
   ?assertEqual({error, wrong_path_format}, storage_files_manager:check_perms(?TEST_ROOT ++ "something/testuser/somefile", SHInfo)),
   ?assertEqual({error, too_short_path}, storage_files_manager:check_perms("something", SHInfo)).
 
+%% Tests if write permissions in groups dir are checked correctly
 check_perms_group_write_file_test(SHInfo) ->
   meck:new(fslogic),
   meck:new(veilhelpers),
