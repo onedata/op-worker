@@ -112,6 +112,7 @@ websocket_handle({binary, Data}, Req, #hander_state{peer_dn = DnString} = State)
         {wrong_internal_message_type, MsgId2}       -> {reply, {binary, encode_answer(wrong_internal_message_type, MsgId2)}, Req, State};
         {message_not_supported, MsgId2}             -> {reply, {binary, encode_answer(message_not_supported, MsgId2)}, Req, State};
         {handshake_error, _HError, MsgId2}          -> {reply, {binary, encode_answer(handshake_error, MsgId2)}, Req, State};
+        {no_user_found_error, _HError, MsgId2}      -> {reply, {binary, encode_answer(no_user_found_error, MsgId2)}, Req, State};
         {AtomError, MsgId2} when is_atom(AtomError) -> {reply, {binary, encode_answer(AtomError, MsgId2)}, Req, State};
         _:_ -> {reply, {binary, encode_answer(ws_handler_error)}, Req, State}
     end;
@@ -157,7 +158,7 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
                 UID1;
             {error, Error} ->
                 ?error("VeilClient handshake failed. User ~p data is not available due to DAO error: ~p", [DnString, Error]),
-                throw({handshake_error, Error, MsgId})
+                throw({no_user_found_error, Error, MsgId})
         end,
 
     %% Fetch session data (using FUSE ID)
