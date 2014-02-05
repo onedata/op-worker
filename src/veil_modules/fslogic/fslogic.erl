@@ -563,7 +563,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, dele
                           Status = dao_lib:apply(dao_vfs, remove_file, [File], ProtocolVersion),
                           case Status of
                             ok ->
-                              ?PARENT_CTIME(Record#deletefile.file_logic_name, fslogic_utils:time()),
+                              update_parent_ctime(Record#deletefile.file_logic_name, fslogic_utils:time()),
                               #atom{value = ?VOK};
                             _BadStatus ->
                               lager:error([{mod, ?MODULE}], "Error: can not remove file: ~s", [File]),
@@ -701,8 +701,8 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, rena
                                 case dao_lib:apply(dao_vfs, save_file, [Renamed], ProtocolVersion) of
                                 {ok, _} ->
                                     CTime = fslogic_utils:time(),
-                                    ?PARENT_CTIME(Record#renamefile.from_file_logic_name, CTime),
-                                    ?PARENT_CTIME(Record#renamefile.to_file_logic_name, CTime),
+                                    update_parent_ctime(Record#renamefile.from_file_logic_name, CTime),
+                                    update_parent_ctime(Record#renamefile.to_file_logic_name, CTime),
                                     #atom{value = ?VOK};
                                 Other ->
                                     lager:warning("Cannot save file document. Reason: ~p", [Other]),
@@ -1493,9 +1493,6 @@ check_file_perms(FileName, UserDocStatus, UserDoc, FileDoc, CheckType) ->
     _ ->
       {ok, true}
   end.
-%% ====================================================================
-%% Internal functions
-%% ====================================================================
 
 %% Updates modification time for parent of Dir
 update_parent_ctime(Dir, CTime) ->
