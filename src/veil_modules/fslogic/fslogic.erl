@@ -260,7 +260,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, chan
       ok ->
         case get_file(ProtocolVersion, FileName, FuseID) of
             {ok, #veil_document{record = #file{} = File} = Doc} ->
-                {Return, NewFile} = {?VENOTSUP, File}, %% @TODO: not implemented
+                {Return, NewFile} = {?VENOTSUP, File}, %% @TODO: not implemented, add permission checking during the implementation
 
                 case Return of
                     ?VOK ->
