@@ -86,7 +86,7 @@ mkdir(Storage_helper_info, Dir) ->
                     ok ->
                       UserRecord = User#veil_document.record,
                       Login = UserRecord#user.login,
-                      ChownAns = storage_files_manager:chown(Storage_helper_info, Dir, Login, ""),
+                      ChownAns = chown(Storage_helper_info, Dir, Login, ""),
                       case ChownAns of
                         ok ->
                           ok;
@@ -371,7 +371,7 @@ create(Storage_helper_info, File) ->
                         ok ->
                           UserRecord = User#veil_document.record,
                           Login = UserRecord#user.login,
-                          ChownAns = storage_files_manager:chown(Storage_helper_info, File, Login, ""),
+                          ChownAns = chown(Storage_helper_info, File, Login, ""),
                           case ChownAns of
                             ok ->
                               ok;

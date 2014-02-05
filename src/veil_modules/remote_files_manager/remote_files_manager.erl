@@ -116,7 +116,7 @@ handle_message(ProtocolVersion, Record) when is_record(Record, deletefileatstora
   SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
   case SH_And_ID of
     {Storage_helper_info, File} ->
-      {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info),
+      {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info, perms),
       case PermsStatus of
         ok ->
           case Perms of
@@ -186,11 +186,11 @@ handle_message(ProtocolVersion, Record) when is_record(Record, readfile) ->
                   #filedata{answer_status = ?VEREMOTEIO}
               end;
             false ->
-              #atom{value = ?VEPERM}
+              #filedata{answer_status = ?VEPERM}
           end;
         _ ->
           lager:warning("readfile error: can not check permissions, shi: ~p, file: ~p", [Storage_helper_info, File]),
-          #atom{value = ?VEREMOTEIO}
+          #filedata{answer_status = ?VEREMOTEIO}
       end;
     _ -> #filedata{answer_status = ?VEREMOTEIO}
   end;
@@ -230,10 +230,10 @@ handle_message(ProtocolVersion, Record) when is_record(Record, changepermsatstor
   SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
   case SH_And_ID of
     {Storage_helper_info, File} ->
-      {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info, perms),
+      {PermsStatus, PermsCheck} = storage_files_manager:check_perms(File, Storage_helper_info, perms),
       case PermsStatus of
         ok ->
-          case Perms of
+          case PermsCheck of
             true ->
               TmpAns = storage_files_manager:chmod(Storage_helper_info, File, Perms),
               case TmpAns of

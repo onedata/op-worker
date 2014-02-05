@@ -9,6 +9,8 @@
 ## @doc: This script starts distributed tests.
 ## ===================================================================
 
+umask 0
+
 rm -rf /tmp/veilfs
 rm -rf /tmp/veilfs2
 mkdir /tmp/veilfs
