@@ -17,7 +17,7 @@
 
 %% Events definitions
 -record(write_event, {user_id, file_id, bytes, event = #event{}}).
--record(event_handler_item, {tree_id, map_fun, disp_map_fun, handler_fun}).
+-record(event_handler_item, {processing_method, tree_id, map_fun, disp_map_fun, handler_fun}).
 
 %% Definitions
 -define(EVENT_HANDLERS_CACHE, event_handlers_cache).
