@@ -508,6 +508,16 @@ helper_requests_test(Config) ->
   ?assertEqual(?VOK, ReadAnswer5),
   ?assertEqual("abc12", binary_to_list(ReadData5)),
 
+  %% The file was not created with ok asnwer because of chmod fail (user not present in the system)
+  %% However it is still present at storage
+  {DeleteStatus, DeleteAnswer} = delete_file_on_storage(Host, Cert2, Port, User2_Id),
+  ?assertEqual("ok", DeleteStatus),
+  ?assertEqual(list_to_atom(?VOK), DeleteAnswer),
+
+  {Status4, Answer4} = delete_file(Host, Cert2, Port, TestFile, FuseId2),
+  ?assertEqual("ok", Status4),
+  ?assertEqual(list_to_atom(?VOK), Answer4),
+
   {Status3, Answer3} = delete_file_on_storage(Host, Cert, Port, Id),
   ?assertEqual("ok", Status3),
   ?assertEqual(list_to_atom(?VOK), Answer3),
