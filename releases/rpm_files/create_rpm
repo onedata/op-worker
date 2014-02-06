@@ -13,10 +13,6 @@ set -e
 
 # Enter script directory
 RUNNER_SCRIPT_DIR=$(cd ${0%/*} && pwd)
-# TODO DO TESTÓW
-cd /root/veilcluster/bigcouchdb
-git checkout VFS-342
-# TODO END
 cd $RUNNER_SCRIPT_DIR
 
 # Check if veil_cluster_node release exists
@@ -41,9 +37,6 @@ cp -R $RUNNER_SCRIPT_DIR/../veil_cluster_node/* $RPM_BUILD_DIRECTORY/SOURCES/vei
 # Attach bigcouch release
 cp -R $BIGCOUCH_RELEASE_DIRECTORY/*  $RPM_BUILD_DIRECTORY/SOURCES/veil/files
 
-#echo `md5sum $RPM_BUILD_DIRECTORY/SOURCES/veil/files/database_node/bin/couchjs`
-
-#exit 0
 
 cd $RPM_BUILD_DIRECTORY/SOURCES
 tar zcf veil.tar.gz veil
