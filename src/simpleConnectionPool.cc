@@ -56,7 +56,7 @@ void SimpleConnectionPool::resetAllConnections(PoolType type)
 void SimpleConnectionPool::deleteAllConnections(PoolType type)
 {
     m_connectionPools[type].connections.clear();
-    cout << "deleting conn: "+m_connectionPools[type].size << endl;
+    cout << "deleting conn: " << m_connectionPools[type].size << endl;
 }
 
 boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(PoolType type)
