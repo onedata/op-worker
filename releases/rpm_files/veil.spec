@@ -1,3 +1,6 @@
+# Turn of binary file stripping
+%global __os_install_post %{nil}
+
 %define _topdir     /tmp/veil_rpmbuild
 %define _tmppath    %{_topdir}/tmp
 %define _prefix     /opt/veil
@@ -30,6 +33,9 @@ Prefix:    %{_prefix}
 BuildRoot: %{buildroot}
 BuildArch: %{arch}
 
+# Disable auto dependency recognition and list required deps explicitely
+AutoReqProv: no
+requires: /bin/bash /bin/sh /usr/bin/env ld-linux-x86-64.so.2()(64bit) ld-linux-x86-64.so.2(GLIBC_2.3)(64bit)
 
 %description
 Veil service - allows installation of veil cluster nodes.
