@@ -404,10 +404,14 @@ int CommunicationHandler::getInstancesCount()
 context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
 {
     // Setup TLS connection (i.e. certificates)
-    EVP_cleanup();
-    OpenSSL_add_all_algorithms();
-    OpenSSL_add_all_ciphers();
-    OpenSSL_add_all_digests();
+    {   boost::unique_lock<boost::mutex> lock(m_instanceMutex);
+        
+        EVP_cleanup();
+        OpenSSL_add_all_algorithms();
+        OpenSSL_add_all_ciphers();
+        OpenSSL_add_all_digests();
+    }
+    
     string certPath = m_certFun ? m_certFun() : m_certPath;
     try {
         context_ptr ctx(new boost::asio::ssl::context(boost::asio::ssl::context::sslv3));
