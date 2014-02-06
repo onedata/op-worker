@@ -638,7 +638,7 @@ generate_sub_proc_list([]) ->
 
 generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun} | Tail]) ->
   NewProcFun = fun({PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo}) ->
-    lager:info("Processing in sub proc: ~p ~n", [Name]),
+    lager:debug("Processing in sub proc: ~p ~n", [Name]),
     BeforeProcessingRequest = os:timestamp(),
     Request = preproccess_msg(Msg),
     Response = 	try
