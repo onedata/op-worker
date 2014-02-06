@@ -6,7 +6,7 @@
 %% @end
 %% ===================================================================
 %% @doc: This module implements rest_module_behaviour and handles all
-%% REST requests directed at /rest/shares/* (creating and deleting shares,
+%% REST requests directed at /rest/shares/(path) (creating and deleting shares,
 %% listing shares and retrieving share details).
 %% @end
 %% ===================================================================

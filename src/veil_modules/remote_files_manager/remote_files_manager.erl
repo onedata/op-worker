@@ -45,7 +45,7 @@ init(_Args) ->
   erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
   [].
 
-%% handle/1
+%% handle/2
 %% ====================================================================
 %% @doc {@link worker_plugin_behaviour} callback handle/1. <br/>
 %% Processes standard worker requests (e.g. ping) and requests from FUSE.
@@ -198,7 +198,7 @@ get_helper_and_id(Combined, ProtocolVersion) ->
       case dao_lib:apply(dao_vfs, get_storage, [{id, Storage}], ProtocolVersion) of
         {ok, #veil_document{record = StorageRecord}} ->
           SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, StorageRecord),
-          lager:info("SHI and info for remote operation: ~p", [{SHI, File}]),
+          lager:debug("SHI and info for remote operation: ~p", [{SHI, File}]),
           {SHI, File};
         Other ->
           lager:warning("Can not get storage from id: ~p", [Other]),

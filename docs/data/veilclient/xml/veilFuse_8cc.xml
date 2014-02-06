@@ -1,0 +1,1202 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="veilFuse_8cc" kind="file">
+    <compoundname>veilFuse.cc</compoundname>
+    <includes local="no">fuse.h</includes>
+    <includes local="no">fuse/fuse_opt.h</includes>
+    <includes local="no">fuse/fuse_lowlevel.h</includes>
+    <includes local="no">unistd.h</includes>
+    <includes local="no">fcntl.h</includes>
+    <includes local="no">sys/stat.h</includes>
+    <includes local="no">dirent.h</includes>
+    <includes local="no">boost/filesystem.hpp</includes>
+    <includes local="no">boost/shared_ptr.hpp</includes>
+    <includes local="no">boost/algorithm/string.hpp</includes>
+    <includes local="no">iostream</includes>
+    <includes refid="veilfs_8h" local="yes">veilfs.h</includes>
+    <includes refid="config_8h" local="yes">config.h</includes>
+    <includes refid="gsiHandler_8h" local="yes">gsiHandler.h</includes>
+    <includes local="yes">glog/logging.h</includes>
+    <includes refid="gsi__utils_8h" local="yes">gsi_utils.h</includes>
+    <incdepgraph>
+      <node id="1792">
+        <label>sys/stat.h</label>
+      </node>
+      <node id="1809">
+        <label>communication_protocol.pb.h</label>
+      </node>
+      <node id="1805">
+        <label>list</label>
+      </node>
+      <node id="1789">
+        <label>fuse/fuse_lowlevel.h</label>
+      </node>
+      <node id="1832">
+        <label>boost/thread/mutex.hpp</label>
+      </node>
+      <node id="1788">
+        <label>fuse/fuse_opt.h</label>
+      </node>
+      <node id="1796">
+        <label>boost/algorithm/string.hpp</label>
+      </node>
+      <node id="1827">
+        <label>queue</label>
+      </node>
+      <node id="1795">
+        <label>boost/shared_ptr.hpp</label>
+      </node>
+      <node id="1823">
+        <label>glog/logging.h</label>
+      </node>
+      <node id="1822">
+        <label>veilConfig.h</label>
+      </node>
+      <node id="1824">
+        <label>storageMapper.h</label>
+        <link refid="storageMapper_8h"/>
+        <childnode refid="1820" relation="include">
+        </childnode>
+        <childnode refid="1812" relation="include">
+        </childnode>
+        <childnode refid="1814" relation="include">
+        </childnode>
+        <childnode refid="1808" relation="include">
+        </childnode>
+        <childnode refid="1803" relation="include">
+        </childnode>
+        <childnode refid="1815" relation="include">
+        </childnode>
+        <childnode refid="1813" relation="include">
+        </childnode>
+        <childnode refid="1825" relation="include">
+        </childnode>
+      </node>
+      <node id="1811">
+        <label>messageBuilder.h</label>
+        <link refid="messageBuilder_8h"/>
+        <childnode refid="1812" relation="include">
+        </childnode>
+        <childnode refid="1808" relation="include">
+        </childnode>
+        <childnode refid="1809" relation="include">
+        </childnode>
+      </node>
+      <node id="1799">
+        <label>errno.h</label>
+      </node>
+      <node id="1791">
+        <label>fcntl.h</label>
+      </node>
+      <node id="1812">
+        <label>string</label>
+      </node>
+      <node id="1830">
+        <label>helpers/storageHelperFactory.h</label>
+      </node>
+      <node id="1836">
+        <label>gsiHandler.h</label>
+        <link refid="gsiHandler_8h"/>
+        <childnode refid="1797" relation="include">
+        </childnode>
+      </node>
+      <node id="1820">
+        <label>map</label>
+      </node>
+      <node id="1834">
+        <label>boost/thread.hpp</label>
+      </node>
+      <node id="1798">
+        <label>veilfs.h</label>
+        <link refid="veilfs_8h"/>
+        <childnode refid="1799" relation="include">
+        </childnode>
+        <childnode refid="1791" relation="include">
+        </childnode>
+        <childnode refid="1800" relation="include">
+        </childnode>
+        <childnode refid="1790" relation="include">
+        </childnode>
+        <childnode refid="1801" relation="include">
+        </childnode>
+        <childnode refid="1802" relation="include">
+        </childnode>
+        <childnode refid="1795" relation="include">
+        </childnode>
+        <childnode refid="1803" relation="include">
+        </childnode>
+        <childnode refid="1818" relation="include">
+        </childnode>
+        <childnode refid="1824" relation="include">
+        </childnode>
+        <childnode refid="1826" relation="include">
+        </childnode>
+        <childnode refid="1829" relation="include">
+        </childnode>
+        <childnode refid="1830" relation="include">
+        </childnode>
+        <childnode refid="1817" relation="include">
+        </childnode>
+        <childnode refid="1815" relation="include">
+        </childnode>
+        <childnode refid="1831" relation="include">
+        </childnode>
+        <childnode refid="1805" relation="include">
+        </childnode>
+      </node>
+      <node id="1787">
+        <label>fuse.h</label>
+      </node>
+      <node id="1825">
+        <label>veilException.h</label>
+        <link refid="veilException_8h"/>
+        <childnode refid="1812" relation="include">
+        </childnode>
+      </node>
+      <node id="1817">
+        <label>simpleConnectionPool.h</label>
+      </node>
+      <node id="1819">
+        <label>yaml-cpp/yaml.h</label>
+      </node>
+      <node id="1814">
+        <label>pthread.h</label>
+      </node>
+      <node id="1801">
+        <label>sys/types.h</label>
+      </node>
+      <node id="1833">
+        <label>boost/thread/condition.hpp</label>
+      </node>
+      <node id="1835">
+        <label>boost/unordered_map.hpp</label>
+      </node>
+      <node id="1790">
+        <label>unistd.h</label>
+      </node>
+      <node id="1804">
+        <label>vector</label>
+      </node>
+      <node id="1826">
+        <label>jobScheduler.h</label>
+        <link refid="jobScheduler_8h"/>
+        <childnode refid="1827" relation="include">
+        </childnode>
+        <childnode refid="1812" relation="include">
+        </childnode>
+        <childnode refid="1828" relation="include">
+        </childnode>
+        <childnode refid="1814" relation="include">
+        </childnode>
+        <childnode refid="1795" relation="include">
+        </childnode>
+        <childnode refid="1815" relation="include">
+        </childnode>
+      </node>
+      <node id="1818">
+        <label>config.h</label>
+        <link refid="config_8h"/>
+        <childnode refid="1812" relation="include">
+        </childnode>
+        <childnode refid="1819" relation="include">
+        </childnode>
+        <childnode refid="1790" relation="include">
+        </childnode>
+        <childnode refid="1820" relation="include">
+        </childnode>
+        <childnode refid="1821" relation="include">
+        </childnode>
+        <childnode refid="1822" relation="include">
+        </childnode>
+        <childnode refid="1815" relation="include">
+        </childnode>
+        <childnode refid="1823" relation="include">
+        </childnode>
+        <childnode refid="1813" relation="include">
+        </childnode>
+      </node>
+      <node id="1794">
+        <label>boost/filesystem.hpp</label>
+      </node>
+      <node id="1821">
+        <label>sstream</label>
+      </node>
+      <node id="1786">
+        <label>src/veilFuse.cc</label>
+        <link refid="veilFuse.cc"/>
+        <childnode refid="1787" relation="include">
+        </childnode>
+        <childnode refid="1788" relation="include">
+        </childnode>
+        <childnode refid="1789" relation="include">
+        </childnode>
+        <childnode refid="1790" relation="include">
+        </childnode>
+        <childnode refid="1791" relation="include">
+        </childnode>
+        <childnode refid="1792" relation="include">
+        </childnode>
+        <childnode refid="1793" relation="include">
+        </childnode>
+        <childnode refid="1794" relation="include">
+        </childnode>
+        <childnode refid="1795" relation="include">
+        </childnode>
+        <childnode refid="1796" relation="include">
+        </childnode>
+        <childnode refid="1797" relation="include">
+        </childnode>
+        <childnode refid="1798" relation="include">
+        </childnode>
+        <childnode refid="1818" relation="include">
+        </childnode>
+        <childnode refid="1836" relation="include">
+        </childnode>
+        <childnode refid="1823" relation="include">
+        </childnode>
+        <childnode refid="1837" relation="include">
+        </childnode>
+      </node>
+      <node id="1829">
+        <label>metaCache.h</label>
+        <link refid="metaCache_8h"/>
+        <childnode refid="1820" relation="include">
+        </childnode>
+        <childnode refid="1812" relation="include">
+        </childnode>
+        <childnode refid="1792" relation="include">
+        </childnode>
+        <childnode refid="1828" relation="include">
+        </childnode>
+        <childnode refid="1815" relation="include">
+        </childnode>
+        <childnode refid="1813" relation="include">
+        </childnode>
+      </node>
+      <node id="1816">
+        <label>boost/enable_shared_from_this.hpp</label>
+      </node>
+      <node id="1806">
+        <label>google/protobuf/repeated_field.h</label>
+      </node>
+      <node id="1828">
+        <label>time.h</label>
+      </node>
+      <node id="1831">
+        <label>pushListener.h</label>
+        <link refid="pushListener_8h"/>
+        <childnode refid="1797" relation="include">
+        </childnode>
+        <childnode refid="1795" relation="include">
+        </childnode>
+        <childnode refid="1816" relation="include">
+        </childnode>
+        <childnode refid="1832" relation="include">
+        </childnode>
+        <childnode refid="1833" relation="include">
+        </childnode>
+        <childnode refid="1834" relation="include">
+        </childnode>
+        <childnode refid="1835" relation="include">
+        </childnode>
+        <childnode refid="1805" relation="include">
+        </childnode>
+        <childnode refid="1808" relation="include">
+        </childnode>
+        <childnode refid="1809" relation="include">
+        </childnode>
+      </node>
+      <node id="1800">
+        <label>cstdlib</label>
+      </node>
+      <node id="1797">
+        <label>iostream</label>
+      </node>
+      <node id="1802">
+        <label>sys/xattr.h</label>
+      </node>
+      <node id="1837">
+        <label>gsi_utils.h</label>
+        <link refid="gsi__utils_8h"/>
+        <childnode refid="1838" relation="include">
+        </childnode>
+      </node>
+      <node id="1803">
+        <label>fslogicProxy.h</label>
+        <link refid="fslogicProxy_8h"/>
+        <childnode refid="1804" relation="include">
+        </childnode>
+        <childnode refid="1805" relation="include">
+        </childnode>
+        <childnode refid="1806" relation="include">
+        </childnode>
+        <childnode refid="1795" relation="include">
+        </childnode>
+        <childnode refid="1807" relation="include">
+        </childnode>
+        <childnode refid="1808" relation="include">
+        </childnode>
+        <childnode refid="1809" relation="include">
+        </childnode>
+        <childnode refid="1810" relation="include">
+        </childnode>
+        <childnode refid="1811" relation="include">
+        </childnode>
+        <childnode refid="1813" relation="include">
+        </childnode>
+        <childnode refid="1815" relation="include">
+        </childnode>
+        <childnode refid="1817" relation="include">
+        </childnode>
+      </node>
+      <node id="1810">
+        <label>communicationHandler.h</label>
+      </node>
+      <node id="1838">
+        <label>stdio.h</label>
+      </node>
+      <node id="1813">
+        <label>lock.h</label>
+        <link refid="lock_8h"/>
+        <childnode refid="1814" relation="include">
+        </childnode>
+      </node>
+      <node id="1808">
+        <label>fuse_messages.pb.h</label>
+      </node>
+      <node id="1815">
+        <label>ISchedulable.h</label>
+        <link refid="ISchedulable_8h"/>
+        <childnode refid="1812" relation="include">
+        </childnode>
+        <childnode refid="1795" relation="include">
+        </childnode>
+        <childnode refid="1816" relation="include">
+        </childnode>
+      </node>
+      <node id="1807">
+        <label>memory</label>
+      </node>
+      <node id="1793">
+        <label>dirent.h</label>
+      </node>
+    </incdepgraph>
+      <sectiondef kind="var">
+      <memberdef kind="variable" id="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" prot="public" static="no" mutable="no">
+        <type>boost::shared_ptr&lt; <ref refid="classveil_1_1client_1_1VeilFS" kindref="compound">VeilFS</ref> &gt;</type>
+        <definition>boost::shared_ptr&lt;VeilFS&gt; VeilAppObject</definition>
+        <argsstring></argsstring>
+        <name>VeilAppObject</name>
+        <briefdescription>
+<para>Main application object (filesystem state) </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="46" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="46" bodyend="-1"/>
+        <referencedby refid="veilFuse_8cc_1a78f3c449e863b54eaa0dffa5926cecb7" compoundref="veilFuse_8cc" startline="52" endline="54">wrap_access</referencedby>
+        <referencedby refid="veilFuse_8cc_1a52a7d1b2e5763f046f8408b9a4a2bef7" compoundref="veilFuse_8cc" startline="55" endline="57">wrap_getattr</referencedby>
+        <referencedby refid="veilFuse_8cc_1a7da6e772ac2f60704c3bb3caf0d7f84a" compoundref="veilFuse_8cc" startline="58" endline="60">wrap_readlink</referencedby>
+        <referencedby refid="veilFuse_8cc_1aea770e0ad88447ffae140073cc065aac" compoundref="veilFuse_8cc" startline="61" endline="63">wrap_mknod</referencedby>
+        <referencedby refid="veilFuse_8cc_1ab6c266cdf951aee544f7b78e8d93f727" compoundref="veilFuse_8cc" startline="64" endline="66">wrap_mkdir</referencedby>
+        <referencedby refid="veilFuse_8cc_1a895e0e78b0609f24228e3be375bd0f75" compoundref="veilFuse_8cc" startline="67" endline="69">wrap_unlink</referencedby>
+        <referencedby refid="veilFuse_8cc_1a356b4eac90c8eb26190a370341273cb6" compoundref="veilFuse_8cc" startline="70" endline="72">wrap_rmdir</referencedby>
+        <referencedby refid="veilFuse_8cc_1a105cf434402ca0a1cbe62cbcc23076ce" compoundref="veilFuse_8cc" startline="73" endline="75">wrap_symlink</referencedby>
+        <referencedby refid="veilFuse_8cc_1adf1509efbb98169e13a2a959cadded43" compoundref="veilFuse_8cc" startline="76" endline="78">wrap_rename</referencedby>
+        <referencedby refid="veilFuse_8cc_1a1e75cc53a55e5aad73bd7d7ffb1d5b2b" compoundref="veilFuse_8cc" startline="79" endline="81">wrap_link</referencedby>
+        <referencedby refid="veilFuse_8cc_1ab79156963bd218237e453c1ffa396061" compoundref="veilFuse_8cc" startline="82" endline="84">wrap_chmod</referencedby>
+        <referencedby refid="veilFuse_8cc_1ace444c2edd75d8e4b48acd5495aa6635" compoundref="veilFuse_8cc" startline="85" endline="87">wrap_chown</referencedby>
+        <referencedby refid="veilFuse_8cc_1aee6dfccdb690222f9fc262d1509194d1" compoundref="veilFuse_8cc" startline="88" endline="90">wrap_truncate</referencedby>
+        <referencedby refid="veilFuse_8cc_1a6da9cb346083f0365adbc68614ccd166" compoundref="veilFuse_8cc" startline="91" endline="93">wrap_utime</referencedby>
+        <referencedby refid="veilFuse_8cc_1a5e779ac8c2fbe8d4ff208c6d97b185f7" compoundref="veilFuse_8cc" startline="94" endline="96">wrap_open</referencedby>
+        <referencedby refid="veilFuse_8cc_1a579289c288ebce8a6be0c119f5057803" compoundref="veilFuse_8cc" startline="97" endline="99">wrap_read</referencedby>
+        <referencedby refid="veilFuse_8cc_1a6da8356659e5daf88b219243cbd03b76" compoundref="veilFuse_8cc" startline="100" endline="102">wrap_write</referencedby>
+        <referencedby refid="veilFuse_8cc_1a0cb3c3dc7539a3ae98ad7ee3696d5d51" compoundref="veilFuse_8cc" startline="103" endline="105">wrap_statfs</referencedby>
+        <referencedby refid="veilFuse_8cc_1a2095b8b8c91abdd16abc731752750092" compoundref="veilFuse_8cc" startline="106" endline="108">wrap_flush</referencedby>
+        <referencedby refid="veilFuse_8cc_1ac36baff66129943182a0347ad884ceca" compoundref="veilFuse_8cc" startline="109" endline="111">wrap_release</referencedby>
+        <referencedby refid="veilFuse_8cc_1ac42dc1d5577ad9a87a1785e221ee3971" compoundref="veilFuse_8cc" startline="112" endline="114">wrap_fsync</referencedby>
+        <referencedby refid="veilFuse_8cc_1a57452ca2aee0db45077c99420b622027" compoundref="veilFuse_8cc" startline="129" endline="131">wrap_readdir</referencedby>
+        <referencedby refid="veilFuse_8cc_1a0c311168f01e9645ac05c74169fb3133" compoundref="veilFuse_8cc" startline="132" endline="134">wrap_opendir</referencedby>
+        <referencedby refid="veilFuse_8cc_1a2cca7c1c73febd19e144a53e15e23c8c" compoundref="veilFuse_8cc" startline="135" endline="137">wrap_releasedir</referencedby>
+        <referencedby refid="veilFuse_8cc_1af6f058b07276234f0ee95c341452deac" compoundref="veilFuse_8cc" startline="138" endline="140">wrap_fsyncdir</referencedby>
+        <referencedby refid="veilFuse_8cc_1adedb285b02c41bde2158ded9cc9fd7ac" compoundref="veilFuse_8cc" startline="210" endline="379">main</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="veilFuse_8cc_1a0e1b61fae36343907d6c85505111ca34" prot="public" static="yes" mutable="no">
+        <type>struct fuse_operations</type>
+        <definition>struct fuse_operations vfs_oper</definition>
+        <argsstring></argsstring>
+        <name>vfs_oper</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="145" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="158" bodyend="-1"/>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+        <referencedby refid="veilFuse_8cc_1adedb285b02c41bde2158ded9cc9fd7ac" compoundref="veilFuse_8cc" startline="210" endline="379">main</referencedby>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="func">
+      <memberdef kind="function" id="veilFuse_8cc_1a78f3c449e863b54eaa0dffa5926cecb7" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_access</definition>
+        <argsstring>(const char *path, int mask)</argsstring>
+        <name>wrap_access</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>mask</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="52" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="52" bodyend="54"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1a52a7d1b2e5763f046f8408b9a4a2bef7" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_getattr</definition>
+        <argsstring>(const char *path, struct stat *statbuf)</argsstring>
+        <name>wrap_getattr</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>struct stat *</type>
+          <declname>statbuf</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="55" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="55" bodyend="57"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1a7da6e772ac2f60704c3bb3caf0d7f84a" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_readlink</definition>
+        <argsstring>(const char *path, char *link, size_t size)</argsstring>
+        <name>wrap_readlink</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>char *</type>
+          <declname>link</declname>
+        </param>
+        <param>
+          <type>size_t</type>
+          <declname>size</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="58" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="58" bodyend="60"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1aea770e0ad88447ffae140073cc065aac" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_mknod</definition>
+        <argsstring>(const char *path, mode_t mode, dev_t dev)</argsstring>
+        <name>wrap_mknod</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>mode_t</type>
+          <declname>mode</declname>
+        </param>
+        <param>
+          <type>dev_t</type>
+          <declname>dev</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="61" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="61" bodyend="63"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1ab6c266cdf951aee544f7b78e8d93f727" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_mkdir</definition>
+        <argsstring>(const char *path, mode_t mode)</argsstring>
+        <name>wrap_mkdir</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>mode_t</type>
+          <declname>mode</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="64" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="64" bodyend="66"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1a895e0e78b0609f24228e3be375bd0f75" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_unlink</definition>
+        <argsstring>(const char *path)</argsstring>
+        <name>wrap_unlink</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="67" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="67" bodyend="69"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1a356b4eac90c8eb26190a370341273cb6" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_rmdir</definition>
+        <argsstring>(const char *path)</argsstring>
+        <name>wrap_rmdir</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="70" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="70" bodyend="72"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1a105cf434402ca0a1cbe62cbcc23076ce" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_symlink</definition>
+        <argsstring>(const char *path, const char *link)</argsstring>
+        <name>wrap_symlink</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>const char *</type>
+          <declname>link</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="73" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="73" bodyend="75"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1adf1509efbb98169e13a2a959cadded43" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_rename</definition>
+        <argsstring>(const char *path, const char *newpath)</argsstring>
+        <name>wrap_rename</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>const char *</type>
+          <declname>newpath</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="76" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="76" bodyend="78"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1a1e75cc53a55e5aad73bd7d7ffb1d5b2b" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_link</definition>
+        <argsstring>(const char *path, const char *newpath)</argsstring>
+        <name>wrap_link</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>const char *</type>
+          <declname>newpath</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="79" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="79" bodyend="81"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1ab79156963bd218237e453c1ffa396061" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_chmod</definition>
+        <argsstring>(const char *path, mode_t mode)</argsstring>
+        <name>wrap_chmod</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>mode_t</type>
+          <declname>mode</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="82" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="82" bodyend="84"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1ace444c2edd75d8e4b48acd5495aa6635" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_chown</definition>
+        <argsstring>(const char *path, uid_t uid, gid_t gid)</argsstring>
+        <name>wrap_chown</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>uid_t</type>
+          <declname>uid</declname>
+        </param>
+        <param>
+          <type>gid_t</type>
+          <declname>gid</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="85" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="85" bodyend="87"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1aee6dfccdb690222f9fc262d1509194d1" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_truncate</definition>
+        <argsstring>(const char *path, off_t newSize)</argsstring>
+        <name>wrap_truncate</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>off_t</type>
+          <declname>newSize</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="88" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="88" bodyend="90"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1a6da9cb346083f0365adbc68614ccd166" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_utime</definition>
+        <argsstring>(const char *path, struct utimbuf *ubuf)</argsstring>
+        <name>wrap_utime</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>struct utimbuf *</type>
+          <declname>ubuf</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="91" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="91" bodyend="93"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1a5e779ac8c2fbe8d4ff208c6d97b185f7" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_open</definition>
+        <argsstring>(const char *path, struct fuse_file_info *fileInfo)</argsstring>
+        <name>wrap_open</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>struct fuse_file_info *</type>
+          <declname>fileInfo</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="94" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="94" bodyend="96"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1a579289c288ebce8a6be0c119f5057803" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_read</definition>
+        <argsstring>(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fileInfo)</argsstring>
+        <name>wrap_read</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>char *</type>
+          <declname>buf</declname>
+        </param>
+        <param>
+          <type>size_t</type>
+          <declname>size</declname>
+        </param>
+        <param>
+          <type>off_t</type>
+          <declname>offset</declname>
+        </param>
+        <param>
+          <type>struct fuse_file_info *</type>
+          <declname>fileInfo</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="97" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="97" bodyend="99"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1a6da8356659e5daf88b219243cbd03b76" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_write</definition>
+        <argsstring>(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fileInfo)</argsstring>
+        <name>wrap_write</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>const char *</type>
+          <declname>buf</declname>
+        </param>
+        <param>
+          <type>size_t</type>
+          <declname>size</declname>
+        </param>
+        <param>
+          <type>off_t</type>
+          <declname>offset</declname>
+        </param>
+        <param>
+          <type>struct fuse_file_info *</type>
+          <declname>fileInfo</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="100" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="100" bodyend="102"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1a0cb3c3dc7539a3ae98ad7ee3696d5d51" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_statfs</definition>
+        <argsstring>(const char *path, struct statvfs *statInfo)</argsstring>
+        <name>wrap_statfs</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>struct statvfs *</type>
+          <declname>statInfo</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="103" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="103" bodyend="105"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1a2095b8b8c91abdd16abc731752750092" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_flush</definition>
+        <argsstring>(const char *path, struct fuse_file_info *fileInfo)</argsstring>
+        <name>wrap_flush</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>struct fuse_file_info *</type>
+          <declname>fileInfo</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="106" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="106" bodyend="108"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1ac36baff66129943182a0347ad884ceca" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_release</definition>
+        <argsstring>(const char *path, struct fuse_file_info *fileInfo)</argsstring>
+        <name>wrap_release</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>struct fuse_file_info *</type>
+          <declname>fileInfo</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="109" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="109" bodyend="111"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1ac42dc1d5577ad9a87a1785e221ee3971" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_fsync</definition>
+        <argsstring>(const char *path, int datasync, struct fuse_file_info *fi)</argsstring>
+        <name>wrap_fsync</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>datasync</declname>
+        </param>
+        <param>
+          <type>struct fuse_file_info *</type>
+          <declname>fi</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="112" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="112" bodyend="114"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1a57452ca2aee0db45077c99420b622027" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_readdir</definition>
+        <argsstring>(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fileInfo)</argsstring>
+        <name>wrap_readdir</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>void *</type>
+          <declname>buf</declname>
+        </param>
+        <param>
+          <type>fuse_fill_dir_t</type>
+          <declname>filler</declname>
+        </param>
+        <param>
+          <type>off_t</type>
+          <declname>offset</declname>
+        </param>
+        <param>
+          <type>struct fuse_file_info *</type>
+          <declname>fileInfo</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="129" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="129" bodyend="131"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1a0c311168f01e9645ac05c74169fb3133" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_opendir</definition>
+        <argsstring>(const char *path, struct fuse_file_info *fileInfo)</argsstring>
+        <name>wrap_opendir</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>struct fuse_file_info *</type>
+          <declname>fileInfo</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="132" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="132" bodyend="134"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1a2cca7c1c73febd19e144a53e15e23c8c" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_releasedir</definition>
+        <argsstring>(const char *path, struct fuse_file_info *fileInfo)</argsstring>
+        <name>wrap_releasedir</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>struct fuse_file_info *</type>
+          <declname>fileInfo</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="135" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="135" bodyend="137"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1af6f058b07276234f0ee95c341452deac" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int wrap_fsyncdir</definition>
+        <argsstring>(const char *path, int datasync, struct fuse_file_info *fileInfo)</argsstring>
+        <name>wrap_fsyncdir</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>datasync</declname>
+        </param>
+        <param>
+          <type>struct fuse_file_info *</type>
+          <declname>fileInfo</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="138" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="138" bodyend="140"/>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+        <referencedby refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1a015c211810b72a309fcab4ff4bdb6d0d" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int vfs_opt_proc</definition>
+        <argsstring>(void *data, const char *arg, int key, struct fuse_args *outargs)</argsstring>
+        <name>vfs_opt_proc</name>
+        <param>
+          <type>void *</type>
+          <declname>data</declname>
+        </param>
+        <param>
+          <type>const char *</type>
+          <declname>arg</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>key</declname>
+        </param>
+        <param>
+          <type>struct fuse_args *</type>
+          <declname>outargs</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="145" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="145" bodyend="152"/>
+        <references refid="veilfs_8h_1a7d172529a5da1ff3f8791e858b569b47" compoundref="veilfs_8h" startline="33">CONFIG_ARGV_OPT_NAME</references>
+        <referencedby refid="veilFuse_8cc_1adedb285b02c41bde2158ded9cc9fd7ac" compoundref="veilFuse_8cc" startline="210" endline="379">main</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>void</type>
+        <definition>static void oper_init</definition>
+        <argsstring>()</argsstring>
+        <name>oper_init</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="160" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="160" bodyend="199"/>
+        <references refid="veilFuse_8cc_1a0e1b61fae36343907d6c85505111ca34" compoundref="veilFuse_8cc" startline="158">vfs_oper</references>
+        <references refid="veilFuse_8cc_1a52a7d1b2e5763f046f8408b9a4a2bef7" compoundref="veilFuse_8cc" startline="55" endline="57">wrap_getattr</references>
+        <references refid="veilFuse_8cc_1a78f3c449e863b54eaa0dffa5926cecb7" compoundref="veilFuse_8cc" startline="52" endline="54">wrap_access</references>
+        <references refid="veilFuse_8cc_1a7da6e772ac2f60704c3bb3caf0d7f84a" compoundref="veilFuse_8cc" startline="58" endline="60">wrap_readlink</references>
+        <references refid="veilFuse_8cc_1a57452ca2aee0db45077c99420b622027" compoundref="veilFuse_8cc" startline="129" endline="131">wrap_readdir</references>
+        <references refid="veilFuse_8cc_1aea770e0ad88447ffae140073cc065aac" compoundref="veilFuse_8cc" startline="61" endline="63">wrap_mknod</references>
+        <references refid="veilFuse_8cc_1ab6c266cdf951aee544f7b78e8d93f727" compoundref="veilFuse_8cc" startline="64" endline="66">wrap_mkdir</references>
+        <references refid="veilFuse_8cc_1a105cf434402ca0a1cbe62cbcc23076ce" compoundref="veilFuse_8cc" startline="73" endline="75">wrap_symlink</references>
+        <references refid="veilFuse_8cc_1a895e0e78b0609f24228e3be375bd0f75" compoundref="veilFuse_8cc" startline="67" endline="69">wrap_unlink</references>
+        <references refid="veilFuse_8cc_1a356b4eac90c8eb26190a370341273cb6" compoundref="veilFuse_8cc" startline="70" endline="72">wrap_rmdir</references>
+        <references refid="veilFuse_8cc_1adf1509efbb98169e13a2a959cadded43" compoundref="veilFuse_8cc" startline="76" endline="78">wrap_rename</references>
+        <references refid="veilFuse_8cc_1a1e75cc53a55e5aad73bd7d7ffb1d5b2b" compoundref="veilFuse_8cc" startline="79" endline="81">wrap_link</references>
+        <references refid="veilFuse_8cc_1ab79156963bd218237e453c1ffa396061" compoundref="veilFuse_8cc" startline="82" endline="84">wrap_chmod</references>
+        <references refid="veilFuse_8cc_1ace444c2edd75d8e4b48acd5495aa6635" compoundref="veilFuse_8cc" startline="85" endline="87">wrap_chown</references>
+        <references refid="veilFuse_8cc_1aee6dfccdb690222f9fc262d1509194d1" compoundref="veilFuse_8cc" startline="88" endline="90">wrap_truncate</references>
+        <references refid="veilFuse_8cc_1a5e779ac8c2fbe8d4ff208c6d97b185f7" compoundref="veilFuse_8cc" startline="94" endline="96">wrap_open</references>
+        <references refid="veilFuse_8cc_1a579289c288ebce8a6be0c119f5057803" compoundref="veilFuse_8cc" startline="97" endline="99">wrap_read</references>
+        <references refid="veilFuse_8cc_1a6da8356659e5daf88b219243cbd03b76" compoundref="veilFuse_8cc" startline="100" endline="102">wrap_write</references>
+        <references refid="veilFuse_8cc_1a0cb3c3dc7539a3ae98ad7ee3696d5d51" compoundref="veilFuse_8cc" startline="103" endline="105">wrap_statfs</references>
+        <references refid="veilFuse_8cc_1ac36baff66129943182a0347ad884ceca" compoundref="veilFuse_8cc" startline="109" endline="111">wrap_release</references>
+        <references refid="veilFuse_8cc_1ac42dc1d5577ad9a87a1785e221ee3971" compoundref="veilFuse_8cc" startline="112" endline="114">wrap_fsync</references>
+        <references refid="veilFuse_8cc_1a6da9cb346083f0365adbc68614ccd166" compoundref="veilFuse_8cc" startline="91" endline="93">wrap_utime</references>
+        <references refid="veilFuse_8cc_1a2095b8b8c91abdd16abc731752750092" compoundref="veilFuse_8cc" startline="106" endline="108">wrap_flush</references>
+        <references refid="veilFuse_8cc_1a0c311168f01e9645ac05c74169fb3133" compoundref="veilFuse_8cc" startline="132" endline="134">wrap_opendir</references>
+        <references refid="veilFuse_8cc_1a2cca7c1c73febd19e144a53e15e23c8c" compoundref="veilFuse_8cc" startline="135" endline="137">wrap_releasedir</references>
+        <references refid="veilFuse_8cc_1af6f058b07276234f0ee95c341452deac" compoundref="veilFuse_8cc" startline="138" endline="140">wrap_fsyncdir</references>
+        <referencedby refid="veilFuse_8cc_1a82908ed6095237ab4e9f0ad0aa6cb2d2" compoundref="veilFuse_8cc" startline="202" endline="206">fuse_init</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1a82908ed6095237ab4e9f0ad0aa6cb2d2" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>void</type>
+        <definition>static void fuse_init</definition>
+        <argsstring>()</argsstring>
+        <name>fuse_init</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="202" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="202" bodyend="206"/>
+        <references refid="veilFuse_8cc_1a4970767463895ff6eb47bb514640be34" compoundref="veilFuse_8cc" startline="160" endline="199">oper_init</references>
+        <referencedby refid="veilFuse_8cc_1adedb285b02c41bde2158ded9cc9fd7ac" compoundref="veilFuse_8cc" startline="210" endline="379">main</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="veilFuse_8cc_1adedb285b02c41bde2158ded9cc9fd7ac" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int main</definition>
+        <argsstring>(int argc, char *argv[], char *envp[])</argsstring>
+        <name>main</name>
+        <param>
+          <type>int</type>
+          <declname>argc</declname>
+        </param>
+        <param>
+          <type>char *</type>
+          <declname>argv</declname>
+          <array>[]</array>
+        </param>
+        <param>
+          <type>char *</type>
+          <declname>envp</declname>
+          <array>[]</array>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" line="210" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc" bodystart="210" bodyend="379"/>
+        <references refid="veilFuse_8cc_1a82908ed6095237ab4e9f0ad0aa6cb2d2" compoundref="veilFuse_8cc" startline="202" endline="206">fuse_init</references>
+        <references refid="veilFuse_8cc_1a015c211810b72a309fcab4ff4bdb6d0d" compoundref="veilFuse_8cc" startline="145" endline="152">vfs_opt_proc</references>
+        <references refid="grid__proxy__info_8c_1ac3e1795766a80ec63b157951b4b9a7d4" compoundref="grid__proxy__info_8c" startline="41">debug</references>
+        <references refid="veilfs_8h_1a7d172529a5da1ff3f8791e858b569b47" compoundref="veilfs_8h" startline="33">CONFIG_ARGV_OPT_NAME</references>
+        <references refid="veilfs_8h_1ab17bbdfd0ce8fd015a9d29bec2e1a9bd" compoundref="veilfs_8h" startline="30">GLOBAL_CONFIG_FILE</references>
+        <references refid="config_8h_1a7f265a0ba16e7d53e4812576bb17f125" compoundref="config_8h" startline="25">LOG_DIR_OPT</references>
+        <references refid="veilFuse_8cc_1a0e1b61fae36343907d6c85505111ca34" compoundref="veilFuse_8cc" startline="158">vfs_oper</references>
+        <references refid="namespaceveil_1_1client_1_1gsi_1a7975c118ead1eb04890ee9d9b0140997" compoundref="gsiHandler_8cc" startline="230" endline="233">veil::client::gsi::validateProxyConfig</references>
+        <references refid="namespaceveil_1_1client_1_1gsi_1af488f7115eb8fc251de1689cd107eceb" compoundref="gsiHandler_8cc" startline="418" endline="436">veil::client::gsi::getProxyCertPath</references>
+        <references refid="namespaceveil_1_1client_1_1gsi_1aa7c45638e1247fbf9441177dad15d9d2" compoundref="gsiHandler_8cc" startline="438" endline="472">veil::client::gsi::getClusterHostname</references>
+        <references refid="config_8h_1ab46273b9a858794af4f4100c2877c34b" compoundref="config_8h" startline="24">CLUSTER_PORT_OPT</references>
+        <references refid="namespaceveil_1_1client_1_1gsi_1aa58c8ad97ba2c1ff1a27a1e96b5ddb6a" compoundref="gsiHandler_8cc" startline="235" endline="416">veil::client::gsi::validateProxyCert</references>
+        <references refid="config_8h_1a0a46ab50d49c1acf4b61cf4100ff0d41" compoundref="config_8h" startline="34">ALIVE_META_CONNECTIONS_COUNT_OPT</references>
+        <references refid="config_8h_1a6372eb9d42b6fa9aad1ab6e0dd4d5ca5" compoundref="config_8h" startline="35">ALIVE_DATA_CONNECTIONS_COUNT_OPT</references>
+        <references refid="config_8h_1a1d9c111137bb167d8e05f9620ed0c466" compoundref="config_8h" startline="33">JOBSCHEDULER_THREADS_OPT</references>
+        <references refid="veilFuse_8cc_1aa36fb0fe5b1e9aa7ad3452b50828757d" compoundref="veilFuse_8cc" startline="46">VeilAppObject</references>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+<para><simplesect kind="author"><para>Rafal Slota </para></simplesect>
+<simplesect kind="copyright"><para>(C) 2013 ACK CYFRONET AGH </para><simplesectsep/><para>This software is released under the MIT Licence. </para></simplesect>
+</para>    </detaileddescription>
+    <location file="/home/krzysztof/Desktop/veilclient/src/veilFuse.cc"/>
+  </compounddef>
+</doxygen>

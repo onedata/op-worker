@@ -489,7 +489,7 @@ contact_fslogic(Message, Value) ->
     ok ->
       receive
         {worker_answer, MsgId, Resp} -> {ok, Resp}
-      after 15000 ->
+      after 7000 ->
         {error, timeout}
       end;
     _ -> {error, CallAns}
@@ -895,7 +895,7 @@ generateData(Size, BufSize) -> [list_to_binary(generateRandomData(BufSize)) | ge
 generateRandomData(1) -> [random:uniform(255)];
 generateRandomData(Size) -> [random:uniform(255) | generateRandomData(Size-1)].
 
-%% get_ets_name/1
+%% get_ets_name/0
 %% ====================================================================
 %% @doc Generates name of ets table for proc
 %% @end
