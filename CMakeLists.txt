@@ -111,8 +111,8 @@ include_directories(${Boost_INCLUDE_DIRS})
 
 # Utility libs
 if(${PREFER_STATIC_LINK})
-    find_library(LTDL_LIBRARY libltdl.a ltdl)
-    find_library(ZLIB_LIBRARY libz.a z)
+    find_library(LTDL_LIBRARY NAMES libltdl.a ltdl)
+    find_library(ZLIB_LIBRARY NAMES libz.a z)
 else()
     find_library(LTDL_LIBRARY ltdl)
     find_library(ZLIB_LIBRARY z)
