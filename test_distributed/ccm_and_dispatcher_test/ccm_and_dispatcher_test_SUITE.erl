@@ -209,7 +209,7 @@ veil_handshake_test(Config) ->
     ?assert(is_list(FuseId11)),
 
     %% Negotiate FuseId for user2 (which not exists)
-    ?assertException(throw, handshake_error, wss:handshakeInit(Socket21, "hostname2", [])),
+    ?assertException(throw, no_user_found_error, wss:handshakeInit(Socket21, "hostname2", [])),
 
 
     %% Add user2 and renegotiate FuseId
