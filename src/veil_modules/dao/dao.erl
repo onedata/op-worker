@@ -248,7 +248,7 @@ exist_record(Id) when is_atom(Id) ->
 exist_record(Id) when is_list(Id) ->
     case dao_helper:open_doc(get_db(), Id) of
         {ok, _} -> {ok, true};
-        {error, {not_found, missing}} -> {ok, false};
+        {error, {not_found, _}} -> {ok, false};
         Other -> Other
     end.
 
