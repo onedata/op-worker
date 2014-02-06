@@ -10,7 +10,6 @@ BIGCOUCH_RELEASE_DIRECTORY=`git rev-parse --show-toplevel`/bigcouchdb
 # Exit on any failure
 set -e
 
-
 # Enter script directory
 RUNNER_SCRIPT_DIR=$(cd ${0%/*} && pwd)
 cd $RUNNER_SCRIPT_DIR
@@ -36,7 +35,6 @@ cp -R $RUNNER_SCRIPT_DIR/../veil_cluster_node/* $RPM_BUILD_DIRECTORY/SOURCES/vei
 
 # Attach bigcouch release
 cp -R $BIGCOUCH_RELEASE_DIRECTORY/*  $RPM_BUILD_DIRECTORY/SOURCES/veil/files
-
 
 cd $RPM_BUILD_DIRECTORY/SOURCES
 tar zcf veil.tar.gz veil
