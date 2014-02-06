@@ -1,5 +1,6 @@
 # Turn off binary file stripping
 %global __os_install_post %{nil}
+
 %define __prelink_undo_cmd %{nil}
 
 %define _topdir     /tmp/veil_rpmbuild
