@@ -105,10 +105,10 @@ init(Args) ->
     Cache1 = worker_host:create_simple_cache(dao_fuse_cache, dao_fuse_cache_loop_time, ClearFun),
     case Cache1 of
       ok ->
-        Cache2 = worker_host:create_simple_cache(storage_cache, 60 *60 *24, ClearFun2),
+        Cache2 = worker_host:create_simple_cache(storage_cache, storage_cache_loop_time, ClearFun2),
         case Cache2 of
           ok ->
-            Cache3 = worker_host:create_simple_cache(users_cache, 60 *60 *24, ClearFun3),
+            Cache3 = worker_host:create_simple_cache(users_cache, users_cache_loop_time, ClearFun3),
             case Cache3 of
               ok ->
                 init({Args, {init_status, ets:info(db_host_store)}});

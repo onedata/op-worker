@@ -669,7 +669,11 @@ get_fuse_by_callback_pid_helper(Pid, [{F, {CList1, CList2}} | T]) ->
 -spec clear_simple_caches(Caches :: list()) -> ok.
 %% ====================================================================
 clear_simple_caches(Caches) ->
-  lists:foreach(fun(Cache) -> ets:delete_all_objects(Cache) end, Caches).
+  lists:foreach(fun
+    ({sub_proc_cache, Cache}) ->
+      worker_host:clear_sub_procs_cache(Cache);
+    (Cache) -> ets:delete_all_objects(Cache)
+  end, Caches).
 
 %% clear_cache/1
 %% ====================================================================
@@ -680,8 +684,14 @@ clear_cache(Cache) ->
   case Cache of
     CacheName when is_atom(CacheName) ->
       ets:delete_all_objects(Cache);
-    {CacheName2, Key} ->
+    {sub_proc_cache, SubProcCache} ->
+      worker_host:clear_sub_procs_cache(SubProcCache);
+    {{sub_proc_cache, SubProcCache}, SubProcKey} ->
+      worker_host:clear_sub_procs_cache(SubProcCache, SubProcKey);
+    {CacheName2, Key} when is_atom(Key) ->
       ets:delete(CacheName2, Key);
+    {CacheName3, Keys} when is_list(Keys) ->
+      lists:foreach(fun(K) -> ets:delete(CacheName3, K) end, Keys);
     [] -> ok;
     [H | T] ->
       clear_cache(H),
