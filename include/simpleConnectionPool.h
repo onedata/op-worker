@@ -50,7 +50,6 @@ public:
                                                                             ///< PUSH channel for every new META connection
 
     virtual void resetAllConnections(PoolType type);                        ///< Drops all connections from the pool.
-    virtual void deleteAllConnections(PoolType type);                       ///< Drops all connections from the pool, without reinitialization
 
     /**
      * Returns pointer to CommunicationHandler that is connected to cluster.
