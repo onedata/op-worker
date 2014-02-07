@@ -41,7 +41,7 @@ public:
         unsigned int size;
     };
 
-    SimpleConnectionPool(std::string hostname, int port, std::string certPath, bool (*updateCert)());
+    SimpleConnectionPool(std::string hostname, int port, std::string certPath, bool (*updateCert)(),int metaPoolSize = DEFAULT_POOL_SIZE,int dataPoolSize = DEFAULT_POOL_SIZE);
     virtual ~SimpleConnectionPool();
     
     virtual std::string getPeerCertificatePath();                           ///< Updates proxy certificate file if needed and returns its path.
