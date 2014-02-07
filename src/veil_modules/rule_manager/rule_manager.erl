@@ -53,7 +53,7 @@ handle(_ProtocolVersion, get_event_handlers) ->
   ets:match(?RULE_MANAGER_ETS, {'$1', '$2'});
 
 handle(_ProtocolVersion, {add_event_handler, {EventType, Item}}) ->
-  ?debug("add_event_handler new"),
+  ?info("add_event_handler new: ~p", [node(self())]),
 
   NewEventItem = case Item#event_handler_item.processing_method of
                    tree -> Item#event_handler_item{tree_id = generate_tree_name()};
@@ -66,11 +66,12 @@ handle(_ProtocolVersion, {add_event_handler, {EventType, Item}}) ->
   end,
   gen_server:call(?Dispatcher_Name, {cluster_regine, 1, {clear_cache, EventType}}),
 
-  ?debug("add_event_handler finished");
+  ?info("add_event_handler finished");
   %%worker_host:clear_cache({?EVENT_HANDLERS_CACHE, Event});
 
 handle(_ProtocolVersion, {get_event_handlers, Event}) ->
   ?info("eventhandlers: ~p~n", [ets:lookup(?RULE_MANAGER_ETS, Event)]),
+  ?info("eventhandlers pid: ~p~n", [node(self())]),
 
   EventHandlerItems = ets:lookup(?RULE_MANAGER_ETS, Event),
   Res = case EventHandlerItems of

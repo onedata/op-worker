@@ -39,9 +39,9 @@ handle(_ProtocolVersion, {clear_cache, Event}) ->
   clear_events_cache(Event),
   worker_host:clear_cache({?EVENT_TREES_MAPPING, Event});
 
-handle(ProtocolVersion, {event_arrived, {AnsPid, Event}}) ->
-  handle(ProtocolVersion, {event_arrived, {AnsPid, Event}, false});
-handle(ProtocolVersion, {event_arrived, {AnsPid, Event}, SecondTry}) ->
+handle(ProtocolVersion, {event_arrived, Event}) ->
+  handle(ProtocolVersion, {event_arrived, Event, false});
+handle(ProtocolVersion, {event_arrived, Event, SecondTry}) ->
   EventType = element(1, Event),
   case ets:lookup(?EVENT_TREES_MAPPING, EventType) of
     [] ->
@@ -51,7 +51,7 @@ handle(ProtocolVersion, {event_arrived, {AnsPid, Event}, SecondTry}) ->
         false ->
           % did not found mapping for event and first try - update caches for this event and try one more time
           update_event_handler(EventType),
-          handle(ProtocolVersion, {event_arrived, {AnsPid, Event}, true})
+          handle(ProtocolVersion, {event_arrived, Event, true})
       end;
     % mapping for event found - forward event
     [{_, EventToTreeMappings}] ->
@@ -60,9 +60,8 @@ handle(ProtocolVersion, {event_arrived, {AnsPid, Event}, SecondTry}) ->
           {tree, TreeId} ->
             ?info("forwarding to tree"),
             % forward event to subprocess tree
-            gen_server:call({?Dispatcher_Name, erlang:node(self())}, {cluster_rengine, 1, {final_stage_tree, TreeId, AnsPid, Event}});
+            gen_server:call({?Dispatcher_Name, erlang:node(self())}, {cluster_rengine, 1, {final_stage_tree, TreeId, Event}});
           {non, HandlerFun} ->
-            io:format("normal processing with ioformat~n"),
             ?info("normal processing"),
             HandlerFun(Event)
         end
@@ -71,7 +70,7 @@ handle(ProtocolVersion, {event_arrived, {AnsPid, Event}, SecondTry}) ->
   end;
 
 % handles standard (non sub tree) event processing
-handle(_ProtocolVersion, {final_stage, HandlerId, AnsPid, Event}) ->
+handle(_ProtocolVersion, {final_stage, HandlerId, Event}) ->
   HandlerItem = ets:lookup(?EVENT_HANDLERS_CACHE, HandlerId),
   case HandlerItem of
     [] ->
@@ -80,8 +79,7 @@ handle(_ProtocolVersion, {final_stage, HandlerId, AnsPid, Event}) ->
       % when between forward and calling final_stage cache has been cleared - in that situation doing nothing is ok.
       ok;
     [{_HandlerId, #event_handler_item{handler_fun = HandlerFun}}] ->
-      Res =  HandlerFun(Event),
-      AnsPid ! {ok, Res}
+      HandlerFun(Event)
   end.
 
 cleanup() ->
@@ -141,12 +139,11 @@ create_process_tree_for_handlers(EventHandlersList) ->
   lists:foreach(fun create_process_tree_for_handler/1, EventHandlersList).
 
 create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = MapFun, handler_fun = HandlerFun}) ->
-  ProcFun = fun(_ProtocolVersion, {final_stage_tree, _TreeId, AnsPid, Event}) ->
-    Res = HandlerFun(Event),
-    AnsPid ! {ok, Res}
+  ProcFun = fun(_ProtocolVersion, {final_stage_tree, _TreeId, Event}) ->
+    HandlerFun(Event)
   end,
 
-  NewMapFun = fun({_ProtocolVersion, {_, _TreeId, _AnsPid, Event}}) ->
+  NewMapFun = fun({_ProtocolVersion, {_, _TreeId, Event}}) ->
     MapFun(Event)
   end,
 
@@ -160,7 +157,7 @@ create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = 
 
 get_request_map_fun() ->
   fun
-    ({final_stage_tree, TreeId, _AnsPid, _Event}) ->
+    ({final_stage_tree, TreeId, _Event}) ->
       ?warning("request map fun success"),
       TreeId;
     (_) ->
@@ -169,13 +166,13 @@ get_request_map_fun() ->
   end.
 
 get_disp_map_fun() ->
-  fun({cluster_rengine, final_stage_tree, {TreeId, _AnsPid, EventRecord}}) ->
+  fun({cluster_rengine, final_stage_tree, {TreeId, Event}}) ->
     EventHandlerFromEts = ets:lookup(?EVENT_HANDLERS_CACHE, TreeId),
     case EventHandlerFromEts of
       [] ->
         % it may happen only if cache has been cleared between forwarding and calling DispMapFun - do nothing
         ok;
       [{_Ev, #event_handler_item{disp_map_fun = FetchedDispMapFun}}] ->
-        FetchedDispMapFun(EventRecord)
+        FetchedDispMapFun(Event)
     end
   end.

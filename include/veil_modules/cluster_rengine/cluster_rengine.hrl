@@ -16,7 +16,8 @@
 -record(event, {timestamp}).
 
 %% Events definitions
--record(write_event, {user_id, file_id, bytes, event = #event{}}).
+%% field ans_pid is just for test purposes - in general events handlers should be fired just for side effects
+-record(write_event, {ans_pid, user_id, file_id, bytes, event = #event{}}).
 -record(event_handler_item, {processing_method, tree_id, map_fun, disp_map_fun, handler_fun}).
 
 %% Definitions
