@@ -55,15 +55,11 @@ void SimpleConnectionPool::resetAllConnections(PoolType type)
 
 boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(PoolType type)
 {
-	cout << "nc1"<<endl;
     boost::unique_lock< boost::recursive_mutex > lock(m_access);
-    cout << "nc2"<<endl;
-
+    
     ConnectionPoolInfo &poolInfo = m_connectionPools[type];
     boost::shared_ptr<CommunicationHandler> conn;
-
-	cout << "nc3"<<endl;
-
+    
     // Check if certificate is OK and generate new one if needed and possible
     //                 Disable certificate update for now (due to globus memory leak)
     if(updateCertCB && false) {
@@ -73,13 +69,11 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(Pool
             return boost::shared_ptr<CommunicationHandler>();
         }
     }
-	cout << "nc4"<<endl;
-
+    
     lock.unlock();
     list<string> ips = dnsQuery(m_hostname);
     lock.lock();
-	cout << "nc5"<<endl;
-
+    
     list<string>::iterator it = m_hostnamePool.begin();
     while(it != m_hostnamePool.end()) // Delete all hostname from m_hostnamePool which are not present in dnsQuery response
     {
@@ -88,14 +82,14 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(Pool
             it = m_hostnamePool.erase(it);
         else ++it;
     }
-    cout << "nc6"<<endl;
+    
     for(it = ips.begin(); it != ips.end(); ++it)
     {
         list<string>::const_iterator itIP = find(m_hostnamePool.begin(), m_hostnamePool.end(), (*it));
         if(itIP == m_hostnamePool.end())
             m_hostnamePool.push_back((*it));
     }
-    cout << "nc7"<<endl;
+    
     // Connect to first working host
     int hostnameCount = m_hostnamePool.size();
     while(hostnameCount--)
@@ -124,7 +118,7 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(Pool
         LOG(WARNING) << "Cannot connect to host: " << connectTo << ":" << m_port;
         
     }
-    cout << "nc8"<<endl;
+    
     if(conn)
         poolInfo.connections.push_front(make_pair(conn, time(NULL)));
     else

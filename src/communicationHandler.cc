@@ -52,7 +52,6 @@ void CommunicationHandler::setCertFun(get_cert_path_fun certFun)
     
 CommunicationHandler::~CommunicationHandler()
 {
-	cout << "destructing communicationHandler" << endl;
     closeConnection();
     boost::unique_lock<boost::mutex> lock(m_instanceMutex);
     --instancesCount;
