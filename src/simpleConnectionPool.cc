@@ -52,7 +52,7 @@ void SimpleConnectionPool::resetAllConnections(PoolType type)
     m_connectionPools[type].connections.clear();
     setPoolSize(type, m_connectionPools[type].size); // Force connection reinitialization
 }
-    
+
 boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(PoolType type)
 {
     boost::unique_lock< boost::recursive_mutex > lock(m_access);

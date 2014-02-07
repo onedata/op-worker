@@ -26,6 +26,8 @@
 
 /// Cluster's answer status
 #define INVALID_FUSE_ID "invalid_fuse_id"
+#define NO_USER_FOUND_ERROR "no_user_found_error"
+#define NO_CONNECTION_FOR_HANDSHAKE "no_connection_for_handshake"
 
 
 namespace veil {
