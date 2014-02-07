@@ -21,14 +21,14 @@ using namespace std;
 
 namespace veil {
 
-SimpleConnectionPool::SimpleConnectionPool(string hostname, int port, string certPath, bool (*updateCert)()) :
+SimpleConnectionPool::SimpleConnectionPool(string hostname, int port, string certPath, bool (*updateCert)(),int metaPoolSize,int dataPoolSize) :
     m_hostname(hostname),
     updateCertCB(updateCert),
     m_port(port),
     m_certPath(certPath)
 {
-    m_connectionPools[META_POOL] = ConnectionPoolInfo(DEFAULT_POOL_SIZE);
-    m_connectionPools[DATA_POOL] = ConnectionPoolInfo(DEFAULT_POOL_SIZE);
+    m_connectionPools[META_POOL] = ConnectionPoolInfo(metaPoolSize);
+    m_connectionPools[DATA_POOL] = ConnectionPoolInfo(dataPoolSize);
 }
 
 SimpleConnectionPool::~SimpleConnectionPool() {}
