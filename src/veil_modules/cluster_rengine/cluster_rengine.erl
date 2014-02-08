@@ -61,7 +61,7 @@ handle(ProtocolVersion, {event_arrived, Event, SecondTry}) ->
             ?info("forwarding to tree"),
             % forward event to subprocess tree
             gen_server:call({?Dispatcher_Name, erlang:node(self())}, {cluster_rengine, 1, {final_stage_tree, TreeId, Event}});
-          {non, HandlerFun} ->
+          {standard, HandlerFun} ->
             ?info("normal processing"),
             HandlerFun(Event)
         end
@@ -103,15 +103,16 @@ save_to_caches(EventType, EventHandlerItems) ->
     fun(#event_handler_item{processing_method = ProcessingMethod, tree_id = TreeId, handler_fun = HandlerFun}) ->
       case ProcessingMethod of
         tree -> {tree, TreeId};
-        _ -> {non, HandlerFun}
+        _ -> {standard, HandlerFun}
       end
     end,
     EventHandlerItems),
   ets:insert(?EVENT_TREES_MAPPING, {EventType, EntriesForHandlers}),
 
+  HandlerItemsForTree = lists:filter(fun(#event_handler_item{tree_id = TreeId}) -> TreeId /= undefined end, EventHandlerItems),
   lists:foreach(fun(#event_handler_item{tree_id = TreeId, map_fun = MapFun, disp_map_fun = DispMapFun, handler_fun = HandlerFun}) ->
     ets:insert(?EVENT_HANDLERS_CACHE, {TreeId, {MapFun, DispMapFun, HandlerFun}})
-  end, EventHandlerItems).
+  end, HandlerItemsForTree).
 
 update_event_handler(EventType) ->
   gen_server:call(?Dispatcher_Name, {rule_manager, 1, self(), {get_event_handlers, EventType}}),
@@ -158,10 +159,9 @@ create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = 
 get_request_map_fun() ->
   fun
     ({final_stage_tree, TreeId, _Event}) ->
-      ?warning("request map fun success"),
       TreeId;
     (_) ->
-      ?warning("request map fun fail"),
+      ?info("request map fun fail"),
       non
   end.
 
@@ -175,4 +175,10 @@ get_disp_map_fun() ->
       [{_Ev, #event_handler_item{disp_map_fun = FetchedDispMapFun}}] ->
         FetchedDispMapFun(Event)
     end
+  end.
+
+insert_to_ets_set(EtsName, Key, ItemToInsert) ->
+  case ets:lookup(EtsName, Key) of
+    [] -> ets:insert(EtsName, {Key, [ItemToInsert]});
+    PreviousItems -> ets:insert(EtsName, {Key, [ItemToInsert | PreviousItems]})
   end.

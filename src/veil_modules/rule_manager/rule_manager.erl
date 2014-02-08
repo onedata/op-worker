@@ -39,7 +39,6 @@ init(_Args) ->
 	[].
 
 handle(_ProtocolVersion, ping) ->
-  ?info("in the rulemanager ping"),
   pong;
 
 handle(_ProtocolVersion, get_version) ->
@@ -53,8 +52,6 @@ handle(_ProtocolVersion, get_event_handlers) ->
   ets:match(?RULE_MANAGER_ETS, {'$1', '$2'});
 
 handle(_ProtocolVersion, {add_event_handler, {EventType, Item}}) ->
-  ?info("add_event_handler new: ~p", [node(self())]),
-
   NewEventItem = case Item#event_handler_item.processing_method of
                    tree -> Item#event_handler_item{tree_id = generate_tree_name()};
                    _ -> Item
@@ -62,17 +59,14 @@ handle(_ProtocolVersion, {add_event_handler, {EventType, Item}}) ->
 
   case ets:lookup(?RULE_MANAGER_ETS, EventType) of
     [] -> ets:insert(?RULE_MANAGER_ETS, {EventType, [NewEventItem]});
-    EventHandlers -> ets:insert(?RULE_MANAGER_ETS, {EventType, [NewEventItem | EventHandlers]})
+    [{_EventType, EventHandlers}] -> ets:insert(?RULE_MANAGER_ETS, {EventType, [NewEventItem | EventHandlers]})
   end,
   gen_server:call(?Dispatcher_Name, {cluster_regine, 1, {clear_cache, EventType}}),
 
-  ?info("add_event_handler finished");
-  %%worker_host:clear_cache({?EVENT_HANDLERS_CACHE, Event});
+  worker_host:clear_cache({?EVENT_HANDLERS_CACHE, EventType}),
+  ?info("New handler for event ~p registered.", [EventType]);
 
 handle(_ProtocolVersion, {get_event_handlers, Event}) ->
-  ?info("eventhandlers: ~p~n", [ets:lookup(?RULE_MANAGER_ETS, Event)]),
-  ?info("eventhandlers pid: ~p~n", [node(self())]),
-
   EventHandlerItems = ets:lookup(?RULE_MANAGER_ETS, Event),
   Res = case EventHandlerItems of
           [{_EventType, ItemsList}] -> ItemsList;
@@ -81,7 +75,6 @@ handle(_ProtocolVersion, {get_event_handlers, Event}) ->
   {ok, Res};
 
 handle(_ProtocolVersion, _Msg) ->
-  ?debug("rule_manager default handler"),
   ok.
 
 cleanup() ->
@@ -91,6 +84,5 @@ cleanup() ->
 
 generate_tree_name() ->
   [{_, Id}] = ets:lookup(?HANDLER_TREE_ID_ETS, current_id),
-  ?info("generarte_tree_name: ~p~n", [Id]),
   ets:insert(?HANDLER_TREE_ID_ETS, {current_id, Id + 1}),
   list_to_atom("event_" ++ integer_to_list(Id)).

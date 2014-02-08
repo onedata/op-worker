@@ -22,7 +22,7 @@
 -export([ccm_code1/0, worker_code/0]).
 
 -export([all/0, init_per_testcase/2]).
-all() -> [test_subprocess_tree].
+all() -> [test_event_subscription].
 
 %% @doc This is distributed test of dao_vfs:find_files.
 %% It consists of series of dao_vfs:find_files with various file_criteria and comparing result to expected values.
@@ -58,18 +58,32 @@ test_event_subscription(Config) ->
 
   WriteEvent = #write_event{user_id = "1234", ans_pid = self()},
 
-  gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
+%%   gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
   receive
     _ -> ?assert(false)
   after 1000
       -> ok
   end,
 
-  subscribe_for_write_events(CCM),
+  subscribe_for_write_events(CCM, standard),
   gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
 
   receive
-    {ok, _} -> ok
+    {ok, standard, _} -> ok
+  after 1000
+    -> ?assert(false)
+  end,
+
+  subscribe_for_write_events(CCM, tree),
+  gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
+
+  receive
+    {ok, standard, _} -> ok
+  after 1000
+    -> ?assert(false)
+  end,
+  receive
+    Ans -> ok
   after 1000
     -> ?assert(false)
   end,
@@ -96,7 +110,7 @@ init_per_testcase(_, Config) ->
   Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
   lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config).
 
-subscribe_for_write_events(Node) ->
+subscribe_for_write_events(Node, ProcessingMethod) ->
   EventHandlerMapFun = fun(#write_event{user_id = UserIdString}) ->
     string_to_integer(UserIdString)
   end,
@@ -107,10 +121,10 @@ subscribe_for_write_events(Node) ->
   end,
 
   EventHandler = fun(#write_event{user_id = UserId, ans_pid = AnsPid}) ->
-    AnsPid ! {ok, "Processed write_event for user: " ++ UserId}
+    AnsPid ! {ok, ProcessingMethod, UserId}
   end,
 
-  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun},
+  EventItem = #event_handler_item{processing_method = ProcessingMethod, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun},
   gen_server:call({?Dispatcher_Name, Node}, {rule_manager, 1, {add_event_handler, {write_event, EventItem}}}).
 
 repeat(N, F) -> for(1, N, F).
