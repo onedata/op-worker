@@ -106,7 +106,6 @@ handle(ProtocolVersion, {getfileattr, UUID}) ->
 
 handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
     try
-        assert_group_access(Record#fusemessage.input), %% Check if requested operation is available on requested direcotry
         handle_fuse_message(ProtocolVersion, Record#fusemessage.input, get(fuse_id))
     catch
         ErrorRet -> ErrorRet
@@ -114,7 +113,6 @@ handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
 
 handle(ProtocolVersion, {internal_call, Record}) ->
     try
-        assert_group_access(Record), %% Check if requested operation is available on requested direcotry
         handle_fuse_message(ProtocolVersion, Record, ?CLUSTER_FUSE_ID)
     catch
         ErrorRet -> ErrorRet
@@ -163,7 +161,7 @@ cleanup() ->
   Result :: term().
 %% ====================================================================
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, updatetimes) ->
-    {FileNameFindingAns, FileName} = get_full_file_name(Record#updatetimes.file_logic_name),
+    {FileNameFindingAns, FileName} = get_full_file_name(Record#updatetimes.file_logic_name, updatetimes),
     case FileName of
         [?PATH_SEPARATOR] ->
             lager:warning("Trying to update times for root directory. FuseID: ~p, Request: ~p. Aborting.", [FuseID, Record]),
@@ -190,12 +188,12 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, upda
                     lager:error("updatetimes: fslogic could not get file ~p due to: ~p", [FileName, Other]),
                     #atom{value = ?VEREMOTEIO}
             end;
+        ?VEPERM -> #atom{value = ?VEPERM};
         _ -> #atom{value = ?VEREMOTEIO}
     end;
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, changefileowner) ->
     {UserDocStatus, UserDoc} = get_user_doc(),
-    {RootStatus, Root} = get_user_root(UserDocStatus, UserDoc),
-    {FileNameFindingAns, FileName} = get_full_file_name(Record#changefileowner.file_logic_name, {RootStatus, Root}),
+    {FileNameFindingAns, FileName} = get_full_file_name(Record#changefileowner.file_logic_name, changefileowner, UserDocStatus, UserDoc),
     case FileNameFindingAns of
       ok ->
         case get_file(ProtocolVersion, FileName, FuseID) of
@@ -251,11 +249,12 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, chan
                 lager:error("fslogic could not get file ~p due to: ~p", [FileName, Other]),
                 #atom{value = ?VEREMOTEIO}
         end;
+      ?VEPERM -> #atom{value = ?VEPERM};
       _  -> #atom{value = ?VEREMOTEIO}
     end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, changefilegroup) ->
-    {FileNameFindingAns, FileName} = get_full_file_name(Record#changefilegroup.file_logic_name),
+    {FileNameFindingAns, FileName} = get_full_file_name(Record#changefilegroup.file_logic_name, changefilegroup),
     case FileNameFindingAns of
       ok ->
         case get_file(ProtocolVersion, FileName, FuseID) of
@@ -279,13 +278,13 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, chan
                 lager:error("fslogic could not get file ~p due to: ~p", [FileName, Other]),
                 #atom{value = ?VEREMOTEIO}
         end;
+      ?VEPERM -> #atom{value = ?VEPERM};
       _  -> #atom{value = ?VEREMOTEIO}
     end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, changefileperms) ->
     {UserDocStatus, UserDoc} = get_user_doc(),
-    {RootStatus, Root} = get_user_root(UserDocStatus, UserDoc),
-    {FileNameFindingAns, FileName} = get_full_file_name(Record#changefileperms.file_logic_name, {RootStatus, Root}),
+    {FileNameFindingAns, FileName} = get_full_file_name(Record#changefileperms.file_logic_name, changefileperms, UserDocStatus, UserDoc),
     case FileNameFindingAns of
       ok ->
         case get_file(ProtocolVersion, FileName, FuseID) of
@@ -316,102 +315,118 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, chan
                 lager:error("fslogic could not get file ~p due to: ~p", [FileName, Other]),
                 #atom{value = ?VEREMOTEIO}
         end;
+      ?VEPERM -> #atom{value = ?VEPERM};
       _  -> #atom{value = ?VEREMOTEIO}
     end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getfileattr) ->
-    {FileNameFindingAns, FileName} = get_full_file_name(Record#getfileattr.file_logic_name),
+    {FileNameFindingAns, FileName} = get_full_file_name(Record#getfileattr.file_logic_name, getfileattr),
     case FileNameFindingAns of
       ok ->
         lager:debug("FileAttr for ~p", [FileName]),
         {DocFindStatus, FileDoc} = get_file(ProtocolVersion, FileName, FuseID),
         getfileattr(ProtocolVersion, DocFindStatus, FileDoc);
+      ?VEPERM -> #fileattr{answer = ?VEPERM, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = ""};
       _  -> #fileattr{answer = ?VEREMOTEIO, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = ""}
     end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getfilelocation) ->
-    {FileNameFindingAns, File} = get_full_file_name(Record#getfilelocation.file_logic_name),
+    {FileNameFindingAns, File} = get_full_file_name(Record#getfilelocation.file_logic_name, getfilelocation),
     case FileNameFindingAns of
       ok ->
         {DocFindStatus, FileDoc} = get_file(ProtocolVersion, File, FuseID),
         getfilelocation(ProtocolVersion, DocFindStatus, FileDoc, FuseID);
+      ?VEPERM -> #filelocation{answer = ?VEPERM, storage_id = -1, file_id = "", validity = 0};
       _  -> #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
     end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getnewfilelocation) ->
     {UserDocStatus, UserDoc} = get_user_doc(),
-    {RootStatus, Root} = get_user_root(UserDocStatus, UserDoc),
     FileBaseName = Record#getnewfilelocation.file_logic_name,
-    {FileNameFindingAns, File} = get_full_file_name(FileBaseName, {RootStatus, Root}),
+    {FileNameFindingAns, File} = get_full_file_name(FileBaseName, getnewfilelocation, UserDocStatus, UserDoc),
     case FileNameFindingAns of
       ok ->
         {ParentFound, ParentInfo} = fslogic_utils:get_parent_and_name_from_path(File, ProtocolVersion),
         case ParentFound of
           ok ->
             {FileName, Parent} = ParentInfo,
-            {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], ProtocolVersion),
-            case fslogic_storage:select_storage(FuseID, StorageList) of
-              #veil_document{uuid = UUID, record = #storage_info{} = Storage} ->
-                SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
-                File_id = get_new_file_id(FileBaseName, UserDoc, Root, SHI, ProtocolVersion),
-                FileLocation = #file_location{storage_id = UUID, file_id = File_id},
+            {PermsStat, PermsOK} = check_file_perms(FileBaseName, UserDocStatus, UserDoc, Parent, write),
+            case PermsStat of
+              ok ->
+                case PermsOK of
+                  true ->
+                    {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], ProtocolVersion),
+                    case fslogic_storage:select_storage(FuseID, StorageList) of
+                      #veil_document{uuid = UUID, record = #storage_info{} = Storage} ->
+                        SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
+                        File_id = get_new_file_id(FileBaseName, UserDoc, SHI, ProtocolVersion),
+                        FileLocation = #file_location{storage_id = UUID, file_id = File_id},
 
-                {UserIdStatus, UserId} = case {UserDocStatus, UserDoc} of
-                                           {ok, _} -> {ok, UserDoc#veil_document.uuid};
-                                           {error, get_user_id_error} -> {ok, ?CLUSTER_USER_ID};
-                                           _ -> {UserDocStatus, UserDoc}
-                                         end,
+                        {UserIdStatus, UserId} = case {UserDocStatus, UserDoc} of
+                                                   {ok, _} -> {ok, UserDoc#veil_document.uuid};
+                                                   {error, get_user_id_error} -> {ok, ?CLUSTER_USER_ID};
+                                                   _ -> {UserDocStatus, UserDoc}
+                                                 end,
 
-                case UserIdStatus of
-                  ok ->
-                    CTime = fslogic_utils:time(),
-
-                    Groups = get_group_owner(FileBaseName), %% Get owner group name based on file access path
-
-                    FileRecordInit = #file{type = ?REG_TYPE, name = FileName, uid = UserId, gids = Groups, parent = Parent, perms = Record#getnewfilelocation.mode, location = FileLocation},
-                    %% Async *times update
-                    FileRecord = fslogic_utils:update_meta_attr(FileRecordInit, times, {CTime, CTime, CTime}),
-
-                    Status = dao_lib:apply(dao_vfs, save_new_file, [File, FileRecord], ProtocolVersion),
-                    Validity = ?LOCATION_VALIDITY,
-                    case Status of
-                      {ok, FileUUID} ->
-                        update_parent_ctime(Record#getnewfilelocation.file_logic_name, CTime),
-                        {Status2, _TmpAns2} = save_file_descriptor(ProtocolVersion, FileUUID, FuseID, Validity),
-                        case Status2 of
+                        case UserIdStatus of
                           ok ->
-                            {SH, File_id2} = get_sh_and_id(FuseID, Storage, File_id),
-                            #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
-                            #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = SHName, storage_helper_args = SHArgs};
-                          _BadStatus2 ->
-                            lager:error([{mod, ?MODULE}], "Error: cannot save file_descriptor document: ~p", [_BadStatus2]),
+                            CTime = fslogic_utils:time(),
+
+                            Groups = get_group_owner(FileBaseName), %% Get owner group name based on file access path
+
+                            FileRecordInit = #file{type = ?REG_TYPE, name = FileName, uid = UserId, gids = Groups, parent = Parent#veil_document.uuid, perms = Record#getnewfilelocation.mode, location = FileLocation},
+                            %% Async *times update
+                            FileRecord = fslogic_utils:update_meta_attr(FileRecordInit, times, {CTime, CTime, CTime}),
+
+                            Status = dao_lib:apply(dao_vfs, save_new_file, [File, FileRecord], ProtocolVersion),
+                            Validity = ?LOCATION_VALIDITY,
+                            case Status of
+                              {ok, FileUUID} ->
+                                update_parent_ctime(Record#getnewfilelocation.file_logic_name, CTime),
+                                {Status2, _TmpAns2} = save_file_descriptor(ProtocolVersion, FileUUID, FuseID, Validity),
+                                case Status2 of
+                                  ok ->
+                                    {SH, File_id2} = get_sh_and_id(FuseID, Storage, File_id),
+                                    #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
+                                    #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = SHName, storage_helper_args = SHArgs};
+                                  _BadStatus2 ->
+                                    lager:error([{mod, ?MODULE}], "Error: cannot save file_descriptor document: ~p", [_BadStatus2]),
+                                    #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
+                                end;
+                              {error, file_exists} ->
+                                #filelocation{answer = ?VEEXIST, storage_id = -1, file_id = "", validity = 0};
+                              _BadStatus ->
+                                lager:error([{mod, ?MODULE}], "Error: cannot save file document: ~p", [_BadStatus]),
+                                #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
+                            end;
+                          _ ->
+                            lager:error([{mod, ?MODULE}], "Error: user doc error for file ~p, error ~p", [File, {UserDocStatus, UserDoc}]),
                             #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
                         end;
-                      {error, file_exists} ->
-                        #filelocation{answer = ?VEEXIST, storage_id = -1, file_id = "", validity = 0};
-                      _BadStatus ->
-                        lager:error([{mod, ?MODULE}], "Error: cannot save file document: ~p", [_BadStatus]),
+                      {error, SelectError} ->
+                        lager:error([{mod, ?MODULE}], "Error: can not get storage information: ~p", [SelectError]),
                         #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
                     end;
-                  _ ->
-                    lager:error([{mod, ?MODULE}], "Error: user doc error for file ~p, error ~p", [File, {UserDocStatus, UserDoc}]),
-                    #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
+                  false ->
+                    lager:warning("Creating file without permissions: ~p", [FileName]),
+                    #filelocation{answer = ?VEPERM, storage_id = -1, file_id = "", validity = 0}
                 end;
-              {error, SelectError} ->
-                lager:error([{mod, ?MODULE}], "Error: can not get storage information: ~p", [SelectError]),
-                #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
+              _ ->
+                lager:warning("Cannot create file. Reason: ~p:~p", [PermsStat, PermsOK]),
+                #filelocation{answer = ?VEPERM, storage_id = -1, file_id = "", validity = 0}
             end;
           _ParentError ->
             lager:error([{mod, ?MODULE}], "Error: can not get parent for file: ~p", [File]),
             #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
         end;
+      ?VEPERM -> #filelocation{answer = ?VEPERM, storage_id = -1, file_id = "", validity = 0};
       _  ->
         lager:error([{mod, ?MODULE}], "Error: can not get full file name: ~p, error ~p", [File, {FileNameFindingAns, File}]),
         #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
     end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, filenotused) ->
-  {FileNameFindingAns, File} = get_full_file_name(Record#filenotused.file_logic_name),
+  {FileNameFindingAns, File} = get_full_file_name(Record#filenotused.file_logic_name, filenotused),
   case FileNameFindingAns of
     ok ->
       Status = dao_lib:apply(dao_vfs, remove_descriptor, [{by_file_n_owner, {File, FuseID}}], ProtocolVersion),
@@ -421,11 +436,12 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, file
           lager:error([{mod, ?MODULE}], "Error: for file not used message, file: ~s", [File, _Other]),
           #atom{value = ?VEREMOTEIO}
       end;
+    ?VEPERM -> #atom{value = ?VEPERM};
     _  -> #atom{value = ?VEREMOTEIO}
   end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, renewfilelocation) ->
-  {FileNameFindingAns, File} = get_full_file_name(Record#renewfilelocation.file_logic_name),
+  {FileNameFindingAns, File} = get_full_file_name(Record#renewfilelocation.file_logic_name, renewfilelocation),
   case FileNameFindingAns of
     ok ->
       {Status, TmpAns} = dao_lib:apply(dao_vfs, list_descriptors, [{by_file_n_owner, {File, FuseID}}, 10, 0], ProtocolVersion),
@@ -455,50 +471,66 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, rene
           lager:error([{mod, ?MODULE}], "Error: can not renew file location for file: ~s", [File]),
           #filelocationvalidity{answer = ?VEREMOTEIO, validity = 0}
       end;
+    ?VEPERM -> #filelocationvalidity{answer = ?VEPERM, validity = 0};
     _  -> #filelocationvalidity{answer = ?VEREMOTEIO, validity = 0}
   end;
 
 handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, createdir) ->
-  {FileNameFindingAns, Dir} = get_full_file_name(Record#createdir.dir_logic_name),
+  {UserDocStatus, UserDoc} = get_user_doc(),
+  {FileNameFindingAns, Dir} = get_full_file_name(Record#createdir.dir_logic_name, createdir, UserDocStatus, UserDoc),
   case FileNameFindingAns of
     ok ->
-            {ParentFound, ParentInfo} = fslogic_utils:get_parent_and_name_from_path(Dir, ProtocolVersion),
+      {ParentFound, ParentInfo} = fslogic_utils:get_parent_and_name_from_path(Dir, ProtocolVersion),
 
-            case ParentFound of
-              ok ->
-                {FileName, Parent} = ParentInfo,
-                {UserIdStatus, UserId} = get_user_id(),
-                case UserIdStatus of
-                  ok ->
-                    Groups = get_group_owner(Record#createdir.dir_logic_name), %% Get owner group name based on file access path
+      case ParentFound of
+        ok ->
+          {FileName, Parent} = ParentInfo,
+          {PermsStat, PermsOK} = check_file_perms(Dir, UserDocStatus, UserDoc, Parent, write),
+          case PermsStat of
+            ok ->
+              case PermsOK of
+                true ->
+                  {UserIdStatus, UserId} = get_user_id(),
+                  case UserIdStatus of
+                    ok ->
+                      Groups = get_group_owner(Record#createdir.dir_logic_name), %% Get owner group name based on file access path
 
-                    FileInit = #file{type = ?DIR_TYPE, name = FileName, uid = UserId, gids = Groups, parent = Parent, perms = Record#createdir.mode},
-                    %% Async *times update
-                    CTime = fslogic_utils:time(),
-                    File = fslogic_utils:update_meta_attr(FileInit, times, {CTime, CTime, CTime}),
+                      FileInit = #file{type = ?DIR_TYPE, name = FileName, uid = UserId, gids = Groups, parent = Parent#veil_document.uuid, perms = Record#createdir.mode},
+                      %% Async *times update
+                      CTime = fslogic_utils:time(),
+                      File = fslogic_utils:update_meta_attr(FileInit, times, {CTime, CTime, CTime}),
 
-                    {Status, TmpAns} = dao_lib:apply(dao_vfs, save_new_file, [Dir, File], ProtocolVersion),
-                    case {Status, TmpAns} of
-                      {ok, _} ->
-                        update_parent_ctime(Record#createdir.dir_logic_name, CTime),
-                        #atom{value = ?VOK};
-                      {error, file_exists} ->
-                        #atom{value = ?VEEXIST};
-                      _BadStatus ->
-                        lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s, error: ~p", [Dir, _BadStatus]),
-                        #atom{value = ?VEREMOTEIO}
-                    end;
-                  _ -> #atom{value = ?VEREMOTEIO}
-                end;
+                      {Status, TmpAns} = dao_lib:apply(dao_vfs, save_new_file, [Dir, File], ProtocolVersion),
+                      case {Status, TmpAns} of
+                        {ok, _} ->
+                          update_parent_ctime(Record#createdir.dir_logic_name, CTime),
+                          #atom{value = ?VOK};
+                        {error, file_exists} ->
+                          #atom{value = ?VEEXIST};
+                        _BadStatus ->
+                          lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s, error: ~p", [Dir, _BadStatus]),
+                          #atom{value = ?VEREMOTEIO}
+                      end;
+                    _ -> #atom{value = ?VEREMOTEIO}
+                  end;
+                false ->
+                  lager:warning("Creating directory without permissions: ~p", [FileName]),
+                  #atom{value = ?VEPERM}
+              end;
+            _ ->
+              lager:warning("Cannot create directory. Reason: ~p:~p", [PermsStat, PermsOK]),
+              #atom{value = ?VEREMOTEIO}
+          end;
               _ParentError ->
                 lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s, parentInfo: ~p", [Dir, _ParentError]),
                 #atom{value = ?VEREMOTEIO}
             end;
+    ?VEPERM -> #atom{value = ?VEPERM};
     _  -> #atom{value = ?VEREMOTEIO}
   end;
 
 handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, getfilechildren) ->
-  {FileNameFindingAns, File} = get_full_file_name(Record#getfilechildren.dir_logic_name),
+  {FileNameFindingAns, File} = get_full_file_name(Record#getfilechildren.dir_logic_name, getfilechildren),
   TokenizedPath = string:tokens(Record#getfilechildren.dir_logic_name, "/"),
   case FileNameFindingAns of
     ok ->
@@ -531,13 +563,13 @@ handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, get
           lager:error([{mod, ?MODULE}], "Error: can not list files in dir: ~s", [File]),
           #filechildren{answer = ?VEREMOTEIO, child_logic_name = []}
       end;
+    ?VEPERM -> #filechildren{answer = ?VEPERM, child_logic_name = []};
     _  -> #filechildren{answer = ?VEREMOTEIO, child_logic_name = []}
   end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, deletefile) ->
   {UserDocStatus, UserDoc} = get_user_doc(),
-  {RootStatus, Root} = get_user_root(UserDocStatus, UserDoc),
-  {FileNameFindingAns, File} = get_full_file_name(Record#deletefile.file_logic_name, {RootStatus, Root}),
+  {FileNameFindingAns, File} = get_full_file_name(Record#deletefile.file_logic_name, deletefile, UserDocStatus, UserDoc),
   case FileNameFindingAns of
     ok ->
       {FindStatus, FindTmpAns} = get_file(ProtocolVersion, File, FuseID),
@@ -589,14 +621,14 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, dele
           lager:error([{mod, ?MODULE}], "Error: can not remove file (can not check file type): ~s", [File]),
           #atom{value = ?VEREMOTEIO}
       end;
+    ?VEPERM -> #atom{value = ?VEPERM};
     _  -> #atom{value = ?VEREMOTEIO}
   end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, renamefile) ->
   {UserDocStatus, UserDoc} = get_user_doc(),
-  {RootStatus, Root} = get_user_root(UserDocStatus, UserDoc),
-  {FileNameFindingAns, File} = get_full_file_name(Record#renamefile.from_file_logic_name, {RootStatus, Root}),
-  {FileNameFindingAns2, NewFileName} = get_full_file_name(Record#renamefile.to_file_logic_name),
+  {FileNameFindingAns, File} = get_full_file_name(Record#renamefile.from_file_logic_name, renamefile, UserDocStatus, UserDoc),
+  {FileNameFindingAns2, NewFileName} = get_full_file_name(Record#renamefile.to_file_logic_name, renamefile, UserDocStatus, UserDoc),
   case {FileNameFindingAns, FileNameFindingAns2} of
     {ok, ok} ->
       case get_file(ProtocolVersion, File, FuseID) of
@@ -615,99 +647,118 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, rena
                           #atom{value = ?VEREMOTEIO};
                         false ->
                           case get_file(ProtocolVersion, NewDir, FuseID) of
-                            {ok, #veil_document{uuid = NewParent}} ->
-                                MoveOnStorage =
-                                    fun(#file{type = ?REG_TYPE}) -> %% Returns new file record with updated file_id field or throws excpetion
-                                        case {UserDocStatus, RootStatus} of %% Assert user doc && user root get status
-                                            {ok, ok} -> ok;
-                                            _ ->
-                                                ?error("Cannot fetch user doc or user root for file ~p.", [File]),
-                                                ?debug("get_user_doc response: ~p", [{UserDocStatus, UserDoc}]),
-                                                ?debug("get_user_root response: ~p", [{RootStatus, Root}]),
-                                                throw(gen_error_message(renamefile, ?VEREMOTEIO))
-                                        end,
+                            {ok, #veil_document{uuid = NewParent} = NewParentDoc} ->
+                              OldDir = fslogic_utils:strip_path_leaf(File),
+                              case get_file(ProtocolVersion, OldDir, FuseID) of
+                                {ok, OldParentDoc} ->
+                                  {PermsStat1, PermsOK1} = check_file_perms(NewDir, UserDocStatus, UserDoc, NewParentDoc, write),
+                                  {PermsStat2, PermsOK2} = check_file_perms(OldDir, UserDocStatus, UserDoc, OldParentDoc, write),
+                                  case {PermsStat1, PermsStat2} of
+                                    {ok, ok} ->
+                                      case {PermsOK1, PermsOK2} of
+                                        {true, true} ->
+                                          MoveOnStorage =
+                                              fun(#file{type = ?REG_TYPE}) -> %% Returns new file record with updated file_id field or throws excpetion
+          %%                                         case {UserDocStatus, RootStatus} of %% Assert user doc && user root get status
+          %%                                             {ok, ok} -> ok;
+          %%                                             _ ->
+          %%                                                 ?error("Cannot fetch user doc or user root for file ~p.", [File]),
+          %%                                                 ?debug("get_user_doc response: ~p", [{UserDocStatus, UserDoc}]),
+          %%                                                 ?debug("get_user_root response: ~p", [{RootStatus, Root}]),
+          %%                                                 throw(gen_error_message(renamefile, ?VEREMOTEIO))
+          %%                                         end,
 
-                                        %% Get storage info
-                                        StorageID   = OldFile#file.location#file_location.storage_id,
-                                        FileID      = OldFile#file.location#file_location.file_id,
-                                        Storage = %% Storage info for the file
-                                            case dao_lib:apply(dao_vfs, get_storage, [{uuid, StorageID}], 1) of
-                                                {ok, #veil_document{record = #storage_info{} = S}} -> S;
-                                                {error, MReason} ->
-                                                    ?error("Cannot fetch storage (ID: ~p) information for file ~p. Reason: ~p", [StorageID, File, MReason]),
-                                                    throw(gen_error_message(renamefile, ?VEREMOTEIO))
-                                            end,
-                                        SHInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage), %% Storage helper for cluster
-                                        NewFileID = get_new_file_id(NewFileName, UserDoc, Root, SHInfo, ProtocolVersion),
+                                                  %% Get storage info
+                                                  StorageID   = OldFile#file.location#file_location.storage_id,
+                                                  FileID      = OldFile#file.location#file_location.file_id,
+                                                  Storage = %% Storage info for the file
+                                                      case dao_lib:apply(dao_vfs, get_storage, [{uuid, StorageID}], 1) of
+                                                          {ok, #veil_document{record = #storage_info{} = S}} -> S;
+                                                          {error, MReason} ->
+                                                              ?error("Cannot fetch storage (ID: ~p) information for file ~p. Reason: ~p", [StorageID, File, MReason]),
+                                                              throw(gen_error_message(renamefile, ?VEREMOTEIO))
+                                                      end,
+                                                  SHInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage), %% Storage helper for cluster
+                                                  NewFileID = get_new_file_id(NewFileName, UserDoc, SHInfo, ProtocolVersion),
 
-                                        %% Change group owner if needed
-                                        case get_group_owner(NewFileName) of
-                                            [] -> ok; %% Dont change group owner
-                                            [NewGroup | _] -> %% We are moving file to group folder -> change owner
-                                                case storage_files_manager:chown(SHInfo, FileID, "", NewGroup) of
-                                                    ok -> ok;
-                                                    MReason1 ->
-                                                        ?error("Cannot change group owner for file (ID: ~p) to ~p due to: ~p.", [FileID, NewGroup, MReason1]),
-                                                        throw(gen_error_message(renamefile, ?VEREMOTEIO))
-                                                end
-                                        end,
+                                                  %% Change group owner if needed
+                                                  case get_group_owner(NewFileName) of
+                                                      [] -> ok; %% Dont change group owner
+                                                      [NewGroup | _] -> %% We are moving file to group folder -> change owner
+                                                          case storage_files_manager:chown(SHInfo, FileID, "", NewGroup) of
+                                                              ok -> ok;
+                                                              MReason1 ->
+                                                                  ?error("Cannot change group owner for file (ID: ~p) to ~p due to: ~p.", [FileID, NewGroup, MReason1]),
+                                                                  throw(gen_error_message(renamefile, ?VEREMOTEIO))
+                                                          end
+                                                  end,
 
-                                        %% Move file to new location on storage
-                                        ActionR = storage_files_manager:mv(SHInfo, FileID, NewFileID),
-                                        _NewFile =
-                                            case ActionR of
-                                                ok -> OldFile#file{location = OldFile#file.location#file_location{file_id = NewFileID}};
-                                                MReason0 ->
-                                                    ?error("Cannot move file (from ID ~p, to ID: ~p) on storage due to: ~p", [FileID, NewFileID, MReason0]),
-                                                    throw(gen_error_message(renamefile, ?VEREMOTEIO))
-                                            end;
-                                    (_) -> ok %% Dont move non-regular files
-                                    end, %% end fun()
+                                                  %% Move file to new location on storage
+                                                  ActionR = storage_files_manager:mv(SHInfo, FileID, NewFileID),
+                                                  _NewFile =
+                                                      case ActionR of
+                                                          ok -> OldFile#file{location = OldFile#file.location#file_location{file_id = NewFileID}};
+                                                          MReason0 ->
+                                                              ?error("Cannot move file (from ID ~p, to ID: ~p) on storage due to: ~p", [FileID, NewFileID, MReason0]),
+                                                              throw(gen_error_message(renamefile, ?VEREMOTEIO))
+                                                      end;
+                                              (_) -> ok %% Dont move non-regular files
+                                              end, %% end fun()
 
-                                %% Check if we need to move file on storage and do it when we do need it
-                                NewFile =
-                                    case {string:tokens(Record#renamefile.from_file_logic_name, "/"), string:tokens(Record#renamefile.to_file_logic_name, "/")} of
-                                        {_, [?GROUPS_BASE_DIR_NAME, _InvalidTarget]} -> %% Moving into ?GROUPS_BASE_DIR_NAME dir is not allowed
-                                            ?info("Attemt to move file to base group directory. Query: ~p", [Record]),
-                                            throw(gen_error_message(renamefile, ?VEPERM));
-                                        {[?GROUPS_BASE_DIR_NAME, _InvalidSource], _} -> %% Moving from ?GROUPS_BASE_DIR_NAME dir is not allowed
-                                            ?info("Attemt to move base group directory. Query: ~p", [Record]),
-                                            throw(gen_error_message(renamefile, ?VEPERM));
+                                          %% Check if we need to move file on storage and do it when we do need it
+                                          NewFile =
+                                              case {string:tokens(Record#renamefile.from_file_logic_name, "/"), string:tokens(Record#renamefile.to_file_logic_name, "/")} of
+                                                  {_, [?GROUPS_BASE_DIR_NAME, _InvalidTarget]} -> %% Moving into ?GROUPS_BASE_DIR_NAME dir is not allowed
+                                                      ?info("Attemt to move file to base group directory. Query: ~p", [Record]),
+                                                      throw(gen_error_message(renamefile, ?VEPERM));
+                                                  {[?GROUPS_BASE_DIR_NAME, _InvalidSource], _} -> %% Moving from ?GROUPS_BASE_DIR_NAME dir is not allowed
+                                                      ?info("Attemt to move base group directory. Query: ~p", [Record]),
+                                                      throw(gen_error_message(renamefile, ?VEPERM));
 
-                                        {[?GROUPS_BASE_DIR_NAME, X | _FromF0], [?GROUPS_BASE_DIR_NAME, X | _ToF0]} -> %% Local (group dir) move, no storage actions are required
-                                            OldFile;
+                                                  {[?GROUPS_BASE_DIR_NAME, X | _FromF0], [?GROUPS_BASE_DIR_NAME, X | _ToF0]} -> %% Local (group dir) move, no storage actions are required
+                                                      OldFile;
 
-                                        {[?GROUPS_BASE_DIR_NAME, _FromGrp0 | _FromF0], [?GROUPS_BASE_DIR_NAME, _ToGrp0 | _ToF0]} -> %% From group X to Y
-                                            MoveOnStorage(OldFile);
-                                        {[?GROUPS_BASE_DIR_NAME, _FromGrp1 | _FromF1], _} ->
-                                            %% From group X user dir
-                                            MoveOnStorage(OldFile);
-                                        {_, [?GROUPS_BASE_DIR_NAME, _ToGrp2 | _ToF2]} ->
-                                            %% From user dir to group X
-                                            MoveOnStorage(OldFile);
+                                                  {[?GROUPS_BASE_DIR_NAME, _FromGrp0 | _FromF0], [?GROUPS_BASE_DIR_NAME, _ToGrp0 | _ToF0]} -> %% From group X to Y
+                                                      MoveOnStorage(OldFile);
+                                                  {[?GROUPS_BASE_DIR_NAME, _FromGrp1 | _FromF1], _} ->
+                                                      %% From group X user dir
+                                                      MoveOnStorage(OldFile);
+                                                  {_, [?GROUPS_BASE_DIR_NAME, _ToGrp2 | _ToF2]} ->
+                                                      %% From user dir to group X
+                                                      MoveOnStorage(OldFile);
 
-                                        {_, _} -> %% Local (user dir) move, no storage actions are required
-                                            OldFile
-                                    end,
+                                                  {_, _} -> %% Local (user dir) move, no storage actions are required
+                                                      OldFile
+                                              end,
 
-                                RenamedFileInit =
-                                    case get_group_owner(NewFileName) of %% Do we need to update group owner?
-                                        [] -> NewFile#file{parent = NewParent, name = fslogic_utils:basename(NewFileName)}; %% Dont change group owner
-                                        [_NewGroup | _] = GIDs -> %% We are moving file to group folder -> change owner
-                                            NewFile#file{parent = NewParent, name = fslogic_utils:basename(NewFileName), gids = GIDs}
-                                    end,
-                                RenamedFile = fslogic_utils:update_meta_attr(RenamedFileInit, ctime, fslogic_utils:time()),
-                                Renamed = OldDoc#veil_document{record = RenamedFile},
-                                case dao_lib:apply(dao_vfs, save_file, [Renamed], ProtocolVersion) of
-                                {ok, _} ->
-                                    CTime = fslogic_utils:time(),
-                                    update_parent_ctime(Record#renamefile.from_file_logic_name, CTime),
-                                    update_parent_ctime(Record#renamefile.to_file_logic_name, CTime),
-                                    #atom{value = ?VOK};
-                                Other ->
-                                    lager:warning("Cannot save file document. Reason: ~p", [Other]),
-                                    #atom{value = ?VEREMOTEIO}
-                                end;
+                                          RenamedFileInit =
+                                              case get_group_owner(NewFileName) of %% Do we need to update group owner?
+                                                  [] -> NewFile#file{parent = NewParent, name = fslogic_utils:basename(NewFileName)}; %% Dont change group owner
+                                                  [_NewGroup | _] = GIDs -> %% We are moving file to group folder -> change owner
+                                                      NewFile#file{parent = NewParent, name = fslogic_utils:basename(NewFileName), gids = GIDs}
+                                              end,
+                                          RenamedFile = fslogic_utils:update_meta_attr(RenamedFileInit, ctime, fslogic_utils:time()),
+                                          Renamed = OldDoc#veil_document{record = RenamedFile},
+                                          case dao_lib:apply(dao_vfs, save_file, [Renamed], ProtocolVersion) of
+                                          {ok, _} ->
+                                              CTime = fslogic_utils:time(),
+                                              update_parent_ctime(Record#renamefile.from_file_logic_name, CTime),
+                                              update_parent_ctime(Record#renamefile.to_file_logic_name, CTime),
+                                              #atom{value = ?VOK};
+                                          Other ->
+                                              lager:warning("Cannot save file document. Reason: ~p", [Other]),
+                                              #atom{value = ?VEREMOTEIO}
+                                          end;
+                                        _ ->
+                                          lager:warning("Moving of file without permissions: ~p", [File]),
+                                          #atom{value = ?VEPERM}
+                                      end;
+                                    _ ->
+                                      lager:warning("Cannot move file. Reason: ~p:~p", [{PermsStat1, PermsStat2}, {PermsOK1, PermsOK2}]),
+                                      #atom{value = ?VEREMOTEIO}
+                                  end;
+                                _ -> #atom{value = ?VEREMOTEIO}
+                              end;
                             {error, file_not_found} ->
                               lager:warning("Cannot find destination dir: ~p", [NewDir]),
                               #atom{value = ?VENOENT};
@@ -732,58 +783,73 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, rena
           #atom{value = ?VENOENT};
         _ -> #atom{value = ?VEREMOTEIO}
       end;
+    {?VEPERM, _} -> #atom{value = ?VEPERM};
+    {_ , ?VEPERM} -> #atom{value = ?VEPERM};
     _  -> #atom{value = ?VEREMOTEIO}
   end;
 
 %% Symbolic link creation. From - link name, To - path pointed by new link
-handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, createlink) ->
-  {FileNameFindingAns, From} = get_full_file_name(Record#createlink.from_file_logic_name),
-%%   {FileNameFindingAns2, To} = get_full_file_name(Record#createlink.to_file_logic_name),
+handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, createlink) ->
+  {UserDocStatus, UserDoc} = get_user_doc(),
+  {FileNameFindingAns, From} = get_full_file_name(Record#createlink.from_file_logic_name, createlink, UserDocStatus, UserDoc),
+%%   {FileNameFindingAns2, To} = get_full_file_name(Record#createlink.to_file_logic_name, createlink),
   To = Record#createlink.to_file_logic_name,
 %%   case {FileNameFindingAns, FileNameFindingAns2} of
 %%     {ok, ok} ->
   case FileNameFindingAns of
     ok ->
-              case get_file(ProtocolVersion, fslogic_utils:strip_path_leaf(From), FuseID) of
-                  {ok, #veil_document{uuid = Parent}} ->
-                      UserId =
-                        case get_user_id() of
-                            {ok, Id} -> Id;
-                            {error, Reason2} ->
-                                lager:error("Cannot get user ID while creating link due to: ~p. Link will belong to 'nobody'.", [Reason2]),
-                                -1
-                        end,
+      {ParentFound, ParentInfo} = fslogic_utils:get_parent_and_name_from_path(From, ProtocolVersion),
 
-                      Groups = get_group_owner(Record#createlink.from_file_logic_name), %% Get owner group name based on file access path
+      case ParentFound of
+        ok ->
+          {FileName, Parent} = ParentInfo,
+          {PermsStat, PermsOK} = check_file_perms(From, UserDocStatus, UserDoc, Parent, write),
+          case PermsStat of
+            ok ->
+              case PermsOK of
+                true ->
+                  UserId =
+                    case UserDoc of
+                      get_user_id_error -> ?CLUSTER_USER_ID;
+                      _ -> UserDoc#veil_document.uuid
+                    end,
 
-                      LinkDocInit = #file{type = ?LNK_TYPE, name = fslogic_utils:basename(From), uid = UserId, gids = Groups, ref_file = To, parent = Parent},
-                      CTime = fslogic_utils:time(),
-                      LinkDoc = fslogic_utils:update_meta_attr(LinkDocInit, times, {CTime, CTime, CTime}),
+                  Groups = get_group_owner(Record#createlink.from_file_logic_name), %% Get owner group name based on file access path
 
-                      case dao_lib:apply(dao_vfs, save_new_file, [From, LinkDoc], ProtocolVersion) of
-                          {ok, _} ->
-                              update_parent_ctime(Record#createlink.from_file_logic_name, CTime),
-                              #atom{value = ?VOK};
-                          {error, file_exists} ->
-                              lager:error("Cannot create link - file already exists: ~p", [From]),
-                              #atom{value = ?VEEXIST};
-                          {error, Reason} ->
-                              lager:error("Cannot save link file (from ~p to ~p) due to error: ~p", [From, To, Reason]),
-                              #atom{value = ?VEREMOTEIO}
-                      end;
-                  {error, file_not_found} ->
-                      lager:error("Cannot create link ~p because parent directory does not exist.", [From]),
-                      #atom{value = ?VENOENT};
-                  {error, Reason1} ->
-                      lager:error("Cannot fetch file information for file ~p due to error: ~p", [fslogic_utils:strip_path_leaf(From), Reason1]),
+                  LinkDocInit = #file{type = ?LNK_TYPE, name = FileName, uid = UserId, gids = Groups, ref_file = To, parent = Parent#veil_document.uuid},
+                  CTime = fslogic_utils:time(),
+                  LinkDoc = fslogic_utils:update_meta_attr(LinkDocInit, times, {CTime, CTime, CTime}),
+
+                  case dao_lib:apply(dao_vfs, save_new_file, [From, LinkDoc], ProtocolVersion) of
+                    {ok, _} ->
+                      update_parent_ctime(Record#createlink.from_file_logic_name, CTime),
+                      #atom{value = ?VOK};
+                    {error, file_exists} ->
+                      lager:error("Cannot create link - file already exists: ~p", [From]),
+                      #atom{value = ?VEEXIST};
+                    {error, Reason} ->
+                      lager:error("Cannot save link file (from ~p to ~p) due to error: ~p", [From, To, Reason]),
                       #atom{value = ?VEREMOTEIO}
+                  end;
+                false ->
+                  lager:warning("Creation of link without permissions: from ~p to ~p", [From, To]),
+                  #atom{value = ?VEPERM}
               end;
+            _ ->
+              lager:warning("Cannot create link. Reason: ~p:~p", [PermsStat, PermsOK]),
+              #atom{value = ?VEREMOTEIO}
+          end;
+        {error, Reason1} ->
+          lager:error("Cannot fetch file information for file ~p due to error: ~p", [From, Reason1]),
+          #atom{value = ?VEREMOTEIO}
+      end;
+    ?VEPERM -> #atom{value = ?VEPERM};
     _  -> #atom{value = ?VEREMOTEIO}
   end;
 
 %% Fetch link data (target path)
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getlink) ->
-  {FileNameFindingAns, File} = get_full_file_name(Record#getlink.file_logic_name),
+  {FileNameFindingAns, File} = get_full_file_name(Record#getlink.file_logic_name, getlink),
   case FileNameFindingAns of
     ok ->
       case get_file(ProtocolVersion, File, FuseID) of
@@ -797,6 +863,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getl
               lager:error("Cannot read link ~p due to error: ~p", [File, Reason]),
               #linkinfo{answer = ?VEREMOTEIO, file_logic_name = ""}
       end;
+    ?VEPERM -> #linkinfo{answer = ?VEPERM, file_logic_name = ""};
     _  -> #linkinfo{answer = ?VEREMOTEIO, file_logic_name = ""}
   end;
 
@@ -998,11 +1065,10 @@ get_user_root() ->
 get_user_groups(UserDocStatus, UserDoc) ->
   case UserDocStatus of
     ok ->
-      UserRecord = UserDoc#veil_document.record,
-      {ok, UserRecord#user.teams};
+      {ok, user_logic:get_team_names(UserDoc)};
     _ ->
       case UserDoc of
-        get_user_id_error -> {error, get_user_id_error};
+        get_user_id_error -> {error, get_user_groups_error};
         _ -> {error, get_user_error}
       end
   end.
@@ -1040,37 +1106,56 @@ get_user_id() ->
 %% ====================================================================
 
 get_full_file_name(FileName) ->
-  get_full_file_name(FileName, get_user_root()).
+  get_full_file_name(FileName, cluster_request).
 
 %% get_full_file_name/2
 %% ====================================================================
 %% @doc Gets file's full name (user's root is added to name, but only when asking about non-group dir).
 %% @end
--spec get_full_file_name(FileName :: string(), {RootStatus :: atom(), Root :: string()}) -> Result when
+-spec get_full_file_name(FileName :: string(), Request :: atom()) -> Result when
   Result :: {ok, FullFileName} | {error, ErrorDesc},
   FullFileName :: string(),
   ErrorDesc :: atom.
 %% ====================================================================
 
-get_full_file_name(FileName, {RootStatus, Root}) ->
-  case string:tokens(FileName, "/") of %% Map all /groups/* requests to root of the file system (i.e. dont add any prefix)
-      [?GROUPS_BASE_DIR_NAME | _] ->
-          {ok, FileName};
-      _ ->
-          case RootStatus of
-            ok ->
+get_full_file_name(FileName, Request) ->
+  {UserDocStatus, UserDoc} = get_user_doc(),
+  get_full_file_name(FileName, Request, UserDocStatus, UserDoc).
+
+%% get_full_file_name/4
+%% ====================================================================
+%% @doc Gets file's full name (user's root is added to name, but only when asking about non-group dir).
+%% @end
+-spec get_full_file_name(FileName :: string(), Request :: atom(), UserDocStatus :: atom(), UserDoc :: tuple()) -> Result when
+  Result :: {ok, FullFileName} | {error, ErrorDesc},
+  FullFileName :: string(),
+  ErrorDesc :: atom.
+%% ====================================================================
+
+get_full_file_name(FileName, Request, UserDocStatus, UserDoc) ->
+  case UserDocStatus of
+    ok ->
+      case assert_group_access(UserDoc, Request, FileName) of
+        ok ->
+          case string:tokens(FileName, "/") of %% Map all /groups/* requests to root of the file system (i.e. dont add any prefix)
+            [?GROUPS_BASE_DIR_NAME | _] ->
+              {ok, FileName};
+            _ ->
+              Root = get_user_root(UserDoc),
               [Beg | _] = FileName,
               NewFileName = case Beg of
                               $/ -> Root ++ FileName;
                               _ -> Root ++ "/" ++ FileName
                             end,
-              {ok, NewFileName};
-            _ ->
-              case Root of
-                get_user_id_error -> {ok, FileName};
-                _ -> {root_not_found, Root}
-              end
-          end
+              {ok, NewFileName}
+          end;
+        _ -> {?VEPERM, ?VEPERM}
+      end;
+    _ ->
+      case UserDoc of
+        get_user_id_error -> {ok, FileName};
+        _ -> {user_doc_not_found, UserDoc}
+      end
   end.
 
 %% Function is not used anymore
@@ -1137,15 +1222,15 @@ get_files_number(Type, GroupName, ProtocolVersion) ->
 %% ====================================================================
 %% @doc Returns id for a new file
 %% @end
--spec get_new_file_id(File :: string(), UserDoc :: term(), Root :: string(), SHInfo :: term(), ProtocolVersion :: integer()) -> string().
+-spec get_new_file_id(File :: string(), UserDoc :: term(), SHInfo :: term(), ProtocolVersion :: integer()) -> string().
 %% ====================================================================
-get_new_file_id(File, UserDoc, Root, SHInfo, ProtocolVersion) ->
+get_new_file_id(File, UserDoc, SHInfo, ProtocolVersion) ->
   {Root1, {CountStatus, FilesCount}} =
-      case {string:tokens(File, "/"), Root} of
+      case {string:tokens(File, "/"), UserDoc} of
           {[?GROUPS_BASE_DIR_NAME, GroupName | _], _} -> %% Group dir context
               {"/" ++ ?GROUPS_BASE_DIR_NAME ++ "/" ++ GroupName, get_files_number(group, GroupName, ProtocolVersion)};
           {_, get_user_id_error} -> {"/", {error, get_user_id_error}}; %% Unknown context
-          _ -> {"/users/" ++ Root, get_files_number(user, UserDoc#veil_document.uuid, ProtocolVersion)}
+          _ -> {"/users/" ++ get_user_root(UserDoc), get_files_number(user, UserDoc#veil_document.uuid, ProtocolVersion)}
       end,
   File_id_beg = case Root1 of
     get_user_id_error -> "/";
@@ -1182,83 +1267,94 @@ create_dirs(Count, CountingBase, SHInfo, TmpAns) ->
 %% assert_group_access/1
 %% ====================================================================
 %% @doc Checks if operation given as parameter (one of fuse_messages) is allowed to be invoked in groups context.
-%%      If operation is not allowed, answer record with error is thrown. It shall be cought and send back to client.
 %% @end
--spec assert_group_access(Record :: tuple()) -> ok | no_return().
+-spec assert_group_access(UserDoc :: tuple(), Request :: atom(), LogicalPath :: string()) -> ok | error.
 %% ====================================================================
-assert_group_access(Record) ->
-    RecordName = element(1, Record),
-    TokenizedPath =
-        try
-            LogicalPath = extract_logical_path(Record),
-            string:tokens(LogicalPath, "/")
-        catch
-            Type:Reason ->
-                ?error_stacktrace("Unable to assert group access due to ~p: ~p", [Type, Reason]),
-                throw(gen_error_message(RecordName, ?VEREMOTEIO))
-        end,
-    assert_group_access(RecordName, TokenizedPath).
-assert_group_access(RecordName, [?GROUPS_BASE_DIR_NAME]) ->
-    case lists:member(RecordName, ?GROUPS_BASE_ALLOWED_ACTIONS) of
-        false   -> throw(gen_error_message(RecordName, ?VEPERM));
+assert_group_access(_UserDoc, cluster_request, _LogicalPath) ->
+  ok;
+
+assert_group_access(UserDoc, Request, LogicalPath) ->
+  assert_grp_access(UserDoc, Request, string:tokens(LogicalPath, "/")).
+
+%% assert_grp_access/1
+%% ====================================================================
+%% @doc Checks if operation given as parameter (one of fuse_messages) is allowed to be invoked in groups context.
+%% @end
+-spec assert_grp_access(UserDoc :: tuple(), Request :: atom(), Path :: list()) -> ok | error.
+%% ====================================================================
+assert_grp_access(_UserDoc, Request, [?GROUPS_BASE_DIR_NAME]) ->
+    case lists:member(Request, ?GROUPS_BASE_ALLOWED_ACTIONS) of
+        false   -> error;
         true    -> ok
     end;
-assert_group_access(RecordName, [?GROUPS_BASE_DIR_NAME, GroupName]) ->
-    case lists:member(RecordName, ?GROUPS_ALLOWED_ACTIONS) of
-        false   -> throw(gen_error_message(RecordName, ?VEPERM));
-        true    -> ok
+assert_grp_access(UserDoc, Request, [?GROUPS_BASE_DIR_NAME | Tail]) ->
+    TailCheck = case Tail of
+      [GroupName] ->
+        case lists:member(Request, ?GROUPS_ALLOWED_ACTIONS) of
+          false   -> error;
+          true    -> ok
+        end;
+      _ ->
+        ok
     end,
-    UserTeams = user_logic:get_team_names({dn, get(user_id)}),
-    case lists:member(GroupName, UserTeams) of
-        true    -> ok;
-        false   -> throw(gen_error_message(RecordName, ?VENOENT))
+
+    case TailCheck of
+      ok ->
+        UserTeams = user_logic:get_team_names(UserDoc),
+        [GroupName2 | _] = Tail,
+        case lists:member(GroupName2, UserTeams) of
+          true    -> ok;
+          false   -> error
+        end;
+      _ ->
+        TailCheck
     end;
-assert_group_access(_, _) ->
+assert_grp_access(_, _, _) ->
     ok.
 
-
-%% extract_logical_path/1
-%% ====================================================================
-%% @doc Convinience method that returns logical file path affected by given operation.
-%%      E.g. for "create file" operation, its parent is the one considered "affected".
-%% @end
--spec extract_logical_path(Record :: tuple()) -> string() | no_return().
-%% ====================================================================
-extract_logical_path(#getfileattr{file_logic_name = Path}) ->
-    Path;
-extract_logical_path(#getfilelocation{file_logic_name = Path}) ->
-    Path;
-extract_logical_path(#deletefile{file_logic_name = Path}) ->
-    Path;
-extract_logical_path(#renamefile{from_file_logic_name = Path}) ->
-    Path;
-extract_logical_path(#getnewfilelocation{file_logic_name = Path}) ->
-   fslogic_utils:strip_path_leaf(Path);
-extract_logical_path(#filenotused{file_logic_name = Path}) ->
-    Path;
-extract_logical_path(#renewfilelocation{file_logic_name = Path}) ->
-    Path;
-extract_logical_path(#getfilechildren{dir_logic_name = Path}) ->
-    Path;
-extract_logical_path(#createdir{dir_logic_name = Path}) ->
-    fslogic_utils:strip_path_leaf(Path);
-extract_logical_path(#getlink{file_logic_name = Path}) ->
-    Path;
-extract_logical_path(#createlink{from_file_logic_name = Path}) ->
-    fslogic_utils:strip_path_leaf(Path);
-extract_logical_path(#changefileowner{file_logic_name = Path}) ->
-    Path;
-extract_logical_path(#changefilegroup{file_logic_name = Path}) ->
-    Path;
-extract_logical_path(#changefileperms{file_logic_name = Path}) ->
-    Path;
-extract_logical_path(#updatetimes{file_logic_name = Path}) ->
-    Path;
-extract_logical_path(#testchannel{}) ->
-    "/";
-extract_logical_path(Record) ->
-    ?error("Unsupported record: ~p", [element(1, Record)]),
-    throw({unsupported_record, element(1, Record)}).
+%% Not needed any more
+%% %% extract_logical_path/1
+%% %% ====================================================================
+%% %% @doc Convinience method that returns logical file path affected by given operation.
+%% %%      E.g. for "create file" operation, its parent is the one considered "affected".
+%% %% @end
+%% -spec extract_logical_path(Record :: tuple()) -> string() | no_return().
+%% %% ====================================================================
+%% extract_logical_path(#getfileattr{file_logic_name = Path}) ->
+%%     Path;
+%% extract_logical_path(#getfilelocation{file_logic_name = Path}) ->
+%%     Path;
+%% extract_logical_path(#deletefile{file_logic_name = Path}) ->
+%%     Path;
+%% extract_logical_path(#renamefile{from_file_logic_name = Path}) ->
+%%     Path;
+%% extract_logical_path(#getnewfilelocation{file_logic_name = Path}) ->
+%%    fslogic_utils:strip_path_leaf(Path);
+%% extract_logical_path(#filenotused{file_logic_name = Path}) ->
+%%     Path;
+%% extract_logical_path(#renewfilelocation{file_logic_name = Path}) ->
+%%     Path;
+%% extract_logical_path(#getfilechildren{dir_logic_name = Path}) ->
+%%     Path;
+%% extract_logical_path(#createdir{dir_logic_name = Path}) ->
+%%     fslogic_utils:strip_path_leaf(Path);
+%% extract_logical_path(#getlink{file_logic_name = Path}) ->
+%%     Path;
+%% extract_logical_path(#createlink{from_file_logic_name = Path}) ->
+%%     fslogic_utils:strip_path_leaf(Path);
+%% extract_logical_path(#changefileowner{file_logic_name = Path}) ->
+%%     Path;
+%% extract_logical_path(#changefilegroup{file_logic_name = Path}) ->
+%%     Path;
+%% extract_logical_path(#changefileperms{file_logic_name = Path}) ->
+%%     Path;
+%% extract_logical_path(#updatetimes{file_logic_name = Path}) ->
+%%     Path;
+%% extract_logical_path(#testchannel{}) ->
+%%     "/";
+%% extract_logical_path(Record) ->
+%%     ?error("Unsupported record: ~p", [element(1, Record)]),
+%%     throw({unsupported_record, element(1, Record)}).
 
 
 %% gen_error_message/2

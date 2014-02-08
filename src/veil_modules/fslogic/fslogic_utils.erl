@@ -55,11 +55,11 @@ get_parent_and_name_from_path(Path, ProtocolVersion) ->
   File = fslogic_utils:basename(Path), 
   Parent = fslogic_utils:strip_path_leaf(Path),
   case Parent of
-    [?PATH_SEPARATOR] -> {ok, {File, ""}};
+    [?PATH_SEPARATOR] -> {ok, {File, #veil_document{}}};
     _Other ->
       {Status, TmpAns} = dao_lib:apply(dao_vfs, get_file, [Parent], ProtocolVersion),
       case Status of
-        ok -> {ok, {File, TmpAns#veil_document.uuid}};
+        ok -> {ok, {File, TmpAns}};
         _BadStatus ->
           lager:error([{mod, ?MODULE}], "Error: cannot find parent for path: ~s", [Path]),
           {error, "Error: cannot find parent: " ++ TmpAns}

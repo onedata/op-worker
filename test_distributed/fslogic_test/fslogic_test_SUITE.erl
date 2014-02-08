@@ -58,8 +58,12 @@ groups_permissions_test(Config) ->
   nodes_manager:wait_for_cluster_init(),
 
   Team = "team1",
+  Team2 = "team2",
+  Team3 = "team3",
   TestFile = "groups/" ++ Team ++ "/groups_permissions_test_file",
   TestFileNewName = TestFile ++ "2",
+  TestFile2 = "groups/" ++ Team2 ++ "/groups_permissions_test_file",
+  TestFile3 = "groups/" ++ Team3 ++ "/groups_permissions_test_file",
 
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
@@ -90,7 +94,7 @@ groups_permissions_test(Config) ->
   Login2 = "user2",
   Name2 = "user2 user2",
   Email2 = "user2@email.net",
-  {CreateUserAns2, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams, Email2, DnList2]),
+  {CreateUserAns2, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, [Team, Team2], Email2, DnList2]),
   ?assertEqual(ok, CreateUserAns2),
 
   %% Connect to cluster
@@ -142,6 +146,130 @@ groups_permissions_test(Config) ->
   {Status11, Answer11} = delete_file(Socket2, TestFileNewName),
   ?assertEqual("ok", Status11),
   ?assertEqual(list_to_atom(?VOK), Answer11),
+
+  {Status12, _, _, _, AnswerOpt12} = create_file(Socket, TestFile2),
+  ?assertEqual("ok", Status12),
+  ?assertEqual(?VEPERM, AnswerOpt12),
+
+  {Status13, _, _, _, AnswerOpt13} = create_file(Socket, TestFile3),
+  ?assertEqual("ok", Status13),
+  ?assertEqual(?VEPERM, AnswerOpt13),
+
+
+
+
+
+
+
+  TestFile4 = "groups/" ++ Team ++ "/groups_permissions_test_file4",
+
+  TestDir = "groups/" ++ Team ++ "/groups_permissions_test_dir",
+  TestDirFile = TestDir ++ "/file1",
+  TestDirDir = TestDir ++ "/dir1",
+
+  LinkName = TestDir ++ "/link1",
+
+  {Status14, Answer14} = mkdir(Socket2, TestDir),
+  ?assertEqual("ok", Status14),
+  ?assertEqual(list_to_atom(?VOK), Answer14),
+
+  {Status15, Answer15} = change_file_perms(Socket2, TestDir, 8#640),
+  ?assertEqual("ok", Status15),
+  ?assertEqual(list_to_atom(?VOK), Answer15),
+
+  {Status16, _, _, _, AnswerOpt16} = create_file(Socket, TestDirFile),
+  ?assertEqual("ok", Status16),
+  ?assertEqual(?VEPERM, AnswerOpt16),
+
+  {Status17, _, _, _, AnswerOpt17} = create_file(Socket2, TestDirFile),
+  ?assertEqual("ok", Status17),
+  ?assertEqual(?VOK, AnswerOpt17),
+
+  {Status18, Answer18} = mkdir(Socket, TestDirDir),
+  ?assertEqual("ok", Status18),
+  ?assertEqual(list_to_atom(?VEPERM), Answer18),
+
+  {Status19, Answer19} = mkdir(Socket2, TestDirDir),
+  ?assertEqual("ok", Status19),
+  ?assertEqual(list_to_atom(?VOK), Answer19),
+
+  {Status20, Answer20} = create_link(Socket, LinkName, TestDirFile),
+  ?assertEqual("ok", Status20),
+  ?assertEqual(list_to_atom(?VEPERM), Answer20),
+
+  {Status21, Answer21} = create_link(Socket2, LinkName, TestDirFile),
+  ?assertEqual("ok", Status21),
+  ?assertEqual(list_to_atom(?VOK), Answer21),
+
+  {Status22, Answer22} = delete_file(Socket2, TestDirDir),
+  ?assertEqual("ok", Status22),
+  ?assertEqual(list_to_atom(?VOK), Answer22),
+
+  {Status23, Answer23} = delete_file(Socket2, LinkName),
+  ?assertEqual("ok", Status23),
+  ?assertEqual(list_to_atom(?VOK), Answer23),
+
+  {Status24, Answer24} = rename_file(Socket, TestDirFile, TestFile4),
+  ?assertEqual("ok", Status24),
+  ?assertEqual(list_to_atom(?VEPERM), Answer24),
+
+  {Status25, Answer25} = rename_file(Socket2, TestDirFile, TestFile4),
+  ?assertEqual("ok", Status25),
+  ?assertEqual(list_to_atom(?VOK), Answer25),
+
+  {Status26, Answer26} = rename_file(Socket, TestFile4, TestDirFile),
+  ?assertEqual("ok", Status26),
+  ?assertEqual(list_to_atom(?VEPERM), Answer26),
+
+  {Status27, Answer27} = rename_file(Socket2, TestFile4, TestDirFile),
+  ?assertEqual("ok", Status27),
+  ?assertEqual(list_to_atom(?VOK), Answer27),
+
+  {Status28, Answer28} = delete_file(Socket2, TestDirFile),
+  ?assertEqual("ok", Status28),
+  ?assertEqual(list_to_atom(?VOK), Answer28),
+
+  {Status29, Answer29} = change_file_perms(Socket2, TestDir, 8#660),
+  ?assertEqual("ok", Status29),
+  ?assertEqual(list_to_atom(?VOK), Answer29),
+
+  {Status30, _, _, _, AnswerOpt30} = create_file(Socket, TestDirFile),
+  ?assertEqual("ok", Status30),
+  ?assertEqual(?VOK, AnswerOpt30),
+
+  {Status31, Answer31} = mkdir(Socket, TestDirDir),
+  ?assertEqual("ok", Status31),
+  ?assertEqual(list_to_atom(?VOK), Answer31),
+
+  {Status32, Answer32} = create_link(Socket, LinkName, TestDirFile),
+  ?assertEqual("ok", Status32),
+  ?assertEqual(list_to_atom(?VOK), Answer32),
+
+  {Status33, Answer33} = delete_file(Socket, TestDirDir),
+  ?assertEqual("ok", Status33),
+  ?assertEqual(list_to_atom(?VOK), Answer33),
+
+  {Status34, Answer34} = delete_file(Socket, LinkName),
+  ?assertEqual("ok", Status34),
+  ?assertEqual(list_to_atom(?VOK), Answer34),
+
+  {Status35, Answer35} = rename_file(Socket, TestDirFile, TestFile4),
+  ?assertEqual("ok", Status35),
+  ?assertEqual(list_to_atom(?VOK), Answer35),
+
+  {Status36, Answer36} = rename_file(Socket, TestFile4, TestDirFile),
+  ?assertEqual("ok", Status36),
+  ?assertEqual(list_to_atom(?VOK), Answer36),
+
+  {Status37, Answer37} = delete_file(Socket, TestDirFile),
+  ?assertEqual("ok", Status37),
+  ?assertEqual(list_to_atom(?VOK), Answer37),
+
+  {Status38, Answer38} = delete_file(Socket2, TestDir),
+  ?assertEqual("ok", Status38),
+  ?assertEqual(list_to_atom(?VOK), Answer38),
+
+
 
   wss:close(Socket),
   wss:close(Socket2),
