@@ -100,7 +100,7 @@ init(_Args) ->
 %% ====================================================================
 %% @doc {@link worker_plugin_behaviour} callback handle/1
 -spec handle(ProtocolVersion :: term(), Request) -> Result when
-    Request :: ping | get_version,
+    Request :: ping | healthcheck | get_version,
     Result :: ok | {ok, Response} | {error, Error} | pong | Version,
     Response :: term(),
     Version :: term(),
@@ -108,6 +108,9 @@ init(_Args) ->
 %% ====================================================================
 handle(_ProtocolVersion, ping) ->
     pong;
+
+handle(_ProtocolVersion, healthcheck) ->
+		ok;
 
 handle(_ProtocolVersion, get_version) ->
     node_manager:check_vsn();
