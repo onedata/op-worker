@@ -496,7 +496,7 @@ contact_fslogic(Message, Value) ->
     ok ->
       receive
         {worker_answer, MsgId, Resp} -> {ok, Resp}
-      after 15000 ->
+      after 7000 ->
         {error, timeout}
       end;
     _ -> {error, CallAns}

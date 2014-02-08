@@ -19,7 +19,7 @@
 %% ===================================================================
 %% API functions
 %% ===================================================================
--export([save_file_share/1, remove_file_share/1, get_file_share/1]).
+-export([save_file_share/1, remove_file_share/1, exist_file_share/1, get_file_share/1]).
 
 
 %% save_file_share/1
@@ -71,6 +71,35 @@ remove_file_share(Key) ->
         _ -> throw(remove_file_share_error)
       end
   end.
+
+%% exist_file_share/1
+%% ====================================================================
+%% @doc Checks whether file share exists in db. Arguments should by share_id, file name or user uuid.                                  l
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec exist_file_share(Key:: {file, File :: uuid()} | {user, User :: uuid()} |
+{uuid, UUID :: uuid()}) -> {ok, true | false} | {error, any()}.
+%% ====================================================================
+exist_file_share({uuid, UUID}) ->
+    dao:set_db(?FILES_DB_NAME),
+    dao:exist_record(UUID);
+exist_file_share({Key, Value}) ->
+    dao:set_db(?FILES_DB_NAME),
+    {View, QueryArgs} = case Key of
+                            user ->
+                                {?SHARE_BY_USER_VIEW, #view_query_args{keys =
+                                [dao_helper:name(Value)], include_docs = true}};
+                            file ->
+                                {?SHARE_BY_FILE_VIEW, #view_query_args{keys =
+                                [dao_helper:name(Value)], include_docs = true}}
+                        end,
+    case dao:list_records(View, QueryArgs) of
+        {ok, #view_result{rows = [#view_row{doc = _FDoc} | _Tail]}} ->
+            {ok, true};
+        {ok, #view_result{rows = []}} ->
+            {ok, false};
+        Other -> Other
+    end.
 
 %% get_file_share/1
 %% ====================================================================
