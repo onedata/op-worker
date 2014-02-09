@@ -10,15 +10,16 @@
 %% @end
 %% ===================================================================
 
--module(gui_test_SUITE).
+-module(gui_and_nagios_test_SUITE).
 -include("nodes_manager.hrl").
 -include("registered_names.hrl").
+-include_lib("xmerl/include/xmerl.hrl").
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([connection_test/1]).
+-export([connection_test/1,nagios_test/1]).
 
-all() -> [connection_test].
+all() -> [connection_test,nagios_test].
 
 %% ====================================================================
 %% Test functions
@@ -44,29 +45,62 @@ connection_test(Config) ->
     {_, Code, _, _} = ibrowse:send_req("https://localhost:" ++ integer_to_list(Port) , [], get),
     ?assertEqual(Code, "200").
 
+%% sends nagios request and check if health status is ok, and if health report contains information about all workers
+nagios_test(Config) ->
+	nodes_manager:check_start_assertions(Config),
+	NodesUp = ?config(nodes, Config),
+	[CCM | _] = NodesUp,
+
+	gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
+	gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+	nodes_manager:wait_for_cluster_cast(),
+	gen_server:cast({global, ?CCM}, init_cluster),
+	nodes_manager:wait_for_cluster_init(),
+
+	ibrowse:start(),
+	NagiosUrl = "https://localhost/nagios",
+	{ok, Code, _RespHeaders, Response} = rpc:call(CCM,ibrowse,send_req, [NagiosUrl,[],get]),
+	{Xml,_} = xmerl_scan:string(Response),
+	{Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
+
+	[MainStatus] = [X#xmlAttribute.value || X <- Xml#xmlElement.attributes, X#xmlAttribute.name==status],
+	ClusterReport = [X || X <- Xml#xmlElement.content, X#xmlElement.name==veil_cluster_node],
+	AssertWorkerInReport = fun ({_WorkerNode,WorkerName}) ->
+		Report = [Y || X <- Xml#xmlElement.content, X#xmlElement.name==worker, Y <- X#xmlElement.attributes, Y#xmlAttribute.value==atom_to_list(WorkerName)],
+		?assertNotEqual(Report,[]) %if it fails, probably worker doesn't handle 'healthcheck' callback
+	end,
+
+	lists:foreach(AssertWorkerInReport,Workers),
+	?assertNotEqual(ClusterReport,[]),
+	?assertEqual(MainStatus,"ok"),
+	?assertEqual(Code,"200").
+
 
 %% ====================================================================
 %% SetUp and TearDown functions
 %% ====================================================================
 
-init_per_testcase(connection_test, Config) ->
+init_per_testcase(_, Config) ->
     ?INIT_DIST_TEST,
     nodes_manager:start_deps_for_tester_node(),
 
     Nodes = nodes_manager:start_test_on_nodes(1),
     [Node1 | _] = Nodes,
 
-    StartLog = nodes_manager:start_app_on_nodes(Nodes, 
-        [[{node_type, ccm_test}, 
-            {dispatcher_port, 5055}, 
-            {ccm_nodes, [Node1]}, 
-            {dns_port, 1308}]]),
+	DB_Node = nodes_manager:get_db_node(),
+
+	StartLog = nodes_manager:start_app_on_nodes(Nodes,
+		[[{node_type, ccm_test},
+			{dispatcher_port, 5055},
+			{ccm_nodes, [Node1]},
+			{dns_port, 1308},
+			{db_nodes, [DB_Node]}]]),
 
     Assertions = [{false, lists:member(error, Nodes)}, {false, lists:member(error, StartLog)}],
     lists:append([{nodes, Nodes}, {assertions, Assertions}], Config).
 
 
-end_per_testcase(connection_test, Config) ->
+end_per_testcase(_, Config) ->
     Nodes = ?config(nodes, Config),
     StopLog = nodes_manager:stop_app_on_nodes(Nodes),
     StopAns = nodes_manager:stop_nodes(Nodes),
