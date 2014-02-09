@@ -194,6 +194,8 @@ void SimpleConnectionPool::setPushCallback(std::string fuseId, push_callback hdl
 
 list<string> SimpleConnectionPool::dnsQuery(string hostname)
 {
+    boost::unique_lock< boost::recursive_mutex > lock(m_access);
+    
     list<string> lst;
     struct addrinfo *result;
     struct addrinfo *res;
