@@ -69,6 +69,8 @@ protected:
     std::string          m_fuseId;
 
     push_callback        m_pushCallback;
+
+    int         m_currWorkers;
     
     boost::recursive_mutex      m_access;
     boost::condition_variable   m_accessCond;
@@ -77,6 +79,23 @@ protected:
     
     virtual boost::shared_ptr<CommunicationHandler> newConnection(PoolType type);   ///< Creates new active connection and adds it to connection pool. Convenience method for testing (makes connection mocking easier) 
     virtual std::list<std::string> dnsQuery(std::string hostname);                  ///< Fetch IP list from DNS for given hostname.
+
+    /// Increments givent int while constructing and deincrement while destructing. 
+    struct CounterRAII {
+        int &c;
+
+        CounterRAII(int &c) 
+          : c(c) 
+        {
+            ++c;
+        }
+
+        ~CounterRAII() 
+        {
+            --c;
+        }
+
+    };
 };
 
 } // namespace veil

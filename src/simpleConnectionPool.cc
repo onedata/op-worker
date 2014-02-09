@@ -25,7 +25,8 @@ SimpleConnectionPool::SimpleConnectionPool(string hostname, int port, string cer
     m_hostname(hostname),
     updateCertCB(updateCert),
     m_port(port),
-    m_certPath(certPath)
+    m_certPath(certPath),
+    m_currWorkers(0)
 {
     m_connectionPools[META_POOL] = ConnectionPoolInfo(metaPoolSize);
     m_connectionPools[DATA_POOL] = ConnectionPoolInfo(dataPoolSize);
@@ -60,6 +61,8 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(Pool
     ConnectionPoolInfo &poolInfo = m_connectionPools[type];
     boost::shared_ptr<CommunicationHandler> conn;
     
+    CounterRAII sc(m_currWorkers);
+
     // Check if certificate is OK and generate new one if needed and possible
     //                 Disable certificate update for now (due to globus memory leak)
     if(updateCertCB && false) {
@@ -143,8 +146,11 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(P
         poolInfo.connections.pop_back();
     
     // Check if pool size matches config
-    long toStart = poolInfo.size - poolInfo.connections.size();
-    while(toStart-- > 0) // Current pool is too small, we should create some connection(s)
+    long toStart = poolInfo.size - poolInfo.connections.size() - m_currWorkers;
+
+    DLOG(INFO) << "Current pool size: " << poolInfo.connections.size() << ", connections in construcion: " << m_currWorkers << ", expected: " << poolInfo.size;
+
+    if(toStart --> 0 ) // Current pool is too small, we should create some connection(s)
     {
         LOG(INFO) << "Connection pool (" << type << " is to small (" << poolInfo.connections.size() << " connections - expected: " << poolInfo.size << "). Opening new connection...";
         
@@ -195,7 +201,7 @@ void SimpleConnectionPool::setPushCallback(std::string fuseId, push_callback hdl
 list<string> SimpleConnectionPool::dnsQuery(string hostname)
 {
     boost::unique_lock< boost::recursive_mutex > lock(m_access);
-    
+
     list<string> lst;
     struct addrinfo *result;
     struct addrinfo *res;
