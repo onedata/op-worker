@@ -34,10 +34,11 @@ public:
     
     struct ConnectionPoolInfo {
         
-        ConnectionPoolInfo(unsigned int s) : size(s) {}
+        ConnectionPoolInfo(unsigned int s) : size(s), currWorkers(0) {}
         ConnectionPoolInfo() : size(DEFAULT_POOL_SIZE) {}
         
         connection_pool_t connections;
+        int currWorkers;
         unsigned int size;
     };
 
@@ -77,6 +78,23 @@ protected:
     
     virtual boost::shared_ptr<CommunicationHandler> newConnection(PoolType type);   ///< Creates new active connection and adds it to connection pool. Convenience method for testing (makes connection mocking easier) 
     virtual std::list<std::string> dnsQuery(std::string hostname);                  ///< Fetch IP list from DNS for given hostname.
+
+    /// Increments givent int while constructing and deincrement while destructing. 
+    struct CounterRAII {
+        int &c;
+
+        CounterRAII(int &c) 
+          : c(c) 
+        {
+            ++c;
+        }
+
+        ~CounterRAII() 
+        {
+            --c;
+        }
+
+    };
 };
 
 } // namespace veil

@@ -60,6 +60,8 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(Pool
     ConnectionPoolInfo &poolInfo = m_connectionPools[type];
     boost::shared_ptr<CommunicationHandler> conn;
     
+    CounterRAII sc(poolInfo.currWorkers);
+
     // Check if certificate is OK and generate new one if needed and possible
     //                 Disable certificate update for now (due to globus memory leak)
     if(updateCertCB && false) {
@@ -143,8 +145,13 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(P
         poolInfo.connections.pop_back();
     
     // Check if pool size matches config
-    long toStart = poolInfo.size - poolInfo.connections.size();
-    while(toStart-- > 0) // Current pool is too small, we should create some connection(s)
+    long toStart = poolInfo.size - poolInfo.connections.size() - poolInfo.currWorkers;
+    if(poolInfo.connections.size() == 0 && toStart <= 0)
+        toStart = 1;
+
+    DLOG(INFO) << "Current pool size: " << poolInfo.connections.size() << ", connections in construcion: " << poolInfo.currWorkers << ", expected: " << poolInfo.size;
+
+    while(toStart --> 0) // Current pool is too small, we should create some connection(s)
     {
         LOG(INFO) << "Connection pool (" << type << " is to small (" << poolInfo.connections.size() << " connections - expected: " << poolInfo.size << "). Opening new connection...";
         
@@ -194,6 +201,8 @@ void SimpleConnectionPool::setPushCallback(std::string fuseId, push_callback hdl
 
 list<string> SimpleConnectionPool::dnsQuery(string hostname)
 {
+    boost::unique_lock< boost::recursive_mutex > lock(m_access);
+
     list<string> lst;
     struct addrinfo *result;
     struct addrinfo *res;

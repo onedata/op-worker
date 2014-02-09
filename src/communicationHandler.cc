@@ -53,8 +53,20 @@ void CommunicationHandler::setCertFun(get_cert_path_fun certFun)
 CommunicationHandler::~CommunicationHandler()
 {
     closeConnection();
+
+    DLOG(INFO) << "Destructing connection: " << this;
+    if(m_endpoint)
+    {
+        m_endpoint->stop();
+    }
+
+    m_worker1.join();
+    m_worker2.join();
+
     boost::unique_lock<boost::mutex> lock(m_instanceMutex);
     --instancesCount;
+
+    DLOG(INFO) << "Connection: " << this << " deleted";
 }
     
 unsigned int CommunicationHandler::getErrorCount()
@@ -69,11 +81,13 @@ void CommunicationHandler::setFuseID(string fuseId)
 
 void CommunicationHandler::setPushCallback(push_callback cb) 
 {
+    boost::unique_lock<boost::mutex> lock(m_connectMutex);
     m_pushCallback = cb; // Register callback
 }
 
 void CommunicationHandler::enablePushChannel() 
 {
+    boost::unique_lock<boost::mutex> lock(m_connectMutex);
     // If channel wasnt active and connection is esabilished atm, register channel
     // If connection is not active, let openConnection() take care of it
     if(!m_isPushChannel && m_connectStatus == CONNECTED && m_pushCallback)
@@ -84,6 +98,7 @@ void CommunicationHandler::enablePushChannel()
 
 void CommunicationHandler::disablePushChannel() 
 {
+    boost::unique_lock<boost::mutex> lock(m_connectMutex);
     // If connection is not active theres no way to close PUSH channel
     if(m_isPushChannel && m_connectStatus == CONNECTED)
         closePushChannel();
