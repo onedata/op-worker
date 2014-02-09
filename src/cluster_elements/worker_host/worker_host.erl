@@ -21,6 +21,7 @@
 -define(BORTER_CHILD_WAIT_TIME, 10000).
 -define(MAX_CHILD_WAIT_TIME, 60000000).
 -define(MAX_CALCULATION_WAIT_TIME, 10000000).
+-define(SUB_PROC_CACHE_CLEAR_TIME, 2000).
 
 %% ====================================================================
 %% API
@@ -162,6 +163,15 @@ handle_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, D
   {reply, ok, State#host_state{request_map = RM, sub_procs = SubProcList,
   dispatcher_request_map = DM, dispatcher_request_map_ok = false}};
 
+%% For tests
+handle_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, Cache}, _From, State) ->
+  Pid = self(),
+  SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache),
+  erlang:send_after(200, Pid, {timer, register_disp_map}),
+  erlang:send_after(200, Pid, {timer, register_sub_proc_caches}),
+  {reply, ok, State#host_state{request_map = RM, sub_procs = SubProcList,
+  dispatcher_request_map = DM, dispatcher_request_map_ok = false}};
+
 handle_call(Request, _From, State) when is_tuple(Request) -> %% Proxy call. Each cast can be achieved by instant proxy-call which ensures
                                                              %% that request was made, unlike cast because cast ignores state of node/gen_server
     {reply, gen_server:cast(State#host_state.plug_in, Request), State};
@@ -291,7 +301,7 @@ handle_cast(register_sub_proc_caches, State) ->
       end
   end;
 
-handle_cast({clear_sub_procs_cache, Cache}, State) ->
+handle_cast({clear_sub_procs_cache, AnsPid, Cache}, State) ->
   CacheName = case Cache of
     C when is_atom(C) ->
       Cache;
@@ -301,17 +311,23 @@ handle_cast({clear_sub_procs_cache, Cache}, State) ->
 
   SubProcs = State#host_state.sub_procs,
   {_SubProcArgs, _SubProcCache, SubProcPid} = proplists:get_value(CacheName, SubProcs, {not_found, not_found, not_found}),
-  case SubProcPid of
+  Ans = case SubProcPid of
     not_found ->
-      ok;
+      false;
     _ ->
       case Cache of
         CName when is_atom(CName) ->
-          SubProcPid ! {sub_proc_management, clear_cache};
+          SubProcPid ! {sub_proc_management, self(), clear_cache};
         {_, Keys} ->
-          SubProcPid ! {sub_proc_management, {clear_cache, Keys}}
+          SubProcPid ! {sub_proc_management, self(), {clear_cache, Keys}}
+      end,
+      receive
+        {sub_proc_cache_cleared, ClearAns} -> ClearAns
+      after ?SUB_PROC_CACHE_CLEAR_TIME ->
+        false
       end
   end,
+  AnsPid ! {sub_proc_cache_cleared, Ans},
   {noreply, State};
 
 handle_cast(stop, State) ->
@@ -594,16 +610,16 @@ sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, 
     {sub_proc_management, stop} ->
       del_sub_procs(ets:first(Name), Name);
 
-    {sub_proc_management, clear_cache} ->
+    {sub_proc_management, ReturnPid, clear_cache} ->
       case CacheName of
           non -> ok;
         _ ->
           ets:delete_all_objects(CacheName),
-          clear_sub_procs_caches(CacheName, clear_cache)
+          ReturnPid ! {sub_proc_cache_cleared, clear_sub_procs_caches(CacheName, clear_cache)}
       end,
       sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
 
-    {sub_proc_management, {clear_cache, Keys}} ->
+    {sub_proc_management, ReturnPid, {clear_cache, Keys}} ->
       case CacheName of
           non -> ok;
         _ ->
@@ -613,7 +629,7 @@ sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, 
             KList when is_list(KList) ->
               lists:foreach(fun(K) -> ets:delete(CacheName, K) end, KList)
           end,
-          clear_sub_procs_caches(CacheName, {clear_cache, Keys})
+          ReturnPid ! {sub_proc_cache_cleared, clear_sub_procs_caches(CacheName, {clear_cache, Keys})}
       end,
       sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
 
@@ -928,17 +944,32 @@ clear_cache(Cache) ->
   end.
 
 clear_sub_procs_caches(EtsName, Message) ->
-  clear_sub_procs_caches(EtsName, ets:first(EtsName), Message).
+  clear_sub_procs_caches(EtsName, ets:first(EtsName), Message, 0).
 
-clear_sub_procs_caches(_EtsName, '$end_of_table', _Message) ->
-  ok;
-clear_sub_procs_caches(EtsName, CurrentElement, Message) ->
-  case CurrentElement of
+clear_sub_procs_caches(_EtsName, '$end_of_table', _Message, SendNum) ->
+  count_answers(SendNum);
+clear_sub_procs_caches(EtsName, CurrentElement, Message, SendNum) ->
+  NewSendNum = case CurrentElement of
     Pid when is_pid(Pid) ->
-      Pid ! {sub_proc_management, Message};
-    _ -> ok
+      Pid ! {sub_proc_management, self(), Message},
+      SendNum + 1;
+    _ -> SendNum
   end,
-  clear_sub_procs_caches(EtsName, ets:next(EtsName, CurrentElement)).
+  clear_sub_procs_caches(EtsName, ets:next(EtsName, CurrentElement), Message, NewSendNum).
+
+count_answers(ExpectedNum) ->
+  count_answers(ExpectedNum, true).
+
+count_answers(0, TmpAns) ->
+  TmpAns;
+
+count_answers(ExpectedNum, TmpAns) ->
+  receive
+    {sub_proc_cache_cleared, TmpAns2} ->
+      count_answers(ExpectedNum - 1, TmpAns and TmpAns2)
+  after ?SUB_PROC_CACHE_CLEAR_TIME ->
+    false
+  end.
 
 get_cache_name(SupProcName) ->
   list_to_atom(atom_to_list(SupProcName) ++ "_cache").
@@ -955,7 +986,25 @@ register_sub_proc_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection,
   end.
 
 clear_sub_procs_cache({PlugIn, Cache}) ->
-  gen_server:cast(PlugIn, {clear_sub_procs_cache, Cache}).
+  gen_server:cast(PlugIn, {clear_sub_procs_cache, self(), Cache}),
+  receive
+    {sub_proc_cache_cleared, ClearAns} ->
+      case ClearAns of
+        true -> ok;
+        _ -> error
+      end
+  after ?SUB_PROC_CACHE_CLEAR_TIME ->
+    error
+  end.
 
 clear_sub_procs_cache({PlugIn, Cache}, Key) ->
-  gen_server:cast(PlugIn, {clear_sub_procs_cache, {Cache, Key}}).
+  gen_server:cast(PlugIn, {clear_sub_procs_cache, self(), {Cache, Key}}),
+  receive
+    {sub_proc_cache_cleared, ClearAns} ->
+      case ClearAns of
+        true -> ok;
+        _ -> error
+      end
+  after ?SUB_PROC_CACHE_CLEAR_TIME ->
+    error
+  end.

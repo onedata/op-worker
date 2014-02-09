@@ -183,8 +183,8 @@ handle_call({get_callback, FuseId}, _From, State) ->
   {reply, Callback, NewState};
 
 handle_call({clear_cache, Cache}, _From, State) ->
-  clear_cache(Cache, State#node_state.simple_caches),
-  {reply, ok, State};
+  Ans = clear_cache(Cache, State#node_state.simple_caches),
+  {reply, Ans, State};
 
 %% Test call
 handle_call(check, _From, State) ->
@@ -685,7 +685,8 @@ clear_cache(Cache, Caches) ->
     CacheName when is_atom(CacheName) ->
       case lists:member(Cache, Caches) of
         true ->
-          ets:delete_all_objects(Cache);
+          ets:delete_all_objects(Cache),
+          ok;
         false ->
           ok
       end;
@@ -696,20 +697,25 @@ clear_cache(Cache, Caches) ->
     {CacheName2, Key} when is_atom(Key) ->
       case lists:member(CacheName2, Caches) of
         true ->
-          ets:delete(CacheName2, Key);
+          ets:delete(CacheName2, Key),
+          ok;
         false ->
           ok
       end;
     {CacheName3, Keys} when is_list(Keys) ->
       case lists:member(CacheName3, Caches) of
         true ->
-          lists:foreach(fun(K) -> ets:delete(CacheName3, K) end, Keys);
+          lists:foreach(fun(K) -> ets:delete(CacheName3, K) end, Keys),
+          ok;
         false ->
           ok
       end;
     [] -> ok;
     [H | T] ->
-      clear_cache(H, Caches),
-      clear_cache(T, Caches)
-  end,
-  ok.
+      Ans1 = clear_cache(H, Caches),
+      Ans2 = clear_cache(T, Caches),
+      case {Ans1, Ans2} of
+        {ok, ok} -> ok;
+        _ -> error
+      end
+  end.
