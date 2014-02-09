@@ -26,7 +26,7 @@
 %% API
 %% ====================================================================
 -export([start_link/3, stop/1, start_sub_proc/5, start_sub_proc/6, generate_sub_proc_list/1, generate_sub_proc_list/5, generate_sub_proc_list/6]).
--export([create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1]).
+-export([create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1, clear_sub_procs_cache/1, clear_sub_procs_cache/2]).
 
 %% ====================================================================
 %% Test API
@@ -598,7 +598,7 @@ sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, 
       case CacheName of
           non -> ok;
         _ ->
-          nodes:manager:clear_cache(CacheName),
+          ets:delete_all_objects(CacheName),
           clear_sub_procs_caches(CacheName, clear_cache)
       end,
       sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
@@ -607,7 +607,12 @@ sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, 
       case CacheName of
           non -> ok;
         _ ->
-          nodes:manager:clear_cache(CacheName, Keys),
+          case Keys of
+            Key when is_atom(Key) ->
+              ets:delete(CacheName, Key);
+            KList when is_list(KList) ->
+              lists:foreach(fun(K) -> ets:delete(CacheName, K) end, KList)
+          end,
           clear_sub_procs_caches(CacheName, {clear_cache, Keys})
       end,
       sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
@@ -878,7 +883,7 @@ create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPi
 %% register_simple_cache/5
 %% ====================================================================
 %% @doc Creates register_simple_cache cache.
--spec create_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean(), Pid :: pid()) -> Result when
+-spec register_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean(), ClearingPid :: pid()) -> Result when
   Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
   CacheLoop :: integer() | atom().
 %% ====================================================================
@@ -933,7 +938,7 @@ clear_sub_procs_caches(EtsName, CurrentElement, Message) ->
       Pid ! {sub_proc_management, Message};
     _ -> ok
   end,
-  delete_all_callbacks(EtsName, ets:next(EtsName, CurrentElement)).
+  clear_sub_procs_caches(EtsName, ets:next(EtsName, CurrentElement)).
 
 get_cache_name(SupProcName) ->
   list_to_atom(atom_to_list(SupProcName) ++ "_cache").
