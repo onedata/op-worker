@@ -1454,7 +1454,7 @@ clear_cache(State, Cache) ->
       {TmpState, TmpWorkersFound}
     catch
       _:_ ->
-        lager:error([{mod, ?MODULE}], "Can not clear cahce ~p of node: ~p", [Cache, Node]),
+        lager:error([{mod, ?MODULE}], "Can not clear cache ~p of node: ~p", [Cache, Node]),
         {NewState, WorkersFound} = node_down(Node, State),
         {NewState, TmpWorkersFound or WorkersFound}
     end

@@ -183,7 +183,7 @@ handle_call({get_callback, FuseId}, _From, State) ->
   {reply, Callback, NewState};
 
 handle_call({clear_cache, Cache}, _From, State) ->
-  clear_cache(Cache),
+  clear_cache(Cache, State#node_state.simple_caches),
   {reply, ok, State};
 
 %% Test call
@@ -678,23 +678,38 @@ clear_simple_caches(Caches) ->
 %% clear_cache/1
 %% ====================================================================
 %% @doc Clears chosen caches at node
--spec clear_cache(Cache :: term()) -> ok.
+-spec clear_cache(Cache :: term(), Caches :: list()) -> ok.
 %% ====================================================================
-clear_cache(Cache) ->
+clear_cache(Cache, Caches) ->
   case Cache of
     CacheName when is_atom(CacheName) ->
-      ets:delete_all_objects(Cache);
+      case lists:member(Cache, Caches) of
+        true ->
+          ets:delete_all_objects(Cache);
+        false ->
+          ok
+      end;
     {sub_proc_cache, SubProcCache} ->
       worker_host:clear_sub_procs_cache(SubProcCache);
     {{sub_proc_cache, SubProcCache}, SubProcKey} ->
       worker_host:clear_sub_procs_cache(SubProcCache, SubProcKey);
     {CacheName2, Key} when is_atom(Key) ->
-      ets:delete(CacheName2, Key);
+      case lists:member(CacheName2, Caches) of
+        true ->
+          ets:delete(CacheName2, Key);
+        false ->
+          ok
+      end;
     {CacheName3, Keys} when is_list(Keys) ->
-      lists:foreach(fun(K) -> ets:delete(CacheName3, K) end, Keys);
+      case lists:member(CacheName3, Caches) of
+        true ->
+          lists:foreach(fun(K) -> ets:delete(CacheName3, K) end, Keys);
+        false ->
+          ok
+      end;
     [] -> ok;
     [H | T] ->
-      clear_cache(H),
-      clear_cache(T)
+      clear_cache(H, Caches),
+      clear_cache(T, Caches)
   end,
   ok.
