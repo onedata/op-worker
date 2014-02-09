@@ -25,8 +25,7 @@ SimpleConnectionPool::SimpleConnectionPool(string hostname, int port, string cer
     m_hostname(hostname),
     updateCertCB(updateCert),
     m_port(port),
-    m_certPath(certPath),
-    m_currWorkers(0)
+    m_certPath(certPath)
 {
     m_connectionPools[META_POOL] = ConnectionPoolInfo(metaPoolSize);
     m_connectionPools[DATA_POOL] = ConnectionPoolInfo(dataPoolSize);

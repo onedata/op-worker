@@ -34,7 +34,7 @@ public:
     
     struct ConnectionPoolInfo {
         
-        ConnectionPoolInfo(unsigned int s) : size(s) {}
+        ConnectionPoolInfo(unsigned int s) : size(s), currWorkers(0) {}
         ConnectionPoolInfo() : size(DEFAULT_POOL_SIZE) {}
         
         connection_pool_t connections;
