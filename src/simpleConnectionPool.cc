@@ -61,7 +61,7 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(Pool
     ConnectionPoolInfo &poolInfo = m_connectionPools[type];
     boost::shared_ptr<CommunicationHandler> conn;
     
-    CounterRAII sc(m_currWorkers);
+    CounterRAII sc(poolInfo.currWorkers);
 
     // Check if certificate is OK and generate new one if needed and possible
     //                 Disable certificate update for now (due to globus memory leak)
@@ -146,11 +146,13 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(P
         poolInfo.connections.pop_back();
     
     // Check if pool size matches config
-    long toStart = poolInfo.size - poolInfo.connections.size() - m_currWorkers;
+    long toStart = poolInfo.size - poolInfo.connections.size() - poolInfo.currWorkers;
+    if(poolInfo.connections.size() == 0 && toStart <= 0)
+        toStart = 1;
 
-    DLOG(INFO) << "Current pool size: " << poolInfo.connections.size() << ", connections in construcion: " << m_currWorkers << ", expected: " << poolInfo.size;
+    DLOG(INFO) << "Current pool size: " << poolInfo.connections.size() << ", connections in construcion: " << poolInfo.currWorkers << ", expected: " << poolInfo.size;
 
-    if(toStart --> 0 ) // Current pool is too small, we should create some connection(s)
+    while(toStart --> 0) // Current pool is too small, we should create some connection(s)
     {
         LOG(INFO) << "Connection pool (" << type << " is to small (" << poolInfo.connections.size() << " connections - expected: " << poolInfo.size << "). Opening new connection...";
         

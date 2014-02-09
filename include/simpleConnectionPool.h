@@ -38,6 +38,7 @@ public:
         ConnectionPoolInfo() : size(DEFAULT_POOL_SIZE) {}
         
         connection_pool_t connections;
+        int currWorkers;
         unsigned int size;
     };
 
@@ -69,8 +70,6 @@ protected:
     std::string          m_fuseId;
 
     push_callback        m_pushCallback;
-
-    int         m_currWorkers;
     
     boost::recursive_mutex      m_access;
     boost::condition_variable   m_accessCond;
