@@ -23,7 +23,7 @@
 %% Application callbacks
 %% ===================================================================
 
-%% start/1
+%% start/2
 %% ====================================================================
 %% @doc Starts application by supervisor initialization.
 -spec start(_StartType :: any(), _StartArgs :: any()) -> Result when

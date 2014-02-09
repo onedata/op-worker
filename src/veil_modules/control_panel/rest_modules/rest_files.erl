@@ -6,7 +6,7 @@
 %% @end
 %% ===================================================================
 %% @doc: This module implements rest_module_behaviour and handles all
-%% REST requests directed at /rest/file/*. Essentially, it serves 
+%% REST requests directed at /rest/files/(path). Essentially, it serves 
 %% user content (files) via HTTP.
 %% @end
 %% ===================================================================

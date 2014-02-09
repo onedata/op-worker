@@ -1,0 +1,604 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="classveil_1_1client_1_1FslogicProxy" kind="class" prot="public">
+    <compoundname>veil::client::FslogicProxy</compoundname>
+    <basecompoundref refid="classveil_1_1client_1_1ISchedulable" prot="public" virt="non-virtual">veil::client::ISchedulable</basecompoundref>
+    <includes refid="fslogicProxy_8h" local="no">include/fslogicProxy.h</includes>
+      <sectiondef kind="protected-attrib">
+      <memberdef kind="variable" id="classveil_1_1client_1_1FslogicProxy_1a6e697ba516477c28fa3882479490b2c2" prot="protected" static="no" mutable="no">
+        <type>boost::shared_ptr&lt; <ref refid="classveil_1_1client_1_1MessageBuilder" kindref="compound">MessageBuilder</ref> &gt;</type>
+        <definition>boost::shared_ptr&lt;MessageBuilder&gt; veil::client::FslogicProxy::m_messageBuilder</definition>
+        <argsstring></argsstring>
+        <name>m_messageBuilder</name>
+        <briefdescription>
+<para><ref refid="classveil_1_1client_1_1MessageBuilder" kindref="compound">MessageBuilder</ref> used to construct cluster packets. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="69" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" bodystart="69" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1a6bce8815a7784951f431370ba22b4991" compoundref="fslogicProxy_8cc" startline="267" endline="304">sendFuseReceiveAnswer</referencedby>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1af8373304e482f3c48b3973902c73d58d" compoundref="fslogicProxy_8cc" startline="306" endline="343">sendFuseReceiveAtom</referencedby>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="protected-func">
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1a6bce8815a7784951f431370ba22b4991" prot="protected" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>bool</type>
+        <definition>bool veil::client::FslogicProxy::sendFuseReceiveAnswer</definition>
+        <argsstring>(const google::protobuf::Message &amp;fMsg, google::protobuf::Message &amp;response)</argsstring>
+        <name>sendFuseReceiveAnswer</name>
+        <param>
+          <type>const google::protobuf::Message &amp;</type>
+          <declname>fMsg</declname>
+        </param>
+        <param>
+          <type>google::protobuf::Message &amp;</type>
+          <declname>response</declname>
+        </param>
+        <briefdescription>
+<para>Sends and receives given protobuf message. </para>        </briefdescription>
+        <detaileddescription>
+<para>High level method used to send serialized protobuf message to cluster and return its response as given by reference object. Both message and response types have to be subtype of FuseMessage. <simplesect kind="return"><para>true only if received response message is initialized (see google::protobuff::Message::IsInitialized()) </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="76" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="267" bodyend="304"/>
+        <references refid="classveil_1_1client_1_1FslogicProxy_1a6e697ba516477c28fa3882479490b2c2" compoundref="fslogicProxy_8h" startline="69">m_messageBuilder</references>
+        <references refid="messageBuilder_8h_1ac70a564001777967993520bb573118fa" compoundref="messageBuilder_8h" startline="16">FUSE_MESSAGES</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a79fd13ab7477e6b84f04a0a94c18bc6a" compoundref="veilfs_8cc" startline="692" endline="695">veil::client::VeilFS::getConnectionPool</references>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1a431322f8de14e4fdcd93e28c3c1c5a90" compoundref="fslogicProxy_8cc" startline="42" endline="56">getFileAttr</referencedby>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1a4d8062af6a7b2f9ca8e4cb3814695d1d" compoundref="fslogicProxy_8cc" startline="58" endline="72">getFileLocation</referencedby>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1a35ca42aa3cbd384a06c17e08f3a30cdc" compoundref="fslogicProxy_8cc" startline="74" endline="89">getNewFileLocation</referencedby>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1aaac0189714f8d3f08eb736072e84a48a" compoundref="fslogicProxy_8cc" startline="91" endline="112">renewFileLocation</referencedby>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1add8469423b2573e9195a86b85053a4c9" compoundref="fslogicProxy_8cc" startline="114" endline="136">getFileChildren</referencedby>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1ae2ca1786b255c4562e82546731fb3450" compoundref="fslogicProxy_8cc" startline="252" endline="265">getLink</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1af8373304e482f3c48b3973902c73d58d" prot="protected" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>std::string</type>
+        <definition>string veil::client::FslogicProxy::sendFuseReceiveAtom</definition>
+        <argsstring>(const google::protobuf::Message &amp;fMsg)</argsstring>
+        <name>sendFuseReceiveAtom</name>
+        <param>
+          <type>const google::protobuf::Message &amp;</type>
+          <declname>fMsg</declname>
+        </param>
+        <briefdescription>
+<para>Sends given protobuf message and receives atom. </para>        </briefdescription>
+        <detaileddescription>
+<para>This method is simalar to <ref refid="classveil_1_1client_1_1FslogicProxy_1a6bce8815a7784951f431370ba22b4991" kindref="member">FslogicProxy::sendFuseReceiveAnswer</ref> But receives simple atom cluster response. <simplesect kind="see"><para><ref refid="classveil_1_1client_1_1FslogicProxy_1a6bce8815a7784951f431370ba22b4991" kindref="member">FslogicProxy::sendFuseReceiveAnswer</ref> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="78" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="306" bodyend="343"/>
+        <references refid="classveil_1_1client_1_1FslogicProxy_1a6e697ba516477c28fa3882479490b2c2" compoundref="fslogicProxy_8h" startline="69">m_messageBuilder</references>
+        <references refid="messageBuilder_8h_1a8799d4cf8a16350538e9cae8d572ab16" compoundref="messageBuilder_8h" startline="17">COMMUNICATION_PROTOCOL</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a79fd13ab7477e6b84f04a0a94c18bc6a" compoundref="veilfs_8cc" startline="692" endline="695">veil::client::VeilFS::getConnectionPool</references>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1a03d6022c37b7a1dfbff3e4390d7b787e" compoundref="fslogicProxy_8cc" startline="139" endline="150">createDir</referencedby>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1a5732b4143b9f65838b22d4585132e57c" compoundref="fslogicProxy_8cc" startline="152" endline="161">deleteFile</referencedby>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1a8b468313d69c7869d3b0a5ed638a3b0a" compoundref="fslogicProxy_8cc" startline="162" endline="175">sendFileNotUsed</referencedby>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1acf4d6aed74e485301300b581ae99e4c5" compoundref="fslogicProxy_8cc" startline="177" endline="186">renameFile</referencedby>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1a9a1a700e833381dc39ac53e72429750f" compoundref="fslogicProxy_8cc" startline="188" endline="197">changeFilePerms</referencedby>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1a0d08963470e674df01ef81979c64ab7a" compoundref="fslogicProxy_8cc" startline="199" endline="213">updateTimes</referencedby>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1a09f1cdc3af4f79199fa6fe480e78c4e5" compoundref="fslogicProxy_8cc" startline="215" endline="226">changeFileOwner</referencedby>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1afc6390e21ac920caf9fe734becb7d0b9" compoundref="fslogicProxy_8cc" startline="228" endline="239">changeFileGroup</referencedby>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1a0c363c11fa92ba84d2230e1967ec21ca" compoundref="fslogicProxy_8cc" startline="241" endline="250">createLink</referencedby>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="public-func">
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1a2b35b80a9a5a423ba6d398d2260dfa49" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type></type>
+        <definition>veil::client::FslogicProxy::FslogicProxy</definition>
+        <argsstring>()</argsstring>
+        <name>FslogicProxy</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="83" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="31" bodyend="35"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1aa9787c09b2dde1dc60e5f40b558c1be1" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type></type>
+        <definition>veil::client::FslogicProxy::~FslogicProxy</definition>
+        <argsstring>()</argsstring>
+        <name>~FslogicProxy</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="84" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="37" bodyend="40"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1a431322f8de14e4fdcd93e28c3c1c5a90" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>bool</type>
+        <definition>bool veil::client::FslogicProxy::getFileAttr</definition>
+        <argsstring>(std::string logicName, protocol::fuse_messages::FileAttr &amp;attr)</argsstring>
+        <name>getFileAttr</name>
+        <param>
+          <type>std::string</type>
+          <declname>logicName</declname>
+        </param>
+        <param>
+          <type>protocol::fuse_messages::FileAttr &amp;</type>
+          <declname>attr</declname>
+        </param>
+        <briefdescription>
+<para>Downloads file attributes from cluster. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="86" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="42" bodyend="56"/>
+        <references refid="classveil_1_1client_1_1FslogicProxy_1a6bce8815a7784951f431370ba22b4991" compoundref="fslogicProxy_8cc" startline="267" endline="304">sendFuseReceiveAnswer</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1a4d8062af6a7b2f9ca8e4cb3814695d1d" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>bool</type>
+        <definition>bool veil::client::FslogicProxy::getFileLocation</definition>
+        <argsstring>(std::string logicName, protocol::fuse_messages::FileLocation &amp;location)</argsstring>
+        <name>getFileLocation</name>
+        <param>
+          <type>std::string</type>
+          <declname>logicName</declname>
+        </param>
+        <param>
+          <type>protocol::fuse_messages::FileLocation &amp;</type>
+          <declname>location</declname>
+        </param>
+        <briefdescription>
+<para>Downloads file location info. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="87" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="58" bodyend="72"/>
+        <references refid="classveil_1_1client_1_1FslogicProxy_1a6bce8815a7784951f431370ba22b4991" compoundref="fslogicProxy_8cc" startline="267" endline="304">sendFuseReceiveAnswer</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1a35ca42aa3cbd384a06c17e08f3a30cdc" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>bool</type>
+        <definition>bool veil::client::FslogicProxy::getNewFileLocation</definition>
+        <argsstring>(std::string logicName, mode_t mode, protocol::fuse_messages::FileLocation &amp;location)</argsstring>
+        <name>getNewFileLocation</name>
+        <param>
+          <type>std::string</type>
+          <declname>logicName</declname>
+        </param>
+        <param>
+          <type>mode_t</type>
+          <declname>mode</declname>
+        </param>
+        <param>
+          <type>protocol::fuse_messages::FileLocation &amp;</type>
+          <declname>location</declname>
+        </param>
+        <briefdescription>
+<para>Query cluser to create new file in DB and get its real location. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="88" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="74" bodyend="89"/>
+        <references refid="classveil_1_1client_1_1FslogicProxy_1a6bce8815a7784951f431370ba22b4991" compoundref="fslogicProxy_8cc" startline="267" endline="304">sendFuseReceiveAnswer</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1aaac0189714f8d3f08eb736072e84a48a" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>int</type>
+        <definition>int veil::client::FslogicProxy::renewFileLocation</definition>
+        <argsstring>(std::string logicName)</argsstring>
+        <name>renewFileLocation</name>
+        <param>
+          <type>std::string</type>
+          <declname>logicName</declname>
+        </param>
+        <briefdescription>
+<para>Try to renew location validity for given file. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="89" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="91" bodyend="112"/>
+        <references refid="classveil_1_1client_1_1FslogicProxy_1a6bce8815a7784951f431370ba22b4991" compoundref="fslogicProxy_8cc" startline="267" endline="304">sendFuseReceiveAnswer</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1add8469423b2573e9195a86b85053a4c9" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>bool</type>
+        <definition>bool veil::client::FslogicProxy::getFileChildren</definition>
+        <argsstring>(std::string dirLogicName, uint32_t children_num, uint32_t offset, std::vector&lt; std::string &gt; &amp;childrenNames)</argsstring>
+        <name>getFileChildren</name>
+        <param>
+          <type>std::string</type>
+          <declname>dirLogicName</declname>
+        </param>
+        <param>
+          <type>uint32_t</type>
+          <declname>children_num</declname>
+        </param>
+        <param>
+          <type>uint32_t</type>
+          <declname>offset</declname>
+        </param>
+        <param>
+          <type>std::vector&lt; std::string &gt; &amp;</type>
+          <declname>childrenNames</declname>
+        </param>
+        <briefdescription>
+<para>List files in given folder. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="90" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="114" bodyend="136"/>
+        <references refid="classveil_1_1client_1_1FslogicProxy_1a6bce8815a7784951f431370ba22b4991" compoundref="fslogicProxy_8cc" startline="267" endline="304">sendFuseReceiveAnswer</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1acf4d6aed74e485301300b581ae99e4c5" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>std::string</type>
+        <definition>string veil::client::FslogicProxy::renameFile</definition>
+        <argsstring>(std::string fromLogicName, std::string toLogicName)</argsstring>
+        <name>renameFile</name>
+        <param>
+          <type>std::string</type>
+          <declname>fromLogicName</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>toLogicName</declname>
+        </param>
+        <briefdescription>
+<para>Rename/move file to new location. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="91" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="177" bodyend="186"/>
+        <references refid="classveil_1_1client_1_1FslogicProxy_1af8373304e482f3c48b3973902c73d58d" compoundref="fslogicProxy_8cc" startline="306" endline="343">sendFuseReceiveAtom</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1a03d6022c37b7a1dfbff3e4390d7b787e" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>std::string</type>
+        <definition>string veil::client::FslogicProxy::createDir</definition>
+        <argsstring>(std::string logicName, mode_t mode)</argsstring>
+        <name>createDir</name>
+        <param>
+          <type>std::string</type>
+          <declname>logicName</declname>
+        </param>
+        <param>
+          <type>mode_t</type>
+          <declname>mode</declname>
+        </param>
+        <briefdescription>
+<para>Create directory. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="92" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="139" bodyend="150"/>
+        <references refid="classveil_1_1client_1_1FslogicProxy_1af8373304e482f3c48b3973902c73d58d" compoundref="fslogicProxy_8cc" startline="306" endline="343">sendFuseReceiveAtom</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1a5732b4143b9f65838b22d4585132e57c" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>std::string</type>
+        <definition>string veil::client::FslogicProxy::deleteFile</definition>
+        <argsstring>(std::string logicName)</argsstring>
+        <name>deleteFile</name>
+        <param>
+          <type>std::string</type>
+          <declname>logicName</declname>
+        </param>
+        <briefdescription>
+<para>Delete given file. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="93" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="152" bodyend="161"/>
+        <references refid="classveil_1_1client_1_1FslogicProxy_1af8373304e482f3c48b3973902c73d58d" compoundref="fslogicProxy_8cc" startline="306" endline="343">sendFuseReceiveAtom</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1a8b468313d69c7869d3b0a5ed638a3b0a" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>bool</type>
+        <definition>bool veil::client::FslogicProxy::sendFileNotUsed</definition>
+        <argsstring>(std::string logicName)</argsstring>
+        <name>sendFileNotUsed</name>
+        <param>
+          <type>std::string</type>
+          <declname>logicName</declname>
+        </param>
+        <briefdescription>
+<para>Inform cluster that file isnt used anymore. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="94" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="162" bodyend="175"/>
+        <references refid="classveil_1_1client_1_1FslogicProxy_1af8373304e482f3c48b3973902c73d58d" compoundref="fslogicProxy_8cc" startline="306" endline="343">sendFuseReceiveAtom</references>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1af4c5a62c4256bc50962b3bccb5e38373" compoundref="fslogicProxy_8cc" startline="379" endline="394">runTask</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1a9a1a700e833381dc39ac53e72429750f" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>std::string</type>
+        <definition>string veil::client::FslogicProxy::changeFilePerms</definition>
+        <argsstring>(std::string path, mode_t mode)</argsstring>
+        <name>changeFilePerms</name>
+        <param>
+          <type>std::string</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>mode_t</type>
+          <declname>mode</declname>
+        </param>
+        <briefdescription>
+<para>Change file permissions. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="95" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="188" bodyend="197"/>
+        <references refid="classveil_1_1client_1_1FslogicProxy_1af8373304e482f3c48b3973902c73d58d" compoundref="fslogicProxy_8cc" startline="306" endline="343">sendFuseReceiveAtom</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1a0c363c11fa92ba84d2230e1967ec21ca" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>std::string</type>
+        <definition>string veil::client::FslogicProxy::createLink</definition>
+        <argsstring>(std::string from, std::string to)</argsstring>
+        <name>createLink</name>
+        <param>
+          <type>std::string</type>
+          <declname>from</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>to</declname>
+        </param>
+        <briefdescription>
+<para>Creates symbolic link &quot;from&quot; to file &quot;to&quot;. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="96" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="241" bodyend="250"/>
+        <references refid="classveil_1_1client_1_1FslogicProxy_1af8373304e482f3c48b3973902c73d58d" compoundref="fslogicProxy_8cc" startline="306" endline="343">sendFuseReceiveAtom</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1ae2ca1786b255c4562e82546731fb3450" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>std::pair&lt; std::string, std::string &gt;</type>
+        <definition>pair&lt; string, string &gt; veil::client::FslogicProxy::getLink</definition>
+        <argsstring>(std::string path)</argsstring>
+        <name>getLink</name>
+        <param>
+          <type>std::string</type>
+          <declname>path</declname>
+        </param>
+        <briefdescription>
+<para>Gets path pointed by link. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="97" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="252" bodyend="265"/>
+        <references refid="classveil_1_1client_1_1FslogicProxy_1a6bce8815a7784951f431370ba22b4991" compoundref="fslogicProxy_8cc" startline="267" endline="304">sendFuseReceiveAnswer</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1a0d08963470e674df01ef81979c64ab7a" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>std::string</type>
+        <definition>string veil::client::FslogicProxy::updateTimes</definition>
+        <argsstring>(std::string path, time_t atime=0, time_t mtime=0, time_t ctime=0)</argsstring>
+        <name>updateTimes</name>
+        <param>
+          <type>std::string</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>time_t</type>
+          <declname>atime</declname>
+          <defval>0</defval>
+        </param>
+        <param>
+          <type>time_t</type>
+          <declname>mtime</declname>
+          <defval>0</defval>
+        </param>
+        <param>
+          <type>time_t</type>
+          <declname>ctime</declname>
+          <defval>0</defval>
+        </param>
+        <briefdescription>
+<para>Updates *time meta attributes for specific file. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="98" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="199" bodyend="213"/>
+        <references refid="classveil_1_1client_1_1FslogicProxy_1af8373304e482f3c48b3973902c73d58d" compoundref="fslogicProxy_8cc" startline="306" endline="343">sendFuseReceiveAtom</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1a09f1cdc3af4f79199fa6fe480e78c4e5" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>std::string</type>
+        <definition>string veil::client::FslogicProxy::changeFileOwner</definition>
+        <argsstring>(std::string path, uid_t uid, std::string uname=&quot;&quot;)</argsstring>
+        <name>changeFileOwner</name>
+        <param>
+          <type>std::string</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>uid_t</type>
+          <declname>uid</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>uname</declname>
+          <defval>&quot;&quot;</defval>
+        </param>
+        <briefdescription>
+<para>Updates file&apos;s owner. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="99" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="215" bodyend="226"/>
+        <references refid="classveil_1_1client_1_1FslogicProxy_1af8373304e482f3c48b3973902c73d58d" compoundref="fslogicProxy_8cc" startline="306" endline="343">sendFuseReceiveAtom</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1afc6390e21ac920caf9fe734becb7d0b9" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>std::string</type>
+        <definition>string veil::client::FslogicProxy::changeFileGroup</definition>
+        <argsstring>(std::string path, gid_t gid, std::string gname=&quot;&quot;)</argsstring>
+        <name>changeFileGroup</name>
+        <param>
+          <type>std::string</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>gid_t</type>
+          <declname>gid</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>gname</declname>
+          <defval>&quot;&quot;</defval>
+        </param>
+        <briefdescription>
+<para>Updates file&apos;s group owner. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="100" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="228" bodyend="239"/>
+        <references refid="classveil_1_1client_1_1FslogicProxy_1af8373304e482f3c48b3973902c73d58d" compoundref="fslogicProxy_8cc" startline="306" endline="343">sendFuseReceiveAtom</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1a699d40e88b822371a2120d862ccb6237" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>void</type>
+        <definition>void veil::client::FslogicProxy::pingCluster</definition>
+        <argsstring>(std::string)</argsstring>
+        <name>pingCluster</name>
+        <param>
+          <type>std::string</type>
+          <defname>nth</defname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="102" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="345" bodyend="377"/>
+        <references refid="config_8h_1a277f7abca2044f354abe265252cb9252" compoundref="config_8h" startline="43">PROTOCOL_VERSION</references>
+        <references refid="fslogicProxy_8h_1a052ae7304b2b339a5ae6d1ecabdbbf6d" compoundref="fslogicProxy_8h" startline="50">FSLOGIC</references>
+        <references refid="fslogicProxy_8h_1a4f7c573e075cedbaf2e6107fa1a7ef21" compoundref="fslogicProxy_8h" startline="48">ATOM</references>
+        <references refid="messageBuilder_8h_1a8799d4cf8a16350538e9cae8d572ab16" compoundref="messageBuilder_8h" startline="17">COMMUNICATION_PROTOCOL</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a79fd13ab7477e6b84f04a0a94c18bc6a" compoundref="veilfs_8cc" startline="692" endline="695">veil::client::VeilFS::getConnectionPool</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a8a27aa2dfe572bb28447a835847a79ba" compoundref="veilfs_8cc" startline="687" endline="690">veil::client::VeilFS::getConfig</references>
+        <references refid="config_8h_1ab6d6b4b4b6538391baf5fed476cfbba0" compoundref="config_8h" startline="32">CLUSTER_PING_INTERVAL_OPT</references>
+        <references refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca64e79be1054c363dd73740130b88aa53" compoundref="ISchedulable_8h" startline="37">veil::client::ISchedulable::TASK_PING_CLUSTER</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1afe20f8ab6077591be6901a2fcf326e0c" compoundref="veilfs_8cc" startline="666" endline="685">veil::client::VeilFS::getScheduler</references>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1af4c5a62c4256bc50962b3bccb5e38373" compoundref="fslogicProxy_8cc" startline="379" endline="394">runTask</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1FslogicProxy_1af4c5a62c4256bc50962b3bccb5e38373" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>bool</type>
+        <definition>bool veil::client::FslogicProxy::runTask</definition>
+        <argsstring>(TaskID taskId, std::string arg0, std::string arg1, std::string arg3)</argsstring>
+        <name>runTask</name>
+        <reimplements refid="classveil_1_1client_1_1ISchedulable_1ac81de45c4664e8aec85d42a6992c23e0">runTask</reimplements>
+        <param>
+          <type><ref refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68c" kindref="member">TaskID</ref></type>
+          <declname>taskId</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>arg0</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>arg1</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>arg3</declname>
+        </param>
+        <briefdescription>
+<para>Task runner derived from <ref refid="classveil_1_1client_1_1ISchedulable" kindref="compound">ISchedulable</ref>. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ref refid="classveil_1_1client_1_1ISchedulable_1ac81de45c4664e8aec85d42a6992c23e0" kindref="member">ISchedulable::runTask</ref> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="104" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/fslogicProxy.cc" bodystart="379" bodyend="394"/>
+        <references refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68cac335b02a928670de1ce08a81b2c581db" compoundref="ISchedulable_8h" startline="34">veil::client::ISchedulable::TASK_SEND_FILE_NOT_USED</references>
+        <references refid="classveil_1_1client_1_1FslogicProxy_1a8b468313d69c7869d3b0a5ed638a3b0a" compoundref="fslogicProxy_8cc" startline="162" endline="175">sendFileNotUsed</references>
+        <references refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca64e79be1054c363dd73740130b88aa53" compoundref="ISchedulable_8h" startline="37">veil::client::ISchedulable::TASK_PING_CLUSTER</references>
+        <references refid="classveil_1_1client_1_1FslogicProxy_1a699d40e88b822371a2120d862ccb6237" compoundref="fslogicProxy_8cc" startline="345" endline="377">pingCluster</references>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+<para>The <ref refid="classveil_1_1client_1_1FslogicProxy" kindref="compound">FslogicProxy</ref> class. </para>    </briefdescription>
+    <detaileddescription>
+<para>This class provides proxy-methods that runs their correspondent cluster-fslogic methods. Each object of <ref refid="classveil_1_1client_1_1FslogicProxy" kindref="compound">FslogicProxy</ref> has its own connection pool, so in order to always use already opened connections there should be only one instance of this class unless you really need connection isolation between successive cluster requests. </para>    </detaileddescription>
+    <inheritancegraph>
+      <node id="118">
+        <label>boost::enable_shared_from_this&lt; ISchedulable &gt;</label>
+      </node>
+      <node id="116">
+        <label>veil::client::FslogicProxy</label>
+        <link refid="classveil_1_1client_1_1FslogicProxy"/>
+        <childnode refid="117" relation="public-inheritance">
+        </childnode>
+      </node>
+      <node id="117">
+        <label>veil::client::ISchedulable</label>
+        <link refid="classveil_1_1client_1_1ISchedulable"/>
+        <childnode refid="118" relation="public-inheritance">
+        </childnode>
+      </node>
+    </inheritancegraph>
+    <collaborationgraph>
+      <node id="121">
+        <label>boost::enable_shared_from_this&lt; ISchedulable &gt;</label>
+      </node>
+      <node id="119">
+        <label>veil::client::FslogicProxy</label>
+        <link refid="classveil_1_1client_1_1FslogicProxy"/>
+        <childnode refid="120" relation="public-inheritance">
+        </childnode>
+      </node>
+      <node id="120">
+        <label>veil::client::ISchedulable</label>
+        <link refid="classveil_1_1client_1_1ISchedulable"/>
+        <childnode refid="121" relation="public-inheritance">
+        </childnode>
+      </node>
+    </collaborationgraph>
+    <location file="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" line="66" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/fslogicProxy.h" bodystart="65" bodyend="105"/>
+    <listofallmembers>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1afc6390e21ac920caf9fe734becb7d0b9" prot="public" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>changeFileGroup</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1a09f1cdc3af4f79199fa6fe480e78c4e5" prot="public" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>changeFileOwner</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1a9a1a700e833381dc39ac53e72429750f" prot="public" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>changeFilePerms</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1a03d6022c37b7a1dfbff3e4390d7b787e" prot="public" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>createDir</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1a0c363c11fa92ba84d2230e1967ec21ca" prot="public" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>createLink</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1a5732b4143b9f65838b22d4585132e57c" prot="public" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>deleteFile</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1a2b35b80a9a5a423ba6d398d2260dfa49" prot="public" virt="non-virtual"><scope>veil::client::FslogicProxy</scope><name>FslogicProxy</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1a431322f8de14e4fdcd93e28c3c1c5a90" prot="public" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>getFileAttr</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1add8469423b2573e9195a86b85053a4c9" prot="public" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>getFileChildren</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1a4d8062af6a7b2f9ca8e4cb3814695d1d" prot="public" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>getFileLocation</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1ae2ca1786b255c4562e82546731fb3450" prot="public" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>getLink</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1a35ca42aa3cbd384a06c17e08f3a30cdc" prot="public" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>getNewFileLocation</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a1971032ea8f78ff6345864c4e40d86bd" prot="public" virt="non-virtual"><scope>veil::client::FslogicProxy</scope><name>ISchedulable</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1a6e697ba516477c28fa3882479490b2c2" prot="protected" virt="non-virtual"><scope>veil::client::FslogicProxy</scope><name>m_messageBuilder</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1a699d40e88b822371a2120d862ccb6237" prot="public" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>pingCluster</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1acf4d6aed74e485301300b581ae99e4c5" prot="public" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>renameFile</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1aaac0189714f8d3f08eb736072e84a48a" prot="public" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>renewFileLocation</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1af4c5a62c4256bc50962b3bccb5e38373" prot="public" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>runTask</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1a8b468313d69c7869d3b0a5ed638a3b0a" prot="public" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>sendFileNotUsed</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1a6bce8815a7784951f431370ba22b4991" prot="protected" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>sendFuseReceiveAnswer</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1af8373304e482f3c48b3973902c73d58d" prot="protected" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>sendFuseReceiveAtom</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca5d7a79cedeac53743c9ca3e4f0a83246" prot="public" virt="non-virtual"><scope>veil::client::FslogicProxy</scope><name>TASK_ASYNC_GET_FILE_LOCATION</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68cac37d99797b742148014ece1b04070abd" prot="public" virt="non-virtual"><scope>veil::client::FslogicProxy</scope><name>TASK_ASYNC_GETATTR</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68caecf889af461568a10f6ecb5494d6287a" prot="public" virt="non-virtual"><scope>veil::client::FslogicProxy</scope><name>TASK_ASYNC_READDIR</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca6266ee7d508841ea9fc2418b40b47678" prot="public" virt="non-virtual"><scope>veil::client::FslogicProxy</scope><name>TASK_ASYNC_UPDATE_TIMES</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca8e8d2679b3902b3d4adb3afc265ae593" prot="public" virt="non-virtual"><scope>veil::client::FslogicProxy</scope><name>TASK_CLEAR_ATTR</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68cab491b54b9730aaf11720b9847b0184c3" prot="public" virt="non-virtual"><scope>veil::client::FslogicProxy</scope><name>TASK_CLEAR_FILE_ATTR</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca9ba4bbf3c2c44cfcf351216bf7e4c42f" prot="public" virt="non-virtual"><scope>veil::client::FslogicProxy</scope><name>TASK_CONNECTION_HANDSHAKE</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68cae14315bcb7937f992b1d6b503981ff18" prot="public" virt="non-virtual"><scope>veil::client::FslogicProxy</scope><name>TASK_LAST_ID</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca64e79be1054c363dd73740130b88aa53" prot="public" virt="non-virtual"><scope>veil::client::FslogicProxy</scope><name>TASK_PING_CLUSTER</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68cac62e13997a39b21ee57c98efdbc12826" prot="public" virt="non-virtual"><scope>veil::client::FslogicProxy</scope><name>TASK_REMOVE_EXPIRED_LOCATON_MAPPING</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca5ff3ad4ffdf1a48962fa88c183ddd253" prot="public" virt="non-virtual"><scope>veil::client::FslogicProxy</scope><name>TASK_RENEW_LOCATION_MAPPING</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68cac335b02a928670de1ce08a81b2c581db" prot="public" virt="non-virtual"><scope>veil::client::FslogicProxy</scope><name>TASK_SEND_FILE_NOT_USED</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68c" prot="public" virt="non-virtual"><scope>veil::client::FslogicProxy</scope><name>TaskID</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1a0d08963470e674df01ef81979c64ab7a" prot="public" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>updateTimes</name></member>
+      <member refid="classveil_1_1client_1_1FslogicProxy_1aa9787c09b2dde1dc60e5f40b558c1be1" prot="public" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>~FslogicProxy</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a1769e067935e32f90656086090a78548" prot="public" virt="virtual"><scope>veil::client::FslogicProxy</scope><name>~ISchedulable</name></member>
+    </listofallmembers>
+  </compounddef>
+</doxygen>

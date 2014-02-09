@@ -25,7 +25,7 @@
 -export([generate_answer/5]).
 
 
-%% generate_response/5
+%% generate_answer/5
 %% ====================================================================
 %% @doc Generates binary dns response for given binary dns request, non protocol agnostic.
 %% @end

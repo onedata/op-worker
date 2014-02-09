@@ -1,0 +1,109 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="structveil_1_1client_1_1storageInfo" kind="struct" prot="public">
+    <compoundname>veil::client::storageInfo</compoundname>
+    <includes refid="storageMapper_8h" local="no">include/storageMapper.h</includes>
+      <sectiondef kind="public-attrib">
+      <memberdef kind="variable" id="structveil_1_1client_1_1storageInfo_1a8e713cee89c15ad808a51d94fe5102dc" prot="public" static="no" mutable="no">
+        <type>time_t</type>
+        <definition>time_t veil::client::storageInfo::last_updated</definition>
+        <argsstring></argsstring>
+        <name>last_updated</name>
+        <briefdescription>
+<para>Last update time. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" line="47" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" bodystart="47" bodyend="-1"/>
+        <referencedby refid="structveil_1_1client_1_1storageInfo_1a31352b6e0c1542b1e5edb26ae6585d97" compoundref="storageMapper_8h" startline="51" endline="54">isValid</referencedby>
+        <referencedby refid="classveil_1_1client_1_1StorageMapper_1ae03feeacef81b0cf5f6418f926897aef" compoundref="storageMapper_8cc" startline="79" endline="105">veil::client::StorageMapper::addLocation</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="structveil_1_1client_1_1storageInfo_1adeefd419b53247a4c966daa48dd2bd83" prot="public" static="no" mutable="no">
+        <type>std::string</type>
+        <definition>std::string veil::client::storageInfo::storageHelperName</definition>
+        <argsstring></argsstring>
+        <name>storageHelperName</name>
+        <briefdescription>
+<para>Name of storage helper. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para>StorageHelperFactory::getStorageHelper </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" line="48" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" bodystart="48" bodyend="-1"/>
+        <referencedby refid="structveil_1_1client_1_1storageInfo_1a31352b6e0c1542b1e5edb26ae6585d97" compoundref="storageMapper_8h" startline="51" endline="54">isValid</referencedby>
+        <referencedby refid="classveil_1_1client_1_1StorageMapper_1ae03feeacef81b0cf5f6418f926897aef" compoundref="storageMapper_8cc" startline="79" endline="105">veil::client::StorageMapper::addLocation</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="structveil_1_1client_1_1storageInfo_1a4085fa76276ba7fca00a769422f4cd90" prot="public" static="no" mutable="no">
+        <type>std::vector&lt; std::string &gt;</type>
+        <definition>std::vector&lt;std::string&gt; veil::client::storageInfo::storageHelperArgs</definition>
+        <argsstring></argsstring>
+        <name>storageHelperArgs</name>
+        <briefdescription>
+<para>Arguments for storage helper. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para>StorageHelperFactory::getStorageHelper </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" line="49" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" bodystart="49" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1StorageMapper_1ae03feeacef81b0cf5f6418f926897aef" compoundref="storageMapper_8cc" startline="79" endline="105">veil::client::StorageMapper::addLocation</referencedby>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="public-func">
+      <memberdef kind="function" id="structveil_1_1client_1_1storageInfo_1a31352b6e0c1542b1e5edb26ae6585d97" prot="public" static="no" const="no" explicit="no" inline="yes" virt="non-virtual">
+        <type>bool</type>
+        <definition>bool veil::client::storageInfo::isValid</definition>
+        <argsstring>()</argsstring>
+        <name>isValid</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" line="51" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" bodystart="51" bodyend="54"/>
+        <references refid="structveil_1_1client_1_1storageInfo_1adeefd419b53247a4c966daa48dd2bd83" compoundref="storageMapper_8h" startline="48">storageHelperName</references>
+        <references refid="structveil_1_1client_1_1storageInfo_1a8e713cee89c15ad808a51d94fe5102dc" compoundref="storageMapper_8h" startline="47">last_updated</references>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+    </detaileddescription>
+    <collaborationgraph>
+      <node id="169">
+        <label>std::basic_string&lt; char &gt;</label>
+      </node>
+      <node id="170">
+        <label>std::vector&lt; std::string &gt;</label>
+        <childnode refid="168" relation="usage">
+          <edgelabel>elements</edgelabel>
+        </childnode>
+      </node>
+      <node id="167">
+        <label>veil::client::storageInfo</label>
+        <link refid="structveil_1_1client_1_1storageInfo"/>
+        <childnode refid="168" relation="usage">
+          <edgelabel>storageHelperName</edgelabel>
+        </childnode>
+        <childnode refid="170" relation="usage">
+          <edgelabel>storageHelperArgs</edgelabel>
+        </childnode>
+      </node>
+      <node id="168">
+        <label>std::string</label>
+        <childnode refid="169" relation="public-inheritance">
+        </childnode>
+      </node>
+    </collaborationgraph>
+    <location file="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" line="46" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/storageMapper.h" bodystart="45" bodyend="55"/>
+    <listofallmembers>
+      <member refid="structveil_1_1client_1_1storageInfo_1a31352b6e0c1542b1e5edb26ae6585d97" prot="public" virt="non-virtual"><scope>veil::client::storageInfo</scope><name>isValid</name></member>
+      <member refid="structveil_1_1client_1_1storageInfo_1a8e713cee89c15ad808a51d94fe5102dc" prot="public" virt="non-virtual"><scope>veil::client::storageInfo</scope><name>last_updated</name></member>
+      <member refid="structveil_1_1client_1_1storageInfo_1a4085fa76276ba7fca00a769422f4cd90" prot="public" virt="non-virtual"><scope>veil::client::storageInfo</scope><name>storageHelperArgs</name></member>
+      <member refid="structveil_1_1client_1_1storageInfo_1adeefd419b53247a4c966daa48dd2bd83" prot="public" virt="non-virtual"><scope>veil::client::storageInfo</scope><name>storageHelperName</name></member>
+    </listofallmembers>
+  </compounddef>
+</doxygen>

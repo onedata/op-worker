@@ -32,9 +32,9 @@ do
 
 
     if [ "`uname -s`" = "Darwin" ]; then
-        libs_list=$(otool -L $BIN_DIR/$libfile | grep -v "$BIN_DIR/" | grep -v "@loader_path" | grep -v ":" | awk -F' ' '{print $1}' | grep lib${LIB_NAME})
+        libs_list=$(otool -L $BIN_DIR/$libfile | grep -v "$BIN_DIR/" | grep -v "@loader_path" | grep -v ":" | awk -F' ' '{print $1}' | grep ${LIB_NAME})
     else
-        libs_list=$(ldd $BIN_DIR/$libfile | grep -v "$BIN_DIR/" | grep '=>' | awk -F'=>' '{print $2}' | awk -F' ' '{print $1}' | grep lib${LIB_NAME})
+        libs_list=$(ldd $BIN_DIR/$libfile | grep -v "$BIN_DIR/" | grep '=>' | awk -F'=>' '{print $2}' | awk -F' ' '{print $1}' | grep ${LIB_NAME})
     fi
 
     for file in $libs_list

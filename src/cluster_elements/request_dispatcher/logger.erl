@@ -145,7 +145,7 @@ get_console_loglevel() ->
 	loglevel_atom_to_int(lists:nth(1, lager_util:mask_to_levels(Mask))).
 
 
-%% get_include_stacktrace/1
+%% get_include_stacktrace/0
 %% ====================================================================
 %% @doc Returns get_include_stacktrace env value
 %% @end 
@@ -156,7 +156,7 @@ get_include_stacktrace() ->
 	Boolean.
 
 
-%% loglevel_atom_to_int/1
+%% loglevel_int_to_atom/1
 %% ====================================================================
 %% @doc Returns loglevel name associated with loglevel number
 -spec loglevel_int_to_atom(LoglevelAsInt :: integer()) -> atom().
