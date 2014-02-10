@@ -200,11 +200,11 @@ handle_call(get_callbacks, _From, State) ->
 %% Test call
 handle_call({start_worker, Node, Module, WorkerArgs}, _From, State) ->
   {Ans, NewState} = start_worker(Node, Module, WorkerArgs, State),
-  case Ans of
+  NewState2 = case Ans of
     ok -> update_dispatchers_and_dns(NewState, true, true);
     error -> NewState
   end,
-  {reply, Ans, NewState};
+  {reply, Ans, NewState2};
 
 %% Test call
 handle_call(check, _From, State) ->
@@ -345,6 +345,7 @@ handle_cast(check_cluster_state, State) ->
   {noreply, NewState};
 
 handle_cast({node_down, Node}, State) ->
+  lager:error("Node down: ~p", [Node]),
   {NewState, WorkersFound} = node_down(Node, State),
 
   %% If workers were running on node that is down,
@@ -1134,6 +1135,7 @@ monitoring_loop(Flag, Nodes) ->
 -spec monitoring_loop(Flag) -> ok when
   Flag :: on | off.
 %% ====================================================================
+%% TODO cancel loop and make it part of gen_server
 monitoring_loop(Flag) ->
   receive
     {nodedown, Node} ->

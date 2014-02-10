@@ -113,7 +113,7 @@ init([Type]) when Type =:= worker ; Type =:= ccm ; Type =:= ccm_test ->
   end,
 
   process_flag(trap_exit, true),
-  erlang:send_after(10, self(), {timer, do_quick_heart_beat}),
+  erlang:send_after(10, self(), {timer, do_heart_beat}),
   erlang:send_after(100, self(), {timer, monitor_mem_net}),
 
   {ok, Period} = application:get_env(veil_cluster_node, node_monitoring_period),
@@ -122,7 +122,7 @@ init([Type]) when Type =:= worker ; Type =:= ccm ; Type =:= ccm_test ->
 
 init([Type]) when Type =:= test_worker ->
   process_flag(trap_exit, true),
-  erlang:send_after(10, self(), {timer, do_quick_heart_beat}),
+  erlang:send_after(10, self(), {timer, do_heart_beat}),
   erlang:send_after(100, self(), {timer, monitor_mem_net}),
 
   {ok, Period} = application:get_env(veil_cluster_node, node_monitoring_period),
@@ -207,9 +207,6 @@ handle_call(_Request, _From, State) ->
 handle_cast(do_heart_beat, State) ->
   {noreply, heart_beat(State#node_state.ccm_con_status, State)};
 
-handle_cast(do_quick_heart_beat, State) ->
-  {noreply, heart_beat(State#node_state.ccm_con_status, State, true)};
-
 handle_cast({heart_beat_ok, StateNum, CallbacksNum}, State) ->
   {noreply, heart_beat_response(StateNum, CallbacksNum, State)};
 
@@ -273,6 +270,10 @@ handle_info({timer, Msg}, State) ->
   gen_server:cast(?Node_Manager_Name, Msg),
   {noreply, State};
 
+handle_info({nodedown, _Node}, State) ->
+  lager:error("Connection to CCM lost"),
+  {noreply, State#node_state{ccm_con_status = not_connected}};
+
 handle_info(_Info, State) ->
   {noreply, State}.
 
@@ -318,16 +319,6 @@ code_change(_OldVsn, State, _Extra) ->
   NewStatus ::  term().
 %% ====================================================================
 heart_beat(Conn_status, State) ->
-  heart_beat(Conn_status, State, false).
-
-%% heart_beat/3
-%% ====================================================================
-%% @doc Connects with ccm and tells that the node is alive.
-%% First it establishes network connection, next sends message to ccm.
--spec heart_beat(Conn_status :: atom(), State::term(), ShortPeriod :: boolean()) -> NewStatus when
-  NewStatus ::  term().
-%% ====================================================================
-heart_beat(Conn_status, State, ShortPeriod) ->
   New_conn_status = case Conn_status of
                                     not_connected ->
                                       {ok, CCM_Nodes} = application:get_env(veil_cluster_node, ccm_nodes),
@@ -343,15 +334,11 @@ heart_beat(Conn_status, State, ShortPeriod) ->
   case New_conn_status of
     connected ->
       gen_server:cast({global, ?CCM}, {node_is_up, node()}),
-
-      case ShortPeriod of
-        true -> erlang:send_after(500, self(), {timer, do_heart_beat});
-        false -> erlang:send_after(Interval * 1000, self(), {timer, do_heart_beat})
-      end;
+      erlang:send_after(Interval * 1000, self(), {timer, do_heart_beat});
     _ -> erlang:send_after(500, self(), {timer, do_heart_beat})
   end,
 
-  lager:info([{mod, ?MODULE}], "Heart beat on node: ~s: sent; connection: ~s", [node(), New_conn_status]),
+  lager:info([{mod, ?MODULE}], "Heart beat on node: ~p: sent; connection: ~p, old conn_status: ~p", [node(), New_conn_status, Conn_status]),
   State#node_state{ccm_con_status = New_conn_status}.
 
 %% heart_beat_response/2
@@ -361,11 +348,13 @@ heart_beat(Conn_status, State, ShortPeriod) ->
   NewStatus ::  term().
 %% ====================================================================
 heart_beat_response(New_state_num, CallbacksNum, State) ->
-  lager:info([{mod, ?MODULE}], "Heart beat on node: ~s: answered, new state_num: ~b, new callback_num", [node(), New_state_num, CallbacksNum]),
+  lager:info([{mod, ?MODULE}], "Heart beat on node: ~p: answered, new state_num: ~b, new callback_num: ~b", [node(), New_state_num, CallbacksNum]),
 
   case (New_state_num == State#node_state.state_num) of
     true -> ok;
     false ->
+      %% TODO find a method which do not force clearing of all simple caches at all nodes when only one worker/node is added/deleted
+      %% Now all caches are canceled because we do not know if state number change is connected with network problems (so cache of node may be not valid)
       clear_simple_caches(State#node_state.simple_caches)
   end,
 
@@ -403,7 +392,10 @@ init_net_connection([Node | Nodes]) ->
   try
     Ans = net_adm:ping(Node),
     case Ans of
-      pong -> ok;
+      pong ->
+        erlang:monitor_node(Node, true),
+        global:sync(),
+        ok;
       pang -> init_net_connection(Nodes)
     end
   catch

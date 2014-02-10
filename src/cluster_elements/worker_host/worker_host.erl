@@ -1015,6 +1015,7 @@ register_sub_proc_simple_cache(Name, CacheLoop, ClearFun, ClearingPid) ->
   end.
 
 clear_sub_procs_cache({PlugIn, Cache}) ->
+  lager:error("aaaa ~p", [{node(), PlugIn, Cache}]),
   gen_server:cast(PlugIn, {clear_sub_procs_cache, self(), Cache}),
   receive
     {sub_proc_cache_cleared, ClearAns} ->
