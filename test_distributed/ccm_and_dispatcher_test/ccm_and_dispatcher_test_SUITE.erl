@@ -530,7 +530,6 @@ ping_test(Config) ->
     end
   end,
   PongsNum = lists:foldl(CheckModules, 0, Jobs),
-  wss:close(Socket),
 
   ?assertEqual(PongsNum, length(Jobs)).
 
