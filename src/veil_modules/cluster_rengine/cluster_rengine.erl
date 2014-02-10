@@ -32,6 +32,9 @@ init(_Args) ->
 handle(_ProtocolVersion, ping) ->
   pong;
 
+handle(_ProtocolVersion, event) ->
+  ?info("From client");
+
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
@@ -50,7 +53,7 @@ handle(ProtocolVersion, {event_arrived, Event, SecondTry}) ->
           ok;
         false ->
           % did not found mapping for event and first try - update caches for this event and try one more time
-          update_event_handler(EventType),
+          update_event_handler(ProtocolVersion, EventType),
           handle(ProtocolVersion, {event_arrived, Event, true})
       end;
     % mapping for event found - forward event
@@ -60,7 +63,7 @@ handle(ProtocolVersion, {event_arrived, Event, SecondTry}) ->
           {tree, TreeId} ->
             ?info("forwarding to tree"),
             % forward event to subprocess tree
-            gen_server:call({?Dispatcher_Name, erlang:node(self())}, {cluster_rengine, 1, {final_stage_tree, TreeId, Event}});
+            gen_server:call({?Dispatcher_Name, erlang:node(self())}, {cluster_rengine, ProtocolVersion, {final_stage_tree, TreeId, Event}});
           {standard, HandlerFun} ->
             ?info("normal processing"),
             HandlerFun(Event)
@@ -114,8 +117,8 @@ save_to_caches(EventType, EventHandlerItems) ->
     ets:insert(?EVENT_HANDLERS_CACHE, {TreeId, {MapFun, DispMapFun, HandlerFun}})
   end, HandlerItemsForTree).
 
-update_event_handler(EventType) ->
-  gen_server:call(?Dispatcher_Name, {rule_manager, 1, self(), {get_event_handlers, EventType}}),
+update_event_handler(ProtocolVersion, EventType) ->
+  gen_server:call(?Dispatcher_Name, {rule_manager, ProtocolVersion, self(), {get_event_handlers, EventType}}),
 
   receive
     {ok, EventHandlers} ->

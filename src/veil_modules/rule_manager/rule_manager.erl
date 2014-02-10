@@ -17,6 +17,8 @@
 -include("logging.hrl").
 -include("registered_names.hrl").
 -include_lib("veil_modules/cluster_rengine/cluster_rengine.hrl").
+-include_lib("veil_modules/dao/dao.hrl").
+-include_lib("veil_modules/dao/dao_helper.hrl").
 
 %% ====================================================================
 %% API functions
@@ -39,6 +41,7 @@ init(_Args) ->
 	[].
 
 handle(_ProtocolVersion, ping) ->
+  ?info("some pong"),
   pong;
 
 handle(_ProtocolVersion, get_version) ->
@@ -52,6 +55,7 @@ handle(_ProtocolVersion, get_event_handlers) ->
   ets:match(?RULE_MANAGER_ETS, {'$1', '$2'});
 
 handle(_ProtocolVersion, {add_event_handler, {EventType, Item}}) ->
+  ?info("entering add_event_handler"),
   NewEventItem = case Item#event_handler_item.processing_method of
                    tree -> Item#event_handler_item{tree_id = generate_tree_name()};
                    _ -> Item
@@ -64,6 +68,8 @@ handle(_ProtocolVersion, {add_event_handler, {EventType, Item}}) ->
   gen_server:call(?Dispatcher_Name, {cluster_regine, 1, {clear_cache, EventType}}),
 
   worker_host:clear_cache({?EVENT_HANDLERS_CACHE, EventType}),
+  notify_producers(),
+
   ?info("New handler for event ~p registered.", [EventType]);
 
 handle(_ProtocolVersion, {get_event_handlers, Event}) ->
@@ -82,7 +88,24 @@ cleanup() ->
 
 %% Helper functions
 
+notify_producers() ->
+  Rows = fetch_rows(?FUSE_CONNECTIONS_VIEW, #view_query_args{}),
+  FuseIds = lists:map(fun(#view_row{key = FuseId}) -> FuseId end, Rows),
+  UniqueFuseIds = sets:to_list(sets:from_list(FuseIds)),
+
+  ?info("Notify producers: ~p", [UniqueFuseIds]),
+  lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, {testchannelanswer, "test"}, "fuse_messages") end, UniqueFuseIds).
+
 generate_tree_name() ->
   [{_, Id}] = ets:lookup(?HANDLER_TREE_ID_ETS, current_id),
   ets:insert(?HANDLER_TREE_ID_ETS, {current_id, Id + 1}),
   list_to_atom("event_" ++ integer_to_list(Id)).
+
+fetch_rows(ViewName, QueryArgs) ->
+  case dao:list_records(ViewName, QueryArgs) of
+    {ok, #view_result{rows = Rows}} ->
+      Rows;
+    Error ->
+      ?error("Invalid view response: ~p", [Error]),
+      throw(invalid_data)
+  end.
