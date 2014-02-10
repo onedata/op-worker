@@ -27,9 +27,9 @@
 %% API
 %% ====================================================================
 %% Logical file organization management (only db is used)
--export([mkdir/1, rmdir/1, mv/2, chown/0, change_file_perm/2, ls/3, getfileattr/1]).
+-export([mkdir/1, rmdir/1, mv/2, chown/0, ls/3, getfileattr/1]).
 %% File access (db and helper are used)
--export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1]).
+-export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1, change_file_perm/2]).
 
 %% File sharing
 -export([get_file_by_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, get_file_user_dependent_name_by_uuid/1]).
@@ -67,7 +67,7 @@
   ErrorDetail :: term().
 %% ====================================================================
 mkdir(DirName) ->
-  {ModeStatus, NewFileLogicMode} = application:get_env(?APP_Name, new_file_logic_mode),
+  {ModeStatus, NewFileLogicMode} = get_mode(DirName),
   case ModeStatus of
     ok ->
       Record = #createdir{dir_logic_name = DirName, mode = NewFileLogicMode},
@@ -137,28 +137,6 @@ mv(From, To) ->
 %% ====================================================================
 chown() ->
   {error, not_implemented_yet}.
-
-%% change_file_perm/2
-%% ====================================================================
-%% @doc Changes file's permissions in db
-%% @end
--spec change_file_perm(FileName :: string(), NewPerms :: integer()) -> Result when
-  Result :: ok | {ErrorGeneral, ErrorDetail},
-  ErrorGeneral :: atom(),
-  ErrorDetail :: term().
-%% ====================================================================
-change_file_perm(FileName, NewPerms) ->
-  Record = #changefileperms{file_logic_name = FileName, perms = NewPerms},
-  {Status, TmpAns} = contact_fslogic(Record),
-  case Status of
-    ok ->
-      Response = TmpAns#atom.value,
-      case Response of
-        ?VOK -> ok;
-        _ -> {logical_file_system_error, Response}
-      end;
-    _ -> {Status, TmpAns}
-  end.
 
 %% ls/3
 %% ====================================================================
@@ -336,7 +314,7 @@ write_from_stream(File, Buf) ->
   ErrorDetail :: term().
 %% ====================================================================
 create(File) ->
-  {ModeStatus, NewFileLogicMode} = application:get_env(?APP_Name, new_file_logic_mode),
+  {ModeStatus, NewFileLogicMode} = get_mode(File),
   case ModeStatus of
     ok ->
       Record = #getnewfilelocation{file_logic_name = File, mode = NewFileLogicMode},
@@ -417,6 +395,35 @@ delete(File) ->
           end;
         _ -> {Response, Response2}
       end.
+
+%% change_file_perm/2
+%% ====================================================================
+%% @doc Changes file's permissions in db and at storage
+%% @end
+-spec change_file_perm(FileName :: string(), NewPerms :: integer()) -> Result when
+  Result :: ok | {ErrorGeneral, ErrorDetail},
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+change_file_perm(FileName, NewPerms) ->
+  Record = #changefileperms{file_logic_name = FileName, perms = NewPerms},
+  {Status, TmpAns} = contact_fslogic(Record),
+  case Status of
+    ok ->
+      Response = TmpAns#atom.value,
+      case Response of
+        ?VOK ->
+          {LocStatus, Response2} = getfilelocation(FileName),
+          case LocStatus of
+            ok ->
+              {Storage_helper_info, FileId} = Response2,
+              storage_files_manager:chmod(Storage_helper_info, FileId, NewPerms);
+            _ -> {LocStatus, Response2}
+          end;
+        _ -> {logical_file_system_error, Response}
+      end;
+    _ -> {Status, TmpAns}
+  end.
 
 %% exists/1
 %% ====================================================================
@@ -904,3 +911,22 @@ generateRandomData(Size) -> [random:uniform(255) | generateRandomData(Size-1)].
 %% ====================================================================
 get_ets_name() ->
   list_to_atom(?NAMES_TABLE ++ pid_to_list(self())).
+
+%% get_mode/1
+%% ====================================================================
+%% @doc Gets mode for a newly created file.
+%% @end
+-spec get_mode(FileName :: string()) -> Result when
+  Result :: {ok, integer()} | {error, undefined}.
+%% ====================================================================
+get_mode(FileName) ->
+  TmpAns = case string:tokens(FileName, "/") of
+    [?GROUPS_BASE_DIR_NAME | _] ->
+      application:get_env(?APP_Name, new_group_file_logic_mode);
+    _ ->
+      application:get_env(?APP_Name, new_file_logic_mode)
+  end,
+  case TmpAns of
+    undefined -> {error, undefined};
+    _ -> TmpAns
+  end.

@@ -21,9 +21,9 @@
 -include("remote_file_management_pb.hrl").
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([storage_helpers_management_test/1, helper_requests_test/1]).
+-export([storage_helpers_management_test/1, helper_requests_test/1, permissions_test/1]).
 
-all() -> [storage_helpers_management_test, helper_requests_test].
+all() -> [storage_helpers_management_test, helper_requests_test, permissions_test].
 
 -define(TEST_ROOT, ["/tmp/veilfs"]). %% Root of test filesystem
 -define(TEST_ROOT2, ["/tmp/veilfs2"]).
@@ -32,6 +32,261 @@ all() -> [storage_helpers_management_test, helper_requests_test].
 %% ====================================================================
 %% Test functions
 %% ====================================================================
+
+%% Tests if not permitted operations can not be executed
+permissions_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+
+  ST_Helper = "ClusterProxy",
+  Team1 = "veilfstestgroup",
+  TestFile = "permissions_test_file",
+  TestFile2 = "groups/" ++ Team1 ++ "/permissions_test_file",
+
+  Cert = ?COMMON_FILE("peer.pem"),
+  Cert2 = ?COMMON_FILE("peer2.pem"),
+  Host = "localhost",
+  Port = ?config(port, Config),
+  [FSLogicNode | _] = NodesUp,
+
+  gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
+  gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  nodes_manager:wait_for_cluster_cast(),
+  gen_server:cast({global, ?CCM}, init_cluster),
+  nodes_manager:wait_for_cluster_init(),
+
+  Fuse_groups = [#fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = ?TEST_ROOT}}],
+  {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, [ST_Helper, [], Fuse_groups]),
+  ?assertEqual(ok, InsertStorageAns),
+
+  {ReadFileAns, PemBin} = file:read_file(Cert),
+  ?assertEqual(ok, ReadFileAns),
+  {ExtractAns, RDNSequence} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin]),
+  ?assertEqual(rdnSequence, ExtractAns),
+  {ConvertAns, DN} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
+  ?assertEqual(ok, ConvertAns),
+  DnList = [DN],
+
+  Login = "veilfstestuser",
+  Name = "user1 user1",
+  Teams1 = [Team1],
+  Email = "user1@email.net",
+  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams1, Email, DnList]),
+  ?assertEqual(ok, CreateUserAns),
+
+  {ReadFileAns2, PemBin2} = file:read_file(Cert2),
+  ?assertEqual(ok, ReadFileAns2),
+  {ExtractAns2, RDNSequence2} = rpc:call(FSLogicNode, user_logic, extract_dn_from_cert, [PemBin2]),
+  ?assertEqual(rdnSequence, ExtractAns2),
+  {ConvertAns2, DN2} = rpc:call(FSLogicNode, user_logic, rdn_sequence_to_dn_string, [RDNSequence2]),
+  ?assertEqual(ok, ConvertAns2),
+  DnList2 = [DN2],
+
+  Login2 = "veilfstestuser2",
+  Name2 = "user2 user2",
+  Teams2 = [Team1],
+  Email2 = "user2@email.net",
+  {CreateUserAns2, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
+  ?assertEqual(ok, CreateUserAns2),
+
+  %% Get FuseId
+  {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
+  FuseId = wss:handshakeInit(Socket, "hostname", []),
+
+  %% Get FuseId
+  {ok, Socket2} = wss:connect(Host, Port, [{certfile, Cert2}, {cacertfile, Cert2}]),
+  FuseId2 = wss:handshakeInit(Socket2, "hostname", []),
+
+  {Status0, _, _, Id0, _, AnswerOpt0} = create_file(Host, Cert2, Port, TestFile, FuseId2),
+  ?assertEqual("ok", Status0),
+  ?assertEqual(?VOK, AnswerOpt0),
+
+
+  {Status1, AnswerOpt1} = create_file_on_storage(Host, Cert2, Port, Id0),
+  ?assertEqual("ok", Status1),
+  ?assertEqual(list_to_atom(?VOK), AnswerOpt1),
+
+  UsrBeg = string:str(Id0, Login2),
+  WrongId1 = string:substr(Id0, 1, UsrBeg - 1) ++ Login ++ string:substr(Id0, UsrBeg + length(Login2)),
+  {Status2, AnswerOpt2} = create_file_on_storage(Host, Cert2, Port, WrongId1),
+  ?assertEqual("ok", Status2),
+  ?assertEqual(list_to_atom(?VEPERM), AnswerOpt2),
+
+  WrongId2 = string:substr(Id0, 1, UsrBeg - 2) ++ string:substr(Id0, UsrBeg + length(Login2)),
+  {Status3, AnswerOpt3} = create_file_on_storage(Host, Cert2, Port, WrongId2),
+  ?assertEqual("ok", Status3),
+  ?assertEqual(list_to_atom(?VEREMOTEIO), AnswerOpt3),
+
+  {WriteStatus0, WriteAnswer0, BytesWritten0} = write(Host, Cert2, Port, Id0, 0, list_to_binary("abcdefgh")),
+  ?assertEqual("ok", WriteStatus0),
+  ?assertEqual(?VOK, WriteAnswer0),
+  ?assertEqual(length("abcdefgh"), BytesWritten0),
+
+
+  {Status4, _, _, Id1, _, AnswerOpt4} = create_file(Host, Cert2, Port, TestFile2, FuseId2),
+  ?assertEqual("ok", Status4),
+  ?assertEqual(?VOK, AnswerOpt4),
+
+  {Status5, AnswerOpt5} = create_file_on_storage(Host, Cert2, Port, Id1),
+  ?assertEqual("ok", Status5),
+  ?assertEqual(list_to_atom(?VOK), AnswerOpt5),
+
+  {WriteStatus01, WriteAnswer01, BytesWritten01} = write(Host, Cert2, Port, Id1, 0, list_to_binary("abcdefgh")),
+  ?assertEqual("ok", WriteStatus01),
+  ?assertEqual(?VOK, WriteAnswer01),
+  ?assertEqual(length("abcdefgh"), BytesWritten01),
+
+  UsrBeg2 = string:str(Id1, Team1),
+  WrongId3 = string:substr(Id1, 1, UsrBeg2 - 1) ++ "other_team" ++ string:substr(Id1, UsrBeg2 + length(Team1)),
+  {Status6, AnswerOpt6} = create_file_on_storage(Host, Cert2, Port, WrongId3),
+  ?assertEqual("ok", Status6),
+  ?assertEqual(list_to_atom(?VEPERM), AnswerOpt6),
+
+
+
+
+  {DeleteStatus, DeleteAnswer} = delete_file_on_storage(Host, Cert, Port, Id0),
+  ?assertEqual("ok", DeleteStatus),
+  ?assertEqual(list_to_atom(?VEPERM), DeleteAnswer),
+
+  {WriteStatus, WriteAnswer, _} = write(Host, Cert, Port, Id0, 0, list_to_binary("xyz")),
+  ?assertEqual("ok", WriteStatus),
+  ?assertEqual(?VEPERM, WriteAnswer),
+
+  {TruncateStatus, TruncateAnswer} = truncate_file_on_storage(Host, Cert, Port, Id0, 5),
+  ?assertEqual("ok", TruncateStatus),
+  ?assertEqual(list_to_atom(?VEPERM), TruncateAnswer),
+
+  {ReadStatus, ReadAnswer, _} = read(Host, Cert, Port, Id0, 2, 2),
+  ?assertEqual("ok", ReadStatus),
+  ?assertEqual(?VEPERM, ReadAnswer),
+
+
+  {PermStatus, PermAnswer} = change_perm_on_storage(Host, Cert, Port, Id0, 8#521),
+  ?assertEqual("ok", PermStatus),
+  ?assertEqual(list_to_atom(?VEPERM), PermAnswer),
+
+
+
+
+  {DeleteStatus2, DeleteAnswer2} = delete_file_on_storage(Host, Cert, Port, WrongId2),
+  ?assertEqual("ok", DeleteStatus2),
+  ?assertEqual(list_to_atom(?VEREMOTEIO), DeleteAnswer2),
+
+  {WriteStatus2, WriteAnswer2, _} = write(Host, Cert, Port, WrongId2, 0, list_to_binary("xyz")),
+  ?assertEqual("ok", WriteStatus2),
+  ?assertEqual(?VEREMOTEIO, WriteAnswer2),
+
+  {TruncateStatus2, TruncateAnswer2} = truncate_file_on_storage(Host, Cert, Port, WrongId2, 5),
+  ?assertEqual("ok", TruncateStatus2),
+  ?assertEqual(list_to_atom(?VEREMOTEIO), TruncateAnswer2),
+
+  {ReadStatus2, ReadAnswer2, _} = read(Host, Cert, Port, WrongId2, 2, 2),
+  ?assertEqual("ok", ReadStatus2),
+  ?assertEqual(?VEREMOTEIO, ReadAnswer2),
+
+
+  {PermStatus2, PermAnswer2} = change_perm_on_storage(Host, Cert, Port, WrongId2, 8#521),
+  ?assertEqual("ok", PermStatus2),
+  ?assertEqual(list_to_atom(?VEREMOTEIO), PermAnswer2),
+
+
+
+
+  {DeleteStatus3, DeleteAnswer3} = delete_file_on_storage(Host, Cert, Port, Id1),
+  ?assertEqual("ok", DeleteStatus3),
+  ?assertEqual(list_to_atom(?VEPERM), DeleteAnswer3),
+
+  {WriteStatus3, WriteAnswer3, BytesWritten3} = write(Host, Cert, Port, Id1, 0, list_to_binary("xyz")),
+  ?assertEqual("ok", WriteStatus3),
+  ?assertEqual(?VOK, WriteAnswer3),
+  ?assertEqual(length("xyz"), BytesWritten3),
+
+  {TruncateStatus3, TruncateAnswer3} = truncate_file_on_storage(Host, Cert, Port, Id1, 5),
+  ?assertEqual("ok", TruncateStatus3),
+  ?assertEqual(list_to_atom(?VOK), TruncateAnswer3),
+
+  {ReadStatus3, ReadAnswer3, ReadData3} = read(Host, Cert, Port, Id1, 2, 2),
+  ?assertEqual("ok", ReadStatus3),
+  ?assertEqual(?VOK, ReadAnswer3),
+  ?assertEqual("zd", binary_to_list(ReadData3)),
+
+  {PermStatus3, PermAnswer3} = change_perm_on_storage(Host, Cert, Port, Id1, 8#521),
+  ?assertEqual("ok", PermStatus3),
+  ?assertEqual(list_to_atom(?VEPERM), PermAnswer3),
+
+
+
+
+
+  {PermStatus3_2, PermAnswer3_2} = change_perm_on_storage(Host, Cert2, Port, Id1, 8#640),
+  ?assertEqual("ok", PermStatus3_2),
+  ?assertEqual(list_to_atom(?VOK), PermAnswer3_2),
+
+
+
+
+
+  {DeleteStatus4, DeleteAnswer4} = delete_file_on_storage(Host, Cert, Port, Id1),
+  ?assertEqual("ok", DeleteStatus4),
+  ?assertEqual(list_to_atom(?VEPERM), DeleteAnswer4),
+
+  {WriteStatus4, WriteAnswer4, _} = write(Host, Cert, Port, Id1, 0, list_to_binary("qpr")),
+  ?assertEqual("ok", WriteStatus4),
+  ?assertEqual(?VEPERM, WriteAnswer4),
+
+  {TruncateStatus4, TruncateAnswer4} = truncate_file_on_storage(Host, Cert, Port, Id1, 3),
+  ?assertEqual("ok", TruncateStatus4),
+  ?assertEqual(list_to_atom(?VEPERM), TruncateAnswer4),
+
+  {ReadStatus4, ReadAnswer4, ReadData4} = read(Host, Cert, Port, Id1, 2, 2),
+  ?assertEqual("ok", ReadStatus4),
+  ?assertEqual(?VOK, ReadAnswer4),
+  ?assertEqual("zd", binary_to_list(ReadData4)),
+
+  {PermStatus4, PermAnswer4} = change_perm_on_storage(Host, Cert, Port, Id1, 8#521),
+  ?assertEqual("ok", PermStatus4),
+  ?assertEqual(list_to_atom(?VEPERM), PermAnswer4),
+
+
+
+
+  {DeleteStatus5, DeleteAnswer5} = delete_file_on_storage(Host, Cert2, Port, Id1),
+  ?assertEqual("ok", DeleteStatus5),
+  ?assertEqual(list_to_atom(?VOK), DeleteAnswer5),
+
+
+
+  {FSLogicDelStatus, FSLogicDelAnswer} = delete_file(Host, Cert2, Port, TestFile, FuseId2),
+  ?assertEqual("ok", FSLogicDelStatus),
+  ?assertEqual(list_to_atom(?VOK), FSLogicDelAnswer),
+
+  {FSLogicDelStatus2, FSLogicDelAnswer2} = delete_file(Host, Cert2, Port, TestFile2, FuseId2),
+  ?assertEqual("ok", FSLogicDelStatus2),
+  ?assertEqual(list_to_atom(?VOK), FSLogicDelAnswer2),
+
+
+  wss:close(Socket),
+  wss:close(Socket2),
+
+  RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+  ?assertEqual(ok, RemoveStorageAns),
+
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team1], ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
+
+  RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
+  ?assertEqual(ok, RemoveUserAns),
+
+  RemoveUserAns2 = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN2}]),
+  ?assertEqual(ok, RemoveUserAns2),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login),
+  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login2),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Team1),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users"),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
 
 %% Checks if appropriate storage helpers are used for different users
 storage_helpers_management_test(Config) ->
@@ -218,7 +473,7 @@ helper_requests_test(Config) ->
   ?assertEqual("ok", WriteStatus),
   ?assertEqual(?VOK, WriteAnswer),
   ?assertEqual(length("abcdefgh"), BytesWritten),
-
+  ?assertEqual(length("abcdefgh"), BytesWritten),
   {ReadStatus, ReadAnswer, ReadData} = read(Host, Cert, Port, Id, 2, 2),
   ?assertEqual("ok", ReadStatus),
   ?assertEqual(?VOK, ReadAnswer),
@@ -252,6 +507,16 @@ helper_requests_test(Config) ->
   ?assertEqual("ok", ReadStatus5),
   ?assertEqual(?VOK, ReadAnswer5),
   ?assertEqual("abc12", binary_to_list(ReadData5)),
+
+  %% The file was not created with ok asnwer because of chmod fail (user not present in the system)
+  %% However it is still present at storage
+  {DeleteStatus, DeleteAnswer} = delete_file_on_storage(Host, Cert2, Port, User2_Id),
+  ?assertEqual("ok", DeleteStatus),
+  ?assertEqual(list_to_atom(?VOK), DeleteAnswer),
+
+  {Status4, Answer4} = delete_file(Host, Cert2, Port, TestFile, FuseId2),
+  ?assertEqual("ok", Status4),
+  ?assertEqual(list_to_atom(?VOK), Answer4),
 
   {Status3, Answer3} = delete_file_on_storage(Host, Cert, Port, Id),
   ?assertEqual("ok", Status3),
@@ -449,6 +714,29 @@ truncate_file_on_storage(Host, Cert, Port, FileID, Length) ->
   OperationMessageBytes = erlang:iolist_to_binary(remote_file_management_pb:encode_truncatefile(OperationMessage)),
 
   RemoteMangementMessage = #remotefilemangement{message_type = "truncatefile", input = OperationMessageBytes},
+  RemoteMangementMessageBytes = erlang:iolist_to_binary(remote_file_management_pb:encode_remotefilemangement(RemoteMangementMessage)),
+
+  Message = #clustermsg{module_name = "remote_files_manager", message_type = "remotefilemangement",
+  message_decoder_name = "remote_file_management", answer_type = "atom",
+  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = RemoteMangementMessageBytes},
+  MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+
+  {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
+  ?assertEqual(ok, ConAns),
+  wss:send(Socket, MessageBytes),
+  {SendAns, Ans} = wss:recv(Socket, 5000),
+  ?assertEqual(ok, SendAns),
+
+  #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
+  Answer = communication_protocol_pb:decode_atom(Bytes),
+  Answer2 = records_translator:translate(Answer, "communication_protocol"),
+  {Status, Answer2}.
+
+change_perm_on_storage(Host, Cert, Port, FileID, NewPerm) ->
+  OperationMessage = #changepermsatstorage{file_id  = FileID, perms = NewPerm},
+  OperationMessageBytes = erlang:iolist_to_binary(remote_file_management_pb:encode_changepermsatstorage(OperationMessage)),
+
+  RemoteMangementMessage = #remotefilemangement{message_type = "changepermsatstorage", input = OperationMessageBytes},
   RemoteMangementMessageBytes = erlang:iolist_to_binary(remote_file_management_pb:encode_remotefilemangement(RemoteMangementMessage)),
 
   Message = #clustermsg{module_name = "remote_files_manager", message_type = "remotefilemangement",
