@@ -27,7 +27,7 @@
 %% API
 %% ====================================================================
 -export([start_link/3, stop/1, start_sub_proc/5, start_sub_proc/6, generate_sub_proc_list/1, generate_sub_proc_list/5, generate_sub_proc_list/6]).
--export([create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_sub_procs_cache/2]).
+-export([create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_sub_procs_cache/2, clear_sipmle_cache/3]).
 
 %% ====================================================================
 %% Test API
@@ -271,15 +271,12 @@ handle_cast(register_sub_proc_caches, State) ->
         CacheRegAns = case CacheType of
           simple ->
             ClearingPid = self(),
-            register_sub_proc_simple_cache({PlugIn, Name}, non, non, true, ClearingPid);
+            register_sub_proc_simple_cache({PlugIn, Name}, non, non, ClearingPid);
           {simple, CacheLoop2, ClearFun2} ->
             ClearingPid2 = self(),
-            register_sub_proc_simple_cache({PlugIn, Name}, CacheLoop2, ClearFun2, true, ClearingPid2);
-          {simple, CacheLoop3, ClearFun3, StrongCacheConnection3} ->
-            ClearingPid3 = self(),
-            register_sub_proc_simple_cache({PlugIn, Name}, CacheLoop3, ClearFun3, StrongCacheConnection3, ClearingPid3);
-          {simple, CacheLoop4, ClearFun4, StrongCacheConnection4, ClearingPid4} ->
-            register_sub_proc_simple_cache({PlugIn, Name}, CacheLoop4, ClearFun4, StrongCacheConnection4, ClearingPid4);
+            register_sub_proc_simple_cache({PlugIn, Name}, CacheLoop2, ClearFun2, ClearingPid2);
+          {simple, CacheLoop4, ClearFun4, ClearingPid4} ->
+            register_sub_proc_simple_cache({PlugIn, Name}, CacheLoop4, ClearFun4, ClearingPid4);
           _ ->
             lager:debug("Use of non simple cache ~p", [{Name, CacheType}]),
             ok
@@ -354,14 +351,11 @@ handle_info({timer, Msg}, State) ->
   {noreply, State};
 
 handle_info({clear_sipmle_cache, LoopTime, Fun, StrongCacheConnection}, State) ->
-  Pid = self(),
-  erlang:send_after(LoopTime, Pid, {clear_sipmle_cache, LoopTime, Fun, StrongCacheConnection}),
-  case StrongCacheConnection of
-    true ->
-      spawn_link(fun() -> Fun() end);
-    _ ->
-      spawn(fun() -> Fun() end)
-  end,
+  clear_sipmle_cache(LoopTime, Fun, StrongCacheConnection),
+  {noreply, State};
+
+handle_info({clear_sub_proc_sipmle_cache, Name, LoopTime, Fun}, State) ->
+  clear_sub_proc_sipmle_cache(Name, LoopTime, Fun, State#host_state.sub_procs),
   {noreply, State};
 
 handle_info(dispatcher_map_registered, State) ->
@@ -621,7 +615,6 @@ sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, 
       sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
 
     {sub_proc_management, ReturnPid, {clear_cache, Keys}} ->
-      lager:error([{mod, ?MODULE}], "aaaa ~p", [{node(), Name, CacheName, Keys}]),
       case CacheName of
           non ->
             ReturnPid ! {sub_proc_cache_cleared, false};
@@ -630,11 +623,15 @@ sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, 
             KList when is_list(KList) ->
               lists:foreach(fun(K) -> ets:delete(CacheName, K) end, KList);
             Key ->
-              lager:error([{mod, ?MODULE}], "bbb ~p", [{node(), Name, CacheName, Key}]),
               ets:delete(CacheName, Key)
           end,
           ReturnPid ! {sub_proc_cache_cleared, clear_sub_procs_caches(Name, {clear_cache, Keys})}
       end,
+      sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
+
+    {sub_proc_management, sub_proc_automatic_cache_clearing, ClearFun} ->
+      ClearFun(CacheName),
+      clear_sub_procs_caches_by_fun(Name, ClearFun),
       sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
 
     {'EXIT', ChildPid, _} ->
@@ -924,7 +921,12 @@ register_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Clearing
 
       case LoopTime of
         Time when is_integer(Time) ->
-          erlang:send_after(1000 * Time, ClearingPid, {clear_sipmle_cache, 1000 * Time, ClearFun, StrongCacheConnection}),
+          case Name of
+            {sub_proc_cache, {_PlugIn, SubProcName}} ->
+              erlang:send_after(1000 * Time, ClearingPid, {clear_sub_proc_sipmle_cache, SubProcName, 1000 * Time, ClearFun});
+            _ ->
+              erlang:send_after(1000 * Time, ClearingPid, {clear_sipmle_cache, 1000 * Time, ClearFun, StrongCacheConnection})
+          end,
           ok;
         non -> ok;
         _ -> loop_time_not_a_number_error
@@ -984,16 +986,31 @@ count_answers(ExpectedNum, TmpAns) ->
     false
   end.
 
+clear_sub_procs_caches_by_fun(EtsName, Fun) ->
+  clear_sub_procs_caches_by_fun(EtsName, ets:first(EtsName), Fun).
+
+clear_sub_procs_caches_by_fun(_EtsName, '$end_of_table', _) ->
+  ok;
+clear_sub_procs_caches_by_fun(EtsName, CurrentElement, Fun) ->
+  case CurrentElement of
+    Pid when is_pid(Pid) ->
+      Pid ! {sub_proc_management, sub_proc_automatic_cache_clearing, Fun};
+    _ ->
+      ok
+  end,
+  clear_sub_procs_caches_by_fun(EtsName, ets:next(EtsName, CurrentElement), Fun).
+
+
 get_cache_name(SupProcName) ->
   list_to_atom(atom_to_list(SupProcName) ++ "_cache").
 
-register_sub_proc_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPid) ->
-  RegAns = register_simple_cache({sub_proc_cache, Name}, CacheLoop, ClearFun, StrongCacheConnection, ClearingPid),
+register_sub_proc_simple_cache(Name, CacheLoop, ClearFun, ClearingPid) ->
+  RegAns = register_simple_cache({sub_proc_cache, Name}, CacheLoop, ClearFun, false, ClearingPid),
   case RegAns of
     ok ->
       ok;
     _ ->
-      lager:error([{mod, ?MODULE}], "Error of register_sub_proc_simple_cache, error: ~p, args: ~p", [RegAns, {Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPid}]),
+      lager:error([{mod, ?MODULE}], "Error of register_sub_proc_simple_cache, error: ~p, args: ~p", [RegAns, {Name, CacheLoop, ClearFun, ClearingPid}]),
       error
   end.
 
@@ -1020,3 +1037,25 @@ clear_sub_procs_cache({PlugIn, Cache}, Key) ->
   after ?SUB_PROC_CACHE_CLEAR_TIME ->
     error
   end.
+
+clear_sipmle_cache(LoopTime, Fun, StrongCacheConnection) ->
+  Pid = self(),
+  erlang:send_after(LoopTime, Pid, {clear_sipmle_cache, LoopTime, Fun, StrongCacheConnection}),
+  case StrongCacheConnection of
+    true ->
+      spawn_link(fun() -> Fun() end);
+    _ ->
+      spawn(fun() -> Fun() end)
+  end.
+
+clear_sub_proc_sipmle_cache(Name, LoopTime, Fun, SubProcs) ->
+  Pid = self(),
+  erlang:send_after(LoopTime, Pid, {clear_sub_proc_sipmle_cache, Name, LoopTime, Fun}),
+  {_SubProcArgs, _SubProcCache, SubProcPid} = proplists:get_value(Name, SubProcs, {not_found, not_found, not_found}),
+  case SubProcPid of
+    not_found ->
+      false;
+    _ ->
+      SubProcPid ! {sub_proc_management, sub_proc_automatic_cache_clearing, Fun}
+  end.
+
