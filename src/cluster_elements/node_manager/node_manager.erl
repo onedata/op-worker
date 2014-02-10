@@ -691,16 +691,14 @@ clear_cache(Cache, Caches) ->
           ok
       end;
     {sub_proc_cache, SubProcCache} ->
-      worker_host:clear_sub_procs_cache(SubProcCache);
-    {{sub_proc_cache, SubProcCache}, SubProcKey} ->
-      worker_host:clear_sub_procs_cache(SubProcCache, SubProcKey);
-    {CacheName2, Key} when is_atom(Key) ->
-      case lists:member(CacheName2, Caches) of
-        true ->
-          ets:delete(CacheName2, Key),
-          ok;
-        false ->
-          ok
+      case lists:member(Cache, Caches) of
+        true -> worker_host:clear_sub_procs_cache(SubProcCache);
+        false -> ok
+      end;
+    {{sub_proc_cache, SubProcCache2}, SubProcKey} ->
+      case lists:member({sub_proc_cache, SubProcCache2}, Caches) of
+        true -> worker_host:clear_sub_procs_cache(SubProcCache2, SubProcKey);
+        false -> ok
       end;
     {CacheName3, Keys} when is_list(Keys) ->
       case lists:member(CacheName3, Caches) of
@@ -710,7 +708,16 @@ clear_cache(Cache, Caches) ->
         false ->
           ok
       end;
-    [] -> ok;
+    {CacheName2, Key} ->
+      case lists:member(CacheName2, Caches) of
+        true ->
+          ets:delete(CacheName2, Key),
+          ok;
+        false ->
+          ok
+      end;
+    [] ->
+      ok;
     [H | T] ->
       Ans1 = clear_cache(H, Caches),
       Ans2 = clear_cache(T, Caches),

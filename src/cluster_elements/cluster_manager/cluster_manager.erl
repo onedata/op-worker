@@ -396,6 +396,11 @@ handle_cast({clear_cache, Cache, ReturnPid}, State) ->
   New_State = clear_cache(State, Cache),
   {noreply, New_State};
 
+handle_cast({synch_cache_clearing, Cache, ReturnPid}, State) ->
+  New_State = clear_cache(State, Cache),
+  ReturnPid ! {cache_cleared, Cache},
+  {noreply, New_State};
+
 handle_cast(_Msg, State) ->
   {noreply, State}.
 

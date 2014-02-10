@@ -86,13 +86,14 @@ sub_proc_cache_test(Config) ->
   nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
 
   ProcFun = fun
-    (_ProtocolVersion, {update_cache, _, {Key, Value}}, CacheName) ->
+    (_ProtocolVersion, {update_cache, _, AnsPid, {Key, Value}}, CacheName) ->
       case ets:lookup(CacheName, Key) of
         [{Key, OldValue}] ->
           ets:insert(CacheName, {Key, OldValue + Value});
         _ ->
           ets:insert(CacheName, {Key, Value})
-      end;
+      end,
+      AnsPid ! cache_updated;
     (_ProtocolVersion, {get_from_cache, _, Key}, CacheName) ->
       case ets:lookup(CacheName, Key) of
         [{Key, Value}] ->
@@ -100,26 +101,27 @@ sub_proc_cache_test(Config) ->
         _ ->
           {cache_value, 0}
       end;
-    (_ProtocolVersion, {sub_proc_test, _}, _CacheName) -> ok
+    (_ProtocolVersion, {sub_proc_test, _, AnsPid}, _CacheName) ->
+      AnsPid ! sub_proc_test_ok
   end,
 
   MapFun = fun
-    ({update_cache,MapNum, _}) -> MapNum rem 10;
+    ({update_cache,MapNum, _, _}) -> MapNum rem 10;
     ({get_from_cache, MapNum, _}) -> MapNum rem 10;
-    ({sub_proc_test, MapNum}) -> MapNum rem 10
+    ({sub_proc_test, MapNum, _}) -> MapNum rem 10
   end,
 
   RequestMap = fun
-    ({update_cache, _, _}) -> sub_proc_test_proccess;
+    ({update_cache, _, _, _}) -> sub_proc_test_proccess;
     ({get_from_cache, _, _}) -> sub_proc_test_proccess;
-    ({sub_proc_test, _}) -> sub_proc_test_proccess;
+    ({sub_proc_test, _, _}) -> sub_proc_test_proccess;
     (_) -> non
   end,
 
   DispMapFun = fun
-    ({update_cache,MapNum2, _}) -> trunc(MapNum2 / 10);
+    ({update_cache,MapNum2, _, _}) -> trunc(MapNum2 / 10);
     ({get_from_cache, MapNum2, _}) -> trunc(MapNum2 / 10);
-    ({sub_proc_test, MapNum2}) -> trunc(MapNum2 / 10);
+    ({sub_proc_test, MapNum2, _}) -> trunc(MapNum2 / 10);
     (_) -> non
   end,
 
@@ -130,35 +132,38 @@ sub_proc_cache_test(Config) ->
   end,
   lists:foreach(RegisterSubProc, NodesUp),
 
+  Pid = self(),
+
   %% send many request to multiply sub_procs
   TestFun = fun() ->
     spawn(fun() ->
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 11}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 12}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 13}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 21}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 31}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 41}}, 500)
+      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 11, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 12, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 13, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 21, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 31, Pid}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 41, Pid}}, 500)
     end)
   end,
 
   TestRequestsNum = 100,
   for(1, TestRequestsNum, TestFun),
+  ?assertEqual(6*TestRequestsNum, count_answers2(6*TestRequestsNum, sub_proc_test_ok)),
 
   TestFun2 = fun() ->
     spawn(fun() ->
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, {k1, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, {k2, 1}}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 12}, {k3, 1}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 13}, {k4, 1}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 21}, {k5, 1}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 31}, {k6, 1}}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 41}, {k1, 1}}, 500)
+      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, Pid, {k1, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, Pid, {k2, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 12, Pid, {k3, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 13, Pid, {k4, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 21, Pid, {k5, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 31, Pid, {k6, 1}}}, 500),
+      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 41, Pid, {k1, 1}}}, 500)
     end)
   end,
   for(1, TestRequestsNum, TestFun2),
+  ?assertEqual(7*TestRequestsNum, count_answers2(7*TestRequestsNum, cache_updated)),
 
-  Pid = self(),
   VerifyFun = fun(MapVal, Key) ->
     gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, Pid, {get_from_cache, MapVal, Key}}, 500),
     receive
@@ -175,8 +180,32 @@ sub_proc_cache_test(Config) ->
   ?assertEqual(TestRequestsNum, VerifyFun(31, k6)),
   ?assertEqual(TestRequestsNum, VerifyFun(41, k1)),
 
+  ?assertEqual(ok, rpc:call(CCM, worker_host, synch_cache_clearing, [{{sub_proc_cache, {fslogic, sub_proc_test_proccess}}, k1}])),
+  ?assertEqual(0, VerifyFun(11, k1)),
+  ?assertEqual(TestRequestsNum, VerifyFun(11, k2)),
+  ?assertEqual(TestRequestsNum, VerifyFun(12, k3)),
+  ?assertEqual(TestRequestsNum, VerifyFun(13, k4)),
+  ?assertEqual(TestRequestsNum, VerifyFun(21, k5)),
+  ?assertEqual(TestRequestsNum, VerifyFun(31, k6)),
+  ?assertEqual(0, VerifyFun(41, k1)),
 
-  ok.
+  ?assertEqual(ok, rpc:call(CCM, worker_host, synch_cache_clearing, [{{sub_proc_cache, {fslogic, sub_proc_test_proccess}}, [k3, k4, k5]}])),
+  ?assertEqual(0, VerifyFun(11, k1)),
+  ?assertEqual(TestRequestsNum, VerifyFun(11, k2)),
+  ?assertEqual(0, VerifyFun(12, k3)),
+  ?assertEqual(0, VerifyFun(13, k4)),
+  ?assertEqual(0, VerifyFun(21, k5)),
+  ?assertEqual(TestRequestsNum, VerifyFun(31, k6)),
+  ?assertEqual(0, VerifyFun(41, k1)),
+
+  ?assertEqual(ok, rpc:call(CCM, worker_host, synch_cache_clearing, [{sub_proc_cache, {fslogic, sub_proc_test_proccess}}])),
+  ?assertEqual(0, VerifyFun(11, k1)),
+  ?assertEqual(0, VerifyFun(11, k2)),
+  ?assertEqual(0, VerifyFun(12, k3)),
+  ?assertEqual(0, VerifyFun(13, k4)),
+  ?assertEqual(0, VerifyFun(21, k5)),
+  ?assertEqual(0, VerifyFun(31, k6)),
+  ?assertEqual(0, VerifyFun(41, k1)).
 
 %% This node-wide caches
 node_cache_test(Config) ->
@@ -216,7 +245,7 @@ node_cache_test(Config) ->
   end,
   lists:foreach(AddDataToCaches, WorkerNodes),
 
-  ?assertEqual(ok, rpc:call(CCM, worker_host, clear_cache, [{test_cache, test_key}])),
+  ?assertEqual(ok, rpc:call(CCM, worker_host, synch_cache_clearing, [{test_cache, test_key}])),
   CheckCaches1 = fun(Node) ->
     ?assertEqual(3, rpc:call(Node, ets, info, [test_cache, size])),
     ?assertEqual([{test_key2, test_value2}], rpc:call(Node, ets, lookup, [test_cache, test_key2])),
@@ -227,7 +256,7 @@ node_cache_test(Config) ->
   end,
   lists:foreach(CheckCaches1, WorkerNodes),
 
-  ?assertEqual(ok, rpc:call(CCM, worker_host, clear_cache, [{test_cache, [test_key2, test_key3]}])),
+  ?assertEqual(ok, rpc:call(CCM, worker_host, synch_cache_clearing, [{test_cache, [test_key2, test_key3]}])),
   CheckCaches2 = fun(Node) ->
     ?assertEqual(1, rpc:call(Node, ets, info, [test_cache, size])),
     K = get_atom_from_node(Node, test_key),
@@ -237,10 +266,10 @@ node_cache_test(Config) ->
   lists:foreach(CheckCaches2, WorkerNodes),
 
   [WN1 | WorkerNodes2] = WorkerNodes,
-  ?assertEqual(ok, rpc:call(CCM, worker_host, clear_cache, [{test_cache, get_atom_from_node(WN1, test_key)}])),
+  ?assertEqual(ok, rpc:call(CCM, worker_host, synch_cache_clearing, [{test_cache, get_atom_from_node(WN1, test_key)}])),
   lists:foreach(CheckCaches2, WorkerNodes2),
 
-  ?assertEqual(ok, rpc:call(CCM, worker_host, clear_cache, [test_cache])),
+  ?assertEqual(ok, rpc:call(CCM, worker_host, synch_cache_clearing, [test_cache])),
   CheckCaches3 = fun(Node) ->
     ?assertEqual(0, rpc:call(Node, ets, info, [test_cache, size]))
   end,
@@ -398,6 +427,17 @@ count_answers(ExpectedNum, TmpAns) ->
       count_answers(ExpectedNum - 1, NewAns)
   after 5000 ->
     TmpAns
+  end.
+
+count_answers2(0, _Message) ->
+  0;
+
+count_answers2(ExpectedNum, Message) ->
+  receive
+    Message ->
+      count_answers2(ExpectedNum - 1, Message) + 1
+  after 5000 ->
+    0
   end.
 
 get_atom_from_node(Node, Ending) ->

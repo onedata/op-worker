@@ -27,7 +27,7 @@
 %% API
 %% ====================================================================
 -export([start_link/3, stop/1, start_sub_proc/5, start_sub_proc/6, generate_sub_proc_list/1, generate_sub_proc_list/5, generate_sub_proc_list/6]).
--export([create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1, clear_sub_procs_cache/1, clear_sub_procs_cache/2]).
+-export([create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_sub_procs_cache/2]).
 
 %% ====================================================================
 %% Test API
@@ -271,15 +271,15 @@ handle_cast(register_sub_proc_caches, State) ->
         CacheRegAns = case CacheType of
           simple ->
             ClearingPid = self(),
-            register_sub_proc_simple_cache({sub_proc_cache, {PlugIn, Name}}, non, non, true, ClearingPid);
+            register_sub_proc_simple_cache({PlugIn, Name}, non, non, true, ClearingPid);
           {simple, CacheLoop2, ClearFun2} ->
             ClearingPid2 = self(),
-            register_sub_proc_simple_cache({sub_proc_cache, {PlugIn, Name}}, CacheLoop2, ClearFun2, true, ClearingPid2);
+            register_sub_proc_simple_cache({PlugIn, Name}, CacheLoop2, ClearFun2, true, ClearingPid2);
           {simple, CacheLoop3, ClearFun3, StrongCacheConnection3} ->
             ClearingPid3 = self(),
-            register_sub_proc_simple_cache({sub_proc_cache, {PlugIn, Name}}, CacheLoop3, ClearFun3, StrongCacheConnection3, ClearingPid3);
+            register_sub_proc_simple_cache({PlugIn, Name}, CacheLoop3, ClearFun3, StrongCacheConnection3, ClearingPid3);
           {simple, CacheLoop4, ClearFun4, StrongCacheConnection4, ClearingPid4} ->
-            register_sub_proc_simple_cache({sub_proc_cache, {PlugIn, Name}}, CacheLoop4, ClearFun4, StrongCacheConnection4, ClearingPid4);
+            register_sub_proc_simple_cache({PlugIn, Name}, CacheLoop4, ClearFun4, StrongCacheConnection4, ClearingPid4);
           _ ->
             lager:debug("Use of non simple cache ~p", [{Name, CacheType}]),
             ok
@@ -612,24 +612,28 @@ sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, 
 
     {sub_proc_management, ReturnPid, clear_cache} ->
       case CacheName of
-          non -> ok;
+          non ->
+            ReturnPid ! {sub_proc_cache_cleared, false};
         _ ->
           ets:delete_all_objects(CacheName),
-          ReturnPid ! {sub_proc_cache_cleared, clear_sub_procs_caches(CacheName, clear_cache)}
+          ReturnPid ! {sub_proc_cache_cleared, clear_sub_procs_caches(Name, clear_cache)}
       end,
       sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
 
     {sub_proc_management, ReturnPid, {clear_cache, Keys}} ->
+      lager:error([{mod, ?MODULE}], "aaaa ~p", [{node(), Name, CacheName, Keys}]),
       case CacheName of
-          non -> ok;
+          non ->
+            ReturnPid ! {sub_proc_cache_cleared, false};
         _ ->
           case Keys of
-            Key when is_atom(Key) ->
-              ets:delete(CacheName, Key);
             KList when is_list(KList) ->
-              lists:foreach(fun(K) -> ets:delete(CacheName, K) end, KList)
+              lists:foreach(fun(K) -> ets:delete(CacheName, K) end, KList);
+            Key ->
+              lager:error([{mod, ?MODULE}], "bbb ~p", [{node(), Name, CacheName, Key}]),
+              ets:delete(CacheName, Key)
           end,
-          ReturnPid ! {sub_proc_cache_cleared, clear_sub_procs_caches(CacheName, {clear_cache, Keys})}
+          ReturnPid ! {sub_proc_cache_cleared, clear_sub_procs_caches(Name, {clear_cache, Keys})}
       end,
       sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
 
@@ -660,7 +664,7 @@ sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, 
                             proc
                         end;
                       map ->
-                        case NewAvgWaitTime > ?BORTER_CHILD_WAIT_TIME * 10 of
+                        case NewAvgWaitTime > ?BORTER_CHILD_WAIT_TIME * 1000 of
                           true ->
                             proc;
                           false ->
@@ -943,6 +947,15 @@ clear_cache(Cache) ->
     error_during_contact_witch_ccm
   end.
 
+synch_cache_clearing(Cache) ->
+  Pid = self(),
+  gen_server:cast({global, ?CCM}, {synch_cache_clearing, Cache, Pid}),
+  receive
+    {cache_cleared, Cache} -> ok
+  after 5000 ->
+    error_during_contact_witch_ccm
+  end.
+
 clear_sub_procs_caches(EtsName, Message) ->
   clear_sub_procs_caches(EtsName, ets:first(EtsName), Message, 0).
 
@@ -975,8 +988,7 @@ get_cache_name(SupProcName) ->
   list_to_atom(atom_to_list(SupProcName) ++ "_cache").
 
 register_sub_proc_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPid) ->
-  Pid = self(),
-  RegAns = register_simple_cache({sub_proc_cache, {Name, Pid}}, CacheLoop, ClearFun, StrongCacheConnection, ClearingPid),
+  RegAns = register_simple_cache({sub_proc_cache, Name}, CacheLoop, ClearFun, StrongCacheConnection, ClearingPid),
   case RegAns of
     ok ->
       ok;
