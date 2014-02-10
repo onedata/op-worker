@@ -17,49 +17,46 @@
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([connection_test/1,nagios_test/1]).
+-export([main_test/1]).
 
-all() -> [connection_test,nagios_test].
+all() -> [main_test].
 
 %% ====================================================================
 %% Test functions
 %% ====================================================================
 
-%% Main test, starts a single-noded cluster and checks if control_panel 
-%% listener is operational.
-connection_test(Config) ->
-    nodes_manager:check_start_assertions(Config),
-
-    NodesUp = ?config(nodes, Config),
-    [CCM | _] = NodesUp,
-
-    gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
-    gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-    nodes_manager:wait_for_cluster_cast(),
-    gen_server:cast({global, ?CCM}, init_cluster),
-    nodes_manager:wait_for_cluster_init(),
-
-    {ok, Port} = rpc:call(CCM, application, get_env, [veil_cluster_node, control_panel_port]),
-
-    ibrowse:start(),
-    {_, Code, _, _} = ibrowse:send_req("https://localhost:" ++ integer_to_list(Port) , [], get),
-    ?assertEqual(Code, "200").
-
-%% sends nagios request and check if health status is ok, and if health report contains information about all workers
-nagios_test(Config) ->
+%% Main test, it initializes cluster and runs all other tests
+main_test(Config) ->
+	%init
 	nodes_manager:check_start_assertions(Config),
 	NodesUp = ?config(nodes, Config),
 	[CCM | _] = NodesUp,
-
+	put(ccm, CCM),
 	gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
 	gen_server:cast({global, ?CCM}, {set_monitoring, on}),
 	nodes_manager:wait_for_cluster_cast(),
 	gen_server:cast({global, ?CCM}, init_cluster),
 	nodes_manager:wait_for_cluster_init(),
-
 	ibrowse:start(),
+
+	%tests
+	connection_test(),
+	nagios_test(),
+
+	%cleanup
+	ibrowse:stop().
+
+%% Checks if control_panel listener is operational.
+connection_test() ->
+    {ok, Port} = rpc:call(get(ccm), application, get_env, [veil_cluster_node, control_panel_port]),
+    {_, Code, _, _} = ibrowse:send_req("https://localhost:" ++ integer_to_list(Port) , [], get),
+
+    ?assertEqual(Code, "200").
+
+%% Sends nagios request and check if health status is ok, and if health report contains information about all workers
+nagios_test() ->
 	NagiosUrl = "https://localhost/nagios",
-	{ok, Code, _RespHeaders, Response} = rpc:call(CCM,ibrowse,send_req, [NagiosUrl,[],get]),
+	{ok, Code, _RespHeaders, Response} = rpc:call(get(ccm),ibrowse,send_req, [NagiosUrl,[],get]),
 	{Xml,_} = xmerl_scan:string(Response),
 	{Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
 
@@ -80,7 +77,7 @@ nagios_test(Config) ->
 %% SetUp and TearDown functions
 %% ====================================================================
 
-init_per_testcase(_, Config) ->
+init_per_testcase(main_test, Config) ->
     ?INIT_DIST_TEST,
     nodes_manager:start_deps_for_tester_node(),
 
@@ -100,7 +97,7 @@ init_per_testcase(_, Config) ->
     lists:append([{nodes, Nodes}, {assertions, Assertions}], Config).
 
 
-end_per_testcase(_, Config) ->
+end_per_testcase(main_test, Config) ->
     Nodes = ?config(nodes, Config),
     StopLog = nodes_manager:stop_app_on_nodes(Nodes),
     StopAns = nodes_manager:stop_nodes(Nodes),
