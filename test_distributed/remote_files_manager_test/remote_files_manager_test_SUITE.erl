@@ -756,6 +756,7 @@ change_perm_on_storage(Host, Cert, Port, FileID, NewPerm) ->
   wss:send(Socket, MessageBytes),
   {SendAns, Ans} = wss:recv(Socket, 5000),
   ?assertEqual(ok, SendAns),
+  wss:close(Socket),
 
   #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
   Answer = communication_protocol_pb:decode_atom(Bytes),
