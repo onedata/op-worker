@@ -186,7 +186,7 @@ create_file(Node, #path_with_times{path = FilePath, times = {ATime, MTime, CTime
   {ParentFound, ParentInfo} = rpc:call(Node, fslogic_utils, get_parent_and_name_from_path , [FilePath, ?ProtocolVersion]),
   ?assertEqual(ok, ParentFound),
   {FileName, Parent} = ParentInfo,
-  File = #file{type = FileType, name = FileName, uid = Uid, parent = Parent, perms = 8#600},
+  File = #file{type = FileType, name = FileName, uid = Uid, parent = Parent#veil_document.uuid, perms = 8#600},
   FileDoc = rpc:call(Node, fslogic_utils, update_meta_attr, [File, times, {ATime, MTime, CTime}]),
   {SaveAns, FileUuid} = rpc:call(Node, dao_lib, apply, [dao_vfs, save_file, [FileDoc], ?ProtocolVersion]),
   ?assertEqual(ok, SaveAns),

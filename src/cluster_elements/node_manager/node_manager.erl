@@ -182,6 +182,10 @@ handle_call({get_callback, FuseId}, _From, State) ->
   {Callback, NewState} = get_callback(State, FuseId),
   {reply, Callback, NewState};
 
+handle_call(get_callback_and_state_num, _From, State) ->
+  Reply = {State#node_state.callbacks_num, State#node_state.state_num},
+  {reply, Reply, State};
+
 handle_call({clear_cache, Cache}, _From, State) ->
   Ans = clear_cache(Cache, State#node_state.simple_caches),
   {reply, Ans, State};
