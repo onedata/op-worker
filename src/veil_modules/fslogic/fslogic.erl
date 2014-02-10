@@ -1292,7 +1292,7 @@ assert_grp_access(_UserDoc, Request, [?GROUPS_BASE_DIR_NAME]) ->
     end;
 assert_grp_access(UserDoc, Request, [?GROUPS_BASE_DIR_NAME | Tail]) ->
     TailCheck = case Tail of
-      [GroupName] ->
+      [_GroupName] ->
         case lists:member(Request, ?GROUPS_ALLOWED_ACTIONS) of
           false   -> error;
           true    -> ok

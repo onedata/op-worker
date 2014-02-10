@@ -501,21 +501,3 @@ end_per_testcase(_, Config) ->
   ?assertEqual(false, lists:member(error, StopLog)),
   ?assertEqual(ok, StopAns).
 
-for(N, N, F) -> [F()];
-for(I, N, F) -> [F()|for(I+1, N, F)].
-
-count_answers(ExpectedNum) ->
-  count_answers(ExpectedNum, []).
-
-count_answers(0, TmpAns) ->
-  TmpAns;
-
-count_answers(ExpectedNum, TmpAns) ->
-  receive
-    {Msg1, Msg2} when is_atom(Msg2) ->
-      NewCounter = proplists:get_value({Msg1, Msg2}, TmpAns, 0) + 1,
-      NewAns = [{{Msg1, Msg2}, NewCounter} | proplists:delete({Msg1, Msg2}, TmpAns)],
-      count_answers(ExpectedNum - 1, NewAns)
-  after 5000 ->
-    TmpAns
-  end.

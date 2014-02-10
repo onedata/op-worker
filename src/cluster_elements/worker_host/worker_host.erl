@@ -899,7 +899,7 @@ create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPi
 
 %% register_simple_cache/5
 %% ====================================================================
-%% @doc Creates register_simple_cache cache.
+%% @doc Registers simple cache.
 -spec register_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean(), ClearingPid :: pid()) -> Result when
   Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
   CacheLoop :: integer() | atom().
@@ -938,7 +938,7 @@ register_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Clearing
 %% clear_cache/1
 %% ====================================================================
 %% @doc Clears chosen caches at all nodes
--spec clear_cache(Cache :: term()) -> ok.
+-spec clear_cache(Cache :: term()) -> ok | error_during_contact_witch_ccm.
 %% ====================================================================
 clear_cache(Cache) ->
   Pid = self(),
@@ -949,6 +949,11 @@ clear_cache(Cache) ->
     error_during_contact_witch_ccm
   end.
 
+%% synch_cache_clearing/1
+%% ====================================================================
+%% @doc Clears chosen caches at all nodes
+-spec synch_cache_clearing(Cache :: term()) -> ok | error_during_contact_witch_ccm.
+%% ====================================================================
 synch_cache_clearing(Cache) ->
   Pid = self(),
   gen_server:cast({global, ?CCM}, {synch_cache_clearing, Cache, Pid}),
@@ -958,9 +963,19 @@ synch_cache_clearing(Cache) ->
     error_during_contact_witch_ccm
   end.
 
+%% clear_sub_procs_caches/2
+%% ====================================================================
+%% @doc Clears caches of all sub processes (used during cache clearing for request)
+-spec clear_sub_procs_caches(EtsName :: atom(), Message :: term()) -> integer().
+%% ====================================================================
 clear_sub_procs_caches(EtsName, Message) ->
   clear_sub_procs_caches(EtsName, ets:first(EtsName), Message, 0).
 
+%% clear_sub_procs_caches/4
+%% ====================================================================
+%% @doc Clears caches of all sub processes
+-spec clear_sub_procs_caches(EtsName :: atom(), CurrentElement :: term(), Message :: term(), SendNum :: integer()) -> integer().
+%% ====================================================================
 clear_sub_procs_caches(_EtsName, '$end_of_table', _Message, SendNum) ->
   count_answers(SendNum);
 clear_sub_procs_caches(EtsName, CurrentElement, Message, SendNum) ->
@@ -972,9 +987,19 @@ clear_sub_procs_caches(EtsName, CurrentElement, Message, SendNum) ->
   end,
   clear_sub_procs_caches(EtsName, ets:next(EtsName, CurrentElement), Message, NewSendNum).
 
+%% count_answers/1
+%% ====================================================================
+%% @doc Gethers answers from sub processes (about cache clearing).
+-spec count_answers(ExpectedNum :: integer()) -> boolean().
+%% ====================================================================
 count_answers(ExpectedNum) ->
   count_answers(ExpectedNum, true).
 
+%% count_answers/1
+%% ====================================================================
+%% @doc Gethers answers from sub processes (about cache clearing).
+-spec count_answers(ExpectedNum :: integer(), TmpAns :: boolean()) -> boolean().
+%% ====================================================================
 count_answers(0, TmpAns) ->
   TmpAns;
 
@@ -986,9 +1011,19 @@ count_answers(ExpectedNum, TmpAns) ->
     false
   end.
 
+%% clear_sub_procs_caches_by_fun/2
+%% ====================================================================
+%% @doc Clears caches of all sub processes (used during automatic cache clearing)
+-spec clear_sub_procs_caches_by_fun(EtsName :: atom(), Fun :: term()) -> integer().
+%% ====================================================================
 clear_sub_procs_caches_by_fun(EtsName, Fun) ->
   clear_sub_procs_caches_by_fun(EtsName, ets:first(EtsName), Fun).
 
+%% clear_sub_procs_caches_by_fun/3
+%% ====================================================================
+%% @doc Clears caches of all sub processes (used during automatic cache clearing)
+-spec clear_sub_procs_caches_by_fun(EtsName :: atom(), CurrentElement::term(), Fun :: term()) -> ok.
+%% ====================================================================
 clear_sub_procs_caches_by_fun(_EtsName, '$end_of_table', _) ->
   ok;
 clear_sub_procs_caches_by_fun(EtsName, CurrentElement, Fun) ->
@@ -1000,10 +1035,21 @@ clear_sub_procs_caches_by_fun(EtsName, CurrentElement, Fun) ->
   end,
   clear_sub_procs_caches_by_fun(EtsName, ets:next(EtsName, CurrentElement), Fun).
 
-
+%% get_cache_name/1
+%% ====================================================================
+%% @doc Returns ets name for sub_proc
+-spec get_cache_name(SupProcName :: atom()) -> atom().
+%% ====================================================================
 get_cache_name(SupProcName) ->
   list_to_atom(atom_to_list(SupProcName) ++ "_cache").
 
+%% register_sub_proc_simple_cache/5
+%% ====================================================================
+%% @doc Registers sub_proc simple cache
+-spec register_sub_proc_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term(), ClearingPid :: pid()) -> Result when
+  Result :: ok | error,
+  CacheLoop :: integer() | atom().
+%% ====================================================================
 register_sub_proc_simple_cache(Name, CacheLoop, ClearFun, ClearingPid) ->
   RegAns = register_simple_cache({sub_proc_cache, Name}, CacheLoop, ClearFun, false, ClearingPid),
   case RegAns of
@@ -1014,6 +1060,11 @@ register_sub_proc_simple_cache(Name, CacheLoop, ClearFun, ClearingPid) ->
       error
   end.
 
+%% clear_sub_procs_cache/1
+%% ====================================================================
+%% @doc Clears caches of sub_proc
+-spec clear_sub_procs_cache({PlugIn :: atom(), Cache :: atom()}) -> ok | error.
+%% ====================================================================
 clear_sub_procs_cache({PlugIn, Cache}) ->
   lager:error("aaaa ~p", [{node(), PlugIn, Cache}]),
   gen_server:cast(PlugIn, {clear_sub_procs_cache, self(), Cache}),
@@ -1027,6 +1078,11 @@ clear_sub_procs_cache({PlugIn, Cache}) ->
     error
   end.
 
+%% clear_sub_procs_cache/2
+%% ====================================================================
+%% @doc Clears caches of sub_proc
+-spec clear_sub_procs_cache({PlugIn :: atom(), Cache :: atom()}, Key :: term()) -> ok | error.
+%% ====================================================================
 clear_sub_procs_cache({PlugIn, Cache}, Key) ->
   gen_server:cast(PlugIn, {clear_sub_procs_cache, self(), {Cache, Key}}),
   receive
@@ -1039,6 +1095,11 @@ clear_sub_procs_cache({PlugIn, Cache}, Key) ->
     error
   end.
 
+%% clear_sipmle_cache/3
+%% ====================================================================
+%% @doc Clears simple cache. Returns clearing process pid.
+-spec clear_sipmle_cache(LoopTime :: integer(), Fun :: term(), StrongCacheConnection :: boolean()) -> pid().
+%% ====================================================================
 clear_sipmle_cache(LoopTime, Fun, StrongCacheConnection) ->
   Pid = self(),
   erlang:send_after(LoopTime, Pid, {clear_sipmle_cache, LoopTime, Fun, StrongCacheConnection}),
@@ -1049,6 +1110,11 @@ clear_sipmle_cache(LoopTime, Fun, StrongCacheConnection) ->
       spawn(fun() -> Fun() end)
   end.
 
+%% clear_sub_proc_sipmle_cache/4
+%% ====================================================================
+%% @doc Clears sub proc simple cache.
+-spec clear_sub_proc_sipmle_cache(Name :: atom(), LoopTime :: integer(), Fun :: term(), SubProcs :: atom()) -> boolean().
+%% ====================================================================
 clear_sub_proc_sipmle_cache(Name, LoopTime, Fun, SubProcs) ->
   Pid = self(),
   erlang:send_after(LoopTime, Pid, {clear_sub_proc_sipmle_cache, Name, LoopTime, Fun}),
