@@ -64,7 +64,7 @@ init(_) ->
 %% @end
 %% ====================================================================
 -spec handle(ProtocolVersion :: term(), Request) -> Result when
-	Request :: ping | get_version |
+	Request :: ping | healthcheck | get_version |
 	{update_state, list(), list()} |
 	{get_worker, atom()} |
   get_nodes,
@@ -75,6 +75,9 @@ init(_) ->
 %% ====================================================================
 handle(_ProtocolVersion, ping) ->
 	pong;
+
+handle(_ProtocolVersion, healthcheck) ->
+	ok;
 
 handle(_ProtocolVersion, get_version) ->
 	node_manager:check_vsn();

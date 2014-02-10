@@ -143,7 +143,7 @@ signing_in_test_() ->
                         end),
 
                     meck:expect(fslogic_utils, get_parent_and_name_from_path,
-                        fun("new_user", _) -> {ok, {"some", "path"}} end),
+                        fun("new_user", _) -> {ok, {"some", #veil_document{}}} end),
 
                     Tim = 12345677,
                     meck:expect(fslogic_utils, time, fun() -> Tim end),

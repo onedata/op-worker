@@ -14,7 +14,7 @@
 -include("veil_modules/dao/dao.hrl").
 
 %% API
--export([strip_path_leaf/1, basename/1, get_parent_and_name_from_path/2, create_children_list/1, create_children_list/2, update_meta_attr/3, time/0]).
+-export([strip_path_leaf/1, basename/1, get_parent_and_name_from_path/2, create_children_list/1, create_children_list/2, update_meta_attr/3, time/0, get_user_id_from_system/1]).
 
 %% ====================================================================
 %% API functions
@@ -55,11 +55,11 @@ get_parent_and_name_from_path(Path, ProtocolVersion) ->
   File = fslogic_utils:basename(Path), 
   Parent = fslogic_utils:strip_path_leaf(Path),
   case Parent of
-    [?PATH_SEPARATOR] -> {ok, {File, ""}};
+    [?PATH_SEPARATOR] -> {ok, {File, #veil_document{}}};
     _Other ->
       {Status, TmpAns} = dao_lib:apply(dao_vfs, get_file, [Parent], ProtocolVersion),
       case Status of
-        ok -> {ok, {File, TmpAns#veil_document.uuid}};
+        ok -> {ok, {File, TmpAns}};
         _BadStatus ->
           lager:error([{mod, ?MODULE}], "Error: cannot find parent for path: ~s", [Path]),
           {error, "Error: cannot find parent: " ++ TmpAns}
@@ -186,6 +186,7 @@ update_meta_attr(#file{meta_doc = MetaUUID} = File, Attr, Value, RetryCount) ->
 %% @doc Internal implementation of update_meta_attr/3. This method handles creation of not existing #file_meta document.
 %% @end
 -spec init_file_meta(File :: #file{}) -> Result :: {#file{}, term()}.
+%% ====================================================================
 init_file_meta(#file{meta_doc = MetaUUID} = File) when is_list(MetaUUID) ->
     case dao_lib:apply(dao_vfs, get_file_meta, [MetaUUID], 1)  of
         {ok, #veil_document{} = MetaDoc} -> {File, MetaDoc};
@@ -200,3 +201,12 @@ init_file_meta(#file{} = File) ->
             lager:error("Cannot save file_meta record for file (name = ~p, parent = ~p) due to: ~p", [File#file.name, File#file.parent, Error]),
             {File, undefined}
     end.
+
+%% get_user_id_from_system/1
+%% ====================================================================
+%% @doc Returns id of user in local system.
+%% @end
+-spec get_user_id_from_system(User :: string()) -> string().
+%% ====================================================================
+get_user_id_from_system(User) ->
+  os:cmd("id -u " ++ User).

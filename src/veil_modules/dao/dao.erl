@@ -132,7 +132,7 @@ init(Args) ->
 %% E.g. calling handle(_, {save_record, [Id, Rec]}) will execute dao_cluster:save_record(Id, Rec) and normalize return value.
 %% @end
 -spec handle(ProtocolVersion :: term(), Request) -> Result when
-    Request :: {Method, Args} | {Mod :: atom(), Method, Args} | ping | get_version,
+    Request :: {Method, Args} | {Mod :: atom(), Method, Args} | ping | healthcheck | get_version,
     Method :: atom(),
     Args :: list(),
     Result :: ok | {ok, Response} | {error, Error} | pong | Version,
@@ -142,6 +142,16 @@ init(Args) ->
 %% ====================================================================
 handle(_ProtocolVersion, ping) ->
   pong;
+
+handle(ProtocolVersion, healthcheck) ->
+	{Status,Msg} = dao_lib:apply(dao_helper,list_dbs,[],ProtocolVersion),
+	case Status of
+		ok ->
+			ok;
+		_ ->
+			lager:error("Healthchecking database filed with error: ~p",Msg),
+			{error,db_healthcheck_failed}
+	end;
 
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
