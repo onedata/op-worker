@@ -523,7 +523,6 @@ ping_test(Config) ->
 
     wss:send(Socket, Msg),
     {RecvAns, Ans} = wss:recv(Socket, 5000),
-		wss:close(Socket),
     ?assertEqual(ok, RecvAns),
     case Ans =:= PongAnsBytes of
       true -> Sum + 1;
@@ -531,6 +530,8 @@ ping_test(Config) ->
     end
   end,
   PongsNum = lists:foldl(CheckModules, 0, Jobs),
+  wss:close(Socket),
+
   ?assertEqual(PongsNum, length(Jobs)).
 
 %% ====================================================================
