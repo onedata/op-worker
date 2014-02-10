@@ -85,8 +85,7 @@ terminate(_Reason, _Req, _State) ->
 	Atribute :: {Name :: atom(),Value :: string()}.
 %% ====================================================================
 node_status(Node,CcmStateNum,CcmCStateNum,Timeout) ->
-	lager:info("Healthcheck on node:~p",[Node]),
-
+	lager:debug("Healthcheck on node:~p",[Node]),
 	%get state nuber and callback number from node manager and dispatcher
 	{_, DispCStateNum} = gen_server:call({?Dispatcher_Name, Node}, get_callbacks, Timeout),
 	DispStateNum = gen_server:call({?Dispatcher_Name, Node}, get_state_num, Timeout),
@@ -114,7 +113,7 @@ node_status(Node,CcmStateNum,CcmCStateNum,Timeout) ->
 	Atribute :: {Name :: atom(),Value :: string()}.
 %% ====================================================================
 worker_status(Worker,Timeout) ->
-	lager:info("Healthcheck on worker: ~p",[Worker]),
+	lager:debug("Healthcheck on worker: ~p",[Worker]),
 	{WorkerNode,WorkerName} = Worker,
 
 	%do healthcheck
