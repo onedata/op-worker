@@ -24,6 +24,9 @@ init(_Args) ->
 handle(_ProtocolVersion, ping) ->
   pong;
 
+handle(_ProtocolVersion, healthcheck) ->
+	ok;
+
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
