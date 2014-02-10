@@ -449,7 +449,7 @@ create_root(Dir, Uid) ->
     case ParentFound of
         ok ->
             {FileName, Parent} = ParentInfo,
-            File = #file{type = ?DIR_TYPE, name = FileName, uid = Uid, parent = Parent, perms = ?UserRootPerms},
+            File = #file{type = ?DIR_TYPE, name = FileName, uid = Uid, parent = Parent#veil_document.uuid, perms = ?UserRootPerms},
             CTime = fslogic_utils:time(),
             FileDoc = fslogic_utils:update_meta_attr(File, times, {CTime, CTime, CTime}),
             SaveAns = dao_lib:apply(dao_vfs, save_new_file, [Dir, FileDoc], 1),

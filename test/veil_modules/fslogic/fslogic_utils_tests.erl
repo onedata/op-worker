@@ -44,8 +44,9 @@ basename_test() ->
     ?assertMatch("leaf", fslogic_utils:basename("leaf")).
 
 get_parent_and_name_from_path() ->
-  meck:expect(dao_lib, apply, fun(_, _, ["/some/path"], _) -> {ok, #veil_document{uuid = "test_id"}} end),
-  ?assertEqual({ok, {"leaf", "test_id"}}, fslogic_utils:get_parent_and_name_from_path("/some/path/leaf", 1)),
+  Doc = #veil_document{uuid = "test_id"},
+  meck:expect(dao_lib, apply, fun(_, _, ["/some/path"], _) -> {ok, Doc} end),
+  ?assertEqual({ok, {"leaf", Doc}}, fslogic_utils:get_parent_and_name_from_path("/some/path/leaf", 1)),
 
   meck:expect(dao_lib, apply, fun(_, _, ["/not_existing_dir"], _) -> {error, "my_error"} end),
   ?assertEqual({error, "Error: cannot find parent: my_error"}, fslogic_utils:get_parent_and_name_from_path("/not_existing_dir/leaf", 1)),
