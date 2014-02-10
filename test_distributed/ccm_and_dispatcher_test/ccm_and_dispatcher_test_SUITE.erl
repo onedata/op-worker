@@ -148,6 +148,7 @@ dispatcher_connection_test(Config) ->
   Msg2 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message2)),
   wss:send(Socket, Msg2),
   {RecvAns2, Ans2} = wss:recv(Socket, 5000),
+	wss:close(Socket),
   ?assertEqual(ok, RecvAns2),
   ?assertEqual(Ans2, AnsMessageBytes).
 
@@ -311,6 +312,10 @@ veil_handshake_test(Config) ->
     ?assertEqual([{testname1, "testvalue1"}, {testname2, "testvalue2"}], Vars),
 
     %% Cleanup
+		wss:close(Socket11),
+		wss:close(Socket12),
+		wss:close(Socket21),
+		wss:close(Socket22),
     ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ TeamName], ?ProtocolVersion])),
     ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
 
@@ -479,8 +484,9 @@ validation_test(Config) ->
   ?assertEqual(error, ConAns3),
   {ConAns4, _} = wss:connect('localhost', Port, [{certfile, ?TEST_FILE("certs/proxy_unknown_ca.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
   ?assertEqual(error, ConAns4),
-  {ConAns5, _Socket1} = wss:connect('localhost', Port, [{certfile, ?TEST_FILE("certs/proxy_valid.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
-  ?assertEqual(ok, ConAns5).
+  {ConAns5, Socket1} = wss:connect('localhost', Port, [{certfile, ?TEST_FILE("certs/proxy_valid.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
+  wss:close(Socket1),
+	?assertEqual(ok, ConAns5).
 
 %% This test checks if client outside the cluster can ping all modules via dispatcher.
 ping_test(Config) ->
@@ -517,6 +523,7 @@ ping_test(Config) ->
 
     wss:send(Socket, Msg),
     {RecvAns, Ans} = wss:recv(Socket, 5000),
+		wss:close(Socket),
     ?assertEqual(ok, RecvAns),
     case Ans =:= PongAnsBytes of
       true -> Sum + 1;
