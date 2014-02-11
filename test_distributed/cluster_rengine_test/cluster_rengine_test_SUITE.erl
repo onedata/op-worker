@@ -22,7 +22,7 @@
 -export([ccm_code1/0, worker_code/0]).
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
-all() -> [test_event_aggregation].
+all() -> [test_event_subscription, test_event_aggregation].
 
 %% @doc This is distributed test of dao_vfs:find_files.
 %% It consists of series of dao_vfs:find_files with various file_criteria and comparing result to expected values.
@@ -66,6 +66,7 @@ test_event_subscription(Config) ->
   end,
 
   subscribe_for_write_events(CCM, standard),
+  timer:sleep(100),
   gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent#write_event{user_id = "2"}}}),
 
   receive
@@ -75,7 +76,10 @@ test_event_subscription(Config) ->
   end,
 
   subscribe_for_write_events(CCM, tree),
+  timer:sleep(100),
   gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent#write_event{user_id = "3"}}}),
+  gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent#write_event{user_id = "4"}}}),
+  gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent#write_event{user_id = "5"}}}),
 
   receive
     {ok, standard, _} -> ok

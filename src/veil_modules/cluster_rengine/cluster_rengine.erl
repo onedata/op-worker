@@ -210,6 +210,18 @@ get_disp_map_fun() ->
     EventHandlerFromEts = ets:lookup(?EVENT_HANDLERS_CACHE, TreeId),
     case EventHandlerFromEts of
       [] ->
+        % if we proceeded here it may be the case, when final_stage_tree is being processed by another node and
+        % this node does not have the most recent version of handler for given event. So try to update
+        update_event_handler(1, element(1, Event)),
+        EventHandler = ets:lookup(?EVENT_HANDLERS_CACHE, TreeId),
+
+        case EventHandler of
+          [] -> non;
+          [{_Ev2, #event_handler_item{disp_map_fun = FetchedDispMapFun2}}] ->
+            ?info("disp_map_fun---------******** EXTRA"),
+            FetchedDispMapFun2(Event)
+        end,
+
         % it may happen only if cache has been cleared between forwarding and calling DispMapFun - do nothing
         non;
       [{_Ev, #event_handler_item{disp_map_fun = FetchedDispMapFun}}] ->
