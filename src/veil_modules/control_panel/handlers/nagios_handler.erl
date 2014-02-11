@@ -37,16 +37,17 @@ handle(Req, State) ->
 	{Workers, StateNum} = gen_server:call({global, ?CCM}, get_workers, Timeout),
 	{_, CStateNum} = gen_server:call({global, ?CCM}, get_callbacks, Timeout),
 
-	%check nodes
-	NodesStatus = pmap(fun(Node) -> node_status(Node,StateNum,CStateNum,Timeout) end, Nodes),
-
 	%check workers
 	WorkersStatus = pmap(fun(Worker) -> worker_status(Worker,Timeout) end,Workers),
 
+	%check nodes
+	WorkersOk = not contains_errors(WorkersStatus),
+	NodesStatus = pmap(fun(Node) -> node_status(Node,StateNum,CStateNum,WorkersOk,Timeout) end, Nodes),
+
 	%check if errors occured
-	{HealthStatus, HttpStatusCode} = case contains_errors(NodesStatus) and contains_errors(WorkersStatus) of
-		true -> {"ok",200};
-		false -> {"error",500}
+	{HealthStatus, HttpStatusCode} = case contains_errors(NodesStatus) or contains_errors(WorkersStatus) of
+		true -> {"error",500};
+		false -> {"ok",200}
 	end,
 
 	%prepare current date
@@ -75,16 +76,17 @@ terminate(_Reason, _Req, _State) ->
 %% Internal Functions
 %% ====================================================================
 
-%% node_status/3
+%% node_status/5
 %% ====================================================================
 %% @doc Checks if callbacks num and state num on dispatcher and node manager are same as in ccm,
-%% returns xmerl simple_xml output describing node health status
+%% returns xmerl simple_xml output describing node health status. If callbacks don't match and some worker is
+%% down - asume "error", if callbacks don't match and all workers are ok - assume "initializing"
 %% @end
--spec node_status(Node :: atom(), CcmStateNum :: integer(), CcmCStateNum :: integer(),Timeout :: integer()) -> Result when
+-spec node_status(Node :: atom(), CcmStateNum :: integer(), CcmCStateNum :: integer(), WorkersOk :: boolean(), Timeout :: integer()) -> Result when
 	Result :: {veil_cluster_node, Attrs :: list(Atribute), []},
 	Atribute :: {Name :: atom(),Value :: string()}.
 %% ====================================================================
-node_status(Node,CcmStateNum,CcmCStateNum,Timeout) ->
+node_status(Node,CcmStateNum,CcmCStateNum,WorkersOk,Timeout) ->
 	lager:debug("Healthcheck on node:~p",[Node]),
 	%get state nuber and callback number from node manager and dispatcher
 	{_, DispCStateNum} = gen_server:call({?Dispatcher_Name, Node}, get_callbacks, Timeout),
@@ -99,10 +101,13 @@ node_status(Node,CcmStateNum,CcmCStateNum,Timeout) ->
 		lager:error("Healthcheck on node ~p failed, callbacks/state number of ccm doesn't match values from node_manager and dispatcher",[Node]),
 		lager:error("ccm_state_num: ~p, ccm_callback_num: ~p,disp_state_num: ~p, disp_callback_num: ~p,manager_state_num: ~p, manager_callback_num: ~p",
 			[CcmStateNum,CcmCStateNum,DispStateNum,DispCStateNum,ManagerStateNum,ManagerCStateNum]),
-		{veil_cluster_node,[{name,atom_to_list(Node)},{status,"error"}],[]}
+		case WorkersOk of
+			true -> {veil_cluster_node,[{name,atom_to_list(Node)},{status,"initializing"}],[]};
+			false -> {veil_cluster_node,[{name,atom_to_list(Node)},{status,"error"}],[]}
+		end
 	end.
 
-%% worker_status/1
+%% worker_status/2
 %% ====================================================================
 %% @doc Calls healthcheck method on selected worker and returns xmerl
 %% simple_xml output describing worker health status
@@ -147,8 +152,8 @@ worker_status(Worker,Timeout) ->
 	Result :: true | false.
 %% ====================================================================
 contains_errors(StatusList) ->
-	Errors = [Status || {_Tag,Attrs,_Content} <- StatusList, {status,Status} <-Attrs, Status /= "ok"],
-	Errors == [].
+	Errors = [Status || {_Tag,Attrs,_Content} <- StatusList, {status,Status} <-Attrs, Status /= "ok", Status /= "initializing"],
+	Errors /= [].
 
 
 %% ====================================================================
