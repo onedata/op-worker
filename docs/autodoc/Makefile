@@ -12,7 +12,7 @@ main:
 
 veilclient:
 	@printf "\r[%3d%%]\tVeilClient" 0
-	@doxygen $(ROOT)/veilclient/Doxyfile
+	@make -C $(ROOT)/veilclient docs
 	@printf "\r[%3d%%]\tVeilClient" 33
 	@mkdir -p $(VEILCLIENT)
 	@pandoc --from=markdown --to=rst --output=$(VEILCLIENT)/about.rst $(ROOT)/veilclient/README.md
