@@ -1,5 +1,5 @@
-VeilCluster
-===========
+About
+=====
 
 VeilCluster is a part of VeilFS system that unifies access to files stored at heterogeneous data storage systems that belong to geographically distributed organizations.
 
