@@ -8,7 +8,7 @@ all: main veilclient veilcluster
 main:
 	@printf "\r[%3d%%]\tMain" 0
 	@python main.py $(MAIN)
-	@printf "\r[%3d%%]\tMain" 100
+	@printf "\r[%3d%%]\tMain\n" 100
 
 veilclient:
 	@printf "\r[%3d%%]\tVeilClient" 0
@@ -16,7 +16,7 @@ veilclient:
 	@pandoc --from=markdown --to=rst --output=$(VEILCLIENT)/about.rst $(ROOT)/veilclient/README.md
 	@printf "\r[%3d%%]\tVeilClient" 50
 	@python veilclient.py $(MAIN) $(VEILCLIENT)
-	@printf "\r[%3d%%]\tVeilClient" 100
+	@printf "\r[%3d%%]\tVeilClient\n" 100
 
 veilcluster:
 	@printf "\r[%3d%%]\tVeilCluster" 0
@@ -26,7 +26,7 @@ veilcluster:
 	@pandoc --from=markdown --to=rst --output=$(VEILCLUSTER)/development.rst $(ROOT)/README-DEVELOPER.md
 	@printf "\r[%3d%%]\tVeilCluster" 50
 	@python veilcluster.py $(ROOT) $(VEILCLUSTER)
-	@printf "\r[%3d%%]\tVeilCluster" 100
+	@printf "\r[%3d%%]\tVeilCluster\n" 100
 
 clean:
 	rm -f $(MAIN)/*.rst
