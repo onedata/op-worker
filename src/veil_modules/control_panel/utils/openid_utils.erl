@@ -286,10 +286,10 @@ normalise_response(X) -> X.
 parse_teams(XMLContent) ->
     {XML, _} = xmerl_scan:string(XMLContent),
     #xmlElement{content = TeamList} = find_XML_node(teams, XML),
-    Res = lists:map(
-        fun(#xmlElement{content = [#xmlText{value = Value}]}) ->
-            Value
-        end, TeamList).
+    lists:map(
+      fun(#xmlElement{content = [#xmlText{value = Value}]}) ->
+        Value
+      end, TeamList).
 
 
 %% find_XML_node/2
@@ -307,7 +307,7 @@ find_XML_node(NodeName, #xmlElement{} = XMLElement) ->
     [SubNode] = XMLElement#xmlElement.content,
     find_XML_node(NodeName, SubNode);
 
-find_XML_node(NodeName, _) ->
+find_XML_node(_NodeName, _) ->
     undefined.
 
 
