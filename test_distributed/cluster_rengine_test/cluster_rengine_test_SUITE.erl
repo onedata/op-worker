@@ -58,7 +58,7 @@ test_event_subscription(Config) ->
 
   WriteEvent = #write_event{user_id = "1234", ans_pid = self()},
 
-%%   gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
+  gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent#write_event{user_id = "1"}}}),
   receive
     _ -> ?assert(false)
   after 1000
@@ -66,7 +66,7 @@ test_event_subscription(Config) ->
   end,
 
   subscribe_for_write_events(CCM, standard),
-  gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
+  gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent#write_event{user_id = "2"}}}),
 
   receive
     {ok, standard, _} -> ok
@@ -75,7 +75,7 @@ test_event_subscription(Config) ->
   end,
 
   subscribe_for_write_events(CCM, tree),
-  gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
+  gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent#write_event{user_id = "3"}}}),
 
   receive
     {ok, standard, _} -> ok
@@ -83,7 +83,7 @@ test_event_subscription(Config) ->
     -> ?assert(false)
   end,
   receive
-    Ans -> ok
+    {ok, tree, _} -> ok
   after 1000
     -> ?assert(false)
   end,
@@ -121,11 +121,18 @@ subscribe_for_write_events(Node, ProcessingMethod) ->
   end,
 
   EventHandler = fun(#write_event{user_id = UserId, ans_pid = AnsPid}) ->
+    ?info("EventHandler ~p", [node(self())]),
     AnsPid ! {ok, ProcessingMethod, UserId}
   end,
 
   EventItem = #event_handler_item{processing_method = ProcessingMethod, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun},
-  gen_server:call({?Dispatcher_Name, Node}, {rule_manager, 1, {add_event_handler, {write_event, EventItem}}}).
+  gen_server:call({?Dispatcher_Name, Node}, {rule_manager, 1, self(), {add_event_handler, {write_event, EventItem}}}),
+
+  receive
+    ok -> ok
+  after 100 ->
+    ?assert(false)
+  end.
 
 repeat(N, F) -> for(1, N, F).
 for(N, N, F) -> [F()];

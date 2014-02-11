@@ -70,12 +70,14 @@ handle(_ProtocolVersion, {add_event_handler, {EventType, Item}}) ->
   end,
   gen_server:call(?Dispatcher_Name, {cluster_regine, 1, {clear_cache, EventType}}),
 
-  worker_host:clear_cache({?EVENT_HANDLERS_CACHE, EventType}),
-  notify_producers(),
+  worker_host:clear_cache({?EVENT_TREES_MAPPING, EventType}),
+%%   notify_producers(),
 
-  ?info("New handler for event ~p registered.", [EventType]);
+  ?info("New handler for event ~p registered.", [EventType]),
+  ok;
 
 handle(_ProtocolVersion, {get_event_handlers, Event}) ->
+  ?info("get_event_handlers for event"),
   EventHandlerItems = ets:lookup(?RULE_MANAGER_ETS, Event),
   Res = case EventHandlerItems of
           [{_EventType, ItemsList}] -> ItemsList;

@@ -48,6 +48,7 @@ handle(_ProtocolVersion, {clear_cache, Event}) ->
 handle(ProtocolVersion, {event_arrived, Event}) ->
   handle(ProtocolVersion, {event_arrived, Event, false});
 handle(ProtocolVersion, {event_arrived, Event, SecondTry}) ->
+  ?info("--- !!event_arrive ~p ~p", [node(), Event#write_event.user_id]),
   EventType = element(1, Event),
   case ets:lookup(?EVENT_TREES_MAPPING, EventType) of
     [] ->
@@ -64,11 +65,11 @@ handle(ProtocolVersion, {event_arrived, Event, SecondTry}) ->
       ForwardEvent = fun(EventToTreeMapping) ->
         case EventToTreeMapping of
           {tree, TreeId} ->
-            ?info("forwarding to tree"),
+            ?info("forwarding to tree ~p", [node()]),
             % forward event to subprocess tree
-            gen_server:call({?Dispatcher_Name, erlang:node(self())}, {cluster_rengine, ProtocolVersion, {final_stage_tree, TreeId, Event}});
+            gen_server:call({cluster_rengine, node()}, {asynch, 1, {final_stage_tree, TreeId, Event}});
           {standard, HandlerFun} ->
-            ?info("normal processing"),
+            ?info("normal processing ~p", [node()]),
             HandlerFun(Event)
         end
       end,
@@ -151,6 +152,7 @@ create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = 
   end,
 
   NewMapFun = fun({_ProtocolVersion, {_, _TreeId, Event}}) ->
+    ?info("NewMapFun!!!!!----"),
     MapFun(Event)
   end,
 
@@ -165,6 +167,7 @@ create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = 
 get_request_map_fun() ->
   fun
     ({final_stage_tree, TreeId, _Event}) ->
+      ?info("request_map---------"),
       TreeId;
     (_) ->
       ?info("request map fun fail"),
@@ -172,7 +175,8 @@ get_request_map_fun() ->
   end.
 
 get_disp_map_fun() ->
-  fun({cluster_rengine, final_stage_tree, {TreeId, Event}}) ->
+  fun({final_stage_tree, TreeId, Event}) ->
+    ?info("disp_map_fun---------"),
     EventHandlerFromEts = ets:lookup(?EVENT_HANDLERS_CACHE, TreeId),
     case EventHandlerFromEts of
       [] ->
