@@ -1,14 +1,11 @@
-VeilCluster development
-=======================
+Development
+===========
 
 This document intends to provide essential information for VeilCluster developers. General information about VeilCluster usage can be found in the "README.md" file.
 
 -------------------------------------------------------------------------------
 
-
-Repo layout
-===========
-
+#### Repo layout
 
 * c_src               # TODO uzupelnic
 * cacerts             # TODO uzupelnic
@@ -50,12 +47,10 @@ Node:
 
 -------------------------------------------------------------------------------
 
-Development - using Makefile to generate single releases and test environments of veil cluster nodes
-====================================================================================================
-
+#### Development - using Makefile to generate single releases and test environments of veil cluster nodes
 
 Generating and managing a single node release for development purposes
--------------------------------------------------------------------------
+----------------------------------------------------------------------
 
 The script 'gen_dev' generates a single node release for testing purposes. It uses 'veil_cluster' script to set the configuration.
 
@@ -76,7 +71,8 @@ Optionally, one of following can be added to arguments:
     -no_compile     -> skips code compilation straight to release generation
     -no_generate    -> skips code compilation and release generation (creates a copy of existing release).
 
-#### Generating a release:
+Generating a release
+--------------------
 
     ~$  make gen_test_node args="-name node_name@host -main_ccm main_ccm_node@host -opt_ccms opt_ccm_node1@host opt_ccm_node2@host -db_nodes db1@host db2@host"
 
@@ -84,7 +80,8 @@ Optionally, one of following can be added to arguments:
 
 After either of these operations, the release will be placed in releases/test_cluster/node_name, with all the environment variables set up.
 
-#### Starting and managing generated packages:
+Starting and managing generated packages
+----------------------------------------
 
     ~$  make start_node node="node_name"               -> starts the node called 'node_name' as a daemon
 
@@ -96,7 +93,7 @@ Note, that it only works for packages in releases/test_cluster/ - those created 
 
 
 Generating a local test environment
---------------------------------------
+-----------------------------------
 
 The script 'gen_test' simplifies setting up a bunch of cluster nodes for testing. It uses both 'gen_dev' and 'veil_cluster' scripts.
 To generate a testing environment proper arguments must be passed to the script:
@@ -110,7 +107,8 @@ To generate a testing environment proper arguments must be passed to the script:
 
 Again, these arguments can be obtained from 'gen_test.args' or passed via args to Makefile.
 
-#### Generating releases for the whole cluster:
+Generating releases for the whole cluster
+-----------------------------------------
 
     ~$  make gen_test_env args="-workers worker1@host -main_ccm main_ccm_node@host -opt_ccms opt_ccm_node1@host opt_ccm_node2@host -db_nodes db1@host db2@host"
 
@@ -118,7 +116,8 @@ Again, these arguments can be obtained from 'gen_test.args' or passed via args t
 
 Both of these commands produce a release for each node in corresponding directories (/releases/test_cluster/).
 
-#### Starting previously generated cluster:
+Starting previously generated cluster
+-------------------------------------
 
     ~$  make start_test_env args="-workers worker1@host -main_ccm main_ccm_node@host -opt_ccms opt_ccm_node1@host opt_ccm_node2@host -db_nodes db1@host db2@host"
 
@@ -127,7 +126,8 @@ Both of these commands produce a release for each node in corresponding director
 It is important that the same args are passed to Makefile or remain in the .args file. This is the way for the script
 to know which release packages need to be started.
 
-#### Generating and immediately starting the whole cluster:
+Generating and immediately starting the whole cluster
+-----------------------------------------------------
 
     ~$  make gen_start_test_env args="-workers worker1@host -main_ccm main_ccm_node@host -opt_ccms opt_ccm_node1@host opt_ccm_node2@host -db_nodes db1@host db2@host"
 
@@ -137,7 +137,8 @@ Every node can be started independently with use of 'start_node', 'attach_to_nod
 
 -------------------------------------------------------------------------------
 
-#### Compilation and Releases from Sources
+Compilation and Releases from Sources
+-------------------------------------
 
 To build a working release of VeilCluster from scratch, type the following commands:
 
@@ -146,8 +147,8 @@ To build a working release of VeilCluster from scratch, type the following comma
 
 After this step we should have a 'veil_cluster_node' folder in the 'releases' folder.
 
-
-#### Execution
+Execution
+---------
 
 Now, we are ready to start CCM and worker processes:
 
@@ -168,7 +169,7 @@ Note:
 
 
 Useful make commands
-===============
+--------------------
 
     ~$  make compile # compilation
 
@@ -191,8 +192,7 @@ Note:
 -------------------------------------------------------------------------------
 
 
-Release management
-===================
+#### Release management
 
 After generation of a release package, configuration files contain default parameters. The script 'veil_cluster', that
 comes with the package (in the 'bin' directory) is used to set up and start a release.
@@ -256,6 +256,6 @@ corresponding to command line arguments. Then, the node will be started presenti
 
 -------------------------------------------------------------------------------
 
-Support
--------
+#### Support
+
 For more information visit project Confluence or write to 'wrzeszcz@agh.edu.pl'.
