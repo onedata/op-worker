@@ -13,7 +13,7 @@ main:
 veilclient:
 	@printf "\r[%3d%%]\tVeilClient" 0
 	@mkdir -p $(VEILCLIENT)
-	@pandoc --from=markdown --to=rst --output=$(VEILCLIENT)/about.rst $(MAIN)/data/veilclient/README.md
+	@pandoc --from=markdown --to=rst --output=$(VEILCLIENT)/about.rst $(ROOT)/veilclient/README.md
 	@printf "\r[%3d%%]\tVeilClient" 50
 	@python veilclient.py $(MAIN) $(VEILCLIENT)
 	@printf "\r[%3d%%]\tVeilClient" 100
@@ -24,8 +24,6 @@ veilcluster:
 	@mkdir -p $(VEILCLUSTER)/c_modules/veilhelpers_nif
 	@pandoc --from=markdown --to=rst --output=$(VEILCLUSTER)/about.rst $(ROOT)/README.md
 	@pandoc --from=markdown --to=rst --output=$(VEILCLUSTER)/development.rst $(ROOT)/README-DEVELOPER.md
-	@#pandoc --from=markdown --to=rst --output=$(VEILCLUSTER)/c_modules/gpv_nif/README.rst $(ROOT)
-	@#pandoc --from=markdown --to=rst --output=$(VEILCLUSTER)/c_modules/veilhelpers_nif/README.rst $(ROOT)
 	@printf "\r[%3d%%]\tVeilCluster" 50
 	@python veilcluster.py $(ROOT) $(VEILCLUSTER)
 	@printf "\r[%3d%%]\tVeilCluster" 100
