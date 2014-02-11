@@ -19,12 +19,18 @@
 -include("registered_names.hrl").
 -include("records.hrl").
 
+-include("veil_modules/dao/dao_vfs.hrl").
+-include("veil_modules/dao/dao.hrl").
+
 -define(PROCESSOR_ETS_NAME, "processor_ets_name").
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
 -export([init/1, handle/2, cleanup/0]).
+
+%% functions for manual tests
+-export([register_mkdir_handler/1, send_mkdir_event/0, delete_file/0]).
 
 init(_Args) ->
   worker_host:create_simple_cache(?EVENT_HANDLERS_CACHE),
@@ -35,7 +41,8 @@ handle(_ProtocolVersion, ping) ->
   pong;
 
 handle(_ProtocolVersion, event) ->
-  ?info("From client");
+  ?info("Some message from client"),
+  handle(1, {event_arrived, #mkdir_event{user_id = "123"}});
 
 handle(_ProtocolVersion, healthcheck) ->
 	ok;
@@ -46,10 +53,11 @@ handle(_ProtocolVersion, get_version) ->
 handle(ProtocolVersion, {event_arrived, Event}) ->
   handle(ProtocolVersion, {event_arrived, Event, false});
 handle(ProtocolVersion, {event_arrived, Event, SecondTry}) ->
-  ?info("--- !!event_arrive ~p ~p", [node(), Event#write_event.user_id]),
+  ?info("--- !!event_arrived ~p", [element(1, Event)]),
   EventType = element(1, Event),
   case ets:lookup(?EVENT_TREES_MAPPING, EventType) of
     [] ->
+      ?info("ffff: ~p", [node()]),
       case SecondTry of
         true ->
           ok;
@@ -126,8 +134,8 @@ update_event_handler(ProtocolVersion, EventType) ->
           CheckIfTreeNeeded = fun(#event_handler_item{processing_method = ProcessingMethod, tree_id = TreeId}) ->
             ((ProcessingMethod =:= tree) and (ets:lookup(?EVENT_HANDLERS_CACHE, TreeId) == [])) end,
           EventsHandlersForTree = lists:filter(CheckIfTreeNeeded, EventHandlersList),
-          create_process_tree_for_handlers(EventsHandlersForTree),
-          save_to_caches(EventType, EventHandlersList)
+          save_to_caches(EventType, EventHandlersList),
+          create_process_tree_for_handlers(EventsHandlersForTree)
       end;
     _ ->
       ?warning("rule_manager sent back unexpected structure")
@@ -191,8 +199,8 @@ create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = 
   Node = erlang:node(self()),
 
   ?info("wolamy register_sub_proc"),
-  gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM}),
-  nodes_manager:wait_for_cluster_cast({cluster_rengine, Node}).
+  gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM}).
+%%   nodes_manager:wait_for_cluster_cast({cluster_rengine, Node}).
 
 get_request_map_fun() ->
   fun
@@ -237,3 +245,39 @@ insert_to_ets_set(EtsName, Key, ItemToInsert) ->
     [] -> ets:insert(EtsName, {Key, [ItemToInsert]});
     PreviousItems -> ets:insert(EtsName, {Key, [ItemToInsert | PreviousItems]})
   end.
+
+
+%% For test purposes
+register_mkdir_handler(InitCounter) ->
+%%   EventHandlerMapFun = fun(#mkdir_event{user_id = UserIdString}) ->
+%%     string_to_integer(UserIdString)
+%%   end,
+%%
+%%   EventHandlerDispMapFun = fun (#mkdir_event{user_id = UserId}) ->
+%%     UserIdInt = string_to_integer(UserId),
+%%     UserIdInt div 100
+%%   end,
+
+  EventHandler = fun(#mkdir_event{user_id = UserId, ans_pid = AnsPid}) ->
+    ?info("Mkdir EventHandler ~p", [node(self())]),
+    delete_file()
+  end,
+
+%%   ProcessingConfig = #processing_config{init_counter = InitCounter},
+  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler}, %, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = ProcessingConfig},
+  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {mkdir_event, EventItem}}}).
+
+send_mkdir_event() ->
+  MkdirEvent = #mkdir_event{user_id = "123"},
+  gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {event_arrived, MkdirEvent}}).
+
+string_to_integer(SomeString) ->
+  {SomeInteger, _} = string:to_integer(SomeString),
+  case SomeString of
+    error ->
+      throw(badarg);
+    _ -> SomeInteger
+  end.
+
+delete_file() ->
+  rpc:call(node(), dao_lib, apply, [dao_vfs, remove_file, ["plgmsitko/todelete"], 1]).

@@ -71,7 +71,7 @@ handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem}}) ->
 %%   gen_server:call(?Dispatcher_Name, {cluster_regine, 1, {clear_cache, EventType}}),
 
   worker_host:clear_cache({?EVENT_TREES_MAPPING, EventType}),
-%%   notify_producers(),
+  notify_producers(),
 
   ?info("New handler for event ~p registered.", [EventType]),
   ok;
