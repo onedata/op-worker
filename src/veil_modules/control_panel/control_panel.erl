@@ -128,7 +128,8 @@ handle(_ProtocolVersion, _Msg) ->
     Error :: timeout | term().
 %% ====================================================================
 cleanup() ->
-    cowboy:stop_listener(http),
+    cowboy:stop_listener(?https_listener),
+    cowboy:stop_listener(?rest_listener),
     ok.
 
 
