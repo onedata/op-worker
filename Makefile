@@ -2,7 +2,7 @@ BASHO_BENCH_DIR = "deps/basho_bench"
 STRESS_TESTS_SRC_DIR = "stress_test"
 DIST_TESTS_SRC_DIR = "test_distributed"
 
-.PHONY: releases deps test
+.PHONY: releases deps test docs
 
 all: deps generate docs
 
@@ -18,6 +18,7 @@ deps:
 	git submodule update
 
 clean:
+	make -C docs clean
 	./rebar clean
 
 distclean: clean
@@ -45,7 +46,11 @@ generate: compile
 	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster_node
 
 docs:
+	make -C docs html
 	./rebar doc skip_deps=true
+
+pdf:
+	make -C docs latexpdf
 
 upgrade:
 	./rebar generate-appups previous_release=${PREV}

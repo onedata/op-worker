@@ -1,0 +1,199 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="fmemopen_8c" kind="file">
+    <compoundname>fmemopen.c</compoundname>
+    <includes local="no">stdio.h</includes>
+    <includes local="no">stdlib.h</includes>
+    <includes local="no">string.h</includes>
+    <includes local="no">sys/mman.h</includes>
+    <incdepgraph>
+      <node id="1335">
+        <label>sys/mman.h</label>
+      </node>
+      <node id="1333">
+        <label>stdlib.h</label>
+      </node>
+      <node id="1331">
+        <label>src/globus-proxy-utils/fmemopen.c</label>
+        <link refid="fmemopen.c"/>
+        <childnode refid="1332" relation="include">
+        </childnode>
+        <childnode refid="1333" relation="include">
+        </childnode>
+        <childnode refid="1334" relation="include">
+        </childnode>
+        <childnode refid="1335" relation="include">
+        </childnode>
+      </node>
+      <node id="1334">
+        <label>string.h</label>
+      </node>
+      <node id="1332">
+        <label>stdio.h</label>
+      </node>
+    </incdepgraph>
+    <innerclass refid="structfmem" prot="public">fmem</innerclass>
+      <sectiondef kind="typedef">
+      <memberdef kind="typedef" id="fmemopen_8c_1ae21bb1cdcb8b7acadca47a55dd9a4b53" prot="public" static="no">
+        <type>struct <ref refid="structfmem" kindref="compound">fmem</ref></type>
+        <definition>typedef struct fmem fmem_t</definition>
+        <argsstring></argsstring>
+        <name>fmem_t</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c" line="8" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c" bodystart="28" bodyend="-1"/>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="func">
+      <memberdef kind="function" id="fmemopen_8c_1a307e31d9468eca4c24e20a380865fcf9" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int readfn</definition>
+        <argsstring>(void *handler, char *buf, int size)</argsstring>
+        <name>readfn</name>
+        <param>
+          <type>void *</type>
+          <declname>handler</declname>
+        </param>
+        <param>
+          <type>char *</type>
+          <declname>buf</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>size</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c" line="30" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c" bodystart="30" bodyend="41"/>
+        <references refid="structfmem_1a8393fad020c142e2de643af2d0dba9fb" compoundref="fmemopen_8c" startline="25">fmem::size</references>
+        <references refid="structfmem_1a5bd49f56467813a44d613a1425931eca" compoundref="fmemopen_8c" startline="24">fmem::pos</references>
+        <references refid="structfmem_1aa8140f9002162674e50499e6d676364b" compoundref="fmemopen_8c" startline="26">fmem::buffer</references>
+        <referencedby refid="fmemopen_8h_1a6b2efc6515c53ab5f0c9800c35f65789" compoundref="fmemopen_8c" startline="80" endline="92">fmemopen</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="fmemopen_8c_1a6bcff750932dc0b5d33e473869f2be4b" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int writefn</definition>
+        <argsstring>(void *handler, const char *buf, int size)</argsstring>
+        <name>writefn</name>
+        <param>
+          <type>void *</type>
+          <declname>handler</declname>
+        </param>
+        <param>
+          <type>const char *</type>
+          <declname>buf</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>size</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c" line="43" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c" bodystart="43" bodyend="54"/>
+        <references refid="structfmem_1a8393fad020c142e2de643af2d0dba9fb" compoundref="fmemopen_8c" startline="25">fmem::size</references>
+        <references refid="structfmem_1a5bd49f56467813a44d613a1425931eca" compoundref="fmemopen_8c" startline="24">fmem::pos</references>
+        <references refid="structfmem_1aa8140f9002162674e50499e6d676364b" compoundref="fmemopen_8c" startline="26">fmem::buffer</references>
+        <referencedby refid="fmemopen_8h_1a6b2efc6515c53ab5f0c9800c35f65789" compoundref="fmemopen_8c" startline="80" endline="92">fmemopen</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="fmemopen_8c_1a8274c47f6acbb2e01d6536f094336807" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>fpos_t</type>
+        <definition>static fpos_t seekfn</definition>
+        <argsstring>(void *handler, fpos_t offset, int whence)</argsstring>
+        <name>seekfn</name>
+        <param>
+          <type>void *</type>
+          <declname>handler</declname>
+        </param>
+        <param>
+          <type>fpos_t</type>
+          <declname>offset</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>whence</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c" line="56" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c" bodystart="56" bodyend="73"/>
+        <references refid="structfmem_1a5bd49f56467813a44d613a1425931eca" compoundref="fmemopen_8c" startline="24">fmem::pos</references>
+        <references refid="structfmem_1a8393fad020c142e2de643af2d0dba9fb" compoundref="fmemopen_8c" startline="25">fmem::size</references>
+        <referencedby refid="fmemopen_8h_1a6b2efc6515c53ab5f0c9800c35f65789" compoundref="fmemopen_8c" startline="80" endline="92">fmemopen</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="fmemopen_8c_1a8205d23867bfbfc42ea0d29d2fa65780" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int closefn</definition>
+        <argsstring>(void *handler)</argsstring>
+        <name>closefn</name>
+        <param>
+          <type>void *</type>
+          <declname>handler</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c" line="75" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c" bodystart="75" bodyend="78"/>
+        <referencedby refid="fmemopen_8h_1a6b2efc6515c53ab5f0c9800c35f65789" compoundref="fmemopen_8c" startline="80" endline="92">fmemopen</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="fmemopen_8c_1a6b2efc6515c53ab5f0c9800c35f65789" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>FILE *</type>
+        <definition>FILE* fmemopen</definition>
+        <argsstring>(void *buf, size_t size, const char *mode)</argsstring>
+        <name>fmemopen</name>
+        <param>
+          <type>void *</type>
+          <declname>buf</declname>
+        </param>
+        <param>
+          <type>size_t</type>
+          <declname>size</declname>
+        </param>
+        <param>
+          <type>const char *</type>
+          <declname>mode</declname>
+        </param>
+        <briefdescription>
+<para>A BSD port of the fmemopen Linux method using funopen. </para>        </briefdescription>
+        <detaileddescription>
+<para>man docs for fmemopen: <ulink url="http://linux.die.net/man/3/fmemopen">http://linux.die.net/man/3/fmemopen</ulink></para><para>man docs for funopen: <ulink url="https://developer.apple.com/library/mac/#documentation/Darwin/Reference/ManPages/man3/funopen.3.html">https://developer.apple.com/library/mac/#documentation/Darwin/Reference/ManPages/man3/funopen.3.html</ulink></para><para>This method is ported from ingenuitas&apos; python-tesseract project.</para><para>You must call fclose on the returned file pointer or memory will be leaked. <verbatim> @param buf The data that will be used to back the FILE* methods. Must be at least
+            @c size bytes.
+ @param size The size of the @c buf data.
+ @param mode The permitted stream operation modes.
+ @returns A pointer that can be used in the fread/fwrite/fseek/fclose family of methods.
+          If a failure occurred NULL will be returned.</verbatim> </para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c" line="80" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c" bodystart="80" bodyend="92"/>
+        <references refid="structfmem_1a8393fad020c142e2de643af2d0dba9fb" compoundref="fmemopen_8c" startline="25">fmem::size</references>
+        <references refid="structfmem_1aa8140f9002162674e50499e6d676364b" compoundref="fmemopen_8c" startline="26">fmem::buffer</references>
+        <references refid="fmemopen_8c_1a307e31d9468eca4c24e20a380865fcf9" compoundref="fmemopen_8c" startline="30" endline="41">readfn</references>
+        <references refid="fmemopen_8c_1a6bcff750932dc0b5d33e473869f2be4b" compoundref="fmemopen_8c" startline="43" endline="54">writefn</references>
+        <references refid="fmemopen_8c_1a8274c47f6acbb2e01d6536f094336807" compoundref="fmemopen_8c" startline="56" endline="73">seekfn</references>
+        <references refid="fmemopen_8c_1a8205d23867bfbfc42ea0d29d2fa65780" compoundref="fmemopen_8c" startline="75" endline="78">closefn</references>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+    </detaileddescription>
+    <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/fmemopen.c"/>
+  </compounddef>
+</doxygen>

@@ -1,0 +1,1534 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="classveil_1_1client_1_1VeilFS" kind="class" prot="public">
+    <compoundname>veil::client::VeilFS</compoundname>
+    <basecompoundref refid="classveil_1_1client_1_1ISchedulable" prot="public" virt="non-virtual">veil::client::ISchedulable</basecompoundref>
+    <includes refid="veilfs_8h" local="no">include/veilfs.h</includes>
+      <sectiondef kind="private-attrib">
+      <memberdef kind="variable" id="classveil_1_1client_1_1VeilFS_1a8b5af3d5bab0620d2b681230f6a7dafb" prot="private" static="no" mutable="no">
+        <type>std::string</type>
+        <definition>std::string veil::client::VeilFS::m_root</definition>
+        <argsstring></argsstring>
+        <name>m_root</name>
+        <briefdescription>
+<para>Filesystem root directory. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="102" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilfs.h" bodystart="102" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a19bc3787cccc8ff63abb971252d4cc8b" compoundref="veilfs_8cc" startline="73" endline="112">VeilFS</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a5e23647ea0b7267b04a9a8009e4a7e7e" compoundref="veilfs_8cc" startline="238" endline="269">readlink</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1ab9eecdb54b3e4da21311f09b15191d30" compoundref="veilfs_8cc" startline="373" endline="389">symlink</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1VeilFS_1a27cfad722fa6676a13612f16de6a545b" prot="private" static="no" mutable="no">
+        <type>uid_t</type>
+        <definition>uid_t veil::client::VeilFS::m_uid</definition>
+        <argsstring></argsstring>
+        <name>m_uid</name>
+        <briefdescription>
+<para>Filesystem owner&apos;s effective uid. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="103" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilfs.h" bodystart="103" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a19bc3787cccc8ff63abb971252d4cc8b" compoundref="veilfs_8cc" startline="73" endline="112">VeilFS</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1add9108b324f1c6eae48fa1180ea5da25" compoundref="veilfs_8cc" startline="139" endline="236">getattr</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1VeilFS_1a0613256b3c8b720bbc1fbf60f4b297cf" prot="private" static="no" mutable="no">
+        <type>gid_t</type>
+        <definition>gid_t veil::client::VeilFS::m_gid</definition>
+        <argsstring></argsstring>
+        <name>m_gid</name>
+        <briefdescription>
+<para>Filesystem owner&apos;s effective gid. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="104" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilfs.h" bodystart="104" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a19bc3787cccc8ff63abb971252d4cc8b" compoundref="veilfs_8cc" startline="73" endline="112">VeilFS</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1add9108b324f1c6eae48fa1180ea5da25" compoundref="veilfs_8cc" startline="139" endline="236">getattr</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1VeilFS_1a12cbb5bbedf191cb8a0ad52bf6ecdd4c" prot="private" static="no" mutable="no">
+        <type>uid_t</type>
+        <definition>uid_t veil::client::VeilFS::m_ruid</definition>
+        <argsstring></argsstring>
+        <name>m_ruid</name>
+        <briefdescription>
+<para>Filesystem root real uid. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="105" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilfs.h" bodystart="105" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a19bc3787cccc8ff63abb971252d4cc8b" compoundref="veilfs_8cc" startline="73" endline="112">VeilFS</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1add9108b324f1c6eae48fa1180ea5da25" compoundref="veilfs_8cc" startline="139" endline="236">getattr</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1VeilFS_1aadc11f23b188ecbd8619ea39823a11bc" prot="private" static="no" mutable="no">
+        <type>gid_t</type>
+        <definition>gid_t veil::client::VeilFS::m_rgid</definition>
+        <argsstring></argsstring>
+        <name>m_rgid</name>
+        <briefdescription>
+<para>Filesystem root real gid. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="106" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilfs.h" bodystart="106" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a19bc3787cccc8ff63abb971252d4cc8b" compoundref="veilfs_8cc" startline="73" endline="112">VeilFS</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1add9108b324f1c6eae48fa1180ea5da25" compoundref="veilfs_8cc" startline="139" endline="236">getattr</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1VeilFS_1ab9d8ae0284b8efa1ace6c5ca00dd3963" prot="private" static="no" mutable="no">
+        <type>boost::shared_ptr&lt; <ref refid="classveil_1_1client_1_1FslogicProxy" kindref="compound">FslogicProxy</ref> &gt;</type>
+        <definition>boost::shared_ptr&lt;FslogicProxy&gt; veil::client::VeilFS::m_fslogic</definition>
+        <argsstring></argsstring>
+        <name>m_fslogic</name>
+        <briefdescription>
+<para><ref refid="classveil_1_1client_1_1FslogicProxy" kindref="compound">FslogicProxy</ref> instance. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="110" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilfs.h" bodystart="110" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a19bc3787cccc8ff63abb971252d4cc8b" compoundref="veilfs_8cc" startline="73" endline="112">VeilFS</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1add9108b324f1c6eae48fa1180ea5da25" compoundref="veilfs_8cc" startline="139" endline="236">getattr</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a5e23647ea0b7267b04a9a8009e4a7e7e" compoundref="veilfs_8cc" startline="238" endline="269">readlink</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a55c79062275417d5ee9b4c2c76457538" compoundref="veilfs_8cc" startline="271" endline="321">mknod</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a6da59140dab694a3e29196ca4eab1b70" compoundref="veilfs_8cc" startline="323" endline="332">mkdir</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a226a7eb0645dab2444d73a26b2daf4e0" compoundref="veilfs_8cc" startline="334" endline="360">unlink</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a8698e41b0f361abd4e33b1e0fb9a054c" compoundref="veilfs_8cc" startline="362" endline="371">rmdir</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1ab9eecdb54b3e4da21311f09b15191d30" compoundref="veilfs_8cc" startline="373" endline="389">symlink</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1afa06b776b2874b00cec413936afc45ad" compoundref="veilfs_8cc" startline="391" endline="401">rename</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1aab7b375cababf998002445452c4edc2a" compoundref="veilfs_8cc" startline="409" endline="425">chmod</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1aed7e44b39819be745b8bb2493cf744cc" compoundref="veilfs_8cc" startline="427" endline="449">chown</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1ab6e3fbfba6aff36dbc9a9fd5e3456cf6" compoundref="veilfs_8cc" startline="596" endline="627">readdir</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1ae721d86abb9618d17b723dcdb7c77b55" compoundref="veilfs_8cc" startline="718" endline="763">runTask</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1VeilFS_1a60987ed20e8d4fa491c19139715de8a6" prot="private" static="no" mutable="no">
+        <type>boost::shared_ptr&lt; <ref refid="classveil_1_1client_1_1StorageMapper" kindref="compound">StorageMapper</ref> &gt;</type>
+        <definition>boost::shared_ptr&lt;StorageMapper&gt; veil::client::VeilFS::m_storageMapper</definition>
+        <argsstring></argsstring>
+        <name>m_storageMapper</name>
+        <briefdescription>
+<para><ref refid="classveil_1_1client_1_1StorageMapper" kindref="compound">StorageMapper</ref> instance. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="111" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilfs.h" bodystart="111" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1add9108b324f1c6eae48fa1180ea5da25" compoundref="veilfs_8cc" startline="139" endline="236">getattr</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a55c79062275417d5ee9b4c2c76457538" compoundref="veilfs_8cc" startline="271" endline="321">mknod</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a2d8808ab5d257071af8d0d28eab709de" compoundref="veilfs_8cc" startline="473" endline="502">open</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a308eeeeef9b5a427ab37bb62dbd8bb2b" compoundref="veilfs_8cc" startline="565" endline="572">release</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1VeilFS_1a44dc9c75b431b42df4b76123ae0e8058" prot="private" static="no" mutable="no">
+        <type>boost::shared_ptr&lt; <ref refid="classveil_1_1client_1_1MetaCache" kindref="compound">MetaCache</ref> &gt;</type>
+        <definition>boost::shared_ptr&lt;MetaCache&gt; veil::client::VeilFS::m_metaCache</definition>
+        <argsstring></argsstring>
+        <name>m_metaCache</name>
+        <briefdescription>
+<para><ref refid="classveil_1_1client_1_1MetaCache" kindref="compound">MetaCache</ref> instance. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="113" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilfs.h" bodystart="113" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1add9108b324f1c6eae48fa1180ea5da25" compoundref="veilfs_8cc" startline="139" endline="236">getattr</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a55c79062275417d5ee9b4c2c76457538" compoundref="veilfs_8cc" startline="271" endline="321">mknod</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a6da59140dab694a3e29196ca4eab1b70" compoundref="veilfs_8cc" startline="323" endline="332">mkdir</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a226a7eb0645dab2444d73a26b2daf4e0" compoundref="veilfs_8cc" startline="334" endline="360">unlink</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a8698e41b0f361abd4e33b1e0fb9a054c" compoundref="veilfs_8cc" startline="362" endline="371">rmdir</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1afa06b776b2874b00cec413936afc45ad" compoundref="veilfs_8cc" startline="391" endline="401">rename</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1aab7b375cababf998002445452c4edc2a" compoundref="veilfs_8cc" startline="409" endline="425">chmod</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1aed7e44b39819be745b8bb2493cf744cc" compoundref="veilfs_8cc" startline="427" endline="449">chown</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a60bab2fd21cc714c3d73f09807526555" compoundref="veilfs_8cc" startline="451" endline="462">truncate</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a72433abbf1a04caace082166b98bfb2f" compoundref="veilfs_8cc" startline="513" endline="531">write</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1ae721d86abb9618d17b723dcdb7c77b55" compoundref="veilfs_8cc" startline="718" endline="763">runTask</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1VeilFS_1aa371b437e144cf086e612da60fcbd66e" prot="private" static="no" mutable="no">
+        <type>boost::shared_ptr&lt; helpers::StorageHelperFactory &gt;</type>
+        <definition>boost::shared_ptr&lt;helpers::StorageHelperFactory&gt; veil::client::VeilFS::m_shFactory</definition>
+        <argsstring></argsstring>
+        <name>m_shFactory</name>
+        <briefdescription>
+<para>Storage Helpers Factory instance. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="115" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilfs.h" bodystart="115" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1VeilFS_1ab431d85f9b3e4d42cd733da11a83f7d2" prot="private" static="no" mutable="no">
+        <type>std::map&lt; std::string, std::pair&lt; std::string, time_t &gt; &gt;</type>
+        <definition>std::map&lt;std::string, std::pair&lt;std::string, time_t&gt; &gt; veil::client::VeilFS::m_linkCache</definition>
+        <argsstring></argsstring>
+        <name>m_linkCache</name>
+        <briefdescription>
+<para>Simple links cache. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="119" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilfs.h" bodystart="119" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1add9108b324f1c6eae48fa1180ea5da25" compoundref="veilfs_8cc" startline="139" endline="236">getattr</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a5e23647ea0b7267b04a9a8009e4a7e7e" compoundref="veilfs_8cc" startline="238" endline="269">readlink</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1VeilFS_1aa745b5a87e692dd70727f3305b4c6ed1" prot="private" static="no" mutable="no">
+        <type><ref refid="classveil_1_1client_1_1ReadWriteLock" kindref="compound">ReadWriteLock</ref></type>
+        <definition>ReadWriteLock veil::client::VeilFS::m_linkCacheLock</definition>
+        <argsstring></argsstring>
+        <name>m_linkCacheLock</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="120" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilfs.h" bodystart="120" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1add9108b324f1c6eae48fa1180ea5da25" compoundref="veilfs_8cc" startline="139" endline="236">getattr</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a5e23647ea0b7267b04a9a8009e4a7e7e" compoundref="veilfs_8cc" startline="238" endline="269">readlink</referencedby>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="private-static-attrib">
+      <memberdef kind="variable" id="classveil_1_1client_1_1VeilFS_1a5813de981e2209bb0065149190369422" prot="private" static="yes" mutable="no">
+        <type><ref refid="classveil_1_1client_1_1ReadWriteLock" kindref="compound">ReadWriteLock</ref></type>
+        <definition>ReadWriteLock veil::client::VeilFS::m_schedulerPoolLock</definition>
+        <argsstring></argsstring>
+        <name>m_schedulerPoolLock</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="108" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilfs.h" bodystart="108" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1afe20f8ab6077591be6901a2fcf326e0c" compoundref="veilfs_8cc" startline="666" endline="685">getScheduler</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a9c77b21d3dba1df999ddd28dbfb4f74d" compoundref="veilfs_8cc" startline="702" endline="706">addScheduler</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1VeilFS_1aa0ef29b82edbc822cde663e85409b7c7" prot="private" static="yes" mutable="no">
+        <type>std::list&lt; boost::shared_ptr&lt; <ref refid="classveil_1_1client_1_1JobScheduler" kindref="compound">JobScheduler</ref> &gt; &gt;</type>
+        <definition>list&lt; boost::shared_ptr&lt; JobScheduler &gt; &gt; veil::client::VeilFS::m_jobSchedulers</definition>
+        <argsstring></argsstring>
+        <name>m_jobSchedulers</name>
+        <briefdescription>
+<para><ref refid="classveil_1_1client_1_1JobScheduler" kindref="compound">JobScheduler</ref> instances. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="112" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilfs.h" bodystart="112" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a3fc983890a62a199295e7aded33ebcd0" compoundref="veilfs_8cc" startline="118" endline="127">staticDestroy</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1afe20f8ab6077591be6901a2fcf326e0c" compoundref="veilfs_8cc" startline="666" endline="685">getScheduler</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a9c77b21d3dba1df999ddd28dbfb4f74d" compoundref="veilfs_8cc" startline="702" endline="706">addScheduler</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1VeilFS_1a20c51e1978d74f27c2a33ec4294fb2ae" prot="private" static="yes" mutable="no">
+        <type>boost::shared_ptr&lt; <ref refid="classveil_1_1client_1_1Config" kindref="compound">Config</ref> &gt;</type>
+        <definition>boost::shared_ptr&lt; Config &gt; veil::client::VeilFS::m_config</definition>
+        <argsstring></argsstring>
+        <name>m_config</name>
+        <briefdescription>
+<para><ref refid="classveil_1_1client_1_1Config" kindref="compound">Config</ref> instance. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="114" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilfs.h" bodystart="114" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a19bc3787cccc8ff63abb971252d4cc8b" compoundref="veilfs_8cc" startline="73" endline="112">VeilFS</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a3fc983890a62a199295e7aded33ebcd0" compoundref="veilfs_8cc" startline="118" endline="127">staticDestroy</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a8a27aa2dfe572bb28447a835847a79ba" compoundref="veilfs_8cc" startline="687" endline="690">getConfig</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1ac3f0f7c154f9da9ed934ca4eafba4f2f" compoundref="veilfs_8cc" startline="708" endline="711">setConfig</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1VeilFS_1a97533f84128709488b7f690c00f49712" prot="private" static="yes" mutable="no">
+        <type>boost::shared_ptr&lt; SimpleConnectionPool &gt;</type>
+        <definition>boost::shared_ptr&lt; SimpleConnectionPool &gt; veil::client::VeilFS::m_connectionPool</definition>
+        <argsstring></argsstring>
+        <name>m_connectionPool</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="116" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilfs.h" bodystart="116" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a3fc983890a62a199295e7aded33ebcd0" compoundref="veilfs_8cc" startline="118" endline="127">staticDestroy</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a79fd13ab7477e6b84f04a0a94c18bc6a" compoundref="veilfs_8cc" startline="692" endline="695">getConnectionPool</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a6b81f97f87e9e11375e087478b7ce1bc" compoundref="veilfs_8cc" startline="713" endline="716">setConnectionPool</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="classveil_1_1client_1_1VeilFS_1af64a63ce559c97601e26b80f672ce8ba" prot="private" static="yes" mutable="no">
+        <type>boost::shared_ptr&lt; <ref refid="classveil_1_1client_1_1PushListener" kindref="compound">PushListener</ref> &gt;</type>
+        <definition>boost::shared_ptr&lt; PushListener &gt; veil::client::VeilFS::m_pushListener</definition>
+        <argsstring></argsstring>
+        <name>m_pushListener</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="117" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilfs.h" bodystart="117" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a19bc3787cccc8ff63abb971252d4cc8b" compoundref="veilfs_8cc" startline="73" endline="112">VeilFS</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a3fc983890a62a199295e7aded33ebcd0" compoundref="veilfs_8cc" startline="118" endline="127">staticDestroy</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1aad8a6fa935c56ee752cfb393c75f967b" compoundref="veilfs_8cc" startline="697" endline="700">getPushListener</referencedby>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="public-static-func">
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1afe20f8ab6077591be6901a2fcf326e0c" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>boost::shared_ptr&lt; <ref refid="classveil_1_1client_1_1JobScheduler" kindref="compound">JobScheduler</ref> &gt;</type>
+        <definition>boost::shared_ptr&lt; JobScheduler &gt; veil::client::VeilFS::getScheduler</definition>
+        <argsstring>(TaskID taskId=TASK_LAST_ID)</argsstring>
+        <name>getScheduler</name>
+        <param>
+          <type><ref refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68c" kindref="member">TaskID</ref></type>
+          <declname>taskId</declname>
+          <defval><ref refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68cae14315bcb7937f992b1d6b503981ff18" kindref="member">TASK_LAST_ID</ref></defval>
+        </param>
+        <briefdescription>
+<para>Returns <ref refid="classveil_1_1client_1_1JobScheduler" kindref="compound">JobScheduler</ref> assigned to this object. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="53" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="666" bodyend="685"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1a5813de981e2209bb0065149190369422" compoundref="veilfs_8h" startline="108">m_schedulerPoolLock</references>
+        <references refid="namespaceveil_1_1client_1a86124671530b503e3884741ce6c8b128a74a5d68dec5afbdd21d9e18d2e6da9b6" compoundref="lock_8h" startline="38">veil::client::WRITE_LOCK</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1aa0ef29b82edbc822cde663e85409b7c7" compoundref="veilfs_8h" startline="112">m_jobSchedulers</references>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1a699d40e88b822371a2120d862ccb6237" compoundref="fslogicProxy_8cc" startline="345" endline="377">veil::client::FslogicProxy::pingCluster</referencedby>
+        <referencedby refid="classveil_1_1client_1_1StorageMapper_1ae03feeacef81b0cf5f6418f926897aef" compoundref="storageMapper_8cc" startline="79" endline="105">veil::client::StorageMapper::addLocation</referencedby>
+        <referencedby refid="classveil_1_1client_1_1StorageMapper_1ad60be094005d5b82195cf3e53899692c" compoundref="storageMapper_8cc" startline="118" endline="133">veil::client::StorageMapper::releaseFile</referencedby>
+        <referencedby refid="classveil_1_1client_1_1StorageMapper_1a29ce4dc7dce914ce6e127f84183beda5" compoundref="storageMapper_8cc" startline="135" endline="176">veil::client::StorageMapper::runTask</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a19bc3787cccc8ff63abb971252d4cc8b" compoundref="veilfs_8cc" startline="73" endline="112">VeilFS</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1add9108b324f1c6eae48fa1180ea5da25" compoundref="veilfs_8cc" startline="139" endline="236">getattr</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a55c79062275417d5ee9b4c2c76457538" compoundref="veilfs_8cc" startline="271" endline="321">mknod</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a6da59140dab694a3e29196ca4eab1b70" compoundref="veilfs_8cc" startline="323" endline="332">mkdir</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a226a7eb0645dab2444d73a26b2daf4e0" compoundref="veilfs_8cc" startline="334" endline="360">unlink</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a8698e41b0f361abd4e33b1e0fb9a054c" compoundref="veilfs_8cc" startline="362" endline="371">rmdir</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1afa06b776b2874b00cec413936afc45ad" compoundref="veilfs_8cc" startline="391" endline="401">rename</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a4348d05f055631458917d3fad712f47d" compoundref="veilfs_8cc" startline="464" endline="471">utime</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a2d8808ab5d257071af8d0d28eab709de" compoundref="veilfs_8cc" startline="473" endline="502">open</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a72433abbf1a04caace082166b98bfb2f" compoundref="veilfs_8cc" startline="513" endline="531">write</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a9fea1cb6f2d8e3bcdd52241e44393bd4" compoundref="veilfs_8cc" startline="587" endline="594">opendir</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1ab6e3fbfba6aff36dbc9a9fd5e3456cf6" compoundref="veilfs_8cc" startline="596" endline="627">readdir</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1ae721d86abb9618d17b723dcdb7c77b55" compoundref="veilfs_8cc" startline="718" endline="763">runTask</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a8a27aa2dfe572bb28447a835847a79ba" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>boost::shared_ptr&lt; <ref refid="classveil_1_1client_1_1Config" kindref="compound">Config</ref> &gt;</type>
+        <definition>boost::shared_ptr&lt; Config &gt; veil::client::VeilFS::getConfig</definition>
+        <argsstring>()</argsstring>
+        <name>getConfig</name>
+        <briefdescription>
+<para>Returns <ref refid="classveil_1_1client_1_1Config" kindref="compound">Config</ref> assigned to this object. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="54" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="687" bodyend="690"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1a20c51e1978d74f27c2a33ec4294fb2ae" compoundref="veilfs_8h" startline="114">m_config</references>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1a699d40e88b822371a2120d862ccb6237" compoundref="fslogicProxy_8cc" startline="345" endline="377">veil::client::FslogicProxy::pingCluster</referencedby>
+        <referencedby refid="classveil_1_1client_1_1PushListener_1a25b5c60143d830aec0aa9a8eab17932d" compoundref="pushListener_8cc" startline="96" endline="103">veil::client::PushListener::onChannelError</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a19bc3787cccc8ff63abb971252d4cc8b" compoundref="veilfs_8cc" startline="73" endline="112">VeilFS</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1add9108b324f1c6eae48fa1180ea5da25" compoundref="veilfs_8cc" startline="139" endline="236">getattr</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1ab6e3fbfba6aff36dbc9a9fd5e3456cf6" compoundref="veilfs_8cc" startline="596" endline="627">readdir</referencedby>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1ae721d86abb9618d17b723dcdb7c77b55" compoundref="veilfs_8cc" startline="718" endline="763">runTask</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a79fd13ab7477e6b84f04a0a94c18bc6a" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>boost::shared_ptr&lt; SimpleConnectionPool &gt;</type>
+        <definition>boost::shared_ptr&lt; SimpleConnectionPool &gt; veil::client::VeilFS::getConnectionPool</definition>
+        <argsstring>()</argsstring>
+        <name>getConnectionPool</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="55" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="692" bodyend="695"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1a97533f84128709488b7f690c00f49712" compoundref="veilfs_8h" startline="116">m_connectionPool</references>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1a6bce8815a7784951f431370ba22b4991" compoundref="fslogicProxy_8cc" startline="267" endline="304">veil::client::FslogicProxy::sendFuseReceiveAnswer</referencedby>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1af8373304e482f3c48b3973902c73d58d" compoundref="fslogicProxy_8cc" startline="306" endline="343">veil::client::FslogicProxy::sendFuseReceiveAtom</referencedby>
+        <referencedby refid="classveil_1_1client_1_1FslogicProxy_1a699d40e88b822371a2120d862ccb6237" compoundref="fslogicProxy_8cc" startline="345" endline="377">veil::client::FslogicProxy::pingCluster</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1aad8a6fa935c56ee752cfb393c75f967b" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>boost::shared_ptr&lt; <ref refid="classveil_1_1client_1_1PushListener" kindref="compound">PushListener</ref> &gt;</type>
+        <definition>boost::shared_ptr&lt; PushListener &gt; veil::client::VeilFS::getPushListener</definition>
+        <argsstring>()</argsstring>
+        <name>getPushListener</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="56" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="697" bodyend="700"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1af64a63ce559c97601e26b80f672ce8ba" compoundref="veilfs_8h" startline="117">m_pushListener</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a9c77b21d3dba1df999ddd28dbfb4f74d" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>void</type>
+        <definition>void veil::client::VeilFS::addScheduler</definition>
+        <argsstring>(boost::shared_ptr&lt; JobScheduler &gt; injected)</argsstring>
+        <name>addScheduler</name>
+        <param>
+          <type>boost::shared_ptr&lt; <ref refid="classveil_1_1client_1_1JobScheduler" kindref="compound">JobScheduler</ref> &gt;</type>
+          <declname>injected</declname>
+        </param>
+        <briefdescription>
+<para>Sets <ref refid="classveil_1_1client_1_1JobScheduler" kindref="compound">JobScheduler</ref> object. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="58" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="702" bodyend="706"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1a5813de981e2209bb0065149190369422" compoundref="veilfs_8h" startline="108">m_schedulerPoolLock</references>
+        <references refid="namespaceveil_1_1client_1a86124671530b503e3884741ce6c8b128a74a5d68dec5afbdd21d9e18d2e6da9b6" compoundref="lock_8h" startline="38">veil::client::WRITE_LOCK</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1aa0ef29b82edbc822cde663e85409b7c7" compoundref="veilfs_8h" startline="112">m_jobSchedulers</references>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1a19bc3787cccc8ff63abb971252d4cc8b" compoundref="veilfs_8cc" startline="73" endline="112">VeilFS</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1ac3f0f7c154f9da9ed934ca4eafba4f2f" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>void</type>
+        <definition>void veil::client::VeilFS::setConfig</definition>
+        <argsstring>(boost::shared_ptr&lt; Config &gt; injected)</argsstring>
+        <name>setConfig</name>
+        <param>
+          <type>boost::shared_ptr&lt; <ref refid="classveil_1_1client_1_1Config" kindref="compound">Config</ref> &gt;</type>
+          <declname>injected</declname>
+        </param>
+        <briefdescription>
+<para>Sets <ref refid="classveil_1_1client_1_1Config" kindref="compound">Config</ref> object. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="59" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="708" bodyend="711"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1a20c51e1978d74f27c2a33ec4294fb2ae" compoundref="veilfs_8h" startline="114">m_config</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a6b81f97f87e9e11375e087478b7ce1bc" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>void</type>
+        <definition>void veil::client::VeilFS::setConnectionPool</definition>
+        <argsstring>(boost::shared_ptr&lt; SimpleConnectionPool &gt; injected)</argsstring>
+        <name>setConnectionPool</name>
+        <param>
+          <type>boost::shared_ptr&lt; SimpleConnectionPool &gt;</type>
+          <declname>injected</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="60" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="713" bodyend="716"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1a97533f84128709488b7f690c00f49712" compoundref="veilfs_8h" startline="116">m_connectionPool</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a3fc983890a62a199295e7aded33ebcd0" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>void</type>
+        <definition>void veil::client::VeilFS::staticDestroy</definition>
+        <argsstring>()</argsstring>
+        <name>staticDestroy</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="66" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="118" bodyend="127"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1a20c51e1978d74f27c2a33ec4294fb2ae" compoundref="veilfs_8h" startline="114">m_config</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1aa0ef29b82edbc822cde663e85409b7c7" compoundref="veilfs_8h" startline="112">m_jobSchedulers</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a97533f84128709488b7f690c00f49712" compoundref="veilfs_8h" startline="116">m_connectionPool</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1af64a63ce559c97601e26b80f672ce8ba" compoundref="veilfs_8h" startline="117">m_pushListener</references>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="public-func">
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a19bc3787cccc8ff63abb971252d4cc8b" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type></type>
+        <definition>veil::client::VeilFS::VeilFS</definition>
+        <argsstring>(std::string path, boost::shared_ptr&lt; Config &gt; cnf, boost::shared_ptr&lt; JobScheduler &gt; scheduler, boost::shared_ptr&lt; FslogicProxy &gt; fslogic, boost::shared_ptr&lt; MetaCache &gt; metaCache, boost::shared_ptr&lt; StorageMapper &gt; mapper, boost::shared_ptr&lt; helpers::StorageHelperFactory &gt; sh_factory)</argsstring>
+        <name>VeilFS</name>
+        <param>
+          <type>std::string</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>boost::shared_ptr&lt; <ref refid="classveil_1_1client_1_1Config" kindref="compound">Config</ref> &gt;</type>
+          <declname>cnf</declname>
+        </param>
+        <param>
+          <type>boost::shared_ptr&lt; <ref refid="classveil_1_1client_1_1JobScheduler" kindref="compound">JobScheduler</ref> &gt;</type>
+          <declname>scheduler</declname>
+        </param>
+        <param>
+          <type>boost::shared_ptr&lt; <ref refid="classveil_1_1client_1_1FslogicProxy" kindref="compound">FslogicProxy</ref> &gt;</type>
+          <declname>fslogic</declname>
+        </param>
+        <param>
+          <type>boost::shared_ptr&lt; <ref refid="classveil_1_1client_1_1MetaCache" kindref="compound">MetaCache</ref> &gt;</type>
+          <declname>metaCache</declname>
+        </param>
+        <param>
+          <type>boost::shared_ptr&lt; <ref refid="classveil_1_1client_1_1StorageMapper" kindref="compound">StorageMapper</ref> &gt;</type>
+          <declname>mapper</declname>
+        </param>
+        <param>
+          <type>boost::shared_ptr&lt; helpers::StorageHelperFactory &gt;</type>
+          <declname>sh_factory</declname>
+        </param>
+        <briefdescription>
+<para><ref refid="classveil_1_1client_1_1VeilFS" kindref="compound">VeilFS</ref> constructor. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="62" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="73" bodyend="112"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1a8b5af3d5bab0620d2b681230f6a7dafb" compoundref="veilfs_8h" startline="102">m_root</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a20c51e1978d74f27c2a33ec4294fb2ae" compoundref="veilfs_8h" startline="114">m_config</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a9c77b21d3dba1df999ddd28dbfb4f74d" compoundref="veilfs_8cc" startline="702" endline="706">addScheduler</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1af64a63ce559c97601e26b80f672ce8ba" compoundref="veilfs_8h" startline="117">m_pushListener</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a8a27aa2dfe572bb28447a835847a79ba" compoundref="veilfs_8cc" startline="687" endline="690">getConfig</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1ab9d8ae0284b8efa1ace6c5ca00dd3963" compoundref="veilfs_8h" startline="110">m_fslogic</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1afe20f8ab6077591be6901a2fcf326e0c" compoundref="veilfs_8cc" startline="666" endline="685">getScheduler</references>
+        <references refid="config_8h_1a0a46ab50d49c1acf4b61cf4100ff0d41" compoundref="config_8h" startline="34">ALIVE_META_CONNECTIONS_COUNT_OPT</references>
+        <references refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca64e79be1054c363dd73740130b88aa53" compoundref="ISchedulable_8h" startline="37">veil::client::ISchedulable::TASK_PING_CLUSTER</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a27cfad722fa6676a13612f16de6a545b" compoundref="veilfs_8h" startline="103">m_uid</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a0613256b3c8b720bbc1fbf60f4b297cf" compoundref="veilfs_8h" startline="104">m_gid</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a12cbb5bbedf191cb8a0ad52bf6ecdd4c" compoundref="veilfs_8h" startline="105">m_ruid</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1aadc11f23b188ecbd8619ea39823a11bc" compoundref="veilfs_8h" startline="106">m_rgid</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1ac9be83b35078512b63491cb06a4fca7b" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type></type>
+        <definition>veil::client::VeilFS::~VeilFS</definition>
+        <argsstring>()</argsstring>
+        <name>~VeilFS</name>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="65" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="114" bodyend="116"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1ada91b10f11a071deb28fc99dbf6498c7" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::access</definition>
+        <argsstring>(const char *path, int mask)</argsstring>
+        <name>access</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>mask</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>access</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para>Not implemented yet. </para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="68" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="129" bodyend="137"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1add9108b324f1c6eae48fa1180ea5da25" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::getattr</definition>
+        <argsstring>(const char *path, struct stat *statbuf, bool fuse_ctx=true)</argsstring>
+        <name>getattr</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>struct stat *</type>
+          <declname>statbuf</declname>
+        </param>
+        <param>
+          <type>bool</type>
+          <declname>fuse_ctx</declname>
+          <defval>true</defval>
+        </param>
+        <briefdescription>
+<para><emphasis>getattr</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+<para>TODO: fetch subdir count </para>        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="69" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="139" bodyend="236"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1a44dc9c75b431b42df4b76123ae0e8058" compoundref="veilfs_8h" startline="113">m_metaCache</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1ab9d8ae0284b8efa1ace6c5ca00dd3963" compoundref="veilfs_8h" startline="110">m_fslogic</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a60987ed20e8d4fa491c19139715de8a6" compoundref="veilfs_8h" startline="111">m_storageMapper</references>
+        <references refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca5d7a79cedeac53743c9ca3e4f0a83246" compoundref="ISchedulable_8h" startline="38">veil::client::ISchedulable::TASK_ASYNC_GET_FILE_LOCATION</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1afe20f8ab6077591be6901a2fcf326e0c" compoundref="veilfs_8cc" startline="666" endline="685">getScheduler</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a12cbb5bbedf191cb8a0ad52bf6ecdd4c" compoundref="veilfs_8h" startline="105">m_ruid</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1aadc11f23b188ecbd8619ea39823a11bc" compoundref="veilfs_8h" startline="106">m_rgid</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a27cfad722fa6676a13612f16de6a545b" compoundref="veilfs_8h" startline="103">m_uid</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a0613256b3c8b720bbc1fbf60f4b297cf" compoundref="veilfs_8h" startline="104">m_gid</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a8a27aa2dfe572bb28447a835847a79ba" compoundref="veilfs_8cc" startline="687" endline="690">getConfig</references>
+        <references refid="config_8h_1a58ba53631e23e6d05158a7ca250c21e9" compoundref="config_8h" startline="36">ENABLE_DIR_PREFETCH_OPT</references>
+        <references refid="config_8h_1a191d80319f47247f03355583e7bee92e" compoundref="config_8h" startline="27">ENABLE_ATTR_CACHE_OPT</references>
+        <references refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68caecf889af461568a10f6ecb5494d6287a" compoundref="ISchedulable_8h" startline="39">veil::client::ISchedulable::TASK_ASYNC_READDIR</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1aa745b5a87e692dd70727f3305b4c6ed1" compoundref="veilfs_8h" startline="120">m_linkCacheLock</references>
+        <references refid="namespaceveil_1_1client_1a86124671530b503e3884741ce6c8b128a74a5d68dec5afbdd21d9e18d2e6da9b6" compoundref="lock_8h" startline="38">veil::client::WRITE_LOCK</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1ab431d85f9b3e4d42cd733da11a83f7d2" compoundref="veilfs_8h" startline="119">m_linkCache</references>
+        <referencedby refid="classveil_1_1client_1_1VeilFS_1ae721d86abb9618d17b723dcdb7c77b55" compoundref="veilfs_8cc" startline="718" endline="763">runTask</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a5e23647ea0b7267b04a9a8009e4a7e7e" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::readlink</definition>
+        <argsstring>(const char *path, char *link, size_t size)</argsstring>
+        <name>readlink</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>char *</type>
+          <declname>link</declname>
+        </param>
+        <param>
+          <type>size_t</type>
+          <declname>size</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>readlink</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para>Not implemented yet. <simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="70" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="238" bodyend="269"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1aa745b5a87e692dd70727f3305b4c6ed1" compoundref="veilfs_8h" startline="120">m_linkCacheLock</references>
+        <references refid="namespaceveil_1_1client_1a86124671530b503e3884741ce6c8b128a378617bc95058da3e7787e260ee8b922" compoundref="lock_8h" startline="37">veil::client::READ_LOCK</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1ab431d85f9b3e4d42cd733da11a83f7d2" compoundref="veilfs_8h" startline="119">m_linkCache</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1ab9d8ae0284b8efa1ace6c5ca00dd3963" compoundref="veilfs_8h" startline="110">m_fslogic</references>
+        <references refid="veilfs_8cc_1acbe675edb39cc8cc2872fb07c7f8c952" compoundref="veilfs_8cc" startline="33">RETURN_IF_ERROR</references>
+        <references refid="classveil_1_1client_1_1AutoLock_1a7d95d6c91bec1806728a9ef6d65c2c15" compoundref="lock_8cc" startline="28" endline="42">veil::client::AutoLock::changeType</references>
+        <references refid="namespaceveil_1_1client_1a86124671530b503e3884741ce6c8b128a74a5d68dec5afbdd21d9e18d2e6da9b6" compoundref="lock_8h" startline="38">veil::client::WRITE_LOCK</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a8b5af3d5bab0620d2b681230f6a7dafb" compoundref="veilfs_8h" startline="102">m_root</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a55c79062275417d5ee9b4c2c76457538" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::mknod</definition>
+        <argsstring>(const char *path, mode_t mode, dev_t dev)</argsstring>
+        <name>mknod</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>mode_t</type>
+          <declname>mode</declname>
+        </param>
+        <param>
+          <type>dev_t</type>
+          <declname>dev</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>mknod</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="71" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="271" bodyend="321"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1a44dc9c75b431b42df4b76123ae0e8058" compoundref="veilfs_8h" startline="113">m_metaCache</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1ab9d8ae0284b8efa1ace6c5ca00dd3963" compoundref="veilfs_8h" startline="110">m_fslogic</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a60987ed20e8d4fa491c19139715de8a6" compoundref="veilfs_8h" startline="111">m_storageMapper</references>
+        <references refid="veilfs_8cc_1ab96062690f9c8dbd9586c0d10ea0ae7f" compoundref="veilfs_8cc" startline="41">GET_LOCATION_INFO</references>
+        <references refid="veilfs_8cc_1ab896ab6bba5334b7d465c7db2897eac2" compoundref="veilfs_8cc" startline="26">SH_RUN</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1afe20f8ab6077591be6901a2fcf326e0c" compoundref="veilfs_8cc" startline="666" endline="685">getScheduler</references>
+        <references refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca8e8d2679b3902b3d4adb3afc265ae593" compoundref="ISchedulable_8h" startline="42">veil::client::ISchedulable::TASK_CLEAR_ATTR</references>
+        <references refid="veilfs_8cc_1a645f98e8ab68beb0b860903c0acb08d3" compoundref="veilfs_8cc" startline="56">PARENT</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a6da59140dab694a3e29196ca4eab1b70" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::mkdir</definition>
+        <argsstring>(const char *path, mode_t mode)</argsstring>
+        <name>mkdir</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>mode_t</type>
+          <declname>mode</declname>
+        </param>
+        <briefdescription>
+<para>mkdir FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="72" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="323" bodyend="332"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1a44dc9c75b431b42df4b76123ae0e8058" compoundref="veilfs_8h" startline="113">m_metaCache</references>
+        <references refid="veilfs_8cc_1acbe675edb39cc8cc2872fb07c7f8c952" compoundref="veilfs_8cc" startline="33">RETURN_IF_ERROR</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1ab9d8ae0284b8efa1ace6c5ca00dd3963" compoundref="veilfs_8h" startline="110">m_fslogic</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1afe20f8ab6077591be6901a2fcf326e0c" compoundref="veilfs_8cc" startline="666" endline="685">getScheduler</references>
+        <references refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca8e8d2679b3902b3d4adb3afc265ae593" compoundref="ISchedulable_8h" startline="42">veil::client::ISchedulable::TASK_CLEAR_ATTR</references>
+        <references refid="veilfs_8cc_1a645f98e8ab68beb0b860903c0acb08d3" compoundref="veilfs_8cc" startline="56">PARENT</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a226a7eb0645dab2444d73a26b2daf4e0" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::unlink</definition>
+        <argsstring>(const char *path)</argsstring>
+        <name>unlink</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>unlink</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="73" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="334" bodyend="360"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1a44dc9c75b431b42df4b76123ae0e8058" compoundref="veilfs_8h" startline="113">m_metaCache</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1ab9d8ae0284b8efa1ace6c5ca00dd3963" compoundref="veilfs_8h" startline="110">m_fslogic</references>
+        <references refid="veilfs_8cc_1ab96062690f9c8dbd9586c0d10ea0ae7f" compoundref="veilfs_8cc" startline="41">GET_LOCATION_INFO</references>
+        <references refid="veilfs_8cc_1ab896ab6bba5334b7d465c7db2897eac2" compoundref="veilfs_8cc" startline="26">SH_RUN</references>
+        <references refid="veilfs_8cc_1acbe675edb39cc8cc2872fb07c7f8c952" compoundref="veilfs_8cc" startline="33">RETURN_IF_ERROR</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1afe20f8ab6077591be6901a2fcf326e0c" compoundref="veilfs_8cc" startline="666" endline="685">getScheduler</references>
+        <references refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca8e8d2679b3902b3d4adb3afc265ae593" compoundref="ISchedulable_8h" startline="42">veil::client::ISchedulable::TASK_CLEAR_ATTR</references>
+        <references refid="veilfs_8cc_1a645f98e8ab68beb0b860903c0acb08d3" compoundref="veilfs_8cc" startline="56">PARENT</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a8698e41b0f361abd4e33b1e0fb9a054c" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::rmdir</definition>
+        <argsstring>(const char *path)</argsstring>
+        <name>rmdir</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>rmdir</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="74" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="362" bodyend="371"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1a44dc9c75b431b42df4b76123ae0e8058" compoundref="veilfs_8h" startline="113">m_metaCache</references>
+        <references refid="veilfs_8cc_1acbe675edb39cc8cc2872fb07c7f8c952" compoundref="veilfs_8cc" startline="33">RETURN_IF_ERROR</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1ab9d8ae0284b8efa1ace6c5ca00dd3963" compoundref="veilfs_8h" startline="110">m_fslogic</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1afe20f8ab6077591be6901a2fcf326e0c" compoundref="veilfs_8cc" startline="666" endline="685">getScheduler</references>
+        <references refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca8e8d2679b3902b3d4adb3afc265ae593" compoundref="ISchedulable_8h" startline="42">veil::client::ISchedulable::TASK_CLEAR_ATTR</references>
+        <references refid="veilfs_8cc_1a645f98e8ab68beb0b860903c0acb08d3" compoundref="veilfs_8cc" startline="56">PARENT</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1ab9eecdb54b3e4da21311f09b15191d30" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::symlink</definition>
+        <argsstring>(const char *path, const char *link)</argsstring>
+        <name>symlink</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>const char *</type>
+          <declname>link</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>symlink</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para>Not implemented yet. <simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="75" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="373" bodyend="389"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1a8b5af3d5bab0620d2b681230f6a7dafb" compoundref="veilfs_8h" startline="102">m_root</references>
+        <references refid="veilfs_8cc_1acbe675edb39cc8cc2872fb07c7f8c952" compoundref="veilfs_8cc" startline="33">RETURN_IF_ERROR</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1ab9d8ae0284b8efa1ace6c5ca00dd3963" compoundref="veilfs_8h" startline="110">m_fslogic</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1afa06b776b2874b00cec413936afc45ad" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::rename</definition>
+        <argsstring>(const char *path, const char *newpath)</argsstring>
+        <name>rename</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>const char *</type>
+          <declname>newpath</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>rename</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="76" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="391" bodyend="401"/>
+        <references refid="veilfs_8cc_1acbe675edb39cc8cc2872fb07c7f8c952" compoundref="veilfs_8cc" startline="33">RETURN_IF_ERROR</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1ab9d8ae0284b8efa1ace6c5ca00dd3963" compoundref="veilfs_8h" startline="110">m_fslogic</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1afe20f8ab6077591be6901a2fcf326e0c" compoundref="veilfs_8cc" startline="666" endline="685">getScheduler</references>
+        <references refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca8e8d2679b3902b3d4adb3afc265ae593" compoundref="ISchedulable_8h" startline="42">veil::client::ISchedulable::TASK_CLEAR_ATTR</references>
+        <references refid="veilfs_8cc_1a645f98e8ab68beb0b860903c0acb08d3" compoundref="veilfs_8cc" startline="56">PARENT</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a44dc9c75b431b42df4b76123ae0e8058" compoundref="veilfs_8h" startline="113">m_metaCache</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1ab99e21b09663bae06145cd5d80b6d7a2" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::link</definition>
+        <argsstring>(const char *path, const char *newpath)</argsstring>
+        <name>link</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>const char *</type>
+          <declname>newpath</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>link</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para>Not implemented yet. <simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="77" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="403" bodyend="407"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1aab7b375cababf998002445452c4edc2a" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::chmod</definition>
+        <argsstring>(const char *path, mode_t mode)</argsstring>
+        <name>chmod</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>mode_t</type>
+          <declname>mode</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>chmod</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="78" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="409" bodyend="425"/>
+        <references refid="veilfs_8cc_1acbe675edb39cc8cc2872fb07c7f8c952" compoundref="veilfs_8cc" startline="33">RETURN_IF_ERROR</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1ab9d8ae0284b8efa1ace6c5ca00dd3963" compoundref="veilfs_8h" startline="110">m_fslogic</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a44dc9c75b431b42df4b76123ae0e8058" compoundref="veilfs_8h" startline="113">m_metaCache</references>
+        <references refid="veilfs_8cc_1ab96062690f9c8dbd9586c0d10ea0ae7f" compoundref="veilfs_8cc" startline="41">GET_LOCATION_INFO</references>
+        <references refid="veilfs_8cc_1ab896ab6bba5334b7d465c7db2897eac2" compoundref="veilfs_8cc" startline="26">SH_RUN</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1aed7e44b39819be745b8bb2493cf744cc" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::chown</definition>
+        <argsstring>(const char *path, uid_t uid, gid_t gid)</argsstring>
+        <name>chown</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>uid_t</type>
+          <declname>uid</declname>
+        </param>
+        <param>
+          <type>gid_t</type>
+          <declname>gid</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>chown</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para>Not implemented yet. <simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="79" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="427" bodyend="449"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1a44dc9c75b431b42df4b76123ae0e8058" compoundref="veilfs_8h" startline="113">m_metaCache</references>
+        <references refid="veilfs_8cc_1acbe675edb39cc8cc2872fb07c7f8c952" compoundref="veilfs_8cc" startline="33">RETURN_IF_ERROR</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1ab9d8ae0284b8efa1ace6c5ca00dd3963" compoundref="veilfs_8h" startline="110">m_fslogic</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a60bab2fd21cc714c3d73f09807526555" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::truncate</definition>
+        <argsstring>(const char *path, off_t newSize)</argsstring>
+        <name>truncate</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>off_t</type>
+          <declname>newSize</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>truncate</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="80" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="451" bodyend="462"/>
+        <references refid="veilfs_8cc_1ab96062690f9c8dbd9586c0d10ea0ae7f" compoundref="veilfs_8cc" startline="41">GET_LOCATION_INFO</references>
+        <references refid="veilfs_8cc_1ab896ab6bba5334b7d465c7db2897eac2" compoundref="veilfs_8cc" startline="26">SH_RUN</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a44dc9c75b431b42df4b76123ae0e8058" compoundref="veilfs_8h" startline="113">m_metaCache</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a4348d05f055631458917d3fad712f47d" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::utime</definition>
+        <argsstring>(const char *path, struct utimbuf *ubuf)</argsstring>
+        <name>utime</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>struct utimbuf *</type>
+          <declname>ubuf</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>utime</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para>Not implemented yet. <simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="81" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="464" bodyend="471"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1afe20f8ab6077591be6901a2fcf326e0c" compoundref="veilfs_8cc" startline="666" endline="685">getScheduler</references>
+        <references refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca6266ee7d508841ea9fc2418b40b47678" compoundref="ISchedulable_8h" startline="41">veil::client::ISchedulable::TASK_ASYNC_UPDATE_TIMES</references>
+        <references refid="namespaceveil_1_1client_1_1utils_1ab10fa67c1503c2cdb54671172e1685a1" compoundref="config_8h" startline="54" endline="58">veil::client::utils::toString</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a2d8808ab5d257071af8d0d28eab709de" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::open</definition>
+        <argsstring>(const char *path, struct fuse_file_info *fileInfo)</argsstring>
+        <name>open</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>struct fuse_file_info *</type>
+          <declname>fileInfo</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>open</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="82" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="473" bodyend="502"/>
+        <references refid="veilfs_8cc_1ab96062690f9c8dbd9586c0d10ea0ae7f" compoundref="veilfs_8cc" startline="41">GET_LOCATION_INFO</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a60987ed20e8d4fa491c19139715de8a6" compoundref="veilfs_8h" startline="111">m_storageMapper</references>
+        <references refid="veilfs_8cc_1ab896ab6bba5334b7d465c7db2897eac2" compoundref="veilfs_8cc" startline="26">SH_RUN</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1afe20f8ab6077591be6901a2fcf326e0c" compoundref="veilfs_8cc" startline="666" endline="685">getScheduler</references>
+        <references refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca6266ee7d508841ea9fc2418b40b47678" compoundref="ISchedulable_8h" startline="41">veil::client::ISchedulable::TASK_ASYNC_UPDATE_TIMES</references>
+        <references refid="namespaceveil_1_1client_1_1utils_1ab10fa67c1503c2cdb54671172e1685a1" compoundref="config_8h" startline="54" endline="58">veil::client::utils::toString</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a78ccf6bc749d7bf95c1e78f9acc741a7" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::read</definition>
+        <argsstring>(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fileInfo)</argsstring>
+        <name>read</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>char *</type>
+          <declname>buf</declname>
+        </param>
+        <param>
+          <type>size_t</type>
+          <declname>size</declname>
+        </param>
+        <param>
+          <type>off_t</type>
+          <declname>offset</declname>
+        </param>
+        <param>
+          <type>struct fuse_file_info *</type>
+          <declname>fileInfo</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>read</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="83" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="504" bodyend="511"/>
+        <references refid="veilfs_8cc_1ab96062690f9c8dbd9586c0d10ea0ae7f" compoundref="veilfs_8cc" startline="41">GET_LOCATION_INFO</references>
+        <references refid="veilfs_8cc_1ab896ab6bba5334b7d465c7db2897eac2" compoundref="veilfs_8cc" startline="26">SH_RUN</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a72433abbf1a04caace082166b98bfb2f" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::write</definition>
+        <argsstring>(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fileInfo)</argsstring>
+        <name>write</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>const char *</type>
+          <declname>buf</declname>
+        </param>
+        <param>
+          <type>size_t</type>
+          <declname>size</declname>
+        </param>
+        <param>
+          <type>off_t</type>
+          <declname>offset</declname>
+        </param>
+        <param>
+          <type>struct fuse_file_info *</type>
+          <declname>fileInfo</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>write</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="84" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="513" bodyend="531"/>
+        <references refid="veilfs_8cc_1ab96062690f9c8dbd9586c0d10ea0ae7f" compoundref="veilfs_8cc" startline="41">GET_LOCATION_INFO</references>
+        <references refid="veilfs_8cc_1ab896ab6bba5334b7d465c7db2897eac2" compoundref="veilfs_8cc" startline="26">SH_RUN</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a44dc9c75b431b42df4b76123ae0e8058" compoundref="veilfs_8h" startline="113">m_metaCache</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1afe20f8ab6077591be6901a2fcf326e0c" compoundref="veilfs_8cc" startline="666" endline="685">getScheduler</references>
+        <references refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca8e8d2679b3902b3d4adb3afc265ae593" compoundref="ISchedulable_8h" startline="42">veil::client::ISchedulable::TASK_CLEAR_ATTR</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1aeb5106f237765686dd1a7e7b8b590671" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::statfs</definition>
+        <argsstring>(const char *path, struct statvfs *statInfo)</argsstring>
+        <name>statfs</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>struct statvfs *</type>
+          <declname>statInfo</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>statfs</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para>Not implemented yet. <simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="85" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="534" bodyend="551"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a46243d13d5901d8ed86c5bfe12ea202e" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::flush</definition>
+        <argsstring>(const char *path, struct fuse_file_info *fileInfo)</argsstring>
+        <name>flush</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>struct fuse_file_info *</type>
+          <declname>fileInfo</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>flush</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para>Not implemented yet. <simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="86" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="554" bodyend="563"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a308eeeeef9b5a427ab37bb62dbd8bb2b" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::release</definition>
+        <argsstring>(const char *path, struct fuse_file_info *fileInfo)</argsstring>
+        <name>release</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>struct fuse_file_info *</type>
+          <declname>fileInfo</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>release</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="87" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="565" bodyend="572"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1a60987ed20e8d4fa491c19139715de8a6" compoundref="veilfs_8h" startline="111">m_storageMapper</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a18d4ab15b5df393f7a27ef3710bcf26a" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::fsync</definition>
+        <argsstring>(const char *path, int datasync, struct fuse_file_info *fi)</argsstring>
+        <name>fsync</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>datasync</declname>
+        </param>
+        <param>
+          <type>struct fuse_file_info *</type>
+          <declname>fi</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>fsync</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para>Not implemented yet. <simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="88" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="575" bodyend="585"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1aff7ac5fe7946b6faccd6a6254439504b" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::setxattr</definition>
+        <argsstring>(const char *path, const char *name, const char *value, size_t size, int flags)</argsstring>
+        <name>setxattr</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>const char *</type>
+          <declname>name</declname>
+        </param>
+        <param>
+          <type>const char *</type>
+          <declname>value</declname>
+        </param>
+        <param>
+          <type>size_t</type>
+          <declname>size</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>flags</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>setxattr</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para>Not implemented yet. <simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="89" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="641" bodyend="644"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a8a015b0e915179775d70b4ad3abe1870" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::getxattr</definition>
+        <argsstring>(const char *path, const char *name, char *value, size_t size)</argsstring>
+        <name>getxattr</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>const char *</type>
+          <declname>name</declname>
+        </param>
+        <param>
+          <type>char *</type>
+          <declname>value</declname>
+        </param>
+        <param>
+          <type>size_t</type>
+          <declname>size</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>getxattr</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para>Not implemented yet. <simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="90" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="646" bodyend="649"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1aaef936a67b0c0a51da5433a3f6b32ffa" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::listxattr</definition>
+        <argsstring>(const char *path, char *list, size_t size)</argsstring>
+        <name>listxattr</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>char *</type>
+          <declname>list</declname>
+        </param>
+        <param>
+          <type>size_t</type>
+          <declname>size</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>listxattr</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para>Not implemented yet. <simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="91" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="651" bodyend="654"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a0d11bf3aab2163c38baa4ad3b0f14dac" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::removexattr</definition>
+        <argsstring>(const char *path, const char *name)</argsstring>
+        <name>removexattr</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>const char *</type>
+          <declname>name</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>removexattr</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para>Not implemented yet. <simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="92" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="656" bodyend="659"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a9fea1cb6f2d8e3bcdd52241e44393bd4" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::opendir</definition>
+        <argsstring>(const char *path, struct fuse_file_info *fileInfo)</argsstring>
+        <name>opendir</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>struct fuse_file_info *</type>
+          <declname>fileInfo</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>opendir</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para>Not implemented yet. <simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="93" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="587" bodyend="594"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1afe20f8ab6077591be6901a2fcf326e0c" compoundref="veilfs_8cc" startline="666" endline="685">getScheduler</references>
+        <references refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca6266ee7d508841ea9fc2418b40b47678" compoundref="ISchedulable_8h" startline="41">veil::client::ISchedulable::TASK_ASYNC_UPDATE_TIMES</references>
+        <references refid="namespaceveil_1_1client_1_1utils_1ab10fa67c1503c2cdb54671172e1685a1" compoundref="config_8h" startline="54" endline="58">veil::client::utils::toString</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1ab6e3fbfba6aff36dbc9a9fd5e3456cf6" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::readdir</definition>
+        <argsstring>(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fileInfo)</argsstring>
+        <name>readdir</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>void *</type>
+          <declname>buf</declname>
+        </param>
+        <param>
+          <type>fuse_fill_dir_t</type>
+          <declname>filler</declname>
+        </param>
+        <param>
+          <type>off_t</type>
+          <declname>offset</declname>
+        </param>
+        <param>
+          <type>struct fuse_file_info *</type>
+          <declname>fileInfo</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>readdir</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="94" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="596" bodyend="627"/>
+        <references refid="classveil_1_1client_1_1VeilFS_1ab9d8ae0284b8efa1ace6c5ca00dd3963" compoundref="veilfs_8h" startline="110">m_fslogic</references>
+        <references refid="veilfs_8h_1afd436a0652d61346811247403f0ea4b4" compoundref="veilfs_8h" startline="39">DIR_BATCH_SIZE</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a8a27aa2dfe572bb28447a835847a79ba" compoundref="veilfs_8cc" startline="687" endline="690">getConfig</references>
+        <references refid="config_8h_1aa70b62c26701fe4f36910912caba63bd" compoundref="config_8h" startline="37">ENABLE_PARALLEL_GETATTR_OPT</references>
+        <references refid="config_8h_1a191d80319f47247f03355583e7bee92e" compoundref="config_8h" startline="27">ENABLE_ATTR_CACHE_OPT</references>
+        <references refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68cac37d99797b742148014ece1b04070abd" compoundref="ISchedulable_8h" startline="40">veil::client::ISchedulable::TASK_ASYNC_GETATTR</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1afe20f8ab6077591be6901a2fcf326e0c" compoundref="veilfs_8cc" startline="666" endline="685">getScheduler</references>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a1cad99925d7773fabb0f0c9b3390e7a5" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::releasedir</definition>
+        <argsstring>(const char *path, struct fuse_file_info *fileInfo)</argsstring>
+        <name>releasedir</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>struct fuse_file_info *</type>
+          <declname>fileInfo</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>releasedir</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para>Not implemented yet. <simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="95" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="629" bodyend="633"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1a55339ba98fe7e1af45ac2c20ffd19d95" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::fsyncdir</definition>
+        <argsstring>(const char *path, int datasync, struct fuse_file_info *fileInfo)</argsstring>
+        <name>fsyncdir</name>
+        <param>
+          <type>const char *</type>
+          <declname>path</declname>
+        </param>
+        <param>
+          <type>int</type>
+          <declname>datasync</declname>
+        </param>
+        <param>
+          <type>struct fuse_file_info *</type>
+          <declname>fileInfo</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>fsyncdir</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para>Not implemented yet. <simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="96" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="635" bodyend="639"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1ab75e795adfea02e75a13324a639d2692" prot="public" static="no" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int veil::client::VeilFS::init</definition>
+        <argsstring>(struct fuse_conn_info *conn)</argsstring>
+        <name>init</name>
+        <param>
+          <type>struct fuse_conn_info *</type>
+          <declname>conn</declname>
+        </param>
+        <briefdescription>
+<para><emphasis>init</emphasis> FUSE callback. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ulink url="http://fuse.sourceforge.net/doxygen/structfuse__operations.html">http://fuse.sourceforge.net/doxygen/structfuse__operations.html</ulink> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="97" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="661" bodyend="664"/>
+      </memberdef>
+      <memberdef kind="function" id="classveil_1_1client_1_1VeilFS_1ae721d86abb9618d17b723dcdb7c77b55" prot="public" static="no" const="no" explicit="no" inline="no" virt="virtual">
+        <type>bool</type>
+        <definition>bool veil::client::VeilFS::runTask</definition>
+        <argsstring>(TaskID taskId, std::string arg0, std::string arg1, std::string arg3)</argsstring>
+        <name>runTask</name>
+        <reimplements refid="classveil_1_1client_1_1ISchedulable_1ac81de45c4664e8aec85d42a6992c23e0">runTask</reimplements>
+        <param>
+          <type><ref refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68c" kindref="member">TaskID</ref></type>
+          <declname>taskId</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>arg0</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>arg1</declname>
+        </param>
+        <param>
+          <type>std::string</type>
+          <declname>arg3</declname>
+        </param>
+        <briefdescription>
+<para>Task runner derived from <ref refid="classveil_1_1client_1_1ISchedulable" kindref="compound">ISchedulable</ref>. </para>        </briefdescription>
+        <detaileddescription>
+<para><simplesect kind="see"><para><ref refid="classveil_1_1client_1_1ISchedulable_1ac81de45c4664e8aec85d42a6992c23e0" kindref="member">ISchedulable::runTask</ref> </para></simplesect>
+</para>        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="99" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/veilfs.cc" bodystart="718" bodyend="763"/>
+        <references refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68caecf889af461568a10f6ecb5494d6287a" compoundref="ISchedulable_8h" startline="39">veil::client::ISchedulable::TASK_ASYNC_READDIR</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a8a27aa2dfe572bb28447a835847a79ba" compoundref="veilfs_8cc" startline="687" endline="690">getConfig</references>
+        <references refid="config_8h_1a191d80319f47247f03355583e7bee92e" compoundref="config_8h" startline="27">ENABLE_ATTR_CACHE_OPT</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1ab9d8ae0284b8efa1ace6c5ca00dd3963" compoundref="veilfs_8h" startline="110">m_fslogic</references>
+        <references refid="veilfs_8h_1afd436a0652d61346811247403f0ea4b4" compoundref="veilfs_8h" startline="39">DIR_BATCH_SIZE</references>
+        <references refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68cac37d99797b742148014ece1b04070abd" compoundref="ISchedulable_8h" startline="40">veil::client::ISchedulable::TASK_ASYNC_GETATTR</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1afe20f8ab6077591be6901a2fcf326e0c" compoundref="veilfs_8cc" startline="666" endline="685">getScheduler</references>
+        <references refid="namespaceveil_1_1client_1_1utils_1ab10fa67c1503c2cdb54671172e1685a1" compoundref="config_8h" startline="54" endline="58">veil::client::utils::toString</references>
+        <references refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca8e8d2679b3902b3d4adb3afc265ae593" compoundref="ISchedulable_8h" startline="42">veil::client::ISchedulable::TASK_CLEAR_ATTR</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1a44dc9c75b431b42df4b76123ae0e8058" compoundref="veilfs_8h" startline="113">m_metaCache</references>
+        <references refid="classveil_1_1client_1_1VeilFS_1add9108b324f1c6eae48fa1180ea5da25" compoundref="veilfs_8cc" startline="139" endline="236">getattr</references>
+        <references refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca6266ee7d508841ea9fc2418b40b47678" compoundref="ISchedulable_8h" startline="41">veil::client::ISchedulable::TASK_ASYNC_UPDATE_TIMES</references>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+<para>The <ref refid="classveil_1_1client_1_1VeilFS" kindref="compound">VeilFS</ref> main class. </para>    </briefdescription>
+    <detaileddescription>
+<para>This class contains FUSE all callbacks, so it basically is an heart of the filesystem. Technically <ref refid="classveil_1_1client_1_1VeilFS" kindref="compound">VeilFS</ref> is an singleton created on programm start and registred in FUSE daemon. </para>    </detaileddescription>
+    <inheritancegraph>
+      <node id="193">
+        <label>boost::enable_shared_from_this&lt; ISchedulable &gt;</label>
+      </node>
+      <node id="192">
+        <label>veil::client::ISchedulable</label>
+        <link refid="classveil_1_1client_1_1ISchedulable"/>
+        <childnode refid="193" relation="public-inheritance">
+        </childnode>
+      </node>
+      <node id="191">
+        <label>veil::client::VeilFS</label>
+        <link refid="classveil_1_1client_1_1VeilFS"/>
+        <childnode refid="192" relation="public-inheritance">
+        </childnode>
+      </node>
+    </inheritancegraph>
+    <collaborationgraph>
+      <node id="201">
+        <label>std::list&lt; boost::shared_ptr&lt; veil::client::JobScheduler &gt; &gt;</label>
+      </node>
+      <node id="196">
+        <label>boost::enable_shared_from_this&lt; ISchedulable &gt;</label>
+      </node>
+      <node id="197">
+        <label>std::map&lt; std::string, std::pair&lt; std::string, time_t &gt; &gt;</label>
+        <childnode refid="198" relation="usage">
+          <edgelabel>keys</edgelabel>
+        </childnode>
+      </node>
+      <node id="199">
+        <label>std::basic_string&lt; char &gt;</label>
+      </node>
+      <node id="195">
+        <label>veil::client::ISchedulable</label>
+        <link refid="classveil_1_1client_1_1ISchedulable"/>
+        <childnode refid="196" relation="public-inheritance">
+        </childnode>
+      </node>
+      <node id="194">
+        <label>veil::client::VeilFS</label>
+        <link refid="classveil_1_1client_1_1VeilFS"/>
+        <childnode refid="195" relation="public-inheritance">
+        </childnode>
+        <childnode refid="197" relation="usage">
+          <edgelabel>m_linkCache</edgelabel>
+        </childnode>
+        <childnode refid="200" relation="usage">
+          <edgelabel>m_linkCacheLock</edgelabel>
+          <edgelabel>m_schedulerPoolLock</edgelabel>
+        </childnode>
+        <childnode refid="201" relation="usage">
+          <edgelabel>m_jobSchedulers</edgelabel>
+        </childnode>
+        <childnode refid="198" relation="usage">
+          <edgelabel>m_root</edgelabel>
+        </childnode>
+      </node>
+      <node id="200">
+        <label>veil::client::ReadWriteLock</label>
+        <link refid="classveil_1_1client_1_1ReadWriteLock"/>
+      </node>
+      <node id="198">
+        <label>std::string</label>
+        <childnode refid="199" relation="public-inheritance">
+        </childnode>
+      </node>
+    </collaborationgraph>
+    <location file="/home/krzysztof/Desktop/veilclient/include/veilfs.h" line="50" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/include/veilfs.h" bodystart="50" bodyend="121"/>
+    <listofallmembers>
+      <member refid="classveil_1_1client_1_1VeilFS_1ada91b10f11a071deb28fc99dbf6498c7" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>access</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a9c77b21d3dba1df999ddd28dbfb4f74d" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>addScheduler</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1aab7b375cababf998002445452c4edc2a" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>chmod</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1aed7e44b39819be745b8bb2493cf744cc" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>chown</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a46243d13d5901d8ed86c5bfe12ea202e" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>flush</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a18d4ab15b5df393f7a27ef3710bcf26a" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>fsync</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a55339ba98fe7e1af45ac2c20ffd19d95" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>fsyncdir</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1add9108b324f1c6eae48fa1180ea5da25" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>getattr</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a8a27aa2dfe572bb28447a835847a79ba" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>getConfig</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a79fd13ab7477e6b84f04a0a94c18bc6a" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>getConnectionPool</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1aad8a6fa935c56ee752cfb393c75f967b" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>getPushListener</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1afe20f8ab6077591be6901a2fcf326e0c" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>getScheduler</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a8a015b0e915179775d70b4ad3abe1870" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>getxattr</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1ab75e795adfea02e75a13324a639d2692" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>init</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a1971032ea8f78ff6345864c4e40d86bd" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>ISchedulable</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1ab99e21b09663bae06145cd5d80b6d7a2" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>link</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1aaef936a67b0c0a51da5433a3f6b32ffa" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>listxattr</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a20c51e1978d74f27c2a33ec4294fb2ae" prot="private" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>m_config</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a97533f84128709488b7f690c00f49712" prot="private" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>m_connectionPool</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1ab9d8ae0284b8efa1ace6c5ca00dd3963" prot="private" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>m_fslogic</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a0613256b3c8b720bbc1fbf60f4b297cf" prot="private" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>m_gid</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1aa0ef29b82edbc822cde663e85409b7c7" prot="private" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>m_jobSchedulers</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1ab431d85f9b3e4d42cd733da11a83f7d2" prot="private" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>m_linkCache</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1aa745b5a87e692dd70727f3305b4c6ed1" prot="private" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>m_linkCacheLock</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a44dc9c75b431b42df4b76123ae0e8058" prot="private" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>m_metaCache</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1af64a63ce559c97601e26b80f672ce8ba" prot="private" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>m_pushListener</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1aadc11f23b188ecbd8619ea39823a11bc" prot="private" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>m_rgid</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a8b5af3d5bab0620d2b681230f6a7dafb" prot="private" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>m_root</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a12cbb5bbedf191cb8a0ad52bf6ecdd4c" prot="private" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>m_ruid</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a5813de981e2209bb0065149190369422" prot="private" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>m_schedulerPoolLock</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1aa371b437e144cf086e612da60fcbd66e" prot="private" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>m_shFactory</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a60987ed20e8d4fa491c19139715de8a6" prot="private" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>m_storageMapper</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a27cfad722fa6676a13612f16de6a545b" prot="private" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>m_uid</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a6da59140dab694a3e29196ca4eab1b70" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>mkdir</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a55c79062275417d5ee9b4c2c76457538" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>mknod</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a2d8808ab5d257071af8d0d28eab709de" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>open</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a9fea1cb6f2d8e3bcdd52241e44393bd4" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>opendir</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a78ccf6bc749d7bf95c1e78f9acc741a7" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>read</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1ab6e3fbfba6aff36dbc9a9fd5e3456cf6" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>readdir</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a5e23647ea0b7267b04a9a8009e4a7e7e" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>readlink</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a308eeeeef9b5a427ab37bb62dbd8bb2b" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>release</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a1cad99925d7773fabb0f0c9b3390e7a5" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>releasedir</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a0d11bf3aab2163c38baa4ad3b0f14dac" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>removexattr</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1afa06b776b2874b00cec413936afc45ad" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>rename</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a8698e41b0f361abd4e33b1e0fb9a054c" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>rmdir</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1ae721d86abb9618d17b723dcdb7c77b55" prot="public" virt="virtual"><scope>veil::client::VeilFS</scope><name>runTask</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1ac3f0f7c154f9da9ed934ca4eafba4f2f" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>setConfig</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a6b81f97f87e9e11375e087478b7ce1bc" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>setConnectionPool</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1aff7ac5fe7946b6faccd6a6254439504b" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>setxattr</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1aeb5106f237765686dd1a7e7b8b590671" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>statfs</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a3fc983890a62a199295e7aded33ebcd0" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>staticDestroy</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1ab9eecdb54b3e4da21311f09b15191d30" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>symlink</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca5d7a79cedeac53743c9ca3e4f0a83246" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>TASK_ASYNC_GET_FILE_LOCATION</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68cac37d99797b742148014ece1b04070abd" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>TASK_ASYNC_GETATTR</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68caecf889af461568a10f6ecb5494d6287a" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>TASK_ASYNC_READDIR</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca6266ee7d508841ea9fc2418b40b47678" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>TASK_ASYNC_UPDATE_TIMES</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca8e8d2679b3902b3d4adb3afc265ae593" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>TASK_CLEAR_ATTR</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68cab491b54b9730aaf11720b9847b0184c3" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>TASK_CLEAR_FILE_ATTR</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca9ba4bbf3c2c44cfcf351216bf7e4c42f" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>TASK_CONNECTION_HANDSHAKE</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68cae14315bcb7937f992b1d6b503981ff18" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>TASK_LAST_ID</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca64e79be1054c363dd73740130b88aa53" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>TASK_PING_CLUSTER</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68cac62e13997a39b21ee57c98efdbc12826" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>TASK_REMOVE_EXPIRED_LOCATON_MAPPING</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68ca5ff3ad4ffdf1a48962fa88c183ddd253" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>TASK_RENEW_LOCATION_MAPPING</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68cac335b02a928670de1ce08a81b2c581db" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>TASK_SEND_FILE_NOT_USED</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a70326b701bdc40395d40098842d0d68c" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>TaskID</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a60bab2fd21cc714c3d73f09807526555" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>truncate</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a226a7eb0645dab2444d73a26b2daf4e0" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>unlink</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a4348d05f055631458917d3fad712f47d" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>utime</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a19bc3787cccc8ff63abb971252d4cc8b" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>VeilFS</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1a72433abbf1a04caace082166b98bfb2f" prot="public" virt="non-virtual"><scope>veil::client::VeilFS</scope><name>write</name></member>
+      <member refid="classveil_1_1client_1_1ISchedulable_1a1769e067935e32f90656086090a78548" prot="public" virt="virtual"><scope>veil::client::VeilFS</scope><name>~ISchedulable</name></member>
+      <member refid="classveil_1_1client_1_1VeilFS_1ac9be83b35078512b63491cb06a4fca7b" prot="public" virt="virtual"><scope>veil::client::VeilFS</scope><name>~VeilFS</name></member>
+    </listofallmembers>
+  </compounddef>
+</doxygen>

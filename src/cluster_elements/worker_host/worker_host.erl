@@ -638,7 +638,7 @@ generate_sub_proc_list([]) ->
 
 generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun} | Tail]) ->
   NewProcFun = fun({PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo}) ->
-    lager:info("Processing in sub proc: ~p ~n", [Name]),
+    lager:debug("Processing in sub proc: ~p ~n", [Name]),
     BeforeProcessingRequest = os:timestamp(),
     Request = preproccess_msg(Msg),
     Response = 	try
@@ -766,7 +766,7 @@ clear_cache(Cache) ->
   Pid = self(),
   gen_server:cast({global, ?CCM}, {clear_cache, Cache, Pid}),
   receive
-    cache_cleared -> ok
+    {cache_cleared, Cache} -> ok
   after 500 ->
     error_during_contact_witch_ccm
   end.

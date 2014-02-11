@@ -44,6 +44,9 @@ handle(_ProtocolVersion, ping) ->
   ?info("some pong"),
   pong;
 
+handle(_ProtocolVersion, healthcheck) ->
+	ok;
+
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 

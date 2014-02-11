@@ -20,10 +20,10 @@
 
 %% API - File system management
 -export([list_dir/3, count_subdirs/1, rename_file/2, lock_file/3, unlock_file/3, find_files/1]). %% High level API functions
--export([save_descriptor/1, remove_descriptor/1, get_descriptor/1, list_descriptors/3]). %% Base descriptor management API functions
--export([save_new_file/2, save_file/1, remove_file/1, get_file/1, get_path_info/1]). %% Base file management API function
--export([save_storage/1, remove_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
--export([save_file_meta/1, remove_file_meta/1, get_file_meta/1]).
+-export([save_descriptor/1, remove_descriptor/1, exist_descriptor/1, get_descriptor/1, list_descriptors/3]). %% Base descriptor management API functions
+-export([save_new_file/2, save_file/1, remove_file/1, exist_file/1, get_file/1, get_path_info/1]). %% Base file management API function
+-export([save_storage/1, remove_storage/1, exist_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
+-export([save_file_meta/1, remove_file_meta/1, exist_file_meta/1, get_file_meta/1]).
 
 
 -ifdef(TEST).
@@ -57,7 +57,7 @@ save_descriptor(#veil_document{record = #file_descriptor{}} = FdDoc) ->
 
 %% remove_descriptor/1
 %% ====================================================================
-%% @doc Removes file descriptor from DB. Argument should be uuid() of #file_descriptor or same as in {@link list_descriptors/3}.
+%% @doc Removes file descriptor from DB. Argument should be uuid() of #file_descriptor or same as in {@link dao_vfs:list_descriptors/3} .
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec remove_descriptor(Fd :: fd() | fd_select()) -> ok | {error, any()} | no_return().
@@ -77,6 +77,16 @@ remove_descriptor3(ListSpec, BatchSize, Offset) ->
         Other -> Other
     end.
 
+%% exist_descriptor/1
+%% ====================================================================
+%% @doc Checks whether file descriptor exists in DB.
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec exist_descriptor(Fd :: fd()) -> {ok, true | false} | {error, any()}.
+%% ====================================================================
+exist_descriptor(Fd) ->
+    dao:set_db(?DESCRIPTORS_DB_NAME),
+    dao:exist_record(Fd).
 
 %% get_descriptor/1
 %% ====================================================================
@@ -97,7 +107,6 @@ get_descriptor(Fd) ->
         Other ->
             Other
     end.
-
 
 %% list_descriptors/3
 %% ====================================================================
@@ -175,6 +184,16 @@ remove_file_meta(FMeta) ->
     dao:set_db(?FILES_DB_NAME),
     dao:remove_record(FMeta).
 
+%% exist_file_meta/1
+%% ====================================================================
+%% @doc Checks whether file meta exists in DB.
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec exist_file_meta(Fd :: fd()) -> {ok, true | false} | {error, any()}.
+%% ====================================================================
+exist_file_meta(FMetaUUID) ->
+    dao:set_db(?FILES_DB_NAME),
+    dao:exist_record(FMetaUUID).
 
 %% get_file_meta/1
 %% ====================================================================
@@ -205,16 +224,8 @@ get_file_meta(FMetaUUID) ->
 save_new_file(FilePath, #file{} = File) ->
   try
     AnalyzedPath = file_path_analyze(FilePath),
-
-    {FindStatus, FindTmpAns} = try
-      get_file(AnalyzedPath)
-    catch
-      _:Error ->
-        {error, Error}
-    end,
-
-    case {FindStatus, FindTmpAns} of
-      {error, file_not_found} ->
+    case exist_file(AnalyzedPath) of
+      {ok, false} ->
         SaveAns = save_file(File),
         case SaveAns of
           {ok, UUID} ->
@@ -230,10 +241,9 @@ save_new_file(FilePath, #file{} = File) ->
             end;
           _ -> SaveAns
         end;
-      {ok, _} ->
+      {ok, true} ->
         {error, file_exists};
-      _ ->
-        {FindStatus, FindTmpAns}
+      Other -> Other
     end
   catch
     _:Error3 ->
@@ -298,6 +308,34 @@ remove_file(File) ->
     end,
 
     dao:remove_record(FData#veil_document.uuid).
+
+%% exist_file/1
+%% ====================================================================
+%% @doc Checks whether file exists in DB. Argument should be file() - see dao_types.hrl for more details. <br/>
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec exist_file(File :: file()) -> {ok, true | false} | {error, any()}.
+%% ====================================================================
+exist_file({internal_path, [], []}) ->
+    {ok, true};
+exist_file({internal_path, [Dir | Path], Root}) ->
+    QueryArgs =
+        #view_query_args{keys = [[dao_helper:name(Root), dao_helper:name(Dir)]],
+        include_docs = case Path of [] -> true; _ -> false end},
+    case dao:list_records(?FILE_TREE_VIEW, QueryArgs) of
+        {ok, #view_result{rows = [#view_row{id = Id, doc = _Doc} | _Tail]}} ->
+            case Path of
+                [] -> {ok, true};
+                _ -> exist_file({internal_path, Path, Id})
+            end;
+        {ok, #view_result{rows = []}} -> {ok, false};
+        Other -> Other
+    end;
+exist_file({uuid, UUID}) ->
+    dao:set_db(?FILES_DB_NAME),
+    dao:exist_record(UUID);
+exist_file(Path) ->
+    exist_file(file_path_analyze(Path)).
 
 %% get_file/1
 %% ====================================================================
@@ -418,7 +456,7 @@ list_dir(Dir, N, Offset) ->
             throw(inavlid_data)
     end.
 
-%% get_subdirs_no/1
+%% count_subdirs/1
 %% ====================================================================
 %% @doc Returns number of first level subdirectories for specified directory.
 %% @end
@@ -534,6 +572,20 @@ remove_storage({id, StorageID}) when is_integer(StorageID) ->
       _ -> {Ans, SData}
     end.
 
+%% exist_storage/1
+%% ====================================================================
+%% @doc Checks whether storage exists in DB. Argument should be uuid() of storage document or ID of storage. <br/>
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec exist_storage({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) ->
+    {ok, true | false} | {error, any()}.
+%% ====================================================================
+exist_storage(Key) ->
+    case ets:lookup(storage_cache, Key) of
+        [] -> exist_storage_in_db(Key);
+        [{_, _Ans}] -> {ok, true}
+    end.
+
 %% get_storage/1
 %% ====================================================================
 %% @doc Gets storage info from DB. Argument should be uuid() of storage document or ID of storage. <br/>
@@ -556,6 +608,28 @@ get_storage(Key) ->
     [{_, Ans}] -> %% Return document from cache
       {ok, Ans}
   end.
+
+
+%% exist_storage_in_db/1
+%% ====================================================================
+%% @doc Checks whether storage exists in DB. Argument should be uuid() of storage document or ID of storage. <br/>
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec exist_storage_in_db({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) ->
+    {ok, true | false} | {error, any()}.
+%% ====================================================================
+exist_storage_in_db({uuid, DocUUID}) when is_list(DocUUID) ->
+    dao:set_db(?SYSTEM_DB_NAME),
+    dao:exist_record(DocUUID);
+exist_storage_in_db({id, StorageID}) when is_integer(StorageID) ->
+    QueryArgs = #view_query_args{keys = [StorageID], include_docs = true},
+    case dao:list_records(?STORAGE_BY_ID_VIEW, QueryArgs) of
+        {ok, #view_result{rows = [#view_row{doc = #veil_document{record = #storage_info{}} = _Doc} | _Tail]}} ->
+            {ok, true};
+        {ok, #view_result{rows = []}} ->
+            {ok, false};
+        Other -> Other
+    end.
 
 
 %% get_storage_from_db/1

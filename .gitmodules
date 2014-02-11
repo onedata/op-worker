@@ -7,3 +7,6 @@
 [submodule "bigcouchdb"]
 	path = bigcouchdb
 	url = ssh://git@git.plgrid.pl:7999/vfs/bigcouchdb.git
+[submodule "veilclient"]
+	path = veilclient
+	url = ssh://git@git.plgrid.pl:7999/vfs/veilclient.git

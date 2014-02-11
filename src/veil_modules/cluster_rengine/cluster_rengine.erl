@@ -35,6 +35,9 @@ handle(_ProtocolVersion, ping) ->
 handle(_ProtocolVersion, event) ->
   ?info("From client");
 
+handle(_ProtocolVersion, healthcheck) ->
+	ok;
+
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 

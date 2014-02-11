@@ -148,7 +148,7 @@ veil_cluster_node_env:
   - parameter:
       name: dispatcher_timeout
       description: Time in ms after witch ranch answers with error
-      value: 2000
+      value: 10000
 
   - parameter:
       name: ca_dir
@@ -161,6 +161,11 @@ veil_cluster_node_env:
       name: control_panel_port
       description: Port on which control_panel is available
       value: 443
+
+  - parameter:
+      name: rest_port
+      description: Port on which REST API is available
+      value: 8443
 
   - parameter:
       name: control_panel_static_files_root
@@ -185,6 +190,11 @@ veil_cluster_node_env:
       value: 60000
 
   - parameter:
+      name: nagios_healtcheck_timeout
+      description: Time for healtcheck response
+      value: 2000
+
+  - parameter:
       name: multipart_max_length
       description: Maximum post body size for a file upload (data/multipart) in Bytes
       value: 107374182400 # 100GB
@@ -203,13 +213,23 @@ veil_cluster_node_env:
   # Files management
   - parameter:
       name: new_file_logic_mode
-      description: Default mode for new file (mode stored in db) (8#644)
-      value: 420
+      description: Default mode for new file (mode stored in db) (8#600)
+      value: 384
+
+  - parameter:
+      name: new_group_file_logic_mode
+      description: Default mode for new file (mode stored in db) inside groups directory (8#660)
+      value: 432
 
   - parameter:
       name: new_file_storage_mode
-      description: Default mode for new file at storage system (8#640)
-      value: 416
+      description: Default mode for new file at storage system (8#600)
+      value: 384
+
+  - parameter:
+      name: new_group_file_storage_mode
+      description: Default mode for new file at storage system inside groups directory (8#660)
+      value: 432
 
   - parameter:
       name: new_dir_storage_mode

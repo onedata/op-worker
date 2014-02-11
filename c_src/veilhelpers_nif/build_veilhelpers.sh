@@ -7,7 +7,7 @@ cd veilhelpers
 mkdir -p ../c_lib
 
 if [ "`uname -s`" = "Darwin" ]; then
-    cp build/*.dylib ../c_lib
+    cp release/*.dylib ../c_lib
 else
-    cp build/*.so ../c_lib
+    cp release/*.so ../c_lib
 fi

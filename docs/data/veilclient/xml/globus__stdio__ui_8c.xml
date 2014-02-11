@@ -1,0 +1,172 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="globus__stdio__ui_8c" kind="file">
+    <compoundname>globus_stdio_ui.c</compoundname>
+    <includes refid="globus__stdio__ui_8h" local="yes">globus_stdio_ui.h</includes>
+    <includes local="yes">openssl/ui.h</includes>
+    <incdepgraph>
+      <node id="1340">
+        <label>src/globus-proxy-utils/globus_stdio_ui.c</label>
+        <link refid="globus_stdio_ui.c"/>
+        <childnode refid="1341" relation="include">
+        </childnode>
+        <childnode refid="1343" relation="include">
+        </childnode>
+      </node>
+      <node id="1341">
+        <label>globus_stdio_ui.h</label>
+        <link refid="globus__stdio__ui_8h"/>
+        <childnode refid="1342" relation="include">
+        </childnode>
+      </node>
+      <node id="1343">
+        <label>openssl/ui.h</label>
+      </node>
+      <node id="1342">
+        <label>globus/globus_common.h</label>
+      </node>
+    </incdepgraph>
+      <sectiondef kind="var">
+      <memberdef kind="variable" id="globus__stdio__ui_8c_1a5d3af13edc1753f8003366277681c57c" prot="public" static="no" mutable="no">
+        <type>globus_module_descriptor_t</type>
+        <definition>globus_module_descriptor_t globus_i_stdio_ui_module</definition>
+        <argsstring></argsstring>
+        <name>globus_i_stdio_ui_module</name>
+        <initializer>=
+{
+    &quot;globus_stdio_ui&quot;,
+    globus_l_stdio_ui_activate,
+    <ref refid="globus__stdio__ui_8c_1a821c67ba0baa685701b2b5874a4350ed" kindref="member">globus_l_stdio_ui_deactivate</ref>,
+}</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/globus_stdio_ui.c" line="40" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/globus_stdio_ui.c" bodystart="40" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="variable" id="globus__stdio__ui_8c_1a2741632890b1d605e0f155d95b9a1a84" prot="public" static="yes" mutable="no">
+        <type>const UI_METHOD *</type>
+        <definition>const UI_METHOD* globus_l_stdio_ui_old_method</definition>
+        <argsstring></argsstring>
+        <name>globus_l_stdio_ui_old_method</name>
+        <initializer>= NULL</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/globus_stdio_ui.c" line="47" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/globus_stdio_ui.c" bodystart="47" bodyend="-1"/>
+        <referencedby refid="globus__stdio__ui_8c_1ac3812a90f6a2983456d00e42693be719" compoundref="globus__stdio__ui_8c" startline="51" endline="61">globus_l_stdio_ui_activate</referencedby>
+        <referencedby refid="globus__stdio__ui_8c_1a821c67ba0baa685701b2b5874a4350ed" compoundref="globus__stdio__ui_8c" startline="65" endline="72">globus_l_stdio_ui_deactivate</referencedby>
+      </memberdef>
+      <memberdef kind="variable" id="globus__stdio__ui_8c_1a09717c9ba915cb861cf6a3bf3b90b338" prot="public" static="yes" mutable="no">
+        <type>UI_METHOD *</type>
+        <definition>UI_METHOD* globus_l_stdio_ui_method</definition>
+        <argsstring></argsstring>
+        <name>globus_l_stdio_ui_method</name>
+        <initializer>= NULL</initializer>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/globus_stdio_ui.c" line="48" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/globus_stdio_ui.c" bodystart="48" bodyend="-1"/>
+        <referencedby refid="globus__stdio__ui_8c_1ac3812a90f6a2983456d00e42693be719" compoundref="globus__stdio__ui_8c" startline="51" endline="61">globus_l_stdio_ui_activate</referencedby>
+        <referencedby refid="globus__stdio__ui_8c_1a821c67ba0baa685701b2b5874a4350ed" compoundref="globus__stdio__ui_8c" startline="65" endline="72">globus_l_stdio_ui_deactivate</referencedby>
+      </memberdef>
+      </sectiondef>
+      <sectiondef kind="func">
+      <memberdef kind="function" id="globus__stdio__ui_8c_1ac3812a90f6a2983456d00e42693be719" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int globus_l_stdio_ui_activate</definition>
+        <argsstring>(void)</argsstring>
+        <name>globus_l_stdio_ui_activate</name>
+        <param>
+          <type>void</type>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/globus_stdio_ui.c" line="22" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/globus_stdio_ui.c" bodystart="51" bodyend="61"/>
+        <references refid="globus__stdio__ui_8c_1a09717c9ba915cb861cf6a3bf3b90b338" compoundref="globus__stdio__ui_8c" startline="48">globus_l_stdio_ui_method</references>
+        <references refid="globus__stdio__ui_8c_1a33b69a332540e06897ff9c5407a0b2a9" compoundref="globus__stdio__ui_8c" startline="89" endline="107">globus_l_stdio_ui_read</references>
+        <references refid="globus__stdio__ui_8c_1af259efd99fa4a30789719d9338291883" compoundref="globus__stdio__ui_8c" startline="77" endline="84">globus_l_stdio_ui_write</references>
+        <references refid="globus__stdio__ui_8c_1a2741632890b1d605e0f155d95b9a1a84" compoundref="globus__stdio__ui_8c" startline="47">globus_l_stdio_ui_old_method</references>
+      </memberdef>
+      <memberdef kind="function" id="globus__stdio__ui_8c_1a821c67ba0baa685701b2b5874a4350ed" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>int globus_l_stdio_ui_deactivate</definition>
+        <argsstring>(void)</argsstring>
+        <name>globus_l_stdio_ui_deactivate</name>
+        <param>
+          <type>void</type>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/globus_stdio_ui.c" line="26" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/globus_stdio_ui.c" bodystart="65" bodyend="72"/>
+        <references refid="globus__stdio__ui_8c_1a09717c9ba915cb861cf6a3bf3b90b338" compoundref="globus__stdio__ui_8c" startline="48">globus_l_stdio_ui_method</references>
+        <references refid="globus__stdio__ui_8c_1a2741632890b1d605e0f155d95b9a1a84" compoundref="globus__stdio__ui_8c" startline="47">globus_l_stdio_ui_old_method</references>
+      </memberdef>
+      <memberdef kind="function" id="globus__stdio__ui_8c_1a33b69a332540e06897ff9c5407a0b2a9" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int globus_l_stdio_ui_read</definition>
+        <argsstring>(UI *ui, UI_STRING *uis)</argsstring>
+        <name>globus_l_stdio_ui_read</name>
+        <param>
+          <type>UI *</type>
+          <declname>ui</declname>
+        </param>
+        <param>
+          <type>UI_STRING *</type>
+          <declname>uis</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/globus_stdio_ui.c" line="30" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/globus_stdio_ui.c" bodystart="89" bodyend="107"/>
+        <referencedby refid="globus__stdio__ui_8c_1ac3812a90f6a2983456d00e42693be719" compoundref="globus__stdio__ui_8c" startline="51" endline="61">globus_l_stdio_ui_activate</referencedby>
+      </memberdef>
+      <memberdef kind="function" id="globus__stdio__ui_8c_1af259efd99fa4a30789719d9338291883" prot="public" static="yes" const="no" explicit="no" inline="no" virt="non-virtual">
+        <type>int</type>
+        <definition>static int globus_l_stdio_ui_write</definition>
+        <argsstring>(UI *ui, UI_STRING *uis)</argsstring>
+        <name>globus_l_stdio_ui_write</name>
+        <param>
+          <type>UI *</type>
+          <declname>ui</declname>
+        </param>
+        <param>
+          <type>UI_STRING *</type>
+          <declname>uis</declname>
+        </param>
+        <briefdescription>
+        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/globus_stdio_ui.c" line="36" column="1" bodyfile="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/globus_stdio_ui.c" bodystart="77" bodyend="84"/>
+        <referencedby refid="globus__stdio__ui_8c_1ac3812a90f6a2983456d00e42693be719" compoundref="globus__stdio__ui_8c" startline="51" endline="61">globus_l_stdio_ui_activate</referencedby>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+    </detaileddescription>
+    <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/globus_stdio_ui.c"/>
+  </compounddef>
+</doxygen>

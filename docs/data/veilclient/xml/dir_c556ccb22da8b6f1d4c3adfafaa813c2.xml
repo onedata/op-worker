@@ -1,0 +1,18 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="dir_c556ccb22da8b6f1d4c3adfafaa813c2" kind="dir">
+    <compoundname>src/globus-proxy-utils</compoundname>
+    <innerfile refid="fmemopen_8c">fmemopen.c</innerfile>
+    <innerfile refid="fmemopen_8h">fmemopen.h</innerfile>
+    <innerfile refid="globus__stdio__ui_8c">globus_stdio_ui.c</innerfile>
+    <innerfile refid="globus__stdio__ui_8h">globus_stdio_ui.h</innerfile>
+    <innerfile refid="grid__proxy__info_8c">grid_proxy_info.c</innerfile>
+    <innerfile refid="grid__proxy__init_8c">grid_proxy_init.c</innerfile>
+    <innerfile refid="gsi__utils_8h">gsi_utils.h</innerfile>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+    </detaileddescription>
+    <location file="/home/krzysztof/Desktop/veilclient/src/globus-proxy-utils/"/>
+  </compounddef>
+</doxygen>

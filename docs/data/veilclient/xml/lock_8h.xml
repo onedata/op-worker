@@ -1,0 +1,235 @@
+<?xml version='1.0' encoding='UTF-8' standalone='no'?>
+<doxygen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="compound.xsd" version="1.8.6">
+  <compounddef id="lock_8h" kind="file">
+    <compoundname>lock.h</compoundname>
+    <includes local="no">pthread.h</includes>
+    <includedby refid="config_8h" local="yes">include/config.h</includedby>
+    <includedby refid="fslogicProxy_8h" local="yes">include/fslogicProxy.h</includedby>
+    <includedby refid="metaCache_8h" local="yes">include/metaCache.h</includedby>
+    <includedby refid="storageMapper_8h" local="yes">include/storageMapper.h</includedby>
+    <includedby refid="jobScheduler_8cc" local="yes">src/jobScheduler.cc</includedby>
+    <includedby refid="lock_8cc" local="yes">src/lock.cc</includedby>
+    <incdepgraph>
+      <node id="1039">
+        <label>pthread.h</label>
+      </node>
+      <node id="1038">
+        <label>include/lock.h</label>
+        <link refid="lock.h"/>
+        <childnode refid="1039" relation="include">
+        </childnode>
+      </node>
+    </incdepgraph>
+    <invincdepgraph>
+      <node id="1049">
+        <label>src/pushListener.cc</label>
+        <link refid="pushListener_8cc"/>
+      </node>
+      <node id="1046">
+        <label>src/ISchedulable.cc</label>
+        <link refid="ISchedulable_8cc"/>
+      </node>
+      <node id="1055">
+        <label>include/storageMapper.h</label>
+        <link refid="storageMapper_8h"/>
+        <childnode refid="1042" relation="include">
+        </childnode>
+        <childnode refid="1050" relation="include">
+        </childnode>
+      </node>
+      <node id="1048">
+        <label>src/metaCache.cc</label>
+        <link refid="metaCache_8cc"/>
+      </node>
+      <node id="1051">
+        <label>src/veilException.cc</label>
+        <link refid="veilException_8cc"/>
+      </node>
+      <node id="1045">
+        <label>src/gsiHandler.cc</label>
+        <link refid="gsiHandler_8cc"/>
+      </node>
+      <node id="1042">
+        <label>include/veilfs.h</label>
+        <link refid="veilfs_8h"/>
+        <childnode refid="1043" relation="include">
+        </childnode>
+        <childnode refid="1044" relation="include">
+        </childnode>
+        <childnode refid="1045" relation="include">
+        </childnode>
+        <childnode refid="1046" relation="include">
+        </childnode>
+        <childnode refid="1047" relation="include">
+        </childnode>
+        <childnode refid="1048" relation="include">
+        </childnode>
+        <childnode refid="1049" relation="include">
+        </childnode>
+        <childnode refid="1050" relation="include">
+        </childnode>
+        <childnode refid="1051" relation="include">
+        </childnode>
+        <childnode refid="1052" relation="include">
+        </childnode>
+        <childnode refid="1053" relation="include">
+        </childnode>
+      </node>
+      <node id="1044">
+        <label>src/fslogicProxy.cc</label>
+        <link refid="fslogicProxy_8cc"/>
+      </node>
+      <node id="1041">
+        <label>include/config.h</label>
+        <link refid="config_8h"/>
+        <childnode refid="1042" relation="include">
+        </childnode>
+        <childnode refid="1043" relation="include">
+        </childnode>
+        <childnode refid="1047" relation="include">
+        </childnode>
+        <childnode refid="1048" relation="include">
+        </childnode>
+        <childnode refid="1053" relation="include">
+        </childnode>
+      </node>
+      <node id="1052">
+        <label>src/veilfs.cc</label>
+        <link refid="veilfs_8cc"/>
+      </node>
+      <node id="1053">
+        <label>src/veilFuse.cc</label>
+        <link refid="veilFuse_8cc"/>
+      </node>
+      <node id="1056">
+        <label>include/metaCache.h</label>
+        <link refid="metaCache_8h"/>
+        <childnode refid="1042" relation="include">
+        </childnode>
+        <childnode refid="1048" relation="include">
+        </childnode>
+        <childnode refid="1052" relation="include">
+        </childnode>
+      </node>
+      <node id="1043">
+        <label>src/config.cc</label>
+        <link refid="config_8cc"/>
+      </node>
+      <node id="1057">
+        <label>src/jobScheduler.cc</label>
+        <link refid="jobScheduler_8cc"/>
+      </node>
+      <node id="1047">
+        <label>src/messageBuilder.cc</label>
+        <link refid="messageBuilder_8cc"/>
+      </node>
+      <node id="1054">
+        <label>include/fslogicProxy.h</label>
+        <link refid="fslogicProxy_8h"/>
+        <childnode refid="1055" relation="include">
+        </childnode>
+        <childnode refid="1042" relation="include">
+        </childnode>
+        <childnode refid="1044" relation="include">
+        </childnode>
+        <childnode refid="1052" relation="include">
+        </childnode>
+      </node>
+      <node id="1050">
+        <label>src/storageMapper.cc</label>
+        <link refid="storageMapper_8cc"/>
+      </node>
+      <node id="1040">
+        <label>include/lock.h</label>
+        <link refid="lock.h"/>
+        <childnode refid="1041" relation="include">
+        </childnode>
+        <childnode refid="1054" relation="include">
+        </childnode>
+        <childnode refid="1056" relation="include">
+        </childnode>
+        <childnode refid="1055" relation="include">
+        </childnode>
+        <childnode refid="1057" relation="include">
+        </childnode>
+        <childnode refid="1058" relation="include">
+        </childnode>
+      </node>
+      <node id="1058">
+        <label>src/lock.cc</label>
+        <link refid="lock_8cc"/>
+      </node>
+    </invincdepgraph>
+    <innerclass refid="classveil_1_1client_1_1ReadWriteLock" prot="public">veil::client::ReadWriteLock</innerclass>
+    <innerclass refid="classveil_1_1client_1_1AutoLock" prot="public">veil::client::AutoLock</innerclass>
+    <innernamespace refid="namespaceveil">veil</innernamespace>
+    <innernamespace refid="namespaceveil_1_1client">veil::client</innernamespace>
+      <sectiondef kind="define">
+      <memberdef kind="define" id="lock_8h_1a1709b36d65924eb14a54a2dff10c773c" prot="public" static="no">
+        <name>FAIRNESS_LEVEL</name>
+        <initializer>5</initializer>
+        <briefdescription>
+<para>Defines how many readers (minimum) should be processed after each writer (which has priority) </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/lock.h" line="15" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/lock.h" bodystart="15" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1ReadWriteLock_1ab5417066b530662f3c95c69f9a8a43e2" compoundref="lock_8cc" startline="80" endline="89">veil::client::ReadWriteLock::readLock</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="lock_8h_1a0c4f2a10324c79411362512f1e8e73c4" prot="public" static="no">
+        <name>MUTEX</name>
+        <param><defname>X</defname></param>
+        <initializer>&amp;X##Mutex</initializer>
+        <briefdescription>
+<para>Constructs name for mutex. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/lock.h" line="18" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/lock.h" bodystart="18" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1ReadWriteLock_1ab5417066b530662f3c95c69f9a8a43e2" compoundref="lock_8cc" startline="80" endline="89">veil::client::ReadWriteLock::readLock</referencedby>
+        <referencedby refid="classveil_1_1client_1_1ReadWriteLock_1aea77ddf8d924ebcef0558478a6f02d85" compoundref="lock_8cc" startline="91" endline="99">veil::client::ReadWriteLock::readUnlock</referencedby>
+        <referencedby refid="classveil_1_1client_1_1ReadWriteLock_1adee8b77278d87c9d9c064a09bef67f2f" compoundref="lock_8cc" startline="101" endline="109">veil::client::ReadWriteLock::writeLock</referencedby>
+        <referencedby refid="classveil_1_1client_1_1ReadWriteLock_1ae0f828f776cab85c7ab455f240c87bfe" compoundref="lock_8cc" startline="111" endline="117">veil::client::ReadWriteLock::writeUnlock</referencedby>
+      </memberdef>
+      <memberdef kind="define" id="lock_8h_1a81f552f4e156eec4e714380532be014c" prot="public" static="no">
+        <name>DECLARE_MUTEX_FOR</name>
+        <param><defname>X</defname></param>
+        <initializer>pthread_mutex_t X##Mutex</initializer>
+        <briefdescription>
+<para>Declare mutex with given name. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/lock.h" line="21" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/lock.h" bodystart="21" bodyend="-1"/>
+      </memberdef>
+      <memberdef kind="define" id="lock_8h_1a8940e09ad454f6893ada60f5bb52f32e" prot="public" static="no">
+        <name>INIT_MUTEX_FOR</name>
+        <param><defname>X</defname></param>
+        <initializer>{ \
+                                    pthread_mutexattr_t mutexattr; \
+                                    pthread_mutexattr_init(&amp;mutexattr); \
+                                    pthread_mutexattr_settype(&amp;mutexattr, PTHREAD_MUTEX_RECURSIVE); \
+                                    pthread_mutex_init(&amp;X##Mutex, &amp;mutexattr); \
+                                }</initializer>
+        <briefdescription>
+<para>Initialize mutex with given name as PTHREAD_MUTEX_RECURSIVE. </para>        </briefdescription>
+        <detaileddescription>
+        </detaileddescription>
+        <inbodydescription>
+        </inbodydescription>
+        <location file="/home/krzysztof/Desktop/veilclient/include/lock.h" line="24" column="9" bodyfile="/home/krzysztof/Desktop/veilclient/include/lock.h" bodystart="24" bodyend="-1"/>
+        <referencedby refid="classveil_1_1client_1_1ReadWriteLock_1aadaa3d68d5c9e78fefdfa51b6a69efdc" compoundref="lock_8cc" startline="66" endline="74">veil::client::ReadWriteLock::ReadWriteLock</referencedby>
+      </memberdef>
+      </sectiondef>
+    <briefdescription>
+    </briefdescription>
+    <detaileddescription>
+<para><simplesect kind="author"><para>Rafal Slota </para></simplesect>
+<simplesect kind="copyright"><para>(C) 2013 ACK CYFRONET AGH </para><simplesectsep/><para>This software is released under the MIT Licence. </para></simplesect>
+</para>    </detaileddescription>
+    <location file="/home/krzysztof/Desktop/veilclient/include/lock.h"/>
+  </compounddef>
+</doxygen>

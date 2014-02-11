@@ -11,7 +11,7 @@
 %% Module :: atom() is module suffix (prefix is 'dao_'), MethodName :: atom() is the method name
 %% and ListOfArgs :: [term()] is list of argument for the method. <br/>
 %% If you want to call utility methods from this module - use Module = utils
-%% See {@link handle/2} for more details.
+%% See {@link dao:handle/2} for more details.
 %% @end
 %% ===================================================================
 -module(dao).
@@ -36,7 +36,7 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% API
--export([save_record/1, get_record/1, remove_record/1, list_records/2, load_view_def/2, set_db/1]).
+-export([save_record/1, exist_record/1, get_record/1, remove_record/1, list_records/2, load_view_def/2, set_db/1]).
 -export([doc_to_term/1,init_storage/0]).
 
 %% ===================================================================
@@ -119,7 +119,7 @@ init(Args) ->
       _ -> throw({error, {dao_fuse_cache_error, Cache1}})
     end.
 
-%% handle/1
+%% handle/2
 %% ====================================================================
 %% @doc {@link worker_plugin_behaviour} callback handle/1. <br/>
 %% All {Module, Method, Args} requests (second argument), executes Method with Args in {@type dao_Module} module, but with one exception:
@@ -132,7 +132,7 @@ init(Args) ->
 %% E.g. calling handle(_, {save_record, [Id, Rec]}) will execute dao_cluster:save_record(Id, Rec) and normalize return value.
 %% @end
 -spec handle(ProtocolVersion :: term(), Request) -> Result when
-    Request :: {Method, Args} | {Mod :: atom(), Method, Args} | ping | get_version,
+    Request :: {Method, Args} | {Mod :: atom(), Method, Args} | ping | healthcheck | get_version,
     Method :: atom(),
     Args :: list(),
     Result :: ok | {ok, Response} | {error, Error} | pong | Version,
@@ -142,6 +142,16 @@ init(Args) ->
 %% ====================================================================
 handle(_ProtocolVersion, ping) ->
   pong;
+
+handle(ProtocolVersion, healthcheck) ->
+	{Status,Msg} = dao_lib:apply(dao_helper,list_dbs,[],ProtocolVersion),
+	case Status of
+		ok ->
+			ok;
+		_ ->
+			lager:error("Healthchecking database filed with error: ~p",Msg),
+			{error,db_healthcheck_failed}
+	end;
 
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
@@ -234,6 +244,23 @@ save_record(#veil_document{uuid = Id, rev_info = RevInfo, record = Rec, force_up
     end;
 save_record(Rec) when is_tuple(Rec) ->
     save_record(#veil_document{record = Rec}).
+
+
+%% exist_record/1
+%% ====================================================================
+%% @doc Checks whether record with UUID = Id exists in DB.
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec exist_record(Id :: atom() | string()) -> {ok, true | false} | {error, any()}.
+%% ====================================================================
+exist_record(Id) when is_atom(Id) ->
+    exist_record(atom_to_list(Id));
+exist_record(Id) when is_list(Id) ->
+    case dao_helper:open_doc(get_db(), Id) of
+        {ok, _} -> {ok, true};
+        {error, {not_found, _}} -> {ok, false};
+        Other -> Other
+    end.
 
 
 %% get_record/1
