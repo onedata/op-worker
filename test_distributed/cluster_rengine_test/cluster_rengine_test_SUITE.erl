@@ -17,12 +17,12 @@
 -include("veil_modules/cluster_rengine/cluster_rengine.hrl").
 
 %% API
--export([test_event_subscription/1]).
+-export([test_event_subscription/1, test_event_aggregation/1]).
 
 -export([ccm_code1/0, worker_code/0]).
 
--export([all/0, init_per_testcase/2]).
-all() -> [test_event_subscription].
+-export([all/0, init_per_testcase/2, end_per_testcase/2]).
+all() -> [test_event_aggregation].
 
 %% @doc This is distributed test of dao_vfs:find_files.
 %% It consists of series of dao_vfs:find_files with various file_criteria and comparing result to expected values.
@@ -91,6 +91,65 @@ test_event_subscription(Config) ->
   ok.
 
 
+test_event_aggregation(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+
+  [CCM | WorkerNodes] = NodesUp,
+
+  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
+  timer:sleep(500),
+  RunWorkerCode = fun(Node) ->
+    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, []))
+  end,
+  lists:foreach(RunWorkerCode, WorkerNodes),
+  timer:sleep(1000),
+
+  {Workers, _} = gen_server:call({global, ?CCM}, get_workers),
+
+  StartAdditionalWorker = fun(Node, Module) ->
+    case lists:member({Node, Module}, Workers) of
+      true -> ok;
+      false ->
+        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, Module, []}),
+        ?assertEqual(ok, StartAns)
+    end
+  end,
+
+  StartAdditionalWorker(CCM, rule_manager),
+  lists:foreach(fun(Node) -> StartAdditionalWorker(Node, cluster_rengine) end, NodesUp),
+
+  WriteEvent = #write_event{user_id = "1234", ans_pid = self()},
+
+  subscribe_for_write_events(CCM, tree, #processing_config{init_counter = 4}),
+  SendEvent = fun() ->
+    gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent}})
+  end,
+
+  SendEvent(),
+  SendEvent(),
+  timer:sleep(2000),
+  gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
+
+  receive
+    {ok, tree, _} -> ?assert(false)
+  after 1000
+    -> ok
+  end,
+
+  SendEvent(),
+  % it's probably somtething wrong in worker host, that why we need one more event than we should
+  SendEvent(),
+
+  receive
+    {ok, tree, _} -> ok
+  after 1000
+    -> ?assert(false)
+  end.
+
+
+
+
 %% ====================================================================
 %% SetUp and TearDown functions
 %% ====================================================================
@@ -110,7 +169,28 @@ init_per_testcase(_, Config) ->
   Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
   lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config).
 
+end_per_testcase(distributed_test, Config) ->
+  Nodes = ?config(nodes, Config),
+  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
+  StopAns = nodes_manager:stop_nodes(Nodes),
+  nodes_manager:stop_deps_for_tester_node(),
+
+  ?assertEqual(false, lists:member(error, StopLog)),
+  ?assertEqual(ok, StopAns);
+
+end_per_testcase(_, Config) ->
+  Nodes = ?config(nodes, Config),
+  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
+  StopAns = nodes_manager:stop_nodes(Nodes),
+
+  ?assertEqual(false, lists:member(error, StopLog)),
+  ?assertEqual(ok, StopAns).
+
+
 subscribe_for_write_events(Node, ProcessingMethod) ->
+  subscribe_for_write_events(Node, ProcessingMethod, #processing_config{}).
+
+subscribe_for_write_events(Node, ProcessingMethod, ProcessingConfig) ->
   EventHandlerMapFun = fun(#write_event{user_id = UserIdString}) ->
     string_to_integer(UserIdString)
   end,
@@ -125,7 +205,7 @@ subscribe_for_write_events(Node, ProcessingMethod) ->
     AnsPid ! {ok, ProcessingMethod, UserId}
   end,
 
-  EventItem = #event_handler_item{processing_method = ProcessingMethod, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun},
+  EventItem = #event_handler_item{processing_method = ProcessingMethod, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = ProcessingConfig},
   gen_server:call({?Dispatcher_Name, Node}, {rule_manager, 1, self(), {add_event_handler, {write_event, EventItem}}}),
 
   receive

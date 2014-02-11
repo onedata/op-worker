@@ -57,18 +57,18 @@ handle(_ProtocolVersion, get_event_handlers) ->
 
   ets:match(?RULE_MANAGER_ETS, {'$1', '$2'});
 
-handle(_ProtocolVersion, {add_event_handler, {EventType, Item}}) ->
+handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem}}) ->
   ?info("entering add_event_handler"),
-  NewEventItem = case Item#event_handler_item.processing_method of
-                   tree -> Item#event_handler_item{tree_id = generate_tree_name()};
-                   _ -> Item
+  NewEventItem = case EventHandlerItem#event_handler_item.processing_method of
+                   tree -> EventHandlerItem#event_handler_item{tree_id = generate_tree_name()};
+                   _ -> EventHandlerItem
                  end,
 
   case ets:lookup(?RULE_MANAGER_ETS, EventType) of
     [] -> ets:insert(?RULE_MANAGER_ETS, {EventType, [NewEventItem]});
     [{_EventType, EventHandlers}] -> ets:insert(?RULE_MANAGER_ETS, {EventType, [NewEventItem | EventHandlers]})
   end,
-  gen_server:call(?Dispatcher_Name, {cluster_regine, 1, {clear_cache, EventType}}),
+%%   gen_server:call(?Dispatcher_Name, {cluster_regine, 1, {clear_cache, EventType}}),
 
   worker_host:clear_cache({?EVENT_TREES_MAPPING, EventType}),
 %%   notify_producers(),
@@ -76,9 +76,9 @@ handle(_ProtocolVersion, {add_event_handler, {EventType, Item}}) ->
   ?info("New handler for event ~p registered.", [EventType]),
   ok;
 
-handle(_ProtocolVersion, {get_event_handlers, Event}) ->
+handle(_ProtocolVersion, {get_event_handlers, EventType}) ->
   ?info("get_event_handlers for event"),
-  EventHandlerItems = ets:lookup(?RULE_MANAGER_ETS, Event),
+  EventHandlerItems = ets:lookup(?RULE_MANAGER_ETS, EventType),
   Res = case EventHandlerItems of
           [{_EventType, ItemsList}] -> ItemsList;
           _ -> []

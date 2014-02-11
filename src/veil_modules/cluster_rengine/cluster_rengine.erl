@@ -19,6 +19,8 @@
 -include("registered_names.hrl").
 -include("records.hrl").
 
+-define(PROCESSOR_ETS_NAME, "processor_ets_name").
+
 %% ====================================================================
 %% API functions
 %% ====================================================================
@@ -40,10 +42,6 @@ handle(_ProtocolVersion, healthcheck) ->
 
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
-
-handle(_ProtocolVersion, {clear_cache, Event}) ->
-  clear_events_cache(Event),
-  worker_host:clear_cache({?EVENT_TREES_MAPPING, Event});
 
 handle(ProtocolVersion, {event_arrived, Event}) ->
   handle(ProtocolVersion, {event_arrived, Event, false});
@@ -67,7 +65,8 @@ handle(ProtocolVersion, {event_arrived, Event, SecondTry}) ->
           {tree, TreeId} ->
             ?info("forwarding to tree ~p", [node()]),
             % forward event to subprocess tree
-            gen_server:call({cluster_rengine, node()}, {asynch, 1, {final_stage_tree, TreeId, Event}});
+%%             gen_server:call({cluster_rengine, node()}, {asynch, 1, {final_stage_tree, TreeId, Event}});
+            gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, self(), {final_stage_tree, TreeId, Event}});
           {standard, HandlerFun} ->
             ?info("normal processing ~p", [node()]),
             HandlerFun(Event)
@@ -94,17 +93,6 @@ cleanup() ->
 
 % inner functions
 
-clear_events_cache(Event) ->
-  EventToTreeMapping = ets:lookup(?EVENT_TREES_MAPPING, element(1, Event)),
-  case EventToTreeMapping of
-    [] -> ok;
-    [{_Ev, TreesNames}] ->
-      DeleteEntry = fun(TreeName) ->
-        ets:delete(?EVENT_HANDLERS_CACHE, TreeName)
-      end,
-      lists:foreach(DeleteEntry, TreesNames)
-  end.
-
 save_to_caches(EventType, EventHandlerItems) ->
   EntriesForHandlers = lists:map(
     fun(#event_handler_item{processing_method = ProcessingMethod, tree_id = TreeId, handler_fun = HandlerFun}) ->
@@ -117,8 +105,11 @@ save_to_caches(EventType, EventHandlerItems) ->
   ets:insert(?EVENT_TREES_MAPPING, {EventType, EntriesForHandlers}),
 
   HandlerItemsForTree = lists:filter(fun(#event_handler_item{tree_id = TreeId}) -> TreeId /= undefined end, EventHandlerItems),
-  lists:foreach(fun(#event_handler_item{tree_id = TreeId, map_fun = MapFun, disp_map_fun = DispMapFun, handler_fun = HandlerFun}) ->
-    ets:insert(?EVENT_HANDLERS_CACHE, {TreeId, {MapFun, DispMapFun, HandlerFun}})
+  lists:foreach(fun(#event_handler_item{tree_id = TreeId} = EventHandlerItem) ->
+    case ets:lookup(?EVENT_HANDLERS_CACHE, TreeId) of
+      [] -> ets:insert(?EVENT_HANDLERS_CACHE, {TreeId, EventHandlerItem});
+      _ -> ok
+    end
   end, HandlerItemsForTree).
 
 update_event_handler(ProtocolVersion, EventType) ->
@@ -132,7 +123,8 @@ update_event_handler(ProtocolVersion, EventType) ->
           ets:insert(?EVENT_TREES_MAPPING, {EventType, []}),
           ok;
         EventHandlersList ->
-          CheckIfTreeNeeded = fun(#event_handler_item{processing_method = ProcessingMethod}) -> ProcessingMethod =:= tree end,
+          CheckIfTreeNeeded = fun(#event_handler_item{processing_method = ProcessingMethod, tree_id = TreeId}) ->
+            ((ProcessingMethod =:= tree) and (ets:lookup(?EVENT_HANDLERS_CACHE, TreeId) == [])) end,
           EventsHandlersForTree = lists:filter(CheckIfTreeNeeded, EventHandlersList),
           create_process_tree_for_handlers(EventsHandlersForTree),
           save_to_caches(EventType, EventHandlersList)
@@ -146,10 +138,47 @@ update_event_handler(ProtocolVersion, EventType) ->
 create_process_tree_for_handlers(EventHandlersList) ->
   lists:foreach(fun create_process_tree_for_handler/1, EventHandlersList).
 
-create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = MapFun, handler_fun = HandlerFun}) ->
-  ProcFun = fun(_ProtocolVersion, {final_stage_tree, _TreeId, Event}) ->
-    HandlerFun(Event)
+create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = MapFun, handler_fun = HandlerFun, config = Config}) ->
+  GetEventProcessorEtsName = fun() ->
+    %% In Erlang doc there is some warning about using pid_to_list in application code.
+    %% It seems (but only seems) to be be used correctly here because we will store only local pids here.
+    %% Still it may be better idea to do some changes to worker_host to prevent from doing "strange" things.
+    list_to_atom(?PROCESSOR_ETS_NAME ++ pid_to_list(self()))
   end,
+
+  CreateEventProcessEtsIfNeeded = fun(EtsName, InitCounter) ->
+    try
+      ?info("ETsname: ~p", [EtsName]),
+      ets:new(EtsName, [named_table, private, set]),
+      ets:insert(EtsName, {counter, InitCounter})
+    catch
+      error:badarg -> ok
+    end
+  end,
+
+
+  ProcFun = case Config#processing_config.init_counter of
+    undefined ->
+      fun(_ProtocolVersion, {final_stage_tree, _TreeId, Event}) ->
+        ?info("handler fun !!! without aggr"),
+        HandlerFun(Event)
+      end;
+    InitCounter ->
+      fun(_ProtocolVersion, {final_stage_tree, _TreeId, Event}) ->
+        ?info("--<<>>-- handler fun !!! with aggr: ~p", [node()]),
+        EtsName = GetEventProcessorEtsName(),
+        ?info("--<<>>-- handler fun !!! with aggr2: ~p", [EtsName]),
+        CreateEventProcessEtsIfNeeded(EtsName, InitCounter),
+        CurrentCounter = ets:update_counter(EtsName, counter, {2, -1, 1, InitCounter}),
+        ?info("....... Current counter: ~p", [CurrentCounter]),
+        case CurrentCounter of
+          InitCounter ->
+            ?info("counter dobity"),
+            HandlerFun(Event);
+          _ -> ok
+        end
+      end
+    end,
 
   NewMapFun = fun({_ProtocolVersion, {_, _TreeId, Event}}) ->
     ?info("NewMapFun!!!!!----"),
@@ -162,7 +191,8 @@ create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = 
   Node = erlang:node(self()),
 
   ?info("wolamy register_sub_proc"),
-  gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM}).
+  gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM}),
+  nodes_manager:wait_for_cluster_cast({cluster_rengine, Node}).
 
 get_request_map_fun() ->
   fun
@@ -176,15 +206,18 @@ get_request_map_fun() ->
 
 get_disp_map_fun() ->
   fun({final_stage_tree, TreeId, Event}) ->
-    ?info("disp_map_fun---------"),
+    ?info("disp_map_fun---------********"),
     EventHandlerFromEts = ets:lookup(?EVENT_HANDLERS_CACHE, TreeId),
     case EventHandlerFromEts of
       [] ->
         % it may happen only if cache has been cleared between forwarding and calling DispMapFun - do nothing
-        ok;
+        non;
       [{_Ev, #event_handler_item{disp_map_fun = FetchedDispMapFun}}] ->
         FetchedDispMapFun(Event)
-    end
+    end;
+    (_) ->
+      ?info("disp_map_fun---------????????"),
+      non
   end.
 
 insert_to_ets_set(EtsName, Key, ItemToInsert) ->
