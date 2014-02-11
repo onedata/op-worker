@@ -12,10 +12,12 @@ main:
 
 veilclient:
 	@printf "\r[%3d%%]\tVeilClient" 0
+	@pandoc $(ROOT)/veilclient/Doxyfile
+	@printf "\r[%3d%%]\tVeilClient" 33
 	@mkdir -p $(VEILCLIENT)
 	@pandoc --from=markdown --to=rst --output=$(VEILCLIENT)/about.rst $(ROOT)/veilclient/README.md
-	@printf "\r[%3d%%]\tVeilClient" 50
-	@python veilclient.py $(MAIN) $(VEILCLIENT)
+	@printf "\r[%3d%%]\tVeilClient" 67
+	@python veilclient.py $(ROOT) $(VEILCLIENT)
 	@printf "\r[%3d%%]\tVeilClient\n" 100
 
 veilcluster:

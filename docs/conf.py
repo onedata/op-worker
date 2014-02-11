@@ -262,5 +262,5 @@ texinfo_documents = [
 # -- Breathe ---------------------------------------------------------------
 
 breathe_projects = {
-    "veilclient" : "data/veilclient/xml/",
+    "veilclient" : "../veilclient/doc/xml/",
 }

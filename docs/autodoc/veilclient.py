@@ -13,8 +13,8 @@ from sphinx import Sphinx
 
 class VeilClient(Sphinx):
 
-	def __init__(self, main, path):
-		self.main = main
+	def __init__(self, root, path):
+		self.root = root
 		self.path = path
 		self.doxygenKinds = ['function', 'struct', 'enum', 'typedef', 'define', 'variable', 'class', 'file']
 
@@ -22,7 +22,7 @@ class VeilClient(Sphinx):
 		if not os.path.exists(self.path):
 			os.makedirs(self.path)
 
-		self.index = minidom.parse(self.main + '/data/veilclient/xml/index.xml').getElementsByTagName('compound')
+		self.index = minidom.parse(self.root + '/veilclient/doc/xml/index.xml').getElementsByTagName('compound')
 		self.classes = filter(lambda node: node.getAttribute('kind') == 'class' and len(node.childNodes) > 2, self.index)
 		self.structs = filter(lambda node: node.getAttribute('kind') == 'struct' and len(node.childNodes) > 2, self.index)
 		self.namespaces = filter(lambda node: node.getAttribute('kind') == 'namespace' and len(node.childNodes) > 2, self.index)
@@ -117,7 +117,7 @@ if __name__ == '__main__':
 
 	if len(sys.argv) != 3:
 		print "Wrong number of parameters"
-		print "Usage: python {0} path_to_main_folder path_to_veilclinent_folder".format(sys.argv[0])
+		print "Usage: python {0} path_to_root_folder path_to_veilclinent_folder".format(sys.argv[0])
 		exit(1)
 
 	veilclient = VeilClient(sys.argv[1], sys.argv[2])
