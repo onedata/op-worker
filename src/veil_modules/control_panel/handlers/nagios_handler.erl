@@ -130,7 +130,7 @@ node_status(Node,CcmStateNum,CcmCStateNum,Timeout) ->
 			lager:warning("ccm_state_num: ~p, ccm_callback_num: ~p,disp_state_num: ~p, disp_callback_num: ~p,manager_state_num: ~p, manager_callback_num: ~p",
 				[CcmStateNum,CcmCStateNum,DispStateNum,DispCStateNum,ManagerStateNum,ManagerCStateNum]),
 			%return
-			{veil_cluster_node,[{name,atom_to_list(Node)},{status,"initializing"}],[]}
+			{veil_cluster_node,[{name,atom_to_list(Node)},{status,"out_of_sync"}],[]}
 		end
 	catch
 	    Type:Error ->
@@ -190,7 +190,7 @@ worker_status(Worker,Timeout) ->
 	Result :: true | false.
 %% ====================================================================
 contains_errors(StatusList) ->
-	Errors = [Status || {_Tag,Attrs,_Content} <- StatusList, {status,Status} <-Attrs, Status /= "ok", Status /= "initializing"],
+	Errors = [Status || {_Tag,Attrs,_Content} <- StatusList, {status,Status} <-Attrs, Status /= "ok", Status /= "out_of_sync"],
 	Errors /= [].
 
 
