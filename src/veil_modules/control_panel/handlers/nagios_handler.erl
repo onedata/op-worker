@@ -98,12 +98,18 @@ node_status(Node,CcmStateNum,CcmCStateNum,WorkersOk,Timeout) ->
 	true ->
 		{veil_cluster_node,[{name,atom_to_list(Node)},{status,"ok"}],[]};
 	false ->
-		lager:error("Healthcheck on node ~p failed, callbacks/state number of ccm doesn't match values from node_manager and dispatcher",[Node]),
-		lager:error("ccm_state_num: ~p, ccm_callback_num: ~p,disp_state_num: ~p, disp_callback_num: ~p,manager_state_num: ~p, manager_callback_num: ~p",
-			[CcmStateNum,CcmCStateNum,DispStateNum,DispCStateNum,ManagerStateNum,ManagerCStateNum]),
 		case WorkersOk of
-			true -> {veil_cluster_node,[{name,atom_to_list(Node)},{status,"initializing"}],[]};
-			false -> {veil_cluster_node,[{name,atom_to_list(Node)},{status,"error"}],[]}
+			true ->
+				lager:warning("Healthcheck on node ~p, callbacks/state number of ccm doesn't match values from node_manager and dispatcher," ++
+					"but all workers are fine, cluster is probably initializing",[Node]),
+				lager:warning("ccm_state_num: ~p, ccm_callback_num: ~p,disp_state_num: ~p, disp_callback_num: ~p,manager_state_num: ~p, manager_callback_num: ~p",
+					[CcmStateNum,CcmCStateNum,DispStateNum,DispCStateNum,ManagerStateNum,ManagerCStateNum]),
+				{veil_cluster_node,[{name,atom_to_list(Node)},{status,"initializing"}],[]};
+			false ->
+				lager:error("Healthcheck on node ~p failed, callbacks/state number of ccm doesn't match values from node_manager and dispatcher",[Node]),
+				lager:error("ccm_state_num: ~p, ccm_callback_num: ~p,disp_state_num: ~p, disp_callback_num: ~p,manager_state_num: ~p, manager_callback_num: ~p",
+					[CcmStateNum,CcmCStateNum,DispStateNum,DispCStateNum,ManagerStateNum,ManagerCStateNum]),
+				{veil_cluster_node,[{name,atom_to_list(Node)},{status,"error"}],[]}
 		end
 	end.
 
