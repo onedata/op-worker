@@ -293,14 +293,6 @@ veil_cluster_node_env:
          This variable determinates how often DAO storage cache should be cleared (in seconds).
        value: 86400 # 24h
 
-
-  # REST
-  - parameter:
-       name: rest_port
-       description: |
-         REST port.
-       value: 8443
-
 obsolete:
   - parameter:
       description: |
