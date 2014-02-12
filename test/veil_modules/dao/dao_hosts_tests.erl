@@ -37,6 +37,8 @@ setup() ->
     meck:new(net_adm, [unstick, passthrough]),
     put(db_host, undefined),
     application:set_env(veil_cluster_node, dao_fuse_cache_loop_time, 30*60),
+    application:set_env(veil_cluster_node, storage_cache_loop_time, 86400),
+    application:set_env(veil_cluster_node, users_cache_loop_time, 86400),
     application:set_env(?APP_Name, ccm_nodes, [not_existing_node]),
     application:set_env(?APP_Name, heart_beat, 60),
     application:set_env(?APP_Name, node_monitoring_period, 15),

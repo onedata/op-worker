@@ -281,6 +281,19 @@ veil_cluster_node_env:
          This variable determinates how often DAO fuse cache maintnance process shall fire up all its jobs (in seconds).
        value: 1800 # 30min
 
+  - parameter:
+       name: storage_cache_loop_time
+       description: |
+         This variable determinates how often DAO storage cache should be cleared (in seconds).
+       value: 86400 # 24h
+
+  - parameter:
+       name: users_cache_loop_time
+       description: |
+         This variable determinates how often DAO storage cache should be cleared (in seconds).
+       value: 86400 # 24h
+
+
   # REST
   - parameter:
        name: rest_port
