@@ -92,8 +92,6 @@ init_per_testcase(main_test, Config) ->
 			{dispatcher_port, 5055},
 			{ccm_nodes, [Node1]},
 			{dns_port, 1308},
-			{control_panel_port,4433},
-			{heart_beat, 1},
 			{db_nodes, [DB_Node]}]]),
 
     Assertions = [{false, lists:member(error, Nodes)}, {false, lists:member(error, StartLog)}],
