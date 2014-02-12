@@ -39,8 +39,7 @@ handle(Req, State) ->
 	WorkersStatus = pmap(fun(Worker) -> worker_status(Worker,Timeout) end,Workers),
 
 	%check nodes
-	WorkersOk = not contains_errors(WorkersStatus),
-	NodesStatus = pmap(fun(Node) -> node_status(Node,StateNum,CStateNum,WorkersOk,Timeout) end, Nodes),
+	NodesStatus = pmap(fun(Node) -> node_status(Node,StateNum,CStateNum,Timeout) end, Nodes),
 
 	%check if errors occured
 	{HealthStatus, HttpStatusCode} =
@@ -105,14 +104,13 @@ get_data_from_ccm(Timeout) ->
 %% node_status/5
 %% ====================================================================
 %% @doc Checks if callbacks num and state num on dispatcher and node manager are same as in ccm,
-%% returns xmerl simple_xml output describing node health status. If callbacks don't match and some worker is
-%% down - asume "error", if callbacks don't match and all workers are ok - assume "initializing"
+%% returns xmerl simple_xml output describing node health status. If state numbers don't match - assume "initializing"
 %% @end
--spec node_status(Node :: atom(), CcmStateNum :: integer(), CcmCStateNum :: integer(), WorkersOk :: boolean(), Timeout :: integer()) -> Result when
+-spec node_status(Node :: atom(), CcmStateNum :: integer(), CcmCStateNum :: integer(), Timeout :: integer()) -> Result when
 	Result :: {veil_cluster_node, Attrs :: list(Atribute), []},
 	Atribute :: {Name :: atom(),Value :: string()}.
 %% ====================================================================
-node_status(Node,CcmStateNum,CcmCStateNum,WorkersOk,Timeout) ->
+node_status(Node,CcmStateNum,CcmCStateNum,Timeout) ->
 	lager:debug("Healthcheck on node:~p",[Node]),
 	try
 		%get state nuber and callback number from node manager and dispatcher
@@ -126,31 +124,13 @@ node_status(Node,CcmStateNum,CcmCStateNum,WorkersOk,Timeout) ->
 		true ->
 			{veil_cluster_node,[{name,atom_to_list(Node)},{status,"ok"}],[]};
 		false ->
-			case WorkersOk of
-				true ->
-					%log
-					lager:warning("Healthcheck on node ~p, callbacks/state number of ccm doesn't match values from node_manager and dispatcher," ++
-						"but all workers are fine, cluster is probably initializing",[Node]),
-					lager:warning("ccm_state_num: ~p, ccm_callback_num: ~p,disp_state_num: ~p, disp_callback_num: ~p,manager_state_num: ~p, manager_callback_num: ~p",
-						[CcmStateNum,CcmCStateNum,DispStateNum,DispCStateNum,ManagerStateNum,ManagerCStateNum]),
-					%return
-					{veil_cluster_node,[{name,atom_to_list(Node)},{status,"initializing"}],[]};
-				false ->
-					%log
-					lager:error("Healthcheck on node ~p failed, callbacks/state number of ccm doesn't match values from node_manager and dispatcher",[Node]),
-					lager:error("ccm_state_num: ~p, ccm_callback_num: ~p,disp_state_num: ~p, disp_callback_num: ~p,manager_state_num: ~p, manager_callback_num: ~p",
-						[CcmStateNum,CcmCStateNum,DispStateNum,DispCStateNum,ManagerStateNum,ManagerCStateNum]),
-					%prepare error
-					ErrorString1 =
-						case {(CcmStateNum == DispStateNum),(CcmCStateNum == DispCStateNum),(CcmStateNum==ManagerStateNum),(CcmCStateNum==ManagerCStateNum)} of
-							{false,_,_,_} -> "{error,invalid_dispatcher_state_num}";
-							{_,false,_,_} -> "{error,invalid_dispatcher_callback_state_num}";
-							{_,_,false,_} -> "{error,invalid_manager_state_num}";
-							{_,_,_,false} -> "{error,invalid_manager_callback_state_num}"
-						end,
-					%return
-					{veil_cluster_node,[{name,atom_to_list(Node)},{status,ErrorString1}],[]}
-			end
+			%log
+			lager:warning("Healthcheck on node ~p, callbacks/state number of ccm doesn't match values from node_manager and dispatcher," ++
+				"but all workers are fine, cluster is probably initializing",[Node]),
+			lager:warning("ccm_state_num: ~p, ccm_callback_num: ~p,disp_state_num: ~p, disp_callback_num: ~p,manager_state_num: ~p, manager_callback_num: ~p",
+				[CcmStateNum,CcmCStateNum,DispStateNum,DispCStateNum,ManagerStateNum,ManagerCStateNum]),
+			%return
+			{veil_cluster_node,[{name,atom_to_list(Node)},{status,"initializing"}],[]}
 		end
 	catch
 	    Type:Error ->
