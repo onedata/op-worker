@@ -27,7 +27,7 @@
 %% Test API
 %% ====================================================================
 -ifdef(TEST).
--export([get_storage_and_id/1]).
+-export([get_storage_and_id/1, verify_file_name/1]).
 -endif.
 
 %% ====================================================================
@@ -263,7 +263,10 @@ get_storage_and_id(Combined) ->
       try
         Storage = list_to_integer(string:substr(Combined, 1, Pos - 1)),
         File = string:substr(Combined, Pos + length(?REMOTE_HELPER_SEPARATOR)),
-        {Storage, File}
+        case verify_file_name(File) of
+          {error, _} -> error;
+          {ok, FileName} -> {Storage, FileName}
+        end
       catch
         _:_ -> error
       end
@@ -295,4 +298,13 @@ get_helper_and_id(Combined, ProtocolVersion) ->
           lager:warning("Can not get storage from id: ~p", [Other]),
           error
       end
+  end.
+
+%% Verify filename
+%% (skip single dot in filename, return error when double dot in filename, return filename otherwies)
+verify_file_name(FileName) ->
+  Tokens = lists:filter(fun(X) -> X =/= "." end, string:tokens(FileName, "/")),
+  case lists:any(fun(X) -> X =:= ".." end, Tokens) of
+    true -> {error, wrong_filename};
+    _ -> {ok, string:join(Tokens, "/")}
   end.

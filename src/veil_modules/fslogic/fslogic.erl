@@ -1604,7 +1604,7 @@ update_parent_ctime(Dir, CTime) ->
     end.
 
 %% Verify filename
-%% (skip single dot in path, return error when double dot in path, return path tokens otherwies)
+%% (skip single dot in filename, return error when double dot in filename, return filename tokens otherwies)
 verify_file_name(FileName) ->
   Tokens = lists:filter(fun(X) -> X =/= "." end, string:tokens(FileName, "/")),
   case lists:any(fun(X) -> X =:= ".." end, Tokens) of

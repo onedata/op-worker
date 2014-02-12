@@ -37,4 +37,12 @@ get_helper_and_id_wrong_args_test() ->
   Ans2 = remote_files_manager:get_storage_and_id(Storage2 ++ ?REMOTE_HELPER_SEPARATOR ++ Id),
   ?assertEqual(error, Ans2).
 
+verify_file_name_test() ->
+  ?assertEqual({error, wrong_filename}, remote_files_manager:verify_file_name("..")),
+  ?assertEqual({error, wrong_filename}, remote_files_manager:verify_file_name("../dir1/dir2/file")),
+  ?assertEqual({error, wrong_filename}, remote_files_manager:verify_file_name("dir1/../dir2/./file")),
+  ?assertEqual({ok, ""}, remote_files_manager:verify_file_name(".")),
+  ?assertEqual({ok, "dir/file"}, remote_files_manager:verify_file_name("././././dir/././file")),
+  ?assertEqual({ok, "dir1/dir2/file"}, remote_files_manager:verify_file_name("./dir1/./dir2/./file/.")).
+
 -endif.
