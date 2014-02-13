@@ -265,7 +265,7 @@ get_storage_and_id(Combined) ->
         File = string:substr(Combined, Pos + length(?REMOTE_HELPER_SEPARATOR)),
         case verify_file_name(File) of
           {error, _} -> error;
-          {ok, FileName} -> {Storage, FileName}
+          {ok, VerifiedFile} -> {Storage, VerifiedFile}
         end
       catch
         _:_ -> error
@@ -303,7 +303,7 @@ get_helper_and_id(Combined, ProtocolVersion) ->
 %% Verify filename
 %% (skip single dot in filename, return error when double dot in filename, return filename otherwies)
 verify_file_name(FileName) ->
-  Tokens = lists:filter(fun(X) -> X =/= "." end, string:tokens(FileName, "/")),
+  Tokens = string:tokens(FileName, "/"),
   case lists:any(fun(X) -> X =:= ".." end, Tokens) of
     true -> {error, wrong_filename};
     _ -> {ok, string:join(Tokens, "/")}

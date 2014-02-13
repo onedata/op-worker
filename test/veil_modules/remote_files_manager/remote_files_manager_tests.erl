@@ -41,8 +41,6 @@ verify_file_name_test() ->
   ?assertEqual({error, wrong_filename}, remote_files_manager:verify_file_name("..")),
   ?assertEqual({error, wrong_filename}, remote_files_manager:verify_file_name("../dir1/dir2/file")),
   ?assertEqual({error, wrong_filename}, remote_files_manager:verify_file_name("dir1/../dir2/./file")),
-  ?assertEqual({ok, ""}, remote_files_manager:verify_file_name(".")),
-  ?assertEqual({ok, "dir/file"}, remote_files_manager:verify_file_name("././././dir/././file")),
-  ?assertEqual({ok, "dir1/dir2/file"}, remote_files_manager:verify_file_name("./dir1/./dir2/./file/.")).
+  ?assertEqual({ok, "dir1/dir2/file"}, remote_files_manager:verify_file_name("dir1/dir2/file")).
 
--endif.
+  -endif.
