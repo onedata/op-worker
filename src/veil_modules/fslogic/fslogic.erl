@@ -201,7 +201,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, chan
       ok ->
         case get_file(ProtocolVersion, FileName, FuseID) of
             {ok, #veil_document{record = #file{} = File} = Doc} ->
-              {PermsStat, PermsOK} = check_file_perms(FileName, UserDocStatus, UserDoc, Doc),
+              {PermsStat, PermsOK} = check_file_perms(FileName, UserDocStatus, UserDoc, Doc, root),
               case PermsStat of
                 ok ->
                   case PermsOK of
@@ -1565,32 +1565,42 @@ check_file_perms(FileName, UserDocStatus, UserDoc, FileDoc) ->
   ErrorDetail :: term().
 %% ====================================================================
 check_file_perms(FileName, UserDocStatus, UserDoc, FileDoc, CheckType) ->
-  case string:tokens(FileName, "/") of
-    [?GROUPS_BASE_DIR_NAME | _] ->
-      FileRecord = FileDoc#veil_document.record,
-      CheckOwn = case CheckType of
-        perms -> true;
-        _ -> %write
-          case FileRecord#file.perms band ?WR_GRP_PERM of
-            0 -> true;
-            _ -> false
-          end
-      end,
-
-      case CheckOwn of
-        true ->
-          case {UserDocStatus, UserDoc} of
-            {ok, _} ->
-              UserUuid = UserDoc#veil_document.uuid,
-              {ok, FileRecord#file.uid =:= UserUuid};
-            {error, get_user_id_error} -> {ok, true};
-            _ -> {UserDocStatus, UserDoc}
-          end;
-        false ->
-          {ok, true}
+  case CheckType of
+    root ->
+      case {UserDocStatus, UserDoc} of
+        {ok, _} ->
+          {ok, false};
+        {error, get_user_id_error} -> {ok, true};
+        _ -> {UserDocStatus, UserDoc}
       end;
     _ ->
-      {ok, true}
+      case string:tokens(FileName, "/") of
+        [?GROUPS_BASE_DIR_NAME | _] ->
+          FileRecord = FileDoc#veil_document.record,
+          CheckOwn = case CheckType of
+                       perms -> true;
+                       _ -> %write
+                         case FileRecord#file.perms band ?WR_GRP_PERM of
+                           0 -> true;
+                           _ -> false
+                         end
+                     end,
+
+          case CheckOwn of
+            true ->
+              case {UserDocStatus, UserDoc} of
+                {ok, _} ->
+                  UserUuid = UserDoc#veil_document.uuid,
+                  {ok, FileRecord#file.uid =:= UserUuid};
+                {error, get_user_id_error} -> {ok, true};
+                _ -> {UserDocStatus, UserDoc}
+              end;
+            false ->
+              {ok, true}
+          end;
+        _ ->
+          {ok, true}
+      end
   end.
 
 %% Updates modification time for parent of Dir
