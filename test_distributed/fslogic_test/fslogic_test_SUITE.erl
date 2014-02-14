@@ -1804,15 +1804,17 @@ users_separation_test(Config) ->
   %% chown test
   {Status23, Answer23} = chown(Socket, TestFile, 77777, "unknown"),
   ?assertEqual("ok", Status23),
-  ?assertEqual(list_to_atom(?VEINVAL), Answer23),
+  ?assertEqual(list_to_atom(?VEPERM), Answer23),
 
-  {Status24, Answer24} = chown(Socket, TestFile, 0, Login2),
-  ?assertEqual("ok", Status24),
-  ?assertEqual(list_to_atom(?VOK), Answer24),
+  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [Login ++ "/" ++ TestFile, Login2, 0])),
+%%   {Status24, Answer24} = chown(Socket, TestFile, 0, Login2),
+%%   ?assertEqual("ok", Status24),
+%%   ?assertEqual(list_to_atom(?VOK), Answer24),
 
-  {Status25, Answer25} = chown(Socket2, TestFile, UID1, "unknown"),
-  ?assertEqual("ok", Status25),
-  ?assertEqual(list_to_atom(?VOK), Answer25),
+  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [Login2 ++ "/" ++ TestFile, "unknown", UID1])),
+%%   {Status25, Answer25} = chown(Socket2, TestFile, UID1, "unknown"),
+%%   ?assertEqual("ok", Status25),
+%%   ?assertEqual(list_to_atom(?VOK), Answer25),
 
   %% Check if owners are set properly
   {Status26, Attr3} = get_file_attr(Socket, TestFile),
