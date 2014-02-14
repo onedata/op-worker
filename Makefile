@@ -49,7 +49,7 @@ docs: deps
 	make -C docs html
 	./rebar doc skip_deps=true
 
-pdf:
+pdf: deps
 	make -C docs latexpdf
 
 upgrade:
