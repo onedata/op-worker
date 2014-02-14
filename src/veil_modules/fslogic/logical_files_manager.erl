@@ -129,7 +129,7 @@ mv(From, To) ->
     _ -> {Status, TmpAns}
   end.
 
-%% chown/1
+%% chown/3
 %% ====================================================================
 %% @doc Changes owner of file (in db)
 %% @end
