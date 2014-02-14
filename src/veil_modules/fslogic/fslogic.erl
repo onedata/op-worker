@@ -45,7 +45,7 @@
 %% ====================================================================
 %% eunit
 -ifdef(TEST).
--export([handle_fuse_message/3]).
+-export([handle_fuse_message/3, verify_file_name/1]).
 -endif.
 
 %% ct
@@ -1136,28 +1136,27 @@ get_full_file_name(FileName, Request) ->
 %% ====================================================================
 
 get_full_file_name(FileName, Request, UserDocStatus, UserDoc) ->
-  case UserDocStatus of
-    ok ->
-      case assert_group_access(UserDoc, Request, FileName) of
-        ok ->
-          case string:tokens(FileName, "/") of %% Map all /groups/* requests to root of the file system (i.e. dont add any prefix)
-            [?GROUPS_BASE_DIR_NAME | _] ->
-              {ok, FileName};
-            _ ->
-              Root = get_user_root(UserDoc),
-              [Beg | _] = FileName,
-              NewFileName = case Beg of
-                              $/ -> Root ++ FileName;
-                              _ -> Root ++ "/" ++ FileName
-                            end,
-              {ok, NewFileName}
-          end;
-        _ -> {?VEPERM, ?VEPERM}
-      end;
-    _ ->
-      case UserDoc of
-        get_user_id_error -> {ok, FileName};
-        _ -> {user_doc_not_found, UserDoc}
+  case verify_file_name(FileName) of
+    {error, Error} -> {Error, FileName};
+    {ok, Tokens} ->
+      VerifiedFileName = string:join(Tokens, "/"),
+      case UserDocStatus of
+        ok -> case assert_group_access(UserDoc, Request, VerifiedFileName) of
+                ok ->
+                  case Tokens of %% Map all /groups/* requests to root of the file system (i.e. dont add any prefix)
+                    [?GROUPS_BASE_DIR_NAME | _] ->
+                      {ok, VerifiedFileName};
+                    _ ->
+                      Root = get_user_root(UserDoc),
+                      {ok, Root ++ "/" ++ VerifiedFileName}
+                  end;
+                _ -> {?VEPERM, ?VEPERM}
+              end;
+        _ ->
+          case UserDoc of
+            get_user_id_error -> {ok, VerifiedFileName};
+            _ -> {user_doc_not_found, UserDoc}
+          end
       end
   end.
 
@@ -1599,3 +1598,12 @@ update_parent_ctime(Dir, CTime) ->
         [?PATH_SEPARATOR] -> ok;
         ParentPath -> gen_server:call(?Dispatcher_Name, {fslogic, 1, #veil_request{subject = get(user_id), request = {internal_call, #updatetimes{file_logic_name = ParentPath, mtime = CTime}}}})
     end.
+
+%% Verify filename
+%% (skip single dot in filename, return error when double dot in filename, return filename tokens otherwies)
+verify_file_name(FileName) ->
+  Tokens = lists:filter(fun(X) -> X =/= "." end, string:tokens(FileName, "/")),
+  case lists:any(fun(X) -> X =:= ".." end, Tokens) of
+    true -> {error, wrong_filename};
+    _ -> {ok, Tokens}
+  end.

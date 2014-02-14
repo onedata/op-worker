@@ -2013,10 +2013,14 @@ files_manager_standard_files_test(Config) ->
   DirName = "fslogic_test_dir2",
   FileInDir = "files_manager_test_file2",
   FileInDir2 = "files_manager_test_file3",
+  FileInDir3 = "files_manager_test_file4",
   FileInDir2NewName = "files_manager_test_file3_new_name",
   File = DirName ++ "/" ++ FileInDir,
   File2 = DirName ++ "/" ++ FileInDir2,
   File2NewName = DirName ++ "/" ++ FileInDir2NewName,
+  File3 = DirName ++ "/../" ++ FileInDir3,
+  File4 = DirName ++ "/./" ++ FileInDir3,
+  File4NoDot = DirName ++ "/" ++ FileInDir3,
 
   NotExistingFile = "files_manager_test_not_existing_file",
 
@@ -2024,6 +2028,9 @@ files_manager_standard_files_test(Config) ->
   ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [File])),
   ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [File2])),
   ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [File2NewName])),
+  ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [File3])),
+  ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [File4])),
+  ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [File4NoDot])),
   ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [NotExistingFile])),
 
   MkDirAns = rpc:call(Node1, logical_files_manager, mkdir, [DirName]),
@@ -2150,7 +2157,14 @@ files_manager_standard_files_test(Config) ->
   ?assertEqual(ok, AnsMvDel2),
   ?assertEqual(false, files_tester:file_exists_storage(TestFileLocation)),
 
+  AnsCreate6 = rpc:call(Node1, logical_files_manager, create, [File3]),
+  ?assertEqual({logical_file_system_error, ?VEREMOTEIO}, AnsCreate6),
 
+  AnsCreate7 = rpc:call(Node1, logical_files_manager, create, [File4]),
+  ?assertEqual(ok, AnsCreate7),
+  ?assert(rpc:call(Node1, logical_files_manager, exists, [File4])),
+  {File4LocationAns, _} = rpc:call(Node1, files_tester, get_file_location, [File4NoDot]),
+  ?assertEqual(ok, File4LocationAns),
 
   {FileLocationAns, FileLocation} = rpc:call(Node1, files_tester, get_file_location, [File]),
   ?assertEqual(ok, FileLocationAns),
@@ -2164,6 +2178,9 @@ files_manager_standard_files_test(Config) ->
 
   AnsDel3 = rpc:call(Node1, logical_files_manager, delete, [File2NewName]),
   ?assertEqual({logical_file_system_error, ?VENOENT}, AnsDel3),
+
+  AnsDel4 = rpc:call(Node1, logical_files_manager, delete, [File4]),
+  ?assertEqual(ok, AnsDel4),
 
   AnsDirDelete = rpc:call(Node1, logical_files_manager, rmdir, [DirName]),
   ?assertEqual(ok, AnsDirDelete),
