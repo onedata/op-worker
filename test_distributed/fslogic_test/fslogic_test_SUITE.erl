@@ -137,7 +137,9 @@ groups_permissions_test(Config) ->
 
   {Status9, Answer9} = chown(Socket, TestFileNewName, 0, Login2),
   ?assertEqual("ok", Status9),
-  ?assertEqual(list_to_atom(?VOK), Answer9),
+  ?assertEqual(list_to_atom(?VEPERM), Answer9),
+
+  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [TestFileNewName, Login2, -1])),
 
   {Status10, Answer10} = delete_file(Socket, TestFileNewName),
   ?assertEqual("ok", Status10),
