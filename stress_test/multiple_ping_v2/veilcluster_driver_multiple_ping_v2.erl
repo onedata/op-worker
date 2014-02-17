@@ -66,7 +66,7 @@ ping(Module, Socket, PongAnsBytes) ->
 
     wss:send(Socket, Msg),
     Ans =
-        case wss:recv(Socket, 0, 5000) of
+        case wss:recv(Socket, 5000) of
             {ok, Ans1} -> Ans1;
             {error, Reason} -> throw({recv, Reason})
         end,

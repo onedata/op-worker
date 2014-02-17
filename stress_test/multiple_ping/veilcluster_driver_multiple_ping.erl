@@ -52,13 +52,13 @@ run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes, Messages_per_conn
     end.
 
 ping(Module, Socket, PongAnsBytes, Messages_per_connect) ->
-    Ping = #atom{value = "ping"},
-    PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
+  Ping = #atom{value = "ping"},
+  PingBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ping)),
 
-    Message = #clustermsg{module_name = atom_to_list(Module), message_type = "atom",
-                            message_decoder_name = "communication_protocol", answer_type = "atom",
-                            answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = PingBytes},
-    Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+  Message = #clustermsg{module_name = atom_to_list(Module), message_type = "atom",
+    message_decoder_name = "communication_protocol", answer_type = "atom",
+    answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = PingBytes},
+  Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
   multiple_ping(Messages_per_connect, Socket, Msg, PongAnsBytes).
 
@@ -67,11 +67,11 @@ multiple_ping(0, _, _, _) ->
 
 multiple_ping(Counter, Socket, Msg, PongAnsBytes) ->
   wss:send(Socket, Msg),
-%%   Ans = case wss:recv(Socket, 0, 5000) of
-%%     {ok, Ans1} -> Ans1;
-%%     {error, Reason} -> throw({recv, Reason})
-%%   end,
-  Ans = PongAnsBytes,
+  Ans = case wss:recv(Socket, 5000) of
+    {ok, Ans1} -> Ans1;
+    {error, Reason} -> throw({recv, Reason})
+  end,
+
   case Ans of
     PongAnsBytes -> multiple_ping(Counter - 1, Socket, Msg, PongAnsBytes);
     Other -> throw({invalid_answer, Other})
