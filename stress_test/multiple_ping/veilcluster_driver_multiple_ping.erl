@@ -67,11 +67,11 @@ multiple_ping(0, _, _, _) ->
 
 multiple_ping(Counter, Socket, Msg, PongAnsBytes) ->
   wss:send(Socket, Msg),
-  Ans = case wss:recv(Socket, 0, 5000) of
-    {ok, Ans1} -> Ans1;
-    {error, Reason} -> throw({recv, Reason})
-  end,
-
+%%   Ans = case wss:recv(Socket, 0, 5000) of
+%%     {ok, Ans1} -> Ans1;
+%%     {error, Reason} -> throw({recv, Reason})
+%%   end,
+  Ans = ok,
   case Ans of
     PongAnsBytes -> multiple_ping(Counter - 1, Socket, Msg, PongAnsBytes);
     Other -> throw({invalid_answer, Other})
