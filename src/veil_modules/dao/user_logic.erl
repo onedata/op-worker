@@ -26,6 +26,7 @@
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
 -export([get_team_names/1]).
+-export([create_dirs_at_storage/3]).
 
 -define(UserRootPerms, 8#600).
 
@@ -485,7 +486,7 @@ create_dirs_at_storage(Root, Teams) ->
 
 %% create_dirs_at_storage/3
 %% ====================================================================
-%% @doc Creates root dir for user and for its teams. only on selected storage
+%% @doc Creates root dir for user and for its teams. Only on selected storage
 %% @end
 -spec create_dirs_at_storage(Root :: string(), Teams :: [string()], Storage :: #storage_info{}) -> ok | Error when
 	Error :: atom().
@@ -502,44 +503,49 @@ create_dirs_at_storage(Root, Teams, Storage) ->
 				Ans3 = storage_files_manager:chmod(SHI, DirName, 8#730),
 				case {Ans2, Ans3} of
 					{ok, ok} ->
-						{SHI, TmpAns};
+						TmpAns;
 					_ ->
 						lager:error("Can not change owner of dir ~p using storage helper ~p. Make sure group '~s' is defined in the system.",
 							[Dir, SHI#storage_helper_info.name, Dir]),
-						{SHI, error}
+						error
 				end;
+			{error, dir_or_file_exists} ->
+				TmpAns;
 			_ ->
 				lager:error("Can not create dir ~p using storage helper ~p. Make sure group '~s' is defined in the system.",
 					[Dir, SHI#storage_helper_info.name, Dir]),
-				{SHI, error}
+				error
 		end
 	end,
 
 	Ans2 = case Root of
 			non ->
-			 ok;
+				ok;
 			_ ->
-			 RootDirName = "users/" ++ Root,
-			 Ans = storage_files_manager:mkdir(SHI, RootDirName),
-			 case Ans of
-				 ok ->
-					 Ans3 = storage_files_manager:chown(SHI, RootDirName, Root, Root),
-					 storage_files_manager:chmod(SHI, RootDirName, 8#300),
-					 case Ans3 of
-						 ok ->
-							 ok;
-						 _ ->
-							 lager:error("Can not change owner of dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
-								 [Root, SHI#storage_helper_info.name, Root])
-					 end;
-				 _ ->
-					 lager:error("Can not create dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
-						 [Root, SHI#storage_helper_info.name, Root])
-			 end
+				RootDirName = "users/" ++ Root,
+				Ans = storage_files_manager:mkdir(SHI, RootDirName),
+				case Ans of
+					ok ->
+						Ans3 = storage_files_manager:chown(SHI, RootDirName, Root, Root),
+						storage_files_manager:chmod(SHI, RootDirName, 8#300),
+						case Ans3 of
+							ok ->
+								ok;
+							_ ->
+								lager:error("Can not change owner of dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
+									[Root, SHI#storage_helper_info.name, Root]),
+								error
+						end;
+					_ ->
+						lager:error("Can not create dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
+							[Root, SHI#storage_helper_info.name, Root]),
+						error
+				end
 			end,
 	Ans4 = lists:foldl(CreateTeamsDirs, ok, Teams),
 	case {Ans2, Ans4} of
-		{ok, ok} -> ok;
+		{ok, ok} ->
+			ok;
 		_ -> create_dir_error
 	end.
 

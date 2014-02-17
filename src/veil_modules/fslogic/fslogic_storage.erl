@@ -123,7 +123,13 @@ insert_storage(HelperName, HelperArgs, Fuse_groups) ->
              end,
 
       case {Ans3, Ans6} of
-        {ok, ok} -> DAO_Ans;
+        {ok, ok} ->
+			case add_dirs_for_existing_users(Storage) of
+				ok -> DAO_Ans;
+				Error ->
+					lager:error("Can not create dirs for existing users and theirs teams, error: ~p",[Error]),
+					{error, users_dirs_creation_error}
+			end;
         _ -> {error, dirs_creation_error}
       end;
     _ -> DAO_Ans
@@ -156,3 +162,27 @@ get_fuse_group(FuseID) ->
           default
       end
   end.
+
+%% add_dirs_for_existing_users/1
+%% ====================================================================
+%% @doc Adds root dirs for all existing users and theirs teams to given storage
+-spec add_dirs_for_existing_users(Storage :: #storage_info{}) -> Result when
+	Result :: ok | {error, Error :: atom()}.
+%% ====================================================================
+add_dirs_for_existing_users(Storage) ->
+	{ok,Users} = dao_lib:apply(dao_users,list_users,[],1),
+	Logins = lists:map(fun(X) -> user_logic:get_login(X) end, Users),
+	TeamsList = lists:map(fun(X) -> user_logic:get_team_names(X) end, Users),
+	LoginsAndTeams = lists:zip(Logins,TeamsList),
+
+	CreateDirs =
+		fun ({Login,Teams},TmpAns) ->
+			case user_logic:create_dirs_at_storage(Login,Teams,Storage) of
+				ok ->
+					TmpAns;
+				Error ->
+					lager:error("Can not create dirs for user ~s, error: ~p",[Login,Error]),
+					Error
+			end
+		end,
+	lists:foldl(CreateDirs, ok, LoginsAndTeams).
