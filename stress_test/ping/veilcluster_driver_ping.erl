@@ -31,18 +31,23 @@ new(_Id) ->
 run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes}) ->
     Host = lists:nth((KeyGen() rem length(Hosts)) + 1 , Hosts),
     NewState = {Hosts, CertFile, PongAnsBytes},
-    case wss:connect(Host, 5555, [{certfile, CertFile}, {cacertfile, CertFile}, auto_handshake]) of
-        {ok, Socket} ->
-            Res =
-                try ping(Action, Socket, PongAnsBytes) of
-                    ok -> {ok, NewState}
-                catch
-                    Reason -> {error, Reason, NewState}
-                end,
-            wss:close(Socket),
-          Res;
-        {error, Error} -> {error, {connect, Error}, NewState};
-        Other -> {error, {unknown_error, Other}, NewState}
+    try
+      case wss:connect(Host, 5555, [{certfile, CertFile}, {cacertfile, CertFile}, auto_handshake]) of
+          {ok, Socket} ->
+%%               Res =
+%%                   try ping(Action, Socket, PongAnsBytes) of
+%%                       ok -> {ok, NewState}
+%%                   catch
+%%                       Reason -> {error, Reason, NewState}
+%%                   end,
+              wss:close(Socket),
+            {ok, NewState};
+          {error, Error} -> {error, {connect, Error}, NewState};
+          Other -> {error, {unknown_error, Other}, NewState}
+      end
+    catch
+      E1:E2 ->
+        {error, {error_thrown, E1, E2}, NewState}
     end.
 
 ping(Module, Socket, PongAnsBytes) ->
