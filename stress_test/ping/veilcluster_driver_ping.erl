@@ -31,7 +31,8 @@ new(_Id) ->
 run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes}) ->
     Host = lists:nth((KeyGen() rem length(Hosts)) + 1 , Hosts),
     NewState = {Hosts, CertFile, PongAnsBytes},
-    case wss:connect(Host, 5555, [{certfile, CertFile}, {cacertfile, CertFile}, auto_handshake]) of
+    case wss:connect(Host, 5555, [{certfile, CertFile}]) of
+%%     case wss:connect(Host, 5555, [{certfile, CertFile}, {cacertfile, CertFile}, auto_handshake]) of
         {ok, Socket} ->
             wss:close(Socket),
             {ok, NewState};
