@@ -36,7 +36,6 @@ new(Id) ->
   end,
 
   CertFile = basho_bench_config:get(cert_file),
-  ssl:start(),
   Pong = #atom{value = "pong"},
   PongBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Pong)),
   PongAns = #answer{answer_status = "ok", worker_answer = PongBytes},
