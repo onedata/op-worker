@@ -71,7 +71,7 @@ multiple_ping(Counter, Socket, Msg, PongAnsBytes) ->
 %%     {ok, Ans1} -> Ans1;
 %%     {error, Reason} -> throw({recv, Reason})
 %%   end,
-  Ans = ok,
+  Ans = PongAnsBytes,
   case Ans of
     PongAnsBytes -> multiple_ping(Counter - 1, Socket, Msg, PongAnsBytes);
     Other -> throw({invalid_answer, Other})
