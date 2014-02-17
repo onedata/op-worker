@@ -33,14 +33,14 @@ run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes}) ->
     NewState = {Hosts, CertFile, PongAnsBytes},
     case wss:connect(Host, 5555, [{certfile, CertFile}, {cacertfile, CertFile}, auto_handshake]) of
         {ok, Socket} ->
-%%             Res =
-%%                 try ping(Action, Socket, PongAnsBytes) of
-%%                     ok -> {ok, NewState}
-%%                 catch
-%%                     Reason -> {error, Reason, NewState}
-%%                 end,
+            Res =
+                try ping(Action, Socket, PongAnsBytes) of
+                    ok -> {ok, NewState}
+                catch
+                    Reason -> {error, Reason, NewState}
+                end,
             wss:close(Socket),
-          {ok, NewState};
+          Res;
         {error, Error} -> {error, {connect, Error}, NewState};
         Other -> {error, {unknown_error, Other}, NewState}
     end.
