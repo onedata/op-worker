@@ -99,11 +99,11 @@ insert_storage(HelperName, HelperArgs, Fuse_groups) ->
               ok;
             _ ->
               lager:error("Can not change owner of users dir using storage helper ~p", [SHI#storage_helper_info.name]),
-              error
+              Ans2
           end;
         _ ->
           lager:error("Can not create users dir using storage helper ~p", [SHI#storage_helper_info.name]),
-          error
+					Ans
       end,
 
       Ans4 = storage_files_manager:mkdir(SHI, "groups"),
@@ -115,11 +115,11 @@ insert_storage(HelperName, HelperArgs, Fuse_groups) ->
                      ok;
                    _ ->
                      lager:error("Can not change owner of groups dir using storage helper ~p", [SHI#storage_helper_info.name]),
-                     error
+										 Ans5
                  end;
                _ ->
                  lager:error("Can not create groups dir using storage helper ~p", [SHI#storage_helper_info.name]),
-                 error
+								 Ans4
              end,
 
       case {Ans3, Ans6} of
@@ -130,7 +130,9 @@ insert_storage(HelperName, HelperArgs, Fuse_groups) ->
 					lager:error("Can not create dirs for existing users and theirs teams, error: ~p",[Error]),
 					{error, users_dirs_creation_error}
 			end;
-        _ -> {error, dirs_creation_error}
+        _ ->
+					lager:error("Dirs creation error: {users_dir_status, groups_dir_status} = ~p",{Ans3, Ans6}),
+					{error, dirs_creation_error}
       end;
     _ -> DAO_Ans
   end.
