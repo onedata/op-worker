@@ -243,9 +243,10 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
 
 int BufferAgent::onFlush(std::string path, ffi_type ffi)
 {
+    write_buffer_ptr wrapper;
     {
         unique_lock guard(m_wrMutex);
-        write_buffer_ptr wrapper = m_wrCacheMap[ffi->fh];
+        wrapper = m_wrCacheMap[ffi->fh];
     }
 
     {
