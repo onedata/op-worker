@@ -33,7 +33,7 @@ new(_Id) ->
 run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes, SocketState, Socket, LogLoop}) ->
     NewLoopValue = case LogLoop of
       0 ->
-        ?INFO("Loop finished~n"),
+        ?DEBUG("Loop finished~n"),
         ?LogLoop;
       _ ->
         LogLoop -1
