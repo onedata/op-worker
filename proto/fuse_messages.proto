@@ -50,6 +50,9 @@ message FileLocation {
     repeated string storage_helper_args = 6;
 }
 
+message CreateFileAck {
+    required string file_logic_name = 1;
+}
 
 message FileNotUsed {
     required string file_logic_name = 1;
