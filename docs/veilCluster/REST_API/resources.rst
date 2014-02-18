@@ -112,7 +112,7 @@ Index
 
 		.. sourcecode:: guess
 
-			curl -i -k --cert proxy_cert -X POST -H "content-type: multipart/form-data" -F "file=@file.txt" https://example.com/rest/latest/files/dir/file.txt		
+			curl -i -k --cert proxy_cert -X POST -H "content-type: multipart/form-data" -F "file=@file.txt" https://example.com:8443/rest/latest/files/dir/file.txt
 
 		**Example request**:
 
@@ -154,7 +154,7 @@ Index
 
 		.. sourcecode:: guess
 
-			curl -i -k --cert proxy_cert -X PUT -H "content-type: multipart/form-data" -F "file=@file.txt" https://example.com/rest/latest/files/dir/file.txt		
+			curl -i -k --cert proxy_cert -X PUT -H "content-type: multipart/form-data" -F "file=@file.txt" https://example.com:8443/rest/latest/files/dir/file.txt
 
 		**Example request**:
 
@@ -324,7 +324,7 @@ Index
 
 		.. sourcecode:: guess
 
-			curl -i -k --cert proxy_cert -H "content-type: application/json" -X POST https://example.com/rest/latest/shares/ -d '"dir/file.txt"'		
+			curl -i -k --cert proxy_cert -H "content-type: application/json" -X POST https://example.com:8443/rest/latest/shares/ -d '"dir/file.txt"'
 
 		**Example request**:
 

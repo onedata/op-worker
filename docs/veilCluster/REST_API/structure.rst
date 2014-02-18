@@ -5,7 +5,7 @@ Structure of the REST URIs
 
 	.. sourcecode:: http
 
-		http://host:port/rest/api-version/path/to/resource
+		http://host:8443/rest/api-version/path/to/resource
 
 	Where *api-version* can be of following:
 
@@ -18,6 +18,6 @@ Structure of the REST URIs
 
 	.. sourcecode:: http
 
-		https://example.com/rest/latest/files/dir
+		https://example.com:8443/rest/latest/files/dir
 
 	For more information see a full list of available :doc:`resources <resources>`.
