@@ -174,10 +174,7 @@ get_fuse_group(FuseID) ->
 add_dirs_for_existing_users(Storage) ->
 	case list_users() of
 		{ok,Users} ->
-			Logins = lists:map(fun(X) -> user_logic:get_login(X) end, Users),
-			TeamsList = lists:map(fun(X) -> user_logic:get_team_names(X) end, Users),
-			LoginsAndTeams = lists:zip(Logins,TeamsList),
-
+			LoginsAndTeams = lists:map(fun(X) -> {user_logic:get_login(X), user_logic:get_team_names(X)} end, Users),
 			CreateDirs =
 				fun ({Login,Teams},TmpAns) ->
 					case user_logic:create_dirs_at_storage(Login,Teams,Storage) of
