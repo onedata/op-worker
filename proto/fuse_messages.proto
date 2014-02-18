@@ -51,7 +51,7 @@ message FileLocation {
 }
 
 message CreateFileAck {
-    required string file_id = 1;
+    required string file_logic_name = 1;
 }
 
 message FileNotUsed {
