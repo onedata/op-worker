@@ -17,7 +17,7 @@
 -include("registered_names.hrl").
 -include("communication_protocol_pb.hrl").
 
--define(LogLoop, 10000).
+-define(LogLoop, 50000).
 
 new(_Id) -> 
     Hosts = basho_bench_config:get(cluster_hosts),
