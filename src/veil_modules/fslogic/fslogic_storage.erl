@@ -131,7 +131,7 @@ insert_storage(HelperName, HelperArgs, Fuse_groups) ->
 					{error, users_dirs_creation_error}
 			end;
         _ ->
-					lager:error("Dirs creation error: {users_dir_status, groups_dir_status} = ~p",{Ans3, Ans6}),
+					lager:error("Dirs creation error: {users_dir_status, groups_dir_status} = ~p",[{Ans3, Ans6}]),
 					{error, dirs_creation_error}
       end;
     _ -> DAO_Ans
