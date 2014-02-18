@@ -315,9 +315,9 @@ storage_helpers_management_test(Config) ->
   ?assertEqual(ok, ConvertAns),
   DnList = [DN],
 
-  Login = "user1",
+  Login = "veilfstestuser",
   Name = "user1 user1",
-  Team1 = "user1 team",
+  Team1 = "veilfstestgroup",
   Teams = [Team1],
   Email = "user1@email.net",
   {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
