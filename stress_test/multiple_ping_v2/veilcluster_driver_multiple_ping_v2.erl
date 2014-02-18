@@ -17,7 +17,8 @@
 -include("registered_names.hrl").
 -include("communication_protocol_pb.hrl").
 
--define(LogLoop, 50000).
+-define(LogLoop, 100).
+-define(LogLoopTime, 60000000).
 
 new(_Id) -> 
     Hosts = basho_bench_config:get(cluster_hosts),
@@ -26,17 +27,23 @@ new(_Id) ->
     PongBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Pong)),
     PongAns = #answer{answer_status = "ok", worker_answer = PongBytes},
     PongAnsBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(PongAns)),
-    Args = {Hosts, CertFile, PongAnsBytes, closed, [], ?LogLoop},
+    Args = {Hosts, CertFile, PongAnsBytes, closed, [], {?LogLoop, os:timestamp()}},
     ?DEBUG("Ping test initialized with params: ~p~n", [Args]),
     {ok, Args}.
 
-run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes, SocketState, Socket, LogLoop}) ->
+run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes, SocketState, Socket, {LogLoop, LastTime}}) ->
     NewLoopValue = case LogLoop of
       0 ->
-        ?DEBUG("Loop finished~n", []),
-        ?LogLoop;
+        Now = os:timestamp(),
+        case timer:now_diff(Now, LastTime) > ?LogLoopTime of
+          true ->
+            ?DEBUG("Loop log~n", []),
+            {?LogLoop, Now};
+          false ->
+            {?LogLoop, LastTime}
+        end;
       _ ->
-        LogLoop -1
+        {LogLoop -1, LastTime}
     end,
 
     Host = lists:nth((KeyGen() rem length(Hosts)) + 1 , Hosts),
