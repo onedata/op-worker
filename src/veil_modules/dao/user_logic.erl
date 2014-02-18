@@ -510,6 +510,7 @@ create_dirs_at_storage(Root, Teams, Storage) ->
 						error
 				end;
 			{error, dir_or_file_exists} ->
+				lager:debug("Team root directory ~p aleready exists",[DirName]),
 				TmpAns;
 			_ ->
 				lager:error("Can not create dir ~p using storage helper ~p. Make sure group '~s' is defined in the system.",
