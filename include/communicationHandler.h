@@ -45,6 +45,8 @@ typedef boost::function<void(const veil::protocol::communication_protocol::Answe
 
 typedef boost::function<std::string()> get_cert_path_fun;
 
+typedef boost::function<void(char*, int, int, void*)> passphrase_fun;
+
 template<typename T>
 std::string toString(T in) {
     std::ostringstream ss;
@@ -53,6 +55,39 @@ std::string toString(T in) {
 }
 
 namespace veil {
+    
+struct CertificateInfo {
+    enum CertificateType {
+        PEM,
+        P12,
+        ASN1
+    };
+    
+    std::string         user_cert_path;
+    std::string         user_key_path;
+    CertificateType     cert_type;
+
+    boost::asio::const_buffer chain_data;
+    boost::asio::const_buffer key_data;
+    
+    CertificateInfo(std::string         p_user_cert_path,
+                    std::string         p_user_key_path,
+                    CertificateType     p_cert_type = PEM)
+      : user_cert_path(p_user_cert_path),
+        user_key_path(p_user_key_path),
+        cert_type(p_cert_type)
+    {
+    }
+
+    CertificateInfo(boost::asio::const_buffer chain_buff, boost::asio::const_buffer key_buff) 
+      : cert_type(PEM),
+        chain_data(chain_buff),
+        key_data(key_buff)
+    {
+    }
+};
+    
+typedef boost::function<CertificateInfo()> cert_info_fun;
 
 /**
  * The CommunicationHandler class.
@@ -77,8 +112,7 @@ protected:
     
     std::string                 m_hostname;
     int                         m_port;
-    std::string                 m_certPath;
-    get_cert_path_fun           m_certFun;
+    cert_info_fun               m_getCertInfo;
     
     // Container that gathers all incoming messages
     boost::unordered_map<long long, std::string> m_incomingMessages;
@@ -126,10 +160,10 @@ protected:
                                                                             ///< as PUSH channel
 
 public:
-    CommunicationHandler(std::string hostname, int port, std::string certPath);
+    CommunicationHandler(std::string hostname, int port, cert_info_fun);
     virtual ~CommunicationHandler();
 
-    virtual void setCertFun(get_cert_path_fun certFun);                     ///< Setter for function that returns certiificate file path.
+    virtual void setCertFun(cert_info_fun certFun);                         ///< Setter for function that returns CommunicationHandler::CertificateInfo struct.
     virtual void setFuseID(std::string);                                    ///< Setter for field m_fuseID.
     virtual void setPushCallback(push_callback);                            ///< Setter for field m_pushCallback.
     virtual void enablePushChannel();                                       ///< Enables PUSH channel on this connection. 

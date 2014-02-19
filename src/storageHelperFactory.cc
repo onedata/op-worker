@@ -9,6 +9,7 @@
 #include "directIOHelper.h"
 #include "clusterProxyHelper.h"
 #include <boost/algorithm/string.hpp>
+#include "communicationHandler.h"
 
 using namespace boost;
 using namespace std;
@@ -20,9 +21,9 @@ namespace config {
 
     // Variables below are used as default values when ConnectionPool object is wasnt set 
     // but storage helper tries to use TCP/IP connection. It should not happen.
-    unsigned int clusterPort;
-    string       proxyCert;
-    string       clusterHostname;
+    unsigned int    clusterPort;
+    cert_info_fun   getCertInfo;
+    string          clusterHostname;
     
 
     namespace {
@@ -37,7 +38,7 @@ namespace config {
     boost::shared_ptr<SimpleConnectionPool> getConnectionPool()
     {
         if(!connectionPool)
-            connectionPool.reset(new SimpleConnectionPool(clusterHostname, clusterPort, proxyCert, NULL));
+            connectionPool.reset(new SimpleConnectionPool(clusterHostname, clusterPort, getCertInfo));
 
         return connectionPool;
     }

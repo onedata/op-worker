@@ -16,7 +16,7 @@ using namespace veil;
 class MockConnectionPool
     : public SimpleConnectionPool {
 public:
-    MockConnectionPool() : SimpleConnectionPool("host", 5555, "certFile", NULL) {};
+    MockConnectionPool() : SimpleConnectionPool("host", 5555, boost::bind(&MockConnectionPool::getCertInfo, this)) {};
     ~MockConnectionPool() {};
 
     MOCK_METHOD2(setPoolSize, void(PoolType, unsigned int));
@@ -25,6 +25,9 @@ public:
     MOCK_METHOD1(selectConnection, boost::shared_ptr<CommunicationHandler>(SimpleConnectionPool::PoolType));
     MOCK_METHOD1(releaseConnection, void(boost::shared_ptr<CommunicationHandler>));
 
+    CertificateInfo getCertInfo() {
+        return CertificateInfo("certFile", "certFile");
+    }
 
 };
 

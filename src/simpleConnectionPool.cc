@@ -6,6 +6,7 @@
  */
 
 #include "simpleConnectionPool.h"
+#include "communicationHandler.h"
 #include "glog/logging.h"
 #include <netinet/in.h>
 #include <sys/types.h>
@@ -21,31 +22,16 @@ using namespace std;
 
 namespace veil {
 
-SimpleConnectionPool::SimpleConnectionPool(string hostname, int port, string certPath, bool (*updateCert)(),int metaPoolSize,int dataPoolSize) :
+SimpleConnectionPool::SimpleConnectionPool(string hostname, int port, cert_info_fun certInfoFun, int metaPoolSize, int dataPoolSize) :
     m_hostname(hostname),
-    updateCertCB(updateCert),
     m_port(port),
-    m_certPath(certPath)
+    m_getCertInfo(certInfoFun)
 {
     m_connectionPools[META_POOL] = ConnectionPoolInfo(metaPoolSize);
     m_connectionPools[DATA_POOL] = ConnectionPoolInfo(dataPoolSize);
 }
 
 SimpleConnectionPool::~SimpleConnectionPool() {}
-
-string SimpleConnectionPool::getPeerCertificatePath() 
-{
-    //                 Disable certificate update for now (due to globus memory leak)
-    if(updateCertCB && false) 
-    {
-        if(!updateCertCB())
-        {
-            LOG(ERROR) << "Could not find valid certificate.";
-        }
-    }
-
-    return m_certPath;
-}
 
 void SimpleConnectionPool::resetAllConnections(PoolType type)
 {
@@ -61,16 +47,6 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(Pool
     boost::shared_ptr<CommunicationHandler> conn;
     
     CounterRAII sc(poolInfo.currWorkers);
-
-    // Check if certificate is OK and generate new one if needed and possible
-    //                 Disable certificate update for now (due to globus memory leak)
-    if(updateCertCB && false) {
-        if(!updateCertCB())
-        {
-            LOG(ERROR) << "Could not find valid certificate.";
-            return boost::shared_ptr<CommunicationHandler>();
-        }
-    }
     
     lock.unlock();
     list<string> ips = dnsQuery(m_hostname);
@@ -102,8 +78,7 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(Pool
         
         lock.unlock();
 
-        conn.reset(new CommunicationHandler(connectTo, m_port, getPeerCertificatePath()));
-        conn->setCertFun(boost::bind(&SimpleConnectionPool::getPeerCertificatePath, this));
+        conn.reset(new CommunicationHandler(connectTo, m_port, m_getCertInfo));
         conn->setFuseID(m_fuseId);  // Set FuseID that shall be used by this connection as session ID
         if(m_pushCallback)                          // Set callback that shall be used for PUSH messages and error messages
             conn->setPushCallback(m_pushCallback);  // Note that this doesnt enable/register PUSH channel !

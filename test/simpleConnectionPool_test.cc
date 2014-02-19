@@ -24,10 +24,14 @@ protected:
     boost::shared_ptr<ProxySimpleConnectionPool> proxy;
 
     virtual void SetUp() {
-        proxy.reset(new ProxySimpleConnectionPool("host", 5555, "cert", NULL));
+        proxy.reset(new ProxySimpleConnectionPool("host", 5555, boost::bind(&SimpleConnectionPoolTest::getCertInfo, this)));
     }
 
     virtual void TearDown() {
+    }
+
+    CertificateInfo getCertInfo() {
+        return CertificateInfo("certFile", "certFile");
     }
 
 };
