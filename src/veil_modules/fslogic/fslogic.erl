@@ -456,7 +456,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, crea
     ok ->
       case get_waiting_file(ProtocolVersion, File, FuseID) of
         {ok, #veil_document{record = #file{} = OldFile} = OldDoc} ->
-          ChangedFile = OldDoc#veil_document{record = OldFile#file.created = true},
+          ChangedFile = OldDoc#veil_document{record = OldFile#file{created = true}},
           case dao_lib:apply(dao_vfs, save_file, [ChangedFile], ProtocolVersion) of
             {ok, _} ->
               #atom{value = ?VOK};

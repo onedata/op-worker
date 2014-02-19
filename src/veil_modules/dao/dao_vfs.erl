@@ -365,7 +365,7 @@ exist_file_helper({internal_path, [Dir | Path], Root}, View) ->
         {ok, #view_result{rows = [#view_row{id = Id, doc = _Doc} | _Tail]}} ->
             case Path of
                 [] -> {ok, true};
-                _ -> exist_file_helper({internal_path, Path, Id})
+                _ -> exist_file_helper({internal_path, Path, Id}, View)
             end;
         {ok, #view_result{rows = []}} -> {ok, false};
         Other -> Other
@@ -414,19 +414,19 @@ get_waiting_file(Args) ->
 -spec get_waiting_file(File :: term(), MultiError :: boolean()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
 get_waiting_file({internal_path, [Dir | Path], Root}, MultiError) ->
-  get_waiting_file({internal_path, [Dir | Path], Root}, MultiError, ?WAITING_FILES_TREE_VIEW).
+  get_file_helper({internal_path, [Dir | Path], Root}, MultiError, ?WAITING_FILES_TREE_VIEW).
 
 %% get_file_helper/2
 %% ====================================================================
 %% @doc Gets file from DB. Argument should be file() - see dao_types.hrl for more details <br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec get_file_helper(File :: file()) -> {ok, file_doc()} | {error, any(), View :: term()} | no_return(). %% Throws file_not_found and invalid_data
+-spec get_file_helper(File :: file(), View :: term()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
 get_file_helper({internal_path, [], []}, _View) -> %% Root dir query
     {ok, #veil_document{uuid = "", record = #file{type = ?DIR_TYPE, perms = ?RD_ALL_PERM bor ?WR_ALL_PERM bor ?EX_ALL_PERM}}};
 get_file_helper({internal_path, [Dir | Path], Root}, View) ->
-  get_file({internal_path, [Dir | Path], Root}, false, View);
+  get_file_helper({internal_path, [Dir | Path], Root}, false, View);
 get_file_helper({uuid, UUID}, _View) ->
     dao:set_db(?FILES_DB_NAME),
     case dao:get_record(UUID) of
