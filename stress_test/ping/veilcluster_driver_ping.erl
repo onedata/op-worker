@@ -55,7 +55,7 @@ run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes, {LogLoop, LastTim
                   try ping(Action, Socket, PongAnsBytes) of
                       ok -> {ok, NewState}
                   catch
-                      Reason -> {error, Reason, NewState}
+                    R1:R2 -> {error, R1, R2, NewState}
                   end,
               wss:close(Socket),
               Res;
