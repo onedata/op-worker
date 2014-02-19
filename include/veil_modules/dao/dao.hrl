@@ -80,7 +80,7 @@
 
 %% Design Names
 -define(VFS_BASE_DESIGN_NAME, "vfs_base").
--define(WAITING_FILES_DESIGN_NAME, "vfs_base").
+-define(WAITING_FILES_DESIGN_NAME, "waitiing_files_tree").
 -define(USER_BY_LOGIN_DESIGN_NAME, "user_by_login").
 -define(USER_BY_EMAIL_DESIGN_NAME, "user_by_email").
 -define(USER_BY_DN_DESIGN_NAME, "user_by_dn").
