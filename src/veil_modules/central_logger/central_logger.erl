@@ -12,7 +12,7 @@
 -module(central_logger).
 -behaviour(worker_plugin_behaviour).
 
--include("logging.hrl")
+-include("logging.hrl").
 
 %% ====================================================================
 %% API functions
