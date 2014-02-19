@@ -312,15 +312,15 @@ veil_handshake_test(Config) ->
     ?assertEqual([{testname1, "testvalue1"}, {testname2, "testvalue2"}], Vars),
 
     %% Cleanup
-		wss:close(Socket11),
-		wss:close(Socket12),
-		wss:close(Socket21),
-		wss:close(Socket22),
     ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ TeamName], ?ProtocolVersion])),
     ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
 
     ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{login, "user1"}])),
-    ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{login, "user2"}])).
+    ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{login, "user2"}])),
+		wss:close(Socket11),
+		wss:close(Socket12),
+		wss:close(Socket21),
+		wss:close(Socket22).
 
 
 %% This test checks if workers list inside dispatcher is refreshed correctly.
@@ -530,7 +530,7 @@ ping_test(Config) ->
     end
   end,
   PongsNum = lists:foldl(CheckModules, 0, Jobs),
-
+%% 	wss:close(Socket), %todo check if everything works fine with this close
   ?assertEqual(PongsNum, length(Jobs)).
 
 %% ====================================================================

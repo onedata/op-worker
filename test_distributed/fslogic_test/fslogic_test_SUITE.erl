@@ -272,11 +272,6 @@ groups_permissions_test(Config) ->
   ?assertEqual("ok", Status38),
   ?assertEqual(list_to_atom(?VOK), Answer38),
 
-
-
-  wss:close(Socket),
-  wss:close(Socket2),
-
   rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team], ?ProtocolVersion]),
   rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion]),
   rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["users/"], ?ProtocolVersion]),
@@ -287,7 +282,9 @@ groups_permissions_test(Config) ->
   RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
   ?assertEqual(ok, RemoveUserAns),
   RemoveUserAns2 = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN2}]),
-  ?assertEqual(ok, RemoveUserAns2).
+  ?assertEqual(ok, RemoveUserAns2),
+  wss:close(Socket),
+  wss:close(Socket2).
 
 %% This test checks if creation of file works well when many concurrent creation requests are sent
 concurrent_file_creation_test(Config) ->
@@ -653,8 +650,6 @@ groups_test(Config) ->
 
 
     %% Cleanup
-		wss:close(Socket1),
-		wss:close(Socket2),
     ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete, ["/veilfstestuser/file"])),
     ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete, ["/groups/veilfstestgroup/f1"])),
     ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete,["/groups/veilfstestgroup/f2"])),
@@ -675,7 +670,9 @@ groups_test(Config) ->
     ?assertEqual(ok, files_tester:delete_dir(?TEST_ROOT ++ "/groups/veilfstestgroup2")),
 
     ?assertEqual(ok, files_tester:delete_dir(?TEST_ROOT ++ "/users")),
-    ?assertEqual(ok, files_tester:delete_dir(?TEST_ROOT ++ "/groups")).
+    ?assertEqual(ok, files_tester:delete_dir(?TEST_ROOT ++ "/groups")),
+		wss:close(Socket1),
+		wss:close(Socket2).
 
 %% Checks creating of directories at storage for users' files.
 %% The test creates path for a new file that contains 2 directories
@@ -814,8 +811,6 @@ user_file_counting_test(Config) ->
     ?assertEqual(list_to_atom(?VOK), Answer)
   end, User2FilesEnding),
 
-	wss:close(Socket),
-	wss:close(Socket2),
 
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
@@ -831,7 +826,9 @@ user_file_counting_test(Config) ->
   files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams2),
 
   files_tester:delete_dir(?TEST_ROOT ++ "/users"),
-  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups"),
+	wss:close(Socket),
+	wss:close(Socket2).
 
 
 %% Checks permissions management functions
@@ -1289,8 +1286,6 @@ dir_mv_test(Config) ->
   ?assertEqual("ok", StatusDelete2),
   ?assertEqual(list_to_atom(?VOK), AnswerDelete2),
 
-	wss:close(Socket),
-
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
@@ -1301,7 +1296,8 @@ dir_mv_test(Config) ->
   files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams),
 
   files_tester:delete_dir(?TEST_ROOT ++ "/users"),
-  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups"),
+	wss:close(Socket).
 
 %% Checks file sharing functions
 file_sharing_test(Config) ->
@@ -1456,8 +1452,6 @@ file_sharing_test(Config) ->
   ?assertEqual("ok", StatusDelete),
   ?assertEqual(list_to_atom(?VOK), AnswerDelete),
 
-	wss:close(Socket),
-
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
@@ -1468,7 +1462,8 @@ file_sharing_test(Config) ->
   files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams),
 
   files_tester:delete_dir(?TEST_ROOT ++ "/users"),
-  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups"),
+	wss:close(Socket).
 
 %% Checks fslogic integration with dao and db
 fuse_requests_test(Config) ->
@@ -1729,8 +1724,6 @@ fuse_requests_test(Config) ->
   ?assertEqual("ok", Status16),
   ?assertEqual(list_to_atom(?VOK), Answer16),
 
-	wss:close(Socket),
-
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
@@ -1741,7 +1734,8 @@ fuse_requests_test(Config) ->
   files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams),
 
   files_tester:delete_dir(?TEST_ROOT ++ "/users"),
-  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups"),
+	wss:close(Socket).
 
 %% Checks fslogic integration with dao and db
 %% This test also checks chown & chgrp behaviour
@@ -1956,9 +1950,6 @@ users_separation_test(Config) ->
   ?assertEqual("ok", Status20),
   ?assertEqual(?VENOENT, Answer20),
 
-	wss:close(Socket),
-	wss:close(Socket2),
-
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
@@ -1973,7 +1964,9 @@ users_separation_test(Config) ->
   files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams2),
 
   files_tester:delete_dir(?TEST_ROOT ++ "/users"),
-  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups"),
+	wss:close(Socket),
+	wss:close(Socket2).
 
 %% Checks files manager (manipulation on tmp files copies)
 files_manager_tmp_files_test(Config) ->
