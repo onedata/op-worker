@@ -384,6 +384,28 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getn
                             Status = dao_lib:apply(dao_vfs, save_new_file, [File, FileRecord], ProtocolVersion),
                             Validity = ?LOCATION_VALIDITY,
                             case Status of
+                              {ok, {waiting_file, ExistingWFile}} ->
+                                ExistingWFileUUID = ExistingWFile#veil_document.uuid,
+                                update_parent_ctime(Record#getnewfilelocation.file_logic_name, CTime),
+                                {ExistingWFileStatus2, _} = save_file_descriptor(ProtocolVersion, ExistingWFileUUID, FuseID, Validity),
+                                case ExistingWFileStatus2 of
+                                  ok ->
+                                    ExistingWFileRecord = ExistingWFile#veil_document.record,
+                                    ExistingWFileLocation= ExistingWFileRecord#file.location,
+
+                                    case dao_lib:apply(dao_vfs, get_storage, [{uuid, ExistingWFileLocation#file_location.storage_id}], ProtocolVersion) of
+                                      {ok, #veil_document{record = ExistingWFileStorage}} ->
+                                        {SH, File_id2} = get_sh_and_id(FuseID, ExistingWFileStorage, ExistingWFileLocation#file_location.file_id),
+                                        #storage_helper_info{name = ExistingWFileStorageSHName, init_args = ExistingWFileStorageSHArgs} = SH,
+                                        #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = ExistingWFileStorageSHName, storage_helper_args = ExistingWFileStorageSHArgs};
+                                      ExistingWFileBadStatus2 ->
+                                        lager:error([{mod, ?MODULE}], "Error: cannot get storage for existing waiting file location: ~p", [ExistingWFileBadStatus2]),
+                                        #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
+                                    end;
+                                  BadStatus2 ->
+                                    lager:error([{mod, ?MODULE}], "Error: cannot save file_descriptor document: ~p", [BadStatus2]),
+                                    #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
+                                end;
                               {ok, FileUUID} ->
                                 update_parent_ctime(Record#getnewfilelocation.file_logic_name, CTime),
                                 {Status2, _TmpAns2} = save_file_descriptor(ProtocolVersion, FileUUID, FuseID, Validity),
@@ -427,6 +449,29 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getn
         lager:error([{mod, ?MODULE}], "Error: can not get full file name: ~p, error ~p", [File, {FileNameFindingAns, File}]),
         #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
     end;
+
+handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, createfileack) ->
+  {FileNameFindingAns, File} = get_full_file_name(Record#filenotused.file_logic_name, createfileack),
+  case FileNameFindingAns of
+    ok ->
+      case get_waiting_file(ProtocolVersion, File, FuseID) of
+        {ok, #veil_document{record = #file{} = OldFile} = OldDoc} ->
+          ChangedFile = OldDoc#veil_document{record = OldFile#file.created = true},
+          case dao_lib:apply(dao_vfs, save_file, [ChangedFile], ProtocolVersion) of
+            {ok, _} ->
+              #atom{value = ?VOK};
+            Other ->
+              lager:warning("Cannot save file document. Reason: ~p", [Other]),
+              #atom{value = ?VEREMOTEIO}
+          end;
+        {error, file_not_found} ->
+          lager:warning("Cannot find waiting file: ~p", [File]),
+          #atom{value = ?VENOENT};
+        _ -> #atom{value = ?VEREMOTEIO}
+      end;
+    ?VEPERM -> #atom{value = ?VEPERM};
+    _  -> #atom{value = ?VEREMOTEIO}
+  end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, filenotused) ->
   {FileNameFindingAns, File} = get_full_file_name(Record#filenotused.file_logic_name, filenotused),
@@ -951,22 +996,41 @@ update_file_descriptor(Descriptor, Validity) ->
 -spec get_file(ProtocolVersion :: term(), File :: string(), FuseID :: string()) -> Result when
   Result :: term().
 %% ====================================================================
-
 get_file(ProtocolVersion, File, FuseID) ->
+  get_file_helper(ProtocolVersion, File, FuseID, get_file).
+
+%% get_waiting_file/3
+%% ====================================================================
+%% @doc Gets file info about file that waits to be created at storage from DB
+%% @end
+-spec get_waiting_file(ProtocolVersion :: term(), File :: string(), FuseID :: string()) -> Result when
+  Result :: term().
+%% ====================================================================
+get_waiting_file(ProtocolVersion, File, FuseID) ->
+  get_file_helper(ProtocolVersion, File, FuseID, get_waiting_file).
+
+%% get_file_helper/4
+%% ====================================================================
+%% @doc Gets file info from DB
+%% @end
+-spec get_file_helper(ProtocolVersion :: term(), File :: string(), FuseID :: string(), Fun :: atom()) -> Result when
+  Result :: term().
+%% ====================================================================
+get_file_helper(ProtocolVersion, File, FuseID, Fun) ->
     lager:debug("get_file(File: ~p, FuseID: ~p)", [File, FuseID]),
     case string:tokens(File, "/") of
         [?GROUPS_BASE_DIR_NAME, GroupName | _] -> %% Check if group that user is tring to access is avaliable to him
             case get(user_id) of %% Internal call, allow all group access
-                undefined   -> dao_lib:apply(dao_vfs, get_file, [File], ProtocolVersion);
+                undefined   -> dao_lib:apply(dao_vfs, Fun, [File], ProtocolVersion);
                 UserDN      -> %% Check if user has access to this group
                     Teams = user_logic:get_team_names({dn, UserDN}),
                     case lists:member(GroupName, Teams) of %% Does the user belong to the group?
-                        true  -> dao_lib:apply(dao_vfs, get_file, [File], ProtocolVersion);
+                        true  -> dao_lib:apply(dao_vfs, Fun, [File], ProtocolVersion);
                         false -> {error, file_not_found} %% Assume that this file does not exists
                     end
             end;
         _ ->
-            dao_lib:apply(dao_vfs, get_file, [File], ProtocolVersion)
+            dao_lib:apply(dao_vfs, Fun, [File], ProtocolVersion)
     end.
 
 %% delete_old_descriptors/3

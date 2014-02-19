@@ -80,6 +80,7 @@
 
 %% Design Names
 -define(VFS_BASE_DESIGN_NAME, "vfs_base").
+-define(WAITING_FILES_DESIGN_NAME, "vfs_base").
 -define(USER_BY_LOGIN_DESIGN_NAME, "user_by_login").
 -define(USER_BY_EMAIL_DESIGN_NAME, "user_by_email").
 -define(USER_BY_DN_DESIGN_NAME, "user_by_dn").
@@ -91,6 +92,7 @@
 
 %% Views
 -define(FILE_TREE_VIEW, #view_info{name = "file_tree", design = ?VFS_BASE_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
+-define(WAITING_FILES_TREE_VIEW, #view_info{name = "waitiing_files_tree", design = ?WAITING_FILES_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
 -define(FILE_SUBDIRS_VIEW, #view_info{name = "file_subdirs", design = ?VFS_BASE_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
 -define(FD_BY_FILE_VIEW, #view_info{name = "fd_by_name", design = ?VFS_BASE_DESIGN_NAME, db_name = ?DESCRIPTORS_DB_NAME}).
 -define(FD_BY_EXPIRED_BEFORE_VIEW, #view_info{name = "fd_by_expired_before", design = ?VFS_BASE_DESIGN_NAME, db_name = ?DESCRIPTORS_DB_NAME}).
@@ -126,7 +128,7 @@
 %% List of all used databases :: [string()]
 -define(DB_LIST, [?SYSTEM_DB_NAME, ?FILES_DB_NAME, ?DESCRIPTORS_DB_NAME, ?USERS_DB_NAME]).
 %% List of all used views :: [#view_info]
--define(VIEW_LIST, [?FILE_TREE_VIEW, ?FILE_SUBDIRS_VIEW, ?FD_BY_FILE_VIEW, ?FD_BY_EXPIRED_BEFORE_VIEW, ?ALL_STORAGE_VIEW,
+-define(VIEW_LIST, [?FILE_TREE_VIEW, ?WAITING_FILES_TREE_VIEW, ?FILE_SUBDIRS_VIEW, ?FD_BY_FILE_VIEW, ?FD_BY_EXPIRED_BEFORE_VIEW, ?ALL_STORAGE_VIEW,
                     ?FILES_BY_UID_AND_FILENAME, ?FILE_META_BY_TIMES, ?FILES_BY_META_DOC,
                     ?USER_BY_EMAIL_VIEW, ?USER_BY_LOGIN_VIEW, ?USER_BY_DN_VIEW, ?USER_BY_UID_VIEW, ?STORAGE_BY_ID_VIEW,
                     ?SHARE_BY_FILE_VIEW, ?SHARE_BY_USER_VIEW, ?USER_FILES_NUMBER_VIEW, ?GROUP_FILES_NUMBER_VIEW,

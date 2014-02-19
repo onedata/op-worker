@@ -21,7 +21,7 @@
 %% API - File system management
 -export([list_dir/3, count_subdirs/1, rename_file/2, lock_file/3, unlock_file/3, find_files/1]). %% High level API functions
 -export([save_descriptor/1, remove_descriptor/1, exist_descriptor/1, get_descriptor/1, list_descriptors/3]). %% Base descriptor management API functions
--export([save_new_file/2, save_file/1, remove_file/1, exist_file/1, get_file/1, get_path_info/1]). %% Base file management API function
+-export([save_new_file/2, save_file/1, remove_file/1, exist_file/1, get_file/1, get_waiting_file/1, get_path_info/1]). %% Base file management API function
 -export([save_storage/1, remove_storage/1, exist_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
 -export([save_file_meta/1, remove_file_meta/1, exist_file_meta/1, get_file_meta/1]).
 
@@ -224,25 +224,44 @@ get_file_meta(FMetaUUID) ->
 save_new_file(FilePath, #file{} = File) ->
   try
     AnalyzedPath = file_path_analyze(FilePath),
-    case exist_file(AnalyzedPath) of
+    case exist_waiting_file(AnalyzedPath) of
       {ok, false} ->
-        SaveAns = save_file(File),
-        case SaveAns of
-          {ok, UUID} ->
-            try
-              get_file(AnalyzedPath, true),
-              {ok, UUID}
-            catch
-              _:file_duplicated ->
-                dao:remove_record(UUID),
-                {error, file_exists};
-              _:Error2 ->
-                {error, Error2}
+        case exist_file(AnalyzedPath) of
+          {ok, false} ->
+            SaveAns = save_file(File),
+            case SaveAns of
+              {ok, UUID} ->
+                %% check if file was not created by disconnected node in parallel
+                try
+                  get_waiting_file(AnalyzedPath, true),
+                  case exist_file(AnalyzedPath) of
+                    {ok, false} ->
+                      {ok, UUID};
+                    {ok, true} ->
+                      dao:remove_record(UUID),
+                      {error, file_exists}
+                  end
+                catch
+                  _:file_duplicated ->
+                    dao:remove_record(UUID),
+                    {error, file_exists};
+                  _:Error2 ->
+                    {error, Error2}
+                end;
+              _ -> SaveAns
             end;
-          _ -> SaveAns
+          {ok, true} ->
+            {error, file_exists};
+          Other -> Other
         end;
       {ok, true} ->
-        {error, file_exists};
+        try
+          ExistingWFile = get_waiting_file(AnalyzedPath),
+          {ok, {waiting_file, ExistingWFile}}
+        catch
+          _:_ ->
+            {error, file_exists}
+        end;
       Other -> Other
     end
   catch
@@ -316,26 +335,46 @@ remove_file(File) ->
 %% @end
 -spec exist_file(File :: file()) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
-exist_file({internal_path, [], []}) ->
+exist_file(Args) ->
+  exist_file_helper(Args, ?FILE_TREE_VIEW).
+
+%% exist_waiting_file/1
+%% ====================================================================
+%% @doc Checks whether file exists in DB and waits to be created at storage. Argument should be file() - see dao_types.hrl for more details. <br/>
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec exist_waiting_file(File :: file()) -> {ok, true | false} | {error, any()}.
+%% ====================================================================
+exist_waiting_file(Args) ->
+  exist_file_helper(Args, ?WAITING_FILES_TREE_VIEW).
+
+%% exist_file_helper/2
+%% ====================================================================
+%% @doc Checks whether file exists in DB. Argument should be file() - see dao_types.hrl for more details. <br/>
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec exist_file_helper(File :: file(), View :: term) -> {ok, true | false} | {error, any()}.
+%% ====================================================================
+exist_file_helper({internal_path, [], []}, _View) ->
     {ok, true};
-exist_file({internal_path, [Dir | Path], Root}) ->
+exist_file_helper({internal_path, [Dir | Path], Root}, View) ->
     QueryArgs =
         #view_query_args{keys = [[dao_helper:name(Root), dao_helper:name(Dir)]],
         include_docs = case Path of [] -> true; _ -> false end},
-    case dao:list_records(?FILE_TREE_VIEW, QueryArgs) of
+    case dao:list_records(View, QueryArgs) of
         {ok, #view_result{rows = [#view_row{id = Id, doc = _Doc} | _Tail]}} ->
             case Path of
                 [] -> {ok, true};
-                _ -> exist_file({internal_path, Path, Id})
+                _ -> exist_file_helper({internal_path, Path, Id})
             end;
         {ok, #view_result{rows = []}} -> {ok, false};
         Other -> Other
     end;
-exist_file({uuid, UUID}) ->
+exist_file_helper({uuid, UUID}, _View) ->
     dao:set_db(?FILES_DB_NAME),
     dao:exist_record(UUID);
-exist_file(Path) ->
-    exist_file(file_path_analyze(Path)).
+exist_file_helper(Path, View) ->
+  exist_file_helper(file_path_analyze(Path), View).
 
 %% get_file/1
 %% ====================================================================
@@ -344,11 +383,51 @@ exist_file(Path) ->
 %% @end
 -spec get_file(File :: file()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
-get_file({internal_path, [], []}) -> %% Root dir query
+get_file(Args) ->
+  get_file_helper(Args, ?FILE_TREE_VIEW).
+
+%% get_file/2
+%% ====================================================================
+%% @doc Gets file from DB. Argument should be file() - see dao_types.hrl for more details <br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec get_file(File :: term(), MultiError :: boolean()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
+%% ====================================================================
+get_file({internal_path, [Dir | Path], Root}, MultiError) ->
+  get_file_helper({internal_path, [Dir | Path], Root}, MultiError, ?FILE_TREE_VIEW).
+
+%% get_waiting_file/1
+%% ====================================================================
+%% @doc Gets file record of file that waits to be created at storage from DB. Argument should be file() - see dao_types.hrl for more details <br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec get_waiting_file(File :: file()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
+%% ====================================================================
+get_waiting_file(Args) ->
+  get_file_helper(Args, ?WAITING_FILES_TREE_VIEW).
+
+%% get_file/2
+%% ====================================================================
+%% @doc Gets file record of file that waits to be created at storage from DB. Argument should be file() - see dao_types.hrl for more details <br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec get_waiting_file(File :: term(), MultiError :: boolean()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
+%% ====================================================================
+get_waiting_file({internal_path, [Dir | Path], Root}, MultiError) ->
+  get_waiting_file({internal_path, [Dir | Path], Root}, MultiError, ?WAITING_FILES_TREE_VIEW).
+
+%% get_file_helper/2
+%% ====================================================================
+%% @doc Gets file from DB. Argument should be file() - see dao_types.hrl for more details <br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec get_file_helper(File :: file()) -> {ok, file_doc()} | {error, any(), View :: term()} | no_return(). %% Throws file_not_found and invalid_data
+%% ====================================================================
+get_file_helper({internal_path, [], []}, _View) -> %% Root dir query
     {ok, #veil_document{uuid = "", record = #file{type = ?DIR_TYPE, perms = ?RD_ALL_PERM bor ?WR_ALL_PERM bor ?EX_ALL_PERM}}};
-get_file({internal_path, [Dir | Path], Root}) ->
-  get_file({internal_path, [Dir | Path], Root}, false);
-get_file({uuid, UUID}) ->
+get_file_helper({internal_path, [Dir | Path], Root}, View) ->
+  get_file({internal_path, [Dir | Path], Root}, false, View);
+get_file_helper({uuid, UUID}, _View) ->
     dao:set_db(?FILES_DB_NAME),
     case dao:get_record(UUID) of
         {ok, #veil_document{record = #file{}} = Doc} ->
@@ -358,22 +437,22 @@ get_file({uuid, UUID}) ->
         Other ->
             Other
     end;
-get_file(Path) ->
-    get_file(file_path_analyze(Path)).
+get_file_helper(Path, View) ->
+  get_file_helper(file_path_analyze(Path), View).
 
-%% get_file/2
+%% get_file_helper/3
 %% ====================================================================
 %% @doc Gets file from DB. Argument should be file() - see dao_types.hrl for more details <br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec get_file(File :: file(), MultiError :: boolean()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
+-spec get_file_helper(File :: term(), MultiError :: boolean(), View :: term()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
-get_file({internal_path, [Dir | Path], Root}, MultiError) ->
+get_file_helper({internal_path, [Dir | Path], Root}, MultiError, View) ->
   QueryArgs =
     #view_query_args{keys = [[dao_helper:name(Root), dao_helper:name(Dir)]],
     include_docs = case Path of [] -> true; _ -> false end}, %% Include doc representing leaf of our file path
   {NewRoot, FileDoc} =
-    case dao:list_records(?FILE_TREE_VIEW, QueryArgs) of
+    case dao:list_records(View, QueryArgs) of
       {ok, #view_result{rows = [#view_row{id = Id, doc = FDoc}]}} ->
         {Id, FDoc};
       {ok, #view_result{rows = []}} ->
@@ -392,7 +471,7 @@ get_file({internal_path, [Dir | Path], Root}, MultiError) ->
     end,
   case Path of
     [] -> {ok, FileDoc};
-    _ -> get_file({internal_path, Path, NewRoot})
+    _ -> get_file_helper({internal_path, Path, NewRoot}, MultiError, View)
   end.
 
 %% get_path_info/1
