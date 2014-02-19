@@ -34,6 +34,7 @@ all() -> [groups_test, files_manager_tmp_files_test, files_manager_standard_file
 -define(SH, "DirectIO").
 -define(TEST_ROOT, ["/tmp/veilfs"]). %% Root of test filesystem
 -define(TEST_ROOT2, ["/tmp/veilfs2"]).
+-define(TEST_ROOT3, ["/tmp/veilfs3"]).
 -define(ProtocolVersion, 1).
 
 %% ====================================================================
@@ -897,7 +898,8 @@ permissions_management_test(Config) ->
   files_tester:delete(?TEST_ROOT ++ "/" ++ File).
 
 %% Checks user creation (root and dirs at storage creation).
-%% The test checks if directories for user and group files are created when the user is added to the system.
+%% The test checks if directories for user and group files are created when the user is added to the system,
+%% and when new storage is created (after adding users)
 user_creation_test(Config) ->
   nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
@@ -934,6 +936,11 @@ user_creation_test(Config) ->
   ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/users/" ++ Login2)),
   ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/groups/" ++ Team1)),
   ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/groups/" ++ Team2)),
+
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/users/" ++ Login)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/users/" ++ Login2)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/groups/" ++ Team1)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/groups/" ++ Team2)),
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
@@ -1087,11 +1094,37 @@ user_creation_test(Config) ->
   ?assertEqual(ok, PermStatus8),
   ?assertEqual(8#300, Perms8 rem 8#01000),
 
-  RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+	% check dirs creation in new storage for existing users
+	{InsertStorageAns3, StorageUUID3} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT3]),
+	?assertEqual(ok, InsertStorageAns3),
+
+	?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/users/" ++ Login)),
+	?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/users/" ++ Login2)),
+	?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/groups/" ++ Team1)),
+	?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/groups/" ++ Team2)),
+
+	{PermStatus9, Perms9} = files_tester:get_permissions(?TEST_ROOT3 ++ "/users/" ++ Login),
+	?assertEqual(ok, PermStatus9),
+	?assertEqual(8#300, Perms9 rem 8#01000),
+	{PermStatus10, Perms10} = files_tester:get_permissions(?TEST_ROOT3 ++ "/users/" ++ Login2),
+	?assertEqual(ok, PermStatus10),
+	?assertEqual(8#300, Perms10 rem 8#01000),
+	{PermStatus11, Perms11} = files_tester:get_permissions(?TEST_ROOT3 ++ "/groups/" ++ Team1),
+	?assertEqual(ok, PermStatus11),
+	?assertEqual(8#730, Perms11 rem 8#01000),
+	{PermStatus12, Perms12} = files_tester:get_permissions(?TEST_ROOT3 ++ "/groups/" ++ Team2),
+	?assertEqual(ok, PermStatus12),
+	?assertEqual(8#730, Perms12 rem 8#01000),
+
+	%cleanup
+	RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
   RemoveStorageAns2 = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID2}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns2),
+
+	RemoveStorageAns3 = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID3}], ?ProtocolVersion]),
+  ?assertEqual(ok, RemoveStorageAns3),
 
   ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team1], ?ProtocolVersion])),
   ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team2], ?ProtocolVersion])),
@@ -1113,13 +1146,21 @@ user_creation_test(Config) ->
   files_tester:delete_dir(?TEST_ROOT2 ++ "/groups/" ++ Team1),
   files_tester:delete_dir(?TEST_ROOT2 ++ "/groups/" ++ Team2),
 
+  files_tester:delete_dir(?TEST_ROOT3 ++ "/users/" ++ Login),
+  files_tester:delete_dir(?TEST_ROOT3 ++ "/users/" ++ Login2),
+  files_tester:delete_dir(?TEST_ROOT3 ++ "/groups/" ++ Team1),
+  files_tester:delete_dir(?TEST_ROOT3 ++ "/groups/" ++ Team2),
+
   files_tester:delete(?TEST_ROOT ++ "/" ++ File),
 
   files_tester:delete_dir(?TEST_ROOT ++ "/users"),
   files_tester:delete_dir(?TEST_ROOT ++ "/groups"),
 
   files_tester:delete_dir(?TEST_ROOT2 ++ "/users"),
-  files_tester:delete_dir(?TEST_ROOT2 ++ "/groups").
+  files_tester:delete_dir(?TEST_ROOT2 ++ "/groups"),
+
+  files_tester:delete_dir(?TEST_ROOT3 ++ "/users"),
+  files_tester:delete_dir(?TEST_ROOT3 ++ "/groups").
 
 %% Checks storage management functions
 %% The tests checks if functions used to manage user's files at storage (e.g. mv, mkdir) works well.
@@ -2311,6 +2352,8 @@ end_per_testcase(_, Config) ->
 
   %% Clear test dir
   os:cmd("rm -rf " ++ ?TEST_ROOT ++ "/*"),
+  os:cmd("rm -rf " ++ ?TEST_ROOT2 ++ "/*"),
+  os:cmd("rm -rf " ++ ?TEST_ROOT3 ++ "/*"),
 
   ?assertEqual(false, lists:member(error, StopLog)),
   ?assertEqual(ok, StopAns).

@@ -17,7 +17,7 @@
 %% ===================================================================
 %% API functions
 %% ===================================================================
--export([save_user/1, remove_user/1, exist_user/1, get_user/1, get_files_number/2]).
+-export([save_user/1, remove_user/1, exist_user/1, get_user/1, list_users/2, get_files_number/2]).
 
 
 %% save_user/1
@@ -109,6 +109,38 @@ get_user(Key) ->
     [{_, Ans}] -> %% Return document from cache
       {ok, Ans}
   end.
+
+%% list_users/2
+%% ====================================================================
+%% @doc Lists N users from DB, starting from Offset. <br/>
+%% Non-error return value is always {ok, [#veil_document{record = #user}]}.
+%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec list_users(N :: pos_integer(), Offset :: non_neg_integer()) ->
+	{ok, DocList :: list(user_doc())} |
+	no_return().
+%% ====================================================================
+list_users(N, Offset) ->
+	dao:set_db(?USERS_DB_NAME),
+
+	QueryArgs = #view_query_args{include_docs = true,  limit = N, skip = Offset, inclusive_end = false},
+
+	GetUser =
+		fun (#view_row{doc = UserDoc}) ->
+			UserDoc;
+		(Other) ->
+				lager:error("Invalid row in view response: ~p", [Other]),
+				throw(invalid_data)
+		end,
+
+	case dao:list_records(?USER_BY_LOGIN_VIEW, QueryArgs) of
+		{ok, #view_result{rows = FDoc}} ->
+			{ok, lists:map(GetUser, FDoc)};
+		Other ->
+			lager:error("Invalid view response: ~p", [Other]),
+			throw(invalid_data)
+	end.
 
 %% exist_user_in_db/1
 %% ====================================================================
