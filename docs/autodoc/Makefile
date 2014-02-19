@@ -3,6 +3,9 @@ VEILCLUSTER=../veilCluster
 MAIN=..
 ROOT=../..
 
+REST_PORT=$(shell sed -n '/.*name:[ ]*rest_port.*/ {N;N; s/.*value:[ ]*\([0-9]*\).*/\1/p}' < ${ROOT}/config/default.yml)
+REST_PORT_PLACEHOLDER=\$${rest_port}
+
 all: main veilclient veilcluster
 
 main:
@@ -21,6 +24,7 @@ veilclient:
 	@printf "\r[%3d%%]\tVeilClient\n" 100
 
 veilcluster:
+	@sed -i -e "s/${REST_PORT_PLACEHOLDER}/${REST_PORT}/" $(VEILCLUSTER)/REST_API/*
 	@printf "\r[%3d%%]\tVeilCluster" 0
 	@mkdir -p $(VEILCLUSTER)/c_modules/gpv_nif
 	@mkdir -p $(VEILCLUSTER)/c_modules/veilhelpers_nif
