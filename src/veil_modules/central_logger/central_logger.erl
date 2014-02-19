@@ -142,7 +142,7 @@ dispatch_log(Message, Timestamp, Severity, OldMetadata) ->
                    end,
         do_log(Message, Timestamp, Severity, Metadata)
     catch
-        Type:Msg -> ?warning_stacktrace("Error dispatching log: ~p:~p", [Type, Msg])
+        Type:Msg -> lager:log(warning, ?gather_metadata ++ [{destination, local}], "Error dispatching log: ~p:~p", [Type, Msg])
     end,
     ok.
 
