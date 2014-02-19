@@ -377,7 +377,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getn
 
                             Groups = get_group_owner(FileBaseName), %% Get owner group name based on file access path
 
-                            FileRecordInit = #file{type = ?REG_TYPE, name = FileName, uid = UserId, gids = Groups, parent = Parent#veil_document.uuid, perms = Record#getnewfilelocation.mode, location = FileLocation},
+                            FileRecordInit = #file{type = ?REG_TYPE, name = FileName, uid = UserId, gids = Groups, parent = Parent#veil_document.uuid, perms = Record#getnewfilelocation.mode, location = FileLocation, created = false},
                             %% Async *times update
                             FileRecord = fslogic_utils:update_meta_attr(FileRecordInit, times, {CTime, CTime, CTime}),
 

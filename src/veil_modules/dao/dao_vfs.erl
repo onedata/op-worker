@@ -223,52 +223,99 @@ get_file_meta(FMetaUUID) ->
 %% ====================================================================
 save_new_file(FilePath, #file{} = File) ->
   try
-    AnalyzedPath = file_path_analyze(FilePath),
-    case exist_waiting_file(AnalyzedPath) of
-      {ok, false} ->
-        case exist_file(AnalyzedPath) of
-          {ok, false} ->
-            SaveAns = save_file(File),
-            case SaveAns of
-              {ok, UUID} ->
-                %% check if file was not created by disconnected node in parallel
-                try
-                  get_waiting_file(AnalyzedPath, true),
-                  case exist_file(AnalyzedPath) of
-                    {ok, false} ->
-                      {ok, UUID};
-                    {ok, true} ->
-                      dao:remove_record(UUID),
-                      {error, file_exists}
-                  end
-                catch
-                  _:file_duplicated ->
-                    dao:remove_record(UUID),
-                    {error, file_exists};
-                  _:Error2 ->
-                    {error, Error2}
-                end;
-              _ -> SaveAns
-            end;
-          {ok, true} ->
-            {error, file_exists};
-          Other -> Other
-        end;
-      {ok, true} ->
-        try
-          ExistingWFile = get_waiting_file(AnalyzedPath),
-          {ok, {waiting_file, ExistingWFile}}
-        catch
-          _:_ ->
-            {error, file_exists}
-        end;
-      Other -> Other
+    case File#file.type of
+      ?REG_TYPE ->
+        save_new_reg_file(FilePath, File);
+      _ ->
+        save_new_not_reg_file(FilePath, File)
     end
   catch
     _:Error3 ->
       {error, Error3}
   end.
 
+%% save_new_reg_file/2
+%% ====================================================================
+%% @doc Saves new regular file to DB
+%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec save_new_reg_file(FilePath :: string(), File :: file_info()) -> {ok, uuid()} | {error, any()} | no_return().
+%% ====================================================================
+save_new_reg_file(FilePath, #file{} = File) ->
+  AnalyzedPath = file_path_analyze(FilePath),
+  case exist_waiting_file(AnalyzedPath) of
+    {ok, false} ->
+      case exist_file(AnalyzedPath) of
+        {ok, false} ->
+          SaveAns = save_file(File),
+          case SaveAns of
+            {ok, UUID} ->
+              %% check if file was not created by disconnected node in parallel
+              try
+                get_waiting_file(AnalyzedPath, true),
+                case exist_file(AnalyzedPath) of
+                  {ok, false} ->
+                    {ok, UUID};
+                  {ok, true} ->
+                    dao:remove_record(UUID),
+                    {error, file_exists}
+                end
+              catch
+                _:file_duplicated ->
+                  dao:remove_record(UUID),
+                  {error, file_exists};
+                _:Error2 ->
+                  {error, Error2}
+              end;
+            _ -> SaveAns
+          end;
+        {ok, true} ->
+          {error, file_exists};
+        Other -> Other
+      end;
+    {ok, true} ->
+      try
+        ExistingWFile = get_waiting_file(AnalyzedPath),
+        {ok, {waiting_file, ExistingWFile}}
+      catch
+        _:_ ->
+          {error, file_exists}
+      end;
+    Other -> Other
+  end.
+
+%% save_new_not_reg_file/2
+%% ====================================================================
+%% @doc Saves new not regular file (dir, link) to DB
+%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec save_new_not_reg_file(FilePath :: string(), File :: file_info()) -> {ok, uuid()} | {error, any()} | no_return().
+%% ====================================================================
+save_new_not_reg_file(FilePath, #file{} = File) ->
+  AnalyzedPath = file_path_analyze(FilePath),
+  case exist_file(AnalyzedPath) of
+    {ok, false} ->
+      SaveAns = save_file(File),
+      case SaveAns of
+        {ok, UUID} ->
+          try
+            get_file(AnalyzedPath, true),
+            {ok, UUID}
+          catch
+            _:file_duplicated ->
+              dao:remove_record(UUID),
+              {error, file_exists};
+            _:Error2 ->
+              {error, Error2}
+          end;
+        _ -> SaveAns
+      end;
+    {ok, true} ->
+      {error, file_exists};
+    Other -> Other
+  end.
 
 %% save_file/1
 %% ====================================================================
