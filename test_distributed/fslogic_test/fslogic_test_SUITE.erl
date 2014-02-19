@@ -1508,13 +1508,36 @@ fuse_requests_test(Config) ->
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}, auto_handshake]),
   ?assertEqual(ok, ConAns),
 
+  {GetStatus, _, _, _, GetAnswerOpt} = get_file_location(Socket, TestFile),
+  ?assertEqual("ok", GetStatus),
+  ?assertEqual(?VENOENT, GetAnswerOpt),
 
   {Status, Helper, Id, _Validity, AnswerOpt0} = create_file(Socket, TestFile),
   ?assertEqual("ok", Status),
   ?assertEqual(?VOK, AnswerOpt0),
+
+  {GetStatus2, _, _, _, GetAnswerOpt2} = get_file_location(Socket, TestFile),
+  ?assertEqual("ok", GetStatus2),
+  ?assertEqual(?VENOENT, GetAnswerOpt2),
+
+  {Status01, Helper01, Id01, _Validity01, AnswerOpt01} = create_file(Socket, TestFile),
+  ?assertEqual("ok", Status01),
+  ?assertEqual(?VOK, AnswerOpt01),
+  ?assertEqual(Helper, Helper01),
+  ?assertEqual(Id, Id01),
+
+  {CreationAckStatus, CreationAckAnswerOpt} = send_creation_ack(Socket, TestFile),
+  ?assertEqual("ok", CreationAckStatus),
+  ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt),
+
+  {CreationAckStatus2, CreationAckAnswerOpt2} = send_creation_ack(Socket, TestFile),
+  ?assertEqual("ok", CreationAckStatus2),
+  ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt2),
+
   {Status1, _Helper1, _Id1, _Validity1, AnswerOpt1} = create_file(Socket, TestFile),
   ?assertEqual("ok", Status1),
   ?assertEqual(?VEEXIST, AnswerOpt1),
+
 
 
 
@@ -1565,6 +1588,18 @@ fuse_requests_test(Config) ->
     ?assertEqual(?VOK, AnswerOpt6)
   end,
   lists:foreach(CreateFile, FilesInDir),
+
+  {Status6_2, Files6_2, AnswerOpt6_2} = ls(Socket, DirName, 10, 0),
+  ?assertEqual("ok", Status6_2),
+  ?assertEqual(?VOK, AnswerOpt6_2),
+  ?assertEqual(0, length(Files6_2)),
+
+  AckCreateFile = fun(File) ->
+    {CreationAckStatus3, CreationAckAnswerOpt3} = send_creation_ack(Socket, File),
+    ?assertEqual("ok", CreationAckStatus3),
+    ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt3)
+  end,
+  lists:foreach(AckCreateFile, FilesInDir),
 
   {Status7, Files7, AnswerOpt7} = ls(Socket, DirName, 10, 0),
   ?assertEqual("ok", Status7),
@@ -1676,6 +1711,10 @@ fuse_requests_test(Config) ->
   ?assertEqual("ok", Status_MV),
   ?assertEqual(?VOK, AnswerMV),
 
+  {CreationAckStatus4, CreationAckAnswerOpt4} = send_creation_ack(Socket, TestFile2),
+  ?assertEqual("ok", CreationAckStatus4),
+  ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt4),
+
   {Status_MV2, AnswerMV2} = rename_file(Socket, TestFile2, DirName ++ "/" ++ TestFile2),
   ?assertEqual("ok", Status_MV2),
   ?assertEqual(list_to_atom(?VOK), AnswerMV2),
@@ -1683,6 +1722,10 @@ fuse_requests_test(Config) ->
   {Status_MV3, _, _, _, AnswerMV3} = create_file(Socket, TestFile2),
   ?assertEqual("ok", Status_MV3),
   ?assertEqual(?VOK, AnswerMV3),
+
+  {CreationAckStatus5, CreationAckAnswerOpt5} = send_creation_ack(Socket, TestFile2),
+  ?assertEqual("ok", CreationAckStatus5),
+  ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt5),
 
   {Status_MV4, AnswerMV4} = delete_file(Socket, TestFile2),
   ?assertEqual("ok", Status_MV4),
@@ -2383,6 +2426,27 @@ create_file(Socket, FileName) ->
   Location = fuse_messages_pb:decode_filelocation(Bytes),
   Location2 = records_translator:translate(Location, "fuse_messages"),
   {Status, Location2#filelocation.storage_helper_name, Location2#filelocation.file_id, Location2#filelocation.validity, Location2#filelocation.answer}.
+
+send_creation_ack(Socket, FileName) ->
+  FslogicMessage = #createfileack{file_logic_name = FileName},
+  FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_createfileack(FslogicMessage)),
+
+  FuseMessage = #fusemessage{message_type = "createfileack", input = FslogicMessageMessageBytes},
+  FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
+
+  Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
+  message_decoder_name = "fuse_messages", answer_type = "atom",
+  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+  MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+
+  wss:send(Socket, MessageBytes),
+  {SendAns, Ans} = wss:recv(Socket, 5000),
+  ?assertEqual(ok, SendAns),
+
+  #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
+  Answer = communication_protocol_pb:decode_atom(Bytes),
+  Answer2 = records_translator:translate(Answer, "communication_protocol"),
+  {Status, Answer2}.
 
 get_file_location(Socket, FileName) ->
   FslogicMessage = #getfilelocation{file_logic_name = FileName},

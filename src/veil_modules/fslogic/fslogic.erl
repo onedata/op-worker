@@ -451,7 +451,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getn
     end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, createfileack) ->
-  {FileNameFindingAns, File} = get_full_file_name(Record#filenotused.file_logic_name, createfileack),
+  {FileNameFindingAns, File} = get_full_file_name(Record#createfileack.file_logic_name, createfileack),
   case FileNameFindingAns of
     ok ->
       case get_waiting_file(ProtocolVersion, File, FuseID) of
@@ -465,8 +465,13 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, crea
               #atom{value = ?VEREMOTEIO}
           end;
         {error, file_not_found} ->
-          lager:warning("Cannot find waiting file: ~p", [File]),
-          #atom{value = ?VENOENT};
+          case get_file(ProtocolVersion, File, FuseID) of
+            {ok, _} ->
+              #atom{value = ?VOK};
+            _ ->
+              lager:warning("Cannot find waiting file: ~p", [File]),
+              #atom{value = ?VENOENT}
+          end;
         _ -> #atom{value = ?VEREMOTEIO}
       end;
     ?VEPERM -> #atom{value = ?VEPERM};
