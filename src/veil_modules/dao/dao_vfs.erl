@@ -268,7 +268,8 @@ save_new_reg_file(FilePath, #file{} = File) ->
                 _:Error2 ->
                   {error, Error2}
               end;
-            _ -> SaveAns
+            _ ->
+              SaveAns
           end;
         {ok, true} ->
           {error, file_exists};
@@ -276,13 +277,19 @@ save_new_reg_file(FilePath, #file{} = File) ->
       end;
     {ok, true} ->
       try
-        ExistingWFile = get_waiting_file(AnalyzedPath),
-        {ok, {waiting_file, ExistingWFile}}
+        {GetAns, ExistingWFile} = get_waiting_file(AnalyzedPath),
+        case GetAns of
+          ok ->
+            {ok, {waiting_file, ExistingWFile}};
+          _ ->
+            {error, file_exists}
+        end
       catch
         _:_ ->
           {error, file_exists}
       end;
-    Other -> Other
+    Other ->
+      Other
   end.
 
 %% save_new_not_reg_file/2

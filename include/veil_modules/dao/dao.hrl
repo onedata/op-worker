@@ -80,7 +80,7 @@
 
 %% Design Names
 -define(VFS_BASE_DESIGN_NAME, "vfs_base").
--define(WAITING_FILES_DESIGN_NAME, "waitiing_files_tree").
+-define(WAITING_FILES_DESIGN_NAME, "waiting_files_tree").
 -define(USER_BY_LOGIN_DESIGN_NAME, "user_by_login").
 -define(USER_BY_EMAIL_DESIGN_NAME, "user_by_email").
 -define(USER_BY_DN_DESIGN_NAME, "user_by_dn").
@@ -92,7 +92,7 @@
 
 %% Views
 -define(FILE_TREE_VIEW, #view_info{name = "file_tree", design = ?VFS_BASE_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
--define(WAITING_FILES_TREE_VIEW, #view_info{name = "waitiing_files_tree", design = ?WAITING_FILES_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
+-define(WAITING_FILES_TREE_VIEW, #view_info{name = "waiting_files_tree", design = ?WAITING_FILES_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
 -define(FILE_SUBDIRS_VIEW, #view_info{name = "file_subdirs", design = ?VFS_BASE_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
 -define(FD_BY_FILE_VIEW, #view_info{name = "fd_by_name", design = ?VFS_BASE_DESIGN_NAME, db_name = ?DESCRIPTORS_DB_NAME}).
 -define(FD_BY_EXPIRED_BEFORE_VIEW, #view_info{name = "fd_by_expired_before", design = ?VFS_BASE_DESIGN_NAME, db_name = ?DESCRIPTORS_DB_NAME}).
