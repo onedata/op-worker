@@ -17,6 +17,9 @@
 -include("registered_names.hrl").
 -include("communication_protocol_pb.hrl").
 
+-define(LogLoop, 10).
+-define(LogLoopTime, 60000000).
+
 new(_Id) -> 
     Hosts = basho_bench_config:get(cluster_hosts),
     CertFile = basho_bench_config:get(cert_file),
@@ -24,13 +27,27 @@ new(_Id) ->
     PongBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Pong)),
     PongAns = #answer{answer_status = "ok", worker_answer = PongBytes},
     PongAnsBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(PongAns)),
-    Args = {Hosts, CertFile, PongAnsBytes},
+    Args = {Hosts, CertFile, PongAnsBytes, {?LogLoop, os:timestamp()}},
     ?DEBUG("Ping test initialized with params: ~p~n", [Args]),
     {ok, Args}.
 
-run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes}) ->
+run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes, {LogLoop, LastTime}}) ->
+  NewLoopValue = case LogLoop of
+                   0 ->
+                     Now = os:timestamp(),
+                     case timer:now_diff(Now, LastTime) > ?LogLoopTime of
+                       true ->
+                         ?DEBUG("Loop log~n", []),
+                         {?LogLoop, Now};
+                       false ->
+                         {?LogLoop, LastTime}
+                     end;
+                   _ ->
+                     {LogLoop -1, LastTime}
+                 end,
+
     Host = lists:nth((KeyGen() rem length(Hosts)) + 1 , Hosts),
-    NewState = {Hosts, CertFile, PongAnsBytes},
+    NewState = {Hosts, CertFile, PongAnsBytes, NewLoopValue},
     try
       case wss:connect(Host, 5555, [{certfile, CertFile}, {cacertfile, CertFile}, auto_handshake]) of
           {ok, Socket} ->
