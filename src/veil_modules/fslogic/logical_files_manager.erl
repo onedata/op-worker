@@ -27,7 +27,7 @@
 %% API
 %% ====================================================================
 %% Logical file organization management (only db is used)
--export([mkdir/1, rmdir/1, mv/2, chown/0, ls/3, getfileattr/1]).
+-export([mkdir/1, rmdir/1, mv/2, chown/3, ls/3, getfileattr/1]).
 %% File access (db and helper are used)
 -export([read/3, write/3, write/2, write_from_stream/2, create/1, truncate/2, delete/1, exists/1, error_to_string/1, change_file_perm/2]).
 
@@ -129,14 +129,27 @@ mv(From, To) ->
     _ -> {Status, TmpAns}
   end.
 
-%% chown/0
+%% chown/3
 %% ====================================================================
 %% @doc Changes owner of file (in db)
 %% @end
--spec chown() -> {error, not_implemented_yet}.
+-spec chown(FileName :: string(), Uname :: string(), Uid :: integer()) -> Result when
+  Result :: ok | {ErrorGeneral, ErrorDetail},
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
 %% ====================================================================
-chown() ->
-  {error, not_implemented_yet}.
+chown(FileName, Uname, Uid) ->
+  Record = #changefileowner{file_logic_name = FileName, uname = Uname, uid = Uid},
+  {Status, TmpAns} = contact_fslogic(Record),
+  case Status of
+    ok ->
+      Response = TmpAns#atom.value,
+      case Response of
+        ?VOK -> ok;
+        _ -> {logical_file_system_error, Response}
+      end;
+    _ -> {Status, TmpAns}
+  end.
 
 %% ls/3
 %% ====================================================================

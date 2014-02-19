@@ -54,3 +54,6 @@
 
 %% Name of direcotry that contains all group dirs
 -define(GROUPS_BASE_DIR_NAME, "groups").
+
+%% burst size for listing
+-define(DAO_LIST_BURST_SIZE,100).

@@ -315,9 +315,9 @@ storage_helpers_management_test(Config) ->
   ?assertEqual(ok, ConvertAns),
   DnList = [DN],
 
-  Login = "user1",
+  Login = "veilfstestuser",
   Name = "user1 user1",
-  Team1 = "user1 team",
+  Team1 = "veilfstestgroup",
   Teams = [Team1],
   Email = "user1@email.net",
   {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
@@ -379,6 +379,7 @@ helper_requests_test(Config) ->
 
   ST_Helper = "ClusterProxy",
   TestFile = "helper_requests_test_file",
+  TestFile2 = "../helper_requests_test_file2",
 
   Cert = ?COMMON_FILE("peer.pem"),
   Cert2 = ?COMMON_FILE("peer2.pem"),
@@ -450,6 +451,10 @@ helper_requests_test(Config) ->
   ?assertEqual("ok", Status),
   ?assertEqual(?VOK, AnswerOpt),
   ?assertEqual(ST_Helper, Helper),
+
+  {Status2, _, _, _, _, AnswerOpt2} = create_file(Host, Cert, Port, TestFile2, FuseId),
+  ?assertEqual("ok", Status2),
+  ?assertEqual(?VEREMOTEIO, AnswerOpt2),
 
   Tokens = string:tokens(Id, "/"),
   ?assertEqual(4, length(Tokens)),

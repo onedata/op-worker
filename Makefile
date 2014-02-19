@@ -45,11 +45,11 @@ generate: compile
 	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster
 	chmod u+x ./releases/veil_cluster_node/bin/veil_cluster_node
 
-docs:
+docs: deps
 	make -C docs html
 	./rebar doc skip_deps=true
 
-pdf:
+pdf: deps
 	make -C docs latexpdf
 
 upgrade:
