@@ -111,9 +111,9 @@ veil_cluster_node_env:
       name: ports_in_use
       description: Ports used by application, that need to be free before veil can start
       value: |
-          ["control_panel_port","dns_port","dispatcher_port","rest_port"]
+          ["control_panel_port","dns_port","rest_port"]
       erlang_term: |
-          [control_panel_port,dns_port,dispatcher_port,rest_port]
+          [control_panel_port,dns_port,rest_port]
 
   # LOGGING
   - parameter:
