@@ -55,6 +55,9 @@ test_event_subscription(Config) ->
 
   StartAdditionalWorker(CCM, rule_manager),
   lists:foreach(fun(Node) -> StartAdditionalWorker(Node, cluster_rengine) end, NodesUp),
+  StartAdditionalWorker(CCM, dao),
+
+  timer:sleep(1000),
 
   WriteEvent = #write_event{user_id = "1234", ans_pid = self()},
 
@@ -66,7 +69,6 @@ test_event_subscription(Config) ->
   end,
 
   subscribe_for_write_events(CCM, standard),
-  timer:sleep(100),
   gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent#write_event{user_id = "2"}}}),
 
   receive
@@ -76,7 +78,6 @@ test_event_subscription(Config) ->
   end,
 
   subscribe_for_write_events(CCM, tree),
-  timer:sleep(100),
   gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent#write_event{user_id = "3"}}}),
   gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent#write_event{user_id = "4"}}}),
   gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent#write_event{user_id = "5"}}}),
@@ -91,6 +92,8 @@ test_event_subscription(Config) ->
   after 1000
     -> ?assert(false)
   end,
+
+  timer:sleep(2000),
 
   ok.
 
@@ -122,6 +125,9 @@ test_event_aggregation(Config) ->
 
   StartAdditionalWorker(CCM, rule_manager),
   lists:foreach(fun(Node) -> StartAdditionalWorker(Node, cluster_rengine) end, NodesUp),
+  StartAdditionalWorker(CCM, dao),
+
+  timer:sleep(1000),
 
   WriteEvent = #write_event{user_id = "1234", ans_pid = self()},
 
