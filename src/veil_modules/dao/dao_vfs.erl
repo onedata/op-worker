@@ -242,7 +242,7 @@ save_new_file(FilePath, #file{} = File) ->
 %% @end
 -spec save_new_reg_file(FilePath :: string(), File :: file_info()) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
-save_new_reg_file(FilePath, #file{} = File) ->
+save_new_reg_file(FilePath, #file{type = Type} = File) when Type == ?REG_TYPE ->
   AnalyzedPath = file_path_analyze(FilePath),
   case exist_waiting_file(AnalyzedPath) of
     {ok, false} ->
@@ -300,7 +300,7 @@ save_new_reg_file(FilePath, #file{} = File) ->
 %% @end
 -spec save_new_not_reg_file(FilePath :: string(), File :: file_info()) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
-save_new_not_reg_file(FilePath, #file{} = File) ->
+save_new_not_reg_file(FilePath, #file{type = Type} = File) when Type > ?REG_TYPE ->
   AnalyzedPath = file_path_analyze(FilePath),
   case exist_file(AnalyzedPath) of
     {ok, false} ->
