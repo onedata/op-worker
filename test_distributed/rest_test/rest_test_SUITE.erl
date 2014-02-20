@@ -70,6 +70,7 @@ main_test(Config) ->
     test_rest_shares(),
 
 
+    ibrowse:stop(),
     % DB cleanup
     RemoveStorageAns = rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
     ?assertEqual(ok, RemoveStorageAns),
@@ -398,7 +399,7 @@ init_per_testcase(main_test, Config) ->
         [[{node_type, ccm_test},
             {dispatcher_port, 5055},
             {ccm_nodes, [Node1]},
-			{rest_port, 8444},
+      			{rest_port, 8444},
             {dns_port, 1308},
             {db_nodes, [DB_Node]}]]),
 

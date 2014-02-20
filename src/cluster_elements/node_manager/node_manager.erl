@@ -222,6 +222,13 @@ handle_cast({dispatcher_updated, DispState, DispCallbacksNum}, State) ->
   {noreply, NewState};
 
 handle_cast(stop, State) ->
+	try
+		cowboy:stop_listener(?DISPATCHER_LISTENER_REF),
+		ranch:stop_listener(?DISPATCHER_LISTENER_REF),
+		ok
+	catch
+		_:_ -> ok
+	end,
   {stop, normal, State};
 
 handle_cast(monitor_mem_net, State) ->
@@ -293,7 +300,8 @@ handle_info(_Info, State) ->
 %% ====================================================================
 terminate(_Reason, _State) ->
   try
-    ranch:stop_listener(?DISPATCHER_LISTENER_REF),
+		cowboy:stop_listener(?DISPATCHER_LISTENER_REF),
+		ranch:stop_listener(?DISPATCHER_LISTENER_REF),
     ok
   catch
     _:_ -> ok
