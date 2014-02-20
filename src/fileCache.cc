@@ -128,7 +128,6 @@ bool FileCache::insertBlock(const FileBlock &block)
             else if ( (*it)->offset <= offset && (*it)->offset + (*it)->size() > offset) 
             {
                 off_t tStart = offset - (*it)->offset;
-                off_t sStart = 0;
                 size_t toCpy = min( (size_t)((*it)->offset + (*it)->size() - offset), cBuff.size() );
                 
                 (*it)->data.replace(tStart, toCpy, cBuff.substr(0, toCpy));
