@@ -17,38 +17,59 @@
 -include("registered_names.hrl").
 -include("communication_protocol_pb.hrl").
 
+-define(LogLoop, 100).
+-define(LogLoopTime, 60000000).
+
 new(_Id) -> 
     Hosts = basho_bench_config:get(cluster_hosts),
     CertFile = basho_bench_config:get(cert_file),
-    ssl:start(),
     Pong = #atom{value = "pong"},
     PongBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Pong)),
     PongAns = #answer{answer_status = "ok", worker_answer = PongBytes},
     PongAnsBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(PongAns)),
-    Args = {Hosts, CertFile, PongAnsBytes, closed, []},
+    Args = {Hosts, CertFile, PongAnsBytes, closed, [], {?LogLoop, os:timestamp()}},
     ?DEBUG("Ping test initialized with params: ~p~n", [Args]),
     {ok, Args}.
 
-run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes, SocketState, Socket}) ->
-    Host = lists:nth((KeyGen() rem length(Hosts)) + 1 , Hosts),
-
-    {NewSocketState, NewSocket} = case SocketState of
-      ok -> {SocketState, Socket};
-      _ -> ssl:connect(Host, 5555, [binary, {active, false}, {packet, 4}, {certfile, CertFile}, {keyfile, CertFile}, {cacertfile, CertFile}, {reuse_sessions, false}], 5000)
+run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes, SocketState, Socket, {LogLoop, LastTime}}) ->
+    NewLoopValue = case LogLoop of
+      0 ->
+        Now = os:timestamp(),
+        case timer:now_diff(Now, LastTime) > ?LogLoopTime of
+          true ->
+            ?DEBUG("Loop log~n", []),
+            {?LogLoop, Now};
+          false ->
+            {?LogLoop, LastTime}
+        end;
+      _ ->
+        {LogLoop -1, LastTime}
     end,
 
-%%     NewState = {Hosts, CertFile, PongAnsBytes, SocketState, NewSocket},
-    case {NewSocketState, NewSocket} of
-        {ok, _} ->
-                try ping(Action, NewSocket, PongAnsBytes) of
-                    ok -> {ok, {Hosts, CertFile, PongAnsBytes, NewSocketState, NewSocket}}
-                catch
-                    Reason ->
-                      ssl:close(NewSocket),
-                      {error, Reason, {Hosts, CertFile, PongAnsBytes, closed, []}}
-                end;
-        {error, Error} -> {error, {connect, Error}, {Hosts, CertFile, PongAnsBytes, closed, []}};
-        Other -> {error, {unknown_error, Other}, {Hosts, CertFile, PongAnsBytes, closed, []}}
+    Host = lists:nth((KeyGen() rem length(Hosts)) + 1 , Hosts),
+
+    try
+      {NewSocketState, NewSocket} = case SocketState of
+        ok -> {SocketState, Socket};
+        _ -> wss:connect(Host, 5555, [{certfile, CertFile}, {cacertfile, CertFile}, auto_handshake])
+      end,
+
+  %%     NewState = {Hosts, CertFile, PongAnsBytes, SocketState, NewSocket},
+      case {NewSocketState, NewSocket} of
+          {ok, _} ->
+                  try ping(Action, NewSocket, PongAnsBytes) of
+                      ok -> {ok, {Hosts, CertFile, PongAnsBytes, NewSocketState, NewSocket, NewLoopValue}}
+                  catch
+                      R1:R2 ->
+                        wss:close(NewSocket),
+                        {error, R1, R2, {Hosts, CertFile, PongAnsBytes, closed, [], NewLoopValue}}
+                  end;
+          {error, Error} -> {error, {connect, Error}, {Hosts, CertFile, PongAnsBytes, closed, [], NewLoopValue}};
+          Other -> {error, {unknown_error, Other}, {Hosts, CertFile, PongAnsBytes, closed, [], NewLoopValue}}
+      end
+    catch
+      E1:E2 ->
+        {error, {error_thrown, E1, E2}, {Hosts, CertFile, PongAnsBytes, closed, [], NewLoopValue}}
     end.
 
 ping(Module, Socket, PongAnsBytes) ->
@@ -60,9 +81,9 @@ ping(Module, Socket, PongAnsBytes) ->
                             answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = PingBytes},
     Msg = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-    ssl:send(Socket, Msg),
+    wss:send(Socket, Msg),
     Ans =
-        case ssl:recv(Socket, 0, 5000) of 
+        case wss:recv(Socket, 5000) of
             {ok, Ans1} -> Ans1;
             {error, Reason} -> throw({recv, Reason})
         end,

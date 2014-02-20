@@ -19,7 +19,6 @@
 new(_Id) ->
     Hosts = basho_bench_config:get(cluster_hosts),
     CertFile = basho_bench_config:get(cert_file),
-    ssl:start(),
     {ok, {Hosts, CertFile}}.
 
 run(_Action, KeyGen, _ValueGen, {Hosts, CertFile}) ->
@@ -27,10 +26,15 @@ run(_Action, KeyGen, _ValueGen, {Hosts, CertFile}) ->
   Host = lists:nth((KG rem length(Hosts)) + 1 , Hosts),
   NewState = {Hosts, CertFile},
 
-  case ssl:connect(Host, 5555, [binary, {active, false}, {packet, 4}, {certfile, CertFile}, {keyfile, CertFile}, {cacertfile, CertFile}, {reuse_sessions, false}], 5000) of
-    {ok, Socket} ->
-      ssl:close(Socket),
-      {ok, NewState};
-    {error, Error} -> {error, {connect, Error}, NewState};
-    Other -> {error, {unknown_error, Other}, NewState}
+  try
+    case wss:connect(Host, 5555, [{certfile, CertFile}, {cacertfile, CertFile}, auto_handshake]) of
+      {ok, Socket} ->
+        wss:close(Socket),
+        {ok, NewState};
+      {error, Error} -> {error, {connect, Error}, NewState};
+      Other -> {error, {unknown_error, Other}, NewState}
+    end
+  catch
+    E1:E2 ->
+      {error, {error_thrown, E1, E2}, NewState}
   end.
