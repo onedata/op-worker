@@ -55,7 +55,8 @@ connection_test() ->
 
 %% Sends nagios request and check if health status is ok, and if health report contains information about all workers
 nagios_test() ->
-	NagiosUrl = "https://localhost/nagios",
+	{ok, Port} = rpc:call(get(ccm), application, get_env, [veil_cluster_node, control_panel_port]),
+	NagiosUrl = "https://localhost:"++integer_to_list(Port)++"/nagios",
 	{ok, Code, _RespHeaders, Response} = rpc:call(get(ccm),ibrowse,send_req, [NagiosUrl,[],get]),
 	{Xml,_} = xmerl_scan:string(Response),
 	{Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),

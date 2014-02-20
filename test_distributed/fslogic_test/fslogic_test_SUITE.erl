@@ -671,6 +671,8 @@ groups_test(Config) ->
 
 
     %% Cleanup
+		wss:close(Socket1),
+		wss:close(Socket2),
     ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete, ["/veilfstestuser/file"])),
     ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete, ["/groups/veilfstestgroup/f1"])),
     ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete,["/groups/veilfstestgroup/f2"])),
@@ -837,6 +839,9 @@ user_file_counting_test(Config) ->
     ?assertEqual("ok", Status),
     ?assertEqual(list_to_atom(?VOK), Answer)
   end, User2FilesEnding),
+
+	wss:close(Socket),
+	wss:close(Socket2),
 
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
@@ -1310,6 +1315,8 @@ dir_mv_test(Config) ->
   ?assertEqual("ok", StatusDelete2),
   ?assertEqual(list_to_atom(?VOK), AnswerDelete2),
 
+	wss:close(Socket),
+
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
@@ -1482,6 +1489,8 @@ file_sharing_test(Config) ->
   {StatusDelete, AnswerDelete} = delete_file(Socket, DirName),
   ?assertEqual("ok", StatusDelete),
   ?assertEqual(list_to_atom(?VOK), AnswerDelete),
+
+	wss:close(Socket),
 
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
@@ -1801,6 +1810,8 @@ fuse_requests_test(Config) ->
   ?assertEqual("ok", Status16),
   ?assertEqual(list_to_atom(?VOK), Answer16),
 
+	wss:close(Socket),
+
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
@@ -2033,6 +2044,9 @@ users_separation_test(Config) ->
   {Status20, Answer20, _} = get_link(Socket, "link_name1"),
   ?assertEqual("ok", Status20),
   ?assertEqual(?VENOENT, Answer20),
+
+	wss:close(Socket),
+	wss:close(Socket2),
 
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),

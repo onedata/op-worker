@@ -70,6 +70,7 @@ main_test(Config) ->
     test_rest_shares(),
 
 
+    ibrowse:stop(),
     % DB cleanup
     RemoveStorageAns = rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
     ?assertEqual(ok, RemoveStorageAns),

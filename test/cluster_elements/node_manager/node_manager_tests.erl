@@ -42,6 +42,8 @@ node_type_test() ->
   application:set_env(?APP_Name, ccm_nodes, [not_existing_node]),
   application:set_env(?APP_Name, heart_beat, 60),
   application:set_env(?APP_Name, node_monitoring_period, 15),
+	meck:new(veil_cluster_node_app),
+	meck:expect(veil_cluster_node_app,ports_ok,fun() -> true end),
   node_manager:start_link(test_worker),
 	NodeType = gen_server:call(?Node_Manager_Name, getNodeType),
 	?assert(NodeType =:= worker),
