@@ -399,7 +399,6 @@ init_per_testcase(main_test, Config) ->
         [[{node_type, ccm_test},
             {dispatcher_port, 5055},
             {ccm_nodes, [Node1]},
-      			{rest_port, 8444},
             {dns_port, 1308},
             {db_nodes, [DB_Node]}]]),
 

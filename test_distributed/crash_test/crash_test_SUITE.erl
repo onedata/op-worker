@@ -290,6 +290,7 @@ callbacks_test(Config) ->
   CheckDispatcherAns(DispatcherCorrectAns1, CCMTest1),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns1, lists:zip(WorkerNodes, FuseInfo1)),
 
+  lists:foreach(fun(X) -> wss:close(X) end, CreatedSockets),
   nodes_manager:stop_node(CCM),
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
   nodes_manager:wait_for_state_loading(),
@@ -367,8 +368,7 @@ callbacks_test(Config) ->
   ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ TeamName], ?ProtocolVersion])),
   ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
 
-  ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{dn, DN}])),
-	lists:foreach(fun(X) -> wss:close(X) end, CreatedSockets).
+  ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{dn, DN}])).
 
 %% ====================================================================
 %% SetUp and TearDown functions

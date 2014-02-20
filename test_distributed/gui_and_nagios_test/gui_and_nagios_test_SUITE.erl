@@ -90,7 +90,6 @@ init_per_testcase(main_test, Config) ->
 	StartLog = nodes_manager:start_app_on_nodes(Nodes,
 		[[{node_type, ccm_test},
 			{dispatcher_port, 5055},
-			{control_panel_port,8444},
 			{ccm_nodes, [Node1]},
 			{dns_port, 1308},
       {heart_beat, 1},

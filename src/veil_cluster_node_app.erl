@@ -126,13 +126,13 @@ ports_are_free([]) ->
 ports_are_free([FirstPort | Rest])->
 	ports_are_free(FirstPort) and ports_are_free(Rest);
 ports_are_free(Port)->
-	{Status, Socket} = gen_tcp:listen(Port, []),
+	{Status, Socket} = gen_tcp:listen(Port, [{reuseaddr, true}]),
 	case Status of
 		ok ->
 			gen_tcp:close(Socket),
 			true;
 		error ->
-			lager:error("Port ~w is in use. Starting aborted.~n", [Port]),
+			lager:error("Port ~w is in use, error: ~p. Starting aborted. ~n", [Port,Socket]),
 			io:format(standard_error, "Port ~w is in use. Starting aborted.~n", [Port]),
 			false
 	end.
