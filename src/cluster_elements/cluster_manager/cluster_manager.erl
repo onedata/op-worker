@@ -200,11 +200,11 @@ handle_call(get_callbacks, _From, State) ->
 %% Test call
 handle_call({start_worker, Node, Module, WorkerArgs}, _From, State) ->
   {Ans, NewState} = start_worker(Node, Module, WorkerArgs, State),
-  case Ans of
+  NewState2 = case Ans of
     ok -> update_dispatchers_and_dns(NewState, true, true);
     error -> NewState
   end,
-  {reply, Ans, NewState};
+  {reply, Ans, NewState2};
 
 %% Test call
 handle_call(check, _From, State) ->
@@ -345,6 +345,7 @@ handle_cast(check_cluster_state, State) ->
   {noreply, NewState};
 
 handle_cast({node_down, Node}, State) ->
+  lager:error("Node down: ~p", [Node]),
   {NewState, WorkersFound} = node_down(Node, State),
 
   %% If workers were running on node that is down,
@@ -394,6 +395,11 @@ handle_cast(stop, State) ->
 handle_cast({clear_cache, Cache, ReturnPid}, State) ->
   ReturnPid ! {cache_cleared, Cache},
   New_State = clear_cache(State, Cache),
+  {noreply, New_State};
+
+handle_cast({synch_cache_clearing, Cache, ReturnPid}, State) ->
+  New_State = clear_cache(State, Cache),
+  ReturnPid ! {cache_cleared, Cache},
   {noreply, New_State};
 
 handle_cast(_Msg, State) ->
@@ -1129,6 +1135,7 @@ monitoring_loop(Flag, Nodes) ->
 -spec monitoring_loop(Flag) -> ok when
   Flag :: on | off.
 %% ====================================================================
+%% TODO cancel loop and make it part of gen_server
 monitoring_loop(Flag) ->
   receive
     {nodedown, Node} ->
@@ -1454,7 +1461,7 @@ clear_cache(State, Cache) ->
       {TmpState, TmpWorkersFound}
     catch
       _:_ ->
-        lager:error([{mod, ?MODULE}], "Can not clear cahce ~p of node: ~p", [Cache, Node]),
+        lager:error([{mod, ?MODULE}], "Can not clear cache ~p of node: ~p", [Cache, Node]),
         {NewState, WorkersFound} = node_down(Node, State),
         {NewState, TmpWorkersFound or WorkersFound}
     end

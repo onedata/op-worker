@@ -45,7 +45,7 @@
 %% ====================================================================
 %% eunit
 -ifdef(TEST).
--export([handle_fuse_message/3]).
+-export([handle_fuse_message/3, verify_file_name/1]).
 -endif.
 
 %% ct
@@ -201,7 +201,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, chan
       ok ->
         case get_file(ProtocolVersion, FileName, FuseID) of
             {ok, #veil_document{record = #file{} = File} = Doc} ->
-              {PermsStat, PermsOK} = check_file_perms(FileName, UserDocStatus, UserDoc, Doc),
+              {PermsStat, PermsOK} = check_file_perms(FileName, UserDocStatus, UserDoc, Doc, root),
               case PermsStat of
                 ok ->
                   case PermsOK of
@@ -1136,28 +1136,27 @@ get_full_file_name(FileName, Request) ->
 %% ====================================================================
 
 get_full_file_name(FileName, Request, UserDocStatus, UserDoc) ->
-  case UserDocStatus of
-    ok ->
-      case assert_group_access(UserDoc, Request, FileName) of
-        ok ->
-          case string:tokens(FileName, "/") of %% Map all /groups/* requests to root of the file system (i.e. dont add any prefix)
-            [?GROUPS_BASE_DIR_NAME | _] ->
-              {ok, FileName};
-            _ ->
-              Root = get_user_root(UserDoc),
-              [Beg | _] = FileName,
-              NewFileName = case Beg of
-                              $/ -> Root ++ FileName;
-                              _ -> Root ++ "/" ++ FileName
-                            end,
-              {ok, NewFileName}
-          end;
-        _ -> {?VEPERM, ?VEPERM}
-      end;
-    _ ->
-      case UserDoc of
-        get_user_id_error -> {ok, FileName};
-        _ -> {user_doc_not_found, UserDoc}
+  case verify_file_name(FileName) of
+    {error, Error} -> {Error, FileName};
+    {ok, Tokens} ->
+      VerifiedFileName = string:join(Tokens, "/"),
+      case UserDocStatus of
+        ok -> case assert_group_access(UserDoc, Request, VerifiedFileName) of
+                ok ->
+                  case Tokens of %% Map all /groups/* requests to root of the file system (i.e. dont add any prefix)
+                    [?GROUPS_BASE_DIR_NAME | _] ->
+                      {ok, VerifiedFileName};
+                    _ ->
+                      Root = get_user_root(UserDoc),
+                      {ok, Root ++ "/" ++ VerifiedFileName}
+                  end;
+                _ -> {?VEPERM, ?VEPERM}
+              end;
+        _ ->
+          case UserDoc of
+            get_user_id_error -> {ok, VerifiedFileName};
+            _ -> {user_doc_not_found, UserDoc}
+          end
       end
   end.
 
@@ -1292,7 +1291,7 @@ assert_grp_access(_UserDoc, Request, [?GROUPS_BASE_DIR_NAME]) ->
     end;
 assert_grp_access(UserDoc, Request, [?GROUPS_BASE_DIR_NAME | Tail]) ->
     TailCheck = case Tail of
-      [GroupName] ->
+      [_GroupName] ->
         case lists:member(Request, ?GROUPS_ALLOWED_ACTIONS) of
           false   -> error;
           true    -> ok
@@ -1565,32 +1564,42 @@ check_file_perms(FileName, UserDocStatus, UserDoc, FileDoc) ->
   ErrorDetail :: term().
 %% ====================================================================
 check_file_perms(FileName, UserDocStatus, UserDoc, FileDoc, CheckType) ->
-  case string:tokens(FileName, "/") of
-    [?GROUPS_BASE_DIR_NAME | _] ->
-      FileRecord = FileDoc#veil_document.record,
-      CheckOwn = case CheckType of
-        perms -> true;
-        _ -> %write
-          case FileRecord#file.perms band ?WR_GRP_PERM of
-            0 -> true;
-            _ -> false
-          end
-      end,
-
-      case CheckOwn of
-        true ->
-          case {UserDocStatus, UserDoc} of
-            {ok, _} ->
-              UserUuid = UserDoc#veil_document.uuid,
-              {ok, FileRecord#file.uid =:= UserUuid};
-            {error, get_user_id_error} -> {ok, true};
-            _ -> {UserDocStatus, UserDoc}
-          end;
-        false ->
-          {ok, true}
+  case CheckType of
+    root ->
+      case {UserDocStatus, UserDoc} of
+        {ok, _} ->
+          {ok, false};
+        {error, get_user_id_error} -> {ok, true};
+        _ -> {UserDocStatus, UserDoc}
       end;
     _ ->
-      {ok, true}
+      case string:tokens(FileName, "/") of
+        [?GROUPS_BASE_DIR_NAME | _] ->
+          FileRecord = FileDoc#veil_document.record,
+          CheckOwn = case CheckType of
+                       perms -> true;
+                       _ -> %write
+                         case FileRecord#file.perms band ?WR_GRP_PERM of
+                           0 -> true;
+                           _ -> false
+                         end
+                     end,
+
+          case CheckOwn of
+            true ->
+              case {UserDocStatus, UserDoc} of
+                {ok, _} ->
+                  UserUuid = UserDoc#veil_document.uuid,
+                  {ok, FileRecord#file.uid =:= UserUuid};
+                {error, get_user_id_error} -> {ok, true};
+                _ -> {UserDocStatus, UserDoc}
+              end;
+            false ->
+              {ok, true}
+          end;
+        _ ->
+          {ok, true}
+      end
   end.
 
 %% Updates modification time for parent of Dir
@@ -1599,3 +1608,12 @@ update_parent_ctime(Dir, CTime) ->
         [?PATH_SEPARATOR] -> ok;
         ParentPath -> gen_server:call(?Dispatcher_Name, {fslogic, 1, #veil_request{subject = get(user_id), request = {internal_call, #updatetimes{file_logic_name = ParentPath, mtime = CTime}}}})
     end.
+
+%% Verify filename
+%% (skip single dot in filename, return error when double dot in filename, return filename tokens otherwies)
+verify_file_name(FileName) ->
+  Tokens = lists:filter(fun(X) -> X =/= "." end, string:tokens(FileName, "/")),
+  case lists:any(fun(X) -> X =:= ".." end, Tokens) of
+    true -> {error, wrong_filename};
+    _ -> {ok, Tokens}
+  end.

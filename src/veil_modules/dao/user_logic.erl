@@ -26,6 +26,7 @@
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
 -export([get_team_names/1]).
+-export([create_dirs_at_storage/3]).
 
 -define(UserRootPerms, 8#600).
 
@@ -463,7 +464,7 @@ create_root(Dir, Uid) ->
 
 %% create_dirs_at_storage/2
 %% ====================================================================
-%% @doc Creates root dir for user and for its teams
+%% @doc Creates root dir for user and for its teams, on all storages
 %% @end
 -spec create_dirs_at_storage(Root :: string(), Teams :: [string()]) -> ok | Error when
     Error :: atom().
@@ -472,65 +473,82 @@ create_dirs_at_storage(Root, Teams) ->
     {ListStatus, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], 1),
     case ListStatus of
         ok ->
-            CreateTeamsDirs = fun(Dir, {SHInfo, TmpAns}) ->
-                DirName = "groups/" ++ Dir,
-                Ans = storage_files_manager:mkdir(SHInfo, DirName),
-                case Ans of
-                    ok ->
-                        Ans2 = storage_files_manager:chown(SHInfo, DirName, "", Dir),
-                        Ans3 = storage_files_manager:chmod(SHInfo, DirName, 8#730),
-                        case {Ans2, Ans3} of
-                            {ok, ok} ->
-                                {SHInfo, TmpAns};
-                            _ ->
-                                lager:error("Can not change owner of dir ~p using storage helper ~p. Make sure group '~s' is defined in the system.",
-                                    [Dir, SHInfo#storage_helper_info.name, Dir]),
-                                {SHInfo, error}
-                        end;
-                    _ ->
-                        lager:error("Can not create dir ~p using storage helper ~p. Make sure group '~s' is defined in the system.",
-                            [Dir, SHInfo#storage_helper_info.name, Dir]),
-                        {SHInfo, error}
-                end
-            end,
-
-            CreateDirsOnStorage = fun(Storage, TmpAns) ->
-                SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
-                Ans2 = case Root of
-                           non ->
-                               ok;
-                           _ ->
-                               RootDirName = "users/" ++ Root,
-                               Ans = storage_files_manager:mkdir(SHI, RootDirName),
-                               case Ans of
-                                   ok ->
-                                       Ans3 = storage_files_manager:chown(SHI, RootDirName, Root, Root),
-                                       storage_files_manager:chmod(SHI, RootDirName, 8#300),
-                                       case Ans3 of
-                                           ok ->
-                                               ok;
-                                           _ ->
-                                               lager:error("Can not change owner of dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
-                                                   [Root, SHI#storage_helper_info.name, Root])
-                                       end;
-                                   _ ->
-                                       lager:error("Can not create dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
-                                           [Root, SHI#storage_helper_info.name, Root])
-                               end
-                       end,
-
-                Ans4 = lists:foldl(CreateTeamsDirs, {SHI, ok}, Teams),
-                case {Ans2, Ans4} of
-                    {ok, ok} -> TmpAns;
-                    _ -> create_dir_error
-                end
-            end,
-
-            lists:foldl(CreateDirsOnStorage, ok, lists:map(fun(VeilDoc) ->
-                VeilDoc#veil_document.record end, StorageList));
+					StorageRecords = lists:map(fun(VeilDoc) -> VeilDoc#veil_document.record end, StorageList),
+					CreateDirs = fun(StorageRecord,TmpAns) ->
+						case create_dirs_at_storage(Root,Teams,StorageRecord) of
+							ok -> TmpAns;
+							Error -> Error
+						end
+					end,
+					lists:foldl(CreateDirs,ok , StorageRecords);
         _ -> storage_listing_error
     end.
 
+%% create_dirs_at_storage/3
+%% ====================================================================
+%% @doc Creates root dir for user and for its teams. Only on selected storage
+%% @end
+-spec create_dirs_at_storage(Root :: string(), Teams :: [string()], Storage :: #storage_info{}) -> ok | Error when
+	Error :: atom().
+%% ====================================================================
+create_dirs_at_storage(Root, Teams, Storage) ->
+	SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
+
+	CreateTeamsDirs = fun(Dir, TmpAns) ->
+		DirName = "groups/" ++ Dir,
+		Ans = storage_files_manager:mkdir(SHI, DirName),
+		case Ans of
+			ok ->
+				Ans2 = storage_files_manager:chown(SHI, DirName, "", Dir),
+				Ans3 = storage_files_manager:chmod(SHI, DirName, 8#730),
+				case {Ans2, Ans3} of
+					{ok, ok} ->
+						TmpAns;
+					_ ->
+						lager:error("Can not change owner of dir ~p using storage helper ~p. Make sure group '~s' is defined in the system.",
+							[Dir, SHI#storage_helper_info.name, Dir]),
+						error
+				end;
+			{error, dir_or_file_exists} ->
+				lager:debug("Team root directory ~p aleready exists",[DirName]),
+				TmpAns;
+			_ ->
+				lager:error("Can not create dir ~p using storage helper ~p. Make sure group '~s' is defined in the system.",
+					[Dir, SHI#storage_helper_info.name, Dir]),
+				error
+		end
+	end,
+
+	Ans2 = case Root of
+			non ->
+				ok;
+			_ ->
+				RootDirName = "users/" ++ Root,
+				Ans = storage_files_manager:mkdir(SHI, RootDirName),
+				case Ans of
+					ok ->
+						Ans3 = storage_files_manager:chown(SHI, RootDirName, Root, Root),
+						storage_files_manager:chmod(SHI, RootDirName, 8#300),
+						case Ans3 of
+							ok ->
+								ok;
+							_ ->
+								lager:error("Can not change owner of dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
+									[Root, SHI#storage_helper_info.name, Root]),
+								error
+						end;
+					_ ->
+						lager:error("Can not create dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
+							[Root, SHI#storage_helper_info.name, Root]),
+						error
+				end
+			end,
+	Ans4 = lists:foldl(CreateTeamsDirs, ok, Teams),
+	case {Ans2, Ans4} of
+		{ok, ok} ->
+			ok;
+		_ -> create_dir_error
+	end.
 
 %% get_team_names/1
 %% ====================================================================

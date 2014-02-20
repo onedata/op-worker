@@ -34,6 +34,7 @@ all() -> [groups_test, files_manager_tmp_files_test, files_manager_standard_file
 -define(SH, "DirectIO").
 -define(TEST_ROOT, ["/tmp/veilfs"]). %% Root of test filesystem
 -define(TEST_ROOT2, ["/tmp/veilfs2"]).
+-define(TEST_ROOT3, ["/tmp/veilfs3"]).
 -define(ProtocolVersion, 1).
 
 %% ====================================================================
@@ -137,7 +138,9 @@ groups_permissions_test(Config) ->
 
   {Status9, Answer9} = chown(Socket, TestFileNewName, 0, Login2),
   ?assertEqual("ok", Status9),
-  ?assertEqual(list_to_atom(?VOK), Answer9),
+  ?assertEqual(list_to_atom(?VEPERM), Answer9),
+
+  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [TestFileNewName, Login2, -1])),
 
   {Status10, Answer10} = delete_file(Socket, TestFileNewName),
   ?assertEqual("ok", Status10),
@@ -895,7 +898,8 @@ permissions_management_test(Config) ->
   files_tester:delete(?TEST_ROOT ++ "/" ++ File).
 
 %% Checks user creation (root and dirs at storage creation).
-%% The test checks if directories for user and group files are created when the user is added to the system.
+%% The test checks if directories for user and group files are created when the user is added to the system,
+%% and when new storage is created (after adding users)
 user_creation_test(Config) ->
   nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
@@ -932,6 +936,11 @@ user_creation_test(Config) ->
   ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/users/" ++ Login2)),
   ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/groups/" ++ Team1)),
   ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT2 ++ "/groups/" ++ Team2)),
+
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/users/" ++ Login)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/users/" ++ Login2)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/groups/" ++ Team1)),
+  ?assertEqual(false, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/groups/" ++ Team2)),
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
@@ -1085,11 +1094,37 @@ user_creation_test(Config) ->
   ?assertEqual(ok, PermStatus8),
   ?assertEqual(8#300, Perms8 rem 8#01000),
 
-  RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+	% check dirs creation in new storage for existing users
+	{InsertStorageAns3, StorageUUID3} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?TEST_ROOT3]),
+	?assertEqual(ok, InsertStorageAns3),
+
+	?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/users/" ++ Login)),
+	?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/users/" ++ Login2)),
+	?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/groups/" ++ Team1)),
+	?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT3 ++ "/groups/" ++ Team2)),
+
+	{PermStatus9, Perms9} = files_tester:get_permissions(?TEST_ROOT3 ++ "/users/" ++ Login),
+	?assertEqual(ok, PermStatus9),
+	?assertEqual(8#300, Perms9 rem 8#01000),
+	{PermStatus10, Perms10} = files_tester:get_permissions(?TEST_ROOT3 ++ "/users/" ++ Login2),
+	?assertEqual(ok, PermStatus10),
+	?assertEqual(8#300, Perms10 rem 8#01000),
+	{PermStatus11, Perms11} = files_tester:get_permissions(?TEST_ROOT3 ++ "/groups/" ++ Team1),
+	?assertEqual(ok, PermStatus11),
+	?assertEqual(8#730, Perms11 rem 8#01000),
+	{PermStatus12, Perms12} = files_tester:get_permissions(?TEST_ROOT3 ++ "/groups/" ++ Team2),
+	?assertEqual(ok, PermStatus12),
+	?assertEqual(8#730, Perms12 rem 8#01000),
+
+	%cleanup
+	RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
   RemoveStorageAns2 = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID2}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns2),
+
+	RemoveStorageAns3 = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID3}], ?ProtocolVersion]),
+  ?assertEqual(ok, RemoveStorageAns3),
 
   ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team1], ?ProtocolVersion])),
   ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team2], ?ProtocolVersion])),
@@ -1111,13 +1146,21 @@ user_creation_test(Config) ->
   files_tester:delete_dir(?TEST_ROOT2 ++ "/groups/" ++ Team1),
   files_tester:delete_dir(?TEST_ROOT2 ++ "/groups/" ++ Team2),
 
+  files_tester:delete_dir(?TEST_ROOT3 ++ "/users/" ++ Login),
+  files_tester:delete_dir(?TEST_ROOT3 ++ "/users/" ++ Login2),
+  files_tester:delete_dir(?TEST_ROOT3 ++ "/groups/" ++ Team1),
+  files_tester:delete_dir(?TEST_ROOT3 ++ "/groups/" ++ Team2),
+
   files_tester:delete(?TEST_ROOT ++ "/" ++ File),
 
   files_tester:delete_dir(?TEST_ROOT ++ "/users"),
   files_tester:delete_dir(?TEST_ROOT ++ "/groups"),
 
   files_tester:delete_dir(?TEST_ROOT2 ++ "/users"),
-  files_tester:delete_dir(?TEST_ROOT2 ++ "/groups").
+  files_tester:delete_dir(?TEST_ROOT2 ++ "/groups"),
+
+  files_tester:delete_dir(?TEST_ROOT3 ++ "/users"),
+  files_tester:delete_dir(?TEST_ROOT3 ++ "/groups").
 
 %% Checks storage management functions
 %% The tests checks if functions used to manage user's files at storage (e.g. mv, mkdir) works well.
@@ -1802,15 +1845,17 @@ users_separation_test(Config) ->
   %% chown test
   {Status23, Answer23} = chown(Socket, TestFile, 77777, "unknown"),
   ?assertEqual("ok", Status23),
-  ?assertEqual(list_to_atom(?VEINVAL), Answer23),
+  ?assertEqual(list_to_atom(?VEPERM), Answer23),
 
-  {Status24, Answer24} = chown(Socket, TestFile, 0, Login2),
-  ?assertEqual("ok", Status24),
-  ?assertEqual(list_to_atom(?VOK), Answer24),
+  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [Login ++ "/" ++ TestFile, Login2, 0])),
+%%   {Status24, Answer24} = chown(Socket, TestFile, 0, Login2),
+%%   ?assertEqual("ok", Status24),
+%%   ?assertEqual(list_to_atom(?VOK), Answer24),
 
-  {Status25, Answer25} = chown(Socket2, TestFile, UID1, "unknown"),
-  ?assertEqual("ok", Status25),
-  ?assertEqual(list_to_atom(?VOK), Answer25),
+  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [Login2 ++ "/" ++ TestFile, "unknown", UID1])),
+%%   {Status25, Answer25} = chown(Socket2, TestFile, UID1, "unknown"),
+%%   ?assertEqual("ok", Status25),
+%%   ?assertEqual(list_to_atom(?VOK), Answer25),
 
   %% Check if owners are set properly
   {Status26, Attr3} = get_file_attr(Socket, TestFile),
@@ -2013,10 +2058,14 @@ files_manager_standard_files_test(Config) ->
   DirName = "fslogic_test_dir2",
   FileInDir = "files_manager_test_file2",
   FileInDir2 = "files_manager_test_file3",
+  FileInDir3 = "files_manager_test_file4",
   FileInDir2NewName = "files_manager_test_file3_new_name",
   File = DirName ++ "/" ++ FileInDir,
   File2 = DirName ++ "/" ++ FileInDir2,
   File2NewName = DirName ++ "/" ++ FileInDir2NewName,
+  File3 = DirName ++ "/../" ++ FileInDir3,
+  File4 = DirName ++ "/./" ++ FileInDir3,
+  File4NoDot = DirName ++ "/" ++ FileInDir3,
 
   NotExistingFile = "files_manager_test_not_existing_file",
 
@@ -2024,6 +2073,9 @@ files_manager_standard_files_test(Config) ->
   ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [File])),
   ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [File2])),
   ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [File2NewName])),
+  ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [File3])),
+  ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [File4])),
+  ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [File4NoDot])),
   ?assertEqual(file_not_exists_in_db, rpc:call(Node1, files_tester, file_exists, [NotExistingFile])),
 
   MkDirAns = rpc:call(Node1, logical_files_manager, mkdir, [DirName]),
@@ -2150,7 +2202,14 @@ files_manager_standard_files_test(Config) ->
   ?assertEqual(ok, AnsMvDel2),
   ?assertEqual(false, files_tester:file_exists_storage(TestFileLocation)),
 
+  AnsCreate6 = rpc:call(Node1, logical_files_manager, create, [File3]),
+  ?assertEqual({logical_file_system_error, ?VEREMOTEIO}, AnsCreate6),
 
+  AnsCreate7 = rpc:call(Node1, logical_files_manager, create, [File4]),
+  ?assertEqual(ok, AnsCreate7),
+  ?assert(rpc:call(Node1, logical_files_manager, exists, [File4])),
+  {File4LocationAns, _} = rpc:call(Node1, files_tester, get_file_location, [File4NoDot]),
+  ?assertEqual(ok, File4LocationAns),
 
   {FileLocationAns, FileLocation} = rpc:call(Node1, files_tester, get_file_location, [File]),
   ?assertEqual(ok, FileLocationAns),
@@ -2164,6 +2223,9 @@ files_manager_standard_files_test(Config) ->
 
   AnsDel3 = rpc:call(Node1, logical_files_manager, delete, [File2NewName]),
   ?assertEqual({logical_file_system_error, ?VENOENT}, AnsDel3),
+
+  AnsDel4 = rpc:call(Node1, logical_files_manager, delete, [File4]),
+  ?assertEqual(ok, AnsDel4),
 
   AnsDirDelete = rpc:call(Node1, logical_files_manager, rmdir, [DirName]),
   ?assertEqual(ok, AnsDirDelete),
@@ -2290,6 +2352,8 @@ end_per_testcase(_, Config) ->
 
   %% Clear test dir
   os:cmd("rm -rf " ++ ?TEST_ROOT ++ "/*"),
+  os:cmd("rm -rf " ++ ?TEST_ROOT2 ++ "/*"),
+  os:cmd("rm -rf " ++ ?TEST_ROOT3 ++ "/*"),
 
   ?assertEqual(false, lists:member(error, StopLog)),
   ?assertEqual(ok, StopAns).

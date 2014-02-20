@@ -31,10 +31,10 @@
 %% API functions
 %% ====================================================================
 -export([
-    init/1, 
-    handle_call/2, 
-    handle_event/2, 
-    handle_info/2, 
+    init/1,
+    handle_call/2,
+    handle_event/2,
+    handle_info/2,
     terminate/2,
     code_change/3
 ]).
@@ -86,7 +86,7 @@ handle_call(_Request, State) ->
     Result :: {ok, NewState},
     NewState :: term().
 %% ====================================================================
-handle_event({log,    #lager_msg {metadata = Metadata, severity = Severity, timestamp = Timestamp, message = Message} }, State) ->
+handle_event({log, #lager_msg{metadata = Metadata, severity = Severity, timestamp = Timestamp, message = Message}}, State) ->
     case lists:keyfind(destination, 1, Metadata) of
         {destination, _} -> already_logged;
         _ -> spawn(fun() -> dispatch_log(Message, Timestamp, Severity, Metadata) end)
@@ -142,14 +142,14 @@ code_change(_OldVsn, State, _Extra) ->
 %% ====================================================================
 dispatch_log(Message, Timestamp, Severity, OldMetadata) ->
     Metadata = case OldMetadata of
-        [] ->
-            [{node, node()}, {source, unknown}];
-        [{pid, Pid}] ->
-            [{node, node()}, {source, error_logger}, {pid, Pid}];
-        OldMetadata2 ->
-            % Make sure node metadata is at the beginning
-            [{node, node()}|lists:keydelete(node, 1, OldMetadata2)]
-    end,
+                   [] ->
+                       [{node, node()}, {source, unknown}];
+                   [{pid, Pid}] ->
+                       [{node, node()}, {source, error_logger}, {pid, Pid}];
+                   OldMetadata2 ->
+                       % Make sure node metadata is at the beginning
+                       [{node, node()} | lists:keydelete(node, 1, OldMetadata2)]
+               end,
     try
         gen_server:call(?Dispatcher_Name, {central_logger, 1, {dispatch_log, Message, Timestamp, Severity, Metadata}})
     catch _:_ ->

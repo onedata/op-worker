@@ -13,8 +13,10 @@ umask 0
 
 rm -rf /tmp/veilfs
 rm -rf /tmp/veilfs2
+rm -rf /tmp/veilfs3
 mkdir /tmp/veilfs
 mkdir /tmp/veilfs2
+mkdir /tmp/veilfs3
 
 userdel -r veilfstestuser 2>/dev/null
 userdel -r veilfstestuser2 2>/dev/null
@@ -74,8 +76,10 @@ do
     fi
     rm -rf /tmp/veilfs
     rm -rf /tmp/veilfs2
+    rm -rf /tmp/veilfs3
     mkdir /tmp/veilfs
     mkdir /tmp/veilfs2
+    mkdir /tmp/veilfs3
     ct_run -pa ../deps/**/ebin -pa ../ebin -pa ./ -noshell -name tester -setcookie $COOKIE -spec  $TEST
 done
 

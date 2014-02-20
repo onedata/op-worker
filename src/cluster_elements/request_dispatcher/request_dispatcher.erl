@@ -244,6 +244,15 @@ handle_call({node_chosen, {Task, ProtocolVersion, Request}}, _From, State) ->
 handle_call({get_callback, Fuse}, _From, State) ->
   {reply, get_callback(Fuse), State};
 
+
+%% test call
+handle_call({get_worker_node, {Request, Module}}, _From, State) ->
+  Ans = get_worker_node(Module, Request, State),
+  case Ans of
+    {Node, NewState} -> {reply, Node, NewState};
+    Other -> {reply, Other, State}
+  end;
+
 %% test call
 handle_call({get_worker_node, Module}, _From, State) ->
   Ans = get_worker_node(Module, non, State),
@@ -316,7 +325,7 @@ handle_cast({update_state, NewStateNum, NewCallbacksNum}, State) ->
       case Ans of
         ok ->
           lager:info([{mod, ?MODULE}], "Dispatcher had old state number, data updated"),
-          gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState#dispatcher_state.state_num, NewCallbacksNum});
+          ok;
         _ ->
           lager:error([{mod, ?MODULE}], "Dispatcher had old state number but could not update data"),
           error
@@ -325,6 +334,7 @@ handle_cast({update_state, NewStateNum, NewCallbacksNum}, State) ->
       case pull_callbacks() of
         error ->
           lager:error([{mod, ?MODULE}], "Dispatcher had old callbacks number but could not update data"),
+          gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState#dispatcher_state.state_num, NewCallbacksNum}),
           {noreply, NewState};
         Number ->
           lager:info([{mod, ?MODULE}], "Dispatcher had old callbacks number, data updated"),

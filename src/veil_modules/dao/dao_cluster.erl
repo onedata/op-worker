@@ -333,7 +333,7 @@ list_connection_info({by_session_id, SessID}) ->
 clear_sessions() ->
     SPid = self(),
     CurrentTime = fslogic_utils:time(),
-    ?info("FUSE session cleanup started. Time: ~p", [CurrentTime]),
+    ?debug("FUSE session cleanup started. Time: ~p", [CurrentTime]),
 
     %% List of worker processes that validates sessions in background
     PidList =

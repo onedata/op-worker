@@ -99,11 +99,11 @@ insert_storage(HelperName, HelperArgs, Fuse_groups) ->
               ok;
             _ ->
               lager:error("Can not change owner of users dir using storage helper ~p", [SHI#storage_helper_info.name]),
-              error
+              Ans2
           end;
         _ ->
           lager:error("Can not create users dir using storage helper ~p", [SHI#storage_helper_info.name]),
-          error
+					Ans
       end,
 
       Ans4 = storage_files_manager:mkdir(SHI, "groups"),
@@ -115,16 +115,24 @@ insert_storage(HelperName, HelperArgs, Fuse_groups) ->
                      ok;
                    _ ->
                      lager:error("Can not change owner of groups dir using storage helper ~p", [SHI#storage_helper_info.name]),
-                     error
+										 Ans5
                  end;
                _ ->
                  lager:error("Can not create groups dir using storage helper ~p", [SHI#storage_helper_info.name]),
-                 error
+								 Ans4
              end,
 
       case {Ans3, Ans6} of
-        {ok, ok} -> DAO_Ans;
-        _ -> {error, dirs_creation_error}
+        {ok, ok} ->
+			case add_dirs_for_existing_users(Storage) of
+				ok -> DAO_Ans;
+				Error ->
+					lager:error("Can not create dirs for existing users and theirs teams, error: ~p",[Error]),
+					{error, users_dirs_creation_error}
+			end;
+        _ ->
+					lager:error("Dirs creation error: {users_dir_status, groups_dir_status} = ~p",[{Ans3, Ans6}]),
+					{error, dirs_creation_error}
       end;
     _ -> DAO_Ans
   end.
@@ -156,3 +164,59 @@ get_fuse_group(FuseID) ->
           default
       end
   end.
+
+%% add_dirs_for_existing_users/1
+%% ====================================================================
+%% @doc Adds root dirs for all existing users and theirs teams to given storage
+-spec add_dirs_for_existing_users(Storage :: #storage_info{}) -> Result when
+	Result :: ok | {error, Error :: atom()}.
+%% ====================================================================
+add_dirs_for_existing_users(Storage) ->
+	case list_users() of
+		{ok,Users} ->
+			LoginsAndTeams = lists:map(fun(X) -> {user_logic:get_login(X), user_logic:get_team_names(X)} end, Users),
+			CreateDirs =
+				fun ({Login,Teams},TmpAns) ->
+					case user_logic:create_dirs_at_storage(Login,Teams,Storage) of
+						ok ->
+							TmpAns;
+						Error ->
+							lager:error("Can not create dirs for user ~s, error: ~p",[Login,Error]),
+							Error
+					end
+				end,
+			lists:foldl(CreateDirs, ok, LoginsAndTeams);
+		{error, Error} ->
+			lager:error("Can not list all users, error: ~p",[Error]),
+			{error, Error}
+	end.
+
+%% list_users/0
+%% ====================================================================
+%% @doc Lists all users
+%% @end
+-spec list_users() ->
+	{ok, DocList :: list(#veil_document{record :: #user{}})} |
+	{error,atom()}.
+%% ====================================================================
+list_users() ->
+	list_users(?DAO_LIST_BURST_SIZE, 0, []).
+
+%% list_users/3
+%% ====================================================================
+%% @doc Returns given Actual list, concatenated with all users beginning
+%%  from Offset (they will be get from dao in packages of size N)
+%% @end
+-spec list_users(N :: pos_integer(), Offset :: non_neg_integer(), Actual :: list(#veil_document{record :: #user{}})) ->
+	{ok, DocList :: list(#veil_document{record :: #user{}})} |
+	{error,atom()}.
+%% ====================================================================
+list_users(N, Offset, Actual) ->
+	case dao_lib:apply(dao_users,list_users,[N,Offset],1) of
+		{ok, UserList} when length(UserList)==N ->
+			list_users(N,Offset+N, Actual++UserList);
+		{ok, FinalUserList}   ->
+			{ok, Actual ++ FinalUserList};
+		{error, Error} ->
+			{error, Error}
+	end.

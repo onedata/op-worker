@@ -21,12 +21,13 @@
 -define(BORTER_CHILD_WAIT_TIME, 10000).
 -define(MAX_CHILD_WAIT_TIME, 60000000).
 -define(MAX_CALCULATION_WAIT_TIME, 10000000).
+-define(SUB_PROC_CACHE_CLEAR_TIME, 2000).
 
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_link/3, stop/1, start_sub_proc/5, generate_sub_proc_list/1, generate_sub_proc_list/5]).
--export([create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1]).
+-export([start_link/3, stop/1, start_sub_proc/5, start_sub_proc/6, generate_sub_proc_list/1, generate_sub_proc_list/5, generate_sub_proc_list/6]).
+-export([create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_sub_procs_cache/2, clear_sipmle_cache/3]).
 
 %% ====================================================================
 %% Test API
@@ -87,13 +88,14 @@ init([PlugIn, PlugInArgs, LoadMemorySize]) ->
     InitAns = PlugIn:init(PlugInArgs),
     case InitAns of
       IDesc when is_record(IDesc, initial_host_description) ->
+        Pid = self(),
         DispatcherRequestMapState = case InitAns#initial_host_description.request_map of
           non -> true;
           _ ->
-            Pid = self(),
             erlang:send_after(200, Pid, {timer, register_disp_map}),
             false
         end,
+        erlang:send_after(200, Pid, {timer, register_sub_proc_caches}),
         {ok, #host_state{plug_in = PlugIn, request_map = InitAns#initial_host_description.request_map, sub_procs = InitAns#initial_host_description.sub_procs,
         dispatcher_request_map = InitAns#initial_host_description.dispatcher_request_map, dispatcher_request_map_ok = DispatcherRequestMapState, plug_in_state = InitAns#initial_host_description.plug_in_state, load_info = {[], [], 0, LoadMemorySize}}};
       _ -> {ok, #host_state{plug_in = PlugIn, plug_in_state = InitAns, load_info = {[], [], 0, LoadMemorySize}}}
@@ -158,6 +160,15 @@ handle_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, D
   Pid = self(),
   SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun),
   erlang:send_after(200, Pid, {timer, register_disp_map}),
+  {reply, ok, State#host_state{request_map = RM, sub_procs = SubProcList,
+  dispatcher_request_map = DM, dispatcher_request_map_ok = false}};
+
+%% For tests
+handle_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, Cache}, _From, State) ->
+  Pid = self(),
+  SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache),
+  erlang:send_after(200, Pid, {timer, register_disp_map}),
+  erlang:send_after(200, Pid, {timer, register_sub_proc_caches}),
   {reply, ok, State#host_state{request_map = RM, sub_procs = SubProcList,
   dispatcher_request_map = DM, dispatcher_request_map_ok = false}};
 
@@ -250,6 +261,72 @@ handle_cast(register_disp_map, State) ->
   end,
   {noreply, State};
 
+handle_cast(register_sub_proc_caches, State) ->
+  case State#host_state.sub_proc_caches_ok of
+    true ->
+      {noreply, State};
+    _ ->
+      PlugIn = State#host_state.plug_in,
+      RegCache = fun({Name, {_StartArgs, CacheType, _Pid}}, TmpAns) ->
+        CacheRegAns = case CacheType of
+          simple ->
+            ClearingPid = self(),
+            register_sub_proc_simple_cache({PlugIn, Name}, non, non, ClearingPid);
+          {simple, CacheLoop2, ClearFun2} ->
+            ClearingPid2 = self(),
+            register_sub_proc_simple_cache({PlugIn, Name}, CacheLoop2, ClearFun2, ClearingPid2);
+          {simple, CacheLoop4, ClearFun4, ClearingPid4} ->
+            register_sub_proc_simple_cache({PlugIn, Name}, CacheLoop4, ClearFun4, ClearingPid4);
+          _ ->
+            lager:debug("Use of non simple cache ~p", [{Name, CacheType}]),
+            ok
+        end,
+
+        case CacheRegAns of
+          ok -> TmpAns;
+          _ -> error
+        end
+      end,
+      RegAns = lists:foldl(RegCache, ok, State#host_state.sub_procs),
+
+      case RegAns of
+        ok -> {noreply, State#host_state{sub_proc_caches_ok = true}};
+        _ ->
+          Pid = self(),
+          erlang:send_after(10000, Pid, {timer, register_sub_proc_caches}),
+          {noreply, State}
+      end
+  end;
+
+handle_cast({clear_sub_procs_cache, AnsPid, Cache}, State) ->
+  CacheName = case Cache of
+    C when is_atom(C) ->
+      Cache;
+    {C2, _} ->
+      C2
+  end,
+
+  SubProcs = State#host_state.sub_procs,
+  {_SubProcArgs, _SubProcCache, SubProcPid} = proplists:get_value(CacheName, SubProcs, {not_found, not_found, not_found}),
+  Ans = case SubProcPid of
+    not_found ->
+      false;
+    _ ->
+      case Cache of
+        CName when is_atom(CName) ->
+          SubProcPid ! {sub_proc_management, self(), clear_cache};
+        {_, Keys} ->
+          SubProcPid ! {sub_proc_management, self(), {clear_cache, Keys}}
+      end,
+      receive
+        {sub_proc_cache_cleared, ClearAns} -> ClearAns
+      after ?SUB_PROC_CACHE_CLEAR_TIME ->
+        false
+      end
+  end,
+  AnsPid ! {sub_proc_cache_cleared, Ans},
+  {noreply, State};
+
 handle_cast(stop, State) ->
   {stop, normal, State};
 
@@ -274,14 +351,11 @@ handle_info({timer, Msg}, State) ->
   {noreply, State};
 
 handle_info({clear_sipmle_cache, LoopTime, Fun, StrongCacheConnection}, State) ->
-  Pid = self(),
-  erlang:send_after(LoopTime, Pid, {clear_sipmle_cache, LoopTime, Fun, StrongCacheConnection}),
-  case StrongCacheConnection of
-    true ->
-      spawn_link(fun() -> Fun() end);
-    _ ->
-      spawn(fun() -> Fun() end)
-  end,
+  clear_sipmle_cache(LoopTime, Fun, StrongCacheConnection),
+  {noreply, State};
+
+handle_info({clear_sub_proc_sipmle_cache, Name, LoopTime, Fun}, State) ->
+  clear_sub_proc_sipmle_cache(Name, LoopTime, Fun, State#host_state.sub_procs),
   {noreply, State};
 
 handle_info(dispatcher_map_registered, State) ->
@@ -357,7 +431,7 @@ proc_standard_request(RequestMap, SubProcs, PlugIn, ProtocolVersion, Msg, MsgId,
       SubProcs;
     _ ->
       try
-        {SubProcArgs, SubProcPid} = proplists:get_value(RequestMap(Msg), SubProcs, {not_found, not_found}),
+        {SubProcArgs, SubProcCache, SubProcPid} = proplists:get_value(RequestMap(Msg), SubProcs, {not_found, not_found, not_found}),
         case SubProcArgs of
           not_found ->
             spawn(fun() -> proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) end),
@@ -370,7 +444,7 @@ proc_standard_request(RequestMap, SubProcs, PlugIn, ProtocolVersion, Msg, MsgId,
                 {Name, MaxDepth, MaxWidth, NewProcFun, NewMapFun} = SubProcArgs,
                 SubProcPid2 = start_sub_proc(Name, MaxDepth, MaxWidth, NewProcFun, NewMapFun),
                 SubProcPid2 ! {PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo},
-                SubProc2Desc = {Name, {SubProcArgs, SubProcPid2}},
+                SubProc2Desc = {Name, {SubProcArgs, SubProcCache, SubProcPid2}},
                 [SubProc2Desc | proplists:delete(Name, SubProcs)];
               _ ->
                 SubProcs
@@ -486,31 +560,79 @@ update_wait_time(WaitFrom, AvgWaitTime) ->
   Result ::  pid().
 %% ====================================================================
 start_sub_proc(Name, MaxDepth, MaxWidth, ProcFun, MapFun) ->
-  spawn(fun() -> start_sub_proc(Name, 1, MaxDepth, MaxWidth, ProcFun, MapFun) end).
+  spawn(fun() -> start_sub_proc(Name, non, 1, MaxDepth, MaxWidth, ProcFun, MapFun) end).
 
 %% start_sub_proc/6
 %% ====================================================================
 %% @doc Starts sub proc
--spec start_sub_proc(Name :: atom(), SubProcDepth :: integer(), MaxDepth :: integer(), MaxWidth :: integer(), ProcFun :: term(), MapFun :: term()) -> Result when
+-spec start_sub_proc(Name :: atom(), CacheType :: term(), MaxDepth :: integer(), MaxWidth :: integer(), ProcFun :: term(), MapFun :: term()) -> Result when
   Result ::  pid().
 %% ====================================================================
-start_sub_proc(Name, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun) ->
+start_sub_proc(Name, CacheType, MaxDepth, MaxWidth, ProcFun, MapFun) ->
+  spawn(fun() -> start_sub_proc(Name, CacheType, 1, MaxDepth, MaxWidth, ProcFun, MapFun) end).
+
+%% start_sub_proc/7
+%% ====================================================================
+%% @doc Starts sub proc
+-spec start_sub_proc(Name :: atom(), CacheType :: term(), SubProcDepth :: integer(), MaxDepth :: integer(), MaxWidth :: integer(), ProcFun :: term(), MapFun :: term()) -> Result when
+  Result ::  pid().
+%% ====================================================================
+start_sub_proc(Name, CacheType, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun) ->
   process_flag(trap_exit, true),
   ets:new(Name, [named_table, set, private]),
-  sub_proc(Name, proc, SubProcDepth, MaxDepth, MaxWidth, os:timestamp(), ?MAX_CALCULATION_WAIT_TIME, ProcFun, MapFun).
+
+  CacheName = case CacheType of
+    non ->
+      non;
+    use_cache ->
+      CName = get_cache_name(Name),
+      ets:new(CName, [named_table, set, private]),
+      CName
+  end,
+
+  sub_proc(Name, CacheName, proc, SubProcDepth, MaxDepth, MaxWidth, os:timestamp(), ?MAX_CALCULATION_WAIT_TIME, ProcFun, MapFun).
 
 %% sub_proc/9
 %% ====================================================================
 %% @doc Sub proc function
--spec sub_proc(Name :: atom(), ProcType:: atom(), SubProcDepth :: integer(), MaxDepth :: integer(), MaxWidth :: integer(),
+-spec sub_proc(Name :: atom(), CacheName :: atom(), ProcType:: atom(), SubProcDepth :: integer(), MaxDepth :: integer(), MaxWidth :: integer(),
     WaitFrom :: term(), AvgWaitTime :: term(), ProcFun :: term(), MapFun :: term()) -> Result when
   Result ::  ok | end_sub_proc.
 %% ====================================================================
-%% TODO Add memory clearing for old data
-sub_proc(Name, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun) ->
+sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun) ->
   receive
     {sub_proc_management, stop} ->
       del_sub_procs(ets:first(Name), Name);
+
+    {sub_proc_management, ReturnPid, clear_cache} ->
+      case CacheName of
+          non ->
+            ReturnPid ! {sub_proc_cache_cleared, false};
+        _ ->
+          ets:delete_all_objects(CacheName),
+          ReturnPid ! {sub_proc_cache_cleared, clear_sub_procs_caches(Name, clear_cache)}
+      end,
+      sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
+
+    {sub_proc_management, ReturnPid, {clear_cache, Keys}} ->
+      case CacheName of
+          non ->
+            ReturnPid ! {sub_proc_cache_cleared, false};
+        _ ->
+          case Keys of
+            KList when is_list(KList) ->
+              lists:foreach(fun(K) -> ets:delete(CacheName, K) end, KList);
+            Key ->
+              ets:delete(CacheName, Key)
+          end,
+          ReturnPid ! {sub_proc_cache_cleared, clear_sub_procs_caches(Name, {clear_cache, Keys})}
+      end,
+      sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
+
+    {sub_proc_management, sub_proc_automatic_cache_clearing, ClearFun} ->
+      ClearFun(CacheName),
+      clear_sub_procs_caches_by_fun(Name, ClearFun),
+      sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
 
     {'EXIT', ChildPid, _} ->
       ChildDesc = ets:lookup(Name, ChildPid),
@@ -522,7 +644,7 @@ sub_proc(Name, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime
           lager:error([{mod, ?MODULE}], "Exit of unknown sub proc"),
           error
       end,
-      sub_proc(Name, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
+      sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
     Request ->
       {Now, NewAvgWaitTime} = update_wait_time(WaitFrom, AvgWaitTime),
       NewProcType = case ProcType of
@@ -539,7 +661,7 @@ sub_proc(Name, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime
                             proc
                         end;
                       map ->
-                        case NewAvgWaitTime > ?BORTER_CHILD_WAIT_TIME * 10 of
+                        case NewAvgWaitTime > ?BORTER_CHILD_WAIT_TIME * 1000 of
                           true ->
                             proc;
                           false ->
@@ -549,7 +671,7 @@ sub_proc(Name, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime
 
       case NewProcType of
         map ->
-          {ForwardNum, ForwardPid} = map_to_sub_proc(Name, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request),
+          {ForwardNum, ForwardPid} = map_to_sub_proc(Name, CacheName, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request),
           case ForwardNum of
             error -> error;
             _ ->
@@ -559,38 +681,46 @@ sub_proc(Name, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime
                 undefined->
                   ets:delete(Name, ForwardPid),
                   ets:delete(Name, ForwardNum),
-                  ForwardPid2 = map_to_sub_proc(Name, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request),
+                  ForwardPid2 = map_to_sub_proc(Name, CacheName, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request),
                   ForwardPid2 ! Request;
                 _ ->
                   ok
               end
           end;
         proc ->
-          ProcFun(Request)
+          case CacheName of
+            non -> ProcFun(Request);
+            _ ->
+              ProcFun(Request, CacheName)
+          end
       end,
 
-      sub_proc(Name, NewProcType, SubProcDepth, MaxDepth, MaxWidth, Now, NewAvgWaitTime, ProcFun, MapFun)
+      sub_proc(Name, CacheName, NewProcType, SubProcDepth, MaxDepth, MaxWidth, Now, NewAvgWaitTime, ProcFun, MapFun)
   after ?MAX_CHILD_WAIT_TIME ->
     end_sub_proc
   end.
 
-%% map_to_sub_proc/7
+%% map_to_sub_proc/8
 %% ====================================================================
 %% @doc Maps request to sub proc pid
--spec map_to_sub_proc(Name :: atom(), SubProcDepth :: integer(), MaxDepth :: integer(), MaxWidth :: integer(),
+-spec map_to_sub_proc(Name :: atom(), CacheName:: atom(), SubProcDepth :: integer(), MaxDepth :: integer(), MaxWidth :: integer(),
    ProcFun :: term(), MapFun :: term(), Request :: term()) -> Result when
   Result ::  {SubProcNum, SubProcPid},
   SubProcNum :: integer(),
   SubProcPid :: term().
 %% ====================================================================
-map_to_sub_proc(Name, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request) ->
+map_to_sub_proc(Name, CacheName, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request) ->
   try
     RequestValue = calculate_proc_vale(SubProcDepth, MaxWidth, MapFun(Request)),
     RequestProc = ets:lookup(Name, RequestValue),
     case RequestProc of
       [] ->
         NewName = list_to_atom(atom_to_list(Name) ++ "_" ++ integer_to_list(RequestValue)),
-        NewPid = spawn(fun() -> start_sub_proc(NewName, SubProcDepth + 1, MaxDepth, MaxWidth, ProcFun, MapFun) end),
+        NewCacheType = case CacheName of
+          non -> non;
+          _ -> use_cache
+        end,
+        NewPid = spawn(fun() -> start_sub_proc(NewName, NewCacheType, SubProcDepth + 1, MaxDepth, MaxWidth, ProcFun, MapFun) end),
         ets:insert(Name, {RequestValue, NewPid}),
         ets:insert(Name, {NewPid, RequestValue}),
         {RequestValue, NewPid};
@@ -627,28 +757,57 @@ calculate_proc_vale(TmpDepth, MaxWidth, CurrentValue) ->
 generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun) ->
   generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun}]).
 
+%% generate_sub_proc_list/6
+%% ====================================================================
+%% @doc Generates the list that describes sub procs.
+-spec generate_sub_proc_list(Name :: atom(), MaxDepth :: integer(), MaxWidth :: integer(), ProcFun :: term(), MapFun :: term(), CacheType :: term()) -> Result when
+  Result ::  list().
+%% ====================================================================
+generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, CacheType) ->
+  generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun, CacheType}]).
+
 %% generate_sub_proc_list/1
 %% ====================================================================
 %% @doc Generates the list that describes sub procs.
--spec generate_sub_proc_list([{Name :: atom(), MaxDepth :: integer(), MaxWidth :: integer(), ProcFun :: term(), MapFun :: term()}]) -> Result when
+-spec generate_sub_proc_list([]) -> Result when
   Result ::  list().
 %% ====================================================================
 generate_sub_proc_list([]) ->
   [];
 
 generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun} | Tail]) ->
-  NewProcFun = fun({PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo}) ->
-    lager:debug("Processing in sub proc: ~p ~n", [Name]),
-    BeforeProcessingRequest = os:timestamp(),
-    Request = preproccess_msg(Msg),
-    Response = 	try
-      ProcFun(ProtocolVersion, Request)
-                catch
-                  Type:Error ->
-                    lager:error("Worker plug-in ~p error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
-                    worker_plug_in_error
-                end,
-    send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo)
+  generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun, non} | Tail]);
+
+generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun, CacheType} | Tail]) ->
+  NewProcFun = case CacheType of
+    non ->
+      fun({PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo}) ->
+        lager:debug("Processing in sub proc: ~p ~n", [Name]),
+        BeforeProcessingRequest = os:timestamp(),
+        Request = preproccess_msg(Msg),
+        Response = 	try
+          ProcFun(ProtocolVersion, Request)
+                    catch
+                      Type:Error ->
+                        lager:error("Worker plug-in ~p error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
+                        worker_plug_in_error
+                    end,
+        send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo)
+      end;
+    _ ->
+      fun({PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo}, CacheName) ->
+        lager:debug("Processing in sub proc: ~p with cache ~p~n", [Name, CacheName]),
+        BeforeProcessingRequest = os:timestamp(),
+        Request = preproccess_msg(Msg),
+        Response = 	try
+          ProcFun(ProtocolVersion, Request, CacheName)
+                    catch
+                      Type:Error ->
+                        lager:error("Worker plug-in ~p error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
+                        worker_plug_in_error
+                    end,
+        send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo)
+      end
   end,
 
   NewMapFun = fun({_, _, Msg2, _, _}) ->
@@ -657,7 +816,11 @@ generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun} | Tail]) ->
   end,
 
   StartArgs = {Name, MaxDepth, MaxWidth, NewProcFun, NewMapFun},
-  SubProc = {Name, {StartArgs, start_sub_proc(Name, MaxDepth, MaxWidth, NewProcFun, NewMapFun)}},
+  CacheType2 = case CacheType of
+    non -> non;
+    _ -> use_cache
+  end,
+  SubProc = {Name, {StartArgs, CacheType, start_sub_proc(Name, CacheType2, MaxDepth, MaxWidth, NewProcFun, NewMapFun)}},
   [SubProc | generate_sub_proc_list(Tail)].
 
 %% stop_all_sub_proc/1
@@ -668,7 +831,7 @@ generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun} | Tail]) ->
 stop_all_sub_proc(SubProcs) ->
   Keys = proplists:get_keys(SubProcs),
   lists:foreach(fun(K) ->
-    {_, SubProcPid} = proplists:get_value(K, SubProcs),
+    {_, _, SubProcPid} = proplists:get_value(K, SubProcs),
     SubProcPid ! {sub_proc_management, stop}
   end, Keys).
 
@@ -724,7 +887,7 @@ create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection) ->
   Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
   CacheLoop :: integer() | atom().
 %% ====================================================================
-create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Pid) ->
+create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPid) ->
   %% Init Cache-ETS. Ignore the fact that other DAO worker could have created this table. In this case, this call will
   %% fail, but table is present anyway, so everyone is happy.
   case ets:info(Name) of
@@ -732,6 +895,16 @@ create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Pid) ->
     [_ | _]     -> ok
   end,
 
+  register_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPid).
+
+%% register_simple_cache/5
+%% ====================================================================
+%% @doc Registers simple cache.
+-spec register_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean(), ClearingPid :: pid()) -> Result when
+  Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
+  CacheLoop :: integer() | atom().
+%% ====================================================================
+register_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPid) ->
   Pid = self(),
   gen_server:cast(?Node_Manager_Name, {register_simple_cache, Name, Pid}),
   receive
@@ -748,7 +921,12 @@ create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Pid) ->
 
       case LoopTime of
         Time when is_integer(Time) ->
-          erlang:send_after(1000 * Time, Pid, {clear_sipmle_cache, 1000 * Time, ClearFun, StrongCacheConnection}),
+          case Name of
+            {sub_proc_cache, {_PlugIn, SubProcName}} ->
+              erlang:send_after(1000 * Time, ClearingPid, {clear_sub_proc_sipmle_cache, SubProcName, 1000 * Time, ClearFun});
+            _ ->
+              erlang:send_after(1000 * Time, ClearingPid, {clear_sipmle_cache, 1000 * Time, ClearFun, StrongCacheConnection})
+          end,
           ok;
         non -> ok;
         _ -> loop_time_not_a_number_error
@@ -760,7 +938,7 @@ create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Pid) ->
 %% clear_cache/1
 %% ====================================================================
 %% @doc Clears chosen caches at all nodes
--spec clear_cache(Cache :: term()) -> ok.
+-spec clear_cache(Cache :: term()) -> ok | error_during_contact_witch_ccm.
 %% ====================================================================
 clear_cache(Cache) ->
   Pid = self(),
@@ -770,3 +948,180 @@ clear_cache(Cache) ->
   after 500 ->
     error_during_contact_witch_ccm
   end.
+
+%% synch_cache_clearing/1
+%% ====================================================================
+%% @doc Clears chosen caches at all nodes
+-spec synch_cache_clearing(Cache :: term()) -> ok | error_during_contact_witch_ccm.
+%% ====================================================================
+synch_cache_clearing(Cache) ->
+  Pid = self(),
+  gen_server:cast({global, ?CCM}, {synch_cache_clearing, Cache, Pid}),
+  receive
+    {cache_cleared, Cache} -> ok
+  after 5000 ->
+    error_during_contact_witch_ccm
+  end.
+
+%% clear_sub_procs_caches/2
+%% ====================================================================
+%% @doc Clears caches of all sub processes (used during cache clearing for request)
+-spec clear_sub_procs_caches(EtsName :: atom(), Message :: term()) -> integer().
+%% ====================================================================
+clear_sub_procs_caches(EtsName, Message) ->
+  clear_sub_procs_caches(EtsName, ets:first(EtsName), Message, 0).
+
+%% clear_sub_procs_caches/4
+%% ====================================================================
+%% @doc Clears caches of all sub processes
+-spec clear_sub_procs_caches(EtsName :: atom(), CurrentElement :: term(), Message :: term(), SendNum :: integer()) -> integer().
+%% ====================================================================
+clear_sub_procs_caches(_EtsName, '$end_of_table', _Message, SendNum) ->
+  count_answers(SendNum);
+clear_sub_procs_caches(EtsName, CurrentElement, Message, SendNum) ->
+  NewSendNum = case CurrentElement of
+    Pid when is_pid(Pid) ->
+      Pid ! {sub_proc_management, self(), Message},
+      SendNum + 1;
+    _ -> SendNum
+  end,
+  clear_sub_procs_caches(EtsName, ets:next(EtsName, CurrentElement), Message, NewSendNum).
+
+%% count_answers/1
+%% ====================================================================
+%% @doc Gethers answers from sub processes (about cache clearing).
+-spec count_answers(ExpectedNum :: integer()) -> boolean().
+%% ====================================================================
+count_answers(ExpectedNum) ->
+  count_answers(ExpectedNum, true).
+
+%% count_answers/1
+%% ====================================================================
+%% @doc Gethers answers from sub processes (about cache clearing).
+-spec count_answers(ExpectedNum :: integer(), TmpAns :: boolean()) -> boolean().
+%% ====================================================================
+count_answers(0, TmpAns) ->
+  TmpAns;
+
+count_answers(ExpectedNum, TmpAns) ->
+  receive
+    {sub_proc_cache_cleared, TmpAns2} ->
+      count_answers(ExpectedNum - 1, TmpAns and TmpAns2)
+  after ?SUB_PROC_CACHE_CLEAR_TIME ->
+    false
+  end.
+
+%% clear_sub_procs_caches_by_fun/2
+%% ====================================================================
+%% @doc Clears caches of all sub processes (used during automatic cache clearing)
+-spec clear_sub_procs_caches_by_fun(EtsName :: atom(), Fun :: term()) -> integer().
+%% ====================================================================
+clear_sub_procs_caches_by_fun(EtsName, Fun) ->
+  clear_sub_procs_caches_by_fun(EtsName, ets:first(EtsName), Fun).
+
+%% clear_sub_procs_caches_by_fun/3
+%% ====================================================================
+%% @doc Clears caches of all sub processes (used during automatic cache clearing)
+-spec clear_sub_procs_caches_by_fun(EtsName :: atom(), CurrentElement::term(), Fun :: term()) -> ok.
+%% ====================================================================
+clear_sub_procs_caches_by_fun(_EtsName, '$end_of_table', _) ->
+  ok;
+clear_sub_procs_caches_by_fun(EtsName, CurrentElement, Fun) ->
+  case CurrentElement of
+    Pid when is_pid(Pid) ->
+      Pid ! {sub_proc_management, sub_proc_automatic_cache_clearing, Fun};
+    _ ->
+      ok
+  end,
+  clear_sub_procs_caches_by_fun(EtsName, ets:next(EtsName, CurrentElement), Fun).
+
+%% get_cache_name/1
+%% ====================================================================
+%% @doc Returns ets name for sub_proc
+-spec get_cache_name(SupProcName :: atom()) -> atom().
+%% ====================================================================
+get_cache_name(SupProcName) ->
+  list_to_atom(atom_to_list(SupProcName) ++ "_cache").
+
+%% register_sub_proc_simple_cache/5
+%% ====================================================================
+%% @doc Registers sub_proc simple cache
+-spec register_sub_proc_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term(), ClearingPid :: pid()) -> Result when
+  Result :: ok | error,
+  CacheLoop :: integer() | atom().
+%% ====================================================================
+register_sub_proc_simple_cache(Name, CacheLoop, ClearFun, ClearingPid) ->
+  RegAns = register_simple_cache({sub_proc_cache, Name}, CacheLoop, ClearFun, false, ClearingPid),
+  case RegAns of
+    ok ->
+      ok;
+    _ ->
+      lager:error([{mod, ?MODULE}], "Error of register_sub_proc_simple_cache, error: ~p, args: ~p", [RegAns, {Name, CacheLoop, ClearFun, ClearingPid}]),
+      error
+  end.
+
+%% clear_sub_procs_cache/1
+%% ====================================================================
+%% @doc Clears caches of sub_proc
+-spec clear_sub_procs_cache({PlugIn :: atom(), Cache :: atom()}) -> ok | error.
+%% ====================================================================
+clear_sub_procs_cache({PlugIn, Cache}) ->
+  gen_server:cast(PlugIn, {clear_sub_procs_cache, self(), Cache}),
+  receive
+    {sub_proc_cache_cleared, ClearAns} ->
+      case ClearAns of
+        true -> ok;
+        _ -> error
+      end
+  after ?SUB_PROC_CACHE_CLEAR_TIME ->
+    error
+  end.
+
+%% clear_sub_procs_cache/2
+%% ====================================================================
+%% @doc Clears caches of sub_proc
+-spec clear_sub_procs_cache({PlugIn :: atom(), Cache :: atom()}, Key :: term()) -> ok | error.
+%% ====================================================================
+clear_sub_procs_cache({PlugIn, Cache}, Key) ->
+  gen_server:cast(PlugIn, {clear_sub_procs_cache, self(), {Cache, Key}}),
+  receive
+    {sub_proc_cache_cleared, ClearAns} ->
+      case ClearAns of
+        true -> ok;
+        _ -> error
+      end
+  after ?SUB_PROC_CACHE_CLEAR_TIME ->
+    error
+  end.
+
+%% clear_sipmle_cache/3
+%% ====================================================================
+%% @doc Clears simple cache. Returns clearing process pid.
+-spec clear_sipmle_cache(LoopTime :: integer(), Fun :: term(), StrongCacheConnection :: boolean()) -> pid().
+%% ====================================================================
+clear_sipmle_cache(LoopTime, Fun, StrongCacheConnection) ->
+  Pid = self(),
+  erlang:send_after(LoopTime, Pid, {clear_sipmle_cache, LoopTime, Fun, StrongCacheConnection}),
+  case StrongCacheConnection of
+    true ->
+      spawn_link(fun() -> Fun() end);
+    _ ->
+      spawn(fun() -> Fun() end)
+  end.
+
+%% clear_sub_proc_sipmle_cache/4
+%% ====================================================================
+%% @doc Clears sub proc simple cache.
+-spec clear_sub_proc_sipmle_cache(Name :: atom(), LoopTime :: integer(), Fun :: term(), SubProcs :: atom()) -> boolean().
+%% ====================================================================
+clear_sub_proc_sipmle_cache(Name, LoopTime, Fun, SubProcs) ->
+  Pid = self(),
+  erlang:send_after(LoopTime, Pid, {clear_sub_proc_sipmle_cache, Name, LoopTime, Fun}),
+  {_SubProcArgs, _SubProcCache, SubProcPid} = proplists:get_value(Name, SubProcs, {not_found, not_found, not_found}),
+  case SubProcPid of
+    not_found ->
+      false;
+    _ ->
+      SubProcPid ! {sub_proc_management, sub_proc_automatic_cache_clearing, Fun}
+  end.
+
