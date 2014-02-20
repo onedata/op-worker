@@ -24,6 +24,12 @@
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 all() -> [test_event_subscription, test_event_aggregation].
 
+-define(assert_received(ResponsePattern), receive
+                                            ResponsePattern -> ok
+                                          after 1000
+                                            -> ?assert(false)
+                                          end).
+
 %% @doc This is distributed test of dao_vfs:find_files.
 %% It consists of series of dao_vfs:find_files with various file_criteria and comparing result to expected values.
 %% Before testing it clears documents that may affect test and after testing it clears created documents.
@@ -32,132 +38,40 @@ test_event_subscription(Config) ->
   nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
-  [CCM | WorkerNodes] = NodesUp,
-
-  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  timer:sleep(500),
-  RunWorkerCode = fun(Node) ->
-    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, []))
-  end,
-  lists:foreach(RunWorkerCode, WorkerNodes),
-  timer:sleep(1000),
-
-  {Workers, _} = gen_server:call({global, ?CCM}, get_workers),
-
-  StartAdditionalWorker = fun(Node, Module) ->
-    case lists:member({Node, Module}, Workers) of
-      true -> ok;
-      false ->
-        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, Module, []}),
-        ?assertEqual(ok, StartAns)
-    end
-  end,
-
-  StartAdditionalWorker(CCM, rule_manager),
-  lists:foreach(fun(Node) -> StartAdditionalWorker(Node, cluster_rengine) end, NodesUp),
-  StartAdditionalWorker(CCM, dao),
-
-  timer:sleep(1000),
+  [CCM | _] = NodesUp,
 
   WriteEvent = #write_event{user_id = "1234", ans_pid = self()},
 
-  gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent#write_event{user_id = "1"}}}),
-  receive
-    _ -> ?assert(false)
-  after 1000
-      -> ok
-  end,
+  send_event(WriteEvent, CCM),
+  assert_nothing_received(),
 
   subscribe_for_write_events(CCM, standard),
-  gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent#write_event{user_id = "2"}}}),
+  send_event(WriteEvent, CCM),
 
-  receive
-    {ok, standard, _} -> ok
-  after 1000
-    -> ?assert(false)
-  end,
+  ?assert_received({ok, standard, _}),
 
   subscribe_for_write_events(CCM, tree),
-  gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent#write_event{user_id = "3"}}}),
-  gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent#write_event{user_id = "4"}}}),
-  gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent#write_event{user_id = "5"}}}),
+  send_event(WriteEvent, CCM),
+  send_event(WriteEvent, CCM),
+  send_event(WriteEvent, CCM),
 
-  receive
-    {ok, standard, _} -> ok
-  after 1000
-    -> ?assert(false)
-  end,
-  receive
-    {ok, tree, _} -> ok
-  after 1000
-    -> ?assert(false)
-  end,
-
-  timer:sleep(2000),
-
-  ok.
+  ?assert_received({ok, standard, _}),
+  ?assert_received({ok, tree, _}).
 
 
 test_event_aggregation(Config) ->
   nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
-
-  [CCM | WorkerNodes] = NodesUp,
-
-  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  timer:sleep(500),
-  RunWorkerCode = fun(Node) ->
-    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, []))
-  end,
-  lists:foreach(RunWorkerCode, WorkerNodes),
-  timer:sleep(1000),
-
-  {Workers, _} = gen_server:call({global, ?CCM}, get_workers),
-
-  StartAdditionalWorker = fun(Node, Module) ->
-    case lists:member({Node, Module}, Workers) of
-      true -> ok;
-      false ->
-        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, Module, []}),
-        ?assertEqual(ok, StartAns)
-    end
-  end,
-
-  StartAdditionalWorker(CCM, rule_manager),
-  lists:foreach(fun(Node) -> StartAdditionalWorker(Node, cluster_rengine) end, NodesUp),
-  StartAdditionalWorker(CCM, dao),
-
-  timer:sleep(1000),
-
-  WriteEvent = #write_event{user_id = "1234", ans_pid = self()},
+  [CCM | _] = NodesUp,
 
   subscribe_for_write_events(CCM, tree, #processing_config{init_counter = 4}),
-  SendEvent = fun() ->
-    gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent}})
-  end,
+  WriteEvent = #write_event{user_id = "1234", ans_pid = self()},
 
-  SendEvent(),
-  SendEvent(),
-  timer:sleep(2000),
-  gen_server:call({?Dispatcher_Name, CCM}, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
+  repeat(3, fun() -> send_event(WriteEvent, CCM) end),
+  assert_nothing_received(),
 
-  receive
-    {ok, tree, _} -> ?assert(false)
-  after 1000
-    -> ok
-  end,
-
-  SendEvent(),
-  % it's probably somtething wrong in worker host, that why we need one more event than we should
-  SendEvent(),
-
-  receive
-    {ok, tree, _} -> ok
-  after 1000
-    -> ?assert(false)
-  end.
-
-
+  send_event(WriteEvent, CCM),
+  ?assert_received({ok, tree, _}).
 
 
 %% ====================================================================
@@ -169,7 +83,7 @@ init_per_testcase(_, Config) ->
   nodes_manager:start_deps_for_tester_node(),
 
   NodesUp = nodes_manager:start_test_on_nodes(2, true),
-  [CCM | _] = NodesUp,
+  [CCM | WorkerNodes] = NodesUp,
   DBNode = nodes_manager:get_db_node(),
 
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, [
@@ -177,7 +91,33 @@ init_per_testcase(_, Config) ->
     [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}]]),
 
   Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
-  lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config).
+  Res = lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config),
+
+  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
+  timer:sleep(500),
+  RunWorkerCode = fun(Node) ->
+    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, []))
+  end,
+  lists:foreach(RunWorkerCode, WorkerNodes),
+  timer:sleep(1000),
+
+  {Workers, _} = gen_server:call({global, ?CCM}, get_workers),
+
+  StartAdditionalWorker = fun(Node, Module) ->
+    case lists:member({Node, Module}, Workers) of
+      true -> ok;
+      false ->
+        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, Module, []}),
+        ?assertEqual(ok, StartAns)
+    end
+  end,
+
+  StartAdditionalWorker(CCM, rule_manager),
+  lists:foreach(fun(Node) -> StartAdditionalWorker(Node, cluster_rengine) end, NodesUp),
+  StartAdditionalWorker(CCM, dao),
+
+  timer:sleep(1000),
+  Res.
 
 end_per_testcase(distributed_test, Config) ->
   Nodes = ?config(nodes, Config),
@@ -205,7 +145,7 @@ subscribe_for_write_events(Node, ProcessingMethod, ProcessingConfig) ->
     string_to_integer(UserIdString)
   end,
 
-  EventHandlerDispMapFun = fun (#write_event{user_id = UserId}) ->
+  EventHandlerDispMapFun = fun(#write_event{user_id = UserId}) ->
     UserIdInt = string_to_integer(UserId),
     UserIdInt div 100
   end,
@@ -226,7 +166,7 @@ subscribe_for_write_events(Node, ProcessingMethod, ProcessingConfig) ->
 
 repeat(N, F) -> for(1, N, F).
 for(N, N, F) -> [F()];
-for(I, N, F) -> [F()|for(I+1, N, F)].
+for(I, N, F) -> [F() | for(I + 1, N, F)].
 
 count_answers(ToReceive) ->
   Set = sets:new(),
@@ -264,3 +204,13 @@ string_to_integer(SomeString) ->
       throw(badarg);
     _ -> SomeInteger
   end.
+
+assert_nothing_received() ->
+  receive
+    _ -> ?assert(false)
+  after 1000
+    -> ok
+  end.
+
+send_event(Event, Node) ->
+  gen_server:call({?Dispatcher_Name, Node}, {cluster_rengine, 1, {event_arrived, Event}}).
