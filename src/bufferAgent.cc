@@ -257,9 +257,7 @@ int BufferAgent::onFlush(std::string path, ffi_type ffi)
         while(wrapper->buffer->blockCount() > 0)
         {
             block_ptr block = wrapper->buffer->removeOldestBlock();
-            uint64_t start = utils::mtime<uint64_t>();
             int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
-            uint64_t end = utils::mtime<uint64_t>();
             
             if(res < 0)
             {
@@ -437,9 +435,7 @@ void BufferAgent::writerLoop()
             if(block) 
             {
                 // Write data to filesystem
-                uint64_t start = utils::mtime<uint64_t>();
                 writeRes = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
-                uint64_t end = utils::mtime<uint64_t>();
 
                 wrapper->cond.notify_all();
             }

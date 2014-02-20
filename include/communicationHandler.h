@@ -43,10 +43,6 @@ typedef boost::asio::ssl::stream<boost::asio::ip::tcp::socket>          socket_t
 typedef websocketpp::lib::shared_ptr<boost::asio::ssl::context>         context_ptr;
 typedef boost::function<void(const veil::protocol::communication_protocol::Answer)>    push_callback;
 
-typedef boost::function<std::string()> get_cert_path_fun;
-
-typedef boost::function<void(char*, int, int, void*)> passphrase_fun;
-
 template<typename T>
 std::string toString(T in) {
     std::ostringstream ss;

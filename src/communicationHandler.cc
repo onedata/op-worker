@@ -359,7 +359,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
     {
         unsigned int msgId = getMsgId();
         
-        uint64_t lap1 = helpers::utils::mtime<uint64_t>();
+        
         if(sendMessage(msg, msgId) < 0)
         {
             if(retry > 0) 
@@ -375,7 +375,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
 
             return answer;
         }
-        uint64_t lap2 = helpers::utils::mtime<uint64_t>();
+        
         if(receiveMessage(answer, msgId, timeout) != 0)
         {
             if(retry > 0) 
@@ -389,10 +389,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
             LOG(ERROR) << "WebSocket communication error";
             answer.set_answer_status(VEIO);
         }
-        uint64_t lap3 = helpers::utils::mtime<uint64_t>();
-
-        //LOG(INFO) << "lap3 - lap2: " << (lap3 - lap2) << " lap2 - lap1: " << (lap2 - lap1) ; 
-
+        
         if(answer.answer_status() != VOK) 
         {
             LOG(INFO) << "Received answer with non-ok status: " << answer.answer_status();

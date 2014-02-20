@@ -10,10 +10,10 @@ namespace helpers {
 using namespace std;
 
 FileCache::FileCache(uint32_t blockSize, bool isBuffer) 
-  : m_byteSize(0),
-    m_isBuffer(isBuffer),
+  : m_isBuffer(isBuffer),
     m_curBlockNo(1),
-    m_blockSize(blockSize)
+    m_blockSize(blockSize),
+    m_byteSize(0)
 {
 }
 
