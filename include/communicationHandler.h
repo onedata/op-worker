@@ -51,7 +51,11 @@ std::string toString(T in) {
 }
 
 namespace veil {
-    
+
+
+/// CertificateInfo provides information about certificate configuration
+/// including: certificate type, certificate paths and / or certificate 
+/// internal buffers pointing to certs loaded into program memory.
 struct CertificateInfo {
     enum CertificateType {
         PEM,
@@ -59,13 +63,14 @@ struct CertificateInfo {
         ASN1
     };
     
-    std::string         user_cert_path;
-    std::string         user_key_path;
+    std::string         user_cert_path;     ///< Path to cert chain file
+    std::string         user_key_path;      ///< Path to user key file 
     CertificateType     cert_type;
 
-    boost::asio::const_buffer chain_data;
-    boost::asio::const_buffer key_data;
+    boost::asio::const_buffer chain_data;   ///< Buffer containing cert chain (PEM format required)
+    boost::asio::const_buffer key_data;     ///< Buffer containing user key (PEM format required)
     
+    /// Construct CertificateInfo using file paths
     CertificateInfo(std::string         p_user_cert_path,
                     std::string         p_user_key_path,
                     CertificateType     p_cert_type = PEM)
@@ -75,6 +80,7 @@ struct CertificateInfo {
     {
     }
 
+    /// Construct CertificateInfo using memeory buffers
     CertificateInfo(boost::asio::const_buffer chain_buff, boost::asio::const_buffer key_buff) 
       : cert_type(PEM),
         chain_data(chain_buff),
@@ -83,6 +89,7 @@ struct CertificateInfo {
     }
 };
     
+// getter for CertificateInfo struct
 typedef boost::function<CertificateInfo()> cert_info_fun;
 
 /**
