@@ -18,6 +18,9 @@
 %% Application callbacks
 -export([start/2, stop/1]).
 
+-ifdef(TEST).
+-export([ports_ok/0]).
+-endif.
 
 %% ===================================================================
 %% Application callbacks

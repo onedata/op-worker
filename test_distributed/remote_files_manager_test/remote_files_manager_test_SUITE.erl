@@ -265,6 +265,10 @@ permissions_test(Config) ->
   ?assertEqual("ok", FSLogicDelStatus2),
   ?assertEqual(list_to_atom(?VOK), FSLogicDelAnswer2),
 
+
+  wss:close(Socket),
+  wss:close(Socket2),
+
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
@@ -282,9 +286,7 @@ permissions_test(Config) ->
   files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Team1),
 
   files_tester:delete_dir(?TEST_ROOT ++ "/users"),
-  files_tester:delete_dir(?TEST_ROOT ++ "/groups"),
-	wss:close(Socket),
-	wss:close(Socket2).
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
 
 %% Checks if appropriate storage helpers are used for different users
 storage_helpers_management_test(Config) ->
@@ -324,6 +326,7 @@ storage_helpers_management_test(Config) ->
   {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   FuseId1 = wss:handshakeInit(Socket, "hostname", [{testvar1, "testvalue1"}, {group_id, "group1"}]), %% Get first fuseId
   FuseId2 = wss:handshakeInit(Socket, "hostname", [{testvar1, "testvalue1"}, {group_id, "group2"}]), %% Get second fuseId
+  wss:close(Socket),
 
   Fuse_groups = [#fuse_group_info{name = "group2", storage_helper = #storage_helper_info{name = ST_Helper, init_args = ?TEST_ROOT2}}],
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, [ST_Helper, ?TEST_ROOT, Fuse_groups]),
@@ -367,8 +370,7 @@ storage_helpers_management_test(Config) ->
   files_tester:delete_dir(?TEST_ROOT ++ "/users"),
   files_tester:delete_dir(?TEST_ROOT ++ "/groups"),
   files_tester:delete_dir(?TEST_ROOT2 ++ "/users"),
-  files_tester:delete_dir(?TEST_ROOT2 ++ "/groups"),
-	wss:close(Socket).
+  files_tester:delete_dir(?TEST_ROOT2 ++ "/groups").
 
 %% Checks if requests from helper "Cluster Proxy" are handled correctly
 helper_requests_test(Config) ->
@@ -430,6 +432,7 @@ helper_requests_test(Config) ->
   %% Get FuseId
   {ok, Socket2} = wss:connect(Host, Port, [{certfile, Cert2}, {cacertfile, Cert2}]),
   FuseId2 = wss:handshakeInit(Socket2, "hostname", []),
+	wss:close(Socket2),
   {User2_Status0, Helper0, _, User2_Id, _, User2_AnswerOpt0} = create_file(Host, Cert2, Port, TestFile, FuseId2),
   ?assertEqual("ok", User2_Status0),
   ?assertEqual(?VOK, User2_AnswerOpt0),
@@ -442,6 +445,7 @@ helper_requests_test(Config) ->
   %% Get FuseId
   {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   FuseId = wss:handshakeInit(Socket, "hostname", []),
+	wss:close(Socket),
 
   {Status, Helper, _, Id, _Validity, AnswerOpt} = create_file(Host, Cert, Port, TestFile, FuseId),
   ?assertEqual("ok", Status),
@@ -547,9 +551,7 @@ helper_requests_test(Config) ->
   files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Team2),
 
   files_tester:delete_dir(?TEST_ROOT ++ "/users"),
-  files_tester:delete_dir(?TEST_ROOT ++ "/groups"),
-	wss:close(Socket),
-	wss:close(Socket2).
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
 
 %% ====================================================================
 %% SetUp and TearDown functions
