@@ -10,10 +10,10 @@ namespace helpers {
 using namespace std;
 
 FileCache::FileCache(uint32_t blockSize, bool isBuffer) 
-  : m_byteSize(0),
-    m_isBuffer(isBuffer),
+  : m_isBuffer(isBuffer),
     m_curBlockNo(1),
-    m_blockSize(blockSize)
+    m_blockSize(blockSize),
+    m_byteSize(0)
 {
 }
 
@@ -128,7 +128,6 @@ bool FileCache::insertBlock(const FileBlock &block)
             else if ( (*it)->offset <= offset && (*it)->offset + (*it)->size() > offset) 
             {
                 off_t tStart = offset - (*it)->offset;
-                off_t sStart = 0;
                 size_t toCpy = min( (size_t)((*it)->offset + (*it)->size() - offset), cBuff.size() );
                 
                 (*it)->data.replace(tStart, toCpy, cBuff.substr(0, toCpy));

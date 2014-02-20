@@ -17,7 +17,7 @@ using namespace veil::protocol::communication_protocol;
 class MockCommunicationHandler
     : public CommunicationHandler {
 public:
-    MockCommunicationHandler() : CommunicationHandler("host", 5555, "certFile") {};
+    MockCommunicationHandler() : CommunicationHandler("host", 5555, boost::bind(&MockCommunicationHandler::getCertInfo, this)) {};
     ~MockCommunicationHandler() {};
 
     int openConnection() {
@@ -28,6 +28,10 @@ public:
     void closeConnection() {}
 
     MOCK_METHOD3(communicate, Answer(ClusterMsg&, uint8_t, uint32_t));
+
+    CertificateInfo getCertInfo() {
+        return CertificateInfo("certFile", "certFile");
+    }
 };
 
 #endif // COMMUNICAION_HANDLER_MOCK_H

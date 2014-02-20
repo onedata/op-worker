@@ -34,7 +34,7 @@ public:
     
     struct ConnectionPoolInfo {
         
-        ConnectionPoolInfo(unsigned int s) : size(s), currWorkers(0) {}
+        ConnectionPoolInfo(unsigned int s) : currWorkers(0), size(s) {}
         ConnectionPoolInfo() : size(DEFAULT_POOL_SIZE) {}
         
         connection_pool_t connections;
@@ -42,10 +42,9 @@ public:
         unsigned int size;
     };
 
-    SimpleConnectionPool(std::string hostname, int port, std::string certPath, bool (*updateCert)(),int metaPoolSize = DEFAULT_POOL_SIZE,int dataPoolSize = DEFAULT_POOL_SIZE);
+    SimpleConnectionPool(std::string hostname, int port, cert_info_fun, int metaPoolSize = DEFAULT_POOL_SIZE, int dataPoolSize = DEFAULT_POOL_SIZE);
     virtual ~SimpleConnectionPool();
     
-    virtual std::string getPeerCertificatePath();                           ///< Updates proxy certificate file if needed and returns its path.
     virtual void setPoolSize(PoolType type, unsigned int);                  ///< Sets size of connection pool. Default for each pool is: 2
     virtual void setPushCallback(std::string fuseId, push_callback);        ///< Sets fuseID and callback function that will be registered for
                                                                             ///< PUSH channel for every new META connection
@@ -64,9 +63,8 @@ public:
 
 protected:
     std::string          m_hostname;
-    bool                 (*updateCertCB)();
     int                  m_port;
-    std::string          m_certPath;
+    cert_info_fun        m_getCertInfo;
     std::string          m_fuseId;
 
     push_callback        m_pushCallback;

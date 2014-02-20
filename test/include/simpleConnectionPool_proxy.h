@@ -13,8 +13,8 @@ class ProxySimpleConnectionPool :
     public SimpleConnectionPool 
 {
 public:
-    ProxySimpleConnectionPool(std::string hostname, int port, std::string cert, bool(*fun)()) : 
-        SimpleConnectionPool(hostname, port, cert, fun)
+    ProxySimpleConnectionPool(std::string hostname, int port, cert_info_fun getCertInfo) : 
+        SimpleConnectionPool(hostname, port, getCertInfo)
     {
     }
 

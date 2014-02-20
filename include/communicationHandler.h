@@ -43,8 +43,6 @@ typedef boost::asio::ssl::stream<boost::asio::ip::tcp::socket>          socket_t
 typedef websocketpp::lib::shared_ptr<boost::asio::ssl::context>         context_ptr;
 typedef boost::function<void(const veil::protocol::communication_protocol::Answer)>    push_callback;
 
-typedef boost::function<std::string()> get_cert_path_fun;
-
 template<typename T>
 std::string toString(T in) {
     std::ostringstream ss;
@@ -53,6 +51,46 @@ std::string toString(T in) {
 }
 
 namespace veil {
+
+
+/// CertificateInfo provides information about certificate configuration
+/// including: certificate type, certificate paths and / or certificate 
+/// internal buffers pointing to certs loaded into program memory.
+struct CertificateInfo {
+    enum CertificateType {
+        PEM,
+        P12,
+        ASN1
+    };
+    
+    std::string         user_cert_path;     ///< Path to cert chain file
+    std::string         user_key_path;      ///< Path to user key file 
+    CertificateType     cert_type;
+
+    boost::asio::const_buffer chain_data;   ///< Buffer containing cert chain (PEM format required)
+    boost::asio::const_buffer key_data;     ///< Buffer containing user key (PEM format required)
+    
+    /// Construct CertificateInfo using file paths
+    CertificateInfo(std::string         p_user_cert_path,
+                    std::string         p_user_key_path,
+                    CertificateType     p_cert_type = PEM)
+      : user_cert_path(p_user_cert_path),
+        user_key_path(p_user_key_path),
+        cert_type(p_cert_type)
+    {
+    }
+
+    /// Construct CertificateInfo using memeory buffers
+    CertificateInfo(boost::asio::const_buffer chain_buff, boost::asio::const_buffer key_buff) 
+      : cert_type(PEM),
+        chain_data(chain_buff),
+        key_data(key_buff)
+    {
+    }
+};
+    
+// getter for CertificateInfo struct
+typedef boost::function<CertificateInfo()> cert_info_fun;
 
 /**
  * The CommunicationHandler class.
@@ -77,8 +115,7 @@ protected:
     
     std::string                 m_hostname;
     int                         m_port;
-    std::string                 m_certPath;
-    get_cert_path_fun           m_certFun;
+    cert_info_fun               m_getCertInfo;
     
     // Container that gathers all incoming messages
     boost::unordered_map<long long, std::string> m_incomingMessages;
@@ -126,10 +163,10 @@ protected:
                                                                             ///< as PUSH channel
 
 public:
-    CommunicationHandler(std::string hostname, int port, std::string certPath);
+    CommunicationHandler(std::string hostname, int port, cert_info_fun);
     virtual ~CommunicationHandler();
 
-    virtual void setCertFun(get_cert_path_fun certFun);                     ///< Setter for function that returns certiificate file path.
+    virtual void setCertFun(cert_info_fun certFun);                         ///< Setter for function that returns CommunicationHandler::CertificateInfo struct.
     virtual void setFuseID(std::string);                                    ///< Setter for field m_fuseID.
     virtual void setPushCallback(push_callback);                            ///< Setter for field m_pushCallback.
     virtual void enablePushChannel();                                       ///< Enables PUSH channel on this connection. 

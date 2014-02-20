@@ -243,41 +243,45 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
 
 int BufferAgent::onFlush(std::string path, ffi_type ffi)
 {
-    unique_lock guard(m_wrMutex);
-        write_buffer_ptr wrapper = m_wrCacheMap[ffi->fh];
-    guard.unlock();
-
-    unique_lock sendGuard(wrapper->sendMutex);
-    unique_lock buff_guard(wrapper->mutex);
-
-    // Send all pending blocks to server
-    while(wrapper->buffer->blockCount() > 0) 
+    write_buffer_ptr wrapper;
     {
-        block_ptr block = wrapper->buffer->removeOldestBlock();
-        uint64_t start = utils::mtime<uint64_t>();
-        int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
-        uint64_t end = utils::mtime<uint64_t>();
-
-        if(res < 0)
-        {
-            // Skip all blocks after receiving error
-            while(wrapper->buffer->blockCount() > 0)
-            {
-                (void) wrapper->buffer->removeOldestBlock();
-            }
-            return res;
-        } else if(res < block->data.size()) {
-            // Send wasn't complete
-            block->offset += res;
-            block->data = block->data.substr(res);
-            wrapper->buffer->insertBlock(*block);
-        }
+        unique_lock guard(m_wrMutex);
+        wrapper = m_wrCacheMap[ffi->fh];
     }
 
-    updateWrBufferSize(ffi->fh, wrapper->buffer->byteSize());
-
-    guard.lock();
-    m_wrJobQueue.remove(ffi->fh);
+    {
+        unique_lock sendGuard(wrapper->sendMutex);
+        unique_lock buff_guard(wrapper->mutex);
+        
+        // Send all pending blocks to server
+        while(wrapper->buffer->blockCount() > 0)
+        {
+            block_ptr block = wrapper->buffer->removeOldestBlock();
+            int res = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
+            
+            if(res < 0)
+            {
+                // Skip all blocks after receiving error
+                while(wrapper->buffer->blockCount() > 0)
+                {
+                    (void) wrapper->buffer->removeOldestBlock();
+                }
+                return res;
+            } else if(res < block->data.size()) {
+                // Send wasn't complete
+                block->offset += res;
+                block->data = block->data.substr(res);
+                wrapper->buffer->insertBlock(*block);
+            }
+        }
+        
+        updateWrBufferSize(ffi->fh, wrapper->buffer->byteSize());
+    }
+    
+    {
+        unique_lock guard(m_wrMutex);
+        m_wrJobQueue.remove(ffi->fh);
+    }
 
     return 0;
 }
@@ -431,9 +435,7 @@ void BufferAgent::writerLoop()
             if(block) 
             {
                 // Write data to filesystem
-                uint64_t start = utils::mtime<uint64_t>();
                 writeRes = doWrite(wrapper->fileName, block->data, block->data.size(), block->offset, &wrapper->ffi);
-                uint64_t end = utils::mtime<uint64_t>();
 
                 wrapper->cond.notify_all();
             }

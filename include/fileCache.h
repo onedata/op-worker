@@ -29,23 +29,23 @@ struct FileBlock
 
     /// Construct empty FileBlock.
     FileBlock() 
-      : _size(0),
-        valid_to(0),
-        offset(0)
+      : offset(0),
+        _size(0),
+        valid_to(0)
     {
     }
 
     FileBlock(off_t off) 
-      : _size(0),
-        valid_to(0),
-        offset(off)
+      : offset(off),
+        _size(0),
+        valid_to(0)
     {
     }
 
     /// Construct FileBlock using given offet and data.
     FileBlock(off_t off, const std::string &buff, uint64_t valid = 0) 
-      : _size(buff.size()),
-        offset(off),
+      : offset(off),
+        _size(buff.size()),
         data(buff),
         valid_to(valid)
     {
@@ -67,7 +67,7 @@ typedef boost::shared_ptr<FileBlock>    block_ptr;
 typedef boost::weak_ptr<FileBlock>      block_weak_ptr;
 
 /// Comparator for pointers to FileBlock which orders them by expiration date
-static struct _OrderByValidTo
+struct _OrderByValidTo
 {
     bool operator() (block_ptr const &a, block_ptr const &b) 
     { 
@@ -78,10 +78,10 @@ static struct _OrderByValidTo
 
         return a->valid_to < b->valid_to;
     }
-} OrderByValidTo;
+};
 
 /// Comparator for pointers to FileBlock which orders them by data offset
-static struct _OrderByOffset
+struct _OrderByOffset
 {
     bool operator() (block_ptr const &a, block_ptr const &b) 
     {
@@ -97,7 +97,7 @@ static struct _OrderByOffset
     { 
         return a < b->offset;
     }
-} OrderByOffset;
+};
 
 /**
  * FileCache object represents single file memory cache.

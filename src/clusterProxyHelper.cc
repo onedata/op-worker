@@ -363,17 +363,8 @@ ClusterProxyHelper::ClusterProxyHelper(std::vector<std::string> args)
         boost::bind(&ClusterProxyHelper::doWrite, this, _1, _2, _3, _4, _5),
         boost::bind(&ClusterProxyHelper::doRead, this, _1, _2, _3, _4, _5))
 {
-    if(args.size() >= 3) { // If arguments are given, use them to establish connection instead default VeilHelpers configuration
-        m_clusterHostname   = args[0];
-        m_clusterPort       = utils::fromString<unsigned int>(args[1]);
-        m_proxyCert         = args[2];
-
-        m_connectionPool.reset(new SimpleConnectionPool(m_clusterHostname, m_clusterPort, m_proxyCert, NULL));
-    } else { // Otherwise init local config using global values
-        m_clusterHostname   = config::clusterHostname;
-        m_clusterPort       = config::clusterPort;
-        m_proxyCert         = config::proxyCert;
-    }
+    m_clusterHostname   = config::clusterHostname;
+    m_clusterPort       = config::clusterPort;
 }
 
 ClusterProxyHelper::~ClusterProxyHelper()

@@ -31,10 +31,10 @@ namespace veil {
 volatile int CommunicationHandler::instancesCount = 0;
 boost::mutex CommunicationHandler::m_instanceMutex;
 
-CommunicationHandler::CommunicationHandler(string hostname, int port, string certPath)
-    : m_hostname(hostname),
-      m_port(port),
-      m_certPath(certPath),
+CommunicationHandler::CommunicationHandler(string p_hostname, int p_port, cert_info_fun p_getCertInfo)
+    : m_hostname(p_hostname),
+      m_port(p_port),
+      m_getCertInfo(p_getCertInfo),
       m_connectStatus(CLOSED),
       m_currentMsgId(1),
       m_errorCount(0),
@@ -44,9 +44,9 @@ CommunicationHandler::CommunicationHandler(string hostname, int port, string cer
     ++instancesCount;
 }
 
-void CommunicationHandler::setCertFun(get_cert_path_fun certFun)
+void CommunicationHandler::setCertFun(cert_info_fun p_getCertInfo)
 {
-    m_certFun = certFun;
+    m_getCertInfo = p_getCertInfo;
 }
     
     
@@ -359,7 +359,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
     {
         unsigned int msgId = getMsgId();
         
-        uint64_t lap1 = helpers::utils::mtime<uint64_t>();
+        
         if(sendMessage(msg, msgId) < 0)
         {
             if(retry > 0) 
@@ -375,7 +375,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
 
             return answer;
         }
-        uint64_t lap2 = helpers::utils::mtime<uint64_t>();
+        
         if(receiveMessage(answer, msgId, timeout) != 0)
         {
             if(retry > 0) 
@@ -389,10 +389,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
             LOG(ERROR) << "WebSocket communication error";
             answer.set_answer_status(VEIO);
         }
-        uint64_t lap3 = helpers::utils::mtime<uint64_t>();
-
-        //LOG(INFO) << "lap3 - lap2: " << (lap3 - lap2) << " lap2 - lap1: " << (lap2 - lap1) ; 
-
+        
         if(answer.answer_status() != VOK) 
         {
             LOG(INFO) << "Received answer with non-ok status: " << answer.answer_status();
@@ -418,16 +415,13 @@ int CommunicationHandler::getInstancesCount()
     
 context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
 {
-    // Setup TLS connection (i.e. certificates)
-    {   boost::unique_lock<boost::mutex> lock(m_instanceMutex);
-        
-        EVP_cleanup();
-        OpenSSL_add_all_algorithms();
-        OpenSSL_add_all_ciphers();
-        OpenSSL_add_all_digests();
+    if (!m_getCertInfo) {
+        LOG(ERROR) << "Cannot get CertificateInfo due to null getter";
+        return context_ptr();
     }
     
-    string certPath = m_certFun ? m_certFun() : m_certPath;
+    CertificateInfo certInfo = m_getCertInfo();
+    
     try {
         context_ptr ctx(new boost::asio::ssl::context(boost::asio::ssl::context::sslv3));
         
@@ -435,13 +429,33 @@ context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
                          boost::asio::ssl::context::no_sslv2 |
                          boost::asio::ssl::context::single_dh_use); 
         
-        ctx->use_certificate_chain_file(certPath);
-        ctx->use_private_key_file(certPath, boost::asio::ssl::context::pem);
+
+        boost::asio::ssl::context_base::file_format file_format; // Certificate format
+        if(certInfo.cert_type == CertificateInfo::ASN1) {
+            file_format = boost::asio::ssl::context::asn1;
+        } else {
+            file_format = boost::asio::ssl::context::pem;
+        }
         
+        if(certInfo.cert_type == CertificateInfo::P12) {
+            LOG(ERROR) << "Unsupported certificate format: P12";
+            return context_ptr();
+        }
+
+        if(boost::asio::buffer_size(certInfo.chain_data) && boost::asio::buffer_size(certInfo.chain_data)) {
+            ctx->use_certificate_chain(certInfo.chain_data);
+            ctx->use_private_key(certInfo.key_data, file_format);
+        } else {
+            ctx->use_certificate_chain_file(certInfo.user_cert_path);
+            ctx->use_private_key_file(certInfo.user_key_path, file_format);
+        }
+    
         return ctx;
         
     } catch (boost::system::system_error& e) {
-        LOG(ERROR) << "Cannot initialize TLS socket due to: " << e.what() << " with cert file: " << certPath;
+        LOG(ERROR) << "Cannot initialize TLS socket due to: " << e.what() 
+                   << " with cert file: " << certInfo.user_cert_path << " and key file: " 
+                   << certInfo.user_key_path;
     }
         
     return context_ptr();
