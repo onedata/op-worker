@@ -49,7 +49,7 @@ test_event_subscription(Config) ->
   WriteEvent = #write_event{user_id = "1234", ans_pid = self()},
 
   send_event(WriteEvent, CCM),
-  assert_nothing_received(),
+  assert_nothing_received(CCM),
 
   register_handler_for_writes(CCM, standard),
   send_event(WriteEvent, CCM),
@@ -61,7 +61,8 @@ test_event_subscription(Config) ->
   timer:sleep(900),
 
   ?assert_received({ok, standard, _}),
-  ?assert_received({ok, tree, _}, 3000).
+  ?assert_received({ok, tree, _}, 3000),
+  assert_nothing_received(CCM).
 
 
 test_event_aggregation(Config) ->
@@ -74,10 +75,17 @@ test_event_aggregation(Config) ->
 
   repeat(3, fun() -> send_event(WriteEvent, CCM) end),
   timer:sleep(900),
-  assert_nothing_received(),
+  assert_nothing_received(CCM),
 
   send_event(WriteEvent, CCM),
-  ?assert_received({ok, tree, _}).
+  ?assert_received({ok, tree, _}),
+  assert_nothing_received(CCM),
+
+  repeat(3, fun() -> send_event(WriteEvent, CCM) end),
+  assert_nothing_received(CCM),
+  send_event(WriteEvent, CCM),
+  ?assert_received({ok, tree, _}),
+  assert_nothing_received(CCM).
 
 
 %% ====================================================================
@@ -213,9 +221,12 @@ string_to_integer(SomeString) ->
     _ -> SomeInteger
   end.
 
-assert_nothing_received() ->
+assert_nothing_received(Node) ->
   receive
-    _ -> ?assert(false)
+    Ans ->
+%%       cluster_rengine:log("FAIL: ", Ans),
+      gen_server:call({?Dispatcher_Name, Node}, {cluster_rengine, 1, {log, "FAIL:", Ans}}),
+      ?assert(false)
   after 1000
     -> ok
   end.

@@ -27,7 +27,7 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([init/1, handle/2, cleanup/0]).
+-export([init/1, handle/2, cleanup/0, log/1]).
 
 %% functions for manual tests
 -export([register_mkdir_handler/1, send_mkdir_event/0, delete_file/0]).
@@ -50,8 +50,22 @@ handle(_ProtocolVersion, healthcheck) ->
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
+handle(_ProtocolVersion, {log, Msg}) ->
+  log(Msg);
+
+handle(_ProtocolVersion, {log, Msg, Args}) ->
+  log(Msg, Args);
+
 handle(ProtocolVersion, {final_stage_tree, TreeId, Event}) ->
-  handle(ProtocolVersion, {event_arrived, Event});
+  EventType = element(1, Event),
+  SleepNeeded = update_event_handler(ProtocolVersion, EventType),
+  % from my observations it takes about 200ms until disp map fun is registered in cluster_manager
+  case SleepNeeded of
+    true -> timer:sleep(600);
+    _ -> ok
+  end,
+  gen_server:call({cluster_rengine, node()}, {asynch, 1, {final_stage_tree, TreeId, Event}});
+
 
 handle(ProtocolVersion, {event_arrived, Event}) ->
   handle(ProtocolVersion, {event_arrived, Event, false});
@@ -293,3 +307,9 @@ string_to_integer(SomeString) ->
 
 delete_file() ->
   rpc:call(node(), dao_lib, apply, [dao_vfs, remove_file, ["plgmsitko/todelete"], 1]).
+
+log(Msg) ->
+  ?info(Msg).
+
+log(Msg, Arg) ->
+  ?info("LOGGGG ::: ~p: ~p", [Msg, Arg]).
