@@ -25,69 +25,109 @@ In order to compile the project, you need to have the following libraries:
 * libfuse
 * libboost - filesystem, thread, random, system (version >= 1.49)
 
-Use the following command to install the required dependency packages:
+Use the following command to install the VeilCluster software and the required dependency packages:
 
 * RHEL/CentOS/Fedora Dependencies (.rpm packages):
 
-        yum install globus-proxy-utils globus-gsi-callback-devel fuse-libs fuse-devel cmake28 boost-devel boost-static subversion protobuf-devel openssl-devel
-
-        ln -s /usr/lib64/globus/include/globus_config.h /usr/include/globus
+        yum install veil-<version>.rpm
 
 
-#### VeilCluster RPM installation and configuration
-
-After installing prerequisites, you can install the VeilCluster RPM.
-
-        rpm -i veil-<version>.rpm
-
-
-VeilCluster setup scripts can be executed with the following command:
+VeilCluster is installed in /opt/veil. The setup scripts are executed with the following commands: 
         
-        veil_setup
+        /opt/veil/setup
 
 The script will guide you through the setup procedure of the VeilCluster. To start the work you should start at least one instance of the CCM component and one worker component instance. 
 
 A sample session of starting VeilCluster from scratch is as follows:
 
-        [root@plgsl63 veilcluster]# veil_setup 
+  	 [root@plgsl64 ~]# /opt/veil/setup 
 
-        *** Veil SETUP ***
-        ~ Nodes configured on this machine will use its hostname: @172.16.67.219
-        (!) Make sure it is resolvable by other hosts in the network
-        ==> What do you want to do?
-         [1] Manage database nodes
-         [2] Manage veil nodes
-         [3] Exit
-        > Your choice: 2
-        ~ Each machine can only host a single worker or a ccm + worker pair.
-        ==> What do you want to do?
-         [1] Set up a new cluster
-         [2] Extend existing cluster
-         [3] Go back
-        > Your choice: 1
-        ~ Installing a new cluster beside a running one may cause unpredictable behaviour.
-        ~ It is required that all database nodes are installed prior to the cluster.
-        ==> Do you wish to continue?
-         [1] Yes
-         [2] No
-        > Your choice: 1
-        ==> List ALL running database nodes, delimiting them with commas (no spaces) [eg. db1@host.net,db2@host2.net,...]
-        ==> The cluster will use ONLY the nodes specified now.
-        > Running DB nodes: db@172.16.67.219
-        ==> Connection to following database nodes has been confirmed:
-         - db@172.16.67.219
-        ==> Following nodes will be installed:
-         - ccm@172.16.67.219
-         - worker@172.16.67.219
-        ==> Confirm:
-         [1] Continue
-         [2] Go back
-        > Your choice: 1
-        ~ Installing ccm@172.16.67.219...
-        ~ Installing worker@172.16.67.219...
-        ~ Starting node(s)...
+	*** Veil SETUP ***
+	~ Nodes configured on this machine will use its hostname: @172.16.67.219
+	(!) Make sure it is resolvable by other hosts in the network
+	==> What do you want to do?
+	 [1] Manage database nodes
+	 [2] Manage veil nodes
+	 [3] Exit
+	> Your choice: 1
+	==> What do you want to do?
+	 [1] Set up a new db custer
+	 [2] Extend existing db cluster
+	 [3] Go back
+	> Your choice: 1
+	==> Following node will be installed:
+	 - db@172.16.67.219
+	==> Confirm:
+	 [1] Continue
+	 [2] Go back
+	> Your choice: 1
+	~ Installing db@172.16.67.219...
+	~ installation complete
+	~ Starting node...
+	[root@plgsl64 ~]# /opt/veil/setup 
 
-To check if the VeilCluster is running you can attach to the CCM component and check heartbeat messages:
+	*** Veil SETUP ***
+	~ Nodes configured on this machine will use its hostname: @172.16.67.219
+	(!) Make sure it is resolvable by other hosts in the network
+	==> What do you want to do?
+	 [1] Manage database nodes
+	 [2] Manage veil nodes
+	 [3] Exit
+	> Your choice: 2
+	~ Each machine can only host a single worker or a ccm + worker pair.
+	==> What do you want to do?
+	 [1] Set up a new cluster
+	 [2] Extend existing cluster
+	 [3] Go back
+	> Your choice: 1
+	~ Installing a new cluster beside a running one may cause unpredictable behaviour.
+	~ It is required that all database nodes are installed prior to the cluster.
+	==> Do you wish to continue?
+	 [1] Yes
+	 [2] No
+	> Your choice: 1
+	==> List ALL running database nodes, delimiting them with commas (no spaces) [eg. db1@host.net,db2@host2.net,...]
+	==> The cluster will use ONLY the nodes specified now.
+	> Running DB nodes: db@172.16.67.219
+	==> Connection to following database nodes has been confirmed:
+	 - db@172.16.67.219
+	==> Storage setup
+	> Select path where veil can store his files (i.e. /veil/veil_files): /veil/veil_files
+	(!) IMPORTANT
+	(!) Configuring user storage
+	(!) If you don't create any storage now, all the data will go throught proxy
+	 and it will work really slow!
+	==> Do you wish to create new storage?
+	 [1] Yes
+	 [2] No
+	> Your choice: 1
+	==> Type following attributes:
+	> Group name: plgveilfs
+	> Storage directory (i.e. /veil/dir1): /veil/dir1
+	==> Do you wish to create new storage?
+	 [1] Yes
+	 [2] No
+	> Your choice: 2
+	==> Is this all?
+	==> group_name: plgveilfs, root: /veil/dir1
+
+	 [1] Yes, continue instalation
+	 [2] Add another
+	 [3] Delete all and configure them again
+	> Your choice: 1
+	==> Following nodes will be installed:
+	 - ccm@172.16.67.219
+	 - worker@172.16.67.219
+	==> Confirm:
+	 [1] Continue
+	 [2] Go back
+	> Your choice: 1
+	~ Installing ccm@172.16.67.219...
+	~ Installing worker@172.16.67.219...
+	~ Starting node(s)...
+
+
+In order to check if the VeilCluster is running you can attach to the CCM component and check heartbeat messages:
 
         [root@plgsl63 veilcluster]# /opt/veil/nodes/ccm/bin/veil_cluster_node attach
         Attaching to /tmp//opt/veil/nodes/ccm/erlang.pipe.1 (^D to exit)
