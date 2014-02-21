@@ -26,7 +26,13 @@ all() -> [test_event_subscription, test_event_aggregation].
 
 -define(assert_received(ResponsePattern), receive
                                             ResponsePattern -> ok
-                                          after 1000
+                                          after 200
+                                            -> ?assert(false)
+                                          end).
+
+-define(assert_received(ResponsePattern, Timeout), receive
+                                            ResponsePattern -> ok
+                                          after Timeout
                                             -> ?assert(false)
                                           end).
 
@@ -45,18 +51,17 @@ test_event_subscription(Config) ->
   send_event(WriteEvent, CCM),
   assert_nothing_received(),
 
-  subscribe_for_write_events(CCM, standard),
+  register_handler_for_writes(CCM, standard),
   send_event(WriteEvent, CCM),
-
   ?assert_received({ok, standard, _}),
 
-  subscribe_for_write_events(CCM, tree),
+  register_handler_for_writes(CCM, tree),
   send_event(WriteEvent, CCM),
-  send_event(WriteEvent, CCM),
-  send_event(WriteEvent, CCM),
+  % from my observations it takes about 200ms until disp map fun is registered in cluster_manager
+  timer:sleep(900),
 
   ?assert_received({ok, standard, _}),
-  ?assert_received({ok, tree, _}).
+  ?assert_received({ok, tree, _}, 3000).
 
 
 test_event_aggregation(Config) ->
@@ -68,6 +73,7 @@ test_event_aggregation(Config) ->
   WriteEvent = #write_event{user_id = "1234", ans_pid = self()},
 
   repeat(3, fun() -> send_event(WriteEvent, CCM) end),
+  timer:sleep(900),
   assert_nothing_received(),
 
   send_event(WriteEvent, CCM),
@@ -137,7 +143,7 @@ end_per_testcase(_, Config) ->
   ?assertEqual(ok, StopAns).
 
 
-subscribe_for_write_events(Node, ProcessingMethod) ->
+register_handler_for_writes(Node, ProcessingMethod) ->
   subscribe_for_write_events(Node, ProcessingMethod, #processing_config{}).
 
 subscribe_for_write_events(Node, ProcessingMethod, ProcessingConfig) ->
@@ -162,7 +168,9 @@ subscribe_for_write_events(Node, ProcessingMethod, ProcessingConfig) ->
     ok -> ok
   after 100 ->
     ?assert(false)
-  end.
+  end,
+
+  timer:sleep(800).
 
 repeat(N, F) -> for(1, N, F).
 for(N, N, F) -> [F()];

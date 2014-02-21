@@ -50,6 +50,9 @@ handle(_ProtocolVersion, healthcheck) ->
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
+handle(ProtocolVersion, {final_stage_tree, TreeId, Event}) ->
+  handle(ProtocolVersion, {event_arrived, Event});
+
 handle(ProtocolVersion, {event_arrived, Event}) ->
   handle(ProtocolVersion, {event_arrived, Event, false});
 handle(ProtocolVersion, {event_arrived, Event, SecondTry}) ->
@@ -63,7 +66,12 @@ handle(ProtocolVersion, {event_arrived, Event, SecondTry}) ->
           ok;
         false ->
           % did not found mapping for event and first try - update caches for this event and try one more time
-          update_event_handler(ProtocolVersion, EventType),
+          SleepNeeded = update_event_handler(ProtocolVersion, EventType),
+          % from my observations it takes about 200ms until disp map fun is registered in cluster_manager
+          case SleepNeeded of
+            true -> timer:sleep(600);
+            _ -> ok
+          end,
           handle(ProtocolVersion, {event_arrived, Event, true})
       end;
     % mapping for event found - forward event
@@ -74,7 +82,8 @@ handle(ProtocolVersion, {event_arrived, Event, SecondTry}) ->
             ?info("forwarding to tree ~p", [node()]),
             % forward event to subprocess tree
 %%             gen_server:call({cluster_rengine, node()}, {asynch, 1, {final_stage_tree, TreeId, Event}});
-            gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, self(), {final_stage_tree, TreeId, Event}});
+            gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {final_stage_tree, TreeId, Event}});
+%%           gen_server:call({cluster_rengine, node()}, {asynch, 1, {final_stage_tree, TreeId, Event}});
           {standard, HandlerFun} ->
             ?info("normal processing ~p", [node()]),
             HandlerFun(Event)
@@ -120,6 +129,7 @@ save_to_caches(EventType, EventHandlerItems) ->
     end
   end, HandlerItemsForTree).
 
+% returns if during update at least one process tree has been registered
 update_event_handler(ProtocolVersion, EventType) ->
   gen_server:call(?Dispatcher_Name, {rule_manager, ProtocolVersion, self(), {get_event_handlers, EventType}}),
 
@@ -135,7 +145,8 @@ update_event_handler(ProtocolVersion, EventType) ->
             ((ProcessingMethod =:= tree) and (ets:lookup(?EVENT_HANDLERS_CACHE, TreeId) == [])) end,
           EventsHandlersForTree = lists:filter(CheckIfTreeNeeded, EventHandlersList),
           save_to_caches(EventType, EventHandlersList),
-          create_process_tree_for_handlers(EventsHandlersForTree)
+          create_process_tree_for_handlers(EventsHandlersForTree),
+          length(EventsHandlersForTree) > 0
       end;
     _ ->
       ?warning("rule_manager sent back unexpected structure")
@@ -199,8 +210,9 @@ create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = 
   Node = erlang:node(self()),
 
   ?info("wolamy register_sub_proc"),
-  gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM}).
-%%   nodes_manager:wait_for_cluster_cast({cluster_rengine, Node}).
+  gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM}),
+%%   nodes_manager:wait_for_cluster_cast({cluster_rengine, Node}),
+  ?info("--- po register_sub_proc").
 
 get_request_map_fun() ->
   fun
