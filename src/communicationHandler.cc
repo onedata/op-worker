@@ -385,7 +385,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
                 uint64_t lastConnectTime = m_lastConnectTime;
 
                 LOG(WARNING) << "Sening message to cluster failed, trying to reconnect and retry";
-                unique_lock guard(m_connectMutex);
+                unique_lock guard(m_reconnectMutex);
                 if(lastConnectTime != m_lastConnectTime) {
                     return communicate(msg, retry - 1);
                 }
@@ -411,7 +411,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
                 uint64_t lastConnectTime = m_lastConnectTime;
 
                 LOG(WARNING) << "Receiving response from cluster failed, trying to reconnect and retry";
-                unique_lock guard(m_connectMutex);
+                unique_lock guard(m_reconnectMutex);
                 if(lastConnectTime != m_lastConnectTime) {
                     return communicate(msg, retry - 1);
                 }

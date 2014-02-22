@@ -134,6 +134,7 @@ protected:
     std::string                 m_fuseID;           ///< Current fuseID for PUSH channel (if any)
     
     boost::recursive_mutex      m_connectMutex;
+    boost::recursive_mutex      m_reconnectMutex;
     boost::condition_variable_any   m_connectCond;
     boost::recursive_mutex      m_msgIdMutex;
     boost::recursive_mutex      m_receiveMutex;
