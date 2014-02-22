@@ -19,7 +19,6 @@
 #include <openssl/err.h>
 
 using namespace std;
-using namespace boost;
 using namespace veil::protocol::communication_protocol;
 using namespace veil::protocol::fuse_messages;
 using websocketpp::lib::placeholders::_1;
@@ -29,7 +28,7 @@ using websocketpp::lib::bind;
 namespace veil {
 
 volatile int CommunicationHandler::instancesCount = 0;
-boost::mutex CommunicationHandler::m_instanceMutex;
+boost::recursive_mutex CommunicationHandler::m_instanceMutex;
 
 CommunicationHandler::CommunicationHandler(string p_hostname, int p_port, cert_info_fun p_getCertInfo)
     : m_hostname(p_hostname),
@@ -38,9 +37,10 @@ CommunicationHandler::CommunicationHandler(string p_hostname, int p_port, cert_i
       m_connectStatus(CLOSED),
       m_currentMsgId(1),
       m_errorCount(0),
-      m_isPushChannel(false)
+      m_isPushChannel(false),
+      m_lastConnectTime(0)
 {
-    boost::unique_lock<boost::mutex> lock(m_instanceMutex);
+    unique_lock lock(m_instanceMutex);
     ++instancesCount;
 }
 
@@ -63,7 +63,7 @@ CommunicationHandler::~CommunicationHandler()
     m_worker1.join();
     m_worker2.join();
 
-    boost::unique_lock<boost::mutex> lock(m_instanceMutex);
+    unique_lock lock(m_instanceMutex);
     --instancesCount;
 
     DLOG(INFO) << "Connection: " << this << " deleted";
@@ -81,13 +81,13 @@ void CommunicationHandler::setFuseID(string fuseId)
 
 void CommunicationHandler::setPushCallback(push_callback cb) 
 {
-    boost::unique_lock<boost::mutex> lock(m_connectMutex);
+    unique_lock lock(m_connectMutex);
     m_pushCallback = cb; // Register callback
 }
 
 void CommunicationHandler::enablePushChannel() 
 {
-    boost::unique_lock<boost::mutex> lock(m_connectMutex);
+    unique_lock lock(m_connectMutex);
     // If channel wasnt active and connection is esabilished atm, register channel
     // If connection is not active, let openConnection() take care of it
     if(!m_isPushChannel && m_connectStatus == CONNECTED && m_pushCallback)
@@ -98,7 +98,7 @@ void CommunicationHandler::enablePushChannel()
 
 void CommunicationHandler::disablePushChannel() 
 {
-    boost::unique_lock<boost::mutex> lock(m_connectMutex);
+    unique_lock lock(m_connectMutex);
     // If connection is not active theres no way to close PUSH channel
     if(m_isPushChannel && m_connectStatus == CONNECTED)
         closePushChannel();
@@ -108,7 +108,7 @@ void CommunicationHandler::disablePushChannel()
     
 int CommunicationHandler::openConnection()
 {
-    boost::unique_lock<boost::mutex> lock(m_connectMutex);
+    unique_lock lock(m_connectMutex);
     websocketpp::lib::error_code ec;
         
     if(m_connectStatus == CONNECTED)
@@ -182,6 +182,10 @@ int CommunicationHandler::openConnection()
     } else if(m_connectStatus < 0) {
         ++m_errorCount;
     }
+
+    if(m_connectStatus == CONNECTED) {
+        m_lastConnectTime = helpers::utils::mtime<uint64_t>();
+    }
         
     return m_connectStatus;
 }
@@ -189,7 +193,7 @@ int CommunicationHandler::openConnection()
     
 void CommunicationHandler::closeConnection()
 {
-    boost::unique_lock<boost::mutex> lock(m_connectMutex);
+    unique_lock lock(m_connectMutex);
     
     if(m_connectStatus == CLOSED)
         return;
@@ -319,7 +323,7 @@ int CommunicationHandler::sendMessage(ClusterMsg& msg, int32_t msgId)
     
 int32_t CommunicationHandler::getMsgId()
 {
-    boost::unique_lock<boost::mutex> lock(m_msgIdMutex);
+    unique_lock lock(m_msgIdMutex);
     ++m_currentMsgId;
     if(m_currentMsgId <= 0) // Skip 0 and negative values
         m_currentMsgId = 1;
@@ -329,13 +333,20 @@ int32_t CommunicationHandler::getMsgId()
     
 int CommunicationHandler::receiveMessage(Answer& answer, int32_t msgId, uint32_t timeout)
 {
-    boost::unique_lock<boost::mutex> lock(m_receiveMutex);
-    
-    uint64_t timout_time = helpers::utils::mtime<uint64_t>() + timeout;
+    unique_lock lock(m_receiveMutex);
+
+    uint64_t timeoutTime = helpers::utils::mtime<uint64_t>() + timeout;
     
     // Incoming message should be in inbox. Wait for it
     while(m_incomingMessages.find(msgId) == m_incomingMessages.end()) {
-        if(helpers::utils::mtime<uint64_t>() > timout_time || !m_receiveCond.timed_wait(lock, boost::posix_time::milliseconds(timeout))) {
+        uint64_t currTime = helpers::utils::mtime<uint64_t>();
+
+        if(m_connectStatus != CONNECTED) {
+            ++m_errorCount;
+            return -2;
+        }
+
+        if(currTime >= timeoutTime || !m_receiveCond.timed_wait(lock, boost::posix_time::milliseconds(timeoutTime - currTime))) {
             ++m_errorCount;
             return -1;
         }
@@ -367,7 +378,15 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
         {
             if(retry > 0) 
             {
+                uint64_t lastConnectTime = m_lastConnectTime;
+
                 LOG(WARNING) << "Sening message to cluster failed, trying to reconnect and retry";
+                unique_lock guard(m_connectMutex);
+                if(lastConnectTime != m_lastConnectTime) {
+                    return communicate(msg, retry - 1);
+                }
+
+                LOG(INFO) << "Initializing reconnect sequence..."; 
                 closeConnection();
                 if(openConnection() == 0)
                     return communicate(msg, retry - 1);
@@ -383,7 +402,15 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
         {
             if(retry > 0) 
             {
+                uint64_t lastConnectTime = m_lastConnectTime;
+
                 LOG(WARNING) << "Receiving response from cluster failed, trying to reconnect and retry";
+                unique_lock guard(m_connectMutex);
+                if(lastConnectTime != m_lastConnectTime) {
+                    return communicate(msg, retry - 1);
+                }
+
+                LOG(INFO) << "Initializing reconnect sequence..."; 
                 closeConnection();
                 if(openConnection() == 0)
                     return communicate(msg, retry - 1);
@@ -412,7 +439,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
 
 int CommunicationHandler::getInstancesCount()
 {
-    boost::unique_lock<boost::mutex> lock(m_instanceMutex);
+    unique_lock lock(m_instanceMutex);
     return instancesCount;
 }
     
@@ -488,14 +515,14 @@ void CommunicationHandler::onMessage(websocketpp::connection_hdl hdl, message_pt
     }
     
     // Continue normally for non-PUSH message
-    boost::unique_lock<boost::mutex> lock(m_receiveMutex);
+    unique_lock lock(m_receiveMutex);
     m_incomingMessages[answer.message_id()] = msg->get_payload();         // Save incloming message to inbox and notify waiting threads
     m_receiveCond.notify_all();
 }
     
 void CommunicationHandler::onOpen(websocketpp::connection_hdl hdl)
 {
-    boost::unique_lock<boost::mutex> lock(m_connectMutex);
+    unique_lock lock(m_connectMutex);
     m_connectStatus = CONNECTED;
     LOG(INFO) << "WebSocket connection esabilished successfully.";
     m_connectCond.notify_all();
@@ -503,21 +530,23 @@ void CommunicationHandler::onOpen(websocketpp::connection_hdl hdl)
     
 void CommunicationHandler::onClose(websocketpp::connection_hdl hdl)
 {
-    boost::unique_lock<boost::mutex> lock(m_connectMutex);
+    unique_lock lock(m_connectMutex);
     ++m_errorCount; // Closing connection means that something went wrong
 
     m_connectStatus = CLOSED;
     m_connectCond.notify_all();
+    m_receiveCond.notify_all();
 }
     
 void CommunicationHandler::onFail(websocketpp::connection_hdl hdl)
 {
-    boost::unique_lock<boost::mutex> lock(m_connectMutex);
+    unique_lock lock(m_connectMutex);
     
     ++m_errorCount;
     
     m_connectStatus = HANDSHAKE_ERROR;
     m_connectCond.notify_all();
+    m_receiveCond.notify_all();
     
     LOG(ERROR) << "WebSocket handshake error";
 }
@@ -542,7 +571,7 @@ void CommunicationHandler::onPongTimeout(websocketpp::connection_hdl hdl, std::s
 void CommunicationHandler::onInterrupt(websocketpp::connection_hdl hdl)
 {
     LOG(WARNING) << "WebSocket connection was interrupted";
-    boost::unique_lock<boost::mutex> lock(m_connectMutex);
+    unique_lock lock(m_connectMutex);
     m_connectStatus = TRANSPORT_ERROR;
 }
 

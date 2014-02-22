@@ -42,6 +42,7 @@ typedef boost::asio::ssl::stream<boost::asio::ip::tcp::socket>          socket_t
 
 typedef websocketpp::lib::shared_ptr<boost::asio::ssl::context>         context_ptr;
 typedef boost::function<void(const veil::protocol::communication_protocol::Answer)>    push_callback;
+typedef boost::unique_lock<boost::recursive_mutex> unique_lock;
 
 template<typename T>
 std::string toString(T in) {
@@ -132,12 +133,14 @@ protected:
     volatile bool               m_isPushChannel;
     std::string                 m_fuseID;           ///< Current fuseID for PUSH channel (if any)
     
-    boost::mutex                m_connectMutex;
-    boost::condition_variable   m_connectCond;
-    boost::mutex                m_msgIdMutex;
-    boost::mutex                m_receiveMutex;
-    boost::condition_variable   m_receiveCond;
-    static boost::mutex         m_instanceMutex;
+    boost::recursive_mutex      m_connectMutex;
+    boost::condition_variable_any   m_connectCond;
+    boost::recursive_mutex      m_msgIdMutex;
+    boost::recursive_mutex      m_receiveMutex;
+    boost::condition_variable_any   m_receiveCond;
+    static boost::recursive_mutex m_instanceMutex;
+
+    uint64_t                    m_lastConnectTime;
     
     /// Callback function which shall be called for every cluster PUSH message
     push_callback m_pushCallback;
