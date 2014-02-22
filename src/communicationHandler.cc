@@ -331,12 +331,15 @@ int CommunicationHandler::receiveMessage(Answer& answer, int32_t msgId, uint32_t
 {
     boost::unique_lock<boost::mutex> lock(m_receiveMutex);
     
+    uint64_t timout_time = helpers::utils::mtime<uint64_t>() + timeout;
+    
     // Incoming message should be in inbox. Wait for it
-    while(m_incomingMessages.find(msgId) == m_incomingMessages.end())
-        if(!m_receiveCond.timed_wait(lock, boost::posix_time::milliseconds(timeout))) {
+    while(m_incomingMessages.find(msgId) == m_incomingMessages.end()) {
+        if(helpers::utils::mtime<uint64_t>() > timout_time || !m_receiveCond.timed_wait(lock, boost::posix_time::milliseconds(timeout))) {
             ++m_errorCount;
             return -1;
         }
+    }
     
     answer.ParseFromString(m_incomingMessages[msgId]);
     m_incomingMessages.erase(m_incomingMessages.find(msgId));
