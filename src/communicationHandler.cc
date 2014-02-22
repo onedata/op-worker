@@ -58,6 +58,7 @@ CommunicationHandler::~CommunicationHandler()
     if(m_endpoint)
     {
         m_endpoint->stop();
+        m_endpoint.reset();
     }
 
     m_worker1.join();
@@ -217,8 +218,8 @@ void CommunicationHandler::closeConnection()
     }
     
     // Stop workers
-    m_worker1.join();
-    m_worker2.join();
+    m_worker1.timed_join(boost::posix_time::milliseconds(200));
+    m_worker2.timed_join(boost::posix_time::milliseconds(200));
     
     m_connectStatus = CLOSED;
 }
