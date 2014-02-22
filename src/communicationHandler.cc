@@ -61,8 +61,13 @@ CommunicationHandler::~CommunicationHandler()
         m_endpoint.reset();
     }
 
-    m_worker1.join();
-    m_worker2.join();
+    if(!m_worker1.timed_join(boost::posix_time::milliseconds(200))) {
+        pthread_cancel(m_worker1.native_handle());
+    }
+    
+    if(!m_worker2.timed_join(boost::posix_time::milliseconds(200))) {
+        pthread_cancel(m_worker2.native_handle());
+    }
 
     unique_lock lock(m_instanceMutex);
     --instancesCount;
