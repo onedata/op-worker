@@ -119,8 +119,6 @@ int CommunicationHandler::openConnection()
     // Initialize ASIO
     if(m_endpoint) { // If endpoint exists, then make sure that previous worker thread are stopped before we destroy that io_service
         m_endpoint->stop();
-        m_worker1.join();
-        m_worker2.join();
     }
     
     // (re)Initialize endpoint (io_service)
@@ -393,6 +391,8 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
             }
                 
             LOG(ERROR) << "WebSocket communication error";
+            DLOG(INFO) << "Error counter: " << m_errorCount;
+
             answer.set_answer_status(VEIO);
 
             return answer;
@@ -417,6 +417,8 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
             }
 
             LOG(ERROR) << "WebSocket communication error";
+            DLOG(INFO) << "Error counter: " << m_errorCount;
+
             answer.set_answer_status(VEIO);
         }
         
