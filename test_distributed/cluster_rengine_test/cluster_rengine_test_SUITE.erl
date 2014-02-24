@@ -17,12 +17,13 @@
 -include("veil_modules/cluster_rengine/cluster_rengine.hrl").
 
 %% API
--export([test_event_subscription/1, test_event_aggregation/1]).
+-export([test_event_subscription/1, test_event_aggregation/1, test_dispatching/1]).
 
 -export([ccm_code1/0, worker_code/0]).
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
-all() -> [test_event_subscription, test_event_aggregation].
+%all() -> [test_event_subscription, test_event_aggregation, test_dispatching].
+all() -> [test_dispatching].
 
 -define(assert_received(ResponsePattern), receive
                                             ResponsePattern -> ok
@@ -51,11 +52,11 @@ test_event_subscription(Config) ->
   send_event(WriteEvent, CCM),
   assert_nothing_received(CCM),
 
-  register_handler_for_writes(CCM, standard),
+  subscribe_for_write_events(CCM, standard),
   send_event(WriteEvent, CCM),
   ?assert_received({ok, standard, _}),
 
-  register_handler_for_writes(CCM, tree),
+  subscribe_for_write_events(CCM, tree),
   send_event(WriteEvent, CCM),
   % from my observations it takes about 200ms until disp map fun is registered in cluster_manager
   timer:sleep(900),
@@ -86,6 +87,41 @@ test_event_aggregation(Config) ->
   send_event(WriteEvent, CCM),
   ?assert_received({ok, tree, _}),
   assert_nothing_received(CCM).
+
+test_dispatching(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+  [CCM | _] = NodesUp,
+
+  subscribe_for_write_events(CCM, tree),
+
+  WriteEvent1 = #write_event{user_id = "1234", ans_pid = self()},
+  WriteEvent2 = #write_event{user_id = "1235", ans_pid = self()},
+  WriteEvent3 = #write_event{user_id = "1334", ans_pid = self()},
+  WriteEvent4 = #write_event{user_id = "1335", ans_pid = self()},
+  WriteEvents = [WriteEvent1, WriteEvent2, WriteEvent3, WriteEvent4],
+  SendWriteEvent = fun (Event) -> send_event(Event, CCM) end,
+
+  SendWriteEvents = fun() ->
+    spawn(fun() ->
+      lists:foreach(SendWriteEvent, WriteEvents)
+    end)
+  end,
+
+  SendWriteEvents(),
+  timer:sleep(1000),
+  count_answers(8),
+
+  repeat(200, SendWriteEvents),
+  timer:sleep(3000),
+  {Count, SetOfPids} = count_answers(4*200),
+  ?assertEqual(0, Count),
+  ?assertEqual(6, sets:size(SetOfPids)),
+
+  SendWriteEvents(),
+  {Count2, SetOfPids2} = count_answers(4),
+  ?assertEqual(0, Count2),
+  ?assertEqual(4, sets:size(SetOfPids2)).
 
 
 %% ====================================================================
@@ -151,7 +187,7 @@ end_per_testcase(_, Config) ->
   ?assertEqual(ok, StopAns).
 
 
-register_handler_for_writes(Node, ProcessingMethod) ->
+subscribe_for_write_events(Node, ProcessingMethod) ->
   subscribe_for_write_events(Node, ProcessingMethod, #processing_config{}).
 
 subscribe_for_write_events(Node, ProcessingMethod, ProcessingConfig) ->
@@ -166,7 +202,7 @@ subscribe_for_write_events(Node, ProcessingMethod, ProcessingConfig) ->
 
   EventHandler = fun(#write_event{user_id = UserId, ans_pid = AnsPid}) ->
     ?info("EventHandler ~p", [node(self())]),
-    AnsPid ! {ok, ProcessingMethod, UserId}
+    AnsPid ! {ok, ProcessingMethod, self()}
   end,
 
   EventItem = #event_handler_item{processing_method = ProcessingMethod, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = ProcessingConfig},
@@ -183,26 +219,6 @@ subscribe_for_write_events(Node, ProcessingMethod, ProcessingConfig) ->
 repeat(N, F) -> for(1, N, F).
 for(N, N, F) -> [F()];
 for(I, N, F) -> [F() | for(I + 1, N, F)].
-
-count_answers(ToReceive) ->
-  Set = sets:new(),
-  receive
-    {ok, Pid} -> count_answers(ToReceive - 1, sets:add_element(Pid, Set));
-    _ -> count_answers(ToReceive, Set)
-  after 1000 ->
-    {ToReceive, Set}
-  end.
-
-count_answers(0, Set) ->
-  {0, Set};
-count_answers(ToReceive, Set) ->
-  receive
-    {'EXIT', _, _} -> count_answers(ToReceive, Set);
-    {ok, Pid} -> count_answers(ToReceive - 1, sets:add_element(Pid, Set));
-    _ -> count_answers(ToReceive, Set)
-  after 1000 ->
-    {ToReceive, Set}
-  end.
 
 ccm_code1() ->
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
@@ -233,3 +249,23 @@ assert_nothing_received(Node) ->
 
 send_event(Event, Node) ->
   gen_server:call({?Dispatcher_Name, Node}, {cluster_rengine, 1, {event_arrived, Event}}).
+
+count_answers(ToReceive) ->
+  Set = sets:new(),
+  receive
+    {ok, _, Pid} -> count_answers(ToReceive - 1, sets:add_element(Pid, Set));
+    _ -> count_answers(ToReceive, Set)
+  after 2000 ->
+    {ToReceive, Set}
+  end.
+
+count_answers(0, Set) ->
+  {0, Set};
+count_answers(ToReceive, Set) ->
+  receive
+    {'EXIT', _, _} -> count_answers(ToReceive, Set);
+    {ok, _, Pid} -> count_answers(ToReceive - 1, sets:add_element(Pid, Set));
+    _ -> count_answers(ToReceive, Set)
+  after 2000 ->
+    {ToReceive, Set}
+  end.

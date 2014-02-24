@@ -70,15 +70,14 @@ handle(ProtocolVersion, {final_stage_tree, TreeId, Event}) ->
 handle(ProtocolVersion, {event_arrived, Event}) ->
   handle(ProtocolVersion, {event_arrived, Event, false});
 handle(ProtocolVersion, {event_arrived, Event, SecondTry}) ->
-  ?info("--- !!event_arrived ~p", [element(1, Event)]),
   EventType = element(1, Event),
   case ets:lookup(?EVENT_TREES_MAPPING, EventType) of
     [] ->
-      ?info("ffff: ~p", [node()]),
       case SecondTry of
         true ->
           ok;
         false ->
+          ?info("cluster_rengine - CACHE MISS: ~p", [self()]),
           % did not found mapping for event and first try - update caches for this event and try one more time
           SleepNeeded = update_event_handler(ProtocolVersion, EventType),
           % from my observations it takes about 200ms until disp map fun is registered in cluster_manager
@@ -93,13 +92,13 @@ handle(ProtocolVersion, {event_arrived, Event, SecondTry}) ->
       ForwardEvent = fun(EventToTreeMapping) ->
         case EventToTreeMapping of
           {tree, TreeId} ->
-            ?info("forwarding to tree ~p", [node()]),
+%%             ?info("forwarding to tree ~p", [node()]),
             % forward event to subprocess tree
 %%             gen_server:call({cluster_rengine, node()}, {asynch, 1, {final_stage_tree, TreeId, Event}});
             gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {final_stage_tree, TreeId, Event}});
 %%           gen_server:call({cluster_rengine, node()}, {asynch, 1, {final_stage_tree, TreeId, Event}});
           {standard, HandlerFun} ->
-            ?info("normal processing ~p", [node()]),
+%%             ?info("normal processing ~p", [node()]),
             HandlerFun(Event)
         end
       end,
@@ -181,7 +180,6 @@ create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = 
 
   CreateEventProcessEtsIfNeeded = fun(EtsName, InitCounter) ->
     try
-      ?info("ETsname: ~p", [EtsName]),
       ets:new(EtsName, [named_table, private, set]),
       ets:insert(EtsName, {counter, InitCounter})
     catch
@@ -193,28 +191,25 @@ create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = 
   ProcFun = case Config#processing_config.init_counter of
     undefined ->
       fun(_ProtocolVersion, {final_stage_tree, _TreeId, Event}) ->
-        ?info("handler fun !!! without aggr"),
+%%         ?info("handler fun !!! without aggr"),
         HandlerFun(Event)
       end;
     InitCounter ->
       fun(_ProtocolVersion, {final_stage_tree, _TreeId, Event}) ->
-        ?info("--<<>>-- handler fun !!! with aggr: ~p", [node()]),
+%%         ?info("--<<>>-- handler fun !!! with aggr: ~p", [node()]),
         EtsName = GetEventProcessorEtsName(),
-        ?info("--<<>>-- handler fun !!! with aggr2: ~p", [EtsName]),
         CreateEventProcessEtsIfNeeded(EtsName, InitCounter),
         CurrentCounter = ets:update_counter(EtsName, counter, {2, -1, 1, InitCounter}),
-        ?info("....... Current counter: ~p", [CurrentCounter]),
         case CurrentCounter of
           InitCounter ->
-            ?info("counter dobity"),
+%%             ?info("counter dobity"),
             HandlerFun(Event);
           _ -> ok
         end
       end
     end,
 
-  NewMapFun = fun({_ProtocolVersion, {_, _TreeId, Event}}) ->
-    ?info("NewMapFun!!!!!----"),
+  NewMapFun = fun({_, _TreeId, Event}) ->
     MapFun(Event)
   end,
 
@@ -223,24 +218,19 @@ create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = 
 
   Node = erlang:node(self()),
 
-  ?info("wolamy register_sub_proc"),
-  gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM}),
+  gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM}).
 %%   nodes_manager:wait_for_cluster_cast({cluster_rengine, Node}),
-  ?info("--- po register_sub_proc").
 
 get_request_map_fun() ->
   fun
     ({final_stage_tree, TreeId, _Event}) ->
-      ?info("request_map---------"),
       TreeId;
     (_) ->
-      ?info("request map fun fail"),
       non
   end.
 
 get_disp_map_fun() ->
   fun({final_stage_tree, TreeId, Event}) ->
-    ?info("disp_map_fun---------********"),
     EventHandlerFromEts = ets:lookup(?EVENT_HANDLERS_CACHE, TreeId),
     case EventHandlerFromEts of
       [] ->
@@ -252,7 +242,6 @@ get_disp_map_fun() ->
         case EventHandler of
           [] -> non;
           [{_Ev2, #event_handler_item{disp_map_fun = FetchedDispMapFun2}}] ->
-            ?info("disp_map_fun---------******** EXTRA"),
             FetchedDispMapFun2(Event)
         end,
 
@@ -262,7 +251,6 @@ get_disp_map_fun() ->
         FetchedDispMapFun(Event)
     end;
     (_) ->
-      ?info("disp_map_fun---------????????"),
       non
   end.
 
