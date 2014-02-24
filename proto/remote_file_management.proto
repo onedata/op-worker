@@ -15,13 +15,13 @@ message DeleteFileAtStorage {
 
 message TruncateFile {
     required string file_id = 1;
-    required int32 length = 2;  
+    required int64 length = 2;
 }
 
 message ReadFile {
     required string file_id = 1;
-    required int32 size = 2;
-    optional int32 offset = 3 [default = 0];
+    required int64 size = 2;
+    optional int64 offset = 3 [default = 0];
 }
 
 message FileData {
@@ -33,14 +33,14 @@ message FileData {
 
 message WriteFile {
     required string file_id = 1;
-    optional int32 size = 2;
+    optional int64 size = 2;
     optional bytes data = 3;
-    optional int32 offset = 4 [default = 0];
+    optional int64 offset = 4 [default = 0];
 }
 
 message WriteInfo {
     required string answer_status = 1;
-    optional int32 bytes_written = 2 [default = 0];
+    optional int64 bytes_written = 2 [default = 0];
     optional string operation_guid = 3;
     optional string new_data_listener = 4;
 }
