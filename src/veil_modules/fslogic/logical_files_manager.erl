@@ -338,7 +338,24 @@ create(File) ->
           case Response of
             ?VOK ->
               Storage_helper_info = #storage_helper_info{name = TmpAns#filelocation.storage_helper_name, init_args = TmpAns#filelocation.storage_helper_args},
-              storage_files_manager:create(Storage_helper_info, TmpAns#filelocation.file_id);
+              case storage_files_manager:create(Storage_helper_info, TmpAns#filelocation.file_id) of
+                ok ->
+                  Record2 = #createfileack{file_logic_name = File},
+                  {Status2, TmpAns2} = contact_fslogic(Record2),
+                  case Status of
+                    ok ->
+                      Response2 = TmpAns2#atom.value,
+                      case Response2 of
+                        ?VOK ->
+                          ok;
+                        _ ->
+                          {logical_file_system_error, {cannot_confirm_file_creation, Response2}}
+                      end;
+                    _ -> {Status2, TmpAns2}
+                  end;
+                StorageBadAns ->
+                  StorageBadAns
+              end;
             ?VEEXIST -> {error, file_exists};
             _ -> {logical_file_system_error, Response}
           end;

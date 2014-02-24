@@ -19,7 +19,7 @@
 %% Files' locks. Designed for use within #file record (`locks` field).
 -record(file_lock, {type = ?REG_TYPE, uid = "", sid = "", pid = 0, offset = 0, size = 0}).
 %% Veil File
--record(file, {type = 1, name = "", uid = "", gids = [], perms = 0, parent = "", ref_file = "", location = #file_location{}, locks = [], meta_doc}).
+-record(file, {type = 1, name = "", uid = "", gids = [], perms = 0, parent = "", ref_file = "", location = #file_location{}, locks = [], meta_doc, created = true}).
 
 %% Those record contains meta data for file which UUID match #file_meta.file field
 -record(file_tag, {key = "", value = []}).

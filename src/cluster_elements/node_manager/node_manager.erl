@@ -87,7 +87,7 @@ init([Type]) when Type =:= worker ; Type =:= ccm ; Type =:= ccm_test ->
   case Type =/= ccm of
     true ->
       try
-        ranch:stop_listener(?DISPATCHER_LISTENER_REF),
+        cowboy:stop_listener(?DISPATCHER_LISTENER_REF),
         ok
       catch
         _:_ -> ok
@@ -293,7 +293,7 @@ handle_info(_Info, State) ->
 %% ====================================================================
 terminate(_Reason, _State) ->
   try
-    ranch:stop_listener(?DISPATCHER_LISTENER_REF),
+		cowboy:stop_listener(?DISPATCHER_LISTENER_REF),
     ok
   catch
     _:_ -> ok

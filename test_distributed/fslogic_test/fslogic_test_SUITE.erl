@@ -108,6 +108,10 @@ groups_permissions_test(Config) ->
   ?assertEqual("ok", Status),
   ?assertEqual(?VOK, AnswerOpt),
 
+  {CreationAckStatus, CreationAckAnswerOpt} = send_creation_ack(Socket, TestFile),
+  ?assertEqual("ok", CreationAckStatus),
+  ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt),
+
   {Status2, _, _, _, AnswerOpt2} = get_file_location(Socket2, TestFile),
   ?assertEqual("ok", Status2),
   ?assertEqual(?VOK, AnswerOpt2),
@@ -162,8 +166,6 @@ groups_permissions_test(Config) ->
 
 
 
-
-
   TestFile4 = "groups/" ++ Team ++ "/groups_permissions_test_file4",
 
   TestDir = "groups/" ++ Team ++ "/groups_permissions_test_dir",
@@ -187,6 +189,10 @@ groups_permissions_test(Config) ->
   {Status17, _, _, _, AnswerOpt17} = create_file(Socket2, TestDirFile),
   ?assertEqual("ok", Status17),
   ?assertEqual(?VOK, AnswerOpt17),
+
+  {CreationAckStatus2, CreationAckAnswerOpt2} = send_creation_ack(Socket2, TestDirFile),
+  ?assertEqual("ok", CreationAckStatus2),
+  ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt2),
 
   {Status18, Answer18} = mkdir(Socket, TestDirDir),
   ?assertEqual("ok", Status18),
@@ -239,6 +245,10 @@ groups_permissions_test(Config) ->
   {Status30, _, _, _, AnswerOpt30} = create_file(Socket, TestDirFile),
   ?assertEqual("ok", Status30),
   ?assertEqual(?VOK, AnswerOpt30),
+
+  {CreationAckStatus3, CreationAckAnswerOpt3} = send_creation_ack(Socket, TestDirFile),
+  ?assertEqual("ok", CreationAckStatus3),
+  ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt3),
 
   {Status31, Answer31} = mkdir(Socket, TestDirDir),
   ?assertEqual("ok", Status31),
@@ -524,6 +534,10 @@ groups_test(Config) ->
 
     {"ok", ok} = mkdir(Socket1, "/test"), %% Test dir
     {"ok", _, _, _, "ok"} = create_file(Socket1, "/file"), %% Test file
+    {CreationAckStatus, CreationAckAnswerOpt} = send_creation_ack(Socket1, "/file"),
+    ?assertEqual("ok", CreationAckStatus),
+    ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt),
+
     {"ok", A6} = rename_file(Socket1, "/test", "/groups/test"),
     ?assertEqual(eperm, A6),
 
@@ -573,6 +587,10 @@ groups_test(Config) ->
 
     {"ok", _, _, _, A21} = create_file(Socket2, "/groups/veilfstestgroup/file"),
     ?assertEqual(ok, list_to_atom(A21)),
+
+    {CreationAckStatus2, CreationAckAnswerOpt2} = send_creation_ack(Socket2, "/groups/veilfstestgroup/file"),
+    ?assertEqual("ok", CreationAckStatus2),
+    ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt2),
 
     {"ok", A22} = mkdir(Socket1, "/groups/veilfstestgroup/dir"), %% Dir should already exist
     ?assertEqual(eexist, A22),
@@ -653,6 +671,8 @@ groups_test(Config) ->
 
 
     %% Cleanup
+		wss:close(Socket1),
+		wss:close(Socket2),
     ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete, ["/veilfstestuser/file"])),
     ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete, ["/groups/veilfstestgroup/f1"])),
     ?assertEqual(ok, rpc:call(Node, logical_files_manager, delete,["/groups/veilfstestgroup/f2"])),
@@ -776,14 +796,22 @@ user_file_counting_test(Config) ->
     FileName = FileBeg ++ FileEnding,
     {Status, _, _, _, AnswerOpt} = create_file(Socket, FileName),
     ?assertEqual("ok", Status),
-    ?assertEqual(?VOK, AnswerOpt)
+    ?assertEqual(?VOK, AnswerOpt),
+
+    {CreationAckStatus, CreationAckAnswerOpt} = send_creation_ack(Socket, FileName),
+    ?assertEqual("ok", CreationAckStatus),
+    ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt)
   end, User1FilesEnding),
 
   lists:foreach(fun(FileEnding) ->
     FileName = FileBeg ++ FileEnding,
     {Status, _, _, _, AnswerOpt} = create_file(Socket2, FileName),
     ?assertEqual("ok", Status),
-    ?assertEqual(?VOK, AnswerOpt)
+    ?assertEqual(?VOK, AnswerOpt),
+
+    {CreationAckStatus2, CreationAckAnswerOpt2} = send_creation_ack(Socket2, FileName),
+    ?assertEqual("ok", CreationAckStatus2),
+    ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt2)
   end, User2FilesEnding),
 
   rpc:call(FSLogicNode, fslogic, get_files_number, [user, UserID1, 1]),
@@ -811,6 +839,9 @@ user_file_counting_test(Config) ->
     ?assertEqual("ok", Status),
     ?assertEqual(list_to_atom(?VOK), Answer)
   end, User2FilesEnding),
+
+	wss:close(Socket),
+	wss:close(Socket2),
 
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
@@ -1284,6 +1315,8 @@ dir_mv_test(Config) ->
   ?assertEqual("ok", StatusDelete2),
   ?assertEqual(list_to_atom(?VOK), AnswerDelete2),
 
+	wss:close(Socket),
+
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
@@ -1346,6 +1379,10 @@ file_sharing_test(Config) ->
   ?assertEqual("ok", StatusCreateFile),
   ?assertEqual(?VOK, AnswerCreateFile),
 
+  {CreationAckStatus, CreationAckAnswerOpt} = send_creation_ack(Socket, TestFile),
+  ?assertEqual("ok", CreationAckStatus),
+  ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt),
+
   {StatusCreate2, AnsCreate2} = rpc:call(FSLogicNode, fslogic_test_SUITE, create_standard_share, [TestFile, DN]),
   ?assertEqual(ok, StatusCreate2),
 
@@ -1369,6 +1406,10 @@ file_sharing_test(Config) ->
   {StatusCreateFile2, _Helper2, _Id2, _Validity2, AnswerCreateFile2} = create_file(Socket, TestFile2),
   ?assertEqual("ok", StatusCreateFile2),
   ?assertEqual(?VOK, AnswerCreateFile2),
+
+  {CreationAckStatus2, CreationAckAnswerOpt2} = send_creation_ack(Socket, TestFile2),
+  ?assertEqual("ok", CreationAckStatus2),
+  ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt2),
 
   {StatusCreate4, AnsCreate4} = rpc:call(FSLogicNode, fslogic_test_SUITE, create_share, [TestFile, some_share, DN]),
   ?assertEqual(ok, StatusCreate4),
@@ -1449,6 +1490,8 @@ file_sharing_test(Config) ->
   ?assertEqual("ok", StatusDelete),
   ?assertEqual(list_to_atom(?VOK), AnswerDelete),
 
+	wss:close(Socket),
+
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
@@ -1508,13 +1551,40 @@ fuse_requests_test(Config) ->
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}, auto_handshake]),
   ?assertEqual(ok, ConAns),
 
+  {GetStatus, _, _, _, GetAnswerOpt} = get_file_location(Socket, TestFile),
+  ?assertEqual("ok", GetStatus),
+  ?assertEqual(?VENOENT, GetAnswerOpt),
+
+  {CreationAckStatus0, CreationAckAnswerOpt0} = send_creation_ack(Socket, TestFile),
+  ?assertEqual("ok", CreationAckStatus0),
+  ?assertEqual(list_to_atom(?VENOENT), CreationAckAnswerOpt0),
 
   {Status, Helper, Id, _Validity, AnswerOpt0} = create_file(Socket, TestFile),
   ?assertEqual("ok", Status),
   ?assertEqual(?VOK, AnswerOpt0),
+
+  {GetStatus2, _, _, _, GetAnswerOpt2} = get_file_location(Socket, TestFile),
+  ?assertEqual("ok", GetStatus2),
+  ?assertEqual(?VENOENT, GetAnswerOpt2),
+
+  {Status01, Helper01, Id01, _Validity01, AnswerOpt01} = create_file(Socket, TestFile),
+  ?assertEqual("ok", Status01),
+  ?assertEqual(?VOK, AnswerOpt01),
+  ?assertEqual(Helper, Helper01),
+  ?assertEqual(Id, Id01),
+
+  {CreationAckStatus, CreationAckAnswerOpt} = send_creation_ack(Socket, TestFile),
+  ?assertEqual("ok", CreationAckStatus),
+  ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt),
+
+  {CreationAckStatus2, CreationAckAnswerOpt2} = send_creation_ack(Socket, TestFile),
+  ?assertEqual("ok", CreationAckStatus2),
+  ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt2),
+
   {Status1, _Helper1, _Id1, _Validity1, AnswerOpt1} = create_file(Socket, TestFile),
   ?assertEqual("ok", Status1),
   ?assertEqual(?VEEXIST, AnswerOpt1),
+
 
 
 
@@ -1565,6 +1635,18 @@ fuse_requests_test(Config) ->
     ?assertEqual(?VOK, AnswerOpt6)
   end,
   lists:foreach(CreateFile, FilesInDir),
+
+  {Status6_2, Files6_2, AnswerOpt6_2} = ls(Socket, DirName, 10, 0),
+  ?assertEqual("ok", Status6_2),
+  ?assertEqual(?VOK, AnswerOpt6_2),
+  ?assertEqual(0, length(Files6_2)),
+
+  AckCreateFile = fun(File) ->
+    {CreationAckStatus3, CreationAckAnswerOpt3} = send_creation_ack(Socket, File),
+    ?assertEqual("ok", CreationAckStatus3),
+    ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt3)
+  end,
+  lists:foreach(AckCreateFile, FilesInDir),
 
   {Status7, Files7, AnswerOpt7} = ls(Socket, DirName, 10, 0),
   ?assertEqual("ok", Status7),
@@ -1676,6 +1758,10 @@ fuse_requests_test(Config) ->
   ?assertEqual("ok", Status_MV),
   ?assertEqual(?VOK, AnswerMV),
 
+  {CreationAckStatus4, CreationAckAnswerOpt4} = send_creation_ack(Socket, TestFile2),
+  ?assertEqual("ok", CreationAckStatus4),
+  ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt4),
+
   {Status_MV2, AnswerMV2} = rename_file(Socket, TestFile2, DirName ++ "/" ++ TestFile2),
   ?assertEqual("ok", Status_MV2),
   ?assertEqual(list_to_atom(?VOK), AnswerMV2),
@@ -1683,6 +1769,10 @@ fuse_requests_test(Config) ->
   {Status_MV3, _, _, _, AnswerMV3} = create_file(Socket, TestFile2),
   ?assertEqual("ok", Status_MV3),
   ?assertEqual(?VOK, AnswerMV3),
+
+  {CreationAckStatus5, CreationAckAnswerOpt5} = send_creation_ack(Socket, TestFile2),
+  ?assertEqual("ok", CreationAckStatus5),
+  ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt5),
 
   {Status_MV4, AnswerMV4} = delete_file(Socket, TestFile2),
   ?assertEqual("ok", Status_MV4),
@@ -1719,6 +1809,8 @@ fuse_requests_test(Config) ->
   {Status16, Answer16} = delete_file(Socket, NewNameOfFIle),
   ?assertEqual("ok", Status16),
   ?assertEqual(list_to_atom(?VOK), Answer16),
+
+	wss:close(Socket),
 
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
@@ -1805,6 +1897,10 @@ users_separation_test(Config) ->
   ?assertEqual("ok", Status),
   ?assertEqual(?VOK, AnswerOpt),
 
+  {CreationAckStatus, CreationAckAnswerOpt} = send_creation_ack(Socket, TestFile),
+  ?assertEqual("ok", CreationAckStatus),
+  ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt),
+
   {Status2, Helper2, Id2, _Validity2, AnswerOpt2} = get_file_location(Socket, TestFile),
   ?assertEqual("ok", Status2),
   ?assertEqual(?VOK, AnswerOpt2),
@@ -1818,6 +1914,10 @@ users_separation_test(Config) ->
   {Status4, Helper4, Id4, _Validity4, AnswerOpt4} = create_file(Socket2, TestFile),
   ?assertEqual("ok", Status4),
   ?assertEqual(?VOK, AnswerOpt4),
+
+  {CreationAckStatus2, CreationAckAnswerOpt2} = send_creation_ack(Socket2, TestFile),
+  ?assertEqual("ok", CreationAckStatus2),
+  ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt2),
 
   {Status5, Helper5, Id5, _Validity5, AnswerOpt5} = get_file_location(Socket2, TestFile),
   ?assertEqual("ok", Status5),
@@ -1944,6 +2044,9 @@ users_separation_test(Config) ->
   {Status20, Answer20, _} = get_link(Socket, "link_name1"),
   ?assertEqual("ok", Status20),
   ?assertEqual(?VENOENT, Answer20),
+
+	wss:close(Socket),
+	wss:close(Socket2),
 
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
@@ -2383,6 +2486,27 @@ create_file(Socket, FileName) ->
   Location = fuse_messages_pb:decode_filelocation(Bytes),
   Location2 = records_translator:translate(Location, "fuse_messages"),
   {Status, Location2#filelocation.storage_helper_name, Location2#filelocation.file_id, Location2#filelocation.validity, Location2#filelocation.answer}.
+
+send_creation_ack(Socket, FileName) ->
+  FslogicMessage = #createfileack{file_logic_name = FileName},
+  FslogicMessageMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_createfileack(FslogicMessage)),
+
+  FuseMessage = #fusemessage{message_type = "createfileack", input = FslogicMessageMessageBytes},
+  FuseMessageBytes = erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FuseMessage)),
+
+  Message = #clustermsg{module_name = "fslogic", message_type = "fusemessage",
+  message_decoder_name = "fuse_messages", answer_type = "atom",
+  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = FuseMessageBytes},
+  MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
+
+  wss:send(Socket, MessageBytes),
+  {SendAns, Ans} = wss:recv(Socket, 5000),
+  ?assertEqual(ok, SendAns),
+
+  #answer{answer_status = Status, worker_answer = Bytes} = communication_protocol_pb:decode_answer(Ans),
+  Answer = communication_protocol_pb:decode_atom(Bytes),
+  Answer2 = records_translator:translate(Answer, "communication_protocol"),
+  {Status, Answer2}.
 
 get_file_location(Socket, FileName) ->
   FslogicMessage = #getfilelocation{file_logic_name = FileName},

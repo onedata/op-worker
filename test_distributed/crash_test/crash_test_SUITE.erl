@@ -83,6 +83,7 @@ main_test(Config) ->
     end,
 
     TmpPongsNum = lists:foldl(CheckModules, 0, Jobs),
+	wss:close(Socket),
     S + TmpPongsNum
   end,
 
@@ -256,7 +257,7 @@ callbacks_test(Config) ->
     end
   end,
 
-  lists:foldl(RegisterCallbacks, [], Ports),
+  CreatedSockets = lists:foldl(RegisterCallbacks, [], Ports),
   nodes_manager:wait_for_request_handling(),
 
   CheckDispatcherAns = fun({DispatcherCorrectAnsList, DispatcherCorrectAnsNum}, {TestAnsList, TestAnsNum}) ->
@@ -289,6 +290,7 @@ callbacks_test(Config) ->
   CheckDispatcherAns(DispatcherCorrectAns1, CCMTest1),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns1, lists:zip(WorkerNodes, FuseInfo1)),
 
+  lists:foreach(fun(X) -> wss:close(X) end, CreatedSockets),
   nodes_manager:stop_node(CCM),
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
   nodes_manager:wait_for_state_loading(),
@@ -380,10 +382,10 @@ init_per_testcase(_, Config) ->
   [CCM | NodesUp2] = NodesUp,
   [CCM2 | _] = NodesUp2,
   DB_Node = nodes_manager:get_db_node(),
-  Args = [[{node_type, ccm}, {dispatcher_port, 5055}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1308}, {db_nodes, [DB_Node]}, {initialization_time, 5}, {cluster_clontrol_period, 1}, {heart_beat, 1}],
-    [{node_type, ccm}, {dispatcher_port, 6666}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1309}, {db_nodes, [DB_Node]}, {initialization_time, 5}, {cluster_clontrol_period, 1}, {heart_beat, 1}],
-    [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1310}, {db_nodes, [DB_Node]}, {heart_beat, 1}],
-    [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1311}, {db_nodes, [DB_Node]}, {heart_beat, 1}]],
+  Args = [[{node_type, ccm}, {dispatcher_port, 5055}, {control_panel_port, 1350}, {rest_port, 8443}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1308}, {db_nodes, [DB_Node]}, {initialization_time, 5}, {cluster_clontrol_period, 1}, {heart_beat, 1}],
+    [{node_type, ccm}, {dispatcher_port, 6666}, {control_panel_port, 1351}, {rest_port, 8445}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1309}, {db_nodes, [DB_Node]}, {initialization_time, 5}, {cluster_clontrol_period, 1}, {heart_beat, 1}],
+    [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {rest_port, 8446}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1310}, {db_nodes, [DB_Node]}, {heart_beat, 1}],
+    [{node_type, worker}, {dispatcher_port, 8888}, {control_panel_port, 1353}, {rest_port, 8447}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1311}, {db_nodes, [DB_Node]}, {heart_beat, 1}]],
 
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, Args),
 
