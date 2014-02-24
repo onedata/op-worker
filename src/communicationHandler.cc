@@ -62,11 +62,11 @@ CommunicationHandler::~CommunicationHandler()
     }
 
     // Force exit worker threads
-    if(m_worker1 && !m_worker1.timed_join(boost::posix_time::milliseconds(200)) && m_worker1.native_handle()) {
+    if(m_worker1.joinable() && !m_worker1.timed_join(boost::posix_time::milliseconds(200)) && m_worker1.native_handle()) {
         pthread_cancel(m_worker1.native_handle());
     }
 
-    if(m_worker2 && !m_worker2.timed_join(boost::posix_time::milliseconds(200)) && m_worker2.native_handle()) {
+    if(m_worker2.joinable() && !m_worker2.timed_join(boost::posix_time::milliseconds(200)) && m_worker2.native_handle()) {
         pthread_cancel(m_worker2.native_handle());
     }
 
