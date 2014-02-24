@@ -5,7 +5,7 @@
 -define(default_port,"5986").
 
 % Default storage paths
--define(default_main_directio_storage,"/mnt/veil").
+-define(default_main_directio_storage,"/mnt/vfs").
 -define(default_group_name_prefix,"grp").
 -define(default_group_storage_prefix,"/mnt/"++?default_group_name_prefix).
 
@@ -76,7 +76,7 @@ main(Args) ->
 setup_start() ->
 	h1("Veil SETUP"),
 	info("Nodes configured on this machine will use its hostname: " ++ get(hostname)),
-	warn("Make sure it is resolvable by other hosts in the network"),
+	warn("Make sure it is resolvable by other hosts in the network (i. e. by adding adequate mapping to /etc/hosts)"),
 	Option = interaction_choose_option(what_to_do, "What do you want to do?", 
 		[
 			{manage_db, "Manage database nodes"},
@@ -168,7 +168,7 @@ setup_get_db_nodes() ->
 
 setup_create_storage() ->
 	h2("Storage setup"),
-	VeilRoot = interaction_get_string(veilfs_storage_root, "Select path where veil can store his files", ?default_main_directio_storage),
+	VeilRoot = interaction_get_string(veilfs_storage_root, "Select path where veil can store its files", ?default_main_directio_storage),
 	VeilGroup = [{name, cluster_fuse_id},{root,VeilRoot}],
 	warn("IMPORTANT"),
 	warn("Configuring direct storage (much faster than default proxy storage) for fuse client groups"),
@@ -458,8 +458,7 @@ setup_install_db()->
 		back ->
 			setup_manage_db();
 		ok ->
-			install_db_node(DbName,DbPath),
-			setup_start()
+			install_db_node(DbName,DbPath)
 	end.
 
 setup_extend_db()->
@@ -495,8 +494,7 @@ setup_extend_db()->
 					setup_manage_db();
 				ok ->
 					install_db_node(DbName,DbPath),
-					add_db_to_cluster(DbName,OtherNode),
-					setup_start()
+					add_db_to_cluster(DbName,OtherNode)
 			end
 	end.
 

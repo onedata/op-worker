@@ -44,7 +44,7 @@ A sample session of starting VeilCluster from scratch is as follows:
 
 	*** Veil SETUP ***
 	~ Nodes configured on this machine will use its hostname: @172.16.67.111
-	(!) Make sure it is resolvable by other hosts in the network
+	(!) Make sure it is resolvable by other hosts in the network (i. e. by adding adequate mapping to /etc/hosts)
 	==> What do you want to do?
 	 [1] Manage database nodes
 	 [2] Manage veil nodes
@@ -67,7 +67,7 @@ A sample session of starting VeilCluster from scratch is as follows:
 
 	*** Veil SETUP ***
 	~ Nodes configured on this machine will use its hostname: @172.16.67.111
-	(!) Make sure it is resolvable by other hosts in the network
+	(!) Make sure it is resolvable by other hosts in the network (i. e. by adding adequate mapping to /etc/hosts)
 	==> What do you want to do?
 	 [1] Manage database nodes
 	 [2] Manage veil nodes
@@ -91,7 +91,7 @@ A sample session of starting VeilCluster from scratch is as follows:
 	==> Connection to following database nodes has been confirmed:
 	 - db@172.16.67.111
 	==> Storage setup
-	> Select path where veil can store his files (default: /mnt/veil):
+	> Select path where veil can store its files (default: /mnt/vfs):
 	(!) IMPORTANT
 	(!) Configuring direct storage (much faster than default proxy storage) for fuse client groups
 	(!) If you don't create any storage now, all the data will go throught proxy
