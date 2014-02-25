@@ -204,12 +204,12 @@ int CommunicationHandler::openConnection()
 
     if(m_connectStatus == CONNECTED) {
         m_lastConnectTime = helpers::utils::mtime<uint64_t>();
-
-        unique_lock lock(m_instanceMutex);
-        socket_type &socket = m_endpointConnection->get_socket();
-        SSL *ssl = socket.native_handle();
-        m_queue.push(SSL_get1_session(ssl));
-        LOG(INFO) << "CACHED: " << m_queue.back()->session_id;
+//
+//        unique_lock lock(m_instanceMutex);
+//        socket_type &socket = m_endpointConnection->get_socket();
+//        SSL *ssl = socket.native_handle();
+//        m_queue.push(SSL_get1_session(ssl));
+//        LOG(INFO) << "CACHED: " << m_queue.back()->session_id;
     }
 
     return m_connectStatus;
@@ -234,6 +234,15 @@ void CommunicationHandler::closeConnection()
 
         try {
             if(m_endpointConnection) {
+
+                {   unique_lock lock(m_instanceMutex);
+
+                    socket_type &socket = m_endpointConnection->get_socket();
+                    SSL *ssl = socket.native_handle();
+                    m_queue.push(SSL_get1_session(ssl));
+                    LOG(INFO) << "CACHED: " << m_queue.back()->session_id;
+                }
+
                 LOG(INFO) << "WebSocket: Lowest layer socket closed.";
                 m_endpointConnection->get_socket().lowest_layer().cancel(ec);  // Explicite close underlying socket to make sure that all ongoing operations will be canceld
                 m_endpointConnection->get_socket().lowest_layer().close(ec);
