@@ -29,6 +29,7 @@ namespace veil {
 
 volatile int CommunicationHandler::instancesCount = 0;
 boost::recursive_mutex CommunicationHandler::m_instanceMutex;
+session_queue m_queue;
 
 CommunicationHandler::CommunicationHandler(string p_hostname, int p_port, cert_info_fun p_getCertInfo)
     : m_hostname(p_hostname),
@@ -163,6 +164,19 @@ int CommunicationHandler::openConnection()
         LOG(INFO) << "Trying to connect to: " << URL;
     }
 
+    {   unique_lock lock(m_instanceMutex);
+
+        if(!m_queue.empty()) {
+            socket_type &socket = con->get_socket();
+            SSL *ssl = socket.native_handle();
+            LOG(INFO) << "REUSING: " << m_queue.front()->session_id;
+            if(SSL_set_session(ssl, m_queue.front()) != 1) {
+                LOG(ERROR) << "Cannot set session.";
+            }
+            m_queue.pop();
+        }
+    }
+
     m_endpoint->connect(con);
     m_endpointConnection = con;
 
@@ -190,6 +204,12 @@ int CommunicationHandler::openConnection()
 
     if(m_connectStatus == CONNECTED) {
         m_lastConnectTime = helpers::utils::mtime<uint64_t>();
+
+        unique_lock lock(m_instanceMutex);
+        socket_type &socket = m_endpointConnection->get_socket();
+        SSL *ssl = socket.native_handle();
+        m_queue.push(SSL_get1_session(ssl));
+        LOG(INFO) << "CACHED: " << m_queue.back()->session_id;
     }
 
     return m_connectStatus;
@@ -465,9 +485,14 @@ context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
         context_ptr ctx(new boost::asio::ssl::context(boost::asio::ssl::context::sslv3));
 
         ctx->set_options(boost::asio::ssl::context::default_workarounds |
+                         boost::asio::ssl::context::verify_none |
                          boost::asio::ssl::context::no_sslv2 |
                          boost::asio::ssl::context::single_dh_use);
 
+        SSL_CTX *ssl_ctx = ctx->native_handle();
+        long mode = SSL_CTX_get_session_cache_mode(ssl_ctx);
+        mode |= SSL_SESS_CACHE_CLIENT;
+        SSL_CTX_set_session_cache_mode(ssl_ctx, mode);
 
         boost::asio::ssl::context_base::file_format file_format; // Certificate format
         if(certInfo.cert_type == CertificateInfo::ASN1) {

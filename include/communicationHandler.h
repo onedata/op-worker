@@ -10,6 +10,7 @@
 #define COMMUNICATION_HANDLER_H
 
 #include <string>
+#include <queue>
 #include <boost/thread.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/unordered_map.hpp>
@@ -43,6 +44,7 @@ typedef boost::asio::ssl::stream<boost::asio::ip::tcp::socket>          socket_t
 typedef websocketpp::lib::shared_ptr<boost::asio::ssl::context>         context_ptr;
 typedef boost::function<void(const veil::protocol::communication_protocol::Answer)>    push_callback;
 typedef boost::unique_lock<boost::recursive_mutex> unique_lock;
+typedef std::queue<SSL_SESSION*> session_queue;
 
 template<typename T>
 std::string toString(T in) {
@@ -132,6 +134,7 @@ protected:
     static volatile int         instancesCount;
     volatile bool               m_isPushChannel;
     std::string                 m_fuseID;           ///< Current fuseID for PUSH channel (if any)
+    static session_queue        m_queue;
     
     boost::recursive_mutex      m_connectMutex;
     boost::recursive_mutex      m_reconnectMutex;
