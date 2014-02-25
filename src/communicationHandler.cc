@@ -483,14 +483,18 @@ context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
         context_ptr ctx(new boost::asio::ssl::context(boost::asio::ssl::context::sslv3));
 
         ctx->set_options(boost::asio::ssl::context::default_workarounds |
-                         boost::asio::ssl::context::no_ticket |
                          boost::asio::ssl::context::no_sslv2 |
                          boost::asio::ssl::context::single_dh_use);
 
         SSL_CTX *ssl_ctx = ctx->native_handle();
+
         long mode = SSL_CTX_get_session_cache_mode(ssl_ctx);
         mode |= SSL_SESS_CACHE_CLIENT;
         SSL_CTX_set_session_cache_mode(ssl_ctx, mode);
+
+        long options = SSL_CTX_get_options(ssl_ctx);
+        options |= SSL_OP_NO_TICKET;
+        SSL_CTX_set_options(ssl_ctx, options);
 
         boost::asio::ssl::context_base::file_format file_format; // Certificate format
         if(certInfo.cert_type == CertificateInfo::ASN1) {
