@@ -29,7 +29,7 @@ namespace veil {
 
 volatile int CommunicationHandler::instancesCount = 0;
 boost::recursive_mutex CommunicationHandler::m_instanceMutex;
-session_queue CommunicationHandler::m_queue;
+SSL_SESSION* CommunicationHandler::m_session = 0;
 
 CommunicationHandler::CommunicationHandler(string p_hostname, int p_port, cert_info_fun p_getCertInfo)
     : m_hostname(p_hostname),
@@ -166,14 +166,23 @@ int CommunicationHandler::openConnection()
 
     {   unique_lock lock(m_instanceMutex);
 
-        if(!m_queue.empty()) {
+//        if(!m_queue.empty()) {
+//            socket_type &socket = con->get_socket();
+//            SSL *ssl = socket.native_handle();
+//            LOG(INFO) << "REUSING: " << m_queue.front()->session_id;
+//            if(SSL_set_session(ssl, m_queue.front()) != 1) {
+//                LOG(ERROR) << "Cannot set session.";
+//            }
+//            m_queue.pop();
+//        }
+
+        if(m_session) {
             socket_type &socket = con->get_socket();
             SSL *ssl = socket.native_handle();
-            LOG(INFO) << "REUSING: " << m_queue.front()->session_id;
-            if(SSL_set_session(ssl, m_queue.front()) != 1) {
-                LOG(ERROR) << "Cannot set session.";
-            }
-            m_queue.pop();
+            LOG(INFO) << "REUSING: " << m_session->session_id;
+             if(SSL_set_session(ssl, m_session) != 1) {
+                 LOG(ERROR) << "Cannot set session.";
+             }
         }
     }
 
@@ -204,10 +213,11 @@ int CommunicationHandler::openConnection()
 
     if(m_connectStatus == CONNECTED) {
         m_lastConnectTime = helpers::utils::mtime<uint64_t>();
-//
-//        unique_lock lock(m_instanceMutex);
-//        socket_type &socket = m_endpointConnection->get_socket();
-//        SSL *ssl = socket.native_handle();
+
+        unique_lock lock(m_instanceMutex);
+        socket_type &socket = m_endpointConnection->get_socket();
+        SSL *ssl = socket.native_handle();
+        m_session = SSL_get1_session(ssl);
 //        m_queue.push(SSL_get1_session(ssl));
 //        LOG(INFO) << "CACHED: " << m_queue.back()->session_id;
     }
