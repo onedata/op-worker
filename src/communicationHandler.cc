@@ -165,27 +165,14 @@ int CommunicationHandler::openConnection()
         LOG(INFO) << "Trying to connect to: " << URL;
     }
 
-//    {   unique_lock lock(m_instanceMutex);
-
-//        if(!m_queue.empty()) {
-//            socket_type &socket = con->get_socket();
-//            SSL *ssl = socket.native_handle();
-//            LOG(INFO) << "REUSING: " << m_queue.front()->session_id;
-//            if(SSL_set_session(ssl, m_queue.front()) != 1) {
-//                LOG(ERROR) << "Cannot set session.";
-//            }
-//            m_queue.pop();
-//        }
-
-        if(m_session) {
-            socket_type &socket = con->get_socket();
-            SSL *ssl = socket.native_handle();
-            LOG(INFO) << "REUSING: " << m_session->session_id;
-             if(SSL_set_session(ssl, m_session) != 1) {
-                 LOG(ERROR) << "Cannot set session.";
-             }
+    if(m_session) {
+        socket_type &socket = con->get_socket();
+        SSL *ssl = socket.native_handle();
+        LOG(INFO) << "REUSING: " << m_session->session_id;
+        if(SSL_set_session(ssl, m_session) != 1) {
+            LOG(ERROR) << "Cannot set session.";
         }
-//    }
+    }
 
     m_endpoint->connect(con);
     m_endpointConnection = con;
@@ -214,12 +201,12 @@ int CommunicationHandler::openConnection()
 
     if(m_connectStatus == CONNECTED) {
         m_lastConnectTime = helpers::utils::mtime<uint64_t>();
-
-//        unique_lock lock(m_instanceMutex);
         socket_type &socket = m_endpointConnection->get_socket();
         SSL *ssl = socket.native_handle();
+        if(m_session) {
+            SSL_SESSION_free(m_session);
+        }
         m_session = SSL_get1_session(ssl);
-//        m_queue.push(SSL_get1_session(ssl));
         LOG(INFO) << "CACHED: " << m_session->session_id << "REUSED: " << SSL_session_reused(ssl);
     }
 
@@ -230,6 +217,12 @@ int CommunicationHandler::openConnection()
 void CommunicationHandler::closeConnection()
 {
     unique_lock lock(m_connectMutex);
+
+    if(m_endpointConnection) {
+        socket_type &socket = m_endpointConnection->get_socket();
+        SSL *ssl = socket.native_handle();
+        SSL_free(ssl);
+    }
 
     if(m_connectStatus == CLOSED)
         return;
