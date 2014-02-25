@@ -244,15 +244,6 @@ void CommunicationHandler::closeConnection()
 
         try {
             if(m_endpointConnection) {
-
-                {   unique_lock lock(m_instanceMutex);
-
-                    socket_type &socket = m_endpointConnection->get_socket();
-                    SSL *ssl = socket.native_handle();
-                    m_queue.push(SSL_get1_session(ssl));
-                    LOG(INFO) << "CACHED: " << m_queue.back()->session_id;
-                }
-
                 LOG(INFO) << "WebSocket: Lowest layer socket closed.";
                 m_endpointConnection->get_socket().lowest_layer().cancel(ec);  // Explicite close underlying socket to make sure that all ongoing operations will be canceld
                 m_endpointConnection->get_socket().lowest_layer().close(ec);
