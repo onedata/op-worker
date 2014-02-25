@@ -29,7 +29,7 @@ namespace veil {
 
 volatile int CommunicationHandler::instancesCount = 0;
 boost::recursive_mutex CommunicationHandler::m_instanceMutex;
-session_queue m_queue;
+session_queue CommunicationHandler::m_queue;
 
 CommunicationHandler::CommunicationHandler(string p_hostname, int p_port, cert_info_fun p_getCertInfo)
     : m_hostname(p_hostname),
