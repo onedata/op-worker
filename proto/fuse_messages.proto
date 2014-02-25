@@ -35,7 +35,7 @@ message FileAttr {
     required int64 mtime = 6;
     required int64 ctime = 7;
     required string type = 9;
-    optional int32 size = 10 [default = 0];
+    optional int64 size = 10 [default = 0];
     optional string uname = 11 [default = ""];
     optional string gname = 12 [default = ""];
     optional int32 links = 13 [default = 1];
