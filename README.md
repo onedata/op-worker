@@ -43,7 +43,7 @@ A sample session of starting VeilCluster from scratch is as follows:
   	 [root@plgsl64 ~]# /opt/veil/setup 
 
 	*** Veil SETUP ***
-	~ Nodes configured on this machine will use its hostname: @172.16.67.111
+	~ Erlang nodes configured on this machine will use its hostname: @172.16.67.111
 	(!) Make sure it is resolvable by other hosts in the network (i. e. by adding adequate mapping to /etc/hosts)
 	==> What do you want to do?
 	 [1] Manage database nodes
@@ -66,7 +66,7 @@ A sample session of starting VeilCluster from scratch is as follows:
 	~ Starting node...
 
 	*** Veil SETUP ***
-	~ Nodes configured on this machine will use its hostname: @172.16.67.111
+	~ Erlang nodes configured on this machine will use its hostname: @172.16.67.111
 	(!) Make sure it is resolvable by other hosts in the network (i. e. by adding adequate mapping to /etc/hosts)
 	==> What do you want to do?
 	 [1] Manage database nodes

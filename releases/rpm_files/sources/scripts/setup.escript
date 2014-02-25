@@ -75,7 +75,7 @@ main(Args) ->
 
 setup_start() ->
 	h1("Veil SETUP"),
-	info("Nodes configured on this machine will use its hostname: " ++ get(hostname)),
+	info("Erlang nodes configured on this machine will use its hostname: " ++ get(hostname)),
 	warn("Make sure it is resolvable by other hosts in the network (i. e. by adding adequate mapping to /etc/hosts)"),
 	Option = interaction_choose_option(what_to_do, "What do you want to do?", 
 		[
