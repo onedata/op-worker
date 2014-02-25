@@ -218,12 +218,6 @@ void CommunicationHandler::closeConnection()
 {
     unique_lock lock(m_connectMutex);
 
-    if(m_endpointConnection) {
-        socket_type &socket = m_endpointConnection->get_socket();
-        SSL *ssl = socket.native_handle();
-        SSL_free(ssl);
-    }
-
     if(m_connectStatus == CLOSED)
         return;
 
