@@ -29,7 +29,7 @@ namespace veil {
 
 volatile int CommunicationHandler::instancesCount = 0;
 boost::recursive_mutex CommunicationHandler::m_instanceMutex;
-SSL_SESSION* CommunicationHandler::m_session = 0;
+//SSL_SESSION* CommunicationHandler::m_session = 0;
 
 CommunicationHandler::CommunicationHandler(string p_hostname, int p_port, cert_info_fun p_getCertInfo)
     : m_hostname(p_hostname),
@@ -39,7 +39,8 @@ CommunicationHandler::CommunicationHandler(string p_hostname, int p_port, cert_i
       m_currentMsgId(1),
       m_errorCount(0),
       m_isPushChannel(false),
-      m_lastConnectTime(0)
+      m_lastConnectTime(0),
+      m_session(0)
 {
     unique_lock lock(m_instanceMutex);
     ++instancesCount;
@@ -55,7 +56,7 @@ CommunicationHandler::~CommunicationHandler()
 {
     closeConnection();
 
-    DLOG(INFO) << "Destructing connection: " << this;
+    LOG(INFO) << "Destructing connection: " << this;
     if(m_endpoint)
     {
         m_endpoint->stop();
@@ -74,7 +75,7 @@ CommunicationHandler::~CommunicationHandler()
     unique_lock lock(m_instanceMutex);
     --instancesCount;
 
-    DLOG(INFO) << "Connection: " << this << " deleted";
+    LOG(INFO) << "Connection: " << this << " deleted";
 }
 
 unsigned int CommunicationHandler::getErrorCount()
@@ -164,7 +165,7 @@ int CommunicationHandler::openConnection()
         LOG(INFO) << "Trying to connect to: " << URL;
     }
 
-    {   unique_lock lock(m_instanceMutex);
+//    {   unique_lock lock(m_instanceMutex);
 
 //        if(!m_queue.empty()) {
 //            socket_type &socket = con->get_socket();
@@ -184,7 +185,7 @@ int CommunicationHandler::openConnection()
                  LOG(ERROR) << "Cannot set session.";
              }
         }
-    }
+//    }
 
     m_endpoint->connect(con);
     m_endpointConnection = con;
@@ -214,12 +215,12 @@ int CommunicationHandler::openConnection()
     if(m_connectStatus == CONNECTED) {
         m_lastConnectTime = helpers::utils::mtime<uint64_t>();
 
-        unique_lock lock(m_instanceMutex);
+//        unique_lock lock(m_instanceMutex);
         socket_type &socket = m_endpointConnection->get_socket();
         SSL *ssl = socket.native_handle();
         m_session = SSL_get1_session(ssl);
 //        m_queue.push(SSL_get1_session(ssl));
-//        LOG(INFO) << "CACHED: " << m_queue.back()->session_id;
+        LOG(INFO) << "CACHED: " << m_session->session_id << "REUSED: " << SSL_session_reused(ssl);
     }
 
     return m_connectStatus;
@@ -428,7 +429,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
             }
 
             LOG(ERROR) << "WebSocket communication error";
-            DLOG(INFO) << "Error counter: " << m_errorCount;
+            LOG(INFO) << "Error counter: " << m_errorCount;
 
             answer.set_answer_status(VEIO);
 
@@ -454,7 +455,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
             }
 
             LOG(ERROR) << "WebSocket communication error";
-            DLOG(INFO) << "Error counter: " << m_errorCount;
+            LOG(INFO) << "Error counter: " << m_errorCount;
 
             answer.set_answer_status(VEIO);
         }

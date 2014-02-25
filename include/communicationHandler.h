@@ -135,7 +135,7 @@ protected:
     volatile bool               m_isPushChannel;
     std::string                 m_fuseID;           ///< Current fuseID for PUSH channel (if any)
 //    static session_queue        m_queue;
-    static SSL_SESSION*         m_session;
+    SSL_SESSION*                m_session;
     
     boost::recursive_mutex      m_connectMutex;
     boost::recursive_mutex      m_reconnectMutex;
