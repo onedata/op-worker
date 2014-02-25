@@ -483,7 +483,7 @@ context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
         context_ptr ctx(new boost::asio::ssl::context(boost::asio::ssl::context::sslv3));
 
         ctx->set_options(boost::asio::ssl::context::default_workarounds |
-                         boost::asio::ssl::context::verify_none |
+                         boost::asio::ssl::context::no_ticket |
                          boost::asio::ssl::context::no_sslv2 |
                          boost::asio::ssl::context::single_dh_use);
 
