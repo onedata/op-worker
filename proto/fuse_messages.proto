@@ -159,3 +159,11 @@ message HandshakeResponse {
 message HandshakeAck {
     required string fuse_id = 1;
 }
+
+message GetQuota {
+    optional int32 type = 1 [default = 0];
+}
+
+message QuotaInfo {
+    required int64 size = 1;
+}
