@@ -120,6 +120,8 @@ int CommunicationHandler::openConnection()
     unique_lock lock(m_connectMutex);
     websocketpp::lib::error_code ec;
 
+    LOG(INFO) << "OPEN CONNECTION, INST COUNT: " << getInstancesCount();
+
     if(m_connectStatus == CONNECTED)
         return 0;
 
@@ -172,6 +174,7 @@ int CommunicationHandler::openConnection()
         if(SSL_set_session(ssl, m_session) != 1) {
             LOG(ERROR) << "Cannot set session.";
         }
+        LOG(INFO) << "GET SESSION: " << SSL_get_session(ssl)->session_id;
     }
 
     m_endpoint->connect(con);
