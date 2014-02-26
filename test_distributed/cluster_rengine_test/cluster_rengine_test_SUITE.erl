@@ -51,6 +51,7 @@ test_event_subscription(Config) ->
   subscribe_for_write_events(CCM, standard),
   send_event(WriteEvent, CCM),
   ?assert_received({ok, standard, _}),
+  assert_nothing_received(CCM),
 
   subscribe_for_write_events(CCM, tree),
   send_event(WriteEvent, CCM),
@@ -167,12 +168,12 @@ init_per_testcase(_, Config) ->
   Res = lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config),
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  timer:sleep(500),
+  nodes_manager:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
-    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, []))
+    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
+    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
-  timer:sleep(1000),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers),
 
@@ -189,7 +190,7 @@ init_per_testcase(_, Config) ->
   lists:foreach(fun(Node) -> StartAdditionalWorker(Node, cluster_rengine) end, NodesUp),
   StartAdditionalWorker(CCM, dao),
 
-  timer:sleep(1000),
+  nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
   Res.
 
 end_per_testcase(distributed_test, Config) ->
@@ -233,7 +234,7 @@ subscribe_for_write_events(Node, ProcessingMethod, ProcessingConfig) ->
 
   receive
     ok -> ok
-  after 100 ->
+  after 400 ->
     ?assert(false)
   end,
 
