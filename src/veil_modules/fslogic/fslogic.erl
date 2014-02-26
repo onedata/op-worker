@@ -37,7 +37,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([init/1, handle/2, cleanup/0]).
+-export([init/1, handle/2, cleanup/0, get_quota/0]).
 -export([get_full_file_name/1, get_file/3, get_user_id/0, get_user_root/0, get_user_root/1, get_user_groups/2, get_user_doc/0]).
 
 %% ====================================================================
@@ -925,6 +925,12 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, test
   Interval = Record#testchannel.answer_delay_in_ms,
   timer:apply_after(Interval, gen_server, cast, [?MODULE, {asynch, ProtocolVersion, {answer_test_message, FuseID, Record#testchannel.answer_message}}]),
   #atom{value = "ok"}.
+
+get_quota() ->
+  case get_user_doc() of
+    {ok, UserDoc} -> UserDoc#veil_document.record#user.quota_doc;
+    Other -> Other
+  end.
 
 %% save_file_descriptor/3
 %% ====================================================================
