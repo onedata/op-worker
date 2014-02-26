@@ -27,7 +27,7 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([init/1, handle/2, cleanup/0, log/1]).
+-export([init/1, handle/2, cleanup/0]).
 
 %% functions for manual tests
 -export([register_mkdir_handler/1, send_mkdir_event/0, delete_file/0]).
@@ -49,12 +49,6 @@ handle(_ProtocolVersion, healthcheck) ->
 
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
-
-handle(_ProtocolVersion, {log, Msg}) ->
-  log(Msg);
-
-handle(_ProtocolVersion, {log, Msg, Args}) ->
-  log(Msg, Args);
 
 handle(ProtocolVersion, {final_stage_tree, TreeId, Event}) ->
   EventType = element(1, Event),
@@ -178,12 +172,10 @@ create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = 
     list_to_atom(?PROCESSOR_ETS_NAME ++ pid_to_list(self()))
   end,
 
-  CreateEventProcessEtsIfNeeded = fun(EtsName, InitCounter) ->
-    try
-      ets:new(EtsName, [named_table, private, set]),
-      ets:insert(EtsName, {counter, InitCounter})
-    catch
-      error:badarg -> ok
+  InitCounterIfNeeded = fun(EtsName, InitCounter) ->
+    case ets:lookup(EtsName, counter) of
+      [] -> ets:insert(EtsName, {counter, InitCounter});
+      _ -> ok
     end
   end,
 
@@ -191,18 +183,14 @@ create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = 
   ProcFun = case Config#processing_config.init_counter of
     undefined ->
       fun(_ProtocolVersion, {final_stage_tree, _TreeId, Event}) ->
-%%         ?info("handler fun !!! without aggr"),
         HandlerFun(Event)
       end;
     InitCounter ->
-      fun(_ProtocolVersion, {final_stage_tree, _TreeId, Event}) ->
-%%         ?info("--<<>>-- handler fun !!! with aggr: ~p", [node()]),
-        EtsName = GetEventProcessorEtsName(),
-        CreateEventProcessEtsIfNeeded(EtsName, InitCounter),
+      fun(_ProtocolVersion, {final_stage_tree, _TreeId, Event}, EtsName) ->
+        InitCounterIfNeeded(EtsName, InitCounter),
         CurrentCounter = ets:update_counter(EtsName, counter, {2, -1, 1, InitCounter}),
         case CurrentCounter of
           InitCounter ->
-%%             ?info("counter dobity"),
             HandlerFun(Event);
           _ -> ok
         end
@@ -218,7 +206,11 @@ create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = 
 
   Node = erlang:node(self()),
 
-  gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM}).
+  LocalCacheName = list_to_atom(atom_to_list(TreeId) ++ "_local_cache"),
+  case Config#processing_config.init_counter of
+    undefined -> gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM});
+    _ -> gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM, LocalCacheName})
+  end.
 %%   nodes_manager:wait_for_cluster_cast({cluster_rengine, Node}),
 
 get_request_map_fun() ->
@@ -295,9 +287,3 @@ string_to_integer(SomeString) ->
 
 delete_file() ->
   rpc:call(node(), dao_lib, apply, [dao_vfs, remove_file, ["plgmsitko/todelete"], 1]).
-
-log(Msg) ->
-  ?info(Msg).
-
-log(Msg, Arg) ->
-  ?info("LOGGGG ::: ~p: ~p", [Msg, Arg]).
