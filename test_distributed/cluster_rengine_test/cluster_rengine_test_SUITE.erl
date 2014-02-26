@@ -23,7 +23,7 @@
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 %all() -> [test_event_subscription, test_event_aggregation, test_dispatching].
-all() -> [test_dispatching].
+all() -> [test_event_subscription, test_event_aggregation, test_dispatching].
 
 -define(assert_received(ResponsePattern), receive
                                             ResponsePattern -> ok
@@ -37,10 +37,6 @@ all() -> [test_dispatching].
                                             -> ?assert(false)
                                           end).
 
-%% @doc This is distributed test of dao_vfs:find_files.
-%% It consists of series of dao_vfs:find_files with various file_criteria and comparing result to expected values.
-%% Before testing it clears documents that may affect test and after testing it clears created documents.
-%% @end
 test_event_subscription(Config) ->
   nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
@@ -99,6 +95,7 @@ test_dispatching(Config) ->
   WriteEvent2 = #write_event{user_id = "1235", ans_pid = self()},
   WriteEvent3 = #write_event{user_id = "1334", ans_pid = self()},
   WriteEvent4 = #write_event{user_id = "1335", ans_pid = self()},
+  WriteEvent5 = #write_event{user_id = "1236", ans_pid = self()},
   WriteEvents = [WriteEvent1, WriteEvent2, WriteEvent3, WriteEvent4],
   SendWriteEvent = fun (Event) -> send_event(Event, CCM) end,
 
@@ -112,16 +109,42 @@ test_dispatching(Config) ->
   timer:sleep(1000),
   count_answers(8),
 
-  repeat(200, SendWriteEvents),
-  timer:sleep(3000),
-  {Count, SetOfPids} = count_answers(4*200),
+  MessagesNum = 300,
+  repeat(MessagesNum, SendWriteEvents),
+  {Count, SetOfPids} = count_answers(4*MessagesNum),
   ?assertEqual(0, Count),
   ?assertEqual(6, sets:size(SetOfPids)),
 
   SendWriteEvents(),
   {Count2, SetOfPids2} = count_answers(4),
   ?assertEqual(0, Count2),
-  ?assertEqual(4, sets:size(SetOfPids2)).
+  ?assertEqual(4, sets:size(SetOfPids2)),
+
+  % WriteEvent1 and WriteEvent5 should be dispatched to the same process
+  SendWriteEvent(WriteEvent1),
+  SendWriteEvent(WriteEvent5),
+  {Count3, SetOfPids3} = count_answers(2),
+  ?assertEqual(0, Count3),
+  ?assertEqual(1, sets:size(SetOfPids3)),
+
+  % WriteEvent1 and WriteEvent2 should be dispatched to different processes on the same node
+  SendWriteEvent(WriteEvent1),
+  SendWriteEvent(WriteEvent2),
+  {Count4, SetOfPids4} = count_answers(2),
+  ?assertEqual(0, Count4),
+  ?assertEqual(2, sets:size(SetOfPids4)),
+  NodesFromPids = fun(Pids) -> sets:from_list(lists:map(fun (Pid) -> node(Pid) end, sets:to_list(Pids))) end,
+  SetOfNodes = NodesFromPids(SetOfPids4),
+  ?assertEqual(1, sets:size(SetOfNodes)),
+
+  % WriteEvent1 and WriteEvent3 should be dispatched to different processes on different nodes
+  SendWriteEvent(WriteEvent1),
+  SendWriteEvent(WriteEvent3),
+  {Count5, SetOfPids5} = count_answers(2),
+  ?assertEqual(0, Count5),
+  ?assertEqual(2, sets:size(SetOfPids5)),
+  SetOfNodes2 = NodesFromPids(SetOfPids5),
+  ?assertEqual(2, sets:size(SetOfNodes2)).
 
 
 %% ====================================================================
@@ -201,7 +224,7 @@ subscribe_for_write_events(Node, ProcessingMethod, ProcessingConfig) ->
   end,
 
   EventHandler = fun(#write_event{user_id = UserId, ans_pid = AnsPid}) ->
-    ?info("EventHandler ~p", [node(self())]),
+%%     ?info("EventHandler ~p", [node(self())]),
     AnsPid ! {ok, ProcessingMethod, self()}
   end,
 
