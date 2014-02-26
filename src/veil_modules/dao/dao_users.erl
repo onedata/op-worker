@@ -261,7 +261,7 @@ get_files_number(Type, UUID) ->
 %% ====================================================================
 %% @doc Returns size of users' files
 %% @end
--spec get_files_size({uuid, UUID :: uuid()}) -> {ok, Sum} | {error, any()}.
+-spec get_files_size({uuid, UUID :: uuid()}) -> {ok, non_neg_integer()} | {error, any()}.
 %% ====================================================================
 get_files_size({uuid, UUID}) ->
   dao:set_db(?FILES_DB_NAME),
