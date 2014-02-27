@@ -64,7 +64,8 @@ basic_test_() ->
                                     {dn, DN} when is_list(DN) -> {ok, #veil_document{record = #user{}}};
                                     _ -> {error, reason}
                                 end;
-                            (dao_vfs, remove_file, _, _) -> ok
+                            (dao_vfs, remove_file, _, _) -> ok;
+                            (dao_users, remove_quota, _, _) -> ok
                         end),
                     ?assertEqual(ok, user_logic:remove_user({login, "login"})),
                     ?assertEqual(ok, user_logic:remove_user({email, "email"})),
@@ -120,7 +121,8 @@ signing_in_test_() ->
                         name = "New User",
                         teams = ["New team(team desc)", "Another team(another desc)"],
                         email_list = ["new@email.com"],
-                        dn_list = ["O=new-dn"]
+                        dn_list = ["O=new-dn"],
+                        quota_doc = "quota_uuid"
                     },
                     % #veil_document encapsulating user record
                     NewUserRecord = #veil_document{record = NewUser},
@@ -137,6 +139,7 @@ signing_in_test_() ->
                                     NewUser -> {ok, "uuid"};
                                     _ -> throw(error)
                                 end;
+                            (dao_users, save_quota, _, _) -> {ok, "quota_uuid"};
                             (dao_vfs, save_new_file, _, _) -> {ok, "file_uuid"};
                             (dao_vfs, list_storage, [], _) ->
                                 {ok, []}
