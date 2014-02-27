@@ -931,9 +931,9 @@ handle_fuse_message(_ProtocolVersion, Record, _FuseID) when is_record(Record, ge
     {ok, UserDoc} ->
       case user_logic:get_quota(UserDoc) of
         {ok, Quota} -> #quotainfo{size = Quota#quota.size};
-        _ -> #quotainfo{quota_size = -1}
+        _ -> #quotainfo{size = -1}
       end;
-    _ -> #quotainfo{quota_size = -1}
+    _ -> #quotainfo{size = -1}
   end;
 
 handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, getfilessize) ->
