@@ -37,7 +37,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([init/1, handle/2, cleanup/0, get_quota/0]).
+-export([init/1, handle/2, cleanup/0]).
 -export([get_full_file_name/1, get_file/3, get_user_id/0, get_user_root/0, get_user_root/1, get_user_groups/2, get_user_doc/0]).
 
 %% ====================================================================
@@ -49,7 +49,7 @@
 -endif.
 
 %% ct
--export([get_files_number/3, create_dirs/4]).
+-export([get_files_number/3, get_files_size/2, create_dirs/4]).
 
 %% ====================================================================
 %% API functions
@@ -924,12 +924,26 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getl
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, testchannel) ->
   Interval = Record#testchannel.answer_delay_in_ms,
   timer:apply_after(Interval, gen_server, cast, [?MODULE, {asynch, ProtocolVersion, {answer_test_message, FuseID, Record#testchannel.answer_message}}]),
-  #atom{value = "ok"}.
+  #atom{value = "ok"};
 
-get_quota() ->
+handle_fuse_message(_ProtocolVersion, Record, _FuseID) when is_record(Record, getquota) ->
   case get_user_doc() of
-    {ok, UserDoc} -> UserDoc#veil_document.record#user.quota_doc;
-    Other -> Other
+    {ok, UserDoc} ->
+      case user_logic:get_quota(UserDoc) of
+        {ok, Quota} -> #quotainfo{size = Quota#quota.size};
+        _ -> #quotainfo{quota_size = -1}
+      end;
+    _ -> #quotainfo{quota_size = -1}
+  end;
+
+handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, getfilessize) ->
+  case get_user_doc() of
+    {ok, UserDoc} ->
+      case get_files_size(UserDoc#veil_document.uuid, ProtocolVersion) of
+        {ok, Size} -> #filessizeinfo{size = Size};
+        _ -> #filessizeinfo{size = -1}
+    end;
+    _ -> #filessizeinfo{size = -1}
   end.
 
 %% save_file_descriptor/3
@@ -1294,6 +1308,21 @@ get_files_number(Type, GroupName, ProtocolVersion) ->
         {error, files_number_not_found} -> {ok, 0};
         _ -> Ans
     end.
+
+%% get_files_size/2
+%% ====================================================================
+%% @doc Returns size of users' files
+%% @end
+-spec get_files_size(UUID :: uuid(), ProtocolVersion :: integer()) -> Result when
+  Result :: {ok, Sum} | {error, any()},
+  Sum :: non_neg_integer().
+%% ====================================================================
+get_files_size(UUID, ProtocolVersion) ->
+  Ans = dao_lib:apply(dao_users, get_files_size, [UUID], ProtocolVersion),
+  case Ans of
+    {error, files_size_not_found} -> {ok, 0};
+    _ -> Ans
+  end.
 
 %% get_new_file_id/5
 %% ====================================================================

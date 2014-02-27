@@ -170,7 +170,7 @@ remove_user(Key) ->
         ok ->
             UserRec2 = UserRec#veil_document.record,
             dao_lib:apply(dao_vfs, remove_file, [UserRec2#user.login], 1),
-            dao_lib:apply(dao_users, remove_quota, [{uuid, UserRec2#user.quota_doc}], 1);
+            dao_lib:apply(dao_users, remove_quota, [UserRec2#user.quota_doc], 1);
         _ -> error
     end,
     dao_lib:apply(dao_users, remove_user, [Key], 1).
@@ -303,11 +303,11 @@ update_dn_list(#veil_document{record = UserInfo} = UserDoc, NewDnList) ->
 %% @end
 -spec get_quota(User) -> Result when
   User :: user_doc(),
-  Result :: quota_info().
+  Result :: {ok, quota_info()} | {error, any()}.
 %% ====================================================================
 get_quota(User) ->
   case dao_lib:apply(dao_users, get_quota, [User#veil_document.record#user.quota_doc], 1) of
-    {ok, QuotaDoc} -> QuotaDoc#veil_document.record;
+    {ok, QuotaDoc} -> {ok, QuotaDoc#veil_document.record};
     Other -> Other
   end.
 

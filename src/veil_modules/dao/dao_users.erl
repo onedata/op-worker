@@ -261,14 +261,24 @@ get_files_number(Type, UUID) ->
 %% ====================================================================
 %% @doc Returns size of users' files
 %% @end
--spec get_files_size({uuid, UUID :: uuid()}) -> {ok, non_neg_integer()} | {error, any()}.
+-spec get_files_size(UUID :: uuid()) -> {ok, non_neg_integer()} | {error, any()} | no_return().
 %% ====================================================================
-get_files_size({uuid, UUID}) ->
+get_files_size(UUID) ->
   dao:set_db(?FILES_DB_NAME),
   QueryArgs = #view_query_args{keys = [dao_helper:name(UUID)], include_docs = false, group_level = 1, view_type = reduce, stale = update_after},
+
   case dao:list_records(?USER_FILES_SIZE_VIEW, QueryArgs) of
-    {ok, #view_result{rows = [#view_row{value = Sum}]}} -> {ok, Sum};
-    {ok, #view_result{rows = []}} -> {ok, 0};
+    {ok, #view_result{rows = [#view_row{value = Sum}]}} ->
+      {ok, Sum};
+    {ok, #view_result{rows = []}} ->
+      lager:error("Size of files of ~p not found", [UUID]),
+      throw(files_size_not_found);
+    {ok, #view_result{rows = [#view_row{value = Sum} | Tail] = AllRows}} ->
+      case length(lists:usort(AllRows)) of
+        Count when Count > 1 -> lager:warning("To many rows in response during files size finding for ~p. Others: ~p", [UUID, Tail]);
+        _ -> ok
+      end,
+      {ok, Sum};
     Other ->
       lager:error("Invalid view response: ~p", [Other]),
       throw(invalid_data)
@@ -319,9 +329,9 @@ save_quota(#veil_document{} = QuotaDoc) ->
 %% @doc Removes users' quota from DB by uuid.
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec remove_quota({uuid, UUID :: uuid()}) -> {error, any()} | no_return().
+-spec remove_quota(UUID :: uuid()) -> {error, any()} | no_return().
 %% ====================================================================
-remove_quota({uuid, UUID}) ->
+remove_quota(UUID) ->
   dao:set_db(?USERS_DB_NAME),
   dao:remove_record(UUID).
 
@@ -332,8 +342,8 @@ remove_quota({uuid, UUID}) ->
 %% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec get_quota({uuid, UUID :: uuid()}) -> {ok, quota_doc()} | {error, any()} | no_return().
+-spec get_quota(UUID :: uuid()) -> {ok, quota_doc()} | {error, any()} | no_return().
 %% ====================================================================
-get_quota({uuid, UUID}) ->
+get_quota(UUID) ->
   dao:set_db(?USERS_DB_NAME),
   dao:get_record(UUID).
