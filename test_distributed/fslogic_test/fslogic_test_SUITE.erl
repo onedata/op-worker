@@ -24,7 +24,7 @@
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([groups_permissions_test/1, files_manager_standard_files_test/1, files_manager_tmp_files_test/1, storage_management_test/1, permissions_management_test/1, user_creation_test/1, get_file_links_test/1,
-  fuse_requests_test/1, users_separation_test/1, file_sharing_test/1, dir_mv_test/1, user_file_counting_test/1, dirs_creating_test/1, groups_test/1, get_by_uuid_test/1, concurrent_file_creation_test/1]).
+  fuse_requests_test/1, users_separation_test/1, file_sharing_test/1, dir_mv_test/1, user_file_counting_test/1, user_file_size_test/1, dirs_creating_test/1, groups_test/1, get_by_uuid_test/1, concurrent_file_creation_test/1]).
 -export([create_standard_share/2, create_share/3, get_share/2]).
 
 all() -> [groups_test, files_manager_tmp_files_test, files_manager_standard_files_test, storage_management_test, permissions_management_test, user_creation_test,
@@ -81,7 +81,7 @@ groups_permissions_test(Config) ->
   Name = "user1 user1",
   Teams = [Team],
   Email = "user1@email.net",
-  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+  {CreateUserAns, UserDoc1} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
 
   {ReadFileAns2, PemBin2} = file:read_file(Cert2),
@@ -95,7 +95,7 @@ groups_permissions_test(Config) ->
   Login2 = "user2",
   Name2 = "user2 user2",
   Email2 = "user2@email.net",
-  {CreateUserAns2, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, [Team, Team2], Email2, DnList2]),
+  {CreateUserAns2, UserDoc2} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, [Team, Team2], Email2, DnList2]),
   ?assertEqual(ok, CreateUserAns2),
 
   %% Connect to cluster
@@ -144,7 +144,23 @@ groups_permissions_test(Config) ->
   ?assertEqual("ok", Status9),
   ?assertEqual(list_to_atom(?VEPERM), Answer9),
 
+  {GetFileAns, FileDoc} = rpc:call(FSLogicNode, dao_vfs, get_file, [TestFileNewName]),
+  ?assertEqual(ok, GetFileAns),
+  {GetFileMetaAns, FileMetaDoc} = rpc:call(FSLogicNode, dao_vfs, get_file_meta, [FileDoc#veil_document.record#file.meta_doc]),
+  ?assertEqual(ok, GetFileMetaAns),
+  FileMetaUID = FileMetaDoc#veil_document.record#file_meta.uid,
+  ?assertEqual(UserDoc1#veil_document.uuid, FileMetaUID),
+
   ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [TestFileNewName, Login2, -1])),
+
+  {GetFileAns1, FileDoc1} = rpc:call(FSLogicNode, dao_vfs, get_file, [TestFileNewName]),
+  ?assertEqual(ok, GetFileAns1),
+  {GetFileMetaAns1, FileMetaDoc1} = rpc:call(FSLogicNode, dao_vfs, get_file_meta, [FileDoc1#veil_document.record#file.meta_doc]),
+  ?assertEqual(ok, GetFileMetaAns1),
+  FileMetaUID1 = FileMetaDoc1#veil_document.record#file_meta.uid,
+  ?assertEqual(UserDoc2#veil_document.uuid, FileMetaUID1),
+
+  ?assertNotEqual(FileMetaUID, FileMetaUID1),
 
   {Status10, Answer10} = delete_file(Socket, TestFileNewName),
   ?assertEqual("ok", Status10),
@@ -859,6 +875,156 @@ user_file_counting_test(Config) ->
   files_tester:delete_dir(?TEST_ROOT ++ "/users"),
   files_tester:delete_dir(?TEST_ROOT ++ "/groups").
 
+%% Checks user files size view.
+%% The test creates some files for two users, and then checks if the view counts their size properly.
+user_file_size_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+  [Node | _] = NodesUp,
+
+  Cert1 = ?COMMON_FILE("peer.pem"),
+  Cert2 = ?COMMON_FILE("peer2.pem"),
+
+  Host = "localhost",
+  Port = ?config(port, Config),
+
+  %% Cluster init
+  gen_server:cast({?Node_Manager_Name, Node}, do_heart_beat),
+  gen_server:cast({global, ?CCM}, {set_monitoring, on}),
+  nodes_manager:wait_for_cluster_cast(),
+  gen_server:cast({global, ?CCM}, init_cluster),
+  nodes_manager:wait_for_cluster_init(),
+
+  %% files_manager call with given user's DN
+  FM = fun(M, A, DN) ->
+    Me = self(),
+    Pid = spawn(Node, fun() -> put(user_id, DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
+    receive
+      {Pid, Resp} -> Resp
+    end
+  end,
+
+  %% Init storage
+  {InsertStorageAns, StorageUUID} = rpc:call(Node, fslogic_storage, insert_storage, [?SH, ?TEST_ROOT]),
+  ?assertEqual(ok, InsertStorageAns),
+
+  %% Init users
+  AddUser = fun(Login, Teams, Cert) ->
+    {ReadFileAns, PemBin} = file:read_file(Cert),
+    ?assertEqual(ok, ReadFileAns),
+    {ExtractAns, RDNSequence} = rpc:call(Node, user_logic, extract_dn_from_cert, [PemBin]),
+    ?assertEqual(rdnSequence, ExtractAns),
+    {ConvertAns, DN} = rpc:call(Node, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
+    ?assertEqual(ok, ConvertAns),
+    DnList = [DN],
+
+    Name = "user1 user1",
+    Email = "user1@email.net",
+    {CreateUserAns, #veil_document{uuid = UserID}} = rpc:call(Node, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+    ?assertEqual(ok, CreateUserAns),
+    {DnList, UserID}
+  end,
+
+  Login1 = "veilfstestuser",
+  Teams1 = ["veilfstestgroup(Grp)"],
+  Login2 = "veilfstestuser2",
+  Teams2 = ["veilfstestgroup(Grp)"],
+  {DN1, UserID1} = AddUser(Login1, Teams1, Cert1),
+  {DN2, UserID2} = AddUser(Login2, Teams2, Cert2),
+  %% END init users
+
+  %% Init connections
+  {ConAns1, Socket1} = wss:connect(Host, Port, [{certfile, Cert1}, {cacertfile, Cert1}, auto_handshake]),
+  ?assertEqual(ok, ConAns1),
+  {ConAns2, Socket2} = wss:connect(Host, Port, [{certfile, Cert2}, {cacertfile, Cert2}, auto_handshake]),
+  ?assertEqual(ok, ConAns2),
+  %% END init connections
+
+  FileBeg = "user_dirs_at_storage_test_file_size",
+  User1FilesEnding = ["1","2","3","4"],
+  User2FilesEnding = ["x","y","z"],
+  FileSize = 100,
+
+  rpc:call(Node, fslogic, get_files_size, ["not_existing_id", 1]),
+  nodes_manager:wait_for_db_reaction(),
+  {CountStatus0, Count0} = rpc:call(Node, fslogic, get_files_size, ["not_existing_id", 1]),
+  ?assertEqual(ok, CountStatus0),
+  ?assertEqual(0, Count0),
+
+  rpc:call(Node, fslogic, get_files_size, [UserID1, 1]),
+  nodes_manager:wait_for_db_reaction(),
+  {CountStatus00, Count00} = rpc:call(Node, fslogic, get_files_size, [UserID1, 1]),
+  ?assertEqual(ok, CountStatus00),
+  ?assertEqual(0, Count00),
+
+  lists:foreach(fun(FileEnding) ->
+    FileName = FileBeg ++ FileEnding,
+
+    AnsCreate = FM(create, [FileName], DN1),
+    ?assertEqual(ok, AnsCreate),
+
+    AnsTruncate = FM(truncate, [FileName, FileSize], DN1),
+    ?assertEqual(ok, AnsTruncate),
+
+    {AnsGetFileAttr, _} = FM(getfileattr, [FileName], DN1),
+    ?assertEqual(ok, AnsGetFileAttr)
+  end, User1FilesEnding),
+
+  lists:foreach(fun(FileEnding) ->
+    FileName = FileBeg ++ FileEnding,
+
+    AnsCreate = FM(create, [FileName], DN2),
+    ?assertEqual(ok, AnsCreate),
+
+    AnsTruncate = FM(truncate, [FileName, FileSize], DN2),
+    ?assertEqual(ok, AnsTruncate),
+
+    {AnsGetFileAttr, _} = FM(getfileattr, [FileName], DN2),
+    ?assertEqual(ok, AnsGetFileAttr)
+  end, User2FilesEnding),
+
+  rpc:call(Node, fslogic, get_files_size, [UserID1, 1]),
+  nodes_manager:wait_for_db_reaction(),
+  {CountStatus, Count} = rpc:call(Node, fslogic, get_files_size, [UserID1, 1]),
+  ?assertEqual(ok, CountStatus),
+  ?assertEqual(length(User1FilesEnding) * FileSize, Count),
+
+  rpc:call(Node, fslogic, get_files_size, [UserID2, 1]),
+  nodes_manager:wait_for_db_reaction(),
+  {CountStatus2, Count2} = rpc:call(Node, fslogic, get_files_size, [UserID2, 1]),
+  ?assertEqual(ok, CountStatus2),
+  ?assertEqual(length(User2FilesEnding) * FileSize, Count2),
+
+  lists:foreach(fun(FileEnding) ->
+    FileName = FileBeg ++ FileEnding,
+    AnsDelete = FM(delete, [FileName], DN1),
+    ?assertEqual(ok, AnsDelete)
+  end, User1FilesEnding),
+
+  lists:foreach(fun(FileEnding) ->
+    FileName = FileBeg ++ FileEnding,
+    AnsDelete = FM(delete, [FileName], DN2),
+    ?assertEqual(ok, AnsDelete)
+  end, User2FilesEnding),
+
+  wss:close(Socket1),
+  wss:close(Socket2),
+
+  RemoveStorageAns = rpc:call(Node, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+  ?assertEqual(ok, RemoveStorageAns),
+
+  RemoveUserAns = rpc:call(Node, user_logic, remove_user, [{dn, DN1}]),
+  ?assertEqual(ok, RemoveUserAns),
+  RemoveUserAns2 = rpc:call(Node, user_logic, remove_user, [{dn, DN2}]),
+  ?assertEqual(ok, RemoveUserAns2),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login1),
+  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login2),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams1),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams2),
+
+  files_tester:delete_dir(?TEST_ROOT ++ "/users"),
+  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
 
 %% Checks permissions management functions
 %% The tests checks some files and then changes their permissions. Erlang functions are used to test if permissions were change properly.

@@ -30,7 +30,6 @@
 -export([get_quota/1, update_quota/2]).
 
 -define(UserRootPerms, 8#600).
--define(DefaultQuotaSize, 10 * 1024 * 1024 * 1024).
 
 %% ====================================================================
 %% Test API
@@ -89,7 +88,7 @@ sign_in(Proplist) ->
     Result :: {ok, user_doc()} | {error, any()}.
 %% ====================================================================
 create_user(Login, Name, Teams, Email, DnList) ->
-    Quota = #quota{size = ?DefaultQuotaSize},
+    Quota = #quota{},
     {ok, QuotaUUID} = dao_lib:apply(dao_users, save_quota, [Quota], 1),
     User = #user
     {
