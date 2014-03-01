@@ -250,34 +250,51 @@ handle_call(get_callbacks, _From, State) ->
 handle_call(get_state_num, _From, State) ->
   {reply, State#dispatcher_state.state_num, State};
 
--ifdef(TEST).
 %% test call
 handle_call({get_worker_node, {Request, Module}}, _From, State) ->
+  handle_test_call({get_worker_node, {Request, Module}}, _From, State);
+
+%% test call
+handle_call({get_worker_node, Module}, _From, State) ->
+  handle_test_call({get_worker_node, Module}, _From, State);
+
+%% test call
+handle_call({check_worker_node, Module}, _From, State) ->
+  handle_test_call({check_worker_node, Module}, _From, State);
+
+handle_call(_Request, _From, State) ->
+  {reply, wrong_request, State}.
+
+%% handle_test_call/3
+%% ====================================================================
+%% @doc Handles calls used during tests
+-spec handle_test_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result :: term().
+%% ====================================================================
+-ifdef(TEST).
+handle_test_call({get_worker_node, {Request, Module}}, _From, State) ->
   Ans = get_worker_node(Module, Request, State),
   case Ans of
     {Node, NewState} -> {reply, Node, NewState};
     Other -> {reply, Other, State}
   end;
 
-%% test call
-handle_call({get_worker_node, Module}, _From, State) ->
+handle_test_call({get_worker_node, Module}, _From, State) ->
   Ans = get_worker_node(Module, non, State),
   case Ans of
     {Node, NewState} -> {reply, Node, NewState};
     Other -> {reply, Other, State}
   end;
 
-%% test call
-handle_call({check_worker_node, Module}, _From, State) ->
+handle_test_call({check_worker_node, Module}, _From, State) ->
   Ans = check_worker_node(Module, non, State),
   case Ans of
     {Node, NewState} -> {reply, Node, NewState};
     Other -> {reply, Other, State}
-  end;
+  end.
+-else.
+handle_test_call(_Request, _From, State) ->
+  {reply, not_supported_in_normal_mode, State}.
 -endif.
-
-handle_call(_Request, _From, State) ->
-  {reply, wrong_request, State}.
 
 %% handle_cast/2
 %% ====================================================================

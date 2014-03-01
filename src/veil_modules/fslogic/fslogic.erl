@@ -82,11 +82,9 @@ handle(_ProtocolVersion, healthcheck) ->
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
--ifdef(TEST).
+%% For tests
 handle(ProtocolVersion, {delete_old_descriptors_test, Time}) ->
-  delete_old_descriptors(ProtocolVersion, Time),
-  ok;
--endif.
+  handle_test(ProtocolVersion, {delete_old_descriptors_test, Time});
 
 handle(_ProtocolVersion, {answer_test_message, FuseID, Message}) ->
   request_dispatcher:send_to_fuse(FuseID, #testchannelanswer{message = Message}, "fuse_messages"),
@@ -144,6 +142,21 @@ handle(_ProtocolVersion, Record) when is_record(Record, callback) ->
 %% Handle requests that have wrong structure.
 handle(_ProtocolVersion, _Msg) ->
   wrong_request.
+
+%% handle_test/3
+%% ====================================================================
+%% @doc Handles calls used during tests
+-spec handle_test(ProtocolVersion :: term(), Request :: term()) -> Result when
+  Result :: atom().
+%% ====================================================================
+-ifdef(TEST).
+handle_test(ProtocolVersion, {delete_old_descriptors_test, Time}) ->
+  delete_old_descriptors(ProtocolVersion, Time),
+  ok.
+-else.
+handle_test(_ProtocolVersion, _Request) ->
+  not_supported_in_normal_mode.
+-endif.
 
 %% cleanup/0
 %% ====================================================================
