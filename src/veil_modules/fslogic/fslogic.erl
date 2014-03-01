@@ -43,13 +43,12 @@
 %% ====================================================================
 %% Test API
 %% ====================================================================
-%% eunit
 -ifdef(TEST).
+%% eunit
 -export([handle_fuse_message/3, verify_file_name/1]).
--endif.
-
 %% ct
 -export([get_files_number/3, create_dirs/4]).
+-endif.
 
 %% ====================================================================
 %% API functions
@@ -83,9 +82,11 @@ handle(_ProtocolVersion, healthcheck) ->
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
+-ifdef(TEST).
 handle(ProtocolVersion, {delete_old_descriptors_test, Time}) ->
   delete_old_descriptors(ProtocolVersion, Time),
   ok;
+-endif.
 
 handle(_ProtocolVersion, {answer_test_message, FuseID, Message}) ->
   request_dispatcher:send_to_fuse(FuseID, #testchannelanswer{message = Message}, "fuse_messages"),

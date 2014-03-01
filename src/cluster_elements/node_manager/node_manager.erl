@@ -36,7 +36,9 @@
 %% ====================================================================
 %% TODO zmierzyć czy bardziej się opłaca przechowywać dane o callbackach
 %% jako stan (jak teraz) czy jako ets i ewentualnie przejść na ets
+-ifdef(TEST).
 -export([get_callback/2, addCallback/3, delete_callback/3]).
+-endif.
 
 %% ====================================================================
 %% gen_server callbacks
@@ -51,7 +53,7 @@
 %% ====================================================================
 %% @doc Starts the server
 -spec start_link(Type) -> Result when
-  Type :: test_worker | worker | ccm,
+  Type :: test_worker | worker | ccm | ccm_test,
   Result ::  {ok,Pid}
   | ignore
   | {error,Error},
@@ -190,7 +192,6 @@ handle_call({clear_cache, Cache}, _From, State) ->
   Ans = clear_cache(Cache, State#node_state.simple_caches),
   {reply, Ans, State};
 
-%% Test call
 handle_call(check, _From, State) ->
   {reply, ok, State};
 

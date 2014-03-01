@@ -155,6 +155,7 @@ handle_call(dispatcher_map_unregistered, _From, State) ->
               end,
   {reply, ok, State#host_state{dispatcher_request_map_ok = DMapState}};
 
+-ifdef(TEST).
 %% For tests
 handle_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM}, _From, State) ->
   Pid = self(),
@@ -171,12 +172,12 @@ handle_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, D
   erlang:send_after(200, Pid, {timer, register_sub_proc_caches}),
   {reply, ok, State#host_state{request_map = RM, sub_procs = SubProcList,
   dispatcher_request_map = DM, dispatcher_request_map_ok = false}};
+-endif.
 
 handle_call(Request, _From, State) when is_tuple(Request) -> %% Proxy call. Each cast can be achieved by instant proxy-call which ensures
                                                              %% that request was made, unlike cast because cast ignores state of node/gen_server
     {reply, gen_server:cast(State#host_state.plug_in, Request), State};
 
-%% Test call
 handle_call(check, _From, State) ->
   {reply, ok, State};
 

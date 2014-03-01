@@ -197,6 +197,10 @@ handle_call({delete_callback, FuseId, Node, Pid}, _From, State) ->
 handle_call(get_callbacks, _From, State) ->
   {reply, {get_callbacks(), State#cm_state.callbacks_num}, State};
 
+handle_call(check, _From, State) ->
+  {reply, ok, State};
+
+-ifdef(TEST).
 %% Test call
 handle_call({start_worker, Node, Module, WorkerArgs}, _From, State) ->
   {Ans, NewState} = start_worker(Node, Module, WorkerArgs, State),
@@ -207,12 +211,9 @@ handle_call({start_worker, Node, Module, WorkerArgs}, _From, State) ->
   {reply, Ans, NewState2};
 
 %% Test call
-handle_call(check, _From, State) ->
-  {reply, ok, State};
-
-%% Test call
 handle_call(check_state_loaded, _From, State) ->
   {reply, State#cm_state.state_loaded, State};
+-endif.
 
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.

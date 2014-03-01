@@ -244,7 +244,13 @@ handle_call({node_chosen, {Task, ProtocolVersion, Request}}, _From, State) ->
 handle_call({get_callback, Fuse}, _From, State) ->
   {reply, get_callback(Fuse), State};
 
+handle_call(get_callbacks, _From, State) ->
+  {reply, {get_callbacks(), State#dispatcher_state.callbacks_num}, State};
 
+handle_call(get_state_num, _From, State) ->
+  {reply, State#dispatcher_state.state_num, State};
+
+-ifdef(TEST).
 %% test call
 handle_call({get_worker_node, {Request, Module}}, _From, State) ->
   Ans = get_worker_node(Module, Request, State),
@@ -268,14 +274,7 @@ handle_call({check_worker_node, Module}, _From, State) ->
     {Node, NewState} -> {reply, Node, NewState};
     Other -> {reply, Other, State}
   end;
-
-%% test call
-handle_call(get_callbacks, _From, State) ->
-  {reply, {get_callbacks(), State#dispatcher_state.callbacks_num}, State};
-
-%% test call
-handle_call(get_state_num, _From, State) ->
-  {reply, State#dispatcher_state.state_num, State};
+-endif.
 
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
