@@ -43,8 +43,8 @@ A sample session of starting VeilCluster from scratch is as follows:
   	 [root@plgsl64 ~]# /opt/veil/setup 
 
 	*** Veil SETUP ***
-	~ Nodes configured on this machine will use its hostname: @172.16.67.219
-	(!) Make sure it is resolvable by other hosts in the network
+	~ Erlang nodes configured on this machine will use its hostname: @172.16.67.111
+	(!) Make sure it is resolvable by other hosts in the network (i. e. by adding adequate mapping to /etc/hosts)
 	==> What do you want to do?
 	 [1] Manage database nodes
 	 [2] Manage veil nodes
@@ -56,19 +56,18 @@ A sample session of starting VeilCluster from scratch is as follows:
 	 [3] Go back
 	> Your choice: 1
 	==> Following node will be installed:
-	 - db@172.16.67.219
+	 - db@172.16.67.111
 	==> Confirm:
 	 [1] Continue
 	 [2] Go back
 	> Your choice: 1
-	~ Installing db@172.16.67.219...
+	~ Installing db@172.16.67.111...
 	~ installation complete
 	~ Starting node...
-	[root@plgsl64 ~]# /opt/veil/setup 
 
 	*** Veil SETUP ***
-	~ Nodes configured on this machine will use its hostname: @172.16.67.219
-	(!) Make sure it is resolvable by other hosts in the network
+	~ Erlang nodes configured on this machine will use its hostname: @172.16.67.111
+	(!) Make sure it is resolvable by other hosts in the network (i. e. by adding adequate mapping to /etc/hosts)
 	==> What do you want to do?
 	 [1] Manage database nodes
 	 [2] Manage veil nodes
@@ -88,42 +87,50 @@ A sample session of starting VeilCluster from scratch is as follows:
 	> Your choice: 1
 	==> List ALL running database nodes, delimiting them with commas (no spaces) [eg. db1@host.net,db2@host2.net,...]
 	==> The cluster will use ONLY the nodes specified now.
-	> Running DB nodes: db@172.16.67.219
+	> Running DB nodes: db@172.16.67.111
 	==> Connection to following database nodes has been confirmed:
-	 - db@172.16.67.219
+	 - db@172.16.67.111
 	==> Storage setup
-	> Select path where veil can store his files (i.e. /veil/veil_files): /veil/veil_files
+	> Select path where veil can store its files (default: /mnt/vfs):
 	(!) IMPORTANT
-	(!) Configuring user storage
+	(!) Configuring direct storage (much faster than default proxy storage) for fuse client groups
 	(!) If you don't create any storage now, all the data will go throught proxy
 	 and it will work really slow!
-	==> Do you wish to create new storage?
+	==> Do you wish to create new storage dedicated for fuse client group?
 	 [1] Yes
 	 [2] No
 	> Your choice: 1
 	==> Type following attributes:
-	> Group name: plgveilfs
-	> Storage directory (i.e. /veil/dir1): /veil/dir1
-	==> Do you wish to create new storage?
+	> Fuse clients group name (default: grp1):
+	> DirectIO storage mount point (default: /mnt/grp1):
+	==> Do you wish to create another storage dedicated for fuse client group?
+	 [1] Yes
+	 [2] No
+	> Your choice: 1
+	==> Type following attributes:
+	> Fuse clients group name (default: grp2): my_grp2
+	> DirectIO storage mount point (default: /mnt/grp2): /mnt/my_grp2
+	==> Do you wish to create another storage dedicated for fuse client group?
 	 [1] Yes
 	 [2] No
 	> Your choice: 2
 	==> Is this all?
-	==> group_name: plgveilfs, root: /veil/dir1
+	==> group_name: grp1, root: /mnt/grp1
+	==> group_name: my_grp2, root: /mnt/my_grp2
 
 	 [1] Yes, continue instalation
 	 [2] Add another
 	 [3] Delete all and configure them again
 	> Your choice: 1
 	==> Following nodes will be installed:
-	 - ccm@172.16.67.219
-	 - worker@172.16.67.219
+	 - ccm@172.16.67.111
+	 - worker@172.16.67.111
 	==> Confirm:
 	 [1] Continue
 	 [2] Go back
 	> Your choice: 1
-	~ Installing ccm@172.16.67.219...
-	~ Installing worker@172.16.67.219...
+	~ Installing ccm@172.16.67.111...
+	~ Installing worker@172.16.67.111...
 	~ Starting node(s)...
 
 

@@ -4,6 +4,11 @@
 % Default bigcouch port
 -define(default_port,"5986").
 
+% Default storage paths
+-define(default_main_directio_storage,"/mnt/vfs").
+-define(default_group_name_prefix,"grp").
+-define(default_group_storage_prefix,"/mnt/"++?default_group_name_prefix).
+
 %Ports that needs to be free
 -define(ports_to_check,[53,443,5555,8443]).
 
@@ -70,8 +75,8 @@ main(Args) ->
 
 setup_start() ->
 	h1("Veil SETUP"),
-	info("Nodes configured on this machine will use its hostname: " ++ get(hostname)),
-	warn("Make sure it is resolvable by other hosts in the network"),
+	info("Erlang nodes configured on this machine will use its hostname: " ++ get(hostname)),
+	warn("Make sure it is resolvable by other hosts in the network (i. e. by adding adequate mapping to /etc/hosts)"),
 	Option = interaction_choose_option(what_to_do, "What do you want to do?", 
 		[
 			{manage_db, "Manage database nodes"},
@@ -163,10 +168,10 @@ setup_get_db_nodes() ->
 
 setup_create_storage() ->
 	h2("Storage setup"),
-	VeilRoot = interaction_get_string(veilfs_storage_root, "Select path where veil can store his files (i.e. /veil/veil_files): "),
+	VeilRoot = interaction_get_string(veilfs_storage_root, "Select path where veil can store its files", ?default_main_directio_storage),
 	VeilGroup = [{name, cluster_fuse_id},{root,VeilRoot}],
 	warn("IMPORTANT"),
-	warn("Configuring user storage"),
+	warn("Configuring direct storage (much faster than default proxy storage) for fuse client groups"),
 	warn("If you don't create any storage now, all the data will go throught proxy\n and it will work really slow!"),
 	UserDefinedGroups = get_fuse_groups_from_user([],1),
 	AllGroups = [VeilGroup | UserDefinedGroups],
@@ -183,8 +188,15 @@ get_fuse_groups_from_user(CurrentGroups,I) ->
 	ConfirmInteractionId = list_to_atom(atom_to_list(want_to_create_storage) ++ integer_to_list(I)),
 	GroupNameInteractionId = list_to_atom(atom_to_list(storage_group_name) ++ integer_to_list(I)),
 	GroupRootInteractionId = list_to_atom(atom_to_list(storage_group_directory) ++ integer_to_list(I)),
-
-	WantToCrate = interaction_choose_option(ConfirmInteractionId, "Do you wish to create new storage?",
+	DefaultGroupName = ?default_group_name_prefix ++ integer_to_list(I),
+	DefaultGroupPath = ?default_group_storage_prefix ++ integer_to_list(I),
+	CreateStorageQuestion = case I > 1 of
+														false ->
+															"Do you wish to create new storage dedicated for fuse client group?";
+														true ->
+															"Do you wish to create another storage dedicated for fuse client group?"
+													end,
+	WantToCrate = interaction_choose_option(ConfirmInteractionId, CreateStorageQuestion,
 	[
 		{yes, "Yes"},
 		{no, "No"}
@@ -192,8 +204,8 @@ get_fuse_groups_from_user(CurrentGroups,I) ->
 	case WantToCrate of
 		yes ->
 			h2("Type following attributes:"),
-			Name = interaction_get_string(GroupNameInteractionId, "Group name: "),
-			Root = interaction_get_string(GroupRootInteractionId, "Storage directory (i.e. /veil/dir1): "),
+			Name = interaction_get_string(GroupNameInteractionId, "Fuse clients group name",DefaultGroupName),
+			Root = interaction_get_string(GroupRootInteractionId, "DirectIO storage mount point",DefaultGroupPath),
 			NewGroup = [{name, Name},{root,Root}],
 			get_fuse_groups_from_user(lists:append(CurrentGroups,[NewGroup]),I+1);
 		no ->
@@ -765,6 +777,15 @@ try_reading_integer(Prompt, Min, Max) ->
 
 
 % Get a string from the console or retrieve it from batch file
+interaction_get_string(Id, Prompt,Default) ->
+	NewPrompt = Prompt ++ " (default: "++Default++"): ",
+	Result = interaction_get_string(Id, NewPrompt),
+	case Result of
+		"" ->
+			Default;
+		_ ->
+			Result
+	end.
 interaction_get_string(Id, Prompt) ->
 	case read_from_batch_file(Id) of
 		{ok, Answer} -> 
@@ -772,8 +793,18 @@ interaction_get_string(Id, Prompt) ->
 
 		_ ->
 			try 
-				{ok, [Result]} = io:fread("> " ++ Prompt, "~s"),
-				true = is_list(Result),
+				Line = io:get_line("> " ++ Prompt),
+				true = is_list(Line),
+
+				%deletes \n from end of the string
+				[$\n | ReversedLine] = lists:reverse(Line),
+				Result = lists:reverse(ReversedLine),
+
+				% assert no whitespace
+				0 = string:str(Result," "),
+				0 = string:str(Result,"\t"),
+				0 = string:str(Result,"\n"),
+
 				Result
 			catch _:_ ->
 				io:format("~nEh?~n"),
