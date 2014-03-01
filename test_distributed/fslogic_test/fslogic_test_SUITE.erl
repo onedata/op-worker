@@ -2439,24 +2439,9 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
-  [FSLogicNode | _] = Nodes,
-
-  rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/user1 team"], ?ProtocolVersion]),
-  rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/user2 team"], ?ProtocolVersion]),
-  rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion]),
-
-  %% Remove users
-  rpc:call(FSLogicNode, user_logic, remove_user, [{login, "user1"}]),
-  rpc:call(FSLogicNode, user_logic, remove_user, [{login, "user2"}]),
-
   StopLog = nodes_manager:stop_app_on_nodes(Nodes),
   StopAns = nodes_manager:stop_nodes(Nodes),
   nodes_manager:stop_deps_for_tester_node(),
-
-  %% Clear test dir
-  os:cmd("rm -rf " ++ ?TEST_ROOT ++ "/*"),
-  os:cmd("rm -rf " ++ ?TEST_ROOT2 ++ "/*"),
-  os:cmd("rm -rf " ++ ?TEST_ROOT3 ++ "/*"),
 
   ?assertEqual(false, lists:member(error, StopLog)),
   ?assertEqual(ok, StopAns).

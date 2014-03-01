@@ -13,7 +13,11 @@
                             ets:insert(suite_state, {ct_root, filename:join(CWD, "../..")}),
                             code:add_path(filename:join(CWD, "../..")),
                             code:add_path(CWD),
-                            shell_default:cd("../..")
+                            shell_default:cd("../.."),
+                            os:cmd("./clear_test_db.sh"),
+                            os:cmd("rm -rf /tmp/veilfs/*"),
+                            os:cmd("rm -rf /tmp/veilfs2/*"),
+                            os:cmd("rm -rf /tmp/veilfs3/*")
                         end).
 
 %% Returns absolute path to given file using virtual CWD which equals to current SUITE directory
