@@ -16,7 +16,6 @@
 -include("veil_modules/dao/dao.hrl").
 
 -define(SH, "DirectIO").
--define(TEST_ROOT, "/tmp/veilfs/"). %% Root of test filesystem
 -define(SH2, "ClusterProxy").
 
 %% This test checks if data from helpers is cached
@@ -130,7 +129,7 @@ check_perms_group_perms_file_test(SHInfo) ->
 
 %% Tests if wrong format of path is found correctly
 wrong_path_format_test() ->
-  SHInfo = #storage_helper_info{name = ?SH, init_args = [?TEST_ROOT]},
+  SHInfo = #storage_helper_info{name = ?SH, init_args = ?ARG_TEST_ROOT},
   ?assertEqual({error, wrong_path_format}, storage_files_manager:check_perms(?TEST_ROOT ++ "something/testuser/somefile", SHInfo)),
   ?assertEqual({error, too_short_path}, storage_files_manager:check_perms("something", SHInfo)).
 
