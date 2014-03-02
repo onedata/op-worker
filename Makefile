@@ -115,7 +115,7 @@ start_node_console:
 	./releases/test_cluster/$(node)/bin/veil_cluster_node console
 
 ### Basho-Bench build (used by CI)
-basho_bench: deps compile
+basho_bench: distclean deps compile
 	cp ${STRESS_TESTS_SRC_DIR}/**/*.erl ${BASHO_BENCH_DIR}/src
 	cp ${DIST_TESTS_SRC_DIR}/wss.erl ${BASHO_BENCH_DIR}/src
 	@mkdir -p ${BASHO_BENCH_DIR}/tests
