@@ -58,11 +58,14 @@ run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes, SocketState, Sock
       case {NewSocketState, NewSocket} of
           {ok, _} ->
                   try ping(Action, NewSocket, PongAnsBytes) of
-                      ok -> {ok, {Hosts, CertFile, PongAnsBytes, NewSocketState, NewSocket, NewLoopValue}}
+                      ok -> {ok, {Hosts, CertFile, PongAnsBytes, NewSocketState, NewSocket, NewLoopValue}};
+											Other-> %just in case, it should never happen
+												?DEBUG("Some unexpected error: ~p~n", [Other]),
+												{error,unexpected_error, {Hosts, CertFile, PongAnsBytes, closed, [], NewLoopValue}}
                   catch
-                      R1:R2 ->
+                      _R1:R2 ->
                         wss:close(NewSocket),
-                        {error, R1, R2, {Hosts, CertFile, PongAnsBytes, closed, [], NewLoopValue}}
+                        {error, R2, {Hosts, CertFile, PongAnsBytes, closed, [], NewLoopValue}}
                   end;
           {error, Error} -> {error, {connect, Error}, {Hosts, CertFile, PongAnsBytes, closed, [], NewLoopValue}};
           Other -> {error, {unknown_error, Other}, {Hosts, CertFile, PongAnsBytes, closed, [], NewLoopValue}}
