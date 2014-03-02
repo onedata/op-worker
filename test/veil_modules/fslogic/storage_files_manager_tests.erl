@@ -16,6 +16,7 @@
 -include("veil_modules/dao/dao.hrl").
 
 -define(SH, "DirectIO").
+-define(TEST_ROOT, "/tmp/veilfs/"). %% Root of test filesystem
 -define(SH2, "ClusterProxy").
 
 %% This test checks if data from helpers is cached
@@ -59,7 +60,8 @@ file_name_cache_test() ->
   ?assertEqual({ok, "0"}, Ans5).
 
 %% Tests if permissions in users dir are checked correctly
-check_perms_user_file_test(SHInfo) ->
+check_perms_user_file_test() ->
+  SHInfo = #storage_helper_info{name = ?SH, init_args = [?TEST_ROOT]},
   meck:new(fslogic),
 
   meck:expect(fslogic, get_user_root, fun() -> {ok, "testuser"} end),
@@ -75,7 +77,8 @@ check_perms_user_file_test(SHInfo) ->
   meck:unload(fslogic).
 
 %% Tests if read permissions in groups dir are checked correctly
-check_perms_read_group_file_test(SHInfo) ->
+check_perms_read_group_file_test() ->
+  SHInfo = #storage_helper_info{name = ?SH, init_args = [?TEST_ROOT]},
   meck:new(fslogic),
 
   meck:expect(fslogic, get_user_doc, fun() -> {ok, #veil_document{record = #user{login = "testuser"}}} end),
@@ -92,7 +95,8 @@ check_perms_read_group_file_test(SHInfo) ->
   meck:unload(fslogic).
 
 %% Tests if permissions to modify file's attributes in groups dir are checked correctly
-check_perms_group_perms_file_test(SHInfo) ->
+check_perms_group_perms_file_test() ->
+  SHInfo = #storage_helper_info{name = ?SH, init_args = [?TEST_ROOT]},
   meck:new(fslogic),
   meck:new(veilhelpers),
   meck:new(fslogic_utils),
@@ -129,12 +133,13 @@ check_perms_group_perms_file_test(SHInfo) ->
 
 %% Tests if wrong format of path is found correctly
 wrong_path_format_test() ->
-  SHInfo = #storage_helper_info{name = ?SH, init_args = ?ARG_TEST_ROOT},
+  SHInfo = #storage_helper_info{name = ?SH, init_args = [?TEST_ROOT]},
   ?assertEqual({error, wrong_path_format}, storage_files_manager:check_perms(?TEST_ROOT ++ "something/testuser/somefile", SHInfo)),
   ?assertEqual({error, too_short_path}, storage_files_manager:check_perms("something", SHInfo)).
 
 %% Tests if write permissions in groups dir are checked correctly
-check_perms_group_write_file_test(SHInfo) ->
+check_perms_group_write_file_test() ->
+  SHInfo = #storage_helper_info{name = ?SH, init_args = [?TEST_ROOT]},
   meck:new(fslogic),
   meck:new(veilhelpers),
   meck:new(fslogic_utils),
