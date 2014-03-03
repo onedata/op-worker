@@ -160,14 +160,9 @@ message HandshakeAck {
     required string fuse_id = 1;
 }
 
-message GetQuota {}
+message GetStatFS {}
 
-message QuotaInfo {
-    required int64 size = 1;
-}
-
-message GetFilesSize {}
-
-message FilesSizeInfo {
-    required int64 size = 1;
+message StatFSInfo {
+    required int64 quota_size = 1;
+    required int64 files_size = 2;
 }
