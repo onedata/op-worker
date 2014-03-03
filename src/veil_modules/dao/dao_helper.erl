@@ -207,11 +207,19 @@ delete_doc(DbName, DocID) ->
         {ok, Doc} ->
             NewDoc = Doc#doc{deleted = true},
             case insert_doc(DbName, NewDoc) of
-                {ok, _Rev} -> ok;
-                Ierror -> Ierror
+                {ok, _Rev} ->
+                  lager:info("Test: delete_doc end ~p", [{ok, _Rev}]),
+                  ok;
+                Ierror ->
+                  lager:info("Test: delete_doc end ~p", [Ierror]),
+                  Ierror
             end;
-        {error, {not_found, Type}} -> {error, Type};
-        Err -> Err
+        {error, {not_found, Type}} ->
+          lager:info("Test: delete_doc end ~p", [{error, Type}]),
+          {error, Type};
+        Err ->
+          lager:info("Test: delete_doc end ~p", [Err]),
+          Err
     end.
 
 

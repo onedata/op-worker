@@ -217,7 +217,8 @@ save_record(#veil_document{uuid = "", record = Rec} = Doc) when is_tuple(Rec) ->
     save_record(Doc#veil_document{uuid = dao_helper:gen_uuid()});
 save_record(#veil_document{uuid = Id, record = Rec} = Doc) when is_tuple(Rec), is_atom(Id) ->
     save_record(Doc#veil_document{uuid = atom_to_list(Id)});
-save_record(#veil_document{uuid = Id, rev_info = RevInfo, record = Rec, force_update = IsForced}) when is_tuple(Rec), is_list(Id)->
+save_record(#veil_document{uuid = Id, rev_info = RevInfo, record = Rec, force_update = IsForced} = AllDoc) when is_tuple(Rec), is_list(Id)->
+    lager:info("Test: save_record start ~p", [AllDoc]),
     Valid = is_valid_record(Rec),
     if
         Valid -> ok;
@@ -239,8 +240,12 @@ save_record(#veil_document{uuid = Id, rev_info = RevInfo, record = Rec, force_up
                 RevDef
         end,
     case dao_helper:insert_doc(get_db(), #doc{id = dao_helper:name(Id), revs = Revs, body = term_to_doc(Rec)}) of
-        {ok, _} -> {ok, Id};
-        {error, Err} -> {error, Err}
+        {ok, _} ->
+          lager:info("Test: save_record stop ~p", [{AllDoc, {ok, Id}}]),
+          {ok, Id};
+        {error, Err} ->
+          lager:info("Test: save_record stop ~p", [AllDoc]),
+          {error, Err}
     end;
 save_record(Rec) when is_tuple(Rec) ->
     save_record(#veil_document{record = Rec}).
@@ -282,11 +287,17 @@ get_record(Id) when is_list(Id) ->
     case dao_helper:open_doc(get_db(), Id) of
         {ok, #doc{body = Body, revs = RevInfo}} ->
             try {doc_to_term(Body), RevInfo} of
-                {Term, RInfo} -> {ok, #veil_document{uuid = Id, rev_info = RInfo, record = Term}}
+                {Term, RInfo} ->
+                  lager:info("Test: get_record end ~p", [#veil_document{uuid = Id, rev_info = RInfo, record = Term}]),
+                  {ok, #veil_document{uuid = Id, rev_info = RInfo, record = Term}}
             catch
-                _:Err -> {error, {invalid_document, Err}}
+                _:Err ->
+                  lager:info("Test: get_record end ~p", [{invalid_document, Err}]),
+                  {error, {invalid_document, Err}}
             end;
-        {error, Error} -> Error
+        {error, Error} ->
+          lager:info("Test: get_record end ~p", [{error, Error}]),
+          Error
     end.
 
 
@@ -315,6 +326,7 @@ remove_record(Id) when is_list(Id) ->
     {ok, QueryResult :: #view_result{}} | {error, term()}.
 %% ====================================================================
 list_records(#view_info{name = ViewName, design = DesignName, db_name = DbName}, QueryArgs) ->
+  lager:info("Test: list_records start ~p", [{#view_info{name = ViewName, design = DesignName, db_name = DbName}, QueryArgs}]),
     FormatKey =  %% Recursive lambda:
     fun(F, K) when is_list(K) -> [F(F, X) || X <- K];
       (_F, K) when is_binary(K) -> binary_to_list(K);
@@ -331,12 +343,14 @@ list_records(#view_info{name = ViewName, design = DesignName, db_name = DbName},
               FormattedRows =
                 [#view_row{id = binary_to_list(Id), key = FormatKey(FormatKey, Key), value = Value, doc = FormatDoc(Doc)}
                   || {row, {[ {id, Id} | [ {key, Key} | [ {value, Value} | Doc ] ] ]}} <- Rows],
+              lager:info("Test: list_records end ~p", [#view_result{total = Total, offset = Offset, rows = FormattedRows}]),
               {ok, #view_result{total = Total, offset = Offset, rows = FormattedRows}};
 
             {ok, Rows2} when is_list(Rows2)->
               FormattedRows2 =
                 [#view_row{id = non, key = FormatKey(FormatKey, Key), value = Value, doc = non}
                   || {row, {[ {key, Key} | [ {value, Value} ] ]}} <- Rows2],
+              lager:info("Test: list_records end ~p", [#view_result{total = length(Rows2), offset = 0, rows = FormattedRows2}]),
               {ok, #view_result{total = length(Rows2), offset = 0, rows = FormattedRows2}};
           {error, _} = E -> throw(E);
             Other ->

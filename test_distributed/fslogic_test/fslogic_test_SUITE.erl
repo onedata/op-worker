@@ -337,10 +337,10 @@ concurrent_file_creation_test(Config) ->
     timeout
   end,
 
-  ?assert(rpc:call(Node1, files_tester, file_exists, [TestFile])),
   CreateAns = [Ans1, Ans2],
   ?assert(lists:member(ok, CreateAns)),
   ?assert(lists:member({error, file_exists}, CreateAns)),
+  ?assert(rpc:call(Node1, files_tester, file_exists, [TestFile])),
 
   AnsDel = rpc:call(Node1, logical_files_manager, delete, [TestFile]),
   ?assertEqual(ok, AnsDel),
