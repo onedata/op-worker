@@ -159,3 +159,10 @@ message HandshakeResponse {
 message HandshakeAck {
     required string fuse_id = 1;
 }
+
+message GetStatFS {}
+
+message StatFSInfo {
+    required int64 quota_size = 1;
+    required int64 files_size = 2;
+}
