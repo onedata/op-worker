@@ -926,24 +926,18 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, test
   timer:apply_after(Interval, gen_server, cast, [?MODULE, {asynch, ProtocolVersion, {answer_test_message, FuseID, Record#testchannel.answer_message}}]),
   #atom{value = "ok"};
 
-handle_fuse_message(_ProtocolVersion, Record, _FuseID) when is_record(Record, getquota) ->
+handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, getstatfs) ->
   case get_user_doc() of
     {ok, UserDoc} ->
       case user_logic:get_quota(UserDoc) of
-        {ok, Quota} -> #quotainfo{size = Quota#quota.size};
-        _ -> #quotainfo{size = -1}
+        {ok, Quota} ->
+          case get_files_size(UserDoc#veil_document.uuid, ProtocolVersion) of
+            {ok, Size} -> #statfsinfo{quota_size = Quota, files_size = Size};
+            _ -> #statfsinfo{quota_size = -1}
+          end;
+        _ -> #statfsinfo{quota_size = -1}
       end;
-    _ -> #quotainfo{size = -1}
-  end;
-
-handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, getfilessize) ->
-  case get_user_doc() of
-    {ok, UserDoc} ->
-      case get_files_size(UserDoc#veil_document.uuid, ProtocolVersion) of
-        {ok, Size} -> #filessizeinfo{size = Size};
-        _ -> #filessizeinfo{size = -1}
-    end;
-    _ -> #filessizeinfo{size = -1}
+    _ -> #statfsinfo{quota_size = -1}
   end.
 
 %% save_file_descriptor/3
