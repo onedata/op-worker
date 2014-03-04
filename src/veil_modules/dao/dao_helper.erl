@@ -331,7 +331,9 @@ revision(RevInfo) when is_binary(RevInfo) ->
   lager:info("Revision Test: input: ~p", [RevInfo]),
     [Num, Rev] = string:tokens(binary_to_list(RevInfo), [$-]),
   lager:info("Revision Test: middle: ~p", [[Num, Rev]]),
-    Ans = {list_to_integer(Num), [binary:encode_unsigned(list_to_integer(Rev, 16))]},
+  Bin = binary:encode_unsigned(list_to_integer(Rev, 16)),
+  BinSize = size(Bin),
+  Ans = {list_to_integer(Num), [<<0:((16-BinSize)*8), Bin/binary>>]},
   lager:info("Revision Test: end: ~p", [Ans]),
   Ans;
 revision({Num, [Rev | _Old]}) ->
