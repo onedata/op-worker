@@ -262,9 +262,15 @@ exist_record(Id) when is_atom(Id) ->
     exist_record(atom_to_list(Id));
 exist_record(Id) when is_list(Id) ->
     case dao_helper:open_doc(get_db(), Id) of
-        {ok, _} -> {ok, true};
-        {error, {not_found, _}} -> {ok, false};
-        Other -> Other
+        {ok, _} ->
+          lager:info("Test: exist_record end ~p", [{ok, true}]),
+          {ok, true};
+        {error, {not_found, _}} ->
+          lager:info("Test: exist_record end ~p", [{ok, false}]),
+          {ok, false};
+        Other ->
+          lager:info("Test: exist_record end ~p", [Other]),
+          Other
     end.
 
 

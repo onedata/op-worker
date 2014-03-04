@@ -328,9 +328,15 @@ name(Name) when is_binary(Name) ->
 -spec revision(RevInfo :: term()) -> term().
 %% ====================================================================
 revision(RevInfo) when is_binary(RevInfo) ->
+  lager:info("Revision Test: input: ~p", [RevInfo]),
     [Num, Rev] = string:tokens(binary_to_list(RevInfo), [$-]),
-    {list_to_integer(Num), [binary:encode_unsigned(list_to_integer(Rev, 16))]};
+  lager:info("Revision Test: middle: ~p", [[Num, Rev]]),
+    Ans = {list_to_integer(Num), [binary:encode_unsigned(list_to_integer(Rev, 16))]},
+  lager:info("Revision Test: end: ~p", [Ans]),
+  Ans;
 revision({Num, [Rev | _Old]}) ->
+  lager:info("Revision Test: start2: ~p", [{Num, [Rev | _Old]}]),
+  lager:info("Revision Test: end2: ~p", [{Num, [Rev]}]),
     {Num, [Rev]}.
 
 
