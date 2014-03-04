@@ -270,9 +270,7 @@ get_files_size(UUID) ->
   case dao:list_records(?USER_FILES_SIZE_VIEW, QueryArgs) of
     {ok, #view_result{rows = [#view_row{value = Sum}]}} ->
       {ok, Sum};
-    {ok, #view_result{rows = []}} ->
-      lager:error("Size of files of ~p not found", [UUID]),
-      throw(files_size_not_found);
+    {ok, #view_result{rows = []}} -> throw(files_size_not_found);
     {ok, #view_result{rows = [#view_row{value = Sum} | Tail] = AllRows}} ->
       case length(lists:usort(AllRows)) of
         Count when Count > 1 -> lager:warning("To many rows in response during files size finding for ~p. Others: ~p", [UUID, Tail]);
