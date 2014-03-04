@@ -62,8 +62,10 @@
 %% ====================================================================
 init(_Args) ->
   Pid = self(),
-  {ok, Interval} = application:get_env(veil_cluster_node, fslogic_cleaning_period),
-  erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
+  {ok, CleaningInterval} = application:get_env(veil_cluster_node, fslogic_cleaning_period),
+  erlang:send_after(CleaningInterval * 1000, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
+  {ok, FilesSizeUpdateInterval} = application:get_env(veil_cluster_node, fslogic_user_files_size_update_period),
+  erlang:send_after(FilesSizeUpdateInterval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size, Pid}}}),
   [].
 
 %% handle/2
@@ -85,6 +87,12 @@ handle(_ProtocolVersion, get_version) ->
 
 handle(ProtocolVersion, {delete_old_descriptors_test, Time}) ->
   delete_old_descriptors(ProtocolVersion, Time),
+  ok;
+
+handle(ProtocolVersion, {update_user_files_size, Pid}) ->
+  get_files_size(uuid, ProtocolVersion),
+  {ok, Interval} = application:get_env(veil_cluster_node, fslogic_user_files_size_update_period),
+  erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size, Pid}}}),
   ok;
 
 handle(_ProtocolVersion, {answer_test_message, FuseID, Message}) ->
@@ -932,12 +940,12 @@ handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, get
       case user_logic:get_quota(UserDoc) of
         {ok, Quota} ->
           case get_files_size(UserDoc#veil_document.uuid, ProtocolVersion) of
-            {ok, Size} -> #statfsinfo{quota_size = Quota, files_size = Size};
-            _ -> #statfsinfo{quota_size = -1}
+            {ok, Size} -> #statfsinfo{quota_size = Quota#quota.size, files_size = Size};
+            _ -> #statfsinfo{quota_size = -1, files_size = -1}
           end;
-        _ -> #statfsinfo{quota_size = -1}
+        _ -> #statfsinfo{quota_size = -1, files_size = -1}
       end;
-    _ -> #statfsinfo{quota_size = -1}
+    _ -> #statfsinfo{quota_size = -1, files_size = -1}
   end.
 
 %% save_file_descriptor/3

@@ -96,6 +96,11 @@ veil_cluster_node_env:
       value: 600
 
   - parameter:
+      name: fslogic_user_files_size_update_period
+      description: How often (in seconds) fslogic should update view counting user's files size
+      value: 60 # 1 min
+
+  - parameter:
       name: node_monitoring_period
       description: How often should node manager wait between successive checks of node status
       value: 15
