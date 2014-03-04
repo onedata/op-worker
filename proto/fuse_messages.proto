@@ -163,6 +163,7 @@ message HandshakeAck {
 message GetStatFS {}
 
 message StatFSInfo {
-    required int64 quota_size = 1;
-    required int64 files_size = 2;
+    optional string answer = 1 [default = "ok"];
+    required int64 quota_size = 2;
+    required int64 files_size = 3;
 }
