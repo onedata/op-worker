@@ -89,7 +89,8 @@ fuse_session_cleanup_test(Config) ->
         Name = "user1 user1",
         Teams = [TeamName],
         Email = "user1@email.net",
-        {CreateUserAns, _} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+        {CreateUserAns, CreateUserAnsFullAns} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+        ct:print("Create: ~p~n", [{CreateUserAns, CreateUserAnsFullAns}]),
         ?assertEqual(ok, CreateUserAns)
     end,
     %% END Add user
@@ -97,9 +98,15 @@ fuse_session_cleanup_test(Config) ->
     AddUser("user1", Cert1),
 
     %% Open connections for the user as session #1
-    {ok, Socket11} = wss:connect(Host, 6666, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #1
-    {ok, Socket12} = wss:connect(Host, 7777, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #2
-    {ok, Socket13} = wss:connect(Host, 7777, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #2
+    {ConAns11, Socket11} = wss:connect(Host, 6666, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #1
+    ct:print("Conn: ~p~n", [{ConAns11, Socket11}]),
+    ?assertEqual(ok, ConAns11),
+    {ConAns12, Socket12} = wss:connect(Host, 7777, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #2
+    ct:print("Conn: ~p~n", [{ConAns12, Socket12}]),
+    ?assertEqual(ok, ConAns12),
+    {ConAns13, Socket13} = wss:connect(Host, 7777, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #2
+    ct:print("Conn: ~p~n", [{ConAns13, Socket13}]),
+    ?assertEqual(ok, ConAns13),
     FuseID1 = wss:handshakeInit(Socket11, "hostname1", []),
 
     ?assertEqual(ok, wss:handshakeAck(Socket11, FuseID1)),
@@ -107,8 +114,12 @@ fuse_session_cleanup_test(Config) ->
     ?assertEqual(ok, wss:handshakeAck(Socket13, FuseID1)),
 
     %% Open connections for the user as session #2
-    {ok, Socket21} = wss:connect(Host, 7777, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #2
-    {ok, Socket22} = wss:connect(Host, 8888, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #3
+    {ConAns21, Socket21} = wss:connect(Host, 7777, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #2
+    ct:print("Conn: ~p~n", [{ConAns21, Socket21}]),
+    ?assertEqual(ok, ConAns21),
+    {ConAns22, Socket22} = wss:connect(Host, 8888, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #3
+    ct:print("Conn: ~p~n", [{ConAns22, Socket22}]),
+    ?assertEqual(ok, ConAns22),
     FuseID2 = wss:handshakeInit(Socket21, "hostname2", []),
 
     ?assertEqual(ok, wss:handshakeAck(Socket21, FuseID2)),
@@ -232,6 +243,7 @@ main_test(Config) ->
   Ports = [5055, 6666, 7777, 8888],
   CheckNodes = fun(Port, S) ->
     {ConAns, Socket} = wss:connect('localhost', Port, [{certfile, PeerCert}]),
+    ct:print("Conn: ~p~n", [{ConAns, Socket}]),
     ?assertEqual(ok, ConAns),
 
     CheckModules = fun(M, Sum) ->
@@ -290,11 +302,14 @@ callbacks_test(Config) ->
   Name = "user1 user1",
   Teams = ["user1 team"],
   Email = "user1@email.net",
-  {CreateUserAns, _} = rpc:call(Worker1, user_logic, create_user, [Login, Name, Teams, Email, DnList], 2000),
+  {CreateUserAns, CreateUserAnsFullAns} = rpc:call(Worker1, user_logic, create_user, [Login, Name, Teams, Email, DnList], 2000),
+  ct:print("Create: ~p~n", [{CreateUserAns, CreateUserAnsFullAns}]),
   ?assertEqual(ok, CreateUserAns),
   %% END Add user
 
-  {ok, Socket0} = wss:connect('localhost', 6666, [{certfile, PeerCert}, {cacertfile, PeerCert}]),
+  {ConAns0, Socket0} = wss:connect('localhost', 6666, [{certfile, PeerCert}, {cacertfile, PeerCert}]),
+  ct:print("Conn: ~p~n", [{ConAns0, Socket0}]),
+  ?assertEqual(ok, ConAns0),
   FuseId1 = wss:handshakeInit(Socket0, "hostname", []), %% Get first fuseId
   FuseId2 = wss:handshakeInit(Socket0, "hostname", []), %% Get second fuseId
   wss:close(Socket0),
@@ -333,6 +348,7 @@ callbacks_test(Config) ->
   Ports = [5055, 6666, 7777, 8888],
   RegisterCallbacks = fun(Port, Sockets) ->
     {ConAns, Socket} = wss:connect('localhost', Port, [{certfile, PeerCert}]),
+    ct:print("Conn: ~p~n", [{ConAns, Socket}]),
     ?assertEqual(ok, ConAns),
 
     HandshakeRes = wss:handshakeAck(Socket, FuseId1), %% Set fuseId for this connection
@@ -346,6 +362,7 @@ callbacks_test(Config) ->
     case Port of
       5055 ->
         {ConAns2, Socket2} = wss:connect('localhost', Port, [{certfile, PeerCert}]),
+        ct:print("Conn: ~p~n", [{ConAns2, Socket2}]),
         ?assertEqual(ok, ConAns2),
 
         HandshakeRes = wss:handshakeAck(Socket2, FuseId2), %% Set fuseId for this connection
@@ -357,6 +374,7 @@ callbacks_test(Config) ->
         ?assertEqual(RegAnsBytes, SendAns2),
 
         {ConAns3, Socket3} = wss:connect('localhost', Port, [{certfile, PeerCert}]),
+        ct:print("Conn: ~p~n", [{ConAns3, Socket3}]),
         ?assertEqual(ok, ConAns3),
 
         HandshakeRes = wss:handshakeAck(Socket3, FuseId1), %% Set fuseId for this connection

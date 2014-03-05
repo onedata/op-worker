@@ -337,6 +337,7 @@ concurrent_file_creation_test(Config) ->
     timeout
   end,
 
+  ct:print("ans1,2: ~p~n", [Ans1, Ans2]),
   CreateAns = [Ans1, Ans2],
   ?assert(lists:member(ok, CreateAns)),
   ?assert(lists:member({error, file_exists}, CreateAns)),
