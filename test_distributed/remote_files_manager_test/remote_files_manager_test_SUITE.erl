@@ -25,8 +25,6 @@
 
 all() -> [storage_helpers_management_test, helper_requests_test, permissions_test].
 
--define(TEST_ROOT, ["/tmp/veilfs"]). %% Root of test filesystem
--define(TEST_ROOT2, ["/tmp/veilfs2"]).
 -define(ProtocolVersion, 1).
 
 %% ====================================================================
@@ -39,7 +37,7 @@ permissions_test(Config) ->
   NodesUp = ?config(nodes, Config),
 
   ST_Helper = "ClusterProxy",
-  Team1 = "veilfstestgroup",
+  Team1 = ?TEST_GROUP,
   TestFile = "permissions_test_file",
   TestFile2 = "groups/" ++ Team1 ++ "/permissions_test_file",
 
@@ -55,7 +53,7 @@ permissions_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   nodes_manager:wait_for_cluster_init(),
 
-  Fuse_groups = [#fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = ?TEST_ROOT}}],
+  Fuse_groups = [#fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = ?ARG_TEST_ROOT}}],
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, [ST_Helper, [], Fuse_groups]),
   ?assertEqual(ok, InsertStorageAns),
 
@@ -67,7 +65,7 @@ permissions_test(Config) ->
   ?assertEqual(ok, ConvertAns),
   DnList = [DN],
 
-  Login = "veilfstestuser",
+  Login = ?TEST_USER,
   Name = "user1 user1",
   Teams1 = [Team1],
   Email = "user1@email.net",
@@ -82,7 +80,7 @@ permissions_test(Config) ->
   ?assertEqual(ok, ConvertAns2),
   DnList2 = [DN2],
 
-  Login2 = "veilfstestuser2",
+  Login2 = ?TEST_USER2,
   Name2 = "user2 user2",
   Teams2 = [Team1],
   Email2 = "user2@email.net",
@@ -287,14 +285,7 @@ permissions_test(Config) ->
   ?assertEqual(ok, RemoveUserAns),
 
   RemoveUserAns2 = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN2}]),
-  ?assertEqual(ok, RemoveUserAns2),
-
-  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login),
-  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login2),
-  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Team1),
-
-  files_tester:delete_dir(?TEST_ROOT ++ "/users"),
-  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
+  ?assertEqual(ok, RemoveUserAns2).
 
 %% Checks if appropriate storage helpers are used for different users
 storage_helpers_management_test(Config) ->
@@ -323,9 +314,9 @@ storage_helpers_management_test(Config) ->
   ?assertEqual(ok, ConvertAns),
   DnList = [DN],
 
-  Login = "veilfstestuser",
+  Login = ?TEST_USER,
   Name = "user1 user1",
-  Team1 = "veilfstestgroup",
+  Team1 = ?TEST_GROUP,
   Teams = [Team1],
   Email = "user1@email.net",
   {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
@@ -336,15 +327,15 @@ storage_helpers_management_test(Config) ->
   FuseId2 = wss:handshakeInit(Socket, "hostname", [{testvar1, "testvalue1"}, {group_id, "group2"}]), %% Get second fuseId
   wss:close(Socket),
 
-  Fuse_groups = [#fuse_group_info{name = "group2", storage_helper = #storage_helper_info{name = ST_Helper, init_args = ?TEST_ROOT2}}],
-  {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, [ST_Helper, ?TEST_ROOT, Fuse_groups]),
+  Fuse_groups = [#fuse_group_info{name = "group2", storage_helper = #storage_helper_info{name = ST_Helper, init_args = ?ARG_TEST_ROOT2}}],
+  {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, [ST_Helper, ?ARG_TEST_ROOT, Fuse_groups]),
   ?assertEqual(ok, InsertStorageAns),
 
 
   {Status, _, Helper, Id, _Validity, AnswerOpt0} = create_file(Host, Cert, Port, TestFile, FuseId1),
   ?assertEqual("ok", Status),
   ?assertEqual(?VOK, AnswerOpt0),
-  ?assertEqual(?TEST_ROOT, Helper),
+  ?assertEqual(?ARG_TEST_ROOT, Helper),
 
   {CreationAckStatus, CreationAckAnswerOpt} = send_creation_ack(Host, Cert, Port, TestFile, FuseId1),
   ?assertEqual("ok", CreationAckStatus),
@@ -353,13 +344,13 @@ storage_helpers_management_test(Config) ->
   {Status2, _, Helper2, Id2, _Validity2, AnswerOpt2} = get_file_location(Host, Cert, Port, TestFile, FuseId1),
   ?assertEqual("ok", Status2),
   ?assertEqual(?VOK, AnswerOpt2),
-  ?assertEqual(?TEST_ROOT, Helper2),
+  ?assertEqual(?ARG_TEST_ROOT, Helper2),
   ?assertEqual(Id, Id2),
 
   {Status3, _, Helper3, _Id3, _Validity3, AnswerOpt3} = get_file_location(Host, Cert, Port, TestFile, FuseId2),
   ?assertEqual("ok", Status3),
   ?assertEqual(?VOK, AnswerOpt3),
-  ?assertEqual(?TEST_ROOT2, Helper3),
+  ?assertEqual(?ARG_TEST_ROOT2, Helper3),
 
   {Status4, Answer4} = delete_file(Host, Cert, Port, TestFile, FuseId2),
   ?assertEqual("ok", Status4),
@@ -372,17 +363,7 @@ storage_helpers_management_test(Config) ->
   ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
 
   RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
-  ?assertEqual(ok, RemoveUserAns),
-
-  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login),
-  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Team1),
-  files_tester:delete_dir(?TEST_ROOT2 ++ "/users/" ++ Login),
-  files_tester:delete_dir(?TEST_ROOT2 ++ "/groups/" ++ Team1),
-
-  files_tester:delete_dir(?TEST_ROOT ++ "/users"),
-  files_tester:delete_dir(?TEST_ROOT ++ "/groups"),
-  files_tester:delete_dir(?TEST_ROOT2 ++ "/users"),
-  files_tester:delete_dir(?TEST_ROOT2 ++ "/groups").
+  ?assertEqual(ok, RemoveUserAns).
 
 %% Checks if requests from helper "Cluster Proxy" are handled correctly
 helper_requests_test(Config) ->
@@ -405,7 +386,7 @@ helper_requests_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   nodes_manager:wait_for_cluster_init(),
 
-  Fuse_groups = [#fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = ?TEST_ROOT}}],
+  Fuse_groups = [#fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = ?ARG_TEST_ROOT}}],
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, [ST_Helper, [], Fuse_groups]),
   ?assertEqual(ok, InsertStorageAns),
 
@@ -417,9 +398,9 @@ helper_requests_test(Config) ->
   ?assertEqual(ok, ConvertAns),
   DnList = [DN],
 
-  Login = "veilfstestuser",
+  Login = ?TEST_USER,
   Name = "user1 user1",
-  Team1 = "veilfstestgroup",
+  Team1 = ?TEST_GROUP,
   Teams1 = [Team1],
   Email = "user1@email.net",
   {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams1, Email, DnList]),
@@ -563,15 +544,7 @@ helper_requests_test(Config) ->
   ?assertEqual(ok, RemoveUserAns),
 
   RemoveUserAns2 = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN2}]),
-  ?assertEqual(ok, RemoveUserAns2),
-
-  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login),
-  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login2),
-  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Team1),
-  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Team2),
-
-  files_tester:delete_dir(?TEST_ROOT ++ "/users"),
-  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
+  ?assertEqual(ok, RemoveUserAns2).
 
 %% ====================================================================
 %% SetUp and TearDown functions

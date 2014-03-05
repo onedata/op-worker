@@ -40,14 +40,13 @@
 %% ====================================================================
 %% Test API
 %% ====================================================================
-%% eunit
 -ifdef(TEST).
+%% eunit
 -export([cache_size/2]).
--endif.
-
 %% ct
 -export([getfilelocation/1]).
 -export([doUploadTest/4]).
+-endif.
 
 %% ====================================================================
 %% API functions
@@ -880,6 +879,7 @@ error_to_string(Error) ->
     _ -> "Unknown error"
   end.
 
+-ifdef(TEST).
 %% doUploadTest/4
 %% ====================================================================
 %% @doc Tests upload speed
@@ -931,6 +931,7 @@ generateData(Size, BufSize) -> [list_to_binary(generateRandomData(BufSize)) | ge
 %% ====================================================================
 generateRandomData(1) -> [random:uniform(255)];
 generateRandomData(Size) -> [random:uniform(255) | generateRandomData(Size-1)].
+-endif.
 
 %% get_ets_name/0
 %% ====================================================================
