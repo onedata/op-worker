@@ -996,15 +996,7 @@ user_file_size_test(Config) ->
   RemoveUserAns = rpc:call(Node, user_logic, remove_user, [{dn, DN1}]),
   ?assertEqual(ok, RemoveUserAns),
   RemoveUserAns2 = rpc:call(Node, user_logic, remove_user, [{dn, DN2}]),
-  ?assertEqual(ok, RemoveUserAns2),
-
-  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login1),
-  files_tester:delete_dir(?TEST_ROOT ++ "/users/" ++ Login2),
-  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams1),
-  files_tester:delete_dir(?TEST_ROOT ++ "/groups/" ++ Teams2),
-
-  files_tester:delete_dir(?TEST_ROOT ++ "/users"),
-  files_tester:delete_dir(?TEST_ROOT ++ "/groups").
+  ?assertEqual(ok, RemoveUserAns2).
 
 %% Checks permissions management functions
 %% The tests checks some files and then changes their permissions. Erlang functions are used to test if permissions were change properly.
