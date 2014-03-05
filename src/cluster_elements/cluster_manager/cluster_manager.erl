@@ -214,10 +214,6 @@ handle_call(check, _From, State) ->
 handle_call(check_state_loaded, _From, State) ->
   {reply, State#cm_state.state_loaded, State};
 
-handle_call(start_stress_test_logging, _From, State) ->
-  lager:info("Nodes: ~p", [State#cm_state.nodes]),
-  {reply, ok, State};
-
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
 
@@ -405,6 +401,16 @@ handle_cast({synch_cache_clearing, Cache, ReturnPid}, State) ->
   New_State = clear_cache(State, Cache),
   ReturnPid ! {cache_cleared, Cache},
   {noreply, New_State};
+
+handle_cast(start_load_logging, State) ->
+  lager:info("Start load logging on nodes: ~p", State#cm_state.nodes),
+  lists:map(fun(Node) -> gen_server:cast({?Node_Manager_Name, Node}, start_load_logging) end, State#cm_state.nodes),
+  {noreply, State};
+
+handle_cast(stop_load_logging, State) ->
+  lager:info("Stop load logging on nodes: ~p", State#cm_state.nodes),
+  lists:map(fun(Node) -> gen_server:cast({?Node_Manager_Name, Node}, stop_load_logging) end, State#cm_state.nodes),
+  {noreply, State};
 
 handle_cast(_Msg, State) ->
   {noreply, State}.

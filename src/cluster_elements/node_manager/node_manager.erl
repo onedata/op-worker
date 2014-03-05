@@ -18,6 +18,7 @@
 -behaviour(gen_server).
 -include("registered_names.hrl").
 -include("records.hrl").
+-include("supervision_macros.hrl").
 
 %% Dispatcher cowboy listener ID
 -define(DISPATCHER_LISTENER_REF, dispatcher_listener).
@@ -30,6 +31,7 @@
 %% ====================================================================
 -export([start_link/1, stop/0]).
 -export([check_vsn/0]).
+-export([start_load_logging_loop/0, load_logging_loop/0]).
 
 %% ====================================================================
 %% Test API
@@ -256,6 +258,23 @@ handle_cast({register_simple_cache, Cache, ReturnPid}, State) ->
   ReturnPid ! simple_cache_registered,
   {noreply, State#node_state{simple_caches = NewCaches}};
 
+handle_cast(start_load_logging, State) ->
+  lager:info("Start load logging on node: ~p", [node()]),
+  {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
+  case whereis(?Load_Logging_Proc) of
+    undefined -> supervisor:start_child(?Supervisor_Name, ?Sup_Child(?Load_Logging_Proc, ?MODULE, start_load_logging_loop, permanent, []));
+    Pid -> Pid ! {log, Interval}
+  end,
+  {noreply, State};
+
+handle_cast(stop_load_logging, State) ->
+  lager:info("Stop load logging on node: ~p", [node()]),
+  case whereis(?Load_Logging_Proc) of
+    undefined -> ok;
+    Pid -> Pid ! stop
+  end,
+  {noreply, State};
+
 handle_cast(_Msg, State) ->
   {noreply, State}.
 
@@ -428,6 +447,29 @@ check_vsn([{Application, _Description, Vsn} | Apps]) ->
   case Application of
     ?APP_Name -> Vsn;
     _Other -> check_vsn(Apps)
+  end.
+
+start_load_logging_loop() ->
+  lager:info("Start load logging loop."),
+  {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
+  Pid = spawn_link(?MODULE, load_logging_loop, []),
+  register(?Load_Logging_Proc, Pid),
+  Pid ! {log, Interval},
+  ok.
+
+load_logging_loop() ->
+  lager:info("Load logging loop."),
+  receive
+    {log, Interval} ->
+      lager:info("Current load: ~p", [gen_server:call({?Node_Manager_Name, node()}, {get_node_stats, short}, 500)]),
+      erlang:send_after(Interval * 1000, self(), {log, Interval}),
+      load_logging_loop();
+    stop ->
+      lager:info("Stop load logging loop."),
+      ok;
+    _ ->
+      lager:info("Load logging loop: unknown message."),
+      load_logging_loop()
   end.
 
 %% get_node_stats/2
