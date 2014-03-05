@@ -28,7 +28,7 @@
 -export([create_standard_share/2, create_share/3, get_share/2]).
 
 all() -> [groups_test, files_manager_tmp_files_test, files_manager_standard_files_test, storage_management_test, permissions_management_test, user_creation_test,
-  fuse_requests_test, groups_permissions_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test, concurrent_file_creation_test, get_file_links_test
+  fuse_requests_test, groups_permissions_test, users_separation_test, file_sharing_test, dir_mv_test, user_file_counting_test, dirs_creating_test, get_by_uuid_test, concurrent_file_creation_test, get_file_links_test, user_file_size_test
 ].
 
 -define(SH, "DirectIO").
@@ -1003,7 +1003,8 @@ user_file_size_test(Config) ->
   ?assertEqual(ok, AnsTruncate),
   {AnsGetFileAttr, _} = FM(getfileattr, [User1TestUpdateFile], DN1),
   ?assertEqual(ok, AnsGetFileAttr),
-  update_files_size(Node),
+  nodes_manager:wait_for_db_reaction(),
+  update_user_files_size_view(Node),
 
   {CountStatus3, Count3} = rpc:call(Node, fslogic, get_files_size, [UserID1, 1]),
   ?assertEqual(ok, CountStatus3),
@@ -2995,8 +2996,8 @@ clear_old_descriptors(Node) ->
   gen_server:call({?Dispatcher_Name, Node}, {fslogic, 1, {delete_old_descriptors_test, Time}}, 1000),
   nodes_manager:wait_for_db_reaction().
 
-update_files_size(Node) ->
-  gen_server:call({?Dispatcher_Name, Node}, {fslogic, 1, update_files_size_test}, 1000),
+update_user_files_size_view(Node) ->
+  gen_server:call({?Dispatcher_Name, Node}, {fslogic, 1, update_user_files_size_view_test}, 1000),
   nodes_manager:wait_for_db_reaction().
 
 create_standard_share(TestFile, DN) ->
