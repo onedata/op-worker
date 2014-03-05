@@ -208,17 +208,13 @@ delete_doc(DbName, DocID) ->
             NewDoc = Doc#doc{deleted = true},
             case insert_doc(DbName, NewDoc) of
                 {ok, _Rev} ->
-                  lager:info("Test: delete_doc end ~p", [{ok, _Rev}]),
                   ok;
                 Ierror ->
-                  lager:info("Test: delete_doc end ~p", [Ierror]),
                   Ierror
             end;
         {error, {not_found, Type}} ->
-          lager:info("Test: delete_doc end ~p", [{error, Type}]),
           {error, Type};
         Err ->
-          lager:info("Test: delete_doc end ~p", [Err]),
           Err
     end.
 
@@ -328,17 +324,11 @@ name(Name) when is_binary(Name) ->
 -spec revision(RevInfo :: term()) -> term().
 %% ====================================================================
 revision(RevInfo) when is_binary(RevInfo) ->
-  lager:info("Revision Test: input: ~p", [RevInfo]),
     [Num, Rev] = string:tokens(binary_to_list(RevInfo), [$-]),
-  lager:info("Revision Test: middle: ~p", [[Num, Rev]]),
-  Bin = binary:encode_unsigned(list_to_integer(Rev, 16)),
-  BinSize = size(Bin),
-  Ans = {list_to_integer(Num), [<<0:((16-BinSize)*8), Bin/binary>>]},
-  lager:info("Revision Test: end: ~p", [Ans]),
-  Ans;
+    Bin = binary:encode_unsigned(list_to_integer(Rev, 16)),
+    BinSize = size(Bin),
+    {list_to_integer(Num), [<<0:((16-BinSize)*8), Bin/binary>>]};
 revision({Num, [Rev | _Old]}) ->
-  lager:info("Revision Test: start2: ~p", [{Num, [Rev | _Old]}]),
-  lager:info("Revision Test: end2: ~p", [{Num, [Rev]}]),
     {Num, [Rev]}.
 
 

@@ -101,7 +101,6 @@ distributed_test(Config) ->
   Host = get_host(CCM),
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  ct:print("Cast1~n"),
   nodes_manager:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
@@ -109,7 +108,6 @@ distributed_test(Config) ->
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  ct:print("Cast2~n"),
   nodes_manager:wait_for_cluster_cast(),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
