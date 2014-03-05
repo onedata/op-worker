@@ -167,3 +167,23 @@ message StatFSInfo {
     required int64 quota_size = 2;
     required int64 files_size = 3;
 }
+
+message PushMessage{
+    required string message_type = 1;
+    optional bytes data = 2;
+}
+
+message EventFilterConfig {
+    required string field_name = 1;
+    required string desired_value = 2;
+}
+
+message EventAggregatorConfig {
+    required string field_name = 1;
+    required uint64 threshold = 2;
+    optional EventFilterConfig wrapped_filter = 3;
+}
+
+message EventMessage {
+    required string type = 1;
+}
