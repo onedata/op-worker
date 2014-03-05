@@ -948,13 +948,13 @@ user_file_size_test(Config) ->
 
   rpc:call(Node, fslogic, get_files_size, ["not_existing_id", 1]),
   nodes_manager:wait_for_db_reaction(),
-  {CountStatus0, Count0} = rpc:call(Node, fslogic, get_files_size, ["not_existing_id", 1]),
+  {CountStatus0, Count0} = rpc:call(Node, user_logic, get_files_size, ["not_existing_id", 1]),
   ?assertEqual(ok, CountStatus0),
   ?assertEqual(0, Count0),
 
   rpc:call(Node, fslogic, get_files_size, [UserID1, 1]),
   nodes_manager:wait_for_db_reaction(),
-  {CountStatus00, Count00} = rpc:call(Node, fslogic, get_files_size, [UserID1, 1]),
+  {CountStatus00, Count00} = rpc:call(Node, user_logic, get_files_size, [UserID1, 1]),
   ?assertEqual(ok, CountStatus00),
   ?assertEqual(0, Count00),
 
@@ -984,15 +984,15 @@ user_file_size_test(Config) ->
     ?assertEqual(ok, AnsGetFileAttr)
   end, User2FilesEnding),
 
-  rpc:call(Node, fslogic, get_files_size, [UserID1, 1]),
+  rpc:call(Node, user_logic, get_files_size, [UserID1, 1]),
   nodes_manager:wait_for_db_reaction(),
-  {CountStatus, Count} = rpc:call(Node, fslogic, get_files_size, [UserID1, 1]),
+  {CountStatus, Count} = rpc:call(Node, user_logic, get_files_size, [UserID1, 1]),
   ?assertEqual(ok, CountStatus),
   ?assertEqual(length(User1FilesEnding) * FileSize, Count),
 
-  rpc:call(Node, fslogic, get_files_size, [UserID2, 1]),
+  rpc:call(Node, user_logic, get_files_size, [UserID2, 1]),
   nodes_manager:wait_for_db_reaction(),
-  {CountStatus2, Count2} = rpc:call(Node, fslogic, get_files_size, [UserID2, 1]),
+  {CountStatus2, Count2} = rpc:call(Node, user_logic, get_files_size, [UserID2, 1]),
   ?assertEqual(ok, CountStatus2),
   ?assertEqual(length(User2FilesEnding) * FileSize, Count2),
 
@@ -1004,9 +1004,11 @@ user_file_size_test(Config) ->
   {AnsGetFileAttr, _} = FM(getfileattr, [User1TestUpdateFile], DN1),
   ?assertEqual(ok, AnsGetFileAttr),
   nodes_manager:wait_for_db_reaction(),
-  update_user_files_size_view(Node),
+  {ok, Interval} = rpc:call(Node, application, get_env, [?APP_Name, user_files_size_view_update_period]),
+  ?assertEqual(2, Interval),
+  timer:sleep(Interval * 1000),
 
-  {CountStatus3, Count3} = rpc:call(Node, fslogic, get_files_size, [UserID1, 1]),
+  {CountStatus3, Count3} = rpc:call(Node, user_logic, get_files_size, [UserID1, 1]),
   ?assertEqual(ok, CountStatus3),
   ?assertEqual(length(User1FilesEnding) * FileSize + FileSize, Count3),
 
@@ -2607,6 +2609,21 @@ get_file_links_test(Config) ->
 %% SetUp and TearDown functions
 %% ====================================================================
 
+init_per_testcase(user_file_size_test, Config) ->
+  ?INIT_DIST_TEST,
+  nodes_manager:start_deps_for_tester_node(),
+
+  NodesUp = nodes_manager:start_test_on_nodes(1),
+  [FSLogicNode | _] = NodesUp,
+  ok = rpc:call(FSLogicNode, application, set_env, [?APP_Name, user_files_size_view_update_period, 2]),
+
+  DB_Node = nodes_manager:get_db_node(),
+  Port = 6666,
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}]]),
+
+  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
+  lists:append([{port, Port}, {nodes, NodesUp}, {assertions, Assertions}], Config);
+
 init_per_testcase(_, Config) ->
   ?INIT_DIST_TEST,
   nodes_manager:start_deps_for_tester_node(),
@@ -2994,10 +3011,6 @@ clear_old_descriptors(Node) ->
   {Megaseconds,Seconds, _Microseconds} = os:timestamp(),
   Time = 1000000*Megaseconds + Seconds + 60*15 + 1,
   gen_server:call({?Dispatcher_Name, Node}, {fslogic, 1, {delete_old_descriptors_test, Time}}, 1000),
-  nodes_manager:wait_for_db_reaction().
-
-update_user_files_size_view(Node) ->
-  gen_server:call({?Dispatcher_Name, Node}, {fslogic, 1, update_user_files_size_view_test}, 1000),
   nodes_manager:wait_for_db_reaction().
 
 create_standard_share(TestFile, DN) ->

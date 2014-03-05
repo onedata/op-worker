@@ -293,7 +293,7 @@ get_files_size(UUID) ->
 %% ====================================================================
 update_files_size() ->
   dao:set_db(?FILES_DB_NAME),
-  QueryArgs = #view_query_args{keys = [], include_docs = false, group_level = 1, view_type = reduce},
+  QueryArgs = #view_query_args{keys = [undefined], include_docs = false, group_level = 1, view_type = reduce},
 
   case dao:list_records(?USER_FILES_SIZE_VIEW, QueryArgs) of
     {ok, _} -> ok;

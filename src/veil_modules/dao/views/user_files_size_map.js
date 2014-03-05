@@ -1,4 +1,4 @@
-// View that allows counting of users' files size
+// View that allows counting sum of sizes of user's files
 function(doc) {
     // count only regular files
     if(doc.record__ == "file_meta")

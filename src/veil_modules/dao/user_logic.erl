@@ -27,7 +27,7 @@
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
 -export([get_team_names/1]).
 -export([create_dirs_at_storage/3]).
--export([get_quota/1, update_quota/2]).
+-export([get_quota/1, update_quota/2, get_files_size/2]).
 
 -define(UserRootPerms, 8#600).
 
@@ -321,8 +321,28 @@ get_quota(User) ->
   Result :: {ok, quota()} | {error, any()}.
 %% ====================================================================
 update_quota(User, NewQuota) ->
-  NewQuotaDoc = #veil_document{uuid = User#veil_document.record#user.quota_doc, record = NewQuota},
-  dao_lib:apply(dao_users, save_quota, [NewQuotaDoc], 1).
+  case get_quota(User) of
+    {ok, QuotaDoc} ->
+      NewQuotaDoc = QuotaDoc#veil_document{record = NewQuota},
+      dao_lib:apply(dao_users, save_quota, [NewQuotaDoc], 1);
+    {error, Error} -> {error, {get_quota_error, Error}};
+    Other -> Other
+  end.
+
+%% get_files_size/2
+%% ====================================================================
+%% @doc Returns size of users' files
+%% @end
+-spec get_files_size(UUID :: uuid(), ProtocolVersion :: integer()) -> Result when
+  Result :: {ok, Sum} | {error, any()},
+  Sum :: non_neg_integer().
+%% ====================================================================
+get_files_size(UUID, ProtocolVersion) ->
+  Ans = dao_lib:apply(dao_users, get_files_size, [UUID], ProtocolVersion),
+  case Ans of
+    {error, files_size_not_found} -> {ok, 0};
+    _ -> Ans
+  end.
 
 %% rdn_sequence_to_dn_string/1
 %% ====================================================================

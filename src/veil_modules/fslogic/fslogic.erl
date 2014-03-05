@@ -49,7 +49,7 @@
 -endif.
 
 %% ct
--export([get_files_number/3, get_files_size/2, create_dirs/4]).
+-export([get_files_number/3, create_dirs/4]).
 
 %% ====================================================================
 %% API functions
@@ -93,10 +93,6 @@ handle(ProtocolVersion, {update_user_files_size_view, Pid}) ->
   update_user_files_size_view(ProtocolVersion),
   {ok, Interval} = application:get_env(veil_cluster_node, user_files_size_view_update_period),
   erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size_view, Pid}}}),
-  ok;
-
-handle(ProtocolVersion, update_user_files_size_view_test) ->
-  update_user_files_size_view(ProtocolVersion),
   ok;
 
 handle(_ProtocolVersion, {answer_test_message, FuseID, Message}) ->
@@ -943,7 +939,7 @@ handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, get
     {ok, UserDoc} ->
       case user_logic:get_quota(UserDoc) of
         {ok, Quota} ->
-          case get_files_size(UserDoc#veil_document.uuid, ProtocolVersion) of
+          case user_logic:get_files_size(UserDoc#veil_document.uuid, ProtocolVersion) of
             {ok, Size} -> #statfsinfo{answer = ?VOK, quota_size = Quota#quota.size, files_size = Size};
             _ -> #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
           end;
@@ -1329,21 +1325,6 @@ get_files_number(Type, GroupName, ProtocolVersion) ->
         {error, files_number_not_found} -> {ok, 0};
         _ -> Ans
     end.
-
-%% get_files_size/2
-%% ====================================================================
-%% @doc Returns size of users' files
-%% @end
--spec get_files_size(UUID :: uuid(), ProtocolVersion :: integer()) -> Result when
-  Result :: {ok, Sum} | {error, any()},
-  Sum :: non_neg_integer().
-%% ====================================================================
-get_files_size(UUID, ProtocolVersion) ->
-  Ans = dao_lib:apply(dao_users, get_files_size, [UUID], ProtocolVersion),
-  case Ans of
-    {error, files_size_not_found} -> {ok, 0};
-    _ -> Ans
-  end.
 
 %% get_new_file_id/5
 %% ====================================================================
