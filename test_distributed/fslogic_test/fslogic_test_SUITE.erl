@@ -319,7 +319,7 @@ concurrent_file_creation_test(Config) ->
   TestFun = fun(File) ->
     spawn(Node1, fun() ->
       CreateAns = logical_files_manager:create(File),
-      MainProc ! CreateAns
+      MainProc ! {create_ans, CreateAns}
     end)
   end,
 
@@ -327,12 +327,12 @@ concurrent_file_creation_test(Config) ->
   TestFun(TestFile),
 
   Ans1 = receive
-    Msg -> Msg
+    {create_ans, Msg} -> Msg
   after 2000 ->
     timeout
   end,
   Ans2 = receive
-    Msg2 -> Msg2
+    {create_ans, Msg2} -> Msg2
   after 2000 ->
     timeout
   end,
