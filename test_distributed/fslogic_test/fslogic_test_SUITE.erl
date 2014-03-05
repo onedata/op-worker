@@ -811,8 +811,30 @@ user_file_counting_test(Config) ->
   ?assertEqual(ok, CountStatus2),
   ?assertEqual(length(User2FilesEnding), Count2),
 
+  lists:foreach(fun(FileEnding) ->
+    FileName = FileBeg ++ FileEnding,
+    {Status, Answer} = delete_file(Socket, FileName),
+    ?assertEqual("ok", Status),
+    ?assertEqual(list_to_atom(?VOK), Answer)
+  end, User1FilesEnding),
+
+  lists:foreach(fun(FileEnding) ->
+    FileName = FileBeg ++ FileEnding,
+    {Status, Answer} = delete_file(Socket2, FileName),
+    ?assertEqual("ok", Status),
+    ?assertEqual(list_to_atom(?VOK), Answer)
+  end, User2FilesEnding),
+
 	wss:close(Socket),
-	wss:close(Socket2).
+	wss:close(Socket2),
+
+  RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
+  ?assertEqual(ok, RemoveStorageAns),
+
+  RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
+  ?assertEqual(ok, RemoveUserAns),
+  RemoveUserAns2 = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN2}]),
+  ?assertEqual(ok, RemoveUserAns2).
 
 %% Checks user files size view.
 %% The test creates some files for two users, and then checks if the view counts their size properly.
@@ -899,26 +921,20 @@ user_file_size_test(Config) ->
 
   lists:foreach(fun(FileEnding) ->
     FileName = FileBeg ++ FileEnding,
-
     AnsCreate = FM(create, [FileName], DN1),
     ?assertEqual(ok, AnsCreate),
-
     AnsTruncate = FM(truncate, [FileName, FileSize], DN1),
     ?assertEqual(ok, AnsTruncate),
-
     {AnsGetFileAttr, _} = FM(getfileattr, [FileName], DN1),
     ?assertEqual(ok, AnsGetFileAttr)
   end, User1FilesEnding),
 
   lists:foreach(fun(FileEnding) ->
     FileName = FileBeg ++ FileEnding,
-
     AnsCreate = FM(create, [FileName], DN2),
     ?assertEqual(ok, AnsCreate),
-
     AnsTruncate = FM(truncate, [FileName, FileSize], DN2),
     ?assertEqual(ok, AnsTruncate),
-
     {AnsGetFileAttr, _} = FM(getfileattr, [FileName], DN2),
     ?assertEqual(ok, AnsGetFileAttr)
   end, User2FilesEnding),
@@ -950,31 +966,8 @@ user_file_size_test(Config) ->
   ?assertEqual(ok, CountStatus3),
   ?assertEqual(length(User1FilesEnding) * FileSize + FileSize, Count3),
 
-  AnsDelete = FM(delete, [User1TestUpdateFile], DN1),
-  ?assertEqual(ok, AnsDelete),
-
-  lists:foreach(fun(FileEnding) ->
-    FileName = FileBeg ++ FileEnding,
-    AnsDelete = FM(delete, [FileName], DN1),
-    ?assertEqual(ok, AnsDelete)
-  end, User1FilesEnding),
-
-  lists:foreach(fun(FileEnding) ->
-    FileName = FileBeg ++ FileEnding,
-    AnsDelete = FM(delete, [FileName], DN2),
-    ?assertEqual(ok, AnsDelete)
-  end, User2FilesEnding),
-
   wss:close(Socket1),
-  wss:close(Socket2),
-
-  RemoveStorageAns = rpc:call(Node, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
-  ?assertEqual(ok, RemoveStorageAns),
-
-  RemoveUserAns = rpc:call(Node, user_logic, remove_user, [{dn, DN1}]),
-  ?assertEqual(ok, RemoveUserAns),
-  RemoveUserAns2 = rpc:call(Node, user_logic, remove_user, [{dn, DN2}]),
-  ?assertEqual(ok, RemoveUserAns2).
+  wss:close(Socket2).
 
 %% Checks permissions management functions
 %% The tests checks some files and then changes their permissions. Erlang functions are used to test if permissions were change properly.
