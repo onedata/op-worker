@@ -1005,7 +1005,6 @@ user_file_size_test(Config) ->
   ?assertEqual(ok, AnsGetFileAttr),
   nodes_manager:wait_for_db_reaction(),
   {ok, Interval} = rpc:call(Node, application, get_env, [?APP_Name, user_files_size_view_update_period]),
-  ?assertEqual(2, Interval),
   timer:sleep(Interval * 1000),
 
   {CountStatus3, Count3} = rpc:call(Node, user_logic, get_files_size, [UserID1, 1]),
@@ -2615,11 +2614,10 @@ init_per_testcase(user_file_size_test, Config) ->
 
   NodesUp = nodes_manager:start_test_on_nodes(1),
   [FSLogicNode | _] = NodesUp,
-  ok = rpc:call(FSLogicNode, application, set_env, [?APP_Name, user_files_size_view_update_period, 2]),
 
   DB_Node = nodes_manager:get_db_node(),
   Port = 6666,
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}]]),
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {user_files_size_view_update_period, 2}]]),
 
   Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
   lists:append([{port, Port}, {nodes, NodesUp}, {assertions, Assertions}], Config);
