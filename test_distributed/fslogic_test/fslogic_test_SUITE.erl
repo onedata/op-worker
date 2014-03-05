@@ -811,30 +811,8 @@ user_file_counting_test(Config) ->
   ?assertEqual(ok, CountStatus2),
   ?assertEqual(length(User2FilesEnding), Count2),
 
-  lists:foreach(fun(FileEnding) ->
-    FileName = FileBeg ++ FileEnding,
-    {Status, Answer} = delete_file(Socket, FileName),
-    ?assertEqual("ok", Status),
-    ?assertEqual(list_to_atom(?VOK), Answer)
-  end, User1FilesEnding),
-
-  lists:foreach(fun(FileEnding) ->
-    FileName = FileBeg ++ FileEnding,
-    {Status, Answer} = delete_file(Socket2, FileName),
-    ?assertEqual("ok", Status),
-    ?assertEqual(list_to_atom(?VOK), Answer)
-  end, User2FilesEnding),
-
 	wss:close(Socket),
-	wss:close(Socket2),
-
-  RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
-  ?assertEqual(ok, RemoveStorageAns),
-
-  RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
-  ?assertEqual(ok, RemoveUserAns),
-  RemoveUserAns2 = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN2}]),
-  ?assertEqual(ok, RemoveUserAns2).
+	wss:close(Socket2).
 
 %% Checks user files size view.
 %% The test creates some files for two users, and then checks if the view counts their size properly.
