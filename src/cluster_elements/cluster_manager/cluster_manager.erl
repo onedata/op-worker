@@ -214,6 +214,10 @@ handle_call(check, _From, State) ->
 handle_call(check_state_loaded, _From, State) ->
   {reply, State#cm_state.state_loaded, State};
 
+handle_call(start_stress_test_logging, _From, State) ->
+  lager:info("Nodes: ~p", [State#cm_state.nodes]),
+  {reply, ok, State};
+
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
 
