@@ -61,8 +61,10 @@
 %% ====================================================================
 init(_Args) ->
   Pid = self(),
-  {ok, Interval} = application:get_env(veil_cluster_node, fslogic_cleaning_period),
-  erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
+  {ok, CleaningInterval} = application:get_env(veil_cluster_node, fslogic_cleaning_period),
+  erlang:send_after(CleaningInterval * 1000, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
+  {ok, FilesSizeUpdateInterval} = application:get_env(veil_cluster_node, user_files_size_view_update_period),
+  erlang:send_after(FilesSizeUpdateInterval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size_view, Pid}}}),
   [].
 
 %% handle/2
@@ -85,6 +87,12 @@ handle(_ProtocolVersion, get_version) ->
 %% For tests
 handle(ProtocolVersion, {delete_old_descriptors_test, Time}) ->
   handle_test(ProtocolVersion, {delete_old_descriptors_test, Time});
+
+handle(ProtocolVersion, {update_user_files_size_view, Pid}) ->
+  update_user_files_size_view(ProtocolVersion),
+  {ok, Interval} = application:get_env(veil_cluster_node, user_files_size_view_update_period),
+  erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size_view, Pid}}}),
+  ok;
 
 handle(_ProtocolVersion, {answer_test_message, FuseID, Message}) ->
   request_dispatcher:send_to_fuse(FuseID, #testchannelanswer{message = Message}, "fuse_messages"),
@@ -938,7 +946,21 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getl
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, testchannel) ->
   Interval = Record#testchannel.answer_delay_in_ms,
   timer:apply_after(Interval, gen_server, cast, [?MODULE, {asynch, ProtocolVersion, {answer_test_message, FuseID, Record#testchannel.answer_message}}]),
-  #atom{value = "ok"}.
+  #atom{value = "ok"};
+
+handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, getstatfs) ->
+  case get_user_doc() of
+    {ok, UserDoc} ->
+      case user_logic:get_quota(UserDoc) of
+        {ok, Quota} ->
+          case user_logic:get_files_size(UserDoc#veil_document.uuid, ProtocolVersion) of
+            {ok, Size} -> #statfsinfo{answer = ?VOK, quota_size = Quota#quota.size, files_size = Size};
+            _ -> #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
+          end;
+        _ -> #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
+      end;
+    _ -> #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
+  end.
 
 %% save_file_descriptor/3
 %% ====================================================================
@@ -1059,7 +1081,6 @@ get_file_helper(ProtocolVersion, File, FuseID, Fun) ->
 -spec delete_old_descriptors(ProtocolVersion :: term(), Time :: integer()) -> Result when
   Result :: term().
 %% ====================================================================
-
 delete_old_descriptors(ProtocolVersion, Time) ->
   Status = dao_lib:apply(dao_vfs, remove_descriptor, [{by_expired_before, Time}], ProtocolVersion),
   case Status of
@@ -1068,6 +1089,22 @@ delete_old_descriptors(ProtocolVersion, Time) ->
       ok;
     Other ->
       lager:error([{mod, ?MODULE}], "Error during clearing old descriptors: ~p", [Other]),
+      Other
+  end.
+
+%% update_user_files_size_view
+%% ====================================================================
+%% @doc Updates user files size view in db
+%% @end
+-spec update_user_files_size_view(ProtocolVersion :: term()) -> term().
+%% ====================================================================
+update_user_files_size_view(ProtocolVersion) ->
+  case dao_lib:apply(dao_users, update_files_size, [], ProtocolVersion) of
+    ok ->
+      lager:info([{mod, ?MODULE}], "User files size view updated"),
+      ok;
+    Other ->
+      lager:error([{mod, ?MODULE}], "Error during updating user files size view: ~p", [Other]),
       Other
   end.
 

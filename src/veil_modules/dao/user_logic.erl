@@ -27,6 +27,7 @@
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
 -export([get_team_names/1]).
 -export([create_dirs_at_storage/3]).
+-export([get_quota/1, update_quota/2, get_files_size/2]).
 
 -define(UserRootPerms, 8#600).
 
@@ -87,6 +88,8 @@ sign_in(Proplist) ->
     Result :: {ok, user_doc()} | {error, any()}.
 %% ====================================================================
 create_user(Login, Name, Teams, Email, DnList) ->
+    Quota = #quota{},
+    {ok, QuotaUUID} = dao_lib:apply(dao_users, save_quota, [Quota], 1),
     User = #user
     {
         login = Login,
@@ -102,7 +105,8 @@ create_user(Login, Name, Teams, Email, DnList) ->
         dn_list = case DnList of
                       List when is_list(List) -> List;
                       _ -> []
-                  end
+                  end,
+        quota_doc = QuotaUUID
     },
     {DaoAns, UUID} = dao_lib:apply(dao_users, save_user, [User], 1),
     case DaoAns of
@@ -169,7 +173,8 @@ remove_user(Key) ->
     case GetUserFirstAns of
         ok ->
             UserRec2 = UserRec#veil_document.record,
-            dao_lib:apply(dao_vfs, remove_file, [UserRec2#user.login], 1);
+            dao_lib:apply(dao_vfs, remove_file, [UserRec2#user.login], 1),
+            dao_lib:apply(dao_users, remove_quota, [UserRec2#user.quota_doc], 1);
         _ -> error
     end,
     dao_lib:apply(dao_users, remove_user, [Key], 1).
@@ -295,6 +300,54 @@ update_dn_list(#veil_document{record = UserInfo} = UserDoc, NewDnList) ->
         {error, Reason} -> {error, Reason}
     end.
 
+%% get_quota/1
+%% ====================================================================
+%% @doc
+%% Convinience function to get #quota from #veil_document encapsulating #user record.
+%% @end
+-spec get_quota(User) -> Result when
+  User :: user_doc(),
+  Result :: {ok, quota_info()} | {error, any()}.
+%% ====================================================================
+get_quota(User) ->
+  case dao_lib:apply(dao_users, get_quota, [User#veil_document.record#user.quota_doc], 1) of
+    {ok, QuotaDoc} -> {ok, QuotaDoc#veil_document.record};
+    Other -> Other
+  end.
+
+%% update_quota/2
+%% ====================================================================
+%% @doc
+%% Update #veil_document encapsulating #quota record with new record and save it to DB.
+%% @end
+-spec update_quota(User, NewQuota) -> Result when
+  User :: user_doc(),
+  NewQuota :: quota_info(),
+  Result :: {ok, quota()} | {error, any()}.
+%% ====================================================================
+update_quota(User, NewQuota) ->
+  case get_quota(User) of
+    {ok, QuotaDoc} ->
+      NewQuotaDoc = QuotaDoc#veil_document{record = NewQuota},
+      dao_lib:apply(dao_users, save_quota, [NewQuotaDoc], 1);
+    {error, Error} -> {error, {get_quota_error, Error}};
+    Other -> Other
+  end.
+
+%% get_files_size/2
+%% ====================================================================
+%% @doc Returns size of users' files
+%% @end
+-spec get_files_size(UUID :: uuid(), ProtocolVersion :: integer()) -> Result when
+  Result :: {ok, Sum} | {error, any()},
+  Sum :: non_neg_integer().
+%% ====================================================================
+get_files_size(UUID, ProtocolVersion) ->
+  Ans = dao_lib:apply(dao_users, get_files_size, [UUID], ProtocolVersion),
+  case Ans of
+    {error, files_size_not_found} -> {ok, 0};
+    _ -> Ans
+  end.
 
 %% rdn_sequence_to_dn_string/1
 %% ====================================================================

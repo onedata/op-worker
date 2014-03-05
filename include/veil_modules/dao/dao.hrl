@@ -45,6 +45,7 @@
         share_desc          -> ?record_info_gen(share_desc);
         fuse_session        -> ?record_info_gen(fuse_session);
         connection_info     -> ?record_info_gen(connection_info);
+        quota               -> ?record_info_gen(quota);
         %next_record        -> ?record_info_gen(next_record);
         _ -> {error, unsupported_record}
     end).
@@ -95,6 +96,7 @@
 -define(SHARE_BY_FILE_DESIGN_NAME, "share_by_file").
 -define(SHARE_BY_USER_DESIGN_NAME, "share_by_user").
 -define(FILES_NUMBER_DESIGN_NAME, "files_number").
+-define(FILES_SIZE_DESIGN_NAME, "files_size").
 -define(FUSE_SESSIONS_DESIGN_NAME, "fuse_sessions").
 
 %% Views
@@ -118,6 +120,7 @@
 -define(SHARE_BY_USER_VIEW, #view_info{name = "share_by_user", design = ?SHARE_BY_USER_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
 
 -define(USER_FILES_NUMBER_VIEW, #view_info{name = "user_files_number", design = ?FILES_NUMBER_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
+-define(USER_FILES_SIZE_VIEW, #view_info{name = "user_files_size", design = ?FILES_SIZE_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
 -define(GROUP_FILES_NUMBER_VIEW, #view_info{name = "group_files_number", design = ?FILES_NUMBER_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
 
 %% FUSE Sessions
@@ -138,7 +141,7 @@
 -define(VIEW_LIST, [?FILE_TREE_VIEW, ?WAITING_FILES_TREE_VIEW, ?FILE_SUBDIRS_VIEW, ?FD_BY_FILE_VIEW, ?FD_BY_EXPIRED_BEFORE_VIEW, ?ALL_STORAGE_VIEW,
                     ?FILES_BY_UID_AND_FILENAME, ?FILE_META_BY_TIMES, ?FILES_BY_META_DOC,
                     ?USER_BY_EMAIL_VIEW, ?USER_BY_LOGIN_VIEW, ?USER_BY_DN_VIEW, ?USER_BY_UID_VIEW, ?STORAGE_BY_ID_VIEW,
-                    ?SHARE_BY_FILE_VIEW, ?SHARE_BY_USER_VIEW, ?USER_FILES_NUMBER_VIEW, ?GROUP_FILES_NUMBER_VIEW,
+                    ?SHARE_BY_FILE_VIEW, ?SHARE_BY_USER_VIEW, ?USER_FILES_NUMBER_VIEW, ?USER_FILES_SIZE_VIEW, ?GROUP_FILES_NUMBER_VIEW,
                     ?FUSE_CONNECTIONS_VIEW, ?EXPIRED_FUSE_SESSIONS_VIEW]).
 %% Default database name
 -define(DEFAULT_DB, lists:nth(1, ?DB_LIST)).
