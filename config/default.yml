@@ -96,7 +96,7 @@ veil_cluster_node_env:
       value: 600
 
   - parameter:
-      name: fslogic_user_files_size_update_period
+      name: fslogic_files_size_update_period
       description: How often (in seconds) fslogic should update view counting user's files size
       value: 60 # 1 min
 

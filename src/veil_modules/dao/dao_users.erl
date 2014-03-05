@@ -17,7 +17,8 @@
 %% ===================================================================
 %% API functions
 %% ===================================================================
--export([save_user/1, remove_user/1, exist_user/1, get_user/1, list_users/2, get_files_number/2, get_files_size/1, save_quota/1, remove_quota/1, get_quota/1]).
+-export([save_user/1, remove_user/1, exist_user/1, get_user/1, list_users/2,
+  get_files_number/2, get_files_size/1, update_files_size/0, save_quota/1, remove_quota/1, get_quota/1]).
 
 
 %% save_user/1
@@ -259,7 +260,7 @@ get_files_number(Type, UUID) ->
 
 %% get_files_size/1
 %% ====================================================================
-%% @doc Returns size of users' files
+%% @doc Returns size of user's files
 %% @end
 -spec get_files_size(UUID :: uuid()) -> {ok, non_neg_integer()} | {error, any()} | no_return().
 %% ====================================================================
@@ -270,13 +271,32 @@ get_files_size(UUID) ->
   case dao:list_records(?USER_FILES_SIZE_VIEW, QueryArgs) of
     {ok, #view_result{rows = [#view_row{value = Sum}]}} ->
       {ok, Sum};
-    {ok, #view_result{rows = []}} -> throw(files_size_not_found);
+    {ok, #view_result{rows = []}} ->
+      lager:error("Size of files of ~p not found", [UUID]),
+      throw(files_size_not_found);
     {ok, #view_result{rows = [#view_row{value = Sum} | Tail] = AllRows}} ->
       case length(lists:usort(AllRows)) of
         Count when Count > 1 -> lager:warning("To many rows in response during files size finding for ~p. Others: ~p", [UUID, Tail]);
         _ -> ok
       end,
       {ok, Sum};
+    Other ->
+      lager:error("Invalid view response: ~p", [Other]),
+      throw(invalid_data)
+  end.
+
+%% update_files_size/1
+%% ====================================================================
+%% @doc Updates counting users' files sizes view in db
+%% @end
+-spec update_files_size() -> ok | {error, any()}.
+%% ====================================================================
+update_files_size() ->
+  dao:set_db(?FILES_DB_NAME),
+  QueryArgs = #view_query_args{keys = [], include_docs = false, group_level = 1, view_type = reduce},
+
+  case dao:list_records(?USER_FILES_SIZE_VIEW, QueryArgs) of
+    {ok, _} -> ok;
     Other ->
       lager:error("Invalid view response: ~p", [Other]),
       throw(invalid_data)

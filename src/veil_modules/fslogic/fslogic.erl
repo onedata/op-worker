@@ -64,8 +64,8 @@ init(_Args) ->
   Pid = self(),
   {ok, CleaningInterval} = application:get_env(veil_cluster_node, fslogic_cleaning_period),
   erlang:send_after(CleaningInterval * 1000, Pid, {timer, {asynch, 1, {delete_old_descriptors, Pid}}}),
-  {ok, FilesSizeUpdateInterval} = application:get_env(veil_cluster_node, fslogic_user_files_size_update_period),
-  erlang:send_after(FilesSizeUpdateInterval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size, Pid}}}),
+  {ok, FilesSizeUpdateInterval} = application:get_env(veil_cluster_node, fslogic_files_size_update_period),
+  erlang:send_after(FilesSizeUpdateInterval * 1000, Pid, {timer, {asynch, 1, {update_files_size, Pid}}}),
   [].
 
 %% handle/2
@@ -89,10 +89,14 @@ handle(ProtocolVersion, {delete_old_descriptors_test, Time}) ->
   delete_old_descriptors(ProtocolVersion, Time),
   ok;
 
-handle(ProtocolVersion, {update_user_files_size, Pid}) ->
-  get_files_size(uuid, ProtocolVersion),
-  {ok, Interval} = application:get_env(veil_cluster_node, fslogic_user_files_size_update_period),
-  erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size, Pid}}}),
+handle(ProtocolVersion, {update_files_size, Pid}) ->
+  update_files_size(ProtocolVersion),
+  {ok, Interval} = application:get_env(veil_cluster_node, fslogic_files_size_update_period),
+  erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {update_files_size, Pid}}}),
+  ok;
+
+handle(ProtocolVersion, update_files_size_test) ->
+  update_files_size(ProtocolVersion),
   ok;
 
 handle(_ProtocolVersion, {answer_test_message, FuseID, Message}) ->
@@ -1067,7 +1071,6 @@ get_file_helper(ProtocolVersion, File, FuseID, Fun) ->
 -spec delete_old_descriptors(ProtocolVersion :: term(), Time :: integer()) -> Result when
   Result :: term().
 %% ====================================================================
-
 delete_old_descriptors(ProtocolVersion, Time) ->
   Status = dao_lib:apply(dao_vfs, remove_descriptor, [{by_expired_before, Time}], ProtocolVersion),
   case Status of
@@ -1076,6 +1079,22 @@ delete_old_descriptors(ProtocolVersion, Time) ->
       ok;
     Other ->
       lager:error([{mod, ?MODULE}], "Error during clearing old descriptors: ~p", [Other]),
+      Other
+  end.
+
+%% update_files_size
+%% ====================================================================
+%% @doc Updates user files size view in db
+%% @end
+-spec update_files_size(ProtocolVersion :: term()) -> term().
+%% ====================================================================
+update_files_size(ProtocolVersion) ->
+  case dao_lib:apply(dao_users, update_files_size, [], ProtocolVersion) of
+    ok ->
+      lager:info([{mod, ?MODULE}], "User files size view updated"),
+      ok;
+    Other ->
+      lager:error([{mod, ?MODULE}], "Error during updating user files size view: ~p", [Other]),
       Other
   end.
 

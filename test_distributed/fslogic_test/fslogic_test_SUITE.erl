@@ -996,16 +996,14 @@ user_file_size_test(Config) ->
   ?assertEqual(ok, CountStatus2),
   ?assertEqual(length(User2FilesEnding) * FileSize, Count2),
 
-  % Test periodical update of user files
+  % Test periodical update of user files size
   AnsCreate = FM(create, [User1TestUpdateFile], DN1),
   ?assertEqual(ok, AnsCreate),
   AnsTruncate = FM(truncate, [User1TestUpdateFile, FileSize], DN1),
   ?assertEqual(ok, AnsTruncate),
   {AnsGetFileAttr, _} = FM(getfileattr, [User1TestUpdateFile], DN1),
   ?assertEqual(ok, AnsGetFileAttr),
-  {ok, Interval} = rpc:call(Node, application, get_env, [veil_cluster_node, fslogic_user_files_size_update_period]),
-  timer:sleep(1000 * Interval),
-  nodes_manager:wait_for_db_reaction(),
+  update_files_size(Node),
 
   {CountStatus3, Count3} = rpc:call(Node, fslogic, get_files_size, [UserID1, 1]),
   ?assertEqual(ok, CountStatus3),
@@ -2615,7 +2613,6 @@ init_per_testcase(_, Config) ->
   NodesUp = nodes_manager:start_test_on_nodes(1),
   [FSLogicNode | _] = NodesUp,
 
-  ok = rpc:call(FSLogicNode, application, set_env, [veil_cluster_node, fslogic_user_files_size_update_period, 2]),
   DB_Node = nodes_manager:get_db_node(),
   Port = 6666,
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}]]),
@@ -2996,6 +2993,10 @@ clear_old_descriptors(Node) ->
   {Megaseconds,Seconds, _Microseconds} = os:timestamp(),
   Time = 1000000*Megaseconds + Seconds + 60*15 + 1,
   gen_server:call({?Dispatcher_Name, Node}, {fslogic, 1, {delete_old_descriptors_test, Time}}, 1000),
+  nodes_manager:wait_for_db_reaction().
+
+update_files_size(Node) ->
+  gen_server:call({?Dispatcher_Name, Node}, {fslogic, 1, update_files_size_test}, 1000),
   nodes_manager:wait_for_db_reaction().
 
 create_standard_share(TestFile, DN) ->
