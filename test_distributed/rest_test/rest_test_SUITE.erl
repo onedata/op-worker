@@ -25,7 +25,6 @@
 
 
 -define(SH, "DirectIO").
--define(TEST_ROOT, ["/tmp/veilfs"]). %% Root of test filesystem
 
 -define(REST_FILES_SUBPATH, "files/").
 -define(REST_ATTRS_SUBPATH, "attrs/").
@@ -75,7 +74,7 @@ main_test(Config) ->
     RemoveStorageAns = rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
     ?assertEqual(ok, RemoveStorageAns),
 
-    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/veilfstestgroup"], ?ProtocolVersion])),
+    ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ ?TEST_GROUP], ?ProtocolVersion])),
     ?assertEqual(ok, rpc:call(CCM, dao_lib, apply, [dao_vfs, remove_file, ["groups"], ?ProtocolVersion])),
 
     rpc:call(CCM, user_logic, remove_user, [{dn, DN}]).
@@ -182,7 +181,7 @@ test_rest_upload() ->
     {Code1, _Headers1, Response1} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", post, [Header1], [Body1]),
     ?assertEqual(Code1, "200"),
     ?assertEqual(list_to_binary(Response1), rest_utils:success_reply(?success_file_uploaded)),
-    File1 = rpc:call(get(ccm), logical_files_manager, read, ["veilfstestuser/dir/file.txt", 0, 9]),
+    File1 = rpc:call(get(ccm), logical_files_manager, read, [?TEST_USER ++ "/dir/file.txt", 0, 9]),
     ?assertEqual(File1, {ok, list_to_binary(Data1)}),
 
     {Header2, Body2} = format_multipart_request(Data1),
@@ -195,7 +194,7 @@ test_rest_upload() ->
     {Code3, _Headers3, Response3} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", put, [Header3], [Body3]),
     ?assertEqual(Code3, "200"),
     ?assertEqual(list_to_binary(Response3), rest_utils:success_reply(?success_file_uploaded)),
-    File3 = rpc:call(get(ccm), logical_files_manager, read, ["veilfstestuser/dir/file.txt", 0, 9]),
+    File3 = rpc:call(get(ccm), logical_files_manager, read, [?TEST_USER ++ "/dir/file.txt", 0, 9]),
     ?assertEqual(File3, {ok, list_to_binary(Data2)}),
 
     {Header4, Body4} = format_multipart_request(Data2),
@@ -356,27 +355,27 @@ setup_user_in_db(DN) ->
     CCM = get(ccm),
 
     DnList = [DN],
-    Login = "veilfstestuser",
+    Login = ?TEST_USER,
     Name = "user user",
-    Teams = ["veilfstestgroup"],
+    Teams = [?TEST_GROUP],
     Email = "user@email.net",
 
     % Cleanup data from other tests
     % TODO Usunac jak wreszcie baza bedzie czyszczona miedzy testami
     rpc:call(CCM, user_logic, remove_user, [{dn, DN}]),
 
-    {Ans1, StorageUUID} = rpc:call(CCM, fslogic_storage, insert_storage, [?SH, ?TEST_ROOT]),
+    {Ans1, StorageUUID} = rpc:call(CCM, fslogic_storage, insert_storage, [?SH, ?ARG_TEST_ROOT]),
     ?assertEqual(ok, Ans1),
     {Ans5, _} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
     ?assertEqual(ok, Ans5),
 
 
     put(user_id, DN),
-    Ans6 = rpc:call(CCM, logical_files_manager, mkdir, ["veilfstestuser/dir"]),
+    Ans6 = rpc:call(CCM, logical_files_manager, mkdir, [?TEST_USER ++ "/dir"]),
     ?assertEqual(ok, Ans6),
 
 
-    Ans7 = rpc:call(CCM, logical_files_manager, create, ["veilfstestuser/dir/file.txt"]),
+    Ans7 = rpc:call(CCM, logical_files_manager, create, [?TEST_USER ++ "/dir/file.txt"]),
     ?assertEqual(ok, Ans7),
 
     StorageUUID.

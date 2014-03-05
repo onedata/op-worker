@@ -150,7 +150,7 @@ signing_in_test_() ->
 
                     Tim = 12345677,
                     meck:expect(fslogic_utils, time, fun() -> Tim end),
-                    meck:expect(fslogic_utils, update_meta_attr, fun(File, times, {Tim, Tim, Tim}) -> File end),
+                    meck:expect(fslogic_utils, update_meta_attr, fun(File, times, {Tim2, Tim2, Tim2}) -> File end),
 
                     ?assertEqual({"new_user", NewUserRecord}, user_logic:sign_in(NewUserInfoProplist)),
                     ?assert(meck:validate(dao_lib))
@@ -222,7 +222,7 @@ signing_in_test_() ->
 
                     Tim = 12345677,
                     meck:expect(fslogic_utils, time, fun() -> Tim end),
-                    meck:expect(fslogic_utils, update_meta_attr, fun(File, times, {Tim, Tim, Tim}) -> File end),
+                    meck:expect(fslogic_utils, update_meta_attr, fun(File, times, {Tim2, Tim2, Tim2}) -> File end),
 
                     ?assertEqual({"existing_user", SynchronizedUser}, user_logic:sign_in(ExistingUserInfoProplist)),
                     ?assert(meck:validate(dao_lib))

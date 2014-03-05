@@ -74,10 +74,17 @@
 %% DB definitions
 %% ====================================================================
 %% DB Names
--define(SYSTEM_DB_NAME, "system_data").
--define(FILES_DB_NAME, "files").
--define(DESCRIPTORS_DB_NAME, "file_descriptors").
--define(USERS_DB_NAME, "users").
+-ifdef(TEST).
+  -define(SYSTEM_DB_NAME, "system_data_test").
+  -define(FILES_DB_NAME, "files_test").
+  -define(DESCRIPTORS_DB_NAME, "file_descriptors_test").
+  -define(USERS_DB_NAME, "users_test").
+-else.
+  -define(SYSTEM_DB_NAME, "system_data").
+  -define(FILES_DB_NAME, "files").
+  -define(DESCRIPTORS_DB_NAME, "file_descriptors").
+  -define(USERS_DB_NAME, "users").
+-endif.
 
 %% Design Names
 -define(VFS_BASE_DESIGN_NAME, "vfs_base").

@@ -43,13 +43,12 @@
 %% ====================================================================
 %% Test API
 %% ====================================================================
-%% eunit
 -ifdef(TEST).
+%% eunit
 -export([handle_fuse_message/3, verify_file_name/1]).
--endif.
-
 %% ct
 -export([get_files_number/3, create_dirs/4]).
+-endif.
 
 %% ====================================================================
 %% API functions
@@ -85,9 +84,9 @@ handle(_ProtocolVersion, healthcheck) ->
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
+%% For tests
 handle(ProtocolVersion, {delete_old_descriptors_test, Time}) ->
-  delete_old_descriptors(ProtocolVersion, Time),
-  ok;
+  handle_test(ProtocolVersion, {delete_old_descriptors_test, Time});
 
 handle(ProtocolVersion, {update_user_files_size_view, Pid}) ->
   update_user_files_size_view(ProtocolVersion),
@@ -151,6 +150,21 @@ handle(_ProtocolVersion, Record) when is_record(Record, callback) ->
 %% Handle requests that have wrong structure.
 handle(_ProtocolVersion, _Msg) ->
   wrong_request.
+
+%% handle_test/3
+%% ====================================================================
+%% @doc Handles calls used during tests
+-spec handle_test(ProtocolVersion :: term(), Request :: term()) -> Result when
+  Result :: atom().
+%% ====================================================================
+-ifdef(TEST).
+handle_test(ProtocolVersion, {delete_old_descriptors_test, Time}) ->
+  delete_old_descriptors(ProtocolVersion, Time),
+  ok.
+-else.
+handle_test(_ProtocolVersion, _Request) ->
+  not_supported_in_normal_mode.
+-endif.
 
 %% cleanup/0
 %% ====================================================================

@@ -108,23 +108,28 @@ create_user(Login, Name, Teams, Email, DnList) ->
                   end,
         quota_doc = QuotaUUID
     },
-    {ok, UUID} = dao_lib:apply(dao_users, save_user, [User], 1),
-    GetUserAns = get_user({uuid, UUID}),
+    {DaoAns, UUID} = dao_lib:apply(dao_users, save_user, [User], 1),
+    case DaoAns of
+      ok ->
+        GetUserAns = get_user({uuid, UUID}),
 
-    [create_team_dir(Team) || Team <- get_team_names(User)], %% Create team dirs in DB if they dont exist
+        [create_team_dir(Team) || Team <- get_team_names(User)], %% Create team dirs in DB if they don't exist
 
-    {GetUserFirstAns, UserRec} = GetUserAns,
-    case GetUserFirstAns of
-        ok ->
+        {GetUserFirstAns, UserRec} = GetUserAns,
+        case GetUserFirstAns of
+          ok ->
             RootAns = create_root(Login, UserRec#veil_document.uuid),
             case RootAns of
-                ok ->
-                    %% TODO zastanowić się co zrobić jak nie uda się stworzyć jakiegoś katalogu (blokowanie rejestracji użytkownika to chyba zbyt dużo)
-                    create_dirs_at_storage(Login, get_team_names(User)),
-                    GetUserAns;
-                _ -> {RootAns, UserRec}
+              ok ->
+                %% TODO zastanowić się co zrobić jak nie uda się stworzyć jakiegoś katalogu (blokowanie rejestracji użytkownika to chyba zbyt dużo)
+                create_dirs_at_storage(Login, get_team_names(User)),
+                GetUserAns;
+              _ -> {RootAns, UserRec}
             end;
-        _ -> GetUserAns
+          _ -> GetUserAns
+        end;
+      _ ->
+        {DaoAns, UUID}
     end.
 
 

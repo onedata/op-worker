@@ -239,8 +239,10 @@ save_record(#veil_document{uuid = Id, rev_info = RevInfo, record = Rec, force_up
                 RevDef
         end,
     case dao_helper:insert_doc(get_db(), #doc{id = dao_helper:name(Id), revs = Revs, body = term_to_doc(Rec)}) of
-        {ok, _} -> {ok, Id};
-        {error, Err} -> {error, Err}
+        {ok, _} ->
+          {ok, Id};
+        {error, Err} ->
+          {error, Err}
     end;
 save_record(Rec) when is_tuple(Rec) ->
     save_record(#veil_document{record = Rec}).
@@ -257,9 +259,12 @@ exist_record(Id) when is_atom(Id) ->
     exist_record(atom_to_list(Id));
 exist_record(Id) when is_list(Id) ->
     case dao_helper:open_doc(get_db(), Id) of
-        {ok, _} -> {ok, true};
-        {error, {not_found, _}} -> {ok, false};
-        Other -> Other
+        {ok, _} ->
+          {ok, true};
+        {error, {not_found, _}} ->
+          {ok, false};
+        Other ->
+          Other
     end.
 
 
@@ -282,11 +287,14 @@ get_record(Id) when is_list(Id) ->
     case dao_helper:open_doc(get_db(), Id) of
         {ok, #doc{body = Body, revs = RevInfo}} ->
             try {doc_to_term(Body), RevInfo} of
-                {Term, RInfo} -> {ok, #veil_document{uuid = Id, rev_info = RInfo, record = Term}}
+                {Term, RInfo} ->
+                  {ok, #veil_document{uuid = Id, rev_info = RInfo, record = Term}}
             catch
-                _:Err -> {error, {invalid_document, Err}}
+                _:Err ->
+                  {error, {invalid_document, Err}}
             end;
-        {error, Error} -> Error
+        {error, Error} ->
+          Error
     end.
 
 

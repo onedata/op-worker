@@ -36,7 +36,9 @@
 %% ====================================================================
 %% TODO zmierzyć czy bardziej się opłaca przechowywać dane o callbackach
 %% jako stan (jak teraz) czy jako ets i ewentualnie przejść na ets
+-ifdef(TEST).
 -export([get_callback/2, addCallback/3, delete_callback/3]).
+-endif.
 
 %% ====================================================================
 %% gen_server callbacks
@@ -51,7 +53,7 @@
 %% ====================================================================
 %% @doc Starts the server
 -spec start_link(Type) -> Result when
-  Type :: test_worker | worker | ccm,
+  Type :: test_worker | worker | ccm | ccm_test,
   Result ::  {ok,Pid}
   | ignore
   | {error,Error},
@@ -190,7 +192,6 @@ handle_call({clear_cache, Cache}, _From, State) ->
   Ans = clear_cache(Cache, State#node_state.simple_caches),
   {reply, Ans, State};
 
-%% Test call
 handle_call(check, _From, State) ->
   {reply, ok, State};
 
@@ -342,7 +343,8 @@ heart_beat(Conn_status, State) ->
     _ -> erlang:send_after(500, self(), {timer, do_heart_beat})
   end,
 
-  lager:info([{mod, ?MODULE}], "Heart beat on node: ~p: sent; connection: ~p, old conn_status: ~p", [node(), New_conn_status, Conn_status]),
+  lager:info([{mod, ?MODULE}], "Heart beat on node: ~p: sent; connection: ~p, old conn_status: ~p,  state_num: ~b, callback_num: ~b,  disp dispatcher_state: ~b, callbacks_state: ~b",
+    [node(), New_conn_status, Conn_status, State#node_state.state_num, State#node_state.callbacks_num, State#node_state.dispatcher_state, State#node_state.callbacks_state]),
   State#node_state{ccm_con_status = New_conn_status}.
 
 %% heart_beat_response/2
