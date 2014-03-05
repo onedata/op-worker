@@ -217,11 +217,12 @@ save_record(#veil_document{uuid = "", record = Rec} = Doc) when is_tuple(Rec) ->
     save_record(Doc#veil_document{uuid = dao_helper:gen_uuid()});
 save_record(#veil_document{uuid = Id, record = Rec} = Doc) when is_tuple(Rec), is_atom(Id) ->
     save_record(Doc#veil_document{uuid = atom_to_list(Id)});
-save_record(#veil_document{uuid = Id, rev_info = RevInfo, record = Rec, force_update = IsForced} = AllDoc) when is_tuple(Rec), is_list(Id)->
+save_record(#veil_document{uuid = Id, rev_info = RevInfo, record = Rec, force_update = IsForced}) when is_tuple(Rec), is_list(Id)->
     Valid = is_valid_record(Rec),
     if
         Valid -> ok;
         true ->
+            lager:error("Cannot save record: ~p because it's not supported", [Rec]),
             throw(unsupported_record)
     end,
     Revs =
@@ -347,6 +348,7 @@ list_records(#view_info{name = ViewName, design = DesignName, db_name = DbName},
               {ok, #view_result{total = length(Rows2), offset = 0, rows = FormattedRows2}};
           {error, _} = E -> throw(E);
             Other ->
+                lager:error("dao_helper:query_view has returned unknown query result: ~p", [Other]),
                 throw({unknown_query_result, Other})
         end.
 
