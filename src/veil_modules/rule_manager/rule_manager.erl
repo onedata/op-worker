@@ -11,7 +11,8 @@
 %% @end
 %% ===================================================================
 
--module(rule_manager).
+-module(
+rule_manager).
 -behaviour(worker_plugin_behaviour).
 
 -include("logging.hrl").
@@ -19,6 +20,9 @@
 -include_lib("veil_modules/cluster_rengine/cluster_rengine.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/dao_helper.hrl").
+
+-include("communication_protocol_pb.hrl").
+-include("fuse_messages_pb.hrl").
 
 %% ====================================================================
 %% API functions
@@ -98,8 +102,22 @@ notify_producers() ->
   FuseIds = lists:map(fun(#view_row{key = FuseId}) -> FuseId end, Rows),
   UniqueFuseIds = sets:to_list(sets:from_list(FuseIds)),
 
-  ?info("Notify producers: ~p", [UniqueFuseIds]),
-  lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, {testchannelanswer, "test"}, "fuse_messages") end, UniqueFuseIds).
+  ?info("new Notify producers: ~p", [UniqueFuseIds]),
+
+
+%%   lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, {testchannelanswer, "test"}, "fuse_messages") end, UniqueFuseIds).
+%%   EventStreamConfig = #eventstreamconfig{event_name = "bazinga_event"},
+%%   HBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventstreamconfig(EventStreamConfig)),
+%%   MsgId = 1000,
+%%   Ans = #answer{answer_status = "push", worker_answer = HBin},
+%%   AnsBin = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(Ans)),
+%%   CMsg = #clustermsg{synch = 0, protocol_version = 1, module_name = "", message_type = "eventstreamconfig", message_id = MsgId, message_decoder_name = "fuse_messages", answer_type = "handshakeresponse", answer_decoder_name = "fuse_messages", input = HBin},
+%%   CMsgBin = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(CMsg)),
+
+  EventFilter = #eventfilterconfig{field_name = "type", desired_value = "mkdir_event"},
+  EventFitlerBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventfilterconfig(EventFilter)),
+  PushMessage = #pushmessage{message_type = "event_filter_config", data = EventFitlerBin},
+  lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, PushMessage, "fuse_messages") end, UniqueFuseIds).
 
 generate_tree_name() ->
   [{_, Id}] = ets:lookup(?HANDLER_TREE_ID_ETS, current_id),
