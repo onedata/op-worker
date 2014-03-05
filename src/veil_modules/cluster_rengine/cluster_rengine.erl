@@ -22,6 +22,8 @@
 -include("veil_modules/dao/dao_vfs.hrl").
 -include("veil_modules/dao/dao.hrl").
 
+-include("fuse_messages_pb.hrl").
+
 -define(PROCESSOR_ETS_NAME, "processor_ets_name").
 
 %% ====================================================================
@@ -40,8 +42,8 @@ init(_Args) ->
 handle(_ProtocolVersion, ping) ->
   pong;
 
-handle(_ProtocolVersion, event) ->
-  ?info("Some message from client"),
+handle(_ProtocolVersion, #eventmessage{type = Type}) ->
+  ?info("Some message from client, type: ~p", [Type]),
   handle(1, {event_arrived, #mkdir_event{user_id = "123"}});
 
 handle(_ProtocolVersion, healthcheck) ->
