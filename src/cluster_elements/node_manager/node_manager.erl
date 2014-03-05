@@ -343,7 +343,8 @@ heart_beat(Conn_status, State) ->
     _ -> erlang:send_after(500, self(), {timer, do_heart_beat})
   end,
 
-  lager:info([{mod, ?MODULE}], "Heart beat on node: ~p: sent; connection: ~p, old conn_status: ~p", [node(), New_conn_status, Conn_status]),
+  lager:info([{mod, ?MODULE}], "Heart beat on node: ~p: sent; connection: ~p, old conn_status: ~p,  state_num: ~b, callback_num: ~b,  disp dispatcher_state: ~b, callbacks_state: ~b",
+    [node(), New_conn_status, Conn_status, State#node_state.state_num, State#node_state.callbacks_num, State#node_state.dispatcher_state, State#node_state.callbacks_state]),
   State#node_state{ccm_con_status = New_conn_status}.
 
 %% heart_beat_response/2
