@@ -10,7 +10,7 @@
 %%       It's meant to be used by Bamboo for stress test load logging.
 %% ===================================================================
 
--define(default_cookie, list_to_atom("172.16.67.131")).%veil_cluster_node).
+-define(default_cookie, veil_cluster_node).
 -define(default_ccm_name, "ccm").
 -define(default_worker_name, "worker").
 
