@@ -55,7 +55,7 @@ CommunicationHandler::~CommunicationHandler()
 {
     closeConnection();
 
-    LOG(INFO) << "Destructing connection: " << this;
+    DLOG(INFO) << "Destructing connection: " << this;
     if(m_endpoint)
     {
         m_endpoint->stop();
@@ -74,7 +74,7 @@ CommunicationHandler::~CommunicationHandler()
     unique_lock lock(m_instanceMutex);
     --instancesCount;
 
-    LOG(INFO) << "Connection: " << this << " deleted";
+    DLOG(INFO) << "Connection: " << this << " deleted";
 }
 
 unsigned int CommunicationHandler::getErrorCount()
@@ -118,8 +118,6 @@ int CommunicationHandler::openConnection()
 {
     unique_lock lock(m_connectMutex);
     websocketpp::lib::error_code ec;
-
-    LOG(INFO) << "OPEN CONNECTION, INST COUNT: " << getInstancesCount();
 
     if(m_connectStatus == CONNECTED)
         return 0;
@@ -415,7 +413,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
             }
 
             LOG(ERROR) << "WebSocket communication error";
-            LOG(INFO) << "Error counter: " << m_errorCount;
+            DLOG(INFO) << "Error counter: " << m_errorCount;
 
             answer.set_answer_status(VEIO);
 
@@ -441,7 +439,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
             }
 
             LOG(ERROR) << "WebSocket communication error";
-            LOG(INFO) << "Error counter: " << m_errorCount;
+            DLOG(INFO) << "Error counter: " << m_errorCount;
 
             answer.set_answer_status(VEIO);
         }
