@@ -11,6 +11,8 @@
 
 -module (gui_utils).
 -include("veil_modules/control_panel/common.hrl").
+-include("logging.hrl").
+
 -export([get_requested_hostname/0, get_user_dn/0, user_logged_in/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0]).
 -export([apply_or_redirect/3, apply_or_redirect/4, top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
 
@@ -89,7 +91,10 @@ dn_and_storage_defined() ->
 can_view_logs() ->
     try
         Teams = user_logic:get_teams(wf:session(user_doc)),
-        string:str(Teams, "plggveilfs") > 0
+        lists:foldl(
+            fun(Team, Acc) ->
+                Acc orelse (string:str(Team, "plggveilfs") > 0)
+            end, false, Teams)
     catch _:_ ->
         false
     end.
@@ -149,7 +154,7 @@ top_menu(ActiveTabID) ->
 -spec top_menu(ActiveTabID :: any(), SubMenuBody :: any()) -> list().
 %% ====================================================================
 top_menu(ActiveTabID, SubMenuBody) ->
-    % Tab, that will be displayed optionally 
+    % Tab, that will be displayed optionally
     LogsPageCaptions = case can_view_logs() of
         false ->
             [];
