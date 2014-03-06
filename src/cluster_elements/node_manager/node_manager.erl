@@ -31,7 +31,7 @@
 %% ====================================================================
 -export([start_link/1, stop/0]).
 -export([check_vsn/0]).
--export([start_load_logging_loop/1, load_logging_loop/1]).
+-export([start_load_logging_loop/2, load_logging_loop/2]).
 
 %% ====================================================================
 %% Test API
@@ -262,8 +262,9 @@ handle_cast({register_simple_cache, Cache, ReturnPid}, State) ->
 handle_cast({start_load_logging, Path}, State) ->
   lager:info("Start load logging on node: ~p", [node()]),
   {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
+  {_, StartTime, _} = os:timestamp(),
   case whereis(?Load_Logging_Proc) of
-    undefined -> supervisor:start_child(?Supervisor_Name, ?Sup_Child(?Load_Logging_Proc, ?MODULE, start_load_logging_loop, permanent, [Path]));
+    undefined -> supervisor:start_child(?Supervisor_Name, ?Sup_Child(?Load_Logging_Proc, ?MODULE, start_load_logging_loop, permanent, [Path, StartTime]));
     Pid -> Pid ! {log, Interval}
   end,
   {noreply, State};
@@ -451,33 +452,34 @@ check_vsn([{Application, _Description, Vsn} | Apps]) ->
     _Other -> check_vsn(Apps)
   end.
 
-start_load_logging_loop(Path) ->
-  lager:info("Start load logging loop."),
+start_load_logging_loop(Path, StartTime) ->
   {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
   case file:open(Path ++ "/load_log.csv", [append]) of
     {ok, Fd} ->
-      Pid = spawn_link(?MODULE, load_logging_loop, [Fd]),
+      Pid = spawn_link(?MODULE, load_logging_loop, [Fd, StartTime]),
       register(?Load_Logging_Proc, Pid),
-      Pid ! {log, Interval},
-      ok;
+      case file:position(Fd, eof) of
+        {ok, 0} ->
+          io:fwrite(Fd, "TIME,CPU,MEM,INPUT,OUTPUT~n", []),
+          Pid ! {log, Interval};
+        _ -> Pid ! {log, Interval}
+      end;
     Other -> lager:error("Error while openning file: ~p", [Other])
   end.
 
-load_logging_loop(Fd) ->
-  lager:info("Load logging loop."),
+load_logging_loop(Fd, StartTime) ->
   receive
     {log, Interval} ->
+      {_, CurrTime, _} = os:timestamp(),
       {Proc, Mem, {In, Out}} = gen_server:call({?Node_Manager_Name, node()}, {get_node_stats, short}, 500),
-      io:fwrite(Fd, "~p,~p,~p,~p~n", [Proc, Mem, In, Out]),
-%%       file:write(Fd, lists:flatten(io_lib:format("~p,~p,~p,~p", [Proc, Mem, In, Out]))),
+      io:fwrite(Fd, "~p,~p,~p,~p,~p~n", [CurrTime - StartTime, Proc, Mem, In, Out]),
       erlang:send_after(Interval * 1000, self(), {log, Interval}),
-      load_logging_loop(Fd);
+      load_logging_loop(Fd, StartTime);
     stop ->
-      lager:info("Stop load logging loop."),
       file:close(Fd);
     Other ->
-      lager:error("Load logging loop: unknown message: ~p", [Other]),
-      load_logging_loop(Fd)
+      lager:error("Load logging loop got unknown message: ~p", [Other]),
+      load_logging_loop(Fd, StartTime)
   end.
 
 %% get_node_stats/2
