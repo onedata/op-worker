@@ -164,11 +164,14 @@ int CommunicationHandler::openConnection()
         LOG(INFO) << "Trying to connect to: " << URL;
     }
 
-    if(m_session) {
-        socket_type &socket = con->get_socket();
-        SSL *ssl = socket.native_handle();
-        if(SSL_set_session(ssl, m_session) != 1) {
-            LOG(ERROR) << "Cannot set session.";
+    {   unique_lock lock(m_instanceMutex);
+
+        if(m_session) {
+            socket_type &socket = con->get_socket();
+            SSL *ssl = socket.native_handle();
+            if(SSL_set_session(ssl, m_session) != 1) {
+                LOG(ERROR) << "Cannot set session.";
+            }
         }
     }
 
@@ -199,6 +202,7 @@ int CommunicationHandler::openConnection()
 
     if(m_connectStatus == CONNECTED) {
         m_lastConnectTime = helpers::utils::mtime<uint64_t>();
+        unique_lock lock(m_instanceMutex);
         socket_type &socket = m_endpointConnection->get_socket();
         SSL *ssl = socket.native_handle();
         if(m_session) {
