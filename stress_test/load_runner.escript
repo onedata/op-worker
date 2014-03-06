@@ -24,20 +24,32 @@ main([Command | Args]) ->
     HostName = "@" ++ os:cmd("hostname -f") -- "\n",
     put(hostname, HostName),
     set_up_net_kernel(),
-    TargetNode = list_to_atom(lists:nth(1, Args)  ++ HostName),
+    NodeType = lists:nth(1, Args),
+    TargetNode = list_to_atom(NodeType ++ HostName),
     case Command of
-        "start" ->
-            start_load_logging(TargetNode);
-        "stop" ->
-            stop_load_logging(TargetNode)
+        "start" -> start_load_logging(NodeType, TargetNode);
+        "stop" -> stop_load_logging(NodeType, TargetNode);
+        _ -> ok
     end.
 
-start_load_logging(Node) ->
+start_load_logging("ccm", Node) ->
     io:format("Starting load logging on node: ~p~n", [Node]),
     {ok, Dir} = file:get_cwd(),
-    io:format("Dir: ~p", [Dir]),
-    ok = rpc:call(Node, gen_server, cast, [{global, central_cluster_manager}, {start_load_logging, Dir}], 1000).
+    io:format("Dir: ~p~n", [Dir]),
+    ok = rpc:call(Node, gen_server, cast, [{global, central_cluster_manager}, {start_load_logging, Dir}], 1000);
+start_load_logging("worker", Node) ->
+    io:format("Starting load logging on node: ~p~n", [Node]),
+    {ok, Dir} = file:get_cwd(),
+    io:format("Dir: ~p~n", [Dir]),
+    ok = rpc:call(Node, gen_server, cast, [node_manager, {start_load_logging, Dir}], 1000);
+start_load_logging(Other, _) ->
+    io:format("Unknown node type: ~p~n", [Other]).
 
-stop_load_logging(Node) ->
+stop_load_logging("ccm", Node) ->
     io:format("Stopping load logging on node: ~p~n", [Node]),
-    ok = rpc:call(Node, gen_server, cast, [{global, central_cluster_manager}, stop_load_logging], 1000).
+    ok = rpc:call(Node, gen_server, cast, [{global, central_cluster_manager}, stop_load_logging], 1000);
+stop_load_logging("worker", Node) ->
+    io:format("Stopping load logging on node: ~p~n", [Node]),
+    ok = rpc:call(Node, gen_server, cast, [node_manager, stop_load_logging], 1000);
+stop_load_logging(Other, _) ->
+    io:format("Unknown node type: ~p~n", [Other]).
