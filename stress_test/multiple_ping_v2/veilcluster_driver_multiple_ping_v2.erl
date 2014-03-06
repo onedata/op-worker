@@ -17,8 +17,6 @@
 -include("registered_names.hrl").
 -include("communication_protocol_pb.hrl").
 
--define(LogLoop, 100).
--define(LogLoopTime, 60000000).
 
 new(_Id) -> 
     Hosts = basho_bench_config:get(cluster_hosts),
@@ -27,24 +25,11 @@ new(_Id) ->
     PongBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Pong)),
     PongAns = #answer{answer_status = "ok", worker_answer = PongBytes},
     PongAnsBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(PongAns)),
-    Args = {Hosts, CertFile, PongAnsBytes, closed, [], {?LogLoop, os:timestamp()}},
+    Args = {Hosts, CertFile, PongAnsBytes, closed, []},
     ?DEBUG("Ping test initialized with params: ~p~n", [Args]),
     {ok, Args}.
 
-run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes, SocketState, Socket, {LogLoop, LastTime}}) ->
-    NewLoopValue = case LogLoop of
-      0 ->
-        Now = os:timestamp(),
-        case timer:now_diff(Now, LastTime) > ?LogLoopTime of
-          true ->
-            ?DEBUG("Loop log~n", []),
-            {?LogLoop, Now};
-          false ->
-            {?LogLoop, LastTime}
-        end;
-      _ ->
-        {LogLoop -1, LastTime}
-    end,
+run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes, SocketState, Socket}) ->
 
     Host = lists:nth((KeyGen() rem length(Hosts)) + 1 , Hosts),
 
@@ -58,21 +43,21 @@ run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes, SocketState, Sock
       case {NewSocketState, NewSocket} of
           {ok, _} ->
                   try ping(Action, NewSocket, PongAnsBytes) of
-                      ok -> {ok, {Hosts, CertFile, PongAnsBytes, NewSocketState, NewSocket, NewLoopValue}};
+                      ok -> {ok, {Hosts, CertFile, PongAnsBytes, NewSocketState, NewSocket}};
 											Other-> %just in case, it should never happen
 												?DEBUG("Some unexpected error: ~p~n", [Other]),
-												{error,unexpected_error, {Hosts, CertFile, PongAnsBytes, closed, [], NewLoopValue}}
+												{error,unexpected_error, {Hosts, CertFile, PongAnsBytes, closed, []}}
                   catch
                       _R1:R2 ->
                         wss:close(NewSocket),
-                        {error, R2, {Hosts, CertFile, PongAnsBytes, closed, [], NewLoopValue}}
+                        {error, R2, {Hosts, CertFile, PongAnsBytes, closed, []}}
                   end;
-          {error, Error} -> {error, {connect, Error}, {Hosts, CertFile, PongAnsBytes, closed, [], NewLoopValue}};
-          Other -> {error, {unknown_error, Other}, {Hosts, CertFile, PongAnsBytes, closed, [], NewLoopValue}}
+          {error, Error} -> {error, {connect, Error}, {Hosts, CertFile, PongAnsBytes, closed, []}};
+          Other -> {error, {unknown_error, Other}, {Hosts, CertFile, PongAnsBytes, closed, []}}
       end
     catch
       E1:E2 ->
-        {error, {error_thrown, E1, E2}, {Hosts, CertFile, PongAnsBytes, closed, [], NewLoopValue}}
+        {error, {error_thrown, E1, E2}, {Hosts, CertFile, PongAnsBytes, closed, []}}
     end.
 
 ping(Module, Socket, PongAnsBytes) ->
