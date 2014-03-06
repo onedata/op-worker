@@ -29,7 +29,7 @@ namespace veil {
 
 volatile int CommunicationHandler::instancesCount = 0;
 boost::recursive_mutex CommunicationHandler::m_instanceMutex;
-//SSL_SESSION* CommunicationHandler::m_session = 0;
+SSL_SESSION* CommunicationHandler::m_session = 0;
 
 CommunicationHandler::CommunicationHandler(string p_hostname, int p_port, cert_info_fun p_getCertInfo)
     : m_hostname(p_hostname),
@@ -39,8 +39,7 @@ CommunicationHandler::CommunicationHandler(string p_hostname, int p_port, cert_i
       m_currentMsgId(1),
       m_errorCount(0),
       m_isPushChannel(false),
-      m_lastConnectTime(0),
-      m_session(0)
+      m_lastConnectTime(0)
 {
     unique_lock lock(m_instanceMutex);
     ++instancesCount;
@@ -170,11 +169,9 @@ int CommunicationHandler::openConnection()
     if(m_session) {
         socket_type &socket = con->get_socket();
         SSL *ssl = socket.native_handle();
-        LOG(INFO) << "REUSING: " << m_session->session_id;
         if(SSL_set_session(ssl, m_session) != 1) {
             LOG(ERROR) << "Cannot set session.";
         }
-        LOG(INFO) << "GET SESSION: " << SSL_get_session(ssl)->session_id;
     }
 
     m_endpoint->connect(con);
@@ -210,7 +207,6 @@ int CommunicationHandler::openConnection()
             SSL_SESSION_free(m_session);
         }
         m_session = SSL_get1_session(ssl);
-        LOG(INFO) << "CACHED: " << m_session->session_id << "REUSED: " << SSL_session_reused(ssl);
     }
 
     return m_connectStatus;
@@ -490,14 +486,9 @@ context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
                          boost::asio::ssl::context::single_dh_use);
 
         SSL_CTX *ssl_ctx = ctx->native_handle();
-
         long mode = SSL_CTX_get_session_cache_mode(ssl_ctx);
         mode |= SSL_SESS_CACHE_CLIENT;
         SSL_CTX_set_session_cache_mode(ssl_ctx, mode);
-
-        long options = SSL_CTX_get_options(ssl_ctx);
-        options |= SSL_OP_NO_TICKET;
-        SSL_CTX_set_options(ssl_ctx, options);
 
         boost::asio::ssl::context_base::file_format file_format; // Certificate format
         if(certInfo.cert_type == CertificateInfo::ASN1) {
