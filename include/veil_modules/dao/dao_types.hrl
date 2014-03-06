@@ -37,6 +37,10 @@
 -type user_info() :: #user{}.
 -type user_doc() :: #veil_document{record :: #user{}}.
 
+-type quota() :: uuid().
+-type quota_info() :: #quota{}.
+-type quota_doc() :: #veil_document{record :: #quota{}}.
+
 -type file_share() :: uuid().
 -type file_share_info() :: #share_desc{}.
 -type file_share_doc() :: #veil_document{record :: #share_desc{}}.

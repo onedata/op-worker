@@ -139,15 +139,15 @@ update_meta_attr(#file{meta_doc = MetaUUID} = File, Attr, Value, RetryCount) ->
                     case Attr of 
                         times -> 
                             case Value of 
-                                {ATime, MTime, CTime}                    -> MetaRec#file_meta{atime = ATime, mtime = MTime, ctime = CTime};
-                                {ATime, MTime} when ATime > 0, MTime > 0 -> MetaRec#file_meta{atime = ATime, mtime = MTime};
-                                {ATime, _MTime} when ATime > 0           -> MetaRec#file_meta{atime = ATime};
-                                {_ATime, MTime} when MTime > 0           -> MetaRec#file_meta{mtime = MTime}
+                                {ATime, MTime, CTime}                    -> MetaRec#file_meta{uid = File#file.uid, atime = ATime, mtime = MTime, ctime = CTime};
+                                {ATime, MTime} when ATime > 0, MTime > 0 -> MetaRec#file_meta{uid = File#file.uid, atime = ATime, mtime = MTime};
+                                {ATime, _MTime} when ATime > 0           -> MetaRec#file_meta{uid = File#file.uid, atime = ATime};
+                                {_ATime, MTime} when MTime > 0           -> MetaRec#file_meta{uid = File#file.uid, mtime = MTime}
                             end;
-                        ctime when Value > 0 -> MetaRec#file_meta{ctime = Value};
-                        mtime when Value > 0 -> MetaRec#file_meta{mtime = Value};
-                        atime when Value > 0 -> MetaRec#file_meta{atime = Value};
-                        size when Value >= 0 -> MetaRec#file_meta{size = Value};
+                        ctime when Value > 0 -> MetaRec#file_meta{uid = File#file.uid, ctime = Value};
+                        mtime when Value > 0 -> MetaRec#file_meta{uid = File#file.uid, mtime = Value};
+                        atime when Value > 0 -> MetaRec#file_meta{uid = File#file.uid, atime = Value};
+                        size when Value >= 0 -> MetaRec#file_meta{uid = File#file.uid, size = Value};
                         _ ->
                             MetaRec
                     end,
@@ -195,7 +195,7 @@ init_file_meta(#file{meta_doc = MetaUUID} = File) when is_list(MetaUUID) ->
             {File, #veil_document{uuid = MetaUUID, record = #file_meta{}}}
     end;
 init_file_meta(#file{} = File) ->
-    case dao_lib:apply(dao_vfs, save_file_meta, [#file_meta{}], 1) of 
+    case dao_lib:apply(dao_vfs, save_file_meta, [#file_meta{uid = File#file.uid}], 1) of
         {ok, MetaUUID} when is_list(MetaUUID) -> init_file_meta(File#file{meta_doc = MetaUUID});
         Error ->
             lager:error("Cannot save file_meta record for file (name = ~p, parent = ~p) due to: ~p", [File#file.name, File#file.parent, Error]),

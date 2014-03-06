@@ -17,7 +17,8 @@
 %% ===================================================================
 %% API functions
 %% ===================================================================
--export([save_user/1, remove_user/1, exist_user/1, get_user/1, list_users/2, get_files_number/2]).
+-export([save_user/1, remove_user/1, exist_user/1, get_user/1, list_users/2,
+  get_files_number/2, get_files_size/1, update_files_size/0, save_quota/1, remove_quota/1, get_quota/1]).
 
 
 %% save_user/1
@@ -257,6 +258,50 @@ get_files_number(Type, UUID) ->
       throw(invalid_data)
   end.
 
+%% get_files_size/1
+%% ====================================================================
+%% @doc Returns size of user's files
+%% @end
+-spec get_files_size(UUID :: uuid()) -> {ok, non_neg_integer()} | {error, any()} | no_return().
+%% ====================================================================
+get_files_size(UUID) ->
+  dao:set_db(?FILES_DB_NAME),
+  QueryArgs = #view_query_args{keys = [dao_helper:name(UUID)], include_docs = false, group_level = 1, view_type = reduce, stale = update_after},
+
+  case dao:list_records(?USER_FILES_SIZE_VIEW, QueryArgs) of
+    {ok, #view_result{rows = [#view_row{value = Sum}]}} ->
+      {ok, Sum};
+    {ok, #view_result{rows = []}} ->
+      lager:error("Size of files of ~p not found", [UUID]),
+      throw(files_size_not_found);
+    {ok, #view_result{rows = [#view_row{value = Sum} | Tail] = AllRows}} ->
+      case length(lists:usort(AllRows)) of
+        Count when Count > 1 -> lager:warning("To many rows in response during files size finding for ~p. Others: ~p", [UUID, Tail]);
+        _ -> ok
+      end,
+      {ok, Sum};
+    Other ->
+      lager:error("Invalid view response: ~p", [Other]),
+      throw(invalid_data)
+  end.
+
+%% update_files_size/1
+%% ====================================================================
+%% @doc Updates counting users' files sizes view in db
+%% @end
+-spec update_files_size() -> ok | {error, any()}.
+%% ====================================================================
+update_files_size() ->
+  dao:set_db(?FILES_DB_NAME),
+  QueryArgs = #view_query_args{keys = [undefined], include_docs = false, group_level = 1, view_type = reduce},
+
+  case dao:list_records(?USER_FILES_SIZE_VIEW, QueryArgs) of
+    {ok, _} -> ok;
+    Other ->
+      lager:error("Invalid view response: ~p", [Other]),
+      throw(invalid_data)
+  end.
+
 %% clear_cache/1
 %% ====================================================================
 %% @doc Deletes key from user caches at all nodes
@@ -280,3 +325,43 @@ clear_all_data_from_cache(UserDoc) ->
   Caches2 = lists:foldl(fun(EMail, TmpAns) -> [{email, EMail} | TmpAns] end, Caches, Doc#user.email_list),
   Caches3 = lists:foldl(fun(DN, TmpAns) -> [{dn, DN} | TmpAns] end, Caches2, Doc#user.dn_list),
   clear_cache(Caches3).
+
+%% save_quota/1
+%% ====================================================================
+%% @doc Saves users' quota to DB. Argument should be either #quota{} record
+%% (if you want to save it as new document) <br/>
+%% or #veil_document{} that wraps #quota{} if you want to update descriptor in DB. <br/>
+%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec save_quota(Quota :: quota_info() | quota_doc()) -> {ok, quota()} | {error, any()} | no_return().
+%% ====================================================================
+save_quota(#quota{} = Quota) ->
+  save_quota(#veil_document{record = Quota});
+save_quota(#veil_document{} = QuotaDoc) ->
+  dao:set_db(?USERS_DB_NAME),
+  dao:save_record(QuotaDoc).
+
+%% remove_quota/1
+%% ====================================================================
+%% @doc Removes users' quota from DB by uuid.
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec remove_quota(UUID :: uuid()) -> {error, any()} | no_return().
+%% ====================================================================
+remove_quota(UUID) ->
+  dao:set_db(?USERS_DB_NAME),
+  dao:remove_record(UUID).
+
+%% get_quota/1
+%% ====================================================================
+%% @doc Gets users' quota from DB by uuid.
+%% Non-error return value is always {ok, #veil_document{record = #quota}.
+%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% @end
+-spec get_quota(UUID :: uuid()) -> {ok, quota_doc()} | {error, any()} | no_return().
+%% ====================================================================
+get_quota(UUID) ->
+  dao:set_db(?USERS_DB_NAME),
+  dao:get_record(UUID).
