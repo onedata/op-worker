@@ -132,6 +132,7 @@ protected:
     static volatile int         instancesCount;
     volatile bool               m_isPushChannel;
     std::string                 m_fuseID;           ///< Current fuseID for PUSH channel (if any)
+    static SSL_SESSION*         m_session;
     
     boost::recursive_mutex      m_connectMutex;
     boost::recursive_mutex      m_reconnectMutex;
