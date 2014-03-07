@@ -866,7 +866,7 @@ user_file_size_test(Config) ->
   end,
 
   %% Init storage
-  {InsertStorageAns, _} = rpc:call(Node, fslogic_storage, insert_storage, [?SH, ?TEST_ROOT]),
+  {InsertStorageAns, _} = rpc:call(Node, fslogic_storage, insert_storage, [?SH, ?ARG_TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
 
   %% Init users
