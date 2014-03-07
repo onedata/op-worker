@@ -24,6 +24,10 @@
 
 -include("fuse_messages_pb.hrl").
 
+-include_lib("veil_modules/dao/dao.hrl").
+-include_lib("veil_modules/dao/dao_helper.hrl").
+-include_lib("veil_modules/dao/dao_types.hrl").
+
 -define(PROCESSOR_ETS_NAME, "processor_ets_name").
 
 %% ====================================================================
@@ -32,7 +36,7 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% functions for manual tests
--export([register_mkdir_handler/1, register_mkdir_handler_aggregation/1, send_mkdir_event/0, delete_file/0]).
+-export([register_mkdir_handler/0, register_mkdir_handler_aggregation/1, register_write_event_handler/1, register_quota_exceeded_handler/0, send_mkdir_event/0, delete_file/0]).
 
 init(_Args) ->
   worker_host:create_simple_cache(?EVENT_HANDLERS_CACHE),
@@ -43,9 +47,13 @@ init(_Args) ->
 handle(_ProtocolVersion, ping) ->
   pong;
 
-handle(_ProtocolVersion, #eventmessage{type = Type}) ->
-  ?info("Some message from client, type: ~p", [Type]),
-  handle(1, {event_arrived, #mkdir_event{user_id = "123"}});
+handle(_ProtocolVersion, #event_payload{user_dn = UserDn, event = #eventmessage{type = Type}}) ->
+  ?info("~n~n~n-~n--~n---~n----~nSome message from client, type: ~p, ~p", [Type, UserDn]),
+  case Type of
+    "mkdir_event" -> handle(1, {event_arrived, #mkdir_event{user_dn = UserDn}});
+    "write_event" -> handle(1, {event_arrived, #write_event{user_dn = UserDn}});
+    _ -> ok
+  end;
 
 handle(_ProtocolVersion, healthcheck) ->
 	ok;
@@ -257,7 +265,7 @@ insert_to_ets_set(EtsName, Key, ItemToInsert) ->
 
 
 %% For test purposes
-register_mkdir_handler(InitCounter) ->
+register_mkdir_handler() ->
 %%   EventHandlerMapFun = fun(#mkdir_event{user_id = UserIdString}) ->
 %%     string_to_integer(UserIdString)
 %%   end,
@@ -286,16 +294,53 @@ register_mkdir_handler_aggregation(InitCounter) ->
     delete_file()
   end,
 
-%%   ProcessingConfig = #processing_config{init_counter = InitCounter},
-  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler}, %, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = ProcessingConfig},
+  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
 
   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "mkdir_event"},
-  EventFitlerBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventfilterconfig(EventFilter)),
 
   EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = InitCounter, wrapped_filter = EventFilter},
   EventAggregatorBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventaggregatorconfig(EventAggregator)),
   PushMessage = #pushmessage{message_type = "event_aggregator_config", data = EventAggregatorBin},
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {mkdir_event, EventItem, PushMessage}}}).
+
+register_write_event_handler(InitCounter) ->
+  EventHandler = fun(#write_event{user_dn = UserDn, ans_pid = AnsPid}) ->
+    ?info("Write EventHandler ~p", [node(self())]),
+    {View, QueryArgs} = {?USER_BY_DN_VIEW, #view_query_args{keys = [dao_helper:name(UserDn)], include_docs = true}},
+    case rpc:call(node(), dao, list_records, [View, QueryArgs]) of
+      {ok, #view_result{rows = Rows}} ->
+        FirstRow = hd(Rows),
+        Uuid = FirstRow#view_row.id,
+        UserDoc = FirstRow#view_row.doc,
+        {ok, SpaceUsed} = user_logic:get_files_size(Uuid, 1),
+        {ok, {quota, Quota}} = user_logic:get_quota(UserDoc),
+        ?info("user has used: ~p, quota: ~p", [SpaceUsed, Quota]),
+        case SpaceUsed > Quota of
+          true ->
+            gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {event_arrived, {quota_exceeded_event, Uuid}}}),
+            ?info("Quota exceeded event emited");
+          _ -> ok
+        end;
+      Error ->
+        ?info("error when searching user by dn: ~p", [Error])
+    end
+  end,
+
+  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
+
+  EventFilter = #eventfilterconfig{field_name = "type", desired_value = "write_event"},
+
+  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = InitCounter, wrapped_filter = EventFilter},
+  EventAggregatorBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventaggregatorconfig(EventAggregator)),
+  PushMessage = #pushmessage{message_type = "event_aggregator_config", data = EventAggregatorBin},
+  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {write_event, EventItem, PushMessage}}}).
+
+register_quota_exceeded_handler() ->
+  EventHandler = fun({quota_exceeded_event, Uuid}) ->
+    ?info("quota exceeded event for user: ~p", [Uuid])
+  end,
+  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
+  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {quota_exceeded_event, EventItem}}}).
 
 send_mkdir_event() ->
   MkdirEvent = #mkdir_event{user_id = "123"},

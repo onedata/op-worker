@@ -20,6 +20,7 @@
 -include("fuse_messages_pb.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
+-include("veil_modules/cluster_rengine/cluster_rengine.hrl").
 -include("logging.hrl").
 -include("veil_modules/dao/dao.hrl").
 -include_lib("public_key/include/public_key.hrl").
@@ -206,6 +207,8 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                       #veil_request{subject = DnString, request = #callback{fuse = FuseID, pid = self(), node = node(), action = channelregistration}};
                   CallbackMsg2 when is_record(CallbackMsg2, channelclose) ->
                       #veil_request{subject = DnString, request = #callback{fuse = FuseID, pid = self(), node = node(), action = channelclose}};
+                  EventMsg when is_record(EventMsg, eventmessage) ->
+                    #veil_request{subject = DnString, request = #event_payload{user_dn = DnString, event = Msg}, fuse_id = FuseID};
                   _ -> #veil_request{subject = DnString, request = Msg, fuse_id = FuseID}
               end,
 
