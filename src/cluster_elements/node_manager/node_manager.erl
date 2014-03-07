@@ -472,7 +472,7 @@ start_load_logging_loop(Path, StartTime) ->
     Other -> lager:error("Error while openning file: ~p", [Other])
   end.
 
-%% TODO po rozwinięciu funkcji monitorującej należy rozważyć integrację pętli z node_managerem
+%% TODO consider integration of load logging loop with node_manager callbacks after development of monitorig function
 %% load_logging_loop/3
 %% ====================================================================
 %% @doc Loop that logs current load of node
