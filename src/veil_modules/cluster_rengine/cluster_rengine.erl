@@ -32,7 +32,7 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% functions for manual tests
--export([register_mkdir_handler/1, send_mkdir_event/0, delete_file/0]).
+-export([register_mkdir_handler/1, register_mkdir_handler_aggregation/1, send_mkdir_event/0, delete_file/0]).
 
 init(_Args) ->
   worker_host:create_simple_cache(?EVENT_HANDLERS_CACHE),
@@ -273,7 +273,28 @@ register_mkdir_handler(InitCounter) ->
 
 %%   ProcessingConfig = #processing_config{init_counter = InitCounter},
   EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler}, %, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = ProcessingConfig},
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {mkdir_event, EventItem}}}).
+
+  EventFilter = #eventfilterconfig{field_name = "type", desired_value = "mkdir_event"},
+  EventFitlerBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventfilterconfig(EventFilter)),
+  PushMessage = #pushmessage{message_type = "event_filter_config", data = EventFitlerBin},
+  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {mkdir_event, EventItem, PushMessage}}}).
+
+register_mkdir_handler_aggregation(InitCounter) ->
+  EventHandler = fun(#mkdir_event{user_id = UserId, ans_pid = AnsPid}) ->
+    ?info("Mkdir EventHandler aggregation ~p", [node(self())]),
+    delete_file()
+  end,
+
+%%   ProcessingConfig = #processing_config{init_counter = InitCounter},
+  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler}, %, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = ProcessingConfig},
+
+  EventFilter = #eventfilterconfig{field_name = "type", desired_value = "mkdir_event"},
+  EventFitlerBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventfilterconfig(EventFilter)),
+
+  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = InitCounter, wrapped_filter = EventFilter},
+  EventAggregatorBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventaggregatorconfig(EventAggregator)),
+  PushMessage = #pushmessage{message_type = "event_aggregator_config", data = EventAggregatorBin},
+  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {mkdir_event, EventItem, PushMessage}}}).
 
 send_mkdir_event() ->
   MkdirEvent = #mkdir_event{user_id = "123"},

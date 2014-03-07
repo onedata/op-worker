@@ -62,6 +62,9 @@ handle(_ProtocolVersion, get_event_handlers) ->
   ets:match(?RULE_MANAGER_ETS, {'$1', '$2'});
 
 handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem}}) ->
+  handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem, #pushmessage{message_type = "unrecognized_filter_config", data = <<"">>}}});
+
+handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem, PushMessage}}) ->
   ?info("entering add_event_handler"),
   NewEventItem = case EventHandlerItem#event_handler_item.processing_method of
                    tree -> EventHandlerItem#event_handler_item{tree_id = generate_tree_name()};
@@ -75,7 +78,7 @@ handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem}}) ->
 %%   gen_server:call(?Dispatcher_Name, {cluster_regine, 1, {clear_cache, EventType}}),
 
   worker_host:clear_cache({?EVENT_TREES_MAPPING, EventType}),
-  notify_producers(),
+  notify_producers(PushMessage),
 
   ?info("New handler for event ~p registered.", [EventType]),
   ok;
@@ -97,7 +100,7 @@ cleanup() ->
 
 %% Helper functions
 
-notify_producers() ->
+notify_producers(PushMessage) ->
   Rows = fetch_rows(?FUSE_CONNECTIONS_VIEW, #view_query_args{}),
   FuseIds = lists:map(fun(#view_row{key = FuseId}) -> FuseId end, Rows),
   UniqueFuseIds = sets:to_list(sets:from_list(FuseIds)),
@@ -114,9 +117,9 @@ notify_producers() ->
 %%   CMsg = #clustermsg{synch = 0, protocol_version = 1, module_name = "", message_type = "eventstreamconfig", message_id = MsgId, message_decoder_name = "fuse_messages", answer_type = "handshakeresponse", answer_decoder_name = "fuse_messages", input = HBin},
 %%   CMsgBin = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(CMsg)),
 
-  EventFilter = #eventfilterconfig{field_name = "type", desired_value = "mkdir_event"},
-  EventFitlerBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventfilterconfig(EventFilter)),
-  PushMessage = #pushmessage{message_type = "event_filter_config", data = EventFitlerBin},
+%%   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "mkdir_event"},
+%%   EventFitlerBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventfilterconfig(EventFilter)),
+%%   PushMessage = #pushmessage{message_type = "event_filter_config", data = EventFitlerBin},
   lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, PushMessage, "fuse_messages") end, UniqueFuseIds).
 
 generate_tree_name() ->
