@@ -25,8 +25,8 @@ set_up_net_kernel() ->
 %% main script function, which processes given arguments
 main([Command | Args]) ->
     HostName = "@" ++ os:cmd("hostname -f") -- "\n",
-    set_up_net_kernel(),
     put(hostname, HostName),
+    set_up_net_kernel(),
     NodeType = lists:nth(1, Args),
     TargetNode = list_to_atom(NodeType ++ HostName),
     case Command of
