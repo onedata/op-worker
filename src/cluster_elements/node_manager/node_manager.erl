@@ -452,6 +452,11 @@ check_vsn([{Application, _Description, Vsn} | Apps]) ->
     _Other -> check_vsn(Apps)
   end.
 
+%% start_load_logging_loop/2
+%% ====================================================================
+%% @doc Start loop that logs current load of node
+-spec start_load_logging_loop(Path :: string(), StartTime :: float()) -> no_return().
+%% ====================================================================
 start_load_logging_loop(Path, StartTime) ->
   {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
   case file:open(Path ++ "/load_log.csv", [append]) of
@@ -467,6 +472,12 @@ start_load_logging_loop(Path, StartTime) ->
     Other -> lager:error("Error while openning file: ~p", [Other])
   end.
 
+%% TODO po rozwinięciu funkcji monitorującej należy rozważyć integrację pętli z node_managerem
+%% load_logging_loop/3
+%% ====================================================================
+%% @doc Loop that logs current load of node
+-spec load_logging_loop(Fd :: fd(), StartTime :: float(), PrevTime :: float()) -> no_return().
+%% ====================================================================
 load_logging_loop(Fd, StartTime, PrevTime) ->
   receive
     {log, Interval} ->
