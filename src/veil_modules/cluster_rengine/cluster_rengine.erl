@@ -37,7 +37,8 @@
 init(_Args) ->
   worker_host:create_simple_cache(?EVENT_HANDLERS_CACHE),
   worker_host:create_simple_cache(?EVENT_TREES_MAPPING),
-	ok.
+	[].
+
 
 handle(_ProtocolVersion, ping) ->
   pong;
@@ -146,7 +147,7 @@ update_event_handler(ProtocolVersion, EventType) ->
     {ok, EventHandlers} ->
       case EventHandlers of
         [] ->
-          % no registered events - insert empty list
+          %% no registered events - insert empty list
           ets:insert(?EVENT_TREES_MAPPING, {EventType, []}),
           ok;
         EventHandlersList ->

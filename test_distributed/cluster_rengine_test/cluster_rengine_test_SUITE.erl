@@ -11,19 +11,21 @@
 %% ==================================================================
 -module(cluster_rengine_test_SUITE).
 
--include("logging.hrl").
 -include("nodes_manager.hrl").
+-include("veil_modules/dao/dao.hrl").
+
+-include("logging.hrl").
 -include("registered_names.hrl").
 -include("veil_modules/cluster_rengine/cluster_rengine.hrl").
 
 %% API
--export([test_event_subscription/1, test_event_aggregation/1, test_dispatching/1]).
+-export([test_event_subscription/1, test_event_aggregation/1, test_dispatching/1, test_quota_case/1]).
 
 -export([ccm_code1/0, worker_code/0]).
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 %all() -> [test_event_subscription, test_event_aggregation, test_dispatching].
-all() -> [test_event_subscription, test_event_aggregation, test_dispatching].
+all() -> [test_event_subscription, test_event_aggregation, test_dispatching, test_quota_case].
 
 -define(assert_received(ResponsePattern), receive
                                             ResponsePattern -> ok
@@ -37,6 +39,10 @@ all() -> [test_event_subscription, test_event_aggregation, test_dispatching].
                                             -> ?assert(false)
                                           end).
 
+-define(SH, "DirectIO").
+
+-record(check_quota_event, {ans_pid, user_id}).
+
 test_event_subscription(Config) ->
   nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
@@ -48,12 +54,19 @@ test_event_subscription(Config) ->
   send_event(WriteEvent, CCM),
   assert_nothing_received(CCM),
 
-  subscribe_for_write_events(CCM, standard),
+
+  EventHandler = fun(#write_event{user_id = UserId, ans_pid = AnsPid}) ->
+    AnsPid ! {ok, standard, self()}
+  end,
+  subscribe_for_write_events(CCM, standard, EventHandler),
   send_event(WriteEvent, CCM),
   ?assert_received({ok, standard, _}),
   assert_nothing_received(CCM),
 
-  subscribe_for_write_events(CCM, tree),
+  EventHandler2 = fun(#write_event{user_id = UserId, ans_pid = AnsPid}) ->
+    AnsPid ! {ok, tree, self()}
+  end,
+  subscribe_for_write_events(CCM, tree, EventHandler2),
   send_event(WriteEvent, CCM),
   % from my observations it takes about 200ms until disp map fun is registered in cluster_manager
   timer:sleep(900),
@@ -68,7 +81,10 @@ test_event_aggregation(Config) ->
   NodesUp = ?config(nodes, Config),
   [CCM | _] = NodesUp,
 
-  subscribe_for_write_events(CCM, tree, #processing_config{init_counter = 4}),
+  EventHandler = fun(#write_event{user_id = UserId, ans_pid = AnsPid}) ->
+    AnsPid ! {ok, tree, self()}
+  end,
+  subscribe_for_write_events(CCM, tree, EventHandler, #processing_config{init_counter = 4}),
   WriteEvent = #write_event{user_id = "1234", ans_pid = self()},
 
   repeat(3, fun() -> send_event(WriteEvent, CCM) end),
@@ -90,7 +106,11 @@ test_dispatching(Config) ->
   NodesUp = ?config(nodes, Config),
   [CCM | _] = NodesUp,
 
-  subscribe_for_write_events(CCM, tree),
+
+  EventHandler = fun(#write_event{user_id = UserId, ans_pid = AnsPid}) ->
+    AnsPid ! {ok, tree, self()}
+  end,
+  subscribe_for_write_events(CCM, tree, EventHandler),
 
   WriteEvent1 = #write_event{user_id = "1234", ans_pid = self()},
   WriteEvent2 = #write_event{user_id = "1235", ans_pid = self()},
@@ -146,6 +166,95 @@ test_dispatching(Config) ->
   ?assertEqual(2, sets:size(SetOfPids5)),
   SetOfNodes2 = NodesFromPids(SetOfPids5),
   ?assertEqual(2, sets:size(SetOfNodes2)).
+
+
+test_quota_case(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+  [CCM | _] = NodesUp,
+
+  Host = "localhost",
+  Port = ?config(port, Config),
+
+  %% files_manager call with given user's DN
+  FM = fun(M, A, DN) ->
+    Me = self(),
+    Pid = spawn(CCM, fun() -> put(user_id, DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
+    receive
+      {Pid, Resp} -> Resp
+    end
+  end,
+
+  %% Init storage
+%%   {InsertStorageAns, StorageUUID} = rpc:call(CCM, fslogic_storage, insert_storage, [?SH, ?TEST_ROOT]),
+  {InsertStorageAns, StorageUUID} = rpc:call(CCM, fslogic_storage, insert_storage, [?SH, "/tmp/veilfs"]),
+  ?assertEqual(ok, InsertStorageAns),
+
+  %% Init users
+  AddUser = fun(Login, Teams, Cert) ->
+    {ReadFileAns, PemBin} = file:read_file(Cert),
+    ?assertEqual(ok, ReadFileAns),
+    {ExtractAns, RDNSequence} = rpc:call(CCM, user_logic, extract_dn_from_cert, [PemBin]),
+    ?assertEqual(rdnSequence, ExtractAns),
+    {ConvertAns, DN} = rpc:call(CCM, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
+    ?assertEqual(ok, ConvertAns),
+    DnList = [DN],
+
+    Name = "user1 user1",
+    Email = "user1@email.net",
+    {CreateUserAns, #veil_document{uuid = UserID}} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+    ?assertEqual(ok, CreateUserAns),
+    {DnList, UserID}
+  end,
+
+  Login1 = "veilfstestuser",
+  Teams1 = ["veilfstestgroup(Grp)"],
+  Login2 = "veilfstestuser2",
+  Teams2 = ["veilfstestgroup(Grp)"],
+  Cert1 = ?COMMON_FILE("peer.pem"),
+  {DN1, UserID1} = AddUser(Login1, Teams1, Cert1),
+  %% END init users
+
+  %% Init connections
+  {ConAns1, Socket1} = wss:connect(Host, Port, [{certfile, Cert1}, {cacertfile, Cert1}, auto_handshake]),
+  ?assertEqual(ok, ConAns1),
+  %% END init connections
+
+  FileName = "events_quota_case",
+  FileSize = 100,
+
+  AnsCreate = FM(create, [FileName], DN1),
+  ?assertEqual(ok, AnsCreate),
+  AnsTruncate = FM(truncate, [FileName, FileSize], DN1),
+  ?assertEqual(ok, AnsTruncate),
+  {AnsGetFileAttr, _} = FM(getfileattr, [FileName], DN1),
+  ?assertEqual(ok, AnsGetFileAttr),
+
+  WriteEvent = #write_event{user_id = UserID1, ans_pid = self()},
+  repeat(10, fun() -> send_event(WriteEvent, CCM) end),
+  assert_nothing_received(CCM),
+
+  EventHandler = fun(#write_event{user_id = UserId, ans_pid = AnsPid}) ->
+    AnsPid ! {ok, write_event_processed, self()},
+    CheckQuotaNeededEvent = #check_quota_event{user_id = UserId},
+    send_event(CheckQuotaNeededEvent, CCM)
+  end,
+
+  subscribe_for_write_events(CCM, standard, EventHandler),
+  send_event(WriteEvent, CCM),
+  ?assert_received({ok, write_event_processed, _}),
+  assert_nothing_received(CCM),
+
+  CheckQuotaEventHandler = fun(#check_quota_event{user_id = UserId, ans_pid = AnsPid}) ->
+    AnsPid ! {ok, check_quota_processed, self()}
+    %if excedded send exceeded
+  end,
+  subscribe_for_events(check_quota_event, CCM, CheckQuotaEventHandler),
+  send_event(WriteEvent, CCM),
+  ?assert_received({ok, write_event_processed, _}),
+  ?assert_received({ok, check_quota_processed, _}),
+  assert_nothing_received(CCM).
+
 
 
 %% ====================================================================
@@ -211,10 +320,10 @@ end_per_testcase(_, Config) ->
   ?assertEqual(ok, StopAns).
 
 
-subscribe_for_write_events(Node, ProcessingMethod) ->
-  subscribe_for_write_events(Node, ProcessingMethod, #processing_config{}).
+subscribe_for_write_events(Node, ProcessingMethod, EventHandler) ->
+  subscribe_for_write_events(Node, ProcessingMethod, EventHandler, #processing_config{}).
 
-subscribe_for_write_events(Node, ProcessingMethod, ProcessingConfig) ->
+subscribe_for_write_events(Node, ProcessingMethod, EventHandler, ProcessingConfig) ->
   EventHandlerMapFun = fun(#write_event{user_id = UserIdString}) ->
     string_to_integer(UserIdString)
   end,
@@ -222,11 +331,6 @@ subscribe_for_write_events(Node, ProcessingMethod, ProcessingConfig) ->
   EventHandlerDispMapFun = fun(#write_event{user_id = UserId}) ->
     UserIdInt = string_to_integer(UserId),
     UserIdInt div 100
-  end,
-
-  EventHandler = fun(#write_event{user_id = UserId, ans_pid = AnsPid}) ->
-%%     ?info("EventHandler ~p", [node(self())]),
-    AnsPid ! {ok, ProcessingMethod, self()}
   end,
 
   EventItem = #event_handler_item{processing_method = ProcessingMethod, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = ProcessingConfig},
@@ -239,6 +343,20 @@ subscribe_for_write_events(Node, ProcessingMethod, ProcessingConfig) ->
   end,
 
   timer:sleep(800).
+
+
+subscribe_for_events(EventType, Node, EventHandler) ->
+  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
+  gen_server:call({?Dispatcher_Name, Node}, {rule_manager, 1, self(), {add_event_handler, {EventType, EventItem}}}),
+
+  receive
+    ok -> ok
+  after 400 ->
+    ?assert(false)
+  end,
+
+  timer:sleep(800).
+
 
 repeat(N, F) -> for(1, N, F).
 for(N, N, F) -> [F()];
