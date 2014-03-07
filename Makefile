@@ -116,7 +116,7 @@ start_node_console:
 
 ### Basho-Bench build (used by CI)
 basho_bench: deps compile
-    rm -rf deps/basho_bench
+	@rm -rf deps/basho_bench
 	cp ${STRESS_TESTS_SRC_DIR}/**/*.erl ${BASHO_BENCH_DIR}/src
 	cp ${DIST_TESTS_SRC_DIR}/wss.erl ${BASHO_BENCH_DIR}/src
 	@mkdir -p ${BASHO_BENCH_DIR}/tests
