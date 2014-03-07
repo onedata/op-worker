@@ -207,11 +207,15 @@ delete_doc(DbName, DocID) ->
         {ok, Doc} ->
             NewDoc = Doc#doc{deleted = true},
             case insert_doc(DbName, NewDoc) of
-                {ok, _Rev} -> ok;
-                Ierror -> Ierror
+                {ok, _Rev} ->
+                  ok;
+                Ierror ->
+                  Ierror
             end;
-        {error, {not_found, Type}} -> {error, Type};
-        Err -> Err
+        {error, {not_found, Type}} ->
+          {error, Type};
+        Err ->
+          Err
     end.
 
 
@@ -321,7 +325,9 @@ name(Name) when is_binary(Name) ->
 %% ====================================================================
 revision(RevInfo) when is_binary(RevInfo) ->
     [Num, Rev] = string:tokens(binary_to_list(RevInfo), [$-]),
-    {list_to_integer(Num), [binary:encode_unsigned(list_to_integer(Rev, 16))]};
+    Bin = binary:encode_unsigned(list_to_integer(Rev, 16)),
+    BinSize = size(Bin),
+    {list_to_integer(Num), [<<0:((16-BinSize)*8), Bin/binary>>]};
 revision({Num, [Rev | _Old]}) ->
     {Num, [Rev]}.
 

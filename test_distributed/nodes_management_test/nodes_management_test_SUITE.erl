@@ -97,9 +97,12 @@ fuse_session_cleanup_test(Config) ->
     AddUser("user1", Cert1),
 
     %% Open connections for the user as session #1
-    {ok, Socket11} = wss:connect(Host, 6666, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #1
-    {ok, Socket12} = wss:connect(Host, 7777, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #2
-    {ok, Socket13} = wss:connect(Host, 7777, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #2
+    {ConAns11, Socket11} = wss:connect(Host, 6666, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #1
+    ?assertEqual(ok, ConAns11),
+    {ConAns12, Socket12} = wss:connect(Host, 7777, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #2
+    ?assertEqual(ok, ConAns12),
+    {ConAns13, Socket13} = wss:connect(Host, 7777, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #2
+    ?assertEqual(ok, ConAns13),
     FuseID1 = wss:handshakeInit(Socket11, "hostname1", []),
 
     ?assertEqual(ok, wss:handshakeAck(Socket11, FuseID1)),
@@ -107,8 +110,10 @@ fuse_session_cleanup_test(Config) ->
     ?assertEqual(ok, wss:handshakeAck(Socket13, FuseID1)),
 
     %% Open connections for the user as session #2
-    {ok, Socket21} = wss:connect(Host, 7777, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #2
-    {ok, Socket22} = wss:connect(Host, 8888, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #3
+    {ConAns21, Socket21} = wss:connect(Host, 7777, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #2
+    ?assertEqual(ok, ConAns21),
+    {ConAns22, Socket22} = wss:connect(Host, 8888, [{certfile, Cert1}, {cacertfile, Cert1}]), %% Node #3
+    ?assertEqual(ok, ConAns22),
     FuseID2 = wss:handshakeInit(Socket21, "hostname2", []),
 
     ?assertEqual(ok, wss:handshakeAck(Socket21, FuseID2)),
@@ -294,7 +299,8 @@ callbacks_test(Config) ->
   ?assertEqual(ok, CreateUserAns),
   %% END Add user
 
-  {ok, Socket0} = wss:connect('localhost', 6666, [{certfile, PeerCert}, {cacertfile, PeerCert}]),
+  {ConAns0, Socket0} = wss:connect('localhost', 6666, [{certfile, PeerCert}, {cacertfile, PeerCert}]),
+  ?assertEqual(ok, ConAns0),
   FuseId1 = wss:handshakeInit(Socket0, "hostname", []), %% Get first fuseId
   FuseId2 = wss:handshakeInit(Socket0, "hostname", []), %% Get second fuseId
   wss:close(Socket0),

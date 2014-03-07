@@ -66,16 +66,41 @@ init([NodeType]) when NodeType =:= worker ->
       ?Sup_Child(node_manager, node_manager, permanent, [NodeType])
     ]}};
 
+init([NodeType]) when NodeType =:= ccm_test ->
+  handle_test_init(NodeType);
+
 init([NodeType]) when NodeType =:= ccm ->
     {ok, { {one_for_one, 5, 10}, [
       ?Sup_Child(request_dispatcher, request_dispatcher, permanent, []),
       ?Sup_Child(cluster_manager, cluster_manager, permanent, []),
       ?Sup_Child(node_manager, node_manager, permanent, [NodeType])
-    ]}};
+    ]}}.
 
-init([NodeType]) when NodeType =:= ccm_test ->
+%% handle_test_init/1
+%% ====================================================================
+%% @doc Handles initialization during the tests
+-spec handle_test_init(NodeType :: atom()) -> Result when
+  Result :: {ok, {SupervisionPolicy, [ChildSpec]}} | ignore,
+  SupervisionPolicy :: {RestartStrategy, MaxR :: non_neg_integer(), MaxT :: pos_integer()},
+  RestartStrategy :: one_for_all
+  | one_for_one
+  | rest_for_one
+  | simple_one_for_one,
+  ChildSpec :: {Id :: term(), StartFunc, RestartPolicy, Type :: worker | supervisor, Modules},
+  StartFunc :: {M :: module(), F :: atom(), A :: [term()] | undefined},
+  RestartPolicy :: permanent
+  | transient
+  | temporary,
+  Modules :: [module()] | dynamic.
+%% ====================================================================
+-ifdef(TEST).
+handle_test_init(NodeType) ->
   {ok, { {one_for_one, 5, 10}, [
     ?Sup_Child(request_dispatcher, request_dispatcher, permanent, []),
     ?Sup_Child(cluster_manager, cluster_manager, permanent, [test]),
     ?Sup_Child(node_manager, node_manager, permanent, [NodeType])
   ]}}.
+-else.
+handle_test_init(_NodeType) ->
+  ignore.
+-endif.

@@ -31,9 +31,6 @@
 
 all() -> [dao_vfs_find_test].
 
--define(RegularFile, 0).
--define(SH, "DirectIO").
--define(TEST_ROOT, ["/tmp/veilfs"]). %% Root of test filesystem
 -define(ProtocolVersion, 1).
 -define(USER1, "dao_vfs_find_user1").
 -define(USER2, "dao_vfs_find_user2").
