@@ -476,7 +476,7 @@ start_load_logging_loop(Path, StartTime) ->
 %% load_logging_loop/3
 %% ====================================================================
 %% @doc Loop that logs current load of node
--spec load_logging_loop(Fd :: fd(), StartTime :: float(), PrevTime :: float()) -> no_return().
+-spec load_logging_loop(Fd :: pid(), StartTime :: float(), PrevTime :: float()) -> no_return().
 %% ====================================================================
 load_logging_loop(Fd, StartTime, PrevTime) ->
   receive
