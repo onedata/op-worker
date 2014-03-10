@@ -25,36 +25,53 @@ set_up_net_kernel() ->
 %% main script function, which processes given arguments
 main([Command | Args]) ->
     HostName = "@" ++ os:cmd("hostname -f") -- "\n",
-    put(hostname, HostName),
     set_up_net_kernel(),
     NodeType = lists:nth(1, Args),
     TargetNode = list_to_atom(NodeType ++ HostName),
     case Command of
-        "start" -> start_load_logging(NodeType, TargetNode);
-        "stop" -> stop_load_logging(NodeType, TargetNode);
-        _ -> ok
+        "start" ->
+            info(TargetNode, "Starting load logging ...~n", []),
+            {ok, Dir} = file:get_cwd(),
+            info(TargetNode, "Logs output directory: ~p.~n", [Dir]),
+            start_load_logging(NodeType, TargetNode, Dir);
+        "stop" ->
+            stop_load_logging(NodeType, TargetNode);
+        Other ->
+            info("Unknown command: ~p.~n", [Other])
     end.
 
 %% cast message to ccm/worker node to start load logging on all nodes/this node
-start_load_logging("ccm", Node) ->
-    io:format("Start load logging on node: ~p~n", [Node]),
-    {ok, Dir} = file:get_cwd(),
-    io:format("Dir: ~p~n", [Dir]),
-    ok = rpc:call(Node, gen_server, cast, [{global, central_cluster_manager}, {start_load_logging, Dir}], 1000);
-start_load_logging("worker", Node) ->
-    io:format("Start load logging on node: ~p~n", [Node]),
-    {ok, Dir} = file:get_cwd(),
-    io:format("Dir: ~p~n", [Dir]),
-    ok = rpc:call(Node, gen_server, cast, [node_manager, {start_load_logging, Dir}], 1000);
-start_load_logging(Other, _) ->
-    io:format("Unknown node type: ~p~n", [Other]).
+start_load_logging("ccm", Node, Dir) ->
+    case rpc:call(Node, gen_server, cast, [{global, central_cluster_manager}, {start_load_logging, Dir}], 1000) of
+        ok -> info(Node, "Load logging has been started.~n", []);
+        Other -> info(Node, "Unable to start load logging. Error: ~p.~n", [Other])
+    end;
+start_load_logging("worker", Node, Dir) ->
+    case rpc:call(Node, gen_server, cast, [node_manager, {start_load_logging, Dir}], 1000) of
+        ok -> info(Node, "Load logging has been started.~n", []);
+        Other -> info(Node, "Unable to start load logging. Error: ~p.~n", [Other])
+    end;
+start_load_logging(Other, _, _) ->
+    info("Unknown node type: ~p.~n", [Other]).
 
 %% cast message to ccm/worker node to stop load logging on all nodes/this node
 stop_load_logging("ccm", Node) ->
-    io:format("Stop load logging on node: ~p~n", [Node]),
-    ok = rpc:call(Node, gen_server, cast, [{global, central_cluster_manager}, stop_load_logging], 1000);
+    case rpc:call(Node, gen_server, cast, [{global, central_cluster_manager}, stop_load_logging], 1000) of
+        ok -> info(Node, "Load logging has been stopped.~n", []);
+        _ -> ok
+    end;
 stop_load_logging("worker", Node) ->
-    io:format("Stop load logging on node: ~p~n", [Node]),
-    ok = rpc:call(Node, gen_server, cast, [node_manager, stop_load_logging], 1000);
+    case rpc:call(Node, gen_server, cast, [node_manager, stop_load_logging], 1000) of
+        ok -> info(Node, "Load logging has been stopped.~n", []);
+        _ -> ok
+    end;
 stop_load_logging(Other, _) ->
-    io:format("Unknown node type: ~p~n", [Other]).
+    info("Unknown node type: ~p.~n", [Other]).
+
+info(Format, Data) ->
+    io:format("---> ", []),
+    io:format(Format, Data).
+
+info(Node, Format, Data) ->
+    io:format("---> [Node: ~p] ", [Node]),
+    io:format(Format, Data).
