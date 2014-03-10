@@ -106,6 +106,11 @@ veil_cluster_node_env:
       value: 15
 
   - parameter:
+      name: node_load_logging_period
+      description: How often (in seconds) should load of each node be logged
+      value: 10
+
+  - parameter:
       name: nif_prefix
       description: Prefix to c_lib directory containing NIF libs
       value: |

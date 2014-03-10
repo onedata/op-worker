@@ -34,6 +34,8 @@
 %% Name of nodes monitoring process
 -define(Monitoring_Proc, monitor_process).
 
+%% Loacl name of node load logging process
+-define(Load_Logging_Proc, load_logging_process).
 
 %% Local name of the process waiting for dns udp messages
 -define(DNS_UDP, dns_udp).

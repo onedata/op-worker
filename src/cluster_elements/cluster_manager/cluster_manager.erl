@@ -416,6 +416,16 @@ handle_cast({synch_cache_clearing, Cache, ReturnPid}, State) ->
   ReturnPid ! {cache_cleared, Cache},
   {noreply, New_State};
 
+handle_cast({start_load_logging, Path}, State) ->
+  lager:info("Start load logging on nodes: ~p", State#cm_state.nodes),
+  lists:map(fun(Node) -> gen_server:cast({?Node_Manager_Name, Node}, {start_load_logging, Path}) end, State#cm_state.nodes),
+  {noreply, State};
+
+handle_cast(stop_load_logging, State) ->
+  lager:info("Stop load logging on nodes: ~p", State#cm_state.nodes),
+  lists:map(fun(Node) -> gen_server:cast({?Node_Manager_Name, Node}, stop_load_logging) end, State#cm_state.nodes),
+  {noreply, State};
+
 handle_cast(_Msg, State) ->
   {noreply, State}.
 
