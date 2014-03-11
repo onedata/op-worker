@@ -50,6 +50,7 @@ run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes, SocketState, Sock
                   catch
                       _R1:R2 ->
                         wss:close(NewSocket),
+												timer:sleep(3000), %todo remove
                         {error, R2, {Hosts, CertFile, PongAnsBytes, closed, []}}
                   end;
           {error, Error} -> {error, {connect, Error}, {Hosts, CertFile, PongAnsBytes, closed, []}};
