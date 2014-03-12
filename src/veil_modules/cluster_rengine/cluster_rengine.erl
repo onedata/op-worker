@@ -43,12 +43,10 @@ init(_Args) ->
   worker_host:create_simple_cache(?EVENT_TREES_MAPPING),
 	[].
 
-
 handle(_ProtocolVersion, ping) ->
   pong;
 
 handle(_ProtocolVersion, #event_payload{user_dn = UserDn, event = #eventmessage{type = Type}}) ->
-  ?info("~n~n~n-~n--~n---~n----~nSome message from client, type: ~p, ~p", [Type, UserDn]),
   case Type of
     "mkdir_event" -> handle(1, {event_arrived, #mkdir_event{user_dn = UserDn}});
     "write_event" -> handle(1, {event_arrived, #write_event{user_dn = UserDn}});
@@ -176,20 +174,12 @@ create_process_tree_for_handlers(EventHandlersList) ->
   lists:foreach(fun create_process_tree_for_handler/1, EventHandlersList).
 
 create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = MapFun, handler_fun = HandlerFun, config = Config}) ->
-  GetEventProcessorEtsName = fun() ->
-    %% In Erlang doc there is some warning about using pid_to_list in application code.
-    %% It seems (but only seems) to be be used correctly here because we will store only local pids here.
-    %% Still it may be better idea to do some changes to worker_host to prevent from doing "strange" things.
-    list_to_atom(?PROCESSOR_ETS_NAME ++ pid_to_list(self()))
-  end,
-
   InitCounterIfNeeded = fun(EtsName, InitCounter) ->
     case ets:lookup(EtsName, counter) of
       [] -> ets:insert(EtsName, {counter, InitCounter});
       _ -> ok
     end
   end,
-
 
   ProcFun = case Config#processing_config.init_counter of
     undefined ->
@@ -284,8 +274,9 @@ register_mkdir_handler() ->
   EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler}, %, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = ProcessingConfig},
 
   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "mkdir_event"},
-  EventFitlerBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventfilterconfig(EventFilter)),
-  PushMessage = #pushmessage{message_type = "event_filter_config", data = EventFitlerBin},
+  EventFilterConfig = #eventconfig{filter_config = EventFilter},
+  EventFitlerBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventconfig(EventFilterConfig)),
+  PushMessage = #pushmessage{message_type = "event_config", data = EventFitlerBin},
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {mkdir_event, EventItem, PushMessage}}}).
 
 register_mkdir_handler_aggregation(InitCounter) ->
@@ -297,10 +288,12 @@ register_mkdir_handler_aggregation(InitCounter) ->
   EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
 
   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "mkdir_event"},
+  EventFilterConfig = #eventconfig{filter_config = EventFilter},
 
-  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = InitCounter, wrapped_filter = EventFilter},
-  EventAggregatorBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventaggregatorconfig(EventAggregator)),
-  PushMessage = #pushmessage{message_type = "event_aggregator_config", data = EventAggregatorBin},
+  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = InitCounter},
+  EventAggregatorConfig = #eventconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
+  EventAggregatorBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventconfig(EventAggregatorConfig)),
+  PushMessage = #pushmessage{message_type = "event_config", data = EventAggregatorBin},
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {mkdir_event, EventItem, PushMessage}}}).
 
 register_write_event_handler(InitCounter) ->
@@ -329,10 +322,12 @@ register_write_event_handler(InitCounter) ->
   EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
 
   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "write_event"},
+  EventFilterConfig = #eventconfig{filter_config = EventFilter},
 
-  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = InitCounter, wrapped_filter = EventFilter},
-  EventAggregatorBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventaggregatorconfig(EventAggregator)),
-  PushMessage = #pushmessage{message_type = "event_aggregator_config", data = EventAggregatorBin},
+  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = InitCounter},
+  EventAggregatorConfig = #eventconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
+  EventAggregatorBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventconfig(EventAggregatorConfig)),
+  PushMessage = #pushmessage{message_type = "event_config", data = EventAggregatorBin},
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {write_event, EventItem, PushMessage}}}).
 
 register_quota_exceeded_handler() ->

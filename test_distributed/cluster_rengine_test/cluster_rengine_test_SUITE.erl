@@ -249,7 +249,6 @@ subscribe_for_write_events(Node, ProcessingMethod, EventHandler, ProcessingConfi
   end,
 
   EventItem = #event_handler_item{processing_method = ProcessingMethod, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = ProcessingConfig},
-  ct:print("calling rule manager!!!!"),
   gen_server:call({?Dispatcher_Name, Node}, {rule_manager, 1, self(), {add_event_handler, {write_event, EventItem}}}),
 
   receive
