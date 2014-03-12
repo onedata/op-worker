@@ -181,9 +181,15 @@ message EventFilterConfig {
 message EventAggregatorConfig {
     required string field_name = 1;
     required uint64 threshold = 2;
-    optional EventFilterConfig wrapped_filter = 3;
+}
+
+message EventConfig {
+    optional EventConfig wrapped_config = 1;
+    optional EventFilterConfig filter_config = 2;
+    optional EventAggregatorConfig aggregator_config = 3;
 }
 
 message EventMessage {
     required string type = 1;
+    optional uint64 count = 2;
 }
