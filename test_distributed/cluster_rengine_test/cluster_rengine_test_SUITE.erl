@@ -13,19 +13,21 @@
 
 -include("nodes_manager.hrl").
 -include("veil_modules/dao/dao.hrl").
+-include("veil_modules/dao/dao_vfs.hrl").
+-include_lib("veil_modules/dao/dao_helper.hrl").
+-include_lib("veil_modules/dao/dao_types.hrl").
 
 -include("logging.hrl").
 -include("registered_names.hrl").
 -include("veil_modules/cluster_rengine/cluster_rengine.hrl").
 
 %% API
--export([test_event_subscription/1, test_event_aggregation/1, test_dispatching/1, test_quota_case/1]).
+-export([test_event_subscription/1, test_event_aggregation/1, test_dispatching/1]).
 
 -export([ccm_code1/0, worker_code/0]).
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
-%all() -> [test_event_subscription, test_event_aggregation, test_dispatching].
-all() -> [test_event_subscription, test_event_aggregation, test_dispatching, test_quota_case].
+all() -> [test_event_subscription, test_event_aggregation, test_dispatching].
 
 -define(assert_received(ResponsePattern), receive
                                             ResponsePattern -> ok
@@ -59,7 +61,9 @@ test_event_subscription(Config) ->
     AnsPid ! {ok, standard, self()}
   end,
   subscribe_for_write_events(CCM, standard, EventHandler),
+  timer:sleep(100),
   send_event(WriteEvent, CCM),
+  timer:sleep(50),
   ?assert_received({ok, standard, _}),
   assert_nothing_received(CCM),
 
@@ -168,95 +172,6 @@ test_dispatching(Config) ->
   ?assertEqual(2, sets:size(SetOfNodes2)).
 
 
-test_quota_case(Config) ->
-  nodes_manager:check_start_assertions(Config),
-  NodesUp = ?config(nodes, Config),
-  [CCM | _] = NodesUp,
-
-  Host = "localhost",
-  Port = ?config(port, Config),
-
-  %% files_manager call with given user's DN
-  FM = fun(M, A, DN) ->
-    Me = self(),
-    Pid = spawn(CCM, fun() -> put(user_id, DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
-    receive
-      {Pid, Resp} -> Resp
-    end
-  end,
-
-  %% Init storage
-%%   {InsertStorageAns, StorageUUID} = rpc:call(CCM, fslogic_storage, insert_storage, [?SH, ?TEST_ROOT]),
-  {InsertStorageAns, StorageUUID} = rpc:call(CCM, fslogic_storage, insert_storage, [?SH, "/tmp/veilfs"]),
-  ?assertEqual(ok, InsertStorageAns),
-
-  %% Init users
-  AddUser = fun(Login, Teams, Cert) ->
-    {ReadFileAns, PemBin} = file:read_file(Cert),
-    ?assertEqual(ok, ReadFileAns),
-    {ExtractAns, RDNSequence} = rpc:call(CCM, user_logic, extract_dn_from_cert, [PemBin]),
-    ?assertEqual(rdnSequence, ExtractAns),
-    {ConvertAns, DN} = rpc:call(CCM, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
-    ?assertEqual(ok, ConvertAns),
-    DnList = [DN],
-
-    Name = "user1 user1",
-    Email = "user1@email.net",
-    {CreateUserAns, #veil_document{uuid = UserID}} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
-    ?assertEqual(ok, CreateUserAns),
-    {DnList, UserID}
-  end,
-
-  Login1 = "veilfstestuser",
-  Teams1 = ["veilfstestgroup(Grp)"],
-  Login2 = "veilfstestuser2",
-  Teams2 = ["veilfstestgroup(Grp)"],
-  Cert1 = ?COMMON_FILE("peer.pem"),
-  {DN1, UserID1} = AddUser(Login1, Teams1, Cert1),
-  %% END init users
-
-  %% Init connections
-  {ConAns1, Socket1} = wss:connect(Host, Port, [{certfile, Cert1}, {cacertfile, Cert1}, auto_handshake]),
-  ?assertEqual(ok, ConAns1),
-  %% END init connections
-
-  FileName = "events_quota_case",
-  FileSize = 100,
-
-  AnsCreate = FM(create, [FileName], DN1),
-  ?assertEqual(ok, AnsCreate),
-  AnsTruncate = FM(truncate, [FileName, FileSize], DN1),
-  ?assertEqual(ok, AnsTruncate),
-  {AnsGetFileAttr, _} = FM(getfileattr, [FileName], DN1),
-  ?assertEqual(ok, AnsGetFileAttr),
-
-  WriteEvent = #write_event{user_id = UserID1, ans_pid = self()},
-  repeat(10, fun() -> send_event(WriteEvent, CCM) end),
-  assert_nothing_received(CCM),
-
-  EventHandler = fun(#write_event{user_id = UserId, ans_pid = AnsPid}) ->
-    AnsPid ! {ok, write_event_processed, self()},
-    CheckQuotaNeededEvent = #check_quota_event{user_id = UserId},
-    send_event(CheckQuotaNeededEvent, CCM)
-  end,
-
-  subscribe_for_write_events(CCM, standard, EventHandler),
-  send_event(WriteEvent, CCM),
-  ?assert_received({ok, write_event_processed, _}),
-  assert_nothing_received(CCM),
-
-  CheckQuotaEventHandler = fun(#check_quota_event{user_id = UserId, ans_pid = AnsPid}) ->
-    AnsPid ! {ok, check_quota_processed, self()}
-    %if excedded send exceeded
-  end,
-  subscribe_for_events(check_quota_event, CCM, CheckQuotaEventHandler),
-  send_event(WriteEvent, CCM),
-  ?assert_received({ok, write_event_processed, _}),
-  ?assert_received({ok, check_quota_processed, _}),
-  assert_nothing_received(CCM).
-
-
-
 %% ====================================================================
 %% SetUp and TearDown functions
 %% ====================================================================
@@ -270,8 +185,8 @@ init_per_testcase(_, Config) ->
   DBNode = nodes_manager:get_db_node(),
 
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, [
-    [{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}],
-    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}]]),
+    [{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {user_files_size_view_update_period, 2}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {user_files_size_view_update_period, 2}]]),
 
   Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
   Res = lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config),
@@ -297,7 +212,7 @@ init_per_testcase(_, Config) ->
 
   StartAdditionalWorker(CCM, rule_manager),
   lists:foreach(fun(Node) -> StartAdditionalWorker(Node, cluster_rengine) end, NodesUp),
-  StartAdditionalWorker(CCM, dao),
+  lists:foreach(fun(Node) -> StartAdditionalWorker(Node, dao) end, NodesUp),
 
   nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
   Res.
@@ -334,6 +249,7 @@ subscribe_for_write_events(Node, ProcessingMethod, EventHandler, ProcessingConfi
   end,
 
   EventItem = #event_handler_item{processing_method = ProcessingMethod, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = ProcessingConfig},
+  ct:print("calling rule manager!!!!"),
   gen_server:call({?Dispatcher_Name, Node}, {rule_manager, 1, self(), {add_event_handler, {write_event, EventItem}}}),
 
   receive
@@ -382,8 +298,7 @@ string_to_integer(SomeString) ->
 assert_nothing_received(Node) ->
   receive
     Ans ->
-%%       cluster_rengine:log("FAIL: ", Ans),
-      gen_server:call({?Dispatcher_Name, Node}, {cluster_rengine, 1, {log, "FAIL:", Ans}}),
+      ct:print("assert nothing failed with: ~p", [Ans]),
       ?assert(false)
   after 1000
     -> ok
@@ -411,3 +326,27 @@ count_answers(ToReceive, Set) ->
   after 2000 ->
     {ToReceive, Set}
   end.
+
+
+add_user(Login, Teams, Cert, Node) ->
+  {ReadFileAns, PemBin} = file:read_file(Cert),
+  ?assertEqual(ok, ReadFileAns),
+  {ExtractAns, RDNSequence} = rpc:call(Node, user_logic, extract_dn_from_cert, [PemBin]),
+  ?assertEqual(rdnSequence, ExtractAns),
+  {ConvertAns, DN} = rpc:call(Node, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
+  ?assertEqual(ok, ConvertAns),
+  DnList = [DN],
+
+  Name = "user1 user1",
+  Email = "user1@email.net",
+  {CreateUserAns, #veil_document{uuid = UserID}} = rpc:call(Node, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+  ?assertEqual(ok, CreateUserAns),
+  {DnList, UserID}.
+
+get_user_doc(UserId, Node) ->
+  {View, QueryArgs} = {?USER_BY_UID_VIEW, #view_query_args{keys = [dao_helper:name(UserId)], include_docs = true}},
+  {Ans, GetUsersRes} = rpc:call(Node, dao, list_records, [View, QueryArgs]),
+  ?assertEqual(ok, Ans),
+
+  FirstRow = hd(GetUsersRes#view_result.rows),
+  FirstRow#view_row.doc.
