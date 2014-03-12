@@ -263,6 +263,7 @@ handle_call({check_worker_node, Module}, _From, State) ->
   handle_test_call({check_worker_node, Module}, _From, State);
 
 handle_call(_Request, _From, State) ->
+  ?error("Error: wrong call: ~p", [_Request]),
   {reply, wrong_request, State}.
 
 %% handle_test_call/3
@@ -382,6 +383,7 @@ handle_cast({delete_callback, FuseId, Node, CallbacksNum}, State) ->
   {noreply, State#dispatcher_state{callbacks_num = CallbacksNum}};
 
 handle_cast(_Msg, State) ->
+  ?error("Error: wrong cast: ~p", [_Msg]),
   {noreply, State}.
 
 %% handle_info/2
@@ -396,6 +398,7 @@ handle_cast(_Msg, State) ->
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 handle_info(_Info, State) ->
+  ?error("Error: wrong info: ~p", [_Info]),
   {noreply, State}.
 
 

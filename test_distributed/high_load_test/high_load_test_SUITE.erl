@@ -23,6 +23,7 @@ all() -> [main_test].
 -define(ProtocolVersion, 1).
 
 %% TODO - pamiętać o zbadaniu late answers
+%% TODO - sprawdzić wszystkie gen_server:call, cast, receive (czy nie mamy late answer), spawny (czy mamy wiedzę jak proces się wywala), logowanie, scalić proces monitorujący w ccmie
 main_test(Config) ->
   nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
@@ -31,22 +32,28 @@ main_test(Config) ->
 
   Pid = self(),
   TestFun = fun() ->
-    spawn(fun() ->
-      gen_server:call({?Dispatcher_Name, CCM}, {fslogic, ?ProtocolVersion, Pid, ping}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {dao, ?ProtocolVersion, Pid, ping}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {dns_worker, ?ProtocolVersion, Pid, ping}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {control_panel, ?ProtocolVersion, Pid, ping}, 500),
-      gen_server:call({?Dispatcher_Name, CCM}, {remote_files_manager, ?ProtocolVersion, Pid, ping}, 500)
-    end)
+    ?assert(is_pid(spawn_link(fun() ->
+      try
+        ?assertEqual(ok, gen_server:call({?Dispatcher_Name, CCM}, {fslogic, ?ProtocolVersion, Pid, ping}, 500)),
+        ?assertEqual(ok, gen_server:call({?Dispatcher_Name, CCM}, {dao, ?ProtocolVersion, Pid, ping}, 500)),
+        ?assertEqual(ok, gen_server:call({?Dispatcher_Name, CCM}, {dns_worker, ?ProtocolVersion, Pid, ping}, 500)),
+        ?assertEqual(ok, gen_server:call({?Dispatcher_Name, CCM}, {control_panel, ?ProtocolVersion, Pid, ping}, 500)),
+        ?assertEqual(ok, gen_server:call({?Dispatcher_Name, CCM}, {remote_files_manager, ?ProtocolVersion, Pid, ping}, 500)),
+        Pid ! test_fun_ok
+      catch
+        E11:E12 ->
+          Pid ! {E11, E12}
+      end
+    end)))
   end,
 
-  TestRequestsNum = 100,
+  TestRequestsNum = 30000,
   for(1, TestRequestsNum, TestFun),
-
   Answers = count_answers(),
-  ct:print("Answers ~p~n", [Answers]),
-  ?assertEqual(5*TestRequestsNum, proplists:get_value(pong, Answers, 0)),
 
+%%   ct:print("Answers ~p~n", [Answers]),
+  ?assertEqual(5*TestRequestsNum, proplists:get_value(pong, Answers, 0)),
+  ?assertEqual(TestRequestsNum, proplists:get_value(test_fun_ok, Answers, 0)),
   ok.
 
 
@@ -100,6 +107,6 @@ count_answers(TmpAns) ->
       NewCounter = proplists:get_value(Msg, TmpAns, 0) + 1,
       NewAns = [{Msg, NewCounter} | proplists:delete(Msg, TmpAns)],
       count_answers(NewAns)
-  after 5000 ->
+  after 10000 ->
     TmpAns
   end.
