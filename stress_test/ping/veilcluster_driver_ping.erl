@@ -40,7 +40,9 @@ run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes}) ->
                   catch
                     R1:R2 -> {error, {R1, R2}, NewState}
                   end,
+							timer:sleep(300),
               wss:close(Socket),
+							timer:sleep(300),
               Res;
           {error, Error} -> {error, {connect, Error}, NewState};
           Other -> {error, {unknown_error, Other}, NewState}
