@@ -45,9 +45,9 @@ run(Action, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes, SocketState, Sock
                   try ping(Action, NewSocket, PongAnsBytes) of
                       ok -> {ok, {Hosts, CertFile, PongAnsBytes, NewSocketState, NewSocket}}
                   catch
-                      _R1:R2 ->
+                      R1:R2 ->
                         wss:close(NewSocket),
-												{error, R2, {Hosts, CertFile, PongAnsBytes, closed, []}}
+												{error, {R1,R2}, {Hosts, CertFile, PongAnsBytes, closed, []}}
                   end;
           {error, Error} -> {error, {connect, Error}, {Hosts, CertFile, PongAnsBytes, closed, []}};
           Other -> {error, {unknown_error, Other}, {Hosts, CertFile, PongAnsBytes, closed, []}}
