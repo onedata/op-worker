@@ -7,9 +7,6 @@
 -include("veil_modules/dao/dao.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 
--define(LogLoop, 100).
--define(LogLoopTime, 60000000).
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% TEST DRIVER CALLBACKS %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
