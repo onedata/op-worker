@@ -122,7 +122,7 @@ send(Pid, Data) ->
 -spec close(SocketRef :: pid()) -> ok.
 %% ====================================================================
 close(Pid) ->
-    Pid ! {close, ""},
+    Pid ! {close, <<>>},
     ok.
 
 
