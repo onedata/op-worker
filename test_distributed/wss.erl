@@ -47,7 +47,8 @@ websocket_terminate({close, Code, _Payload}, _ConnState, State) ->
     State ! {self(), {closed, Code}},
     ok;
 websocket_terminate({normal, _Payload}, _ConnState, State) ->
-	lager:info("websocket_terminate(~p, ~p, ~p) ",[{normal, _Payload}, _ConnState, State]),
+		lager:info("websocket_terminate(~p, ~p, ~p) ",[{normal, _Payload}, _ConnState, State]),
+    State ! {self(), {closed, normal}},
 		ok.
 
 
