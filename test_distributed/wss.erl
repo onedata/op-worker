@@ -40,15 +40,14 @@ websocket_handle(_, _ConnState, State) ->
 websocket_info({send, Data}, _ConnState, State) ->
     {reply, {binary, Data}, State};
 websocket_info({close, Payload}, _ConnState, State) ->
-		lager:info("websocket_info close"),
-    {close, <<>>, "done"}.
+%% 		lager:info("websocket_info close"),
+    {close, Payload, "done"}.
 
 websocket_terminate({close, Code, _Payload}, _ConnState, State) ->
     State ! {self(), {closed, Code}},
     ok;
 websocket_terminate({normal, _Payload}, _ConnState, State) ->
 		lager:info("websocket_terminate(~p, ~p, ~p) ",[{normal, _Payload}, _ConnState, State]),
-%%     State ! {self(), {closed, normal}},
 		ok.
 
 
