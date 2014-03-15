@@ -17,7 +17,7 @@ NitrogenClass.prototype.$attach_upload_handle_dragdrop_veil = function(form,inpu
     if(typeof(form.$nitrogen_pending_files)=="undefined")
         form.$nitrogen_pending_files = [];
 
-    jQuery.getScript("/nitrogen/jquery.fileupload.min.js",function(){
+    jQuery.getScript("js/jquery.fileupload.min.js",function(){
         var dropzone = jQuery(".upload_drop");
     
         jQuery(input).fileupload({
