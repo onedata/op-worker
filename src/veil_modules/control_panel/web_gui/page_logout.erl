@@ -5,11 +5,11 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This file contains n2o website code.
+%% @doc: This file contains Nitrogen website code
 %% @end
 %% ===================================================================
 
--module(page_404).
+-module(page_logout).
 -compile(export_all).
 -include("veil_modules/control_panel/common.hrl").
 
@@ -17,17 +17,22 @@
 main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}.
 
 %% Page title
-title() -> [<<"Error 404">>].
+title() -> [<<"Logout page">>].
 
-%% This will be placed in the template instead of {{body}} tag
+%% This will be placed in the template instead of [[[page:body()]]] tag
 body() ->
-    #panel{style = <<"position: relative;">>, body = [
-        #panel{class = <<"alert alert-danger login-page">>, body = [
-            #h3{body = <<"Error 404">>},
-            #p{class = <<"login-info">>, body = <<"Requested page could not be found on the server.">>},
-            #button{postback = to_login, class = <<"btn btn-warning btn-block">>, body = <<"Login page">>}
+    wf:logout(),
+    #panel{style = <<"position: relative;">>, body =
+    [
+        #panel{class = <<"alert alert-success login-page">>, body = [
+            #h3{class = <<"">>, body = <<"Logout successful">>},
+            #p{class = <<"login-info">>, body = <<"Come back soon.">>},
+            #button{postback = to_login, class = <<"btn btn-primary btn-block">>, body = <<"Login page">>}
         ]}
-    ] ++ gui_utils:logotype_footer(120)}.
+    ]
+    ++ gui_utils:logotype_footer(120)
+        ++ [#p{body = <<"<iframe src=\"https://openid.plgrid.pl/logout\" style=\"display:none\"></iframe>">>}]
+    }.
 
 event(init) -> ok;
 event(to_login) -> gui_utils:redirect_to_login().

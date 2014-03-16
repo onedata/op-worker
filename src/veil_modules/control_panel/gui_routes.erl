@@ -21,6 +21,22 @@ init(State, Ctx) ->
     Path = wf:path(Ctx#context.req),
     {ok, State, Ctx#context{path = Path, module = route(Path)}}.
 
-route(<<"/strona">>) -> strona;
-route(<<"/ws/strona">>) -> strona;
+route(<<"/">>) -> page_file_manager;
+route(<<"/ws/">>) -> page_file_manager;
+
+route(<<"/login">>) -> page_login;
+route(<<"/ws/login">>) -> page_login;
+
+route(<<"/validate_login">>) -> page_validate_login;
+route(<<"/ws/validate_login">>) -> page_validate_login;
+
+route(<<"/logout">>) -> page_logout;
+route(<<"/ws/logout">>) -> page_logout;
+
+route(<<"/file_manager">>) -> page_file_manager;
+route(<<"/ws/file_manager">>) -> page_file_manager;
+
+route(<<"/error">>) -> page_error;
+route(<<"/ws/error">>) -> page_error;
+
 route(_) -> page_404.

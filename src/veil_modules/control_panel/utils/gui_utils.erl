@@ -14,8 +14,8 @@
 -include("logging.hrl").
 
 -export([get_requested_hostname/0, get_user_dn/0, user_logged_in/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0]).
--export([redirect_to_login/1, redirect_from_login/0, apply_or_redirect/3, apply_or_redirect/4]).
--export([top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
+-export([redirect_to_login/0, redirect_to_login/1, redirect_from_login/0]).
+-export([apply_or_redirect/3, apply_or_redirect/4, top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
 
 
 %% ====================================================================
@@ -30,7 +30,7 @@
 %% ====================================================================
 get_requested_hostname() ->
     {Headers, _} = wf:headers(?REQ),
-    _Hostname = proplists:get_value(<<"host">>, Headers).
+    proplists:get_value(<<"host">>, Headers, undefined).
 
 %% get_user_dn/0
 %% ====================================================================
@@ -100,14 +100,22 @@ can_view_logs() ->
     end.
 
 
+redirect_to_login() ->
+    redirect_to_login(<<"">>).
+
+
 redirect_to_login(PageName) ->
-    wf:redirect(<<"/strona?x=", PageName/binary>>).
+    case PageName of
+        <<"">> -> wf:redirect(<<"/login">>);
+        _ -> wf:redirect(<<"/login?x=", PageName/binary>>)
+    end.
 
 
 redirect_from_login() ->
-    Params = wf:params(?REQ),
-    TargetPage = proplists:get_value(<<"x">>, Params, <<"">>),
-    wf:redirect(<<"/", TargetPage/binary>>).
+    case wf:q(<<"x">>) of
+        undefined -> wf:redirect(<<"/">>);
+        TargetPage -> wf:redirect(TargetPage)
+    end.
 
 
 %% apply_or_redirect/3
