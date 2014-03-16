@@ -19,7 +19,7 @@
 -define(AUTOREFRESH_PERIOD, 500).
 
 % Item is either a file or a dir represented in manager
--record(item, {id="", path="/", is_shared=false, attr=#fileattributes { } }).
+-record(item, {id = "", path = "/", is_shared = false, attr = #fileattributes{}}).
 
 %%%%% List of keys stored in session memory
 % user_doc -> user's document obtained during login
@@ -38,12 +38,13 @@
 main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}.
 
 %% Page title
-title() -> [<<"File manager">>].
+title() -> <<"File manager">>.
 
-%% This will be placed in the template instead of [[[page:body()]]] tag
+%% This will be placed in the template instead of {{body}} tag
 body() ->
-    <<"ZOMG">>.
-    %gui_utils:apply_or_redirect(?MODULE, render_body, true).
+    gui_utils:apply_or_redirect(?MODULE, render_ender, true).
+
+render_ender() -> <<"ZOMG">>.
 
 event(init) -> ok.
 

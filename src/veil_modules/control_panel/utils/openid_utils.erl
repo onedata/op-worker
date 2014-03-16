@@ -153,7 +153,7 @@ retrieve_user_info() ->
         DN3 = wf:to_list(wf:q(<<?openid_dn3_key>>)),
         DnList = lists:filter(
             fun(X) ->
-                (X /= undefined)
+                (X /= [])
             end, [DN1, DN2, DN3]),
         {ok, [
             {login, Login},
@@ -163,7 +163,7 @@ retrieve_user_info() ->
             {dn_list, lists:usort(DnList)}
         ]}
     catch Type:Message ->
-        lager:error("Failed to retrieve user info.~n~p: ~p~n~p", [Type, Message, erlang:get_stacktrace()]),
+        ?error_stacktrace("Failed to retrieve user info - ~p: ~p", [Type, Message]),
         {error, invalid_request}
     end.
 

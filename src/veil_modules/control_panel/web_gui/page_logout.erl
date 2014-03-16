@@ -17,11 +17,13 @@
 main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}.
 
 %% Page title
-title() -> [<<"Logout page">>].
+title() -> <<"Logout page">>.
 
-%% This will be placed in the template instead of [[[page:body()]]] tag
+%% This will be placed in the template instead of {{body}} tag
 body() ->
-    wf:logout(),
+    wf:user(undefined),
+    wf:session(user_doc, undefined),
+    %wf:logout(), % Not yet implemented in n2o
     #panel{style = <<"position: relative;">>, body =
     [
         #panel{class = <<"alert alert-success login-page">>, body = [
@@ -35,4 +37,4 @@ body() ->
     }.
 
 event(init) -> ok;
-event(to_login) -> gui_utils:redirect_to_login().
+event(to_login) -> gui_utils:redirect_to_login(false).

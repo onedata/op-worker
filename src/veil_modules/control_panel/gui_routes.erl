@@ -36,6 +36,12 @@ route(<<"/ws/logout">>) -> page_logout;
 route(<<"/file_manager">>) -> page_file_manager;
 route(<<"/ws/file_manager">>) -> page_file_manager;
 
+route(<<"/manage_account">>) -> page_manage_account;
+route(<<"/ws/manage_account">>) -> page_manage_account;
+
+route(<<"/about">>) -> page_about;
+route(<<"/ws/about">>) -> page_about;
+
 route(<<"/error">>) -> page_error;
 route(<<"/ws/error">>) -> page_error;
 

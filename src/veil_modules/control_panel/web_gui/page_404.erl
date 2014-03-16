@@ -17,7 +17,7 @@
 main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}.
 
 %% Page title
-title() -> [<<"Error 404">>].
+title() -> <<"Error 404">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
@@ -30,4 +30,4 @@ body() ->
     ] ++ gui_utils:logotype_footer(120)}.
 
 event(init) -> ok;
-event(to_login) -> gui_utils:redirect_to_login().
+event(to_login) -> gui_utils:redirect_to_login(false).

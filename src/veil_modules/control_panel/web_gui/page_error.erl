@@ -17,7 +17,7 @@
 main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}.
 
 %% Page title
-title() -> [<<"Error">>].
+title() -> <<"Error">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
@@ -25,13 +25,13 @@ body() ->
         #panel{class = <<"alert alert-danger login-page">>, body = [
             #h3{body = <<"Error">>},
             #p{class = <<"login-info">>, style = <<"font-weight: bold;">>, body = wf:q(<<"reason">>)},
-            #p{class = << "login-info">>, body = wf:q(<<"details">>)},
+            #p{class = <<"login-info">>, body = wf:q(<<"details">>)},
             #button{postback = to_login, class = <<"btn btn-warning btn-block">>, body = <<"Login page">>}
         ]}
     ] ++ gui_utils:logotype_footer(120)}.
 
 event(init) -> ok;
-event(to_login) -> gui_utils:redirect_to_login().
+event(to_login) -> gui_utils:redirect_to_login(false).
 
 
 % This function causes a HTTP rediurect to error page, which displays an error message.

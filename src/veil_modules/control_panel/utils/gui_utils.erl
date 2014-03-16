@@ -13,8 +13,9 @@
 -include("veil_modules/control_panel/common.hrl").
 -include("logging.hrl").
 
--export([get_requested_hostname/0, get_user_dn/0, user_logged_in/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0]).
--export([redirect_to_login/0, redirect_to_login/1, redirect_from_login/0]).
+-export([get_requested_hostname/0, get_user_dn/0, get_requested_page/0]).
+-export([user_logged_in/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0]).
+-export([redirect_to_login/1, redirect_from_login/0]).
 -export([apply_or_redirect/3, apply_or_redirect/4, top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
 
 
@@ -31,6 +32,20 @@
 get_requested_hostname() ->
     {Headers, _} = wf:headers(?REQ),
     proplists:get_value(<<"host">>, Headers, undefined).
+
+
+%% get_requested_page/0
+%% ====================================================================
+%% @doc Returns the page requested by the client.
+%% @end
+-spec get_requested_page() -> binary().
+%% ====================================================================
+get_requested_page() ->
+    Path = wf:path(?REQ),
+    case Path of
+        <<"/ws", Page/binary>> -> Page;
+        <<Page/binary>> -> Page
+    end.
 
 %% get_user_dn/0
 %% ====================================================================
@@ -100,14 +115,11 @@ can_view_logs() ->
     end.
 
 
-redirect_to_login() ->
-    redirect_to_login(<<"">>).
-
-
-redirect_to_login(PageName) ->
-    case PageName of
-        <<"">> -> wf:redirect(<<"/login">>);
-        _ -> wf:redirect(<<"/login?x=", PageName/binary>>)
+redirect_to_login(EnableGoingBack) ->
+    PageName = get_requested_page(),
+    case EnableGoingBack of
+        false -> wf:redirect(<<"/login">>);
+        true -> wf:redirect(<<"/login?x=", PageName/binary>>)
     end.
 
 
@@ -139,10 +151,10 @@ apply_or_redirect(Module, Fun, Args, NeedDN) ->
     try
         case user_logged_in() of
             false ->
-                wf:redirect_to_login(<<"/login">>);
+                gui_utils:redirect_to_login(true);
             true ->
                 case NeedDN and (not dn_and_storage_defined()) of
-                    true -> wf:redirect("/manage_account");
+                    true -> wf:redirect(<<"/manage_account">>);
                     false -> erlang:apply(Module, Fun, Args)
                 end
         end
