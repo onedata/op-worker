@@ -263,8 +263,7 @@ start_deps() ->
   application:start(ranch),
   application:start(nprocreg),
   application:start(cowboy),
-  application:start(nitrogen_core),
-  application:start(simple_bridge),
+  application:start(n2o),
   application:start(mimetypes),
   application:start(ibrowse),
   application:load(?APP_Name).
@@ -285,9 +284,8 @@ stop_deps() ->
   application:stop(cowboy),
   application:stop(lager),
   application:stop(sasl),
-  application:stop(nitrogen_core),
+  application:stop(n2o),
   application:stop(mimetypes),
-  application:stop(simple_bridge),
   application:stop(ibrowse),
   application:unload(?APP_Name).
 

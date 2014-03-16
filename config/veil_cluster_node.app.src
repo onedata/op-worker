@@ -10,30 +10,31 @@
 %% ===================================================================
 
 {application, veil_cluster_node,
- [
-  {description, "Application starts node of VeilFS central cluster"},
-  {vsn, "0.0.6_VFS-70"},
-  {registered, []},
-  {applications, [
-                  kernel,
-                  stdlib,
-                  nitrogen_core,
-                  simple_bridge,
-                  mimetypes,
-                  sasl,
-                  public_key,
-                  lager,
-                  crypto,
-                  ssl,
-                  os_mon,
-                  ranch,
-                  nprocreg,
-                  cowboy,
-                  ibrowse
-                 ]},
-  {mod, {veil_cluster_node_app, []}},
-  {env, [
-		%% This part is auto-generated
-    %% Don't modify "{env, [" line an whatever comes after it
-	]}
-]}.
+    [
+        {description, "Application starts node of VeilFS central cluster"},
+        {vsn, "0.0.6_VFS-70"},
+        {registered, []},
+        {applications, [
+            kernel,
+            stdlib,
+            xmerl,
+            sasl,
+            public_key,
+            lager,
+            crypto,
+            ssl,
+            ibrowse,
+            os_mon,
+            ranch,
+            cowboy,
+            n2o,
+            erlydtl,
+            gproc,
+            mimetypes
+        ]},
+        {mod, {veil_cluster_node_app, []}},
+        {env, [
+            %% This part is auto-generated
+            %% Don't modify "{env, [" line an whatever comes after it
+        ]}
+    ]}.

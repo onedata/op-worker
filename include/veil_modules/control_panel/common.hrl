@@ -12,7 +12,7 @@
 -ifndef(CONTROL_PANEL_COMMON_HRL).
 -define(CONTROL_PANEL_COMMON_HRL, 1).
 
--include_lib("nitrogen_core/include/wf.hrl").
+-include_lib("n2o/include/wf.hrl").
 -include_lib("veil_modules/control_panel/nitrogen_records.hrl").
 
 % Relative suffix of GUI address, leading to shared files

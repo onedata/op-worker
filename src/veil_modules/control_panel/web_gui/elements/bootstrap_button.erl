@@ -19,37 +19,20 @@
 reflect() -> record_info(fields, bootstrap_button).
 
 render_element(Record) ->
-    ID = Record#bootstrap_button.id,
-    Anchor = Record#bootstrap_button.anchor,
-    case Record#bootstrap_button.postback of
-        undefined -> ignore;
-        Postback -> wf:wire(Anchor, #event { type=click, validation_group=ID, postback=Postback, delegate=Record#bootstrap_button.delegate })
-    end,
+    Id = case Record#button.postback of
+             undefined -> Record#button.id;
+             Postback ->
+                 ID = case Record#button.id of undefined -> wf:temp_id(); I -> I end,
+                 wf:wire(#event{type=click, postback=Postback, target=ID,
+                 source=Record#button.source, delegate=Record#button.delegate }),
+                 ID end,
 
-    case Record#bootstrap_button.click of
-        undefined -> ignore;
-        ClickActions -> wf:wire(Anchor, #event { type=click, actions=ClickActions })
-    end,
-
-    Value = ["  ", wf:html_encode(Record#bootstrap_button.text, Record#bootstrap_button.html_encode), "  "], 
-
-    DataToggleAttributes = 
-    	case Record#bootstrap_button.data_toggle of
-    		[] -> [];
-    		_ ->
-    			[
-    				{'data-toggle', Record#bootstrap_button.data_toggle},
-    				{'data-target', Record#bootstrap_button.data_target}
-    			]
-    	end,
-
-    UniversalAttributes = [
-        {id, Record#bootstrap_button.html_id},
-        {title, Record#bootstrap_button.title},
-        {class, [bootstrap_button, Record#bootstrap_button.class]},
-        {style, Record#bootstrap_button.style},
-        {value, Value},
-        {type, Record#bootstrap_button.type}
-    ] ++ DataToggleAttributes,
-
-    wf_tags:emit_tag(button, [Record#bootstrap_button.body], UniversalAttributes).
+    wf_tags:emit_tag(<<"button">>, wf:render(Record#button.body), [
+        {<<"id">>, Id},
+        {<<"title">>, Record#bootstrap_button.title},
+        {<<"type">>, Record#button.type},
+        {<<"name">>, Record#button.name},
+        {<<"class">>, Record#button.class},
+        {<<"style">>, Record#button.style},
+        {<<"disabled">>, if Record#button.disabled == true -> "disabled"; true -> undefined end},
+        {<<"value">>, Record#button.value}  | Record#button.data_fields ]).

@@ -14,16 +14,14 @@
 
 % Button with additional fields
 -record(bootstrap_button, {?ELEMENT_BASE(bootstrap_button), 
-    text="", 
-    title,
+    text="",
     html_encode=true, 
     click, 
     postback, 
     delegate,
     data_toggle="",
     data_target="",
-    type=button,
-    body=""
+    type=button
 }).
 
 
@@ -45,8 +43,7 @@
     method, 
     action, 
     html_name, 
-    enctype, 
-    body=[]
+    enctype
 }).
 
 

@@ -18,7 +18,7 @@
         // Register as an anonymous AMD module:
         define([
             'jquery',
-            '../nitrogen/fileupload/jquery.ui.widget.js'
+            'jquery.ui.widget.js'
         ], factory);
     } else {
         // Browser globals:

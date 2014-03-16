@@ -9,12 +9,13 @@
 %% @end
 %% ===================================================================
 
--module (gui_utils).
+-module(gui_utils).
 -include("veil_modules/control_panel/common.hrl").
 -include("logging.hrl").
 
 -export([get_requested_hostname/0, get_user_dn/0, user_logged_in/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0]).
--export([apply_or_redirect/3, apply_or_redirect/4, top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
+-export([redirect_to_login/1, redirect_from_login/0, apply_or_redirect/3, apply_or_redirect/4]).
+-export([top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
 
 
 %% ====================================================================
@@ -25,12 +26,11 @@
 %% ====================================================================
 %% @doc Returns the hostname requested by the client.
 %% @end
--spec get_requested_hostname() -> string().
+-spec get_requested_hostname() -> binary().
 %% ====================================================================
 get_requested_hostname() ->
-    RequestBridge = wf_context:request_bridge(),
-    proplists:get_value(host, RequestBridge:headers()).
-
+    {Headers, _} = wf:headers(?REQ),
+    _Hostname = proplists:get_value(<<"host">>, Headers).
 
 %% get_user_dn/0
 %% ====================================================================
@@ -100,6 +100,16 @@ can_view_logs() ->
     end.
 
 
+redirect_to_login(PageName) ->
+    wf:redirect(<<"/strona?x=", PageName/binary>>).
+
+
+redirect_from_login() ->
+    Params = wf:params(?REQ),
+    TargetPage = proplists:get_value(<<"x">>, Params, <<"">>),
+    wf:redirect(<<"/", TargetPage/binary>>).
+
+
 %% apply_or_redirect/3
 %% ====================================================================
 %% @doc Checks if the client has right to do the operation (is logged in and possibly 
@@ -108,30 +118,30 @@ can_view_logs() ->
 -spec apply_or_redirect(Module :: atom, Fun :: atom, boolean()) -> boolean().
 %% ====================================================================
 apply_or_redirect(Module, Fun, NeedDN) ->
-    apply_or_redirect(Module, Fun, [], NeedDN).    
+    apply_or_redirect(Module, Fun, [], NeedDN).
 
 %% apply_or_redirect/4
 %% ====================================================================
 %% @doc Checks if the client has right to do the operation (is logged in and possibly 
 %% has a certificate DN defined). If so, it executes the code.
 %% @end
--spec apply_or_redirect(Module :: atom, Fun :: atom, Args :: list(), boolean()) -> boolean().
+-spec apply_or_redirect(Module :: atom, Fun :: atom, Args :: list(), boolean()) -> boolean() | no_return.
 %% ====================================================================
 apply_or_redirect(Module, Fun, Args, NeedDN) ->
-    try 
+    try
         case user_logged_in() of
             false ->
-                wf:redirect_to_login("/login");
-            true -> 
+                wf:redirect_to_login(<<"/login">>);
+            true ->
                 case NeedDN and (not dn_and_storage_defined()) of
                     true -> wf:redirect("/manage_account");
                     false -> erlang:apply(Module, Fun, Args)
                 end
         end
     catch Type:Message ->
-        lager:error("Error in ~p - ~p:~p~n~p", [Module, Type, Message, erlang:get_stacktrace()]),
-        page_error:redirect_with_error("Internal server error", 
-            "Server encountered an unexpected error. Please contact the site administrator if the problem persists.")
+        ?error_stacktrace("Error in ~p - ~p:~p", [Module, Type, Message]),
+        page_error:redirect_with_error(<<"Internal server error">>,
+            <<"Server encountered an unexpected error. Please contact the site administrator if the problem persists.">>)
     end.
 
 
@@ -156,41 +166,41 @@ top_menu(ActiveTabID) ->
 top_menu(ActiveTabID, SubMenuBody) ->
     % Tab, that will be displayed optionally
     LogsPageCaptions = case can_view_logs() of
-        false ->
-            [];
-        true ->
-            [{logs_tab, #listitem { body=[
-                #link{ style="padding: 18px;", url="/logs", text="Logs" }
-            ]}}]
-    end,
+                           false ->
+                               [];
+                           true ->
+                               [{logs_tab, #li{body = [
+                                   #link{style = "padding: 18px;", url = "/logs", body = "Logs"}
+                               ]}}]
+                       end,
     % Define menu items with ids, so that proper tab can be made active via function parameter 
     % see old_menu_captions()
-    MenuCaptions = 
-    [
-        {file_manager_tab, #listitem { body=[
-            #link{ style="padding: 18px;", url="/file_manager", text="File manager" }
-        ]}},
-        {shared_files_tab, #listitem { body=[
-            #link{ style="padding: 18px;", url="/shared_files", text="Shared files" }
-        ]}}
-    ] ++ LogsPageCaptions,
+    MenuCaptions =
+        [
+            {file_manager_tab, #li{body = [
+                #link{style = "padding: 18px;", url = "/file_manager", body = "File manager"}
+            ]}},
+            {shared_files_tab, #li{body = [
+                #link{style = "padding: 18px;", url = "/shared_files", body = "Shared files"}
+            ]}}
+        ] ++ LogsPageCaptions,
 
-    MenuIcons = 
-    [
-        {manage_account_tab, #listitem { body=#link{ style="padding: 18px;", title="Manage account",
-            url="/manage_account", body=[user_logic:get_name(wf:session(user_doc)) , #span{ class="fui-user", style="margin-left: 10px;" }] } } },
-        %{contact_support_tab, #listitem { body=#link{ style="padding: 18px;", title="Contact & Support",
-        %    url="/contact_support", body=#span{ class="fui-question" } } } },
-        {about_tab, #listitem { body=#link{ style="padding: 18px;", title="About",
-              url="/about", body=#span{ class="fui-info" } } } },
-        {logout_button,  #listitem { body=#link{ style="padding: 18px;", title="Log out",
-            url="/logout", body=#span{ class="fui-power" } } } }
-    ],
+    MenuIcons =
+        [
+            {manage_account_tab, #li{body = #link{style = "padding: 18px;", title = "Manage account",
+            url = "/manage_account", body = [user_logic:get_name(wf:session(user_doc)), #span{class = "fui-user", style = "margin-left: 10px;"}]}}},
+            %{contact_support_tab, #li { body=#link{ style="padding: 18px;", title="Contact & Support",
+            %    url="/contact_support", body=#span{ class="fui-question" } } } },
+            {about_tab, #li{body = #link{style = "padding: 18px;", title = "About",
+            url = "/about", body = #span{class = "fui-info"}}}},
+            {logout_button, #li{body = #link{style = "padding: 18px;", title = "Log out",
+            url = "/logout", body = #span{class = "fui-power"}}}}
+        ],
 
     MenuCaptionsProcessed = lists:map(
         fun({TabID, ListItem}) ->
             case TabID of
-                ActiveTabID -> ListItem#listitem { class="active" };
+                ActiveTabID -> ListItem#li{class = "active"};
                 _ -> ListItem
             end
         end, MenuCaptions),
@@ -198,17 +208,17 @@ top_menu(ActiveTabID, SubMenuBody) ->
     MenuIconsProcessed = lists:map(
         fun({TabID, ListItem}) ->
             case TabID of
-                ActiveTabID -> ListItem#listitem { class="active" };
+                ActiveTabID -> ListItem#li{class = "active"};
                 _ -> ListItem
             end
         end, MenuIcons),
 
-    #panel { class="navbar navbar-fixed-top", body=[
-        #panel { class="navbar-inner", style="border-bottom: 2px solid gray;", body=[
-            #panel { class="container", body=[    
-                #list { class="nav pull-left", body=MenuCaptionsProcessed },
-                #list { class="nav pull-right", body=MenuIconsProcessed }
-            ]}                
+    #panel{class = "navbar navbar-fixed-top", body = [
+        #panel{class = "navbar-inner", style = "border-bottom: 2px solid gray;", body = [
+            #panel{class = "container", body = [
+                #list{class = "nav pull-left", body = MenuCaptionsProcessed},
+                #list{class = "nav pull-right", body = MenuIconsProcessed}
+            ]}
         ]}
     ] ++ SubMenuBody}.
 
@@ -221,63 +231,58 @@ top_menu(ActiveTabID, SubMenuBody) ->
 %% ====================================================================
 logotype_footer(MarginTop) ->
     [
-        #panel { style=wf:f("position: relative; height: ~Bpx;", [MarginTop + 82]), body=[ 
-            #panel { style=wf:f("text-align: center; z-index: -1; margin-top: ~Bpx;", [MarginTop]), 
-                body=[
-                #image { style="margin: 10px 100px;", image="/images/innow-gosp-logo.png" },
-                #image { style="margin: 10px 100px;", image="/images/plgrid-plus-logo.png" },
-                #image { style="margin: 10px 100px;", image="/images/unia-logo.png" }
+        #panel{style = wf:f("position: relative; height: ~Bpx;", [MarginTop + 82]), body = [
+            #panel{style = wf:f("body-align: center; z-index: -1; margin-top: ~Bpx;", [MarginTop]),
+            body = [
+                #image{style = "margin: 10px 100px;", image = "/images/innow-gosp-logo.png"},
+                #image{style = "margin: 10px 100px;", image = "/images/plgrid-plus-logo.png"},
+                #image{style = "margin: 10px 100px;", image = "/images/unia-logo.png"}
             ]}
         ]}
     ].
 
 
-
-
-
 % Development functions
 empty_page() ->
     [
-        #h6 { text="Not yet implemented" },
-        #br{},  #br{},  #br{},  #br{},  #br{},  
-        #br{},  #br{},  #br{},  #br{},  #br{}, 
-        #br{},  #br{},  #br{},  #br{},  #br{}, 
-        #br{},  #br{},  #br{},  #br{},  #br{},  
-        #br{},  #br{},  #br{},  #br{},  #br{},  
-        #br{},  #br{},  #br{},  #br{},  #br{},  
-        #br{},  #br{},  #br{},  #br{},  #br{},  
-        #br{},  #br{},  #br{},  #br{},  #br{},  
-        #br{},  #br{},  #br{},  #br{},  #br{},  
-        #br{},  #br{},  #br{},  #br{},  #br{},  
-        #br{},  #br{},  #br{},  #br{},  #br{}
+        #h6{body = "Not yet implemented"},
+        #br{}, #br{}, #br{}, #br{}, #br{},
+        #br{}, #br{}, #br{}, #br{}, #br{},
+        #br{}, #br{}, #br{}, #br{}, #br{},
+        #br{}, #br{}, #br{}, #br{}, #br{},
+        #br{}, #br{}, #br{}, #br{}, #br{},
+        #br{}, #br{}, #br{}, #br{}, #br{},
+        #br{}, #br{}, #br{}, #br{}, #br{},
+        #br{}, #br{}, #br{}, #br{}, #br{},
+        #br{}, #br{}, #br{}, #br{}, #br{},
+        #br{}, #br{}, #br{}, #br{}, #br{},
+        #br{}, #br{}, #br{}, #br{}, #br{}
     ].
-
-
 
 
 % old_menu_captions() ->
 % _MenuCaptions = 
 %     [
-%         {data_tab, #listitem { body=[
-%             #link{ style="padding: 18px;", url="/file_manager", text="Data" },
+%         {data_tab, #li { body=[
+%             #link{ style="padding: 18px;", url="/file_manager", body="Data" },
 %             #list { style="top: 37px;", body=[
-%                 #listitem { body=#link{ url="/file_manager", text="File manager" } },
-%                 #listitem { body=#link{ url="/shared_files", text="Shared files" } }
+%                 #li { body=#link{ url="/file_manager", body="File manager" } },
+%                 #li { body=#link{ url="/shared_files", body="Shared files" } }
 %             ]}
 %         ]}},
-%         {rules_tab, #listitem { body=[
-%             #link{ style="padding: 18px;", url="/rules_composer", text="Rules" },
+%         {rules_tab, #li { body=[
+%             #link{ style="padding: 18px;", url="/rules_composer", body="Rules" },
 %             #list {  style="top: 37px;", body=[
-%                 #listitem { body=#link{ url="/rules_composer", text="Rules composer" } },
-%                 #listitem { body=#link{ url="/rules_viewer", text="Rules viewer" } },
-%                 #listitem { body=#link{ url="/rules_simulator", text="Rules simulator" } }
+%                 #li { body=#link{ url="/rules_composer", body="Rules composer" } },
+%                 #li { body=#link{ url="/rules_viewer", body="Rules viewer" } },
+%                 #li { body=#link{ url="/rules_simulator", body="Rules simulator" } }
 %             ]}
 %         ]}},
-%         {administration_tab, #listitem { body=[
-%             #link{ style="padding: 18px;", url="/system_state", text="Administration" },
+%         {administration_tab, #li { body=[
+%             #link{ style="padding: 18px;", url="/system_state", body="Administration" },
 %             #list {  style="top: 37px;", body=[
-%                 #listitem { body=#link{ url="/system_state", text="System state" } },
-%                 #listitem { body=#link{ url="/events", text="Events" } }
+%                 #li { body=#link{ url="/system_state", body="System state" } },
+%                 #li { body=#link{ url="/events", body="Events" } }
 %             ]}
 %         ]}}
 %     ].

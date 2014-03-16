@@ -11,7 +11,6 @@
 -module(rest_utils_tests).
 
 -ifdef(TEST).
--include("veil_modules/control_panel/rest_utils.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 -record(test_record_a, {id, message, text}).

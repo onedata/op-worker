@@ -7,7 +7,7 @@
 %% ===================================================================
 %% @doc: This module implements worker_plugin_behaviour callbacks.
 %% It is responsible for setting up cowboy listener and registering
-%% nitrogen_handler as the handler.
+%% handlers for n2o (GUI) and REST.
 %% @end
 %% ===================================================================
 
@@ -20,7 +20,7 @@
 -export([init/1, handle/2, cleanup/0]).
 
 % Paths in gui static directory
--define(static_paths, ["css/", "fonts/", "images/", "js/", "nitrogen/"]).
+-define(static_paths, ["css/", "fonts/", "images/", "js/", "n2o/"]).
 
 % Cowboy listener reference
 -define(https_listener, http).
@@ -33,8 +33,7 @@
 %% init/1
 %% ====================================================================
 %% @doc {@link worker_plugin_behaviour} callback init/1 <br />
-%% Sets up cowboy dispatch with nitrogen handler and starts
-%% cowboy service on desired port.
+%% Sets up cowboy handlers for GUI and REST.
 %% @end
 -spec init(Args :: term()) -> Result when
     Result :: ok | {error, Error},
@@ -53,9 +52,6 @@ init(_Args) ->
     {ok, MaxKeepAlive} = application:get_env(veil_cluster_node, control_panel_max_keepalive),
     {ok, Timeout} = application:get_env(veil_cluster_node, control_panel_socket_timeout),
 
-    % Set prefix of nitrogen page modules. This cannot be set in sys.config, 
-    % because nitrogen does not start as an application.
-    application:set_env(nitrogen, module_prefix, "page"),
     % Start the listener for web gui and nagios handler
     {ok, _} = cowboy:start_https(?https_listener, GuiNbAcceptors,
         [
@@ -66,7 +62,7 @@ init(_Args) ->
         ],
         [
             {env, [{dispatch, Dispatch}]},
-            {max_keepalive, MaxKeepAlive},
+            %{max_keepalive, MaxKeepAlive},
             {timeout, Timeout}
         ]),
 
@@ -154,7 +150,8 @@ init_dispatch(DocRoot, StaticPaths) ->
         % Nitrogen will handle everything that's not handled in the StaticDispatches
         {'_', StaticDispatches ++ [
             {"/nagios/[...]", nagios_handler, []},
-            {'_', nitrogen_handler, []}
+            {"/ws/[...]", bullet_handler, [{handler, n2o_bullet}]},
+            {'_', n2o_cowboy, []}
         ]}
     ],
     cowboy_router:compile(Dispatch).
