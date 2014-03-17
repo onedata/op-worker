@@ -13,6 +13,7 @@
 -compile(export_all).
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
+-include("logging.hrl").
 
 
 % How often shoul comet process check for changes in current dir
@@ -44,8 +45,15 @@ title() -> <<"File manager">>.
 body() ->
     gui_utils:apply_or_redirect(?MODULE, render_ender, true).
 
-render_ender() -> <<"ZOMG">>.
+render_ender() ->
+    [
+        #textbox { id = "new_email_textbox" },
+        #button { body = <<"penis">>, postback=dupa, source=["new_email_textbox"]},
+        #panel { id = test_id, body = <<"nic">> }
+    ].
 
+event(dupa) ->
+    wf:update(test_id, <<"This string contains ' apostrophe">>);
 event(init) -> ok.
 
 %%

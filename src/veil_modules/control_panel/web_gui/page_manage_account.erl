@@ -99,7 +99,7 @@ main_table() ->
 
         #tr{cells = [
             #td{style = <<"border-width: 0px; padding: 10px 10px">>, body =
-            #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Certificates' DNs">>}},
+            #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Certificates&#8217 DNs">>}},
             #td{style = <<"border-width: 0px; padding: 10px 10px">>, body = dn_list_body()}
         ]}
     ]}.
@@ -127,7 +127,7 @@ email_list_body() ->
             #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
             [
                 Email,
-                #link{class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
+                #link{id = "remove_email_button", class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
                 postback = {action, update_email, [User, {remove, Email}]}, body =
                 #span{class = <<"fui-cross">>, style = <<"font-size: 16px;">>}}
             ]}}
@@ -138,8 +138,9 @@ email_list_body() ->
             postback = {action, show_email_adding, [true]}, body =
             #span{class = <<"fui-plus">>, style = <<"font-size: 16px; position: relative;">>}},
             #textbox{id = "new_email_textbox", class = <<"flat">>, body = <<"">>, style = <<"display: none;">>,
-            placeholder = <<"New email address">>, postback = {action, update_email, [User, {add, submitted}]}},
-            #button{id = "new_email_submit", class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
+            placeholder = <<"New email address">>, postback = {action, update_email, [User, {add, submitted}]},
+            source = ["new_email_textbox"]},
+            #link{id = "new_email_submit", class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
             postback = {action, update_email, [User, {add, submitted}]}, source = ["new_email_textbox"], body =
             #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
             #link{id = "new_email_cancel", class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
@@ -158,7 +159,7 @@ dn_list_body() ->
             #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
             [
                 DN,
-                #link{class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
+                #link{id = "remove_dn_button", class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
                 postback = {action, update_dn, [User, {remove, DN}]}, body =
                 #span{class = <<"fui-cross">>, style = <<"font-size: 16px;">>}}
             ]}}
@@ -168,9 +169,9 @@ dn_list_body() ->
             #link{id = "add_dn_button", class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
             postback = {action, show_dn_adding, [true]}, body =
             #span{class = <<"fui-plus">>, style = <<"font-size: 16px;">>}},
-            #textarea{id = "new_dn_textbox", style = <<"display: none; font-size: 12px; width: 600px; height: 200px;
-					vertical-align: top; overflow-y: scroll;">>,
-            body = <<"">>, placeholder = <<"Paste your .pem certificate here...">>},
+            #textarea{id = "new_dn_textbox", style = <<"display: none; font-size: 12px; width: 600px; height: 200px;",
+            "vertical-align: top; overflow-y: scroll;">>, body = <<"">>,
+            source = ["new_dn_textbox"], placeholder = <<"Paste your .pem certificate here...">>},
             #link{id = "new_dn_submit", class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
             postback = {action, update_dn, [User, {add, submitted}]}, source = ["new_dn_textbox"], body =
             #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
@@ -193,8 +194,6 @@ event({action, Fun, Args}) ->
 
 % Update email list - add or remove one and save new user doc
 update_email(User, AddOrRemove) ->
-    ?dump(AddOrRemove),
-    ?dump(wf:q("new_email_textbox")),
     OldEmailList = user_logic:get_email_list(User),
     {ok, NewUser} = case AddOrRemove of
                         {add, submitted} ->
@@ -209,7 +208,7 @@ update_email(User, AddOrRemove) ->
                         {remove, Email} -> user_logic:update_email_list(User, OldEmailList -- [Email])
                     end,
     wf:session(user_doc, NewUser),
-    wf:update("main_table", main_table()), wf:flush(room).
+    wf:update("main_table", main_table()).
 
 
 % Update DN list - add or remove one and save new user doc
@@ -238,7 +237,7 @@ update_dn(User, AddOrRemove) ->
             {ok, NewUser} = user_logic:update_dn_list(User, OldDnList -- [DN]),
             wf:session(user_doc, NewUser)
     end,
-    wf:update("main_table", main_table()), wf:flush(room).
+    wf:update("main_table", main_table()).
 
 
 % Show email adding form

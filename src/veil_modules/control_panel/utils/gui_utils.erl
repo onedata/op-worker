@@ -190,7 +190,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
                                [];
                            true ->
                                [{logs_tab, #li{body = [
-                                   #link{style = "padding: 18px;", url = "/logs", body = "Logs"}
+                                   #link{style = <<"padding: 18px;">>, url = <<"/logs">>, body = <<"Logs">>}
                                ]}}]
                        end,
     % Define menu items with ids, so that proper tab can be made active via function parameter 
@@ -198,29 +198,30 @@ top_menu(ActiveTabID, SubMenuBody) ->
     MenuCaptions =
         [
             {file_manager_tab, #li{body = [
-                #link{style = "padding: 18px;", url = "/file_manager", body = "File manager"}
+                #link{style = <<"padding: 18px;">>, url = <<"/file_manager">>, body = <<"File manager">>}
             ]}},
             {shared_files_tab, #li{body = [
-                #link{style = "padding: 18px;", url = "/shared_files", body = "Shared files"}
+                #link{style = <<"padding: 18px;">>, url = <<"/shared_files">>, body = <<"Shared files">>}
             ]}}
         ] ++ LogsPageCaptions,
 
     MenuIcons =
         [
-            {manage_account_tab, #li{body = #link{style = "padding: 18px;", title = "Manage account",
-            url = "/manage_account", body = [user_logic:get_name(wf:session(user_doc)), #span{class = "fui-user", style = "margin-left: 10px;"}]}}},
+            {manage_account_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Manage account">>,
+            url = <<"/manage_account">>, body = [user_logic:get_name(wf:session(user_doc)), #span{class = <<"fui-user">>,
+            style = <<"margin-left: 10px;">>}]}}},
             %{contact_support_tab, #li { body=#link{ style="padding: 18px;", title="Contact & Support",
             %    url="/contact_support", body=#span{ class="fui-question" } } } },
-            {about_tab, #li{body = #link{style = "padding: 18px;", title = "About",
-            url = "/about", body = #span{class = "fui-info"}}}},
-            {logout_button, #li{body = #link{style = "padding: 18px;", title = "Log out",
-            url = "/logout", body = #span{class = "fui-power"}}}}
+            {about_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"About">>,
+            url = <<"/about">>, body = #span{class = <<"fui-info">>}}}},
+            {logout_button, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Log out">>,
+            url = <<"/logout">>, body = #span{class = <<"fui-power">>}}}}
         ],
 
     MenuCaptionsProcessed = lists:map(
         fun({TabID, ListItem}) ->
             case TabID of
-                ActiveTabID -> ListItem#li{class = "active"};
+                ActiveTabID -> ListItem#li{class = <<"active">>};
                 _ -> ListItem
             end
         end, MenuCaptions),
@@ -228,16 +229,16 @@ top_menu(ActiveTabID, SubMenuBody) ->
     MenuIconsProcessed = lists:map(
         fun({TabID, ListItem}) ->
             case TabID of
-                ActiveTabID -> ListItem#li{class = "active"};
+                ActiveTabID -> ListItem#li{class = <<"active">>};
                 _ -> ListItem
             end
         end, MenuIcons),
 
-    #panel{class = "navbar navbar-fixed-top", body = [
-        #panel{class = "navbar-inner", style = "border-bottom: 2px solid gray;", body = [
-            #panel{class = "container", body = [
-                #list{class = "nav pull-left", body = MenuCaptionsProcessed},
-                #list{class = "nav pull-right", body = MenuIconsProcessed}
+    #panel{class = <<"navbar navbar-fixed-top">>, body = [
+        #panel{class = <<"navbar-inner">>, style = <<"border-bottom: 2px solid gray;">>, body = [
+            #panel{class = <<"container">>, body = [
+                #list{class = <<"nav pull-left">>, body = MenuCaptionsProcessed},
+                #list{class = <<"nav pull-right">>, body = MenuIconsProcessed}
             ]}
         ]}
     ] ++ SubMenuBody}.
@@ -250,13 +251,14 @@ top_menu(ActiveTabID, SubMenuBody) ->
 -spec logotype_footer(MarginTop :: integer()) -> list().
 %% ====================================================================
 logotype_footer(MarginTop) ->
+    Height = integer_to_binary(MarginTop + 82),
+    Margin = integer_to_binary(MarginTop),
     [
-        #panel{style = wf:f("position: relative; height: ~Bpx;", [MarginTop + 82]), body = [
-            #panel{style = wf:f("body-align: center; z-index: -1; margin-top: ~Bpx;", [MarginTop]),
-            body = [
-                #image{style = "margin: 10px 100px;", image = "/images/innow-gosp-logo.png"},
-                #image{style = "margin: 10px 100px;", image = "/images/plgrid-plus-logo.png"},
-                #image{style = "margin: 10px 100px;", image = "/images/unia-logo.png"}
+        #panel{style = <<"position: relative; height: ", Height/binary, "px;">>, body = [
+            #panel{style = <<"text-align: center; z-index: -1; margin-top: ", Margin/binary, "px;">>, body = [
+                #image{style = <<"margin: 10px 100px;">>, image = <<"/images/innow-gosp-logo.png">>},
+                #image{style = <<"margin: 10px 100px;">>, image = <<"/images/plgrid-plus-logo.png">>},
+                #image{style = <<"margin: 10px 100px;">>, image = <<"/images/unia-logo.png">>}
             ]}
         ]}
     ].
@@ -265,7 +267,7 @@ logotype_footer(MarginTop) ->
 % Development functions
 empty_page() ->
     [
-        #h6{body = "Not yet implemented"},
+        #h6{body = <<"Not yet implemented">>},
         #br{}, #br{}, #br{}, #br{}, #br{},
         #br{}, #br{}, #br{}, #br{}, #br{},
         #br{}, #br{}, #br{}, #br{}, #br{},
