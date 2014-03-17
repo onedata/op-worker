@@ -157,31 +157,46 @@ handle_call(dispatcher_map_unregistered, _From, State) ->
 
 %% For tests
 handle_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM}, _From, State) ->
+  handle_test_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM}, _From, State);
+
+%% For tests
+handle_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, Cache}, _From, State) ->
+  handle_test_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, Cache}, _From, State);
+
+handle_call(Request, _From, State) when is_tuple(Request) -> %% Proxy call. Each cast can be achieved by instant proxy-call which ensures
+                                                             %% that request was made, unlike cast because cast ignores state of node/gen_server
+    {reply, gen_server:cast(State#host_state.plug_in, Request), State};
+
+handle_call(check, _From, State) ->
+  {reply, ok, State};
+
+handle_call(_Request, _From, State) ->
+    {reply, wrong_request, State}.
+
+%% handle_test_call/3
+%% ====================================================================
+%% @doc Handles calls used during tests
+-spec handle_test_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result :: term().
+%% ====================================================================
+-ifdef(TEST).
+handle_test_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM}, _From, State) ->
   Pid = self(),
   SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun),
   erlang:send_after(200, Pid, {timer, register_disp_map}),
   {reply, ok, State#host_state{request_map = RM, sub_procs = SubProcList,
   dispatcher_request_map = DM, dispatcher_request_map_ok = false}};
 
-%% For tests
-handle_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, Cache}, _From, State) ->
+handle_test_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, Cache}, _From, State) ->
   Pid = self(),
   SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache),
   erlang:send_after(200, Pid, {timer, register_disp_map}),
   erlang:send_after(200, Pid, {timer, register_sub_proc_caches}),
   {reply, ok, State#host_state{request_map = RM, sub_procs = SubProcList,
-  dispatcher_request_map = DM, dispatcher_request_map_ok = false}};
-
-handle_call(Request, _From, State) when is_tuple(Request) -> %% Proxy call. Each cast can be achieved by instant proxy-call which ensures
-                                                             %% that request was made, unlike cast because cast ignores state of node/gen_server
-    {reply, gen_server:cast(State#host_state.plug_in, Request), State};
-
-%% Test call
-handle_call(check, _From, State) ->
-  {reply, ok, State};
-
-handle_call(_Request, _From, State) ->
-    {reply, wrong_request, State}.
+  dispatcher_request_map = DM, dispatcher_request_map_ok = false}}.
+-else.
+handle_test_call(_Request, _From, State) ->
+  {reply, not_supported_in_normal_mode, State}.
+-endif.
 
 %% handle_cast/2
 %% ====================================================================

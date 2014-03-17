@@ -20,7 +20,6 @@
 -include("veil_modules/dao/dao_vfs.hrl").
 
 -define(SH, "DirectIO").
--define(SH_ARGS, ["/tmp/veilfs"]). %% Root of test filesystem
 -define(TEST_FILE1, "testfile1").
 -define(TEST_FILE2, "testfile2").
 
@@ -46,7 +45,7 @@ integration_test(Config) ->
     NodesUp = ?config(nodes, Config),
     [FSLogicNode | _] = NodesUp,
 
-    SHInfo = #storage_helper_info{name = ?SH, init_args = ?SH_ARGS},
+    SHInfo = #storage_helper_info{name = ?SH, init_args = ?ARG_TEST_ROOT},
 
     ?assertEqual(0, rpc:call(FSLogicNode, veilhelpers, exec, [mknod, SHInfo, [?TEST_FILE1, 8#744, 0]])),
     ?assertEqual(-17, rpc:call(FSLogicNode, veilhelpers, exec, [mknod, SHInfo, [?TEST_FILE1, 8#744, 0]])),  %% File already exists
@@ -119,7 +118,7 @@ init_per_testcase(_, Config) ->
     StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}]]),
 
     Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
-    [FSRoot | _] = ?SH_ARGS,
+    FSRoot = ?TEST_ROOT,
     file:delete(FSRoot ++ ?TEST_FILE1),
     file:delete(FSRoot ++ ?TEST_FILE2), 
 

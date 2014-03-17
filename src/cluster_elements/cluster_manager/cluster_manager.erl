@@ -197,26 +197,40 @@ handle_call({delete_callback, FuseId, Node, Pid}, _From, State) ->
 handle_call(get_callbacks, _From, State) ->
   {reply, {get_callbacks(), State#cm_state.callbacks_num}, State};
 
-%% Test call
-handle_call({start_worker, Node, Module, WorkerArgs}, _From, State) ->
-  {Ans, NewState} = start_worker(Node, Module, WorkerArgs, State),
-  NewState2 = case Ans of
-    ok -> update_dispatchers_and_dns(NewState, true, true);
-    error -> NewState
-  end,
-  {reply, Ans, NewState2};
-
-%% Test call
 handle_call(check, _From, State) ->
   {reply, ok, State};
 
 %% Test call
+handle_call({start_worker, Node, Module, WorkerArgs}, _From, State) ->
+  handle_test_call({start_worker, Node, Module, WorkerArgs}, _From, State);
+
+%% Test call
 handle_call(check_state_loaded, _From, State) ->
-  {reply, State#cm_state.state_loaded, State};
+  handle_test_call(check_state_loaded, _From, State);
 
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
 
+%% handle_test_call/3
+%% ====================================================================
+%% @doc Handles calls used during tests
+-spec handle_test_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result :: term().
+%% ====================================================================
+-ifdef(TEST).
+handle_test_call({start_worker, Node, Module, WorkerArgs}, _From, State) ->
+  {Ans, NewState} = start_worker(Node, Module, WorkerArgs, State),
+  NewState2 = case Ans of
+                ok -> update_dispatchers_and_dns(NewState, true, true);
+                error -> NewState
+              end,
+  {reply, Ans, NewState2};
+
+handle_test_call(check_state_loaded, _From, State) ->
+  {reply, State#cm_state.state_loaded, State}.
+-else.
+handle_test_call(_Request, _From, State) ->
+  {reply, not_supported_in_normal_mode, State}.
+-endif.
 
 %% handle_cast/2
 %% ====================================================================
@@ -401,6 +415,16 @@ handle_cast({synch_cache_clearing, Cache, ReturnPid}, State) ->
   New_State = clear_cache(State, Cache),
   ReturnPid ! {cache_cleared, Cache},
   {noreply, New_State};
+
+handle_cast({start_load_logging, Path}, State) ->
+  lager:info("Start load logging on nodes: ~p", State#cm_state.nodes),
+  lists:map(fun(Node) -> gen_server:cast({?Node_Manager_Name, Node}, {start_load_logging, Path}) end, State#cm_state.nodes),
+  {noreply, State};
+
+handle_cast(stop_load_logging, State) ->
+  lager:info("Stop load logging on nodes: ~p", State#cm_state.nodes),
+  lists:map(fun(Node) -> gen_server:cast({?Node_Manager_Name, Node}, stop_load_logging) end, State#cm_state.nodes),
+  {noreply, State};
 
 handle_cast(_Msg, State) ->
   {noreply, State}.

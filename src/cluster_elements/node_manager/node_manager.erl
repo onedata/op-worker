@@ -18,6 +18,7 @@
 -behaviour(gen_server).
 -include("registered_names.hrl").
 -include("records.hrl").
+-include("supervision_macros.hrl").
 
 %% Dispatcher cowboy listener ID
 -define(DISPATCHER_LISTENER_REF, dispatcher_listener).
@@ -30,13 +31,16 @@
 %% ====================================================================
 -export([start_link/1, stop/0]).
 -export([check_vsn/0]).
+-export([start_load_logging_loop/2, load_logging_loop/3]).
 
 %% ====================================================================
 %% Test API
 %% ====================================================================
 %% TODO zmierzyć czy bardziej się opłaca przechowywać dane o callbackach
 %% jako stan (jak teraz) czy jako ets i ewentualnie przejść na ets
+-ifdef(TEST).
 -export([get_callback/2, addCallback/3, delete_callback/3]).
+-endif.
 
 %% ====================================================================
 %% gen_server callbacks
@@ -51,7 +55,7 @@
 %% ====================================================================
 %% @doc Starts the server
 -spec start_link(Type) -> Result when
-  Type :: test_worker | worker | ccm,
+  Type :: test_worker | worker | ccm | ccm_test,
   Result ::  {ok,Pid}
   | ignore
   | {error,Error},
@@ -190,7 +194,6 @@ handle_call({clear_cache, Cache}, _From, State) ->
   Ans = clear_cache(Cache, State#node_state.simple_caches),
   {reply, Ans, State};
 
-%% Test call
 handle_call(check, _From, State) ->
   {reply, ok, State};
 
@@ -255,6 +258,24 @@ handle_cast({register_simple_cache, Cache, ReturnPid}, State) ->
   end,
   ReturnPid ! simple_cache_registered,
   {noreply, State#node_state{simple_caches = NewCaches}};
+
+handle_cast({start_load_logging, Path}, State) ->
+  lager:info("Start load logging on node: ~p", [node()]),
+  {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
+  {MegaSecs, Secs, MicroSecs} = os:timestamp(),
+  case whereis(?Load_Logging_Proc) of
+    undefined -> supervisor:start_child(?Supervisor_Name, ?Sup_Child(?Load_Logging_Proc, ?MODULE, start_load_logging_loop, permanent, [Path, 1000000 * MegaSecs + Secs + MicroSecs / 1000000]));
+    Pid -> Pid ! {log, Interval}
+  end,
+  {noreply, State};
+
+handle_cast(stop_load_logging, State) ->
+  lager:info("Stop load logging on node: ~p", [node()]),
+  case whereis(?Load_Logging_Proc) of
+    undefined -> ok;
+    Pid -> Pid ! stop
+  end,
+  {noreply, State};
 
 handle_cast(_Msg, State) ->
   {noreply, State}.
@@ -342,7 +363,8 @@ heart_beat(Conn_status, State) ->
     _ -> erlang:send_after(500, self(), {timer, do_heart_beat})
   end,
 
-  lager:info([{mod, ?MODULE}], "Heart beat on node: ~p: sent; connection: ~p, old conn_status: ~p", [node(), New_conn_status, Conn_status]),
+  lager:info([{mod, ?MODULE}], "Heart beat on node: ~p: sent; connection: ~p, old conn_status: ~p,  state_num: ~b, callback_num: ~b,  disp dispatcher_state: ~b, callbacks_state: ~b",
+    [node(), New_conn_status, Conn_status, State#node_state.state_num, State#node_state.callbacks_num, State#node_state.dispatcher_state, State#node_state.callbacks_state]),
   State#node_state{ccm_con_status = New_conn_status}.
 
 %% heart_beat_response/2
@@ -428,6 +450,48 @@ check_vsn([{Application, _Description, Vsn} | Apps]) ->
   case Application of
     ?APP_Name -> Vsn;
     _Other -> check_vsn(Apps)
+  end.
+
+%% start_load_logging_loop/2
+%% ====================================================================
+%% @doc Start loop that logs current load of node
+-spec start_load_logging_loop(Path :: string(), StartTime :: float()) -> no_return().
+%% ====================================================================
+start_load_logging_loop(Path, StartTime) ->
+  {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
+  case file:open(Path ++ "/load_log.csv", [append]) of
+    {ok, Fd} ->
+      Pid = spawn_link(?MODULE, load_logging_loop, [Fd, StartTime, StartTime]),
+      register(?Load_Logging_Proc, Pid),
+      case file:position(Fd, eof) of
+        {ok, 0} ->
+          io:fwrite(Fd, "elapsed, window, cpu, mem, input, output~n", []),
+          erlang:send_after(Interval * 1000, Pid, {log, Interval});
+        _ -> Pid ! {log, Interval}
+      end;
+    Other -> lager:error("Error while openning file: ~p", [Other])
+  end.
+
+%% TODO consider integration of load logging loop with node_manager callbacks after development of monitorig function
+%% load_logging_loop/3
+%% ====================================================================
+%% @doc Loop that logs current load of node
+-spec load_logging_loop(Fd :: pid(), StartTime :: float(), PrevTime :: float()) -> no_return().
+%% ====================================================================
+load_logging_loop(Fd, StartTime, PrevTime) ->
+  receive
+    {log, Interval} ->
+      {MegaSecs, Secs, MicroSecs} = os:timestamp(),
+      CurrTime = 1000000 * MegaSecs + Secs + MicroSecs / 1000000,
+      {Proc, Mem, {In, Out}} = gen_server:call({?Node_Manager_Name, node()}, {get_node_stats, short}, 500),
+      io:fwrite(Fd, "~.6f, ~.6f, ~.6f, ~.6f, ~p, ~p~n", [CurrTime - StartTime, CurrTime - PrevTime, Proc, Mem, In, Out]),
+      erlang:send_after(Interval * 1000, self(), {log, Interval}),
+      load_logging_loop(Fd, StartTime, CurrTime);
+    stop ->
+      file:close(Fd);
+    Other ->
+      lager:error("Load logging loop got unknown message: ~p", [Other]),
+      load_logging_loop(Fd, StartTime, PrevTime)
   end.
 
 %% get_node_stats/2

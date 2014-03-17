@@ -71,16 +71,14 @@ class VeilClient(Sphinx):
 		if not os.path.exists(self.path + '/files/'):
 			os.makedirs(self.path + '/files/')
 
-		globusProxyUtilsMembers = ['fmemopen.c', 'fmemopen.h', 'globus_stdio_ui.c', 'globus_stdio_ui.h',\
-		'grid_proxy_info.c', 'grid_proxy_init.c', 'gsi_utils.h']
 		src = []
 		include = []
 
 		for file in self.files:
 			name = file.getElementsByTagName('name')[0].firstChild.nodeValue
-			if name not in globusProxyUtilsMembers and name.endswith('.cc'):
+			if name.endswith('.cc'):
 				src.append(name)
-			if name not in globusProxyUtilsMembers and name.endswith('.h'):
+			if name.endswith('.h'):
 				include.append(name)
 
 		with open(self.path + '/files/index.rst', 'w') as index:
@@ -97,15 +95,6 @@ class VeilClient(Sphinx):
 			index.write('**Headers**\n\n')
 			self.w_toctree(index, 0)
 			for name in include:
-				index.write('\t' + name.replace('::', '.') + '\n')
-				with open(self.path + '/files/' + name.replace('::', '.') + '.rst', 'w') as f:
-					self.w_section(f, name, '=')
-					self.w_file(f, name, 1)
-			index.write('\n')
-
-			index.write('**Globus proxy utils**\n\n')
-			self.w_toctree(index, 0)
-			for name in globusProxyUtilsMembers:
 				index.write('\t' + name.replace('::', '.') + '\n')
 				with open(self.path + '/files/' + name.replace('::', '.') + '.rst', 'w') as f:
 					self.w_section(f, name, '=')
