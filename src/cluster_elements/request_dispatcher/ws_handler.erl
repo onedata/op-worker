@@ -124,6 +124,9 @@ websocket_handle({Type, Data}, Req, State) ->
 %% Handle Handshake request - FUSE ID negotiation
 handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #handshakerequest{hostname = Hostname, variable = Vars} = HReq, MsgId, Answer_type}, #hander_state{peer_dn = DnString} = State) ->
     ?debug("Handshake request: ~p", [HReq]),
+		?debug("##Handshake request: ~p,~n Answer_decoder_name: ~p,~n vars: ~p,~n hostname: ~p, ~n MsgId: ~p, ~n Ans_type ~p~n ",[Req,Answer_decoder_name,Vars,Hostname,MsgId,Answer_type]), %todo remove
+		?debug("file descriptors: ~p", [os:cmd("lsof -i -n -P | wc -l")]),
+		?debug("ports: ~p, processes: ~p, memory: ~p",[length(erlang:ports()),length(erlang:processes()),erlang:memory()]),
     NewFuseId = genFuseId(HReq),
     UID = %% Fetch user's ID
         case dao_lib:apply(dao_users, get_user, [{dn, DnString}], ProtocolVersion) of
