@@ -88,7 +88,7 @@ test_event_aggregation(Config) ->
   EventHandler = fun(#write_event{user_id = UserId, ans_pid = AnsPid}) ->
     AnsPid ! {ok, tree, self()}
   end,
-  subscribe_for_write_events(CCM, tree, EventHandler, #processing_config{init_counter = 4}),
+  subscribe_for_write_events(CCM, tree, EventHandler, #aggregator_config{init_counter = 4}),
   WriteEvent = #write_event{user_id = "1234", ans_pid = self()},
 
   repeat(3, fun() -> send_event(WriteEvent, CCM) end),
@@ -236,7 +236,7 @@ end_per_testcase(_, Config) ->
 
 
 subscribe_for_write_events(Node, ProcessingMethod, EventHandler) ->
-  subscribe_for_write_events(Node, ProcessingMethod, EventHandler, #processing_config{}).
+  subscribe_for_write_events(Node, ProcessingMethod, EventHandler, #aggregator_config{}).
 
 subscribe_for_write_events(Node, ProcessingMethod, EventHandler, ProcessingConfig) ->
   EventHandlerMapFun = fun(#write_event{user_id = UserIdString}) ->

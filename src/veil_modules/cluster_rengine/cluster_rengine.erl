@@ -36,7 +36,7 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% functions for manual tests
--export([register_mkdir_handler/0, register_mkdir_handler_aggregation/1, register_write_event_handler/1, register_quota_exceeded_handler/0, send_mkdir_event/0, delete_file/0]).
+-export([register_mkdir_handler/0, register_mkdir_handler_aggregation/1, register_write_event_handler/1, register_quota_exceeded_handler/0, send_mkdir_event/0, register_integration/1, delete_file/1]).
 
 init(_Args) ->
   worker_host:create_simple_cache(?EVENT_HANDLERS_CACHE),
@@ -181,7 +181,7 @@ create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = 
     end
   end,
 
-  ProcFun = case Config#processing_config.init_counter of
+  ProcFun = case Config#aggregator_config.init_counter of
     undefined ->
       fun(_ProtocolVersion, {final_stage_tree, _TreeId, Event}) ->
         HandlerFun(Event)
@@ -208,7 +208,7 @@ create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = 
   Node = erlang:node(self()),
 
   LocalCacheName = list_to_atom(atom_to_list(TreeId) ++ "_local_cache"),
-  case Config#processing_config.init_counter of
+  case Config#aggregator_config.init_counter of
     undefined -> gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM});
     _ -> gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM, LocalCacheName})
   end.
@@ -267,34 +267,30 @@ register_mkdir_handler() ->
 
   EventHandler = fun(#mkdir_event{user_id = UserId, ans_pid = AnsPid}) ->
     ?info("Mkdir EventHandler ~p", [node(self())]),
-    delete_file()
+    delete_file("plgmsitko/todelete")
   end,
 
 %%   ProcessingConfig = #processing_config{init_counter = InitCounter},
   EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler}, %, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = ProcessingConfig},
 
   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "mkdir_event"},
-  EventFilterConfig = #eventconfig{filter_config = EventFilter},
-  EventFitlerBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventconfig(EventFilterConfig)),
-  PushMessage = #pushmessage{message_type = "event_config", data = EventFitlerBin},
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {mkdir_event, EventItem, PushMessage}}}).
+  EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
+  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {mkdir_event, EventItem, EventFilterConfig}}}).
 
 register_mkdir_handler_aggregation(InitCounter) ->
   EventHandler = fun(#mkdir_event{user_id = UserId, ans_pid = AnsPid}) ->
     ?info("Mkdir EventHandler aggregation ~p", [node(self())]),
-    delete_file()
+    delete_file("plgmsitko/todelete")
   end,
 
   EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
 
   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "mkdir_event"},
-  EventFilterConfig = #eventconfig{filter_config = EventFilter},
+  EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
 
   EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = InitCounter},
-  EventAggregatorConfig = #eventconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
-  EventAggregatorBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventconfig(EventAggregatorConfig)),
-  PushMessage = #pushmessage{message_type = "event_config", data = EventAggregatorBin},
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {mkdir_event, EventItem, PushMessage}}}).
+  EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
+  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {mkdir_event, EventItem, EventAggregatorConfig}}}).
 
 register_write_event_handler(InitCounter) ->
   EventHandler = fun(#write_event{user_dn = UserDn, ans_pid = AnsPid}) ->
@@ -322,13 +318,11 @@ register_write_event_handler(InitCounter) ->
   EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
 
   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "write_event"},
-  EventFilterConfig = #eventconfig{filter_config = EventFilter},
+  EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
 
   EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = InitCounter},
-  EventAggregatorConfig = #eventconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
-  EventAggregatorBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventconfig(EventAggregatorConfig)),
-  PushMessage = #pushmessage{message_type = "event_config", data = EventAggregatorBin},
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {write_event, EventItem, PushMessage}}}).
+  EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
+  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {write_event, EventItem, EventAggregatorConfig}}}).
 
 register_quota_exceeded_handler() ->
   EventHandler = fun({quota_exceeded_event, Uuid}) ->
@@ -349,5 +343,19 @@ string_to_integer(SomeString) ->
     _ -> SomeInteger
   end.
 
-delete_file() ->
-  rpc:call(node(), dao_lib, apply, [dao_vfs, remove_file, ["plgmsitko/todelete"], 1]).
+register_integration(FilePath) ->
+
+  EventHandler = fun(_) ->
+    delete_file(FilePath)
+  end,
+
+  EventItem = {event_handler_item, standard, undefined, undefined, undefined, EventHandler, undefined},
+
+  %EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler}, %, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = ProcessingConfig},
+  EventFilter = {eventfilterconfig, "type", "mkdir_event"},
+  EventFilterConfig = {eventstreamconfig, undefined, EventFilter, undefined},
+  gen_server:call({request_dispatcher, node()}, {rule_manager, 1, self(), {add_event_handler, {mkdir_event, EventItem, EventFilterConfig}}}).
+
+delete_file(FilePath) ->
+%%   rpc:call(node(), dao_lib, apply, [dao_vfs, remove_file, ["plgmsitko/todelete"], 1]).
+  rpc:call(node(), dao_lib, apply, [dao_vfs, remove_file, [FilePath], 1]).

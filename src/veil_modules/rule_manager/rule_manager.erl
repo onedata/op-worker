@@ -30,10 +30,12 @@ rule_manager).
 -export([init/1, handle/2, cleanup/0]).
 
 -define(RULE_MANAGER_ETS, rule_manager).
+-define(PRODUCERS_RULES_ETS, producers_rules).
 -define(HANDLER_TREE_ID_ETS, handler_tree_id_ets).
 
 init(_Args) ->
   ets:new(?RULE_MANAGER_ETS, [named_table, public, set, {read_concurrency, true}]),
+  ets:new(?PRODUCERS_RULES_ETS, [named_table, public, set, {read_concurrency, true}]),
   ets:new(?HANDLER_TREE_ID_ETS, [named_table, public, set]),
   ets:insert(?HANDLER_TREE_ID_ETS, {current_id, 1}),
 
@@ -42,6 +44,7 @@ init(_Args) ->
   end,
 
   ets:insert(?RULE_MANAGER_ETS, {save_event, [FunctionOnSave]}),
+  ?info("@@@@@@ rulemanager init"),
 	[].
 
 handle(_ProtocolVersion, ping) ->
@@ -50,6 +53,15 @@ handle(_ProtocolVersion, ping) ->
 
 handle(_ProtocolVersion, healthcheck) ->
 	ok;
+
+handle(_ProtocolVersion, event_producer_config_request) ->
+  ?info("--------- event producer config request"),
+  Configs = case ets:lookup(?PRODUCERS_RULES_ETS, producer_configs) of
+              [{_Key, ProducerConfigs}] -> ProducerConfigs;
+              _ -> []
+            end,
+  ?info("--------- event producer config request: ~p", [Configs]),
+  #eventproducerconfig{event_streams_configs = Configs};
 
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
@@ -62,10 +74,9 @@ handle(_ProtocolVersion, get_event_handlers) ->
   ets:match(?RULE_MANAGER_ETS, {'$1', '$2'});
 
 handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem}}) ->
-  handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem, #pushmessage{message_type = "unrecognized_filter_config", data = <<"">>}}});
+  handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem, #eventstreamconfig{}}});
 
-handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem, PushMessage}}) ->
-  ?info("entering add_event_handler"),
+handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem, ProducerConfig}}) ->
   NewEventItem = case EventHandlerItem#event_handler_item.processing_method of
                    tree -> EventHandlerItem#event_handler_item{tree_id = generate_tree_name()};
                    _ -> EventHandlerItem
@@ -75,10 +86,16 @@ handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem, PushM
     [] -> ets:insert(?RULE_MANAGER_ETS, {EventType, [NewEventItem]});
     [{_EventType, EventHandlers}] -> ets:insert(?RULE_MANAGER_ETS, {EventType, [NewEventItem | EventHandlers]})
   end,
+
+  %% todo: eventually it needs to be implemented differently
+  case ets:lookup(?PRODUCERS_RULES_ETS, producer_configs) of
+    [] -> ets:insert(?PRODUCERS_RULES_ETS, {producer_configs, [ProducerConfig]});
+    [{_, ListOfConfigs}] -> ets:insert(?PRODUCERS_RULES_ETS, {producer_configs, [ProducerConfig | ListOfConfigs]})
+  end,
 %%   gen_server:call(?Dispatcher_Name, {cluster_regine, 1, {clear_cache, EventType}}),
 
   worker_host:clear_cache({?EVENT_TREES_MAPPING, EventType}),
-  notify_producers(PushMessage),
+  notify_producers(ProducerConfig),
 
   ?info("New handler for event ~p registered.", [EventType]),
   ok;
@@ -100,14 +117,15 @@ cleanup() ->
 
 %% Helper functions
 
-notify_producers(PushMessage) ->
+notify_producers(ProducerConfig) ->
   Rows = fetch_rows(?FUSE_CONNECTIONS_VIEW, #view_query_args{}),
   FuseIds = lists:map(fun(#view_row{key = FuseId}) -> FuseId end, Rows),
   UniqueFuseIds = sets:to_list(sets:from_list(FuseIds)),
 
   ?info("new Notify producers: ~p", [UniqueFuseIds]),
 
-
+  ProducerConfigBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventstreamconfig(ProducerConfig)),
+  PushMessage = #pushmessage{message_type = "event_config", data = ProducerConfigBin},
 %%   lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, {testchannelanswer, "test"}, "fuse_messages") end, UniqueFuseIds).
 %%   EventStreamConfig = #eventstreamconfig{event_name = "bazinga_event"},
 %%   HBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventstreamconfig(EventStreamConfig)),

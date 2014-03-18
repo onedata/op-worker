@@ -15,8 +15,8 @@
   {developer, [fusemessage, remotefilemangement, channelregistration, channelclose, atom, handshakerequest, handshakeack, eventmessage]}
 ]).
 -define(AtomsWhiteList, [
-  {standard_user, [ping, event]},
-  {developer, [ping, event]}
+  {standard_user, [ping, event_producer_config_request]},
+  {developer, [ping, event_producer_config_request]}
 ]).
 
 
