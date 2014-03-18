@@ -183,10 +183,14 @@ message EventAggregatorConfig {
     required uint64 threshold = 2;
 }
 
-message EventConfig {
-    optional EventConfig wrapped_config = 1;
+message EventStreamConfig {
+    optional EventStreamConfig wrapped_config = 1;
     optional EventFilterConfig filter_config = 2;
     optional EventAggregatorConfig aggregator_config = 3;
+}
+
+message EventProducerConfig {
+    repeated EventStreamConfig event_streams_configs = 1;
 }
 
 message EventMessage {
