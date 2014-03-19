@@ -13,7 +13,6 @@ compile:
 	rm -rf src/proto
 
 deps:
-	rm -rf deps
 	./rebar get-deps
 	git submodule init
 	git submodule update
