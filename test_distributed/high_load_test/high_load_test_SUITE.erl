@@ -76,7 +76,7 @@ main_test(Config) ->
     end)))
   end,
 
-  TestRequestsNum = 25000,
+  TestRequestsNum = 10000,
   for(1, TestRequestsNum, TestFun),
   Answers = count_answers(),
 
@@ -155,7 +155,7 @@ multi_node_test(Config) ->
     end)))
   end,
 
-  TestRequestsNum = 10000,
+  TestRequestsNum = 5000,
   for(1, TestRequestsNum, TestFun),
   Answers = count_answers(),
 
@@ -258,7 +258,7 @@ sub_proc_load_test(Config) ->
     end)))
   end,
 
-  TestRequestsNum = 1000,
+  TestRequestsNum = 500,
   for(1, TestRequestsNum, TestFun),
 
   Answers = count_answers(),
