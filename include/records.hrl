@@ -32,6 +32,6 @@
 -record(initial_host_description, {request_map = non, dispatcher_request_map = non, sub_procs = [], plug_in_state = []}).
 
 %% This record is used by requests_dispatcher (it contains its state).
--record(dispatcher_state, {modules = [], modules_const_list = [], state_num = 0, callbacks_num = 0, current_load = 0, avg_load = 0, request_map = []}).
+-record(dispatcher_state, {modules = [], modules_const_list = [], state_num = 0, callbacks_num = 0, current_load = 0, avg_load = 0, request_map = [], asnych_mode = false}).
 
 -endif.

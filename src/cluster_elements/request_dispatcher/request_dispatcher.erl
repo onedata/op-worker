@@ -134,112 +134,145 @@ handle_call({get_workers, Module}, _From, State) ->
   {reply, get_workers(Module, State), State};
 
 handle_call({Task, ProtocolVersion, AnsPid, MsgId, Request}, _From, State) ->
-  Ans = get_worker_node(Task, Request, State),
-  case Ans of
-    {Node, NewState} ->
-      case Node of
-        non ->
-          case Task of
-            central_logger -> ok;
-            _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
-          end,
-          {reply, worker_not_found, State};
-        _N ->
-          gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}),
-          {reply, ok, NewState}
-      end;
-    Other -> {reply, Other, State}
+  case State#dispatcher_state.asnych_mode of
+    true ->
+      forward_request(false, Task, Request, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}, State);
+    false ->
+      Ans = get_worker_node(Task, Request, State),
+      case Ans of
+        {Node, NewState} ->
+          case Node of
+            non ->
+              case Task of
+                central_logger -> ok;
+                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+              end,
+              {reply, worker_not_found, State};
+            _N ->
+              gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}),
+              {reply, ok, NewState}
+          end;
+        Other -> {reply, Other, State}
+      end
   end;
 
 handle_call({Task, ProtocolVersion, AnsPid, Request}, _From, State) ->
-  Ans = get_worker_node(Task, Request, State),
-  case Ans of
-    {Node, NewState} ->
-      case Node of
-        non ->
-          case Task of
-            central_logger -> ok;
-            _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
-          end,
-          {reply, worker_not_found, State};
-        _N ->
-          gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, {proc, AnsPid}}),
-          {reply, ok, NewState}
-      end;
-    Other -> {reply, Other, State}
+  case State#dispatcher_state.asnych_mode of
+    true ->
+      forward_request(false, Task, Request, {synch, ProtocolVersion, Request, {proc, AnsPid}}, State);
+    false ->
+      Ans = get_worker_node(Task, Request, State),
+      case Ans of
+        {Node, NewState} ->
+          case Node of
+            non ->
+              case Task of
+                central_logger -> ok;
+                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+              end,
+              {reply, worker_not_found, State};
+            _N ->
+              gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, {proc, AnsPid}}),
+              {reply, ok, NewState}
+          end;
+        Other -> {reply, Other, State}
+      end
   end;
 
 handle_call({Task, ProtocolVersion, Request}, _From, State) ->
-  Ans = get_worker_node(Task, Request, State),
-  case Ans of
-    {Node, NewState} ->
-      case Node of
-        non ->
-          case Task of
-            central_logger -> ok;
-            _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
-          end,
-          {reply, worker_not_found, State};
-        _N ->
-          gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request}),
-          {reply, ok, NewState}
-      end;
-    Other -> {reply, Other, State}
+  case State#dispatcher_state.asnych_mode of
+    true ->
+      forward_request(false, Task, Request, {asynch, ProtocolVersion, Request}, State);
+    false ->
+      Ans = get_worker_node(Task, Request, State),
+      case Ans of
+        {Node, NewState} ->
+          case Node of
+            non ->
+              case Task of
+                central_logger -> ok;
+                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+              end,
+              {reply, worker_not_found, State};
+            _N ->
+              gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request}),
+              {reply, ok, NewState}
+          end;
+        Other -> {reply, Other, State}
+      end
   end;
 
 handle_call({node_chosen, {Task, ProtocolVersion, AnsPid, Request}}, _From, State) ->
-  Ans = check_worker_node(Task, Request, State),
-  case Ans of
-    {Node, NewState} ->
-      case Node of
-        non ->
-          case Task of
-            central_logger -> ok;
-            _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
-          end,
-          {reply, worker_not_found, State};
-        _N ->
-          gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, {proc, AnsPid}}),
-          {reply, ok, NewState}
-      end;
-    Other -> {reply, Other, State}
+  case State#dispatcher_state.asnych_mode of
+    true ->
+      forward_request(true, Task, Request, {synch, ProtocolVersion, Request, {proc, AnsPid}}, State);
+    false ->
+      Ans = check_worker_node(Task, Request, State),
+      case Ans of
+        {Node, NewState} ->
+          case Node of
+            non ->
+              case Task of
+                central_logger -> ok;
+                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+              end,
+              {reply, worker_not_found, State};
+            _N ->
+              gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, {proc, AnsPid}}),
+              {reply, ok, NewState}
+          end;
+        Other -> {reply, Other, State}
+      end
   end;
 
 handle_call({node_chosen, {Task, ProtocolVersion, AnsPid, MsgId, Request}}, _From, State) ->
-  Ans = check_worker_node(Task, Request, State),
-  case Ans of
-    {Node, NewState} ->
-      case Node of
-        non ->
-          case Task of
-            central_logger -> ok;
-            _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
-          end,
-          {reply, worker_not_found, State};
-        _N ->
-          gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}),
-          {reply, ok, NewState}
-      end;
-    Other -> {reply, Other, State}
+  case State#dispatcher_state.asnych_mode of
+    true ->
+      forward_request(true, Task, Request, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}, State);
+    false ->
+      Ans = check_worker_node(Task, Request, State),
+      case Ans of
+        {Node, NewState} ->
+          case Node of
+            non ->
+              case Task of
+                central_logger -> ok;
+                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+              end,
+              {reply, worker_not_found, State};
+            _N ->
+              gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}),
+              {reply, ok, NewState}
+          end;
+        Other -> {reply, Other, State}
+      end
   end;
 
 handle_call({node_chosen, {Task, ProtocolVersion, Request}}, _From, State) ->
-  Ans = check_worker_node(Task, Request, State),
-  case Ans of
-    {Node, NewState} ->
-      case Node of
-        non ->
-          case Task of
-            central_logger -> ok;
-            _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
-          end,
-          {reply, worker_not_found, State};
-        _N ->
-          gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request}),
-          {reply, ok, NewState}
-      end;
-    Other -> {reply, Other, State}
+  case State#dispatcher_state.asnych_mode of
+    true ->
+      forward_request(true, Task, Request, {asynch, ProtocolVersion, Request}, State);
+    false ->
+      Ans = check_worker_node(Task, Request, State),
+      case Ans of
+        {Node, NewState} ->
+          case Node of
+            non ->
+              case Task of
+                central_logger -> ok;
+                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+              end,
+              {reply, worker_not_found, State};
+            _N ->
+              gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request}),
+              {reply, ok, NewState}
+          end;
+        Other -> {reply, Other, State}
+      end
   end;
+
+handle_call({set_asnych_mode, AsnychMode}, _From, State) ->
+  {reply, ok, State#dispatcher_state{asnych_mode = AsnychMode}};
 
 handle_call({get_callback, Fuse}, _From, State) ->
   {reply, get_callback(Fuse), State};
@@ -851,4 +884,77 @@ choose_node_by_map(Module, Msg, State) ->
       end
   end.
 
-
+forward_request(NodeChosen, Task, Request, Message, State) ->
+  ModulesList = proplists:get_value(Task, State#dispatcher_state.modules_const_list, wrong_worker_type),
+  Ans = case ModulesList of
+    wrong_worker_type -> wrong_worker_type;
+    _ ->
+      ModulesListLength = length(ModulesList),
+      case ModulesListLength of
+        0 -> worker_not_found;
+        1 ->
+          [Node | _] = ModulesList,
+          gen_server:cast({Task, Node}, Message),
+          ok;
+        _ ->
+          RequestMapList = State#dispatcher_state.request_map,
+          RequestMap = proplists:get_value(Task, RequestMapList, non),
+          case RequestMap of
+            non ->
+              Action = case NodeChosen of
+                true ->
+                  ThisNode = node(),
+                  case lists:member(ThisNode, ModulesList) of
+                    true ->
+                      gen_server:cast({Task, ThisNode}, Message),
+                      forwarded;
+                    false ->
+                      ok
+                  end;
+                false ->
+                  ok
+              end,
+              case Action of
+                forwarded ->
+                  ok;
+                _ ->
+                  random:seed(now()),
+                  Node2 = lists:nth(random:uniform(ModulesListLength), ModulesList),
+                  gen_server:cast({Task, Node2}, Message)
+              end;
+            _ ->
+              spawn(fun() ->
+                try
+                  RequestNum = RequestMap(Message),
+                  case RequestNum of
+                    Num when is_integer(Num) ->
+                      Node3 = lists:nth(Num rem ModulesListLength + 1, ModulesList),
+                      gen_server:cast({Task, Node3}, Message);
+                    WrongAns ->
+                      lager:error("Dispatcher (request map) wrong answer for module ~p and request ~p: ~p", [Task, Message, WrongAns]),
+                      random:seed(now()),
+                      Node4 = lists:nth(random:uniform(ModulesListLength), ModulesList),
+                      gen_server:cast({Task, Node4}, Message)
+                  end
+                catch
+                  Type:Error ->
+                    lager:error("Dispatcher (request map) error for module ~p and request ~p: ~p:~p ~n ~p", [Task, Message, Type, Error, erlang:get_stacktrace()]),
+                    random:seed(now()),
+                    Node5 = lists:nth(random:uniform(ModulesListLength), ModulesList),
+                    gen_server:cast({Task, Node5}, Message)
+                end
+              end)
+          end,
+          ok
+      end
+  end,
+  case Ans of
+    ok ->
+      {reply, ok, State};
+    Other ->
+      case Task of
+        central_logger -> ok;
+        _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+      end,
+      {reply, Other, State}
+  end.

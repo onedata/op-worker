@@ -122,8 +122,7 @@ handle(_ProtocolVersion, {get_worker, Module}) ->
   New_DNS_State = DNS_State#dns_worker_state{workers_list = NewWorkersList},
   ok = gen_server:call(?MODULE, {updatePlugInState, New_DNS_State}),
 
-  {S1,S2,S3} = now(),
-  random:seed(S1,S2,S3),
+  random:seed(now()),
   Result3 = make_ans_random(Result2),
 	case Module of
     control_panel ->
@@ -145,8 +144,7 @@ handle(_ProtocolVersion, get_nodes) ->
         end, NodesList)),
       {ok, Res};
     _ ->
-      {S1,S2,S3} = now(),
-      random:seed(S1,S2,S3),
+      random:seed(now()),
       ChooseNodes = fun({Node, NodeLoad}, TmpAns) ->
         case is_number(NodeLoad) and (NodeLoad > 0) of
           true ->

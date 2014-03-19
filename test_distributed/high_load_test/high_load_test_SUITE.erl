@@ -15,15 +15,16 @@
 -include("registered_names.hrl").
 
 %% API
--export([main_test/1, sub_proc_load_test/1]).
+-export([main_test/1, sub_proc_load_test/1, multi_node_test/1]).
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 
 %% export nodes' codes
 -export([ccm_code1/0, ccm_code2/0, worker_code/0]).
 
-all() -> [main_test, sub_proc_load_test].
+all() -> [main_test, sub_proc_load_test, multi_node_test].
 
 -define(ProtocolVersion, 1).
+-define(MessageTimeout, 5000).
 
 %% ====================================================================
 %% Code of nodes used during the test
@@ -58,11 +59,15 @@ main_test(Config) ->
   TestFun = fun() ->
     ?assert(is_pid(spawn_link(fun() ->
       try
-        ?assertEqual(ok, gen_server:call({?Dispatcher_Name, CCM}, {fslogic, ?ProtocolVersion, Pid, ping}, 500)),
-        ?assertEqual(ok, gen_server:call({?Dispatcher_Name, CCM}, {dao, ?ProtocolVersion, Pid, ping}, 500)),
-        ?assertEqual(ok, gen_server:call({?Dispatcher_Name, CCM}, {dns_worker, ?ProtocolVersion, Pid, ping}, 500)),
-        ?assertEqual(ok, gen_server:call({?Dispatcher_Name, CCM}, {control_panel, ?ProtocolVersion, Pid, ping}, 500)),
-        ?assertEqual(ok, gen_server:call({?Dispatcher_Name, CCM}, {remote_files_manager, ?ProtocolVersion, Pid, ping}, 500)),
+        ?assertEqual(ok, gen_server:call({?Dispatcher_Name, CCM}, {fslogic, ?ProtocolVersion, Pid, ping}, ?MessageTimeout)),
+        Pid ! test_fun_ok,
+        ?assertEqual(ok, gen_server:call({?Dispatcher_Name, CCM}, {dao, ?ProtocolVersion, Pid, ping}, ?MessageTimeout)),
+        Pid ! test_fun_ok,
+        ?assertEqual(ok, gen_server:call({?Dispatcher_Name, CCM}, {dns_worker, ?ProtocolVersion, Pid, ping}, ?MessageTimeout)),
+        Pid ! test_fun_ok,
+        ?assertEqual(ok, gen_server:call({?Dispatcher_Name, CCM}, {control_panel, ?ProtocolVersion, Pid, ping}, ?MessageTimeout)),
+        Pid ! test_fun_ok,
+        ?assertEqual(ok, gen_server:call({?Dispatcher_Name, CCM}, {remote_files_manager, ?ProtocolVersion, Pid, ping}, ?MessageTimeout)),
         Pid ! test_fun_ok
       catch
         E11:E12 ->
@@ -71,13 +76,92 @@ main_test(Config) ->
     end)))
   end,
 
-  TestRequestsNum = 30000,
+  TestRequestsNum = 25000,
   for(1, TestRequestsNum, TestFun),
   Answers = count_answers(),
 
-  ct:print("Answers ~p~n", [Answers]),
-  ?assertEqual(5*TestRequestsNum, proplists:get_value(pong, Answers, 0)),
-  ?assertEqual(TestRequestsNum, proplists:get_value(test_fun_ok, Answers, 0)).
+%%   ct:print("Answers ~p~n", [Answers]),
+  ?assertEqual(5*TestRequestsNum, proplists:get_value(test_fun_ok, Answers, 0)),
+  ?assertEqual(5*TestRequestsNum, proplists:get_value(pong, Answers, 0)).
+
+multi_node_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+
+  [CCM | WorkerNodes] = NodesUp,
+
+  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
+  nodes_manager:wait_for_cluster_cast(),
+  RunWorkerCode = fun(Node) ->
+    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
+    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+  end,
+  lists:foreach(RunWorkerCode, WorkerNodes),
+  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
+  nodes_manager:wait_for_cluster_init(),
+
+  {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
+  StartAdditionalWorker = fun(Node) ->
+    case lists:member({Node, fslogic}, Workers) of
+      true -> ok;
+      false ->
+        ?assertEqual(ok, gen_server:call({global, ?CCM}, {start_worker, Node, fslogic, []}, 3000))
+    end,
+    case lists:member({Node, dao}, Workers) of
+      true -> ok;
+      false ->
+        ?assertEqual(ok, gen_server:call({global, ?CCM}, {start_worker, Node, dao, []}, 3000))
+    end,
+    case lists:member({Node, dns_worker}, Workers) of
+      true -> ok;
+      false ->
+        ?assertEqual(ok, gen_server:call({global, ?CCM}, {start_worker, Node, dns_worker, []}, 3000))
+    end,
+    case lists:member({Node, cluster_rengine}, Workers) of
+      true -> ok;
+      false ->
+        ?assertEqual(ok, gen_server:call({global, ?CCM}, {start_worker, Node, cluster_rengine, []}, 3000))
+    end,
+    case lists:member({Node, gateway}, Workers) of
+      true -> ok;
+      false ->
+        ?assertEqual(ok, gen_server:call({global, ?CCM}, {start_worker, Node, gateway, []}, 3000))
+    end
+  end,
+  lists:foreach(StartAdditionalWorker, NodesUp),
+  nodes_manager:wait_for_cluster_init(5*length(NodesUp) - 5),
+
+  Pid = self(),
+  TestFun = fun() ->
+    ?assert(is_pid(spawn_link(fun() ->
+      try
+        NodeTestFun = fun(Node) ->
+          ?assertEqual(ok, gen_server:call({?Dispatcher_Name, Node}, {fslogic, ?ProtocolVersion, Pid, ping}, ?MessageTimeout)),
+          Pid ! test_fun_ok,
+          ?assertEqual(ok, gen_server:call({?Dispatcher_Name, Node}, {dao, ?ProtocolVersion, Pid, ping}, ?MessageTimeout)),
+          Pid ! test_fun_ok,
+          ?assertEqual(ok, gen_server:call({?Dispatcher_Name, Node}, {dns_worker, ?ProtocolVersion, Pid, ping}, ?MessageTimeout)),
+          Pid ! test_fun_ok,
+          ?assertEqual(ok, gen_server:call({?Dispatcher_Name, Node}, {cluster_rengine, ?ProtocolVersion, Pid, ping}, ?MessageTimeout)),
+          Pid ! test_fun_ok,
+          ?assertEqual(ok, gen_server:call({?Dispatcher_Name, Node}, {gateway, ?ProtocolVersion, Pid, ping}, ?MessageTimeout)),
+          Pid ! test_fun_ok
+        end,
+        lists:foreach(NodeTestFun, NodesUp)
+      catch
+        E11:E12 ->
+          Pid ! {E11, E12}
+      end
+    end)))
+  end,
+
+  TestRequestsNum = 10000,
+  for(1, TestRequestsNum, TestFun),
+  Answers = count_answers(),
+
+%%   ct:print("Answers ~p~n", [Answers]),
+  ?assertEqual(5*length(NodesUp)*TestRequestsNum, proplists:get_value(test_fun_ok, Answers, 0)),
+  ?assertEqual(5*length(NodesUp)*TestRequestsNum, proplists:get_value(pong, Answers, 0)).
 
 sub_proc_load_test(Config) ->
   nodes_manager:check_start_assertions(Config),
@@ -108,21 +192,25 @@ sub_proc_load_test(Config) ->
   nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
 
   ProcFun = fun(_ProtocolVersion, {sub_proc_test, _, AnsPid}) ->
+    calc(10000),
     AnsPid ! sub_proc_ok
   end,
 
   MapFun = fun({sub_proc_test, MapNum, _}) ->
+    calc(1000),
     MapNum rem 10
   end,
 
   RequestMap = fun
     ({sub_proc_test, _, _}) ->
+      calc(1000),
       sub_proc_test_proccess;
     (_) -> non
   end,
 
   DispMapFun = fun
     ({sub_proc_test, MapNum2, _}) ->
+      calc(1000),
       trunc(MapNum2 / 10);
     (_) -> non
   end,
@@ -139,18 +227,30 @@ sub_proc_load_test(Config) ->
   TestFun = fun() ->
     ?assert(is_pid(spawn_link(fun() ->
       try
-        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 11, Self}}, 500),
-        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 12, Self}}, 500),
-        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 13, Self}}, 500),
-        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 21, Self}}, 500),
-        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 22, Self}}, 500),
-        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 23, Self}}, 500),
-        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 31, Self}}, 500),
-        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 32, Self}}, 500),
-        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 33, Self}}, 500),
-        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 41, Self}}, 500),
-        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 42, Self}}, 500),
-        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 43, Self}}, 500)
+        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 11, Self}}, ?MessageTimeout),
+        Self ! test_fun_ok,
+        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 12, Self}}, ?MessageTimeout),
+        Self ! test_fun_ok,
+        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 13, Self}}, ?MessageTimeout),
+        Self ! test_fun_ok,
+        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 21, Self}}, ?MessageTimeout),
+        Self ! test_fun_ok,
+        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 22, Self}}, ?MessageTimeout),
+        Self ! test_fun_ok,
+        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 23, Self}}, ?MessageTimeout),
+        Self ! test_fun_ok,
+        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 31, Self}}, ?MessageTimeout),
+        Self ! test_fun_ok,
+        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 32, Self}}, ?MessageTimeout),
+        Self ! test_fun_ok,
+        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 33, Self}}, ?MessageTimeout),
+        Self ! test_fun_ok,
+        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 41, Self}}, ?MessageTimeout),
+        Self ! test_fun_ok,
+        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 42, Self}}, ?MessageTimeout),
+        Self ! test_fun_ok,
+        gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 43, Self}}, ?MessageTimeout),
+        Self ! test_fun_ok
       catch
         E11:E12 ->
           Self ! {E11, E12}
@@ -158,12 +258,13 @@ sub_proc_load_test(Config) ->
     end)))
   end,
 
-  TestRequestsNum = 10000,
+  TestRequestsNum = 1000,
   for(1, TestRequestsNum, TestFun),
 
   Answers = count_answers(),
 
-  ct:print("Answers ~p~n", [Answers]),
+%%   ct:print("Answers ~p~n", [Answers]),
+  ?assertEqual(12*TestRequestsNum, proplists:get_value(test_fun_ok, Answers, 0)),
   ?assertEqual(12*TestRequestsNum, proplists:get_value(sub_proc_ok, Answers, 0)).
 
 
@@ -171,7 +272,21 @@ sub_proc_load_test(Config) ->
 %% SetUp and TearDown functions
 %% ====================================================================
 
-init_per_testcase(sub_proc_load_test, Config) ->
+init_per_testcase(main_test, Config) ->
+  ?INIT_DIST_TEST,
+  nodes_manager:start_deps_for_tester_node(),
+
+  NodesUp = nodes_manager:start_test_on_nodes(1),
+  [Node1 | _] = NodesUp,
+
+  DB_Node = nodes_manager:get_db_node(),
+  Port = 6666,
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [Node1]}, {dns_port, 1317}, {db_nodes, [DB_Node]}]]),
+
+  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
+  lists:append([{port, Port}, {nodes, NodesUp}, {assertions, Assertions}], Config);
+
+init_per_testcase(_, Config) ->
   ?INIT_DIST_TEST,
   nodes_manager:start_deps_for_tester_node(),
 
@@ -186,21 +301,7 @@ init_per_testcase(sub_proc_load_test, Config) ->
     [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}]]),
 
   Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
-  lists:append([{nodes, NodesUp}, {assertions, Assertions}, {dbnode, DBNode}], Config);
-
-init_per_testcase(_, Config) ->
-  ?INIT_DIST_TEST,
-  nodes_manager:start_deps_for_tester_node(),
-
-  NodesUp = nodes_manager:start_test_on_nodes(1),
-  [Node1 | _] = NodesUp,
-
-  DB_Node = nodes_manager:get_db_node(),
-  Port = 6666,
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [Node1]}, {dns_port, 1317}, {db_nodes, [DB_Node]}]]),
-
-  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
-  lists:append([{port, Port}, {nodes, NodesUp}, {assertions, Assertions}], Config).
+  lists:append([{nodes, NodesUp}, {assertions, Assertions}, {dbnode, DBNode}], Config).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
@@ -237,3 +338,8 @@ count_answers(TmpAns) ->
   after 5000 ->
     TmpAns
   end.
+
+calc(0) ->
+  0;
+calc(X) ->
+  calc(X-1).
