@@ -7,9 +7,6 @@
 -include("veil_modules/dao/dao.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 
--define(LogLoop, 100).
--define(LogLoopTime, 60000000).
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% TEST DRIVER CALLBACKS %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -50,29 +47,15 @@ new(Id) ->
     ?DEBUG("dd file: ~p~n", [File]),
     BlockSize = basho_bench_config:get(block_size),
     Data = [0 || _X <- lists:seq(1, 1024*BlockSize)],
-    {ok, {Device, 0, Data, {?LogLoop, os:timestamp()}}}.
+    {ok, {Device, 0, Data}}.
 
 
 %% Only 'write' action is implemented right now
 run(write, _KeyGen, _ValueGen, {Dev, _Offset, _Data} = State) when is_atom(Dev) ->
     timer:sleep(1000), %% Dont generate more then one error per sec when open/2 is failing
     {error, {open, Dev}, State};
-run(write, _KeyGen, _ValueGen, {Dev, Offset, Data, {LogLoop, LastTime}}) ->
-  NewLoopValue = case LogLoop of
-                   0 ->
-                     Now = os:timestamp(),
-                     case timer:now_diff(Now, LastTime) > ?LogLoopTime of
-                       true ->
-                         ?DEBUG("Loop log~n", []),
-                         {?LogLoop, Now};
-                       false ->
-                         {?LogLoop, LastTime}
-                     end;
-                   _ ->
-                     {LogLoop -1, LastTime}
-                 end,
-
-    NewState = {Dev, (Offset + length(Data)) rem (basho_bench_config:get(max_filesize) * 1024*1024), Data, NewLoopValue},
+run(write, _KeyGen, _ValueGen, {Dev, Offset, Data}) ->
+    NewState = {Dev, (Offset + length(Data)) rem (basho_bench_config:get(max_filesize) * 1024*1024), Data},
     case file:pwrite(Dev, 0, Data) of 
         ok -> {ok, NewState};
         {error, Reason} -> 

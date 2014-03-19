@@ -40,11 +40,13 @@ websocket_handle(_, _ConnState, State) ->
 websocket_info({send, Data}, _ConnState, State) ->
     {reply, {binary, Data}, State};
 websocket_info({close, Payload}, _ConnState, State) ->
-    {close, Payload, State}.
+		{close, Payload, State}.
 
 websocket_terminate({close, Code, _Payload}, _ConnState, State) ->
     State ! {self(), {closed, Code}},
-    ok.
+    ok;
+websocket_terminate({_Code, _Payload}, _ConnState, State) ->
+		ok.
 
 
 %% ====================================================================
@@ -122,7 +124,7 @@ send(Pid, Data) ->
 -spec close(SocketRef :: pid()) -> ok.
 %% ====================================================================
 close(Pid) ->
-    Pid ! {close, ""},
+    Pid ! {close, <<>>},
     ok.
 
 
