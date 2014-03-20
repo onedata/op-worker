@@ -16,6 +16,7 @@
 -include("supervision_macros.hrl").
 -include("modules_and_args.hrl").
 
+-define(STATS_WEIGHTS, [{cpu, 100}, {mem, 100}]).
 -define(CALLBACKS_TABLE, callbacks_table).
 
 %% ====================================================================
@@ -1292,7 +1293,7 @@ map_node_stats_to_load(NodesStats) ->
   end, undefined, NodesStats),
 
   %% Define weigth of statistical data (default weigth equals 1)
-  StatsWeight = dict:from_list([{cpu, 100}, {mem, 100}]),
+  StatsWeight = dict:from_list(?STATS_WEIGHTS),
   GetStatWeight = fun(Name) ->
     case dict:find(Name, StatsWeight) of
       {ok, Value} -> Value;

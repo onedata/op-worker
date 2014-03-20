@@ -31,6 +31,7 @@
 %% ====================================================================
 -export([start_link/1, stop/0]).
 -export([check_vsn/0]).
+-export([create_node_stats_rrd/1, save_node_stats_to_rrd/0, log_load/4]).
 
 %% ====================================================================
 %% Test API
@@ -112,12 +113,7 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
         [
           {env, [{dispatch, Dispatch}]}
         ]),
-
-      case create_node_stats_rrd() of
-        {error, Error} -> lager:error([{mod, ?MODULE}], "Can not create node stats RRD: ~p", [Error]);
-        _ -> ok
-      end,
-      erlang:send_after(100, self(), {timer, monitor_node});
+      spawn(?MODULE, create_node_stats_rrd, [self()]);
     false -> ok
   end,
 
@@ -128,12 +124,8 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
 
 init([Type]) when Type =:= test_worker ->
   process_flag(trap_exit, true),
-  case create_node_stats_rrd() of
-    {error, Error} -> lager:error([{mod, ?MODULE}], "Can not create node stats RRD: ~p", [Error]);
-    _ -> ok
-  end,
+  spawn(?MODULE, create_node_stats_rrd, [self()]),
   erlang:send_after(10, self(), {timer, do_heart_beat}),
-  erlang:send_after(100, self(), {timer, monitor_node}),
 
   {ok, #node_state{node_type = worker, ccm_con_status = not_connected}};
 
@@ -236,10 +228,7 @@ handle_cast(stop, State) ->
   {stop, normal, State};
 
 handle_cast(monitor_node, State) ->
-  case save_node_stats_to_rrd() of
-    {error, Error} -> lager:error([{mod, ?MODULE}], "Can not save node stats to RRD: ~p", [Error]);
-    _ -> ok
-  end,
+  spawn(?MODULE, save_node_stats_to_rrd, []),
   {ok, Period} = application:get_env(?APP_Name, node_monitoring_period),
   erlang:send_after(1000 * Period, self(), {timer, monitor_node}),
   {noreply, State};
@@ -276,8 +265,8 @@ handle_cast({start_load_logging, Path}, State) ->
   StartTime = MegaSecs * 1000000 + Secs + MicroSecs / 1000000,
   case file:open(Path ++ "/load_log.csv", [write]) of
     {ok, Fd} ->
-      Header = "elapsed, window" ++ lists:foldl(fun(Elem, Acc) -> Acc ++ ", " ++ Elem end,
-        "", lists:map(fun({Name, _}) -> atom_to_list(Name) end, get_node_stats(0))) ++ "\n",
+      NodeStats = get_node_stats(0),
+      Header = string:join(["elapsed", "window" | lists:map(fun({Name, _}) -> atom_to_list(Name) end, NodeStats)], ", ") ++ "\n",
       io:fwrite(Fd, Header, []),
       erlang:send_after(Interval * 1000, self(), {timer, {log_load, StartTime, StartTime}}),
       {noreply, State#node_state{load_logging_fd = Fd}};
@@ -285,22 +274,7 @@ handle_cast({start_load_logging, Path}, State) ->
   end;
 
 handle_cast({log_load, StartTime, PrevTime}, State) ->
-  {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
-  {MegaSecs, Secs, MicroSecs} = erlang:now(),
-  CurrTime = MegaSecs * 1000000 + Secs + MicroSecs / 1000000,
-  case State#node_state.load_logging_fd of
-    undefined -> ok;
-    Fd ->
-      NodeStats = get_node_stats(short),
-      io:format("Node stats: ~p~n", [NodeStats]),
-      Values = [CurrTime - StartTime, CurrTime - PrevTime | lists:map(fun({_, Value}) ->
-        Value end, NodeStats)],
-      Format = string:join(lists:duplicate(length(Values), "~.6f"), ", ") ++ "\n",
-      io:format("Values: ~p~n", [Values]),
-      io:format("Format: ~p~n", [Format]),
-      io:fwrite(Fd, Format, Values),
-      erlang:send_after(Interval * 1000, self(), {timer, {log_load, StartTime, CurrTime}})
-  end,
+  spawn(?MODULE, log_load, [self(), State#node_state.load_logging_fd, StartTime, PrevTime]),
   {noreply, State};
 
 handle_cast(stop_load_logging, State) ->
@@ -486,13 +460,35 @@ check_vsn([{Application, _Description, Vsn} | Apps]) ->
     _Other -> check_vsn(Apps)
   end.
 
-%% create_node_stats_rrd/0
+%% log_load/4
+%% ====================================================================
+%% @doc Writes node load to file
+-spec log_load(Pid :: pid(), Fd :: pid(), StartTime :: integer(), PrevTime :: integer()) -> Result when
+  Result :: ok.
+%% ====================================================================
+log_load(Pid, Fd, StartTime, PrevTime) ->
+  {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
+  {MegaSecs, Secs, MicroSecs} = erlang:now(),
+  CurrTime = MegaSecs * 1000000 + Secs + MicroSecs / 1000000,
+  case Fd of
+    undefined -> ok;
+    _ ->
+      NodeStats = get_node_stats(short),
+      Values = [CurrTime - StartTime, CurrTime - PrevTime | lists:map(fun({_, Value}) ->
+        Value end, NodeStats)],
+      Format = string:join(lists:duplicate(length(Values), "~.6f"), ", ") ++ "\n",
+      io:fwrite(Fd, Format, Values),
+      erlang:send_after(Interval * 1000, Pid, {timer, {log_load, StartTime, CurrTime}}),
+      ok
+  end.
+
+%% create_node_stats_rrd/1
 %% ====================================================================
 %% @doc Creates node stats Round Robin Database
--spec create_node_stats_rrd() -> Result when
-  Result :: {ok, Data :: binary()} | {error, Error :: term()}.
+  -spec create_node_stats_rrd(Pid :: pid()) -> Result when
+Result :: {ok, Data :: binary()} | {error, Error :: term()}.
 %% ====================================================================
-create_node_stats_rrd() ->
+create_node_stats_rrd(Pid) ->
   {ok, Period} = application:get_env(?APP_Name, node_monitoring_period),
   Heartbeat = 2 * Period,
   RRASize = round(24 * 60 * 60 / Period), % one day in seconds devided by monitoring period
@@ -516,7 +512,10 @@ create_node_stats_rrd() ->
   RRAs = lists:map(fun(Step) -> BinaryStep = integer_to_binary(Step),
     <<"RRA:AVERAGE:0.5:", BinaryStep/binary, ":", RRASizeBinary/binary>> end, Steps),
 
-  rrderlang:create(?Node_Stats_RRD_Name, Options, DSs, RRAs).
+  case rrderlang:create(?Node_Stats_RRD_Name, Options, DSs, RRAs) of
+    {error, Error} -> lager:error([{mod, ?MODULE}], "Can not create node stats RRD: ~p", [Error]);
+    _ -> erlang:send_after(100, Pid, {timer, monitor_node})
+  end.
 
 %% get_node_stats/1
 %% ====================================================================
@@ -571,14 +570,19 @@ get_node_stats(StartTime, EndTime) ->
 %% ====================================================================
 %% @doc Saves node stats to Round Robin Database
 -spec save_node_stats_to_rrd() -> Result when
-  Result :: {ok, Data :: binary()} | {error, Error :: term()}.
+  Result :: ok | {error, Error :: term()}.
 %% ====================================================================
 save_node_stats_to_rrd() ->
   {MegaSecs, Secs, _} = erlang:now(),
   Timestamp = MegaSecs * 1000000 + Secs,
   Stats = get_cpu_stats() ++ get_memory_stats() ++ get_storage_stats() ++ get_network_stats() ++ get_port_stats(),
   Values = lists:map(fun({_, Value}) -> Value end, Stats),
-  rrderlang:update(?Node_Stats_RRD_Name, <<>>, Values, Timestamp).
+  case rrderlang:update(?Node_Stats_RRD_Name, <<>>, Values, Timestamp) of
+    {error, Error} ->
+      lager:error([{mod, ?MODULE}], "Can not save node stats to RRD: ~p", [Error]),
+      {error, Error};
+    _ -> ok
+  end.
 
 %% get_network_stats/0
 %% ====================================================================
@@ -592,17 +596,25 @@ get_network_stats() ->
   {ok, Period} = application:get_env(?APP_Name, node_monitoring_period),
   case file:list_dir("/sys/class/net") of
     {ok, Interfaces} ->
-      RxBytes = lists:foldl(fun(Interface, Acc) ->
-        get_interface_stats(Interface, "rx_bytes") + Acc end, 0, Interfaces),
-      TxBytes = lists:foldl(fun(Interface, Acc) ->
-        get_interface_stats(Interface, "tx_bytes") + Acc end, 0, Interfaces),
-      RxPackets = lists:foldl(fun(Interface, Acc) ->
-        get_interface_stats(Interface, "rx_packets") + Acc end, 0, Interfaces),
-      TxPackets = lists:foldl(fun(Interface, Acc) ->
-        get_interface_stats(Interface, "tx_packets") + Acc end, 0, Interfaces),
-      lists:map(fun({Name, Value}) -> {Name, round(Value / Period)} end,
-        [{network_rx_bps, RxBytes}, {network_tx_bps, TxBytes},
-          {network_rx_pps, RxPackets}, {network_tx_pps, TxPackets}]);
+      SumInterfacesStats = fun(Type) ->
+        lists:foldl(fun(Interface, Acc) ->
+          case {get_interface_stats(Interface, Type), Acc} of
+            {undefined, _} -> Acc;
+            {InterfaceStat, undefined} -> InterfaceStat;
+            {InterfaceStat, _} -> InterfaceStat + Acc
+          end
+        end, undefined, Interfaces)
+      end,
+      RxBytes = SumInterfacesStats("rx_bytes"),
+      TxBytes = SumInterfacesStats("tx_bytes"),
+      RxPackets = SumInterfacesStats("rx_packets"),
+      TxPackets = SumInterfacesStats("tx_packets"),
+
+      lists:map(fun
+        ({Name, undefined}) -> {Name, undefined};
+        ({Name, Value}) -> {Name, round(Value / Period)}
+      end, [{network_rx_bps, RxBytes}, {network_tx_bps, TxBytes},
+        {network_rx_pps, RxPackets}, {network_tx_pps, TxPackets}]);
     _ ->
       [{network_rx_bps, undefined}, {network_tx_bps, undefined},
         {network_rx_pps, undefined}, {network_tx_pps, undefined}]
@@ -658,7 +670,9 @@ get_cpu_stats() ->
 get_port_stats() ->
   {ok, Period} = application:get_env(?APP_Name, node_monitoring_period),
   Ports = erlang:ports(),
-  lists:map(fun({Name, Value}) -> {Name, round(Value / Period)} end,
+  lists:map(fun
+    ({Name, undefinde}) -> {Name, undefined};
+    ({Name, Value}) -> {Name, round(Value / Period)} end,
     [
       {port_rx_bps, lists:foldl(
         fun(_, undefined) -> undefined;
