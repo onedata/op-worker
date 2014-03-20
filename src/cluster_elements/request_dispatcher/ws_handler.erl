@@ -207,8 +207,6 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                       #veil_request{subject = DnString, request = #callback{fuse = FuseID, pid = self(), node = node(), action = channelregistration}};
                   CallbackMsg2 when is_record(CallbackMsg2, channelclose) ->
                       #veil_request{subject = DnString, request = #callback{fuse = FuseID, pid = self(), node = node(), action = channelclose}};
-                  EventMsg when is_record(EventMsg, eventmessage) ->
-                    #veil_request{subject = DnString, request = #event_payload{user_dn = DnString, event = Msg}, fuse_id = FuseID};
                   _ -> #veil_request{subject = DnString, request = Msg, fuse_id = FuseID}
               end,
 

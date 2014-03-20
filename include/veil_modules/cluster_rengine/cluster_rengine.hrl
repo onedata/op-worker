@@ -26,8 +26,6 @@
 -record(mkdir_event, {ans_pid, user_id, user_dn, file_id, event = #event{}}).
 -record(open_event, {ans_pid, user_id, file_id, event = #event{}}).
 
--record(event_payload, {user_dn, event}).
-
 -record(event_handler_item, {processing_method, tree_id, map_fun, disp_map_fun, handler_fun, config}).
 
 %% Definitions

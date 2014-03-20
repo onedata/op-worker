@@ -46,10 +46,10 @@ init(_Args) ->
 handle(_ProtocolVersion, ping) ->
   pong;
 
-handle(_ProtocolVersion, #event_payload{user_dn = UserDn, event = #eventmessage{type = Type}}) ->
+handle(_ProtocolVersion, #eventmessage{type = Type}) ->
   case Type of
-    "mkdir_event" -> handle(1, {event_arrived, #mkdir_event{user_dn = UserDn}});
-    "write_event" -> handle(1, {event_arrived, #write_event{user_dn = UserDn}});
+    "mkdir_event" -> handle(1, {event_arrived, #mkdir_event{user_dn = get(user_id)}});
+    "write_event" -> handle(1, {event_arrived, #write_event{user_dn = get(user_id)}});
     _ -> ok
   end;
 
@@ -288,7 +288,7 @@ register_mkdir_handler_aggregation(InitCounter) ->
   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "mkdir_event"},
   EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
 
-  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = InitCounter},
+  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = InitCounter, sum_field_name = "count"},
   EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {mkdir_event, EventItem, EventAggregatorConfig}}}).
 
@@ -320,7 +320,7 @@ register_write_event_handler(InitCounter) ->
   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "write_event"},
   EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
 
-  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = InitCounter},
+  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = InitCounter, sum_field_name = "count"},
   EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {write_event, EventItem, EventAggregatorConfig}}}).
 
