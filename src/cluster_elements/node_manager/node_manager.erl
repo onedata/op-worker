@@ -274,7 +274,11 @@ handle_cast({start_load_logging, Path}, State) ->
   end;
 
 handle_cast({log_load, StartTime, PrevTime}, State) ->
-  spawn(?MODULE, log_load, [self(), State#node_state.load_logging_fd, StartTime, PrevTime]),
+  {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
+  {MegaSecs, Secs, MicroSecs} = erlang:now(),
+  CurrTime = MegaSecs * 1000000 + Secs + MicroSecs / 1000000,
+  spawn(?MODULE, log_load, [State#node_state.load_logging_fd, StartTime, PrevTime, CurrTime]),
+  erlang:send_after(Interval * 1000, self(), {timer, {log_load, StartTime, CurrTime}}),
   {noreply, State};
 
 handle_cast(stop_load_logging, State) ->
@@ -463,13 +467,10 @@ check_vsn([{Application, _Description, Vsn} | Apps]) ->
 %% log_load/4
 %% ====================================================================
 %% @doc Writes node load to file
--spec log_load(Pid :: pid(), Fd :: pid(), StartTime :: integer(), PrevTime :: integer()) -> Result when
+-spec log_load(Fd :: pid(), StartTime :: integer(), PrevTime :: integer(), CurrTime :: integer()) -> Result when
   Result :: ok.
 %% ====================================================================
-log_load(Pid, Fd, StartTime, PrevTime) ->
-  {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
-  {MegaSecs, Secs, MicroSecs} = erlang:now(),
-  CurrTime = MegaSecs * 1000000 + Secs + MicroSecs / 1000000,
+log_load(Fd, StartTime, PrevTime, CurrTime) ->
   case Fd of
     undefined -> ok;
     _ ->
@@ -478,7 +479,6 @@ log_load(Pid, Fd, StartTime, PrevTime) ->
         Value end, NodeStats)],
       Format = string:join(lists:duplicate(length(Values), "~.6f"), ", ") ++ "\n",
       io:fwrite(Fd, Format, Values),
-      erlang:send_after(Interval * 1000, Pid, {timer, {log_load, StartTime, CurrTime}}),
       ok
   end.
 
