@@ -344,54 +344,55 @@ handle_test_call(_Request, _From, State) ->
 handle_cast({update_state, NewStateNum, NewCallbacksNum}, State) ->
   case {State#dispatcher_state.state_num == NewStateNum, State#dispatcher_state.callbacks_num == NewCallbacksNum} of
     {true, true} ->
-      gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewStateNum, NewCallbacksNum}),
-      {noreply, State};
+      gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewStateNum, NewCallbacksNum});
     {false, true} ->
-      {Ans, NewState} = pull_state(State),
-
-      case Ans of
-        ok ->
-          lager:info([{mod, ?MODULE}], "Dispatcher had old state number, data updated"),
-          gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState#dispatcher_state.state_num, NewCallbacksNum});
-        _ ->
-          lager:error([{mod, ?MODULE}], "Dispatcher had old state number but could not update data"),
-          error
-      end,
-
-      {noreply, NewState};
+      spawn(fun() ->
+        lager:info([{mod, ?MODULE}], "Dispatcher had old state number, starting update"),
+        {Ans, NewState} = pull_state(State),
+        gen_server:cast(?Dispatcher_Name, {update_state, Ans, non, NewState})
+      end);
     {true, false} ->
-      case pull_callbacks() of
-        error ->
-          lager:error([{mod, ?MODULE}], "Dispatcher had old callbacks number but could not update data"),
-          {noreply, State};
-        Number ->
-          lager:info([{mod, ?MODULE}], "Dispatcher had old callbacks number, data updated"),
-          gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewStateNum, Number}),
-          {noreply, State#dispatcher_state{callbacks_num = Number}}
-      end;
+      spawn(fun() ->
+        lager:info([{mod, ?MODULE}], "Dispatcher had old callbacks number, starting update"),
+        {AnsList, AnsNum} = pull_callbacks(State#dispatcher_state.callbacks_num),
+        gen_server:cast(?Dispatcher_Name, {update_state, non, AnsList, State#dispatcher_state{callbacks_num = AnsNum}})
+      end);
     {false, false} ->
-      {Ans, NewState} = pull_state(State),
+      spawn(fun() ->
+        lager:info([{mod, ?MODULE}], "Dispatcher had old state number, starting update"),
+        {AnsState, NewState} = pull_state(State),
+        lager:info([{mod, ?MODULE}], "Dispatcher had old callbacks number, starting update"),
+        {AnsList, AnsNum} = pull_callbacks(State#dispatcher_state.callbacks_num),
+        gen_server:cast(?Dispatcher_Name, {update_state, AnsState, AnsList, NewState#dispatcher_state{callbacks_num = AnsNum}})
+      end)
+  end,
+  {noreply, State};
 
-      case Ans of
-        ok ->
-          lager:info([{mod, ?MODULE}], "Dispatcher had old state number, data updated"),
-          ok;
-        _ ->
-          lager:error([{mod, ?MODULE}], "Dispatcher had old state number but could not update data"),
-          error
+handle_cast({update_pulled_state, NewStateStatus, CallbacksList, NewState}, State) ->
+  case NewStateStatus of
+    non ->
+      ok;
+    ok ->
+      lager:info([{mod, ?MODULE}], "Dispatcher state updated");
+    _ ->
+      lager:error([{mod, ?MODULE}], "Dispatcher had old state number but could not update data")
+  end,
+
+  case CallbacksList of
+    non ->
+      ok;
+    error ->
+      lager:error([{mod, ?MODULE}], "Dispatcher had old callbacks number but could not update data");
+    _ ->
+      UpdateCallbacks = fun({Fuse, NodesList}) ->
+        ets:insert(?CALLBACKS_TABLE, {Fuse, NodesList})
       end,
+      lists:foreach(UpdateCallbacks, CallbacksList),
+      lager:info([{mod, ?MODULE}], "Dispatcher callbacks updated")
+  end,
 
-      case pull_callbacks() of
-        error ->
-          lager:error([{mod, ?MODULE}], "Dispatcher had old callbacks number but could not update data"),
-          gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState#dispatcher_state.state_num, NewCallbacksNum}),
-          {noreply, NewState};
-        Number ->
-          lager:info([{mod, ?MODULE}], "Dispatcher had old callbacks number, data updated"),
-          gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState#dispatcher_state.state_num, Number}),
-          {noreply, NewState#dispatcher_state{callbacks_num = Number}}
-      end
-  end;
+  gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState#dispatcher_state.state_num, NewCallbacksNum}),
+  {noreply, NewState};
 
 handle_cast({update_workers, WorkersList, RequestMap, NewStateNum, CurLoad, AvgLoad}, _State) ->
   NewState = update_workers(WorkersList, NewStateNum, CurLoad, AvgLoad, ?Modules),
@@ -738,25 +739,20 @@ get_callback(Fuse) ->
       not_found
   end.
 
-%% pull_callbacks/0
+%% pull_callbacks/1
 %% ====================================================================
 %% @doc Pulls info about callbacks from CCM
--spec pull_callbacks() -> Result when
+-spec pull_callbacks(OldCallbacksNum :: integer()) -> Result when
   Result :: error | CallbacksNum,
   CallbacksNum :: integer().
 %% ====================================================================
-pull_callbacks() ->
+pull_callbacks(OldCallbacksNum) ->
   try
-    {CallbacksList, CallbacksNum} = gen_server:call({global, ?CCM}, get_callbacks, 1000),
-    UpdateCallbacks = fun({Fuse, NodesList}) ->
-      ets:insert(?CALLBACKS_TABLE, {Fuse, NodesList})
-    end,
-    lists:foreach(UpdateCallbacks, CallbacksList),
-    CallbacksNum
+    gen_server:call({global, ?CCM}, get_callbacks, 1000)
   catch
     _:_ ->
       lager:error([{mod, ?MODULE}], "Dispatcher on node: ~s: can not pull callbacks list", [node()]),
-      error
+      {error, OldCallbacksNum}
   end.
 
 %% get_callbacks/0

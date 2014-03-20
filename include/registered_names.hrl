@@ -31,10 +31,6 @@
 %% works as a dispatcher.
 -define(Dispatcher_Name, request_dispatcher).
 
-%% Name of nodes monitoring process
--define(Monitoring_Proc, monitor_process).
-
-
 %% Local name of the process waiting for dns udp messages
 -define(DNS_UDP, dns_udp).
 

@@ -83,85 +83,114 @@ handle(_ProtocolVersion, get_version) ->
 	node_manager:check_vsn();
 
 handle(_ProtocolVersion, {update_state, ModulesToNodes, NLoads, AvgLoad}) ->
-  ModulesToNodes2 = lists:map(fun ({Module, Nodes}) ->
-    GetLoads = fun({Node, V}) ->
-      {Node, V, V}
-    end,
-    {Module, lists:map(GetLoads, Nodes)}
-  end, ModulesToNodes),
-	New_DNS_State = #dns_worker_state{workers_list = ModulesToNodes2, nodes_list = NLoads, avg_load = AvgLoad},
-	ok = gen_server:call(?MODULE, {updatePlugInState, New_DNS_State});
+  try
+    ModulesToNodes2 = lists:map(fun ({Module, Nodes}) ->
+      GetLoads = fun({Node, V}) ->
+        {Node, V, V}
+      end,
+      {Module, lists:map(GetLoads, Nodes)}
+    end, ModulesToNodes),
+    New_DNS_State = #dns_worker_state{workers_list = ModulesToNodes2, nodes_list = NLoads, avg_load = AvgLoad},
+    case gen_server:call(?MODULE, {updatePlugInState, New_DNS_State}) of
+      ok ->
+        ok;
+      UpdateError ->
+        lager:error("DNS update error: ~p", [UpdateError]),
+        udpate_error
+    end
+  catch
+    E1:E2 ->
+      lager:error("DNS update error: ~p:~p", [E1, E2]),
+      udpate_error
+  end;
 
 handle(_ProtocolVersion, {get_worker, Module}) ->
-	DNS_State = gen_server:call(?MODULE, getPlugInState),
-	WorkerList = DNS_State#dns_worker_state.workers_list,
-  NodesList = DNS_State#dns_worker_state.nodes_list,
-	Result = proplists:get_value(Module, WorkerList, []),
+  try
+    DNS_State = gen_server:call(?MODULE, getPlugInState),
+    WorkerList = DNS_State#dns_worker_state.workers_list,
+    NodesList = DNS_State#dns_worker_state.nodes_list,
+    Result = proplists:get_value(Module, WorkerList, []),
 
-  PrepareResult = fun({Node, V, C}, {TmpAns, TmpWorkers}) ->
-    TmpAns2 = case C of
-      V -> [Node | TmpAns];
-      _ -> TmpAns
+    PrepareResult = fun({Node, V, C}, {TmpAns, TmpWorkers}) ->
+      TmpAns2 = case C of
+        V -> [Node | TmpAns];
+        _ -> TmpAns
+      end,
+      C2 = case C of
+        1 -> V;
+        _ -> C - 1
+      end,
+      {TmpAns2, [{Node, V, C2} | TmpWorkers]}
     end,
-    C2 = case C of
-      1 -> V;
-      _ -> C - 1
-    end,
-    {TmpAns2, [{Node, V, C2} | TmpWorkers]}
-  end,
-  {Result2, ModuleWorkerList} = lists:foldl(PrepareResult, {[], []}, Result),
+    {Result2, ModuleWorkerList} = lists:foldl(PrepareResult, {[], []}, Result),
 
-  PrepareState = fun({M, Workers}, TmpWorkersList) ->
-    case M =:= Module of
-      true -> [{M, ModuleWorkerList} | TmpWorkersList];
-      false -> [{M, Workers} | TmpWorkersList]
+    PrepareState = fun({M, Workers}, TmpWorkersList) ->
+      case M =:= Module of
+        true -> [{M, ModuleWorkerList} | TmpWorkersList];
+        false -> [{M, Workers} | TmpWorkersList]
+      end
+    end,
+    NewWorkersList = lists:foldl(PrepareState, [], WorkerList),
+
+    New_DNS_State = DNS_State#dns_worker_state{workers_list = NewWorkersList},
+
+    case gen_server:call(?MODULE, {updatePlugInState, New_DNS_State}) of
+      ok ->
+        random:seed(now()),
+        Result3 = make_ans_random(Result2),
+        case Module of
+          control_panel ->
+            {ok, Result3};
+          _ ->
+            create_ans(Result3, NodesList)
+        end;
+      UpdateError ->
+        lager:error("DNS get_worker error: ~p", [UpdateError]),
+        {error, dns_update_state_error}
     end
-  end,
-  NewWorkersList = lists:foldl(PrepareState, [], WorkerList),
-
-  New_DNS_State = DNS_State#dns_worker_state{workers_list = NewWorkersList},
-  ok = gen_server:call(?MODULE, {updatePlugInState, New_DNS_State}),
-
-  random:seed(now()),
-  Result3 = make_ans_random(Result2),
-	case Module of
-    control_panel ->
-      {ok, Result3};
-    _ ->
-      create_ans(Result3, NodesList)
+  catch
+    E1:E2 ->
+      lager:error("DNS get_worker error: ~p:~p", [E1, E2]),
+      {error, dns_get_worker_error}
   end;
 
 handle(_ProtocolVersion, get_nodes) ->
-  DNS_State = gen_server:call(?MODULE, getPlugInState),
-  NodesList = DNS_State#dns_worker_state.nodes_list,
-  AvgLoad = DNS_State#dns_worker_state.avg_load,
+  try
+    DNS_State = gen_server:call(?MODULE, getPlugInState),
+    NodesList = DNS_State#dns_worker_state.nodes_list,
+    AvgLoad = DNS_State#dns_worker_state.avg_load,
 
-  case AvgLoad of
-    0 ->
-      Res = make_ans_random(lists:map(
-        fun({Node, _}) ->
-          Node
-        end, NodesList)),
-      {ok, Res};
-    _ ->
-      random:seed(now()),
-      ChooseNodes = fun({Node, NodeLoad}, TmpAns) ->
-        case is_number(NodeLoad) and (NodeLoad > 0) of
-          true ->
-            Ratio = AvgLoad / NodeLoad,
-            case Ratio >= random:uniform() of
-              true ->
-                [Node | TmpAns];
-              false ->
-                TmpAns
-            end;
-          false ->
-            [Node | TmpAns]
-        end
-      end,
-      Result = lists:foldl(ChooseNodes, [], NodesList),
-      Result2 = make_ans_random(Result),
-      create_ans(Result2, NodesList)
+    case AvgLoad of
+      0 ->
+        Res = make_ans_random(lists:map(
+          fun({Node, _}) ->
+            Node
+          end, NodesList)),
+        {ok, Res};
+      _ ->
+        random:seed(now()),
+        ChooseNodes = fun({Node, NodeLoad}, TmpAns) ->
+          case is_number(NodeLoad) and (NodeLoad > 0) of
+            true ->
+              Ratio = AvgLoad / NodeLoad,
+              case Ratio >= random:uniform() of
+                true ->
+                  [Node | TmpAns];
+                false ->
+                  TmpAns
+              end;
+            false ->
+              [Node | TmpAns]
+          end
+        end,
+        Result = lists:foldl(ChooseNodes, [], NodesList),
+        Result2 = make_ans_random(Result),
+        create_ans(Result2, NodesList)
+    end
+  catch
+    E1:E2 ->
+      lager:error("DNS get_nodes error: ~p:~p", [E1, E2]),
+      {error, get_nodes}
   end;
 
 handle(ProtocolVersion, Msg) ->

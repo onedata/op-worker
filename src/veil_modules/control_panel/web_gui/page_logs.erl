@@ -65,6 +65,7 @@ body() ->
 render_body() -> 
     % Start a comet process
     {ok, Pid} = wf:comet(fun() -> comet_loop_init() end),
+    %% TODO - what if central loger is down?
     % Subscribe for logs at central_logger
     gen_server:call(?Dispatcher_Name, {central_logger, 1, {subscribe, Pid}}),
     wf:state(comet_pid, Pid),
@@ -215,7 +216,12 @@ comet_loop(Counter, PageState=#page_state { first_log=FirstLog, auto_scroll=Auto
         end
     catch _Type:_Msg ->
         ?debug_stacktrace("~p ~p", [_Type, _Msg]),
-        gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}}),
+        try
+          gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}})
+        catch
+          _:_ ->
+            error
+        end,
         wf:insert_bottom(main_table, comet_error()),
         wf:flush()
     end.

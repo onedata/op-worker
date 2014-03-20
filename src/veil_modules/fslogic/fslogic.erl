@@ -1725,7 +1725,14 @@ check_file_perms(FileName, UserDocStatus, UserDoc, FileDoc, CheckType) ->
 update_parent_ctime(Dir, CTime) ->
     case fslogic_utils:strip_path_leaf(Dir) of
         [?PATH_SEPARATOR] -> ok;
-        ParentPath -> gen_server:call(?Dispatcher_Name, {fslogic, 1, #veil_request{subject = get(user_id), request = {internal_call, #updatetimes{file_logic_name = ParentPath, mtime = CTime}}}})
+        ParentPath ->
+          try
+            gen_server:call(?Dispatcher_Name, {fslogic, 1, #veil_request{subject = get(user_id), request = {internal_call, #updatetimes{file_logic_name = ParentPath, mtime = CTime}}}})
+          catch
+            E1:E2 ->
+              lager:error("update_parent_ctime error: ~p:~p", [E1, E2]),
+              error
+          end
     end.
 
 %% Verify filename

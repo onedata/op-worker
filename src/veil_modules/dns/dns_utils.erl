@@ -193,7 +193,8 @@ get_workers(Module, Dispatcher, DispatcherTimeout) ->
 		DispatcherAns = gen_server:call(Dispatcher, {dns_worker, 1, Pid, {get_worker, Module}}),
 		case DispatcherAns of
 			ok -> receive
-						{ok, ListOfIPs} -> {ok, ListOfIPs}
+						{ok, ListOfIPs} -> {ok, ListOfIPs};
+            {error, Error} -> {error, Error}
 				  after
 						DispatcherTimeout -> lager:error("Unexpected dispatcher timeout"), {error, timeout}
 				  end;
@@ -219,7 +220,8 @@ get_nodes(Dispatcher, DispatcherTimeout) ->
     DispatcherAns = gen_server:call(Dispatcher, {dns_worker, 1, Pid, get_nodes}),
     case DispatcherAns of
       ok -> receive
-              {ok, ListOfIPs} -> {ok, ListOfIPs}
+              {ok, ListOfIPs} -> {ok, ListOfIPs};
+              {error, Error} -> {error, Error}
             after
               DispatcherTimeout -> lager:error("Unexpected dispatcher timeout"), {error, timeout}
             end;

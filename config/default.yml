@@ -75,13 +75,6 @@ veil_cluster_node_env:
       value: 1000
 
   - parameter:
-      name: hot_swapping_time
-      description: |
-        Time in ms after witch code of loops will be reloaded
-        e.g. if value is 10000 hot_swap message will be sent to loops 10 seconds after release_handler:install_release execution
-      value: 2000
-
-  - parameter:
       name: ssl_cert_path
       description: Path to certificate used by ranch_ssl
       value: |
