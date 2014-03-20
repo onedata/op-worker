@@ -130,14 +130,14 @@ veil_cluster_node_env:
       name: current_loglevel
       description: |
         Current loglevel in the cluster. Logs with lower importance will be completely discarded
-        Available loglevels are 0-7, respectively: debug, info, notice, warning, error, critical, alert, emergency 
+        Available loglevels are 0-7, respectively: debug, info, notice, warning, error, critical, alert, emergency
       value: 0
 
   - parameter:
       name: default_loglevel
       description: |
-        Used to reset loglevel to default. 
-        Available loglevels are 0-7, respectively: debug, info, notice, warning, error, critical, alert, emergency 
+        Used to reset loglevel to default.
+        Available loglevels are 0-7, respectively: debug, info, notice, warning, error, critical, alert, emergency
       value: 0
 
   - parameter:
@@ -171,6 +171,11 @@ veil_cluster_node_env:
       name: ca_dir
       description: path to dir containing CA and CRL certs used by GSI handler
       value: cacerts
+
+  - parameter:
+      name: crl_update_interval
+      description: the interval between CRL updates done by GSI handler
+      value: 3600000
 
 
   # CONTROL PANEL
@@ -219,7 +224,7 @@ veil_cluster_node_env:
   - parameter:
       name: control_panel_download_buffer
       description: Buffer size used to send file to a client
-      value: 1048576 
+      value: 1048576
 
   - parameter:
       name: control_panel_upload_buffer

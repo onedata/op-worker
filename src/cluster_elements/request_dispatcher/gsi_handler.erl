@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Rafal Slota
 %% @author Konrad Zemek
-%% @copyright (C): 2013 ACK CYFRONET AGH
+%% @copyright (C): 2014 ACK CYFRONET AGH
 %% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
@@ -47,7 +47,8 @@ init() ->
             case vcn_utils:ensure_running(inets) of
                 ok ->
                     update_crls(CADir),
-                    case timer:apply_interval(1000 * 60 * 60, ?MODULE, update_crls, [CADir]) of
+                    {ok, CRLUpdateInterval} = application:get_env(?APP_Name, crl_update_interval),
+                    case timer:apply_interval(CRLUpdateInterval, ?MODULE, update_crls, [CADir]) of
                         {ok, _} -> ok;
                         {error, Reason} -> lager:error("GSI Handler: Setting CLR auto-update failed (reason: ~p)", [Reason])
                     end;
@@ -334,7 +335,7 @@ update_crl(CADir, {OtpCert, [URL | URLs], Name}) ->
 %% ====================================================================
 %% @doc Converts a der or pem encoded binary CRL to a CertificateList record.
 %% @end
--spec binary_to_crl(Binary :: binary()) -> {der_encoded(), #'CertificateList'{}} | false.
+-spec binary_to_crl(Binary :: binary()) -> {true, #'CertificateList'{}} | false.
 %% ====================================================================
 binary_to_crl(Binary) ->
     try
