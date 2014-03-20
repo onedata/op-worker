@@ -354,19 +354,31 @@ strip_filename_ext(FileName) when is_list(FileName) ->
 is_proxy_certificate(OtpCert = #'OTPCertificate'{}) ->
     Ext = OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.extensions,
     Subject = OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject,
+    {rdnSequence, Attrs} = Subject,
+
+    %% Get all subject's RDNs
+    FlatAttrs = [Attr || #'AttributeTypeAndValue'{} = Attr <- lists:flatten(Attrs)],
+    ReversedAttrs = lists:reverse(FlatAttrs),
+
+    %% Check for legacy proxy and use the result as init status for RFC check
+    LegacyStatus =
+        case ReversedAttrs of
+            [#'AttributeTypeAndValue'{type = ?'id-at-commonName', value = {_, "proxy"}} | _] ->
+                maybe;
+            _ -> false
+        end,
+
+    %% Proceed with RFC proxy check
     case Ext of
         Exts when is_list(Exts) ->
-            lists:foldl(fun(#'Extension'{extnID = ?PROXY_CERT_EXT}, _) -> true;
-                    (_, AccIn) -> AccIn end, false, Ext);
+            lists:foldl(
+                fun(#'Extension'{extnID = ?PROXY_CERT_EXT}, _) ->
+                    true;
+                (_, AccIn) ->
+                    AccIn
+                end, LegacyStatus, Ext);
         _ ->
-            {rdnSequence, Attrs} = Subject,
-            FlatAttrs = [Attr || #'AttributeTypeAndValue'{} = Attr <- lists:flatten(Attrs)],
-            ReversedAttrs = lists:reverse(FlatAttrs),
-            case ReversedAttrs of
-                [#'AttributeTypeAndValue'{type = ?'id-at-commonName', value = {_, "proxy"}} | _] ->
-                    maybe;
-                _ -> false
-            end
+            false
     end.
 
 
