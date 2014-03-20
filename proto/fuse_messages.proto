@@ -181,6 +181,7 @@ message EventFilterConfig {
 message EventAggregatorConfig {
     required string field_name = 1;
     required uint64 threshold = 2;
+    required string sum_field_name = 3; // it will be extended in future. so far we assume that aggregation function is always sum and sum_field_name is field_name which values are summed
 }
 
 message EventStreamConfig {
