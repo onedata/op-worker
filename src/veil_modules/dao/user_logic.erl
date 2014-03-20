@@ -637,6 +637,7 @@ create_team_dir(TeamName) ->
     CTime = fslogic_utils:time(),
     GFile = #file{type = ?DIR_TYPE, name = ?GROUPS_BASE_DIR_NAME, uid = "0", parent = "", perms = 8#555},
     GFileDoc = fslogic_utils:update_meta_attr(GFile, times, {CTime, CTime, CTime}),
+    %% TODO - first get, next if not exists, create new
     {SaveStatus, UUID} = dao_lib:apply(dao_vfs, save_new_file, ["/" ++ ?GROUPS_BASE_DIR_NAME, GFileDoc], 1),
     GroupsBase = case {SaveStatus, UUID} of
                      {ok, _} -> UUID;
