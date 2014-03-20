@@ -44,9 +44,9 @@
 %% ====================================================================
 %% @doc Starts cluster manager
 -spec start_link() -> Result when
-  Result ::  {ok,Pid}
+  Result :: {ok, Pid}
   | ignore
-  | {error,Error},
+  | {error, Error},
   Pid :: pid(),
   Error :: {already_started, Pid} | term().
 %% ====================================================================
@@ -58,11 +58,11 @@ start_link() ->
 %% @doc Starts cluster manager
 -spec start_link(Mode) -> Result when
   Mode :: test | normal,
-  Result ::  {ok,Pid}
+  Result :: {ok, Pid}
   | ignore
-  | {error,Error},
+  | {error, Error},
   Pid :: pid(),
-  Error :: {already_started,Pid} | term().
+  Error :: {already_started, Pid} | term().
 %% ====================================================================
 start_link(Mode) ->
   Args = case Mode of
@@ -100,16 +100,16 @@ stop() ->
 init([]) ->
   ets:new(?CALLBACKS_TABLE, [named_table, set]),
   process_flag(trap_exit, true),
-  {ok, Interval} = application:get_env(veil_cluster_node, initialization_time),
+  {ok, Interval} = application:get_env(?APP_Name, initialization_time),
   Pid = self(),
   erlang:send_after(Interval * 1000, Pid, {timer, init_cluster}),
   erlang:send_after(50, Pid, {timer, {set_monitoring, on}}),
 
-  {ok, Interval2} = application:get_env(veil_cluster_node, heart_beat),
-  LoggerAndDAOInterval = case Interval > (2*Interval2 + 1) of
-    true -> 2*Interval2;
-    false -> Interval - 1
-  end,
+  {ok, Interval2} = application:get_env(?APP_Name, heart_beat),
+  LoggerAndDAOInterval = case Interval > (2 * Interval2 + 1) of
+                           true -> 2 * Interval2;
+                           false -> Interval - 1
+                         end,
   erlang:send_after(LoggerAndDAOInterval * 1000 + 100, Pid, {timer, start_central_logger}),
   erlang:send_after(LoggerAndDAOInterval * 1000 + 200, Pid, {timer, get_state_from_db}),
   {ok, #cm_state{}};
@@ -159,11 +159,11 @@ handle_call({addCallback, FuseId, Node, Pid}, _From, State) ->
   try
     gen_server:call({?Node_Manager_Name, Node}, {addCallback, FuseId, Pid}, 500),
     CallbacksNum = case add_callback(Node, FuseId, State#cm_state.nodes, State#cm_state.callbacks_num) of
-      updated ->
-        save_state(),
-        State#cm_state.callbacks_num + 1;
-      _ -> State#cm_state.callbacks_num
-    end,
+                     updated ->
+                       save_state(),
+                       State#cm_state.callbacks_num + 1;
+                     _ -> State#cm_state.callbacks_num
+                   end,
     {reply, ok, State#cm_state{callbacks_num = CallbacksNum}}
   catch
     _:_ ->
@@ -175,18 +175,18 @@ handle_call({delete_callback, FuseId, Node, Pid}, _From, State) ->
   try
     Ans = gen_server:call({?Node_Manager_Name, Node}, {delete_callback, FuseId, Pid}, 500),
     CallbacksNum = case Ans of
-      fuse_deleted ->
-        case delete_callback(Node, FuseId, State#cm_state.nodes, State#cm_state.callbacks_num, true) of
-          updated ->
-            save_state(),
-            State#cm_state.callbacks_num + 1;
-          deleted ->
-            save_state(),
-            State#cm_state.callbacks_num + 1;
-          _ -> State#cm_state.callbacks_num
-        end;
-      _ -> State#cm_state.callbacks_num
-    end,
+                     fuse_deleted ->
+                       case delete_callback(Node, FuseId, State#cm_state.nodes, State#cm_state.callbacks_num, true) of
+                         updated ->
+                           save_state(),
+                           State#cm_state.callbacks_num + 1;
+                         deleted ->
+                           save_state(),
+                           State#cm_state.callbacks_num + 1;
+                         _ -> State#cm_state.callbacks_num
+                       end;
+                     _ -> State#cm_state.callbacks_num
+                   end,
     {reply, ok, State#cm_state{callbacks_num = CallbacksNum}}
   catch
     _:_ ->
@@ -314,11 +314,11 @@ handle_cast({register_dispatcher_map, Module, Map, AnsPid}, State) ->
 
 handle_cast(get_state_from_db, State) ->
   NewState2 = case (State#cm_state.nodes =:= []) or State#cm_state.state_loaded of
-    true ->
-      State;
-    false ->
-      get_state_from_db(State)
-  end,
+                true ->
+                  State;
+                false ->
+                  get_state_from_db(State)
+              end,
 
   case State#cm_state.state_loaded of
     true ->
@@ -390,7 +390,7 @@ handle_cast({worker_answer, cluster_state, Response}, State) ->
                {ok, SavedState} ->
                  lager:info([{mod, ?MODULE}], "State read from DB: ~p", [SavedState]),
                  merge_state(State, SavedState);
-               {error, {not_found,missing}} ->
+               {error, {not_found, missing}} ->
                  save_state(true),
                  State;
                Error ->
@@ -418,7 +418,8 @@ handle_cast({synch_cache_clearing, Cache, ReturnPid}, State) ->
 
 handle_cast({start_load_logging, Path}, State) ->
   lager:info("Start load logging on nodes: ~p", State#cm_state.nodes),
-  lists:map(fun(Node) -> gen_server:cast({?Node_Manager_Name, Node}, {start_load_logging, Path}) end, State#cm_state.nodes),
+  lists:map(fun(Node) ->
+    gen_server:cast({?Node_Manager_Name, Node}, {start_load_logging, Path}) end, State#cm_state.nodes),
   {noreply, State};
 
 handle_cast(stop_load_logging, State) ->
@@ -472,7 +473,7 @@ terminate(_Reason, _State) ->
   Vsn :: term().
 %% ====================================================================
 code_change(_OldVsn, State, _Extra) ->
-  {ok, Interval} = application:get_env(veil_cluster_node, hot_swapping_time),
+  {ok, Interval} = application:get_env(?APP_Name, hot_swapping_time),
   erlang:send_after(Interval, self(), {timer, update_monitoring_loop}),
   {ok, State}.
 
@@ -487,7 +488,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% be started (and starts them). Additionally, it sets timer that
 %% initiates checking of cluster state.
 -spec init_cluster(State :: term()) -> NewState when
-  NewState ::  term().
+  NewState :: term().
 %% ====================================================================
 init_cluster(State) ->
   Nodes = State#cm_state.nodes,
@@ -526,7 +527,7 @@ init_cluster(State) ->
       NewState3;
     false ->
       Pid = self(),
-      {ok, Interval} = application:get_env(veil_cluster_node, initialization_time),
+      {ok, Interval} = application:get_env(?APP_Name, initialization_time),
       erlang:send_after(1000 * Interval, Pid, {timer, init_cluster}),
       State
   end.
@@ -536,7 +537,7 @@ init_cluster(State) ->
 %% @doc Chooses node for workers when there are more nodes than workers.
 -spec init_cluster_nodes_dominance(State :: term(), Nodes :: list(), Jobs1 :: list(),
     Jobs2 :: list(), Args1 :: list(), Args2 :: list()) -> NewState when
-  NewState ::  term().
+  NewState :: term().
 %% ====================================================================
 init_cluster_nodes_dominance(State, [], _Jobs1, _Jobs2, _Args1, _Args2) ->
   State;
@@ -551,7 +552,7 @@ init_cluster_nodes_dominance(State, [N | Nodes], [J | Jobs1], Jobs2, [A | Args1]
 %% @doc Chooses node for workers when there are more workers than nodes.
 -spec init_cluster_jobs_dominance(State :: term(), Jobs :: list(),
     Args :: list(), Nodes1 :: list(), Nodes2 :: list()) -> NewState when
-  NewState ::  term().
+  NewState :: term().
 %% ====================================================================
 init_cluster_jobs_dominance(State, [], [], _Nodes1, _Nodes2) ->
   State;
@@ -566,7 +567,7 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
 %% @doc Checks cluster state and decides if any new component should
 %% be started (currently running ones are overloaded) or stopped.
 -spec check_cluster_state(State :: term()) -> NewState when
-  NewState ::  term().
+  NewState :: term().
 %% ====================================================================
 check_cluster_state(State) ->
   CheckNum = (State#cm_state.cluster_check_num + 1) rem 15,
@@ -581,7 +582,7 @@ check_cluster_state(State) ->
 
                      MinV = lists:min([NodeLoad || {_Node, NodeLoad, _ModulesLoads} <- Load, NodeLoad =/= error]),
                      MaxV = lists:max([NodeLoad || {_Node, NodeLoad, _ModulesLoads} <- Load, NodeLoad =/= error]),
-                     case (MinV > 0) and (((MaxV >= 2* MinV) and (MaxV >= 1.5 * AvgLoad)) or (MaxV >= 5* MinV)) of
+                     case (MinV > 0) and (((MaxV >= 2 * MinV) and (MaxV >= 1.5 * AvgLoad)) or (MaxV >= 5 * MinV)) of
                        true ->
                          [{MaxNode, MaxNodeModulesLoads} | _] = [{Node, ModulesLoads} || {Node, NodeLoad, ModulesLoads} <- Load, NodeLoad == MaxV],
                          MaxMV = lists:max([MLoad || {_Module, MLoad} <- MaxNodeModulesLoads, MLoad =/= error]),
@@ -637,14 +638,14 @@ check_cluster_state(State) ->
 %% plan_next_cluster_state_check/0
 %% ====================================================================
 %% @doc Decides when cluster state should be checked next time and sets
-%% the timer (cluster_clontrol_period environment variable is used).
+%% the timer (cluster_monitoring_period environment variable is used).
 -spec plan_next_cluster_state_check() -> Result when
   Result :: {ok, TRef} | {error, Reason},
   TRef :: term(),
   Reason :: term().
 %% ====================================================================
 plan_next_cluster_state_check() ->
-  {ok, Interval} = application:get_env(veil_cluster_node, cluster_clontrol_period),
+  {ok, Interval} = application:get_env(?APP_Name, cluster_monitoring_period),
   erlang:send_after(Interval * 1000, self(), {timer, check_cluster_state}).
 
 %% start_worker/4
@@ -658,7 +659,7 @@ plan_next_cluster_state_check() ->
 %% ====================================================================
 start_worker(Node, Module, WorkerArgs, State) ->
   try
-    {ok, LoadMemorySize} = application:get_env(veil_cluster_node, worker_load_memory_size),
+    {ok, LoadMemorySize} = application:get_env(?APP_Name, worker_load_memory_size),
     {ok, ChildPid} = supervisor:start_child({?Supervisor_Name, Node}, ?Sup_Child(Module, worker_host, transient, [Module, WorkerArgs, LoadMemorySize])),
     Workers = State#cm_state.workers,
     lager:info([{mod, ?MODULE}], "Worker: ~s started at node: ~s", [Module, Node]),
@@ -765,11 +766,11 @@ add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
 
       MapState = try
         ok = gen_server:call(ChildPid, dispatcher_map_unregistered, 500)
-      catch
-        _:_ ->
-          lager:error([{mod, ?MODULE}], "Error during contact with worker ~p found at node ~s", [Id, Node]),
-          error
-      end,
+                 catch
+                   _:_ ->
+                     lager:error([{mod, ?MODULE}], "Error during contact with worker ~p found at node ~s", [Id, Node]),
+                     error
+                 end,
 
       case MapState of
         ok ->
@@ -805,10 +806,10 @@ node_down(Node, State) ->
   Nodes = State#cm_state.nodes,
   NewNodes = lists:foldl(CreateNewNodesList, [], Nodes),
 
-  {CallbacksNum, WorkersFound2}  = case delete_all_callbacks(Node, State#cm_state.nodes, State#cm_state.callbacks_num) of
-    true -> {State#cm_state.callbacks_num + 1, true};
-    false -> {State#cm_state.callbacks_num, WorkersFound}
-  end,
+  {CallbacksNum, WorkersFound2} = case delete_all_callbacks(Node, State#cm_state.nodes, State#cm_state.callbacks_num) of
+                                    true -> {State#cm_state.callbacks_num + 1, true};
+                                    false -> {State#cm_state.callbacks_num, WorkersFound}
+                                  end,
 
   {State#cm_state{workers = NewWorkers, nodes = NewNodes, callbacks_num = CallbacksNum}, WorkersFound2}.
 
@@ -890,7 +891,7 @@ save_state(MergedState) ->
 %% ====================================================================
 %% @doc This function updates cluster state on the basis of data read
 %% from DB.
--spec merge_state(State :: term(), SavedState:: term()) -> NewState when
+-spec merge_state(State :: term(), SavedState :: term()) -> NewState when
   NewState :: term().
 %% ====================================================================
 merge_state(State, SavedState) ->
@@ -1010,13 +1011,13 @@ update_dispatcher_state(Nodes, Loads, AvgLoad) ->
   AvgLoad :: number().
 %% ====================================================================
 update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
-  MergeByFirstElement = fun (List) -> lists:reverse(lists:foldl(fun({Key, Value}, []) ->  [{Key, [Value]}];
+  MergeByFirstElement = fun(List) -> lists:reverse(lists:foldl(fun({Key, Value}, []) -> [{Key, [Value]}];
     ({Key, Value}, [{Key, AccValues} | Tail]) -> [{Key, [Value | AccValues]} | Tail];
     ({Key, Value}, Acc) -> [{Key, [Value]} | Acc]
   end, [], lists:keysort(1, List)))
   end,
 
-  NodeToIPWithLogging = fun (Node) ->
+  NodeToIPWithLogging = fun(Node) ->
     case node_to_ip(Node) of
       {ok, Address} -> Address;
       {error, Error} ->
@@ -1029,7 +1030,7 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
 
   MergedByModule = MergeByFirstElement(ModuleToNode),
 
-  ModulesToNodes = lists:map(fun ({Module, Nodes}) ->
+  ModulesToNodes = lists:map(fun({Module, Nodes}) ->
     GetLoads = fun({Node, NodeLoad, ModulesLoads}, TmpAns) ->
       case lists:member(Node, Nodes) of
         true ->
@@ -1044,8 +1045,8 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
                   end,
 
           case ModuleV > 0.5 of
-            true -> case (AvgLoad > 0) and (NodeV >= 2*AvgLoad) of
-                      true->
+            true -> case (AvgLoad > 0) and (NodeV >= 2 * AvgLoad) of
+                      true ->
                         V = erlang:min(10, erlang:round(NodeV / AvgLoad)),
                         [{Node, V} | TmpAns];
                       false -> [{Node, 1} | TmpAns]
@@ -1064,7 +1065,7 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
         MinV = lists:min([V || {_Node, V} <- FilteredNodeToLoad]),
         FilteredNodeToLoad2 = case MinV of
                                 1 -> FilteredNodeToLoad;
-                                _ -> [{Node, erlang:round(V/MinV) } || {Node, V} <- FilteredNodeToLoad]
+                                _ -> [{Node, erlang:round(V / MinV)} || {Node, V} <- FilteredNodeToLoad]
                               end,
 
         IPs = [{NodeToIPWithLogging(Node), Param} || {Node, Param} <- FilteredNodeToLoad2],
@@ -1080,9 +1081,10 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
     fun({Node, NodeLoad, _}) ->
       {NodeToIPWithLogging(Node), NodeLoad}
     end, NodeToLoad),
-  UpdateDnsWorker = fun ({_Node, Module, Pid}) ->
+  UpdateDnsWorker = fun({_Node, Module, Pid}) ->
     case Module of
-      dns_worker -> gen_server:cast(Pid, {asynch, 1, {update_state, FilteredModulesToNodes, [{N_IP, N_Load} || {N_IP, N_Load} <- NLoads, N_IP =/= unknownaddress], AvgLoad}});
+      dns_worker ->
+        gen_server:cast(Pid, {asynch, 1, {update_state, FilteredModulesToNodes, [{N_IP, N_Load} || {N_IP, N_Load} <- NLoads, N_IP =/= unknownaddress], AvgLoad}});
       _ -> ok
     end
   end,
@@ -1121,8 +1123,8 @@ check_load(WorkerPlugin) ->
 %% ====================================================================
 node_to_ip(Node) ->
   StrNode = atom_to_list(Node),
-  AddressWith@ = lists:dropwhile(fun (Char) -> Char =/= $@ end, StrNode),
-  Address = lists:dropwhile(fun (Char) -> Char =:= $@ end, AddressWith@),
+  AddressWith@ = lists:dropwhile(fun(Char) -> Char =/= $@ end, StrNode),
+  Address = lists:dropwhile(fun(Char) -> Char =:= $@ end, AddressWith@),
   inet:getaddr(Address, inet).
 
 
@@ -1259,39 +1261,72 @@ get_workers_versions([{Node, Module} | Workers], Versions) ->
   Result :: list().
 %% ====================================================================
 calculate_node_load(Nodes, Period) ->
-  GetNodeInfo = fun(Node) ->
-    Info = try
+  GetNodeStats = fun(Node) ->
+    Stats = try
       gen_server:call({?Node_Manager_Name, Node}, {get_node_stats, Period}, 500)
-    catch
-      _:_ ->
-        lager:error([{mod, ?MODULE}], "Can not get status of node: ~s", [Node]),
-        {error, error, {error, error}}
-    end,
-    {Node, Info}
+            catch
+              _:_ ->
+                lager:error([{mod, ?MODULE}], "Can not get statistics of node: ~s", [Node]),
+                undefined
+            end,
+    {Node, Stats}
   end,
-  NodesInfo = lists:map(GetNodeInfo, Nodes),
-  GetNetMax = fun({_Node, {_Proc, _MemAvg, {InSum, OutSum}}}, {InTmp, OutTmp}) ->
-    case InSum of
-      error -> {InTmp, OutTmp};
-      _ -> {erlang:max(InSum, InTmp), erlang:max(OutSum, OutTmp)}
+  NodesStats = lists:map(GetNodeStats, Nodes),
+  map_node_stats_to_load(NodesStats).
+
+%% map_node_stats_to_load/1
+%% ====================================================================
+%% @doc Maps node statistical data to one value for each node
+-spec map_node_stats_to_load(NodesStats :: list()) -> Result when
+  Result :: {[{Node :: term(), Load}], AvgLoad},
+  Load :: float() | undefined,
+  AvgLoad :: float() | undefined.
+%% ====================================================================
+map_node_stats_to_load(NodesStats) ->
+  %% Create list of maximum values for each statistical data
+  MaxStats = lists:foldl(fun
+    ({_, undefined}, Maxs) -> Maxs;
+    ({_, Stats}, undefined) -> Stats;
+    ({_, Stats}, Maxs) ->
+      lists:zipwith(fun({Name, X}, {Name, Y}) -> {Name, max(X, Y)} end, Stats, Maxs)
+  end, undefined, NodesStats),
+
+  %% Define weigth of statistical data (default weigth equals 1)
+  StatsWeight = dict:from_list([{cpu, 100}, {mem, 100}]),
+  GetStatWeight = fun(Name) ->
+    case dict:find(Name, StatsWeight) of
+      {ok, Value} -> Value;
+      _ -> 1
     end
   end,
-  {InMax, OutMax} = lists:foldl(GetNetMax, {0, 0}, NodesInfo),
-  InMax2 = erlang:max(InMax, 1),
-  OutMax2 = erlang:max(OutMax, 1),
-  CalculateNodeValue = fun({Node, {Proc, MemAvg, {InSum, OutSum}}}, {TmpList, Sum, Count}) ->
-    case Proc of
-      error -> {[{Node, error} | TmpList], Sum, Count};
-      _ ->
-        V = Proc + MemAvg + InSum/InMax2 + OutSum/OutMax2,
-        {[{Node, V} | TmpList], Sum + V, Count + 1}
-    end
+
+  %% Convert list of statistical data base on maximal values and weigth of each entry
+  StatsToLoadMap = fun(Stats) ->
+    ScaledStats = lists:zipwith(fun
+      ({Name, _}, {Name, 0.0}) -> 0.0;
+      ({Name, Stat}, {Name, MaxStat}) -> GetStatWeight(Name) * Stat / MaxStat
+    end, Stats, MaxStats),
+    lists:foldl(fun(ScaledStat, Acc) -> ScaledStat + Acc end, 0, ScaledStats)
   end,
-  {Ans, Sum, Count} = lists:foldl(CalculateNodeValue, {[], 0, 0}, NodesInfo),
-  case Count of
-    0 -> {Ans, 0};
-    _ -> {Ans, Sum / Count}
-  end.
+
+  %% Get load for each node
+  NodesLoad = lists:map(fun
+    ({Node, undefined}) -> {Node, error};
+    ({Node, Stats}) -> {Node, StatsToLoadMap(Stats)} end, NodesStats),
+
+  %% Calculate average load
+  {SumLoad, Counter} = lists:foldl(fun
+    ({_, error}, {SumLoad, Counter}) -> {SumLoad, Counter};
+    ({_, Load}, {SumLoad, Counter}) -> {Load + SumLoad, Counter + 1}
+  end, {0, 0}, NodesLoad),
+
+  Result = case Counter of
+             0 -> {NodesLoad, 0};
+             _ -> {NodesLoad, SumLoad / Counter}
+           end,
+
+  io:format("RESULT: ~p~n", [Result]),
+  Result.
 
 %% calculate_worker_load/1
 %% ====================================================================
@@ -1302,7 +1337,7 @@ calculate_node_load(Nodes, Period) ->
 calculate_worker_load(Workers) ->
   WorkersLoad = [{Node, {Module, check_load(Pid)}} || {Node, Module, Pid} <- Workers],
 
-  MergeByFirstElement = fun (List) -> lists:reverse(lists:foldl(fun({Key, Value}, []) ->  [{Key, [Value]}];
+  MergeByFirstElement = fun(List) -> lists:reverse(lists:foldl(fun({Key, Value}, []) -> [{Key, [Value]}];
     ({Key, Value}, [{Key, AccValues} | Tail]) -> [{Key, [Value | AccValues]} | Tail];
     ({Key, Value}, Acc) -> [{Key, [Value]} | Acc]
   end, [], lists:keysort(1, List)))
@@ -1310,7 +1345,7 @@ calculate_worker_load(Workers) ->
 
   MergedByNode = MergeByFirstElement(WorkersLoad),
 
-  EvaluateLoad = fun ({Node, Modules}) ->
+  EvaluateLoad = fun({Node, Modules}) ->
     GetLoadsSum = fun({_Module, Value}, TmpAns) ->
       case Value of
         error -> TmpAns;
@@ -1341,7 +1376,7 @@ calculate_worker_load(Workers) ->
   Result :: list().
 %% ====================================================================
 calculate_load(NodesLoad, WorkersLoad) ->
-  Merge = fun ({Node, NLoad}) ->
+  Merge = fun({Node, NLoad}) ->
     {Node, NLoad, proplists:get_value(Node, WorkersLoad, [])}
   end,
   lists:map(Merge, NodesLoad).
@@ -1496,9 +1531,9 @@ clear_cache(State, Cache) ->
   %% If workers were running on node that is down,
   %% upgrade state.
   State3 = case WF of
-                true -> update_dispatchers_and_dns(State2, true, true);
-                false -> State2
-              end,
+             true -> update_dispatchers_and_dns(State2, true, true);
+             false -> State2
+           end,
 
   save_state(),
   State3.

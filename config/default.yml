@@ -65,11 +65,6 @@ veil_cluster_node_env:
       value: 60
 
   - parameter:
-      name: cluster_clontrol_period
-      description: How long (in sec) should ccm wait between successive checks of cluster status
-      value: 60
-
-  - parameter:
       name: worker_load_memory_size
       description: Memory size which stores information about worker load
       value: 1000
@@ -101,9 +96,14 @@ veil_cluster_node_env:
       value: 60 # 1 min
 
   - parameter:
+      name: cluster_monitoring_period
+      description: How often should central cluster manager wait between successive checks of node status
+      value: 60
+
+  - parameter:
       name: node_monitoring_period
       description: How often should node manager wait between successive checks of node status
-      value: 15
+      value: 10
 
   - parameter:
       name: node_load_logging_period

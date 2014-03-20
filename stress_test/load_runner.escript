@@ -11,8 +11,6 @@
 %% ===================================================================
 
 -define(default_cookie, veil_cluster_node).
--define(default_ccm_name, "ccm").
--define(default_worker_name, "worker").
 
 %% set up net_kernel, which must be running for distributed Erlang to work,
 %% and to provide monitoring of the network

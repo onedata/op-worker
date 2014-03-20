@@ -29,7 +29,8 @@
                   ranch,
                   nprocreg,
                   cowboy,
-                  ibrowse
+                  ibrowse,
+                  rrderlang
                  ]},
   {mod, {veil_cluster_node_app, []}},
   {env, [
