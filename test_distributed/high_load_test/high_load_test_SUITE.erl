@@ -47,8 +47,6 @@ worker_code() ->
 %% Test function
 %% ====================================================================
 
-%% TODO - pamiętać o zbadaniu late answers w testach
-%% TODO - sprawdzić wszystkie TODO
 main_test(Config) ->
   nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
