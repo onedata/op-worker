@@ -323,7 +323,7 @@ clear_all_data_from_cache(UserDoc) ->
   Doc = UserDoc#veil_document.record,
   Caches = [{uuid, UserDoc#veil_document.uuid}, {login, Doc#user.login}],
   Caches2 = lists:foldl(fun(EMail, TmpAns) -> [{email, EMail} | TmpAns] end, Caches, Doc#user.email_list),
-  Caches3 = lists:foldl(fun(DN, TmpAns) -> [{dn, DN} | TmpAns] end, Caches2, Doc#user.dn_list),
+  Caches3 = lists:foldl(fun(DN, TmpAns) -> [{dn, user_logic:rdn_sequence_to_dn_string(DN)} | TmpAns] end, Caches2, Doc#user.dn_list),
   clear_cache(Caches3).
 
 %% save_quota/1
