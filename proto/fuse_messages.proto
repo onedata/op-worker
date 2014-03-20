@@ -168,12 +168,6 @@ message StatFSInfo {
     required int64 files_size = 3;
 }
 
-message PushMessage{
-    required string message_type = 1;
-    optional bytes data = 2;
-}
-
-
 message EventFilterConfig {
     required string field_name = 1;
     required string desired_value = 2;
@@ -187,27 +181,7 @@ message EventAggregatorConfig {
 
 // EventStreamConfig is a message sent by cluster to client which contains informations needed for client to perform events processing (filtering, aggregation etc.)
 // Only one of fields filter_config and aggregation_config is supposed to be set. Type of EventStreamConfig is determined by the fact which of those two fields is set.
-//
-// EventStreamConfig, EventFilterConfig, EventAggregatorConfig will be extended in future
-//
-// Example:
-// Let assume we want to configure stream composed of two substreams: first we want to filter only messages with type "write_event" and then we want to group by filePath
-// and send message on every 10th event
-// EventStreamConfig{
-//	wrapped_config: EventStreamConfig{
-//		filter_config: EventFilterConfig{
-//			field_name: "type",
-//			desired_value: "write_event"
-//		}
-//	},
-//	aggregator_config: EventAggregatorConfig{
-//		field_name = "filePath",
-//		threshold = 10,
-//		sum_field_name = "count"
-//	}
-// }
-// If we want message to be sent after 100 bytes has been written instead of every 10th event we need to change sum_field_name to "bytes" and threshold to 100
-
+// wrapped_config should be used when one needs to create chain of streams. If wrapped_config is set to contains another EventStreamConfig then the event first go to the most wrapped stream
 message EventStreamConfig {
     optional EventStreamConfig wrapped_config = 1;
     optional EventFilterConfig filter_config = 2;
