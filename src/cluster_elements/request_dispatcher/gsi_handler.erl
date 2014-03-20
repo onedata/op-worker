@@ -361,8 +361,8 @@ is_proxy_certificate(OtpCert = #'OTPCertificate'{}) ->
         _ ->
             {rdnSequence, Attrs} = Subject,
             FlatAttrs = [Attr || #'AttributeTypeAndValue'{} = Attr <- lists:flatten(Attrs)],
-            Attrs1 = lists:keyfind(?'id-at-commonName', 2, lists:reverse(FlatAttrs)),
-            case Attrs1 of
+            ReversedAttrs = lists:reverse(FlatAttrs),
+            case ReversedAttrs of
                 [#'AttributeTypeAndValue'{type = ?'id-at-commonName', value = {_, "proxy"}} | _] ->
                     maybe;
                 _ -> false
