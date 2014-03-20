@@ -1320,13 +1320,10 @@ map_node_stats_to_load(NodesStats) ->
     ({_, Load}, {SumLoad, Counter}) -> {Load + SumLoad, Counter + 1}
   end, {0, 0}, NodesLoad),
 
-  Result = case Counter of
-             0 -> {NodesLoad, 0};
-             _ -> {NodesLoad, SumLoad / Counter}
-           end,
-
-  io:format("RESULT: ~p~n", [Result]),
-  Result.
+  case Counter of
+    0 -> {NodesLoad, 0};
+    _ -> {NodesLoad, SumLoad / Counter}
+  end.
 
 %% calculate_worker_load/1
 %% ====================================================================

@@ -78,7 +78,7 @@ update_dns_state__empty_list() ->
 
 calculate_node_load_error() ->
   {NodesLoad, AvgLoad} = cluster_manager:calculate_node_load([n1, n2], medium),
-  ?assertEqual(NodesLoad, [{n2, error}, {n1, error}]),
+  ?assertEqual(NodesLoad, [{n1, error}, {n2, error}]),
   ?assert(AvgLoad == 0).
 
 calculate_worker_load_error() ->
