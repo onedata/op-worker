@@ -201,7 +201,7 @@ get_workers(Module, Dispatcher, DispatcherTimeout) ->
 			worker_not_found -> lager:error("Dispatcher error - worker not found"), {error, worker_not_found}
 		end
 	catch
-		_:Error -> lager:error("Dispatcher not responding ~p", [Error]), {error, dispatcher_not_responding}
+		_:Error2 -> lager:error("Dispatcher not responding ~p", [Error2]), {error, dispatcher_not_responding}
 	end.
 
 %% get_nodes/2
@@ -228,7 +228,7 @@ get_nodes(Dispatcher, DispatcherTimeout) ->
       worker_not_found -> lager:error("Dispatcher error - worker not found"), {error, worker_not_found}
     end
   catch
-    _:Error -> lager:error("Dispatcher not responding ~p", [Error]), {error, dispatcher_not_responding}
+    _:Error2 -> lager:error("Dispatcher not responding ~p", [Error2]), {error, dispatcher_not_responding}
   end.
 
 %% translate_dispatcher_response_to_params/5

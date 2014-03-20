@@ -491,7 +491,7 @@ exists(FileName) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-lcontact_fslogic(Record) ->
+contact_fslogic(Record) ->
   contact_fslogic(internal_call, Record).
 
 %% contact_fslogic/2

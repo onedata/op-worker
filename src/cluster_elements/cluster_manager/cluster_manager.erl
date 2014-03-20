@@ -1161,7 +1161,7 @@ change_monitoring([Node | Nodes], Flag) ->
 %% ====================================================================
 get_version(State) ->
   Workers = get_workers_list(State),
-  Versions = get_workers_versions(Workers).
+  get_workers_versions(Workers).
 
 %% get_workers_versions/1
 %% ====================================================================

@@ -25,10 +25,6 @@
 
 %% TODO zmierzyć czy bardziej się opłaca przechowywać dane o modułach
 %% jako stan (jak teraz) czy jako ets i ewentualnie przejść na ets
-%% TODO - sprawdzić czy dispatcher wytrzyma obciążenie - alternatywą jest
-%% przejście z round robin na losowość co wyłacza updatowanie stanu
-%% Można też wyłączyć potwierdzenie znajdowania noda co
-%% da jeszcze większe przyspieszenie
 
 %% ====================================================================
 %% Test API
@@ -348,51 +344,56 @@ handle_cast({update_state, NewStateNum, NewCallbacksNum}, State) ->
     {false, true} ->
       spawn(fun() ->
         lager:info([{mod, ?MODULE}], "Dispatcher had old state number, starting update"),
-        {Ans, NewState} = pull_state(State),
-        gen_server:cast(?Dispatcher_Name, {update_state, Ans, non, NewState})
+        {WorkersList, StateNum} = pull_state(State#dispatcher_state.state_num),
+        gen_server:cast(?Dispatcher_Name, {update_pulled_state, WorkersList, StateNum, non, non})
       end);
     {true, false} ->
       spawn(fun() ->
         lager:info([{mod, ?MODULE}], "Dispatcher had old callbacks number, starting update"),
         {AnsList, AnsNum} = pull_callbacks(State#dispatcher_state.callbacks_num),
-        gen_server:cast(?Dispatcher_Name, {update_state, non, AnsList, State#dispatcher_state{callbacks_num = AnsNum}})
+        gen_server:cast(?Dispatcher_Name, {update_pulled_state, non, non, AnsList, AnsNum})
       end);
     {false, false} ->
       spawn(fun() ->
         lager:info([{mod, ?MODULE}], "Dispatcher had old state number, starting update"),
-        {AnsState, NewState} = pull_state(State),
+        {WorkersList, StateNum} = pull_state(State#dispatcher_state.state_num),
         lager:info([{mod, ?MODULE}], "Dispatcher had old callbacks number, starting update"),
         {AnsList, AnsNum} = pull_callbacks(State#dispatcher_state.callbacks_num),
-        gen_server:cast(?Dispatcher_Name, {update_state, AnsState, AnsList, NewState#dispatcher_state{callbacks_num = AnsNum}})
+        gen_server:cast(?Dispatcher_Name, {update_pulled_state, WorkersList, StateNum, AnsList, AnsNum})
       end)
   end,
   {noreply, State};
 
-handle_cast({update_pulled_state, NewStateStatus, CallbacksList, NewState}, State) ->
-  case NewStateStatus of
+handle_cast({update_pulled_state, WorkersList, StateNum, CallbacksList, CallbacksNum}, State) ->
+  NewState = case WorkersList of
     non ->
-      ok;
-    ok ->
-      lager:info([{mod, ?MODULE}], "Dispatcher state updated");
+      State;
+    error ->
+      lager:error([{mod, ?MODULE}], "Dispatcher had old state number but could not update data"),
+      State;
     _ ->
-      lager:error([{mod, ?MODULE}], "Dispatcher had old state number but could not update data")
+      TmpState = update_workers(WorkersList, State#dispatcher_state.state_num, State#dispatcher_state.current_load, State#dispatcher_state.avg_load, ?Modules),
+      lager:info([{mod, ?MODULE}], "Dispatcher state updated"),
+      TmpState#dispatcher_state{state_num = StateNum}
   end,
 
-  case CallbacksList of
+  NewState2 = case CallbacksList of
     non ->
-      ok;
+      NewState;
     error ->
-      lager:error([{mod, ?MODULE}], "Dispatcher had old callbacks number but could not update data");
+      lager:error([{mod, ?MODULE}], "Dispatcher had old callbacks number but could not update data"),
+      NewState;
     _ ->
       UpdateCallbacks = fun({Fuse, NodesList}) ->
         ets:insert(?CALLBACKS_TABLE, {Fuse, NodesList})
       end,
       lists:foreach(UpdateCallbacks, CallbacksList),
-      lager:info([{mod, ?MODULE}], "Dispatcher callbacks updated")
+      lager:info([{mod, ?MODULE}], "Dispatcher callbacks updated"),
+      NewState#dispatcher_state{callbacks_num = CallbacksNum}
   end,
 
-  gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState#dispatcher_state.state_num, NewCallbacksNum}),
-  {noreply, NewState};
+  gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState2#dispatcher_state.state_num, NewState2#dispatcher_state.callbacks_num}),
+  {noreply, NewState2};
 
 handle_cast({update_workers, WorkersList, RequestMap, NewStateNum, CurLoad, AvgLoad}, _State) ->
   NewState = update_workers(WorkersList, NewStateNum, CurLoad, AvgLoad, ?Modules),
@@ -623,20 +624,18 @@ update_workers(WorkersList, SNum, CLoad, ALoad, Modules) ->
 %% pull_state/1
 %% ====================================================================
 %% @doc Pulls workers list from cluster manager.
--spec pull_state(State :: term()) -> Result when
-  Result :: {ok, NewState} | {error, State},
-  State :: term(),
-  NewState :: term().
+-spec pull_state(CurrentStateNum :: integer()) -> Result when
+  Result :: {WorkersList, StateNum} | {error, StateNum},
+  StateNum :: integer(),
+  WorkersList :: list().
 %% ====================================================================
-pull_state(State) ->
+pull_state(CurrentStateNum) ->
   try
-    {WorkersList, StateNum} = gen_server:call({global, ?CCM}, get_workers, 1000),
-    NewState = update_workers(WorkersList, State#dispatcher_state.state_num, State#dispatcher_state.current_load, State#dispatcher_state.avg_load, ?Modules),
-    {ok, NewState#dispatcher_state{state_num = StateNum}}
+    gen_server:call({global, ?CCM}, get_workers, 1000)
   catch
     _:_ ->
       lager:error([{mod, ?MODULE}], "Dispatcher on node: ~s: can not pull workers list", [node()]),
-      {error, State}
+      {error, CurrentStateNum}
   end.
 
 %% get_workers/2
