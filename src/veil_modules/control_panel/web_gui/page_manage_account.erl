@@ -113,7 +113,7 @@ team_list_body() ->
     lists:map(
         fun(Team) ->
             #li{style = <<"font-size: 18px; padding: 5px 0;">>,
-            body = re:replace(Team, "\\(", " (", [global, {return, list}])}
+            body = list_to_binary(re:replace(Team, "\\(", " (", [global, {return, list}]))}
         end, Teams)
     }.
 
@@ -183,7 +183,7 @@ dn_list_body() ->
 
 
 % Postback event handling
-event(init) -> wf:reg(room);
+event(init) -> ok;
 
 event({action, Fun}) ->
     event({action, Fun, []});

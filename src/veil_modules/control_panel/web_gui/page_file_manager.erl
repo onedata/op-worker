@@ -48,12 +48,12 @@ body() ->
 render_ender() ->
     [
         #textbox { id = "new_email_textbox" },
-        #button { body = <<"penis">>, postback=dupa, source=["new_email_textbox"]},
+        #button { id="asd", body = <<"ble">>, actions = [#event{type = click, postback = ble, target="asd"}] },
         #panel { id = test_id, body = <<"nic">> }
     ].
 
-event(dupa) ->
-    wf:update(test_id, <<"This string contains ' apostrophe">>);
+event(ble) ->
+    wf:update(test_id, <<"This string contains apostrophe">>);
 event(init) -> ok.
 
 %%

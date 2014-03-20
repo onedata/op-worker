@@ -36,6 +36,12 @@ route(<<"/ws/logout">>) -> page_logout;
 route(<<"/file_manager">>) -> page_file_manager;
 route(<<"/ws/file_manager">>) -> page_file_manager;
 
+route(<<"/shared_files">>) -> page_shared_files;
+route(<<"/ws/shared_files">>) -> page_shared_files;
+
+route(<<"/logs">>) -> page_logs;
+route(<<"/ws/logs">>) -> page_logs;
+
 route(<<"/manage_account">>) -> page_manage_account;
 route(<<"/ws/manage_account">>) -> page_manage_account;
 

@@ -13,10 +13,11 @@
 -include("veil_modules/control_panel/common.hrl").
 -include("logging.hrl").
 
--export([get_requested_hostname/0, get_user_dn/0, get_requested_page/0]).
+-export([get_requested_hostname/0, get_requested_page/0, get_user_dn/0]).
 -export([user_logged_in/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0]).
 -export([redirect_to_login/1, redirect_from_login/0]).
 -export([apply_or_redirect/3, apply_or_redirect/4, top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
+-export([to_list/1, to_binary/1]).
 
 
 %% ====================================================================
@@ -115,14 +116,28 @@ can_view_logs() ->
     end.
 
 
-redirect_to_login(EnableGoingBack) ->
+%% redirect_to_login/1
+%% ====================================================================
+%% @doc Redirects to login page. Can remember the source page, so that
+%% a user can be redirected back after logging in.
+%% @end
+-spec redirect_to_login(boolean()) -> ok.
+%% ====================================================================
+redirect_to_login(SaveSourcePage) ->
     PageName = get_requested_page(),
-    case EnableGoingBack of
+    case SaveSourcePage of
         false -> wf:redirect(<<"/login">>);
         true -> wf:redirect(<<"/login?x=", PageName/binary>>)
     end.
 
 
+%% redirect_from_login/0
+%% ====================================================================
+%% @doc Redirects back from login page to the originally requested page.
+%% If it hasn't been stored before, redirects to index page.
+%% @end
+-spec redirect_from_login() -> ok.
+%% ====================================================================
 redirect_from_login() ->
     case wf:q(<<"x">>) of
         undefined -> wf:redirect(<<"/">>);
@@ -208,14 +223,14 @@ top_menu(ActiveTabID, SubMenuBody) ->
     MenuIcons =
         [
             {manage_account_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Manage account">>,
-            url = <<"/manage_account">>, body = [user_logic:get_name(wf:session(user_doc)), #span{class = <<"fui-user">>,
-            style = <<"margin-left: 10px;">>}]}}},
+                url = <<"/manage_account">>, body = [user_logic:get_name(wf:session(user_doc)), #span{class = <<"fui-user">>,
+                    style = <<"margin-left: 10px;">>}]}}},
             %{contact_support_tab, #li { body=#link{ style="padding: 18px;", title="Contact & Support",
             %    url="/contact_support", body=#span{ class="fui-question" } } } },
             {about_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"About">>,
-            url = <<"/about">>, body = #span{class = <<"fui-info">>}}}},
+                url = <<"/about">>, body = #span{class = <<"fui-info">>}}}},
             {logout_button, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Log out">>,
-            url = <<"/logout">>, body = #span{class = <<"fui-power">>}}}}
+                url = <<"/logout">>, body = #span{class = <<"fui-power">>}}}}
         ],
 
     MenuCaptionsProcessed = lists:map(
@@ -280,6 +295,31 @@ empty_page() ->
         #br{}, #br{}, #br{}, #br{}, #br{},
         #br{}, #br{}, #br{}, #br{}, #br{}
     ].
+
+
+%% to_list/1
+%% ====================================================================
+%% @doc Converts any term to list.
+%% @end
+-spec to_list(term()) -> list().
+%% ====================================================================
+to_list(Term) when is_list(Term) -> Term;
+to_list(Term) ->
+    try
+        wf:to_list(Term)
+    catch _:_ ->
+        lists:flatten(io_lib:format("~p", [Term]))
+    end.
+
+
+%% to_binary/1
+%% ====================================================================
+%% @doc Converts any term to binary.
+%% @end
+-spec to_binary(term()) -> binary().
+%% ====================================================================
+to_binary(Term) when is_binary(Term) -> Term;
+to_binary(Term) -> list_to_binary(to_list(Term)).
 
 
 % old_menu_captions() ->
