@@ -373,7 +373,7 @@ handle_cast({update_pulled_state, WorkersList, StateNum, CallbacksList, Callback
       State;
     _ ->
       TmpState = update_workers(WorkersList, State#dispatcher_state.state_num, State#dispatcher_state.current_load, State#dispatcher_state.avg_load, ?Modules),
-      lager:info([{mod, ?MODULE}], "Dispatcher state updated"),
+      lager:info([{mod, ?MODULE}], "Dispatcher state updated, state num: ~p", [StateNum]),
       TmpState#dispatcher_state{state_num = StateNum}
   end,
 
@@ -397,10 +397,12 @@ handle_cast({update_pulled_state, WorkersList, StateNum, CallbacksList, Callback
 
 handle_cast({update_workers, WorkersList, RequestMap, NewStateNum, CurLoad, AvgLoad}, _State) ->
   NewState = update_workers(WorkersList, NewStateNum, CurLoad, AvgLoad, ?Modules),
+  lager:info([{mod, ?MODULE}], "Dispatcher state updated, state num: ~p", [NewStateNum]),
   {noreply, NewState#dispatcher_state{request_map = RequestMap}};
 
 handle_cast({update_workers, WorkersList, RequestMap, NewStateNum, CurLoad, AvgLoad, Modules}, _State) ->
   NewState = update_workers(WorkersList, NewStateNum, CurLoad, AvgLoad, Modules),
+  lager:info([{mod, ?MODULE}], "Dispatcher state updated, state num: ~p", [NewStateNum]),
   {noreply, NewState#dispatcher_state{request_map = RequestMap}};
 
 handle_cast({update_loads, CurLoad, AvgLoad}, State) ->

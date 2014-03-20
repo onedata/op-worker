@@ -47,10 +47,8 @@ worker_code() ->
 %% Test function
 %% ====================================================================
 
-%% TODO - pamiętać o zbadaniu late answers
-%% TODO - sprawdzić wszystkie gen_server:call (czy zawsze mamy ustawione timeouty i catche), cast, receive (czy nie mamy late answer, czy mamy logowanie w handle_info), spawny (czy mamy wiedzę jak proces się wywala), logowanie, scalić proces monitorujący w ccmie
-%% TODO - sprawdzić czemu po starcie klastra wyskakuje dispatcher had old data (zrobić też asynch update dispatchera), sprawdzić wszystkie TODO
-%% TODO użyć is_process_alive w sub_procesach
+%% TODO - pamiętać o zbadaniu late answers w testach
+%% TODO - sprawdzić wszystkie TODO
 main_test(Config) ->
   nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),

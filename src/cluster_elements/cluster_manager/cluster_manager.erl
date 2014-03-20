@@ -313,22 +313,22 @@ handle_cast({register_dispatcher_map, Module, Map, AnsPid}, State) ->
   end;
 
 handle_cast(get_state_from_db, State) ->
-  NewState2 = case (State#cm_state.nodes =:= []) or State#cm_state.state_loaded of
-    true ->
-      State;
-    false ->
-      get_state_from_db(State)
-  end,
-
   case State#cm_state.state_loaded of
     true ->
-      ok;
+      {noreply, State};
     false ->
-      Pid = self(),
-      erlang:send_after(1000, Pid, {timer, get_state_from_db})
-  end,
+      NewState2 = case (State#cm_state.nodes =:= []) or State#cm_state.state_loaded of
+                    true ->
+                      State;
+                    false ->
+                      get_state_from_db(State)
+                  end,
 
-  {noreply, NewState2};
+      Pid = self(),
+      erlang:send_after(1000, Pid, {timer, get_state_from_db}),
+
+      {noreply, NewState2}
+  end;
 
 handle_cast(start_central_logger, State) ->
   case State#cm_state.nodes =:= [] of
@@ -341,8 +341,8 @@ handle_cast(start_central_logger, State) ->
       {noreply, NewState}
   end;
 
-handle_cast({save_state, MergedState}, State) ->
-  case State#cm_state.state_loaded or MergedState of
+handle_cast(save_state, State) ->
+  case State#cm_state.state_loaded of
     true ->
       try
         Ans = gen_server:call(?Dispatcher_Name, {dao, 1, {save_state, [State#cm_state{dispatcher_maps = []}]}}, 500),
@@ -400,8 +400,8 @@ handle_cast({worker_answer, cluster_state, Response}, State) ->
                  lager:info([{mod, ?MODULE}], "State read from DB: ~p", [SavedState]),
                  merge_state(State, SavedState);
                {error, {not_found,missing}} ->
-                 save_state(true),
-                 State;
+                 save_state(),
+                 State#cm_state{state_loaded = true};
                Error ->
                  lager:info([{mod, ?MODULE}], "State cannot be read from DB: ~p", [Error]), %% info logging level because state may not be present in db and it's not an error
                  State
@@ -880,16 +880,8 @@ get_state_from_db(State) ->
 -spec save_state() -> ok.
 %% ====================================================================
 save_state() ->
-  save_state(false).
-
-%% save_state/1
-%% ====================================================================
-%% @doc This function saves cluster state in DB.
--spec save_state(MergedState :: boolean()) -> ok.
-%% ====================================================================
-save_state(MergedState) ->
   Pid = self(),
-  erlang:send_after(100, Pid, {timer, {save_state, MergedState}}).
+  erlang:send_after(100, Pid, {timer, save_state}).
 
 %% merge_state/2
 %% ====================================================================
@@ -934,7 +926,7 @@ merge_state(State, SavedState) ->
                    false -> MergedState
                  end,
 
-  save_state(true),
+  save_state(),
   MergedState2.
 
 %% get_workers_list/1
