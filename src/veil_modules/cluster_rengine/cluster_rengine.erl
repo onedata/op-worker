@@ -23,6 +23,7 @@
 -include("veil_modules/dao/dao.hrl").
 
 -include("fuse_messages_pb.hrl").
+-include("communication_protocol_pb.hrl").
 
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/dao_helper.hrl").
@@ -36,7 +37,7 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% functions for manual tests
--export([register_mkdir_handler/0, register_mkdir_handler_aggregation/1, register_write_event_handler/1, register_quota_exceeded_handler/0, send_mkdir_event/0, register_integration/1, delete_file/1]).
+-export([register_mkdir_handler/0, register_mkdir_handler_aggregation/1, register_write_event_handler/1, register_quota_exceeded_handler/0, send_mkdir_event/0, register_integration/1, delete_file/1, change_quota/2]).
 
 init(_Args) ->
   worker_host:create_simple_cache(?EVENT_HANDLERS_CACHE),
@@ -48,8 +49,8 @@ handle(_ProtocolVersion, ping) ->
 
 handle(_ProtocolVersion, #eventmessage{type = Type}) ->
   case Type of
-    "mkdir_event" -> handle(1, {event_arrived, #mkdir_event{user_dn = get(user_id)}});
-    "write_event" -> handle(1, {event_arrived, #write_event{user_dn = get(user_id)}});
+    "mkdir_event" -> handle(1, {event_arrived, #mkdir_event{user_dn = get(user_id), fuse_id = get(fuse_id)}});
+    "write_event" -> handle(1, {event_arrived, #write_event{user_dn = get(user_id), fuse_id = get(fuse_id)}});
     _ -> ok
   end;
 
@@ -293,7 +294,7 @@ register_mkdir_handler_aggregation(InitCounter) ->
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {mkdir_event, EventItem, EventAggregatorConfig}}}).
 
 register_write_event_handler(InitCounter) ->
-  EventHandler = fun(#write_event{user_dn = UserDn, ans_pid = AnsPid}) ->
+  EventHandler = fun(#write_event{user_dn = UserDn, ans_pid = AnsPid, fuse_id = FuseId}) ->
     ?info("Write EventHandler ~p", [node(self())]),
     {View, QueryArgs} = {?USER_BY_DN_VIEW, #view_query_args{keys = [dao_helper:name(UserDn)], include_docs = true}},
     case rpc:call(node(), dao, list_records, [View, QueryArgs]) of
@@ -306,7 +307,7 @@ register_write_event_handler(InitCounter) ->
         ?info("user has used: ~p, quota: ~p", [SpaceUsed, Quota]),
         case SpaceUsed > Quota of
           true ->
-            gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {event_arrived, {quota_exceeded_event, Uuid}}}),
+            gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {event_arrived, {quota_exceeded_event, Uuid, FuseId}}}),
             ?info("Quota exceeded event emited");
           _ -> ok
         end;
@@ -325,8 +326,9 @@ register_write_event_handler(InitCounter) ->
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {write_event, EventItem, EventAggregatorConfig}}}).
 
 register_quota_exceeded_handler() ->
-  EventHandler = fun({quota_exceeded_event, Uuid}) ->
-    ?info("quota exceeded event for user: ~p", [Uuid])
+  EventHandler = fun({quota_exceeded_event, Uuid, FuseId}) ->
+    ?info("quota exceeded event for user: ~p", [Uuid]),
+    request_dispatcher:send_to_fuse(FuseId, #atom{value = "write_disabled"}, "communication_protocol")
   end,
   EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {quota_exceeded_event, EventItem}}}).
@@ -359,3 +361,7 @@ register_integration(FilePath) ->
 delete_file(FilePath) ->
 %%   rpc:call(node(), dao_lib, apply, [dao_vfs, remove_file, ["plgmsitko/todelete"], 1]).
   rpc:call(node(), dao_lib, apply, [dao_vfs, remove_file, [FilePath], 1]).
+
+change_quota(UserLogin, NewQuotaInBytes) ->
+  {ok, UserDoc} = user_logic:get_user({login, UserLogin}),
+  user_logic:update_quota(UserDoc, #quota{size = NewQuotaInBytes}).

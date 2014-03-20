@@ -124,8 +124,8 @@ notify_producers(ProducerConfig) ->
 
   ?info("new Notify producers: ~p", [UniqueFuseIds]),
 
-  ProducerConfigBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventstreamconfig(ProducerConfig)),
-  PushMessage = #pushmessage{message_type = "event_config", data = ProducerConfigBin},
+  %ProducerConfigBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventstreamconfig(ProducerConfig)),
+  %PushMessage = #pushmessage{message_type = "event_config", data = ProducerConfigBin},
 %%   lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, {testchannelanswer, "test"}, "fuse_messages") end, UniqueFuseIds).
 %%   EventStreamConfig = #eventstreamconfig{event_name = "bazinga_event"},
 %%   HBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventstreamconfig(EventStreamConfig)),
@@ -138,7 +138,7 @@ notify_producers(ProducerConfig) ->
 %%   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "mkdir_event"},
 %%   EventFitlerBin = erlang:iolist_to_binary(fuse_messages_pb:encode_eventfilterconfig(EventFilter)),
 %%   PushMessage = #pushmessage{message_type = "event_filter_config", data = EventFitlerBin},
-  lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, PushMessage, "fuse_messages") end, UniqueFuseIds).
+  lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, ProducerConfig, "fuse_messages") end, UniqueFuseIds).
 
 generate_tree_name() ->
   [{_, Id}] = ets:lookup(?HANDLER_TREE_ID_ETS, current_id),

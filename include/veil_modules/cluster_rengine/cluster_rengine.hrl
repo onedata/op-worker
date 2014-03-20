@@ -21,9 +21,9 @@
 
 %% Events definitions
 %% field ans_pid is just for test purposes - in general events handlers should be fired just for side effects
--record(write_event, {ans_pid, user_id, user_dn, file_id, bytes, event = #event{}}).
+-record(write_event, {ans_pid, fuse_id, user_id, user_dn, file_id, bytes, event = #event{}}).
 -record(read_event, {ans_pid, user_id, file_id, bytes, event = #event{}}).
--record(mkdir_event, {ans_pid, user_id, user_dn, file_id, event = #event{}}).
+-record(mkdir_event, {ans_pid, fuse_id, user_id, user_dn, file_id, event = #event{}}).
 -record(open_event, {ans_pid, user_id, file_id, event = #event{}}).
 
 -record(event_handler_item, {processing_method, tree_id, map_fun, disp_map_fun, handler_fun, config}).

@@ -326,12 +326,16 @@ get_quota(User) ->
   Result :: {ok, quota()} | {error, any()}.
 %% ====================================================================
 update_quota(User, NewQuota) ->
-  case get_quota(User) of
+  Quota = dao_lib:apply(dao_users, get_quota, [User#veil_document.record#user.quota_doc], 1),
+  case Quota of
     {ok, QuotaDoc} ->
+      ?info("updatequota 1"),
       NewQuotaDoc = QuotaDoc#veil_document{record = NewQuota},
       dao_lib:apply(dao_users, save_quota, [NewQuotaDoc], 1);
     {error, Error} -> {error, {get_quota_error, Error}};
-    Other -> Other
+    Other ->
+      ?info("updatequota 22234"),
+      Other
   end.
 
 %% get_files_size/2

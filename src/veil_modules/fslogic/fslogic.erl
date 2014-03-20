@@ -78,6 +78,9 @@ init(_Args) ->
 handle(_ProtocolVersion, ping) ->
   pong;
 
+handle(_ProtocolVersion, is_write_enabled) ->
+  #atom{value=true};
+
 handle(_ProtocolVersion, healthcheck) ->
 	ok;
 
