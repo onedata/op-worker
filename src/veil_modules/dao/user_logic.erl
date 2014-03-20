@@ -27,7 +27,7 @@
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
 -export([get_team_names/1]).
 -export([create_dirs_at_storage/3]).
--export([get_quota/1, update_quota/2, get_files_size/2]).
+-export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/1]).
 
 -define(UserRootPerms, 8#600).
 
@@ -662,3 +662,21 @@ create_team_dir(TeamName) ->
         {error, file_exists} -> {error, dir_exists};
         Other -> Other
     end.
+
+quota_exceeded(UserQuery) ->
+  case user_logic:get_user(UserQuery) of
+    {ok, UserDoc} ->
+      Uuid = UserDoc#veil_document.uuid,
+      {ok, SpaceUsed} = user_logic:get_files_size(Uuid, 1),
+      {ok, {quota, Quota}} = user_logic:get_quota(UserDoc),
+      ?info("user has used: ~p, quota: ~p", [SpaceUsed, Quota]),
+      case SpaceUsed > Quota of
+        true ->
+          true;
+        _ ->
+          false
+      end;
+    Error ->
+      ?warning("cannot fetch user: ~p", [Error]),
+      non
+  end.

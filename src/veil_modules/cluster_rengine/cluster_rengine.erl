@@ -37,7 +37,8 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% functions for manual tests
--export([register_mkdir_handler/0, register_mkdir_handler_aggregation/1, register_write_event_handler/1, register_quota_exceeded_handler/0, send_mkdir_event/0, register_integration/1, delete_file/1, change_quota/2]).
+-export([register_mkdir_handler/0, register_mkdir_handler_aggregation/1, register_write_event_handler/1, register_quota_exceeded_handler/0,
+         send_mkdir_event/0, register_integration/1, delete_file/1, change_quota/2, register_rm_event_handler/0]).
 
 init(_Args) ->
   worker_host:create_simple_cache(?EVENT_HANDLERS_CACHE),
@@ -51,6 +52,7 @@ handle(_ProtocolVersion, #eventmessage{type = Type}) ->
   case Type of
     "mkdir_event" -> handle(1, {event_arrived, #mkdir_event{user_dn = get(user_id), fuse_id = get(fuse_id)}});
     "write_event" -> handle(1, {event_arrived, #write_event{user_dn = get(user_id), fuse_id = get(fuse_id)}});
+    "rm_event" -> handle(1, {event_arrived, #rm_event{user_dn = get(user_id), fuse_id = get(fuse_id)}});
     _ -> ok
   end;
 
@@ -294,25 +296,14 @@ register_mkdir_handler_aggregation(InitCounter) ->
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {mkdir_event, EventItem, EventAggregatorConfig}}}).
 
 register_write_event_handler(InitCounter) ->
-  EventHandler = fun(#write_event{user_dn = UserDn, ans_pid = AnsPid, fuse_id = FuseId}) ->
+  EventHandler = fun(#write_event{user_dn = UserDn, fuse_id = FuseId}) ->
     ?info("Write EventHandler ~p", [node(self())]),
-    {View, QueryArgs} = {?USER_BY_DN_VIEW, #view_query_args{keys = [dao_helper:name(UserDn)], include_docs = true}},
-    case rpc:call(node(), dao, list_records, [View, QueryArgs]) of
-      {ok, #view_result{rows = Rows}} ->
-        FirstRow = hd(Rows),
-        Uuid = FirstRow#view_row.id,
-        UserDoc = FirstRow#view_row.doc,
-        {ok, SpaceUsed} = user_logic:get_files_size(Uuid, 1),
-        {ok, {quota, Quota}} = user_logic:get_quota(UserDoc),
-        ?info("user has used: ~p, quota: ~p", [SpaceUsed, Quota]),
-        case SpaceUsed > Quota of
-          true ->
-            gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {event_arrived, {quota_exceeded_event, Uuid, FuseId}}}),
-            ?info("Quota exceeded event emited");
-          _ -> ok
-        end;
-      Error ->
-        ?info("error when searching user by dn: ~p", [Error])
+    case user_logic:quota_exceeded({dn, UserDn}) of
+      true ->
+        gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {event_arrived, {quota_exceeded_event, UserDn, FuseId}}}),
+        ?info("Quota exceeded event emited");
+      _ ->
+        ok
     end
   end,
 
@@ -326,12 +317,26 @@ register_write_event_handler(InitCounter) ->
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {write_event, EventItem, EventAggregatorConfig}}}).
 
 register_quota_exceeded_handler() ->
-  EventHandler = fun({quota_exceeded_event, Uuid, FuseId}) ->
-    ?info("quota exceeded event for user: ~p", [Uuid]),
+  EventHandler = fun({quota_exceeded_event, UserDn, FuseId}) ->
+    ?info("quota exceeded event for user: ~p", [UserDn]),
     request_dispatcher:send_to_fuse(FuseId, #atom{value = "write_disabled"}, "communication_protocol")
   end,
   EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {quota_exceeded_event, EventItem}}}).
+
+register_rm_event_handler() ->
+  EventHandler = fun(#rm_event{user_dn = UserDn, fuse_id = FuseId}) ->
+    ?info("RmEvent Handler"),
+    case user_logic:quota_exceeded({dn, UserDn}) of
+      false -> request_dispatcher:send_to_fuse(FuseId, #atom{value = "write_enabled"}, "communication_protocol");
+      _ -> ok
+    end
+  end,
+
+  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
+  EventFilter = #eventfilterconfig{field_name = "type", desired_value = "rm_event"},
+  EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
+  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {rm_event, EventItem, EventFilterConfig}}}).
 
 send_mkdir_event() ->
   MkdirEvent = #mkdir_event{user_id = "123"},
@@ -365,3 +370,4 @@ delete_file(FilePath) ->
 change_quota(UserLogin, NewQuotaInBytes) ->
   {ok, UserDoc} = user_logic:get_user({login, UserLogin}),
   user_logic:update_quota(UserDoc, #quota{size = NewQuotaInBytes}).
+

@@ -79,7 +79,10 @@ handle(_ProtocolVersion, ping) ->
   pong;
 
 handle(_ProtocolVersion, is_write_enabled) ->
-  #atom{value=true};
+  case user_logic:quota_exceeded({dn, get(user_id)}) of
+    true -> false;
+    _ -> true
+  end;
 
 handle(_ProtocolVersion, healthcheck) ->
 	ok;
