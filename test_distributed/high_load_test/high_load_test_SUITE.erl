@@ -47,6 +47,7 @@ worker_code() ->
 %% Test function
 %% ====================================================================
 
+%% Tests if one node cluster is able to answer a lot of messages at once
 main_test(Config) ->
   nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
@@ -82,6 +83,7 @@ main_test(Config) ->
   ?assertEqual(5*TestRequestsNum, proplists:get_value(test_fun_ok, Answers, 0)),
   ?assertEqual(5*TestRequestsNum, proplists:get_value(pong, Answers, 0)).
 
+%% Tests if many node cluster is able to answer a lot of messages at once
 multi_node_test(Config) ->
   nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
@@ -161,6 +163,7 @@ multi_node_test(Config) ->
   ?assertEqual(5*length(NodesUp)*TestRequestsNum, proplists:get_value(test_fun_ok, Answers, 0)),
   ?assertEqual(5*length(NodesUp)*TestRequestsNum, proplists:get_value(pong, Answers, 0)).
 
+%% Tests if many node cluster is able to answer a lot of messages to sub_processes at once
 sub_proc_load_test(Config) ->
   nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
