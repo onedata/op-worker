@@ -38,7 +38,7 @@
 
 %% functions for manual tests
 -export([register_mkdir_handler/0, register_mkdir_handler_aggregation/1, register_write_event_handler/1, register_quota_exceeded_handler/0,
-         send_mkdir_event/0, register_integration/1, delete_file/1, change_quota/2, register_rm_event_handler/0]).
+         send_mkdir_event/0, delete_file/1, change_quota/2, register_rm_event_handler/0, prepare/0]).
 
 init(_Args) ->
   worker_host:create_simple_cache(?EVENT_HANDLERS_CACHE),
@@ -98,13 +98,9 @@ handle(ProtocolVersion, {event_arrived, Event, SecondTry}) ->
       ForwardEvent = fun(EventToTreeMapping) ->
         case EventToTreeMapping of
           {tree, TreeId} ->
-%%             ?info("forwarding to tree ~p", [node()]),
             % forward event to subprocess tree
-%%             gen_server:call({cluster_rengine, node()}, {asynch, 1, {final_stage_tree, TreeId, Event}});
             gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {final_stage_tree, TreeId, Event}});
-%%           gen_server:call({cluster_rengine, node()}, {asynch, 1, {final_stage_tree, TreeId, Event}});
           {standard, HandlerFun} ->
-%%             ?info("normal processing ~p", [node()]),
             HandlerFun(Event)
         end
       end,
@@ -250,24 +246,8 @@ get_disp_map_fun() ->
       non
   end.
 
-insert_to_ets_set(EtsName, Key, ItemToInsert) ->
-  case ets:lookup(EtsName, Key) of
-    [] -> ets:insert(EtsName, {Key, [ItemToInsert]});
-    PreviousItems -> ets:insert(EtsName, {Key, [ItemToInsert | PreviousItems]})
-  end.
-
-
 %% For test purposes
 register_mkdir_handler() ->
-%%   EventHandlerMapFun = fun(#mkdir_event{user_id = UserIdString}) ->
-%%     string_to_integer(UserIdString)
-%%   end,
-%%
-%%   EventHandlerDispMapFun = fun (#mkdir_event{user_id = UserId}) ->
-%%     UserIdInt = string_to_integer(UserId),
-%%     UserIdInt div 100
-%%   end,
-
   EventHandler = fun(#mkdir_event{user_id = UserId, ans_pid = AnsPid}) ->
     ?info("Mkdir EventHandler ~p", [node(self())]),
     delete_file("plgmsitko/todelete")
@@ -280,6 +260,7 @@ register_mkdir_handler() ->
   EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {mkdir_event, EventItem, EventFilterConfig}}}).
 
+%% For test purposes
 register_mkdir_handler_aggregation(InitCounter) ->
   EventHandler = fun(#mkdir_event{user_id = UserId, ans_pid = AnsPid}) ->
     ?info("Mkdir EventHandler aggregation ~p", [node(self())]),
@@ -295,6 +276,7 @@ register_mkdir_handler_aggregation(InitCounter) ->
   EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {mkdir_event, EventItem, EventAggregatorConfig}}}).
 
+%% For test purposes
 register_write_event_handler(InitCounter) ->
   EventHandler = fun(#write_event{user_dn = UserDn, fuse_id = FuseId}) ->
     ?info("Write EventHandler ~p", [node(self())]),
@@ -316,6 +298,7 @@ register_write_event_handler(InitCounter) ->
   EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {write_event, EventItem, EventAggregatorConfig}}}).
 
+%% For test purposes
 register_quota_exceeded_handler() ->
   EventHandler = fun({quota_exceeded_event, UserDn, FuseId}) ->
     ?info("quota exceeded event for user: ~p", [UserDn]),
@@ -324,6 +307,7 @@ register_quota_exceeded_handler() ->
   EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {quota_exceeded_event, EventItem}}}).
 
+%% For test purposes
 register_rm_event_handler() ->
   EventHandler = fun(#rm_event{user_dn = UserDn, fuse_id = FuseId}) ->
     ?info("RmEvent Handler"),
@@ -342,27 +326,6 @@ send_mkdir_event() ->
   MkdirEvent = #mkdir_event{user_id = "123"},
   gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {event_arrived, MkdirEvent}}).
 
-string_to_integer(SomeString) ->
-  {SomeInteger, _} = string:to_integer(SomeString),
-  case SomeString of
-    error ->
-      throw(badarg);
-    _ -> SomeInteger
-  end.
-
-register_integration(FilePath) ->
-
-  EventHandler = fun(_) ->
-    delete_file(FilePath)
-  end,
-
-  EventItem = {event_handler_item, standard, undefined, undefined, undefined, EventHandler, undefined},
-
-  %EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler}, %, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = ProcessingConfig},
-  EventFilter = {eventfilterconfig, "type", "mkdir_event"},
-  EventFilterConfig = {eventstreamconfig, undefined, EventFilter, undefined},
-  gen_server:call({request_dispatcher, node()}, {rule_manager, 1, self(), {add_event_handler, {mkdir_event, EventItem, EventFilterConfig}}}).
-
 delete_file(FilePath) ->
 %%   rpc:call(node(), dao_lib, apply, [dao_vfs, remove_file, ["plgmsitko/todelete"], 1]).
   rpc:call(node(), dao_lib, apply, [dao_vfs, remove_file, [FilePath], 1]).
@@ -371,3 +334,8 @@ change_quota(UserLogin, NewQuotaInBytes) ->
   {ok, UserDoc} = user_logic:get_user({login, UserLogin}),
   user_logic:update_quota(UserDoc, #quota{size = NewQuotaInBytes}).
 
+prepare() ->
+  register_write_event_handler(1),
+  register_quota_exceeded_handler(),
+  register_rm_event_handler(),
+  change_quota("plgmsitko", 100).
