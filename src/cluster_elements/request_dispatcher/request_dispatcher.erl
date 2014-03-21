@@ -881,6 +881,14 @@ choose_node_by_map(Module, Msg, State) ->
       end
   end.
 
+%% forward_request/5
+%% ====================================================================
+%% @doc Forwards request. Uses asynchronous process if RequestMap is used.
+-spec forward_request(NodeChosen :: boolean(), Task :: atom(), Request :: term(), Message :: term(), State) -> Result when
+  Result :: {reply, Ans, State},
+  Ans :: wrong_worker_type | worker_not_found | ok,
+  State :: term().
+%% ====================================================================
 forward_request(NodeChosen, Task, Request, Message, State) ->
   ModulesList = proplists:get_value(Task, State#dispatcher_state.modules_const_list, wrong_worker_type),
   Ans = case ModulesList of
