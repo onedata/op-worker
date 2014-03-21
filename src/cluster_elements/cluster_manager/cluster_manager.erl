@@ -15,6 +15,7 @@
 -include("records.hrl").
 -include("supervision_macros.hrl").
 -include("modules_and_args.hrl").
+-include("logging.hrl").
 
 -define(CALLBACKS_TABLE, callbacks_table).
 
@@ -22,7 +23,6 @@
 %% API
 %% ====================================================================
 -export([start_link/0, start_link/1, stop/0]).
--export([monitoring_loop/1, monitoring_loop/2, start_monitoring_loop/2]).
 
 %% ====================================================================
 %% gen_server callbacks
@@ -103,7 +103,6 @@ init([]) ->
   {ok, Interval} = application:get_env(veil_cluster_node, initialization_time),
   Pid = self(),
   erlang:send_after(Interval * 1000, Pid, {timer, init_cluster}),
-  erlang:send_after(50, Pid, {timer, {set_monitoring, on}}),
 
   {ok, Interval2} = application:get_env(veil_cluster_node, heart_beat),
   LoggerAndDAOInterval = case Interval > (2*Interval2 + 1) of
@@ -262,9 +261,10 @@ handle_cast({node_is_up, Node}, State) ->
           %% were running on node).
           case Ans of
             ok ->
-              case whereis(?Monitoring_Proc) of
-                undefined -> ok;
-                MPid -> MPid ! {monitor_node, Node}
+              case State#cm_state.state_monitoring of
+                on ->
+                  erlang:monitor_node(Node, true);
+                off -> ok
               end,
 
               NewState2 = NewState#cm_state{nodes = [Node | Nodes]},
@@ -313,22 +313,22 @@ handle_cast({register_dispatcher_map, Module, Map, AnsPid}, State) ->
   end;
 
 handle_cast(get_state_from_db, State) ->
-  NewState2 = case (State#cm_state.nodes =:= []) or State#cm_state.state_loaded of
-    true ->
-      State;
-    false ->
-      get_state_from_db(State)
-  end,
-
   case State#cm_state.state_loaded of
     true ->
-      ok;
+      {noreply, State};
     false ->
-      Pid = self(),
-      erlang:send_after(1000, Pid, {timer, get_state_from_db})
-  end,
+      NewState2 = case (State#cm_state.nodes =:= []) or State#cm_state.state_loaded of
+                    true ->
+                      State;
+                    false ->
+                      get_state_from_db(State)
+                  end,
 
-  {noreply, NewState2};
+      Pid = self(),
+      erlang:send_after(1000, Pid, {timer, get_state_from_db}),
+
+      {noreply, NewState2}
+  end;
 
 handle_cast(start_central_logger, State) ->
   case State#cm_state.nodes =:= [] of
@@ -341,13 +341,18 @@ handle_cast(start_central_logger, State) ->
       {noreply, NewState}
   end;
 
-handle_cast({save_state, MergedState}, State) ->
-  case State#cm_state.state_loaded or MergedState of
+handle_cast(save_state, State) ->
+  case State#cm_state.state_loaded of
     true ->
-      Ans = gen_server:call(?Dispatcher_Name, {dao, 1, {save_state, [State#cm_state{dispatcher_maps = []}]}}, 500),
-      case Ans of
-        ok -> lager:info([{mod, ?MODULE}], "Save state message sent");
-        _ -> lager:error([{mod, ?MODULE}], "Save state error: ~p", [Ans])
+      try
+        Ans = gen_server:call(?Dispatcher_Name, {dao, 1, {save_state, [State#cm_state{dispatcher_maps = []}]}}, 500),
+        case Ans of
+          ok -> lager:info([{mod, ?MODULE}], "Save state message sent");
+          _ -> lager:error([{mod, ?MODULE}], "Save state error: ~p", [Ans])
+        end
+      catch
+        E1:E2 ->
+          lager:error([{mod, ?MODULE}], "Save state error: ~p:~p", [E1, E2])
       end;
     false ->
       ok
@@ -373,17 +378,21 @@ handle_cast({node_down, Node}, State) ->
   {noreply, NewState2};
 
 handle_cast({set_monitoring, Flag}, State) ->
-  case whereis(?Monitoring_Proc) of
-    undefined ->
-      {ok, _ChildPid} = supervisor:start_child(?Supervisor_Name, ?Sup_Child(monitor_process, ?MODULE, start_monitoring_loop, permanent, [Flag, State#cm_state.nodes]));
-    MPid ->
-      MPid ! {Flag, State#cm_state.nodes}
+  case Flag of
+    on ->
+      case State#cm_state.state_monitoring of
+        off ->
+          change_monitoring(State#cm_state.nodes, true);
+        on -> ok
+      end;
+    off ->
+      case State#cm_state.state_monitoring of
+        on ->
+          change_monitoring(State#cm_state.nodes, false);
+        off -> ok
+      end
   end,
-  {noreply, State};
-
-handle_cast(update_monitoring_loop, State) ->
-  whereis(?Monitoring_Proc) ! switch_code,
-  {noreply, State};
+  {noreply, State#cm_state{state_monitoring = Flag}};
 
 handle_cast({worker_answer, cluster_state, Response}, State) ->
   NewState = case Response of
@@ -391,8 +400,8 @@ handle_cast({worker_answer, cluster_state, Response}, State) ->
                  lager:info([{mod, ?MODULE}], "State read from DB: ~p", [SavedState]),
                  merge_state(State, SavedState);
                {error, {not_found,missing}} ->
-                 save_state(true),
-                 State;
+                 save_state(),
+                 State#cm_state{state_loaded = true};
                Error ->
                  lager:info([{mod, ?MODULE}], "State cannot be read from DB: ~p", [Error]), %% info logging level because state may not be present in db and it's not an error
                  State
@@ -445,7 +454,16 @@ handle_info({timer, Msg}, State) ->
   gen_server:cast({global, ?CCM}, Msg),
   {noreply, State};
 
+handle_info({nodedown, Node}, State) ->
+  case State#cm_state.state_monitoring of
+    on ->
+      gen_server:cast({global, ?CCM}, {node_down, Node});
+    off -> ok
+  end,
+  {noreply, State};
+
 handle_info(_Info, State) ->
+  ?error("Error: wrong info: ~p", [_Info]),
   {noreply, State}.
 
 
@@ -459,7 +477,6 @@ handle_info(_Info, State) ->
   | term().
 %% ====================================================================
 terminate(_Reason, _State) ->
-  catch whereis(?Monitoring_Proc) ! exit,
   ok.
 
 
@@ -472,8 +489,6 @@ terminate(_Reason, _State) ->
   Vsn :: term().
 %% ====================================================================
 code_change(_OldVsn, State, _Extra) ->
-  {ok, Interval} = application:get_env(veil_cluster_node, hot_swapping_time),
-  erlang:send_after(Interval, self(), {timer, update_monitoring_loop}),
   {ok, State}.
 
 
@@ -875,16 +890,8 @@ get_state_from_db(State) ->
 -spec save_state() -> ok.
 %% ====================================================================
 save_state() ->
-  save_state(false).
-
-%% save_state/1
-%% ====================================================================
-%% @doc This function saves cluster state in DB.
--spec save_state(MergedState :: boolean()) -> ok.
-%% ====================================================================
-save_state(MergedState) ->
   Pid = self(),
-  erlang:send_after(100, Pid, {timer, {save_state, MergedState}}).
+  erlang:send_after(100, Pid, {timer, save_state}).
 
 %% merge_state/2
 %% ====================================================================
@@ -901,11 +908,19 @@ merge_state(State, SavedState) ->
   NewNodes = lists:filter(fun(N) -> not lists:member(N, State1#cm_state.nodes) end, SavedState#cm_state.nodes),
 
   CreateNewState = fun(Node, {TmpState, TmpWorkersFound}) ->
-    whereis(?Monitoring_Proc) ! {monitor_node, Node},
+    case State#cm_state.state_monitoring of
+      on ->
+        erlang:monitor_node(Node, true);
+      off -> ok
+    end,
     {Ans, NewState, WorkersFound} = check_node(Node, TmpState),
     case Ans of
       ok ->
-        whereis(?Monitoring_Proc) ! {monitor_node, Node},
+        case State#cm_state.state_monitoring of
+          on ->
+            erlang:monitor_node(Node, true);
+          off -> ok
+        end,
         NewState2 = NewState#cm_state{nodes = [Node | NewState#cm_state.nodes]},
         case WorkersFound of
           true -> {NewState2, true};
@@ -921,7 +936,7 @@ merge_state(State, SavedState) ->
                    false -> MergedState
                  end,
 
-  save_state(true),
+  save_state(),
   MergedState2.
 
 %% get_workers_list/1
@@ -1126,79 +1141,6 @@ node_to_ip(Node) ->
   inet:getaddr(Address, inet).
 
 
-%% start_monitoring_loop/2
-%% ====================================================================
-%% @doc Starts loop that monitors if nodes are alive.
--spec start_monitoring_loop(Flag, Nodes) -> ok when
-  Flag :: on | off,
-  Nodes :: list().
-%% ====================================================================
-start_monitoring_loop(Flag, Nodes) ->
-  Pid = spawn_link(?MODULE, monitoring_loop, [Flag, Nodes]),
-  register(?Monitoring_Proc, Pid),
-  {ok, Pid}.
-
-%% monitoring_loop/2
-%% ====================================================================
-%% @doc Beginning of loop that monitors if nodes are alive.
--spec monitoring_loop(Flag, Nodes) -> ok when
-  Flag :: on | off,
-  Nodes :: list().
-%% ====================================================================
-monitoring_loop(Flag, Nodes) ->
-  case Flag of
-    on ->
-      change_monitoring(Nodes, true);
-    off -> ok
-  end,
-  monitoring_loop(Flag).
-
-%% monitoring_loop/1
-%% ====================================================================
-%% @doc Loop that monitors if nodes are alive.
--spec monitoring_loop(Flag) -> ok when
-  Flag :: on | off.
-%% ====================================================================
-%% TODO cancel loop and make it part of gen_server
-monitoring_loop(Flag) ->
-  receive
-    {nodedown, Node} ->
-      case Flag of
-        on ->
-          gen_server:cast({global, ?CCM}, {node_down, Node});
-        off -> ok
-      end,
-      monitoring_loop(Flag);
-    {monitor_node, Node} ->
-      case Flag of
-        on ->
-          erlang:monitor_node(Node, true);
-        off -> ok
-      end,
-      monitoring_loop(Flag);
-    {off, Nodes} ->
-      case Flag of
-        on ->
-          change_monitoring(Nodes, false);
-        off -> ok
-      end,
-      monitoring_loop(off);
-    {on, Nodes} ->
-      case Flag of
-        off ->
-          change_monitoring(Nodes, true);
-        on -> ok
-      end,
-      monitoring_loop(on);
-    {get_version, Reply_Pid} ->
-      Reply_Pid ! {monitor_process_version, node_manager:check_vsn()},
-      monitoring_loop(Flag);
-    switch_code ->
-      ?MODULE:monitoring_loop(Flag);
-    exit ->
-      ok
-  end.
-
 %% change_monitoring/2
 %% ====================================================================
 %% @doc Starts or stops monitoring of nodes.
@@ -1221,14 +1163,7 @@ change_monitoring([Node | Nodes], Flag) ->
 %% ====================================================================
 get_version(State) ->
   Workers = get_workers_list(State),
-  Versions = get_workers_versions(Workers),
-  Pid = self(),
-  whereis(?Monitoring_Proc) ! {get_version, Pid},
-  receive
-    {monitor_process_version, V} -> [{node(), monitor_process, V} | Versions]
-  after 500 ->
-    [{node(), monitor_process, error} | Versions]
-  end.
+  get_workers_versions(Workers).
 
 %% get_workers_versions/1
 %% ====================================================================
@@ -1249,8 +1184,14 @@ get_workers_versions([], Versions) ->
   Versions;
 
 get_workers_versions([{Node, Module} | Workers], Versions) ->
-  V = gen_server:call({Module, Node}, {test_call, 1, get_version}, 500),
-  get_workers_versions(Workers, [{Node, Module, V} | Versions]).
+  try
+    V = gen_server:call({Module, Node}, {test_call, 1, get_version}, 500),
+    get_workers_versions(Workers, [{Node, Module, V} | Versions])
+  catch
+    E1:E2 ->
+      lager:error([{mod, ?MODULE}], "get_workers_versions error: ~p:~p", [E1, E2]),
+      get_workers_versions(Workers, [{Node, Module, can_not_connect_with_worker} | Versions])
+  end.
 
 %% calculate_node_load/2
 %% ====================================================================

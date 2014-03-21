@@ -54,7 +54,6 @@ update_dns_state_test_() ->
 %% This test checks if ccm is resistant to incorrect requests.
 wrong_request_test() ->
 	application:set_env(?APP_Name, worker_load_memory_size, 1000),
-	application:set_env(?APP_Name, hot_swapping_time, 10000),
 	application:set_env(?APP_Name, initialization_time, 10),
 	application:set_env(?APP_Name, cluster_clontrol_period, 300),
 

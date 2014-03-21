@@ -34,7 +34,7 @@
 save_user(#user{} = User) ->
     save_user(#veil_document{record = User});
 save_user(#veil_document{record = #user{}, uuid = UUID} = UserDoc) when is_list(UUID), UUID =/= "" ->
-    clear_all_data_from_cache(UserDoc),
+    clear_all_data_from_cache(UUID),
 
     dao:set_db(?USERS_DB_NAME),
     dao:save_record(UserDoc);
@@ -69,7 +69,7 @@ save_user(#veil_document{record = #user{}} = UserDoc) ->
 %% ====================================================================
 remove_user(Key) ->
     {ok, FDoc} = get_user(Key),
-    clear_all_data_from_cache(FDoc),
+    clear_all_data_from_cache(FDoc#veil_document.uuid),
     dao:set_db(?USERS_DB_NAME),
     dao:remove_record(FDoc#veil_document.uuid).
 
@@ -104,6 +104,13 @@ get_user(Key) ->
       case DBAns of
         {ok, Doc} ->
           ets:insert(users_cache, {Key, Doc}),
+          DocKey = Doc#veil_document.uuid,
+          case ets:lookup(users_cache, {key_info, DocKey}) of
+            [] ->
+              ets:insert(users_cache, {{key_info, DocKey}, [Key]});
+            [{_, TmpInfo}] ->
+              ets:insert(users_cache, {{key_info, DocKey}, [Key | TmpInfo]})
+          end,
           {ok, Doc};
         Other -> Other
       end;
@@ -302,29 +309,23 @@ update_files_size() ->
       throw(invalid_data)
   end.
 
-%% clear_cache/1
-%% ====================================================================
-%% @doc Deletes key from user caches at all nodes
--spec clear_cache(Key :: term()) -> ok.
-%% ====================================================================
-clear_cache(Key) ->
-  ets:delete(users_cache, Key),
-  case worker_host:clear_cache({users_cache, Key}) of
-    ok -> ok;
-    Error -> throw({error_during_global_cache_clearing, Error})
-  end.
-
 %% clear_all_data_from_cache/1
 %% ====================================================================
 %% @doc Deletes all data connected with user from user caches at all nodes
--spec clear_all_data_from_cache(UserDoc :: term()) -> ok.
+-spec clear_all_data_from_cache(DocKey :: string()) -> ok.
 %% ====================================================================
-clear_all_data_from_cache(UserDoc) ->
-  Doc = UserDoc#veil_document.record,
-  Caches = [{uuid, UserDoc#veil_document.uuid}, {login, Doc#user.login}],
-  Caches2 = lists:foldl(fun(EMail, TmpAns) -> [{email, EMail} | TmpAns] end, Caches, Doc#user.email_list),
-  Caches3 = lists:foldl(fun(DN, TmpAns) -> [{dn, DN} | TmpAns] end, Caches2, Doc#user.dn_list),
-  clear_cache(Caches3).
+clear_all_data_from_cache(DocKey) ->
+  case ets:lookup(users_cache, {key_info, DocKey}) of
+    [] ->
+      ok;
+    [{_, KeysList}] ->
+      lists:foreach(fun(Key) -> ets:delete(users_cache, Key) end, KeysList),
+      ets:delete(users_cache, {key_info, DocKey}),
+      case worker_host:clear_cache({users_cache, [{key_info, DocKey} | KeysList]}) of
+        ok -> ok;
+        Error -> throw({error_during_global_cache_clearing, Error})
+      end
+  end.
 
 %% save_quota/1
 %% ====================================================================

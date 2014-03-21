@@ -333,7 +333,7 @@ concurrent_file_creation_test(Config) ->
 
   MainProc = self(),
   TestFun = fun(File) ->
-    spawn(Node1, fun() ->
+    spawn_link(Node1, fun() ->
       CreateAns = logical_files_manager:create(File),
       MainProc ! {create_ans, CreateAns}
     end)
@@ -463,7 +463,7 @@ groups_test(Config) ->
     %% files_manager call with given user's DN
     FM = fun(M, A, DN) ->
             Me = self(),
-            Pid = spawn(Node, fun() -> put(user_id, DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
+            Pid = spawn_link(Node, fun() -> put(user_id, DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
             receive
                 {Pid, Resp} -> Resp
             end
@@ -859,7 +859,7 @@ user_file_size_test(Config) ->
   %% files_manager call with given user's DN
   FM = fun(M, A, DN) ->
     Me = self(),
-    Pid = spawn(Node, fun() -> put(user_id, DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
+    Pid = spawn_link(Node, fun() -> put(user_id, DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
     receive
       {Pid, Resp} -> Resp
     end
