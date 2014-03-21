@@ -392,7 +392,7 @@ handle_cast({set_monitoring, Flag}, State) ->
         off -> ok
       end
   end,
-  {noreply, State};
+  {noreply, State#cm_state{state_monitoring = Flag}};
 
 handle_cast({worker_answer, cluster_state, Response}, State) ->
   NewState = case Response of
