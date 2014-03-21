@@ -320,7 +320,8 @@ clear_all_data_from_cache(DocKey) ->
       ok;
     [{_, KeysList}] ->
       lists:foreach(fun(Key) -> ets:delete(users_cache, Key) end, KeysList),
-      case worker_host:clear_cache({users_cache, KeysList}) of
+      ets:delete(users_cache, {key_info, DocKey}),
+      case worker_host:clear_cache({users_cache, [{key_info, DocKey} | KeysList]}) of
         ok -> ok;
         Error -> throw({error_during_global_cache_clearing, Error})
       end
