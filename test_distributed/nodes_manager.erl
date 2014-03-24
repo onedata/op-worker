@@ -267,6 +267,7 @@ start_deps() ->
   application:start(simple_bridge),
   application:start(mimetypes),
   application:start(ibrowse),
+  application:start(rrderlang),
   application:load(?APP_Name).
 
 %% stop_deps/0
@@ -289,6 +290,7 @@ stop_deps() ->
   application:stop(mimetypes),
   application:stop(simple_bridge),
   application:stop(ibrowse),
+  application:stop(rrderlang),
   application:unload(?APP_Name).
 
 %% start_app_local/1
@@ -387,7 +389,7 @@ start_nodes([{NodeName, Host} | Nodes], [Param | AdditionalParams]) ->
         ok -> Node2;
         _ -> error
       end
-  after 10000 ->
+  after 5000 ->
     error
   end,
   [Node3 | OtherNodesAns].
@@ -738,6 +740,6 @@ wait_for_state_loading(TriesNum) ->
   case check_state_loading() of
     true -> true;
     _ ->
-      timer:sleep(500),
+      timer:sleep(5000),
       wait_for_state_loading(TriesNum - 1)
   end.
