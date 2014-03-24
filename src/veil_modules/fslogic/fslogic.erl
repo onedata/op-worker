@@ -1375,8 +1375,7 @@ get_new_file_id(File, UserDoc, SHInfo, ProtocolVersion) ->
 create_dirs(Count, CountingBase, SHInfo, TmpAns) ->
   case Count > CountingBase of
     true ->
-      {S1,S2,S3} = now(),
-      random:seed(S1,S2,S3),
+      random:seed(now()),
       DirName = TmpAns ++ integer_to_list(random:uniform(CountingBase)) ++ "/",
       case storage_files_manager:mkdir(SHInfo, DirName) of
         ok -> create_dirs(Count div CountingBase, CountingBase, SHInfo, DirName);
@@ -1726,7 +1725,14 @@ check_file_perms(FileName, UserDocStatus, UserDoc, FileDoc, CheckType) ->
 update_parent_ctime(Dir, CTime) ->
     case fslogic_utils:strip_path_leaf(Dir) of
         [?PATH_SEPARATOR] -> ok;
-        ParentPath -> gen_server:call(?Dispatcher_Name, {fslogic, 1, #veil_request{subject = get(user_id), request = {internal_call, #updatetimes{file_logic_name = ParentPath, mtime = CTime}}}})
+        ParentPath ->
+          try
+            gen_server:call(?Dispatcher_Name, {fslogic, 1, #veil_request{subject = get(user_id), request = {internal_call, #updatetimes{file_logic_name = ParentPath, mtime = CTime}}}})
+          catch
+            E1:E2 ->
+              lager:error("update_parent_ctime error: ~p:~p", [E1, E2]),
+              error
+          end
     end.
 
 %% Verify filename

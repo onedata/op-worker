@@ -511,24 +511,30 @@ contact_fslogic(Message, Value) ->
             _ -> put(files_manager_msg_id, 0)
           end,
 
-  CallAns = case Message of
-    internal_call ->
-      UserID = get(user_id),
-      case UserID of
-        undefined -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {internal_call, Value}});
-        _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, #veil_request{subject = UserID, request = {internal_call, Value}}})
-      end;
-    _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {Message, Value}})
-  end,
+  try
+    CallAns = case Message of
+      internal_call ->
+        UserID = get(user_id),
+        case UserID of
+          undefined -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {internal_call, Value}});
+          _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, #veil_request{subject = UserID, request = {internal_call, Value}}})
+        end;
+      _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {Message, Value}})
+    end,
 
-  case CallAns of
-    ok ->
-      receive
-        {worker_answer, MsgId, Resp} -> {ok, Resp}
-      after 7000 ->
-        {error, timeout}
-      end;
-    _ -> {error, CallAns}
+    case CallAns of
+      ok ->
+        receive
+          {worker_answer, MsgId, Resp} -> {ok, Resp}
+        after 7000 ->
+          {error, timeout}
+        end;
+      _ -> {error, CallAns}
+    end
+  catch
+    E1:E2 ->
+      lager:error("Logical files manager: error during contact with fslogic: ~p:~p", [E1, E2]),
+      {error, dispatcher_error}
   end.
 
 %% get_file_by_uuid/1

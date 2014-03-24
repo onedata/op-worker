@@ -140,7 +140,7 @@ sub_procs_error_cache_clearing_test(Config) ->
 
   %% send many request to multiply sub_procs
   TestFun = fun() ->
-    spawn(fun() ->
+    spawn_link(fun() ->
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 11, Pid}}, 500),
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 12, Pid}}, 500),
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 13, Pid}}, 500),
@@ -155,7 +155,7 @@ sub_procs_error_cache_clearing_test(Config) ->
   ?assertEqual(6*TestRequestsNum, count_answers2(6*TestRequestsNum, sub_proc_test_ok)),
 
   TestFun2 = fun() ->
-    spawn(fun() ->
+    spawn_link(fun() ->
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, Pid, {k1, 1}}}, 500),
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, Pid, {k2, 1}}}, 500),
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 12, Pid, {k3, 1}}}, 500),
@@ -224,7 +224,7 @@ error_nodes_cache_clearing_test(Config) ->
   nodes_manager:wait_for_cluster_init(),
 
   CreateCaches = fun(Node, Ans) ->
-    Pid = spawn(Node, fun() ->
+    Pid = spawn_link(Node, fun() ->
       ?assertEqual(ok, worker_host:create_simple_cache(test_cache)),
       cache_loop()
     end),
@@ -350,7 +350,7 @@ sub_procs_automatic_cache_clearing_test(Config) ->
 
   %% send many request to multiply sub_procs
   TestFun = fun() ->
-    spawn(fun() ->
+    spawn_link(fun() ->
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 11, Pid}}, 500),
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 12, Pid}}, 500),
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 13, Pid}}, 500),
@@ -365,7 +365,7 @@ sub_procs_automatic_cache_clearing_test(Config) ->
   ?assertEqual(6*TestRequestsNum, count_answers2(6*TestRequestsNum, sub_proc_test_ok)),
 
   TestFun2 = fun() ->
-    spawn(fun() ->
+    spawn_link(fun() ->
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, Pid, {k1, 1}}}, 500),
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, Pid, {k2, 1}}}, 500),
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 12, Pid, {k3, 1}}}, 500),
@@ -423,7 +423,7 @@ automatic_nodes_cache_clearing_test(Config) ->
 
   ClearFun = fun() -> ets:delete_all_objects(test_cache) end,
   CreateCaches = fun(Node, Ans) ->
-    Pid = spawn(Node, fun() ->
+    Pid = spawn_link(Node, fun() ->
       ?assertEqual(ok, worker_host:create_simple_cache(test_cache, ?CacheClearingTime, ClearFun)),
       cache_loop()
     end),
@@ -541,7 +541,7 @@ sub_proc_cache_test(Config) ->
 
   %% send many request to multiply sub_procs
   TestFun = fun() ->
-    spawn(fun() ->
+    spawn_link(fun() ->
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 11, Pid}}, 500),
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 12, Pid}}, 500),
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 13, Pid}}, 500),
@@ -556,7 +556,7 @@ sub_proc_cache_test(Config) ->
   ?assertEqual(6*TestRequestsNum, count_answers2(6*TestRequestsNum, sub_proc_test_ok)),
 
   TestFun2 = fun() ->
-    spawn(fun() ->
+    spawn_link(fun() ->
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, Pid, {k1, 1}}}, 500),
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 11, Pid, {k2, 1}}}, 500),
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {update_cache, 12, Pid, {k3, 1}}}, 500),
@@ -630,7 +630,7 @@ node_cache_test(Config) ->
   nodes_manager:wait_for_cluster_init(),
 
   CreateCaches = fun(Node, Ans) ->
-    Pid = spawn(Node, fun() ->
+    Pid = spawn_link(Node, fun() ->
       ?assertEqual(ok, worker_host:create_simple_cache(test_cache)),
       cache_loop()
     end),
@@ -741,7 +741,7 @@ sub_proc_test(Config) ->
 
   Self = self(),
   TestFun = fun() ->
-    spawn(fun() ->
+    spawn_link(fun() ->
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 11, Self}}, 500),
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 12, Self}}, 500),
       gen_server:call({?Dispatcher_Name, CCM}, {fslogic, 1, {sub_proc_test, 13, Self}}, 500),

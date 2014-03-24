@@ -848,10 +848,11 @@ find_files(FileCriteria) when is_record(FileCriteria, file_criteria) ->
 %% clear_cache/1
 %% ====================================================================
 %% @doc Deletes key from storage caches at all nodes
--spec clear_cache(Key :: term()) -> ok.
+-spec clear_cache(Key :: list()) -> ok.
 %% ====================================================================
+%% TODO when storage adding procedure will change (now it always gets new id), clearing function should be updated
 clear_cache(Key) ->
-  ets:delete(storage_cache, Key),
+  lists:foreach(fun(K) -> ets:delete(storage_cache, K) end, Key),
   case worker_host:clear_cache({storage_cache, Key}) of
     ok -> ok;
     Error -> throw({error_during_global_cache_clearing, Error})

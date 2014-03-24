@@ -34,7 +34,7 @@ gpv_status gpv_init(GPV_CTX *gpv_ctx) {
     gpv_ctx->ssl = NULL;
 
     gpv_ctx->callback_data = NULL;
-    
+
     gpv_ctx->x509_context = X509_STORE_CTX_new();
     gpv_ctx->trusted_store = X509_STORE_new();
     gpv_ctx->chain_stack = sk_X509_new_null();
@@ -42,13 +42,13 @@ gpv_status gpv_init(GPV_CTX *gpv_ctx) {
     gpv_ctx->crl_stack = sk_X509_CRL_new_null();
     gpv_ctx->proxy_cert = NULL;
 
-    globus_gsi_callback_data_init(&gpv_ctx->callback_data);    
+    globus_gsi_callback_data_init(&gpv_ctx->callback_data);
     globus_gsi_callback_get_X509_STORE_callback_data_index(&gpv_ctx->callback_data_index);
     globus_gsi_callback_set_allow_missing_signing_policy(gpv_ctx->callback_data, 1);
 
-    if(!gpv_ctx->x509_context || !gpv_ctx->trusted_store || !gpv_ctx->trusted_stack || !gpv_ctx->chain_stack || !gpv_ctx->crl_stack) 
-        return GPV_MEMORY_ALLOCATE_ERROR;                 
-    
+    if(!gpv_ctx->x509_context || !gpv_ctx->trusted_store || !gpv_ctx->trusted_stack || !gpv_ctx->chain_stack || !gpv_ctx->crl_stack)
+        return GPV_MEMORY_ALLOCATE_ERROR;
+
     return GPV_SUCCESS;
 }
 
@@ -73,7 +73,7 @@ gpv_status gpv_verify(GPV_CTX *gpv_ctx) {
 
     // Initialize X509_STORE using GPV context
     X509_STORE_CTX_init(gpv_ctx->x509_context, gpv_ctx->trusted_store, gpv_ctx->proxy_cert, gpv_ctx->chain_stack);
-    X509_STORE_CTX_set0_crls(gpv_ctx->x509_context, gpv_ctx->crl_stack);    
+    X509_STORE_CTX_set0_crls(gpv_ctx->x509_context, gpv_ctx->crl_stack);
 
     gpv_ctx->x509_context->check_issued = globus_gsi_callback_check_issued;
 
@@ -93,12 +93,12 @@ gpv_status gpv_verify(GPV_CTX *gpv_ctx) {
 }
 
 int gpv_get_error(GPV_CTX *ctx) {
-    return X509_STORE_CTX_get_error(ctx->x509_context);  
+    return X509_STORE_CTX_get_error(ctx->x509_context);
 }
 
 gpv_status gpv_set_leaf_cert(GPV_CTX *gpv_ctx, const byte *buff, int len) {
     gpv_ctx->proxy_cert = d2i_X509(&gpv_ctx->proxy_cert, &buff, len);
-    if(gpv_ctx->proxy_cert == NULL) 
+    if(gpv_ctx->proxy_cert == NULL)
         return GPV_CERT_READ_ERROR;
     return GPV_SUCCESS;
 }
@@ -106,34 +106,45 @@ gpv_status gpv_set_leaf_cert(GPV_CTX *gpv_ctx, const byte *buff, int len) {
 gpv_status gpv_add_trusted_ca(GPV_CTX *gpv_ctx, const byte *buff, int len) {
     X509 *tmp = NULL;
     tmp = d2i_X509(&tmp, &buff, len);
-    if(tmp == NULL) 
+    if(tmp == NULL)
         return GPV_CERT_READ_ERROR;
     if(X509_STORE_add_cert(gpv_ctx->trusted_store, tmp) < 1) {
         X509_free(tmp);
         return GPV_CERT_INSERT_ERROR;
     }
 
-    if(sk_X509_push(gpv_ctx->trusted_stack, tmp) < 1)
+    if(sk_X509_push(gpv_ctx->trusted_stack, tmp) < 1) {
+        X509_free(tmp);
         return GPV_CERT_INSERT_ERROR;
+    }
     return GPV_SUCCESS;
 }
 
 gpv_status gpv_add_chain_cert(GPV_CTX *gpv_ctx, const byte *buff, int len) {
     X509 *tmp = NULL;
     tmp = d2i_X509(&tmp, &buff, len);
-    if(tmp == NULL) 
+    if(tmp == NULL)
         return GPV_CERT_READ_ERROR;
-    if(sk_X509_push(gpv_ctx->chain_stack, tmp) < 1)
+    if(sk_X509_push(gpv_ctx->chain_stack, tmp) < 1) {
+        X509_free(tmp);
         return GPV_CERT_INSERT_ERROR;
+    }
     return GPV_SUCCESS;
 }
 
 gpv_status gpv_add_crl_cert(GPV_CTX *gpv_ctx, const byte *buff, int len) {
     X509_CRL *tmp = NULL;
     tmp = d2i_X509_CRL(&tmp, &buff, len);
-    if(tmp == NULL) 
+    if(tmp == NULL)
         return GPV_CERT_READ_ERROR;
-    if(sk_X509_CRL_push(gpv_ctx->crl_stack, tmp) < 1)
+    if(X509_STORE_add_crl(gpv_ctx->trusted_store, tmp) < 1) {
+        X509_CRL_free(tmp);
         return GPV_CERT_INSERT_ERROR;
+    }
+
+    if(sk_X509_CRL_push(gpv_ctx->crl_stack, tmp) < 1) {
+        X509_CRL_free(tmp);
+        return GPV_CERT_INSERT_ERROR;
+    }
     return GPV_SUCCESS;
 }

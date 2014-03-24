@@ -1,6 +1,7 @@
 %% ===================================================================
 %% @author Rafal Slota
-%% @copyright (C): 2013 ACK CYFRONET AGH
+%% @author Konrad Zemek
+%% @copyright (C): 2014 ACK CYFRONET AGH
 %% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
@@ -38,20 +39,32 @@ init() ->
     {ok, CADir1} = application:get_env(?APP_Name, ca_dir),
     CADir = atom_to_list(CADir1),
 
-    {SSPid, _Ref} = spawn_monitor(fun() -> start_slaves(?GSI_SLAVE_COUNT) end), 
+    {SSPid, _Ref} = spawn_monitor(fun() -> start_slaves(?GSI_SLAVE_COUNT) end),
 
     case filelib:is_dir(CADir) of
         true ->
             load_certs(CADir),
-            update_crls(CADir);
+            case vcn_utils:ensure_running(inets) of
+                ok ->
+                    update_crls(CADir),
+                    {ok, CRLUpdateInterval} = application:get_env(?APP_Name, crl_update_interval),
+                    case timer:apply_interval(CRLUpdateInterval, ?MODULE, update_crls, [CADir]) of
+                        {ok, _} -> ok;
+                        {error, Reason} -> lager:error("GSI Handler: Setting CLR auto-update failed (reason: ~p)", [Reason])
+                    end;
+
+                {error, Reason} ->
+                    lager:error("GSI Handler: Cannot update CRLs because inets didn't start (reason: ~p)", [Reason])
+            end;
+
         false ->
-            lager:error("Cannot find GSI CA certs dir (~p)", [CADir])
+            lager:error("GSI Handler: Cannot find GSI CA certs dir (~p)", [CADir])
     end,
 
-    receive 
+    receive
         {'DOWN', _, process, SSPid, normal} -> lager:info("GSI Handler module successfully loaded");
-        {'DOWN', _, process, SSPid, Reason} -> 
-            lager:warning("GSI Handler: slave node loader unknown exit reason: ~p", [Reason]),
+        {'DOWN', _, process, SSPid, Reason1} ->
+            lager:warning("GSI Handler: slave node loader unknown exit reason: ~p", [Reason1]),
             lager:info("GSI Handler module partially loaded")
     after 5000 ->
         lager:error("GSI Handler: slave node loader execution timeout, state unknown"),
@@ -99,28 +112,40 @@ load_certs(CADir) ->
     CRL2 = [ lists:map(fun(Y) -> {Name, Y} end, public_key:pem_decode(X)) || {Name, {ok, X}} <- CRL1],
 
     {Len1, Len2} =
-        lists:foldl(fun({Name, {Type, X, _}}, {CAs, CRLs}) ->
-                    case Type of
-                        'Certificate' -> ets:insert(gsi_state, {{ca, public_key:pkix_issuer_id(X, self)}, X, Name}), {CAs + 1, CRLs};
-                        'CertificateList' -> ets:insert(gsi_state, {{crl, public_key:pkix_issuer_id(X, self)}, X, Name}), {CAs, CRLs + 1};
-                        _ -> {CAs, CRLs}
-                    end end, {0, 0}, lists:flatten(CA2 ++ CRL2)),
+        lists:foldl(
+            fun({Name, {Type, X, _}}, {CAs, CRLs}) ->
+                case Type of
+                    'Certificate' ->
+                        {ok, {_SerialNumber, Issuer}} = public_key:pkix_issuer_id(X, self),
+                        ets:insert(gsi_state, {{ca, Issuer}, X, Name}),
+                        {CAs + 1, CRLs};
+
+                    'CertificateList' ->
+                        CertificateList = public_key:der_decode(Type, X),
+                        #'CertificateList'{tbsCertList = TBSCertList} = CertificateList,
+                        #'TBSCertList'{issuer = Issuer} = TBSCertList,
+                        ets:insert(gsi_state, {{crl, Issuer}, X, Name}),
+                        {CAs, CRLs + 1};
+
+                    _ -> {CAs, CRLs}
+                end
+            end, {0, 0}, lists:flatten(CA2 ++ CRL2)),
     lager:info("GSI Handler: ~p CA and ~p CRL certs successfully loaded", [Len1, Len2]),
     ok.
 
 
 %% update_crls/1
 %% ====================================================================
-%% @doc Updates CRL certificates based on their distribution point (x509 CA extension). <br/>
-%%      Not yet fully implemented.
+%% @doc Updates CRL certificates based on their distribution point (x509 CA extension).
 %% @end
 -spec update_crls(CADir :: string()) -> ok | no_return().
 %% ====================================================================
 update_crls(CADir) ->
+    lager:info("GSI Handler: Updating CLRs from distribution points"),
     CAs = [{public_key:pkix_decode_cert(X, otp), Name} || [X, Name] <- ets:match(gsi_state, {{ca, '_'}, '$1', '$2'})],
     CAsAndDPs = [{OtpCert, get_dp_url(OtpCert), Name} || {OtpCert, Name} <- CAs],
-    lists:foreach(fun(X) -> update_crl(CADir, X) end, CAsAndDPs),
-    ok.
+    vcn_utils:pforeach(fun(X) -> update_crl(CADir, X) end, CAsAndDPs),
+    load_certs(CADir).
 
 
 %% proxy_subject/1
@@ -200,7 +225,7 @@ initialize_node(NodeName) when is_atom(NodeName) ->
                 lager:error("Could not start GSI slave node ~p @ ~p due to error: ~p", [NodeName, get_host(), Reason]),
                 'nonode@nohost'
         end,
-    case NodeRes1 of 
+    case NodeRes1 of
         'nonode@nohost' -> {error, cannot_start_node};
         NodeRes ->
             {ok, Prefix} = application:get_env(?APP_Name, nif_prefix),
@@ -229,9 +254,9 @@ initialize_node(NodeName) when is_atom(NodeName) ->
 -spec call(Module :: atom(), Method :: atom(), Args :: [term()]) -> ok | no_return().
 %% ====================================================================
 call(Module, Method, Args) ->
-    case ets:info(gsi_state) of 
+    case ets:info(gsi_state) of
         undefined -> error(gsi_handler_not_loaded);
-        _ -> ok 
+        _ -> ok
     end,
     Nodes = ets:lookup(gsi_state, node),
     call(Module, Method, Args, Nodes).
@@ -258,17 +283,84 @@ call(Module, Method, Args, [{node, NodeName} | OtherNodes]) ->
     end.
 
 
-%% update_crl/1
+%% update_crl/2
 %% ====================================================================
 %% @doc Handles CRL update process for given CRL certificate. <br/>
 %%      This method gets already prepared URLs and destination file name.
 %% @end
--spec update_crl(CADir :: string(), {OtpCert :: #'OTPCertificate'{}, [URLs :: string()], Name :: string()}) -> not_yet_implemented.
+-spec update_crl(CADir :: string(), {OtpCert :: #'OTPCertificate'{}, [URLs :: string()], Name :: string()}) -> ok | {error, no_dp}.
 %% ====================================================================
 update_crl(_CADir, {_OtpCert, [], _Name}) ->
-    no_dp;  
-update_crl(_CADir, {_OtpCert, [_URL | _URLs], _Name}) ->
-    not_yet_implemented.                                    %% TODO: implement CRL update via http (httpc module?)
+    {error, no_dp};
+update_crl(CADir, {OtpCert, [URL | URLs], Name}) ->
+    case httpc:request(get, {URL, []}, [{timeout, 10000}], [{body_format, binary}, {full_result, false}]) of
+        {ok, {200, Binary}} ->
+            case binary_to_crl(Binary) of
+                {true, CertList} ->
+                    PubKey = get_pubkey(OtpCert),
+                    #'CertificateList'{tbsCertList = TBSCertList, signature = {0, Signature}, signatureAlgorithm = AlgorithmIdent} = CertList,
+                    #'AlgorithmIdentifier'{algorithm = Oid} = AlgorithmIdent,
+                    {DigestType, _} = public_key:pkix_sign_types(Oid),
+                    Der = public_key:der_encode('TBSCertList', TBSCertList),
+
+                    case public_key:verify(Der, DigestType, Signature, PubKey) of
+                        true ->
+                            lager:info("GSI Handler: Saving new CLR of ~p", [Name]),
+                            PemEntry = public_key:pem_entry_encode('CertificateList', CertList),
+                            Data = public_key:pem_encode([PemEntry]),
+                            file:write_file(filename:join(CADir, Name ++ ".crl"), Data),
+                            ok;
+
+                        false ->
+                            lager:warning("GSI Handler: CLR of ~p retrieved from ~p couldn't be verified", [Name, URL]),
+                            update_crl(CADir, {OtpCert, URLs, Name})
+                    end;
+
+                false ->
+                    lager:warning("GSI Handler: CLR of ~p retrieved from ~p couldn't be decoded", [Name, URL]),
+                    update_crl(CADir, {OtpCert, URLs, Name})
+            end;
+
+        {ok, {Status, _}} ->
+            lager:warning("GSI Handler: Updating CLR of ~p from URL ~p failed (status: ~p)", [Name, URL, Status]),
+            update_crl(CADir, {OtpCert, URLs, Name});
+
+        {error, Reason} ->
+            lager:warning("GSI Handler: Updating CLR of ~p from URL ~p failed (reason: ~p)", [Name, URL, Reason]),
+            update_crl(CADir, {OtpCert, URLs, Name})
+    end.
+
+
+%% binary_to_crl/1
+%% ====================================================================
+%% @doc Converts a der or pem encoded binary CRL to a CertificateList record.
+%% @end
+-spec binary_to_crl(Binary :: binary()) -> {true, #'CertificateList'{}} | false.
+%% ====================================================================
+binary_to_crl(Binary) ->
+    try
+        try
+            {true, public_key:der_decode('CertificateList', Binary)}
+        catch error:_ ->
+            [{'CertificateList', Entry, not_encrypted} | _] = public_key:pem_decode(Binary),
+            {true, public_key:der_decode('CertificateList', Entry)}
+        end
+    catch
+        error:_ -> false
+    end.
+
+
+%% get_pubkey/1
+%% ====================================================================
+%% @doc Retrieves public key from an OTP Certificate.
+%% @end
+-spec get_pubkey(OtpCert :: #'OTPCertificate'{}) -> binary().
+%% ====================================================================
+get_pubkey(OtpCert) ->
+    #'OTPCertificate'{tbsCertificate = TbsCert} = OtpCert,
+    #'OTPTBSCertificate'{subjectPublicKeyInfo = PKI} = TbsCert,
+    #'OTPSubjectPublicKeyInfo'{subjectPublicKey = Key} = PKI,
+    Key.
 
 
 %% get_host/0
@@ -318,7 +410,7 @@ make_code_path() ->
 
 %% get_dp_url/1
 %% ====================================================================
-%% @doc Extracts from given OTP certificate list of distribution point's URLs (based on x509 DP extension)
+%% @doc Extracts from given OTP certificate list of distribution point's HTTP URLs (based on x509 DP extension)
 %% @end
 -spec get_dp_url(OtpCert :: #'OTPCertificate'{}) -> [URL :: string()].
 %% ====================================================================
@@ -326,7 +418,7 @@ get_dp_url(OtpCert = #'OTPCertificate'{}) ->
     Ext = OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.extensions,
     DPs = lists:flatten([X || #'Extension'{extnValue = X} <- Ext, is_list(X)]),
     GNames = [GenNames || #'DistributionPoint'{distributionPoint = {fullName, GenNames}} <- DPs],
-    [URL || {uniformResourceIdentifier, URL} <- lists:flatten(GNames)].
+    [URL || {uniformResourceIdentifier, URL} <- lists:flatten(GNames), lists:prefix("http", URL)].
 
 
 %% strip_filename_ext/1
@@ -357,19 +449,19 @@ is_proxy_certificate(OtpCert = #'OTPCertificate'{}) ->
 
 %% find_eec_cert/3
 %% ====================================================================
-%% @doc For given proxy certificate returns its EEC 
+%% @doc For given proxy certificate returns its EEC
 %% @end
 -spec find_eec_cert(CurrentOtp :: #'OTPCertificate'{}, Chain :: [#'OTPCertificate'{}], IsProxy :: boolean()) -> {ok, #'OTPCertificate'{}} | no_return().
 %% ====================================================================
 find_eec_cert(CurrentOtp, Chain, true) ->
     false = public_key:pkix_is_self_signed(CurrentOtp),
-    {ok, NextCert} = 
+    {ok, NextCert} =
         lists:foldl(fun(_, {ok, Found}) -> {ok, Found};
-                    (Cert, NotFound)-> case public_key:pkix_is_issuer(CurrentOtp, Cert) of 
+                    (Cert, NotFound)-> case public_key:pkix_is_issuer(CurrentOtp, Cert) of
                                            true -> {ok, Cert};
                                            false -> NotFound
-                                        end end,    
-                no_cert, Chain), 
+                                        end end,
+                no_cert, Chain),
     find_eec_cert(NextCert, Chain, is_proxy_certificate(NextCert));
 find_eec_cert(CurrentOtp, _Chain, false) ->
     {ok, CurrentOtp}.
@@ -377,7 +469,7 @@ find_eec_cert(CurrentOtp, _Chain, false) ->
 
 %% time_str_2_gregorian_sec/1
 %% ====================================================================
-%% @doc See pubkey_cert:time_str_2_gregorian_sec/1  
+%% @doc See pubkey_cert:time_str_2_gregorian_sec/1
 %% @end
 -spec time_str_2_gregorian_sec(TimeStr :: term()) -> integer().
 %% ====================================================================

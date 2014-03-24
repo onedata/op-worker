@@ -17,6 +17,7 @@
 -include("records.hrl").
 -include("registered_names.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
+-include("logging.hrl").
 
 -define(BORTER_CHILD_WAIT_TIME, 10000).
 -define(MAX_CHILD_WAIT_TIME, 60000000).
@@ -377,9 +378,7 @@ handle_info(dispatcher_map_registered, State) ->
   {noreply, State#host_state{dispatcher_request_map_ok = true}};
 
 handle_info(_Info, State) ->
-%% 	PlugIn = State#host_state.plug_in,
-%%     {_Reply, NewPlugInState} = PlugIn:handle(Info, State#host_state.plug_in_state), %% TODO: fix me ! There's no such callback in worker_plugin
-%%     {noreply, State#host_state{plug_in_state = NewPlugInState}}.
+  ?error("Error: wrong info: ~p", [_Info]),
   {noreply, State}.
 
 
@@ -454,14 +453,14 @@ proc_standard_request(RequestMap, SubProcs, PlugIn, ProtocolVersion, Msg, MsgId,
           _ ->
             SubProcPid ! {PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo},
             %% check if chosen proc did not time out before message was delivered
-            case process_info(SubProcPid) of
-              undefined->
+            case is_process_alive(SubProcPid) of
+              false ->
                 {Name, MaxDepth, MaxWidth, NewProcFun, NewMapFun} = SubProcArgs,
                 SubProcPid2 = start_sub_proc(Name, MaxDepth, MaxWidth, NewProcFun, NewMapFun),
                 SubProcPid2 ! {PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo},
                 SubProc2Desc = {Name, {SubProcArgs, SubProcCache, SubProcPid2}},
                 [SubProc2Desc | proplists:delete(Name, SubProcs)];
-              _ ->
+              true ->
                 SubProcs
             end
         end
@@ -692,13 +691,13 @@ sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, 
             _ ->
               ForwardPid ! Request,
               %% check if chosen proc did not time out before message was delivered
-              case process_info(ForwardPid) of
-                undefined->
+              case is_process_alive(ForwardPid) of
+                false ->
                   ets:delete(Name, ForwardPid),
                   ets:delete(Name, ForwardNum),
                   ForwardPid2 = map_to_sub_proc(Name, CacheName, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFun, Request),
                   ForwardPid2 ! Request;
-                _ ->
+                true ->
                   ok
               end
           end;
