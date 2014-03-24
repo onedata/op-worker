@@ -387,7 +387,7 @@ start_nodes([{NodeName, Host} | Nodes], [Param | AdditionalParams]) ->
         ok -> Node2;
         _ -> error
       end
-  after 5000 ->
+  after 10000 ->
     error
   end,
   [Node3 | OtherNodesAns].
