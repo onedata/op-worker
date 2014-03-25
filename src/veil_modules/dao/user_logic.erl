@@ -88,8 +88,8 @@ sign_in(Proplist) ->
     Result :: {ok, user_doc()} | {error, any()}.
 %% ====================================================================
 create_user(Login, Name, Teams, Email, DnList) ->
-    Quota = #quota{},
-    {ok, QuotaUUID} = dao_lib:apply(dao_users, save_quota, [Quota], 1),
+	Quota = #quota{},
+    {QuotaAns, QuotaUUID} = dao_lib:apply(dao_users, save_quota, [Quota], 1),
     User = #user
     {
         login = Login,
@@ -109,28 +109,70 @@ create_user(Login, Name, Teams, Email, DnList) ->
         quota_doc = QuotaUUID
     },
     {DaoAns, UUID} = dao_lib:apply(dao_users, save_user, [User], 1),
-    case DaoAns of
-      ok ->
-        GetUserAns = get_user({uuid, UUID}),
+	try
+		erase(created_team_dirs),
+		erase(created_root_dir),
+		case {DaoAns,QuotaAns} of
+			{ok,ok} ->
+		        GetUserAns = get_user({uuid, UUID}),
 
-        [create_team_dir(Team) || Team <- get_team_names(User)], %% Create team dirs in DB if they don't exist
+			    CreatedTeamDirs = [TeamUIID || {ok,TeamUIID} <- [create_team_dir(Team) || Team <- get_team_names(User)]], %% Create team dirs in DB if they don't exist
+				put(created_team_dirs,CreatedTeamDirs),
 
-        {GetUserFirstAns, UserRec} = GetUserAns,
-        case GetUserFirstAns of
-          ok ->
-            RootAns = create_root(Login, UserRec#veil_document.uuid),
-            case RootAns of
-              ok ->
-                %% TODO zastanowić się co zrobić jak nie uda się stworzyć jakiegoś katalogu (blokowanie rejestracji użytkownika to chyba zbyt dużo)
-                create_dirs_at_storage(Login, get_team_names(User)),
-                GetUserAns;
-              _ -> {RootAns, UserRec}
-            end;
-          _ -> GetUserAns
-        end;
-      _ ->
-        {DaoAns, UUID}
-    end.
+				{GetUserFirstAns, UserRec} = GetUserAns,
+		        case GetUserFirstAns of
+		          ok ->
+		            RootAns = create_root(Login, UserRec#veil_document.uuid),
+		            case RootAns of
+			            {ok,RootUUID} ->
+			                %% TODO zastanowić się co zrobić jak nie uda się stworzyć jakiegoś katalogu (blokowanie rejestracji użytkownika to chyba zbyt dużo)
+				            put(created_root_dir,RootUUID),
+			                case create_dirs_at_storage(Login, get_team_names(User)) of
+								ok -> ok;
+								DirsError -> throw(DirsError)
+			                end,
+			                GetUserAns;
+			            {error,file_exists} ->
+				            lager:warning("Root dir for user ~s already exists!",[Login]),
+				            case create_dirs_at_storage(Login, get_team_names(User)) of
+					            ok -> ok;
+					            DirsError -> throw(DirsError)
+				            end,
+				            GetUserAns;
+		                _ ->
+			                throw({RootAns, UserRec})
+		            end;
+		          _ ->
+		            throw(GetUserAns)
+		        end;
+			_ ->
+			    throw({error, {UUID,QuotaUUID}})
+	    end
+    catch
+    _Type:Error  ->
+	    lager:info("Creating user failed with error: ~p",[Error]),
+	    case QuotaAns of
+			ok ->
+				dao_lib:apply(dao_users, remove_quota, [QuotaUUID],1);
+			_ -> already_clean
+		end,
+		case DaoAns of
+			ok ->
+				dao_lib:apply(dao_users, remove_user, [{uuid,UUID}],1);
+			_ -> already_clean
+		end,
+	    case get(created_team_dirs) of
+			TeamDirUUIDs when is_list(TeamDirUUIDs) ->
+				[dao_lib:apply(dao_vfs, remove_file, [{uuid,TeamDirUUID}], 1) || TeamDirUUID <- TeamDirUUIDs];
+			_ -> already_clean
+	    end,
+	    case get(created_root_dir) of
+			RootDir when is_list(RootDir) ->
+				dao_lib:apply(dao_vfs, remove_file, [{uuid,RootDir}], 1);
+			_ -> already_clean
+	    end,
+	    Error
+	end.
 
 
 %% get_user/1
@@ -500,8 +542,7 @@ shortname_to_oid_code(Shortname) ->
 %% ====================================================================
 %% @doc Creates root directory for user.
 %% @end
--spec create_root(Dir :: string(), Uid :: term()) -> ok | Error when
-    Error :: atom().
+-spec create_root(Dir :: string(), Uid :: term()) -> {ok, uuid()} | {error,atom()}.
 %% ====================================================================
 create_root(Dir, Uid) ->
     {ParentFound, ParentInfo} = fslogic_utils:get_parent_and_name_from_path(Dir, 1),
@@ -511,13 +552,8 @@ create_root(Dir, Uid) ->
             File = #file{type = ?DIR_TYPE, name = FileName, uid = Uid, parent = Parent#veil_document.uuid, perms = ?UserRootPerms},
             CTime = fslogic_utils:time(),
             FileDoc = fslogic_utils:update_meta_attr(File, times, {CTime, CTime, CTime}),
-            SaveAns = dao_lib:apply(dao_vfs, save_new_file, [Dir, FileDoc], 1),
-            case SaveAns of
-                {error, file_exists} ->
-                    root_exists;
-                _ -> ok
-            end;
-        _ParentError -> parent_error
+            dao_lib:apply(dao_vfs, save_new_file, [Dir, FileDoc], 1);
+        _ParentError -> {error,parent_error}
     end.
 
 %% create_dirs_at_storage/2
@@ -565,6 +601,7 @@ create_dirs_at_storage(Root, Teams, Storage) ->
 					_ ->
 						lager:error("Can not change owner of dir ~p using storage helper ~p. Make sure group '~s' is defined in the system.",
 							[Dir, SHI#storage_helper_info.name, Dir]),
+						storage_files_manager:delete_dir(SHI, DirName),
 						error
 				end;
 			{error, dir_or_file_exists} ->
@@ -577,9 +614,9 @@ create_dirs_at_storage(Root, Teams, Storage) ->
 		end
 	end,
 
-	Ans2 = case Root of
+	{RootDirAns,RootDirCreated} = case Root of
 			non ->
-				ok;
+				{ok,false};
 			_ ->
 				RootDirName = "users/" ++ Root,
 				Ans = storage_files_manager:mkdir(SHI, RootDirName),
@@ -589,23 +626,44 @@ create_dirs_at_storage(Root, Teams, Storage) ->
 						storage_files_manager:chmod(SHI, RootDirName, 8#300),
 						case Ans3 of
 							ok ->
-								ok;
+								{ok,true};
 							_ ->
 								lager:error("Can not change owner of dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
 									[Root, SHI#storage_helper_info.name, Root]),
-								error
+								{error,true}
+						end;
+					{error, dir_or_file_exists} ->
+						lager:warning("User root dir ~p already exists",[RootDirName]),
+						Ans3 = storage_files_manager:chown(SHI, RootDirName, Root, Root),
+						storage_files_manager:chmod(SHI, RootDirName, 8#300),
+						case Ans3 of
+							ok ->
+								{ok,false};
+							_ ->
+								lager:error("Can not change owner of dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
+									[Root, SHI#storage_helper_info.name, Root]),
+								{error,false}
 						end;
 					_ ->
 						lager:error("Can not create dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
 							[Root, SHI#storage_helper_info.name, Root]),
-						error
+						{error,false}
 				end
 			end,
-	Ans4 = lists:foldl(CreateTeamsDirs, ok, Teams),
-	case {Ans2, Ans4} of
-		{ok, ok} ->
-			ok;
-		_ -> create_dir_error
+
+	case RootDirAns of
+		ok ->
+			TeamDirsAns = lists:foldl(CreateTeamsDirs, ok, Teams),
+			case {TeamDirsAns, RootDirCreated} of
+				{ok, _} ->
+					ok;
+				{error, true } ->
+					storage_files_manager:delete_dir(SHI, "users/"++Root),
+					create_dir_error;
+				{error,false} ->
+					create_dir_error
+
+			end
 	end.
 
 %% get_team_names/1
@@ -634,24 +692,29 @@ get_team_names(UserQuery) ->
 -spec create_team_dir(Dir :: string()) -> {ok, UUID :: uuid()} | {error, Reason :: any()} | no_return().
 %% ====================================================================
 create_team_dir(TeamName) ->
-    CTime = fslogic_utils:time(),
-    GFile = #file{type = ?DIR_TYPE, name = ?GROUPS_BASE_DIR_NAME, uid = "0", parent = "", perms = 8#555},
-    GFileDoc = fslogic_utils:update_meta_attr(GFile, times, {CTime, CTime, CTime}),
-    %% TODO - first get, next if not exists, create new
-    {SaveStatus, UUID} = dao_lib:apply(dao_vfs, save_new_file, ["/" ++ ?GROUPS_BASE_DIR_NAME, GFileDoc], 1),
-    GroupsBase = case {SaveStatus, UUID} of
-                     {ok, _} -> UUID;
-                     {error, file_exists} ->
-                         case dao_lib:apply(dao_vfs, get_file, ["/" ++ ?GROUPS_BASE_DIR_NAME], 1) of
-                             {ok, #veil_document{uuid = UUID1}} -> UUID1;
-                             {error, Reason2} ->
-                                 ?error("Error while getting groups base dir: ~p", [Reason2]),
-                                 error({error, Reason2})
-                         end;
-                     {error, Reason} ->
-                         ?error("Error while getting groups base dir: ~p", [Reason]),
-                         error({error, Reason})
-                 end,
+	CTime = fslogic_utils:time(),
+	GroupsBase = case dao_lib:apply(dao_vfs, exist_file, ["/" ++ ?GROUPS_BASE_DIR_NAME], 1) of
+		{ok,true} ->
+			case dao_lib:apply(dao_vfs, get_file, ["/" ++ ?GROUPS_BASE_DIR_NAME], 1) of
+				{ok,#veil_document{uuid = UUID}} ->
+					UUID;
+				{error,Reason} ->
+					?error("Error while getting groups base dir: ~p", [Reason]),
+					error({error, Reason})
+			end;
+		{ok,false}->
+			GFile = #file{type = ?DIR_TYPE, name = ?GROUPS_BASE_DIR_NAME, uid = "0", parent = "", perms = 8#555},
+			GFileDoc = fslogic_utils:update_meta_attr(GFile, times, {CTime, CTime, CTime}),
+			case dao_lib:apply(dao_vfs, save_new_file, ["/" ++ ?GROUPS_BASE_DIR_NAME, GFileDoc], 1) of
+				{ok, UUID} -> UUID;
+				{error, Reason} ->
+					?error("Error while creating groups base dir: ~p", [Reason]),
+					error({error, Reason})
+			end;
+		{error,Reason} ->
+			?error("Error while checking existence of groups base dir: ~p", [Reason]),
+			error({error, Reason})
+	end,
 
     TFile = #file{type = ?DIR_TYPE, name = TeamName, uid = "0", gids = [TeamName], parent = GroupsBase, perms = 8#770},
     TFileDoc = fslogic_utils:update_meta_attr(TFile, times, {CTime, CTime, CTime}),
