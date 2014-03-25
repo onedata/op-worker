@@ -2,12 +2,7 @@
 <module type="ERLANG_MODULE" version="4">
   <component name="FacetManager">
     <facet type="erlang" name="Erlang">
-      <configuration>
-        <includePaths>
-          <path value="$MODULE_DIR$/include" />
-          <path value="$MODULE_DIR$/test_distributed" />
-        </includePaths>
-      </configuration>
+      <configuration />
     </facet>
   </component>
   <component name="NewModuleRootManager" inherit-compiler-output="false">
