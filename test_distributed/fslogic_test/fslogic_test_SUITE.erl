@@ -1198,14 +1198,14 @@ user_creation_test(Config) ->
   {OwnStatus5, User5, Group5} = files_tester:get_owner(?TEST_ROOT2 ++ "/users/" ++ Login),
   ?assertEqual(ok, OwnStatus5),
   ?assertEqual(User, User5),
-  ?assertEqual(Group, Group5),
+
+  %% Groups are not changed currently in this context
+  %% ?assertEqual(Group, Group5),
 
   {OwnStatus6, User6, Group6} = files_tester:get_owner(?TEST_ROOT2 ++ "/groups/" ++ Team1),
   ?assertEqual(ok, OwnStatus6),
   ?assertEqual(User0, User6),
-
-  %% Groups are not changed currently in this context
-  %% ?assertEqual(Group2, Group6),
+  ?assertEqual(Group2, Group6),
 
   {ReadFileAns2, PemBin2} = file:read_file(Cert2),
   ?assertEqual(ok, ReadFileAns2),
