@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This file contains Nitrogen website code
+%% @doc: This file contains n2o website code
 %% @end
 %% ===================================================================
 
@@ -53,8 +53,15 @@ render_ender() ->
     ].
 
 event(ble) ->
-    wf:update(test_id, <<"This string contains apostrophe">>);
-event(init) -> ok.
+    gui_utils:update(test_id, <<"This string contains apostrophe">>);
+event(init) ->
+    gui_utils:comet(fun() -> comet_loop(0) end).
+
+comet_loop(Counter) ->
+    gui_utils:update("test_id", integer_to_binary(Counter)),
+    gui_utils:flush(),
+    timer:sleep(100),
+    comet_loop(Counter + 1).
 
 %%
 %% % Page content
@@ -695,7 +702,7 @@ event(init) -> ok.
 %%                     #bootstrap_button { class="btn btn-success btn-wide", body="Ok", id=wire_click({action, create_directory, [{q, create_dir_textbox}]})}
 %%                 ]}
 %%             ],
-%%             {Body, "obj('create_dir_textbox').focus();", {action, hide_popup}};
+%%             {Body, "$('#create_dir_textbox').focus();", {action, hide_popup}};
 %%
 %%         rename_item ->
 %%             Filename = filename:basename(lists:nth(1, get_key(selected_items))),
@@ -714,16 +721,16 @@ event(init) -> ok.
 %%                 ]}
 %%             ],
 %%             {Body,
-%%                 wf:f("obj('new_name_textbox').focus();
-%%                 if (typeof obj('new_name_textbox').selectionStart != \"undefined\")
+%%                 wf:f("$('#new_name_textbox').focus();
+%%                 if (typeof $('#new_name_textbox').selectionStart != \"undefined\")
 %%                 {
-%%                     obj('new_name_textbox').selectionStart = ~B;
-%%                     obj('new_name_textbox').selectionEnd = ~B;
+%%                     $('#new_name_textbox').selectionStart = ~B;
+%%                     $('#new_name_textbox').selectionEnd = ~B;
 %%                 }
 %%                 else if (document.selection && document.selection.createRange)
 %%                 {
 %%                     // IE branch
-%%                     obj('new_name_textbox').select();
+%%                     $('#new_name_textbox').select();
 %%                     var range = document.selection.createRange();
 %%                     range.collapse(true);
 %%                     range.moveEnd(\"character\", ~B);
@@ -751,12 +758,11 @@ event(init) -> ok.
 %%                     new -> #p { body="<b>" ++ Filename ++ "</b> successfully shared. Visit <b>Shared files</b> tab for more." }
 %%                 end,
 %%                 #form { class="control-group", body=[
-%%                     %% todo add hostname dynamically
 %%                     #textbox { id=wire_enter(shared_link_textbox, {action, hide_popup}), class="flat", style="width: 700px;",
 %%                         text=AddressPrefix ++ ShareID, placeholder="Download link" }
 %%                 ]}
 %%             ],
-%%             {Body, "obj('shared_link_textbox').focus(); obj('shared_link_textbox').select();",
+%%             {Body, "$('#shared_link_textbox').focus(); $('#shared_link_textbox').select();",
 %%                 {action, hide_popup}};
 %%
 %%         file_upload ->
@@ -799,28 +805,8 @@ event(init) -> ok.
 %%                                 class="btn btn-danger btn-wide", body="Cancel" }
 %%                         ]}
 %%                     ],
-%%                     {Body, "obj('ok_button').focus();", {action, hide_popup}}
+%%                     {Body, "$('#ok_button').focus();", {action, hide_popup}}
 %%             end;
-%%
-%%         % todo own checkbox element (collision with nitrogen's)
-%%         advanced2 ->
-%%             Body = [
-%%                 #form { class="control-group", body=[
-%%                     #p { text="Displayed attributes" },
-%%                     #panel { style="text-aalign: left;", body=[
-%%                         #label { class="checkbox primary", for="checkbox5", body=[
-%%                             #span { class="icons", body=[
-%%                                 #span { class="first-icon fui-checkbox-unchecked" },
-%%                                 #span { class="second-icon fui-checkbox-checked" }
-%%                             ]},
-%%                             #checkbox { value="", id="checkbox5" },
-%%                             "Unchecked"
-%%                         ]}
-%%                     ]}
-%%                 ]}
-%%             ],
-%%             {Body, undefined, {action, hide_popup}};
-%%
 %%
 %%         _ ->
 %%             {[], undefined, undefined}

@@ -5,13 +5,14 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This file contains Nitrogen website code
+%% @doc: This file contains n2o website code
 %% @end
 %% ===================================================================
 
 -module(page_logout).
 -compile(export_all).
 -include("veil_modules/control_panel/common.hrl").
+-include("logging.hrl").
 
 %% Template points to the template file, which will be filled with content
 main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}.
@@ -21,9 +22,7 @@ title() -> <<"Logout page">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    wf:user(undefined),
-    wf:session(user_doc, undefined),
-    %wf:logout(), % Not yet implemented in n2o
+    wf:logout(),
     #panel{style = <<"position: relative;">>, body =
     [
         #panel{class = <<"alert alert-success login-page">>, body = [

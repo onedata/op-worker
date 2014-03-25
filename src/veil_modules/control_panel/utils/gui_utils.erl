@@ -17,7 +17,9 @@
 -export([user_logged_in/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0]).
 -export([redirect_to_login/1, redirect_from_login/0]).
 -export([apply_or_redirect/3, apply_or_redirect/4, top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
--export([to_list/1, to_binary/1]).
+-export([comet/1, init_comet/2, flush/0]).
+-export([update/2, replace/2, insert_top/2, insert_bottom/2, insert_before/2, insert_after/2, remove/1]).
+-export([to_list/1, to_binary/1, join_to_binary/1]).
 
 
 %% ====================================================================
@@ -194,7 +196,7 @@ top_menu(ActiveTabID) ->
 %% ====================================================================
 %% @doc Convienience function to render top menu in GUI pages. 
 %% Item with ActiveTabID will be highlighted as active. 
-%% Submenu body (list of nitrogen elements) will be concatenated below the main menu.
+%% Submenu body (list of n2o elements) will be concatenated below the main menu.
 %% @end
 -spec top_menu(ActiveTabID :: any(), SubMenuBody :: any()) -> list().
 %% ====================================================================
@@ -297,6 +299,47 @@ empty_page() ->
     ].
 
 
+%% comet/1
+%% ====================================================================
+%% @doc Spawns an asynchronous process connected to the calling process.
+%% The calling process must be the websocket process of n2o framework.
+%% Allows flushing actions / events to the main process (async updates).
+%% @end
+-spec comet(function()) -> {ok, pid()} | no_return().
+%% ====================================================================
+comet(CometFun) ->
+    process_flag(trap_exit, true),
+    Pid = spawn_link(?MODULE, init_comet, [self(), CometFun]),
+    {ok, Pid}.
+
+
+%% init_comet/2
+%% ====================================================================
+%% @doc Internal function used to initialize an asynchronous "comet" process.
+%% @end
+-spec init_comet(pid(), fun()) -> no_return().
+%% ====================================================================
+init_comet(OwnerPid, Fun) ->
+    timer:sleep(200), % defer the comet process so that n2o websocket process
+    % can initialize
+    put(ws_process, OwnerPid),
+    wf_context:init_context([]),
+    Fun().
+
+
+%% flush/0
+%% ====================================================================
+%% @doc Flushes accumulated events to websocket process, causing page update.
+%% @end
+-spec flush() -> ok.
+%% ====================================================================
+flush() ->
+    Actions = wf_context:actions(),
+    wf_context:clear_actions(),
+    get(ws_process) ! {flush, Actions},
+    ok.
+
+
 %% to_list/1
 %% ====================================================================
 %% @doc Converts any term to list.
@@ -320,6 +363,88 @@ to_list(Term) ->
 %% ====================================================================
 to_binary(Term) when is_binary(Term) -> Term;
 to_binary(Term) -> list_to_binary(to_list(Term)).
+
+
+%% join_to_binary/1
+%% ====================================================================
+%% @doc Joins any terms to a js-escaped binary.
+%% @end
+-spec join_to_binary([term()]) -> binary().
+%% ====================================================================
+join_to_binary(Terms) ->
+    join_to_binary(Terms, <<"">>).
+
+join_to_binary([], Acc) ->
+    Acc;
+
+join_to_binary([H | T], Acc) ->
+    join_to_binary(T, <<Acc/binary, (to_binary(H))/binary>>).
+
+
+% Set of update functions from n2o, slightly changed
+
+
+%% update/2
+%% ====================================================================
+%% @doc Updates contents of a DOM element.
+%% @end
+-spec update(term(), term()) -> ok.
+%% ====================================================================
+update(Target, Elements) -> wf:wire(#jquery{target = Target, method = ["html"], args = [Elements], format="'~s'"}).
+
+
+%% replace/2
+%% ====================================================================
+%% @doc Replaces a DOM element with another.
+%% @end
+-spec replace(term(), term()) -> ok.
+%% ====================================================================
+replace(Target, Elements) -> wf:wire(#jquery{target = Target, method = ["replaceWith"], args = [Elements], format="'~s'"}).
+
+
+%% insert_top/2
+%% ====================================================================
+%% @doc Prepends an element to a DOM element.
+%% @end
+-spec insert_top(term(), term()) -> ok.
+%% ====================================================================
+insert_top(Target, Elements) -> wf:wire(#jquery{target = Target, method = ["prepend"], args = [Elements], format="'~s'"}).
+
+
+%% insert_bottom/2
+%% ====================================================================
+%% @doc Appends an element to a DOM element.
+%% @end
+-spec insert_bottom(term(), term()) -> ok.
+%% ====================================================================
+insert_bottom(Target, Elements) -> wf:wire(#jquery{target = Target, method = ["append"], args = [Elements], format="'~s'"}).
+
+
+%% insert_before/2
+%% ====================================================================
+%% @doc Inserts an element before a DOM element.
+%% @end
+-spec insert_before(term(), term()) -> ok.
+%% ====================================================================
+insert_before(Target, Elements) -> wf:wire(#jquery{target = Target, method = ["before"], args = [Elements], format="'~s'"}).
+
+
+%% insert_after/2
+%% ====================================================================
+%% @doc Inserts an element after a DOM element.
+%% @end
+-spec insert_after(term(), term()) -> ok.
+%% ====================================================================
+insert_after(Target, Elements) -> wf:wire(#jquery{target = Target, method = ["after"], args = [Elements], format="'~s'"}).
+
+
+%% remove/1
+%% ====================================================================
+%% @doc Updates an element from DOM.
+%% @end
+-spec remove(term()) -> ok.
+%% ====================================================================
+remove(Target) -> wf:wire(#jquery{target = Target, method = ["remove"]}).
 
 
 % old_menu_captions() ->

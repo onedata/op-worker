@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This file contains Nitrogen website code
+%% @doc: This file contains n2o website code
 %% @end
 %% ===================================================================
 
@@ -44,7 +44,7 @@ body() ->
 event(init) -> ok;
 % Login event handling
 event(login) ->
-    % Collect nitrogen redirect params if present
+    % Collect redirect param if present
     RedirectParam = case wf:q(<<"x">>) of
                         undefined -> <<"">>;
                         Val -> <<"?x=", Val/binary>>
@@ -53,14 +53,14 @@ event(login) ->
     Hostname = gui_utils:get_requested_hostname(),
     case Hostname of
         undefined ->
-            wf:update("error_message", <<"Cannot establish requested hostname. Please contact the site administrator.">>),
-            wf:wire(#jq{target = "error_message", method = ["fadeIn"], args = [300]});
+            gui_utils:update("error_message", <<"Cannot establish requested hostname. Please contact the site administrator.">>),
+            wf:wire(#jquery{target = "error_message", method = ["fadeIn"], args = [300]});
         Host ->
             % Get redirect URL and redirect to OpenID login
             case openid_utils:get_login_url(Host, RedirectParam) of
                 {error, _} ->
-                    wf:update("error_message", <<"Unable to reach OpenID Provider. Please try again later.">>),
-                    wf:wire(#jq{target = "error_message", method = ["fadeIn"], args = [300]});
+                    gui_utils:update("error_message", <<"Unable to reach OpenID Provider. Please try again later.">>),
+                    wf:wire(#jquery{target = "error_message", method = ["fadeIn"], args = [300]});
                 URL ->
                     wf:redirect(URL)
             end

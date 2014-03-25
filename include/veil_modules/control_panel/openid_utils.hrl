@@ -40,7 +40,6 @@
 
 
 % Macros used to extract parameters from OpenID response
-% They are atoms so use of nitrogen wf:q is straightforward
 -define(openid_login_key, "openid.sreg.nickname").
 -define(openid_name_key, "openid.sreg.fullname").
 -define(openid_teams_key, "openid.ext1.value.teams").

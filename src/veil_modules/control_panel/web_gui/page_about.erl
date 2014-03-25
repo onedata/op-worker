@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This file contains Nitrogen website code
+%% @doc: This file contains n2o website code
 %% @end
 %% ===================================================================
 
@@ -75,7 +75,7 @@ about_table() ->
 get_license() ->
     case file:read_file(?path_to_license_file) of
         {ok, File} -> File;
-        {error, Error} -> wf:to_binary(Error)
+        {error, Error} -> gui_utils:to_binary(Error)
     end.
 
 % HTML list with developers printed

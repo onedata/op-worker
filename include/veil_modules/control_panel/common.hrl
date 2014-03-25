@@ -13,7 +13,7 @@
 -define(CONTROL_PANEL_COMMON_HRL, 1).
 
 -include_lib("n2o/include/wf.hrl").
--include_lib("veil_modules/control_panel/nitrogen_records.hrl").
+-include_lib("veil_modules/control_panel/custom_elements.hrl").
 
 % Relative suffix of GUI address, leading to shared files
 -define(shared_files_download_path, "/share/").

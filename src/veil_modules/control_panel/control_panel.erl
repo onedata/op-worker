@@ -147,7 +147,6 @@ init_dispatch(DocRoot, StaticPaths) ->
 
     % Set up dispatch
     Dispatch = [
-        % Nitrogen will handle everything that's not handled in the StaticDispatches
         {'_', StaticDispatches ++ [
             {"/nagios/[...]", nagios_handler, []},
             {"/ws/[...]", bullet_handler, [{handler, n2o_bullet}]},

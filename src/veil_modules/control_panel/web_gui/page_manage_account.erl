@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This file contains Nitrogen website code
+%% @doc: This file contains n2o website code
 %% @end
 %% ===================================================================
 
@@ -54,16 +54,16 @@ render_body() ->
 % Info to register a DN
 maybe_display_dn_message() ->
     case user_logic:get_dn_list(wf:session(user_doc)) of
-        [] -> wf:wire(#jq{target = "dn_error_panel", method = ["show"]});
-        _ -> wf:wire(#jq{target = "dn_error_panel", method = ["hide"]})
+        [] -> wf:wire(#jquery{target = "dn_error_panel", method = ["show"]});
+        _ -> wf:wire(#jquery{target = "dn_error_panel", method = ["hide"]})
     end.
 
 
 % Info to install a storage helper
 maybe_display_helper_message() ->
     case gui_utils:storage_defined() of
-        false -> wf:wire(#jq{target = "helper_error_panel", method = ["show"]});
-        true -> wf:wire(#jq{target = "helper_error_panel", method = ["hide"]})
+        false -> wf:wire(#jquery{target = "helper_error_panel", method = ["show"]});
+        true -> wf:wire(#jquery{target = "helper_error_panel", method = ["hide"]})
     end.
 
 
@@ -208,7 +208,7 @@ update_email(User, AddOrRemove) ->
                         {remove, Email} -> user_logic:update_email_list(User, OldEmailList -- [Email])
                     end,
     wf:session(user_doc, NewUser),
-    wf:update("main_table", main_table()).
+    gui_utils:update("main_table", main_table()).
 
 
 % Update DN list - add or remove one and save new user doc
@@ -237,23 +237,23 @@ update_dn(User, AddOrRemove) ->
             {ok, NewUser} = user_logic:update_dn_list(User, OldDnList -- [DN]),
             wf:session(user_doc, NewUser)
     end,
-    wf:update("main_table", main_table()).
+    gui_utils:update("main_table", main_table()).
 
 
 % Show email adding form
 show_email_adding(Flag) ->
     case Flag of
         true ->
-            wf:wire(#jq{target = "add_email_button", method = ["hide"]}),
-            wf:wire(#jq{target = "new_email_textbox", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jq{target = "new_email_cancel", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jq{target = "new_email_submit", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jq{target = "new_email_textbox", method = ["focus"]});
+            wf:wire(#jquery{target = "add_email_button", method = ["hide"]}),
+            wf:wire(#jquery{target = "new_email_textbox", method = ["fadeIn"], args = [300]}),
+            wf:wire(#jquery{target = "new_email_cancel", method = ["fadeIn"], args = [300]}),
+            wf:wire(#jquery{target = "new_email_submit", method = ["fadeIn"], args = [300]}),
+            wf:wire(#jquery{target = "new_email_textbox", method = ["focus"]});
         false ->
-            wf:wire(#jq{target = "add_email_button", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jq{target = "new_email_textbox", method = ["hide"]}),
-            wf:wire(#jq{target = "new_email_cancel", method = ["hide"]}),
-            wf:wire(#jq{target = "new_email_submit", method = ["hide"]})
+            wf:wire(#jquery{target = "add_email_button", method = ["fadeIn"], args = [300]}),
+            wf:wire(#jquery{target = "new_email_textbox", method = ["hide"]}),
+            wf:wire(#jquery{target = "new_email_cancel", method = ["hide"]}),
+            wf:wire(#jquery{target = "new_email_submit", method = ["hide"]})
     end.
 
 
@@ -261,14 +261,14 @@ show_email_adding(Flag) ->
 show_dn_adding(Flag) ->
     case Flag of
         true ->
-            wf:wire(#jq{target = "add_dn_button", method = ["hide"]}),
-            wf:wire(#jq{target = "new_dn_textbox", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jq{target = "new_dn_submit", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jq{target = "new_dn_cancel", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jq{target = "new_dn_textbox", method = ["focus"]});
+            wf:wire(#jquery{target = "add_dn_button", method = ["hide"]}),
+            wf:wire(#jquery{target = "new_dn_textbox", method = ["fadeIn"], args = [300]}),
+            wf:wire(#jquery{target = "new_dn_submit", method = ["fadeIn"], args = [300]}),
+            wf:wire(#jquery{target = "new_dn_cancel", method = ["fadeIn"], args = [300]}),
+            wf:wire(#jquery{target = "new_dn_textbox", method = ["focus"]});
         false ->
-            wf:wire(#jq{target = "add_dn_button", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jq{target = "new_dn_textbox", method = ["hide"]}),
-            wf:wire(#jq{target = "new_dn_cancel", method = ["hide"]}),
-            wf:wire(#jq{target = "new_dn_submit", method = ["hide"]})
+            wf:wire(#jquery{target = "add_dn_button", method = ["fadeIn"], args = [300]}),
+            wf:wire(#jquery{target = "new_dn_textbox", method = ["hide"]}),
+            wf:wire(#jquery{target = "new_dn_cancel", method = ["hide"]}),
+            wf:wire(#jquery{target = "new_dn_submit", method = ["hide"]})
     end.

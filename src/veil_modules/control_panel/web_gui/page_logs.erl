@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This file contains Nitrogen website code
+%% @doc: This file contains n2o website code
 %% @end
 %% ===================================================================
 
@@ -66,21 +66,15 @@ body() ->
 
 % User can view logs, render the body
 render_body() ->
-    % Start a comet process
-    {ok, Pid} = wf:comet(fun() -> comet_loop_init() end),
-
-    % Subscribe for logs at central_logger
-    gen_server:call(?Dispatcher_Name, {central_logger, 1, {subscribe, Pid}}),
-
     _Body = [
-        gui_utils:top_menu(logs_tab, logs_submenu(Pid)),
+        gui_utils:top_menu(logs_tab, logs_submenu()),
         #panel{style = <<"margin-top: 122px; z-index: -1;">>, body = main_table()},
         footer_popup()
     ].
 
 
 % Submenu that will end up concatenated to top menu
-logs_submenu(Pid) ->
+logs_submenu() ->
     [
         #panel{class = <<"navbar-inner">>, style = <<"border-bottom: 1px solid gray; padding-bottom: 5px;">>, body = [
             #panel{class = <<"container">>, body = [
@@ -90,7 +84,7 @@ logs_submenu(Pid) ->
                         class = <<"btn btn-inverse btn-small">>, style = <<"width: 150px;">>, body = <<"Loglevel: <b>debug</b>">>},
                     #button{title = <<"Minimum log severity to be displayed">>, class = <<"btn btn-inverse btn-small dropdown-toggle">>,
                         data_fields = [{<<"data-toggle">>, <<"dropdown">>}], body = #span{class = <<"caret">>}},
-                    #list{id = "loglevel_dropdown", class = <<"dropdown-menu dropdown-inverse">>, body = loglevel_dropdown_body(debug, Pid)}
+                    #list{id = "loglevel_dropdown", class = <<"dropdown-menu dropdown-inverse">>, body = loglevel_dropdown_body(debug)}
                 ]},
                 #panel{class = <<"btn-group">>, style = "margin: 12px 15px;", body = [
                     <<"<i class=\"dropdown-arrow dropdown-arrow-inverse\"></i>">>,
@@ -99,10 +93,10 @@ logs_submenu(Pid) ->
                     #button{title = <<"Maximum number of logs to be displayed - oldest logs will be discarded">>,
                         class = <<"btn btn-inverse btn-small dropdown-toggle">>, data_fields = [{<<"data-toggle">>, <<"dropdown">>}],
                         body = #span{class = <<"caret">>}},
-                    #list{id = "max_logs_dropdown", class = <<"dropdown-menu dropdown-inverse">>, body = max_logs_dropdown_body(200, Pid)}
+                    #list{id = "max_logs_dropdown", class = <<"dropdown-menu dropdown-inverse">>, body = max_logs_dropdown_body(200)}
                 ]},
                 #panel{class = <<"btn-group">>, style = <<"margin: 12px 15px;">>, body = [
-                    #button{postback = {Pid, show_filters_popup}, class = <<"btn btn-inverse">>,
+                    #button{postback = show_filters_popup, class = <<"btn btn-inverse">>,
                         style = <<"width: 110px; height: 34px; padding: 6px 13px 8px;">>, id = "show_filters_button",
                         body = <<"Edit filters">>}
                 ]},
@@ -113,12 +107,12 @@ logs_submenu(Pid) ->
 
                 #list{class = <<"nav pull-right">>, body = [
                     #li{id = "generate_logs", body = #link{title = <<"Clear all logs">>, style = <<"padding: 18px 14px;">>,
-                        body = #span{class = <<"fui-trash">>}, postback = {Pid, clear_all_logs}}}
+                        body = #span{class = <<"fui-trash">>}, postback = clear_all_logs}}
                 ]},
                 #panel{class = <<"btn-group pull-right">>, style = <<"padding: 7px 14px 0px; margin-top: 7px;">>, body = [
                     #label{id = "auto_scroll_checkbox", class = <<"checkbox checked">>, for = <<"auto_scroll_checkbox">>,
                         style = <<"display: block; font-weight: bold;">>,
-                        actions = #event{type = "click", postback = {Pid, toggle_auto_scroll}, target = "auto_scroll_checkbox"}, body = [
+                        actions = #event{type = "click", postback = toggle_auto_scroll, target = "auto_scroll_checkbox"}, body = [
                             #span{class = <<"icons">>},
                             #checkbox{id = "auto_scroll_checkbox", data_fields = [{<<"data-toggle">>, <<"checkbox">>}],
                                 value = <<"">>, checked = true},
@@ -152,7 +146,7 @@ footer_popup() ->
 
 
 % This will be placed in footer_popup after user selects to edit logs
-filters_panel(Pid) ->
+filters_panel() ->
     CloseButton = #link{postback = hide_filters_popup, title = <<"Hide">>, class = <<"glyph-link">>,
         style = <<"position: absolute; top: 8px; right: 8px; z-index: 3;">>,
         body = #span{class = <<"fui-cross">>, style = <<"font-size: 20px;">>}},
@@ -160,31 +154,31 @@ filters_panel(Pid) ->
         CloseButton,
         #panel{style = <<"margin: 0 40px; overflow:hidden; position: relative;">>, body = [
             #panel{style = <<"float: left; position: relative;">>, body = [
-                filter_form(message_filter, Pid),
-                filter_form(node_filter, Pid)
+                filter_form(message_filter),
+                filter_form(node_filter)
             ]},
             #panel{style = <<"float: left; position: relative; clear: both;">>, body = [
-                filter_form(module_filter, Pid),
-                filter_form(function_filter, Pid)
+                filter_form(module_filter),
+                filter_form(function_filter)
             ]}
         ]}
     ].
 
 
 % Creates a set of elements used to edit filter preferences of a single filter
-filter_form(FilterType, Pid) ->
+filter_form(FilterType) ->
     #span{style = <<"display: inline-block; position: relative; height: 42px; margin-bottom: 15px; width: 410px; text-align: left;">>, body = [
         #label{id = get_filter_label(FilterType), style = <<"display: inline; margin: 9px 14px;">>,
-            actions = #event{type = "click", postback = {Pid, toggle_filter, FilterType}, target = get_filter_label(FilterType)},
+            actions = #event{type = "click", postback = {toggle_filter, FilterType}, target = get_filter_label(FilterType)},
             class = <<"label label-large label-inverse">>, body = get_filter_name(FilterType)},
         #p{id = get_filter_none(FilterType), style = <<"display: inline;">>, body = <<"off">>},
         #panel{id = get_filter_panel(FilterType), class = <<"input-append">>, style = <<"margin-bottom: 0px; display: inline;">>, body = [
             #textbox{id = get_filter_textbox(FilterType), class = <<"span2">>, body = <<"">>,
-                placeholder = get_filter_placeholder(FilterType), postback = {Pid, update_filter, FilterType},
+                placeholder = get_filter_placeholder(FilterType), postback = {update_filter, FilterType},
                 source = [get_filter_textbox(FilterType)]},
             #panel{class = <<"btn-group">>, body = [
                 #button{class = <<"btn">>, type = <<"button">>, title = <<"Save">>,
-                    body = #span{class = <<"fui-check">>}, postback = {Pid, update_filter, FilterType},
+                    body = #span{class = <<"fui-check">>}, postback = {update_filter, FilterType},
                     source = [get_filter_textbox(FilterType)]}
             ]}
         ]}
@@ -224,8 +218,8 @@ comet_loop(Counter, PageState = #page_state{first_log = FirstLog, auto_scroll = 
     catch _Type:_Msg ->
         ?debug_stacktrace("~p ~p", [_Type, _Msg]),
         gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}}),
-        wf:insert_bottom("main_table", comet_error()),
-        wf:flush(room)
+        gui_utils:insert_bottom("main_table", comet_error()),
+        gui_utils:flush()
     end.
 
 
@@ -252,8 +246,8 @@ process_log(Counter, {Message, Timestamp, Severity, Metadata},
                                        false ->
                                            {Counter, PageState};
                                        true ->
-                                           wf:insert_bottom("main_table", render_row(Counter, {Message, Timestamp, Severity, Metadata})),
-                                           wf:wire(#jq{target = ?EXPANDED_LOG_ROW_ID_PREFIX ++ integer_to_list(Counter), method = ["hide"]}),
+                                           gui_utils:insert_bottom("main_table", render_row(Counter, {Message, Timestamp, Severity, Metadata})),
+                                           wf:wire(#jquery{target = ?EXPANDED_LOG_ROW_ID_PREFIX ++ integer_to_list(Counter), method = ["hide"]}),
                                            NewFirstLog = remove_old_logs(Counter, FirstLog, MaxLogs),
                                            case AutoScroll of
                                                false ->
@@ -261,7 +255,7 @@ process_log(Counter, {Message, Timestamp, Severity, Metadata},
                                                true ->
                                                    wf:wire("$('html, body').animate({scrollTop: $(document).height()}, 50);")
                                            end,
-                                           wf:flush(room),
+                                           gui_utils:flush(),
                                            {Counter + 1, PageState#page_state{first_log = NewFirstLog}}
                                    end.
 
@@ -270,11 +264,11 @@ process_log(Counter, {Message, Timestamp, Severity, Metadata},
 remove_old_logs(Counter, FirstLog, MaxLogs) ->
     case FirstLog + MaxLogs =< Counter of
         false ->
-            wf:flush(room),
+            gui_utils:flush(),
             FirstLog;
         true ->
-            wf:remove(?COLLAPSED_LOG_ROW_ID_PREFIX ++ integer_to_list(FirstLog)),
-            wf:remove(?EXPANDED_LOG_ROW_ID_PREFIX ++ integer_to_list(FirstLog)),
+            gui_utils:remove(?COLLAPSED_LOG_ROW_ID_PREFIX ++ integer_to_list(FirstLog)),
+            gui_utils:remove(?EXPANDED_LOG_ROW_ID_PREFIX ++ integer_to_list(FirstLog)),
             remove_old_logs(Counter, FirstLog + 1, MaxLogs)
     end.
 
@@ -305,7 +299,7 @@ render_row(Counter, {Message, Timestamp, Severity, Metadata}) ->
 
 
 % Render the body of loglevel dropdown, so it highlights the current choice
-loglevel_dropdown_body(Active, Pid) ->
+loglevel_dropdown_body(Active) ->
     lists:map(
         fun(Loglevel) ->
             Class = case Loglevel of
@@ -313,13 +307,13 @@ loglevel_dropdown_body(Active, Pid) ->
                         _ -> <<"">>
                     end,
             ID = "loglevel_li_" ++ atom_to_list(Loglevel),
-            #li{id = ID, actions = #event{type = "click", postback = {Pid, set_loglevel, Loglevel}, target = ID},
+            #li{id = ID, actions = #event{type = "click", postback = {set_loglevel, Loglevel}, target = ID},
                 class = Class, body = #link{body = atom_to_binary(Loglevel, latin1)}}
         end, ?LOGLEVEL_LIST).
 
 
 % Render the body of max logs dropdown, so it highlights the current choice
-max_logs_dropdown_body(Active, Pid) ->
+max_logs_dropdown_body(Active) ->
     lists:map(
         fun(Number) ->
             Class = case Number of
@@ -327,7 +321,7 @@ max_logs_dropdown_body(Active, Pid) ->
                         _ -> <<"">>
                     end,
             ID = "maxlogs_li_" ++ integer_to_list(Number),
-            #li{id = ID, actions = #event{type = "click", postback = {Pid, set_max_logs, Number}, target = ID},
+            #li{id = ID, actions = #event{type = "click", postback = {set_max_logs, Number}, target = ID},
                 class = Class, body = #link{body = integer_to_binary(Number)}}
         end, ?MAX_LOGS_OPTIONS).
 
@@ -404,97 +398,104 @@ filter_contains(String, Filter) ->
 % Event handling
 event(init) ->
     put(filters, #page_state{}),
-    wf:reg(room);
+    % Start a comet process
+    {ok, Pid} = gui_utils:comet(fun() -> comet_loop_init() end),
+    put(comet_pid, Pid),
+    % Subscribe for logs at central_logger
+    gen_server:call(?Dispatcher_Name, {central_logger, 1, {subscribe, Pid}});
 
-event({Pid, toggle_auto_scroll}) ->
-    Pid ! toggle_auto_scroll;
+
+event(toggle_auto_scroll) ->
+    get(comet_pid) ! toggle_auto_scroll;
 
 
-event({Pid, clear_all_logs}) ->
-    Pid ! clear_all_logs;
+event(clear_all_logs) ->
+    get(comet_pid) ! clear_all_logs;
 
 
 % Collapse or expand a log
 event({toggle_log, Id, ShowAll}) ->
     case ShowAll of
         true ->
-            wf:wire(#jq{target = ?EXPANDED_LOG_ROW_ID_PREFIX ++ integer_to_list(Id), method = ["fadeIn"], args = ["300"]}),
-            wf:wire(#jq{target = ?COLLAPSED_LOG_ROW_ID_PREFIX ++ integer_to_list(Id), method = ["hide"]});
+            wf:wire(#jquery{target = ?EXPANDED_LOG_ROW_ID_PREFIX ++ integer_to_list(Id), method = ["fadeIn"], args = ["300"]}),
+            wf:wire(#jquery{target = ?COLLAPSED_LOG_ROW_ID_PREFIX ++ integer_to_list(Id), method = ["hide"]});
         false ->
-            wf:wire(#jq{target = ?EXPANDED_LOG_ROW_ID_PREFIX ++ integer_to_list(Id), method = ["hide"]}),
-            wf:wire(#jq{target = ?COLLAPSED_LOG_ROW_ID_PREFIX ++ integer_to_list(Id), method = ["fadeIn"], args = ["300"]})
+            wf:wire(#jquery{target = ?EXPANDED_LOG_ROW_ID_PREFIX ++ integer_to_list(Id), method = ["hide"]}),
+            wf:wire(#jquery{target = ?COLLAPSED_LOG_ROW_ID_PREFIX ++ integer_to_list(Id), method = ["fadeIn"], args = ["300"]})
     end;
 
 
 % Show filters edition panel
-event({Pid, show_filters_popup}) ->
-    wf:wire(#jq{target = "footer_popup", method = ["addClass"], args = ["\"hidden\""]}),
-    wf:update("footer_popup", filters_panel(Pid)),
+event(show_filters_popup) ->
+    wf:wire(#jquery{target = "footer_popup", method = ["addClass"], args = ["\"hidden\""]}),
+    gui_utils:update("footer_popup", filters_panel()),
     lists:foreach(
         fun(FilterType) ->
             event({show_filter, FilterType})
         end, get_filter_types()),
-    wf:wire(#jq{target = "footer_popup", method = ["removeClass"], args = ["\"hidden\""]});
+    wf:wire(#jquery{target = "footer_popup", method = ["removeClass"], args = ["\"hidden\""]});
 
 
 % Hide filters edition panel
 event(hide_filters_popup) ->
-    wf:wire(#jq{target = "footer_popup", method = ["addClass"], args = ["\"hidden\""]});
+    wf:wire(#jquery{target = "footer_popup", method = ["addClass"], args = ["\"hidden\""]});
 
 
 % Change loglevel
-event({Pid, set_loglevel, Loglevel}) ->
-    wf:update("loglevel_label", <<"Loglevel: <b>", (atom_to_binary(Loglevel, latin1))/binary, "</b>">>),
-    wf:update("loglevel_dropdown", loglevel_dropdown_body(Loglevel, Pid)),
-    Pid ! {set_loglevel, Loglevel};
+event({set_loglevel, Loglevel}) ->
+    gui_utils:update("loglevel_label", <<"Loglevel: <b>", (atom_to_binary(Loglevel, latin1))/binary, "</b>">>),
+    gui_utils:update("loglevel_dropdown", loglevel_dropdown_body(Loglevel)),
+    get(comet_pid) ! {set_loglevel, Loglevel};
 
 
 % Change displayed log limit
-event({Pid, set_max_logs, Number}) ->
-    wf:update("max_logs_label", <<"Max logs: <b>", (integer_to_binary(Number))/binary, "</b>">>),
-    wf:update("max_logs_dropdown", max_logs_dropdown_body(Number, Pid)),
-    Pid ! {set_max_logs, Number};
+event({set_max_logs, Number}) ->
+    gui_utils:update("max_logs_label", <<"Max logs: <b>", (integer_to_binary(Number))/binary, "</b>">>),
+    gui_utils:update("max_logs_dropdown", max_logs_dropdown_body(Number)),
+    get(comet_pid) ! {set_max_logs, Number};
 
 
 % Show patricular filter form
 event({show_filter, FilterName}) ->
     Filter = get_filter(get(filters), FilterName),
-    case Filter of
-        undefined ->
-            wf:wire(#jq{target = get_filter_panel(FilterName), method = ["hide"]}),
-            wf:wire(#jq{target = get_filter_none(FilterName), method = ["show"]});
+    case (Filter =:= undefined) orelse (Filter =:= <<"">>) of
+        true ->
+            wf:wire(#jquery{target = get_filter_panel(FilterName), method = ["hide"]}),
+            wf:wire(#jquery{target = get_filter_none(FilterName), method = ["show"]});
         _ ->
-            wf:wire(#jq{target = get_filter_panel(FilterName), method = ["show"]}),
-            wf:wire(#jq{target = get_filter_none(FilterName), method = ["hide"]}),
-            wf:wire(#jq{target = get_filter_textbox(FilterName), method = ["val"], args = ["\"" ++ gui_utils:to_list(Filter) ++ "\""]})
+            wf:wire(#jquery{target = get_filter_panel(FilterName), method = ["show"]}),
+            wf:wire(#jquery{target = get_filter_none(FilterName), method = ["hide"]}),
+            wf:wire(#jquery{target = get_filter_textbox(FilterName), method = ["val"], args = ["\"" ++ gui_utils:to_list(Filter) ++ "\""]})
     end;
 
 
 % Toggle patricular filter on/off
-event({Pid, toggle_filter, FilterName}) ->
-    MessageFilter = get_filter(get(filters), FilterName),
-    case MessageFilter of
+event({toggle_filter, FilterName}) ->
+    Filter = get_filter(get(filters), FilterName),
+    case Filter of
         undefined ->
-            wf:wire(#jq{target = get_filter_panel(FilterName), method = ["show"]}),
-            wf:wire(#jq{target = get_filter_none(FilterName), method = ["hide"]}),
-            wf:wire(#jq{target = get_filter_textbox(FilterName), method = ["val"], args = ["\"\""]}),
+            wf:wire(#jquery{target = get_filter_panel(FilterName), method = ["show"]}),
+            wf:wire(#jquery{target = get_filter_none(FilterName), method = ["hide"]}),
+            wf:wire(#jquery{target = get_filter_textbox(FilterName), method = ["val"], args = ["\"\""]}),
             put(filters, set_filter(get(filters), FilterName, <<"">>));
         _ ->
-            wf:wire(#jq{target = get_filter_panel(FilterName), method = ["hide"]}),
-            wf:wire(#jq{target = get_filter_none(FilterName), method = ["show"]}),
+            wf:wire(#jquery{target = get_filter_panel(FilterName), method = ["hide"]}),
+            wf:wire(#jquery{target = get_filter_none(FilterName), method = ["show"]}),
             put(filters, set_filter(get(filters), FilterName, undefined)),
-            Pid ! {set_filter, FilterName, undefined}
+            get(comet_pid) ! {set_filter, FilterName, undefined}
     end;
 
 
 % Update patricular filter
-event({Pid, update_filter, FilterName}) ->
+event({update_filter, FilterName}) ->
     Filter = gui_utils:to_binary(wf:q(get_filter_textbox(FilterName))),
     case Filter of
-        <<"">> -> invalid;
+        <<"">> ->
+            put(filters, set_filter(get(filters), FilterName, undefined)),
+            get(comet_pid) ! {set_filter, FilterName, undefined};
         Bin when is_binary(Bin) ->
             put(filters, set_filter(get(filters), FilterName, Filter)),
-            Pid ! {set_filter, FilterName, Filter};
+            get(comet_pid) ! {set_filter, FilterName, Filter};
         _ -> invalid
     end;
 

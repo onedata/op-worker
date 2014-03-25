@@ -6,7 +6,7 @@
 %% @end
 %% ===================================================================
 %% @doc: This module processes file download and upload requests. After validating 
-%% them it conducts streaming to or from a socket or makes nitrogen display a proper error page.
+%% them it conducts streaming to or from a socket or makes n2o display a proper error page.
 %% @end
 %% ===================================================================
 

@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This file contains Nitrogen website code
+%% @doc: This file contains n2o website code
 %% @end
 %% ===================================================================
 
@@ -41,7 +41,7 @@ redirect_with_error(Reason, Details) ->
         [wf:url_encode(Reason), wf:url_encode(Details)]))).
 
 
-% These functions allow easy edition of error messages. They are called from nitrogen_handler
+% These functions allow easy edition of error messages. They are called from n2o handlers
 % to obtain redirect url with proper args enclosed in cowboy request
 
 generate_redirect_request(Req, Reason, Details) ->

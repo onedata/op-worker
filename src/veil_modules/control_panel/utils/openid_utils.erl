@@ -6,7 +6,7 @@
 %% @end
 %% ===================================================================
 %% @doc: This is a simple library used to establish an OpenID authentication.
-%% It needs nitrogen and ibrowse to run.
+%% It needs n2o and ibrowse to run.
 %% @end
 %% ===================================================================
 
