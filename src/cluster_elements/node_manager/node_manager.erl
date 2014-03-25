@@ -18,6 +18,7 @@
 -behaviour(gen_server).
 -include("registered_names.hrl").
 -include("records.hrl").
+-include("logging.hrl").
 -include("supervision_macros.hrl").
 
 %% Dispatcher cowboy listener ID
@@ -241,9 +242,10 @@ handle_cast({delete_callback_by_pid, Pid}, State) ->
     _ ->
       spawn(fun() ->
         try
-          gen_server:call({global, ?CCM}, {delete_callback, Fuse, node(), Pid}, 1000)
+          gen_server:call({global, ?CCM}, {delete_callback, Fuse, node(), Pid}, 2000)
         catch
           _:_ ->
+            lager:error("delete_callback - error during contact with CCM"),
             error
         end
       end)
@@ -300,6 +302,7 @@ handle_info({nodedown, _Node}, State) ->
   {noreply, State#node_state{ccm_con_status = not_connected}};
 
 handle_info(_Info, State) ->
+  ?error("Error: wrong info: ~p", [_Info]),
   {noreply, State}.
 
 

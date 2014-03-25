@@ -138,7 +138,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% ====================================================================
 %% @doc Adds proper tags if they don't exist and sends the log to central_logger.
 -spec dispatch_log(Message :: string(), Timestamp :: term(), Severity :: atom(), OldMetadata :: list()) -> Result when
-    Result :: ok.
+    Result :: ok | central_logger_not_running.
 %% ====================================================================
 dispatch_log(Message, Timestamp, Severity, OldMetadata) ->
     Metadata = case OldMetadata of
