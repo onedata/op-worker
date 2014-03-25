@@ -697,11 +697,6 @@ sub_proc_test(Config) ->
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
   nodes_manager:wait_for_cluster_init(),
 
-  %% TODO !!! Check why late answer from gen_server sometimes appear !!!
-  %% Late answer: If no reply is received within the specified time, the function call fails.
-  %% If the caller catches the failure and continues running, and the server is just late with the reply,
-  %% it may arrive at any time later into the caller's message queue. The caller must in this case be
-  %% prepared for this and discard any such garbage messages that are two element tuples with a reference as the first element.
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
     case lists:member({Node, fslogic}, Workers) of

@@ -207,11 +207,11 @@ store_exec({{owner, true}, Msg}) -> %% If calling process is an owner of this ta
     store_exec(sequential, Msg);      %% because there is chance that gen_server is not started yet
 store_exec({{owner, false}, Msg}) ->
     PPid = self(),
-    Pid = spawn(fun() -> receive Resp -> PPid ! {self(), Resp} after 300 -> exited end end),
+    Pid = spawn(fun() -> receive Resp -> PPid ! {self(), Resp} after 1000 -> exited end end),
     gen_server:cast(dao, {sequential_synch, get(protocol_version), {hosts, store_exec, [sequential, Msg]}, {proc, Pid}}),
     receive
         {Pid, Response} -> Response
-    after 300 ->
+    after 1000 ->
         {error, timeout}
     end;
 store_exec(Msg) ->

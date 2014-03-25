@@ -14,10 +14,10 @@
 -include("logging.hrl").
 
 % request_cache record for simple_bridge
--record(request_cache, {request, docroot="", body=""}).
+-record(request_cache, {request, docroot = "", body = ""}).
 
 % Maximum size of posted data in Bytes. Override with multipart_max_length_mb in config
--define (MAX_POST_SIZE, 107374182400).  % 100GB
+-define(MAX_POST_SIZE, 107374182400).  % 100GB
 
 %% ====================================================================
 %% API function
@@ -29,16 +29,16 @@
 %% @doc Try to parse the request encapsulated in request bridge if it is
 %% a multipart POST request.
 %% @end
--spec parse(ReqBridge :: record()) -> 
-    {ok, not_multipart} | 
+-spec parse(ReqBridge :: record()) ->
+    {ok, not_multipart} |
     {ok, Params :: [tuple()], Files :: [#uploaded_file{}]} |
     {error, any()}.
 %% ====================================================================
 parse(ReqBridge) ->
     case is_multipart_request(ReqBridge) of
-        true -> 
+        true ->
             _Result = parse_multipart(ReqBridge);
-        false -> 
+        false ->
             {ok, not_multipart}
     end.
 
@@ -51,38 +51,32 @@ parse(ReqBridge) ->
 is_multipart_request(ReqBridge) ->
     try ReqBridge:header(content_type) of
         "multipart/form-data" ++ _ -> true;
-        _                          -> false
-    catch _:_                      -> false
+        _ -> false
+    catch _:_ -> false
     end.
 
 
 % Checks the validity of multipart request and calls file_transfer_handler to parse it
-parse_multipart(ReqBridge) ->    
-    try 
-        wf_context:init_context(ReqBridge, undefined),
-        wf_handler:call(session_handler, init),
-        UserID = try wf:session(user_doc) catch _:_ -> undefined end,
+parse_multipart(ReqBridge) ->
+    wf_context:init_context(ReqBridge, undefined),
+    wf_handler:call(session_handler, init),
+    UserID = try wf:session(user_doc) catch _:_ -> undefined end,
 
-        {_, _, ReqKey, _, _, _, _} = ReqBridge,
-        #request_cache{request = Req} = cowboy_request_server:get(ReqKey),
-        {LenghtBin, _} = cowboy_req:header(<<"content-length">>, Req), 
-        Length = list_to_integer(binary_to_list(LenghtBin)),
+    {_, _, ReqKey, _, _, _, _} = ReqBridge,
+    #request_cache{request = Req} = cowboy_request_server:get(ReqKey),
+    {LenghtBin, _} = cowboy_req:header(<<"content-length">>, Req),
+    Length = list_to_integer(binary_to_list(LenghtBin)),
 
-        case Length > get_max_post_size() of
-            true  -> throw(post_too_big);
-            false -> continue
-        end,
+    case Length > get_max_post_size() of
+        true -> throw(post_too_big);
+        false -> continue
+    end,
 
-        {ok, _Params, _Files} = file_transfer_handler:handle_upload_request(Req, UserID)
-    catch Type:Message ->
-        lager:error("Error while handling upload request - ~p:~p~n~p", 
-            [Type, Message, erlang:get_stacktrace()]),
-        {error, {Type, Message, erlang:get_stacktrace()}}
-    end.
+    {ok, _Params, _Files} = file_transfer_handler:handle_upload_request(Req, UserID).
 
 
 % Returns maximum acceptable post size, either default or set in app.src.
-get_max_post_size() -> 
+get_max_post_size() ->
     case application:get_env(veil_cluster_node, multipart_max_length) of
         {ok, Value} -> Value;
         _ ->
