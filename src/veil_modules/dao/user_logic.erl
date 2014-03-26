@@ -598,9 +598,9 @@ create_dirs_at_storage(Root, Teams, Storage) ->
 				case {Ans2, Ans3} of
 					{ok, ok} ->
 						TmpAns;
-					_ ->
-						lager:error("Can not change owner of dir ~p using storage helper ~p. Make sure group '~s' is defined in the system.",
-							[Dir, SHI#storage_helper_info.name, Dir]),
+					Error1 ->
+						lager:error("Can not change owner of dir ~p using storage helper ~p due to ~p. Make sure group '~s' is defined in the system.",
+							[Dir, SHI#storage_helper_info.name, Error1, Dir]),
 						storage_files_manager:delete_dir(SHI, DirName),
 						error
 				end;
@@ -622,15 +622,17 @@ create_dirs_at_storage(Root, Teams, Storage) ->
 				Ans = storage_files_manager:mkdir(SHI, RootDirName),
 				case Ans of
 					ok ->
-						Ans3 = storage_files_manager:chown(SHI, RootDirName, Root, Root),
+                        %% Change only UID. Don't touch GID since group with name that equals user's name can be missing
+                        %% @todo: scan user groups and try to chown with first group name on the list (not critical)
+						Ans3 = storage_files_manager:chown(SHI, RootDirName, Root, ""),
 						storage_files_manager:chmod(SHI, RootDirName, 8#300),
 						case Ans3 of
 							ok ->
 								{ok,true};
-							_ ->
-								lager:error("Can not change owner of dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
-									[Root, SHI#storage_helper_info.name, Root]),
-								{error,true}
+                            Error2 ->
+								lager:error("Can not change owner of dir ~p using storage helper ~p due to ~p. Make sure user '~s' is defined in the system.",
+									[Root, SHI#storage_helper_info.name, Error2, Root]),
+	                            {error,true}
 						end;
 					{error, dir_or_file_exists} ->
 						lager:warning("User root dir ~p already exists",[RootDirName]),
