@@ -1226,6 +1226,7 @@ calculate_node_load(Nodes, Period) ->
 %% ====================================================================
 map_node_stats_to_load(NodesStats) ->
   %% Create list of maximum values for each statistical data
+  lager:info("Nodes stats: ~p~n", [NodesStats]),
   MaxStats = lists:foldl(fun
     ({_, undefined}, Maxs) -> Maxs;
     ({_, Stats}, undefined) -> Stats;
@@ -1254,7 +1255,10 @@ map_node_stats_to_load(NodesStats) ->
   %% Get load for each node
   NodesLoad = lists:map(fun
     ({Node, undefined}) -> {Node, error};
-    ({Node, Stats}) -> {Node, StatsToLoadMap(Stats)} end, NodesStats),
+    ({Node, Stats}) ->
+      lager:info("Node: ~p, Stats: ~p~n", [Node, Stats]),
+      {Node, StatsToLoadMap(Stats)}
+  end, NodesStats),
 
   %% Calculate average load
   {SumLoad, Counter} = lists:foldl(fun
