@@ -15,13 +15,14 @@
 -include("records.hrl").
 -include("modules_and_args.hrl").
 -include("logging.hrl").
+-include("veil_modules/dao/dao_types.hrl").
 
 -define(CALLBACKS_TABLE, dispatcher_callbacks_table).
 
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_link/0, stop/0, send_to_fuse/3]).
+-export([start_link/0, stop/0, send_to_fuse/3, send_to_user/4]).
 
 %% TODO zmierzyć czy bardziej się opłaca przechowywać dane o modułach
 %% jako stan (jak teraz) czy jako ets i ewentualnie przejść na ets
@@ -261,6 +262,29 @@ handle_call({node_chosen, {Task, ProtocolVersion, Request}}, _From, State) ->
               {reply, worker_not_found, State};
             _N ->
               gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request}),
+              {reply, ok, NewState}
+          end;
+        Other -> {reply, Other, State}
+      end
+  end;
+
+handle_call({node_chosen_for_ack, {Task, ProtocolVersion, Request, MsgId}}, _From, State) ->
+  case State#dispatcher_state.asnych_mode of
+    true ->
+      forward_request(true, Task, Request, {asynch, ProtocolVersion, Request}, State);
+    false ->
+      Ans = check_worker_node(Task, Request, State),
+      case Ans of
+        {Node, NewState} ->
+          case Node of
+            non ->
+              case Task of
+                central_logger -> ok;
+                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+              end,
+              {reply, worker_not_found, State};
+            _N ->
+              gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request, MsgId}),
               {reply, ok, NewState}
           end;
         Other -> {reply, Other, State}
@@ -783,8 +807,8 @@ get_callbacks(Fuse) ->
 -spec send_to_fuse(FuseId :: string(), Message :: term(), MessageDecoder :: string()) -> Result when
   Result :: callback_node_not_found | node_manager_error | dispatcher_error | ok | term().
 %% ====================================================================
-send_to_fuse(Fuse, Message, MessageDecoder) ->
-  send_to_fuse(Fuse, Message, MessageDecoder, 3).
+send_to_fuse(FuseId, Message, MessageDecoder) ->
+  send_to_fuse(FuseId, Message, MessageDecoder, 3).
 
 %% send_to_fuse/4
 %% ====================================================================
@@ -792,40 +816,40 @@ send_to_fuse(Fuse, Message, MessageDecoder) ->
   -spec send_to_fuse(FuseId :: string(), Message :: term(), MessageDecoder :: string(), SendNum :: integer()) -> Result when
 Result :: callback_node_not_found | node_manager_error | dispatcher_error | ok | term().
 %% ====================================================================
-send_to_fuse(Fuse, Message, MessageDecoder, SendNum) ->
+send_to_fuse(FuseId, Message, MessageDecoder, SendNum) ->
   Ans = try
-    Node = gen_server:call(?Dispatcher_Name, {get_callback, Fuse}, 500),
+    Node = gen_server:call(?Dispatcher_Name, {get_callback, FuseId}, 500),
     case Node of
       not_found ->
         callback_node_not_found;
       _ ->
         try
-          Callback = gen_server:call({?Node_Manager_Name, Node}, {get_callback, Fuse}, 1000),
+          Callback = gen_server:call({?Node_Manager_Name, Node}, {get_callback, FuseId}, 1000),
           case Callback of
             non -> channel_not_found;
             _ ->
               case get(callback_msg_ID) of
                 ID when is_integer(ID) ->
                   put(callback_msg_ID, ID + 1);
-                _ -> put(callback_msg_ID, 0)
+                _ -> put(callback_msg_ID, 1) % it is better to start with 1 because 0 is declared in protocol as default value
               end,
               MsgID = get(callback_msg_ID),
-              Callback ! {self(), Message, MessageDecoder, MsgID},
+              Callback ! {with_ack, self(), Message, MessageDecoder, MsgID},
               receive
-                {Callback, MsgID, Response} -> Response
+                {Callback, MsgID, Response} -> {ok, {Response, MsgID, FuseId}}
               after 500 ->
                 socket_error
               end
           end
         catch
           E1:E2 ->
-            lager:error([{mod, ?MODULE}], "Can not get callback from node: ~p to fuse ~p, error: ~p:~p", [Node, Fuse, E1, E2]),
+            lager:error([{mod, ?MODULE}], "Can not get callback from node: ~p to fuse ~p, error: ~p:~p", [Node, FuseId, E1, E2]),
             node_manager_error
         end
     end
   catch
     _:_ ->
-      lager:error([{mod, ?MODULE}], "Can not get callback node of fuse: ~p", [Fuse]),
+      lager:error([{mod, ?MODULE}], "Can not get callback node of fuse: ~p", [FuseId]),
       dispatcher_error
   end,
   case Ans of
@@ -834,8 +858,39 @@ send_to_fuse(Fuse, Message, MessageDecoder, SendNum) ->
       case SendNum of
         0 -> Ans;
         _ ->
-          send_to_fuse(Fuse, Message, MessageDecoder, SendNum - 1)
+          send_to_fuse(FuseId, Message, MessageDecoder, SendNum - 1)
       end
+  end.
+
+%% send_to_user/4
+%% ====================================================================
+%% @doc Sends message to fuse
+-spec send_to_user(UserKey :: user_key(), Message :: term(), MessageDecoder :: string(), ProtocolVersion :: integer()) -> Result when
+  Result :: callback_node_not_found | node_manager_error | dispatcher_error | ok | term().
+%% ====================================================================
+send_to_user(UserKey, Message, MessageDecoder, ProtocolVersion) ->
+  send_to_user(UserKey, Message, MessageDecoder, ProtocolVersion, 3).
+
+%% send_to_user/5
+%% ====================================================================
+%% @doc Sends message to fuse
+-spec send_to_user(UserKey :: user_key(), Message :: term(), MessageDecoder :: string(), ProtocolVersion :: integer(), SendNum :: integer()) -> Result when
+  Result :: callback_node_not_found | node_manager_error | dispatcher_error | ok | term().
+%% ====================================================================
+send_to_user(UserKey, Message, MessageDecoder, ProtocolVersion, SendNum) ->
+  case user_logic:get_user(UserKey) of
+    {ok, UserDoc} ->
+      case dao_lib:apply(dao_cluster, get_sessions_by_user, [UserDoc#veil_document.uuid], ProtocolVersion) of
+        {ok, FuseIds} ->
+          ?info("--- request_dispatcher, fuseids: ~p , ~p", [UserDoc#veil_document.uuid, FuseIds]),
+
+          ListOfTuples = [{MsgId, FuseId} || {ok, {_, MsgId, FuseId}} <- lists:map(fun(FuseId) -> send_to_fuse(FuseId, Message, MessageDecoder, SendNum) end, FuseIds)],
+          {[MsgId || {MsgId, _FuseId} <- ListOfTuples], [FuseId || {_MsgId, FuseId} <- ListOfTuples]};
+        {error, Error} ->
+          ?warning("cannot get fuse ids for user")
+      end;
+    {error, Error} ->
+      ?warning("cannot get user in send_to_user")
   end.
 
 %% choose_node_by_map/3

@@ -227,9 +227,18 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                 _:_ -> {reply, {binary, encode_answer(dispatcher_error, MsgId)}, Req, State}
             end;
         false ->
+            ?info("--- ws_handler: ~p", [MsgId]),
             try
-                Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Request}}),
-                {reply, {binary, encode_answer(Ans, MsgId)}, Req, State}
+                %% it assumes that if MsgId > 0 then message is push message ack and call to ack callback is needed.
+                %% this assumption is true now in veilclient but it is not stated explicitly anywhere.
+                case Msg of
+                  ack ->
+                    gen_server:call(?Dispatcher_Name, {node_chosen_for_ack, {Task, ProtocolVersion, Request, MsgId}}),
+                    {ok, Req, State};
+                  _ ->
+                    Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Request}}),
+                    {reply, {binary, encode_answer(Ans, MsgId)}, Req, State}
+                end
             catch
                 _:_ -> {reply, {binary, encode_answer(dispatcher_error, MsgId)}, Req, State}
             end
@@ -270,6 +279,26 @@ websocket_info({ResponsePid, Message, MessageDecoder, MsgID}, Req, State) ->
         ResponsePid ! {self(), MsgID, handler_error},
         {ok, Req, State}
     end;
+websocket_info({with_ack, ResponsePid, Message, MessageDecoder, MsgID}, Req, State) ->
+  ?info("--- ws_handler websocket_info with_ack"),
+  try
+    [MessageType | _] = tuple_to_list(Message),
+    AnsRecord = encode_answer_record(push, MsgID, atom_to_list(MessageType), MessageDecoder, Message),
+    case list_to_atom(AnsRecord#answer.answer_status) of
+      push ->
+        ?info("--- ws_handler websocket_info with_ack PUSH"),
+        ResponsePid ! {self(), MsgID, ok},
+        {reply, {binary, erlang:iolist_to_binary(communication_protocol_pb:encode_answer(AnsRecord))}, Req, State};
+      Other ->
+        ResponsePid ! {self(), MsgID, Other},
+        {ok, Req, State}
+    end
+  catch
+    Type:Error ->
+      lager:error("Ranch handler callback error for message ~p, error: ~p:~p", [Message, Type, Error]),
+      ResponsePid ! {self(), MsgID, handler_error},
+      {ok, Req, State}
+  end;
 websocket_info(_Msg, Req, State) ->
     ?warning("Unknown WebSocket PUSH request. Message: ~p", [_Msg]),
     {ok, Req, State}.

@@ -27,7 +27,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_link/3, stop/1, start_sub_proc/5, start_sub_proc/6, generate_sub_proc_list/1, generate_sub_proc_list/5, generate_sub_proc_list/6]).
+-export([start_link/3, stop/1, start_sub_proc/5, start_sub_proc/6, generate_sub_proc_list/1, generate_sub_proc_list/5, generate_sub_proc_list/6, send_to_user/5]).
 -export([create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_sub_procs_cache/2, clear_sipmle_cache/3]).
 
 %% ====================================================================
@@ -85,22 +85,22 @@ stop(PlugIn) ->
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 init([PlugIn, PlugInArgs, LoadMemorySize]) ->
-    process_flag(trap_exit, true),
-    InitAns = PlugIn:init(PlugInArgs),
-    case InitAns of
-      IDesc when is_record(IDesc, initial_host_description) ->
-        Pid = self(),
-        DispatcherRequestMapState = case InitAns#initial_host_description.request_map of
-          non -> true;
-          _ ->
-            erlang:send_after(200, Pid, {timer, register_disp_map}),
-            false
-        end,
-        erlang:send_after(200, Pid, {timer, register_sub_proc_caches}),
-        {ok, #host_state{plug_in = PlugIn, request_map = InitAns#initial_host_description.request_map, sub_procs = InitAns#initial_host_description.sub_procs,
-        dispatcher_request_map = InitAns#initial_host_description.dispatcher_request_map, dispatcher_request_map_ok = DispatcherRequestMapState, plug_in_state = InitAns#initial_host_description.plug_in_state, load_info = {[], [], 0, LoadMemorySize}}};
-      _ -> {ok, #host_state{plug_in = PlugIn, plug_in_state = InitAns, load_info = {[], [], 0, LoadMemorySize}}}
-    end.
+  process_flag(trap_exit, true),
+  InitAns = PlugIn:init(PlugInArgs),
+  case InitAns of
+    IDesc when is_record(IDesc, initial_host_description) ->
+      Pid = self(),
+      DispatcherRequestMapState = case InitAns#initial_host_description.request_map of
+        non -> true;
+        _ ->
+          erlang:send_after(200, Pid, {timer, register_disp_map}),
+          false
+      end,
+      erlang:send_after(200, Pid, {timer, register_sub_proc_caches}),
+      {ok, #host_state{plug_in = PlugIn, request_map = InitAns#initial_host_description.request_map, sub_procs = InitAns#initial_host_description.sub_procs,
+      dispatcher_request_map = InitAns#initial_host_description.dispatcher_request_map, dispatcher_request_map_ok = DispatcherRequestMapState, plug_in_state = InitAns#initial_host_description.plug_in_state, load_info = {[], [], 0, LoadMemorySize}}};
+    _ -> {ok, #host_state{plug_in = PlugIn, plug_in_state = InitAns, load_info = {[], [], 0, LoadMemorySize}}}
+  end.
 
 %% handle_call/3
 %% ====================================================================
@@ -224,6 +224,24 @@ handle_cast({asynch, ProtocolVersion, Msg}, State) ->
 	PlugIn = State#host_state.plug_in,
   NewSubProcList = proc_standard_request(State#host_state.request_map, State#host_state.sub_procs, PlugIn, ProtocolVersion, Msg, non, non),
 	{noreply, State#host_state{sub_procs = NewSubProcList}};
+
+handle_cast({asynch, ProtocolVersion, Msg, MsgId}, State) ->
+  ?info("---- bazinga insise handle_cast for ack"),
+  [{_, MainMsgId}] = ets:lookup(?MSG_ID_TO_HANDLER_ID, MsgId),
+  HandlerTuple = ets:lookup(?ACK_HANDLERS, MainMsgId),
+  case HandlerTuple of
+    [{_, {Callback, SuccessMsgIds, FailMsgIds, Length, Pid}}] ->
+      ?info("---- bazinga insise handle_cast for ack, fuse_id: ~p", [get(fuse_id)]),
+      NewSuccessMsgIds = [get(fuse_id) | SuccessMsgIds],
+      NewFailMsgIds = lists:delete(MsgId, FailMsgIds),
+      ets:insert(?ACK_HANDLERS, {MainMsgId, {Callback, SuccessMsgIds, NewFailMsgIds, Length, Pid}}),
+      case length(NewSuccessMsgIds) of
+        Length -> Pid ! {call_on_complete_callback};
+        _ -> ok
+      end;
+    _ -> ok
+  end,
+  {noreply, State};
 
 handle_cast({sequential_synch, ProtocolVersion, Msg, MsgId, ReplyTo}, State) ->
     PlugIn = State#host_state.plug_in,
@@ -863,6 +881,33 @@ del_sub_procs(Key, Name) ->
     _ -> ok
   end,
   del_sub_procs(ets:next(Name, Key), Name).
+
+
+send_to_user(UserKey, Message, MessageDecoder, OnCompleteCallback, ProtocolVersion) ->
+  {MsgIds, FuseIds} = request_dispatcher:send_to_user(UserKey, Message, MessageDecoder, ProtocolVersion),
+  ?info("------- bazinga send_to_user after  request_dispatcher:send_to_user: ~p", [MsgIds]),
+
+  case MsgIds of
+    [] ->
+      OnCompleteCallback([], []);
+    [FirstMsgId | Rest] ->
+      ets:insert(?MSG_ID_TO_HANDLER_ID, {FirstMsgId, FirstMsgId}),
+      lists:foreach(fun(AnotherMsgId) -> ets:insert(?MSG_ID_TO_HANDLER_ID, {FirstMsgId, AnotherMsgId}) end, Rest),
+
+      Pid = spawn(fun() ->
+        receive
+          {call_on_complete_callback} ->
+            ?info("--- bazinga called after 4000ms"),
+            [{_Key, {_, SucessMsgIds, FailMsgIds, _Length, _Pid}}] = ets:lookup(?ACK_HANDLERS, FirstMsgId),
+            ets:delete(?ACK_HANDLERS, FirstMsgId),
+            ets:delete(?MSG_ID_TO_HANDLER_ID, FirstMsgId),
+            OnCompleteCallback(SucessMsgIds, FailMsgIds)
+        end
+      end),
+
+      ets:insert(?ACK_HANDLERS, {FirstMsgId, {OnCompleteCallback, [], [FuseIds], length(MsgIds), Pid}}),
+      erlang:send_after(4000, Pid, {call_on_complete_callback})
+  end.
 
 %% create_simple_cache/1
 %% ====================================================================

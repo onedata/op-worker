@@ -94,8 +94,7 @@ exist_user(Key) ->
 %% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec get_user(Key :: {login, Login :: string()} | {email, Email :: string()} |
-{uuid, UUID :: uuid()} | {dn, DN :: string()}) -> {ok, user_doc()} | {error, any()} | no_return().
+-spec get_user(Key :: user_key()) -> {ok, user_doc()} | {error, any()} | no_return().
 %% ====================================================================
 get_user(Key) ->
   case ets:lookup(users_cache, Key) of
