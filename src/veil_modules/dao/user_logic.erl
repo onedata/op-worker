@@ -65,8 +65,12 @@ sign_in(Proplist) ->
                {ok, ExistingUser} ->
                    synchronize_user_info(ExistingUser, Teams, Email, DnList);
                {error, user_not_found} ->
-                   {ok, NewUser} = create_user(Login, Name, Teams, Email, DnList),
-                   NewUser;
+                    case create_user(Login, Name, Teams, Email, DnList) of
+						{ok, NewUser} ->
+							NewUser;
+	                    {error,Error} ->
+							throw(Error)
+	               end;
     %% Code below is only for development purposes (connection to DB is not required)
                Error ->
                    throw(Error)
@@ -136,11 +140,11 @@ create_user(Login, Name, Teams, Email, DnList) ->
 				            lager:warning("Root dir for user ~s already exists!",[Login]),
 				            case create_dirs_at_storage(Login, get_team_names(User)) of
 					            ok -> ok;
-					            DirsError -> throw(DirsError)
+					            DirsError2 -> throw(DirsError2)
 				            end,
 				            GetUserAns;
 		                _ ->
-			                throw({RootAns, UserRec})
+			                throw(RootAns)
 		            end;
 		          _ ->
 		            throw(GetUserAns)
@@ -150,7 +154,7 @@ create_user(Login, Name, Teams, Email, DnList) ->
 	    end
     catch
     _Type:Error  ->
-	    lager:info("Creating user failed with error: ~p",[Error]),
+	    lager:error("Creating user failed with error: ~p",[Error]),
 	    case QuotaAns of
 			ok ->
 				dao_lib:apply(dao_users, remove_quota, [QuotaUUID],1);
@@ -560,7 +564,7 @@ create_root(Dir, Uid) ->
 %% ====================================================================
 %% @doc Creates root dir for user and for its teams, on all storages
 %% @end
--spec create_dirs_at_storage(Root :: string(), Teams :: [string()]) -> ok | Error when
+-spec create_dirs_at_storage(Root :: string(), Teams :: [string()]) -> ok | {error,Error} when
     Error :: atom().
 %% ====================================================================
 create_dirs_at_storage(Root, Teams) ->
@@ -575,14 +579,14 @@ create_dirs_at_storage(Root, Teams) ->
 						end
 					end,
 					lists:foldl(CreateDirs,ok , StorageRecords);
-        _ -> storage_listing_error
+        _ -> {error,storage_listing_error}
     end.
 
 %% create_dirs_at_storage/3
 %% ====================================================================
 %% @doc Creates root dir for user and for its teams. Only on selected storage
 %% @end
--spec create_dirs_at_storage(Root :: string(), Teams :: [string()], Storage :: #storage_info{}) -> ok | Error when
+-spec create_dirs_at_storage(Root :: string(), Teams :: [string()], Storage :: #storage_info{}) -> ok | {error,Error} when
 	Error :: atom().
 %% ====================================================================
 create_dirs_at_storage(Root, Teams, Storage) ->
@@ -602,7 +606,7 @@ create_dirs_at_storage(Root, Teams, Storage) ->
 						lager:error("Can not change owner of dir ~p using storage helper ~p due to ~p. Make sure group '~s' is defined in the system.",
 							[Dir, SHI#storage_helper_info.name, Error1, Dir]),
 						storage_files_manager:delete_dir(SHI, DirName),
-						error
+						{error, dir_chown_error}
 				end;
 			{error, dir_or_file_exists} ->
 				lager:debug("Team root directory ~p aleready exists",[DirName]),
@@ -610,7 +614,7 @@ create_dirs_at_storage(Root, Teams, Storage) ->
 			_ ->
 				lager:error("Can not create dir ~p using storage helper ~p. Make sure group '~s' is defined in the system.",
 					[Dir, SHI#storage_helper_info.name, Dir]),
-				error
+				{error, create_dir_error}
 		end
 	end,
 
@@ -632,7 +636,7 @@ create_dirs_at_storage(Root, Teams, Storage) ->
                             Error2 ->
 								lager:error("Can not change owner of dir ~p using storage helper ~p due to ~p. Make sure user '~s' is defined in the system.",
 									[Root, SHI#storage_helper_info.name, Error2, Root]),
-	                            {error,true}
+	                            {{error,dir_chown_error},true}
 						end;
 					{error, dir_or_file_exists} ->
 						lager:warning("User root dir ~p already exists",[RootDirName]),
@@ -644,12 +648,12 @@ create_dirs_at_storage(Root, Teams, Storage) ->
 							_ ->
 								lager:error("Can not change owner of dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
 									[Root, SHI#storage_helper_info.name, Root]),
-								{error,false}
+								{{error,dir_chown_error},false}
 						end;
 					_ ->
 						lager:error("Can not create dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
 							[Root, SHI#storage_helper_info.name, Root]),
-						{error,false}
+						{{error,create_dir_error},false}
 				end
 			end,
 
@@ -659,13 +663,14 @@ create_dirs_at_storage(Root, Teams, Storage) ->
 			case {TeamDirsAns, RootDirCreated} of
 				{ok, _} ->
 					ok;
-				{error, true } ->
+				{TeamsError, true} ->
 					storage_files_manager:delete_dir(SHI, "users/"++Root),
-					create_dir_error;
-				{error,false} ->
-					create_dir_error
-
-			end
+					TeamsError;
+				{TeamsError2, false} ->
+					TeamsError2
+			end;
+		RootError ->
+			RootError
 	end.
 
 %% get_team_names/1
