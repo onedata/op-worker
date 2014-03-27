@@ -568,7 +568,6 @@ get_node_stats(StartTime, EndTime) ->
 
       lists:zip(HeaderAtom, AvgValues);
     Other ->
-      lager:error("RRDERLANG FETCH: ~p~n", [Other]),
       Other
   end.
 
