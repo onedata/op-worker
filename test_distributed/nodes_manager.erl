@@ -639,7 +639,7 @@ check_init(ModulesNum) ->
   E2 :: term().
 %% ====================================================================
 wait_for_cluster_init() ->
-  wait_for_cluster_init(0).
+  wait_for_cluster_init(20).
 
 %% wait_for_cluster_init/1
 %% ====================================================================
@@ -663,8 +663,7 @@ wait_for_cluster_init(ModulesNum) ->
   E2 :: term().
 %% ====================================================================
 wait_for_cluster_init(ModulesNum, 0) ->
-%%   ?assert(check_init(ModulesNum))
-  check_init(ModulesNum);
+  ?assert(check_init(ModulesNum));
 
 wait_for_cluster_init(ModulesNum, TriesNum) ->
   case check_init(ModulesNum) of
