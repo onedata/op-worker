@@ -144,6 +144,8 @@ signing_in_test_() ->
                             (dao_vfs, save_new_file, _, _) -> {ok, "file_uuid"};
                             (dao_vfs, list_storage, [], _) -> {ok, []};
 	                        (dao_vfs, exist_file,["/" ++ ?GROUPS_BASE_DIR_NAME],_) -> {ok,true};
+	                        (dao_vfs, exist_file,["/" ++ ?GROUPS_BASE_DIR_NAME ++ "/New team"],_) -> {ok,true};
+	                        (dao_vfs, exist_file,["/" ++ ?GROUPS_BASE_DIR_NAME ++ "/Another team"],_) -> {ok,true};
 	                        (dao_vfs, get_file,["/" ++ ?GROUPS_BASE_DIR_NAME],_) -> {ok,#veil_document{uuid="group_dir_uuid"}}
                         end),
 
@@ -221,6 +223,7 @@ signing_in_test_() ->
                             (dao_vfs, save_new_file, _, _) -> {ok, "file_uuid"};
                             (dao_vfs, list_storage, [], _) -> {ok, []};
 	                        (dao_vfs, exist_file,["/" ++ ?GROUPS_BASE_DIR_NAME],_) -> {ok,true};
+	                        (dao_vfs, exist_file,["/" ++ ?GROUPS_BASE_DIR_NAME ++ "/Updated team"],_) -> {ok,true};
 	                        (dao_vfs, get_file,["/" ++ ?GROUPS_BASE_DIR_NAME],_) -> {ok,#veil_document{uuid="group_dir_uuid"}}
                         end),
 

@@ -114,14 +114,12 @@ create_user(Login, Name, Teams, Email, DnList) ->
     },
     {DaoAns, UUID} = dao_lib:apply(dao_users, save_user, [User], 1),
 	try
-		erase(created_team_dirs),
 		erase(created_root_dir),
 		case {DaoAns,QuotaAns} of
 			{ok,ok} ->
 		        GetUserAns = get_user({uuid, UUID}),
 
-			    CreatedTeamDirs = [TeamUIID || {ok,TeamUIID} <- [create_team_dir(Team) || Team <- get_team_names(User)]], %% Create team dirs in DB if they don't exist
-				put(created_team_dirs,CreatedTeamDirs),
+			    [create_team_dir(Team) || Team <- get_team_names(User)], %% Create team dirs in DB if they don't exist
 
 				{GetUserFirstAns, UserRec} = GetUserAns,
 		        case GetUserFirstAns of
@@ -129,7 +127,6 @@ create_user(Login, Name, Teams, Email, DnList) ->
 		            RootAns = create_root(Login, UserRec#veil_document.uuid),
 		            case RootAns of
 			            {ok,RootUUID} ->
-			                %% TODO zastanowić się co zrobić jak nie uda się stworzyć jakiegoś katalogu (blokowanie rejestracji użytkownika to chyba zbyt dużo)
 				            put(created_root_dir,RootUUID),
 			                case create_dirs_at_storage(Login, get_team_names(User)) of
 								ok -> ok;
@@ -165,11 +162,6 @@ create_user(Login, Name, Teams, Email, DnList) ->
 				dao_lib:apply(dao_users, remove_user, [{uuid,UUID}],1);
 			_ -> already_clean
 		end,
-	    case get(created_team_dirs) of
-			TeamDirUUIDs when is_list(TeamDirUUIDs) ->
-				[dao_lib:apply(dao_vfs, remove_file, [{uuid,TeamDirUUID}], 1) || TeamDirUUID <- TeamDirUUIDs];
-			_ -> already_clean
-	    end,
 	    case get(created_root_dir) of
 			RootDir when is_list(RootDir) ->
 				dao_lib:apply(dao_vfs, remove_file, [{uuid,RootDir}], 1);
@@ -596,7 +588,7 @@ create_dirs_at_storage(Root, Teams, Storage) ->
 		DirName = "groups/" ++ Dir,
 		Ans = storage_files_manager:mkdir(SHI, DirName),
 		case Ans of
-			ok ->
+			SuccessAns when SuccessAns == ok orelse SuccessAns == {error, dir_or_file_exists} ->
 				Ans2 = storage_files_manager:chown(SHI, DirName, "", Dir),
 				Ans3 = storage_files_manager:chmod(SHI, DirName, 8#730),
 				case {Ans2, Ans3} of
@@ -605,12 +597,8 @@ create_dirs_at_storage(Root, Teams, Storage) ->
 					Error1 ->
 						lager:error("Can not change owner of dir ~p using storage helper ~p due to ~p. Make sure group '~s' is defined in the system.",
 							[Dir, SHI#storage_helper_info.name, Error1, Dir]),
-						storage_files_manager:delete_dir(SHI, DirName),
 						{error, dir_chown_error}
 				end;
-			{error, dir_or_file_exists} ->
-				lager:debug("Team root directory ~p aleready exists",[DirName]),
-				TmpAns;
 			_ ->
 				lager:error("Can not create dir ~p using storage helper ~p. Make sure group '~s' is defined in the system.",
 					[Dir, SHI#storage_helper_info.name, Dir]),
@@ -629,9 +617,9 @@ create_dirs_at_storage(Root, Teams, Storage) ->
                         %% Change only UID. Don't touch GID since group with name that equals user's name can be missing
                         %% @todo: scan user groups and try to chown with first group name on the list (not critical)
 						Ans3 = storage_files_manager:chown(SHI, RootDirName, Root, ""),
-						storage_files_manager:chmod(SHI, RootDirName, 8#300),
-						case Ans3 of
-							ok ->
+						Ans4 = storage_files_manager:chmod(SHI, RootDirName, 8#300),
+						case {Ans3,Ans4} of
+							{ok,ok} ->
 								{ok,true};
                             Error2 ->
 								lager:error("Can not change owner of dir ~p using storage helper ~p due to ~p. Make sure user '~s' is defined in the system.",
@@ -640,10 +628,10 @@ create_dirs_at_storage(Root, Teams, Storage) ->
 						end;
 					{error, dir_or_file_exists} ->
 						lager:warning("User root dir ~p already exists",[RootDirName]),
-						Ans3 = storage_files_manager:chown(SHI, RootDirName, Root, Root),
-						storage_files_manager:chmod(SHI, RootDirName, 8#300),
-						case Ans3 of
-							ok ->
+						Ans3 = storage_files_manager:chown(SHI, RootDirName, Root, ""),
+						Ans4 = storage_files_manager:chmod(SHI, RootDirName, 8#300),
+						case {Ans3,Ans4} of
+							{ok,ok} ->
 								{ok,false};
 							_ ->
 								lager:error("Can not change owner of dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
@@ -670,7 +658,13 @@ create_dirs_at_storage(Root, Teams, Storage) ->
 					TeamsError2
 			end;
 		RootError ->
-			RootError
+			case RootDirCreated of
+				true ->
+					storage_files_manager:delete_dir(SHI, "users/"++Root),
+					RootError;
+				false ->
+					RootError
+			end
 	end.
 
 %% get_team_names/1
