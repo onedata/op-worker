@@ -639,7 +639,7 @@ check_init(ModulesNum) ->
   E2 :: term().
 %% ====================================================================
 wait_for_cluster_init() ->
-  wait_for_cluster_init(20).
+  wait_for_cluster_init(0).
 
 %% wait_for_cluster_init/1
 %% ====================================================================

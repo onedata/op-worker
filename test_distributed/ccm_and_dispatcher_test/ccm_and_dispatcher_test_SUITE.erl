@@ -541,7 +541,7 @@ ping_test(Config) ->
 init_per_testcase(application_start_test1, Config) ->
   ?INIT_DIST_TEST,
 
-  NodesUp = nodes_manager:start_test_on_nodes(1),
+  NodesUp = nodes_manager:start_test_on_nodes(1, true),
   [CCM | _] = NodesUp,
 
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}]]),
@@ -552,7 +552,7 @@ init_per_testcase(application_start_test1, Config) ->
 init_per_testcase(application_start_test2, Config) ->
   ?INIT_DIST_TEST,
 
-  NodesUp = nodes_manager:start_test_on_nodes(1),
+  NodesUp = nodes_manager:start_test_on_nodes(1, true),
   [CCM | _] = NodesUp,
 
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}]]),
@@ -563,7 +563,7 @@ init_per_testcase(application_start_test2, Config) ->
 init_per_testcase(type1, Config) ->
   ?INIT_DIST_TEST,
 
-  NodesUp = nodes_manager:start_test_on_nodes(1),
+  NodesUp = nodes_manager:start_test_on_nodes(1, true),
   [CCM | _] = NodesUp,
 
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}]]),
@@ -575,7 +575,7 @@ init_per_testcase(type2, Config) ->
   ?INIT_DIST_TEST,
   nodes_manager:start_deps_for_tester_node(),
 
-  NodesUp = nodes_manager:start_test_on_nodes(1),
+  NodesUp = nodes_manager:start_test_on_nodes(1, true),
   [CCM | _] = NodesUp,
 
   PeerCert = ?COMMON_FILE("peer.pem"),

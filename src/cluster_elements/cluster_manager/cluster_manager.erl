@@ -1205,7 +1205,8 @@ get_workers_versions([{Node, Module} | Workers], Versions) ->
 calculate_node_load(Nodes, Period) ->
   GetNodeStats = fun(Node) ->
     try gen_server:call({?Node_Manager_Name, Node}, {get_node_stats, Period}, 500) of
-      Stats -> {Node, Stats}
+      Stats when is_list(Stats) -> {Node, Stats};
+      _ -> {Node, undefined}
     catch
       _:_ ->
         lager:error([{mod, ?MODULE}], "Can not get statistics of node: ~s", [Node]),
