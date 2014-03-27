@@ -723,9 +723,13 @@ create_team_dir(TeamName) ->
 			error({error, Reason})
 	end,
 
-    TFile = #file{type = ?DIR_TYPE, name = TeamName, uid = "0", gids = [TeamName], parent = GroupsBase, perms = 8#770},
-    TFileDoc = fslogic_utils:update_meta_attr(TFile, times, {CTime, CTime, CTime}),
-    case dao_lib:apply(dao_vfs, save_new_file, ["/" ++ ?GROUPS_BASE_DIR_NAME ++ "/" ++ TeamName, TFileDoc], 1) of
-        {error, file_exists} -> {error, dir_exists};
-        Other -> Other
-    end.
+	case dao_lib:apply(dao_vfs, exist_file, ["/" ++ ?GROUPS_BASE_DIR_NAME ++ "/" ++ TeamName], 1) of
+		{ok,true} ->
+			{error, dir_exists};
+		{ok,false}->
+			TFile = #file{type = ?DIR_TYPE, name = TeamName, uid = "0", gids = [TeamName], parent = GroupsBase, perms = 8#770},
+			TFileDoc = fslogic_utils:update_meta_attr(TFile, times, {CTime, CTime, CTime}),
+			dao_lib:apply(dao_vfs, save_new_file, ["/" ++ ?GROUPS_BASE_DIR_NAME ++ "/" ++ TeamName, TFileDoc], 1);
+		Error ->
+			Error
+	end.
