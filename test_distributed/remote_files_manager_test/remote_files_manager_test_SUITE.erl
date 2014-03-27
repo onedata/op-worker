@@ -414,9 +414,9 @@ helper_requests_test(Config) ->
   ?assertEqual(ok, ConvertAns2),
   DnList2 = [DN2],
 
-  Login2 = "user2",
+  Login2 = ?TEST_USER2,
   Name2 = "user2 user2",
-  Team2 = "user2 team",
+  Team2 = ?TEST_GROUP2,
   Teams2 = [Team2],
   Email2 = "user2@email.net",
   {CreateUserAns2, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
@@ -437,7 +437,7 @@ helper_requests_test(Config) ->
 
   {User2_Status2, User2_Answer2} = create_file_on_storage(Host, Cert2, Port, User2_Id),
   ?assertEqual("ok", User2_Status2),
-  ?assertEqual(list_to_atom(?VEREMOTEIO), User2_Answer2),
+  ?assertEqual(list_to_atom(?VOK), User2_Answer2), %todo check it should return 'ok' instead of 'eremoteio'
 
   %% Get FuseId
   {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),

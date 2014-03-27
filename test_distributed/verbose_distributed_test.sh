@@ -22,6 +22,7 @@ userdel -r veilfstestuser 2>/dev/null
 userdel -r veilfstestuser2 2>/dev/null
 groupdel veilfstestgroup 2>/dev/null
 groupdel veilfstestgroup2 2>/dev/null
+groupdel veilfstestgroup3 2>/dev/null
 groupdel veilfstestuser 2>/dev/null
 groupdel veilfstestuser2 2>/dev/null
 rm -rf /home/veilfstestuser
@@ -37,6 +38,9 @@ groupadd veilfstestgroup2
 useradd veilfstestuser2
 usermod -a -G veilfstestgroup2 veilfstestuser2
 usermod -a -G veilfstestgroup veilfstestuser2
+
+# Group 3
+groupadd veilfstestgroup3
 
 mkdir -p distributed_tests_out
 cp -R test_distributed/* distributed_tests_out
@@ -104,6 +108,7 @@ userdel -r veilfstestuser
 userdel -r veilfstestuser2
 groupdel veilfstestgroup
 groupdel veilfstestgroup2
+groupdel veilfstestgroup3
 rm -rf /home/veilfstestuser
 rm -rf /home/veilfstestuser2
 
