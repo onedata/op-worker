@@ -287,9 +287,9 @@ parse_teams(XMLContent) ->
     {XML, _} = xmerl_scan:string(XMLContent),
     #xmlElement{content = TeamList} = find_XML_node(teams, XML),
     lists:map(
-      fun(#xmlElement{content = [#xmlText{value = Value}]}) ->
-        Value
-      end, TeamList).
+        fun(#xmlElement{content = [#xmlText{value = Value}]}) ->
+            binary_to_list(unicode:characters_to_binary(Value, unicode))
+        end, TeamList).
 
 
 %% find_XML_node/2
