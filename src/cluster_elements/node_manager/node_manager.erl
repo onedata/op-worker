@@ -268,7 +268,8 @@ handle_cast({start_load_logging, Path}, State) ->
   case file:open(Path ++ "/load_log.csv", [write]) of
     {ok, Fd} ->
       NodeStats = get_node_stats(0),
-      Header = string:join(["elapsed", "window" | lists:map(fun({Name, _}) -> atom_to_list(Name) end, NodeStats)], ", ") ++ "\n",
+      Header = string:join(["elapsed", "window" | lists:map(fun({Name, _}) ->
+        atom_to_list(Name) end, NodeStats)], ", ") ++ "\n",
       io:fwrite(Fd, Header, []),
       erlang:send_after(Interval * 1000, self(), {timer, {log_load, StartTime, StartTime}}),
       {noreply, State#node_state{load_logging_fd = Fd}};
@@ -488,8 +489,8 @@ log_load(Fd, StartTime, PrevTime, CurrTime) ->
 %% create_node_stats_rrd/1
 %% ====================================================================
 %% @doc Creates node stats Round Robin Database
-  -spec create_node_stats_rrd(Pid :: pid()) -> Result when
-Result :: {ok, Data :: binary()} | {error, Error :: term()}.
+-spec create_node_stats_rrd(Pid :: pid()) -> Result when
+  Result :: {ok, Data :: binary()} | {error, Error :: term()}.
 %% ====================================================================
 create_node_stats_rrd(Pid) ->
   {ok, Period} = application:get_env(?APP_Name, node_monitoring_period),
@@ -566,7 +567,9 @@ get_node_stats(StartTime, EndTime) ->
       end, Values),
 
       lists:zip(HeaderAtom, AvgValues);
-    Other -> Other
+    Other ->
+      lager:error("RRDERLANG FETCH: ~p~n", [Other]),
+      Other
   end.
 
 %% save_node_stats_to_rrd/0
