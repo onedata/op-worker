@@ -359,6 +359,7 @@ code_change(_OldVsn, State, _Extra) ->
 -spec heart_beat(Conn_status :: atom(), State :: term()) -> NewStatus when
   NewStatus :: term().
 %% ====================================================================
+%% TODO Check why first heart beat is not successful
 heart_beat(Conn_status, State) ->
   New_conn_status = case Conn_status of
                       not_connected ->

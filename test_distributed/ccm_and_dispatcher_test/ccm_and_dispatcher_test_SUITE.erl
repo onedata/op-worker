@@ -544,7 +544,7 @@ init_per_testcase(application_start_test1, Config) ->
   NodesUp = nodes_manager:start_test_on_nodes(1),
   [CCM | _] = NodesUp,
 
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}]]),
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1}]]),
 
   Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
   lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config);
@@ -555,7 +555,7 @@ init_per_testcase(application_start_test2, Config) ->
   NodesUp = nodes_manager:start_test_on_nodes(1),
   [CCM | _] = NodesUp,
 
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}]]),
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1}]]),
 
   Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
   lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config);
@@ -566,7 +566,7 @@ init_per_testcase(type1, Config) ->
   NodesUp = nodes_manager:start_test_on_nodes(1),
   [CCM | _] = NodesUp,
 
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}]]),
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1}]]),
 
   Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
   lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config);
@@ -580,7 +580,7 @@ init_per_testcase(type2, Config) ->
 
   PeerCert = ?COMMON_FILE("peer.pem"),
   Port = 6666,
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [CCM]}, {dns_port, 1315}, {db_nodes, [nodes_manager:get_db_node()]}]]),
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [CCM]}, {dns_port, 1315}, {db_nodes, [nodes_manager:get_db_node()]}, {heart_beat, 1}]]),
 
   Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
   lists:append([{port, Port}, {peer_cert, PeerCert}, {nodes, NodesUp}, {assertions, Assertions}], Config);
