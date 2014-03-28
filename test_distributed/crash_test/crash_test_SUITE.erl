@@ -88,6 +88,7 @@ main_test(Config) ->
   end,
 
   {Workers, InitialStateNum} = gen_server:call({global, ?CCM}, get_workers, 1000),
+  ct:print("Workers: ~p~nJobs: ~p~n", [Workers, Jobs]),
   ?assertEqual(length(Workers), length(Jobs)),
   PongsNum = lists:foldl(CheckNodes, 0, Ports),
   ?assertEqual(PongsNum, length(Jobs) * length(Ports)),

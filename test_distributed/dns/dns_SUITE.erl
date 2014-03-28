@@ -222,7 +222,7 @@ end_per_testcase(_, Config) ->
 
 %% Helper function setting test timeout, checking start assertions and waiting for cluster creation
 prepare_test_and_start_cluster(Config) ->
-  ct:timetrap({seconds, 30}),
+  ct:timetrap({seconds, 120}),
   nodes_manager:check_start_assertions(Config),
   start_cluster(Config),
   nodes_manager:wait_for_cluster_init().
