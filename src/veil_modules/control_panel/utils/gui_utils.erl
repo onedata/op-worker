@@ -18,6 +18,7 @@
 -export([redirect_to_login/1, redirect_from_login/0]).
 -export([apply_or_redirect/3, apply_or_redirect/4, top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
 -export([comet/1, init_comet/2, flush/0]).
+-export([register_escape_event/1, script_for_enter_submission/2]).
 -export([update/2, replace/2, insert_top/2, insert_bottom/2, insert_before/2, insert_after/2, remove/1]).
 -export([to_list/1, to_binary/1, join_to_binary/1]).
 
@@ -320,8 +321,7 @@ comet(CometFun) ->
 -spec init_comet(pid(), fun()) -> no_return().
 %% ====================================================================
 init_comet(OwnerPid, Fun) ->
-    timer:sleep(200), % defer the comet process so that n2o websocket process
-    % can initialize
+    timer:sleep(100), % defer the comet process so that n2o websocket process can initialize
     put(ws_process, OwnerPid),
     wf_context:init_context([]),
     Fun().
@@ -336,8 +336,38 @@ init_comet(OwnerPid, Fun) ->
 flush() ->
     Actions = wf_context:actions(),
     wf_context:clear_actions(),
-    get(ws_process) ! {flush, Actions},
+    case Actions of
+        [] ->
+            skip;
+        undefined ->
+            skip;
+        _ ->
+            get(ws_process) ! {flush, Actions}
+    end,
     ok.
+
+
+%% register_escape_event/1
+%% ====================================================================
+%% @doc Binds escape button so that it generates an event every time it's pressed.
+%% The event will call the function api_event(Tag, [], Context) on page module.
+%% @end
+-spec register_escape_event(string()) -> ok.
+%% ====================================================================
+register_escape_event(Tag) ->
+    wf:wire(#api{name = "escape_pressed", tag = Tag}),
+    wf:wire("jQuery(document).bind('keydown', function (e){if (e.which == 27) escape_pressed();});").
+
+
+%% script_for_enter_submission/2
+%% ====================================================================
+%% @doc Generates snippet of javascript, which can be directly used with wf:wire.
+%% It intercepts enter keypresses on given input element and performs a click() on given submit button.
+%% @end
+-spec script_for_enter_submission(string(), string()) -> string().
+%% ====================================================================
+script_for_enter_submission(InputID, ButtonToClickID) ->
+    wf:f("$('#~s').bind('keydown', function (e){ if (e.which == 13) $('#~s').click(); });", [InputID, ButtonToClickID]).
 
 
 %% to_list/1
@@ -390,7 +420,7 @@ join_to_binary([H | T], Acc) ->
 %% @end
 -spec update(term(), term()) -> ok.
 %% ====================================================================
-update(Target, Elements) -> wf:wire(#jquery{target = Target, method = ["html"], args = [Elements], format="'~s'"}).
+update(Target, Elements) -> wf:wire(#jquery{target = Target, method = ["html"], args = [Elements], format = "'~s'"}).
 
 
 %% replace/2
@@ -399,7 +429,8 @@ update(Target, Elements) -> wf:wire(#jquery{target = Target, method = ["html"], 
 %% @end
 -spec replace(term(), term()) -> ok.
 %% ====================================================================
-replace(Target, Elements) -> wf:wire(#jquery{target = Target, method = ["replaceWith"], args = [Elements], format="'~s'"}).
+replace(Target, Elements) ->
+    wf:wire(#jquery{target = Target, method = ["replaceWith"], args = [Elements], format = "'~s'"}).
 
 
 %% insert_top/2
@@ -408,7 +439,8 @@ replace(Target, Elements) -> wf:wire(#jquery{target = Target, method = ["replace
 %% @end
 -spec insert_top(term(), term()) -> ok.
 %% ====================================================================
-insert_top(Target, Elements) -> wf:wire(#jquery{target = Target, method = ["prepend"], args = [Elements], format="'~s'"}).
+insert_top(Target, Elements) ->
+    wf:wire(#jquery{target = Target, method = ["prepend"], args = [Elements], format = "'~s'"}).
 
 
 %% insert_bottom/2
@@ -417,7 +449,8 @@ insert_top(Target, Elements) -> wf:wire(#jquery{target = Target, method = ["prep
 %% @end
 -spec insert_bottom(term(), term()) -> ok.
 %% ====================================================================
-insert_bottom(Target, Elements) -> wf:wire(#jquery{target = Target, method = ["append"], args = [Elements], format="'~s'"}).
+insert_bottom(Target, Elements) ->
+    wf:wire(#jquery{target = Target, method = ["append"], args = [Elements], format = "'~s'"}).
 
 
 %% insert_before/2
@@ -426,7 +459,8 @@ insert_bottom(Target, Elements) -> wf:wire(#jquery{target = Target, method = ["a
 %% @end
 -spec insert_before(term(), term()) -> ok.
 %% ====================================================================
-insert_before(Target, Elements) -> wf:wire(#jquery{target = Target, method = ["before"], args = [Elements], format="'~s'"}).
+insert_before(Target, Elements) ->
+    wf:wire(#jquery{target = Target, method = ["before"], args = [Elements], format = "'~s'"}).
 
 
 %% insert_after/2
@@ -435,7 +469,8 @@ insert_before(Target, Elements) -> wf:wire(#jquery{target = Target, method = ["b
 %% @end
 -spec insert_after(term(), term()) -> ok.
 %% ====================================================================
-insert_after(Target, Elements) -> wf:wire(#jquery{target = Target, method = ["after"], args = [Elements], format="'~s'"}).
+insert_after(Target, Elements) ->
+    wf:wire(#jquery{target = Target, method = ["after"], args = [Elements], format = "'~s'"}).
 
 
 %% remove/1

@@ -18,15 +18,20 @@
 -define(contact_email, "support@onedata.org").
 
 %% Template points to the template file, which will be filled with content
-main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}.
+main() ->
+    case gui_utils:user_logged_in() and gui_utils:dn_and_storage_defined() of
+        false ->
+            gui_utils:redirect_to_login(true),
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+        true ->
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}
+    end.
 
 %% Page title
 title() -> <<"About">>.
 
 %% This will be placed in the template instead of {{body}} tag
-body() -> gui_utils:apply_or_redirect(?MODULE, render_body, true).
-
-render_body() ->
+body() -> 
     #panel{style = <<"position: relative;">>, body = [
         gui_utils:top_menu(about_tab),
         #panel{style = <<"margin-top: 60px; padding: 20px;">>, body = [

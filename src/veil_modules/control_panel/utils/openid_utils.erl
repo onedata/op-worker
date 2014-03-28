@@ -83,16 +83,16 @@ prepare_validation_parameters() ->
         RequestParameters = lists:foldl(
             fun(Key, Acc) ->
                 Value = case wf:q(Key) of
-                            undefined -> throw("Value for " ++ wf:to_list(Key) ++ " not found");
+                            undefined -> throw("Value for " ++ gui_utils:to_list(Key) ++ " not found");
                             Val -> Val
                         end,
                 % Safely URL-decode params
-                Param = wf:to_binary(wf:url_encode(wf:to_list(Value))),
+                Param = wf:to_binary(wf:url_encode(gui_utils:to_list(Value))),
                 <<Acc/binary, "&", Key/binary, "=", Param/binary>>
             end, <<"">>, SignedArgs),
         ValidationRequestBody = <<?openid_check_authentication_mode, RequestParameters/binary>>,
         EndpointURL = wf:q(<<?openid_op_endpoint_key>>),
-        {wf:to_list(EndpointURL), wf:to_list(ValidationRequestBody)}
+        {gui_utils:to_list(EndpointURL), gui_utils:to_list(ValidationRequestBody)}
 
     catch Type:Message ->
         ?error_stacktrace("Failed to process login validation request.~n~p: ~p", [Type, Message]),
@@ -144,13 +144,13 @@ validate_openid_login({EndpointURL, ValidationRequestBody}) ->
 %% ====================================================================
 retrieve_user_info() ->
     try
-        Login = wf:to_list(wf:q(<<?openid_login_key>>)),
-        Name = wf:to_list(wf:q(<<?openid_name_key>>)),
-        Teams = parse_teams(wf:to_list(wf:q(<<?openid_teams_key>>))),
-        Email = wf:to_list(wf:q(<<?openid_email_key>>)),
-        DN1 = wf:to_list(wf:q(<<?openid_dn1_key>>)),
-        DN2 = wf:to_list(wf:q(<<?openid_dn2_key>>)),
-        DN3 = wf:to_list(wf:q(<<?openid_dn3_key>>)),
+        Login = gui_utils:to_list(wf:q(<<?openid_login_key>>)),
+        Name = gui_utils:to_list(wf:q(<<?openid_name_key>>)),
+        Teams = parse_teams(gui_utils:to_list(wf:q(<<?openid_teams_key>>))),
+        Email = gui_utils:to_list(wf:q(<<?openid_email_key>>)),
+        DN1 = gui_utils:to_list(wf:q(<<?openid_dn1_key>>)),
+        DN2 = gui_utils:to_list(wf:q(<<?openid_dn2_key>>)),
+        DN3 = gui_utils:to_list(wf:q(<<?openid_dn3_key>>)),
         DnList = lists:filter(
             fun(X) ->
                 (X /= [])

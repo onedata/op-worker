@@ -42,7 +42,21 @@
 
 
 %% Template points to the template file, which will be filled with content
-main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}.
+main() ->
+    case gui_utils:user_logged_in() of
+        false ->
+            gui_utils:redirect_to_login(true),
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+        true ->
+            case gui_utils:can_view_logs() of
+                false ->
+                    wf:redirect(<<"/">>),
+                    #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+                true ->
+                    #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}
+            end
+    end.
+
 
 
 %% Page title
@@ -51,21 +65,7 @@ title() -> <<"Logs">>.
 
 % This will be placed instead of [[[body()]]] tag in template
 body() ->
-    case gui_utils:user_logged_in() of
-        false ->
-            gui_utils:redirect_to_login(true);
-        true ->
-            case gui_utils:can_view_logs() of
-                false ->
-                    wf:redirect(<<"/">>);
-                true ->
-                    render_body()
-            end
-    end.
-
-
-% User can view logs, render the body
-render_body() ->
+    gui_utils:register_escape_event("escape_pressed"),
     _Body = [
         gui_utils:top_menu(logs_tab, logs_submenu()),
         #panel{style = <<"margin-top: 122px; z-index: -1;">>, body = main_table()},
@@ -102,8 +102,8 @@ logs_submenu() ->
                 ]},
 
                 % Uncomment for development
-                #link{title = "Generate logs", style = "padding: 18px 14px;",
-                    body = "GENERUJ LOGI", postback = generate_logs},
+                %#link{title = "Generate logs", style = "padding: 18px 14px;",
+                %    body = "GENERUJ LOGI", postback = generate_logs},
 
                 #list{class = <<"nav pull-right">>, body = [
                     #li{id = "generate_logs", body = #link{title = <<"Clear all logs">>, style = <<"padding: 18px 14px;">>,
@@ -174,10 +174,9 @@ filter_form(FilterType) ->
         #p{id = get_filter_none(FilterType), style = <<"display: inline;">>, body = <<"off">>},
         #panel{id = get_filter_panel(FilterType), class = <<"input-append">>, style = <<"margin-bottom: 0px; display: inline;">>, body = [
             #textbox{id = get_filter_textbox(FilterType), class = <<"span2">>, body = <<"">>,
-                placeholder = get_filter_placeholder(FilterType), postback = {update_filter, FilterType},
-                source = [get_filter_textbox(FilterType)]},
+                placeholder = get_filter_placeholder(FilterType)},
             #panel{class = <<"btn-group">>, body = [
-                #button{class = <<"btn">>, type = <<"button">>, title = <<"Save">>,
+                #button{id = get_filter_submit_button(FilterType), class = <<"btn">>, type = <<"button">>, title = <<"Save">>,
                     body = #span{class = <<"fui-check">>}, postback = {update_filter, FilterType},
                     source = [get_filter_textbox(FilterType)]}
             ]}
@@ -396,6 +395,10 @@ filter_contains(String, Filter) ->
 
 % =====================
 % Event handling
+api_event("escape_pressed", _, _) ->
+    event(hide_filters_popup).
+
+
 event(init) ->
     put(filters, #page_state{}),
     % Start a comet process
@@ -431,6 +434,7 @@ event(show_filters_popup) ->
     gui_utils:update("footer_popup", filters_panel()),
     lists:foreach(
         fun(FilterType) ->
+            wf:wire(gui_utils:script_for_enter_submission(get_filter_textbox(FilterType), get_filter_submit_button(FilterType))),
             event({show_filter, FilterType})
         end, get_filter_types()),
     wf:wire(#jquery{target = "footer_popup", method = ["removeClass"], args = ["\"hidden\""]});
@@ -560,4 +564,9 @@ get_filter_textbox(message_filter) -> "message_filter_textbox";
 get_filter_textbox(node_filter) -> "node_filter_textbox";
 get_filter_textbox(module_filter) -> "module_filter_textbox";
 get_filter_textbox(function_filter) -> "function_filter_textbox".
+
+get_filter_submit_button(message_filter) -> "message_filter_button";
+get_filter_submit_button(node_filter) -> "node_filter_button";
+get_filter_submit_button(module_filter) -> "module_filter_button";
+get_filter_submit_button(function_filter) -> "function_filter_button".
 

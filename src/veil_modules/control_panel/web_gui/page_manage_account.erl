@@ -15,17 +15,20 @@
 -include("logging.hrl").
 
 %% Template points to the template file, which will be filled with content
-main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}.
+main() ->
+    case gui_utils:user_logged_in() of
+        false ->
+            gui_utils:redirect_to_login(true),
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+        true ->
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}
+    end.
 
 %% Page title
 title() -> <<"Manage account">>.
 
 %% This will be placed in the template instead of [[[page:body()]]] tag
-body() -> gui_utils:apply_or_redirect(?MODULE, render_body, false).
-
-
-% Body content
-render_body() ->
+body() ->
     #panel{style = <<"position: relative;">>, body = [
         gui_utils:top_menu(manage_account_tab),
         #panel{style = <<"margin-top: 60px; padding: 20px;">>, body = [
@@ -197,7 +200,7 @@ update_email(User, AddOrRemove) ->
     OldEmailList = user_logic:get_email_list(User),
     {ok, NewUser} = case AddOrRemove of
                         {add, submitted} ->
-                            NewEmail = wf:to_list(wf:q("new_email_textbox")),
+                            NewEmail = gui_utils:to_list(wf:q("new_email_textbox")),
                             case user_logic:get_user({email, NewEmail}) of
                                 {ok, _} ->
                                     wf:wire(#alert{text = <<"This e-mail address is in use.">>}),

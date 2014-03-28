@@ -20,20 +20,20 @@ render_action(Record = #jquery{property = undefined, target = Target, method = M
     PreRenderedArgs = string:join([case A of
                                     A when is_tuple(A) -> wf:render(A);
                                     A when is_list(A) -> A;
-                                    A when is_integer(A) -> wf:to_list(A);
+                                    A when is_integer(A) -> gui_utils:to_list(A);
                                     A -> A end || A <- Args2], ","),
     RenderedArgs = case Record#jquery.format of
                        "'~s'" -> wf:js_escape(PreRenderedArgs);
                        _ -> PreRenderedArgs
                        end,
     string:join([wf:f("$('#~s').~s(" ++ Record#jquery.format ++ ");",
-        [wf:to_list(Target), wf:to_list(Method), RenderedArgs]) || Method <- Methods], []);
+        [gui_utils:to_list(Target), gui_utils:to_list(Method), RenderedArgs]) || Method <- Methods], []);
 
 render_action(#jquery{target = Target, method = undefined, property = Property, args = simple, right = Right}) ->
-    wf:f("~s.~s = ~s;", [wf:to_list(Target), wf:to_list(Property), wf:render(Right)]);
+    wf:f("~s.~s = ~s;", [gui_utils:to_list(Target), gui_utils:to_list(Property), wf:render(Right)]);
 
 render_action(#jquery{target = Target, method = undefined, property = Property, right = undefined}) ->
-    wf:f("$('#~s').~s;", [wf:to_list(Target), wf:to_list(Property)]);
+    wf:f("$('#~s').~s;", [gui_utils:to_list(Target), gui_utils:to_list(Property)]);
 
 render_action(#jquery{target = Target, method = undefined, property = Property, right = Right}) ->
-    wf:f("$('#~s').~s = ~s", [wf:to_list(Target), wf:to_list(Property), wf:render(Right)]).
+    wf:f("$('#~s').~s = ~s", [gui_utils:to_list(Target), gui_utils:to_list(Property), wf:render(Right)]).
