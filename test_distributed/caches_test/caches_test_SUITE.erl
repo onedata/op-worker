@@ -433,15 +433,32 @@ automatic_nodes_cache_clearing_test(Config) ->
   CachesPids = lists:foldl(CreateCaches, [], WorkerNodes),
 
   AddDataToCaches = fun(Node) ->
+    ct:print("Creating test_cache on node: ~p~n", [Node]),
+
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key, test_value}])),
+    ct:print("1. Checking test_cache size on node: ~p~n", [Node]),
+    ?assertEqual(1, rpc:call(Node, ets, info, [test_cache, size])),
+
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key2, test_value2}])),
+    ct:print("2. Checking test_cache size on node: ~p~n", [Node]),
+    ?assertEqual(2, rpc:call(Node, ets, info, [test_cache, size])),
+
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key3, test_value3}])),
+    ct:print("3. Checking test_cache size on node: ~p~n", [Node]),
+    ?assertEqual(3, rpc:call(Node, ets, info, [test_cache, size])),
+
     ?assert(rpc:call(Node, ets, insert, [test_cache, {get_atom_from_node(Node, test_key), get_atom_from_node(Node, test_value)}])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    ct:print("4. Checking test_cache size on node: ~p~n", [Node]),
+    ?assertEqual(4, rpc:call(Node, ets, info, [test_cache, size])),
+
+    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node}),
+    ct:print("4. Checking test_cache again size on node: ~p~n", [Node]),
+    ?assertEqual(4, rpc:call(Node, ets, info, [test_cache, size]))
   end,
   lists:foreach(AddDataToCaches, WorkerNodes),
 
   CheckCaches1 = fun(Node) ->
+    ct:print("==> Checking test_cache size on node: ~p~n", [Node]),
     ?assertEqual(4, rpc:call(Node, ets, info, [test_cache, size])),
     ?assertEqual([{test_key, test_value}], rpc:call(Node, ets, lookup, [test_cache, test_key])),
     ?assertEqual([{test_key2, test_value2}], rpc:call(Node, ets, lookup, [test_cache, test_key2])),

@@ -542,7 +542,7 @@ wait_for_cluster_cast() ->
 -spec wait_for_cluster_cast(GenServ :: term()) -> ok | no_return().
 %% ====================================================================
 wait_for_cluster_cast(GenServ) ->
-  timer:sleep(1000),
+  timer:sleep(500),
   Ans = try
     gen_server:call(GenServ, check, 60000)
   catch
