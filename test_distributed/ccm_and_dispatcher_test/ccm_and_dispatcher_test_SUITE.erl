@@ -78,7 +78,7 @@ modules_start_and_ping_test(Config) ->
 
   gen_server:cast({global, ?CCM}, get_state_from_db),
   nodes_manager:wait_for_cluster_cast(),
-  ?assertEqual(3, gen_server:call({global, ?CCM}, get_state_num, 500)),
+  ?assertEqual(2, gen_server:call({global, ?CCM}, get_state_num, 500)),
   State = gen_server:call({global, ?CCM}, get_state, 500),
   Workers = State#cm_state.workers,
   ?assertEqual(1, length(Workers)),

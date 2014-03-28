@@ -542,9 +542,9 @@ wait_for_cluster_cast() ->
 -spec wait_for_cluster_cast(GenServ :: term()) -> ok | no_return().
 %% ====================================================================
 wait_for_cluster_cast(GenServ) ->
-  timer:sleep(500),
+  timer:sleep(100),
   Ans = try
-    gen_server:call(GenServ, check, 60000)
+    gen_server:call(GenServ, check, 10000)
   catch
     E1:E2 ->
       {exception, E1, E2}
@@ -574,7 +574,7 @@ wait_for_nodes_registration(NodesNum, TriesNum) ->
   case check_nodes() of
     NodesNum -> ok;
     _ ->
-      timer:sleep(5000),
+      timer:sleep(500),
       wait_for_nodes_registration(NodesNum, TriesNum - 1)
   end.
 
@@ -609,7 +609,7 @@ check_init(ModulesNum) ->
     {WList, StateNum} = gen_server:call({global, ?CCM}, get_workers, 1000),
     case length(WList) >= ModulesNum of
       true ->
-        timer:sleep(5000),
+        timer:sleep(500),
         Nodes = gen_server:call({global, ?CCM}, get_nodes, 1000),
         {_, CStateNum} = gen_server:call({global, ?CCM}, get_callbacks, 1000),
         CheckNode = fun(Node, TmpAns) ->
@@ -669,7 +669,7 @@ wait_for_cluster_init(ModulesNum, TriesNum) ->
   case check_init(ModulesNum) of
     true -> true;
     _ ->
-      timer:sleep(5000),
+      timer:sleep(500),
       wait_for_cluster_init(ModulesNum, TriesNum - 1)
   end.
 
@@ -739,6 +739,6 @@ wait_for_state_loading(TriesNum) ->
   case check_state_loading() of
     true -> true;
     _ ->
-      timer:sleep(5000),
+      timer:sleep(500),
       wait_for_state_loading(TriesNum - 1)
   end.
