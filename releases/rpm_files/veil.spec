@@ -54,6 +54,7 @@ Veil service - allows installation of veil cluster nodes.
 %post
 chkconfig --add veil
 ln -s %{_prefix}/setup /usr/bin/veil_setup
+ln -s %{_prefix}/useradd /usr/bin/veil_useradd
 
 %preun
 %{_prefix}/scripts/erl_launcher escript %{_prefix}/scripts/init.escript stop
