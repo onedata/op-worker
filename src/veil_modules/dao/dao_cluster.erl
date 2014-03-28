@@ -277,6 +277,8 @@ get_connection_info(SessID) ->
     ok |
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
+remove_connection_info("") ->
+	ok;
 remove_connection_info(SessID) ->
     dao:remove_record(SessID).
 
