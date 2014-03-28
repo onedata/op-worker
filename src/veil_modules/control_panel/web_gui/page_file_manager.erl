@@ -74,8 +74,8 @@ manager_submenu() ->
                         #textbox{id = wire_enter("search_textbox", "search_button"), class = <<"span2">>,
                             style = <<"width: 220px;">>, placeholder = <<"Search">>},
                         #panel{class = <<"btn-group">>, body = [
-                            #button{id = wire_click("search_button", {action, search, [{q, search_textbox}]}), class = <<"btn">>, type = <<"button">>,
-                                source = ["search_textbox"], body = #span{class = <<"fui-search">>}}
+                            #button{id = wire_click("search_button", ["search_textbox"], {action, search, [{q, "search_textbox"}]}),
+                                class = <<"btn">>, type = <<"button">>, body = #span{class = <<"fui-search">>}}
                         ]}
                     ]}
                 ]}
@@ -120,10 +120,10 @@ manager_submenu() ->
 
                 #panel{class = <<"btn-toolbar pull-right no-margin">>, style = <<"padding: 12px 15px; overflow: hidden;">>, body = [
                     #panel{class = <<"btn-group no-margin">>, body = [
-                        #link{id = wire_click(list_view_button, {action, toggle_view, [list]}),
+                        #link{id = wire_click("list_view_button", {action, toggle_view, [list]}),
                             title = "List view", class = <<"btn btn-small btn-inverse">>,
                             body = #span{class = <<"fui-list-columned">>}},
-                        #link{id = wire_click(grid_view_button, {action, toggle_view, [grid]}),
+                        #link{id = wire_click("grid_view_button", {action, toggle_view, [grid]}),
                             title = "Grid view", class = <<"btn btn-small btn-inverse">>,
                             body = #span{class = <<"fui-list-small-thumbnails">>}}
                     ]}
@@ -178,6 +178,10 @@ wire_click(ID, Tag) ->
     put(to_wire, get(to_wire) ++ [{ID, ID, #event{type = click, target = ID, postback = Tag}, true}]),
     ID.
 
+wire_click(ID, Source, Tag) ->
+    put(to_wire, get(to_wire) ++ [{ID, ID, #event{type = click, target = ID, source = Source, postback = Tag}, true}]),
+    ID.
+
 wire_enter(ID, ButtonToClickID) ->
     % No need to show the spinner, as this only performs a click on a submit button
     put(to_wire, get(to_wire) ++ [gui_utils:script_for_enter_submission(ID, ButtonToClickID)]),
@@ -196,13 +200,13 @@ wire_script(Script) ->
 do_wiring() ->
     lists:foreach(
         fun({TriggerID, TargetID, Event = #event{type = Type}, ShowSpinner}) ->
-            wf:wire(TriggerID, TargetID, Event),
             case ShowSpinner of
                 false ->
                     skip;
                 true ->
                     wf:wire(wf:f("$('#~s').bind('~s', function anonymous(event) { $('#spinner').show(150); });", [TriggerID, Type]))
-            end;
+            end,
+            wf:wire(TriggerID, TargetID, Event);
             (Script) ->
                 wf:wire(Script)
         end, get(to_wire)),
@@ -225,7 +229,8 @@ event(init) ->
             skip;
         true ->
             UserID = gui_utils:get_user_dn(),
-            {ok, Pid} = gui_utils:comet(fun() -> comet_loop_init(UserID) end),
+            Hostname = gui_utils:get_requested_hostname(),
+            {ok, Pid} = gui_utils:comet(fun() -> comet_loop_init(UserID, Hostname) end),
             put(comet_pid, Pid)
     end;
 
@@ -247,9 +252,10 @@ event({action, Fun, Args}) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Comet loop and functions evaluated by comet
-comet_loop_init(UserId) ->
+comet_loop_init(UserId, RequestedHostname) ->
     % Initialize page state
     put(user_id, UserId),
+    set_requested_hostname(RequestedHostname),
     set_working_directory("/"),
     set_selected_items([]),
     set_display_style(list),
@@ -266,6 +272,7 @@ comet_loop_init(UserId) ->
     % Render elements depending on page state
     reset_wire_accumulator(),
     refresh_workspace(),
+    do_wiring(),
     gui_utils:flush(),
 
     % Enter comet loop for event processing and autorefreshing
@@ -278,8 +285,8 @@ comet_loop() ->
             {action, Fun, Args} ->
                 reset_wire_accumulator(),
                 erlang:apply(?MODULE, Fun, Args),
-                wf:wire(#jquery{target = "spinner", method = ["hide"]}),
                 do_wiring(),
+                wf:wire(#jquery{target = "spinner", method = ["hide"]}),
                 gui_utils:flush(),
                 comet_loop()
         after ?AUTOREFRESH_PERIOD ->
@@ -331,7 +338,11 @@ refresh_workspace() ->
 
 
 sort_item_list() ->
-    ItemList = get_item_list(),
+    AllItems = get_item_list(),
+    {ItemList, GroupsDir} = lists:partition(
+        fun(I) ->
+            item_path(I) /= "/groups"
+        end, AllItems),
     Attr = get_sort_by(),
     SortAscending = get_sort_ascending(),
     SortedItems = lists:sort(
@@ -359,7 +370,7 @@ sort_item_list() ->
                           Dirs ++ Files;
                       _ -> Result
                   end,
-    set_item_list(FinalResult).
+    set_item_list(GroupsDir ++ FinalResult).
 
 
 sort_toggle(Type) ->
@@ -398,7 +409,7 @@ refresh_tool_buttons() ->
                                                Attr -> <<"active">>;
                                                _ -> <<"">>
                                            end,
-                                   Acc ++ [#li{id = wire_click("list_sort_by" ++ gui_utils:to_list(Attr), {action, sort_toggle, [Attr]}),
+                                   Acc ++ [#li{id = wire_click("list_sort_by_" ++ gui_utils:to_list(Attr), {action, sort_toggle, [Attr]}),
                                        class = Class, body = #link{body = attr_to_name(Attr)}}]
                                end, [], [name | get_displayed_file_attributes()])
                    end,
@@ -435,7 +446,6 @@ enable_tool_button(ID, Flag) ->
 
 
 navigate(Path) ->
-    ?dump(Path),
     set_working_directory(Path),
     clear_manager().
 
@@ -590,8 +600,8 @@ show_popup(Type) ->
                     #form{class = <<"control-group">>, body = [
                         #textbox{id = wire_enter("create_dir_textbox", "create_dir_submit"), class = <<"flat">>,
                             style = <<"width: 350px;">>, placeholder = <<"New directory name">>},
-                        #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, source = ["create_dir_textbox"],
-                            id = wire_click("create_dir_submit", {action, create_directory, [{q, create_dir_textbox}]})}
+                        #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>,
+                            id = wire_click("create_dir_submit", ["create_dir_textbox"], {action, create_directory, [{q, "create_dir_textbox"}]})}
                     ]}
                 ],
                 {Body, "$('#create_dir_textbox').focus();", {action, hide_popup}};
@@ -607,9 +617,9 @@ show_popup(Type) ->
                     #p{body = <<"Rename <b>", (gui_utils:to_binary(Filename))/binary, "</b>">>},
                     #form{class = <<"control-group">>, body = [
                         #textbox{id = wire_enter("new_name_textbox", "new_name_submit"), class = <<"flat">>,
-                            style = <<"width: 350px;">>, placeholder = <<"New name">>, body = gui_utils:to_binary(Filename)},
-                        #button{id = wire_click("new_name_submit", {action, rename_item, [OldLocation, {q, new_name_textbox}]}),
-                            class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, source = ["new_name_textbox"]}
+                            style = <<"width: 350px;">>, placeholder = <<"New name">>, value = gui_utils:to_binary(Filename)},
+                        #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>,
+                            id = wire_click("new_name_submit", ["new_name_textbox"], {action, rename_item, [OldLocation, {q, "new_name_textbox"}]})}
                     ]}
                 ],
                 FocusScript = wf:f("$('#new_name_textbox').focus();
@@ -642,7 +652,7 @@ show_popup(Type) ->
                                     end,
                 clear_workspace(),
                 select_item(Path),
-                AddressPrefix = <<"https://", (gui_utils:get_requested_hostname())/binary, ?shared_files_download_path>>,
+                AddressPrefix = <<"https://", (get_requested_hostname())/binary, ?shared_files_download_path>>,
                 Body = [
                     case Status of
                         exists ->
@@ -665,7 +675,7 @@ show_popup(Type) ->
                 %Body = [
                 %%    #veil_upload{tag = file_upload, show_button = true, multiple = true, droppable = true, target_dir = get_working_directory()}
                 %],
-                {<<"ZOMG NOT IMPLEMENTED">>, undefined, {action, clear_manager}};
+                {"ZOMG NOT IMPLEMENTED", undefined, {action, clear_manager}};
 
             remove_selected ->
                 {_FB, _S, _A} =
@@ -681,25 +691,25 @@ show_popup(Type) ->
                                 end, {0, 0}, Paths),
                             FilesString = if
                                               (NumFiles =:= 1) ->
-                                                  <<(integer_to_binary(NumFiles))/binary, " file">>;
+                                                  <<"<b>", (integer_to_binary(NumFiles))/binary, " file</b>">>;
                                               (NumFiles > 1) ->
-                                                  <<(integer_to_binary(NumFiles))/binary, " files">>;
+                                                  <<"<b>", (integer_to_binary(NumFiles))/binary, " files</b>">>;
                                               true -> <<"">>
                                           end,
                             DirsString = if
                                              (NumDirs =:= 1) ->
-                                                 <<(integer_to_binary(NumDirs))/binary, " directory and all its content">>;
+                                                 <<"<b>", (integer_to_binary(NumDirs))/binary, " directory</b> and all its content">>;
                                              (NumDirs > 1) ->
-                                                 <<(integer_to_binary(NumDirs))/binary, " directories and all their content">>;
+                                                 <<"<b>", (integer_to_binary(NumDirs))/binary, " directories</b> and all their content">>;
                                              true -> <<"">>
                                          end,
                             Punctuation = if
-                                              (FilesString /= "") and (DirsString /= "") ->
+                                              (FilesString /= <<"">>) and (DirsString /= <<"">>) ->
                                                   <<", ">>;
                                               true -> <<"">>
                                           end,
                             Body = [
-                                #p{body = <<FilesString/binary, Punctuation/binary, DirsString/binary>>},
+                                #p{body = <<"Remove ", FilesString/binary, Punctuation/binary, DirsString/binary, "?">>},
                                 #form{class = <<"control-group">>, body = [
                                     #button{id = wire_click("ok_button", {action, remove_selected}),
                                         class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
@@ -768,6 +778,15 @@ grid_view_body() ->
                                  end;
                              _ -> <<"">>
                          end,
+            ImageUrl = case item_is_dir(Item) of
+                           true ->
+                               case FullPath of
+                                   "/groups" -> <<"/images/folder_groups64.png">>;
+                                   _ -> <<"/images/folder64.png">>
+                               end;
+                           false ->
+                               <<"/images/file64.png">>
+                       end,
             LinkID = "grid_item_" ++ integer_to_list(Counter),
             % Item won't hightlight if the link is clicked.
             wire_script(wf:f("$('.wfid_~s').click(function(e) { e.stopPropagation();});", [LinkID])),
@@ -778,7 +797,7 @@ grid_view_body() ->
                            true ->
                                [
                                    #panel{style = <<"margin: 0 auto; text-align: center;">>, body = [
-                                       #image{style = ImageStyle, image = <<"/images/folder64.png">>}
+                                       #image{style = ImageStyle, image = ImageUrl}
                                    ]},
                                    #panel{style = <<"margin: 5px auto 0; text-align: center; word-wrap: break-word;">>, body = [
                                        #link{title = Filename, id = wire_click(LinkID, {action, navigate, [FullPath]}), body = Filename}
@@ -795,7 +814,7 @@ grid_view_body() ->
                                    #panel{style = <<"margin: 0 auto; text-align: center;">>, body = [
                                        #panel{style = <<"display: inline-block; position: relative;">>, body = [
                                            ShareIcon,
-                                           #image{style = ImageStyle, image = <<"/images/file64.png">>}
+                                           #image{style = ImageStyle, image = ImageUrl}
                                        ]}
                                    ]},
                                    #panel{style = <<"margin: 5px auto 0; text-align: center; word-wrap: break-word;">>, body = [
@@ -870,12 +889,21 @@ list_view_body() ->
                                  end;
                              _ -> <<"">>
                          end,
+            ImageUrl = case item_is_dir(Item) of
+                           true ->
+                               case FullPath of
+                                   "/groups" -> <<"/images/folder_groups32.png">>;
+                                   _ -> <<"/images/folder32.png">>
+                               end;
+                           false ->
+                               <<"/images/file32.png">>
+                       end,
             LinkID = "list_item_" ++ integer_to_list(Counter),
             % Item won't hightlight if the link is clicked.
-            wire_script(wf:f("$('.wfid_~s').click(function(e) { e.stopPropagation();});", [LinkID])),
+            wire_script(wf:f("$('#~s').click(function(e) { e.stopPropagation();});", [LinkID])),
             ImageID = "image_" ++ integer_to_list(Counter),
             % Image won't hightlight if the image is clicked.
-            wire_script(wf:f("$('.wfid_~s').click(function(e) { e.stopPropagation();});", [ImageID])),
+            wire_script(wf:f("$('#~s').click(function(e) { e.stopPropagation();});", [ImageID])),
             TableRow = #tr{
                 id = wire_click(item_id(Item), {action, select_item, [FullPath]}),
                 cells = [
@@ -885,7 +913,7 @@ list_view_body() ->
                                 class = <<"table-cell">>, body = [
                                     #panel{style = <<"display: inline-block; vertical-align: middle;">>, body = [
                                         #link{id = wire_click(ImageID, {action, navigate, [FullPath]}), body =
-                                        #image{class = <<"list-icon">>, style = ImageStyle, image = <<"/images/folder32.png">>}}
+                                        #image{class = <<"list-icon">>, style = ImageStyle, image = ImageUrl}}
                                     ]},
                                     #panel{class = <<"filename_row">>,
                                         style = <<"max-width: 400px; word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
@@ -903,7 +931,7 @@ list_view_body() ->
                                     #link{id = ImageID, target = <<"_blank">>,
                                         url = <<?user_content_download_path, "?f=", (gui_utils:to_binary(wf:url_encode(FullPath)))/binary>>, body = [
                                             ShareIcon,
-                                            #image{class = <<"list-icon">>, style = ImageStyle, image = <<"/images/file32.png">>}
+                                            #image{class = <<"list-icon">>, style = ImageStyle, image = ImageUrl}
                                         ]}
                                 ]},
                                 #panel{class = <<"filename_row">>, style = <<"word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
@@ -938,7 +966,11 @@ item_new(Dir, File) ->
     item_new(FullPath).
 
 item_new(FullPath) ->
-    FileAttr = fs_get_attributes(FullPath),
+    FA = fs_get_attributes(FullPath),
+    FileAttr = case FA#fileattributes.type of
+                   "DIR" -> FA#fileattributes{size = -1};
+                   _ -> FA
+               end,
     IsShared = case logical_files_manager:get_share({file, FullPath}) of
                    {ok, _} -> true;
                    _ -> false
@@ -1112,6 +1144,9 @@ fs_unique_filename(RequestedPath, Counter) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Functions to save and retrieve page state
+set_requested_hostname(Host) -> put(rh, Host).
+get_requested_hostname() -> get(rh).
+
 set_working_directory(Dir) -> put(wd, Dir).
 get_working_directory() -> get(wd).
 

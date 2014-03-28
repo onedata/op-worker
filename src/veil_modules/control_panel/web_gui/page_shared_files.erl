@@ -30,6 +30,7 @@ title() -> <<"Shared files">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
+    gui_utils:register_escape_event("escape_pressed"),
     [
         gui_utils:top_menu(shared_files_tab),
         #panel{style = <<"margin-top: 59px;">>, body = main_panel()},
@@ -106,6 +107,10 @@ footer_popup() ->
 
 
 % Handle postback event
+api_event("escape_pressed", _, _) ->
+    event({action, hide_popup}).
+
+
 event(init) ->
     ok;
 
@@ -124,14 +129,17 @@ show_link(ShareID) ->
             style = <<"position: absolute; top: 8px; right: 8px; z-index: 3;">>,
             body = #span{class = <<"fui-cross">>, style = <<"font-size: 20px;">>}},
         #form{class = <<"control-group">>, body = [
-            #textbox{id = "shared_link_textbox", class = <<"flat">>, style = <<"width: 700px;">>, postback = {action, hide_popup},
-                value = <<AddressPrefix/binary, ShareID/binary>>, placeholder = <<"Download link">>}
+            #textbox{id = "shared_link_textbox", class = <<"flat">>, style = <<"width: 700px;">>,
+                value = <<AddressPrefix/binary, ShareID/binary>>, placeholder = <<"Download link">>},
+            #button{id = "shared_link_submit", postback = {action, hide_popup},
+                class = <<"btn btn-success btn-wide">>, body = <<"Ok">>}
         ]}
     ],
     wf:update(footer_popup, Body),
     wf:wire(#jquery{target = "footer_popup", method = ["removeClass"], args = ["\"hidden\""]}),
     wf:wire(#jquery{target = "footer_popup", method = ["slideDown"], args = ["200"]}),
-    wf:wire(#jquery{target = "shared_link_textbox", method = ["focus", "select"]}).
+    wf:wire(#jquery{target = "shared_link_textbox", method = ["focus", "select"]}),
+    wf:wire(gui_utils:script_for_enter_submission("shared_link_textbox", "shared_link_submit")).
 
 
 % Display removal prompt in popup panel

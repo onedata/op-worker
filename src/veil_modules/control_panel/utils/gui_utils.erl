@@ -367,7 +367,7 @@ register_escape_event(Tag) ->
 -spec script_for_enter_submission(string(), string()) -> string().
 %% ====================================================================
 script_for_enter_submission(InputID, ButtonToClickID) ->
-    wf:f("$('#~s').bind('keydown', function (e){ if (e.which == 13) $('#~s').click(); });", [InputID, ButtonToClickID]).
+    wf:f("$('#~s').bind('keydown', function (e){ if (e.which == 13) { e.preventDefault(); $('#~s').click(); } });", [InputID, ButtonToClickID]).
 
 
 %% to_list/1
