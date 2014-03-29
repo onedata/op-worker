@@ -377,7 +377,9 @@ script_for_enter_submission(InputID, ButtonToClickID) ->
 %% @end
 -spec to_list(term()) -> list().
 %% ====================================================================
+to_list(undefined) -> [];
 to_list(Term) when is_list(Term) -> Term;
+to_list(Term) when is_binary(Term) -> binary_to_list(Term);
 to_list(Term) ->
     try
         wf:to_list(Term)

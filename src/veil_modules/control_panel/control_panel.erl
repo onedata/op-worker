@@ -74,7 +74,7 @@ init(_Args) ->
         ],
         [
             {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
-            %{max_keepalive, MaxKeepAlive},
+            %{max_keepalive, 1},
             {timeout, Timeout}
         ]),
 

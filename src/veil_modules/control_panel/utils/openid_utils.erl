@@ -34,8 +34,8 @@
 -spec get_login_url(HostName :: binary(), RedirectParams :: binary()) -> binary() | {error, endpoint_unavailable}.
 %% ====================================================================
 get_login_url(HostName, RedirectParams) ->
-    Endpoint = discover_op_endpoint(?xrds_url),
     try
+        Endpoint = discover_op_endpoint(?xrds_url),
         <<Endpoint/binary,
         "?", ?openid_checkid_mode,
         "&", ?openid_ns,
@@ -71,7 +71,6 @@ prepare_validation_parameters() ->
     try
         % 'openid.signed' contains parameters that must be contained in validation request
         SignedArgsNoPrefix = binary:split(wf:q(<<?openid_signed_key>>), <<",">>, [global]),
-
         % Add 'openid.' prefix to all parameters
         % And add 'openid.sig' and 'openid.signed' params which are required for validation
         SignedArgs = lists:map(
@@ -87,7 +86,7 @@ prepare_validation_parameters() ->
                             Val -> Val
                         end,
                 % Safely URL-decode params
-                Param = wf:to_binary(wf:url_encode(gui_utils:to_list(Value))),
+                Param = gui_utils:to_binary(wf:url_encode(gui_utils:to_list(Value))),
                 <<Acc/binary, "&", Key/binary, "=", Param/binary>>
             end, <<"">>, SignedArgs),
         ValidationRequestBody = <<?openid_check_authentication_mode, RequestParameters/binary>>,
@@ -146,7 +145,7 @@ retrieve_user_info() ->
     try
         Login = gui_utils:to_list(wf:q(<<?openid_login_key>>)),
         Name = gui_utils:to_list(wf:q(<<?openid_name_key>>)),
-        Teams = parse_teams(gui_utils:to_list(wf:q(<<?openid_teams_key>>))),
+        Teams = parse_teams(binary_to_list(wf:q(<<?openid_teams_key>>))),
         Email = gui_utils:to_list(wf:q(<<?openid_email_key>>)),
         DN1 = gui_utils:to_list(wf:q(<<?openid_dn1_key>>)),
         DN2 = gui_utils:to_list(wf:q(<<?openid_dn2_key>>)),
@@ -288,7 +287,7 @@ parse_teams(XMLContent) ->
     #xmlElement{content = TeamList} = find_XML_node(teams, XML),
     lists:map(
         fun(#xmlElement{content = [#xmlText{value = Value}]}) ->
-            Value
+            binary_to_list(unicode:characters_to_binary(Value, unicode))
         end, TeamList).
 
 
