@@ -42,17 +42,18 @@ redirect_with_error(Reason, Details) ->
 
 
 % These functions allow easy edition of error messages. They are called from n2o handlers
-% to obtain redirect url with proper args enclosed in cowboy request
-
+% to obtain redirect url with proper args enclosed in cowboy request.
+% wf_core:run is called so proper page can be displayed by n2o engine.
 generate_redirect_request(Req, Reason, Details) ->
     Qs = list_to_binary(wf:f("reason=~s&details=~s",
         [wf:url_encode(Reason), wf:url_encode(Details)])),
-    {false, cowboy_req:set([{path, <<"/error">>}, {qs, Qs}], Req)}.
+    {ok, NewReq} = wf_core:run(cowboy_req:set([{path, <<"/error">>}, {qs, Qs}], Req)),
+    {ok, NewReq}.
 
 
 user_content_request_error(Message, Req) ->
     {Reason, Details} = case Message of
-                            not_logged_in -> {"No active session", "You need to log in to download your content."};
+                            not_logged_in -> {"No active session", "You need to log in to download your files."};
                             file_not_found -> {"Invalid URL", "This URL doesn't point to any file. "};
                             sending_failed -> {"Internal server error", "Failed during serving the file. " ++
                                 "Please try again or contact the site administrator if the problem persists."}

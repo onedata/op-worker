@@ -782,6 +782,10 @@ grid_view_body() ->
                            true ->
                                case FullPath of
                                    "/groups" -> <<"/images/folder_groups64.png">>;
+                                   "/groups" ++ Rest -> case string:rstr(Rest, "/") of
+                                                             1 -> <<"/images/folder_groups64.png">>;
+                                                             _ -> <<"/images/folder64.png">>
+                                                         end;
                                    _ -> <<"/images/folder64.png">>
                                end;
                            false ->
@@ -819,7 +823,7 @@ grid_view_body() ->
                                    ]},
                                    #panel{style = <<"margin: 5px auto 0; text-align: center; word-wrap: break-word;">>, body = [
                                        #link{title = Filename, id = LinkID, body = Filename, target = <<"_blank">>,
-                                           url = <<?user_content_download_path, "?f=", (gui_utils:to_binary(wf:url_encode(FullPath)))/binary>>}
+                                           url = <<?user_content_download_path, "/", (gui_utils:to_binary(wf:url_encode(FullPath)))/binary>>}
                                    ]}
                                ]
                        end
@@ -893,6 +897,10 @@ list_view_body() ->
                            true ->
                                case FullPath of
                                    "/groups" -> <<"/images/folder_groups32.png">>;
+                                   "/groups" ++ Rest -> case string:rstr(Rest, "/") of
+                                                            1 -> <<"/images/folder_groups32.png">>;
+                                                            _ -> <<"/images/folder32.png">>
+                                                        end;
                                    _ -> <<"/images/folder32.png">>
                                end;
                            false ->
@@ -900,7 +908,7 @@ list_view_body() ->
                        end,
             LinkID = "list_item_" ++ integer_to_list(Counter),
             % Item won't hightlight if the link is clicked.
-            wire_script(wf:f("$('#~s').click(function(e) { e.stopPropagation();});", [LinkID])),
+            wire_script(wf:f("$('#~s').click(function(e) { e.stopPropagation(); });", [LinkID])),
             ImageID = "image_" ++ integer_to_list(Counter),
             % Image won't hightlight if the image is clicked.
             wire_script(wf:f("$('#~s').click(function(e) { e.stopPropagation();});", [ImageID])),
@@ -929,14 +937,14 @@ list_view_body() ->
                             #td{body = #span{class = <<"table-cell">>, body = [
                                 #panel{style = <<"display: inline-block; vertical-align: middle; position: relative;">>, body = [
                                     #link{id = ImageID, target = <<"_blank">>,
-                                        url = <<?user_content_download_path, "?f=", (gui_utils:to_binary(wf:url_encode(FullPath)))/binary>>, body = [
+                                        url = <<?user_content_download_path, "/", (gui_utils:to_binary(wf:url_encode(FullPath)))/binary>>, body = [
                                             ShareIcon,
                                             #image{class = <<"list-icon">>, style = ImageStyle, image = ImageUrl}
                                         ]}
                                 ]},
                                 #panel{class = <<"filename_row">>, style = <<"word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
                                     #link{id = LinkID, body = Filename, target = <<"_blank">>,
-                                        url = <<?user_content_download_path, "?f=", (gui_utils:to_binary(wf:url_encode(FullPath)))/binary>>}
+                                        url = <<?user_content_download_path, "/", (gui_utils:to_binary(wf:url_encode(FullPath)))/binary>>}
                                 ]}
                             ]}}
                     end

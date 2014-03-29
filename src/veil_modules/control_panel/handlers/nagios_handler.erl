@@ -9,6 +9,7 @@
 %% @end
 %% ===================================================================
 -module(nagios_handler).
+-behaviour(cowboy_http_handler).
 -include("registered_names.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 

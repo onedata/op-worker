@@ -21,6 +21,7 @@
 -export([register_escape_event/1, script_for_enter_submission/2]).
 -export([update/2, replace/2, insert_top/2, insert_bottom/2, insert_before/2, insert_after/2, remove/1]).
 -export([to_list/1, to_binary/1, join_to_binary/1]).
+-export([cowboy_ensure_header/3]).
 
 
 %% ====================================================================
@@ -482,8 +483,20 @@ insert_after(Target, Elements) ->
 remove(Target) -> wf:wire(#jquery{target = Target, method = ["remove"]}).
 
 
+%% cowboy_ensure_header/3
+%% ====================================================================
+%% @doc Sets a response header, but prevents duplicate entries. Header must
+%% be normalized to lowercase (e. g. content-type and not Content-Type)
+%% @end
+-spec cowboy_ensure_header(binary(), binary(), req()) -> ok.
+%% ====================================================================
+cowboy_ensure_header(Name, Value, Req) when is_binary(Name) and is_binary(Value) ->
+    Req2 = cowboy_req:delete_resp_header(Name, Req),
+    _Req3 = cowboy_req:set_resp_header(Name, Value, Req2).
+
+
 % old_menu_captions() ->
-% _MenuCaptions = 
+% _MenuCaptions =
 %     [
 %         {data_tab, #li { body=[
 %             #link{ style="padding: 18px;", url="/file_manager", body="Data" },

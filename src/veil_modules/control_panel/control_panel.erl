@@ -14,13 +14,16 @@
 -module(control_panel).
 -behaviour(worker_plugin_behaviour).
 
+-include("veil_modules/control_panel/common.hrl").
+-include("logging.hrl").
+
 %% ====================================================================
 %% API functions
 %% ====================================================================
 -export([init/1, handle/2, cleanup/0]).
 
 % Paths in gui static directory
--define(static_paths, ["css/", "fonts/", "images/", "js/", "n2o/"]).
+-define(static_paths, ["/css/", "/fonts/", "/images/", "/js/", "/n2o/"]).
 
 % Cowboy listener reference
 -define(https_listener, http).
@@ -42,7 +45,6 @@
 init(_Args) ->
     % Get params from env for gui
     {ok, DocRoot} = application:get_env(veil_cluster_node, control_panel_static_files_root),
-    Dispatch = init_dispatch(atom_to_list(DocRoot), ?static_paths),
 
     {ok, Cert} = application:get_env(veil_cluster_node, ssl_cert_path),
     CertString = atom_to_list(Cert),
@@ -52,6 +54,16 @@ init(_Args) ->
     {ok, MaxKeepAlive} = application:get_env(veil_cluster_node, control_panel_max_keepalive),
     {ok, Timeout} = application:get_env(veil_cluster_node, control_panel_socket_timeout),
 
+    % Setup GUI dispatch opts for cowboy
+    GUIDispatch = [
+        {'_', static_dispatches(atom_to_list(DocRoot), ?static_paths) ++ [
+            {"/nagios/[...]", nagios_handler, []},
+            {?user_content_download_path ++ "/:path", file_download_handler, [{type, ?user_content_request_type}]},
+            {?shared_files_download_path ++ "/:path", file_download_handler, [{type, ?shared_files_request_type}]},
+            {"/ws/[...]", bullet_handler, [{handler, n2o_bullet}]},
+            {'_', n2o_cowboy, []}
+        ]}
+    ],
     % Start the listener for web gui and nagios handler
     {ok, _} = cowboy:start_https(?https_listener, GuiNbAcceptors,
         [
@@ -61,7 +73,7 @@ init(_Args) ->
             {password, ""}
         ],
         [
-            {env, [{dispatch, Dispatch}]},
+            {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
             %{max_keepalive, MaxKeepAlive},
             {timeout, Timeout}
         ]),
@@ -132,56 +144,12 @@ cleanup() ->
 %% ====================================================================
 %% Auxiliary functions
 %% ====================================================================
-
-%% Compiles dispatch options to the format cowboy expects
-init_dispatch(DocRoot, StaticPaths) ->
-    Handler = cowboy_static,
-    StaticDispatches = lists:map(fun(Dir) ->
-        Path = reformat_path(Dir),
+%% Generates static file routing for cowboy.
+static_dispatches(DocRoot, StaticPaths) ->
+    _StaticDispatches = lists:map(fun(Dir) ->
         Opts = [
-            {mimetypes, {fun mimetypes:path_to_mimes/2, default}}
-            | localized_dir_file(DocRoot, Dir)
+            {mimetypes, {fun mimetypes:path_to_mimes/2, default}},
+            {directory, DocRoot ++ Dir}
         ],
-        {Path, Handler, Opts}
-    end, StaticPaths),
-
-    % Set up dispatch
-    Dispatch = [
-        {'_', StaticDispatches ++ [
-            {"/nagios/[...]", nagios_handler, []},
-            {"/ws/[...]", bullet_handler, [{handler, n2o_bullet}]},
-            {'_', n2o_cowboy, []}
-        ]}
-    ],
-    cowboy_router:compile(Dispatch).
-
-
-localized_dir_file(DocRoot, Path) ->
-    NewPath = case hd(Path) of
-                  $/ -> DocRoot ++ Path;
-                  _ -> DocRoot ++ "/" ++ Path
-              end,
-    _NewPath2 = case lists:last(Path) of
-                    $/ -> [{directory, NewPath}];
-                    _ ->
-                        Dir = filename:dirname(NewPath),
-                        File = filename:basename(NewPath),
-                        [
-                            {directory, Dir},
-                            {file, File}
-                        ]
-                end.
-
-% Ensure the paths start with /, and if a path ends with /, then add "[...]" to it
-reformat_path(Path) ->
-    Path2 = case hd(Path) of
-                $/ -> Path;
-                $\ -> Path;
-                _ -> [$/ | Path]
-            end,
-    Path3 = case lists:last(Path) of
-                $/ -> Path2 ++ "[...]";
-                $\ -> Path2 ++ "[...]";
-                _ -> Path2
-            end,
-    Path3.
+        {Dir ++ "[...]", cowboy_static, Opts}
+    end, StaticPaths).

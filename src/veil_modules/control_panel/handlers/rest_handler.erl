@@ -141,7 +141,7 @@ allowed_methods(Req, {error, Type}) ->
 %% ====================================================================
 %% @doc Cowboy callback function
 %% Returns content types that can be provided. "application/json" is default.
-%% It can be changed later by cowbyoy_req:set_resp_header/3.
+%% It can be changed later by gui_utils:cowboy_ensure_header/3.
 %% @end
 -spec content_types_provided(req(), #state{}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
@@ -193,7 +193,7 @@ get_resource(Req, #state{version = Version, handler_module = Mod, resource_id = 
                          {body, ResponseBody} ->
                              {ResponseBody, Req2};
                          {stream, Size, Fun, ContentType} ->
-                             Req3 = cowboy_req:set_resp_header(<<"content-type">>, ContentType, Req2),
+                             Req3 = gui_utils:cowboy_ensure_header(<<"content-type">>, ContentType, Req2),
                              {{stream, Size, Fun}, Req3};
                          error ->
                              {ok, Req3} = cowboy_req:reply(500, Req2),
@@ -316,7 +316,7 @@ handle_data(Req, Mod, Version, Id, Data) ->
 -spec do_init(req(), string()) -> {ok, req(), #state{} | {error, term()}}.
 %% ====================================================================
 do_init(Req, DnString) ->
-    Req2 = cowboy_req:set_resp_header(<<"content-type">>, <<"application/json">>, Req),
+    Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"application/json">>, Req),
     case user_logic:get_user({dn, DnString}) of
         {ok, _} ->
             put(user_id, DnString),
@@ -351,7 +351,7 @@ process_callback_answer(Answer, Req) ->
             NewReq = cowboy_req:set_resp_body(ResponseBody, Req),
             {true, NewReq};
         {stream, Size, Fun, ContentType} ->
-            Req2 = cowboy_req:set_resp_header(<<"content-type">>, ContentType, Req),
+            Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, ContentType, Req),
             Req3 = cowboy_req:set_resp_body_fun(Size, Fun, Req2),
             {true, Req3};
         error ->
