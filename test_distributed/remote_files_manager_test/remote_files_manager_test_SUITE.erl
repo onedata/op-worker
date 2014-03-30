@@ -474,7 +474,9 @@ helper_requests_test(Config) ->
   {OwnStatus, User, Group} = files_tester:get_owner(?TEST_ROOT ++ "/users/" ++ Dir ++ "/" ++ NameEnding),
   ?assertEqual(ok, OwnStatus),
   ?assert(User /= 0),
-  ?assert(Group /= 0),
+
+  %% Group is not set for files in user-only-context
+  %% ?assert(Group /= 0),
 
   {WriteStatus, WriteAnswer, BytesWritten} = write(Host, Cert, Port, Id, 0, list_to_binary("abcdefgh")),
   ?assertEqual("ok", WriteStatus),

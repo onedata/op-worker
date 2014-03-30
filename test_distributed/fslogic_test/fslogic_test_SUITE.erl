@@ -1183,20 +1183,24 @@ user_creation_test(Config) ->
   ?assertEqual(User, User2),
   ?assertEqual(false, Group =:= Group2),
 
-  {OwnStatus3, User3, Group3} = files_tester:get_owner(?TEST_ROOT ++ "/users/" ++ Login),
+  {OwnStatus3, User3, _Group3} = files_tester:get_owner(?TEST_ROOT ++ "/users/" ++ Login),
   ?assertEqual(ok, OwnStatus3),
   ?assertEqual(User, User3),
-  ?assertEqual(Group, Group3),
+
+  %% Groups are not changed currently in this context
+  %% ?assertEqual(Group, Group3),
 
   {OwnStatus4, User4, Group4} = files_tester:get_owner(?TEST_ROOT ++ "/groups/" ++ Team1),
   ?assertEqual(ok, OwnStatus4),
   ?assertEqual(User0, User4),
   ?assertEqual(Group2, Group4),
 
-  {OwnStatus5, User5, Group5} = files_tester:get_owner(?TEST_ROOT2 ++ "/users/" ++ Login),
+  {OwnStatus5, User5, _Group5} = files_tester:get_owner(?TEST_ROOT2 ++ "/users/" ++ Login),
   ?assertEqual(ok, OwnStatus5),
   ?assertEqual(User, User5),
-  ?assertEqual(Group, Group5),
+
+  %% Groups are not changed currently in this context
+  %% ?assertEqual(Group, Group5),
 
   {OwnStatus6, User6, Group6} = files_tester:get_owner(?TEST_ROOT2 ++ "/groups/" ++ Team1),
   ?assertEqual(ok, OwnStatus6),

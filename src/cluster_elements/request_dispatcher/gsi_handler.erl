@@ -16,6 +16,8 @@
 -include_lib("registered_names.hrl").
 -include("logging.hrl").
 
+-deprecated([proxy_subject/1]).
+
 -export([init/0, verify_callback/3, load_certs/1, update_crls/1, proxy_subject/1, call/3, is_proxy_certificate/1, find_eec_cert/3]).
 %% ===================================================================
 %% API
@@ -152,6 +154,8 @@ update_crls(CADir) ->
 %% ====================================================================
 %% @doc Returns subject of given certificate.
 %% If proxy certificate is given, EEC subject is returned.
+%% @deprecated The function shall not be used when proxy is not directly signed by EEC (which you can't be sure about without x509 chain). <br/>
+%%             Use {@link gsi_handler:find_eec_cert/3} instead and get EEC's subject (if you have the whole certificate chain available).
 %% @end
 -spec proxy_subject(OtpCert :: #'OTPCertificate'{}) -> {rdnSequence, [#'AttributeTypeAndValue'{}]}.
 %% ====================================================================
@@ -423,27 +427,50 @@ get_dp_url(OtpCert = #'OTPCertificate'{}) ->
 
 %% strip_filename_ext/1
 %% ====================================================================
-%% @doc Strips extension from given filename (assuming that extension has 3 chars).
+%% @doc Strips extension from given filename.
 %% @end
 -spec strip_filename_ext(FileName :: string()) -> FileName :: string().
 %% ====================================================================
 strip_filename_ext(FileName) when is_list(FileName) ->
-    string:substr(FileName, 1, length(FileName)-4).
+    filename:rootname(FileName).
 
 
 %% is_proxy_certificate/1
 %% ====================================================================
-%% @doc Checks is given OTP Certificate has an proxy extension
+%% @doc Checks is given OTP Certificate has an proxy extension or looks like legacy proxy.
+%%      'maybe' is returned for proxy legacy proxy certificates since, there's no way to be sure about it
+%%      'true' is returned only for RFC compliant Proxy Certificates.
 %% @end
--spec is_proxy_certificate(OtpCert :: #'OTPCertificate'{}) -> boolean().
+-spec is_proxy_certificate(OtpCert :: #'OTPCertificate'{}) -> boolean() | maybe.
 %% ====================================================================
 is_proxy_certificate(OtpCert = #'OTPCertificate'{}) ->
     Ext = OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.extensions,
+    Subject = OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject,
+    {rdnSequence, Attrs} = Subject,
+
+    %% Get all subject's RDNs
+    FlatAttrs = [Attr || #'AttributeTypeAndValue'{} = Attr <- lists:flatten(Attrs)],
+    ReversedAttrs = lists:reverse(FlatAttrs),
+
+    %% Check for legacy proxy and use the result as init status for RFC check
+    LegacyStatus =
+        case ReversedAttrs of
+            [#'AttributeTypeAndValue'{type = ?'id-at-commonName', value = {_, "proxy"}} | _] ->
+                maybe;
+            _ -> false
+        end,
+
+    %% Proceed with RFC proxy check
     case Ext of
         Exts when is_list(Exts) ->
-            lists:foldl(fun(#'Extension'{extnID = ?PROXY_CERT_EXT}, _) -> true;
-                    (_, AccIn) -> AccIn end, false, Ext);
-        _ -> false
+            lists:foldl(
+                fun(#'Extension'{extnID = ?PROXY_CERT_EXT}, _) ->
+                    true;
+                (_, AccIn) ->
+                    AccIn
+                end, LegacyStatus, Ext);
+        _ ->
+            false
     end.
 
 
@@ -453,6 +480,9 @@ is_proxy_certificate(OtpCert = #'OTPCertificate'{}) ->
 %% @end
 -spec find_eec_cert(CurrentOtp :: #'OTPCertificate'{}, Chain :: [#'OTPCertificate'{}], IsProxy :: boolean()) -> {ok, #'OTPCertificate'{}} | no_return().
 %% ====================================================================
+find_eec_cert(CurrentOtp, Chain, maybe) ->
+    ?warning("Processing non RFC compliant Proxy Certificate with subject: ~p", [CurrentOtp#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject]),
+    find_eec_cert(CurrentOtp, Chain, true);
 find_eec_cert(CurrentOtp, Chain, true) ->
     false = public_key:pkix_is_self_signed(CurrentOtp),
     {ok, NextCert} =
