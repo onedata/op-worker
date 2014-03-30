@@ -50,7 +50,7 @@ on_complete(Message, SuccessFuseIds, FailFuseIds) ->
 send_push_msg(ProtocolVersion) ->
   TestAtom = #atom{value = "test_atom2"},
   OnComplete = fun(SuccessFuseIds, FailFuseIds) -> on_complete(TestAtom, SuccessFuseIds, FailFuseIds) end,
-  worker_host:send_to_user({uuid, "20000"}, TestAtom, "communication_protocol", OnComplete, ProtocolVersion).
+  worker_host:send_to_user_with_ack({uuid, "20000"}, TestAtom, "communication_protocol", OnComplete, ProtocolVersion).
 
 cleanup() ->
 	ok.

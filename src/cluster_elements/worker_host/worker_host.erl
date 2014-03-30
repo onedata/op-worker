@@ -889,7 +889,7 @@ del_sub_procs(Key, Name) ->
 -spec send_to_user(UserKey :: user_key(), Message :: term(), MessageDecoder :: string(), ProtocolVersion :: integer()) -> Result when
   Result :: ok | {error, Error :: term()}.
 %% ====================================================================
-send_to_user_with_ack(UserKey, Message, MessageDecoder, OnCompleteCallback, ProtocolVersion) ->
+send_to_user(UserKey, Message, MessageDecoder, ProtocolVersion) ->
   case user_logic:get_user(UserKey) of
     {ok, UserDoc} ->
       case dao_lib:apply(dao_cluster, get_sessions_by_user, [UserDoc#veil_document.uuid], ProtocolVersion) of

@@ -277,13 +277,11 @@ websocket_info({ResponsePid, Message, MessageDecoder, MsgID}, Req, State) ->
         {ok, Req, State}
     end;
 websocket_info({with_ack, ResponsePid, Message, MessageDecoder, MsgID}, Req, State) ->
-  ?info("--- ws_handler websocket_info with_ack"),
   try
     [MessageType | _] = tuple_to_list(Message),
     AnsRecord = encode_answer_record(push, MsgID, atom_to_list(MessageType), MessageDecoder, Message),
     case list_to_atom(AnsRecord#answer.answer_status) of
       push ->
-        ?info("--- ws_handler websocket_info with_ack PUSH"),
         ResponsePid ! {self(), MsgID, ok},
         {reply, {binary, erlang:iolist_to_binary(communication_protocol_pb:encode_answer(AnsRecord))}, Req, State};
       Other ->
