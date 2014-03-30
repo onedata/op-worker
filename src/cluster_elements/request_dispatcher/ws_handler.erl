@@ -227,13 +227,10 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                 _:_ -> {reply, {binary, encode_answer(dispatcher_error, MsgId)}, Req, State}
             end;
         false ->
-            ?info("--- ws_handler: ~p", [MsgId]),
             try
-                %% it assumes that if MsgId > 0 then message is push message ack and call to ack callback is needed.
-                %% this assumption is true now in veilclient but it is not stated explicitly anywhere.
                 case Msg of
                   ack ->
-                    gen_server:call(?Dispatcher_Name, {node_chosen_for_ack, {Task, ProtocolVersion, Request, MsgId}}),
+                    gen_server:call(?Dispatcher_Name, {node_chosen_for_ack, {Task, ProtocolVersion, Request, MsgId, FuseID}}),
                     {ok, Req, State};
                   _ ->
                     Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Request}}),

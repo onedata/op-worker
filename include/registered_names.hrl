@@ -40,7 +40,6 @@
 %% Local name of the process waiting for dns udp messages
 -define(DNS_UDP, dns_udp).
 
--define(MSG_ID_TO_HANDLER_ID, msg_id_to_handler_id).
 -define(ACK_HANDLERS, ack_handlers).
 
 -endif.

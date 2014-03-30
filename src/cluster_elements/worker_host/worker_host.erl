@@ -18,16 +18,18 @@
 -include("registered_names.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include("logging.hrl").
+-include("veil_modules/dao/dao_types.hrl").
 
 -define(BORTER_CHILD_WAIT_TIME, 10000).
 -define(MAX_CHILD_WAIT_TIME, 60000000).
 -define(MAX_CALCULATION_WAIT_TIME, 10000000).
 -define(SUB_PROC_CACHE_CLEAR_TIME, 2000).
+-define(WAIT_FOR_ACK_MS, 4000).
 
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_link/3, stop/1, start_sub_proc/5, start_sub_proc/6, generate_sub_proc_list/1, generate_sub_proc_list/5, generate_sub_proc_list/6, send_to_user/5]).
+-export([start_link/3, stop/1, start_sub_proc/5, start_sub_proc/6, generate_sub_proc_list/1, generate_sub_proc_list/5, generate_sub_proc_list/6, send_to_user/4, send_to_user_with_ack/5]).
 -export([create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_sub_procs_cache/2, clear_sipmle_cache/3]).
 
 %% ====================================================================
@@ -225,18 +227,17 @@ handle_cast({asynch, ProtocolVersion, Msg}, State) ->
   NewSubProcList = proc_standard_request(State#host_state.request_map, State#host_state.sub_procs, PlugIn, ProtocolVersion, Msg, non, non),
 	{noreply, State#host_state{sub_procs = NewSubProcList}};
 
-handle_cast({asynch, ProtocolVersion, Msg, MsgId}, State) ->
-  ?info("---- bazinga insise handle_cast for ack"),
-  [{_, MainMsgId}] = ets:lookup(?MSG_ID_TO_HANDLER_ID, MsgId),
-  HandlerTuple = ets:lookup(?ACK_HANDLERS, MainMsgId),
+handle_cast({asynch, ProtocolVersion, Msg, MsgId, FuseID}, State) ->
+  HandlerTuple = ets:lookup(?ACK_HANDLERS, MsgId),
   case HandlerTuple of
-    [{_, {Callback, SuccessMsgIds, FailMsgIds, Length, Pid}}] ->
-      ?info("---- bazinga insise handle_cast for ack, fuse_id: ~p", [get(fuse_id)]),
-      NewSuccessMsgIds = [get(fuse_id) | SuccessMsgIds],
-      NewFailMsgIds = lists:delete(MsgId, FailMsgIds),
-      ets:insert(?ACK_HANDLERS, {MainMsgId, {Callback, SuccessMsgIds, NewFailMsgIds, Length, Pid}}),
-      case length(NewSuccessMsgIds) of
-        Length -> Pid ! {call_on_complete_callback};
+    [{_, {Callback, SuccessFuseIds, FailFuseIds, Length, Pid}}] ->
+      NewSuccessFuseIds = [FuseID | SuccessFuseIds],
+      NewFailFuseIds = lists:delete(FuseID, FailFuseIds),
+      ets:insert(?ACK_HANDLERS, {MsgId, {Callback, NewSuccessFuseIds, NewFailFuseIds, Length, Pid}}),
+      case length(NewSuccessFuseIds) of
+        Length ->
+          % we dont need to cancel timer set with send_after which sends the same message - receiver process should be dead after call_on_complete_callback
+          Pid ! {call_on_complete_callback};
         _ -> ok
       end;
     _ -> ok
@@ -882,31 +883,62 @@ del_sub_procs(Key, Name) ->
   end,
   del_sub_procs(ets:next(Name, Key), Name).
 
+%% send_to_user/4
+%% ====================================================================
+%% @doc Sends message to all active fuses belonging to user.
+-spec send_to_user(UserKey :: user_key(), Message :: term(), MessageDecoder :: string(), ProtocolVersion :: integer()) -> Result when
+  Result :: ok | {error, Error :: term()}.
+%% ====================================================================
+send_to_user_with_ack(UserKey, Message, MessageDecoder, OnCompleteCallback, ProtocolVersion) ->
+  case user_logic:get_user(UserKey) of
+    {ok, UserDoc} ->
+      case dao_lib:apply(dao_cluster, get_sessions_by_user, [UserDoc#veil_document.uuid], ProtocolVersion) of
+        {ok, FuseIds} ->
+          lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, Message, MessageDecoder) end, FuseIds),
+          ok;
+        {error, Error} ->
+          ?warning("cannot get fuse ids for user")
+      end;
+    {error, Error} ->
+      ?warning("cannot get user in send_to_user")
+  end.
 
-send_to_user(UserKey, Message, MessageDecoder, OnCompleteCallback, ProtocolVersion) ->
-  {MsgIds, FuseIds} = request_dispatcher:send_to_user(UserKey, Message, MessageDecoder, ProtocolVersion),
-  ?info("------- bazinga send_to_user after  request_dispatcher:send_to_user: ~p", [MsgIds]),
+%% send_to_user_with_ack/5
+%% ====================================================================
+%% @doc Sends message with ack to all active fuses belonging to user. OnCompleteCallback function will be called in
+%% newly created proces when all acks will come back or timeout is reached.
+-spec send_to_user_with_ack(UserKey :: user_key(), Message :: term(), MessageDecoder :: string(),
+    OnCompleteCallback :: fun((SuccessFuseIds :: list(), FailFuseIds :: list()) -> term()), ProtocolVersion :: integer()) -> Result when
+    Result :: ok | {error, Error :: term()}.
+%% ====================================================================
+send_to_user_with_ack(UserKey, Message, MessageDecoder, OnCompleteCallback, ProtocolVersion) ->
+  case user_logic:get_user(UserKey) of
+    {ok, UserDoc} ->
+      case dao_lib:apply(dao_cluster, get_sessions_by_user, [UserDoc#veil_document.uuid], ProtocolVersion) of
+        {ok, FuseIds} ->
+          MsgId = request_dispatcher:next_msg_id(),
 
-  case MsgIds of
-    [] ->
-      OnCompleteCallback([], []);
-    [FirstMsgId | Rest] ->
-      ets:insert(?MSG_ID_TO_HANDLER_ID, {FirstMsgId, FirstMsgId}),
-      lists:foreach(fun(AnotherMsgId) -> ets:insert(?MSG_ID_TO_HANDLER_ID, {FirstMsgId, AnotherMsgId}) end, Rest),
+          Pid = spawn(fun() ->
+            receive
+              {call_on_complete_callback} ->
+                [{_Key, {_, SucessFuseIds, FailFuseIds, _Length, _Pid}}] = ets:lookup(?ACK_HANDLERS, MsgId),
+                ets:delete(?ACK_HANDLERS, MsgId),
+                OnCompleteCallback(SucessFuseIds, FailFuseIds)
+            end
+          end),
 
-      Pid = spawn(fun() ->
-        receive
-          {call_on_complete_callback} ->
-            ?info("--- bazinga called after 4000ms"),
-            [{_Key, {_, SucessMsgIds, FailMsgIds, _Length, _Pid}}] = ets:lookup(?ACK_HANDLERS, FirstMsgId),
-            ets:delete(?ACK_HANDLERS, FirstMsgId),
-            ets:delete(?MSG_ID_TO_HANDLER_ID, FirstMsgId),
-            OnCompleteCallback(SucessMsgIds, FailMsgIds)
-        end
-      end),
+          % we need to create and insert to ets ack handler before sending a push message
+          ets:insert(?ACK_HANDLERS, {MsgId, {OnCompleteCallback, [], FuseIds, length(FuseIds), Pid}}),
 
-      ets:insert(?ACK_HANDLERS, {FirstMsgId, {OnCompleteCallback, [], [FuseIds], length(MsgIds), Pid}}),
-      erlang:send_after(4000, Pid, {call_on_complete_callback})
+          % now we can send messages to fuses
+          lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse_ack(FuseId, Message, MessageDecoder, MsgId) end, FuseIds),
+          erlang:send_after(?WAIT_FOR_ACK_MS, Pid, {call_on_complete_callback}),
+          ok;
+        {error, Error} ->
+          ?warning("cannot get fuse ids for user")
+      end;
+    {error, Error} ->
+      ?warning("cannot get user in send_to_user")
   end.
 
 %% create_simple_cache/1

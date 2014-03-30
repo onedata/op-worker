@@ -238,11 +238,9 @@ list_fuse_sessions({by_valid_to, Time}) ->
     end.
 
 get_sessions_by_user(Uuid) ->
-  QueryArgs = #view_query_args{keys = [dao_helper:name(Uuid)], include_docs = true},
-  ?info("--------- get_sessions_by_user: ~p", [Uuid]),
+  QueryArgs = #view_query_args{keys = [dao_helper:name(Uuid)]},
   case dao:list_records(?FUSE_SESSIONS_BY_USER_ID_VIEW, QueryArgs) of
     {ok, #view_result{rows = Rows}} ->
-      ?info("----- dc: ~p", [length(Rows)]),
       {ok, [FuseId || #view_row{id = FuseId} <- Rows]};
     {error, Reason} ->
       {error, Reason}

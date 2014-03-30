@@ -19,6 +19,9 @@
 
 -define(CALLBACKS_TABLE, callbacks_table).
 
+%% Singleton modules are modules which are supposed to have only one instance.
+-define(SINGLETON_MODULES, [control_panel, central_logger, rule_manager]).
+
 %% ====================================================================
 %% API
 %% ====================================================================
@@ -607,10 +610,8 @@ check_cluster_state(State) ->
                              MinWorkers = [Module || {Module, _MLoad} <- MinNodeModulesLoads, Module == MaxModule],
                              case MinWorkers =:= [] of
                                true ->
-                                 case MaxModule of
-                                   control_panel ->
-                                     State;
-                                   central_logger ->
+                                 case lists:member(MaxModule, ?SINGLETON_MODULES) of
+                                   true ->
                                      State;
                                    _ ->
                                      lager:info([{mod, ?MODULE}], "Worker: ~s will be started at node: ~s", [MaxModule, MinNode]),

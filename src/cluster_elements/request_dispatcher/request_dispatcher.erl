@@ -15,14 +15,13 @@
 -include("records.hrl").
 -include("modules_and_args.hrl").
 -include("logging.hrl").
--include("veil_modules/dao/dao_types.hrl").
 
 -define(CALLBACKS_TABLE, dispatcher_callbacks_table).
 
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_link/0, stop/0, send_to_fuse/3, send_to_user/4]).
+-export([start_link/0, stop/0, send_to_fuse/3, send_to_fuse_ack/4, next_msg_id/0]).
 
 %% TODO zmierzyć czy bardziej się opłaca przechowywać dane o modułach
 %% jako stan (jak teraz) czy jako ets i ewentualnie przejść na ets
@@ -268,7 +267,7 @@ handle_call({node_chosen, {Task, ProtocolVersion, Request}}, _From, State) ->
       end
   end;
 
-handle_call({node_chosen_for_ack, {Task, ProtocolVersion, Request, MsgId}}, _From, State) ->
+handle_call({node_chosen_for_ack, {Task, ProtocolVersion, Request, MsgId, FuseId}}, _From, State) ->
   case State#dispatcher_state.asnych_mode of
     true ->
       forward_request(true, Task, Request, {asynch, ProtocolVersion, Request}, State);
@@ -284,7 +283,7 @@ handle_call({node_chosen_for_ack, {Task, ProtocolVersion, Request, MsgId}}, _Fro
               end,
               {reply, worker_not_found, State};
             _N ->
-              gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request, MsgId}),
+              gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request, MsgId, FuseId}),
               {reply, ok, NewState}
           end;
         Other -> {reply, Other, State}
@@ -828,15 +827,10 @@ send_to_fuse(FuseId, Message, MessageDecoder, SendNum) ->
           case Callback of
             non -> channel_not_found;
             _ ->
-              case get(callback_msg_ID) of
-                ID when is_integer(ID) ->
-                  put(callback_msg_ID, ID + 1);
-                _ -> put(callback_msg_ID, 1) % it is better to start with 1 because 0 is declared in protocol as default value
-              end,
-              MsgID = get(callback_msg_ID),
+              MsgID = next_msg_id(),
               Callback ! {with_ack, self(), Message, MessageDecoder, MsgID},
               receive
-                {Callback, MsgID, Response} -> {ok, {Response, MsgID, FuseId}}
+                {Callback, MsgID, Response} -> Response
               after 500 ->
                 socket_error
               end
@@ -862,36 +856,68 @@ send_to_fuse(FuseId, Message, MessageDecoder, SendNum) ->
       end
   end.
 
-%% send_to_user/4
+%% send_to_fuse_ack/4
 %% ====================================================================
-%% @doc Sends message to fuse
--spec send_to_user(UserKey :: user_key(), Message :: term(), MessageDecoder :: string(), ProtocolVersion :: integer()) -> Result when
+%% @doc Sends message to fuse with ack
+-spec send_to_fuse_ack(FuseId :: string(), Message :: term(), MessageDecoder :: string(), MessageId :: integer()) -> Result when
   Result :: callback_node_not_found | node_manager_error | dispatcher_error | ok | term().
 %% ====================================================================
-send_to_user(UserKey, Message, MessageDecoder, ProtocolVersion) ->
-  send_to_user(UserKey, Message, MessageDecoder, ProtocolVersion, 3).
+send_to_fuse_ack(FuseId, Message, MessageDecoder, MessageId) ->
+  send_to_fuse_ack(FuseId, Message, MessageDecoder, MessageId, 3).
 
-%% send_to_user/5
+%% send_to_fuse_ack/5
 %% ====================================================================
-%% @doc Sends message to fuse
--spec send_to_user(UserKey :: user_key(), Message :: term(), MessageDecoder :: string(), ProtocolVersion :: integer(), SendNum :: integer()) -> Result when
+%% @doc Sends message to fuse with ack
+-spec send_to_fuse_ack(FuseId :: string(), Message :: term(), MessageDecoder :: string(), MessageId :: integer(), SendNum :: integer()) -> Result when
   Result :: callback_node_not_found | node_manager_error | dispatcher_error | ok | term().
 %% ====================================================================
-send_to_user(UserKey, Message, MessageDecoder, ProtocolVersion, SendNum) ->
-  case user_logic:get_user(UserKey) of
-    {ok, UserDoc} ->
-      case dao_lib:apply(dao_cluster, get_sessions_by_user, [UserDoc#veil_document.uuid], ProtocolVersion) of
-        {ok, FuseIds} ->
-          ?info("--- request_dispatcher, fuseids: ~p , ~p", [UserDoc#veil_document.uuid, FuseIds]),
-
-          ListOfTuples = [{MsgId, FuseId} || {ok, {_, MsgId, FuseId}} <- lists:map(fun(FuseId) -> send_to_fuse(FuseId, Message, MessageDecoder, SendNum) end, FuseIds)],
-          {[MsgId || {MsgId, _FuseId} <- ListOfTuples], [FuseId || {_MsgId, FuseId} <- ListOfTuples]};
-        {error, Error} ->
-          ?warning("cannot get fuse ids for user")
-      end;
-    {error, Error} ->
-      ?warning("cannot get user in send_to_user")
+send_to_fuse_ack(FuseId, Message, MessageDecoder, MessageId, SendNum) ->
+  Ans = try
+    Node = gen_server:call(?Dispatcher_Name, {get_callback, FuseId}, 500),
+    case Node of
+      not_found ->
+        callback_node_not_found;
+      _ ->
+        try
+          Callback = gen_server:call({?Node_Manager_Name, Node}, {get_callback, FuseId}, 1000),
+          case Callback of
+            non -> channel_not_found;
+            _ ->
+              Callback ! {with_ack, self(), Message, MessageDecoder, MessageId},
+              receive
+                {Callback, MsgID, Response} -> Response
+              after 500 ->
+                socket_error
+              end
+          end
+        catch
+          E1:E2 ->
+            lager:error([{mod, ?MODULE}], "Can not get callback from node: ~p to fuse ~p, error: ~p:~p", [Node, FuseId, E1, E2]),
+            node_manager_error
+        end
+    end
+        catch
+          _:_ ->
+            lager:error([{mod, ?MODULE}], "Can not get callback node of fuse: ~p", [FuseId]),
+            dispatcher_error
+        end,
+  case Ans of
+    ok -> ok;
+    _ ->
+      case SendNum of
+        0 -> Ans;
+        _ ->
+          send_to_fuse_ack(FuseId, Message, MessageDecoder, MessageId, SendNum - 1)
+      end
   end.
+
+next_msg_id() ->
+  case get(callback_msg_ID) of
+    ID when is_integer(ID) ->
+      put(callback_msg_ID, ID - 1);
+    _ -> put(callback_msg_ID, -1)
+  end,
+  get(callback_msg_ID).
 
 %% choose_node_by_map/3
 %% ====================================================================

@@ -25,7 +25,6 @@
 -export([init/1, handle/2, cleanup/0, send_push_msg/1]).
 
 init(_Args) ->
-  ets:new(?MSG_ID_TO_HANDLER_ID, [named_table, set, public]),
   ets:new(?ACK_HANDLERS, [named_table, set, public]),
 	[].
 
@@ -45,34 +44,13 @@ on_complete(Message, SuccessFuseIds, FailFuseIds) ->
   ?info("oncomplete called"),
   case FailFuseIds of
     [] -> ?info("------- ack success --------");
-    _ -> ?info("-------- ack fail ---------")
+    _ -> ?info("-------- ack fail, sucess: ~p, fail: ~p ---------", [length(SuccessFuseIds), length(FailFuseIds)])
   end.
 
 send_push_msg(ProtocolVersion) ->
-
-  TestAtom11 = #atom{value = "test_atom11"},
   TestAtom = #atom{value = "test_atom2"},
-
-  Rows = fetch_rows(?FUSE_CONNECTIONS_VIEW, #view_query_args{}),
-  FuseIds = lists:map(fun(#view_row{key = FuseId}) -> FuseId end, Rows),
-  UniqueFuseIds = sets:to_list(sets:from_list(FuseIds)),
-  ?info("----- bazinga 345 ---"),
-
-  lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, TestAtom11, "communication_protocol") end, UniqueFuseIds),
-  ?info("----- bazinga 346 ---"),
-
   OnComplete = fun(SuccessFuseIds, FailFuseIds) -> on_complete(TestAtom, SuccessFuseIds, FailFuseIds) end,
-  worker_host:send_to_user({uuid, "20000"}, TestAtom, "communication_protocol", OnComplete, ProtocolVersion),
-  ?info("---- bazinga sent to user ---").
+  worker_host:send_to_user({uuid, "20000"}, TestAtom, "communication_protocol", OnComplete, ProtocolVersion).
 
 cleanup() ->
 	ok.
-
-fetch_rows(ViewName, QueryArgs) ->
-  case dao:list_records(ViewName, QueryArgs) of
-    {ok, #view_result{rows = Rows}} ->
-      Rows;
-    Error ->
-      ?error("Invalid view response: ~p", [Error]),
-      throw(invalid_data)
-  end.
