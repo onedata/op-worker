@@ -342,6 +342,7 @@ clear_sessions() ->
         case list_fuse_sessions({by_valid_to, CurrentTime}) of
             {ok, Sessions} ->
                 %% [{#veil_document{record = #fuse_session}, {Pid, MRef}}]
+	            ?info("old fuse sessions: ~p",[length(Sessions)]),
                 [{X, spawn_monitor(fun() -> SPid ! {self(), check_session(X)} end)} || X <- Sessions];
             {error, Reason} ->
                 ?error("Cannot cleanup old fuse sessions. Expired session list fetch failed: ~p", [Reason]),
