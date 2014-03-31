@@ -488,7 +488,7 @@ term_to_doc(Field) when is_pid(Field) ->
 term_to_doc(Field) when is_binary(Field) ->
     <<<<?RECORD_FIELD_BINARY_PREFIX>>/binary, Field/binary>>;   %% Binary is saved as string, so we add a prefix
 term_to_doc(Field) when is_list(Field) ->
-    case io_lib:printable_list(Field) of
+    case io_lib:printable_unicode_list(Field) of
         true -> dao_helper:name(Field);
         false -> [term_to_doc(X) || X <- Field]
     end;
@@ -550,7 +550,7 @@ doc_to_term(Field) when is_binary(Field) -> %% Binary type means that it is atom
         BinPref == 1 -> list_to_binary(string:sub_string(SField, length(?RECORD_FIELD_BINARY_PREFIX) + 1));
         AtomPref == 1 -> list_to_atom(string:sub_string(SField, length(?RECORD_FIELD_ATOM_PREFIX) + 1));
         PidPref == 1 -> list_to_pid(string:sub_string(SField, length(?RECORD_FIELD_PID_PREFIX) + 1));
-        true -> SField
+        true -> unicode:characters_to_list(list_to_binary(SField))
     end;
 doc_to_term(Field) when is_list(Field) ->
     [doc_to_term(X) || X <- Field];
