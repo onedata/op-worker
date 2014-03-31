@@ -460,7 +460,7 @@ get_file({internal_path, [Dir | Path], Root}, MultiError) ->
 get_waiting_file(Args) ->
   get_file_helper(Args, ?WAITING_FILES_TREE_VIEW).
 
-%% get_file/2
+%% get_waiting_file/2
 %% ====================================================================
 %% @doc Gets file record of file that waits to be created at storage from DB. Argument should be file() - see dao_types.hrl for more details <br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
