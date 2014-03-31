@@ -19,7 +19,12 @@ vm_arguments:
   - argument:
       name: erl_max_ports
       description: Increase number of concurrent ports/sockets
-      value: -env ERL_MAX_PORTS 4096
+      value: -env ERL_MAX_PORTS 20000
+
+  - argument:
+      name: max_processes
+      description: Increase number of processes
+      value: +P 1000000
 
 
 
