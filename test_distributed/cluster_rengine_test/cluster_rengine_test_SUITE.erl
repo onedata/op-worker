@@ -31,7 +31,7 @@ all() -> [test_event_subscription, test_event_aggregation, test_dispatching].
 
 -define(assert_received(ResponsePattern), receive
                                             ResponsePattern -> ok
-                                          after 200
+                                          after 1000
                                             -> ?assert(false)
                                           end).
 
@@ -53,17 +53,18 @@ test_event_subscription(Config) ->
 
   WriteEvent = #write_event{user_id = "1234", ans_pid = self()},
 
+  % there was no subscription for events - sending events has no effect
   send_event(WriteEvent, CCM),
   assert_nothing_received(CCM),
 
-
+  % event handler sends back some message to producer to enable verification
   EventHandler = fun(#write_event{user_id = UserId, ans_pid = AnsPid}) ->
     AnsPid ! {ok, standard, self()}
   end,
-  subscribe_for_write_events(CCM, standard, EventHandler),
-  timer:sleep(100),
+  subscribe_for_write_events(CCM, standard, EventHandler), % subscribing for events
   send_event(WriteEvent, CCM),
-  timer:sleep(50),
+
+  % this time there is a subscription for write_event - we should receive message
   ?assert_received({ok, standard, _}),
   assert_nothing_received(CCM),
 
@@ -72,9 +73,8 @@ test_event_subscription(Config) ->
   end,
   subscribe_for_write_events(CCM, tree, EventHandler2),
   send_event(WriteEvent, CCM),
-  % from my observations it takes about 200ms until disp map fun is registered in cluster_manager
-  timer:sleep(900),
 
+  % this time there are two handler registered
   ?assert_received({ok, standard, _}),
   ?assert_received({ok, tree, _}, 3000),
   assert_nothing_received(CCM).
@@ -92,7 +92,6 @@ test_event_aggregation(Config) ->
   WriteEvent = #write_event{user_id = "1234", ans_pid = self()},
 
   repeat(3, fun() -> send_event(WriteEvent, CCM) end),
-  timer:sleep(900),
   assert_nothing_received(CCM),
 
   send_event(WriteEvent, CCM),
@@ -131,7 +130,6 @@ test_dispatching(Config) ->
   end,
 
   SendWriteEvents(),
-  timer:sleep(1000),
   count_answers(8),
 
   MessagesNum = 300,
@@ -259,20 +257,6 @@ subscribe_for_write_events(Node, ProcessingMethod, EventHandler, ProcessingConfi
 
   timer:sleep(800).
 
-
-subscribe_for_events(EventType, Node, EventHandler) ->
-  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
-  gen_server:call({?Dispatcher_Name, Node}, {rule_manager, 1, self(), {add_event_handler, {EventType, EventItem}}}),
-
-  receive
-    ok -> ok
-  after 400 ->
-    ?assert(false)
-  end,
-
-  timer:sleep(800).
-
-
 repeat(N, F) -> for(1, N, F).
 for(N, N, F) -> [F()];
 for(I, N, F) -> [F() | for(I + 1, N, F)].
@@ -325,27 +309,3 @@ count_answers(ToReceive, Set) ->
   after 2000 ->
     {ToReceive, Set}
   end.
-
-
-add_user(Login, Teams, Cert, Node) ->
-  {ReadFileAns, PemBin} = file:read_file(Cert),
-  ?assertEqual(ok, ReadFileAns),
-  {ExtractAns, RDNSequence} = rpc:call(Node, user_logic, extract_dn_from_cert, [PemBin]),
-  ?assertEqual(rdnSequence, ExtractAns),
-  {ConvertAns, DN} = rpc:call(Node, user_logic, rdn_sequence_to_dn_string, [RDNSequence]),
-  ?assertEqual(ok, ConvertAns),
-  DnList = [DN],
-
-  Name = "user1 user1",
-  Email = "user1@email.net",
-  {CreateUserAns, #veil_document{uuid = UserID}} = rpc:call(Node, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
-  ?assertEqual(ok, CreateUserAns),
-  {DnList, UserID}.
-
-get_user_doc(UserId, Node) ->
-  {View, QueryArgs} = {?USER_BY_UID_VIEW, #view_query_args{keys = [dao_helper:name(UserId)], include_docs = true}},
-  {Ans, GetUsersRes} = rpc:call(Node, dao, list_records, [View, QueryArgs]),
-  ?assertEqual(ok, Ans),
-
-  FirstRow = hd(GetUsersRes#view_result.rows),
-  FirstRow#view_row.doc.
