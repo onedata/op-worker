@@ -152,7 +152,6 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #handshakerequest{hostn
 
 %% Handle HandshakeACK message - set FUSE ID used in this session, register connection
 handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type}, #hander_state{peer_dn = DnString} = State) ->
-  lager:error("aaaa ~p", [{_Synch, _Task, Answer_decoder_name, ProtocolVersion, NewFuseId, MsgId, Answer_type}]),
     UID = %% Fetch user's ID
         case dao_lib:apply(dao_users, get_user, [{dn, DnString}], ProtocolVersion) of
             {ok, #veil_document{uuid = UID1}} ->
