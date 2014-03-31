@@ -115,11 +115,14 @@ handle(ProtocolVersion, {getfileattr, UUID}) ->
   getfileattr(ProtocolVersion, DocFindStatus, FileDoc);
 
 handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
-    try
+  lager:error("bbb ~p", [Record]),
+    Ans = try
         handle_fuse_message(ProtocolVersion, Record#fusemessage.input, get(fuse_id))
     catch
         ErrorRet -> ErrorRet
-    end;
+    end,
+  lager:error("ccc ~p", [Ans]),
+  Ans;
 
 handle(ProtocolVersion, {internal_call, Record}) ->
     try
