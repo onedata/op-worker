@@ -15,4 +15,4 @@
 ## 'name of spec file'_SUITE.
 ## ===================================================================
 
-./test_distributed/verbose_distributed_test.sh rest_test main_test | ./test_distributed/filter_output.sh
+./test_distributed/verbose_distributed_test.sh $1 $2 | ./test_distributed/filter_output.sh
