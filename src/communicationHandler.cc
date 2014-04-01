@@ -18,7 +18,7 @@
 #include <openssl/evp.h>
 #include <openssl/err.h>
 
-using namespace std;
+using std::string;
 using namespace veil::protocol::communication_protocol;
 using namespace veil::protocol::fuse_messages;
 using websocketpp::lib::placeholders::_1;
