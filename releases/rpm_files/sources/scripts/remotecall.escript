@@ -3,33 +3,27 @@
 -define(key_pool, "-k").
 -define(commands, "-c").
 -define(debug, "-d").
--define(silent, "-s").
 
 main(Args) ->
-	case args_correct(Args) of
-		true ->
-			ok;
-		false ->
+	[Host,KeyPool,Command] = parse_args(Args),
+	debug("args: ~p" ,[[Host,KeyPool,Command]]),
+	connection_ok(Host,KeyPool),
+	call_command_on_host(Host,KeyPool,Command).
+
+%% ------------ Arg parsing ------------
+parse_args(Args) ->
+	try
+		[Host] = args_get(Args,?hosts),
+		KeyPool = args_get(Args,?key_pool),
+		[Command] = args_get(Args,?commands),
+		put(debug,lists:member(?debug,Args)),
+		[Host,KeyPool,Command]
+	catch
+	    _Type:_Error  ->
 			print_error("usage: veil_remotecall [-k {key}] -h {user@host}  -c {command} "),
 			print_error("Script will execute all comands on each host, using key pool to authenticate"),
 			erlang:halt(1)
-	end,
-	put(debug,lists:member(?debug,Args)),
-	put(silent,lists:member(?silent,Args)),
-	Hosts = args_get(Args,?hosts),
-	debug("hosts:~p",[Hosts]),
-	KeyPool = args_get(Args,?key_pool),
-	debug("keys:~p",[KeyPool]),
-	Commands = args_get(Args,?commands),
-	debug("commands:~p",[Commands]),
-
-	[call_commands_on_host(Host,KeyPool,Commands) || Host <-Hosts].
-
-%% ------------ Arg parsing ------------
-% check if all necessary args are present
-args_correct(Args) ->
-	lists:member(?hosts,Args)  andalso
-	lists:member(?commands,Args).
+	end.
 
 % get list of arguments of some type
 args_get(Args,Type) ->
@@ -47,14 +41,21 @@ args_get([HostArg|Rest],Type,true) ->
 %% -------------------------------------
 
 %% ------------- SSH calls -------------
-% ssh to host using key_pool, ane execute all given commands
-call_commands_on_host(_Host,_KeyPool,[]) ->
-	ok;
-call_commands_on_host(Host,KeyPool,[Command|Rest]) ->
-	print(Host++": "++Command),
-	Ans = os:cmd("ssh "++parse_key_pool(KeyPool)++" "++Host++" "++"'"++Command++"'"), % ssh -i key1 -i key2.. user@host 'command'
-	print(Ans),
-	call_commands_on_host(Host,KeyPool,Rest).
+% checks if ssh connection can be established and simple command can be executed
+connection_ok(Host,KeyPool) ->
+	case call_command_on_host(Host,KeyPool,"test 0") of
+		{0,_} -> true;
+		_ -> false
+	end.
+
+% tries to connect with given list of keys and executes command on host
+call_command_on_host(Host,KeyPool,Command) ->
+	debug(Host++": "++Command),
+	Result = os:cmd("ssh "++parse_key_pool(KeyPool)++" "++Host++" "++"'"++Command++"'" ++ ";echo *$?"), % ssh -i key1 -i key2.. user@host 'command' ; echo #$?
+	Ans = get_answer(Result),
+	RCode = get_return_code(Result),
+	debug(Ans),
+	{RCode,Ans}.
 
 %parse key_pool to ssh format (-i key1 -i key2...)
 parse_key_pool([]) ->
@@ -62,8 +63,22 @@ parse_key_pool([]) ->
 parse_key_pool([Key1|Rest]) ->
 	" -i "++Key1++parse_key_pool(Rest).
 
+%get ansver from os command result
+get_answer(Result) ->
+	SeparatorPosition = string:rchr(Result,$*),
+	string:substr(Result,1,SeparatorPosition-1).
 
-%% -------------- Printing -------------
+%get return code from os command result
+get_return_code(Result) ->
+	Code = lists:last(string:tokens(Result,"*")),
+	[_ | RevertedCode] =lists:reverse(Code),
+	list_to_integer(lists:reverse(RevertedCode)).
+%% -------------------------------------
+
+
+%% -------- Internal functions ---------
+debug(Text) ->
+	debug(Text,[]).
 debug(Text,Args) ->
 	case get(debug) of
 		true ->
@@ -74,12 +89,7 @@ debug(Text,Args) ->
 print(Text) ->
 	print(Text, []).
 print(Text,Args) ->
-	case get(silent) of
-		false ->
-			io:format(Text++"~n",Args);
-		true ->
-			none
-	end.
+	io:format(Text++"~n",Args).
 print_error(Text) ->
 	io:format(Text++"~n").
 %% -------------------------------------
