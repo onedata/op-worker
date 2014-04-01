@@ -547,10 +547,18 @@ doc_to_term(Field) when is_binary(Field) -> %% Binary type means that it is atom
     AtomPref = string:str(SField, ?RECORD_FIELD_ATOM_PREFIX),
     PidPref = string:str(SField, ?RECORD_FIELD_PID_PREFIX),
     if
-        BinPref == 1 -> list_to_binary(string:sub_string(SField, length(?RECORD_FIELD_BINARY_PREFIX) + 1));
-        AtomPref == 1 -> list_to_atom(string:sub_string(SField, length(?RECORD_FIELD_ATOM_PREFIX) + 1));
-        PidPref == 1 -> list_to_pid(string:sub_string(SField, length(?RECORD_FIELD_PID_PREFIX) + 1));
-        true -> SField
+	    BinPref == 1 -> list_to_binary(string:sub_string(SField, length(?RECORD_FIELD_BINARY_PREFIX) + 1));
+	    AtomPref == 1 -> list_to_atom(string:sub_string(SField, length(?RECORD_FIELD_ATOM_PREFIX) + 1));
+	    PidPref == 1 ->
+		    PidString = string:sub_string(SField, length(?RECORD_FIELD_PID_PREFIX) + 1),
+		    try list_to_pid(PidString) of
+			    Pid -> Pid
+		    catch
+			    _:_Error ->
+				    ?warning("Cannot convert document to term: cannot read PID ~p. Node missing?", [PidString]),
+				    undefined
+		    end;
+	    true -> SField
     end;
 doc_to_term(Field) when is_list(Field) ->
     [doc_to_term(X) || X <- Field];
