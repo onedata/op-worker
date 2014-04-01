@@ -348,7 +348,7 @@ list_records(#view_info{name = ViewName, design = DesignName, db_name = DbName},
               {ok, #view_result{total = length(Rows2), offset = 0, rows = FormattedRows2}};
           {error, _} = E -> throw(E);
             Other ->
-                lager:error("dao_helper:query_view has returned unknown query result: ~p", [Other]),
+                lager:error("##dao_helper:query_view has returned unknown query result: ~p", [Other]),
                 throw({unknown_query_result, Other})
         end.
 

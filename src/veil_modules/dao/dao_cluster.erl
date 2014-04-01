@@ -234,6 +234,7 @@ list_fuse_sessions({by_valid_to, Time}) ->
         {ok, #view_result{rows = Rows}} ->
             {ok, [Session || #view_row{doc = #veil_document{record = #fuse_session{}} = Session} <- Rows]};
         {error, Reason} ->
+	        lager:error("##list fuse sessions error: ~p",[Reason]),
             {error, Reason}
     end.
 
@@ -335,17 +336,17 @@ list_connection_info({by_session_id, SessID}) ->
 clear_sessions() ->
     SPid = self(),
     CurrentTime = fslogic_utils:time(),
-    ?debug("FUSE session cleanup started. Time: ~p", [CurrentTime]),
+    ?debug("##FUSE session cleanup started. Time: ~p", [CurrentTime]),
 
     %% List of worker processes that validates sessions in background
     PidList =
         case list_fuse_sessions({by_valid_to, CurrentTime}) of
             {ok, Sessions} ->
                 %% [{#veil_document{record = #fuse_session}, {Pid, MRef}}]
-	            ?info("old fuse sessions: ~p",[Sessions]),
+	            ?info("##old fuse sessions: ~p",[Sessions]),
                 [{X, spawn_monitor(fun() -> SPid ! {self(), check_session(X)} end)} || X <- Sessions];
             {error, Reason} ->
-                ?error("Cannot cleanup old fuse sessions. Expired session list fetch failed: ~p", [Reason]),
+                ?error("##Cannot cleanup old fuse sessions. Expired session list fetch failed: ~p", [Reason]),
                 exit(Reason)
         end,
 
@@ -361,7 +362,7 @@ clear_sessions() ->
                     save_fuse_session(NewDoc), %% Save updated document
                     ok;
                 {Pid, {error, Reason1}} -> %% Connection is broken, remove it
-                    ?info("FUSE Session ~p is broken (~p). Invalidating...", [SessID, Reason1]),
+                    ?info("##FUSE Session ~p is broken (~p). Invalidating...", [SessID, Reason1]),
                     close_fuse_session(SessID),
                     session_closed
             after 60000 ->
@@ -372,7 +373,7 @@ clear_sessions() ->
     %% Iterate over all check_session results and apply ProcessSession/2 on each
     _Res = [ProcessSession(Doc, Pid) || {Doc, {Pid, _}} <- PidList],
 
-    ?debug("FUSE session cleanup ended. Status: ~p", [_Res]),
+    ?debug("##FUSE session cleanup ended. Status: ~p", [_Res]),
     ok.
 
 
