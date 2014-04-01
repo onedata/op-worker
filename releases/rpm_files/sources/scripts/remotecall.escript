@@ -47,11 +47,12 @@ args_get([HostArg|Rest],Type,true) ->
 %% -------------------------------------
 
 %% ------------- SSH calls -------------
+% ssh to host using key_pool, ane execute all given commands
 call_commands_on_host(_Host,_KeyPool,[]) ->
 	ok;
 call_commands_on_host(Host,KeyPool,[Command|Rest]) ->
 	print(Host++": "++Command),
-	Ans = os:cmd("ssh "++parse_key_pool(KeyPool)++" "++Host++" "++Command),
+	Ans = os:cmd("ssh "++parse_key_pool(KeyPool)++" "++Host++" "++"'"++Command++"'"), % ssh -i key1 -i key2.. user@host 'command'
 	print(Ans),
 	call_commands_on_host(Host,KeyPool,Rest).
 
