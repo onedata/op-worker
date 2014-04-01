@@ -65,7 +65,8 @@
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-mkdir(DirName) ->
+mkdir(DirNameStr) ->
+  DirName = check_utf(DirNameStr),
   {ModeStatus, NewFileLogicMode} = get_mode(DirName),
   case ModeStatus of
     ok ->
@@ -93,7 +94,8 @@ mkdir(DirName) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-rmdir(DirName) ->
+rmdir(DirNameStr) ->
+  DirName = check_utf(DirNameStr),
   Record = #deletefile{file_logic_name = DirName},
   {Status, TmpAns} = contact_fslogic(Record),
   case Status of
@@ -115,7 +117,9 @@ rmdir(DirName) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-mv(From, To) ->
+mv(FromStr, ToStr) ->
+  From = check_utf(FromStr),
+  To = check_utf(ToStr),
   Record = #renamefile{from_file_logic_name = From, to_file_logic_name  = To},
   {Status, TmpAns} = contact_fslogic(Record),
   case Status of
@@ -137,7 +141,8 @@ mv(From, To) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-chown(FileName, Uname, Uid) ->
+chown(FileNameStr, Uname, Uid) ->
+  FileName = check_utf(FileNameStr),
   Record = #changefileowner{file_logic_name = FileName, uname = Uname, uid = Uid},
   {Status, TmpAns} = contact_fslogic(Record),
   case Status of
@@ -160,7 +165,8 @@ chown(FileName, Uname, Uid) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-ls(DirName, ChildrenNum, Offset) ->
+ls(DirNameStr, ChildrenNum, Offset) ->
+  DirName = check_utf(DirNameStr),
   Record = #getfilechildren{dir_logic_name = DirName, children_num = ChildrenNum, offset = Offset},
   {Status, TmpAns} = contact_fslogic(Record),
   case Status of
@@ -186,7 +192,8 @@ ls(DirName, ChildrenNum, Offset) ->
 getfileattr({uuid, UUID}) ->
   getfileattr(getfileattr, UUID);
 
-getfileattr(FileName) ->
+getfileattr(FileNameStr) ->
+  FileName = check_utf(FileNameStr),
   Record = #getfileattr{file_logic_name = FileName},
   getfileattr(internal_call, Record).
 
@@ -241,7 +248,8 @@ getfileattr(Message, Value) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-read(File, Offset, Size) ->
+read(FileStr, Offset, Size) ->
+  File = check_utf(FileStr),
   {Response, Response2} = getfilelocation(File),
       case Response of
         ok ->
@@ -262,7 +270,8 @@ read(File, Offset, Size) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-write(File, Buf) ->
+write(FileStr, Buf) ->
+  File = check_utf(FileStr),
   {Response, Response2} = getfilelocation(File),
       case Response of
         ok ->
@@ -283,7 +292,8 @@ write(File, Buf) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-write(File, Offset, Buf) ->
+write(FileStr, Offset, Buf) ->
+  File = check_utf(FileStr),
   {Response, Response2} = getfilelocation(File),
       case Response of
         ok ->
@@ -304,7 +314,8 @@ write(File, Offset, Buf) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-write_from_stream(File, Buf) ->
+write_from_stream(FileStr, Buf) ->
+  File = check_utf(FileStr),
   {Response, Response2} = getfilelocation(File),
   case Response of
     ok ->
@@ -325,7 +336,8 @@ write_from_stream(File, Buf) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-create(File) ->
+create(FileStr) ->
+  File = check_utf(FileStr),
   {ModeStatus, NewFileLogicMode} = get_mode(File),
   case ModeStatus of
     ok ->
@@ -374,7 +386,8 @@ create(File) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-truncate(File, Size) ->
+truncate(FileStr, Size) ->
+  File = check_utf(FileStr),
   {Response, Response2} = getfilelocation(File),
       case Response of
         ok ->
@@ -395,7 +408,8 @@ truncate(File, Size) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-delete(File) ->
+delete(FileStr) ->
+  File = check_utf(FileStr),
   {Response, Response2} = getfilelocation(File),
       case Response of
         ok ->
@@ -434,7 +448,8 @@ delete(File) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-change_file_perm(FileName, NewPerms) ->
+change_file_perm(FileNameStr, NewPerms) ->
+  FileName = check_utf(FileNameStr),
   Record = #changefileperms{file_logic_name = FileName, perms = NewPerms},
   {Status, TmpAns} = contact_fslogic(Record),
   case Status of
@@ -463,7 +478,8 @@ change_file_perm(FileName, NewPerms) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-exists(FileName) ->
+exists(FileNameStr) ->
+  FileName = check_utf(FileNameStr),
   {FileNameFindingAns, File} = fslogic:get_full_file_name(FileName),
   case FileNameFindingAns of
     ok ->
@@ -966,4 +982,12 @@ get_mode(FileName) ->
   case TmpAns of
     undefined -> {error, undefined};
     _ -> TmpAns
+  end.
+
+check_utf(FileName) ->
+  case io_lib:printable_unicode_list(FileName) of
+    true ->
+      FileName;
+    false ->
+      unicode:characters_to_list(list_to_binary(FileName))
   end.
