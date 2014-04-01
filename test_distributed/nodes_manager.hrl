@@ -40,8 +40,10 @@
 -define(TEST_USER2, "veilfstestuser2").
 -define(TEST_GROUP, "veilfstestgroup").
 -define(TEST_GROUP2, "veilfstestgroup2").
+-define(TEST_GROUP3, "veilfstestgroup3").
 -define(TEST_GROUP_EXTENDED, "veilfstestgroup(Grp)").
 -define(TEST_GROUP2_EXTENDED, "veilfstestgroup2(Grp2)").
+-define(TEST_GROUP3_EXTENDED, "veilfstestgroup3(Grp3)").
 
 %% ====================================================================
 %% Assertion macros
