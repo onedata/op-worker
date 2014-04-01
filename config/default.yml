@@ -286,7 +286,7 @@ veil_cluster_node_env:
       description: |
         This variable determinates how often FUSE sessions shall be checked (in seconds).
         Note that session will be discarded only when there are no connections active for the session.
-      value: 10800 # 3h
+      value: 600 # 10min
 
   - parameter:
        name: dao_fuse_cache_loop_time
