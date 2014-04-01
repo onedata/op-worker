@@ -173,6 +173,7 @@ ls(DirNameStr, ChildrenNum, Offset) ->
     ok ->
       Response = TmpAns#filechildren.answer,
       case Response of
+        % TODO delete map when GUI will use N20
         ?VOK -> {ok, lists:map(fun(Child) -> binary_to_list(unicode:characters_to_binary(Child)) end, TmpAns#filechildren.child_logic_name)};
         _ -> {logical_file_system_error, Response}
       end;
@@ -585,7 +586,8 @@ get_file_user_dependent_name_by_uuid(UUID) ->
         UserDN ->
           case dao_lib:apply(dao_users, get_user, [{dn, UserDN}], 1) of
             {ok, #veil_document { record=#user { login=Login } } } ->
-              {ok, string:sub_string(FullPath, length(Login ++ "/") + 1)};
+              % TODO delete format change when GUI will use N20
+              {ok, binary_to_list(unicode:characters_to_binary(string:sub_string(FullPath, length(Login ++ "/") + 1)))};
             {ErrorGeneral, ErrorDetail} ->
               {ErrorGeneral, ErrorDetail}
           end
@@ -606,7 +608,8 @@ get_file_user_dependent_name_by_uuid(UUID) ->
 %% ====================================================================
 get_file_name_by_uuid(UUID) ->
   case get_file_by_uuid(UUID) of
-    {ok, #veil_document{record = FileRec}} -> {ok, FileRec#file.name};
+    % TODO delete format change when GUI will use N20
+    {ok, #veil_document{record = FileRec}} -> {ok, binary_to_list(unicode:characters_to_binary(FileRec#file.name))};
     _ -> {error, {get_file_by_uuid, UUID}}
   end.
 
@@ -670,7 +673,8 @@ create_standard_share(File) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-create_share(File, Share_With) ->
+create_share(FileStr, Share_With) ->
+  File = check_utf(FileStr),
   {Status, FullName} = fslogic:get_full_file_name(File),
   {Status2, UID} = fslogic:get_user_id(),
   case {Status, Status2} of
@@ -741,7 +745,8 @@ add_share(Share_info) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-get_share({file, File}) ->
+get_share({file, FileStr}) ->
+  File = check_utf(FileStr),
   {Status, FullName} = fslogic:get_full_file_name(File),
   case Status of
     ok ->
@@ -773,7 +778,8 @@ get_share(Key) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-remove_share({file, File}) ->
+remove_share({file, FileStr}) ->
+  File = check_utf(FileStr),
   {Status, FullName} = fslogic:get_full_file_name(File),
   case Status of
     ok ->
@@ -984,6 +990,7 @@ get_mode(FileName) ->
     _ -> TmpAns
   end.
 
+% TODO delete format change when GUI will use N20
 check_utf(FileName) ->
   case io_lib:printable_unicode_list(FileName) of
     true ->
