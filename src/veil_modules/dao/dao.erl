@@ -510,14 +510,7 @@ term_to_doc(Field) when is_tuple(Field) ->
                 true ->
                     {_, Fields, _} = ?dao_record_info(RecName),
 
-                    % TODO temporary fix that enables use of diacritic chars in file names
-                    Value = case {RecName, lists:nth(Poz, Fields)} of
-                                % Exclusively for filenames, apply conversion to binary
-                                {file, name} -> list_to_binary(Elem);
-                                % Standard conversion
-                                _ -> term_to_doc(Elem)
-                            end,
-                    % </endfix>
+                    Value = term_to_doc(Elem),
 
                     {Poz + 1, dao_json:mk_field(AccIn, atom_to_list(lists:nth(Poz, Fields)), Value)};
                 false ->
