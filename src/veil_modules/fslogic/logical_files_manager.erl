@@ -987,7 +987,10 @@ get_mode(FileName) ->
 check_utf(FileName) ->
   case io_lib:printable_unicode_list(FileName) of
     true ->
+      lager:info("OK unicode: ~p", [FileName]),
       FileName;
     false ->
-      unicode:characters_to_list(list_to_binary(FileName))
+      Ans = unicode:characters_to_list(list_to_binary(FileName)),
+      lager:info("Wrong unicode: ~p ~p", [FileName, Ans]),
+      Ans
   end.
