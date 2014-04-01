@@ -19,7 +19,7 @@ shift
 
 case $COMMAND in
 	escript)
-		$RELEASE_PACKAGE_LOCATION/erts-$ERTS_VSN/bin/escript $@
+		$RELEASE_PACKAGE_LOCATION/erts-$ERTS_VSN/bin/escript "$@"
 		;;
 
 	epmd)
