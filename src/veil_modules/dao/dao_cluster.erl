@@ -343,7 +343,7 @@ clear_sessions() ->
         case list_fuse_sessions({by_valid_to, CurrentTime}) of
             {ok, Sessions} ->
                 %% [{#veil_document{record = #fuse_session}, {Pid, MRef}}]
-	            ?info("##old fuse sessions: ~p",[Sessions]),
+	            ?info("##old fuse sessions: ~p",[length(Sessions)]),
                 [{X, spawn_monitor(fun() -> SPid ! {self(), check_session(X)} end)} || X <- Sessions];
             {error, Reason} ->
                 ?error("##Cannot cleanup old fuse sessions. Expired session list fetch failed: ~p", [Reason]),
@@ -442,14 +442,21 @@ check_session(#veil_document{record = #fuse_session{}, uuid = SessID}) ->
 %% ====================================================================
 check_connection(Connection = #veil_document{record = #connection_info{session_id = SessID, controlling_node = CNode, controlling_pid = CPid}}) ->
     SPid = self(),
-    spawn(CNode, fun() -> CPid ! {SPid, get_session_id} end),   %% Send ping to connection controlling process
-    receive
-        {ok, SessID} ->         %% Connection is alive and has valid session ID. Leave it be.
-            ok;
-        {ok, Inval} ->          %% Connection has invalid session ID. Close it.
-            ?warning("Connection ~p has invalid session ID (~p)", [Connection, Inval]),
-            {error, invalid_session_id}
-    after 3000 ->
-        ?warning("Connection ~p is not avalilable due to timeout.", [Connection]),
-        {error, timeout}
-    end.
+    lager:info("session connection check: session_id ~p controlling_node ~p, controlling_pid ~p",[SessID, CNode,CPid]),
+	case is_pid(CPid) of
+		true->
+			spawn(CNode, fun() -> CPid ! {SPid, get_session_id} end),   %% Send ping to connection controlling process
+		    receive
+		        {ok, SessID} ->         %% Connection is alive and has valid session ID. Leave it be.
+		            ok;
+		        {ok, Inval} ->          %% Connection has invalid session ID. Close it.
+		            ?warning("Connection ~p has invalid session ID (~p)", [Connection, Inval]),
+		            {error, invalid_session_id}
+		    after 3000 ->
+		        ?warning("Connection ~p is not avalilable due to timeout.", [Connection]),
+		        {error, timeout}
+		    end;
+		false->
+			?error("Connection pid unknown"),
+			{error,wrong_pid}
+	end.
