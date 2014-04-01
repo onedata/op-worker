@@ -173,7 +173,7 @@ ls(DirNameStr, ChildrenNum, Offset) ->
     ok ->
       Response = TmpAns#filechildren.answer,
       case Response of
-        ?VOK -> {ok, TmpAns#filechildren.child_logic_name};
+        ?VOK -> {ok, lists:map(fun(Child) -> binary_to_list(unicode:characters_to_binary(Child)) end, TmpAns#filechildren.child_logic_name)};
         _ -> {logical_file_system_error, Response}
       end;
     _ -> {Status, TmpAns}
