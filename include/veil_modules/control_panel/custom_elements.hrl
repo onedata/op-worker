@@ -32,15 +32,11 @@
 
 % Custom upload element
 -record(veil_upload, {?ELEMENT_BASE(veil_upload),
-    delegate,
-    tag,
-    show_button = true,
-    file_text = "Select files",
-    button_text = "Start upload",
-    droppable = false,
-    droppable_text = "Drop files",
-    multiple = false,
-    target_dir = "/"
+    delegate, % Required to get start / finish reports in given module (will call Delegate:upload_event/1).
+    target_dir = <<"/">>,
+    file_text = <<"Select files">>,
+    button_text = <<"Start upload">>,
+    droppable_text = <<"Drop files">>
 }).
 
 -endif.

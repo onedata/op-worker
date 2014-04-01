@@ -18,7 +18,7 @@
 -export([redirect_to_login/1, redirect_from_login/0]).
 -export([apply_or_redirect/3, apply_or_redirect/4, top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
 -export([comet/1, init_comet/2, flush/0]).
--export([register_escape_event/1, script_for_enter_submission/2]).
+-export([register_escape_event/1, script_for_enter_submission/2, script_to_bind_element_click/2]).
 -export([update/2, replace/2, insert_top/2, insert_bottom/2, insert_before/2, insert_after/2, remove/1]).
 -export([to_list/1, to_binary/1, join_to_binary/1]).
 -export([cowboy_ensure_header/3]).
@@ -357,7 +357,7 @@ flush() ->
 %% ====================================================================
 register_escape_event(Tag) ->
     wf:wire(#api{name = "escape_pressed", tag = Tag}),
-    wf:wire("jQuery(document).bind('keydown', function (e){if (e.which == 27) escape_pressed();});").
+    wf:wire("$(document).bind('keydown', function (e){if (e.which == 27) escape_pressed();});").
 
 
 %% script_for_enter_submission/2
@@ -369,6 +369,17 @@ register_escape_event(Tag) ->
 %% ====================================================================
 script_for_enter_submission(InputID, ButtonToClickID) ->
     wf:f("$('#~s').bind('keydown', function (e){ if (e.which == 13) { e.preventDefault(); $('#~s').click(); } });", [InputID, ButtonToClickID]).
+
+
+%% script_to_bind_element_click/2
+%% ====================================================================
+%% @doc Generates snippet of javascript, which can be directly used with wf:wire.
+%% It intercepts enter keypresses on given input element and performs a click() on given submit button.
+%% @end
+-spec script_to_bind_element_click(string(), string()) -> string().
+%% ====================================================================
+script_to_bind_element_click(ElementID, Javascript) ->
+    wf:f("$('#~s').bind('click', function anonymous(event) { ~s });", [ElementID, Javascript]).
 
 
 %% to_list/1

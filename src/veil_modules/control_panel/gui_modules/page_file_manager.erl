@@ -199,12 +199,12 @@ wire_script(Script) ->
 % wire_xxx() will accumulate wiring clauses, and do_wiring will flush it.
 do_wiring() ->
     lists:foreach(
-        fun({TriggerID, TargetID, Event = #event{type = Type}, ShowSpinner}) ->
+        fun({TriggerID, TargetID, Event, ShowSpinner}) ->
             case ShowSpinner of
                 false ->
                     skip;
                 true ->
-                    wf:wire(wf:f("$('#~s').bind('~s', function anonymous(event) { $('#spinner').show(150); });", [TriggerID, Type]))
+                    wf:wire(gui_utils:script_to_bind_element_click(TriggerID, "$('#spinner').show(150);"))
             end,
             wf:wire(TriggerID, TargetID, Event);
             (Script) ->
@@ -221,6 +221,11 @@ reset_wire_accumulator() ->
 %% Handling events
 api_event("escape_pressed", _, _) ->
     event({action, hide_popup}).
+
+
+% Upload events
+upload_event(start) -> ?dump(start);
+upload_event(finish) -> ?dump(finish).
 
 
 event(init) ->
@@ -672,10 +677,10 @@ show_popup(Type) ->
                 {Body, "$('#shared_link_textbox').focus(); $('#shared_link_textbox').select();", {action, hide_popup}};
 
             file_upload ->
-                %Body = [
-                %%    #veil_upload{tag = file_upload, show_button = true, multiple = true, droppable = true, target_dir = get_working_directory()}
-                %],
-                {"ZOMG NOT IMPLEMENTED", undefined, {action, clear_manager}};
+                Body = [
+                    #veil_upload{delegate = page_file_manager, target_dir = get_working_directory()}
+                ],
+                {Body, undefined, {action, clear_manager}};
 
             remove_selected ->
                 {_FB, _S, _A} =

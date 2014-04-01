@@ -1,24 +1,21 @@
 %% ===================================================================
 %% @author Lukasz Opiola
-%% @copyright (C): 2013 ACK CYFRONET AGH
+%% @copyright (C): 2014 ACK CYFRONET AGH
 %% This software is released under the MIT license
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module processes file download and upload requests. After validating 
-%% them it conducts streaming to or from a socket or makes n2o display a proper error page.
+%% @doc: This module processes file upload requests, both originating from
+%% REST and web GUI.
 %% @end
 %% ===================================================================
 
--module(file_transfer_handler).
+-module(file_upload_handler).
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao_share.hrl").
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/control_panel/rest_messages.hrl").
 -include("err.hrl").
-
-% Buffer size used to send file to a client. Override with control_panel_download_buffer.
--define(DOWNLOAD_BUFFER_SIZE, 1048576). % 1MB
 
 % Buffer size used to stream file from a client. Override with control_panel_upload_buffer.
 -define(UPLOAD_BUFFER_SIZE, 1048576). % 1MB
@@ -29,38 +26,103 @@
 % Timeout for fetching single part of data from socket
 -define(UPLOAD_PART_TIMEOUT, 30000). % 30 seconds
 
+%% Cowboy callbacks
+-export([init/3, handle/2, terminate/3]).
+%% Functions used in external modules (e.g. rest_handlers)
+-export([handle_upload_request/1, handle_rest_upload/3]).
+
+
+%% ====================================================================
+%% Cowboy API functions
+%% ====================================================================
+
+%% init/3
+%% ====================================================================
+%% @doc Cowboy handler callback.
+-spec init(any(), term(), any()) -> {ok, term(), atom()}.
+%% ====================================================================
+init(_Type, Req, _Opts) ->
+    {ok, Req, []}.
+
+
+%% handle/2
+%% ====================================================================
+%% @doc Handles a request. Supports user content and shared files downloads.
+%% @end
+-spec handle(term(), term()) -> {ok, term(), term()}.
+%% ====================================================================
+handle(Req, State) ->
+    {ok, NewReq} = handle_upload_request(Req),
+    {ok, NewReq, State}.
+
+
+%% terminate/3
+%% ====================================================================
+%% @doc Cowboy handler callback, no cleanup needed
+-spec terminate(term(), term(), term()) -> ok.
+%% ====================================================================
+terminate(_Reason, _Req, _State) ->
+    ok.
+
+
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([handle_upload_request/2, handle_rest_upload/3]).
 
-
-%% handle_upload_request/2
+%% handle_upload_request/1
 %% ====================================================================
-%% @doc Asserts the validity of mutlipart POST request and proceeds with
+%% @doc Asserts the validity of multipart POST request and proceeds with
 %% parsing or returns an error. Returns list of parsed filed values and
 %% file body.
 %% @end
--spec handle_upload_request(Req :: req(), record()) ->
-    {ok, Params :: [tuple()], Files :: [any()]} |
-    {error, incorrect_session}.
+-spec handle_upload_request(req()) -> {ok, req()}.
 %% ====================================================================
-handle_upload_request(Req, UserDoc) ->
-    case UserDoc of
-        undefined ->
-            {error, incorrect_session};
-        Doc ->
-            case user_logic:get_dn_list(Doc) of
-                [] ->
-                    {error, incorrect_session};
-                undefined ->
-                    {error, incorrect_session};
-                List when is_list(List) ->
-                    % This will cause logical_files_manager to create the file for proper user
-                    put(user_id, lists:nth(1, List)),
-                    {ok, _Params, _Files} = parse_multipart(Req, [], [])
-            end
+handle_upload_request(Req) ->
+    try
+%%         try_or_throw(
+%%             fun() ->
+%%                 try
+%%                     Context = wf_context:init_context(Req),
+%%                     SessionHandler = proplists:get_value(session, Context#context.handlers),
+%%                     SessionHandler:init([], Context),
+%%                     UserID = wf:session(user_doc),
+%%                     true = (UserID /= undefined),
+%%                     put(user_id, lists:nth(1, user_logic:get_dn_list(UserID)))
+%%                 catch A:B -> ?dump({A, B, erlang:get_stacktrace()}) end
+%%             end, not_logged_in),
+
+        put(user_id, "CN=plglopiola,CN=Lukasz Opiola,O=CYFRONET,O=Uzytkownik,O=PL-Grid,C=PL"),
+
+        % Params and _FilePath are not currently used but there are cases when they could be useful
+        {ok, _Params, [{OriginalFileName, _FilePath}]} = parse_multipart(Req, [], []),
+
+        % Return a struct conforming to upload plugin requirements
+        RespBody = rest_utils:encode_to_json(
+            {struct, [
+                {files, [
+                    {struct, [
+                        {name, list_to_binary(OriginalFileName)}
+                    ]}
+                ]}
+            ]}),
+
+        Req2 = cowboy_req:set_resp_header(<<"content-type">>, <<"application/json">>, Req),
+        Req3 = cowboy_req:set_resp_body(RespBody, Req2),
+        % Force connection to close, so that every upload is in
+        {ok, _FinReq} = cowboy_req:reply(200, Req3#http_req{connection = close})
+
+    catch Type:Message ->
+        case Message of
+            not_logged_in ->
+                ?dump({Type, Message}),
+                skip;
+            _ ->
+                ?error_stacktrace("Error while processing file upload from user ~p - ~p:~p",
+                    [get(user_id), Type, Message])
+        end,
+        {ok, _ErrorReq} = cowboy_req:reply(500, Req)
     end.
+
 
 %% handle_rest_upload/3
 %% ====================================================================
@@ -186,7 +248,7 @@ parse_multipart(Req, Params, Files) ->
             {ok, Params, Files}
     end.
 
-% Params are needed when it stumbles upon a file, so it can retrieve its
+% Params are needed when it reaches a file, so it can retrieve its
 % target location from hidden field
 parse_part(Req, Params) ->
     case multipart_data(Req) of
@@ -238,8 +300,8 @@ parse_file(Req, Headers, Params) ->
                     undefined -> throw({"Error in parse_file", no_upload_target_specified});
                     Path -> Path
                 end,
-    Name = get_file_name(Headers),
-    RequestedFullPath = filename:absname(Name, TargetDir),
+    OriginalFileName = get_file_name(Headers),
+    RequestedFullPath = filename:absname(OriginalFileName, TargetDir),
     FullPath = ensure_unique_filename(RequestedFullPath, 0),
     NewReq = try
         stream_file_to_fslogic(Req, FullPath, get_upload_buffer_size())
@@ -247,12 +309,7 @@ parse_file(Req, Headers, Params) ->
                  logical_files_manager:delete(FullPath),
                  throw({"Error in parse_file", Type, Message})
              end,
-    File = {
-        name = Name,
-        path = FullPath,
-        field_name = get_field_name(Headers)
-    },
-    {NewReq, {file, File}}.
+    {NewReq, {file, {OriginalFileName, FullPath}}}.
 
 
 % Tries to create a file as long as one gets created (changing its name every time)
@@ -273,6 +330,7 @@ ensure_unique_filename(RequestedPath, Counter) ->
     case logical_files_manager:create(NewName) of
         ok -> NewName;
         {_, ?VEEXIST} -> ensure_unique_filename(RequestedPath, Counter + 1);
+        {_, file_exists} -> ensure_unique_filename(RequestedPath, Counter + 1);
         Error -> throw({"Error in ensure_unique_filename", Error})
     end.
 
@@ -343,6 +401,21 @@ get_upload_buffer_size() ->
                     ?error("Could not read 'control_panel_upload_buffer' from config. Make sure it is present in config.yml and .app.src."),
                     ?UPLOAD_BUFFER_SIZE
             end.
+
+
+%% try_or_throw/2
+%% ====================================================================
+%% @doc Convienience function to envelope a piece of code in try throw statement.
+%% Used for clear code where multiple try catches are nested.
+%% @end
+-spec try_or_throw(function(), term()) -> term() | no_return().
+%% ====================================================================
+try_or_throw(Fun, ThrowWhat) ->
+    try
+        Fun()
+    catch _:_ ->
+        throw(ThrowWhat)
+    end.
 
 
 %% ====================================================================
@@ -479,14 +552,14 @@ stream_body(MaxLength, Req) ->
 -spec stream_body_recv(non_neg_integer(), Req)
             -> {ok, binary(), Req} | {error, atom()} when Req :: req().
 stream_body_recv(MaxLength, Req = #http_req{
-        transport = Transport, socket = Socket, buffer = Buffer,
-        body_state = {stream, Length, _, _, _}}) ->
+    transport = Transport, socket = Socket, buffer = Buffer,
+    body_state = {stream, Length, _, _, _}}) ->
     %% @todo Allow configuring the timeout.
     case Transport:recv(Socket, min(Length, MaxLength), ?UPLOAD_PART_TIMEOUT) of
         {ok, Data} -> transfer_decode(<<Buffer/binary, Data/binary>>,
             Req#http_req{buffer = <<>>});
         {error, Reason} ->
-            lager:error("Cannot recv upload part data with len: ~p due to: ~p", [min(Length, MaxLength), Reason]),
+            ?error_stacktrace("Cannot recv upload part data with len: ~p due to: ~p", [min(Length, MaxLength), Reason]),
             {error, Reason}
     end.
 
@@ -520,7 +593,7 @@ transfer_decode(Data, Req = #http_req{body_state = {stream, _,
 -spec transfer_decode_done(non_neg_integer(), binary(), Req)
             -> Req when Req :: req().
 transfer_decode_done(Length, Rest, Req = #http_req{
-        headers = Headers, p_headers = PHeaders}) ->
+    headers = Headers, p_headers = PHeaders}) ->
     Headers2 = lists:keystore(<<"content-length">>, 1, Headers,
         {<<"content-length">>, list_to_binary(integer_to_list(Length))}),
     %% At this point we just assume TEs were all decoded.
@@ -529,7 +602,7 @@ transfer_decode_done(Length, Rest, Req = #http_req{
         {<<"content-length">>, Length}),
     PHeaders3 = lists:keydelete(<<"transfer-encoding">>, 1, PHeaders2),
     Req#http_req{buffer = Rest, body_state = done,
-    headers = Headers3, p_headers = PHeaders3}.
+        headers = Headers3, p_headers = PHeaders3}.
 
 %% @todo Probably needs a Rest.
 -spec content_decode(content_decode_fun(), binary(), Req)

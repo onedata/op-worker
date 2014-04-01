@@ -31,7 +31,7 @@
 %% @end
 -spec parse(ReqBridge :: record()) ->
     {ok, not_multipart} |
-    {ok, Params :: [tuple()], Files :: [#uploaded_file{}]} |
+    {ok, Params :: [tuple()], Files :: [any()]} |
     {error, any()}.
 %% ====================================================================
 parse(ReqBridge) ->

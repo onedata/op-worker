@@ -60,6 +60,7 @@ init(_Args) ->
             {"/nagios/[...]", nagios_handler, []},
             {?user_content_download_path ++ "/:path", file_download_handler, [{type, ?user_content_request_type}]},
             {?shared_files_download_path ++ "/:path", file_download_handler, [{type, ?shared_files_request_type}]},
+            {?file_upload_path, file_upload_handler, []},
             {"/ws/[...]", bullet_handler, [{handler, n2o_bullet}]},
             {'_', n2o_cowboy, []}
         ]}

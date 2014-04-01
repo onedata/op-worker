@@ -27,14 +27,8 @@
 % Identifier for requests of user content
 -define(user_content_request_type, user_content).
 
-
-% Record describing an uploaded file
--record(uploaded_file, {
-    name,
-    path,
-    field_name,
-    size
-}).
+% Relative suffix of GUI address, leading to file upload service
+-define(file_upload_path, "/upload").
 
 % Include from dao, cannot include whole hrl because of collision with wf.hrl
 -record(veil_document, {uuid = "", rev_info = 0, record = none, force_update = false}).
@@ -81,7 +75,7 @@
 	qs_vals = undefined :: undefined | list({binary(), binary() | true}),
 	bindings = undefined :: undefined | cowboy_router:bindings(),
 	headers = [] :: cowboy:http_headers(),
-	p_headers = [] :: [any()], %% @todo Improve those specs.
+	p_headers = [] :: [any()],
 	cookies = undefined :: undefined | [{binary(), binary()}],
 	meta = [] :: [{atom(), any()}],
 
