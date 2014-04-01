@@ -116,6 +116,7 @@ handle(ProtocolVersion, {getfileattr, UUID}) ->
 
 handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
     try
+        lager:info("Fuse message: ~p", [Record]),
         handle_fuse_message(ProtocolVersion, Record#fusemessage.input, get(fuse_id))
     catch
         ErrorRet -> ErrorRet
