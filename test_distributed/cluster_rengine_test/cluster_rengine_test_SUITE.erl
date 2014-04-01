@@ -102,7 +102,7 @@ test_event_aggregation(Config) ->
       _ -> AnsPid ! {ok, tree, self()}
     end
   end,
-  subscribe_for_write_events(CCM, tree, EventHandler, #aggregator_config{init_counter = 4}),
+  subscribe_for_write_events(CCM, tree, EventHandler, #event_stream_config{config = #aggregator_config{field_name = user_id, fun_field_name = "count", threshold = 4}}),
   WriteEvent = [{type, write_event}, {user_id, "1234"}, {ans_pid, self()}],
 
   repeat(3, fun() -> send_event(WriteEvent, CCM) end),
@@ -252,7 +252,7 @@ end_per_testcase(_, Config) ->
 
 
 subscribe_for_write_events(Node, ProcessingMethod, EventHandler) ->
-  subscribe_for_write_events(Node, ProcessingMethod, EventHandler, #aggregator_config{}).
+  subscribe_for_write_events(Node, ProcessingMethod, EventHandler, #event_stream_config{}).
 
 subscribe_for_write_events(Node, ProcessingMethod, EventHandler, ProcessingConfig) ->
   ?info("subscribe_for_write_events"),

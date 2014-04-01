@@ -168,30 +168,31 @@ update_event_handler(ProtocolVersion, EventType) ->
 create_process_tree_for_handlers(EventHandlersList) ->
   lists:foreach(fun create_process_tree_for_handler/1, EventHandlersList).
 
-create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = MapFun, handler_fun = HandlerFun, config = Config}) ->
-  InitCounterIfNeeded = fun(EtsName, InitCounter) ->
-    case ets:lookup(EtsName, counter) of
-      [] -> ets:insert(EtsName, {counter, InitCounter});
-      _ -> ok
-    end
-  end,
-
-  ProcFun = case Config#aggregator_config.init_counter of
-    undefined ->
-      fun(_ProtocolVersion, {final_stage_tree, _TreeId, Event}) ->
-        HandlerFun(Event)
-      end;
-    InitCounter ->
-      fun(_ProtocolVersion, {final_stage_tree, _TreeId, Event}, EtsName) ->
-        InitCounterIfNeeded(EtsName, InitCounter),
-        CurrentCounter = ets:update_counter(EtsName, counter, {2, -1, 1, InitCounter}),
-        case CurrentCounter of
-          InitCounter ->
-            HandlerFun(Event);
-          _ -> ok
-        end
-      end
-    end,
+create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = MapFun, handler_fun = HandlerFun, config = #event_stream_config{config = ActualConfig} = Config}) ->
+  ProcFun = case ActualConfig of
+              undefined ->
+                fun(ProtocolVersion, {final_stage_tree, TreeId2, Event}) ->
+                    HandlerFun(Event)
+                end;
+              _ ->
+                FromConfigFun = fun_from_config(Config),
+                case element(1, ActualConfig) of
+                  aggregator_config ->
+                    fun(ProtocolVersion, {final_stage_tree, TreeId2, Event}, EtsName) ->
+                      case FromConfigFun(ProtocolVersion, {final_stage_tree, TreeId2, Event}, EtsName) of
+                        non -> ok;
+                        Ev -> HandlerFun(Ev)
+                      end
+                    end;
+                  _ ->
+                    fun(ProtocolVersion, {final_stage_tree, TreeId2, Event}) ->
+                      case FromConfigFun(ProtocolVersion, {final_stage_tree, TreeId2, Event}) of
+                        non -> ok;
+                        Ev -> HandlerFun(Ev)
+                      end
+                    end
+                end
+            end,
 
   NewMapFun = fun({_, _TreeId, Event}) ->
     MapFun(Event)
@@ -203,11 +204,80 @@ create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = 
   Node = erlang:node(self()),
 
   LocalCacheName = list_to_atom(atom_to_list(TreeId) ++ "_local_cache"),
-  case Config#aggregator_config.init_counter of
+  case ActualConfig of
     undefined -> gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM});
-    _ -> gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM, LocalCacheName})
+    _ -> case element(1, ActualConfig) of
+     aggregator_config -> gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM, LocalCacheName});
+     _ -> gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM})
+    end
   end.
 %%   nodes_manager:wait_for_cluster_cast({cluster_rengine, Node}),
+
+fun_from_config(#event_stream_config{config = ActualConfig, wrapped_config = WrappedConfig}) ->
+  WrappedFun = case WrappedConfig of
+    undefined -> non;
+    _ -> fun_from_config(WrappedConfig)
+  end,
+
+  case element(1, ActualConfig) of
+    aggregator_config ->
+      fun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName) ->
+        ?info("-------- Aggregator fun: ~p", [Event]),
+        case WrappedFun of
+          non -> ok;
+          _ -> WrappedFun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName)
+        end,
+
+        InitCounterIfNeeded = fun(EtsName, Key) ->
+          case ets:lookup(EtsName, Key) of
+            [] -> ets:insert(EtsName, {Key, 0});
+            _ -> ok
+          end
+        end,
+
+        FieldName = ActualConfig#aggregator_config.field_name,
+        FieldValue = proplists:get_value(FieldName, Event, {}),
+        FunFieldName = ActualConfig#aggregator_config.fun_field_name,
+        Incr = proplists:get_value(FunFieldName, Event, 1),
+        ?info("-------- Aggregator fun incr: ~p, ~p, ~p", [Incr, FieldName, FieldValue]),
+
+        case FieldValue of
+          FieldValue2 when not is_tuple(FieldValue2) ->
+            Key = "sum_" ++ FieldValue,
+            InitCounterIfNeeded(EtsName, Key),
+            [{_Key, Val}] = ets:lookup(EtsName, Key),
+            NewValue = Val + Incr,
+            ?info("-------- Aggregator fun new Value: ~p", [NewValue]),
+            case NewValue >= ActualConfig#aggregator_config.threshold of
+              true ->
+                ?info("-------- Aggregator fun new Value: TRUE"),
+                ets:insert(EtsName, {Key, 0}),
+                [{type, proplists:get_value(type, Event)}, {FieldName, FieldValue}, {sum, NewValue}, {ans_pid, proplists:get_value(ans_pid, Event)}];
+              _ ->
+                ?info("-------- Aggregator fun new Value: FALSE"),
+                ets:insert(EtsName, {Key, NewValue}),
+                non
+            end;
+          _ -> non
+        end
+      end;
+    filter_config ->
+      fun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName) ->
+        case WrappedFun of
+          non -> ok;
+          _ -> WrappedFun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName)
+        end,
+
+        FieldName = ActualConfig#filter_config.field_name,
+        FieldValue = proplists:get_value(FieldName, Event, {}),
+        case FieldValue =:= ActualConfig#filter_config.desired_value of
+          true -> Event;
+          _ -> non
+        end
+      end;
+    _ ->
+      ?warning("Unknown type of stream event config: ~p", [element(1, ActualConfig)])
+  end.
 
 get_request_map_fun() ->
   fun
@@ -249,7 +319,6 @@ register_mkdir_handler() ->
     delete_file("plgmsitko/todelete")
   end,
 
-%%   ProcessingConfig = #processing_config{init_counter = InitCounter},
   EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler}, %, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = ProcessingConfig},
 
   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "mkdir_event"},

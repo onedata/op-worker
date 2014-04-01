@@ -16,8 +16,9 @@
 -record(event, {timestamp, multiplicity}).
 
 %% processing_config stores information how events should be processed (aggregation, counting etc.)
--record(aggregator_config, {init_counter, aggregation_discriminator, wrapped_config}).
--record(filter_config, {field_name, desired_value, wrapped_config}).
+-record(aggregator_config, {field_name, threshold, fun_field_name}).
+-record(filter_config, {field_name, desired_value}).
+-record(event_stream_config, {config, wrapped_config}).
 
 %% Events definitions
 %% field ans_pid is just for test purposes - in general events handlers should be fired just for side effects
