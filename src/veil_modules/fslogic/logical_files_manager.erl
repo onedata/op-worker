@@ -990,6 +990,12 @@ get_mode(FileName) ->
     _ -> TmpAns
   end.
 
+%% check_utf/1
+%% ====================================================================
+%% @doc Checks if string is in proper format and converts it if needed.
+%% @end
+-spec check_utf(FileName :: string()) -> string().
+%% ====================================================================
 % TODO delete format change when GUI will use N20
 check_utf(FileName) ->
   case io_lib:printable_unicode_list(FileName) of
