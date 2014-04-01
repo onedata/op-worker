@@ -18,7 +18,7 @@
 -record(user, {login = "", name = "", teams = undefined, email_list = [], dn_list = [], quota_doc}).
 
 %% This record defines a users' quota and is handled as a database document
--record(quota, {size = 10 * 1024 * 1024 * 1024}).
+-record(quota, {size = 10 * 1024 * 1024 * 1024, exceeded = false}).
 
 %% Declarations of lowest and highest user IDs. Those UIDs are used as #user record UUID. 
 -define(LOWEST_USER_ID, 20000).

@@ -40,6 +40,10 @@
 -export([register_mkdir_handler/0, register_mkdir_handler_aggregation/1, register_write_event_handler/1, register_quota_exceeded_handler/0,
          send_mkdir_event/0, delete_file/1, change_quota/2, register_rm_event_handler/0, prepare/0]).
 
+-ifdef(TEST).
+-compile([export_all]).
+-endif.
+
 init(_Args) ->
   worker_host:create_simple_cache(?EVENT_HANDLERS_CACHE),
   worker_host:create_simple_cache(?EVENT_TREES_MAPPING),
@@ -223,11 +227,6 @@ fun_from_config(#event_stream_config{config = ActualConfig, wrapped_config = Wra
     aggregator_config ->
       fun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName) ->
         ?info("-------- Aggregator fun: ~p", [Event]),
-        case WrappedFun of
-          non -> ok;
-          _ -> WrappedFun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName)
-        end,
-
         InitCounterIfNeeded = fun(EtsName, Key) ->
           case ets:lookup(EtsName, Key) of
             [] -> ets:insert(EtsName, {Key, 0});
@@ -235,44 +234,60 @@ fun_from_config(#event_stream_config{config = ActualConfig, wrapped_config = Wra
           end
         end,
 
-        FieldName = ActualConfig#aggregator_config.field_name,
-        FieldValue = proplists:get_value(FieldName, Event, {}),
-        FunFieldName = ActualConfig#aggregator_config.fun_field_name,
-        Incr = proplists:get_value(FunFieldName, Event, 1),
-        ?info("-------- Aggregator fun incr: ~p, ~p, ~p", [Incr, FieldName, FieldValue]),
-
-        case FieldValue of
-          FieldValue2 when not is_tuple(FieldValue2) ->
-            Key = "sum_" ++ FieldValue,
-            InitCounterIfNeeded(EtsName, Key),
-            [{_Key, Val}] = ets:lookup(EtsName, Key),
-            NewValue = Val + Incr,
-            ?info("-------- Aggregator fun new Value: ~p", [NewValue]),
-            case NewValue >= ActualConfig#aggregator_config.threshold of
-              true ->
-                ?info("-------- Aggregator fun new Value: TRUE"),
-                ets:insert(EtsName, {Key, 0}),
-                [{type, proplists:get_value(type, Event)}, {FieldName, FieldValue}, {sum, NewValue}, {ans_pid, proplists:get_value(ans_pid, Event)}];
-              _ ->
-                ?info("-------- Aggregator fun new Value: FALSE"),
-                ets:insert(EtsName, {Key, NewValue}),
-                non
-            end;
-          _ -> non
-        end
-      end;
-    filter_config ->
-      fun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName) ->
-        case WrappedFun of
-          non -> ok;
+        ActualEvent = case WrappedFun of
+          non -> Event;
           _ -> WrappedFun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName)
         end,
 
-        FieldName = ActualConfig#filter_config.field_name,
-        FieldValue = proplists:get_value(FieldName, Event, {}),
-        case FieldValue =:= ActualConfig#filter_config.desired_value of
-          true -> Event;
-          _ -> non
+        case ActualEvent of
+          non -> non;
+          _ ->
+            FieldName = ActualConfig#aggregator_config.field_name,
+            FieldValue = proplists:get_value(FieldName, ActualEvent, {}),
+            FunFieldName = ActualConfig#aggregator_config.fun_field_name,
+            Incr = proplists:get_value(FunFieldName, ActualEvent, 1),
+            ?info("-------- Aggregator fun incr: ~p, ~p, ~p", [Incr, FieldName, FieldValue]),
+
+            case FieldValue of
+              FieldValue2 when not is_tuple(FieldValue2) ->
+                Key = "sum_" ++ FieldValue,
+                InitCounterIfNeeded(EtsName, Key),
+                [{_Key, Val}] = ets:lookup(EtsName, Key),
+                NewValue = Val + Incr,
+                ?info("-------- Aggregator fun new Value: ~p", [NewValue]),
+                case NewValue >= ActualConfig#aggregator_config.threshold of
+                  true ->
+                    ?info("-------- Aggregator fun new Value: TRUE"),
+                    ets:insert(EtsName, {Key, 0}),
+                    case proplists:get_value(ans_pid, ActualEvent) of
+                      undefined -> [{FieldName, FieldValue}, {FunFieldName, NewValue}];
+                      _ -> [{FieldName, FieldValue}, {FunFieldName, NewValue}, {ans_pid, proplists:get_value(ans_pid, ActualEvent)}]
+                    end;
+                  _ ->
+                    ?info("-------- Aggregator fun new Value: FALSE"),
+                    ets:insert(EtsName, {Key, NewValue}),
+                    non
+                end;
+              _ -> non
+            end
+          end
+        end;
+    filter_config ->
+      fun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName) ->
+        ActualEvent = case WrappedFun of
+          non -> Event;
+          _ -> WrappedFun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName)
+        end,
+
+        case ActualEvent of
+          non -> non;
+          _ ->
+            FieldName = ActualConfig#filter_config.field_name,
+            FieldValue = proplists:get_value(FieldName, ActualEvent, {}),
+            case FieldValue =:= ActualConfig#filter_config.desired_value of
+              true -> ActualEvent;
+              _ -> non
+            end
         end
       end;
     _ ->

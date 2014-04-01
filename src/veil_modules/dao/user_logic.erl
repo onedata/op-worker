@@ -329,12 +329,10 @@ update_quota(User, NewQuota) ->
   Quota = dao_lib:apply(dao_users, get_quota, [User#veil_document.record#user.quota_doc], 1),
   case Quota of
     {ok, QuotaDoc} ->
-      ?info("updatequota 1"),
       NewQuotaDoc = QuotaDoc#veil_document{record = NewQuota},
       dao_lib:apply(dao_users, save_quota, [NewQuotaDoc], 1);
     {error, Error} -> {error, {get_quota_error, Error}};
     Other ->
-      ?info("updatequota 22234"),
       Other
   end.
 
@@ -672,8 +670,10 @@ quota_exceeded(UserQuery) ->
       ?info("user has used: ~p, quota: ~p", [SpaceUsed, Quota]),
       case SpaceUsed > Quota of
         true ->
+          update_quota(UserDoc, #quota{size = Quota, exceeded = true}),
           true;
         _ ->
+          update_quota(UserDoc, #quota{size = Quota, exceeded = false}),
           false
       end;
     Error ->
