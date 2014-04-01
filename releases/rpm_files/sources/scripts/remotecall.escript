@@ -1,35 +1,34 @@
 % Args
 -define(hosts, "-h").
--define(keys, "-k").
+-define(key_pool, "-k").
 -define(commands, "-c").
-
-% Debug
--define(debug,true).
+-define(debug, "-d").
+-define(silent, "-s").
 
 main(Args) ->
 	case args_correct(Args) of
 		true ->
 			ok;
 		false ->
-			print("usage: veil_remotecall [-h {user@host}] [-k {key}] [-c {command}] "),
-			print("Script will execute all comands on each (host,key) pair."),
-			print("Number of hosts must be equal to number of keys."),
+			print_error("usage: veil_remotecall [-k {key}] -h {user@host}  -c {command} "),
+			print_error("Script will execute all comands on each host, using key pool to authenticate"),
 			erlang:halt(1)
 	end,
+	put(debug,lists:member(?debug,Args)),
+	put(silent,lists:member(?silent,Args)),
 	Hosts = args_get(Args,?hosts),
 	debug("hosts:~p",[Hosts]),
-	Keys = args_get(Args,?keys),
-	debug("keys:~p~n",[Keys]),
+	KeyPool = args_get(Args,?key_pool),
+	debug("keys:~p",[KeyPool]),
 	Commands = args_get(Args,?commands),
 	debug("commands:~p",[Commands]),
 
-	[call_commands_on_host(Host,Key,Commands) || {Host,Key} <- lists:zip(Hosts,Keys)].
+	[call_commands_on_host(Host,KeyPool,Commands) || Host <-Hosts].
 
 %% ------------ Arg parsing ------------
 % check if all necessary args are present
 args_correct(Args) ->
 	lists:member(?hosts,Args)  andalso
-	lists:member(?keys,Args)  andalso
 	lists:member(?commands,Args).
 
 % get list of arguments of some type
@@ -48,25 +47,38 @@ args_get([HostArg|Rest],Type,true) ->
 %% -------------------------------------
 
 %% ------------- SSH calls -------------
-call_commands_on_host(_Host,_Key,[]) ->
+call_commands_on_host(_Host,_KeyPool,[]) ->
 	ok;
-call_commands_on_host(Host,Key,[Command|Rest]) ->
+call_commands_on_host(Host,KeyPool,[Command|Rest]) ->
 	print(Host++": "++Command),
-	Ans = os:cmd("ssh -i "++Key++" "++Host++" "++Command),
+	Ans = os:cmd("ssh "++parse_key_pool(KeyPool)++" "++Host++" "++Command),
 	print(Ans),
-	call_commands_on_host(Host,Key,Rest).
+	call_commands_on_host(Host,KeyPool,Rest).
+
+%parse key_pool to ssh format (-i key1 -i key2...)
+parse_key_pool([]) ->
+	"";
+parse_key_pool([Key1|Rest]) ->
+	" -i "++Key1++parse_key_pool(Rest).
 
 
 %% -------------- Printing -------------
-print(Text) ->
-	print(Text, []).
-print(Text,Args) ->
-	io:format(Text++"~n",Args).
 debug(Text,Args) ->
-	case ?debug of
+	case get(debug) of
 		true ->
 			print("[debug] "++Text,Args);
 		false ->
 			none
 	end.
+print(Text) ->
+	print(Text, []).
+print(Text,Args) ->
+	case get(silent) of
+		false ->
+			io:format(Text++"~n",Args);
+		true ->
+			none
+	end.
+print_error(Text) ->
+	io:format(Text++"~n").
 %% -------------------------------------
