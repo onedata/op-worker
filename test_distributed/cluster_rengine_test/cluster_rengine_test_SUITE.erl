@@ -43,23 +43,26 @@ all() -> [test_event_subscription, test_event_aggregation, test_dispatching].
 
 -define(SH, "DirectIO").
 
--record(check_quota_event, {ans_pid, user_id}).
-
 test_event_subscription(Config) ->
   nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | _] = NodesUp,
 
-  WriteEvent = #write_event{user_id = "1234", ans_pid = self()},
+  WriteEvent = [{type, write_event}, {user_id, "1234"}, {ans_pid, self()}],
 
   % there was no subscription for events - sending events has no effect
   send_event(WriteEvent, CCM),
   assert_nothing_received(CCM),
 
   % event handler sends back some message to producer to enable verification
-  EventHandler = fun(#write_event{user_id = UserId, ans_pid = AnsPid}) ->
-    AnsPid ! {ok, standard, self()}
+  EventHandler = fun(WriteEv) ->
+    ?info("eventhandler <<---"),
+    AnsPid = proplists:get_value(ans_pid, WriteEv),
+    case AnsPid of
+      undefined -> ok;
+      _ -> AnsPid ! {ok, standard, self()}
+    end
   end,
   subscribe_for_write_events(CCM, standard, EventHandler), % subscribing for events
   send_event(WriteEvent, CCM),
@@ -68,11 +71,18 @@ test_event_subscription(Config) ->
   ?assert_received({ok, standard, _}),
   assert_nothing_received(CCM),
 
-  EventHandler2 = fun(#write_event{user_id = UserId, ans_pid = AnsPid}) ->
-    AnsPid ! {ok, tree, self()}
+  EventHandler2 = fun(WriteEv) ->
+    ?info("eventhandler2 <<---"),
+    AnsPid = proplists:get_value(ans_pid, WriteEv),
+    case AnsPid of
+      undefined -> ok;
+      _ -> AnsPid ! {ok, tree, self()}
+    end
   end,
   subscribe_for_write_events(CCM, tree, EventHandler2),
+  timer:sleep(1000),
   send_event(WriteEvent, CCM),
+  timer:sleep(1000),
 
   % this time there are two handler registered
   ?assert_received({ok, standard, _}),
@@ -85,11 +95,15 @@ test_event_aggregation(Config) ->
   NodesUp = ?config(nodes, Config),
   [CCM | _] = NodesUp,
 
-  EventHandler = fun(#write_event{user_id = UserId, ans_pid = AnsPid}) ->
-    AnsPid ! {ok, tree, self()}
+  EventHandler = fun(WriteEv) ->
+    AnsPid = proplists:get_value(ans_pid, WriteEv),
+    case AnsPid of
+      undefined -> ok;
+      _ -> AnsPid ! {ok, tree, self()}
+    end
   end,
   subscribe_for_write_events(CCM, tree, EventHandler, #aggregator_config{init_counter = 4}),
-  WriteEvent = #write_event{user_id = "1234", ans_pid = self()},
+  WriteEvent = [{type, write_event}, {user_id, "1234"}, {ans_pid, self()}],
 
   repeat(3, fun() -> send_event(WriteEvent, CCM) end),
   assert_nothing_received(CCM),
@@ -110,16 +124,20 @@ test_dispatching(Config) ->
   [CCM | _] = NodesUp,
 
 
-  EventHandler = fun(#write_event{user_id = UserId, ans_pid = AnsPid}) ->
-    AnsPid ! {ok, tree, self()}
+  EventHandler = fun(WriteEv) ->
+    AnsPid = proplists:get_value(ans_pid, WriteEv),
+    case AnsPid of
+      undefined -> ok;
+      _ -> AnsPid ! {ok, tree, self()}
+    end
   end,
   subscribe_for_write_events(CCM, tree, EventHandler),
 
-  WriteEvent1 = #write_event{user_id = "1234", ans_pid = self()},
-  WriteEvent2 = #write_event{user_id = "1235", ans_pid = self()},
-  WriteEvent3 = #write_event{user_id = "1334", ans_pid = self()},
-  WriteEvent4 = #write_event{user_id = "1335", ans_pid = self()},
-  WriteEvent5 = #write_event{user_id = "1236", ans_pid = self()},
+  WriteEvent1 = [{type, write_event}, {user_id, "1234"}, {ans_pid, self()}],
+  WriteEvent2 = [{type, write_event}, {user_id, "1235"}, {ans_pid, self()}],
+  WriteEvent3 = [{type, write_event}, {user_id, "1334"}, {ans_pid, self()}],
+  WriteEvent4 = [{type, write_event}, {user_id, "1335"}, {ans_pid, self()}],
+  WriteEvent5 = [{type, write_event}, {user_id, "1236"}, {ans_pid, self()}],
   WriteEvents = [WriteEvent1, WriteEvent2, WriteEvent3, WriteEvent4],
   SendWriteEvent = fun (Event) -> send_event(Event, CCM) end,
 
@@ -237,13 +255,23 @@ subscribe_for_write_events(Node, ProcessingMethod, EventHandler) ->
   subscribe_for_write_events(Node, ProcessingMethod, EventHandler, #aggregator_config{}).
 
 subscribe_for_write_events(Node, ProcessingMethod, EventHandler, ProcessingConfig) ->
-  EventHandlerMapFun = fun(#write_event{user_id = UserIdString}) ->
-    string_to_integer(UserIdString)
+  ?info("subscribe_for_write_events"),
+  EventHandlerMapFun = fun(WriteEv) ->
+    UserIdString = proplists:get_value(user_id, WriteEv),
+    case UserIdString of
+      undefined -> ok;
+      _ -> string_to_integer(UserIdString)
+    end
   end,
 
-  EventHandlerDispMapFun = fun(#write_event{user_id = UserId}) ->
-    UserIdInt = string_to_integer(UserId),
-    UserIdInt div 100
+  EventHandlerDispMapFun = fun(WriteEv) ->
+    UserIdString = proplists:get_value(user_id, WriteEv),
+    case UserIdString of
+      undefined -> ok;
+      _ ->
+        UserIdInt = string_to_integer(UserIdString),
+        UserIdInt div 100
+    end
   end,
 
   EventItem = #event_handler_item{processing_method = ProcessingMethod, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = ProcessingConfig},

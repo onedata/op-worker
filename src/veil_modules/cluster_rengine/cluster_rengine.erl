@@ -49,12 +49,8 @@ handle(_ProtocolVersion, ping) ->
   pong;
 
 handle(_ProtocolVersion, #eventmessage{type = Type}) ->
-  case Type of
-    "mkdir_event" -> handle(1, {event_arrived, #mkdir_event{user_dn = get(user_id), fuse_id = get(fuse_id)}});
-    "write_event" -> handle(1, {event_arrived, #write_event{user_dn = get(user_id), fuse_id = get(fuse_id)}});
-    "rm_event" -> handle(1, {event_arrived, #rm_event{user_dn = get(user_id), fuse_id = get(fuse_id)}});
-    _ -> ok
-  end;
+  Event = [{type, list_to_atom(Type)}, {user_dn = get(user_id)}, {fuse_id, get(fuse_id)}],
+  handle(1, {event_arrived, Event});
 
 handle(_ProtocolVersion, healthcheck) ->
 	ok;
@@ -63,7 +59,7 @@ handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
 handle(ProtocolVersion, {final_stage_tree, TreeId, Event}) ->
-  EventType = element(1, Event),
+  EventType = proplists:get_value(type, Event),
   SleepNeeded = update_event_handler(ProtocolVersion, EventType),
   % from my observations it takes about 200ms until disp map fun is registered in cluster_manager
   case SleepNeeded of
@@ -76,7 +72,7 @@ handle(ProtocolVersion, {final_stage_tree, TreeId, Event}) ->
 handle(ProtocolVersion, {event_arrived, Event}) ->
   handle(ProtocolVersion, {event_arrived, Event, false});
 handle(ProtocolVersion, {event_arrived, Event, SecondTry}) ->
-  EventType = element(1, Event),
+  EventType = proplists:get_value(type, Event),
   case ets:lookup(?EVENT_TREES_MAPPING, EventType) of
     [] ->
       case SecondTry of
@@ -228,7 +224,7 @@ get_disp_map_fun() ->
       [] ->
         % if we proceeded here it may be the case, when final_stage_tree is being processed by another node and
         % this node does not have the most recent version of handler for given event. So try to update
-        update_event_handler(1, element(1, Event)),
+        update_event_handler(1, proplists:get_value(type, Event)),
         EventHandler = ets:lookup(?EVENT_HANDLERS_CACHE, TreeId),
 
         case EventHandler of
@@ -322,18 +318,21 @@ register_rm_event_handler() ->
   EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {rm_event, EventItem, EventFilterConfig}}}).
 
+%% For test purposes
 send_mkdir_event() ->
   MkdirEvent = #mkdir_event{user_id = "123"},
   gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {event_arrived, MkdirEvent}}).
 
+%% For test purposes
 delete_file(FilePath) ->
-%%   rpc:call(node(), dao_lib, apply, [dao_vfs, remove_file, ["plgmsitko/todelete"], 1]).
   rpc:call(node(), dao_lib, apply, [dao_vfs, remove_file, [FilePath], 1]).
 
+%% For test purposes
 change_quota(UserLogin, NewQuotaInBytes) ->
   {ok, UserDoc} = user_logic:get_user({login, UserLogin}),
   user_logic:update_quota(UserDoc, #quota{size = NewQuotaInBytes}).
 
+%% For test purposes
 prepare() ->
   register_write_event_handler(1),
   register_quota_exceeded_handler(),
