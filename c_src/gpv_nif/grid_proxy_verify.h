@@ -1,12 +1,13 @@
 /*********************************************************************
 *  @author Rafal Slota
-*  @copyright (C): 2013 ACK CYFRONET AGH
+*  @author Konrad Zemek
+*  @copyright (C): 2013-2014 ACK CYFRONET AGH
 *  This software is released under the MIT license
 *  cited in 'LICENSE.txt'.
 *********************************************************************/
 
 #ifndef GRID_PROXY_VERIFY_H
-#define GRID_PROXY_VERIFY_H 1
+#define GRID_PROXY_VERIFY_H
 
 #include <globus/globus_gsi_callback.h>
 #include <openssl/x509_vfy.h>
@@ -19,8 +20,6 @@
 #define GPV_CERT_INSERT_ERROR           4
 #define GPV_CTX_INIT_ERROR              5
 #define GPV_VALIDATE_ERROR              6
-#define GPV_ERROR                       7
-#define GPV_SSL_INIT_ERROR              8
 
 // Types
 typedef unsigned char byte;
@@ -28,22 +27,17 @@ typedef unsigned int gpv_status;
 
 // GPV Context type
 typedef struct {
-    SSL                             *ssl;
-    SSL_CTX                         *sslContext;
-
-    X509_STORE_CTX                  *x509_context; 
+    X509_STORE_CTX                  *x509_context;
     X509_STORE                      *trusted_store;
-    STACK_OF(X509)                  *trusted_stack;
     STACK_OF(X509)                  *chain_stack;
-    STACK_OF(X509_CRL)              *crl_stack;
     X509                            *proxy_cert;
-    X509_VERIFY_PARAM               *verify_params;
+    X509_VERIFY_PARAM               *verify_param;
 
     globus_gsi_callback_data_t      callback_data;
-    int                             callback_data_index; // Bonus CTX data index
+    int                             callback_data_index; // bonus CTX data index
 } GPV_CTX;
 
-// Initializes static date used by globus and openssl
+// Initializes static data used by globus and openssl
 gpv_status gpv_init(GPV_CTX*);
 
 // Unloads all data globally allocated by globus and openssl
@@ -51,7 +45,6 @@ void gpv_cleanup(GPV_CTX*);
 
 // Gets last globus/openssl error code
 int gpv_get_error(GPV_CTX*);
-
 
 // Proceed with verification
 gpv_status gpv_verify(GPV_CTX*);
@@ -69,4 +62,4 @@ gpv_status gpv_add_chain_cert(GPV_CTX*, const byte*, int);
 gpv_status gpv_add_crl_cert(GPV_CTX*, const byte*, int);
 
 
-#endif
+#endif // GRID_PROXY_VERIFY_H
