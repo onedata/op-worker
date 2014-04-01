@@ -371,8 +371,8 @@ comet_loop() ->
                         sync_release(),
                         timer:sleep(?AUTOREFRESH_PERIOD)
                 end
-            catch Type:Message ->            
-                sync_release(),
+            catch Type:Message ->
+                catch sync_release(),
                 lager:error("Error in file_manager comet_loop - ~p - ~p~n~p", 
                     [Type, Message, erlang:get_stacktrace()])
             end
