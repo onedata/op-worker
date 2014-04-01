@@ -53,7 +53,7 @@ handle(_ProtocolVersion, ping) ->
   pong;
 
 handle(_ProtocolVersion, #eventmessage{type = Type}) ->
-  Event = [{type, list_to_atom(Type)}, {user_dn = get(user_id)}, {fuse_id, get(fuse_id)}],
+  Event = [{type, list_to_atom(Type)}, {user_dn, get(user_id)}, {fuse_id, get(fuse_id)}],
   handle(1, {event_arrived, Event});
 
 handle(_ProtocolVersion, healthcheck) ->
@@ -358,11 +358,13 @@ register_mkdir_handler_aggregation(InitCounter) ->
 
 %% For test purposes
 register_write_event_handler(InitCounter) ->
-  EventHandler = fun(#write_event{user_dn = UserDn, fuse_id = FuseId}) ->
+  EventHandler = fun(Event) ->
     ?info("Write EventHandler ~p", [node(self())]),
+    UserDn = proplists:get_value(user_dn, Event),
+    FuseId = proplists:get_value(fuse_id, Event),
     case user_logic:quota_exceeded({dn, UserDn}) of
       true ->
-        gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {event_arrived, {quota_exceeded_event, UserDn, FuseId}}}),
+        gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {event_arrived, [{type, quota_exceeded_event}, {user_dn, UserDn}, {fuse_id, FuseId}]}}),
         ?info("Quota exceeded event emited");
       _ ->
         ok
@@ -380,7 +382,9 @@ register_write_event_handler(InitCounter) ->
 
 %% For test purposes
 register_quota_exceeded_handler() ->
-  EventHandler = fun({quota_exceeded_event, UserDn, FuseId}) ->
+  EventHandler = fun(Event) ->
+    UserDn = proplists:get_value(user_dn, Event),
+    FuseId = proplists:get_value(fuse_id, Event),
     ?info("quota exceeded event for user: ~p", [UserDn]),
     request_dispatcher:send_to_fuse(FuseId, #atom{value = "write_disabled"}, "communication_protocol")
   end,
@@ -389,8 +393,10 @@ register_quota_exceeded_handler() ->
 
 %% For test purposes
 register_rm_event_handler() ->
-  EventHandler = fun(#rm_event{user_dn = UserDn, fuse_id = FuseId}) ->
+  EventHandler = fun(Event) ->
     ?info("RmEvent Handler"),
+    UserDn = proplists:get_value(user_dn, Event),
+    FuseId = proplists:get_value(fuse_id, Event),
     case user_logic:quota_exceeded({dn, UserDn}) of
       false -> request_dispatcher:send_to_fuse(FuseId, #atom{value = "write_enabled"}, "communication_protocol");
       _ -> ok

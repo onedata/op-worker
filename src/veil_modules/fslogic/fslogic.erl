@@ -82,7 +82,7 @@ handle(_ProtocolVersion, is_write_enabled) ->
   case user_logic:get_user({dn, get(user_id)}) of
     {ok, UserDoc} ->
       case user_logic:get_quota(UserDoc) of
-        {ok, #quota{exceeded = Exceeded}} when is_binary(Exceeded) -> not(Exceeded);
+        {ok, #quota{exceeded = Exceeded}} when is_boolean(Exceeded) -> not(Exceeded);
         Error ->
           ?warning("cannot get quota doc for user with dn: ~p, Error: ~p", [get(user_id), Error]),
           false

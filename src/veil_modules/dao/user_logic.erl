@@ -666,7 +666,7 @@ quota_exceeded(UserQuery) ->
     {ok, UserDoc} ->
       Uuid = UserDoc#veil_document.uuid,
       {ok, SpaceUsed} = user_logic:get_files_size(Uuid, 1),
-      {ok, {quota, Quota}} = user_logic:get_quota(UserDoc),
+      {ok, #quota{size = Quota}} = user_logic:get_quota(UserDoc),
       ?info("user has used: ~p, quota: ~p", [SpaceUsed, Quota]),
       case SpaceUsed > Quota of
         true ->
