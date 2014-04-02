@@ -1363,7 +1363,15 @@ get_new_file_id(File, UserDoc, SHInfo, ProtocolVersion) ->
       end
   end,
 
-  File_id_beg ++ dao_helper:gen_uuid() ++ re:replace(File, "/", "___", [global, {return,list}]).
+  WithoutSpecial = lists:foldl(fun(Char, Ans) ->
+    case Char > 255 of
+      true ->
+        Ans;
+      false ->
+        [Char | Ans]
+    end
+  end, [], lists:reverse(File)),
+  File_id_beg ++ dao_helper:gen_uuid() ++ re:replace(WithoutSpecial, "/", "___", [global, {return,list}]).
 
 %% create_dirs/4
 %% ====================================================================
