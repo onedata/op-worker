@@ -294,7 +294,7 @@ sync_loop(Holder, Waiting, LastUpdate) ->
             end;
         {Holder, release} ->
             if 
-                Waiting /= none ->     Waiting ! {self(), ok};
+                Waiting /= none -> Waiting ! {self(), ok};
                 true -> skip
             end,
             Holder ! {self(), ok},
@@ -302,6 +302,18 @@ sync_loop(Holder, Waiting, LastUpdate) ->
 
         _ -> 
             sync_loop(Holder, Waiting, LastUpdate)
+
+    % Make sure no deadlock occurs
+    after 10000 ->
+            if 
+                Waiting /= none -> Waiting ! {self(), ok};
+                true -> skip
+            end,
+            if 
+                Holder /= none -> Holder ! {self(), ok};
+                true -> skip
+            end,
+            sync_loop(Waiting, none, erlang:now())
     end.
 
 
