@@ -212,10 +212,17 @@ remove_fuse_session(FuseId) ->
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 close_fuse_session(FuseId) ->
-    ok = remove_fuse_session(FuseId), %% Remove session from DB
-    {ok, Connections} = list_connection_info({by_session_id, FuseId}), %% List all it's connections
-    [close_connection(X) || #veil_document{uuid = X}  <- Connections], %% and close them all
-    ok.
+    Ans = remove_fuse_session(FuseId), %% Remove session from DB
+    case Ans of
+	ok ->
+	    {ok, Connections} = list_connection_info({by_session_id, FuseId}), %% List all it's connections
+	    [close_connection(X) || #veil_document{uuid = X}  <- Connections], %% and close them all
+	    ok;
+	{error,deleted} ->
+		ok;
+	Other ->
+		throw(Other)
+	end.
 
 
 %% list_fuse_sessions/1
