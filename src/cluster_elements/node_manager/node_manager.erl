@@ -117,6 +117,7 @@ init([Type]) when Type =:= worker ; Type =:= ccm ; Type =:= ccm_test ->
     false -> ok
   end,
 
+  ets:new(?LFM_EVENT_PRODUCTION_ENABLED_ETS, [set, named_table, public]),
   process_flag(trap_exit, true),
   erlang:send_after(10, self(), {timer, do_heart_beat}),
   erlang:send_after(100, self(), {timer, monitor_mem_net}),

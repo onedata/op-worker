@@ -299,7 +299,15 @@ write(FileStr, Offset, Buf) ->
       case Response of
         ok ->
           {Storage_helper_info, FileId} = Response2,
-          storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf);
+          Res = storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf),
+          case {is_integer(Res), event_production_enabled(write_event)} of
+            {true, true} ->
+              WriteEvent = [{type, write_event}, {user_dn, get(user_id)}, {count, binary:referenced_byte_size(Buf)}],
+              gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}});
+            _ ->
+              ok
+          end,
+          Res;
         _ -> {Response, Response2}
       end.
 
@@ -1007,3 +1015,9 @@ check_utf(FileName) when is_list(FileName) ->
 
 check_utf(FileName) ->
   FileName.
+
+event_production_enabled(EventName) ->
+  case ets:lookup(?LFM_EVENT_PRODUCTION_ENABLED_ETS, EventName) of
+    [{_Key, Value}] -> Value;
+    _ -> false
+  end.

@@ -40,4 +40,6 @@
 %% Local name of the process waiting for dns udp messages
 -define(DNS_UDP, dns_udp).
 
+-define(LFM_EVENT_PRODUCTION_ENABLED_ETS, lfm_event_production_enabled_ets).
+
 -endif.
