@@ -27,6 +27,10 @@
 %% Path (relative to domain) on which cowboy expects client's requests
 -define(VEILCLIENT_URI_PATH, "/veilclient").
 
+%% Minimal message ID that can be used - it is limited by type of Answer.message_id in protocol buffers
+%% TODO: change type of message_id to sint32, more at https://developers.google.com/protocol-buffers/docs/proto#scalar
+-define(MIN_MSG_ID, -1073741824). %% 1073741824 = 2^30
+
 %% ====================================================================
 %% API
 %% ====================================================================
@@ -97,6 +101,7 @@ init([Type]) when Type =:= worker ; Type =:= ccm ; Type =:= ccm_test ->
       catch
         _:_ -> ok
       end,
+      ets:new(?ACK_HANDLERS, [named_table, set, public]),
       {ok, Port} = application:get_env(?APP_Name, dispatcher_port),
       {ok, DispatcherPoolSize} = application:get_env(?APP_Name, dispatcher_pool_size),
       {ok, CertFile} = application:get_env(?APP_Name, ssl_cert_path),
@@ -197,6 +202,15 @@ handle_call({clear_cache, Cache}, _From, State) ->
 
 handle_call(check, _From, State) ->
   {reply, ok, State};
+
+handle_call(get_next_callback_msg_id, _From, State) ->
+  case get(callback_msg_ID) of
+    ID when is_integer(ID) and ID > ?MIN_MSG_ID ->
+      put(callback_msg_ID, ID - 1);
+    _ ->
+      put(callback_msg_ID, -1)
+  end,
+  {reply, get(callback_msg_ID), State};
 
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.

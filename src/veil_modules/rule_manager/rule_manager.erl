@@ -25,7 +25,6 @@
 -export([init/1, handle/2, cleanup/0, send_push_msg/1]).
 
 init(_Args) ->
-  ets:new(?ACK_HANDLERS, [named_table, set, public]),
 	[].
 
 handle(_ProtocolVersion, ping) ->
@@ -40,6 +39,11 @@ handle(_ProtocolVersion, get_version) ->
 handle(_ProtocolVersion, _Msg) ->
 	ok.
 
+cleanup() ->
+  ok.
+
+
+%% For test purposes
 on_complete(Message, SuccessFuseIds, FailFuseIds) ->
   ?info("oncomplete called"),
   case FailFuseIds of
@@ -47,10 +51,8 @@ on_complete(Message, SuccessFuseIds, FailFuseIds) ->
     _ -> ?info("-------- ack fail, sucess: ~p, fail: ~p ---------", [length(SuccessFuseIds), length(FailFuseIds)])
   end.
 
+%% For test purposes
 send_push_msg(ProtocolVersion) ->
   TestAtom = #atom{value = "test_atom2"},
   OnComplete = fun(SuccessFuseIds, FailFuseIds) -> on_complete(TestAtom, SuccessFuseIds, FailFuseIds) end,
   worker_host:send_to_user_with_ack({uuid, "20000"}, TestAtom, "communication_protocol", OnComplete, ProtocolVersion).
-
-cleanup() ->
-	ok.
