@@ -57,7 +57,7 @@ message CreateFileAck {
 message FileNotUsed {
     required string file_logic_name = 1;
 }
- 
+
 message RenewFileLocation {
     required string file_logic_name = 1;
 }
@@ -116,8 +116,8 @@ message ChangeFileOwner {
 
 message ChangeFileGroup {
     required string file_logic_name = 1;
-    required int32 gid = 3; 
-    optional string gname = 5 [default = ""]; 
+    required int32 gid = 3;
+    optional string gname = 5 [default = ""];
 }
 
 message ChangeFilePerms {
@@ -179,6 +179,12 @@ message EventAggregatorConfig {
     required string sum_field_name = 3; // it will be extended in future. so far we assume that aggregation function is always sum and sum_field_name is field_name which values are summed
 }
 
+message EventTransformerConfig {
+    repeated string field_names_to_replace = 1;
+    repeated string values_to_replace = 2;
+    repeated string new_values = 3;
+}
+
 // EventStreamConfig is a message sent by cluster to client which contains informations needed for client to perform events processing (filtering, aggregation etc.)
 // Only one of fields filter_config and aggregation_config is supposed to be set. Type of EventStreamConfig is determined by the fact which of those two fields is set.
 // wrapped_config should be used when one needs to create chain of streams. If wrapped_config is set to contains another EventStreamConfig then the event first go to the most wrapped stream
@@ -186,6 +192,7 @@ message EventStreamConfig {
     optional EventStreamConfig wrapped_config = 1;
     optional EventFilterConfig filter_config = 2;
     optional EventAggregatorConfig aggregator_config = 3;
+    optional EventTransformerConfig transformer_config = 4;
 }
 
 message EventProducerConfig {
