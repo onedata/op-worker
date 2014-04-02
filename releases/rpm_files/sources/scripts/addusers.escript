@@ -8,7 +8,7 @@ main(Args) ->
 	[Host,KeyPool,Command] = parse_args(Args),
 	debug("args: ~p" ,[[Host,KeyPool,Command]]),
 	connection_ok(Host,KeyPool),
-	call_command_on_host(Host,KeyPool,Command).
+	debug("~p",[call_command_on_host(Host,KeyPool,Command)]).
 
 %% ------------ Arg parsing ------------
 parse_args(Args) ->
@@ -20,8 +20,8 @@ parse_args(Args) ->
 		[Host,KeyPool,Command]
 	catch
 	    _Type:_Error  ->
-			print_error("usage: veil_remotecall [-k {key}] -h {user@host}  -c {command} "),
-			print_error("Script will execute all comands on each host, using key pool to authenticate"),
+%% 			print_error("usage: veil_addusers [-k {key}] -h {user@host}  -c {command} "),
+%% 			print_error("Script will execute all comands on each host, using key pool to authenticate"),
 			erlang:halt(1)
 	end.
 
