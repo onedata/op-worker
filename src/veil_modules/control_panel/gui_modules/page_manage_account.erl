@@ -32,24 +32,24 @@ body() ->
     #panel{style = <<"position: relative;">>, body = [
         gui_utils:top_menu(manage_account_tab),
         #panel{style = <<"margin-top: 60px; padding: 20px;">>, body = [
-            #panel{id = "dn_error_panel", style = <<"display: none;">>,
-            class = <<"dialog dialog-danger">>, body = [
-                #p{body = <<"To be able to use any functionalities, please do one of the following: ">>},
-                #panel{style = <<"margin-left: auto; margin-right: auto; text-align: left; display: inline-block;">>, body = [
-                    #list{body = [
-                        #li{style = <<"padding: 10px 0 0;">>,
-                        body = <<"Enable certificate DN retrieval from your OpenID provider and log in again">>},
-                        #li{style = <<"padding: 7px 0 0;">>,
-                        body = <<"Add your .pem certificate manually below">>}
+            #panel{id = <<"dn_error_panel">>, style = <<"display: none;">>,
+                class = <<"dialog dialog-danger">>, body = [
+                    #p{body = <<"To be able to use any functionalities, please do one of the following: ">>},
+                    #panel{style = <<"margin-left: auto; margin-right: auto; text-align: left; display: inline-block;">>, body = [
+                        #list{body = [
+                            #li{style = <<"padding: 10px 0 0;">>,
+                                body = <<"Enable certificate DN retrieval from your OpenID provider and log in again">>},
+                            #li{style = <<"padding: 7px 0 0;">>,
+                                body = <<"Add your .pem certificate manually below">>}
+                        ]}
                     ]}
-                ]}
-            ]},
-            #panel{id = "helper_error_panel", style = <<"display: none;">>,
-            class = <<"dialog dialog-danger">>, body = [
-                #p{body = <<"To be able to use any functionalities, there must be at least one storage helper defined.">>}
-            ]},
+                ]},
+            #panel{id = <<"helper_error_panel">>, style = <<"display: none;">>,
+                class = <<"dialog dialog-danger">>, body = [
+                    #p{body = <<"To be able to use any functionalities, there must be at least one storage helper defined.">>}
+                ]},
             #h6{style = <<" text-align: center;">>, body = <<"Manage account">>},
-            #panel{id = "main_table", body = main_table()}
+            #panel{id = <<"main_table">>, body = main_table()}
         ]}
     ] ++ gui_utils:logotype_footer(20)}.
 
@@ -116,7 +116,7 @@ team_list_body() ->
     lists:map(
         fun(Team) ->
             #li{style = <<"font-size: 18px; padding: 5px 0;">>,
-            body = list_to_binary(re:replace(Team, "\\(", " (", [global, {return, list}]))}
+                body = list_to_binary(re:replace(Team, "\\(", " (", [global, {return, list}]))}
         end, Teams)
     }.
 
@@ -130,25 +130,25 @@ email_list_body() ->
             #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
             [
                 Email,
-                #link{id = "remove_email_button", class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
-                postback = {action, update_email, [User, {remove, Email}]}, body =
-                #span{class = <<"fui-cross">>, style = <<"font-size: 16px;">>}}
+                #link{id = <<"remove_email_button">>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
+                    postback = {action, update_email, [User, {remove, Email}]}, body =
+                    #span{class = <<"fui-cross">>, style = <<"font-size: 16px;">>}}
             ]}}
         end, user_logic:get_email_list(User))
     ++ [
         #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
-            #link{id = "add_email_button", class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
-            postback = {action, show_email_adding, [true]}, body =
-            #span{class = <<"fui-plus">>, style = <<"font-size: 16px; position: relative;">>}},
-            #textbox{id = "new_email_textbox", class = <<"flat">>, body = <<"">>, style = <<"display: none;">>,
-            placeholder = <<"New email address">>, postback = {action, update_email, [User, {add, submitted}]},
-            source = ["new_email_textbox"]},
-            #link{id = "new_email_submit", class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
-            postback = {action, update_email, [User, {add, submitted}]}, source = ["new_email_textbox"], body =
-            #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
-            #link{id = "new_email_cancel", class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
-            postback = {action, show_email_adding, [false]}, body =
-            #span{class = <<"fui-cross-inverted">>, style = <<"font-size: 20px;">>}}
+            #link{id = <<"add_email_button">>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
+                postback = {action, show_email_adding, [true]}, body =
+                #span{class = <<"fui-plus">>, style = <<"font-size: 16px; position: relative;">>}},
+            #textbox{id = <<"new_email_textbox">>, class = <<"flat">>, body = <<"">>, style = <<"display: none;">>,
+                placeholder = <<"New email address">>, postback = {action, update_email, [User, {add, submitted}]},
+                source = ["new_email_textbox"]},
+            #link{id = <<"new_email_submit">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
+                postback = {action, update_email, [User, {add, submitted}]}, source = ["new_email_textbox"], body =
+                #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
+            #link{id = <<"new_email_cancel">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
+                postback = {action, show_email_adding, [false]}, body =
+                #span{class = <<"fui-cross-inverted">>, style = <<"font-size: 20px;">>}}
         ]}
     ]}.
 
@@ -162,25 +162,25 @@ dn_list_body() ->
             #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
             [
                 DN,
-                #link{id = "remove_dn_button", class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
-                postback = {action, update_dn, [User, {remove, DN}]}, body =
-                #span{class = <<"fui-cross">>, style = <<"font-size: 16px;">>}}
+                #link{id = <<"remove_dn_button">>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
+                    postback = {action, update_dn, [User, {remove, DN}]}, body =
+                    #span{class = <<"fui-cross">>, style = <<"font-size: 16px;">>}}
             ]}}
         end, user_logic:get_dn_list(User))
     ++ [
         #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
-            #link{id = "add_dn_button", class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
-            postback = {action, show_dn_adding, [true]}, body =
-            #span{class = <<"fui-plus">>, style = <<"font-size: 16px;">>}},
-            #textarea{id = "new_dn_textbox", style = <<"display: none; font-size: 12px; width: 600px; height: 200px;",
+            #link{id = <<"add_dn_button">>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
+                postback = {action, show_dn_adding, [true]}, body =
+                #span{class = <<"fui-plus">>, style = <<"font-size: 16px;">>}},
+            #textarea{id = <<"new_dn_textbox">>, style = <<"display: none; font-size: 12px; width: 600px; height: 200px;",
             "vertical-align: top; overflow-y: scroll;">>, body = <<"">>,
-            source = ["new_dn_textbox"], placeholder = <<"Paste your .pem certificate here...">>},
-            #link{id = "new_dn_submit", class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
-            postback = {action, update_dn, [User, {add, submitted}]}, source = ["new_dn_textbox"], body =
-            #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
-            #link{id = "new_dn_cancel", class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
-            postback = {action, show_dn_adding, [false]}, body =
-            #span{class = <<"fui-cross-inverted">>, style = <<"font-size: 20px;">>}}
+                source = ["new_dn_textbox"], placeholder = <<"Paste your .pem certificate here...">>},
+            #link{id = <<"new_dn_submit">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
+                postback = {action, update_dn, [User, {add, submitted}]}, source = ["new_dn_textbox"], body =
+                #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
+            #link{id = <<"new_dn_cancel">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
+                postback = {action, show_dn_adding, [false]}, body =
+                #span{class = <<"fui-cross-inverted">>, style = <<"font-size: 20px;">>}}
         ]}
     ]}.
 

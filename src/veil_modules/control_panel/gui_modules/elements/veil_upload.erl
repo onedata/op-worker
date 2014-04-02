@@ -22,29 +22,44 @@
 -define(upload_start_callback, "report_upload_start").
 -define(upload_finish_callback, "report_upload_finish").
 
+% Must be the same as constants in veil_upload.js
+-define(FORM_ID, "upload_form").
+
+-define(SELECT_BUTTON_TEXT, "Select files").
+-define(SELECT_BUTTON_ID, "file_input").
+-define(FAKE_SELECT_BUTTON_ID, "file_input_dummy").
+
+-define(DROPZONE_ID, "drop_zone_container").
+-define(DROPZONE_TEXT, "Drop files").
+
+-define(SUBMIT_BUTTON_ID, "upload_submit").
+-define(SUBMIT_BUTTON_TEXT, "Start upload").
+
+-define(PENDING_FILES_LIST_ID, "pending_files").
+
+-define(PROGRESS_BAR_CLASS, "progress_bar").
+-define(CURRENT_DONE_BAR_ID, "upload_done").
+-define(CURRENT_LEFT_BAR_ID, "upload_left").
+-define(OVERALL_DONE_BAR_ID, "upload_done_overall").
+-define(OVERALL_LEFT_BAR_ID, "upload_left_overall").
+
+
 render_element(Record) ->
-    DroppableText = Record#veil_upload.droppable_text,
-    FileInputText = Record#veil_upload.file_text,
-    ButtonText = Record#veil_upload.button_text,
     TargetDir = Record#veil_upload.target_dir,
-    FormID = "upload_form",
-    SubmitButtonID = "upload_submit",
-    DropID = "drop_zone_container",
-    DropListingID = "drop_listing",
-    FileInputID = "file_input",
-    FakeFileInputID = "file_input_dummy",
+    SubscriberPid = Record#veil_upload.subscriber_pid,
+    PickledPid = wf:pickle(SubscriberPid),
 
     wf:wire(#api{name = ?upload_start_callback, tag = ?upload_start_callback, delegate = ?MODULE}),
     wf:wire(#api{name = ?upload_finish_callback, tag = ?upload_finish_callback, delegate = ?MODULE}),
-    wf:wire(wf:f("$('#~s').prop('disabled', true);", [SubmitButtonID])),
+    wf:wire(wf:f("$('#~s').prop('disabled', true);", [?SUBMIT_BUTTON_ID])),
 
-    SubmitJS = wf:f("veil_send_pending_files($('#~s').get(0), $('#~s').get(0));", [FormID, FileInputID]),
-    wf:wire(gui_utils:script_to_bind_element_click(SubmitButtonID, SubmitJS)),
+    SubmitJS = wf:f("veil_send_pending_files($('#~s').get(0), $('#~s').get(0));", [?FORM_ID, ?SELECT_BUTTON_ID]),
+    wf:wire(gui_utils:script_to_bind_element_click(?SUBMIT_BUTTON_ID, SubmitJS)),
 
-    ReportUploadStartJS = wf:f("~s('~s');", [?upload_start_callback, gui_utils:to_list(Record#veil_upload.delegate)]),
-    wf:wire(gui_utils:script_to_bind_element_click(SubmitButtonID, ReportUploadStartJS)),
+    ReportUploadStartJS = wf:f("~s('~s');", [?upload_start_callback, PickledPid]),
+    wf:wire(gui_utils:script_to_bind_element_click(?SUBMIT_BUTTON_ID, ReportUploadStartJS)),
 
-    UploadJS = wf:f("veil_attach_upload_handle_dragdrop($('#~s').get(0), $('#~s').get(0));", [FormID, FileInputID]),
+    UploadJS = wf:f("veil_attach_upload_handle_dragdrop($('#~s').get(0), $('#~s').get(0));", [?FORM_ID, ?SELECT_BUTTON_ID]),
     wf:wire(UploadJS),
 
 
@@ -79,13 +94,13 @@ render_element(Record) ->
         #panel{style = <<"margin: 0 40px; overflow:hidden; position: relative; display:block;">>, body = [
             #panel{style = <<"float: left;">>, body = [
                 #panel{
-                    id = DropID,
+                    id = <<?DROPZONE_ID>>,
                     style = UploadDropStyle,
                     body = [
                         #panel{
                             class = <<"dropzone">>,
                             style = DropzoneStyle,
-                            body = DroppableText
+                            body = <<?DROPZONE_TEXT>>
                         }
                     ]
                 },
@@ -97,15 +112,14 @@ render_element(Record) ->
                             {<<"type">>, <<"button">>},
                             {<<"class">>, <<"btn btn-inverse">>},
                             {<<"style">>, <<"margin: 0 auto; position: absolute; z-index: 1; width: 290px; height: 37px;">>},
-                            {<<"value">>, FileInputText},
-                            {<<"id">>, FakeFileInputID}
+                            {<<"value">>, <<?SELECT_BUTTON_TEXT>>},
+                            {<<"id">>, <<?FAKE_SELECT_BUTTON_ID>>}
                         ]),
 
                         wf_tags:emit_tag(<<"input">>, [
                             {<<"name">>, <<"file">>},
                             {<<"multiple">>, <<"true">>},
-                            {<<"class">>, <<"no_postback ", (list_to_binary(FileInputID))/binary>>},
-                            {<<"id">>, list_to_binary(FileInputID)},
+                            {<<"id">>, <<?SELECT_BUTTON_ID>>},
                             {<<"type">>, <<"file">>},
                             {<<"style">>, <<"cursor: pointer; margin: 0 auto; opacity: 0; filter:alpha(opacity: 0); position: relative; z-index: 2; width: 290px; height: 37px;">>}
                         ])
@@ -113,54 +127,36 @@ render_element(Record) ->
                 }
             ]},
             #panel{style = <<"position:relative; margin-left: 330px; margin-right: 0px; overflow: hidden;">>, body = [
-                #panel{class = <<"pending_files tagsinput tagsinput-primary">>, style = <<"height: 100%; max-height: 125px; overflow-y: scroll;">>, body = [
+                #panel{id = <<?PENDING_FILES_LIST_ID>>, class = <<"tagsinput tagsinput-primary">>, style = <<"height: 100%; max-height: 125px; overflow-y: scroll;">>, body = [
                     #span{class = <<"tag dummy_tag">>, style = <<"background-color:rgb(189, 195, 199);">>, body = [
                         #span{body = <<"No files selected for upload...">>}
                     ]}
                 ]},
 
-                #panel{class = <<"progress_bar progress">>, style = <<"margin: 0 0 12px; display: none;">>, body = [
-                    #panel{class = <<"bar bar-warning upload_done">>, style = <<"width: 0%; transition-property: none;",
-                        "-moz-transition-property: none; -webkit-transition-property: none;-o-transition-property: none;">>},
-                    #panel{class = <<"bar upload_left">>, style = <<"background-color: white; width: 100%; transition-property: none;",
-                        "-moz-transition-property: none; -webkit-transition-property: none;-o-transition-property: none;">>}
+                #panel{class = <<?PROGRESS_BAR_CLASS, " progress">>, style = <<"margin: 0 0 12px; display: none;">>, body = [
+                    #panel{id = <<?CURRENT_DONE_BAR_ID>>, class = <<"bar bar-warning">>, style = <<"width: 0%; transition-property: none;",
+                    "-moz-transition-property: none; -webkit-transition-property: none;-o-transition-property: none;">>},
+                    #panel{id = <<?CURRENT_LEFT_BAR_ID>>, class = <<"bar">>, style = <<"background-color: white; width: 100%; transition-property: none;",
+                    "-moz-transition-property: none; -webkit-transition-property: none;-o-transition-property: none;">>}
                 ]},
-                #panel{class = <<"progress_bar progress">>, style = <<"margin: 0 0 12px; display: none;">>, body = [
-                    #panel{class = <<"bar bar-success upload_done_overall">>, style = <<"width: 0%; transition-property: none;",
-                        "-moz-transition-property: none; -webkit-transition-property: none;-o-transition-property: none;">>},
-                    #panel{class = <<"bar upload_left_overall">>, style = <<"background-color: white; width: 100%; transition-property: none;",
-                        "-moz-transition-property: none; -webkit-transition-property: none;-o-transition-property: none;">>}
+                #panel{class = <<?PROGRESS_BAR_CLASS, " progress">>, style = <<"margin: 0 0 12px; display: none;">>, body = [
+                    #panel{id = <<?OVERALL_DONE_BAR_ID>>, class = <<"bar bar-success">>, style = <<"width: 0%; transition-property: none;",
+                    "-moz-transition-property: none; -webkit-transition-property: none;-o-transition-property: none;">>},
+                    #panel{id = <<?OVERALL_LEFT_BAR_ID>>, class = <<"bar">>, style = <<"background-color: white; width: 100%; transition-property: none;",
+                    "-moz-transition-property: none; -webkit-transition-property: none;-o-transition-property: none;">>}
                 ]},
-                #button{id = SubmitButtonID, class = <<"btn btn-block no-margin">>, body = ButtonText},
-
-                %% TODO?
-                #list{
-                    style = <<"margin-top: 12px;">>,
-                    show_if = false,
-                    id = DropListingID,
-                    class = upload_droplist
-                },
-
-                %% TODO?
-                wf_tags:emit_tag(<<"input">>, [
-                    {<<"name">>, <<"pageContext">>},
-                    {<<"type">>, <<"hidden">>},
-                    {<<"class">>, <<"no_postback">>},
-                    {<<"value">>, <<"">>}
-                ]),
+                #button{id = <<?SUBMIT_BUTTON_ID>>, class = <<"btn btn-block no-margin">>, body = <<?SUBMIT_BUTTON_TEXT>>},
 
                 wf_tags:emit_tag(<<"input">>, [
                     {<<"name">>, <<"targetDir">>},
                     {<<"type">>, <<"hidden">>},
-                    {<<"class">>, <<"no_postback">>},
                     {<<"value">>, TargetDir}
                 ]),
 
-                %% TODO?
                 wf_tags:emit_tag(<<"input">>, [
+                    {<<"name">>, <<"pid">>},
                     {<<"type">>, <<"hidden">>},
-                    {<<"class">>, <<"no_postback">>},
-                    {<<"value">>, <<"">>}
+                    {<<"value">>, PickledPid}
                 ])
             ]}
         ]}
@@ -168,22 +164,31 @@ render_element(Record) ->
 
     [
         wf_tags:emit_tag(<<"form">>, wf:render(FormContent), [
-            {<<"id">>, FormID},
+            {<<"id">>, <<?FORM_ID>>},
             {<<"name">>, <<"files[]">>},
             {<<"method">>, <<"POST">>},
             {<<"enctype">>, <<"multipart/form-data">>},
-            {<<"class">>, <<"no_postback">>},
             {<<"style">>, <<"width: 100%; position: relative; overflow: hidden; margin-bottom: 15px;">>},
             {<<"action">>, <<?file_upload_path>>}
         ])
     ].
 
 
+% This is called once the user presses start. Sends a 'upload_started' message to subscriber_pid.
 api_event(?upload_start_callback, Args, _) ->
-    Delegate = binary_to_atom(mochijson2:decode(Args), latin1),
-    Delegate:upload_event(start);
+    try
+        PickledPid = mochijson2:decode(Args),
+        wf:depickle(PickledPid) ! upload_started
+    catch Type:Message ->
+        ?error_stacktrace("Error, could not resolve subscriber pid during upload - ~p:~p", [Type, Message])
+    end;
 
 
+% This is called once upload completes (all files). Sends a 'upload_finished' message to subscriber_pid.
 api_event(?upload_finish_callback, Args, _) ->
-    Delegate = binary_to_atom(mochijson2:decode(Args), latin1),
-    Delegate:upload_event(finish).
+    try
+        PickledPid = mochijson2:decode(Args),
+        wf:depickle(PickledPid) ! upload_finished
+    catch Type:Message ->
+        ?error_stacktrace("Error, could not resolve subscriber pid during upload - ~p:~p", [Type, Message])
+    end.

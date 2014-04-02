@@ -22,7 +22,7 @@
 
 % Item is either a file or a dir represented in manager
 -record(item, {
-    id = "",
+    id = <<"">>,
     path = "/",
     is_shared = false,
     attr = #fileattributes{}}).
@@ -47,7 +47,7 @@ body() ->
     reset_wire_accumulator(),
     gui_utils:register_escape_event("escape_pressed"),
     Body = [
-        #panel{id = "spinner", class = <<"spinner">>, style = <<"display: none; position: absolute; top: 15px; left: 17px; z-index: 1234;">>, body = [
+        #panel{id = <<"spinner">>, class = <<"spinner">>, style = <<"position: absolute; top: 15px; left: 17px; z-index: 1234;">>, body = [
             #image{image = <<"/images/spinner.gif">>}
         ]},
         gui_utils:top_menu(file_manager_tab, manager_submenu()),
@@ -67,7 +67,7 @@ manager_submenu() ->
                 tool_button_and_dummy("tb_up_one_level", <<"Up one level">>, <<"padding: 10px 7px 10px 15px;">>,
                     <<"fui-arrow-left">>, {action, up_one_level})},
                 #panel{class = <<"breadcrumb-text breadcrumb-background">>, style = <<"overflow: hidden; margin-left: 15px;">>, body = [
-                    #p{id = "path_navigator", class = <<"breadcrumb-content">>, body = <<"~/">>}%path_navigator_body("/")}
+                    #p{id = <<"path_navigator">>, class = <<"breadcrumb-content">>, body = <<"~/">>}%path_navigator_body("/")}
                 ]},
                 #panel{class = <<"control-group">>, style = <<"position: absolute; right: 15px; top: 0;">>, body = [
                     #panel{class = <<"input-append">>, style = <<"; margin-bottom: 0px;">>, body = [
@@ -105,10 +105,10 @@ manager_submenu() ->
                 %    "fui-windows", {action, put_to_clipboard, [copy]}) ++
 
                 [#li{id = wire_click("tb_paste", {action, paste_from_clipboard}), body = #link{title = <<"Paste">>, style = <<"padding: 18px 14px;">>,
-                    body = #span{class = <<"fui-upload">>, body = #span{id = "clipboard_size_label", class = <<"iconbar-unread">>,
+                    body = #span{class = <<"fui-upload">>, body = #span{id = <<"clipboard_size_label">>, class = <<"iconbar-unread">>,
                         style = <<"right: -12px; top: -10px; background-color: rgb(26, 188, 156);">>,
                         body = <<"0">>}}}},
-                    #li{id = "tb_paste_dummy", class = <<"disabled hidden">>, body = #link{title = <<"Paste">>, style = <<"padding: 18px 14px;">>,
+                    #li{id = <<"tb_paste_dummy">>, class = <<"disabled hidden">>, body = #link{title = <<"Paste">>, style = <<"padding: 18px 14px;">>,
                         body = #span{style = <<"color: rgb(200, 200, 200);">>, class = <<"fui-upload">>}}}]
                 },
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
@@ -144,12 +144,12 @@ manager_submenu() ->
 
 % Working space of the explorer.
 manager_workspace() ->
-    #panel{id = "manager_workspace", style = <<"z-index: -1; margin: 170px 0 20px 0; overflow: hidden">>, body = []}.
+    #panel{id = <<"manager_workspace">>, style = <<"z-index: -1; margin: 170px 0 20px 0; overflow: hidden">>, body = []}.
 
 
 % Footer popup to display prompts and forms.
 footer_popup() ->
-    #panel{id = "footer_popup", class = <<"dialog success-dialog wide hidden">>,
+    #panel{id = <<"footer_popup">>, class = <<"dialog success-dialog wide hidden">>,
         style = <<"z-index: 2; position:fixed; bottom: 0; margin-bottom: 0px; padding: 20px 0px; width: 100%;">>, body = []
     }.
 
@@ -223,11 +223,6 @@ api_event("escape_pressed", _, _) ->
     event({action, hide_popup}).
 
 
-% Upload events
-upload_event(start) -> ?dump(start);
-upload_event(finish) -> ?dump(finish).
-
-
 event(init) ->
     case gui_utils:user_logged_in() and gui_utils:dn_and_storage_defined() of
         false ->
@@ -278,38 +273,49 @@ comet_loop_init(UserId, RequestedHostname) ->
     reset_wire_accumulator(),
     refresh_workspace(),
     do_wiring(),
+    wf:wire(#jquery{target = "spinner", method = ["hide"]}),
     gui_utils:flush(),
 
     % Enter comet loop for event processing and autorefreshing
-    comet_loop().
+    comet_loop(false).
 
 
-comet_loop() ->
+comet_loop(IsUploadInProgress) ->
     try
         receive
             {action, Fun, Args} ->
-                reset_wire_accumulator(),
-                erlang:apply(?MODULE, Fun, Args),
-                do_wiring(),
+                case IsUploadInProgress of
+                    true ->
+                        wf:wire(#alert{text = "Please wait for the upload to finish."}), gui_utils:flush();
+                    false ->
+                        reset_wire_accumulator(),
+                        erlang:apply(?MODULE, Fun, Args),
+                        do_wiring()
+                end,
                 wf:wire(#jquery{target = "spinner", method = ["hide"]}),
                 gui_utils:flush(),
-                comet_loop()
+                comet_loop(IsUploadInProgress);
+            upload_started ->
+                comet_loop(true);
+            upload_finished ->
+                comet_loop(false)
+
         after ?AUTOREFRESH_PERIOD ->
             % Refresh file list if it has changed
-%%             CurrentItemList = fs_list_dir(get_working_directory()),
-%%             CurrentMD5 = item_list_md5(CurrentItemList),
-%%             case get_item_list_rev() of
-%%                 CurrentMD5 ->
-%%                     skip;
-%%                 _ ->
-%%                     reset_wire_accumulator(),
-%%                     set_item_list(CurrentItemList),
-%%                     set_item_list_rev(CurrentMD5),
-%%                     refresh_workspace(),
-%%                     do_wiring(),
-%%                     gui_utils:flush()
-%%             end,
-            comet_loop()
+            CurrentItemList = fs_list_dir(get_working_directory()),
+            CurrentMD5 = item_list_md5(CurrentItemList),
+            case get_item_list_rev() of
+                CurrentMD5 ->
+                    skip;
+                _ ->
+                    reset_wire_accumulator(),
+                    set_item_list(CurrentItemList),
+                    set_item_list_rev(CurrentMD5),
+                    refresh_workspace(),
+                    do_wiring(),
+                    gui_utils:flush()
+            end,
+            comet_loop(IsUploadInProgress)
         end
 
     catch Type:Message ->
@@ -571,9 +577,11 @@ create_directory(Name) ->
 
 remove_selected() ->
     SelectedItems = get_selected_items(),
+    ?dump(get(user_id)),
+    ?dump(SelectedItems),
     lists:foreach(
         fun(Path) ->
-            fs_remove(Path)
+            ?dump(fs_remove(Path))
         end, SelectedItems),
     clear_clipboard(),
     clear_manager().
@@ -678,7 +686,7 @@ show_popup(Type) ->
 
             file_upload ->
                 Body = [
-                    #veil_upload{delegate = page_file_manager, target_dir = get_working_directory()}
+                    #veil_upload{subscriber_pid = self(), target_dir = get_working_directory()}
                 ],
                 {Body, undefined, {action, clear_manager}};
 
@@ -788,15 +796,15 @@ grid_view_body() ->
                                case FullPath of
                                    "/groups" -> <<"/images/folder_groups64.png">>;
                                    "/groups" ++ Rest -> case string:rstr(Rest, "/") of
-                                                             1 -> <<"/images/folder_groups64.png">>;
-                                                             _ -> <<"/images/folder64.png">>
-                                                         end;
+                                                            1 -> <<"/images/folder_groups64.png">>;
+                                                            _ -> <<"/images/folder64.png">>
+                                                        end;
                                    _ -> <<"/images/folder64.png">>
                                end;
                            false ->
                                <<"/images/file64.png">>
                        end,
-            LinkID = "grid_item_" ++ integer_to_list(Counter),
+            LinkID = <<"grid_item_", (integer_to_binary(Counter))/binary>>,
             % Item won't hightlight if the link is clicked.
             wire_script(wf:f("$('.wfid_~s').click(function(e) { e.stopPropagation();});", [LinkID])),
             Tile = #panel{
@@ -911,10 +919,10 @@ list_view_body() ->
                            false ->
                                <<"/images/file32.png">>
                        end,
-            LinkID = "list_item_" ++ integer_to_list(Counter),
+            LinkID = <<"list_item_", (integer_to_binary(Counter))/binary>>,
             % Item won't hightlight if the link is clicked.
             wire_script(wf:f("$('#~s').click(function(e) { e.stopPropagation(); });", [LinkID])),
-            ImageID = "image_" ++ integer_to_list(Counter),
+            ImageID = <<"image_", (integer_to_binary(Counter))/binary>>,
             % Image won't hightlight if the image is clicked.
             wire_script(wf:f("$('#~s').click(function(e) { e.stopPropagation();});", [ImageID])),
             TableRow = #tr{
@@ -967,7 +975,7 @@ list_view_body() ->
             ($(window).width() - ~B) + 'px'); }; $(window).resize();", [ContentWithoutFilename])),
     [
         HeaderTable,
-        #table{id = "main_table", class = <<"table table-bordered">>,
+        #table{id = <<"main_table">>, class = <<"table table-bordered">>,
             style = <<"border-radius: 0; margin-top: 49px; margin-bottom: 0; width: 100%; ">>, body = #tbody{body = DirUpRow ++ TableRows}}
     ].
 
@@ -988,7 +996,7 @@ item_new(FullPath) ->
                    {ok, _} -> true;
                    _ -> false
                end,
-    #item{id = "item_" ++ integer_to_list(get_item_counter()), path = FullPath, is_shared = IsShared, attr = FileAttr}.
+    #item{id = <<"item_", (get_item_counter())/binary>>, path = FullPath, is_shared = IsShared, attr = FileAttr}.
 
 item_find(Path) ->
     case lists:keyfind(Path, 3, get_item_list()) of
@@ -1194,4 +1202,4 @@ set_item_counter(Counter) -> put(item_counter, Counter).
 get_item_counter() ->
     Val = get(item_counter),
     put(item_counter, Val + 1),
-    Val.
+    integer_to_binary(Val).  % Return binary as this is used for making element IDs

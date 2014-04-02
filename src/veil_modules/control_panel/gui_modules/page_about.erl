@@ -31,11 +31,11 @@ main() ->
 title() -> <<"About">>.
 
 %% This will be placed in the template instead of {{body}} tag
-body() -> 
+body() ->
     #panel{style = <<"position: relative;">>, body = [
         gui_utils:top_menu(about_tab),
         #panel{style = <<"margin-top: 60px; padding: 20px;">>, body = [
-            #panel{id = "about_table", body = about_table()}
+            #panel{id = <<"about_table">>, body = about_table()}
         ]}
     ] ++ gui_utils:logotype_footer(20)}.
 
@@ -65,7 +65,7 @@ about_table() ->
             #td{style = <<"border-width: 0px; padding: 10px 10px">>, body =
             #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"License">>}},
             #td{style = <<"border-width: 0px; padding: 10px 10px">>,
-            body = #p{style = <<"white-space: pre; font-size: 100%; line-height: normal">>, body = get_license()}}
+                body = #p{style = <<"white-space: pre; font-size: 100%; line-height: normal">>, body = get_license()}}
         ]},
 
         #tr{cells = [

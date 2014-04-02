@@ -17,7 +17,7 @@
 -export([user_logged_in/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0]).
 -export([redirect_to_login/1, redirect_from_login/0]).
 -export([apply_or_redirect/3, apply_or_redirect/4, top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
--export([comet/1, init_comet/2, flush/0]).
+-export([comet/1, init_comet/2, comet_supervisor/2, flush/0]).
 -export([register_escape_event/1, script_for_enter_submission/2, script_to_bind_element_click/2]).
 -export([update/2, replace/2, insert_top/2, insert_bottom/2, insert_before/2, insert_after/2, remove/1]).
 -export([to_list/1, to_binary/1, join_to_binary/1]).
@@ -304,15 +304,22 @@ empty_page() ->
 %% comet/1
 %% ====================================================================
 %% @doc Spawns an asynchronous process connected to the calling process.
-%% The calling process must be the websocket process of n2o framework.
-%% Allows flushing actions / events to the main process (async updates).
+%% IMPORTANT! The calling process must be the websocket process of n2o framework.
+%% In other words, it should be called from event/1 function of page module.
+%% Allows flushing actions to the main process (async updates).
+%% Every instance of comet will get a supervisor to make sure it won't go rogue
+%% after the calling process has finished.
 %% @end
 -spec comet(function()) -> {ok, pid()} | no_return().
 %% ====================================================================
 comet(CometFun) ->
+    % Prevent comet and supervisor from killing the calling process on crash
     process_flag(trap_exit, true),
-    Pid = spawn_link(?MODULE, init_comet, [self(), CometFun]),
-    {ok, Pid}.
+    % Spawn comet process, _link so it will die if the calling process craches
+    CometPid = spawn_link(?MODULE, init_comet, [self(), CometFun]),
+    % Spawn comet supervisor, _link so it will die if the calling process craches
+    spawn_link(?MODULE, comet_supervisor, [self(), CometPid]),
+    {ok, CometPid}.
 
 
 %% init_comet/2
@@ -326,6 +333,20 @@ init_comet(OwnerPid, Fun) ->
     put(ws_process, OwnerPid),
     wf_context:init_context([]),
     Fun().
+
+
+%% comet_supervisor/2
+%% ====================================================================
+%% @doc Internal function evaluated by comet supervisor. The supervisor will
+%% kill the comet process whenever comet creator process finishes.
+%% @end
+-spec comet_supervisor(pid(), pid()) -> no_return().
+%% ====================================================================
+comet_supervisor(CallingPid, CometPid) ->
+    MonitorRef = erlang:monitor(process, CallingPid),
+    receive
+        {'DOWN', MonitorRef, _, _, _} -> exit(CometPid, kill)
+    end.
 
 
 %% flush/0

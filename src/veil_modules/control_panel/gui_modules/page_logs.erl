@@ -58,7 +58,6 @@ main() ->
     end.
 
 
-
 %% Page title
 title() -> <<"Logs">>.
 
@@ -80,24 +79,24 @@ logs_submenu() ->
             #panel{class = <<"container">>, body = [
                 #panel{class = <<"btn-group">>, style = <<"margin: 12px 15px;">>, body = [
                     <<"<i class=\"dropdown-arrow dropdown-arrow-inverse\"></i>">>,
-                    #button{id = "loglevel_label", title = <<"Minimum log severity to be displayed">>,
+                    #button{id = <<"loglevel_label">>, title = <<"Minimum log severity to be displayed">>,
                         class = <<"btn btn-inverse btn-small">>, style = <<"width: 150px;">>, body = <<"Loglevel: <b>debug</b>">>},
                     #button{title = <<"Minimum log severity to be displayed">>, class = <<"btn btn-inverse btn-small dropdown-toggle">>,
                         data_fields = [{<<"data-toggle">>, <<"dropdown">>}], body = #span{class = <<"caret">>}},
-                    #list{id = "loglevel_dropdown", class = <<"dropdown-menu dropdown-inverse">>, body = loglevel_dropdown_body(debug)}
+                    #list{id = <<"loglevel_dropdown">>, class = <<"dropdown-menu dropdown-inverse">>, body = loglevel_dropdown_body(debug)}
                 ]},
                 #panel{class = <<"btn-group">>, style = "margin: 12px 15px;", body = [
                     <<"<i class=\"dropdown-arrow dropdown-arrow-inverse\"></i>">>,
-                    #button{id = "max_logs_label", title = <<"Maximum number of logs to be displayed - oldest logs will be discarded">>,
+                    #button{id = <<"max_logs_label">>, title = <<"Maximum number of logs to be displayed - oldest logs will be discarded">>,
                         class = <<"btn btn-inverse btn-small">>, style = <<"width: 120px;">>, body = <<"Max logs: <b>200</b>">>},
                     #button{title = <<"Maximum number of logs to be displayed - oldest logs will be discarded">>,
                         class = <<"btn btn-inverse btn-small dropdown-toggle">>, data_fields = [{<<"data-toggle">>, <<"dropdown">>}],
                         body = #span{class = <<"caret">>}},
-                    #list{id = "max_logs_dropdown", class = <<"dropdown-menu dropdown-inverse">>, body = max_logs_dropdown_body(200)}
+                    #list{id = <<"max_logs_dropdown">>, class = <<"dropdown-menu dropdown-inverse">>, body = max_logs_dropdown_body(200)}
                 ]},
                 #panel{class = <<"btn-group">>, style = <<"margin: 12px 15px;">>, body = [
                     #button{postback = show_filters_popup, class = <<"btn btn-inverse">>,
-                        style = <<"width: 110px; height: 34px; padding: 6px 13px 8px;">>, id = "show_filters_button",
+                        style = <<"width: 110px; height: 34px; padding: 6px 13px 8px;">>, id = <<"show_filters_button">>,
                         body = <<"Edit filters">>}
                 ]},
 
@@ -106,15 +105,15 @@ logs_submenu() ->
                 %    body = "GENERUJ LOGI", postback = generate_logs},
 
                 #list{class = <<"nav pull-right">>, body = [
-                    #li{id = "generate_logs", body = #link{title = <<"Clear all logs">>, style = <<"padding: 18px 14px;">>,
+                    #li{id = <<"generate_logs">>, body = #link{title = <<"Clear all logs">>, style = <<"padding: 18px 14px;">>,
                         body = #span{class = <<"fui-trash">>}, postback = clear_all_logs}}
                 ]},
                 #panel{class = <<"btn-group pull-right">>, style = <<"padding: 7px 14px 0px; margin-top: 7px;">>, body = [
-                    #label{id = "auto_scroll_checkbox", class = <<"checkbox checked">>, for = <<"auto_scroll_checkbox">>,
+                    #label{id = <<"auto_scroll_checkbox">>, class = <<"checkbox checked">>, for = <<"auto_scroll_checkbox">>,
                         style = <<"display: block; font-weight: bold;">>,
                         actions = #event{type = "click", postback = toggle_auto_scroll, target = "auto_scroll_checkbox"}, body = [
                             #span{class = <<"icons">>},
-                            #checkbox{id = "auto_scroll_checkbox", data_fields = [{<<"data-toggle">>, <<"checkbox">>}],
+                            #checkbox{id = <<"auto_scroll_checkbox">>, data_fields = [{<<"data-toggle">>, <<"checkbox">>}],
                                 value = <<"">>, checked = true},
                             "Auto scroll"
                         ]}
@@ -126,7 +125,7 @@ logs_submenu() ->
 
 % Main table displaying logs
 main_table() ->
-    #table{id = "main_table", class = <<"table table-stripped">>,
+    #table{id = <<"main_table">>, class = <<"table table-stripped">>,
         style = <<"border-radius: 0; margin-bottom: 0; table-layout: fixed; width: 100%;">>,
         body = [
             #tr{cells = [
@@ -142,7 +141,7 @@ main_table() ->
 footer_popup() ->
     #panel{class = <<"dialog success-dialog wide hidden">>,
         style = <<"z-index: 2; position:fixed; bottom: 0; margin-bottom: 0px; padding: 20px 0px; width: 100%;">>,
-        id = "footer_popup", body = []}.
+        id = <<"footer_popup">>, body = []}.
 
 
 % This will be placed in footer_popup after user selects to edit logs
@@ -305,7 +304,7 @@ loglevel_dropdown_body(Active) ->
                         Active -> <<"active">>;
                         _ -> <<"">>
                     end,
-            ID = "loglevel_li_" ++ atom_to_list(Loglevel),
+            ID = <<"loglevel_li_", (atom_to_binary(Loglevel, latin1))/binary>>,
             #li{id = ID, actions = #event{type = "click", postback = {set_loglevel, Loglevel}, target = ID},
                 class = Class, body = #link{body = atom_to_binary(Loglevel, latin1)}}
         end, ?LOGLEVEL_LIST).
@@ -319,7 +318,7 @@ max_logs_dropdown_body(Active) ->
                         Active -> <<"active">>;
                         _ -> <<"">>
                     end,
-            ID = "maxlogs_li_" ++ integer_to_list(Number),
+            ID = <<"maxlogs_li_", (integer_to_binary(Number))/binary>>,
             #li{id = ID, actions = #event{type = "click", postback = {set_max_logs, Number}, target = ID},
                 class = Class, body = #link{body = integer_to_binary(Number)}}
         end, ?MAX_LOGS_OPTIONS).
@@ -397,6 +396,10 @@ filter_contains(String, Filter) ->
 % Event handling
 api_event("escape_pressed", _, _) ->
     event(hide_filters_popup).
+
+
+event(terminate) ->
+    gui_utils:kill_comet(get(comet_pid));
 
 
 event(init) ->

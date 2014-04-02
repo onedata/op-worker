@@ -82,7 +82,7 @@ main_panel() ->
                     [] ->
                         #p{style = <<"padding: 15px;">>, body = <<"No shared files">>};
                     _ ->
-                        #table{id = "main_table", class = <<"table table-stripped">>, style = <<"border-radius: 0; margin-bottom: 0;">>,
+                        #table{id = <<"main_table">>, class = <<"table table-stripped">>, style = <<"border-radius: 0; margin-bottom: 0;">>,
                             body = TableRows}
                 end,
     wf:wire(wf:f("window.onresize = function(e) { $('.filename_row').css('max-width', '' +
@@ -102,7 +102,7 @@ get_shared_files() ->
 
 % Footer popup panel
 footer_popup() ->
-    #panel{class = <<"dialog success-dialog wide hidden">>, id = "footer_popup",
+    #panel{class = <<"dialog success-dialog wide hidden">>, id = <<"footer_popup">>,
         style = <<"position:fixed; bottom: 0; margin-bottom: 0px; padding: 20px 0; width: 100%;">>, body = []}.
 
 
@@ -129,9 +129,9 @@ show_link(ShareID) ->
             style = <<"position: absolute; top: 8px; right: 8px; z-index: 3;">>,
             body = #span{class = <<"fui-cross">>, style = <<"font-size: 20px;">>}},
         #form{class = <<"control-group">>, body = [
-            #textbox{id = "shared_link_textbox", class = <<"flat">>, style = <<"width: 700px;">>,
+            #textbox{id = <<"shared_link_textbox">>, class = <<"flat">>, style = <<"width: 700px;">>,
                 value = <<AddressPrefix/binary, ShareID/binary>>, placeholder = <<"Download link">>},
-            #button{id = "shared_link_submit", postback = {action, hide_popup},
+            #button{id = <<"shared_link_submit">>, postback = {action, hide_popup},
                 class = <<"btn btn-success btn-wide">>, body = <<"Ok">>}
         ]}
     ],
@@ -151,7 +151,7 @@ remove_link_prompt(ShareID, Filename) ->
                 body = #span{class = <<"fui-cross">>, style = <<"font-size: 20px;">>}},
             #form{class = <<"control-group">>, body = [
                 #p{body = <<"Remove share for <b>", Filename/binary, "</b>?">>},
-                #button{id = "ok_button", class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, postback = {action, remove_link, [ShareID]}},
+                #button{id = <<"ok_button">>, class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, postback = {action, remove_link, [ShareID]}},
                 #button{class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>, postback = {action, hide_popup}}
             ]}
         ],

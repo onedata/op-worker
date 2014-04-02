@@ -79,19 +79,17 @@ terminate(_Reason, _Req, _State) ->
 %% ====================================================================
 handle_upload_request(Req) ->
     try
-%%         try_or_throw(
-%%             fun() ->
-%%                 try
-%%                     Context = wf_context:init_context(Req),
-%%                     SessionHandler = proplists:get_value(session, Context#context.handlers),
-%%                     SessionHandler:init([], Context),
-%%                     UserID = wf:session(user_doc),
-%%                     true = (UserID /= undefined),
-%%                     put(user_id, lists:nth(1, user_logic:get_dn_list(UserID)))
-%%                 catch A:B -> ?dump({A, B, erlang:get_stacktrace()}) end
-%%             end, not_logged_in),
-
-        put(user_id, "CN=plglopiola,CN=Lukasz Opiola,O=CYFRONET,O=Uzytkownik,O=PL-Grid,C=PL"),
+        {State, NewContext, SessionHandler} = try_or_throw(
+            fun() ->
+                Context = wf_context:init_context(Req),
+                SessHandler = proplists:get_value(session, Context#context.handlers),
+                {ok, St, NewCtx} = SessHandler:init([], Context),
+                wf_context:context(NewCtx),
+                UserID = wf:session(user_doc),
+                true = (UserID /= undefined),
+                put(user_id, lists:nth(1, user_logic:get_dn_list(UserID))),
+                {St, NewCtx, SessHandler}
+            end, not_logged_in),
 
         % Params and _FilePath are not currently used but there are cases when they could be useful
         {ok, _Params, [{OriginalFileName, _FilePath}]} = parse_multipart(Req, [], []),
@@ -106,7 +104,9 @@ handle_upload_request(Req) ->
                 ]}
             ]}),
 
-        Req2 = cowboy_req:set_resp_header(<<"content-type">>, <<"application/json">>, Req),
+        {ok, [], FinalCtx} = SessionHandler:finish(State, NewContext),
+        Req2 = cowboy_req:set_resp_header(<<"content-type">>, <<"application/json">>,
+            FinalCtx#context.req),
         Req3 = cowboy_req:set_resp_body(RespBody, Req2),
         % Force connection to close, so that every upload is in
         {ok, _FinReq} = cowboy_req:reply(200, Req3#http_req{connection = close})
@@ -114,13 +114,12 @@ handle_upload_request(Req) ->
     catch Type:Message ->
         case Message of
             not_logged_in ->
-                ?dump({Type, Message}),
                 skip;
             _ ->
                 ?error_stacktrace("Error while processing file upload from user ~p - ~p:~p",
                     [get(user_id), Type, Message])
         end,
-        {ok, _ErrorReq} = cowboy_req:reply(500, Req)
+        {ok, _ErrorReq} = cowboy_req:reply(500, Req#http_req{connection = close})
     end.
 
 

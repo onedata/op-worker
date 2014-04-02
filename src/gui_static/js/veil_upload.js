@@ -1,9 +1,19 @@
-var FormID = '#upload_form';
-var SubmitButtonID = '#upload_submit';
-var DropID = '#drop_zone_container';
-var DropListingID = '#drop_listing';
-var FileInputID = '#file_input';
-var FakeFileInputID = '#file_input_dummy';
+// Must be the same as macros in veil_upload.erl
+var SUBMIT_BUTTON_ID = '#upload_submit';
+var DROPZONE_ID = '#drop_zone_container';
+var SELECT_BUTTON_ID = '#file_input';
+var FAKE_SELECT_BUTTON_ID = '#file_input_dummy';
+var PENDING_FILES_LIST_ID = '#pending_files';
+
+var PROGRESS_BAR_CLASS = '.progress_bar';
+var CURRENT_DONE_BAR_ID = '#upload_done';
+var CURRENT_LEFT_BAR_ID = '#upload_left';
+var OVERALL_DONE_BAR_ID = '#upload_done_overall';
+var OVERALL_LEFT_BAR_ID = '#upload_left_overall';
+
+var YELLOW_TAG_COLOUR = "rgb(241, 196, 15)";
+var GREEN_TAG_COLOUR = "rgb(46, 204, 113)";
+var RED_TAG_COLOUR = "rgb(231, 76, 60)";
 
 
 veil_send_pending_files = function (form, input) {
@@ -21,7 +31,7 @@ veil_attach_upload_handle_dragdrop = function (form, input) {
         form.$pending_files = [];
 
     $.getScript("js/jquery.fileupload.min.js", function () {
-        var dropzone = $("#drop_zone_container");
+        var dropzone = $(DROPZONE_ID);
 
         $(input).fileupload({
             dropZone: dropzone,
@@ -29,37 +39,39 @@ veil_attach_upload_handle_dragdrop = function (form, input) {
             sequentialUploads: true,
             paramName: "file",
             formData: function () {
-                //form.elements["pageContext"].value = this.$params["pageContext"];
-                var d = $(form).serializeArray();
-                return d;
+                return  $(form).serializeArray();
             },
             start: function (e) {
-                //form.pageContext.value = this.$params["pageContext"];
-                $(SubmitButtonID).html("Uploading...");
-                $(SubmitButtonID).prop('disabled', true);
-                $("#drop_zone_container").prop('disabled', true);
-                $(".select_files").prop('disabled', true);
-                $(SubmitButtonID).removeClass("btn-inverse");
-                $(".upload_done_overall").css("width", "0%");
-                $(".upload_left_overall").css("width", "100%");
-                $(".upload_done").css("width", "0%");
-                $(".upload_left").css("width", "100%");
-                $(".progress_bar").show();
+                $(SUBMIT_BUTTON_ID).css("color", "#2C3E50");
+                $(SUBMIT_BUTTON_ID).html("Uploading...");
+                $(SUBMIT_BUTTON_ID).prop('disabled', true);
+                $(DROPZONE_ID).prop('disabled', true);
+                $(SELECT_BUTTON_ID).prop('disabled', true);
+                $(FAKE_SELECT_BUTTON_ID).prop('disabled', true);
+                $(SUBMIT_BUTTON_ID).removeClass("btn-inverse");
+                $(OVERALL_DONE_BAR_ID).css("width", "0%");
+                $(OVERALL_LEFT_BAR_ID).css("width", "100%");
+                $(CURRENT_DONE_BAR_ID).css("width", "0%");
+                $(CURRENT_LEFT_BAR_ID).css("width", "100%");
+                $(PROGRESS_BAR_CLASS).show();
             },
             progressall: function (e, data) {
                 var prog = parseInt(data.loaded / data.total * 100, 10);
-                $(SubmitButtonID).html(sizeProgressString(data.loaded, data.total) + " (" + prog + ")%");
-                $(".upload_done_overall").css("width", prog + "%");
-                $(".upload_left_overall").css("width", (100 - prog) + "%");
+                $(SUBMIT_BUTTON_ID).html(sizeProgressString(data.loaded, data.total) + " (" + prog + ")%");
+                $(OVERALL_DONE_BAR_ID).css("width", prog + "%");
+                $(OVERALL_LEFT_BAR_ID).css("width", (100 - prog) + "%");
             },
             progress: function (e, data) {
                 var prog = parseInt(data.loaded / data.total * 100, 10);
-                $(".upload_done").css("width", prog + "%");
-                $(".upload_left").css("width", (100 - prog) + "%");
+                $(CURRENT_DONE_BAR_ID).css("width", prog + "%");
+                $(CURRENT_LEFT_BAR_ID).css("width", (100 - prog) + "%");
 
-                $(".pending_files").find("span[filename=\"" + data.files[0].name + "\"][status=added]")
-                    .css("background-color", "rgb(241, 196, 15)");
-                // Single file progress
+                // Paint a tag yellow, but only the first one found
+                if ($(PENDING_FILES_LIST_ID).find("span[filename=\"" + data.files[0].name + "\"][status=in_progress]").length == 0) {
+                    $($(PENDING_FILES_LIST_ID).find("span[filename=\"" + data.files[0].name + "\"][status=added]")[0])
+                        .attr("status", "in_progress")
+                        .css("background-color", YELLOW_TAG_COLOUR);
+                }
             },
             send: function (e, data) {
             },
@@ -69,24 +81,34 @@ veil_attach_upload_handle_dragdrop = function (form, input) {
             always: function (e, data) {
             },
             fail: function (e, data, options) {
+                $(findTagByFilename(data.files[0].name)).
+                    css("background-color", RED_TAG_COLOUR).
+                    attr("status", "error");
                 veil_increment_pending_upload_counter(form, -1);
             },
             add: function (e, data) {
                 $(".dummy_tag").remove();
                 $.each(data.files, function (i, f) {
                     // Let's add the visual list of pending files
-                    $(".pending_files")
-                        .append($("<span></span>").attr("filename", f.name)
-                            .attr("status", "added").css("background-color", "rgb(189, 195, 199)")
-                            .addClass("tag").append($("<span></span>").text(f.name)));
-                    $(SubmitButtonID).prop('disabled', false);
-                    $(SubmitButtonID).addClass("btn-inverse");
+                    $(PENDING_FILES_LIST_ID)
+                        .append($("<span></span>")
+                            .attr("filename", f.name)
+                            .attr("status", "added")
+                            .css("background-color", "rgb(189, 195, 199)")
+                            .addClass("tag")
+                            .append($("<span></span>").text(f.name)));
+                    $(SUBMIT_BUTTON_ID).prop('disabled', false);
+                    $(SUBMIT_BUTTON_ID).addClass("btn-inverse");
                     veil_increment_pending_upload_counter(form, 1);
                 });
                 form.$pending_files.push(data);
             },
             done: function (e, data) {
-                veil_upload_finished(data.result.files[0].name);
+                $(CURRENT_DONE_BAR_ID).css("width", "0%");
+                $(CURRENT_LEFT_BAR_ID).css("width", "100%");
+                $(findTagByFilename(data.result.files[0].name)).
+                    css("background-color", GREEN_TAG_COLOUR).
+                    attr("status", "success");
                 veil_increment_pending_upload_counter(form, -1);
             }
         })
@@ -100,43 +122,43 @@ veil_increment_pending_upload_counter = function (form, incrementer) {
     counter += incrementer;
     $(form).data("pending_uploads", counter);
     if (counter == 0) {
-        $(SubmitButtonID).html("Upload successful!");
-        $(".upload_done_overall").css("width", "100%");
-        $(".upload_left_overall").css("width", "0%");
-        $(".upload_done").css("width", "100%");
-        $(".upload_left").css("width", "0%");
-        $(".progress_bar").fadeOut(1500);
+        $(SUBMIT_BUTTON_ID).html("Upload successful!");
+        $(OVERALL_DONE_BAR_ID).css("width", "100%");
+        $(OVERALL_LEFT_BAR_ID).css("width", "0%");
+        $(CURRENT_DONE_BAR_ID).css("width", "100%");
+        $(CURRENT_LEFT_BAR_ID).css("width", "0%");
+        $(PROGRESS_BAR_CLASS).fadeOut(1500);
         setTimeout(function f() {
-            $(SubmitButtonID).html("Start upload");
+            $(SUBMIT_BUTTON_ID).html("Start upload");
+            $(DROPZONE_ID).prop('disabled', false);
+            $(SELECT_BUTTON_ID).prop('disabled', false);
+            $(FAKE_SELECT_BUTTON_ID).prop('disabled', false);
+            $(SUBMIT_BUTTON_ID).css("color", "#FFFFFF");
         }, 1500);
-        $(".drop_zone_container").prop('disabled', false);
-        $("#file_input").prop('disabled', false);
-        //setTimeout(function f(){$(".pending_files").empty()
+        //setTimeout(function f(){$(PENDING_FILES_LIST_ID).empty()
         //   .append($("<span></span>").css("background-color", "rgb(235, 237, 239)").addClass("tag dummy_tag")
         //      .append($("<span></span>").text("No files selected for upload...")));}, 3000);
-        report_upload_finish('page_file_manager');
+        report_upload_finish($('#upload_form').find("input[name=\"pid\"]").val());
         veil_alert_unfinished_files(form);
     }
 }
 
-
-veil_upload_finished = function (Name) {
-    $(".upload_done").css("width", "0%");
-    $(".upload_left").css("width", "100%");
-    $(".pending_files").find("span[filename=\"" + Name + "\"][status=added]")
-        .css("background-color", "rgb(46, 204, 113)").attr("status", "done");
-}
-
 veil_alert_unfinished_files = function (form) {
-    var files = $(".pending_files").find("span.tag[status='added']");
+    var files = $(PENDING_FILES_LIST_ID).find("span.tag[status='error']");
     if (files.length > 0) {
-        files.css("background-color", "rgb(231, 76, 60)").attr("status", "error");
-
         var filenames = $(files).get().map(function (f) {
             return $(f).text()
         }).join("\r\n");
         alert("There was an error uploading the following file(s):\r\n" + filenames + "\r\n\r\nPlease try again.");
     }
+}
+
+function findTagByFilename(FileName) {
+    var tags = $(PENDING_FILES_LIST_ID).find("span[filename=\"" + FileName + "\"][status=in_progress]");
+    if (tags.length == 0) {
+        tags = $(PENDING_FILES_LIST_ID).find("span[filename=\"" + FileName + "\"][status=added]");
+    }
+    return tags[0];    
 }
 
 function sizeProgressString(currentSize, totalSize) {
@@ -149,4 +171,4 @@ function sizeProgressString(currentSize, totalSize) {
     } while (totalSize > 1024);
 
     return currentSize.toFixed(2) + "/" + totalSize.toFixed(2) + byteUnits[i];
-};
+}

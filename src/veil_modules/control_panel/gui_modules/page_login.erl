@@ -29,7 +29,7 @@ body() ->
                                   _ -> <<"">>
                               end,
             #panel{style = <<"position: relative;">>, body = [
-                #panel{id = "error_message", style = ErrorPanelStyle, class = <<"dialog dialog-danger">>, body = #p{
+                #panel{id = <<"error_message">>, style = ErrorPanelStyle, class = <<"dialog dialog-danger">>, body = #p{
                     body = <<"Session error or session expired. Please log in again.">>}},
                 #panel{class = <<"alert alert-success login-page">>, body = [
                     #h3{body = <<"Welcome to VeilFS">>},
