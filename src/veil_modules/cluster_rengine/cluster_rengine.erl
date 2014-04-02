@@ -38,7 +38,7 @@
 
 %% functions for manual tests
 -export([register_mkdir_handler/0, register_mkdir_handler_aggregation/1, register_write_event_handler/1, register_quota_exceeded_handler/0,
-         send_mkdir_event/0, delete_file/1, change_quota/2, register_rm_event_handler/0, prepare/0]).
+         send_mkdir_event/0, delete_file/1, change_quota/2, register_rm_event_handler/0, prepare/2, register_for_stats/1]).
 
 -ifdef(TEST).
 -compile([export_all]).
@@ -52,8 +52,8 @@ init(_Args) ->
 handle(_ProtocolVersion, ping) ->
   pong;
 
-handle(_ProtocolVersion, #eventmessage{type = Type}) ->
-  Event = [{type, list_to_atom(Type)}, {user_dn, get(user_id)}, {fuse_id, get(fuse_id)}],
+handle(_ProtocolVersion, #eventmessage{type = Type, count = Count}) ->
+  Event = [{type, list_to_atom(Type)}, {user_dn, get(user_id)}, {fuse_id, get(fuse_id)}, {count, Count}],
   handle(1, {event_arrived, Event});
 
 handle(_ProtocolVersion, healthcheck) ->
@@ -395,11 +395,32 @@ register_quota_exceeded_handler() ->
 register_rm_event_handler() ->
   EventHandler = fun(Event) ->
     ?info("RmEvent Handler"),
-    UserDn = proplists:get_value(user_dn, Event),
-    FuseId = proplists:get_value(fuse_id, Event),
-    case user_logic:quota_exceeded({dn, UserDn}) of
-      false -> request_dispatcher:send_to_fuse(FuseId, #atom{value = "write_enabled"}, "communication_protocol");
-      _ -> ok
+    QuotaExceededFn = fun() ->
+        UserDn = proplists:get_value(user_dn, Event),
+        FuseId = proplists:get_value(fuse_id, Event),
+        case user_logic:quota_exceeded({dn, UserDn}) of
+          false ->
+            request_dispatcher:send_to_fuse(FuseId, #atom{value = "write_enabled"}, "communication_protocol"),
+            false;
+          _ ->
+            true
+        end
+    end,
+
+    Exceeded = QuotaExceededFn(),
+
+    %% if quota is exceeded check quota one more time after 5s - in meanwhile db view might get reloaded
+    case Exceeded of
+      true ->
+        spawn(fun() ->
+          receive
+            _ -> ok
+          after 5000 ->
+            QuotaExceededFn()
+          end
+        end);
+      _ ->
+        ok
     end
   end,
 
@@ -422,9 +443,33 @@ change_quota(UserLogin, NewQuotaInBytes) ->
   {ok, UserDoc} = user_logic:get_user({login, UserLogin}),
   user_logic:update_quota(UserDoc, #quota{size = NewQuotaInBytes}).
 
+register_for_stats(Bytes) ->
+  EventHandler = fun(Event) ->
+    ?info("Write EventHandler for stats"),
+    Count = proplists:get_value(count, Event),
+    ?info("-----> Stats: ~p", [Count])
+  end,
+
+  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
+
+  EventFilter = #eventfilterconfig{field_name = "type", desired_value = "write_event"},
+  EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
+
+  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = Bytes, sum_field_name = "bytes"},
+  EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
+
+  EventTransformer = #eventtransformerconfig{field_names_to_replace = ["type"], values_to_replace = ["write_event"], new_values = ["write_for_stats"]},
+  EventTransformerConfig = #eventstreamconfig{transformer_config = EventTransformer, wrapped_config = EventAggregatorConfig},
+  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {write_for_stats, EventItem, EventTransformerConfig}}}).
+
+
 %% For test purposes
-prepare() ->
-  register_write_event_handler(1),
+prepare(QuotaBytes, StatsBytes) ->
+  register_write_event_handler(2),
+  timer:sleep(100),
   register_quota_exceeded_handler(),
+  timer:sleep(100),
   register_rm_event_handler(),
-  change_quota("plgmsitko", 100).
+  timer:sleep(100),
+  register_for_stats(StatsBytes),
+  change_quota("plgmsitko", QuotaBytes).
