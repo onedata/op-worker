@@ -458,5 +458,5 @@ check_connection(Connection = #veil_document{record = #connection_info{session_i
 		    end;
 		false->
 			?error("Connection pid unknown"),
-			{error,wrong_pid}
+			ok % we cannot return error since we don't know whether connection is ok or not
 	end.
