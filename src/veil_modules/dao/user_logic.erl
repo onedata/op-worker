@@ -27,7 +27,7 @@
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
 -export([get_team_names/1]).
 -export([create_dirs_at_storage/3]).
--export([get_quota/1, update_quota/2, get_files_size/2]).
+-export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/1]).
 
 -define(UserRootPerms, 8#600).
 
@@ -364,12 +364,14 @@ get_quota(User) ->
   Result :: {ok, quota()} | {error, any()}.
 %% ====================================================================
 update_quota(User, NewQuota) ->
-  case get_quota(User) of
+  Quota = dao_lib:apply(dao_users, get_quota, [User#veil_document.record#user.quota_doc], 1),
+  case Quota of
     {ok, QuotaDoc} ->
       NewQuotaDoc = QuotaDoc#veil_document{record = NewQuota},
       dao_lib:apply(dao_users, save_quota, [NewQuotaDoc], 1);
     {error, Error} -> {error, {get_quota_error, Error}};
-    Other -> Other
+    Other ->
+      Other
   end.
 
 %% get_files_size/2
@@ -727,3 +729,23 @@ create_team_dir(TeamName) ->
 		Error ->
 			Error
 	end.
+
+quota_exceeded(UserQuery) ->
+  case user_logic:get_user(UserQuery) of
+    {ok, UserDoc} ->
+      Uuid = UserDoc#veil_document.uuid,
+      {ok, SpaceUsed} = user_logic:get_files_size(Uuid, 1),
+      {ok, #quota{size = Quota}} = user_logic:get_quota(UserDoc),
+      ?info("user has used: ~p, quota: ~p", [SpaceUsed, Quota]),
+      case SpaceUsed > Quota of
+        true ->
+          update_quota(UserDoc, #quota{size = Quota, exceeded = true}),
+          true;
+        _ ->
+          update_quota(UserDoc, #quota{size = Quota, exceeded = false}),
+          false
+      end;
+    Error ->
+      ?warning("cannot fetch user: ~p", [Error]),
+      non
+  end.

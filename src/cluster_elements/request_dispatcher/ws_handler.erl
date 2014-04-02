@@ -20,6 +20,7 @@
 -include("fuse_messages_pb.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
+-include("veil_modules/cluster_rengine/cluster_rengine.hrl").
 -include("logging.hrl").
 -include("veil_modules/dao/dao.hrl").
 -include_lib("public_key/include/public_key.hrl").
