@@ -325,7 +325,7 @@ call_command_on_host(Host,KeyPool,Command) ->
 			"localhost" ->
 				os:cmd(Command ++ ";echo *$?"); % command ; echo *$?
 			_ ->
-				os:cmd("ssh "++parse_key_pool(KeyPool)++" "++Host++" "++"'"++Command++"'" ++ ";echo *$?") % ssh -i key1 -i key2.. user@host 'command' ; echo *$?
+				os:cmd("ssh "++parse_key_pool(KeyPool)++" root@"++Host++" "++"'"++Command++"'" ++ ";echo *$?") % ssh -i key1 -i key2.. user@host 'command' ; echo *$?
 		end,
 	Ans = get_answer(Result),
 	RCode = get_return_code(Result),
