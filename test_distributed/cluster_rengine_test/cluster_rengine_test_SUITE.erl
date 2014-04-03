@@ -79,10 +79,9 @@ test_event_subscription(Config) ->
       _ -> AnsPid ! {ok, tree, self()}
     end
   end,
+  
   subscribe_for_write_events(CCM, tree, EventHandler2),
-  timer:sleep(1000),
   send_event(WriteEvent, CCM),
-  timer:sleep(1000),
 
   % this time there are two handler registered
   ?assert_received({ok, standard, _}),
@@ -105,7 +104,9 @@ test_event_aggregation(Config) ->
   subscribe_for_write_events(CCM, tree, EventHandler, #event_stream_config{config = #aggregator_config{field_name = user_id, fun_field_name = "count", threshold = 4}}),
   WriteEvent = [{type, write_event}, {user_id, "1234"}, {ans_pid, self()}],
 
-  repeat(3, fun() -> send_event(WriteEvent, CCM) end),
+  repeat(2, fun() -> send_event(WriteEvent, CCM) end),
+  timer:sleep(600),
+  send_event(WriteEvent, CCM),
   assert_nothing_received(CCM),
 
   send_event(WriteEvent, CCM),
@@ -146,6 +147,11 @@ test_dispatching(Config) ->
       lists:foreach(SendWriteEvent, WriteEvents)
     end)
   end,
+
+  SendWriteEvent(WriteEvent1),
+  SendWriteEvent(WriteEvent2),
+
+  timer:sleep(600),
 
   SendWriteEvents(),
   count_answers(8),
