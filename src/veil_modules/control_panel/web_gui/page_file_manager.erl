@@ -1182,17 +1182,17 @@ fs_remove(Path) ->
 
 
 fs_remove_dir(DirPath) ->
-    %case is_group_dir(DirPath) of
-    %    true ->
-    %        skip;
-    %    false ->
+    case is_group_dir(DirPath) of
+        true ->
+            skip;
+        false ->
             ItemList = fs_list_dir(DirPath),
             lists:foreach(
                 fun(Item) ->
                     fs_remove(item_path(Item))
                 end, ItemList),
             logical_files_manager:rmdir(DirPath).
-    %end.
+    end.
 
 
 fs_list_dir(Dir) ->
