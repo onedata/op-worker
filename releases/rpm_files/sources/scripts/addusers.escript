@@ -308,10 +308,11 @@ arglist_to_erlang_string(Prefix,[ Other | Rest]) ->
 
 % checks if ssh connection can be established and simple command can be executed
 assert_connection_ok(Host,KeyPool) ->
-	case call_command_on_host(Host,KeyPool,"test 0") of
+	case call_command_on_host(Host,KeyPool,"test 0",true) of
 		{0,""} -> ok;
-		{_,Ans} ->
-			print_error("Could not connect to: ~p, error: ~p ",[Host,Ans]),
+		{_,_} ->
+			{_,Error} = call_command_on_host(Host,KeyPool,"test 0",false),
+			print_error("Could not connect to: ~p, error: ~p ",[Host,Error]),
 			halt(1)
 	end.
 
@@ -319,13 +320,19 @@ assert_connection_ok(Host,KeyPool) ->
 call_command_on_host(Host,Command) ->
 	call_command_on_host(Host,get(?key_pool),Command).
 call_command_on_host(Host,KeyPool,Command) ->
+	call_command_on_host(Host,KeyPool,Command,true).
+call_command_on_host(Host,KeyPool,Command,Quiet) ->
 	debug("executing command on "++Host++": "++Command),
+	QuietArg = case Quiet of
+				   true -> "-q";
+				   false -> ""
+	           end,
 	Result =
 		case Host of
 			"localhost" ->
 				os:cmd(Command ++ ";echo *$?"); % command ; echo *$?
 			_ ->
-				os:cmd("ssh -q "++parse_key_pool(KeyPool)++" root@"++Host++" "++"'"++Command++"'" ++ ";echo *$?") % ssh -i key1 -i key2.. user@host 'command' ; echo *$?
+				os:cmd("ssh "++QuietArg++" "++parse_key_pool(KeyPool)++" root@"++Host++" "++"'"++Command++"'" ++ ";echo *$?") % ssh -i key1 -i key2.. user@host 'command' ; echo *$?
 		end,
 	Ans = get_answer(Result),
 	RCode = get_return_code(Result),
