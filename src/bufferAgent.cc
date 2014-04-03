@@ -1,6 +1,6 @@
 #include "bufferAgent.h"
 #include "helpers/storageHelperFactory.h"
-#include "glog/logging.h"
+#include "logging.h"
 
 using boost::shared_ptr;
 using boost::thread;

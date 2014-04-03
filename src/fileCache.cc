@@ -1,5 +1,5 @@
 #include "fileCache.h"
-#include "glog/logging.h"
+#include "logging.h"
 #include "helpers/storageHelperFactory.h"
 
 #define MAX_BLOCK_SIZE 10

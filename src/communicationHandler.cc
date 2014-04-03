@@ -7,7 +7,7 @@
 
 #include "communicationHandler.h"
 #include "fuse_messages.pb.h"
-#include "glog/logging.h"
+#include "logging.h"
 #include "helpers/storageHelperFactory.h"
 #include <google/protobuf/descriptor.h>
 #include <iostream>

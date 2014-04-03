@@ -44,8 +44,8 @@ static std::string levelToStr(RemoteLogLevel level)
 {
     switch(level)
     {
-        case protocol::logging::INFO: return "INFO";
         case protocol::logging::LDEBUG: return "DEBUG";
+        case protocol::logging::INFO: return "INFO";
         case protocol::logging::WARNING: return "WARNING";
         case protocol::logging::ERROR: return "ERROR";
         case protocol::logging::FATAL: return "FATAL";
@@ -57,7 +57,7 @@ RemoteLogWriter::RemoteLogWriter()
     : m_pid(getpid())
 {
     m_thread = boost::thread(&RemoteLogWriter::writeLoop, this);
-    m_thresholdLevel = protocol::logging::LDEBUG;
+    m_thresholdLevel = protocol::logging::NONE;
 }
 
 void RemoteLogWriter::buffer(const RemoteLogLevel level,
