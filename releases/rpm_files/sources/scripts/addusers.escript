@@ -1,6 +1,9 @@
 % Installation directory of veil RPM
 -define(prefix, "/opt/veil/").
 
+% Args file
+-define(args_file, ?prefix ++"scripts/addusers.cfg").
+
 % Args
 -define(all_args,[?hosts,?key_pool,?users,?uid_range,?gid_range,?debug]).
 -define(hosts, "hosts").
@@ -10,21 +13,29 @@
 -define(gid_range,"gid_range").
 -define(debug, "d").
 
-% Args file
--define(args_file, ?prefix ++"scripts/addusers.cfg").
-
 main(Args) ->
 	try
+		%parse all args
+		info("Parsing arguments from ~s and commandline...",[?args_file]),
 		parse_args(Args),
-		%print all args
-		[debug("~p: ~p",[Name, get(Name)]) || Name <- ?all_args],
-		%check connections
-		[assert_connection_ok(Host,get(?key_pool)) || Host <- get(?hosts)],
+		info("Arguments:"),
+		[info("~p: ~p",[Name, get(Name)]) || Name <- ?all_args],
 
-		%find minimmal gid
-		[MinGid,MaxGid] = get(?gid_range),
-		FreeGid = find_free_gid(get(?hosts),list_to_integer(MinGid),list_to_integer(MaxGid)),
-	    debug("~p",[FreeGid])
+		%check connections
+		info("Checking connection to hosts..."),
+		[assert_connection_ok(Host,get(?key_pool)) || Host <- get(?hosts)],
+		info("ok"),
+
+		%prepare and add all groups
+		info("Creating groups..."),
+		AllGroups = [Group || [_Username,UserGroups] <- get(?users),Group <- UserGroups] ++
+					[Username || [Username,_UserGroups] <- get(?users)],
+		UniqueGroups = sets:to_list(sets:from_list(AllGroups)),
+		grp_add_all(get(?hosts),UniqueGroups),
+
+		%add all users
+		info("Creating users..."),
+		usr_add_all(get(?hosts),get(?users))
 
 	catch
 	    _Type:Error ->
@@ -34,20 +45,25 @@ main(Args) ->
 
 
 
-%% --------- Group management ----------
-find_free_gid(_Hosts,Min,Max) when Min>Max ->
-	print_error("cannot find free group id"),
+%% ====================================================================
+%% Group management
+%% ====================================================================
+
+% Find minimal free gid for selected group name, on all hosts
+find_free_gid(_Hosts,_Name,Min,Max) when Min>Max ->
+	print_error("Cannot find free group id, terminating"),
 	halt(1);
-find_free_gid(Hosts,Min,Max) ->
-	case lists:all(fun(Host) -> not grp_exists(Host,Min) end,Hosts) of
+find_free_gid(Hosts,Name,Min,Max) ->
+	case lists:all(fun(Host) -> (not grp_exists(Host,Min)) orelse (grp_get_name(Host,Min) == Name)  end,Hosts) of
 		true ->
 			Min;
 		false ->
-			find_free_gid(Hosts,Min+1,Max)
+			find_free_gid(Hosts,Name,Min+1,Max)
 	end.
 
+%Check if group with given groupname or gid exists on host
 grp_exists(Host,Gid) when is_integer(Gid) ->
-	grp_exists(Host,integer_to_list(Gid));
+	grp_exists(Host,integer_to_list(Gid)); %when gid given, we also check existence by calling grp_get_gid function (it works ok with gid too)
 grp_exists(Host,GroupNameOrGid) ->
 	case grp_get_gid(Host,GroupNameOrGid) of
 		"" ->
@@ -56,6 +72,7 @@ grp_exists(Host,GroupNameOrGid) ->
 			true
 	end.
 
+% Get gid of group (by groupname or gid)
 grp_get_gid(Host,GroupName) ->
 	{0,Ans} = call_command_on_host(Host,"getent group "++GroupName++" | cut -d: -f3"),
 	case Ans of
@@ -65,23 +82,61 @@ grp_get_gid(Host,GroupName) ->
 			lists:reverse(Reversed)
 	end.
 
+% Get name of group (by gid)
+grp_get_name(Host,Gid) when is_integer(Gid) ->
+	grp_get_name(Host,integer_to_list(Gid));
+grp_get_name(Host,Gid) ->
+	{0,Ans} = call_command_on_host(Host,"getent group "++Gid++" | cut -d: -f1"),
+	case Ans of
+		[] -> [];
+		_ ->
+			[$\n | Reversed]=lists:reverse(Ans),
+			lists:reverse(Reversed)
+	end.
+
+% Add group on host, fails if group exists
 grp_add(Host,GroupName,Gid) ->
 	{0,Ans} = call_command_on_host(Host,"groupadd -g "++Gid++" "++GroupName),
 	Ans.
-%% -------------------------------------
 
-%% --------- Users management ----------
-find_free_uid(_Hosts,Min,Max) when Min>Max ->
-	print_error("cannot find free user id"),
+% Add group on host, prints warning if group exists
+grp_add_with_warning(Host,Group,Gid) ->
+	case grp_exists(Host,Group) of
+		true ->
+			warn("Group ~p already exists on host: ~p, with gid: ~p",[Group,Host,grp_get_gid(Host,Group)]);
+		false ->
+			grp_add(Host,Group,Gid),
+			info("Group ~p added on host: ~p, with gid: ~p",[Group,Host,Gid])
+	end.
+
+% Add all groups on all hosts
+grp_add_all(_Hosts,[]) ->
+	ok;
+grp_add_all(Hosts,[Group]) ->
+	[MinGid,MaxGid] = get(?gid_range),
+	Gid = integer_to_list(find_free_gid(Hosts,Group,list_to_integer(MinGid),list_to_integer(MaxGid))),
+	[grp_add_with_warning(Host,Group,Gid) || Host <- Hosts];
+grp_add_all(Hosts,Groups) ->
+	[ grp_add_all(Hosts,[Group]) ||Group <- Groups].
+
+
+%% ====================================================================
+%% User management
+%% ====================================================================
+
+% Find minimal free uid for selected username, on all hosts
+find_free_uid(_Hosts,_Name,Min,Max) when Min>Max ->
+	print_error("Cannot find free user id, terminating"),
 	halt(1);
-find_free_uid(Hosts,Min,Max) ->
-	case lists:all(fun(Host) -> not usr_exists(Host,Min) end,Hosts) of
+find_free_uid(Hosts,Name,Min,Max) ->
+	case lists:all(fun(Host) -> (not usr_exists(Host,Min)) orelse (usr_get_name(Host,Min) == Name) end,Hosts) of
 		true ->
 			Min;
 		false ->
-			find_free_uid(Hosts,Min+1,Max)
+			find_free_uid(Hosts,Name,Min+1,Max)
 	end.
 
+%Check if user with given username or uid exists on host
 usr_exists(Host,Uid) when is_integer(Uid) ->
 	usr_exists(Host,integer_to_list(Uid));
 usr_exists(Host,UserNameOrUid) ->
@@ -92,6 +147,7 @@ usr_exists(Host,UserNameOrUid) ->
 			true
 	end.
 
+% Get uid of user (by username or uid)
 usr_get_uid(Host,UserName) ->
 	{0,Ans} = call_command_on_host(Host,"getent passwd "++UserName++" | cut -d: -f3"),
 	case Ans of
@@ -101,12 +157,54 @@ usr_get_uid(Host,UserName) ->
 			lists:reverse(Reversed)
 	end.
 
-usr_add(Host,UserName,Uid) ->
-	{0,Ans} = call_command_on_host(Host,"useradd -u "++Uid++" "++UserName),
-	Ans.
-%% -------------------------------------
+% Get name of user (by uid)
+usr_get_name(Host,Uid) when is_integer(Uid) ->
+	usr_get_name(Host,integer_to_list(Uid));
+usr_get_name(Host,Uid) ->
+	{0,Ans} = call_command_on_host(Host,"getent passwd "++Uid++" | cut -d: -f1"),
+	case Ans of
+		[] -> [];
+		_ ->
+			[$\n | Reversed]=lists:reverse(Ans),
+			lists:reverse(Reversed)
+	end.
 
-%% ------------ Arg parsing ------------
+% Add user to group
+usr_add_to_grp(Host,User,Group) ->
+	{0,Ans} = call_command_on_host(Host,"usermod -a -G "++Group++" "++User),
+	Ans.
+
+% Add user on host, fails if user exists
+usr_add(Host,UserName,Uid) ->
+	{0,Ans} = call_command_on_host(Host,"useradd -u "++Uid++" -g "++UserName++" "++UserName),
+	Ans.
+
+% Add user on host, prints warning if user exists
+usr_add_with_warning(Host,User,Uid) when is_list(User) and is_list(Host) ->
+	case usr_exists(Host,User) of
+		true ->
+			warn("user ~p already exists on host: ~p, with uid: ~p",[User,Host,usr_get_uid(Host,User)]);
+		false ->
+			usr_add(Host,User,Uid),
+			info("user ~p added on host: ~p, with uid: ~p",[User,Host,Uid])
+	end.
+
+% Add all users on all hosts
+usr_add_all(_Hosts,[]) ->
+	ok;
+usr_add_all(Hosts,[ [Username,Groups] ]) ->
+	[MinUid,MaxUid] = get(?uid_range),
+	Uid = integer_to_list(find_free_uid(Hosts,Username,list_to_integer(MinUid),list_to_integer(MaxUid))),
+	[usr_add_with_warning(Host,Username,Uid) || Host <- Hosts],
+	[usr_add_to_grp(Host,Username,Group) || Group <- Groups, Host <- Hosts];
+usr_add_all(Hosts,Users) ->
+	[ usr_add_all(Hosts,[User]) ||User <- Users].
+
+
+%% ====================================================================
+%% Arg parsing
+%% ====================================================================
+
 % Parse default and commandline args and put them into process dictionary
 parse_args(Args) ->
 	%set args to default
@@ -114,29 +212,49 @@ parse_args(Args) ->
 	case Status of
 		ok -> ok;
 		error ->
-			print_error("error during parsing ~p: ~p",[?args_file,DefaultArgs]),
+			print_error("Error during parsing ~p: ~p",[?args_file,DefaultArgs]),
 			halt(1)
 	end,
-	[assert_arg_ok(Name) || {Name,_Value} <- DefaultArgs],
 	[put(atom_to_list(Name),Value) || {Name,Value} <- DefaultArgs],
+	[assert_arg_ok(Name) || {Name,_Value} <- DefaultArgs],
 
 	%override default args by those obtained from commandline
 	ArgNames = lists:filter(fun(Arg) -> hd(Arg)==$- end,Args),
+	[put(Name,get_arg(Args,Name)) || [$-|Name] <- ArgNames],
 	[assert_arg_ok(Name) || [$-|Name] <- ArgNames],
-	[put(Name,get_arg(Args,Name)) || [$-|Name] <- ArgNames].
+	ok.
 
-% Check if given arg is globally defined
-
+% Check if given arg is globally defined and properly formatted
 assert_arg_ok(Arg) when is_atom(Arg) ->
 	assert_arg_ok(atom_to_list(Arg));
 assert_arg_ok(Arg) ->
-	case lists:member(Arg,?all_args) of
+	case lists:member(Arg,?all_args) andalso arg_format_ok(Arg)  of
 		true ->
 			ok;
 		false ->
-			print_error("Unknown argument: ~p",[Arg]),
+			print_error("Bad argument: ~p",[Arg]),
+			print_error("For command line args usage info, please read ~s config file.",[?args_file]),
 			halt(1)
 	end.
+
+%checks format of given argument
+arg_format_ok(StringListArg) when StringListArg==?hosts orelse StringListArg==?key_pool ->
+	StringList = get(StringListArg),
+	is_list(StringList) andalso lists:all(fun(X) -> is_list(X) end,StringList);
+arg_format_ok(RangeArg) when RangeArg==?gid_range orelse RangeArg==?uid_range ->
+	try
+		[Min,Max] = get(RangeArg),
+		list_to_integer(Min),
+		list_to_integer(Max),
+		true
+	catch
+	    _:_  -> false
+	end;
+arg_format_ok(?users) ->
+	Users = get(?users),
+	is_list(Users) andalso lists:all(fun([Name,Groups]) -> is_list(Name) andalso is_list(Groups); (_) -> false end,Users);
+arg_format_ok(_) ->
+	true.
 
 % Parses arguments associated with given Argname to erlang term
 get_arg(Args,Argname) when is_atom(Argname) ->
@@ -183,15 +301,17 @@ arglist_to_erlang_string(Prefix,[ Other | Rest]) ->
 		_ ->
 			arglist_to_erlang_string(Prefix++","++"\""++Other++"\"",Rest)
 	end.
-%% -------------------------------------
 
-%% ------------- SSH calls -------------
+%% ====================================================================
+%% SSH calls
+%% ====================================================================
+
 % checks if ssh connection can be established and simple command can be executed
 assert_connection_ok(Host,KeyPool) ->
 	case call_command_on_host(Host,KeyPool,"test 0") of
-		{0,_} -> ok;
-		_ ->
-			print_error("Could not connect to: ~p",[Host]),
+		{0,""} -> ok;
+		{_,Ans} ->
+			print_error("Could not connect to: ~p, error: ~p ",[Host,Ans]),
 			halt(1)
 	end.
 
@@ -199,7 +319,7 @@ assert_connection_ok(Host,KeyPool) ->
 call_command_on_host(Host,Command) ->
 	call_command_on_host(Host,get(?key_pool),Command).
 call_command_on_host(Host,KeyPool,Command) ->
-	debug(Host++": "++Command),
+	debug("executing command on "++Host++": "++Command),
 	Result =
 		case Host of
 			"localhost" ->
@@ -209,7 +329,7 @@ call_command_on_host(Host,KeyPool,Command) ->
 		end,
 	Ans = get_answer(Result),
 	RCode = get_return_code(Result),
-	debug(Ans),
+	debug("result: "++Ans),
 	{RCode,Ans}.
 
 %parse key_pool to ssh format (-i key1 -i key2...)
@@ -228,10 +348,11 @@ get_return_code(Result) ->
 	Code = lists:last(string:tokens(Result,"*")),
 	[_ | RevertedCode] =lists:reverse(Code),
 	list_to_integer(lists:reverse(RevertedCode)).
-%% -------------------------------------
 
+%% ====================================================================
+%% Logging
+%% ====================================================================
 
-%% -------- Internal functions ---------
 debug(Text) ->
 	debug(Text,[]).
 debug(Text,Args) ->
@@ -239,16 +360,19 @@ debug(Text,Args) ->
 		undefined ->
 			none;
 		_ ->
-			print("[debug] "++Text,Args)
+			io:format("[debug] "++Text++"~n",Args)
 	end.
 
-print(Text) ->
-	print(Text, []).
-print(Text,Args) ->
-	io:format(Text++"~n",Args).
+info(Text) ->
+	info(Text, []).
+info(Text,Args) ->
+	io:format("[info] "++Text++"~n",Args).
+
+warn(Text,Args) ->
+	io:format("[waring] "++ Text++"~n",Args).
 
 print_error(Text) ->
 	print_error(Text,[]).
 print_error(Text,Args) ->
-	io:format("(!) "++Text++"~n",Args).
+	io:format("[error] "++Text++"~n",Args).
 %% -------------------------------------
