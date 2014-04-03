@@ -152,7 +152,7 @@ handle_user_content_request(Req) ->
                         Type, Message, erlang:get_stacktrace()]);
             _ -> skip
         end,
-        {false, _RedirectReq} = page_error:user_content_request_error(Message, Req)
+        {true, _FinReq} = cowboy_req:reply(500, Req#http_req{connection = close})
     end.
 
 
@@ -188,7 +188,7 @@ handle_shared_file_request(Req) ->
                     [Path, Type, Message, erlang:get_stacktrace()]);
             _ -> skip
         end,
-        {false, _RedirectReq} = page_error:shared_file_request_error(Message, Req)
+        {true, _FinReq} = cowboy_req:reply(500, Req#http_req{connection = close})
     end.
 
 % Sends file as a http response, file is given by uuid
