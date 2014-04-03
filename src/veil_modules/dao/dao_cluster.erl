@@ -288,7 +288,16 @@ get_connection_info(SessID) ->
 remove_connection_info("") ->
 	ok;
 remove_connection_info(SessID) ->
-    dao:remove_record(SessID).
+	{ok, #veil_document{record = #connection_info{controlling_node = CNode, controlling_pid = CPid, session_id = SessionID}}} = get_connection_info(SessID),
+	case list_connection_info({by_session_id, SessionID}) of
+		{ok,[_OneConnection]} ->
+			remove_fuse_session(SessionID),
+			dao:remove_record(SessID);
+		{ok,_} ->
+			dao:remove_record(SessID);
+		{error,Error} ->
+			lager:error("Error while listing connection info: ~p",[Error])
+	end.
 
 
 %% close_connection/1
