@@ -7,15 +7,23 @@
 
 #include "logging.h"
 
-//#include "storageHelperFactory.h"
+#include "communicationHandler.h"
+#include "helpers/storageHelperFactory.h"
 
+#include <boost/algorithm/string/case_conv.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/chrono/duration.hpp>
 
 #include <unistd.h>
 
 #include <ctime>
+#include <numeric>
 
+
+static const boost::posix_time::seconds MAX_FLUSH_DELAY(10);
+static const uint64_t LOG_MESSAGE_ID = std::numeric_limits<int32_t>::max() + 1;
+static const std::string CENTRAL_LOG_MODULE_NAME("central_logger");
+static const std::string LOGGING_DECODER("logging");
 
 namespace veil
 {
@@ -26,8 +34,6 @@ boost::shared_ptr<RemoteLogWriter> logWriter(new RemoteLogWriter);
 RemoteLogSink logSink(logWriter);
 RemoteLogSink debugLogSink(logWriter, protocol::logging::LDEBUG);
 
-const boost::posix_time::seconds MAX_FLUSH_DELAY(10);
-
 static RemoteLogLevel glogToLevel(google::LogSeverity glevel)
 {
     switch(glevel)
@@ -37,19 +43,6 @@ static RemoteLogLevel glogToLevel(google::LogSeverity glevel)
         case google::ERROR: return protocol::logging::ERROR;
         case google::FATAL: return protocol::logging::FATAL;
         default: return protocol::logging::NONE;
-    }
-}
-
-static std::string levelToStr(RemoteLogLevel level)
-{
-    switch(level)
-    {
-        case protocol::logging::LDEBUG: return "DEBUG";
-        case protocol::logging::INFO: return "INFO";
-        case protocol::logging::WARNING: return "WARNING";
-        case protocol::logging::ERROR: return "ERROR";
-        case protocol::logging::FATAL: return "FATAL";
-        default: return "NONE";
     }
 }
 
@@ -89,7 +82,7 @@ bool RemoteLogWriter::handleThresholdChange(const protocol::communication_protoc
     req.ParseFromString(answer.worker_answer());
     m_thresholdLevel = req.level();
 
-    LOG(INFO) << "Client will now log " << levelToStr(req.level()) <<
+    LOG(INFO) << "Client will now log " << req.level() <<
                  " and higher level messages to cluster.";
 
     return true;
@@ -105,15 +98,30 @@ protocol::logging::LogMessage RemoteLogWriter::popBuffer()
     m_buffer.pop();
     return msg;
 }
-#include <iostream>
+
 void RemoteLogWriter::writeLoop()
 {
     while(true)
     {
         const protocol::logging::LogMessage msg = popBuffer();
-        if(msg.level() != protocol::logging::LDEBUG)
-            DLOG(INFO) << "OMG";
-        std::cout << "Sending a message [" << levelToStr(msg.level()) << "] " << msg.message() << std::endl;
+
+        boost::shared_ptr<SimpleConnectionPool> connectionPool = helpers::config::getConnectionPool();
+        if(!connectionPool)
+            continue;
+
+        boost::shared_ptr<CommunicationHandler> connection = connectionPool->selectConnection();
+        if(!connection)
+            continue;
+
+        protocol::communication_protocol::ClusterMsg clm;
+        clm.set_protocol_version(PROTOCOL_VERSION);
+        clm.set_synch(false);
+        clm.set_module_name(CENTRAL_LOG_MODULE_NAME);
+        clm.set_message_decoder_name(LOGGING_DECODER);
+        clm.set_message_type(boost::algorithm::to_lower_copy(msg.GetDescriptor()->name()));
+        clm.set_input(msg.SerializeAsString());
+
+        connection->sendMessage(clm, LOG_MESSAGE_ID);
     }
 }
 

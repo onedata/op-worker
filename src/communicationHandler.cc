@@ -11,6 +11,7 @@
 #include "helpers/storageHelperFactory.h"
 #include <google/protobuf/descriptor.h>
 #include <iostream>
+#include <numeric>
 #include <string>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -348,9 +349,9 @@ int CommunicationHandler::sendMessage(ClusterMsg& msg, int32_t msgId)
 int32_t CommunicationHandler::getMsgId()
 {
     unique_lock lock(m_msgIdMutex);
-    ++m_currentMsgId;
-    if(m_currentMsgId <= 0) // Skip 0 and negative values
-        m_currentMsgId = 1;
+
+    m_currentMsgId %= std::numeric_limits<int32_t>::max();
+    ++m_currentMsgId; // the range is [1, int32_max]
 
     return m_currentMsgId;
 }
