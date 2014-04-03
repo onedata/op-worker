@@ -35,6 +35,8 @@
 /// Path on which cluster listenes for websocket connections
 #define CLUSTER_URI_PATH "/veilclient"
 
+const unsigned int MAX_GENERATED_MSG_ID = std::numeric_limits<unsigned int>::max() / 2;
+const unsigned int IGNORE_ANSWER_MSG_ID = MAX_GENERATED_MSG_ID + 1;
 
 typedef websocketpp::client<websocketpp::config::asio_tls_client>       ws_client;
 typedef websocketpp::config::asio_tls_client::message_type::ptr         message_ptr;
@@ -43,6 +45,7 @@ typedef boost::asio::ssl::stream<boost::asio::ip::tcp::socket>          socket_t
 typedef websocketpp::lib::shared_ptr<boost::asio::ssl::context>         context_ptr;
 typedef boost::function<void(const veil::protocol::communication_protocol::Answer)>    push_callback;
 typedef boost::unique_lock<boost::recursive_mutex> unique_lock;
+
 
 template<typename T>
 std::string toString(T in) {

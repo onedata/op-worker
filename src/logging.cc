@@ -21,9 +21,9 @@
 
 
 static const boost::posix_time::seconds MAX_FLUSH_DELAY(10);
-static const uint64_t LOG_MESSAGE_ID = std::numeric_limits<int32_t>::max() + 1;
 static const std::string CENTRAL_LOG_MODULE_NAME("central_logger");
 static const std::string LOGGING_DECODER("logging");
+static const std::queue<veil::protocol::logging::LogMessage>::size_type MAX_MESSAGE_BUFFER_SIZE = 1024;
 
 namespace veil
 {
@@ -68,9 +68,7 @@ void RemoteLogWriter::buffer(const RemoteLogLevel level,
     log.set_timestamp(timestamp);
     log.set_message(message);
 
-    boost::lock_guard<boost::mutex> guard(m_bufferMutex);
-    m_buffer.push(log);
-    m_bufferChanged.notify_all();
+    pushMessage(log);
 }
 
 bool RemoteLogWriter::handleThresholdChange(const protocol::communication_protocol::Answer &answer)
@@ -88,7 +86,17 @@ bool RemoteLogWriter::handleThresholdChange(const protocol::communication_protoc
     return true;
 }
 
-protocol::logging::LogMessage RemoteLogWriter::popBuffer()
+void RemoteLogWriter::pushMessage(const protocol::logging::LogMessage &msg)
+{
+    boost::lock_guard<boost::mutex> guard(m_bufferMutex);
+    if(m_buffer.size() > MAX_MESSAGE_BUFFER_SIZE)
+        return; // silently drop message
+
+    m_buffer.push(msg);
+    m_bufferChanged.notify_all();
+}
+
+protocol::logging::LogMessage RemoteLogWriter::popMessage()
 {
     boost::unique_lock<boost::mutex> lock(m_bufferMutex);
     while(m_buffer.empty())
@@ -103,7 +111,7 @@ void RemoteLogWriter::writeLoop()
 {
     while(true)
     {
-        const protocol::logging::LogMessage msg = popBuffer();
+        const protocol::logging::LogMessage msg = popMessage();
 
         boost::shared_ptr<SimpleConnectionPool> connectionPool = helpers::config::getConnectionPool();
         if(!connectionPool)
@@ -121,7 +129,7 @@ void RemoteLogWriter::writeLoop()
         clm.set_message_type(boost::algorithm::to_lower_copy(msg.GetDescriptor()->name()));
         clm.set_input(msg.SerializeAsString());
 
-        connection->sendMessage(clm, LOG_MESSAGE_ID);
+        connection->sendMessage(clm, IGNORE_ANSWER_MSG_ID);
     }
 }
 
@@ -147,29 +155,3 @@ void RemoteLogSink::send(google::LogSeverity severity,
 
 } // namespace logging
 } // namespace veil
-
-//void RemoteLoggerProxy::Write(bool force_flush, time_t timestamp,
-//                              const char *message, int message_len)
-//{
-//    m_logger->Write(force_flush, timestamp, message, message_len);
-
-//    if(s_remoteLevel == m_level)
-//    {
-//        auto connection = veil::helpers::config::getConnectionPool()->selectConnection();
-//        if(!connection)
-//            return;
-
-////        auto config = VeilFS::getConfig();
-////        if(!config)
-////            return false;
-
-//        LogMessage log;
-////        log.set_fuse_id(config->getFuseID());
-//        log.set_level(m_level);
-//        log.set_timestamp(timestamp);
-//        log.set_message(message);
-
-//        ClusterMsg msg;
-//        connection->sendMessage(msg);
-//    }
-//}

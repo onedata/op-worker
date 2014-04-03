@@ -349,10 +349,7 @@ int CommunicationHandler::sendMessage(ClusterMsg& msg, int32_t msgId)
 int32_t CommunicationHandler::getMsgId()
 {
     unique_lock lock(m_msgIdMutex);
-
-    m_currentMsgId %= std::numeric_limits<int32_t>::max();
-    ++m_currentMsgId; // the range is [1, int32_max]
-
+    m_currentMsgId = (m_currentMsgId % MAX_GENERATED_MSG_ID) + 1;
     return m_currentMsgId;
 }
 
