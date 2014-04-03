@@ -486,9 +486,7 @@ register_for_write_stats2(Bytes) ->
   EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = Bytes, sum_field_name = "bytes"},
   EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
 
-  EventTransformer = #eventtransformerconfig{field_names_to_replace = ["type"], values_to_replace = ["write_event"], new_values = ["write_for_stats"]},
-  EventTransformerConfig = #eventstreamconfig{transformer_config = EventTransformer, wrapped_config = EventAggregatorConfig},
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {write_for_stats, EventItem, EventTransformerConfig}}}).
+  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {write_event, EventItem, EventAggregatorConfig}}}).
 
 register_for_quota_events(WriteStatsEventsMultiplier) ->
   EventHandler = fun(Event) ->

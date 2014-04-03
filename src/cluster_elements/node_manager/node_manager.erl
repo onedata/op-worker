@@ -119,6 +119,8 @@ init([Type]) when Type =:= worker ; Type =:= ccm ; Type =:= ccm_test ->
 
   ets:new(?LFM_EVENT_PRODUCTION_ENABLED_ETS, [set, named_table, public]),
   ets:new(?WRITE_DISABLED_USERS, [set, named_table, public]),
+  ets:new(?ACK_HANDLERS, [set, named_table, public]),
+
   process_flag(trap_exit, true),
   erlang:send_after(10, self(), {timer, do_heart_beat}),
   erlang:send_after(100, self(), {timer, monitor_mem_net}),
@@ -289,6 +291,7 @@ handle_cast({notify_lfm, EventType, Enabled}, State) ->
   {noreply, State};
 
 handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
+  ?info("update_user_write_enabled: ~p", [Enabled]),
   case Enabled of
     false -> ets:insert(?WRITE_DISABLED_USERS, {UserDn, true});
     _ -> ets:delete(?WRITE_DISABLED_USERS, UserDn)
