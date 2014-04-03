@@ -20,6 +20,7 @@
 -include("veil_modules/dao/dao_share.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
+-include("logging.hrl").
 
 -define(NAMES_TABLE, "names_map").
 
@@ -294,8 +295,10 @@ write(FileStr, Buf) ->
   ErrorDetail :: term().
 %% ====================================================================
 write(FileStr, Offset, Buf) ->
-  File = check_utf(FileStr),
-  {Response, Response2} = getfilelocation(File),
+  case write_enabled(get(user_id)) of
+    true ->
+      File = check_utf(FileStr),
+      {Response, Response2} = getfilelocation(File),
       case Response of
         ok ->
           {Storage_helper_info, FileId} = Response2,
@@ -309,7 +312,10 @@ write(FileStr, Offset, Buf) ->
           end,
           Res;
         _ -> {Response, Response2}
-      end.
+      end;
+    _ ->
+      {error, quota_exceeded}
+  end.
 
 %% write_from_stream/2
 %% ====================================================================
@@ -438,7 +444,17 @@ delete(FileStr) ->
                 ok ->
                   Response3 = TmpAns3#atom.value,
                   case Response3 of
-                    ?VOK -> ok;
+                    ?VOK ->
+                      case event_production_enabled(rm_event) of
+                        true ->
+                          ?info("rm_event production enabled ------"),
+                          RmEvent = [{type, rm_event}, {user_dn, get(user_id)}],
+                          gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, RmEvent}});
+                        _ ->
+                          ?info("rm_event production disabled ------"),
+                          ok
+                      end,
+                      ok;
                     _ -> {logical_file_system_error, Response3}
                   end;
                 _ -> {Status3, TmpAns3}
@@ -1018,6 +1034,12 @@ check_utf(FileName) ->
 
 event_production_enabled(EventName) ->
   case ets:lookup(?LFM_EVENT_PRODUCTION_ENABLED_ETS, EventName) of
-    [{_Key, Value}] -> Value;
+    [{_Key, _Value}] -> true;
     _ -> false
+  end.
+
+write_enabled(UserDn) ->
+  case ets:lookup(?WRITE_DISABLED_USERS, UserDn) of
+    [{_Key, _Value}] -> false;
+    _ -> true
   end.

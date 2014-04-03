@@ -101,7 +101,7 @@ handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem, Produ
   ok;
 
 handle(_ProtocolVersion, {get_event_handlers, EventType}) ->
-  ?info("get_event_handlers for event"),
+  ?info("rm get_event_handlers for event ~p", [EventType]),
   EventHandlerItems = ets:lookup(?RULE_MANAGER_ETS, EventType),
   Res = case EventHandlerItems of
           [{_EventType, ItemsList}] -> ItemsList;
@@ -126,7 +126,9 @@ notify_producers(ProducerConfig, EventType) ->
 
   lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, ProducerConfig, "fuse_messages") end, UniqueFuseIds),
 
-  gen_server:cast({global, ?CCM}, {notify_lfm, EventType}).
+  ?info("After new Notify producers: ~p", [UniqueFuseIds]),
+
+  gen_server:cast({global, ?CCM}, {notify_lfm, EventType, true}).
 
 generate_tree_name() ->
   [{_, Id}] = ets:lookup(?HANDLER_TREE_ID_ETS, current_id),

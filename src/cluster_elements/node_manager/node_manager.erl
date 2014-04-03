@@ -118,6 +118,7 @@ init([Type]) when Type =:= worker ; Type =:= ccm ; Type =:= ccm_test ->
   end,
 
   ets:new(?LFM_EVENT_PRODUCTION_ENABLED_ETS, [set, named_table, public]),
+  ets:new(?WRITE_DISABLED_USERS, [set, named_table, public]),
   process_flag(trap_exit, true),
   erlang:send_after(10, self(), {timer, do_heart_beat}),
   erlang:send_after(100, self(), {timer, monitor_mem_net}),
@@ -277,6 +278,21 @@ handle_cast(stop_load_logging, State) ->
   case whereis(?Load_Logging_Proc) of
     undefined -> ok;
     Pid -> Pid ! stop
+  end,
+  {noreply, State};
+
+handle_cast({notify_lfm, EventType, Enabled}, State) ->
+  ?info("node_manager notify_lfm -------"),
+  case Enabled of
+    true -> ets:insert(?LFM_EVENT_PRODUCTION_ENABLED_ETS, {EventType, true});
+    _ -> ets:delete(?LFM_EVENT_PRODUCTION_ENABLED_ETS, EventType)
+  end,
+  {noreply, State};
+
+handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
+  case Enabled of
+    false -> ets:insert(?WRITE_DISABLED_USERS, {UserDn, true});
+    _ -> ets:delete(?WRITE_DISABLED_USERS, UserDn)
   end,
   {noreply, State};
 

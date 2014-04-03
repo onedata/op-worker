@@ -27,7 +27,7 @@
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
 -export([get_team_names/1]).
 -export([create_dirs_at_storage/3]).
--export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/1]).
+-export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/2]).
 
 -define(UserRootPerms, 8#600).
 
@@ -730,11 +730,23 @@ create_team_dir(TeamName) ->
 			Error
 	end.
 
-quota_exceeded(UserQuery) ->
+%% quota_exceeded/2
+%% ====================================================================
+%% @doc
+%% Return if quota is exceeded for user. Saves result to quota doc related to user. Throws an exception when user does not exists.
+%% @end
+-spec quota_exceeded(Key :: {login, Login :: string()} |
+{email, Email :: string()} |
+{uuid, UUID :: user()} |
+{dn, DN :: string()} |
+{rdnSequence, [#'AttributeTypeAndValue'{}]}, ProtocolVersion :: integer()) ->
+  {binary() | no_return()}.
+%% ====================================================================
+quota_exceeded(UserQuery, ProtocolVersion) ->
   case user_logic:get_user(UserQuery) of
     {ok, UserDoc} ->
       Uuid = UserDoc#veil_document.uuid,
-      {ok, SpaceUsed} = user_logic:get_files_size(Uuid, 1),
+      {ok, SpaceUsed} = user_logic:get_files_size(Uuid, ProtocolVersion),
       {ok, #quota{size = Quota}} = user_logic:get_quota(UserDoc),
       ?info("user has used: ~p, quota: ~p", [SpaceUsed, Quota]),
       case SpaceUsed > Quota of
@@ -746,6 +758,5 @@ quota_exceeded(UserQuery) ->
           false
       end;
     Error ->
-      ?warning("cannot fetch user: ~p", [Error]),
-      non
+      throw({cannot_fetch_user, UserQuery})
   end.

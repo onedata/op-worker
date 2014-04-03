@@ -425,17 +425,30 @@ handle_cast({synch_cache_clearing, Cache, ReturnPid}, State) ->
   ReturnPid ! {cache_cleared, Cache},
   {noreply, New_State};
 
-handle_cast({notify_lfm, EventType}, State) ->
-  NotifyFn = fun(Node, {_TmpState, _TmpWorkersFound}) ->
-    try
-      gen_server:call({?Node_Manager_Name, Node}, {notify_lfm, EventType})
-    catch
-      E1:E2 -> ?warning("cannot notify lfm node: ~p, Error: ~p:~p", [Node, E1, E2])
-    end
+handle_cast({notify_lfm, EventType, Enabled}, State) ->
+  ?info("cluser_manager notify_lfm -------"),
+  NotifyFn = fun(Node) ->
+%%     try
+      gen_server:cast({?Node_Manager_Name, Node}, {notify_lfm, EventType, Enabled})
+%%     catch
+%%       E1:E2 -> ?warning("cannot notify lfm node: ~p, Error: ~p:~p", [Node, E1, E2])
+%%     end
   end,
 
-  lists:foreach(NotifyFn, State#cm_state.nodes);
+  lists:foreach(NotifyFn, State#cm_state.nodes),
+  {noreply, State};
 
+handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
+  NotifyFn = fun(Node) ->
+%%     try
+      gen_server:cast({?Node_Manager_Name, Node}, {update_user_write_enabled, UserDn, Enabled})
+%%     catch
+%%       E1:E2 -> ?warning("cannot notify lfm node: ~p, Error: ~p:~p", [Node, E1, E2])
+%%     end
+  end,
+
+  lists:foreach(NotifyFn, State#cm_state.nodes),
+  {noreply, State};
 
 handle_cast({start_load_logging, Path}, State) ->
   lager:info("Start load logging on nodes: ~p", State#cm_state.nodes),
