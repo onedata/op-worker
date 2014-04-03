@@ -152,7 +152,8 @@ handle_user_content_request(Req) ->
                         Type, Message, erlang:get_stacktrace()]);
             _ -> skip
         end,
-        {true, _FinReq} = cowboy_req:reply(500, Req#http_req{connection = close})
+        {ok, FinReq} = cowboy_req:reply(500, Req#http_req{connection = close}),
+        {true, FinReq}
     end.
 
 
@@ -188,7 +189,8 @@ handle_shared_file_request(Req) ->
                     [Path, Type, Message, erlang:get_stacktrace()]);
             _ -> skip
         end,
-        {true, _FinReq} = cowboy_req:reply(500, Req#http_req{connection = close})
+        {ok, FinReq} = cowboy_req:reply(500, Req#http_req{connection = close}),
+        {true, FinReq}
     end.
 
 % Sends file as a http response, file is given by uuid
