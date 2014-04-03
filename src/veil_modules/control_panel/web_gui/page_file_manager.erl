@@ -1164,7 +1164,7 @@ is_group_dir(Path) ->
             end;
         false ->
             false
-    end,
+    end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% logical_files_manager interfacing

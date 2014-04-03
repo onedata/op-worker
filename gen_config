@@ -6,7 +6,7 @@ main(OverlayFileList) ->
     % Check if yamler is existent in deps
     case filelib:is_file("./deps/yamler") of
         false ->
-            io:format("yamler not found in /deps directory. Make sure deps are pulled (make deps).~n"),
+            io:format("yamler not found in deps directory. Make sure deps are pulled (make deps).~n"),
             halt(1);
         true ->
             proceed
