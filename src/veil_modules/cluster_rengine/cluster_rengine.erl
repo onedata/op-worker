@@ -31,17 +31,10 @@
 
 -define(PROCESSOR_ETS_NAME, "processor_ets_name").
 
--define(ProtocolVersion, 1).
-
 %% ====================================================================
 %% API functions
 %% ====================================================================
 -export([init/1, handle/2, cleanup/0]).
-
-%% functions for manual tests
--export([register_mkdir_handler/0, register_mkdir_handler_aggregation/1, register_write_event_handler/1, register_quota_exceeded_handler/0,
-         send_mkdir_event/0, delete_file/1, change_quota/2, register_rm_event_handler/0, prepare/2, prepare2/2, register_for_write_stats/1,
-         register_for_write_stats2/1, register_for_read_stats/1, register_for_quota_events/1, send_push_msg/0]).
 
 -ifdef(TEST).
 -compile([export_all]).
@@ -55,9 +48,9 @@ init(_Args) ->
 handle(_ProtocolVersion, ping) ->
   pong;
 
-handle(_ProtocolVersion, #eventmessage{type = Type, count = Count}) ->
+handle(ProtocolVersion, #eventmessage{type = Type, count = Count}) ->
   Event = [{type, list_to_atom(Type)}, {user_dn, get(user_id)}, {fuse_id, get(fuse_id)}, {count, Count}],
-  handle(1, {event_arrived, Event});
+  handle(ProtocolVersion, {event_arrived, Event});
 
 handle(_ProtocolVersion, healthcheck) ->
 	ok;
@@ -65,27 +58,13 @@ handle(_ProtocolVersion, healthcheck) ->
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
-handle(ProtocolVersion, {final_stage_tree, TreeId, Event}) ->
-  EventType = proplists:get_value(type, Event),
-  ?info("final stage trre, ~p", [EventType]),
-  case ets:lookup(?EVENT_TREES_MAPPING, EventType) of
-    [] -> SleepNeeded = update_event_handler(ProtocolVersion, EventType),
-      % from my observations it takes about 200ms until disp map fun is registered in cluster_manager
-      case SleepNeeded of
-        true -> timer:sleep(600);
-        _ -> ok
-      end,
-      gen_server:call({cluster_rengine, node()}, {asynch, 1, {final_stage_tree, TreeId, Event}});
-    _ ->
-      ok
-  end;
-
+handle(_ProtocolVersion, {final_stage_tree, _TreeId, _Event}) ->
+  ?warning("cluster_rengine final_stage_tree handler should be always called in subprocess tree process");
 
 handle(ProtocolVersion, {event_arrived, Event}) ->
   handle(ProtocolVersion, {event_arrived, Event, false});
 handle(ProtocolVersion, {event_arrived, Event, SecondTry}) ->
   EventType = proplists:get_value(type, Event),
-  ?info("event_arrived: ~p, ~p", [EventType, SecondTry]),
   case ets:lookup(?EVENT_TREES_MAPPING, EventType) of
     [] ->
       case SecondTry of
@@ -108,8 +87,7 @@ handle(ProtocolVersion, {event_arrived, Event, SecondTry}) ->
         case EventToTreeMapping of
           {tree, TreeId} ->
             % forward event to subprocess tree
-            ?info("forward to tree, ~p", [EventType]),
-            gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {final_stage_tree, TreeId, Event}});
+            gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, ProtocolVersion, {final_stage_tree, TreeId, Event}});
           {standard, HandlerFun} ->
             HandlerFun(Event)
         end
@@ -170,7 +148,7 @@ update_event_handler(ProtocolVersion, EventType) ->
             ((ProcessingMethod =:= tree) and (ets:lookup(?EVENT_HANDLERS_CACHE, TreeId) == [])) end,
           EventsHandlersForTree = lists:filter(CheckIfTreeNeeded, EventHandlersList),
           save_to_caches(EventType, EventHandlersList),
-          create_process_tree_for_handlers(EventsHandlersForTree),
+          create_process_tree_for_handlers(ProtocolVersion, EventsHandlersForTree),
           length(EventsHandlersForTree) > 0
       end;
     _ ->
@@ -179,28 +157,29 @@ update_event_handler(ProtocolVersion, EventType) ->
       ?warning("rule manager did not replied")
   end.
 
-create_process_tree_for_handlers(EventHandlersList) ->
-  lists:foreach(fun create_process_tree_for_handler/1, EventHandlersList).
+create_process_tree_for_handlers(ProtocolVersion, EventHandlersList) ->
+  CreateProcessTreeForHandler = fun(HandlersList) -> create_process_tree_for_handler(ProtocolVersion, HandlersList) end,
+  lists:foreach(CreateProcessTreeForHandler, EventHandlersList).
 
-create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = MapFun, handler_fun = HandlerFun, config = #event_stream_config{config = ActualConfig} = Config}) ->
+create_process_tree_for_handler(ProtocolVersion, #event_handler_item{tree_id = TreeId, map_fun = MapFun, handler_fun = HandlerFun, config = #event_stream_config{config = ActualConfig} = Config}) ->
   ProcFun = case ActualConfig of
               undefined ->
-                fun(ProtocolVersion, {final_stage_tree, TreeId2, Event}) ->
+                fun(_ProtocolVersion, {final_stage_tree, TreeId2, Event}) ->
                     HandlerFun(Event)
                 end;
               _ ->
                 FromConfigFun = fun_from_config(Config),
                 case element(1, ActualConfig) of
                   aggregator_config ->
-                    fun(ProtocolVersion, {final_stage_tree, TreeId2, Event}, EtsName) ->
-                      case FromConfigFun(ProtocolVersion, {final_stage_tree, TreeId2, Event}, EtsName) of
+                    fun(ProtocolVersion2, {final_stage_tree, TreeId2, Event}, EtsName) ->
+                      case FromConfigFun(ProtocolVersion2, {final_stage_tree, TreeId2, Event}, EtsName) of
                         non -> ok;
                         Ev -> HandlerFun(Ev)
                       end
                     end;
                   _ ->
-                    fun(ProtocolVersion, {final_stage_tree, TreeId2, Event}) ->
-                      case FromConfigFun(ProtocolVersion, {final_stage_tree, TreeId2, Event}) of
+                    fun(ProtocolVersion2, {final_stage_tree, TreeId2, Event}) ->
+                      case FromConfigFun(ProtocolVersion2, {final_stage_tree, TreeId2, Event}) of
                         non -> ok;
                         Ev -> HandlerFun(Ev)
                       end
@@ -213,7 +192,7 @@ create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = 
   end,
 
   RM = get_request_map_fun(),
-  DM = get_disp_map_fun(),
+  DM = get_disp_map_fun(ProtocolVersion),
 
   Node = erlang:node(self()),
 
@@ -225,7 +204,6 @@ create_process_tree_for_handler(#event_handler_item{tree_id = TreeId, map_fun = 
      _ -> gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM})
     end
   end.
-%%   nodes_manager:wait_for_cluster_cast({cluster_rengine, Node}),
 
 fun_from_config(#event_stream_config{config = ActualConfig, wrapped_config = WrappedConfig}) ->
   WrappedFun = case WrappedConfig of
@@ -255,7 +233,6 @@ fun_from_config(#event_stream_config{config = ActualConfig, wrapped_config = Wra
             FieldValue = proplists:get_value(FieldName, ActualEvent, {}),
             FunFieldName = ActualConfig#aggregator_config.fun_field_name,
             Incr = proplists:get_value(FunFieldName, ActualEvent, 1),
-            ?info("-------- Aggregator fun incr: ~p, ~p, ~p", [Incr, FieldName, FieldValue]),
 
             case FieldValue of
               FieldValue2 when not is_tuple(FieldValue2) ->
@@ -265,14 +242,12 @@ fun_from_config(#event_stream_config{config = ActualConfig, wrapped_config = Wra
                 NewValue = Val + Incr,
                 case NewValue >= ActualConfig#aggregator_config.threshold of
                   true ->
-                    ?info("-------- Aggregator fun EMIT new Value: TRUE: ~p", [node()]),
                     ets:insert(EtsName, {Key, 0}),
                     case proplists:get_value(ans_pid, ActualEvent) of
                       undefined -> [{FieldName, FieldValue}, {FunFieldName, NewValue}];
                       _ -> [{FieldName, FieldValue}, {FunFieldName, NewValue}, {ans_pid, proplists:get_value(ans_pid, ActualEvent)}]
                     end;
                   _ ->
-                    ?info("-------- Aggregator fun new Value: FALSE: ~p", [node()]),
                     ets:insert(EtsName, {Key, NewValue}),
                     non
                 end;
@@ -310,14 +285,14 @@ get_request_map_fun() ->
       non
   end.
 
-get_disp_map_fun() ->
+get_disp_map_fun(ProtocolVersion) ->
   fun({final_stage_tree, TreeId, Event}) ->
     EventHandlerFromEts = ets:lookup(?EVENT_HANDLERS_CACHE, TreeId),
     case EventHandlerFromEts of
       [] ->
         % if we proceeded here it may be the case, when final_stage_tree is being processed by another node and
         % this node does not have the most recent version of handler for given event. So try to update
-        update_event_handler(1, proplists:get_value(type, Event)),
+        update_event_handler(ProtocolVersion, proplists:get_value(type, Event)),
         EventHandler = ets:lookup(?EVENT_HANDLERS_CACHE, TreeId),
 
         case EventHandler of
@@ -334,240 +309,3 @@ get_disp_map_fun() ->
     (_) ->
       non
   end.
-
-%% For test purposes
-register_mkdir_handler() ->
-  EventHandler = fun(#mkdir_event{user_id = UserId, ans_pid = AnsPid}) ->
-    ?info("Mkdir EventHandler ~p", [node(self())]),
-    delete_file("plgmsitko/todelete")
-  end,
-
-  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler}, %, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = ProcessingConfig},
-
-  EventFilter = #eventfilterconfig{field_name = "type", desired_value = "mkdir_event"},
-  EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {mkdir_event, EventItem, EventFilterConfig}}}).
-
-%% For test purposes
-register_mkdir_handler_aggregation(InitCounter) ->
-  EventHandler = fun(#mkdir_event{user_id = UserId, ans_pid = AnsPid}) ->
-    ?info("Mkdir EventHandler aggregation ~p", [node(self())]),
-    delete_file("plgmsitko/todelete")
-  end,
-
-  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
-
-  EventFilter = #eventfilterconfig{field_name = "type", desired_value = "mkdir_event"},
-  EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
-
-  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = InitCounter, sum_field_name = "count"},
-  EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {mkdir_event, EventItem, EventAggregatorConfig}}}).
-
-%% For test purposes
-register_write_event_handler(InitCounter) ->
-  EventHandler = fun(Event) ->
-    ?info("Write EventHandler ~p", [node(self())]),
-    UserDn = proplists:get_value(user_dn, Event),
-    FuseId = proplists:get_value(fuse_id, Event),
-    case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
-      true ->
-        gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {event_arrived, [{type, quota_exceeded_event}, {user_dn, UserDn}, {fuse_id, FuseId}]}}),
-        ?info("Quota exceeded event emited");
-      _ ->
-        ok
-    end
-  end,
-
-  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
-
-  EventFilter = #eventfilterconfig{field_name = "type", desired_value = "write_event"},
-  EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
-
-  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = InitCounter, sum_field_name = "count"},
-  EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {write_event, EventItem, EventAggregatorConfig}}}).
-
-%% For test purposes
-register_quota_exceeded_handler() ->
-  EventHandler = fun(Event) ->
-    UserDn = proplists:get_value(user_dn, Event),
-    ?info("quota exceeded event for user: ~p", [UserDn]),
-    worker_host:send_to_user({dn, UserDn}, #atom{value = "write_disabled"}, "communication_protocol", 1),
-    gen_server:cast({global, ?CCM}, {update_user_write_enabled, UserDn, false})
-  end,
-  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {quota_exceeded_event, EventItem}}}).
-
-%% For test purposes
-register_rm_event_handler() ->
-  EventHandler = fun(Event) ->
-    ?info("RmEvent Handler"),
-    QuotaExceededFn = fun() ->
-        UserDn = proplists:get_value(user_dn, Event),
-        case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
-          false ->
-            worker_host:send_to_user({dn, UserDn}, #atom{value = "write_enabled"}, "communication_protocol", 1),
-            gen_server:cast({global, ?CCM}, {update_user_write_enabled, UserDn, true}),
-            false;
-          _ ->
-            true
-        end
-    end,
-
-    Exceeded = QuotaExceededFn(),
-
-    %% if quota is exceeded check quota one more time after 5s - in meanwhile db view might get reloaded
-    case Exceeded of
-      true ->
-        spawn(fun() ->
-          receive
-            _ -> ok
-          after 5000 ->
-            QuotaExceededFn()
-          end
-        end);
-      _ ->
-        ok
-    end
-  end,
-
-  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
-  EventFilter = #eventfilterconfig{field_name = "type", desired_value = "rm_event"},
-  EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {rm_event, EventItem, EventFilterConfig}}}).
-
-%% For test purposes
-send_mkdir_event() ->
-  MkdirEvent = #mkdir_event{user_id = "123"},
-  gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {event_arrived, MkdirEvent}}).
-
-%% For test purposes
-delete_file(FilePath) ->
-  rpc:call(node(), dao_lib, apply, [dao_vfs, remove_file, [FilePath], 1]).
-
-%% For test purposes
-change_quota(UserLogin, NewQuotaInBytes) ->
-  {ok, UserDoc} = user_logic:get_user({login, UserLogin}),
-  user_logic:update_quota(UserDoc, #quota{size = NewQuotaInBytes}).
-
-register_for_write_stats(Bytes) ->
-  EventHandler = fun(Event) ->
-    ?info("Write EventHandler for stats"),
-    Count = proplists:get_value(count, Event),
-    ?info("-----> Stats: ~p", [Count])
-  end,
-
-  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
-
-  EventFilter = #eventfilterconfig{field_name = "type", desired_value = "write_event"},
-  EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
-
-  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = Bytes, sum_field_name = "bytes"},
-  EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
-
-  EventTransformer = #eventtransformerconfig{field_names_to_replace = ["type"], values_to_replace = ["write_event"], new_values = ["write_for_stats"]},
-  EventTransformerConfig = #eventstreamconfig{transformer_config = EventTransformer, wrapped_config = EventAggregatorConfig},
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {write_for_stats, EventItem, EventTransformerConfig}}}).
-
-register_for_write_stats2(Bytes) ->
-  EventHandler = fun(Event) ->
-    ?info("Write EventHandler for stats2"),
-    NewEvent1 = proplists:delete(type, Event),
-    QuotaEvent = [{type, quota_write_event} | NewEvent1],
-    gen_server:call(?Dispatcher_Name, {cluster_rengine, ?ProtocolVersion, {event_arrived, QuotaEvent}})
-  end,
-
-  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
-
-  EventFilter = #eventfilterconfig{field_name = "type", desired_value = "write_event"},
-  EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
-
-  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = Bytes, sum_field_name = "bytes"},
-  EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
-
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {write_event, EventItem, EventAggregatorConfig}}}).
-
-register_for_quota_events(WriteStatsEventsMultiplier) ->
-  EventHandler = fun(Event) ->
-    ?info("Write EventHandler2 ~p", [node(self())]),
-    UserDn = proplists:get_value(user_dn, Event),
-    case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
-      true ->
-        gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {event_arrived, [{type, quota_exceeded_event}, {user_dn, UserDn}]}}),
-        ?info("Quota exceeded event emited");
-      _ ->
-        ok
-    end
-  end,
-
-  EventHandlerMapFun = fun(WriteEv) ->
-    UserDnString = proplists:get_value(user_dn, WriteEv),
-    case UserDnString of
-      undefined -> ok;
-      _ -> string:len(UserDnString)
-    end
-  end,
-
-  EventHandlerDispMapFun = fun(WriteEv) ->
-    UserDnString = proplists:get_value(user_dn, WriteEv),
-    case UserDnString of
-      undefined -> ok;
-      _ ->
-        UserIdInt = string:len(UserDnString),
-        UserIdInt div 10
-    end
-  end,
-  Config = #event_stream_config{config = #aggregator_config{field_name = user_dn, fun_field_name = "_count", threshold = WriteStatsEventsMultiplier}},
-  EventItem = #event_handler_item{processing_method = tree, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = Config},
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {quota_write_event, EventItem}}}).
-
-register_for_read_stats(Bytes) ->
-  EventHandler = fun(Event) ->
-    ?info("Read EventHandler for stats"),
-    Count = proplists:get_value(count, Event),
-    ?info("-----> Stats: ~p", [Count])
-  end,
-
-  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
-
-  EventFilter = #eventfilterconfig{field_name = "type", desired_value = "read_event"},
-  EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
-
-  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = Bytes, sum_field_name = "bytes"},
-  EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
-
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {read_event, EventItem, EventAggregatorConfig}}}).
-
-%% For test purposes
-prepare(QuotaBytes, StatsBytes) ->
-  register_write_event_handler(2),
-  timer:sleep(100),
-  register_quota_exceeded_handler(),
-  timer:sleep(100),
-  register_rm_event_handler(),
-  timer:sleep(100),
-  register_for_write_stats(StatsBytes),
-  change_quota("plgmsitko", QuotaBytes).
-
-prepare2(QuotaBytes, StatsBytes) ->
-  register_quota_exceeded_handler(),
-  ?info("------ prepare2 bazinga 1"),
-  timer:sleep(100),
-  register_rm_event_handler(),
-  ?info("------ prepare2 bazinga 2"),
-  timer:sleep(100),
-  register_for_write_stats2(StatsBytes),
-  timer:sleep(100),
-  register_for_quota_events(2),
-  timer:sleep(100),
-  ?info("------ prepare2 bazinga 3"),
-  register_for_read_stats(StatsBytes),
-  ?info("------ prepare2 bazinga 4"),
-  change_quota("plgmsitko", QuotaBytes),
-  ?info("------ prepare2 bazinga 5").
-
-
-send_push_msg() ->
-  TestAtom = #atom{value = "test_atom2"},
-  worker_host:send_to_user({uuid, "20000"}, TestAtom, "communication_protocol", 1).
