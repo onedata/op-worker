@@ -1191,7 +1191,7 @@ fs_remove_dir(DirPath) ->
                 fun(Item) ->
                     fs_remove(item_path(Item))
                 end, ItemList),
-            logical_files_manager:rmdir(DirPath).
+            logical_files_manager:rmdir(DirPath)
     end.
 
 
