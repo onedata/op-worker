@@ -49,18 +49,15 @@ init(_Args) ->
   end,
 
   ets:insert(?RULE_MANAGER_ETS, {save_event, [FunctionOnSave]}),
-  ?info("@@@@@@ rulemanager init"),
 	[].
 
 handle(_ProtocolVersion, ping) ->
-  ?info("some pong"),
   pong;
 
 handle(_ProtocolVersion, healthcheck) ->
 	ok;
 
 handle(_ProtocolVersion, event_producer_config_request) ->
-  ?info("--------- event producer config request"),
   Configs = case ets:lookup(?PRODUCERS_RULES_ETS, producer_configs) of
               [{_Key, ProducerConfigs}] -> ProducerConfigs;
               _ -> []
@@ -97,9 +94,7 @@ handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem, Produ
     [] -> ets:insert(?PRODUCERS_RULES_ETS, {producer_configs, [ProducerConfig]});
     [{_, ListOfConfigs}] -> ets:insert(?PRODUCERS_RULES_ETS, {producer_configs, [ProducerConfig | ListOfConfigs]})
   end,
-%%   gen_server:call(?Dispatcher_Name, {cluster_regine, 1, {clear_cache, EventType}}),
 
-  ?info("--------- Clear EVENT_TREES_MAPPING. ~p", [EventType]),
   gen_server:cast({global, ?CCM}, {clear_ets, ?EVENT_TREES_MAPPING, EventType}),
 
   notify_producers(ProducerConfig, EventType),
@@ -144,8 +139,6 @@ notify_producers(ProducerConfig, EventType) ->
   ?info("new Notify producers: ~p", [UniqueFuseIds]),
 
   lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, ProducerConfig, "fuse_messages") end, UniqueFuseIds),
-
-  ?info("After new Notify producers: ~p", [UniqueFuseIds]),
 
   gen_server:cast({global, ?CCM}, {notify_lfm, EventType, true}).
 

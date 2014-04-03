@@ -41,7 +41,7 @@
 %% functions for manual tests
 -export([register_mkdir_handler/0, register_mkdir_handler_aggregation/1, register_write_event_handler/1, register_quota_exceeded_handler/0,
          send_mkdir_event/0, delete_file/1, change_quota/2, register_rm_event_handler/0, prepare/2, prepare2/2, register_for_write_stats/1,
-         register_for_write_stats2/1, register_for_read_stats/1, register_for_quota_events/1]).
+         register_for_write_stats2/1, register_for_read_stats/1, register_for_quota_events/1, send_push_msg/0]).
 
 -ifdef(TEST).
 -compile([export_all]).
@@ -492,15 +492,15 @@ register_for_write_stats2(Bytes) ->
 
 register_for_quota_events(WriteStatsEventsMultiplier) ->
   EventHandler = fun(Event) ->
-    ?info("Write EventHandler2 ~p", [node(self())])
-%%     UserDn = proplists:get_value(user_dn, Event)
-%%     case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
-%%       true ->
-%%         gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {event_arrived, [{type, quota_exceeded_event}, {user_dn, UserDn}]}}),
-%%         ?info("Quota exceeded event emited");
-%%       _ ->
-%%         ok
-%%     end
+    ?info("Write EventHandler2 ~p", [node(self())]),
+    UserDn = proplists:get_value(user_dn, Event),
+    case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
+      true ->
+        gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {event_arrived, [{type, quota_exceeded_event}, {user_dn, UserDn}]}}),
+        ?info("Quota exceeded event emited");
+      _ ->
+        ok
+    end
   end,
 
   EventHandlerMapFun = fun(WriteEv) ->
@@ -568,3 +568,8 @@ prepare2(QuotaBytes, StatsBytes) ->
   ?info("------ prepare2 bazinga 4"),
   change_quota("plgmsitko", QuotaBytes),
   ?info("------ prepare2 bazinga 5").
+
+
+send_push_msg() ->
+  TestAtom = #atom{value = "test_atom2"},
+  worker_host:send_to_user({uuid, "20000"}, TestAtom, "communication_protocol", 1).

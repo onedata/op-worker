@@ -282,7 +282,6 @@ handle_cast(stop_load_logging, State) ->
   {noreply, State};
 
 handle_cast({notify_lfm, EventType, Enabled}, State) ->
-  ?info("node_manager notify_lfm -------"),
   case Enabled of
     true -> ets:insert(?LFM_EVENT_PRODUCTION_ENABLED_ETS, {EventType, true});
     _ -> ets:delete(?LFM_EVENT_PRODUCTION_ENABLED_ETS, EventType)
@@ -297,7 +296,6 @@ handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
   {noreply, State};
 
 handle_cast({clear_ets, EtsName, Key}, State) ->
-  ?info("clear ets ~p:~p", [EtsName, Key]),
   ets:delete(EtsName, Key),
   {noreply, State};
 
