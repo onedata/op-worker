@@ -48,9 +48,15 @@ static RemoteLogLevel glogToLevel(google::LogSeverity glevel)
 
 RemoteLogWriter::RemoteLogWriter()
     : m_pid(getpid())
+    , m_thresholdLevel(protocol::logging::NONE)
 {
     m_thread = boost::thread(&RemoteLogWriter::writeLoop, this);
-    m_thresholdLevel = protocol::logging::NONE;
+}
+
+RemoteLogWriter::~RemoteLogWriter()
+{
+    m_thread.interrupt(); // the thread will be interrupted at next buffer wait
+    m_thread.join();
 }
 
 void RemoteLogWriter::buffer(const RemoteLogLevel level,

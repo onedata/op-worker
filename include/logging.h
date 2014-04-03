@@ -73,8 +73,14 @@ class RemoteLogWriter
 public:
     /**
      * Constructor. Sets the PID value sent with log messages to getpid().
+     * Runs the message write loop in a separate thread.
      */
     RemoteLogWriter();
+
+    /**
+     * Destructor. Interrupts and joins the write-loop thread.
+     */
+    ~RemoteLogWriter();
 
     /**
      * Saves a message to be sent to a cluster in a buffer. The buffer is
