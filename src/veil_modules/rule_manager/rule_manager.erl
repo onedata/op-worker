@@ -99,7 +99,9 @@ handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem, Produ
   end,
 %%   gen_server:call(?Dispatcher_Name, {cluster_regine, 1, {clear_cache, EventType}}),
 
-  worker_host:clear_cache({?EVENT_TREES_MAPPING, EventType}),
+  ?info("--------- Clear EVENT_TREES_MAPPING. ~p", [EventType]),
+  gen_server:cast({global, ?CCM}, {clear_ets, ?EVENT_TREES_MAPPING, EventType}),
+
   notify_producers(ProducerConfig, EventType),
 
   ?info("New handler for event ~p registered.", [EventType]),

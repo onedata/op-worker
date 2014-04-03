@@ -431,11 +431,7 @@ handle_cast({synch_cache_clearing, Cache, ReturnPid}, State) ->
 handle_cast({notify_lfm, EventType, Enabled}, State) ->
   ?info("cluser_manager notify_lfm -------"),
   NotifyFn = fun(Node) ->
-%%     try
       gen_server:cast({?Node_Manager_Name, Node}, {notify_lfm, EventType, Enabled})
-%%     catch
-%%       E1:E2 -> ?warning("cannot notify lfm node: ~p, Error: ~p:~p", [Node, E1, E2])
-%%     end
   end,
 
   lists:foreach(NotifyFn, State#cm_state.nodes),
@@ -443,11 +439,16 @@ handle_cast({notify_lfm, EventType, Enabled}, State) ->
 
 handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
   NotifyFn = fun(Node) ->
-%%     try
       gen_server:cast({?Node_Manager_Name, Node}, {update_user_write_enabled, UserDn, Enabled})
-%%     catch
-%%       E1:E2 -> ?warning("cannot notify lfm node: ~p, Error: ~p:~p", [Node, E1, E2])
-%%     end
+  end,
+
+  lists:foreach(NotifyFn, State#cm_state.nodes),
+  {noreply, State};
+
+handle_cast({clear_ets, EtsName, Key}, State) ->
+  ?info("clear_ets -------: ~p", [Key]),
+  NotifyFn = fun(Node) ->
+    gen_server:cast({?Node_Manager_Name, Node}, {clear_ets, EtsName, Key})
   end,
 
   lists:foreach(NotifyFn, State#cm_state.nodes),
@@ -1446,6 +1447,7 @@ register_dispatcher_map(Module, Map, MapsList) ->
   NewState :: term().
 %% ====================================================================
 clear_cache(State, Cache) ->
+  ?info("----- >>>>>> INSIDE clear cache"),
   Clear = fun(Node, {TmpState, TmpWorkersFound}) ->
     try
       ok = gen_server:call({?Node_Manager_Name, Node}, {clear_cache, Cache}, 500),

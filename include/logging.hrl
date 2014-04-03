@@ -9,6 +9,9 @@
 %% @end
 %% ===================================================================
 
+-ifndef(LOGGING_HRL).
+-define(LOGGING_HRL, 1).
+
 % List of available loglevels
 -define(LOGLEVEL_LIST, [debug, info, notice, warning, error, critical, alert, emergency]).
 
@@ -109,3 +112,5 @@
             _ -> [{dn, get(user_id)}]
         end
 ).
+
+-endif.

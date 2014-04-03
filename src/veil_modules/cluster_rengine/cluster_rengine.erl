@@ -48,8 +48,8 @@
 -endif.
 
 init(_Args) ->
-  worker_host:create_simple_cache(?EVENT_HANDLERS_CACHE),
-  worker_host:create_simple_cache(?EVENT_TREES_MAPPING),
+  ets:new(?EVENT_HANDLERS_CACHE, [named_table, public, set, {read_concurrency, true}]),
+  ets:new(?EVENT_TREES_MAPPING, [named_table, public, set, {read_concurrency, true}]),
 	[].
 
 handle(_ProtocolVersion, ping) ->
@@ -392,9 +392,8 @@ register_write_event_handler(InitCounter) ->
 register_quota_exceeded_handler() ->
   EventHandler = fun(Event) ->
     UserDn = proplists:get_value(user_dn, Event),
-    FuseId = proplists:get_value(fuse_id, Event),
     ?info("quota exceeded event for user: ~p", [UserDn]),
-    send_to_user({dn, UserDn}, #atom{value = "write_disabled"}, "communication_protocol", 1),
+    worker_host:send_to_user({dn, UserDn}, #atom{value = "write_disabled"}, "communication_protocol", 1),
     gen_server:cast({global, ?CCM}, {update_user_write_enabled, UserDn, false})
   end,
   EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
@@ -408,7 +407,7 @@ register_rm_event_handler() ->
         UserDn = proplists:get_value(user_dn, Event),
         case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
           false ->
-            send_to_user({dn, UserDn}, #atom{value = "write_enabled"}, "communication_protocol", 1),
+            worker_host:send_to_user({dn, UserDn}, #atom{value = "write_enabled"}, "communication_protocol", 1),
             gen_server:cast({global, ?CCM}, {update_user_write_enabled, UserDn, true}),
             false;
           _ ->
@@ -493,16 +492,15 @@ register_for_write_stats2(Bytes) ->
 
 register_for_quota_events(WriteStatsEventsMultiplier) ->
   EventHandler = fun(Event) ->
-    ?info("Write EventHandler2 ~p", [node(self())]),
-    UserDn = proplists:get_value(user_dn, Event),
-    FuseId = proplists:get_value(fuse_id, Event),
-    case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
-      true ->
-        gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {event_arrived, [{type, quota_exceeded_event}, {user_dn, UserDn}, {fuse_id, FuseId}]}}),
-        ?info("Quota exceeded event emited");
-      _ ->
-        ok
-    end
+    ?info("Write EventHandler2 ~p", [node(self())])
+%%     UserDn = proplists:get_value(user_dn, Event)
+%%     case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
+%%       true ->
+%%         gen_server:call({?Dispatcher_Name, node()}, {cluster_rengine, 1, {event_arrived, [{type, quota_exceeded_event}, {user_dn, UserDn}]}}),
+%%         ?info("Quota exceeded event emited");
+%%       _ ->
+%%         ok
+%%     end
   end,
 
   EventHandlerMapFun = fun(WriteEv) ->
@@ -570,18 +568,3 @@ prepare2(QuotaBytes, StatsBytes) ->
   ?info("------ prepare2 bazinga 4"),
   change_quota("plgmsitko", QuotaBytes),
   ?info("------ prepare2 bazinga 5").
-
-%% it will be replaced with another function when VFS-483 is merged
-send_to_user(UserKey, Message, MessageDecoder, ProtocolVersion) ->
-  case user_logic:get_user(UserKey) of
-    {ok, UserDoc} ->
-      case dao_lib:apply(dao_cluster, get_sessions_by_user, [UserDoc#veil_document.uuid], ProtocolVersion) of
-        {ok, FuseIds} ->
-          lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, Message, MessageDecoder) end, FuseIds),
-          ok;
-        {error, Error} ->
-          ?warning("cannot get fuse ids for user")
-      end;
-    {error, Error} ->
-      ?warning("cannot get user in send_to_user")
-  end.
