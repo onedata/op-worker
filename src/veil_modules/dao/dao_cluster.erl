@@ -349,7 +349,7 @@ clear_sessions() ->
         {ok, Sessions} ->
             %% [{#veil_document{record = #fuse_session}, {Pid, MRef}}]
             ?info("##old fuse sessions: ~p",[length(Sessions)]),
-            Splitted = split_list(Sessions,10000),
+            Splitted = split_list(Sessions,1000),
             [clear_sessions(Part) || Part <- Splitted],
             ok;
         {error, Reason} ->
