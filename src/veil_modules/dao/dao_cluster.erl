@@ -341,22 +341,26 @@ list_connection_info({by_session_id, SessID}) ->
     ok | no_return().
 %% ====================================================================
 clear_sessions() ->
-    SPid = self(),
     CurrentTime = fslogic_utils:time(),
     ?debug("##FUSE session cleanup started. Time: ~p", [CurrentTime]),
 
     %% List of worker processes that validates sessions in background
-    PidList =
-        case list_fuse_sessions({by_valid_to, CurrentTime}) of
-            {ok, Sessions} ->
-                %% [{#veil_document{record = #fuse_session}, {Pid, MRef}}]
-	            ?info("##old fuse sessions: ~p",[length(Sessions)]),
-                [{X, spawn_monitor(fun() -> SPid ! {self(), check_session(X)} end)} || X <- Sessions];
-            {error, Reason} ->
-                ?error("##Cannot cleanup old fuse sessions. Expired session list fetch failed: ~p", [Reason]),
-                exit(Reason)
-        end,
+    case list_fuse_sessions({by_valid_to, CurrentTime}) of
+        {ok, Sessions} ->
+            %% [{#veil_document{record = #fuse_session}, {Pid, MRef}}]
+            ?info("##old fuse sessions: ~p",[length(Sessions)]),
+            Splitted = split_list(Sessions,10000),
+            [clear_sessions(Part) || Part <- Splitted],
+            ok;
+        {error, Reason} ->
+            ?error("##Cannot cleanup old fuse sessions. Expired session list fetch failed: ~p", [Reason]),
+            exit(Reason)
+    end.
 
+clear_sessions(Sessions) ->
+	?info("##old fuse sessions burst: ~p",[length(Sessions)]),
+	SPid = self(),
+	PidList = [{X, spawn_monitor(fun() -> SPid ! {self(), check_session(X)} end)} || X <- Sessions],
     %% Helper function that fetches and processes check_session result from given worker process
     ProcessSession =
         fun(#veil_document{uuid = SessID}, Pid) ->
@@ -467,3 +471,13 @@ check_connection(Connection = #veil_document{record = #connection_info{session_i
 			?error("Connection pid unknown"),
 			ok % we cannot return error since we don't know whether connection is ok or not
 	end.
+
+split_list(List, Max) ->
+	element(1, lists:foldl(fun
+		(E, {[Buff|Acc], 1}) ->
+			{[[E],Buff|Acc], Max};
+		(E, {[Buff|Acc], C}) ->
+			{[[E|Buff]|Acc], C-1};
+		(E, {[], _}) ->
+			{[[E]], Max}
+	end, {[], Max}, List)).
