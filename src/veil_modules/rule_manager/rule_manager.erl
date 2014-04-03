@@ -14,6 +14,11 @@
 -module(
 rule_manager).
 -behaviour(worker_plugin_behaviour).
+-include("logging.hrl").
+-include("registered_names.hrl").
+-include("veil_modules/dao/dao_helper.hrl").
+-include("veil_modules/dao/dao.hrl").
+-include("communication_protocol_pb.hrl").
 
 -include("logging.hrl").
 -include("registered_names.hrl").
@@ -27,7 +32,7 @@ rule_manager).
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([init/1, handle/2, cleanup/0]).
+-export([init/1, handle/2, cleanup/0, send_push_msg/1]).
 
 -define(RULE_MANAGER_ETS, rule_manager).
 -define(PRODUCERS_RULES_ETS, producers_rules).
@@ -111,6 +116,18 @@ handle(_ProtocolVersion, {get_event_handlers, EventType}) ->
 
 handle(_ProtocolVersion, _Msg) ->
   ok.
+
+on_complete(Message, SuccessFuseIds, FailFuseIds) ->
+  ?info("oncomplete called"),
+  case FailFuseIds of
+    [] -> ?info("------- ack success --------");
+    _ -> ?info("-------- ack fail, sucess: ~p, fail: ~p ---------", [length(SuccessFuseIds), length(FailFuseIds)])
+  end.
+
+send_push_msg(ProtocolVersion) ->
+  TestAtom = #atom{value = "test_atom2"},
+  OnComplete = fun(SuccessFuseIds, FailFuseIds) -> on_complete(TestAtom, SuccessFuseIds, FailFuseIds) end,
+  worker_host:send_to_user_with_ack({uuid, "20000"}, TestAtom, "communication_protocol", OnComplete, ProtocolVersion).
 
 cleanup() ->
 	ok.

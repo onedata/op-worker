@@ -176,10 +176,7 @@ create_user(Login, Name, Teams, Email, DnList) ->
 %% @doc
 %% Retrieves user from DB by login, email, uuid, DN or rdnSequence proplist. Returns veil_document wrapping a #user record.
 %% @end
--spec get_user(Key :: {login, Login :: string()} |
-{email, Email :: string()} |
-{uuid, UUID :: user()} |
-{dn, DN :: string()} |
+-spec get_user(Key :: user_key() |
 {rdnSequence, [#'AttributeTypeAndValue'{}]}) ->
     {ok, user_doc()} | {error, any()}.
 %% ====================================================================
@@ -195,10 +192,7 @@ get_user(Key) ->
 %% @doc
 %% Removes user from DB by login.
 %% @end
--spec remove_user(Key :: {login, Login :: string()} |
-{email, Email :: string()} |
-{uuid, UUID :: user()} |
-{dn, DN :: string()} |
+-spec remove_user(Key :: user_key() |
 {rdnSequence, [#'AttributeTypeAndValue'{}]}) ->
     Result :: ok | {error, any()}.
 %% ====================================================================

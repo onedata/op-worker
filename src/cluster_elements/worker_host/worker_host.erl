@@ -18,16 +18,18 @@
 -include("registered_names.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include("logging.hrl").
+-include("veil_modules/dao/dao_types.hrl").
 
 -define(BORTER_CHILD_WAIT_TIME, 10000).
 -define(MAX_CHILD_WAIT_TIME, 60000000).
 -define(MAX_CALCULATION_WAIT_TIME, 10000000).
 -define(SUB_PROC_CACHE_CLEAR_TIME, 2000).
+-define(WAIT_FOR_ACK_MS, 4000).
 
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_link/3, stop/1, start_sub_proc/5, start_sub_proc/6, generate_sub_proc_list/1, generate_sub_proc_list/5, generate_sub_proc_list/6]).
+-export([start_link/3, stop/1, start_sub_proc/5, start_sub_proc/6, generate_sub_proc_list/1, generate_sub_proc_list/5, generate_sub_proc_list/6, send_to_user/4, send_to_user_with_ack/5]).
 -export([create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_sub_procs_cache/2, clear_sipmle_cache/3]).
 
 %% ====================================================================
@@ -85,22 +87,22 @@ stop(PlugIn) ->
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 init([PlugIn, PlugInArgs, LoadMemorySize]) ->
-    process_flag(trap_exit, true),
-    InitAns = PlugIn:init(PlugInArgs),
-    case InitAns of
-      IDesc when is_record(IDesc, initial_host_description) ->
-        Pid = self(),
-        DispatcherRequestMapState = case InitAns#initial_host_description.request_map of
-          non -> true;
-          _ ->
-            erlang:send_after(200, Pid, {timer, register_disp_map}),
-            false
-        end,
-        erlang:send_after(200, Pid, {timer, register_sub_proc_caches}),
-        {ok, #host_state{plug_in = PlugIn, request_map = InitAns#initial_host_description.request_map, sub_procs = InitAns#initial_host_description.sub_procs,
-        dispatcher_request_map = InitAns#initial_host_description.dispatcher_request_map, dispatcher_request_map_ok = DispatcherRequestMapState, plug_in_state = InitAns#initial_host_description.plug_in_state, load_info = {[], [], 0, LoadMemorySize}}};
-      _ -> {ok, #host_state{plug_in = PlugIn, plug_in_state = InitAns, load_info = {[], [], 0, LoadMemorySize}}}
-    end.
+  process_flag(trap_exit, true),
+  InitAns = PlugIn:init(PlugInArgs),
+  case InitAns of
+    IDesc when is_record(IDesc, initial_host_description) ->
+      Pid = self(),
+      DispatcherRequestMapState = case InitAns#initial_host_description.request_map of
+        non -> true;
+        _ ->
+          erlang:send_after(200, Pid, {timer, register_disp_map}),
+          false
+      end,
+      erlang:send_after(200, Pid, {timer, register_sub_proc_caches}),
+      {ok, #host_state{plug_in = PlugIn, request_map = InitAns#initial_host_description.request_map, sub_procs = InitAns#initial_host_description.sub_procs,
+      dispatcher_request_map = InitAns#initial_host_description.dispatcher_request_map, dispatcher_request_map_ok = DispatcherRequestMapState, plug_in_state = InitAns#initial_host_description.plug_in_state, load_info = {[], [], 0, LoadMemorySize}}};
+    _ -> {ok, #host_state{plug_in = PlugIn, plug_in_state = InitAns, load_info = {[], [], 0, LoadMemorySize}}}
+  end.
 
 %% handle_call/3
 %% ====================================================================
@@ -208,6 +210,23 @@ handle_cast({asynch, ProtocolVersion, Msg}, State) ->
 	PlugIn = State#host_state.plug_in,
   NewSubProcList = proc_standard_request(State#host_state.request_map, State#host_state.sub_procs, PlugIn, ProtocolVersion, Msg, non, non),
 	{noreply, State#host_state{sub_procs = NewSubProcList}};
+
+handle_cast({asynch, ProtocolVersion, Msg, MsgId, FuseID}, State) ->
+  HandlerTuple = ets:lookup(?ACK_HANDLERS, MsgId),
+  case HandlerTuple of
+    [{_, {Callback, SuccessFuseIds, FailFuseIds, Length, Pid}}] ->
+      NewSuccessFuseIds = [FuseID | SuccessFuseIds],
+      NewFailFuseIds = lists:delete(FuseID, FailFuseIds),
+      ets:insert(?ACK_HANDLERS, {MsgId, {Callback, NewSuccessFuseIds, NewFailFuseIds, Length, Pid}}),
+      case length(NewSuccessFuseIds) of
+        Length ->
+          % we dont need to cancel timer set with send_after which sends the same message - receiver process should be dead after call_on_complete_callback
+          Pid ! {call_on_complete_callback};
+        _ -> ok
+      end;
+    _ -> ok
+  end,
+  {noreply, State};
 
 handle_cast({sequential_synch, ProtocolVersion, Msg, MsgId, ReplyTo}, State) ->
     PlugIn = State#host_state.plug_in,
@@ -847,6 +866,64 @@ del_sub_procs(Key, Name) ->
     _ -> ok
   end,
   del_sub_procs(ets:next(Name, Key), Name).
+
+%% send_to_user/4
+%% ====================================================================
+%% @doc Sends message to all active fuses belonging to user.
+-spec send_to_user(UserKey :: user_key(), Message :: term(), MessageDecoder :: string(), ProtocolVersion :: integer()) -> Result when
+  Result :: ok | {error, Error :: term()}.
+%% ====================================================================
+send_to_user(UserKey, Message, MessageDecoder, ProtocolVersion) ->
+  case user_logic:get_user(UserKey) of
+    {ok, UserDoc} ->
+      case dao_lib:apply(dao_cluster, get_sessions_by_user, [UserDoc#veil_document.uuid], ProtocolVersion) of
+        {ok, FuseIds} ->
+          lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, Message, MessageDecoder) end, FuseIds),
+          ok;
+        {error, Error} ->
+          ?warning("cannot get fuse ids for user")
+      end;
+    {error, Error} ->
+      ?warning("cannot get user in send_to_user")
+  end.
+
+%% send_to_user_with_ack/5
+%% ====================================================================
+%% @doc Sends message with ack to all active fuses belonging to user. OnCompleteCallback function will be called in
+%% newly created proces when all acks will come back or timeout is reached.
+-spec send_to_user_with_ack(UserKey :: user_key(), Message :: term(), MessageDecoder :: string(),
+    OnCompleteCallback :: fun((SuccessFuseIds :: list(), FailFuseIds :: list()) -> term()), ProtocolVersion :: integer()) -> Result when
+    Result :: ok | {error, Error :: term()}.
+%% ====================================================================
+send_to_user_with_ack(UserKey, Message, MessageDecoder, OnCompleteCallback, ProtocolVersion) ->
+  case user_logic:get_user(UserKey) of
+    {ok, UserDoc} ->
+      case dao_lib:apply(dao_cluster, get_sessions_by_user, [UserDoc#veil_document.uuid], ProtocolVersion) of
+        {ok, FuseIds} ->
+          MsgId = request_dispatcher:next_msg_id(),
+
+          Pid = spawn(fun() ->
+            receive
+              {call_on_complete_callback} ->
+                [{_Key, {_, SucessFuseIds, FailFuseIds, _Length, _Pid}}] = ets:lookup(?ACK_HANDLERS, MsgId),
+                ets:delete(?ACK_HANDLERS, MsgId),
+                OnCompleteCallback(SucessFuseIds, FailFuseIds)
+            end
+          end),
+
+          % we need to create and insert to ets ack handler before sending a push message
+          ets:insert(?ACK_HANDLERS, {MsgId, {OnCompleteCallback, [], FuseIds, length(FuseIds), Pid}}),
+
+          % now we can send messages to fuses
+          lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse_ack(FuseId, Message, MessageDecoder, MsgId) end, FuseIds),
+          erlang:send_after(?WAIT_FOR_ACK_MS, Pid, {call_on_complete_callback}),
+          ok;
+        {error, Error} ->
+          ?warning("cannot get fuse ids for user")
+      end;
+    {error, Error} ->
+      ?warning("cannot get user in send_to_user")
+  end.
 
 %% create_simple_cache/1
 %% ====================================================================

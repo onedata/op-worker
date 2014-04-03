@@ -40,7 +40,13 @@
 %% Local name of the process waiting for dns udp messages
 -define(DNS_UDP, dns_udp).
 
+%% name of ETS which contains event types that should be produced by logical files manager
 -define(LFM_EVENT_PRODUCTION_ENABLED_ETS, lfm_event_production_enabled_ets).
+
+%% name of ETS which contains user dn which excceded quota (used by logical files manager)
 -define(WRITE_DISABLED_USERS, write_disabled_users).
+
+%% name of ETS which contains ack handlers
+-define(ACK_HANDLERS, ack_handlers).
 
 -endif.
