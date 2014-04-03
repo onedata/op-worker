@@ -1152,18 +1152,13 @@ item_list_md5(ItemList) ->
 
 
 is_group_dir(Path) ->
-    case item_is_dir(Item) of
-        true ->
-            case FullPath of
-                "/groups" -> true;
-                "/groups" ++ Rest -> case string:rstr(Rest, "/") of
-                                1 -> true;
-                                _ -> false
-                            end;
-            _ -> false
-            end;
-        false ->
-            false
+    case Path of
+        "/groups" -> true;
+        "/groups" ++ Rest -> case string:rstr(Rest, "/") of
+                        1 -> true;
+                        _ -> false
+                    end;
+        _ -> false
     end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
