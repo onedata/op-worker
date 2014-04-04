@@ -16,7 +16,7 @@
 
 
 % How often shoul comet process check for changes in current dir
--define(AUTOREFRESH_PERIOD, 500).
+-define(AUTOREFRESH_PERIOD, 1000).
 
 % Item is either a file or a dir represented in manager
 -record(item, {id="", path="/", is_shared=false, attr=#fileattributes { } }).
