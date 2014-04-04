@@ -338,6 +338,36 @@ update_dn_list(#veil_document{record = UserInfo} = UserDoc, NewDnList) ->
         {error, Reason} -> {error, Reason}
     end.
 
+%% get_role/1
+%% ====================================================================
+%% @doc
+%% Convinience function to get user role from #veil_document encapsulating #user record.
+%% @end
+-spec get_role(User) -> Result when
+    User :: user_doc(),
+    Result :: atom().
+%% ====================================================================
+get_role(User) ->
+    User#veil_document.record#user.role.
+
+
+%% update_role/2
+%% ====================================================================
+%% @doc
+%% Update #veil_document encapsulating #user record with user role and save it to DB.
+%% @end
+-spec update_role(User, NewRole) -> Result when
+    User :: user_doc(),
+    NewRole :: atom(),
+    Result :: {ok, user_doc()} | {error, any()}.
+%% ====================================================================
+update_role(#veil_document{record = UserInfo} = UserDoc, NewRole) ->
+    NewDoc = UserDoc#veil_document{record = UserInfo#user{role = NewRole}},
+    case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
+        {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
+        {error, Reason} -> {error, Reason}
+    end.
+
 %% get_quota/1
 %% ====================================================================
 %% @doc
