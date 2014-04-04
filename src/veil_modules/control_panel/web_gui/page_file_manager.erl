@@ -15,7 +15,7 @@
 -include("veil_modules/fslogic/fslogic.hrl").
 
 
-% How often shoul comet process check for changes in current dir
+% How often should comet process check for changes in current dir
 -define(AUTOREFRESH_PERIOD, 1000).
 
 % Item is either a file or a dir represented in manager
