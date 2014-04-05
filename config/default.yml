@@ -19,13 +19,12 @@ vm_arguments:
   - argument:
       name: erl_max_ports
       description: Increase number of concurrent ports/sockets
-      value: -env ERL_MAX_PORTS 20000
+      value: -env ERL_MAX_PORTS 4096
 
   - argument:
       name: max_processes
       description: Increase number of processes
       value: +P 1000000
-
 
 
 veil_cluster_node_env:
@@ -286,13 +285,13 @@ veil_cluster_node_env:
       description: |
         This variable determinates how often FUSE sessions shall be checked (in seconds).
         Note that session will be discarded only when there are no connections active for the session.
-      value: 600 # 10min
+      value: 10800 # 3h
 
   - parameter:
        name: dao_fuse_cache_loop_time
        description: |
          This variable determinates how often DAO fuse cache maintnance process shall fire up all its jobs (in seconds).
-       value: 600 # 10min
+       value: 1800 # 30min
 
   - parameter:
        name: storage_cache_loop_time

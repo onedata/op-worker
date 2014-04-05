@@ -20,7 +20,6 @@
 new(_Id) -> 
     Hosts = basho_bench_config:get(cluster_hosts),
     CertFile = basho_bench_config:get(cert_file),
-	?INFO("cert_file: ~p",[CertFile]),
     Pong = #atom{value = "pong"},
     PongBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Pong)),
     PongAns = #answer{answer_status = "ok", worker_answer = PongBytes},

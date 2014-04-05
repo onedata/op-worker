@@ -348,7 +348,7 @@ list_records(#view_info{name = ViewName, design = DesignName, db_name = DbName},
               {ok, #view_result{total = length(Rows2), offset = 0, rows = FormattedRows2}};
           {error, _} = E -> throw(E);
             Other ->
-                lager:error("##dao_helper:query_view has returned unknown query result: ~p", [Other]),
+                lager:error("dao_helper:query_view has returned unknown query result: ~p", [Other]),
                 throw({unknown_query_result, Other})
         end.
 
@@ -550,14 +550,14 @@ doc_to_term(Field) when is_binary(Field) -> %% Binary type means that it is atom
 	    BinPref == 1 -> list_to_binary(string:sub_string(SField, length(?RECORD_FIELD_BINARY_PREFIX) + 1));
 	    AtomPref == 1 -> list_to_atom(string:sub_string(SField, length(?RECORD_FIELD_ATOM_PREFIX) + 1));
 	    PidPref == 1 ->
-		    PidString = string:sub_string(SField, length(?RECORD_FIELD_PID_PREFIX) + 1),
-		    try list_to_pid(PidString) of
-			    Pid -> Pid
-		    catch
-			    _:_Error ->
-				    ?warning("Cannot convert document to term: cannot read PID ~p. Node missing?", [PidString]),
-				    undefined
-		    end;
+		PidString = string:sub_string(SField, length(?RECORD_FIELD_PID_PREFIX) + 1),
+		try list_to_pid(PidString) of
+			Pid -> Pid
+		catch
+			_:_Error ->
+				?warning("Cannot convert document to term: cannot read PID ~p. Node missing?", [PidString]),
+				undefined
+		end;
 	    true -> SField
     end;
 doc_to_term(Field) when is_list(Field) ->
