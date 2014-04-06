@@ -33,8 +33,11 @@ init(_Type, Req, _Opts) ->
 handle(Req, State) ->
 	{Path, _} = cowboy_req:path(Req),
 	{Hostname, _} = cowboy_req:header(<<"host">>, Req),
-	?dump(<<Hostname/binary, Path/binary>>),
-	{ok, Req2} = cowboy_req:reply(301, [{<<"location">>, <<"https://", Hostname/binary, Path/binary>>}], <<"">>, Req),
+	{ok, Req2} = cowboy_req:reply(301, 
+		[
+			{<<"location">>, <<"https://", Hostname/binary, Path/binary>>}
+			{<<"content-type">>, <<"text/html">>}
+		], <<"">>, Req),
   	{ok, Req2, State}.
 
 
