@@ -22,7 +22,6 @@ title() -> "Manage account".
 
 %% This will be placed in the template instead of [[[page:body()]]] tag
 body() ->
-    ?dump(dfgnasdlfgfdsflg),
     gui_utils:apply_or_redirect(?MODULE, render_body, false).
 
 
@@ -74,7 +73,6 @@ main_table() ->
     maybe_display_dn_message(),
     maybe_display_helper_message(),
     User = wf:session(user_doc),
-    ?dump(User),
     #table{style = "border-width: 0px; width: auto;", rows = [
 
         #tablerow{cells = [
