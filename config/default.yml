@@ -195,6 +195,11 @@ veil_cluster_node_env:
       value: 100
 
   - parameter:
+      name: control_panel_number_of_http_acceptors
+      description: Number of accepting processes on port 80 (redirecting to https)
+      value: 50
+
+  - parameter:
       name: control_panel_max_keepalive
       description: Max time in sec to keep a connection alive
       value: 1

@@ -1,11 +1,11 @@
 %% ===================================================================
 %% @author Lukasz Opiola
-%% @copyright (C): 2013 ACK CYFRONET AGH
+%% @copyright (C): 2014 ACK CYFRONET AGH
 %% This software is released under the MIT license 
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module requests directed to http:// and returns a 304 redirect to https://.
+%% @doc: This module requests directed to http and returns a 301 redirect to https.
 %% @end
 %% ===================================================================
 -module(redirect_handler).
@@ -29,12 +29,12 @@ init(_Type, Req, _Opts) ->
 
 %% handle/2
 %% ====================================================================
-%% @doc Handles a request returning a HTTP Redirect (304)
+%% @doc Handles a request returning a HTTP Redirect (301 - Moved permanently).
 %% @end
 -spec handle(term(), term()) -> {ok, term(), term()}.
 %% ====================================================================
 handle(Req, State) ->
-	{ok, Req2} = cowboy_req:reply(200, [{<<"content-type">>, <<"application/json">>}], "dupa", Req),
+	{ok, Req2} = cowboy_req:reply(200, <<"dupa">>, Req),
   	{ok, Req2, State}.
 
 

@@ -72,13 +72,14 @@ init(_Args) ->
         ]),
 
 
-    % Start the listener that will redirect all requests of http:// to https://
+    {ok, RedirectNbAcceptors} = application:get_env(veil_cluster_node, control_panel_number_of_http_acceptors),
+    % Start the listener that will redirect all requests of http to https
     RedirectDispatch = [
         {'_', [
             {":path", redirect_handler, []}
         ]}
     ],
-    {ok, _} = cowboy:start_http(?https_listener, GuiNbAcceptors,
+    {ok, _} = cowboy:start_http(?https_listener, RedirectNbAcceptors,
         [
             {port, 80}
         ],
