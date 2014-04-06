@@ -149,6 +149,7 @@ handle(_ProtocolVersion, _Msg) ->
 cleanup() ->
     cowboy:stop_listener(?https_listener),
     cowboy:stop_listener(?rest_listener),
+    cowboy:stop_listener(?http_redirector_listener),
     ok.
 
 
