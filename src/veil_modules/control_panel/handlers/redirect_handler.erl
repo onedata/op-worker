@@ -24,8 +24,8 @@ init(_Type, Req, _Opts) ->
 	try
 		?dump(cowboy_req:binding(path, Req)),
 		?dump(cowboy_req:header(<<"host">>, Req)),
-		?dump(cowboy_req:get_path(Req)),
-		?dump(cowboy_req:get_path_info(Req))
+		?dump(cowboy_req:path(Req)),
+		?dump(cowboy_req:path_info(Req))
 		catch A:B ->
 			?dump({A, B})
 		end,
