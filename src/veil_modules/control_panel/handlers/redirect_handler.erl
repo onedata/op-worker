@@ -21,12 +21,6 @@
 -spec init(any(), term(), any()) -> {ok, term(), []}.
 %% ====================================================================
 init(_Type, Req, _Opts) ->
-	try
-		{Path, _} = cowboy_req:path(Req),
-		?dump(Path)
-		catch A:B ->
-			?dump({A, B})
-		end,
 	{ok, Req, []}.
 
 
@@ -37,7 +31,10 @@ init(_Type, Req, _Opts) ->
 -spec handle(term(), term()) -> {ok, term(), term()}.
 %% ====================================================================
 handle(Req, State) ->
-	{ok, Req2} = cowboy_req:reply(200, [], <<"dupa">>, Req),
+	{Path, _} = cowboy_req:path(Req),
+	{Hostname, _} = cowboy_req:header(<<"host">>, Req)),
+?dump(<<Hostname/binary, Path/binary>>),
+	{ok, Req2} = cowboy_req:reply(301, [], <<Hostname/binary, Path/binary>>, Req),
   	{ok, Req2, State}.
 
 
