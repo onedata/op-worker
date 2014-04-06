@@ -22,7 +22,7 @@
 %% ====================================================================
 -export([sign_in/1, create_user/5, get_user/1, remove_user/1]).
 -export([get_login/1, get_name/1, get_teams/1, update_teams/2]).
--export([get_email_list/1, update_email_list/2, get_dn_list/1, update_dn_list/2]).
+-export([get_email_list/1, update_email_list/2, get_dn_list/1, update_dn_list/2, get_role/1, update_role/2]).
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
 -export([get_team_names/1]).
