@@ -31,8 +31,8 @@ init(_Type, Req, _Opts) ->
 -spec handle(term(), term()) -> {ok, term(), term()}.
 %% ====================================================================
 handle(Req, State) ->
-	{Path, _} = cowboy_req:path(Req),
 	{Hostname, _} = cowboy_req:header(<<"host">>, Req),
+	{Path, _} = cowboy_req:path(Req),
 	{ok, Req2} = cowboy_req:reply(301, 
 		[
 			{<<"location">>, <<"https://", Hostname/binary, Path/binary>>},
