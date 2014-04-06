@@ -8,7 +8,7 @@
 %% @doc: This module requests directed to http:// and returns a 304 redirect to https://.
 %% @end
 %% ===================================================================
--module(nagios_handler).
+-module(redirect_handler).
 
 -include("logging.hrl").
 
@@ -29,7 +29,7 @@ init(_Type, Req, _Opts) ->
 
 %% handle/2
 %% ====================================================================
-%% @doc Handles a request producing an XML response
+%% @doc Handles a request returning a HTTP Redirect (304)
 %% @end
 -spec handle(term(), term()) -> {ok, term(), term()}.
 %% ====================================================================
