@@ -26,8 +26,8 @@ init(_Type, Req, _Opts) ->
 		?dump(cowboy_req:header(<<"host">>, Req)),
 		?dump(cowboy_req:get_path(Req)),
 		?dump(cowboy_req:get_path_info(Req))
-		catch _:_ ->
-			?dump(ehkm)
+		catch A:B ->
+			?dump({A, B})
 		end,
 	{ok, Req, []}.
 
@@ -39,7 +39,7 @@ init(_Type, Req, _Opts) ->
 -spec handle(term(), term()) -> {ok, term(), term()}.
 %% ====================================================================
 handle(Req, State) ->
-	{ok, Req2} = cowboy_req:reply(200, <<"dupa">>, Req),
+	{ok, Req2} = cowboy_req:reply(200, [], <<"dupa">>, Req),
   	{ok, Req2, State}.
 
 
