@@ -318,9 +318,14 @@ sync_loop(Holder, Waiting, LastUpdate) ->
 
 
 sync_lock(MinTimePassed) ->
-    Pid = get_key(sync_pid),
-    Pid ! {self(), lock, MinTimePassed},
-    receive {Pid, Ans} -> Ans end.
+    try ->
+        Pid = get_key(sync_pid),
+        Pid ! {self(), lock, MinTimePassed},
+        receive {Pid, Ans} -> Ans end
+    catch _:_ ->
+        error % Return error if sync_pid cannot be retrieved
+    end.
+
 
 sync_release() ->
     Pid = get_key(sync_pid),
@@ -351,7 +356,8 @@ event({action, Fun, Args}) ->
 
 
 process_event({action, Fun, Args}) ->
-    sync_lock(0),
+    % Make sure the lock is obtained or crash otherwise
+    ok = sync_lock(0),
     reset_wire_accumulator(),
     put(user_id, gui_utils:get_user_dn()),
     erlang:apply(?MODULE, Fun, Args),
@@ -370,7 +376,8 @@ comet_loop_init() ->
 comet_loop() ->
     case sync_lock(?AUTOREFRESH_PERIOD) of
         {wait, Time} ->
-            timer:sleep(Time);
+            timer:sleep(Time),
+            comet_loop();
         ok ->
             try
                 case gui_utils:get_user_dn() of
@@ -382,14 +389,16 @@ comet_loop() ->
                         comet_maybe_refresh(),
                         sync_release(),
                         timer:sleep(?AUTOREFRESH_PERIOD)
-                end
+                end,
+                comet_loop()
             catch Type:Message ->
                 catch sync_release(),
                 lager:error("Error in file_manager comet_loop - ~p - ~p~n~p", 
                     [Type, Message, erlang:get_stacktrace()])
-            end
-    end,
-    comet_loop().
+            end;
+        _ -> 
+            terminate
+    end.
 
 
 comet_maybe_refresh() ->        
