@@ -21,9 +21,13 @@
 -spec init(any(), term(), any()) -> {ok, term(), []}.
 %% ====================================================================
 init(_Type, Req, _Opts) ->
-	?dump(cowboy_req:header(<<"host">>, Req)),
-	?dump(cowboy_req:get_path(Req)),
-	?dump(cowboy_req:get_path_info(Req)),
+	try
+		?dump(cowboy_req:header(<<"host">>, Req)),
+		?dump(cowboy_req:get_path(Req)),
+		?dump(cowboy_req:get_path_info(Req))
+		catch _:_ ->
+			?dump(ehkm)
+		end,
 	{ok, Req, []}.
 
 
