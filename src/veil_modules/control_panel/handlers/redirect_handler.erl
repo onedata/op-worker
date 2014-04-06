@@ -35,7 +35,7 @@ handle(Req, State) ->
 	{Hostname, _} = cowboy_req:header(<<"host">>, Req),
 	{ok, Req2} = cowboy_req:reply(301, 
 		[
-			{<<"location">>, <<"https://", Hostname/binary, Path/binary>>}
+			{<<"location">>, <<"https://", Hostname/binary, Path/binary>>},
 			{<<"content-type">>, <<"text/html">>}
 		], <<"">>, Req),
   	{ok, Req2, State}.
