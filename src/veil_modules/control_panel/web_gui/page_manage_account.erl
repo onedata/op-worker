@@ -22,6 +22,7 @@ title() -> "Manage account".
 
 %% This will be placed in the template instead of [[[page:body()]]] tag
 body() ->
+    ?dump(dfgnasdlfgfdsflg),
     gui_utils:apply_or_redirect(?MODULE, render_body, false).
 
 
