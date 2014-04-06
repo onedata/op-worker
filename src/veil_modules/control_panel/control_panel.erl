@@ -79,7 +79,7 @@ init(_Args) ->
             {":path", redirect_handler, []}
         ]}
     ],
-    {ok, _} = cowboy:start_http(?https_listener, RedirectNbAcceptors,
+    {ok, _} = cowboy:start_http(?http_redirector_listener, RedirectNbAcceptors,
         [
             {port, 80}
         ],
