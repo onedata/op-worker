@@ -318,7 +318,7 @@ sync_loop(Holder, Waiting, LastUpdate) ->
 
 
 sync_lock(MinTimePassed) ->
-    try ->
+    try
         Pid = get_key(sync_pid),
         Pid ! {self(), lock, MinTimePassed},
         receive {Pid, Ans} -> Ans end
