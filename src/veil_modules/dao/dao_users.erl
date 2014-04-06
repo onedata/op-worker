@@ -18,7 +18,8 @@
 %% API functions
 %% ===================================================================
 -export([save_user/1, remove_user/1, exist_user/1, get_user/1, list_users/2,
-  get_files_number/2, get_files_size/1, update_files_size/0, save_quota/1, remove_quota/1, get_quota/1]).
+  get_files_number/2, get_files_size/1, update_files_size/0, 
+  save_quota/1, remove_quota/1, get_quota/1, clear_all_data_from_cache/1]).
 
 
 %% save_user/1
