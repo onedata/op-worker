@@ -23,7 +23,7 @@
 init(_Type, Req, _Opts) ->
 	try
 		{Path, _} = cowboy_req:path(Req),
-		?dump(Path),
+		?dump(Path)
 		catch A:B ->
 			?dump({A, B})
 		end,
