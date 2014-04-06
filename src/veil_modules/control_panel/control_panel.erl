@@ -84,7 +84,7 @@ init(_Args) ->
             {port, 80}
         ],
         [
-            {env, [{dispatch, Dispatch}]},
+            {env, [{dispatch, RedirectDispatch}]},
             {max_keepalive, 1},
             {timeout, Timeout}
         ]),
