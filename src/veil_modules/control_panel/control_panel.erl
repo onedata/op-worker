@@ -76,15 +76,16 @@ init(_Args) ->
     % Start the listener that will redirect all requests of http to https
     RedirectDispatch = [
         {'_', [
-            {'_', redirect_handler, []}
+            {"/:path", redirect_handler, []}
         ]}
     ],
+
     {ok, _} = cowboy:start_http(?http_redirector_listener, RedirectNbAcceptors,
         [
             {port, 80}
         ],
         [
-            {env, [{dispatch, RedirectDispatch}]},
+            {env, [{dispatch, cowboy_router:compile(RedirectDispatch)}]},
             {max_keepalive, 1},
             {timeout, Timeout}
         ]),
