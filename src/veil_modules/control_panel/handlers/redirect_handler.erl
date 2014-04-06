@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module requests directed to http and returns a 301 redirect to https.
+%% @doc: This module handles requests directed to http and returns a 301 redirect to https.
 %% @end
 %% ===================================================================
 -module(redirect_handler).
