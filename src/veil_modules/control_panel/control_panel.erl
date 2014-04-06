@@ -76,7 +76,7 @@ init(_Args) ->
     % Start the listener that will redirect all requests of http to https
     RedirectDispatch = [
         {'_', [
-            {"/:path", redirect_handler, []}
+            {'_', redirect_handler, []}
         ]}
     ],
 
