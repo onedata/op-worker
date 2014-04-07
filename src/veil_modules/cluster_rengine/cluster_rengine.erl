@@ -89,7 +89,8 @@ handle(ProtocolVersion, {event_arrived, Event}) ->
   EventType = proplists:get_value(type, Event),
   case ets:lookup(?EVENT_TREES_MAPPING, EventType) of
     [] ->
-      ?info("bazinga - cluster_rengine no event handler for ~p", [EventType]);
+      %% event arrived but no handlers - ok
+      ok;
     % mapping for event found - forward event
     [{_, EventToTreeMappings}] ->
       ForwardEvent = fun(EventToTreeMapping) ->
@@ -139,7 +140,6 @@ save_to_caches(EventType, #event_handler_item{processing_method = ProcessingMeth
   end.
 
 create_process_tree_for_handler(ProtocolVersion, #event_handler_item{tree_id = TreeId, map_fun = MapFun, handler_fun = HandlerFun, config = #event_stream_config{config = ActualConfig} = Config}) ->
-  ?info("---- cr: create_process_tree_for_handler bazinga"),
   ProcFun = case ActualConfig of
               undefined ->
                 fun(_ProtocolVersion, {final_stage_tree, TreeId2, Event}) ->

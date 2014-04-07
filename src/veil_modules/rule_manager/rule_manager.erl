@@ -146,12 +146,10 @@ fetch_rows(ViewName, QueryArgs) ->
   end.
 
 register_default_rules(WriteBytesThreshold) ->
-  ?info("------"),
-  ?info("----------"),
-  ?info("--------------- register_default_rules"),
   register_quota_exceeded_handler(),
   register_rm_event_handler(),
-  register_for_write_events(WriteBytesThreshold).
+  register_for_write_events(WriteBytesThreshold),
+  ?info("default rule_manager rules registered").
 
 %% ====================================================================
 %% Rule definitions
@@ -167,7 +165,6 @@ register_quota_exceeded_handler() ->
 
 register_rm_event_handler() ->
   EventHandler = fun(Event) ->
-    ?info("RmEvent Handler"),
     QuotaExceededFn = fun() ->
       UserDn = proplists:get_value(user_dn, Event),
       case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
@@ -204,12 +201,10 @@ register_rm_event_handler() ->
 
 register_for_write_events(Bytes) ->
   EventHandler = fun(Event) ->
-    ?info("Write EventHandler2 ~p", [node(self())]),
     UserDn = proplists:get_value(user_dn, Event),
     case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
       true ->
-        cluster_rengine:send_event(?ProtocolVersion, [{type, quota_exceeded_event}, {user_dn, UserDn}]),
-        ?info("Quota exceeded event emited");
+        cluster_rengine:send_event(?ProtocolVersion, [{type, quota_exceeded_event}, {user_dn, UserDn}]);
       _ ->
         ok
     end

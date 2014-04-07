@@ -273,10 +273,8 @@ read(FileStr, Offset, Size) ->
   ErrorDetail :: term().
 %% ====================================================================
 write(FileStr, Buf) ->
-  ?info("---- > Bazinga write/2 in flm"),
   case write_enabled(get(user_id)) of
     true ->
-      ?info("---- > Bazinga write in flm enabled 2"),
       File = check_utf(FileStr),
       {Response, Response2} = getfilelocation(File),
       case Response of
@@ -285,18 +283,15 @@ write(FileStr, Buf) ->
           Res = storage_files_manager:write(Storage_helper_info, FileId, Buf),
           case {is_integer(Res), event_production_enabled(write_event)} of
             {true, true} ->
-              ?info("--- write_event production enabled, ~p", [get(user_id)]),
               WriteEvent = [{type, write_event}, {user_dn, get(user_id)}, {count, binary:referenced_byte_size(Buf)}],
               gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}});
             _ ->
-              ?info("---- write_event production disabled ~p", [{is_integer(Res), event_production_enabled(write_event)}]),
               ok
           end,
           Res;
         _ -> {Response, Response2}
       end;
     _ ->
-      ?info("---- > Bazinga write in flm disabled"),
       {error, quota_exceeded}
   end.
 
@@ -313,10 +308,8 @@ write(FileStr, Buf) ->
   ErrorDetail :: term().
 %% ====================================================================
 write(FileStr, Offset, Buf) ->
-  ?info("---- > Bazinga write/3 in flm"),
   case write_enabled(get(user_id)) of
     true ->
-      ?info("---- > Bazinga write in flm enabled"),
       File = check_utf(FileStr),
       {Response, Response2} = getfilelocation(File),
       case Response of
@@ -334,7 +327,6 @@ write(FileStr, Offset, Buf) ->
         _ -> {Response, Response2}
       end;
     _ ->
-      ?info("---- > Bazinga write in flm disabled"),
       {error, quota_exceeded}
   end.
 
@@ -351,7 +343,6 @@ write(FileStr, Offset, Buf) ->
   ErrorDetail :: term().
 %% ====================================================================
 write_from_stream(FileStr, Buf) ->
-  ?info("----- bazinga LFM, write_from_stream"),
   case write_enabled(get(user_id)) of
     true ->
       File = check_utf(FileStr),
@@ -372,7 +363,6 @@ write_from_stream(FileStr, Buf) ->
         _ -> {Response, Response2}
       end;
     _ ->
-      ?info("---- > Bazinga write in flm disabled"),
       {error, quota_exceeded}
   end.
 

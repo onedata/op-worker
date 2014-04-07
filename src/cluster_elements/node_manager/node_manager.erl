@@ -291,7 +291,6 @@ handle_cast({notify_lfm, EventType, Enabled}, State) ->
   {noreply, State};
 
 handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
-  ?info("update_user_write_enabled: ~p", [Enabled]),
   case Enabled of
     false -> ets:insert(?WRITE_DISABLED_USERS, {UserDn, true});
     _ -> ets:delete(?WRITE_DISABLED_USERS, UserDn)
