@@ -15,8 +15,8 @@
 -include("veil_modules/fslogic/fslogic.hrl").
 
 
-% How often shoul comet process check for changes in current dir
--define(AUTOREFRESH_PERIOD, 500).
+% How often should comet process check for changes in current dir
+-define(AUTOREFRESH_PERIOD, 1000).
 
 % Item is either a file or a dir represented in manager
 -record(item, {id="", path="/", is_shared=false, attr=#fileattributes { } }).
@@ -1151,6 +1151,15 @@ item_list_md5(ItemList) ->
         end, <<"">>, ItemList).
 
 
+is_group_dir(Path) ->
+    case Path of
+        "/groups" -> true;
+        "/groups" ++ Rest -> case string:rstr(Rest, "/") of
+                        1 -> true;
+                        _ -> false
+                    end;
+        _ -> false
+    end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% logical_files_manager interfacing
@@ -1173,12 +1182,17 @@ fs_remove(Path) ->
 
 
 fs_remove_dir(DirPath) ->
-    ItemList = fs_list_dir(DirPath),
-    lists:foreach(
-        fun(Item) ->
-            fs_remove(item_path(Item))
-        end, ItemList),
-    logical_files_manager:rmdir(DirPath).
+    case is_group_dir(DirPath) of
+        true ->
+            skip;
+        false ->
+            ItemList = fs_list_dir(DirPath),
+            lists:foreach(
+                fun(Item) ->
+                    fs_remove(item_path(Item))
+                end, ItemList),
+            logical_files_manager:rmdir(DirPath)
+    end.
 
 
 fs_list_dir(Dir) ->

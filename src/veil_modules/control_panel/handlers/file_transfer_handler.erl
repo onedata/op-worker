@@ -117,78 +117,87 @@ handle_rest_upload(Req, Path, Overwrite) ->
 
 % Checks if user content download request is valid and serves a file
 handle_user_content_request(Req) ->
-    try
-        try_or_throw(
-            fun() ->
-                RequestBridge = simple_bridge:make_request(cowboy_request_bridge, {Req, ""}),
-                wf_context:init_context(RequestBridge, undefined),
-                wf_handler:call(session_handler, init),
-                UserID = wf:session(user_doc),
-                true = (UserID /= undefined),
-                put(user_id, lists:nth(1, user_logic:get_dn_list(UserID)))
-            end, not_logged_in),
+    % Try to retrieve user's session
+    InitSession = try
+        RequestBridge = simple_bridge:make_request(cowboy_request_bridge, {Req, ""}),
+        wf_context:init_context(RequestBridge, undefined),
+        wf_handler:call(session_handler, init),
+        UserID = wf:session(user_doc),
+        true = (UserID /= undefined),
+        put(user_id, lists:nth(1, user_logic:get_dn_list(UserID))),
+        ok
+    catch _:_ ->
+        error
+    end,
 
-        {Filepath, Size} = try_or_throw(
-            fun() ->
+    case InitSession of
+        error -> 
+            {false, _RedirectReq} = page_error:user_content_request_error(not_logged_in, Req);
+        ok ->
+            % Try to get file by given path
+            FileInfo = try
                 {FilepathBin, _} = cowboy_req:qs_val(<<"f">>, Req),
                 TryFilepath = binary_to_list(FilepathBin),
                 {ok, Fileattr} = logical_files_manager:getfileattr(TryFilepath),
                 "REG" = Fileattr#fileattributes.type,
                 TrySize = Fileattr#fileattributes.size,
                 {TryFilepath, TrySize}
-            end, file_not_found),
+            catch _:_ ->
+                error
+            end,
 
-        {ok, NewReq} = try_or_throw(
-            fun() ->
-                send_file_by_path(Req, Filepath, Size)
-            end, {sending_failed, Filepath}),
-        {true, NewReq}
-
-    catch Type:Message ->
-        case Message of
-            {sending_failed, Path} ->
-                lager:error("Error while sending file ~p to user ~p - ~p:~p~n~p",
-                    [Path, user_logic:get_login(get(user_id)),
-                        Type, Message, erlang:get_stacktrace()]);
-            _ -> skip
-        end,
-        {false, _RedirectReq} = page_error:user_content_request_error(Message, Req)
+            case FileInfo of
+                error ->
+                    {false, _RedirectReq} = page_error:user_content_request_error(file_not_found, Req);
+                {Filepath, Size} ->
+                    % Send the file
+                    try
+                        {ok, NewReq} = send_file_by_path(Req, Filepath, Size),
+                        {true, NewReq}
+                    catch Type:Message ->
+                        ?error_stacktrace("Error while sending file ~p to user ~p - ~p:~p",
+                            [Filepath, user_logic:get_login(get(user_id)), Type, Message]),
+                        {ok, FinReq} = cowboy_req:reply(500, Req#http_req{connection = close}),
+                        {true, FinReq}
+                    end
+            end
     end.
 
 
 % Checks if shared file download request is valid and serves a file
 handle_shared_file_request(Req) ->
-    try
-        {FileID, FileName, Size} = try_or_throw(
-            fun() ->
-                put(user_id, undefined),
-                {Path, _} = cowboy_req:path(Req),
-                <<"/share/", ShareID/binary>> = Path,
-                true = (ShareID /= <<"">>),
+    % Try to get file by share uuid
+    FileInfo = try
+        put(user_id, undefined),
+        {TPath, _} = cowboy_req:path(Req),
+        <<"/share/", ShareID/binary>> = TPath,
+        true = (ShareID /= <<"">>),
 
-                {ok, #veil_document{record = #share_desc{file = FileID}}} =
-                    logical_files_manager:get_share({uuid, binary_to_list(ShareID)}),
-                {ok, FileName} = logical_files_manager:get_file_name_by_uuid(FileID),
-                {ok, Fileattr} = logical_files_manager:getfileattr({uuid, FileID}),
-                "REG" = Fileattr#fileattributes.type,
-                TrySize = Fileattr#fileattributes.size,
-                {FileID, FileName, TrySize}
-            end, file_not_found),
+        {ok, #veil_document{record = #share_desc{file = TFileID}}} =
+            logical_files_manager:get_share({uuid, binary_to_list(ShareID)}),
+        {ok, TFileName} = logical_files_manager:get_file_name_by_uuid(TFileID),
+        {ok, Fileattr} = logical_files_manager:getfileattr({uuid, TFileID}),
+        "REG" = Fileattr#fileattributes.type,
+        TSize = Fileattr#fileattributes.size,
+        {TFileID, TFileName, TSize}
+    catch _:_ ->
+        error
+    end,
 
-        {ok, NewReq} = try_or_throw(
-            fun() ->
-                send_file_by_uuid(Req, FileID, FileName, Size)
-            end, {sending_failed, FileName}),
-        {true, NewReq}
-
-    catch Type:Message ->
-        case Message of
-            {sending_failed, Path} ->
-                lager:error("Error while sending shared file ~p - ~p:~p~n~p",
-                    [Path, Type, Message, erlang:get_stacktrace()]);
-            _ -> skip
-        end,
-        {false, _RedirectReq} = page_error:shared_file_request_error(Message, Req)
+    % Redirect to error page if the link was incorrect, or send the file
+    case FileInfo of
+        error ->
+            {false, _RedirectReq} = page_error:shared_file_request_error(file_not_found, Req);
+        {FileID, FileName, Size} ->
+            try
+                {ok, NewReq} = send_file_by_uuid(Req, FileID, FileName, Size),
+                {true, NewReq}
+            catch Type:Message ->
+                ?error_stacktrace("Error while sending shared file ~p - ~p:~p",
+                    [FileID, Type, Message]),
+                {ok, FinReq} = cowboy_req:reply(500, Req#http_req{connection = close}),
+                {true, FinReq}
+            end
     end.
 
 % Sends file as a http response, file is given by uuid
