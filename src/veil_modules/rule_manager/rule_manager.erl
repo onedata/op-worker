@@ -43,18 +43,13 @@ rule_manager).
 -define(HANDLER_TREE_ID_ETS, handler_tree_id_ets).
 
 -define(ProtocolVersion, 1).
+-define(VIEW_UPDATE_DELAY, 5000).
 
 init(_Args) ->
   ets:new(?RULE_MANAGER_ETS, [named_table, public, set, {read_concurrency, true}]),
   ets:new(?PRODUCERS_RULES_ETS, [named_table, public, set, {read_concurrency, true}]),
   ets:new(?HANDLER_TREE_ID_ETS, [named_table, public, set]),
   ets:insert(?HANDLER_TREE_ID_ETS, {current_id, 1}),
-
-  FunctionOnSave = fun(_Event) ->
-    function_on_save
-  end,
-
-  ets:insert(?RULE_MANAGER_ETS, {save_event, [FunctionOnSave]}),
 	[].
 
 handle(_ProtocolVersion, ping) ->
@@ -74,11 +69,11 @@ handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
 handle(_ProtocolVersion, get_event_handlers) ->
-  %% for that moment it does not make sense to copy values from one ets to another, but it's just mock implementation
-  %% end the only purpose is to keep rule_manager and cluster_rengine separate
-  %% in real implementation event handlers for rule_manager will be stored in db
+  MatchingItems = ets:match(?RULE_MANAGER_ETS, {'$1', '$2'}),
 
-  ets:match(?RULE_MANAGER_ETS, {'$1', '$2'});
+  %% ets:match returns list of lists - convert it to list of tuples
+  Res = lists:map(fun(Item) -> list_to_tuple(Item) end, MatchingItems),
+  {ok, Res};
 
 handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem}}) ->
   handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem, #eventstreamconfig{}}});
@@ -100,8 +95,7 @@ handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem, Produ
     [{_, ListOfConfigs}] -> ets:insert(?PRODUCERS_RULES_ETS, {producer_configs, [ProducerConfig | ListOfConfigs]})
   end,
 
-  gen_server:cast({global, ?CCM}, {clear_ets, ?EVENT_TREES_MAPPING, EventType}),
-
+  notify_cluster_rengines(NewEventItem, EventType),
   notify_producers(ProducerConfig, EventType),
 
   ?info("New handler for event ~p registered.", [EventType]),
@@ -122,6 +116,15 @@ cleanup() ->
 	ok.
 
 %% Helper functions
+
+notify_cluster_rengines(EventHandlerItem, EventType) ->
+  Ans = gen_server:call({global, ?CCM}, {update_cluster_rengines, EventType, EventHandlerItem}),
+  case Ans of
+    ok -> ok;
+    _ ->
+      ?warning("Cannot nofify cluster_rengines"),
+      error
+  end.
 
 notify_producers(ProducerConfig, EventType) ->
   Rows = fetch_rows(?FUSE_CONNECTIONS_VIEW, #view_query_args{}),
@@ -182,7 +185,7 @@ register_rm_event_handler() ->
         spawn(fun() ->
           receive
             _ -> ok
-          after 5000 ->
+          after ?VIEW_UPDATE_DELAY ->
             QuotaExceededFn()
           end
         end);

@@ -43,7 +43,17 @@
 init(_Args) ->
   ets:new(?EVENT_HANDLERS_CACHE, [named_table, public, set, {read_concurrency, true}]),
   ets:new(?EVENT_TREES_MAPPING, [named_table, public, set, {read_concurrency, true}]),
-	[].
+  gen_server:call(?Dispatcher_Name, {rule_manager, 1, self(), get_event_handlers}),
+
+  receive
+    {ok, EventHandlers} ->
+      lists:foreach(fun({EventType, EventHandlerItem}) -> update_event_handler(1, EventType, EventHandlerItem) end, EventHandlers);
+    _ ->
+      ?warning("rule_manager sent back unexpected structure for get_event_handlers")
+  after 1000 ->
+    ?warning("rule manager did not replied for get_event_handlers")
+  end
+.
 
 handle(_ProtocolVersion, ping) ->
   pong;
@@ -61,26 +71,15 @@ handle(_ProtocolVersion, get_version) ->
 handle(_ProtocolVersion, {final_stage_tree, _TreeId, _Event}) ->
   ?warning("cluster_rengine final_stage_tree handler should be always called in subprocess tree process");
 
+handle(ProtocolVersion, {update_cluster_rengine, EventType, EventHandlerItem}) ->
+  ?info("--- cluster_rengines update_cluster_rengine"),
+  update_event_handler(ProtocolVersion, EventType, EventHandlerItem);
+
 handle(ProtocolVersion, {event_arrived, Event}) ->
-  handle(ProtocolVersion, {event_arrived, Event, false});
-handle(ProtocolVersion, {event_arrived, Event, SecondTry}) ->
   EventType = proplists:get_value(type, Event),
   case ets:lookup(?EVENT_TREES_MAPPING, EventType) of
     [] ->
-      case SecondTry of
-        true ->
-          ok;
-        false ->
-          ?info("cluster_rengine - CACHE MISS: ~p, ~p", [node(), EventType]),
-          % did not found mapping for event and first try - update caches for this event and try one more time
-          SleepNeeded = update_event_handler(ProtocolVersion, EventType),
-          % from my observations it takes about 200ms until disp map fun is registered in cluster_manager
-          case SleepNeeded of
-            true -> timer:sleep(600);
-            _ -> ok
-          end,
-          handle(ProtocolVersion, {event_arrived, Event, true})
-      end;
+      ?info("bazinga - cluster_rengine no event handler for ~p", [EventType]);
     % mapping for event found - forward event
     [{_, EventToTreeMappings}] ->
       ForwardEvent = fun(EventToTreeMapping) ->
@@ -93,19 +92,6 @@ handle(ProtocolVersion, {event_arrived, Event, SecondTry}) ->
         end
       end,
       lists:foreach(ForwardEvent, EventToTreeMappings)
-  end;
-
-% handles standard (non sub tree) event processing
-handle(_ProtocolVersion, {final_stage, HandlerId, Event}) ->
-  HandlerItem = ets:lookup(?EVENT_HANDLERS_CACHE, HandlerId),
-  case HandlerItem of
-    [] ->
-      % we do not have to worry about updating cache here. Doing nothing is ok because this event is the result of forward
-      % of event_arrived so mapping had to exist in moment of forwarding. Only situation when this code executes is
-      % when between forward and calling final_stage cache has been cleared - in that situation doing nothing is ok.
-      ok;
-    [{_HandlerId, #event_handler_item{handler_fun = HandlerFun}}] ->
-      HandlerFun(Event)
   end.
 
 cleanup() ->
@@ -113,55 +99,37 @@ cleanup() ->
 
 % inner functions
 
-save_to_caches(EventType, EventHandlerItems) ->
-  EntriesForHandlers = lists:map(
-    fun(#event_handler_item{processing_method = ProcessingMethod, tree_id = TreeId, handler_fun = HandlerFun}) ->
-      case ProcessingMethod of
-        tree -> {tree, TreeId};
-        _ -> {standard, HandlerFun}
-      end
-    end,
-    EventHandlerItems),
-  ets:insert(?EVENT_TREES_MAPPING, {EventType, EntriesForHandlers}),
-
-  HandlerItemsForTree = lists:filter(fun(#event_handler_item{tree_id = TreeId}) -> TreeId /= undefined end, EventHandlerItems),
-  lists:foreach(fun(#event_handler_item{tree_id = TreeId} = EventHandlerItem) ->
-    case ets:lookup(?EVENT_HANDLERS_CACHE, TreeId) of
-      [] -> ets:insert(?EVENT_HANDLERS_CACHE, {TreeId, EventHandlerItem});
-      _ -> ok
-    end
-  end, HandlerItemsForTree).
-
 % returns if during update at least one process tree has been registered
-update_event_handler(ProtocolVersion, EventType) ->
-  gen_server:call(?Dispatcher_Name, {rule_manager, ProtocolVersion, self(), {get_event_handlers, EventType}}),
+update_event_handler(ProtocolVersion, EventType, #event_handler_item{processing_method = ProcessingMethod, tree_id = TreeId} = EventHandlerItem) ->
+  ?info("---- update_event_handler: ~p", [{ProcessingMethod, ets:lookup(?EVENT_HANDLERS_CACHE, TreeId)}]),
+  case {ProcessingMethod, ets:lookup(?EVENT_HANDLERS_CACHE, TreeId)} of
+    {tree, []} -> create_process_tree_for_handler(ProtocolVersion, EventHandlerItem);
+    _ -> ok
+  end,
+  save_to_caches(EventType, EventHandlerItem).
 
-  receive
-    {ok, EventHandlers} ->
-      case EventHandlers of
-        [] ->
-          %% no registered events - insert empty list
-          ets:insert(?EVENT_TREES_MAPPING, {EventType, []}),
-          ok;
-        EventHandlersList ->
-          CheckIfTreeNeeded = fun(#event_handler_item{processing_method = ProcessingMethod, tree_id = TreeId}) ->
-            ((ProcessingMethod =:= tree) and (ets:lookup(?EVENT_HANDLERS_CACHE, TreeId) == [])) end,
-          EventsHandlersForTree = lists:filter(CheckIfTreeNeeded, EventHandlersList),
-          save_to_caches(EventType, EventHandlersList),
-          create_process_tree_for_handlers(ProtocolVersion, EventsHandlersForTree),
-          length(EventsHandlersForTree) > 0
-      end;
-    _ ->
-      ?warning("rule_manager sent back unexpected structure")
-    after 1000 ->
-      ?warning("rule manager did not replied")
+save_to_caches(EventType, #event_handler_item{processing_method = ProcessingMethod, tree_id = TreeId, handler_fun = HandlerFun} = EventHandlerItem) ->
+  EventHandlerEntry = case ProcessingMethod of
+                        tree -> {tree, TreeId};
+                        _ -> {standard, HandlerFun}
+                      end,
+  EventHandlerEntries = case ets:lookup(?EVENT_TREES_MAPPING, EventType) of
+                          [{_Key, Value}] -> Value;
+                          _ -> []
+                        end,
+  ets:insert(?EVENT_TREES_MAPPING, {EventType, [EventHandlerEntry | EventHandlerEntries]}),
+  ?info("save_to_caches: ~p", [ets:lookup(?EVENT_TREES_MAPPING, EventType)]),
+
+  case ProcessingMethod of
+    tree -> case ets:lookup(?EVENT_HANDLERS_CACHE, TreeId) of
+              [] -> ets:insert(?EVENT_HANDLERS_CACHE, {TreeId, EventHandlerItem});
+              _ -> ok
+            end;
+    _ -> ok
   end.
 
-create_process_tree_for_handlers(ProtocolVersion, EventHandlersList) ->
-  CreateProcessTreeForHandler = fun(HandlersList) -> create_process_tree_for_handler(ProtocolVersion, HandlersList) end,
-  lists:foreach(CreateProcessTreeForHandler, EventHandlersList).
-
 create_process_tree_for_handler(ProtocolVersion, #event_handler_item{tree_id = TreeId, map_fun = MapFun, handler_fun = HandlerFun, config = #event_stream_config{config = ActualConfig} = Config}) ->
+  ?info("---- cr: create_process_tree_for_handler bazinga"),
   ProcFun = case ActualConfig of
               undefined ->
                 fun(_ProtocolVersion, {final_stage_tree, TreeId2, Event}) ->
@@ -290,18 +258,6 @@ get_disp_map_fun(ProtocolVersion) ->
     EventHandlerFromEts = ets:lookup(?EVENT_HANDLERS_CACHE, TreeId),
     case EventHandlerFromEts of
       [] ->
-        % if we proceeded here it may be the case, when final_stage_tree is being processed by another node and
-        % this node does not have the most recent version of handler for given event. So try to update
-        update_event_handler(ProtocolVersion, proplists:get_value(type, Event)),
-        EventHandler = ets:lookup(?EVENT_HANDLERS_CACHE, TreeId),
-
-        case EventHandler of
-          [] -> non;
-          [{_Ev2, #event_handler_item{disp_map_fun = FetchedDispMapFun2}}] ->
-            FetchedDispMapFun2(Event)
-        end,
-
-        % it may happen only if cache has been cleared between forwarding and calling DispMapFun - do nothing
         non;
       [{_Ev, #event_handler_item{disp_map_fun = FetchedDispMapFun}}] ->
         FetchedDispMapFun(Event)

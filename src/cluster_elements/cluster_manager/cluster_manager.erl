@@ -202,6 +202,18 @@ handle_call(get_callbacks, _From, State) ->
 handle_call(check, _From, State) ->
   {reply, ok, State};
 
+handle_call({update_cluster_rengines, EventType, EventHandlerItem}, _From, State) ->
+  Workers = State#cm_state.workers,
+  UpdateClusterRengine = fun ({_Node, Module, Pid}) ->
+    case Module of
+      cluster_rengine -> gen_server:cast(Pid, {asynch, 1, {update_cluster_rengine, EventType, EventHandlerItem}});
+      _ -> ok
+    end
+  end,
+
+  lists:foreach(UpdateClusterRengine, Workers),
+  {reply, ok, State};
+
 %% Test call
 handle_call({start_worker, Node, Module, WorkerArgs}, _From, State) ->
   handle_test_call({start_worker, Node, Module, WorkerArgs}, _From, State);
@@ -1447,7 +1459,6 @@ register_dispatcher_map(Module, Map, MapsList) ->
   NewState :: term().
 %% ====================================================================
 clear_cache(State, Cache) ->
-  ?info("----- >>>>>> INSIDE clear cache"),
   Clear = fun(Node, {TmpState, TmpWorkersFound}) ->
     try
       ok = gen_server:call({?Node_Manager_Name, Node}, {clear_cache, Cache}, 500),

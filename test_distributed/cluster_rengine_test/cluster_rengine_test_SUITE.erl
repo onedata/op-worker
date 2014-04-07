@@ -80,7 +80,7 @@ test_event_subscription(Config) ->
     end
   end,
   
-  subscribe_for_write_events(CCM, tree, EventHandler2),
+  subscribe_for_write_events(CCM, tree, EventHandler2, #event_stream_config{config = #aggregator_config{field_name = user_id, fun_field_name = "count", threshold = 1}}),
   send_event(WriteEvent, CCM),
 
   % this time there are two handler registered
@@ -105,7 +105,6 @@ test_event_aggregation(Config) ->
   WriteEvent = [{type, write_event}, {user_id, "1234"}, {ans_pid, self()}],
 
   repeat(2, fun() -> send_event(WriteEvent, CCM) end),
-  timer:sleep(600),
   send_event(WriteEvent, CCM),
   assert_nothing_received(CCM),
 
@@ -150,8 +149,6 @@ test_dispatching(Config) ->
 
   SendWriteEvent(WriteEvent1),
   SendWriteEvent(WriteEvent2),
-
-  timer:sleep(600),
 
   SendWriteEvents(),
   count_answers(8),
@@ -289,7 +286,7 @@ subscribe_for_write_events(Node, ProcessingMethod, EventHandler, ProcessingConfi
     ?assert(false)
   end,
 
-  timer:sleep(800).
+  timer:sleep(1000).
 
 repeat(N, F) -> for(1, N, F).
 for(N, N, F) -> [F()];
