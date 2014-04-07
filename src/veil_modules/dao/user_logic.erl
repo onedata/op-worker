@@ -375,12 +375,15 @@ update_role(#veil_document{record = UserInfo} = UserDoc, NewRole) ->
     end;
 
 update_role(Key, NewRole) ->
-    {ok, UserDoc} = get_user(Key),
-    #veil_document{record = UserInfo} = UserDoc,
-    NewDoc = UserDoc#veil_document{record = UserInfo#user{role = NewRole}},
-    case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
-        {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
-        {error, Reason} -> {error, Reason}
+    case get_user(Key) of
+        {ok, UserDoc} ->
+            #veil_document{record = UserInfo} = UserDoc,
+            NewDoc = UserDoc#veil_document{record = UserInfo#user{role = NewRole}},
+            case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
+                {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
+                {error, Reason} -> {error, Reason}
+            end;
+        Other -> Other
     end.
 
 %% get_quota/1
