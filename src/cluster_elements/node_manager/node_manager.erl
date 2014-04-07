@@ -298,10 +298,6 @@ handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
   end,
   {noreply, State};
 
-handle_cast({clear_ets, EtsName, Key}, State) ->
-  ets:delete(EtsName, Key),
-  {noreply, State};
-
 handle_cast(_Msg, State) ->
   {noreply, State}.
 

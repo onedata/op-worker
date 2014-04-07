@@ -36,6 +36,9 @@
 %% ====================================================================
 -export([init/1, handle/2, cleanup/0]).
 
+%% utils functions
+-export([send_event/2]).
+
 -ifdef(TEST).
 -compile([export_all]).
 -endif.
@@ -43,17 +46,10 @@
 init(_Args) ->
   ets:new(?EVENT_HANDLERS_CACHE, [named_table, public, set, {read_concurrency, true}]),
   ets:new(?EVENT_TREES_MAPPING, [named_table, public, set, {read_concurrency, true}]),
-  gen_server:call(?Dispatcher_Name, {rule_manager, 1, self(), get_event_handlers}),
 
-  receive
-    {ok, EventHandlers} ->
-      lists:foreach(fun({EventType, EventHandlerItem}) -> update_event_handler(1, EventType, EventHandlerItem) end, EventHandlers);
-    _ ->
-      ?warning("rule_manager sent back unexpected structure for get_event_handlers")
-  after 1000 ->
-    ?warning("rule manager did not replied for get_event_handlers")
-  end
-.
+  Pid = self(),
+  erlang:send_after(5000, Pid, {timer, {asynch, 1, get_event_handlers}}),
+  ok.
 
 handle(_ProtocolVersion, ping) ->
   pong;
@@ -67,6 +63,20 @@ handle(_ProtocolVersion, healthcheck) ->
 
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
+
+handle(ProtocolVersion, get_event_handlers) ->
+  gen_server:call(?Dispatcher_Name, {rule_manager, ProtocolVersion, self(), get_event_handlers}),
+
+  receive
+    {ok, EventHandlers} ->
+      ?info("here, ~p", [EventHandlers]),
+      lists:foreach(fun({EventType, EventHandlerItem}) ->
+        update_event_handler(1, EventType, EventHandlerItem) end, EventHandlers);
+    _ ->
+      ?warning("rule_manager sent back unexpected structure for get_event_handlers")
+  after 1000 ->
+    ?warning("rule manager did not replied for get_event_handlers")
+  end;
 
 handle(_ProtocolVersion, {final_stage_tree, _TreeId, _Event}) ->
   ?warning("cluster_rengine final_stage_tree handler should be always called in subprocess tree process");
@@ -265,3 +275,6 @@ get_disp_map_fun(ProtocolVersion) ->
     (_) ->
       non
   end.
+
+send_event(ProtocolVersion, Event) ->
+  gen_server:call(?Dispatcher_Name, {cluster_rengine, ProtocolVersion, {event_arrived, Event}}).

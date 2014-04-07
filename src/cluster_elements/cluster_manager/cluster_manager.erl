@@ -22,6 +22,12 @@
 %% Singleton modules are modules which are supposed to have only one instance.
 -define(SINGLETON_MODULES, [control_panel, central_logger, rule_manager]).
 
+-ifdef(TEST).
+-define(REGISTER_DEFAULT_RULES, false).
+-else.
+-define(REGISTER_DEFAULT_RULES, true).
+-endif.
+
 %% ====================================================================
 %% API
 %% ====================================================================
@@ -114,6 +120,10 @@ init([]) ->
   end,
   erlang:send_after(LoggerAndDAOInterval * 1000 + 100, Pid, {timer, start_central_logger}),
   erlang:send_after(LoggerAndDAOInterval * 1000 + 200, Pid, {timer, get_state_from_db}),
+  case ?REGISTER_DEFAULT_RULES of
+    true -> erlang:send_after(30000, Pid, {timer, register_default_rules});
+    _ -> ok
+  end,
   {ok, #cm_state{}};
 
 init([test]) ->
@@ -202,6 +212,7 @@ handle_call(get_callbacks, _From, State) ->
 handle_call(check, _From, State) ->
   {reply, ok, State};
 
+%% TODO: add generic mechanism that do the same thing
 handle_call({update_cluster_rengines, EventType, EventHandlerItem}, _From, State) ->
   Workers = State#cm_state.workers,
   UpdateClusterRengine = fun ({_Node, Module, Pid}) ->
@@ -345,6 +356,10 @@ handle_cast(get_state_from_db, State) ->
       {noreply, NewState2}
   end;
 
+handle_cast(register_default_rules, State) ->
+  gen_server:call(?Dispatcher_Name, {rule_manager, 1, register_default_rules}),
+  {noreply, State};
+
 handle_cast(start_central_logger, State) ->
   case State#cm_state.nodes =:= [] of
     true ->
@@ -452,15 +467,6 @@ handle_cast({notify_lfm, EventType, Enabled}, State) ->
 handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
   NotifyFn = fun(Node) ->
       gen_server:cast({?Node_Manager_Name, Node}, {update_user_write_enabled, UserDn, Enabled})
-  end,
-
-  lists:foreach(NotifyFn, State#cm_state.nodes),
-  {noreply, State};
-
-handle_cast({clear_ets, EtsName, Key}, State) ->
-  ?info("clear_ets -------: ~p", [Key]),
-  NotifyFn = fun(Node) ->
-    gen_server:cast({?Node_Manager_Name, Node}, {clear_ets, EtsName, Key})
   end,
 
   lists:foreach(NotifyFn, State#cm_state.nodes),

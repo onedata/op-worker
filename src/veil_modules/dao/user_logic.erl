@@ -13,6 +13,7 @@
 
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("logging.hrl").
+-include("registered_names.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
 
@@ -743,14 +744,23 @@ quota_exceeded(UserQuery, ProtocolVersion) ->
       {ok, SpaceUsed} = user_logic:get_files_size(Uuid, ProtocolVersion),
       {ok, #quota{size = Quota}} = user_logic:get_quota(UserDoc),
       ?info("user has used: ~p, quota: ~p", [SpaceUsed, Quota]),
+
+      %% TODO: there is one little problem with this - we dont recognize situation in which quota has been manually changed to
+      %% exactly the same value as default_quota
+      {ok, DefaultQuotaSize} = application:get_env(?APP_Name, default_quota),
+      QuotaToInsert = case Quota =:= DefaultQuotaSize of
+                        true -> ?DEFAULT_QUOTA_DB_TAG;
+                        _ -> Quota
+                      end,
+
       case SpaceUsed > Quota of
         true ->
-          update_quota(UserDoc, #quota{size = Quota, exceeded = true}),
+          update_quota(UserDoc, #quota{size = QuotaToInsert, exceeded = true}),
           true;
         _ ->
-          update_quota(UserDoc, #quota{size = Quota, exceeded = false}),
+          update_quota(UserDoc, #quota{size = QuotaToInsert, exceeded = false}),
           false
       end;
     Error ->
-      throw({cannot_fetch_user, UserQuery})
+      throw({cannot_fetch_user, Error})
   end.

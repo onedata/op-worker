@@ -11,20 +11,13 @@
 %% @end
 %% ===================================================================
 
--module(
-rule_manager).
+-module(rule_manager).
 -behaviour(worker_plugin_behaviour).
 -include("logging.hrl").
 -include("registered_names.hrl").
 -include("veil_modules/dao/dao_helper.hrl").
 -include("veil_modules/dao/dao.hrl").
--include("communication_protocol_pb.hrl").
-
--include("logging.hrl").
--include("registered_names.hrl").
--include_lib("veil_modules/cluster_rengine/cluster_rengine.hrl").
--include_lib("veil_modules/dao/dao.hrl").
--include_lib("veil_modules/dao/dao_helper.hrl").
+-include("veil_modules/cluster_rengine/cluster_rengine.hrl").
 
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
@@ -35,8 +28,7 @@ rule_manager).
 -export([init/1, handle/2, cleanup/0]).
 
 %% functions for manual tests
--export([register_quota_exceeded_handler/0, change_quota/2, register_rm_event_handler/0, prepare/2,
-  register_for_write_stats/1, register_for_read_stats/1, register_for_quota_events/1]).
+-export([register_quota_exceeded_handler/0, register_rm_event_handler/0, register_for_write_events/1]).
 
 -define(RULE_MANAGER_ETS, rule_manager).
 -define(PRODUCERS_RULES_ETS, producers_rules).
@@ -109,6 +101,10 @@ handle(_ProtocolVersion, {get_event_handlers, EventType}) ->
         end,
   {ok, Res};
 
+handle(_ProtocolVersion, register_default_rules) ->
+  {ok, QuotaCheckFreq} = application:get_env(?APP_Name, quota_check_freq),
+  register_default_rules(QuotaCheckFreq);
+
 handle(_ProtocolVersion, _Msg) ->
   ok.
 
@@ -149,8 +145,16 @@ fetch_rows(ViewName, QueryArgs) ->
       throw(invalid_data)
   end.
 
+register_default_rules(WriteBytesThreshold) ->
+  ?info("------"),
+  ?info("----------"),
+  ?info("--------------- register_default_rules"),
+  register_quota_exceeded_handler(),
+  register_rm_event_handler(),
+  register_for_write_events(WriteBytesThreshold).
+
 %% ====================================================================
-%% Functions for manual tests
+%% Rule definitions
 %% ====================================================================
 register_quota_exceeded_handler() ->
   EventHandler = fun(Event) ->
@@ -161,7 +165,6 @@ register_quota_exceeded_handler() ->
   EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {quota_exceeded_event, EventItem}}}).
 
-%% For test purposes
 register_rm_event_handler() ->
   EventHandler = fun(Event) ->
     ?info("RmEvent Handler"),
@@ -199,13 +202,13 @@ register_rm_event_handler() ->
   EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {rm_event, EventItem, EventFilterConfig}}}).
 
-register_for_quota_events(WriteStatsEventsMultiplier) ->
+register_for_write_events(Bytes) ->
   EventHandler = fun(Event) ->
     ?info("Write EventHandler2 ~p", [node(self())]),
     UserDn = proplists:get_value(user_dn, Event),
     case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
       true ->
-        send_event([{type, quota_exceeded_event}, {user_dn, UserDn}]),
+        cluster_rengine:send_event(?ProtocolVersion, [{type, quota_exceeded_event}, {user_dn, UserDn}]),
         ?info("Quota exceeded event emited");
       _ ->
         ok
@@ -229,34 +232,7 @@ register_for_quota_events(WriteStatsEventsMultiplier) ->
         UserIdInt div 10
     end
   end,
-  Config = #event_stream_config{config = #aggregator_config{field_name = user_dn, fun_field_name = "_count", threshold = WriteStatsEventsMultiplier}},
-  EventItem = #event_handler_item{processing_method = tree, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = Config},
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {quota_write_event, EventItem}}}).
-
-register_for_read_stats(Bytes) ->
-  EventHandler = fun(Event) ->
-    Count = proplists:get_value(count, Event),
-    ?info("Read stats: ~p", [Count])
-  end,
-  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
-
-  EventFilter = #eventfilterconfig{field_name = "type", desired_value = "read_event"},
-  EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
-  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = Bytes, sum_field_name = "bytes"},
-  EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
-
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {read_event, EventItem, EventAggregatorConfig}}}).
-
-register_for_write_stats(Bytes) ->
-  EventHandler = fun(Event) ->
-    Count = proplists:get_value(count, Event),
-    ?info("Write stats: ~p", [Count]),
-
-    NewEvent1 = proplists:delete(type, Event),
-    QuotaEvent = [{type, quota_write_event} | NewEvent1],
-    send_event(QuotaEvent)
-  end,
-  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
+  EventItem = #event_handler_item{processing_method = tree, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = #event_stream_config{config = #aggregator_config{field_name = user_dn, fun_field_name = count, threshold = Bytes}}},
 
   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "write_event"},
   EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
@@ -264,19 +240,3 @@ register_for_write_stats(Bytes) ->
   EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
 
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {write_event, EventItem, EventAggregatorConfig}}}).
-
-%% For test purposes
-change_quota(UserLogin, NewQuotaInBytes) ->
-  {ok, UserDoc} = user_logic:get_user({login, UserLogin}),
-  user_logic:update_quota(UserDoc, #quota{size = NewQuotaInBytes}).
-
-send_event(Event) ->
-  gen_server:call(?Dispatcher_Name, {cluster_rengine, ?ProtocolVersion, {event_arrived, Event}}).
-
-prepare(QuotaBytes, StatsBytes) ->
-  register_quota_exceeded_handler(),
-  register_rm_event_handler(),
-  register_for_write_stats(StatsBytes),
-  register_for_quota_events(2),
-  register_for_read_stats(StatsBytes),
-  change_quota("plgmsitko", QuotaBytes).

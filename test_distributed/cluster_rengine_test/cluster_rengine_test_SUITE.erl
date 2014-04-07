@@ -80,7 +80,7 @@ test_event_subscription(Config) ->
     end
   end,
   
-  subscribe_for_write_events(CCM, tree, EventHandler2, #event_stream_config{config = #aggregator_config{field_name = user_id, fun_field_name = "count", threshold = 1}}),
+  subscribe_for_write_events(CCM, tree, EventHandler2, #event_stream_config{}),
   send_event(WriteEvent, CCM),
 
   % this time there are two handler registered

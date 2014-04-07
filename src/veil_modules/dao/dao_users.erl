@@ -13,6 +13,8 @@
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/dao_helper.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
+-include("registered_names.hrl").
+-include("logging.hrl").
 
 %% ===================================================================
 %% API functions
@@ -364,4 +366,13 @@ remove_quota(UUID) ->
 %% ====================================================================
 get_quota(UUID) ->
   dao:set_db(?USERS_DB_NAME),
-  dao:get_record(UUID).
+  {ok, DefaultQuotaSize} = application:get_env(?APP_Name, default_quota),
+
+  %% we want to be able to have special value in db for default quota in order to control default quota size via config in default.yml
+  %% here we are replacing DEFAULT_QUOTA_DB_TAG with value configured in default.yml
+  case dao:get_record(UUID) of
+    {ok, #veil_document{record = #quota{size = Size} = Quota} = QuotaDoc} when Size =:= ?DEFAULT_QUOTA_DB_TAG ->
+      NewQuota = Quota#quota{size = DefaultQuotaSize},
+      {ok, QuotaDoc#veil_document{record = NewQuota}};
+    Res -> Res
+  end.
