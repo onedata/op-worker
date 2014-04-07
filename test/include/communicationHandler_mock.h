@@ -11,7 +11,7 @@
 #include "communicationHandler.h"
 #include "gmock/gmock.h"
 
-using namespace veil; 
+using namespace veil;
 using namespace veil::protocol::communication_protocol;
 
 class MockCommunicationHandler
@@ -23,11 +23,12 @@ public:
     int openConnection() {
         return 0;
     }
-      
+
     // Override
     void closeConnection() {}
 
     MOCK_METHOD3(communicate, Answer(ClusterMsg&, uint8_t, uint32_t));
+    MOCK_METHOD2(sendMessage, int(ClusterMsg&, int32_t));
 
     CertificateInfo getCertInfo() {
         return CertificateInfo("certFile", "certFile");

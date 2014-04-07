@@ -19,7 +19,6 @@
 #include <ctime>
 #include <numeric>
 
-
 static const boost::posix_time::seconds MAX_FLUSH_DELAY(10);
 static const std::string CENTRAL_LOG_MODULE_NAME("central_logger");
 static const std::string LOGGING_DECODER("logging");
@@ -46,9 +45,9 @@ static RemoteLogLevel glogToLevel(google::LogSeverity glevel)
     }
 }
 
-RemoteLogWriter::RemoteLogWriter()
+RemoteLogWriter::RemoteLogWriter(const RemoteLogLevel initialThreshold)
     : m_pid(getpid())
-    , m_thresholdLevel(protocol::logging::NONE)
+    , m_thresholdLevel(initialThreshold)
 {
     m_thread = boost::thread(&RemoteLogWriter::writeLoop, this);
 }

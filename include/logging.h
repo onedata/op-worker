@@ -74,13 +74,15 @@ public:
     /**
      * Constructor. Sets the PID value sent with log messages to getpid().
      * Runs the message write loop in a separate thread.
+     * @param initialThreshold The initial threshold level below which messages
+     * won't be sent to a cluster.
      */
-    RemoteLogWriter();
+    RemoteLogWriter(const RemoteLogLevel initialThreshold = protocol::logging::NONE);
 
     /**
      * Destructor. Interrupts and joins the write-loop thread.
      */
-    ~RemoteLogWriter();
+    virtual ~RemoteLogWriter();
 
     /**
      * Saves a message to be sent to a cluster in a buffer. The buffer is
@@ -91,8 +93,9 @@ public:
      * @param timestamp Time of logging the message.
      * @param message The message that was logged.
      */
-    void buffer(const RemoteLogLevel level, const std::string &fileName,
-                const int line, const time_t timestamp, const std::string &message);
+    virtual void buffer(const RemoteLogLevel level, const std::string &fileName,
+                        const int line, const time_t timestamp,
+                        const std::string &message);
 
     /**
      * If the @p answer contains a ChangeRemoteLevel request from a cluster,
@@ -100,7 +103,7 @@ public:
      * @param answer A push message from the cluster.
      * @return true.
      */
-    bool handleThresholdChange(const protocol::communication_protocol::Answer &answer);
+    virtual bool handleThresholdChange(const protocol::communication_protocol::Answer &answer);
 
 private:
     void pushMessage(const protocol::logging::LogMessage &msg);
