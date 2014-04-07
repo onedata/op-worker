@@ -179,6 +179,7 @@ message EventAggregatorConfig {
     required string sum_field_name = 3; // it will be extended in future. so far we assume that aggregation function is always sum and sum_field_name is field_name which values are summed
 }
 
+// configure stream in client. Enables changing event values.
 message EventTransformerConfig {
     repeated string field_names_to_replace = 1;
     repeated string values_to_replace = 2;
