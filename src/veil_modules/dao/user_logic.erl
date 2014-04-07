@@ -355,13 +355,28 @@ get_role(User) ->
 %% ====================================================================
 %% @doc
 %% Update #veil_document encapsulating #user record with user role and save it to DB.
+%% First argument can also be a key to get user from DB, as in get_user/1.
 %% @end
 -spec update_role(User, NewRole) -> Result when
-    User :: user_doc(),
+    User :: user_doc() | 
+{login, Login :: string()} |
+{email, Email :: string()} |
+{uuid, UUID :: user()} |
+{dn, DN :: string()} |
+{rdnSequence, [#'AttributeTypeAndValue'{}]},
     NewRole :: atom(),
     Result :: {ok, user_doc()} | {error, any()}.
 %% ====================================================================
 update_role(#veil_document{record = UserInfo} = UserDoc, NewRole) ->
+    NewDoc = UserDoc#veil_document{record = UserInfo#user{role = NewRole}},
+    case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
+        {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
+        {error, Reason} -> {error, Reason}
+    end;
+
+update_role(Key, NewRole) ->
+    {ok, UserDoc} = get_user(Key),
+    #veil_document{record = UserInfo} = UserDoc,
     NewDoc = UserDoc#veil_document{record = UserInfo#user{role = NewRole}},
     case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
         {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
