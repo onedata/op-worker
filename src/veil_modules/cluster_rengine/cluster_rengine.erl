@@ -69,7 +69,6 @@ handle(ProtocolVersion, get_event_handlers) ->
 
   receive
     {ok, EventHandlers} ->
-      ?info("here, ~p", [EventHandlers]),
       lists:foreach(fun({EventType, EventHandlerItem}) ->
         update_event_handler(1, EventType, EventHandlerItem) end, EventHandlers);
     _ ->
@@ -112,7 +111,6 @@ cleanup() ->
 
 % returns if during update at least one process tree has been registered
 update_event_handler(ProtocolVersion, EventType, #event_handler_item{processing_method = ProcessingMethod, tree_id = TreeId} = EventHandlerItem) ->
-  ?info("---- update_event_handler: ~p", [{ProcessingMethod, ets:lookup(?EVENT_HANDLERS_CACHE, TreeId)}]),
   case {ProcessingMethod, ets:lookup(?EVENT_HANDLERS_CACHE, TreeId)} of
     {tree, []} -> create_process_tree_for_handler(ProtocolVersion, EventHandlerItem);
     _ -> ok
@@ -129,7 +127,6 @@ save_to_caches(EventType, #event_handler_item{processing_method = ProcessingMeth
                           _ -> []
                         end,
   ets:insert(?EVENT_TREES_MAPPING, {EventType, [EventHandlerEntry | EventHandlerEntries]}),
-  ?info("save_to_caches: ~p", [ets:lookup(?EVENT_TREES_MAPPING, EventType)]),
 
   case ProcessingMethod of
     tree -> case ets:lookup(?EVENT_HANDLERS_CACHE, TreeId) of

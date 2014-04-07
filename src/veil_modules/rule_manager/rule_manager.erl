@@ -50,6 +50,7 @@ handle(_ProtocolVersion, ping) ->
 handle(_ProtocolVersion, healthcheck) ->
 	ok;
 
+%% handler called by veilclient on intitialization - returns config for veilclient
 handle(_ProtocolVersion, event_producer_config_request) ->
   Configs = case ets:lookup(?PRODUCERS_RULES_ETS, producer_configs) of
               [{_Key, ProducerConfigs}] -> ProducerConfigs;
@@ -127,8 +128,10 @@ notify_producers(ProducerConfig, EventType) ->
   FuseIds = lists:map(fun(#view_row{key = FuseId}) -> FuseId end, Rows),
   UniqueFuseIds = sets:to_list(sets:from_list(FuseIds)),
 
+  %% notify all fuses
   lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, ProducerConfig, "fuse_messages") end, UniqueFuseIds),
 
+  %% notify logical_files_manager
   gen_server:cast({global, ?CCM}, {notify_lfm, EventType, true}).
 
 generate_tree_name() ->
@@ -161,12 +164,13 @@ register_quota_exceeded_handler() ->
     gen_server:cast({global, ?CCM}, {update_user_write_enabled, UserDn, false})
   end,
   EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
+
+  %% no client configuration needed - register event handler
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {quota_exceeded_event, EventItem}}}).
 
 register_rm_event_handler() ->
   EventHandler = fun(Event) ->
-    QuotaExceededFn = fun() ->
-      UserDn = proplists:get_value(user_dn, Event),
+    CheckQuota = fun(UserDn) ->
       case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
         false ->
           worker_host:send_to_user({dn, UserDn}, #atom{value = "write_enabled"}, "communication_protocol", ?ProtocolVersion),
@@ -177,7 +181,24 @@ register_rm_event_handler() ->
       end
     end,
 
-    Exceeded = QuotaExceededFn(),
+    %% this function returns boolean true only if check quota is needed and quota is exceeded
+    CheckQuotaIfNeeded = fun(UserDn) ->
+      case user_logic:get_user({dn, UserDn}) of
+        {ok, UserDoc} ->
+          case user_logic:get_quota(UserDoc) of
+            {ok, #quota{exceeded = true}} ->
+              %% calling CheckQuota causes view reloading so we call it only when needed (quota has been already exceeded)
+              CheckQuota(UserDn);
+            _ -> false
+          end;
+        Error ->
+          ?warning("cannot get user with dn: ~p, Error: ~p", [UserDn, Error]),
+          false
+      end
+    end,
+
+    UserDn = proplists:get_value(user_dn, Event),
+    Exceeded = CheckQuotaIfNeeded(UserDn),
 
     %% if quota is exceeded check quota one more time after 5s - in meanwhile db view might get reloaded
     case Exceeded of
@@ -186,19 +207,22 @@ register_rm_event_handler() ->
           receive
             _ -> ok
           after ?VIEW_UPDATE_DELAY ->
-            QuotaExceededFn()
+            CheckQuota(UserDn)
           end
         end);
       _ ->
         ok
     end
   end,
-
   EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
+
+  %% client configuration
   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "rm_event"},
   EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
+
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {rm_event, EventItem, EventFilterConfig}}}).
 
+%% Registers handler which will be called every Bytes will be written.
 register_for_write_events(Bytes) ->
   EventHandler = fun(Event) ->
     UserDn = proplists:get_value(user_dn, Event),
@@ -229,6 +253,7 @@ register_for_write_events(Bytes) ->
   end,
   EventItem = #event_handler_item{processing_method = tree, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = #event_stream_config{config = #aggregator_config{field_name = user_dn, fun_field_name = count, threshold = Bytes}}},
 
+  %% client configuration
   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "write_event"},
   EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
   EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = Bytes, sum_field_name = "bytes"},
