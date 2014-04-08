@@ -900,24 +900,30 @@ send_to_user_with_ack(UserKey, Message, MessageDecoder, OnCompleteCallback, Prot
     {ok, UserDoc} ->
       case dao_lib:apply(dao_cluster, get_sessions_by_user, [UserDoc#veil_document.uuid], ProtocolVersion) of
         {ok, FuseIds} ->
-          MsgId = request_dispatcher:next_msg_id(),
+          try
+            MsgId = gen_server:call({?Node_Manager_Name, node()}, get_next_callback_msg_id),
 
-          Pid = spawn(fun() ->
-            receive
-              {call_on_complete_callback} ->
-                [{_Key, {_, SucessFuseIds, FailFuseIds, _Length, _Pid}}] = ets:lookup(?ACK_HANDLERS, MsgId),
-                ets:delete(?ACK_HANDLERS, MsgId),
-                OnCompleteCallback(SucessFuseIds, FailFuseIds)
-            end
-          end),
+            Pid = spawn(fun() ->
+              receive
+                {call_on_complete_callback} ->
+                  [{_Key, {_, SucessFuseIds, FailFuseIds, _Length, _Pid}}] = ets:lookup(?ACK_HANDLERS, MsgId),
+                  ets:delete(?ACK_HANDLERS, MsgId),
+                  OnCompleteCallback(SucessFuseIds, FailFuseIds)
+              end
+            end),
 
-          % we need to create and insert to ets ack handler before sending a push message
-          ets:insert(?ACK_HANDLERS, {MsgId, {OnCompleteCallback, [], FuseIds, length(FuseIds), Pid}}),
+            % we need to create and insert to ets ack handler before sending a push message
+            ets:insert(?ACK_HANDLERS, {MsgId, {OnCompleteCallback, [], FuseIds, length(FuseIds), Pid}}),
 
-          % now we can send messages to fuses
-          lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse_ack(FuseId, Message, MessageDecoder, MsgId) end, FuseIds),
-          erlang:send_after(?WAIT_FOR_ACK_MS, Pid, {call_on_complete_callback}),
-          ok;
+            % now we can send messages to fuses
+            lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse_ack(FuseId, Message, MessageDecoder, MsgId) end, FuseIds),
+            erlang:send_after(?WAIT_FOR_ACK_MS, Pid, {call_on_complete_callback}),
+            ok
+          catch
+            E1:E2 ->
+              ?warning("cannot get callback message id, Error: ~p:~p", [E1, E2]),
+              {error, E2}
+          end;
         {error, Error} ->
           ?warning("cannot get fuse ids for user")
       end;

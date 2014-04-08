@@ -113,7 +113,6 @@ cleanup() ->
 	ok.
 
 %% Helper functions
-
 notify_cluster_rengines(EventHandlerItem, EventType) ->
   Ans = gen_server:call({global, ?CCM}, {update_cluster_rengines, EventType, EventHandlerItem}),
   case Ans of

@@ -827,8 +827,8 @@ send_to_fuse(FuseId, Message, MessageDecoder, SendNum) ->
           case Callback of
             non -> channel_not_found;
             _ ->
-              MsgID = next_msg_id(),
-              Callback ! {self(), Message, MessageDecoder, MsgID},
+              MsgID = gen_server:call({?Node_Manager_Name, Node}, get_next_callback_msg_id),
+              Callback ! {with_ack, self(), Message, MessageDecoder, MsgID},
               receive
                 {Callback, MsgID, Response} -> Response
               after 500 ->
@@ -910,14 +910,6 @@ send_to_fuse_ack(FuseId, Message, MessageDecoder, MessageId, SendNum) ->
           send_to_fuse_ack(FuseId, Message, MessageDecoder, MessageId, SendNum - 1)
       end
   end.
-
-next_msg_id() ->
-  case get(callback_msg_ID) of
-    ID when is_integer(ID) ->
-      put(callback_msg_ID, ID - 1);
-    _ -> put(callback_msg_ID, -1)
-  end,
-  get(callback_msg_ID).
 
 %% choose_node_by_map/3
 %% ====================================================================
