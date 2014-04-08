@@ -21,7 +21,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_link/0, stop/0, send_to_fuse/3, send_to_fuse_ack/4, next_msg_id/0]).
+-export([start_link/0, stop/0, send_to_fuse/3, send_to_fuse_ack/4]).
 
 %% TODO zmierzyć czy bardziej się opłaca przechowywać dane o modułach
 %% jako stan (jak teraz) czy jako ets i ewentualnie przejść na ets
@@ -828,7 +828,7 @@ send_to_fuse(FuseId, Message, MessageDecoder, SendNum) ->
             non -> channel_not_found;
             _ ->
               MsgID = gen_server:call({?Node_Manager_Name, Node}, get_next_callback_msg_id),
-              Callback ! {with_ack, self(), Message, MessageDecoder, MsgID},
+              Callback ! {self(), Message, MessageDecoder, MsgID},
               receive
                 {Callback, MsgID, Response} -> Response
               after 500 ->

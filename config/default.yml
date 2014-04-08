@@ -306,6 +306,8 @@ veil_cluster_node_env:
       name: default_quota
       description: |
         This variable will be used to determine user quota if property size of quota doc of user has not been changed after user creation.
+        By default user quota is saved in db per user as special value indicating that default_quota should be used.
+        So if you change this value it will be applied to all users (existing and those that will be created in future) except of those whose quota has been manually changed.
       value: 10737418240 # 10GB
 
   - parameter:
