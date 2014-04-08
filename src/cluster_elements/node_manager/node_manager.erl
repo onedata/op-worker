@@ -101,7 +101,7 @@ init([Type]) when Type =:= worker ; Type =:= ccm ; Type =:= ccm_test ->
       catch
         _:_ -> ok
       end,
-      ets:new(?ACK_HANDLERS, [named_table, set, public]),
+
       {ok, Port} = application:get_env(?APP_Name, dispatcher_port),
       {ok, DispatcherPoolSize} = application:get_env(?APP_Name, dispatcher_pool_size),
       {ok, CertFile} = application:get_env(?APP_Name, ssl_cert_path),
