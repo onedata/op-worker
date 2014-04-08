@@ -23,4 +23,7 @@
 -define(EVENT_HANDLERS_CACHE, event_handlers_cache).
 -define(EVENT_TREES_MAPPING, event_trees_cache).
 
+%% Types
+-type event_handler_item() :: #event_handler_item{}.
+
 -endif.

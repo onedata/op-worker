@@ -30,8 +30,15 @@
 %% functions for manual tests
 -export([register_quota_exceeded_handler/0, register_rm_event_handler/0, register_for_write_events/1]).
 
+%% name of ets that store event_handler_item records registered in rule_manager as values and event types as keys
 -define(RULE_MANAGER_ETS, rule_manager).
+
+%% name of ets that store eventstreamconfig records (from fuse_messages_pb)
+%% TODO: consider using worker_host state instead
 -define(PRODUCERS_RULES_ETS, producers_rules).
+
+%% name of ets for tree id generation
+%% TODO: consider using worker_host state instead
 -define(HANDLER_TREE_ID_ETS, handler_tree_id_ets).
 
 -define(ProtocolVersion, 1).
@@ -82,7 +89,6 @@ handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem, Produ
     [{_EventType, EventHandlers}] -> ets:insert(?RULE_MANAGER_ETS, {EventType, [NewEventItem | EventHandlers]})
   end,
 
-  %% todo: eventually it needs to be implemented differently
   case ets:lookup(?PRODUCERS_RULES_ETS, producer_configs) of
     [] -> ets:insert(?PRODUCERS_RULES_ETS, {producer_configs, [ProducerConfig]});
     [{_, ListOfConfigs}] -> ets:insert(?PRODUCERS_RULES_ETS, {producer_configs, [ProducerConfig | ListOfConfigs]})
@@ -112,7 +118,16 @@ handle(_ProtocolVersion, _Msg) ->
 cleanup() ->
 	ok.
 
+%% ====================================================================
 %% Helper functions
+%% ====================================================================
+
+%% notify_cluster_rengines/2
+%% ====================================================================
+%% @doc Notify all cluster_rengines about EventHandlerItem for EventType
+%% @end
+-spec notify_cluster_rengines(EventHandlerItem :: event_handler_item(), EventType :: atom()) -> ok | error.
+%% ====================================================================
 notify_cluster_rengines(EventHandlerItem, EventType) ->
   Ans = gen_server:call({global, ?CCM}, {update_cluster_rengines, EventType, EventHandlerItem}),
   case Ans of
@@ -122,6 +137,12 @@ notify_cluster_rengines(EventHandlerItem, EventType) ->
       error
   end.
 
+%% notify_producers/2
+%% ====================================================================
+%% @doc Notify event producers about new ProducerConfig.
+%% @end
+-spec notify_producers(ProducerConfig :: #eventstreamconfig{}, EventType :: atom()) -> term().
+%% ====================================================================
 notify_producers(ProducerConfig, EventType) ->
   Rows = fetch_rows(?FUSE_CONNECTIONS_VIEW, #view_query_args{}),
   FuseIds = lists:map(fun(#view_row{key = FuseId}) -> FuseId end, Rows),
@@ -133,11 +154,14 @@ notify_producers(ProducerConfig, EventType) ->
   %% notify logical_files_manager
   gen_server:cast({global, ?CCM}, {notify_lfm, EventType, true}).
 
+%% TODO: add proper spec
 generate_tree_name() ->
   [{_, Id}] = ets:lookup(?HANDLER_TREE_ID_ETS, current_id),
   ets:insert(?HANDLER_TREE_ID_ETS, {current_id, Id + 1}),
   list_to_atom("event_" ++ integer_to_list(Id)).
 
+%% Helper function for fetching rows from view
+%% TODO: add proper spec
 fetch_rows(ViewName, QueryArgs) ->
   case dao:list_records(ViewName, QueryArgs) of
     {ok, #view_result{rows = Rows}} ->
@@ -147,6 +171,8 @@ fetch_rows(ViewName, QueryArgs) ->
       throw(invalid_data)
   end.
 
+%% Register rules that should registered just after cluster startup
+%% TODO: add proper spec
 register_default_rules(WriteBytesThreshold) ->
   register_quota_exceeded_handler(),
   register_rm_event_handler(),

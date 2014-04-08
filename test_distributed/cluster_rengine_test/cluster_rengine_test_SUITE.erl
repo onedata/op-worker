@@ -5,8 +5,9 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ==================================================================
-%% @doc:
-%%
+%% @doc: This test checks if event handlers subscription, configuration
+%% and processing works correctly. Tests send events by themselves
+%% mimicking behaviour of event producers.
 %% @end
 %% ==================================================================
 -module(cluster_rengine_test_SUITE).

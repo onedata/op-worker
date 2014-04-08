@@ -875,6 +875,7 @@ del_sub_procs(Key, Name) ->
 -spec send_to_user(UserKey :: user_key(), Message :: term(), MessageDecoder :: string(), ProtocolVersion :: integer()) -> Result when
   Result :: ok | {error, Error :: term()}.
 %% ====================================================================
+%% TODO: move to request_dispatcher
 send_to_user(UserKey, Message, MessageDecoder, ProtocolVersion) ->
   case user_logic:get_user(UserKey) of
     {ok, UserDoc} ->
