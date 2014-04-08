@@ -15,7 +15,7 @@
 -define(DAO_USERS, 1).
 
 %% This record defines a user and is handled as a database document
--record(user, {login = "", name = "", teams = undefined, email_list = [], dn_list = [], quota_doc}).
+-record(user, {login = "", name = "", teams = undefined, email_list = [], dn_list = [], quota_doc, role = user}).
 
 %% This record defines a users' quota and is handled as a database document
 -record(quota, {size = 10 * 1024 * 1024 * 1024}).

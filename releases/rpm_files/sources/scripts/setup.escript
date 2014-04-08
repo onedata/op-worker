@@ -10,7 +10,7 @@
 -define(default_group_storage_prefix,"/mnt/"++?default_group_name_prefix).
 
 %Ports that needs to be free
--define(ports_to_check,[53,443,5555,8443]).
+-define(ports_to_check,[53,80,443,5555,8443]).
 
 % Curl options
 -define(curl_opts,"--connect-timeout 5 -s").
