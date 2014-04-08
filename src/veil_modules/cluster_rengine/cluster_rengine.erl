@@ -102,7 +102,11 @@ handle(ProtocolVersion, {event_arrived, Event}) ->
         end
       end,
       lists:foreach(ForwardEvent, EventToTreeMappings)
-  end.
+  end;
+
+%% Handle requests that have wrong structure.
+handle(_ProtocolVersion, _Msg) ->
+  wrong_request.
 
 cleanup() ->
 	ok.

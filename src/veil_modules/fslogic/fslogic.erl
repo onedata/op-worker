@@ -79,6 +79,7 @@ handle(_ProtocolVersion, ping) ->
   pong;
 
 %% this handler is intended to be called by newly connected clients
+%% TODO: create generic mechanism for getting configuration on client startup
 handle(ProtocolVersion, is_write_enabled) ->
   try
     case user_logic:get_user({dn, get(user_id)}) of

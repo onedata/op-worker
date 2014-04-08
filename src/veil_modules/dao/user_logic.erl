@@ -728,14 +728,14 @@ create_team_dir(TeamName) ->
 %% quota_exceeded/2
 %% ====================================================================
 %% @doc
-%% Return if quota is exceeded for user. Saves result to quota doc related to user. Throws an exception when user does not exists.
+%% Return true if quota is exceeded for user. Saves result to quota doc related to user. Throws an exception when user does not exists.
 %% @end
 -spec quota_exceeded(Key :: {login, Login :: string()} |
 {email, Email :: string()} |
 {uuid, UUID :: user()} |
 {dn, DN :: string()} |
 {rdnSequence, [#'AttributeTypeAndValue'{}]}, ProtocolVersion :: integer()) ->
-  {binary() | no_return()}.
+  {boolean() | no_return()}.
 %% ====================================================================
 quota_exceeded(UserQuery, ProtocolVersion) ->
   case user_logic:get_user(UserQuery) of

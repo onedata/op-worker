@@ -237,6 +237,14 @@ list_fuse_sessions({by_valid_to, Time}) ->
             {error, Reason}
     end.
 
+%% get_sessions_by_user/1
+%% ====================================================================
+%% @doc Returns fuse_session records for user of given uuid.
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec get_sessions_by_user(Uuid :: string()) ->
+  {ok, [#veil_document{}]} | {error, any()}.
+%% ====================================================================
 get_sessions_by_user(Uuid) ->
   QueryArgs = #view_query_args{keys = [dao_helper:name(Uuid)]},
   case dao:list_records(?FUSE_SESSIONS_BY_USER_ID_VIEW, QueryArgs) of

@@ -885,7 +885,7 @@ send_to_fuse_ack(FuseId, Message, MessageDecoder, MessageId, SendNum) ->
             _ ->
               Callback ! {with_ack, self(), Message, MessageDecoder, MessageId},
               receive
-                {Callback, MsgID, Response} -> Response
+                {Callback, MessageId, Response} -> Response
               after 500 ->
                 socket_error
               end

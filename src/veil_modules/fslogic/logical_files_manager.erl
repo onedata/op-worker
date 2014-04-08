@@ -473,11 +473,9 @@ delete(FileStr) ->
                     ?VOK ->
                       case event_production_enabled(rm_event) of
                         true ->
-                          ?info("rm_event production enabled ------"),
                           RmEvent = [{type, rm_event}, {user_dn, get(user_id)}],
                           gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, RmEvent}});
                         _ ->
-                          ?info("rm_event production disabled ------"),
                           ok
                       end,
                       ok;
@@ -1058,12 +1056,23 @@ check_utf(FileName) when is_list(FileName) ->
 check_utf(FileName) ->
   FileName.
 
+%% event_production_enabled/1
+%% ====================================================================
+%% @doc Returns true if event of type EventName should be produced.
+%% @end
+-spec event_production_enabled(EventName :: atom()) -> boolean().
+%% ====================================================================
 event_production_enabled(EventName) ->
   case ets:lookup(?LFM_EVENT_PRODUCTION_ENABLED_ETS, EventName) of
     [{_Key, _Value}] -> true;
     _ -> false
   end.
 
+%% write_enabled/1
+%% ====================================================================
+%% @doc Returns true if quota for user of given dn has not been exceeded and therefore writing is enabled.
+%% @end
+-spec write_enabled(UserDn :: string()) -> boolean().
 write_enabled(UserDn) ->
   case ets:lookup(?WRITE_DISABLED_USERS, UserDn) of
     [{_Key, _Value}] -> false;

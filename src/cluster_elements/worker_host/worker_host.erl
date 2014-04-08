@@ -217,6 +217,8 @@ handle_cast({asynch, ProtocolVersion, Msg, MsgId, FuseID}, State) ->
     [{_, {Callback, SuccessFuseIds, FailFuseIds, Length, Pid}}] ->
       NewSuccessFuseIds = [FuseID | SuccessFuseIds],
       NewFailFuseIds = lists:delete(FuseID, FailFuseIds),
+
+      %% TODO: refactoring needed - Length not needed, we can replace NewFailFuseIds with AllFuseIds and then we will always have Length and we will not have to delete anything from this list
       ets:insert(?ACK_HANDLERS, {MsgId, {Callback, NewSuccessFuseIds, NewFailFuseIds, Length, Pid}}),
       case length(NewSuccessFuseIds) of
         Length ->
@@ -881,10 +883,12 @@ send_to_user(UserKey, Message, MessageDecoder, ProtocolVersion) ->
           lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, Message, MessageDecoder) end, FuseIds),
           ok;
         {error, Error} ->
-          ?warning("cannot get fuse ids for user")
+          ?warning("cannot get fuse ids for user, error: ~p", [Error]),
+          {error, Error}
       end;
     {error, Error} ->
-      ?warning("cannot get user in send_to_user")
+      ?warning("cannot get user in send_to_user: ~p", [Error]),
+      {error, Error}
   end.
 
 %% send_to_user_with_ack/5
@@ -917,6 +921,8 @@ send_to_user_with_ack(UserKey, Message, MessageDecoder, OnCompleteCallback, Prot
 
             % now we can send messages to fuses
             lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse_ack(FuseId, Message, MessageDecoder, MsgId) end, FuseIds),
+
+            %% TODO change to receive .. after
             erlang:send_after(?WAIT_FOR_ACK_MS, Pid, {call_on_complete_callback}),
             ok
           catch
@@ -925,10 +931,12 @@ send_to_user_with_ack(UserKey, Message, MessageDecoder, OnCompleteCallback, Prot
               {error, E2}
           end;
         {error, Error} ->
-          ?warning("cannot get fuse ids for user")
+          ?warning("cannot get fuse ids for user"),
+          {error, Error}
       end;
     {error, Error} ->
-      ?warning("cannot get user in send_to_user")
+      ?warning("cannot get user in send_to_user"),
+      {error, Error}
   end.
 
 %% create_simple_cache/1
