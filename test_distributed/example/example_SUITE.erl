@@ -97,8 +97,8 @@ init_per_testcase(distributed_test, Config) ->
   Nodes = nodes_manager:start_test_on_nodes(2),
   [Node1 | _] = Nodes,
 
-  StartLog = nodes_manager:start_app_on_nodes(Nodes, [[{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [Node1]}, {dns_port, 1308}, {control_panel_port, 2308}, {rest_port, 3308}],
-    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [Node1]}, {dns_port, 1309}, {control_panel_port, 2309}, {rest_port, 3309}]]),
+  StartLog = nodes_manager:start_app_on_nodes(Nodes, [[{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [Node1]}, {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [Node1]}, {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}]]),
 
   Assertions = [{false, lists:member(error, Nodes)}, {false, lists:member(error, StartLog)}],
   lists:append([{nodes, Nodes}, {assertions, Assertions}], Config);
