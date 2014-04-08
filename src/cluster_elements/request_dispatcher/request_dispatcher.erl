@@ -828,7 +828,7 @@ send_to_fuse(FuseId, Message, MessageDecoder, SendNum) ->
             non -> channel_not_found;
             _ ->
               MsgID = next_msg_id(),
-              Callback ! {with_ack, self(), Message, MessageDecoder, MsgID},
+              Callback ! {self(), Message, MessageDecoder, MsgID},
               receive
                 {Callback, MsgID, Response} -> Response
               after 500 ->
