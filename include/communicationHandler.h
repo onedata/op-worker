@@ -10,7 +10,6 @@
 #define COMMUNICATION_HANDLER_H
 
 #include <string>
-#include <boost/atomic.hpp>
 #include <boost/thread.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/unordered_map.hpp>
@@ -130,7 +129,6 @@ protected:
     volatile int                m_connectStatus;    ///< Current connection status
     volatile unsigned int       m_currentMsgId;     ///< Next messageID to be used
     volatile unsigned int       m_errorCount;       ///< How many connection errors were cought
-    static boost::atomic<int>   s_instancesCount;
     volatile bool               m_isPushChannel;
     std::string                 m_fuseID;           ///< Current fuseID for PUSH channel (if any)
     static SSL_SESSION*         m_session;
@@ -203,8 +201,6 @@ public:
      * @return Answer protobuf message. If error occures, empty Answer object will be returned.
      */
     virtual             protocol::communication_protocol::Answer communicate(protocol::communication_protocol::ClusterMsg &msg, uint8_t retry, uint32_t timeout = 0);
-
-    static int getInstancesCount();                                 ///< Returns number of CommunicationHander instances.
 
 };
 
