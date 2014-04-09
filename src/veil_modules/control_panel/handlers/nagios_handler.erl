@@ -11,6 +11,7 @@
 -module(nagios_handler).
 -include("registered_names.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
+-include("logging.hrl").
 
 -export([init/3, handle/2, terminate/3]).
 
@@ -111,7 +112,7 @@ get_data_from_ccm(Timeout) ->
 	Atribute :: {Name :: atom(),Value :: string()}.
 %% ====================================================================
 node_status(Node,CcmStateNum,CcmCStateNum,Timeout) ->
-	lager:debug("Healthcheck on node:~p",[Node]),
+	?debug("Healthcheck on node:~p",[Node]),
 	try
 		%get state nuber and callback number from node manager and dispatcher
 		{_, DispCStateNum} = gen_server:call({?Dispatcher_Name, Node}, get_callbacks, Timeout),
@@ -149,7 +150,7 @@ node_status(Node,CcmStateNum,CcmCStateNum,Timeout) ->
 	Atribute :: {Name :: atom(),Value :: string()}.
 %% ====================================================================
 worker_status(Worker,Timeout) ->
-	lager:debug("Healthcheck on worker: ~p",[Worker]),
+	?debug("Healthcheck on worker: ~p",[Worker]),
 	{WorkerNode,WorkerName} = Worker,
 	NameString = atom_to_list(WorkerName),
 	NodeString = atom_to_list(WorkerNode),

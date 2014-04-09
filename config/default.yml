@@ -124,14 +124,14 @@ veil_cluster_node_env:
       description: |
         Current loglevel in the cluster. Logs with lower importance will be completely discarded
         Available loglevels are 0-7, respectively: debug, info, notice, warning, error, critical, alert, emergency
-      value: 0
+      value: 1
 
   - parameter:
       name: default_loglevel
       description: |
         Used to reset loglevel to default.
         Available loglevels are 0-7, respectively: debug, info, notice, warning, error, critical, alert, emergency
-      value: 0
+      value: 1
 
   - parameter:
       name: include_stacktrace
