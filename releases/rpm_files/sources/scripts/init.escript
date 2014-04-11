@@ -49,32 +49,6 @@ main(Args) ->
 		
 	try
 		try lists:nth(1, Args) of
-			"start" -> 
-				start_db_node(),
-				start_veil_nodes();
-
-			"stop" -> 
-				stop_veil_nodes(),
-				stop_db_node();
-
-			% Required by the init.d standard
-			"restart" -> 
-				ok;  % Can be imlemented using node_reconf script
-
-			% Required by the init.d standard
-			"reload" -> 
-				ok;  % TODO
-
-			% Required by the init.d standard
-			"force_reload" -> 
-				ok;  % TODO
-
-			% Required by the init.d standard
-			"status" -> 
-				ok;  % TODO
-
-
-			% Commands below are used by the install script - start only veil or db nodes
 			"start_veil" -> start_veil_nodes();
 
 			"stop_veil" -> stop_veil_nodes();
@@ -83,13 +57,41 @@ main(Args) ->
 
 			"stop_db" -> stop_db_node();
 
+			"status_veil" -> halt(status(veil));
 
-			Unknown -> ?error("Unknown argument: " ++ Unknown) 
+			"status_db" -> halt(status(database));
+			Unknown ->
+				?error("Unknown argument: " ++ Unknown),
+				halt(1)
 		catch _:_ ->
-			?error("Wrong script usage") 
+			?error("Wrong script usage"),
+			halt(1)
 		end
 	catch Type:Message ->
-		?error("The script terminated abnormally~n~p: ~p~nStack trace:~n~p", [Type, Message, erlang:get_stacktrace()])
+		?error("The script terminated abnormally~n~p: ~p~nStack trace:~n~p", [Type, Message, erlang:get_stacktrace()]),
+		halt(1)
+	end.
+
+status(NodeType) when is_atom(NodeType) ->
+	case get_nodes_from_config(NodeType) of
+		{none, []} ->
+			3;
+		{db_node, Db} ->
+			status(Db);
+		{worker, Worker} ->
+			status(Worker);
+		{ccm_plus_worker, {CCM, Worker}} ->
+			case {status(CCM), status(Worker)} of
+				{0,0} -> 0;
+				_ -> 3
+			end
+	end;
+status({_NodeType, NodeName, _Path}) ->
+	LongName = atom_to_list(NodeName) ++ get(hostname),
+	case rpc:call(list_to_atom(LongName), init, get_status, []) of
+		{started,_} -> 0;
+		{starting,_} -> 0;
+		_ -> 3
 	end.
 
 start_db_node() ->
