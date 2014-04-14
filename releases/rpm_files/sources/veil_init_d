@@ -21,6 +21,9 @@
 # Needed for erlexec to run
 export HOME=/
 
+# Default installation path
+PREFIX=/opt/veil/
+
 start() {
 	start_db ; ret1=$?
 	start_veil ; ret2=$?
@@ -31,7 +34,7 @@ start_veil() {
 	status_veil_silent ; status=$?
 	if [ $status -ne 0 ]; then
 		echo -n "Starting veil: "
-		/opt/veil/scripts/erl_launcher escript /opt/veil/scripts/init.escript start_veil
+		${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript start_veil
 		ret=$?
 		[ $ret -eq 0 ] && success || failure
 		echo
@@ -42,7 +45,7 @@ start_db() {
 	status_db_silent ; status=$?
 	if [ $status -ne 0 ]; then
 		echo -n "Starting db: "
-		/opt/veil/scripts/erl_launcher escript /opt/veil/scripts/init.escript start_db
+		${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript start_db
 		ret=$?
 		[ $ret -eq 0 ] && success || failure
 		echo
@@ -60,7 +63,7 @@ stop_veil() {
 	status_veil_silent ; status=$?
 	if [ $status -eq 0 ]; then
 		echo -n "Stopping veil: "
-		/opt/veil/scripts/erl_launcher escript /opt/veil/scripts/init.escript stop_veil
+		${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript stop_veil
 		ret=$?
 		[ $ret -eq 0 ] && success || failure
 		echo
@@ -71,7 +74,7 @@ stop_db() {
 	status_db_silent ; status=$?
 	if [ $status -eq 0 ]; then
 		echo -n "Stopping db: "
-		/opt/veil/scripts/erl_launcher escript /opt/veil/scripts/init.escript stop_db
+		${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript stop_db
 		ret=$?
 		[ $ret -eq 0 ] && success || failure
 		echo
@@ -98,10 +101,10 @@ status_db() {
 	return $ret
 }
 status_veil_silent() {
-	/opt/veil/scripts/erl_launcher escript /opt/veil/scripts/init.escript status_veil
+	${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript status_veil
 }
 status_db_silent() {
-	/opt/veil/scripts/erl_launcher escript /opt/veil/scripts/init.escript status_db
+	${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript status_db
 }
 
 
