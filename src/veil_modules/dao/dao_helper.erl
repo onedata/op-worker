@@ -297,7 +297,7 @@ query_view(DbName, DesignName, ViewName) ->
     {ok, QueryResult :: term()} | {error, term()}.
 %% ====================================================================
 query_view(DbName, DesignName, ViewName, QueryArgs = #view_query_args{view_type = Type}) ->
-	QueryArgs1 =
+    QueryArgs1 =
         case Type of
             map -> QueryArgs;
             reduce -> QueryArgs;

@@ -241,7 +241,6 @@ list_fuse_sessions({by_valid_to, Time}) ->
         {ok, #view_result{rows = Rows}} ->
             {ok, [Session || #view_row{doc = #veil_document{record = #fuse_session{}} = Session} <- Rows]};
         {error, Reason} ->
-	        lager:error("##list fuse sessions error: ~p",[Reason]),
             {error, Reason}
     end.
 
@@ -279,6 +278,7 @@ get_connection_info(SessID) ->
 %% remove_connection_info/1
 %% ====================================================================
 %% @doc Removes connection_info record with given SessID form DB.
+%% 		If it's last connection for session, session is deleted also.
 %%      Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec remove_connection_info(SessID :: uuid()) ->
@@ -288,16 +288,14 @@ get_connection_info(SessID) ->
 remove_connection_info("") ->
 	ok;
 remove_connection_info(SessID) ->
-	{ok, #veil_document{record = #connection_info{controlling_node = CNode, controlling_pid = CPid, session_id = SessionID}}} = get_connection_info(SessID),
+	{ok, #veil_document{record = #connection_info{session_id = SessionID}}} = get_connection_info(SessID),
 	case list_connection_info({by_session_id, SessionID}) of
 		{ok,[_OneConnection]} ->
-			remove_fuse_session(SessionID),
-			dao:remove_record(SessID);
+			remove_fuse_session(SessionID);
 		{ok,_} ->
-			dao:remove_record(SessID);
-		{error,Error} ->
-			lager:error("Error while listing connection info: ~p",[Error])
-	end.
+			ok
+	end,
+	dao:remove_record(SessID).
 
 
 %% close_connection/1
@@ -351,23 +349,21 @@ list_connection_info({by_session_id, SessID}) ->
 %% ====================================================================
 clear_sessions() ->
     CurrentTime = fslogic_utils:time(),
-    ?debug("##FUSE session cleanup started. Time: ~p", [CurrentTime]),
+    ?debug("FUSE session cleanup started. Time: ~p", [CurrentTime]),
 
     %% List of worker processes that validates sessions in background
-    case list_fuse_sessions({by_valid_to, CurrentTime}) of
+    Res = case list_fuse_sessions({by_valid_to, CurrentTime}) of
         {ok, Sessions} ->
-            %% [{#veil_document{record = #fuse_session}, {Pid, MRef}}]
-            ?info("##old fuse sessions: ~p",[length(Sessions)]),
             Splitted = split_list(Sessions,1000),
-            [clear_sessions(Part) || Part <- Splitted],
-            ok;
+            [clear_sessions(Part) || Part <- Splitted];
         {error, Reason} ->
-            ?error("##Cannot cleanup old fuse sessions. Expired session list fetch failed: ~p", [Reason]),
+            ?error("Cannot cleanup old fuse sessions. Expired session list fetch failed: ~p", [Reason]),
             exit(Reason)
-    end.
+    end,
+	?debug("FUSE session cleanup ended. Status: ~p", [Res]),
+	ok.
 
 clear_sessions(Sessions) ->
-	?info("##old fuse sessions burst: ~p",[length(Sessions)]),
 	SPid = self(),
 	PidList = [{X, spawn_monitor(fun() -> SPid ! {self(), check_session(X)} end)} || X <- Sessions],
     %% Helper function that fetches and processes check_session result from given worker process
@@ -382,19 +378,15 @@ clear_sessions(Sessions) ->
                     save_fuse_session(NewDoc), %% Save updated document
                     ok;
                 {Pid, {error, Reason1}} -> %% Connection is broken, remove it
-                    ?info("##FUSE Session ~p is broken (~p). Invalidating...", [SessID, Reason1]),
+                    ?info("FUSE Session ~p is broken (~p). Invalidating...", [SessID, Reason1]),
                     close_fuse_session(SessID),
                     session_closed
             after 60000 ->
                 timeout
             end
         end,
-
     %% Iterate over all check_session results and apply ProcessSession/2 on each
-    _Res = [ProcessSession(Doc, Pid) || {Doc, {Pid, _}} <- PidList],
-
-    ?debug("##FUSE session cleanup ended. Status: ~p", [_Res]),
-    ok.
+    [ProcessSession(Doc, Pid) || {Doc, {Pid, _}} <- PidList].
 
 
 %% check_session/1
@@ -462,7 +454,6 @@ check_session(#veil_document{record = #fuse_session{}, uuid = SessID}) ->
 %% ====================================================================
 check_connection(Connection = #veil_document{record = #connection_info{session_id = SessID, controlling_node = CNode, controlling_pid = CPid}}) ->
     SPid = self(),
-    lager:info("session connection check: session_id ~p controlling_node ~p, controlling_pid ~p",[SessID, CNode,CPid]),
 	case is_pid(CPid) of
 		true->
 			spawn(CNode, fun() -> CPid ! {SPid, get_session_id} end),   %% Send ping to connection controlling process
@@ -481,6 +472,11 @@ check_connection(Connection = #veil_document{record = #connection_info{session_i
 			ok % we cannot return error since we don't know whether connection is ok or not
 	end.
 
+%% split_list/2
+%% ====================================================================
+%% @doc Slit list to 'Max' sized chunks.
+-spec split_list(list(),integer()) -> list(list()).
+%% ====================================================================
 split_list(List, Max) ->
 	element(1, lists:foldl(fun
 		(E, {[Buff|Acc], 1}) ->
