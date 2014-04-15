@@ -735,8 +735,8 @@ clear_simple_caches(Caches) ->
   lists:foreach(fun
     ({sub_proc_cache, Cache}) ->
       worker_host:clear_sub_procs_cache(Cache);
-    ({permanent_cache, Cache}) -> ok;
-    ({permanent_cache, Cache, CacheCheckFun}) -> CacheCheckFun();
+    ({permanent_cache, _Cache}) -> ok;
+    ({permanent_cache, _Cache, CacheCheckFun}) -> CacheCheckFun();
     (Cache) -> ets:delete_all_objects(Cache)
   end, Caches).
 
@@ -786,15 +786,16 @@ clear_cache(Cache, Caches) ->
           case ClearingMethod of
             simple ->
               {EtsName, EtsKey} = ClearingMethodAttr,
-              ets:delete(EtsName, EtsKey);
+              ets:delete(EtsName, EtsKey),
+              ok;
             all ->
               ets:delete_all_objects(ClearingMethodAttr),
               ok;
             sub_proc ->
               worker_host:clear_sub_procs_cache(ClearingMethodAttr);
             list ->
-              {EtsName2, Keys} = ClearingMethodAttr,
-              lists:foreach(fun(K) -> ets:delete(EtsName2, K) end, Keys),
+              {EtsName2, KeysToDel} = ClearingMethodAttr,
+              lists:foreach(fun(K) -> ets:delete(EtsName2, K) end, KeysToDel),
               ok
           end;
         false ->
