@@ -60,6 +60,7 @@ ln -s %{_prefix}/addusers /usr/bin/veil_addusers
 %{_prefix}/scripts/erl_launcher escript %{_prefix}/scripts/init.escript stop
 chkconfig --del veil
 rm -f /usr/bin/veil_setup
+rm -f /usr/bin/veil_addusers
 
 %clean
 rm -rf $RPM_BUILD_ROOT
