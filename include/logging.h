@@ -14,6 +14,7 @@
 #include <boost/atomic.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/thread.hpp>
+#include <boost/thread/scoped_thread.hpp>
 
 #include <glog/logging.h>
 
@@ -70,17 +71,33 @@ extern RemoteLogSink debugLogSink;
  */
 class RemoteLogWriter
 {
+    typedef boost::scoped_thread<boost::interrupt_and_join_if_joinable> Thread;
+    typedef std::queue<protocol::logging::LogMessage>::size_type BufferSize;
+    static const BufferSize DEFAULT_MAX_MESSAGE_BUFFER_SIZE = 1024;
+    static const BufferSize DEFAULT_MESSAGE_BUFFER_TRIM_SIZE = 850;
+
 public:
     /**
      * Constructor. Sets the PID value sent with log messages to getpid().
-     * Runs the message write loop in a separate thread.
      * @param initialThreshold The initial threshold level below which messages
      * won't be sent to a cluster.
+     * @param maxBufferSize The maximum size of the buffer. When the buffer size
+     * exceeds the maximum size, it is trimmed to @p bufferTrimSize and a
+     * warning message is added to the buffer.
+     * @param bufferTrimSize The size to which the buffer will be trimmed after
+     * exceeding @p maxBufferSize .
      */
-    RemoteLogWriter(const RemoteLogLevel initialThreshold = protocol::logging::NONE);
+    RemoteLogWriter(const RemoteLogLevel initialThreshold = protocol::logging::NONE,
+                    const BufferSize maxBufferSize = DEFAULT_MAX_MESSAGE_BUFFER_SIZE,
+                    const BufferSize bufferTrimSize = DEFAULT_MESSAGE_BUFFER_TRIM_SIZE);
 
     /**
-     * Destructor. Interrupts and joins the write-loop thread.
+     * Runs the message write loop in a separate thread.
+     */
+    virtual void run();
+
+    /**
+     * Destructor.
      */
     virtual ~RemoteLogWriter();
 
@@ -109,11 +126,14 @@ private:
     void pushMessage(const protocol::logging::LogMessage &msg);
     protocol::logging::LogMessage popMessage();
     void writeLoop();
+    void dropExcessMessages();
 
     const pid_t m_pid;
+    const BufferSize m_maxBufferSize;
+    const BufferSize m_bufferTrimSize;
     boost::condition_variable m_bufferChanged;
     boost::mutex m_bufferMutex;
-    boost::thread m_thread;
+    Thread m_thread;
     boost::atomic<RemoteLogLevel> m_thresholdLevel;
     std::queue<protocol::logging::LogMessage> m_buffer;
 };

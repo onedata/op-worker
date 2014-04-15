@@ -18,11 +18,11 @@
 
 #include <ctime>
 #include <numeric>
+#include <sstream>
 
 static const boost::posix_time::seconds MAX_FLUSH_DELAY(10);
 static const std::string CENTRAL_LOG_MODULE_NAME("central_logger");
 static const std::string LOGGING_DECODER("logging");
-static const std::queue<veil::protocol::logging::LogMessage>::size_type MAX_MESSAGE_BUFFER_SIZE = 1024;
 
 namespace veil
 {
@@ -45,17 +45,27 @@ static RemoteLogLevel glogToLevel(google::LogSeverity glevel)
     }
 }
 
-RemoteLogWriter::RemoteLogWriter(const RemoteLogLevel initialThreshold)
+RemoteLogWriter::RemoteLogWriter(const RemoteLogLevel initialThreshold,
+                                 const BufferSize maxBufferSize,
+                                 const BufferSize bufferTrimSize)
     : m_pid(getpid())
+    , m_maxBufferSize(maxBufferSize)
+    , m_bufferTrimSize(bufferTrimSize)
     , m_thresholdLevel(initialThreshold)
 {
-    m_thread = boost::thread(&RemoteLogWriter::writeLoop, this);
+}
+
+void RemoteLogWriter::run()
+{
+    if(m_thread.get_id() == Thread().get_id()) // Not-a-Thread
+    {
+        Thread thread(boost::thread(&RemoteLogWriter::writeLoop, this));
+        m_thread.swap(thread);
+    }
 }
 
 RemoteLogWriter::~RemoteLogWriter()
 {
-    m_thread.interrupt(); // the thread will be interrupted at next buffer wait
-    m_thread.join();
 }
 
 void RemoteLogWriter::buffer(const RemoteLogLevel level,
@@ -94,10 +104,12 @@ bool RemoteLogWriter::handleThresholdChange(const protocol::communication_protoc
 void RemoteLogWriter::pushMessage(const protocol::logging::LogMessage &msg)
 {
     boost::lock_guard<boost::mutex> guard(m_bufferMutex);
-    if(m_buffer.size() > MAX_MESSAGE_BUFFER_SIZE)
-        return; // silently drop message
 
     m_buffer.push(msg);
+
+    if(m_buffer.size() > m_maxBufferSize)
+        dropExcessMessages();
+
     m_bufferChanged.notify_all();
 }
 
@@ -132,10 +144,32 @@ void RemoteLogWriter::writeLoop()
         clm.set_module_name(CENTRAL_LOG_MODULE_NAME);
         clm.set_message_decoder_name(LOGGING_DECODER);
         clm.set_message_type(boost::algorithm::to_lower_copy(msg.GetDescriptor()->name()));
-        clm.set_input(msg.SerializeAsString());
+        msg.SerializeToString(clm.mutable_input());
 
         connection->sendMessage(clm, IGNORE_ANSWER_MSG_ID);
     }
+}
+
+void RemoteLogWriter::dropExcessMessages()
+{
+    const BufferSize dropped = m_buffer.size() - m_bufferTrimSize;
+    while (m_buffer.size() > m_bufferTrimSize)
+        m_buffer.pop();
+
+    std::stringstream message;
+    message << "RemoteLogWriter dropped " << dropped
+           << " messages as the limit of " << m_maxBufferSize
+           << " buffered messages has been exceeded";
+
+    protocol::logging::LogMessage log;
+    log.set_level(protocol::logging::WARNING);
+    log.set_pid(m_pid);
+    log.set_file_name("logging.cc");
+    log.set_line(__LINE__),
+    log.set_timestamp(std::time(0));
+    log.set_message(message.str());
+
+    m_buffer.push(log);
 }
 
 RemoteLogSink::RemoteLogSink(const boost::shared_ptr<RemoteLogWriter> &writer,

@@ -11,7 +11,6 @@
 #include "helpers/storageHelperFactory.h"
 #include <google/protobuf/descriptor.h>
 #include <iostream>
-#include <numeric>
 #include <string>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -56,7 +55,9 @@ CommunicationHandler::~CommunicationHandler()
 {
     closeConnection();
 
-    DLOG(INFO) << "Destructing connection: " << this;
+#ifndef NDEBUG
+    LOG_TO_SINK(NULL, INFO) << "Destructing connection: " << this;
+#endif
     if(m_endpoint)
     {
         m_endpoint->stop();
@@ -75,7 +76,9 @@ CommunicationHandler::~CommunicationHandler()
     unique_lock lock(m_instanceMutex);
     --instancesCount;
 
-    DLOG(INFO) << "Connection: " << this << " deleted";
+#ifndef NDEBUG
+    LOG_TO_SINK(NULL, INFO) << "Connection: " << this << " deleted";
+#endif
 }
 
 unsigned int CommunicationHandler::getErrorCount()

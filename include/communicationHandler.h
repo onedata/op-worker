@@ -9,6 +9,7 @@
 #ifndef COMMUNICATION_HANDLER_H
 #define COMMUNICATION_HANDLER_H
 
+#include <numeric>
 #include <string>
 #include <boost/thread.hpp>
 #include <boost/shared_ptr.hpp>
@@ -35,8 +36,8 @@
 /// Path on which cluster listenes for websocket connections
 #define CLUSTER_URI_PATH "/veilclient"
 
-const unsigned int MAX_GENERATED_MSG_ID = std::numeric_limits<unsigned int>::max() / 2;
-const unsigned int IGNORE_ANSWER_MSG_ID = MAX_GENERATED_MSG_ID + 1;
+static const unsigned int MAX_GENERATED_MSG_ID = std::numeric_limits<unsigned int>::max() / 2;
+static const unsigned int IGNORE_ANSWER_MSG_ID = MAX_GENERATED_MSG_ID + 1;
 
 typedef websocketpp::client<websocketpp::config::asio_tls_client>       ws_client;
 typedef websocketpp::config::asio_tls_client::message_type::ptr         message_ptr;

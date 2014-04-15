@@ -42,6 +42,8 @@ struct RemoteLogWriterFixture: public ::testing::Test
         veil::helpers::config::setConnectionPool(mockConnectionPool);
         ON_CALL(*mockConnectionPool, selectConnection(_))
                 .WillByDefault(::testing::Return(mockCommunicationHandler));
+
+        logWriter.run();
     }
 
     bool areMessagesEqual(const veil::protocol::logging::LogMessage &l,
@@ -140,6 +142,7 @@ TEST_F(RemoteLogSinkFixture, ShouldOverrideSeverityIfSetInConstructor)
 TEST(RemoteLogWriter, ShouldNotHangOnDestroy)
 {
     veil::logging::RemoteLogWriter logWriter;
+    logWriter.run();
 }
 
 TEST_F(RemoteLogWriterFixture, ShouldSendReceivedMessagesThroughConnection)
@@ -179,4 +182,35 @@ TEST_F(RemoteLogWriterFixture, ShouldSendAMessageWithIGNORE_ANSWER_MSG_ID)
     logWriter.buffer(veil::protocol::logging::INFO, "", 0, 0, "");
 
     waitUntil(messageSent, 10);
+}
+
+TEST_F(RemoteLogWriterFixture, ShouldDropMessagesAfterExceedingMaxBufferSize)
+{
+    veil::logging::RemoteLogWriter writer(veil::protocol::logging::LDEBUG,
+                                          /*maxBufferSize*/ 10,
+                                          /*bufferTrimSize*/ 5);
+
+    // The writer.run() is not called yet so the write loop is not running.
+    for(int i = 0; i < 11; ++i)
+        writer.buffer(veil::protocol::logging::INFO, "", 0, 0, "");
+
+    // We expect the writer to send 6 messages total, the last one being a
+    // warning about dropped messages.
+    boost::atomic<bool> messageSent(false);
+    veil::protocol::communication_protocol::ClusterMsg sentClsMessage;
+
+    // Note: gmock satisfies expectations in reverse order
+    EXPECT_CALL(*mockCommunicationHandler, sendMessage(_, _))
+            .WillOnce(DoAll(SaveArg<0>(&sentClsMessage), Assign(&messageSent, true), Return(0)));
+    EXPECT_CALL(*mockCommunicationHandler, sendMessage(_, _))
+            .Times(5).WillRepeatedly(Return(0)).RetiresOnSaturation();
+
+    writer.run();
+    waitUntil(messageSent, 10);
+
+    veil::protocol::logging::LogMessage log;
+    log.ParseFromString(sentClsMessage.input());
+
+    EXPECT_EQ(veil::protocol::logging::WARNING, log.level());
+    EXPECT_NE(std::string::npos, log.message().find("buffered messages has been exceeded"));
 }
