@@ -55,6 +55,7 @@ handle(_ProtocolVersion, ping) ->
   pong;
 
 handle(ProtocolVersion, #eventmessage{type = Type, count = Count}) ->
+  ?info("---- bazinga: received eventmessage from client, Type: ~p, Count: ~p", [Type, Count]),
   Event = [{type, list_to_atom(Type)}, {user_dn, get(user_id)}, {fuse_id, get(fuse_id)}, {count, Count}],
   handle(ProtocolVersion, {event_arrived, Event});
 

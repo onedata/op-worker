@@ -257,6 +257,7 @@ register_rm_event_handler() ->
 
 %% Registers handler which will be called every Bytes will be written.
 register_for_write_events(Bytes) ->
+  ?info("-- bazinga - register_for_write_events with freq: ~p", [Bytes]),
   EventHandler = fun(Event) ->
     UserDn = proplists:get_value(user_dn, Event),
     case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
