@@ -384,6 +384,7 @@ heart_beat_response(New_state_num, CallbacksNum, State) ->
     false ->
       %% TODO find a method which do not force clearing of all simple caches at all nodes when only one worker/node is added/deleted
       %% Now all caches are canceled because we do not know if state number change is connected with network problems (so cache of node may be not valid)
+      %% TODO during refactoring integrate simple and permanent cache (cache clearing can be triggered as CacheCheckFun)
       clear_simple_caches(State#node_state.simple_caches)
   end,
 

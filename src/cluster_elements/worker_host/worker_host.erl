@@ -908,8 +908,14 @@ create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection) ->
 create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPid) ->
   %% Init Cache-ETS. Ignore the fact that other DAO worker could have created this table. In this case, this call will
   %% fail, but table is present anyway, so everyone is happy.
-  case ets:info(Name) of
-    undefined   -> ets:new(Name, [named_table, public, set, {read_concurrency, true}]);
+  EtsName = case Name of
+    {permanent_cache, PCache} -> PCache;
+    {permanent_cache, PCache2, _} -> PCache2;
+    _ -> Name
+  end,
+
+  case ets:info(EtsName) of
+    undefined   -> ets:new(EtsName, [named_table, public, set, {read_concurrency, true}]);
     [_ | _]     -> ok
   end,
 
