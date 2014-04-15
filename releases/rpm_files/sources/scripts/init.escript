@@ -75,10 +75,11 @@ main(Args) ->
 % Returns (according to http://refspecs.linuxbase.org/LSB_3.1.1/LSB-Core-generic/LSB-Core-generic/iniscrptact.html):
 % 0 - program is running or service is OK
 % 3 - program is not running
+% 4 - program or service status is unknown
 status(NodeType) when is_atom(NodeType) ->
 	case get_nodes_from_config(NodeType) of
 		{none, []} ->
-			3;
+			4;
 		{db_node, Db} ->
 			status(Db);
 		{worker, Worker} ->

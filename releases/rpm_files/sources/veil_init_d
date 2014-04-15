@@ -32,7 +32,7 @@ start() {
 
 start_veil() {
 	status_veil_silent ; status=$?
-	if [ $status -ne 0 ]; then
+	if [ $status -eq 3 ]; then
 		echo -n "Starting veil: "
 		${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript start_veil
 		ret=$?
@@ -43,7 +43,7 @@ start_veil() {
 }
 start_db() {
 	status_db_silent ; status=$?
-	if [ $status -ne 0 ]; then
+	if [ $status -eq 3 ]; then
 		echo -n "Starting db: "
 		${PREFIX}scripts/erl_launcher escript ${PREFIX}scripts/init.escript start_db
 		ret=$?
@@ -88,16 +88,30 @@ restart() {
 status() {
 	status_veil ; ret1=$?
     status_db ; ret2=$?
-	[ $ret1 -eq 0 ] && [ $ret2 -eq 0 ] || return 3
+	[[ $ret1 -eq 0 || $ret1 -eq 4 ]] && [[ $ret2 -eq 0 || $ret2 -eq 4 ]] || return 3
 }
 status_veil() {
 	status_veil_silent ; ret=$?
-	[ $ret -eq 0 ] && echo "veil: Running" || echo "veil: Not running."
+	echo -n "veil: "
+	if [ $ret -eq 0 ]; then
+		 echo "Running."
+	elif [ $ret -eq 4 ]; then
+		echo "Not present on host."
+	else
+		echo "Not running."
+	fi
 	return $ret
 }
 status_db() {
 	status_db_silent ; ret=$?
-	[ $ret -eq 0 ] && echo "db: Running" || echo "db: Not running."
+	echo -n "db: "
+	if [ $ret -eq 0 ]; then
+		 echo "Running."
+	elif [ $ret -eq 4 ]; then
+		echo "Not present on host."
+	else
+		echo "Not running."
+	fi
 	return $ret
 }
 status_veil_silent() {
