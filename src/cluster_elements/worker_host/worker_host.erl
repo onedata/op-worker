@@ -868,7 +868,7 @@ del_sub_procs(Key, Name) ->
 %% ====================================================================
 %% @doc Creates simple cache.
 -spec create_simple_cache(Name :: CacheName) -> Result when
-  CacheName :: atom() | {permanent_cache, atom()},
+  CacheName :: atom() | {permanent_cache, atom()} | {permanent_cache, atom(), term()},
   Result :: ok | error_during_cache_registration.
 %% ====================================================================
 create_simple_cache(Name) ->
@@ -878,7 +878,7 @@ create_simple_cache(Name) ->
 %% ====================================================================
 %% @doc Creates simple cache.
 -spec create_simple_cache(Name :: CacheName, CacheLoop, ClearFun :: term()) -> Result when
-  CacheName :: atom() | {permanent_cache, atom()},
+  CacheName :: atom() | {permanent_cache, atom()} | {permanent_cache, atom(), term()},
   Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
   CacheLoop :: integer() | atom().
 %% ====================================================================
@@ -889,7 +889,7 @@ create_simple_cache(Name, CacheLoop, ClearFun) ->
 %% ====================================================================
 %% @doc Creates simple cache.
 -spec create_simple_cache(Name :: CacheName, CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean()) -> Result when
-  CacheName :: atom() | {permanent_cache, atom()},
+  CacheName :: atom() | {permanent_cache, atom()} | {permanent_cache, atom(), term()},
   Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
   CacheLoop :: integer() | atom().
 %% ====================================================================
@@ -901,7 +901,7 @@ create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection) ->
 %% ====================================================================
 %% @doc Creates simple cache.
 -spec create_simple_cache(Name :: CacheName, CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean(), Pid :: pid()) -> Result when
-  CacheName :: atom() | {permanent_cache, atom()},
+  CacheName :: atom() | {permanent_cache, atom()} | {permanent_cache, atom(), term()},
   Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
   CacheLoop :: integer() | atom().
 %% ====================================================================
@@ -925,7 +925,7 @@ create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPi
 %% ====================================================================
 %% @doc Registers simple cache.
 -spec register_simple_cache(Name :: CacheName, CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean(), ClearingPid :: pid()) -> Result when
-  CacheName :: atom() | {permanent_cache, atom()} | {sub_proc_cache, {PlugIn, SubProcName}},
+  CacheName :: atom() | {permanent_cache, atom()} | {permanent_cache, atom(), term()} | {sub_proc_cache, {PlugIn, SubProcName}},
   PlugIn :: atom(),
   SubProcName :: atom(),
   Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
