@@ -454,7 +454,7 @@ check_session(#veil_document{record = #fuse_session{}, uuid = SessID}) ->
 %% ====================================================================
 check_connection(Connection = #veil_document{record = #connection_info{session_id = SessID, controlling_node = CNode, controlling_pid = CPid}}) ->
     SPid = self(),
-	case is_pid(CPid) of
+	case is_pid(CPid) of %(temporary fix) todo change our pid storing mechanisms, so we would always have proper pid here (see also dao:doc_to_term/1 todo)
 		true->
 			spawn(CNode, fun() -> CPid ! {SPid, get_session_id} end),   %% Send ping to connection controlling process
 		    receive

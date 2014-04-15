@@ -544,7 +544,7 @@ doc_to_term(Field) when is_binary(Field) -> %% Binary type means that it is atom
 	    AtomPref == 1 -> list_to_atom(string:sub_string(SField, length(?RECORD_FIELD_ATOM_PREFIX) + 1));
 	    PidPref == 1 ->
 		PidString = string:sub_string(SField, length(?RECORD_FIELD_PID_PREFIX) + 1),
-		try list_to_pid(PidString) of
+		try list_to_pid(PidString) of %(temporary fix) todo change our pid storing mechanisms, so such conversion won't fail
 			Pid -> Pid
 		catch
 			_:_Error ->
