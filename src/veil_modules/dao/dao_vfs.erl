@@ -460,7 +460,7 @@ get_file({internal_path, [Dir | Path], Root}, MultiError) ->
 get_waiting_file(Args) ->
   get_file_helper(Args, ?WAITING_FILES_TREE_VIEW).
 
-%% get_file/2
+%% get_waiting_file/2
 %% ====================================================================
 %% @doc Gets file record of file that waits to be created at storage from DB. Argument should be file() - see dao_types.hrl for more details <br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
@@ -961,8 +961,8 @@ find_file_by_file_name_or_uuid(FileCriteria) ->
   UidBin = case FileCriteria#file_criteria.uid of
              null -> null;
              Uid when is_binary(Uid) -> Uid;
-             Uid when is_list(Uid) -> list_to_binary(Uid);
-             Uid when is_integer(Uid) -> list_to_binary(integer_to_list(Uid))
+             Uid when is_list(Uid) -> dao_helper:name(Uid);
+             Uid when is_integer(Uid) -> dao_helper:name(integer_to_list(Uid))
            end,
 
   QueryArgs = case FilePattern of
@@ -975,8 +975,8 @@ find_file_by_file_name_or_uuid(FileCriteria) ->
                   case lists:nth(length(FilePattern), FilePattern) of
                     $* ->
                       Prefix = lists:sublist(FilePattern, length(FilePattern) - 1),
-                      #view_query_args{start_key = [UidBin, list_to_binary(Prefix)], end_key = [UidBin, end_key_for_prefix(Prefix)]};
-                    _ -> #view_query_args{keys = [[UidBin, list_to_binary(FilePattern)]]}
+                      #view_query_args{start_key = [UidBin, dao_helper:name(Prefix)], end_key = [UidBin, end_key_for_prefix(Prefix)]};
+                    _ -> #view_query_args{keys = [[UidBin, dao_helper:name(FilePattern)]]}
                   end
               end,
 
@@ -1012,7 +1012,7 @@ find_by_times(FileCriteria) ->
     fun(MetaId) ->
       lists:map(
         fun(DesiredType) ->
-          [list_to_binary(MetaId), DesiredType]
+          [dao_helper:name(MetaId), DesiredType]
         end,
         DesiredTypes)
     end,

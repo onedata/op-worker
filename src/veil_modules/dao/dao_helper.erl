@@ -314,7 +314,7 @@ query_view(DbName, DesignName, ViewName, QueryArgs = #view_query_args{view_type 
 name(Name) when is_atom(Name) ->
     name(atom_to_list(Name));
 name(Name) when is_list(Name) ->
-    ?l2b(Name);
+    unicode:characters_to_binary(Name);
 name(Name) when is_binary(Name) ->
     Name.
 

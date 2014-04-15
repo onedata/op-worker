@@ -15,8 +15,8 @@
 -include("veil_modules/fslogic/fslogic.hrl").
 
 
-% How often shoul comet process check for changes in current dir
--define(AUTOREFRESH_PERIOD, 500).
+% How often should comet process check for changes in current dir
+-define(AUTOREFRESH_PERIOD, 1000).
 
 % Item is either a file or a dir represented in manager
 -record(item, {id="", path="/", is_shared=false, attr=#fileattributes { } }).
@@ -294,7 +294,7 @@ sync_loop(Holder, Waiting, LastUpdate) ->
             end;
         {Holder, release} ->
             if 
-                Waiting /= none ->     Waiting ! {self(), ok};
+                Waiting /= none -> Waiting ! {self(), ok};
                 true -> skip
             end,
             Holder ! {self(), ok},
@@ -302,13 +302,30 @@ sync_loop(Holder, Waiting, LastUpdate) ->
 
         _ -> 
             sync_loop(Holder, Waiting, LastUpdate)
+
+    % Make sure no deadlock occurs
+    after 10000 ->
+            if 
+                Waiting /= none -> Waiting ! {self(), ok};
+                true -> skip
+            end,
+            if 
+                Holder /= none -> Holder ! {self(), ok};
+                true -> skip
+            end,
+            sync_loop(Waiting, none, erlang:now())
     end.
 
 
 sync_lock(MinTimePassed) ->
-    Pid = get_key(sync_pid),
-    Pid ! {self(), lock, MinTimePassed},
-    receive {Pid, Ans} -> Ans end.
+    try
+        Pid = get_key(sync_pid),
+        Pid ! {self(), lock, MinTimePassed},
+        receive {Pid, Ans} -> Ans end
+    catch _:_ ->
+        error % Return error if sync_pid cannot be retrieved
+    end.
+
 
 sync_release() ->
     Pid = get_key(sync_pid),
@@ -339,7 +356,8 @@ event({action, Fun, Args}) ->
 
 
 process_event({action, Fun, Args}) ->
-    sync_lock(0),
+    % Make sure the lock is obtained or crash otherwise
+    ok = sync_lock(0),
     reset_wire_accumulator(),
     put(user_id, gui_utils:get_user_dn()),
     erlang:apply(?MODULE, Fun, Args),
@@ -358,7 +376,8 @@ comet_loop_init() ->
 comet_loop() ->
     case sync_lock(?AUTOREFRESH_PERIOD) of
         {wait, Time} ->
-            timer:sleep(Time);
+            timer:sleep(Time),
+            comet_loop();
         ok ->
             try
                 case gui_utils:get_user_dn() of
@@ -370,14 +389,16 @@ comet_loop() ->
                         comet_maybe_refresh(),
                         sync_release(),
                         timer:sleep(?AUTOREFRESH_PERIOD)
-                end
-            catch Type:Message ->            
-                sync_release(),
+                end,
+                comet_loop()
+            catch Type:Message ->
+                catch sync_release(),
                 lager:error("Error in file_manager comet_loop - ~p - ~p~n~p", 
                     [Type, Message, erlang:get_stacktrace()])
-            end
-    end,
-    comet_loop().
+            end;
+        _ -> 
+            terminate
+    end.
 
 
 comet_maybe_refresh() ->        
@@ -1139,6 +1160,15 @@ item_list_md5(ItemList) ->
         end, <<"">>, ItemList).
 
 
+is_group_dir(Path) ->
+    case Path of
+        "/groups" -> true;
+        "/groups" ++ Rest -> case string:rstr(Rest, "/") of
+                        1 -> true;
+                        _ -> false
+                    end;
+        _ -> false
+    end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% logical_files_manager interfacing
@@ -1161,12 +1191,17 @@ fs_remove(Path) ->
 
 
 fs_remove_dir(DirPath) ->
-    ItemList = fs_list_dir(DirPath),
-    lists:foreach(
-        fun(Item) ->
-            fs_remove(item_path(Item))
-        end, ItemList),
-    logical_files_manager:rmdir(DirPath).
+    case is_group_dir(DirPath) of
+        true ->
+            skip;
+        false ->
+            ItemList = fs_list_dir(DirPath),
+            lists:foreach(
+                fun(Item) ->
+                    fs_remove(item_path(Item))
+                end, ItemList),
+            logical_files_manager:rmdir(DirPath)
+    end.
 
 
 fs_list_dir(Dir) ->

@@ -414,30 +414,14 @@ helper_requests_test(Config) ->
   ?assertEqual(ok, ConvertAns2),
   DnList2 = [DN2],
 
+%% 	try to create user who is not present in system (it should fail during dirs chown)
   Login2 = "user2",
   Name2 = "user2 user2",
   Team2 = "user2 team",
   Teams2 = [Team2],
   Email2 = "user2@email.net",
-  {CreateUserAns2, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
-  ?assertEqual(ok, CreateUserAns2),
-
-  %% Get FuseId
-  {ok, Socket2} = wss:connect(Host, Port, [{certfile, Cert2}, {cacertfile, Cert2}]),
-  FuseId2 = wss:handshakeInit(Socket2, "hostname", []),
-	wss:close(Socket2),
-  {User2_Status0, Helper0, _, User2_Id, _, User2_AnswerOpt0} = create_file(Host, Cert2, Port, TestFile, FuseId2),
-  ?assertEqual("ok", User2_Status0),
-  ?assertEqual(?VOK, User2_AnswerOpt0),
-  ?assertEqual(ST_Helper, Helper0),
-
-  {CreationAckStatus, CreationAckAnswerOpt} = send_creation_ack(Host, Cert2, Port, TestFile, FuseId2),
-  ?assertEqual("ok", CreationAckStatus),
-  ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt),
-
-  {User2_Status2, User2_Answer2} = create_file_on_storage(Host, Cert2, Port, User2_Id),
-  ?assertEqual("ok", User2_Status2),
-  ?assertEqual(list_to_atom(?VEREMOTEIO), User2_Answer2),
+  CreateUserAns2 = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
+  ?assertEqual({error,dir_chown_error}, CreateUserAns2),
 
   %% Get FuseId
   {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
@@ -517,16 +501,6 @@ helper_requests_test(Config) ->
   ?assertEqual(?VOK, ReadAnswer5),
   ?assertEqual("abc12", binary_to_list(ReadData5)),
 
-  %% The file was not created with ok asnwer because of chmod fail (user not present in the system)
-  %% However it is still present at storage
-  {DeleteStatus, DeleteAnswer} = delete_file_on_storage(Host, Cert2, Port, User2_Id),
-  ?assertEqual("ok", DeleteStatus),
-  ?assertEqual(list_to_atom(?VOK), DeleteAnswer),
-
-  {Status4, Answer4} = delete_file(Host, Cert2, Port, TestFile, FuseId2),
-  ?assertEqual("ok", Status4),
-  ?assertEqual(list_to_atom(?VOK), Answer4),
-
   {Status3, Answer3} = delete_file_on_storage(Host, Cert, Port, Id),
   ?assertEqual("ok", Status3),
   ?assertEqual(list_to_atom(?VOK), Answer3),
@@ -539,14 +513,10 @@ helper_requests_test(Config) ->
   ?assertEqual(ok, RemoveStorageAns),
 
   ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team1], ?ProtocolVersion])),
-  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team2], ?ProtocolVersion])),
   ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
 
   RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
-  ?assertEqual(ok, RemoveUserAns),
-
-  RemoveUserAns2 = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN2}]),
-  ?assertEqual(ok, RemoveUserAns2).
+  ?assertEqual(ok, RemoveUserAns).
 
 %% ====================================================================
 %% SetUp and TearDown functions

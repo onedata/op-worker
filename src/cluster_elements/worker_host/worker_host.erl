@@ -294,7 +294,7 @@ handle_cast(register_sub_proc_caches, State) ->
           {simple, CacheLoop4, ClearFun4, ClearingPid4} ->
             register_sub_proc_simple_cache({PlugIn, Name}, CacheLoop4, ClearFun4, ClearingPid4);
           _ ->
-            lager:debug("Use of non simple cache ~p", [{Name, CacheType}]),
+            ?debug("Use of non simple cache ~p", [{Name, CacheType}]),
             ok
         end,
 
@@ -796,7 +796,7 @@ generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun, CacheType} |
   NewProcFun = case CacheType of
     non ->
       fun({PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo}) ->
-        lager:debug("Processing in sub proc: ~p ~n", [Name]),
+        ?debug("Processing in sub proc: ~p ~n", [Name]),
         BeforeProcessingRequest = os:timestamp(),
         Request = preproccess_msg(Msg),
         Response = 	try
@@ -810,7 +810,7 @@ generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun, CacheType} |
       end;
     _ ->
       fun({PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo}, CacheName) ->
-        lager:debug("Processing in sub proc: ~p with cache ~p~n", [Name, CacheName]),
+        ?debug("Processing in sub proc: ~p with cache ~p~n", [Name, CacheName]),
         BeforeProcessingRequest = os:timestamp(),
         Request = preproccess_msg(Msg),
         Response = 	try
