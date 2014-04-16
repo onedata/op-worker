@@ -54,10 +54,24 @@ init(_Args) ->
 handle(_ProtocolVersion, ping) ->
   pong;
 
-handle(ProtocolVersion, #eventmessage{type = Type, count = Count}) ->
-  ?info("---- bazinga: received eventmessage from client, Type: ~p, Count: ~p", [Type, Count]),
-  Event = [{type, list_to_atom(Type)}, {user_dn, get(user_id)}, {fuse_id, get(fuse_id)}, {count, Count}],
-  handle(ProtocolVersion, {event_arrived, Event});
+handle(ProtocolVersion, EventMessage) when is_record(EventMessage, eventmessage) ->
+  ?info("---- bazinga: received eventmessage from client, numkeys: ~p, numValues: ~p, stringkeys: ~p, stringValues: ~p",
+    [EventMessage#eventmessage.numeric_properties_keys, EventMessage#eventmessage.numeric_properties_values, EventMessage#eventmessage.string_properties_keys, EventMessage#eventmessage.string_properties_values]),
+
+  Properties = lists:zip(EventMessage#eventmessage.numeric_properties_keys, EventMessage#eventmessage.numeric_properties_values)
+           ++ lists:zip(EventMessage#eventmessage.string_properties_keys, EventMessage#eventmessage.string_properties_values),
+
+  %% type value is supposed to be atom, TODO: change cluster_rengine to make it unnecessary
+  Event = case proplists:get_value("type", Properties) of
+    undefined -> Properties;
+    Type when is_list(Type) ->
+      Ev = proplists:delete("type", Properties),
+      [{"type", list_to_atom(Type)} | Ev];
+    _ -> Properties
+  end,
+
+  AdditionalProperties = [{"user_dn", get(user_id)}, {"fuse_id", get(fuse_id)}],
+  handle(ProtocolVersion, {event_arrived, Event ++ AdditionalProperties});
 
 handle(_ProtocolVersion, healthcheck) ->
 	ok;

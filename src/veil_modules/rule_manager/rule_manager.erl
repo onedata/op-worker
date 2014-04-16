@@ -194,7 +194,7 @@ change_write_enabled(UserDn, false) ->
 %% ====================================================================
 register_quota_exceeded_handler() ->
   EventHandler = fun(Event) ->
-    UserDn = proplists:get_value(user_dn, Event),
+    UserDn = proplists:get_value("user_dn", Event),
     change_write_enabled(UserDn, false)
   end,
   EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
@@ -230,7 +230,7 @@ register_rm_event_handler() ->
       end
     end,
 
-    UserDn = proplists:get_value(user_dn, Event),
+    UserDn = proplists:get_value("user_dn", Event),
     Exceeded = CheckQuotaIfNeeded(UserDn),
 
     %% if quota is exceeded check quota one more time after 5s - in meanwhile db view might get reloaded
@@ -259,18 +259,18 @@ register_rm_event_handler() ->
 register_for_write_events(Bytes) ->
   ?info("-- bazinga - register_for_write_events with freq: ~p", [Bytes]),
   EventHandler = fun(Event) ->
-    UserDn = proplists:get_value(user_dn, Event),
+    UserDn = proplists:get_value("user_dn", Event),
     case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
       true ->
         ?info("--- bazinga - quota exceeded for user ~p", [UserDn]),
-        cluster_rengine:send_event(?ProtocolVersion, [{type, quota_exceeded_event}, {user_dn, UserDn}]);
+        cluster_rengine:send_event(?ProtocolVersion, [{type, quota_exceeded_event}, {"user_dn", UserDn}]);
       _ ->
         ok
     end
   end,
 
   EventHandlerMapFun = fun(WriteEv) ->
-    UserDnString = proplists:get_value(user_dn, WriteEv),
+    UserDnString = proplists:get_value("user_dn", WriteEv),
     case UserDnString of
       undefined -> ok;
       _ -> string:len(UserDnString)
@@ -278,7 +278,7 @@ register_for_write_events(Bytes) ->
   end,
 
   EventHandlerDispMapFun = fun(WriteEv) ->
-    UserDnString = proplists:get_value(user_dn, WriteEv),
+    UserDnString = proplists:get_value("user_dn", WriteEv),
     case UserDnString of
       undefined -> ok;
       _ ->
@@ -286,7 +286,7 @@ register_for_write_events(Bytes) ->
         UserIdInt div 10
     end
   end,
-  EventItem = #event_handler_item{processing_method = tree, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = #event_stream_config{config = #aggregator_config{field_name = user_dn, fun_field_name = count, threshold = Bytes}}},
+  EventItem = #event_handler_item{processing_method = tree, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = #event_stream_config{config = #aggregator_config{field_name = "user_dn", fun_field_name = "bytes", threshold = Bytes}}},
 
   %% client configuration
   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "write_event"},

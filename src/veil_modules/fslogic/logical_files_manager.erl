@@ -283,7 +283,7 @@ write(FileStr, Buf) ->
           Res = storage_files_manager:write(Storage_helper_info, FileId, Buf),
           case {is_integer(Res), event_production_enabled(write_event)} of
             {true, true} ->
-              WriteEvent = [{type, write_event}, {user_dn, get(user_id)}, {count, binary:referenced_byte_size(Buf)}],
+              WriteEvent = [{"type", write_event}, {"user_dn", get(user_id)}, {"bytes", binary:referenced_byte_size(Buf)}],
               gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}});
             _ ->
               ok
@@ -318,7 +318,7 @@ write(FileStr, Offset, Buf) ->
           Res = storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf),
           case {is_integer(Res), event_production_enabled(write_event)} of
             {true, true} ->
-              WriteEvent = [{type, write_event}, {user_dn, get(user_id)}, {count, binary:referenced_byte_size(Buf)}],
+              WriteEvent = [{"type", write_event}, {"user_dn", get(user_id)}, {"count", binary:referenced_byte_size(Buf)}],
               gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}});
             _ ->
               ok
@@ -354,7 +354,7 @@ write_from_stream(FileStr, Buf) ->
           Res = storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf),
           case {is_integer(Res), event_production_enabled(write_event)} of
             {true, true} ->
-              WriteEvent = [{type, write_event}, {user_dn, get(user_id)}, {count, binary:referenced_byte_size(Buf)}],
+              WriteEvent = [{"type", write_event}, {"user_dn", get(user_id)}, {"count", binary:referenced_byte_size(Buf)}],
               gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}});
             _ ->
               ok
@@ -473,7 +473,7 @@ delete(FileStr) ->
                     ?VOK ->
                       case event_production_enabled(rm_event) of
                         true ->
-                          RmEvent = [{type, rm_event}, {user_dn, get(user_id)}],
+                          RmEvent = [{"type", rm_event}, {"user_dn", get(user_id)}],
                           gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, RmEvent}});
                         _ ->
                           ok
