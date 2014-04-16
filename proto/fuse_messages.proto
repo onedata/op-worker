@@ -200,7 +200,11 @@ message EventProducerConfig {
     repeated EventStreamConfig event_streams_configs = 1;
 }
 
+// Generic event message.
+// TODO: add support for multiple values per one key
 message EventMessage {
-    required string type = 1;
-    optional uint64 count = 2;
+    repeated string numeric_properties_keys = 1; // numericPropertiesKeys length is expected to be equal numericPropertiesValues length
+    repeated int64 numeric_properties_values = 2;
+    repeated string string_properties_keys = 3; // stringPropertiesKeys length is expected to be equal stringPropertiesValues length
+    repeated string string_properties_values = 4;
 }
