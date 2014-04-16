@@ -104,6 +104,21 @@ veil_cluster_node_env:
       value: 10
 
   - parameter:
+      name: short_monitoring_time_window
+      description: Short time window (in seconds) for which Round Robin Database will be queried
+      value: 60
+
+  - parameter:
+      name: medium_monitoring_time_window
+      description: Medium time window (in seconds) for which Round Robin Database will be queried
+      value: 300
+
+  - parameter:
+      name: long_monitoring_time_window
+      description: Long time window (in seconds) for which Round Robin Database will be queried
+      value: 900
+
+  - parameter:
       name: nif_prefix
       description: Prefix to c_lib directory containing NIF libs
       value: |

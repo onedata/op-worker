@@ -44,6 +44,7 @@
 %% jako stan (jak teraz) czy jako ets i ewentualnie przejść na ets
 -ifdef(TEST).
 -export([get_callback/2, addCallback/3, delete_callback/3]).
+-export([calculate_network_stats/3, get_interface_stats/2, get_cpu_stats/1, calculate_ports_transfer/4, get_memory_stats/0]).
 -endif.
 
 %% ====================================================================
@@ -582,12 +583,12 @@ create_node_stats_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkS
   Result :: [{Name :: atom(), Value :: float()}] | {error, term()}.
 %% ====================================================================
 get_node_stats(TimeWindow, Format) ->
-  Interval = case TimeWindow of
-               short -> 1 * 60;
-               medium -> 5 * 60;
-               long -> 15 * 60;
-               _ -> TimeWindow
-             end,
+  {ok, Interval} = case TimeWindow of
+                     short -> application:get_env(?APP_Name, short_monitoring_time_window);
+                     medium -> application:get_env(?APP_Name, medium_monitoring_time_window);
+                     long -> application:get_env(?APP_Name, long_monitoring_time_window);
+                     _ -> {ok, TimeWindow}
+                   end,
   {MegaSecs, Secs, _} = erlang:now(),
   EndTime = 1000000 * MegaSecs + Secs,
   StartTime = EndTime - Interval,
@@ -723,7 +724,7 @@ get_interface_stats(Interface, Type) ->
   Value :: float().
 %% ====================================================================
 get_cpu_stats(CpuStats) ->
-  case file:open("/proc/stat", [raw]) of
+  case file:open("/proc/stat", [read]) of
     {ok, Fd} ->
       CurrentCpuStats = read_cpu_stats(Fd, []),
       gen_server:cast(?Node_Manager_Name, {update_cpu_stats, CurrentCpuStats}),
@@ -790,9 +791,9 @@ calculate_ports_transfer([], [{_, In, Out} | Ports], Input, Output) ->
 calculate_ports_transfer([{Port, InA, OutA} | PortsA], [{Port, InB, OutB} | PortsB], Input, Output) ->
   calculate_ports_transfer(PortsA, PortsB, Input + InB - InA, Output + OutB - OutA);
 calculate_ports_transfer([{PortA, _, _} | PortsA], [{PortB, InB, OutB} | PortsB], Input, Output) when PortA < PortB ->
-  calculate_ports_transfer(PortsA, [{PortB, InB, OutB} | PortsB], Input + InB, Output + OutB);
-calculate_ports_transfer([{PortA, InA, OutA} | PortsA], [{PortB, _, _} | PortsB], Input, Output) when PortA > PortB ->
-  calculate_ports_transfer([{PortA, InA, OutA} | PortsA], PortsB, Input, Output);
+  calculate_ports_transfer(PortsA, [{PortB, InB, OutB} | PortsB], Input, Output);
+calculate_ports_transfer([{PortA, _, _} | PortsA], [{PortB, InB, OutB} | PortsB], Input, Output) when PortA > PortB ->
+  calculate_ports_transfer(PortsA, PortsB, Input + InB, Output + OutB);
 calculate_ports_transfer(_, _, Input, Output) ->
   [{<<"ports_rx_b">>, Input}, {<<"ports_tx_b">>, Output}].
 
@@ -805,7 +806,7 @@ calculate_ports_transfer(_, _, Input, Output) ->
   Value :: float().
 %% ====================================================================
 get_memory_stats() ->
-  case file:open("/proc/meminfo", [raw]) of
+  case file:open("/proc/meminfo", [read]) of
     {ok, Fd} -> read_memory_stats(Fd, undefined, undefined, 0);
     _ -> 0
   end.

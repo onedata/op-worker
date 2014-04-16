@@ -20,7 +20,7 @@
 -include("fuse_messages_pb.hrl").
 -include("communication_protocol_pb.hrl").
 
--define(STATS_WEIGHTS, [{cpu, 100}, {mem, 100}]).
+-define(STATS_WEIGHTS, [{"cpu", 100}, {"mem", 100}]).
 -define(CALLBACKS_TABLE, callbacks_table).
 -define(IO_BYTES_THRESHOLD, 10).
 
@@ -51,7 +51,8 @@
 %% Test API
 %% ====================================================================
 -ifdef(TEST).
--export([update_dns_state/3, update_dispatcher_state/6, calculate_load/2, calculate_worker_load/1, calculate_node_load/2]).
+-export([update_dns_state/3, update_dispatcher_state/6, calculate_load/2, calculate_worker_load/1, calculate_node_load/2,
+  merge_nodes_stats/1, map_node_stats_to_load/1]).
 -endif.
 
 %% ====================================================================
@@ -225,7 +226,7 @@ handle_call(check, _From, State) ->
 %% TODO: add generic mechanism that do the same thing
 handle_call({update_cluster_rengines, EventType, EventHandlerItem}, _From, State) ->
   Workers = State#cm_state.workers,
-  UpdateClusterRengine = fun ({_Node, Module, Pid}) ->
+  UpdateClusterRengine = fun({_Node, Module, Pid}) ->
     case Module of
       cluster_rengine -> gen_server:cast(Pid, {asynch, 1, {update_cluster_rengine, EventType, EventHandlerItem}});
       _ -> ok
@@ -484,7 +485,7 @@ handle_cast({synch_cache_clearing, Cache, ReturnPid}, State) ->
 %% this handler notify all logical_files_manager that event production of EventType should be enabled/disabled
 handle_cast({notify_lfm, EventType, Enabled}, State) ->
   NotifyFn = fun(Node) ->
-      gen_server:cast({?Node_Manager_Name, Node}, {notify_lfm, EventType, Enabled})
+    gen_server:cast({?Node_Manager_Name, Node}, {notify_lfm, EventType, Enabled})
   end,
 
   lists:foreach(NotifyFn, State#cm_state.nodes),
@@ -492,7 +493,7 @@ handle_cast({notify_lfm, EventType, Enabled}, State) ->
 
 handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
   NotifyFn = fun(Node) ->
-      gen_server:cast({?Node_Manager_Name, Node}, {update_user_write_enabled, UserDn, Enabled})
+    gen_server:cast({?Node_Manager_Name, Node}, {update_user_write_enabled, UserDn, Enabled})
   end,
 
   lists:foreach(NotifyFn, State#cm_state.nodes),
@@ -731,8 +732,14 @@ check_cluster_state(State) ->
                      WorkersLoad = calculate_worker_load(State#cm_state.workers),
                      Load = calculate_load(NodesLoad, WorkersLoad),
 
-                     MinV = lists:min([NodeLoad || {_Node, NodeLoad, _ModulesLoads} <- Load, NodeLoad =/= error]),
-                     MaxV = lists:max([NodeLoad || {_Node, NodeLoad, _ModulesLoads} <- Load, NodeLoad =/= error]),
+                     MinV = case [NodeLoad || {_Node, NodeLoad, _ModulesLoads} <- Load, NodeLoad =/= error] of
+                              [] -> 0;
+                              NonEmptyList -> lists:min(NonEmptyList)
+                            end,
+                     MaxV = case [NodeLoad || {_Node, NodeLoad, _ModulesLoads} <- Load, NodeLoad =/= error] of
+                              [] -> 0;
+                              NonEmptyList -> lists:max(NonEmptyList)
+                            end,
                      case (MinV > 0) and (((MaxV >= 2 * MinV) and (MaxV >= 1.5 * AvgLoad)) or (MaxV >= 5 * MinV)) of
                        true ->
                          [{MaxNode, MaxNodeModulesLoads} | _] = [{Node, ModulesLoads} || {Node, NodeLoad, ModulesLoads} <- Load, NodeLoad == MaxV],
@@ -1358,15 +1365,24 @@ calculate_node_load(Nodes, Period) ->
   AvgLoad :: float() | undefined.
 %% ====================================================================
 map_node_stats_to_load(NodesStats) ->
+
+  %% Unify diffrent nodes stats to common pattern
+  UnifiedNodesStats = lists:map(fun
+    ({Node, undefined}) -> {Node, undefined};
+    ({Node, NodeStats}) ->
+      {Node, lists:zip(["cpu", "mem", "net_rx_b", "net_tx_b", "net_rx_pps", "net_tx_pps", "ports_rx_b", "ports_tx_b"],
+        merge_nodes_stats([{Node, NodeStats}]))}
+  end, NodesStats),
+
   %% Create list of maximum values for each statistical data
   MaxStats = lists:foldl(fun
     ({_, undefined}, Maxs) -> Maxs;
     ({_, Stats}, undefined) -> Stats;
     ({_, Stats}, Maxs) ->
       lists:zipwith(fun({Name, X}, {Name, Y}) -> {Name, max(X, Y)} end, Stats, Maxs)
-  end, undefined, NodesStats),
+  end, undefined, UnifiedNodesStats),
 
-  %% Define weigth of statistical data (default weigth equals 1)
+  %% Define weigth of statistical data (default weight equals 1)
   StatsWeight = dict:from_list(?STATS_WEIGHTS),
   GetStatWeight = fun(Name) ->
     case dict:find(Name, StatsWeight) of
@@ -1388,7 +1404,7 @@ map_node_stats_to_load(NodesStats) ->
   NodesLoad = lists:map(fun
     ({Node, undefined}) -> {Node, error};
     ({Node, Stats}) -> {Node, StatsToLoadMap(Stats)}
-  end, NodesStats),
+  end, UnifiedNodesStats),
 
   %% Calculate average load
   {SumLoad, Counter} = lists:foldl(fun
@@ -1661,13 +1677,24 @@ create_cluster_stats_rrd() ->
 save_cluster_stats_to_rrd(NodesStats, #cm_state{storage_stats = StorageStats}) ->
   {MegaSecs, Secs, _} = erlang:now(),
   Timestamp = MegaSecs * 1000000 + Secs,
-  Values = merge_nodes_stats(NodesStats, #cluster_stats{}) ++ get_storage_stats(StorageStats),
+  Values = merge_nodes_stats(NodesStats) ++ get_storage_stats(StorageStats),
   case rrderlang:update(?Cluster_Stats_RRD_Name, <<>>, Values, Timestamp) of
     {error, Error} ->
       lager:error([{mod, ?MODULE}], "Can not save node stats to RRD: ~p", [Error]),
       {error, Error};
     _ -> ok
   end.
+
+%% merge_nodes_stats/1
+%% ====================================================================
+%% @doc Checks storage usage
+-spec merge_nodes_stats(NodesStats :: term()) -> Result when
+  Result :: [{Name, Value}],
+  Name :: string(),
+  Value :: non_neg_integer().
+%% ====================================================================
+merge_nodes_stats(NodesStats) ->
+  merge_nodes_stats(NodesStats, #cluster_stats{}).
 
 %% merge_nodes_stats/2
 %% ====================================================================
@@ -1732,12 +1759,12 @@ get_storage_stats(#storage_stats{read_bytes = RB, write_bytes = WB}) ->
   Result :: [{Name :: atom(), Value :: float()}] | {error, term()}.
 %% ====================================================================
 get_cluster_stats(TimeWindow, Format) ->
-  Interval = case TimeWindow of
-               short -> 1 * 60;
-               medium -> 5 * 60;
-               long -> 15 * 60;
-               _ -> TimeWindow
-             end,
+  {ok, Interval} = case TimeWindow of
+                     short -> application:get_env(?APP_Name, short_monitoring_time_window);
+                     medium -> application:get_env(?APP_Name, medium_monitoring_time_window);
+                     long -> application:get_env(?APP_Name, long_monitoring_time_window);
+                     _ -> {ok, TimeWindow}
+                   end,
   {MegaSecs, Secs, _} = erlang:now(),
   EndTime = MegaSecs * 1000000 + Secs,
   StartTime = EndTime - Interval,
