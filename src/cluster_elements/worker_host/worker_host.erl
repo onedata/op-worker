@@ -28,7 +28,7 @@
 %% API
 %% ====================================================================
 -export([start_link/3, stop/1, start_sub_proc/5, start_sub_proc/6, generate_sub_proc_list/1, generate_sub_proc_list/5, generate_sub_proc_list/6]).
--export([create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_sub_procs_cache/2, clear_sipmle_cache/3]).
+-export([create_permanent_cache/1, create_permanent_cache/2, create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_sipmle_cache/3]).
 
 %% ====================================================================
 %% Test API
@@ -867,7 +867,8 @@ del_sub_procs(Key, Name) ->
 %% create_simple_cache/1
 %% ====================================================================
 %% @doc Creates simple cache.
--spec create_simple_cache(Name :: atom()) -> Result when
+-spec create_simple_cache(Name :: CacheName) -> Result when
+  CacheName :: atom() | {permanent_cache, atom()} | {permanent_cache, atom(), term()},
   Result :: ok | error_during_cache_registration.
 %% ====================================================================
 create_simple_cache(Name) ->
@@ -876,7 +877,8 @@ create_simple_cache(Name) ->
 %% create_simple_cache/3
 %% ====================================================================
 %% @doc Creates simple cache.
--spec create_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term()) -> Result when
+-spec create_simple_cache(Name :: CacheName, CacheLoop, ClearFun :: term()) -> Result when
+  CacheName :: atom() | {permanent_cache, atom()} | {permanent_cache, atom(), term()},
   Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
   CacheLoop :: integer() | atom().
 %% ====================================================================
@@ -886,7 +888,8 @@ create_simple_cache(Name, CacheLoop, ClearFun) ->
 %% create_simple_cache/4
 %% ====================================================================
 %% @doc Creates simple cache.
--spec create_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean()) -> Result when
+-spec create_simple_cache(Name :: CacheName, CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean()) -> Result when
+  CacheName :: atom() | {permanent_cache, atom()} | {permanent_cache, atom(), term()},
   Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
   CacheLoop :: integer() | atom().
 %% ====================================================================
@@ -897,15 +900,22 @@ create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection) ->
 %% create_simple_cache/5
 %% ====================================================================
 %% @doc Creates simple cache.
--spec create_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean(), Pid :: pid()) -> Result when
+-spec create_simple_cache(Name :: CacheName, CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean(), Pid :: pid()) -> Result when
+  CacheName :: atom() | {permanent_cache, atom()} | {permanent_cache, atom(), term()},
   Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
   CacheLoop :: integer() | atom().
 %% ====================================================================
 create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPid) ->
   %% Init Cache-ETS. Ignore the fact that other DAO worker could have created this table. In this case, this call will
   %% fail, but table is present anyway, so everyone is happy.
-  case ets:info(Name) of
-    undefined   -> ets:new(Name, [named_table, public, set, {read_concurrency, true}]);
+  EtsName = case Name of
+    {permanent_cache, PCache} -> PCache;
+    {permanent_cache, PCache2, _} -> PCache2;
+    _ -> Name
+  end,
+
+  case ets:info(EtsName) of
+    undefined   -> ets:new(EtsName, [named_table, public, set, {read_concurrency, true}]);
     [_ | _]     -> ok
   end,
 
@@ -914,7 +924,10 @@ create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPi
 %% register_simple_cache/5
 %% ====================================================================
 %% @doc Registers simple cache.
--spec register_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean(), ClearingPid :: pid()) -> Result when
+-spec register_simple_cache(Name :: CacheName, CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean(), ClearingPid :: pid()) -> Result when
+  CacheName :: atom() | {permanent_cache, atom()} | {permanent_cache, atom(), term()} | {sub_proc_cache, {PlugIn, SubProcName}},
+  PlugIn :: atom(),
+  SubProcName :: atom(),
   Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
   CacheLoop :: integer() | atom().
 %% ====================================================================
@@ -948,6 +961,24 @@ register_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Clearing
   after 500 ->
     error_during_cache_registration
   end.
+
+%% create_permanent_cache/1
+%% ====================================================================
+%% @doc Creates permanent cache.
+-spec create_permanent_cache(Name :: atom()) -> Result when
+  Result :: ok | error_during_cache_registration.
+%% ====================================================================
+create_permanent_cache(Name) ->
+  create_simple_cache({permanent_cache, Name}).
+
+%% create_permanent_cache/2
+%% ====================================================================
+%% @doc Creates permanent cache.
+-spec create_permanent_cache(Name :: atom(), CacheCheckFun :: term()) -> Result when
+  Result :: ok | error_during_cache_registration.
+%% ====================================================================
+create_permanent_cache(Name, CacheCheckFun) ->
+  create_simple_cache({permanent_cache, Name, CacheCheckFun}).
 
 %% clear_cache/1
 %% ====================================================================
@@ -1077,8 +1108,21 @@ register_sub_proc_simple_cache(Name, CacheLoop, ClearFun, ClearingPid) ->
 %% clear_sub_procs_cache/1
 %% ====================================================================
 %% @doc Clears caches of sub_proc
--spec clear_sub_procs_cache({PlugIn :: atom(), Cache :: atom()}) -> ok | error.
+-spec clear_sub_procs_cache(Cache :: CacheDesc) -> ok | error when
+  CacheDesc :: {PlugIn :: atom(), Cache :: atom()} | {{PlugIn :: atom(), Cache :: atom()}, Key :: term()}.
 %% ====================================================================
+clear_sub_procs_cache({{PlugIn, Cache}, Key}) ->
+  gen_server:cast(PlugIn, {clear_sub_procs_cache, self(), {Cache, Key}}),
+  receive
+    {sub_proc_cache_cleared, ClearAns} ->
+      case ClearAns of
+        true -> ok;
+        _ -> error
+      end
+  after ?SUB_PROC_CACHE_CLEAR_TIME ->
+    error
+  end;
+
 clear_sub_procs_cache({PlugIn, Cache}) ->
   gen_server:cast(PlugIn, {clear_sub_procs_cache, self(), Cache}),
   receive
@@ -1091,22 +1135,6 @@ clear_sub_procs_cache({PlugIn, Cache}) ->
     error
   end.
 
-%% clear_sub_procs_cache/2
-%% ====================================================================
-%% @doc Clears caches of sub_proc
--spec clear_sub_procs_cache({PlugIn :: atom(), Cache :: atom()}, Key :: term()) -> ok | error.
-%% ====================================================================
-clear_sub_procs_cache({PlugIn, Cache}, Key) ->
-  gen_server:cast(PlugIn, {clear_sub_procs_cache, self(), {Cache, Key}}),
-  receive
-    {sub_proc_cache_cleared, ClearAns} ->
-      case ClearAns of
-        true -> ok;
-        _ -> error
-      end
-  after ?SUB_PROC_CACHE_CLEAR_TIME ->
-    error
-  end.
 
 %% clear_sipmle_cache/3
 %% ====================================================================
