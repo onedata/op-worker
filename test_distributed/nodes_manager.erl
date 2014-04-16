@@ -259,7 +259,6 @@ start_deps() ->
 
 
   ssl:start(),
-  application:start(os_mon),
   application:start(ranch),
   application:start(nprocreg),
   application:start(cowboy),
@@ -278,7 +277,6 @@ start_deps() ->
 
 stop_deps() ->
   application:stop(ranch),
-  application:stop(os_mon),
   application:stop(ssl),
   application:stop(crypto),
   application:stop(public_key),

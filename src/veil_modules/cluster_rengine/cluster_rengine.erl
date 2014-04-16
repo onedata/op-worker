@@ -59,7 +59,7 @@ handle(ProtocolVersion, #eventmessage{type = Type, count = Count}) ->
   handle(ProtocolVersion, {event_arrived, Event});
 
 handle(_ProtocolVersion, healthcheck) ->
-	ok;
+  ok;
 
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
@@ -90,7 +90,7 @@ handle(ProtocolVersion, {event_arrived, Event}) ->
     [] ->
       %% event arrived but no handlers - ok
       ok;
-    % mapping for event found - forward event
+  % mapping for event found - forward event
     [{_, EventToTreeMappings}] ->
       ForwardEvent = fun(EventToTreeMapping) ->
         case EventToTreeMapping of
@@ -109,7 +109,7 @@ handle(_ProtocolVersion, _Msg) ->
   wrong_request.
 
 cleanup() ->
-	ok.
+  ok.
 
 % inner functions
 
@@ -144,7 +144,7 @@ create_process_tree_for_handler(ProtocolVersion, #event_handler_item{tree_id = T
   ProcFun = case ActualConfig of
               undefined ->
                 fun(_ProtocolVersion, {final_stage_tree, TreeId2, Event}) ->
-                    HandlerFun(Event)
+                  HandlerFun(Event)
                 end;
               _ ->
                 FromConfigFun = fun_from_config(Config),
@@ -179,16 +179,16 @@ create_process_tree_for_handler(ProtocolVersion, #event_handler_item{tree_id = T
   case ActualConfig of
     undefined -> gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM});
     _ -> case element(1, ActualConfig) of
-     aggregator_config -> gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM, LocalCacheName});
-     _ -> gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM})
-    end
+           aggregator_config -> gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM, LocalCacheName});
+           _ -> gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM})
+         end
   end.
 
 fun_from_config(#event_stream_config{config = ActualConfig, wrapped_config = WrappedConfig}) ->
   WrappedFun = case WrappedConfig of
-    undefined -> non;
-    _ -> fun_from_config(WrappedConfig)
-  end,
+                 undefined -> non;
+                 _ -> fun_from_config(WrappedConfig)
+               end,
 
   case element(1, ActualConfig) of
     aggregator_config ->
@@ -201,9 +201,9 @@ fun_from_config(#event_stream_config{config = ActualConfig, wrapped_config = Wra
         end,
 
         ActualEvent = case WrappedFun of
-          non -> Event;
-          _ -> WrappedFun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName)
-        end,
+                        non -> Event;
+                        _ -> WrappedFun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName)
+                      end,
 
         case ActualEvent of
           non -> non;
@@ -232,14 +232,14 @@ fun_from_config(#event_stream_config{config = ActualConfig, wrapped_config = Wra
                 end;
               _ -> non
             end
-          end
-        end;
+        end
+      end;
     filter_config ->
       fun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName) ->
         ActualEvent = case WrappedFun of
-          non -> Event;
-          _ -> WrappedFun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName)
-        end,
+                        non -> Event;
+                        _ -> WrappedFun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName)
+                      end,
 
         case ActualEvent of
           non -> non;

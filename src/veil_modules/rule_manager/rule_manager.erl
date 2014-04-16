@@ -49,13 +49,13 @@ init(_Args) ->
   ets:new(?PRODUCERS_RULES_ETS, [named_table, public, set, {read_concurrency, true}]),
   ets:new(?HANDLER_TREE_ID_ETS, [named_table, public, set]),
   ets:insert(?HANDLER_TREE_ID_ETS, {current_id, 1}),
-	[].
+  [].
 
 handle(_ProtocolVersion, ping) ->
   pong;
 
 handle(_ProtocolVersion, healthcheck) ->
-	ok;
+  ok;
 
 %% handler called by veilclient on intitialization - returns config for veilclient
 handle(_ProtocolVersion, event_producer_config_request) ->
@@ -116,7 +116,7 @@ handle(_ProtocolVersion, _Msg) ->
   ok.
 
 cleanup() ->
-	ok.
+  ok.
 
 %% ====================================================================
 %% Helper functions
@@ -179,14 +179,21 @@ register_default_rules(WriteBytesThreshold) ->
   register_for_write_events(WriteBytesThreshold),
   ?info("default rule_manager rules registered").
 
+change_write_enabled(UserDn, true) ->
+  worker_host:send_to_user({dn, UserDn}, #atom{value = "write_enabled"}, "communication_protocol", ?ProtocolVersion),
+  gen_server:cast({global, ?CCM}, {update_user_write_enabled, UserDn, true});
+change_write_enabled(UserDn, false) ->
+  worker_host:send_to_user({dn, UserDn}, #atom{value = "write_disabled"}, "communication_protocol", ?ProtocolVersion),
+  gen_server:cast({global, ?CCM}, {update_user_write_enabled, UserDn, false}).
+
+
 %% ====================================================================
 %% Rule definitions
 %% ====================================================================
 register_quota_exceeded_handler() ->
   EventHandler = fun(Event) ->
     UserDn = proplists:get_value(user_dn, Event),
-    worker_host:send_to_user({dn, UserDn}, #atom{value = "write_disabled"}, "communication_protocol", 1),
-    gen_server:cast({global, ?CCM}, {update_user_write_enabled, UserDn, false})
+    change_write_enabled(UserDn, false)
   end,
   EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
 
@@ -195,11 +202,10 @@ register_quota_exceeded_handler() ->
 
 register_rm_event_handler() ->
   EventHandler = fun(Event) ->
-    CheckQuota = fun(UserDn) ->
+    CheckQuotaExceeded = fun(UserDn) ->
       case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
         false ->
-          worker_host:send_to_user({dn, UserDn}, #atom{value = "write_enabled"}, "communication_protocol", ?ProtocolVersion),
-          gen_server:cast({global, ?CCM}, {update_user_write_enabled, UserDn, true}),
+          change_write_enabled(UserDn, true),
           false;
         _ ->
           true
@@ -213,7 +219,7 @@ register_rm_event_handler() ->
           case user_logic:get_quota(UserDoc) of
             {ok, #quota{exceeded = true}} ->
               %% calling CheckQuota causes view reloading so we call it only when needed (quota has been already exceeded)
-              CheckQuota(UserDn);
+              CheckQuotaExceeded(UserDn);
             _ -> false
           end;
         Error ->
@@ -232,7 +238,7 @@ register_rm_event_handler() ->
           receive
             _ -> ok
           after ?VIEW_UPDATE_DELAY ->
-            CheckQuota(UserDn)
+            CheckQuotaExceeded(UserDn)
           end
         end);
       _ ->

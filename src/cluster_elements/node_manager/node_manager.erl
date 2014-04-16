@@ -36,7 +36,6 @@
 %% ====================================================================
 -export([start_link/1, stop/0]).
 -export([check_vsn/0]).
--export([create_node_stats_rrd/1, save_node_stats_to_rrd/0, log_load/4]).
 
 %% ====================================================================
 %% Test API
@@ -101,7 +100,6 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
       catch
         _:_ -> ok
       end,
-
       {ok, Port} = application:get_env(?APP_Name, dispatcher_port),
       {ok, DispatcherPoolSize} = application:get_env(?APP_Name, dispatcher_pool_size),
       {ok, CertFile} = application:get_env(?APP_Name, ssl_cert_path),
@@ -119,7 +117,7 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
         [
           {env, [{dispatch, Dispatch}]}
         ]),
-      spawn(?MODULE, create_node_stats_rrd, [self()]);
+      erlang:send_after(10000, self(), {timer, start_node_monitoring});
     false -> ok
   end,
 
@@ -134,7 +132,7 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
 
 init([Type]) when Type =:= test_worker ->
   process_flag(trap_exit, true),
-  spawn(?MODULE, create_node_stats_rrd, [self()]),
+  erlang:send_after(10000, self(), {timer, start_node_monitoring}),
   erlang:send_after(10, self(), {timer, do_heart_beat}),
 
   {ok, #node_state{node_type = worker, ccm_con_status = not_connected}};
@@ -171,11 +169,19 @@ handle_call(get_ccm_connection_status, _From, State) ->
   {reply, State#node_state.ccm_con_status, State};
 
 handle_call({get_node_stats, TimeWindow}, _From, State) ->
-  Reply = get_node_stats(TimeWindow),
+  Reply = get_node_stats(TimeWindow, default),
+  {reply, Reply, State};
+
+handle_call({get_node_stats_json, TimeWindow}, _From, State) ->
+  Reply = get_node_stats(TimeWindow, json),
   {reply, Reply, State};
 
 handle_call({get_node_stats, StartTime, EndTime}, _From, State) ->
   Reply = get_node_stats(StartTime, EndTime),
+  {reply, Reply, State};
+
+handle_call({get_node_stats_json, StartTime, EndTime}, _From, State) ->
+  Reply = get_node_stats(StartTime, EndTime, json),
   {reply, Reply, State};
 
 handle_call(get_fuses_list, _From, State) ->
@@ -246,8 +252,12 @@ handle_cast({dispatcher_updated, DispState, DispCallbacksNum}, State) ->
 handle_cast(stop, State) ->
   {stop, normal, State};
 
+handle_cast(start_node_monitoring, State) ->
+  spawn(fun() -> create_node_stats_rrd(State) end),
+  {noreply, State};
+
 handle_cast(monitor_node, State) ->
-  spawn(?MODULE, save_node_stats_to_rrd, []),
+  spawn(fun() -> save_node_stats_to_rrd(State) end),
   {ok, Period} = application:get_env(?APP_Name, node_monitoring_period),
   erlang:send_after(1000 * Period, self(), {timer, monitor_node}),
   {noreply, State};
@@ -285,9 +295,9 @@ handle_cast({start_load_logging, Path}, State) ->
   StartTime = MegaSecs * 1000000 + Secs + MicroSecs / 1000000,
   case file:open(Path ++ "/load_log.csv", [write]) of
     {ok, Fd} ->
-      NodeStats = get_node_stats(0),
+      NodeStats = get_node_stats(0, default),
       Header = string:join(["elapsed", "window" | lists:map(fun({Name, _}) ->
-        atom_to_list(Name) end, NodeStats)], ", ") ++ "\n",
+        binary_to_list(Name) end, NodeStats)], ", ") ++ "\n",
       io:fwrite(Fd, Header, []),
       erlang:send_after(Interval * 1000, self(), {timer, {log_load, StartTime, StartTime}}),
       {noreply, State#node_state{load_logging_fd = Fd}};
@@ -298,7 +308,7 @@ handle_cast({log_load, StartTime, PrevTime}, State) ->
   {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
   {MegaSecs, Secs, MicroSecs} = erlang:now(),
   CurrTime = MegaSecs * 1000000 + Secs + MicroSecs / 1000000,
-  spawn(?MODULE, log_load, [State#node_state.load_logging_fd, StartTime, PrevTime, CurrTime]),
+  spawn(fun() -> log_load(State#node_state.load_logging_fd, StartTime, PrevTime, CurrTime) end),
   erlang:send_after(Interval * 1000, self(), {timer, {log_load, StartTime, CurrTime}}),
   {noreply, State};
 
@@ -323,6 +333,15 @@ handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
     _ -> ets:delete(?WRITE_DISABLED_USERS, UserDn)
   end,
   {noreply, State};
+
+handle_cast({update_cpu_stats, CpuStats}, State) ->
+  {noreply, State#node_state{cpu_stats = CpuStats}};
+
+handle_cast({update_network_stats, NetworkStats}, State) ->
+  {noreply, State#node_state{network_stats = NetworkStats}};
+
+handle_cast({update_ports_stats, PortsStats}, State) ->
+  {noreply, State#node_state{ports_stats = PortsStats}};
 
 handle_cast(_Msg, State) ->
   {noreply, State}.
@@ -511,7 +530,7 @@ log_load(Fd, StartTime, PrevTime, CurrTime) ->
   case Fd of
     undefined -> ok;
     _ ->
-      NodeStats = get_node_stats(short),
+      NodeStats = get_node_stats(short, default),
       Values = [CurrTime - StartTime, CurrTime - PrevTime | lists:map(fun({_, Value}) ->
         Value end, NodeStats)],
       Format = string:join(lists:duplicate(length(Values), "~.6f"), ", ") ++ "\n",
@@ -522,45 +541,47 @@ log_load(Fd, StartTime, PrevTime, CurrTime) ->
 %% create_node_stats_rrd/1
 %% ====================================================================
 %% @doc Creates node stats Round Robin Database
--spec create_node_stats_rrd(Pid :: pid()) -> Result when
-  Result :: {ok, Data :: binary()} | {error, Error :: term()}.
+-spec create_node_stats_rrd(State :: term()) -> Result when
+  Result :: ok | {error, Error :: term()}.
 %% ====================================================================
-create_node_stats_rrd(Pid) ->
+create_node_stats_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkStats, ports_stats = PortsStats}) ->
   {ok, Period} = application:get_env(?APP_Name, node_monitoring_period),
   Heartbeat = 2 * Period,
-  RRASize = round(24 * 60 * 60 / Period), % one day in seconds devided by monitoring period
-  Steps = [1, 7, 30, 365], % defines how many primary data points are used to build a consolidated data point which then goes into the archive, it is an equivalent of [1 day, 7 days, 30 days, 365 days]
+  RRASize = round(60 * 60 / Period), % one hour in seconds devided by monitoring period
+  Steps = [1, 24, 24 * 7, 24 * 30, 24 * 365], % defines how many primary data points are used to build a consolidated data point which then goes into the archive, it is an equivalent of [1 day, 7 days, 30 days, 365 days]
   BinaryPeriod = integer_to_binary(Period),
   BinaryHeartbeat = integer_to_binary(Heartbeat),
   RRASizeBinary = integer_to_binary(RRASize),
   Options = <<"--step ", BinaryPeriod/binary>>,
 
-  DSs = lists:map(fun({Name, _}) -> BinaryName = atom_to_binary(Name, utf8),
-    <<"DS:", BinaryName/binary, ":GAUGE:", BinaryHeartbeat/binary, ":0:100">> end, get_cpu_stats()) ++
-    lists:map(fun({Name, _}) -> BinaryName = atom_to_binary(Name, utf8),
-      <<"DS:", BinaryName/binary, ":GAUGE:", BinaryHeartbeat/binary, ":0:100">> end, get_memory_stats()) ++
-    lists:map(fun({Name, _}) -> BinaryName = atom_to_binary(Name, utf8),
-      <<"DS:", BinaryName/binary, ":COUNTER:", BinaryHeartbeat/binary, ":U:U">> end, get_storage_stats()) ++
-    lists:map(fun({Name, _}) -> BinaryName = atom_to_binary(Name, utf8),
-      <<"DS:", BinaryName/binary, ":COUNTER:", BinaryHeartbeat/binary, ":0:U">> end, get_network_stats()) ++
-    lists:map(fun({Name, _}) -> BinaryName = atom_to_binary(Name, utf8),
-      <<"DS:", BinaryName/binary, ":COUNTER:", BinaryHeartbeat/binary, ":0:U">> end, get_port_stats()),
+  DSs = lists:map(fun({Name, _}) ->
+    <<"DS:", Name/binary, ":GAUGE:", BinaryHeartbeat/binary, ":0:100">> end, get_cpu_stats(CpuStats)) ++
+    lists:map(fun({Name, _}) ->
+      <<"DS:", Name/binary, ":GAUGE:", BinaryHeartbeat/binary, ":0:100">> end, get_memory_stats()) ++
+    lists:map(fun({Name, _}) ->
+      <<"DS:", Name/binary, ":GAUGE:", BinaryHeartbeat/binary, ":0:U">> end, get_network_stats(NetworkStats)) ++
+    lists:map(fun({Name, _}) ->
+      <<"DS:", Name/binary, ":GAUGE:", BinaryHeartbeat/binary, ":0:U">> end, get_ports_stats(PortsStats)),
 
   RRAs = lists:map(fun(Step) -> BinaryStep = integer_to_binary(Step),
     <<"RRA:AVERAGE:0.5:", BinaryStep/binary, ":", RRASizeBinary/binary>> end, Steps),
 
   case rrderlang:create(?Node_Stats_RRD_Name, Options, DSs, RRAs) of
-    {error, Error} -> lager:error([{mod, ?MODULE}], "Can not create node stats RRD: ~p", [Error]);
-    _ -> erlang:send_after(100, Pid, {timer, monitor_node})
+    {error, Error} ->
+      lager:error([{mod, ?MODULE}], "Can not create node stats RRD: ~p", [Error]),
+      {error, Error};
+    _ ->
+      gen_server:cast(?Node_Manager_Name, monitor_node),
+      ok
   end.
 
 %% get_node_stats/1
 %% ====================================================================
 %% @doc Get statistics about node load
--spec get_node_stats(TimeWindow :: short | medium | long | integer()) -> Result when
+-spec get_node_stats(TimeWindow :: short | medium | long | integer(), Format :: default | json) -> Result when
   Result :: [{Name :: atom(), Value :: float()}] | {error, term()}.
 %% ====================================================================
-get_node_stats(TimeWindow) ->
+get_node_stats(TimeWindow, Format) ->
   Interval = case TimeWindow of
                short -> 1 * 60;
                medium -> 5 * 60;
@@ -568,25 +589,28 @@ get_node_stats(TimeWindow) ->
                _ -> TimeWindow
              end,
   {MegaSecs, Secs, _} = erlang:now(),
-  EndTime = MegaSecs * 1000000 + Secs,
+  EndTime = 1000000 * MegaSecs + Secs,
   StartTime = EndTime - Interval,
-  get_node_stats(StartTime, EndTime).
+  get_node_stats(StartTime, EndTime, Format).
 
 %% get_node_stats/2
 %% ====================================================================
 %% @doc Get statistics about node load
--spec get_node_stats(StartTime :: integer(), EndTime :: integer()) -> Result when
-  Result :: [{Name :: atom(), Value :: float()}] | {error, term()}.
+-spec get_node_stats(StartTime :: integer(), EndTime :: integer(), Format :: default | json) -> Result when
+  Result :: [{Name :: string(), Value :: float()}] | {error, term()}.
 %% ====================================================================
-get_node_stats(StartTime, EndTime) ->
+get_node_stats(StartTime, EndTime, Format) ->
   BinaryEndTime = integer_to_binary(EndTime),
   BinaryStartTime = integer_to_binary(StartTime),
   Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
-  case rrderlang:fetch(?Node_Stats_RRD_Name, Options, <<"AVERAGE">>) of
+  FetchFunction = case Format of
+                    json -> fun rrderlang:fetch_json/3;
+                    _ -> fun rrderlang:fetch/3
+                  end,
+  case FetchFunction(?Node_Stats_RRD_Name, Options, <<"AVERAGE">>) of
     {ok, {Header, Data}} ->
-      HeaderAtom = lists:map(fun(Elem) -> binary_to_atom(Elem, utf8) end, Header),
+      HeaderList = lists:map(fun(Elem) -> binary_to_list(Elem) end, Header),
       HeaderLen = length(Header),
-
       Values = lists:foldl(fun({_, Values}, Acc) ->
         lists:zipwith(fun
           (nan, {Y, C}) -> {Y, C};
@@ -599,21 +623,22 @@ get_node_stats(StartTime, EndTime) ->
         ({Value, Counter}) -> Value / Counter
       end, Values),
 
-      lists:zip(HeaderAtom, AvgValues);
+      lists:zip(HeaderList, AvgValues);
     Other ->
       Other
   end.
 
-%% save_node_stats_to_rrd/0
+%% save_node_stats_to_rrd/1
 %% ====================================================================
 %% @doc Saves node stats to Round Robin Database
--spec save_node_stats_to_rrd() -> Result when
+-spec save_node_stats_to_rrd(State :: term()) -> Result when
   Result :: ok | {error, Error :: term()}.
 %% ====================================================================
-save_node_stats_to_rrd() ->
+save_node_stats_to_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkStats, ports_stats = PortsStats}) ->
   {MegaSecs, Secs, _} = erlang:now(),
   Timestamp = MegaSecs * 1000000 + Secs,
-  Stats = get_cpu_stats() ++ get_memory_stats() ++ get_storage_stats() ++ get_network_stats() ++ get_port_stats(),
+  Stats = get_cpu_stats(CpuStats) ++ get_memory_stats() ++ get_network_stats(NetworkStats) ++
+    get_ports_stats(PortsStats),
   Values = lists:map(fun({_, Value}) -> Value end, Stats),
   case rrderlang:update(?Node_Stats_RRD_Name, <<>>, Values, Timestamp) of
     {error, Error} ->
@@ -625,142 +650,181 @@ save_node_stats_to_rrd() ->
 %% get_network_stats/0
 %% ====================================================================
 %% @doc Checks network usage
--spec get_network_stats() -> Result when
-  Result :: [{network_rx_ops, Value} | {network_tx_ops, Value} |
-  {network_rx_bps, Value} | {network_tx_bps, Value}],
-  Value :: float() | undefined.
+-spec get_network_stats(NetworkStats :: [{Name, Value}]) -> Result when
+  Result :: [{Name, Value}],
+  Name :: string(),
+  Value :: non_neg_integer().
 %% ====================================================================
-get_network_stats() ->
+get_network_stats(NetworkStats) ->
   {ok, Period} = application:get_env(?APP_Name, node_monitoring_period),
-  case file:list_dir("/sys/class/net") of
+  Dir = "/sys/class/net/",
+  case file:list_dir(Dir) of
     {ok, Interfaces} ->
-      SumInterfacesStats = fun(Type) ->
-        lists:foldl(fun(Interface, Acc) ->
-          case {get_interface_stats(Interface, Type), Acc} of
-            {undefined, _} -> Acc;
-            {InterfaceStat, undefined} -> InterfaceStat;
-            {InterfaceStat, _} -> InterfaceStat + Acc
-          end
-        end, undefined, Interfaces)
-      end,
-      RxBytes = SumInterfacesStats("rx_bytes"),
-      TxBytes = SumInterfacesStats("tx_bytes"),
-      RxPackets = SumInterfacesStats("rx_packets"),
-      TxPackets = SumInterfacesStats("tx_packets"),
-
-      lists:map(fun
-        ({Name, undefined}) -> {Name, undefined};
-        ({Name, Value}) -> {Name, round(Value / Period)}
-      end, [{network_rx_bps, RxBytes}, {network_tx_bps, TxBytes},
-        {network_rx_pps, RxPackets}, {network_tx_pps, TxPackets}]);
-    _ ->
-      [{network_rx_bps, undefined}, {network_tx_bps, undefined},
-        {network_rx_pps, undefined}, {network_tx_pps, undefined}]
+      PhysicalInterfaces = lists:filter(
+        fun(Interface) -> case file:read_link_all(Dir ++ Interface) of
+                            {ok, Info} ->
+                              string:str(Info, "virtual") =:= 0;
+                            _ -> false end
+        end, Interfaces),
+      CurrentNetworkStats = lists:foldl(
+        fun(Interface, Stats) -> [
+          {<<"net_rx_b_", (list_to_binary(Interface))/binary>>, get_interface_stats(Interface, "rx_bytes")},
+          {<<"net_tx_b_", (list_to_binary(Interface))/binary>>, get_interface_stats(Interface, "tx_bytes")},
+          {<<"net_rx_pps_", (list_to_binary(Interface))/binary>>, get_interface_stats(Interface, "rx_packets") / Period},
+          {<<"net_tx_pps_", (list_to_binary(Interface))/binary>>, get_interface_stats(Interface, "tx_packets") / Period} |
+          Stats
+        ] end, [], PhysicalInterfaces),
+      gen_server:cast(?Node_Manager_Name, {update_network_stats, CurrentNetworkStats}),
+      calculate_network_stats(CurrentNetworkStats, NetworkStats, []);
+    _ -> []
   end.
+
+calculate_network_stats([], _, Stats) ->
+  lists:reverse(Stats);
+calculate_network_stats([Stat | CurrentNetworkStats], [], Stats) ->
+  calculate_network_stats(CurrentNetworkStats, [], [Stat | Stats]);
+calculate_network_stats([{Name, StatA} | CurrentNetworkStats], [{Name, StatB} | NetworkStats], Stats) ->
+  calculate_network_stats(CurrentNetworkStats, NetworkStats, [{Name, StatA - StatB} | Stats]);
+calculate_network_stats([{NameA, StatA} | CurrentNetworkStats], [{NameB, _} | NetworkStats], Stats) when NameA < NameB ->
+  calculate_network_stats(CurrentNetworkStats, NetworkStats, [{NameA, StatA} | Stats]);
+calculate_network_stats([{NameA, _} | CurrentNetworkStats], [{NameB, _} | NetworkStats], Stats) when NameA > NameB ->
+  calculate_network_stats(CurrentNetworkStats, NetworkStats, Stats);
+calculate_network_stats(_, _, Stats) ->
+  lists:reverse(Stats).
 
 %% get_interface_stats/2
 %% ====================================================================
 %% @doc Checks interface usage, where Interface is a name (e.g. eth0)
 %% and Type is name of collecting statistics (e.g. rx_bytes)
 -spec get_interface_stats(Interface :: string(), Type :: string()) -> Result when
-  Result :: non_neg_integer() | undefined.
+  Result :: non_neg_integer().
 %% ====================================================================
 get_interface_stats(Interface, Type) ->
   Filename = "/sys/class/net/" ++ Interface ++ "/statistics/" ++ Type,
   case file:open(Filename, [raw]) of
     {ok, Fd} ->
-      case file:read_line(Fd) of
-        {ok, Value} ->
-          list_to_integer(string:strip(Value, right, $\n));
-        _ -> undefined
-      end;
-    _ -> undefined
+      InterfaceStats = case file:read_line(Fd) of
+                         {ok, Value} -> list_to_integer(string:strip(Value, right, $\n));
+                         _ -> 0
+                       end,
+      file:close(Fd),
+      InterfaceStats;
+    _ -> 0
   end.
 
-%% get_cpu_stats/0
+%% get_cpu_stats/1
 %% ====================================================================
 %% @doc Checks cpu usage
--spec get_cpu_stats() -> Result when
-  Result :: [{cpu, Value} | {cpu_avg1, Value} | {cpu_avg5, Value} | {cpu_avg15, Value}],
-  Value :: float() | undefined.
+-spec get_cpu_stats(CpuStats :: [{Name, WorkJiffies, TotalJiffies}]) -> Result when
+  WorkJiffies :: non_neg_integer(),
+  TotalJiffies :: non_neg_integer(),
+  Result :: [{Name, Value}],
+  Name :: string(),
+  Value :: float().
 %% ====================================================================
-get_cpu_stats() ->
-  Try = fun(Fun) ->
-    case Fun() of
-      {error, _} -> undefined;
-      Result -> Result
-    end
-  end,
-  [
-    {cpu, Try(fun() -> cpu_sup:util() end)},
-    {cpu_avg1, Try(fun() -> cpu_sup:avg1() end)},
-    {cpu_avg5, Try(fun() -> cpu_sup:avg5() end)},
-    {cpu_avg15, Try(fun() -> cpu_sup:avg15() end)}
-  ].
+get_cpu_stats(CpuStats) ->
+  case file:open("/proc/stat", [raw]) of
+    {ok, Fd} ->
+      CurrentCpuStats = read_cpu_stats(Fd, []),
+      gen_server:cast(?Node_Manager_Name, {update_cpu_stats, CurrentCpuStats}),
+      case calculate_cpu_stats(CurrentCpuStats, CpuStats, []) of
+        [Main, _OneCore] -> [Main];
+        MoreCores -> MoreCores
+      end;
+    _ -> []
+  end.
 
-%% get_port_stats/0
+read_cpu_stats(Fd, Stats) ->
+  case file:read_line(Fd) of
+    {ok, "cpu" ++ _ = Line} ->
+      ["cpu" ++ ID | Values] = string:tokens(string:strip(Line, right, $\n), " "),
+      Name = case ID of
+               "" -> <<"cpu">>;
+               _ -> <<"core", (list_to_binary(ID))/binary>>
+             end,
+      [User, Nice, System | Rest] = lists:map(fun(Value) -> list_to_integer(Value) end, Values),
+      WorkJiffies = User + Nice + System,
+      TotalJiffies = WorkJiffies + lists:foldl(fun(Value, Sum) -> Value + Sum end, 0, Rest),
+      read_cpu_stats(Fd, [{Name, WorkJiffies, TotalJiffies} | Stats]);
+    _ ->
+      file:close(Fd),
+      Stats
+  end.
+
+calculate_cpu_stats([{Name, _, _} | CurrentCpuStats], [], Stats) ->
+  calculate_cpu_stats(CurrentCpuStats, [], [{Name, 0} | Stats]);
+calculate_cpu_stats([{Name, _, T} | CurrentCpuStats], [{Name, _, T} | CpuStats], Stats) ->
+  calculate_cpu_stats(CurrentCpuStats, CpuStats, [{Name, 0} | Stats]);
+calculate_cpu_stats([{Name, WA, TA} | CurrentCpuStats], [{Name, WB, TB} | CpuStats], Stats) ->
+  calculate_cpu_stats(CurrentCpuStats, CpuStats, [{Name, 100 * (WA - WB) / (TA - TB)} | Stats]);
+calculate_cpu_stats(_, _, Stats) ->
+  Stats.
+
+%% get_port_stats/1
 %% ====================================================================
 %% @doc Checks port usage
--spec get_port_stats() -> Result when
-  Result :: [{port_rx_bps, Value} | {port_tx_bps, Value}],
-  Value :: float() | undefined.
+-spec get_ports_stats(PortsStats :: [{Port, Input, Output}]) -> Result when
+  Port :: port(),
+  Input :: non_neg_integer(),
+  Output :: non_neg_integer(),
+  Result :: [{Name, Value}],
+  Name :: string(),
+  Value :: non_neg_integer().
 %% ====================================================================
-get_port_stats() ->
-  {ok, Period} = application:get_env(?APP_Name, node_monitoring_period),
-  Ports = erlang:ports(),
-  lists:map(fun
-    ({Name, undefinde}) -> {Name, undefined};
-    ({Name, Value}) -> {Name, round(Value / Period)} end,
-    [
-      {port_rx_bps, lists:foldl(
-        fun(_, undefined) -> undefined;
-          (Port, Acc) -> case erlang:port_info(Port, input) of
-                           {input, Bytes} -> Acc + Bytes;
-                           undefined -> undefined
-                         end
-        end, 0, Ports)},
-      {port_tx_bps, lists:foldl(
-        fun(_, undefined) -> undefined;
-          (Port, Acc) -> case erlang:port_info(Port, output) of
-                           {output, Bytes} -> Acc + Bytes;
-                           undefined -> undefined
-                         end
-        end, 0, Ports)}
-    ]).
+get_ports_stats(PortsStats) ->
+  GetPortInfo = fun(Port, Item) ->
+    case erlang:port_info(Port, Item) of
+      {Item, Value} -> Value;
+      _ -> 0
+    end
+  end,
+  ExistingPorts = lists:sort(erlang:ports()),
+  ExistingPortsStats = lists:map(
+    fun(Port) -> {Port, GetPortInfo(Port, input), GetPortInfo(Port, output)}
+    end, ExistingPorts),
+  gen_server:cast(?Node_Manager_Name, {update_ports_stats, ExistingPortsStats}),
+  calculate_ports_transfer(PortsStats, ExistingPortsStats, 0, 0).
+
+calculate_ports_transfer([], [{_, In, Out} | Ports], Input, Output) ->
+  calculate_ports_transfer([], Ports, Input + In, Output + Out);
+calculate_ports_transfer([{Port, InA, OutA} | PortsA], [{Port, InB, OutB} | PortsB], Input, Output) ->
+  calculate_ports_transfer(PortsA, PortsB, Input + InB - InA, Output + OutB - OutA);
+calculate_ports_transfer([{PortA, _, _} | PortsA], [{PortB, InB, OutB} | PortsB], Input, Output) when PortA < PortB ->
+  calculate_ports_transfer(PortsA, [{PortB, InB, OutB} | PortsB], Input + InB, Output + OutB);
+calculate_ports_transfer([{PortA, InA, OutA} | PortsA], [{PortB, _, _} | PortsB], Input, Output) when PortA > PortB ->
+  calculate_ports_transfer([{PortA, InA, OutA} | PortsA], PortsB, Input, Output);
+calculate_ports_transfer(_, _, Input, Output) ->
+  [{<<"ports_rx_b">>, Input}, {<<"ports_tx_b">>, Output}].
 
 %% get_memory_stats/0
 %% ====================================================================
 %% @doc Checks memory usage
 -spec get_memory_stats() -> Result when
-  Result :: [{mem, Value}],
-  Value :: float() | undefined.
+  Result :: [{Name, Value}],
+  Name :: string(),
+  Value :: float().
 %% ====================================================================
 get_memory_stats() ->
-  MemDataList = memsup:get_system_memory_data(),
-  {FreeMem, TotalMem} = lists:foldl(
-    fun({free_memory, Size}, {_, TotalMem}) -> {Size, TotalMem};
-      ({total_memory, Size}, {FreeMem, _}) -> {FreeMem, Size};
-      ({_, _}, {FreeMem, TotalMem}) -> {FreeMem, TotalMem}
-    end,
-    {undefined, undefined}, MemDataList),
-  case FreeMem of
-    undefined -> [{mem, undefined}];
-    _ -> case TotalMem of
-           undefined -> [{mem, undefined}];
-           _ -> [{mem, 100 * (TotalMem - FreeMem) / TotalMem}]
-         end
+  case file:open("/proc/meminfo", [raw]) of
+    {ok, Fd} -> read_memory_stats(Fd, undefined, undefined, 0);
+    _ -> 0
   end.
 
-%% get_storage_stats/0
-%% ====================================================================
-%% @doc Checks storage usage
--spec get_storage_stats() -> Result when
-  Result :: [{storage_rx_ops, Value} | {storage_tx_ops, Value} |
-  {storage_rx_bps, Value} | {storage_tx_bps, Value}],
-  Value :: float() | undefined.
-%% ====================================================================
-get_storage_stats() ->
-  [{storage_rx_ops, undefined}, {storage_tx_ops, undefined}, {storage_rx_bps, undefined}, {storage_tx_bps, undefined}].
+read_memory_stats(Fd, MemFree, MemTotal, 2) ->
+  file:close(Fd),
+  [{<<"mem">>, 100 * (MemTotal - MemFree) / MemTotal}];
+read_memory_stats(Fd, MemFree, MemTotal, Counter) ->
+  GetValue = fun(Line) ->
+    [Value | _] = string:tokens(Line, " "),
+    list_to_integer(Value)
+  end,
+  case file:read_line(Fd) of
+    {ok, "MemTotal:" ++ Line} -> read_memory_stats(Fd, MemFree, GetValue(Line), Counter + 1);
+    {ok, "MemFree:" ++ Line} -> read_memory_stats(Fd, GetValue(Line), MemTotal, Counter + 1);
+    eof -> file:close(Fd), [];
+    {error, _} -> [];
+    _ -> read_memory_stats(Fd, MemFree, MemTotal, Counter)
+  end.
 
 %% get_callback/2
 %% ====================================================================

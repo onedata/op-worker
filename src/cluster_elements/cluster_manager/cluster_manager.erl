@@ -16,18 +16,26 @@
 -include("supervision_macros.hrl").
 -include("modules_and_args.hrl").
 -include("logging.hrl").
+-include("veil_modules/cluster_rengine/cluster_rengine.hrl").
+-include("fuse_messages_pb.hrl").
+-include("communication_protocol_pb.hrl").
 
 -define(STATS_WEIGHTS, [{cpu, 100}, {mem, 100}]).
 -define(CALLBACKS_TABLE, callbacks_table).
+-define(IO_BYTES_THRESHOLD, 10).
 
 %% Singleton modules are modules which are supposed to have only one instance.
 -define(SINGLETON_MODULES, [control_panel, central_logger, rule_manager]).
+
 
 -ifdef(TEST).
 -define(REGISTER_DEFAULT_RULES, false).
 -else.
 -define(REGISTER_DEFAULT_RULES, true).
 -endif.
+
+-record(cluster_stats, {cpu = {0, 0}, memory = {0, 0}, net_rx_b = {0, 0}, net_tx_b = {0, 0}, net_rx_pps = {0, 0},
+  net_tx_pps = {0, 0}, ports_rx_b = {0, 0}, ports_tx_b = {0, 0}}).
 
 %% ====================================================================
 %% API
@@ -121,6 +129,7 @@ init([]) ->
                          end,
   erlang:send_after(LoggerAndDAOInterval * 1000 + 100, Pid, {timer, start_central_logger}),
   erlang:send_after(LoggerAndDAOInterval * 1000 + 200, Pid, {timer, get_state_from_db}),
+  erlang:send_after(30000, Pid, {timer, start_cluster_monitoring}),
   case ?REGISTER_DEFAULT_RULES of
     true -> erlang:send_after(30000, Pid, {timer, register_default_rules});
     _ -> ok
@@ -225,6 +234,22 @@ handle_call({update_cluster_rengines, EventType, EventHandlerItem}, _From, State
 
   lists:foreach(UpdateClusterRengine, Workers),
   {reply, ok, State};
+
+handle_call({get_cluster_stats, TimeWindow}, _From, State) ->
+  Reply = get_cluster_stats(TimeWindow, default),
+  {reply, Reply, State};
+
+handle_call({get_cluster_stats_json, TimeWindow}, _From, State) ->
+  Reply = get_cluster_stats(TimeWindow, json),
+  {reply, Reply, State};
+
+handle_call({get_cluster_stats, StartTime, EndTime}, _From, State) ->
+  Reply = get_cluster_stats(StartTime, EndTime),
+  {reply, Reply, State};
+
+handle_call({get_cluster_stats_json, StartTime, EndTime}, _From, State) ->
+  Reply = get_cluster_stats(StartTime, EndTime, json),
+  {reply, Reply, State};
 
 %% Test call
 handle_call({start_worker, Node, Module, WorkerArgs}, _From, State) ->
@@ -482,6 +507,69 @@ handle_cast({start_load_logging, Path}, State) ->
 handle_cast(stop_load_logging, State) ->
   lager:info("Stop load logging on nodes: ~p", State#cm_state.nodes),
   lists:map(fun(Node) -> gen_server:cast({?Node_Manager_Name, Node}, stop_load_logging) end, State#cm_state.nodes),
+  {noreply, State};
+
+handle_cast(start_cluster_monitoring, State) ->
+  spawn(fun() -> create_cluster_stats_rrd() end),
+  {noreply, State};
+
+handle_cast(monitor_cluster, State) ->
+  {ok, Period} = application:get_env(?APP_Name, cluster_monitoring_period),
+  GetNodeStats = fun(Node) ->
+    try gen_server:call({?Node_Manager_Name, Node}, {get_node_stats, Period}, 500) of
+      Stats when is_list(Stats) -> {Node, Stats};
+      _ -> {Node, undefined}
+    catch
+      _:_ ->
+        lager:error([{mod, ?MODULE}], "Can not get statistics of node: ~s", [Node]),
+        {Node, undefined}
+    end
+  end,
+  NodesStats = lists:map(GetNodeStats, State#cm_state.nodes),
+  spawn(fun() -> save_cluster_stats_to_rrd(NodesStats, State) end),
+  erlang:send_after(1000 * Period, self(), {timer, monitor_cluster}),
+  {noreply, State#cm_state{storage_stats = #storage_stats{}}};
+
+handle_cast({update_storage_write_b, Bytes}, #cm_state{storage_stats = #storage_stats{write_bytes = WB} = Stats} = State) ->
+  {noreply, State#cm_state{storage_stats = Stats#storage_stats{write_bytes = WB + Bytes}}};
+
+handle_cast({update_storage_read_b, Bytes}, #cm_state{storage_stats = #storage_stats{read_bytes = RB} = Stats} = State) ->
+  {noreply, State#cm_state{storage_stats = Stats#storage_stats{read_bytes = RB + Bytes}}};
+
+handle_cast(register_io_event_handler, State) ->
+  IOWriteEventHandler = fun(Event) ->
+    Bytes = proplists:get_value(count, Event),
+    gen_server:cast({global, ?CCM}, {update_storage_write_b, Bytes})
+  end,
+
+  WriteEventItem = #event_handler_item{processing_method = standard, handler_fun = IOWriteEventHandler},
+
+  WriteEventFilter = #eventfilterconfig{field_name = "type", desired_value = "write_event"},
+  WriteEventFilterConfig = #eventstreamconfig{filter_config = WriteEventFilter},
+
+  WriteEventAggregator = #eventaggregatorconfig{field_name = "type", threshold = ?IO_BYTES_THRESHOLD, sum_field_name = "bytes"},
+  WriteEventAggregatorConfig = #eventstreamconfig{aggregator_config = WriteEventAggregator, wrapped_config = WriteEventFilterConfig},
+
+  WriteEventTransformer = #eventtransformerconfig{field_names_to_replace = ["type"], values_to_replace = ["write_event"], new_values = ["write_for_stats"]},
+  WriteEventTransformerConfig = #eventstreamconfig{transformer_config = WriteEventTransformer, wrapped_config = WriteEventAggregatorConfig},
+  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {write_for_stats, WriteEventItem, WriteEventTransformerConfig}}}),
+
+  IOReadEventHandler = fun(Event) ->
+    Bytes = proplists:get_value(count, Event),
+    gen_server:cast({global, ?CCM}, {update_storage_read_b, Bytes})
+  end,
+
+  ReadEventItem = #event_handler_item{processing_method = standard, handler_fun = IOReadEventHandler},
+
+  ReadEventFilter = #eventfilterconfig{field_name = "type", desired_value = "read_event"},
+  ReadEventFilterConfig = #eventstreamconfig{filter_config = ReadEventFilter},
+
+  ReadEventAggregator = #eventaggregatorconfig{field_name = "type", threshold = ?IO_BYTES_THRESHOLD, sum_field_name = "bytes"},
+  ReadEventAggregatorConfig = #eventstreamconfig{aggregator_config = ReadEventAggregator, wrapped_config = ReadEventFilterConfig},
+
+  ReadEventTransformer = #eventtransformerconfig{field_names_to_replace = ["type"], values_to_replace = ["read_event"], new_values = ["read_for_stats"]},
+  ReadEventTransformerConfig = #eventstreamconfig{transformer_config = ReadEventTransformer, wrapped_config = ReadEventAggregatorConfig},
+  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {read_for_stats, ReadEventItem, ReadEventTransformerConfig}}}),
   {noreply, State};
 
 handle_cast(_Msg, State) ->
@@ -1271,7 +1359,6 @@ calculate_node_load(Nodes, Period) ->
 %% ====================================================================
 map_node_stats_to_load(NodesStats) ->
   %% Create list of maximum values for each statistical data
-  lager:info("Nodes stats: ~p~n", [NodesStats]),
   MaxStats = lists:foldl(fun
     ({_, undefined}, Maxs) -> Maxs;
     ({_, Stats}, undefined) -> Stats;
@@ -1300,9 +1387,7 @@ map_node_stats_to_load(NodesStats) ->
   %% Get load for each node
   NodesLoad = lists:map(fun
     ({Node, undefined}) -> {Node, error};
-    ({Node, Stats}) ->
-      lager:info("Node: ~p, Stats: ~p~n", [Node, Stats]),
-      {Node, StatsToLoadMap(Stats)}
+    ({Node, Stats}) -> {Node, StatsToLoadMap(Stats)}
   end, NodesStats),
 
   %% Calculate average load
@@ -1525,3 +1610,170 @@ clear_cache(State, Cache) ->
 
   save_state(),
   State3.
+
+%% create_node_stats_rrd/1
+%% ====================================================================
+%% @doc Creates node stats Round Robin Database
+-spec create_cluster_stats_rrd() -> Result when
+  Result :: ok | {error, Error :: term()}.
+%% ====================================================================
+create_cluster_stats_rrd() ->
+  {ok, Period} = application:get_env(?APP_Name, cluster_monitoring_period),
+  Heartbeat = 2 * Period,
+  RRASize = round(60 * 60 / Period), % one day in seconds devided by monitoring period
+  Steps = [1, 24, 24 * 7, 24 * 30, 24 * 365], % defines how many primary data points are used to build a consolidated data point which then goes into the archive, it is an equivalent of [1 hour, 1 day, 7 days, 30 days, 365 days]
+  BinaryPeriod = integer_to_binary(Period),
+  BinaryHeartbeat = integer_to_binary(Heartbeat),
+  RRASizeBinary = integer_to_binary(RRASize),
+  Options = <<"--step ", BinaryPeriod/binary>>,
+
+  DSs = [
+    <<"DS:cpu:GAUGE:", BinaryHeartbeat/binary, ":0:100">>,
+    <<"DS:mem:GAUGE:", BinaryHeartbeat/binary, ":0:100">>,
+    <<"DS:net_rx_b:GAUGE:", BinaryHeartbeat/binary, ":0:U">>,
+    <<"DS:net_tx_b:GAUGE:", BinaryHeartbeat/binary, ":0:U">>,
+    <<"DS:net_rx_pps:GAUGE:", BinaryHeartbeat/binary, ":0:U">>,
+    <<"DS:net_tx_pps:GAUGE:", BinaryHeartbeat/binary, ":0:U">>,
+    <<"DS:ports_rx_b:GAUGE:", BinaryHeartbeat/binary, ":0:U">>,
+    <<"DS:ports_tx_b:GAUGE:", BinaryHeartbeat/binary, ":0:U">>,
+    <<"DS:storage_read_b:GAUGE:", BinaryHeartbeat/binary, ":0:U">>,
+    <<"DS:storage_write_b:GAUGE:", BinaryHeartbeat/binary, ":0:U">>
+  ],
+  RRAs = lists:map(fun(Step) -> BinaryStep = integer_to_binary(Step),
+    <<"RRA:AVERAGE:0.5:", BinaryStep/binary, ":", RRASizeBinary/binary>> end, Steps),
+
+  case rrderlang:create(?Cluster_Stats_RRD_Name, Options, DSs, RRAs) of
+    {error, Error} ->
+      lager:error([{mod, ?MODULE}], "Can not create cluster stats RRD: ~p", [Error]),
+      {error, Error};
+    _ ->
+      gen_server:cast({global, ?CCM}, register_io_event_handler),
+      gen_server:cast({global, ?CCM}, monitor_cluster),
+      ok
+  end.
+
+%% save_cluster_stats_to_rrd/1
+%% ====================================================================
+%% @doc Saves node cluster to Round Robin Database
+-spec save_cluster_stats_to_rrd(NodesStats :: term(), State :: term()) -> Result when
+  Result :: ok | {error, Error :: term()}.
+%% ====================================================================
+save_cluster_stats_to_rrd(NodesStats, #cm_state{storage_stats = StorageStats}) ->
+  {MegaSecs, Secs, _} = erlang:now(),
+  Timestamp = MegaSecs * 1000000 + Secs,
+  Values = merge_nodes_stats(NodesStats, #cluster_stats{}) ++ get_storage_stats(StorageStats),
+  case rrderlang:update(?Cluster_Stats_RRD_Name, <<>>, Values, Timestamp) of
+    {error, Error} ->
+      lager:error([{mod, ?MODULE}], "Can not save node stats to RRD: ~p", [Error]),
+      {error, Error};
+    _ -> ok
+  end.
+
+%% merge_nodes_stats/2
+%% ====================================================================
+%% @doc Checks storage usage
+-spec merge_nodes_stats(NodesStats :: term(), SumStats :: term()) -> Result when
+  Result :: [{Name, Value}],
+  Name :: string(),
+  Value :: non_neg_integer().
+%% ====================================================================
+merge_nodes_stats([], SumStats) ->
+  AvgFun = fun
+    ({_, 0}) -> 0;
+    ({Sum, Counter}) -> Sum / Counter
+  end,
+  [
+    AvgFun(SumStats#cluster_stats.cpu), AvgFun(SumStats#cluster_stats.memory),
+    AvgFun(SumStats#cluster_stats.net_rx_b), AvgFun(SumStats#cluster_stats.net_tx_b),
+    AvgFun(SumStats#cluster_stats.net_rx_pps), AvgFun(SumStats#cluster_stats.net_tx_pps),
+    AvgFun(SumStats#cluster_stats.ports_rx_b), AvgFun(SumStats#cluster_stats.ports_tx_b)
+  ];
+merge_nodes_stats([{_, undefined} | NodeStats], SumStats) ->
+  merge_nodes_stats(NodeStats, SumStats);
+merge_nodes_stats([{_, Stats} | NodeStats], SumStats) ->
+  merge_nodes_stats(
+    NodeStats,
+    lists:foldl(fun
+      ({"cpu", Value}, #cluster_stats{cpu = {V, C}} = S) ->
+        S#cluster_stats{cpu = {V + Value, C + 1}};
+      ({"mem", Value}, #cluster_stats{memory = {V, C}} = S) ->
+        S#cluster_stats{memory = {V + Value, C + 1}};
+      ({"net_rx_b_" ++ _, Value}, #cluster_stats{net_rx_b = {V, C}} = S) ->
+        S#cluster_stats{net_rx_b = {V + Value, C + 1}};
+      ({"net_tx_b_" ++ _, Value}, #cluster_stats{net_tx_b = {V, C}} = S) ->
+        S#cluster_stats{net_tx_b = {V + Value, C + 1}};
+      ({"net_rx_pps_" ++ _, Value}, #cluster_stats{net_rx_pps = {V, C}} = S) ->
+        S#cluster_stats{net_rx_pps = {V + Value, C + 1}};
+      ({"net_tx_pps_" ++ _, Value}, #cluster_stats{net_tx_pps = {V, C}} = S) ->
+        S#cluster_stats{net_tx_pps = {V + Value, C + 1}};
+      ({"ports_rx_b", Value}, #cluster_stats{ports_rx_b = {V, C}} = S) ->
+        S#cluster_stats{ports_rx_b = {V + Value, C + 1}};
+      ({"ports_tx_b", Value}, #cluster_stats{ports_tx_b = {V, C}} = S) ->
+        S#cluster_stats{ports_tx_b = {V + Value, C + 1}};
+      (_, S) -> S
+    end, SumStats, Stats)
+  ).
+
+%% get_storage_stats/0
+%% ====================================================================
+%% @doc Checks storage usage
+-spec get_storage_stats(StorageStats :: term()) -> Result when
+  Result :: [{Name, Value}],
+  Name :: string(),
+  Value :: non_neg_integer().
+%% ====================================================================
+get_storage_stats(#storage_stats{read_bytes = RB, write_bytes = WB}) ->
+  [RB, WB].
+
+%% get_cluster_stats/1
+%% ====================================================================
+%% @doc Get statistics about cluster load
+-spec get_cluster_stats(TimeWindow :: short | medium | long | integer(), Format :: default | json) -> Result when
+  Result :: [{Name :: atom(), Value :: float()}] | {error, term()}.
+%% ====================================================================
+get_cluster_stats(TimeWindow, Format) ->
+  Interval = case TimeWindow of
+               short -> 1 * 60;
+               medium -> 5 * 60;
+               long -> 15 * 60;
+               _ -> TimeWindow
+             end,
+  {MegaSecs, Secs, _} = erlang:now(),
+  EndTime = MegaSecs * 1000000 + Secs,
+  StartTime = EndTime - Interval,
+  get_cluster_stats(StartTime, EndTime, Format).
+
+%% get_cluster_stats/2
+%% ====================================================================
+%% @doc Get statistics about cluster load
+-spec get_cluster_stats(StartTime :: integer(), EndTime :: integer(), Format :: default | json) -> Result when
+  Result :: [{Name :: string(), Value :: float()}] | {error, term()}.
+%% ====================================================================
+get_cluster_stats(StartTime, EndTime, Format) ->
+  BinaryEndTime = integer_to_binary(EndTime),
+  BinaryStartTime = integer_to_binary(StartTime),
+  Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
+  FetchFunction = case Format of
+                    json -> fun rrderlang:fetch_json/3;
+                    _ -> fun rrderlang:fetch/3
+                  end,
+  case FetchFunction(?Cluster_Stats_RRD_Name, Options, <<"AVERAGE">>) of
+    {ok, {Header, Data}} ->
+      HeaderList = lists:map(fun(Elem) -> binary_to_list(Elem) end, Header),
+      HeaderLen = length(Header),
+      Values = lists:foldl(fun({_, Values}, Acc) ->
+        lists:zipwith(fun
+          (nan, {Y, C}) -> {Y, C};
+          (X, {Y, C}) -> {X + Y, C + 1}
+        end, Values, Acc)
+      end, lists:duplicate(HeaderLen, {0, 0}), Data),
+
+      AvgValues = lists:map(fun
+        ({_, 0}) -> 0.0;
+        ({Value, Counter}) -> Value / Counter
+      end, Values),
+
+      lists:zip(HeaderList, AvgValues);
+    Other ->
+      Other
+  end.

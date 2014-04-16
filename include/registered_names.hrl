@@ -31,11 +31,11 @@
 %% works as a dispatcher.
 -define(Dispatcher_Name, request_dispatcher).
 
+%% Name of Round Robin Database that collects summary cluster load statistics
+-define(Cluster_Stats_RRD_Name, <<"cluster_stats.rrd">>).
+
 %% Name of Round Robin Database that collects node load statistics
 -define(Node_Stats_RRD_Name, <<"node_stats.rrd">>).
-
-%% Name of nodes monitoring process
--define(Monitoring_Proc, monitor_process).
 
 %% Local name of the process waiting for dns udp messages
 -define(DNS_UDP, dns_udp).
