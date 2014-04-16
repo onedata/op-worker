@@ -14,6 +14,8 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/chrono/duration.hpp>
 
+#include <google/protobuf/descriptor.h>
+
 #include <unistd.h>
 
 #include <ctime>
