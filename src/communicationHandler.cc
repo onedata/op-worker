@@ -52,9 +52,7 @@ CommunicationHandler::~CommunicationHandler()
 {
     closeConnection();
 
-#ifndef NDEBUG
-    LOG_TO_SINK(NULL, INFO) << "Destructing connection: " << this;
-#endif
+    DLOG_TO_SINK(NULL, INFO) << "Destructing connection: " << this;
     if(m_endpoint)
     {
         m_endpoint->stop();
@@ -70,9 +68,7 @@ CommunicationHandler::~CommunicationHandler()
         pthread_cancel(m_worker2.native_handle());
     }
 
-#ifndef NDEBUG
-    LOG_TO_SINK(NULL, INFO) << "Connection: " << this << " deleted";
-#endif
+    DLOG_TO_SINK(NULL, INFO) << "Connection: " << this << " deleted";
 }
 
 unsigned int CommunicationHandler::getErrorCount()

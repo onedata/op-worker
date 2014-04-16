@@ -22,15 +22,17 @@
 #include <string>
 
 
-#if !defined(NDEBUG) && defined(DLOG)
+#ifndef NDEBUG
 #   undef DLOG
 #   define DLOG(severity) LOG_TO_SINK(&veil::logging::debugLogSink, severity)
+#   define DLOG_TO_SINK(sink, severity) LOG_TO_SINK(sink, severity)
+#else
+#   define DLOG_TO_SINK(sink, severity) \
+        true ? (void) 0 : @ac_google_namespace@::LogMessageVoidify() & LOG_TO_SINK(sink, severity)
 #endif
 
-#if defined(LOG)
-#   undef LOG
-#   define LOG(severity) LOG_TO_SINK(&veil::logging::logSink, severity)
-#endif
+#undef LOG
+#define LOG(severity) LOG_TO_SINK(&veil::logging::logSink, severity)
 
 namespace veil
 {
