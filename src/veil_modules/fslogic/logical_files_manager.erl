@@ -20,6 +20,7 @@
 -include("veil_modules/dao/dao_share.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
+-include("logging.hrl").
 
 -define(NAMES_TABLE, "names_map").
 
@@ -272,13 +273,26 @@ read(FileStr, Offset, Size) ->
   ErrorDetail :: term().
 %% ====================================================================
 write(FileStr, Buf) ->
-  File = check_utf(FileStr),
-  {Response, Response2} = getfilelocation(File),
+  case write_enabled(get(user_id)) of
+    true ->
+      File = check_utf(FileStr),
+      {Response, Response2} = getfilelocation(File),
       case Response of
         ok ->
           {Storage_helper_info, FileId} = Response2,
-          storage_files_manager:write(Storage_helper_info, FileId, Buf);
+          Res = storage_files_manager:write(Storage_helper_info, FileId, Buf),
+          case {is_integer(Res), event_production_enabled(write_event)} of
+            {true, true} ->
+              WriteEvent = [{type, write_event}, {user_dn, get(user_id)}, {count, binary:referenced_byte_size(Buf)}],
+              gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}});
+            _ ->
+              ok
+          end,
+          Res;
         _ -> {Response, Response2}
+      end;
+    _ ->
+      {error, quota_exceeded}
   end.
 
 %% write/3
@@ -294,14 +308,27 @@ write(FileStr, Buf) ->
   ErrorDetail :: term().
 %% ====================================================================
 write(FileStr, Offset, Buf) ->
-  File = check_utf(FileStr),
-  {Response, Response2} = getfilelocation(File),
+  case write_enabled(get(user_id)) of
+    true ->
+      File = check_utf(FileStr),
+      {Response, Response2} = getfilelocation(File),
       case Response of
         ok ->
           {Storage_helper_info, FileId} = Response2,
-          storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf);
+          Res = storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf),
+          case {is_integer(Res), event_production_enabled(write_event)} of
+            {true, true} ->
+              WriteEvent = [{type, write_event}, {user_dn, get(user_id)}, {count, binary:referenced_byte_size(Buf)}],
+              gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}});
+            _ ->
+              ok
+          end,
+          Res;
         _ -> {Response, Response2}
-      end.
+      end;
+    _ ->
+      {error, quota_exceeded}
+  end.
 
 %% write_from_stream/2
 %% ====================================================================
@@ -316,14 +343,27 @@ write(FileStr, Offset, Buf) ->
   ErrorDetail :: term().
 %% ====================================================================
 write_from_stream(FileStr, Buf) ->
-  File = check_utf(FileStr),
-  {Response, Response2} = getfilelocation(File),
-  case Response of
-    ok ->
-      {Storage_helper_info, FileId} = Response2,
-      Offset = cache_size(File, byte_size(Buf)),
-      storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf);
-    _ -> {Response, Response2}
+  case write_enabled(get(user_id)) of
+    true ->
+      File = check_utf(FileStr),
+      {Response, Response2} = getfilelocation(File),
+      case Response of
+        ok ->
+          {Storage_helper_info, FileId} = Response2,
+          Offset = cache_size(File, byte_size(Buf)),
+          Res = storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf),
+          case {is_integer(Res), event_production_enabled(write_event)} of
+            {true, true} ->
+              WriteEvent = [{type, write_event}, {user_dn, get(user_id)}, {count, binary:referenced_byte_size(Buf)}],
+              gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}});
+            _ ->
+              ok
+          end,
+          Res;
+        _ -> {Response, Response2}
+      end;
+    _ ->
+      {error, quota_exceeded}
   end.
 
 %% create/1
@@ -430,7 +470,15 @@ delete(FileStr) ->
                 ok ->
                   Response3 = TmpAns3#atom.value,
                   case Response3 of
-                    ?VOK -> ok;
+                    ?VOK ->
+                      case event_production_enabled(rm_event) of
+                        true ->
+                          RmEvent = [{type, rm_event}, {user_dn, get(user_id)}],
+                          gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, RmEvent}});
+                        _ ->
+                          ok
+                      end,
+                      ok;
                     _ -> {logical_file_system_error, Response3}
                   end;
                 _ -> {Status3, TmpAns3}
@@ -1007,3 +1055,26 @@ check_utf(FileName) when is_list(FileName) ->
 
 check_utf(FileName) ->
   FileName.
+
+%% event_production_enabled/1
+%% ====================================================================
+%% @doc Returns true if event of type EventName should be produced.
+%% @end
+-spec event_production_enabled(EventName :: atom()) -> boolean().
+%% ====================================================================
+event_production_enabled(EventName) ->
+  case ets:lookup(?LFM_EVENT_PRODUCTION_ENABLED_ETS, EventName) of
+    [{_Key, _Value}] -> true;
+    _ -> false
+  end.
+
+%% write_enabled/1
+%% ====================================================================
+%% @doc Returns true if quota for user of given dn has not been exceeded and therefore writing is enabled.
+%% @end
+-spec write_enabled(UserDn :: string()) -> boolean().
+write_enabled(UserDn) ->
+  case ets:lookup(?WRITE_DISABLED_USERS, UserDn) of
+    [{_Key, _Value}] -> false;
+    _ -> true
+  end.

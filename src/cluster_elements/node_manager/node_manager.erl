@@ -27,6 +27,10 @@
 %% Path (relative to domain) on which cowboy expects client's requests
 -define(VEILCLIENT_URI_PATH, "/veilclient").
 
+%% Minimal message ID that can be used - it is limited by type of Answer.message_id in protocol buffers
+%% TODO: change type of message_id to sint32, more at https://developers.google.com/protocol-buffers/docs/proto#scalar
+-define(MIN_MSG_ID, -1073741824). %% 1073741824 = 2^30
+
 %% ====================================================================
 %% API
 %% ====================================================================
@@ -97,6 +101,7 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
       catch
         _:_ -> ok
       end,
+
       {ok, Port} = application:get_env(?APP_Name, dispatcher_port),
       {ok, DispatcherPoolSize} = application:get_env(?APP_Name, dispatcher_pool_size),
       {ok, CertFile} = application:get_env(?APP_Name, ssl_cert_path),
@@ -117,6 +122,10 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
       spawn(?MODULE, create_node_stats_rrd, [self()]);
     false -> ok
   end,
+
+  ets:new(?LFM_EVENT_PRODUCTION_ENABLED_ETS, [set, named_table, public]),
+  ets:new(?WRITE_DISABLED_USERS, [set, named_table, public]),
+  ets:new(?ACK_HANDLERS, [set, named_table, public]),
 
   process_flag(trap_exit, true),
   erlang:send_after(10, self(), {timer, do_heart_beat}),
@@ -197,6 +206,15 @@ handle_call({clear_cache, Cache}, _From, State) ->
 
 handle_call(check, _From, State) ->
   {reply, ok, State};
+
+handle_call(get_next_callback_msg_id, _From, State) ->
+  case get(callback_msg_ID) of
+    ID when is_integer(ID) and ID > ?MIN_MSG_ID ->
+      put(callback_msg_ID, ID - 1);
+    _ ->
+      put(callback_msg_ID, -1)
+  end,
+  {reply, get(callback_msg_ID), State};
 
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
@@ -291,6 +309,20 @@ handle_cast(stop_load_logging, State) ->
     Fd -> file:close(Fd)
   end,
   {noreply, State#node_state{load_logging_fd = undefined}};
+
+handle_cast({notify_lfm, EventType, Enabled}, State) ->
+  case Enabled of
+    true -> ets:insert(?LFM_EVENT_PRODUCTION_ENABLED_ETS, {EventType, true});
+    _ -> ets:delete(?LFM_EVENT_PRODUCTION_ENABLED_ETS, EventType)
+  end,
+  {noreply, State};
+
+handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
+  case Enabled of
+    false -> ets:insert(?WRITE_DISABLED_USERS, {UserDn, true});
+    _ -> ets:delete(?WRITE_DISABLED_USERS, UserDn)
+  end,
+  {noreply, State};
 
 handle_cast(_Msg, State) ->
   {noreply, State}.

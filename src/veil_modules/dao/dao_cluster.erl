@@ -21,7 +21,7 @@
 -export([save_state/2, save_state/1, get_state/1, get_state/0, clear_state/1, clear_state/0]).
 
 %% API - FUSE session
--export([get_fuse_session/1, get_fuse_session/2, save_fuse_session/1, remove_fuse_session/1, close_fuse_session/1, list_fuse_sessions/1]).
+-export([get_fuse_session/1, get_fuse_session/2, save_fuse_session/1, remove_fuse_session/1, close_fuse_session/1, list_fuse_sessions/1, get_sessions_by_user/1]).
 -export([clear_sessions/0]).
 
 %% API - FUSE connections
@@ -237,6 +237,22 @@ list_fuse_sessions({by_valid_to, Time}) ->
             {error, Reason}
     end.
 
+%% get_sessions_by_user/1
+%% ====================================================================
+%% @doc Returns fuse_session records for user of given uuid.
+%% Should not be used directly, use {@link dao:handle/2} instead.
+%% @end
+-spec get_sessions_by_user(Uuid :: string()) ->
+  {ok, [#veil_document{}]} | {error, any()}.
+%% ====================================================================
+get_sessions_by_user(Uuid) ->
+  QueryArgs = #view_query_args{keys = [dao_helper:name(Uuid)]},
+  case dao:list_records(?FUSE_SESSIONS_BY_USER_ID_VIEW, QueryArgs) of
+    {ok, #view_result{rows = Rows}} ->
+      {ok, [FuseId || #view_row{id = FuseId} <- Rows]};
+    {error, Reason} ->
+      {error, Reason}
+  end.
 
 %% ===================================================================
 %% FUSE Connection Info management

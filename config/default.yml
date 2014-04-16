@@ -311,6 +311,21 @@ veil_cluster_node_env:
          This variable determinates how often DAO storage cache should be cleared (in seconds).
        value: 86400 # 24h
 
+  # Quota management
+  - parameter:
+      name: default_quota
+      description: |
+        This variable will be used to determine user quota if property size of quota doc of user has not been changed after user creation.
+        By default user quota is saved in db per user as special value indicating that default_quota should be used.
+        So if you change this value it will be applied to all users (existing and those that will be created in future) except of those whose quota has been manually changed.
+      value: 10737418240 # 10GB
+
+  - parameter:
+      name: quota_check_freq
+      description: |
+        This variable determines after how many bytes written quota check is performed.
+      value: 52428800 # 50MB
+
 obsolete:
   - parameter:
       description: |
