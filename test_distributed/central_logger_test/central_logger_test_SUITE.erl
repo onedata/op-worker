@@ -269,11 +269,11 @@ init_per_testcase(init_and_cleanup_test, Config) ->
     [[{node_type, ccm}, 
       {dispatcher_port, 5055}, 
       {ccm_nodes, [CCM]}, 
-      {dns_port, 1308}, {control_panel_port, 2308},{control_panel_redirect_port, 1354},  {rest_port, 3308}, {initialization_time, 1}, {heart_beat, 1}],
+      {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354},  {rest_port, 3308}, {initialization_time, 1}, {heart_beat, 1}],
     [{node_type, worker}, 
       {dispatcher_port, 5056}, 
       {ccm_nodes, [CCM]}, 
-      {dns_port, 1309}, {control_panel_port, 2309},{control_panel_redirect_port, 1355},  {rest_port, 3309}, {heart_beat, 1}]]),
+      {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355},  {rest_port, 3309}, {heart_beat, 1}]]),
 
   Assertions = [{false, lists:member(error, Nodes)}, {false, lists:member(error, StartLog)}],
   lists:append([{nodes, Nodes}, {assertions, Assertions}], Config).
