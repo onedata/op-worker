@@ -7,7 +7,7 @@
 
 #include "communicationHandler.h"
 #include "fuse_messages.pb.h"
-#include "glog/logging.h"
+#include "logging.h"
 #include "helpers/storageHelperFactory.h"
 #include <google/protobuf/descriptor.h>
 #include <iostream>
@@ -52,7 +52,7 @@ CommunicationHandler::~CommunicationHandler()
 {
     closeConnection();
 
-    DLOG(INFO) << "Destructing connection: " << this;
+    DLOG_TO_SINK(NULL, INFO) << "Destructing connection: " << this;
     if(m_endpoint)
     {
         m_endpoint->stop();
@@ -68,7 +68,7 @@ CommunicationHandler::~CommunicationHandler()
         pthread_cancel(m_worker2.native_handle());
     }
 
-    DLOG(INFO) << "Connection: " << this << " deleted";
+    DLOG_TO_SINK(NULL, INFO) << "Connection: " << this << " deleted";
 }
 
 unsigned int CommunicationHandler::getErrorCount()
@@ -342,10 +342,7 @@ int CommunicationHandler::sendMessage(ClusterMsg& msg, int32_t msgId)
 int32_t CommunicationHandler::getMsgId()
 {
     unique_lock lock(m_msgIdMutex);
-    ++m_currentMsgId;
-    if(m_currentMsgId <= 0) // Skip 0 and negative values
-        m_currentMsgId = 1;
-
+    m_currentMsgId = (m_currentMsgId % MAX_GENERATED_MSG_ID) + 1;
     return m_currentMsgId;
 }
 
