@@ -28,7 +28,7 @@
 #   define DLOG_TO_SINK(sink, severity) LOG_TO_SINK(sink, severity)
 #else
 #   define DLOG_TO_SINK(sink, severity) \
-        true ? (void) 0 : @ac_google_namespace@::LogMessageVoidify() & LOG_TO_SINK(sink, severity)
+        true ? (void) 0 : google::LogMessageVoidify() & LOG_TO_SINK(sink, severity)
 #endif
 
 #undef LOG
