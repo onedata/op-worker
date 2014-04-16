@@ -27,7 +27,6 @@ using websocketpp::lib::bind;
 
 namespace veil {
 
-volatile int CommunicationHandler::instancesCount = 0;
 boost::recursive_mutex CommunicationHandler::m_instanceMutex;
 SSL_SESSION* CommunicationHandler::m_session = 0;
 
@@ -41,8 +40,6 @@ CommunicationHandler::CommunicationHandler(string p_hostname, int p_port, cert_i
       m_isPushChannel(false),
       m_lastConnectTime(0)
 {
-    unique_lock lock(m_instanceMutex);
-    ++instancesCount;
 }
 
 void CommunicationHandler::setCertFun(cert_info_fun p_getCertInfo)
@@ -72,9 +69,6 @@ CommunicationHandler::~CommunicationHandler()
     if(m_worker2.joinable() && !m_worker2.timed_join(boost::posix_time::milliseconds(200)) && m_worker2.native_handle()) {
         pthread_cancel(m_worker2.native_handle());
     }
-
-    unique_lock lock(m_instanceMutex);
-    --instancesCount;
 
 #ifndef NDEBUG
     LOG_TO_SINK(NULL, INFO) << "Connection: " << this << " deleted";
@@ -464,12 +458,6 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
     }
 
     return answer;
-}
-
-int CommunicationHandler::getInstancesCount()
-{
-    unique_lock lock(m_instanceMutex);
-    return instancesCount;
 }
 
 context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
