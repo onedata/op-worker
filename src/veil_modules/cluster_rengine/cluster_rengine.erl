@@ -61,16 +61,8 @@ handle(ProtocolVersion, EventMessage) when is_record(EventMessage, eventmessage)
   Properties = lists:zip(EventMessage#eventmessage.numeric_properties_keys, EventMessage#eventmessage.numeric_properties_values)
            ++ lists:zip(EventMessage#eventmessage.string_properties_keys, EventMessage#eventmessage.string_properties_values),
 
-  %% type value is supposed to be atom, TODO: change cluster_rengine to make it unnecessary
-  Event = case proplists:get_value("type", Properties) of
-    undefined -> Properties;
-    Type when is_list(Type) ->
-      Ev = proplists:delete("type", Properties),
-      [{"type", list_to_atom(Type)} | Ev];
-    _ -> Properties
-  end,
-
   AdditionalProperties = [{"user_dn", get(user_id)}, {"fuse_id", get(fuse_id)}],
+  Event = Properties ++ AdditionalProperties,
   handle(ProtocolVersion, {event_arrived, Event ++ AdditionalProperties});
 
 handle(_ProtocolVersion, healthcheck) ->
@@ -100,7 +92,7 @@ handle(ProtocolVersion, {update_cluster_rengine, EventType, EventHandlerItem}) -
   update_event_handler(ProtocolVersion, EventType, EventHandlerItem);
 
 handle(ProtocolVersion, {event_arrived, Event}) ->
-  EventType = proplists:get_value(type, Event),
+  EventType = proplists:get_value("type", Event),
   case ets:lookup(?EVENT_TREES_MAPPING, EventType) of
     [] ->
       %% event arrived but no handlers - ok
@@ -237,9 +229,9 @@ fun_from_config(#event_stream_config{config = ActualConfig, wrapped_config = Wra
                 case NewValue >= ActualConfig#aggregator_config.threshold of
                   true ->
                     ets:insert(EtsName, {Key, 0}),
-                    case proplists:get_value(ans_pid, ActualEvent) of
+                    case proplists:get_value("ans_pid", ActualEvent) of
                       undefined -> [{FieldName, FieldValue}, {FunFieldName, NewValue}];
-                      _ -> [{FieldName, FieldValue}, {FunFieldName, NewValue}, {ans_pid, proplists:get_value(ans_pid, ActualEvent)}]
+                      AnsPid -> [{FieldName, FieldValue}, {FunFieldName, NewValue}, {"ans_pid", AnsPid}]
                     end;
                   _ ->
                     ets:insert(EtsName, {Key, NewValue}),

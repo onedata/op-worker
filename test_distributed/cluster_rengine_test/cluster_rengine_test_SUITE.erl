@@ -49,16 +49,15 @@ test_event_subscription(Config) ->
 
   [CCM | _] = NodesUp,
 
-  WriteEvent = [{type, write_event}, {user_id, "1234"}, {ans_pid, self()}],
+  WriteEvent = [{"type", "write_event"}, {"user_id", "1234"}, {"ans_pid", self()}],
 
   % there was no subscription for events - sending events has no effect
   send_event(WriteEvent, CCM),
-  assert_nothing_received(CCM),
+  assert_nothing_received(),
 
   % event handler sends back some message to producer to enable verification
   EventHandler = fun(WriteEv) ->
-    ?info("eventhandler <<---"),
-    AnsPid = proplists:get_value(ans_pid, WriteEv),
+    AnsPid = proplists:get_value("ans_pid", WriteEv),
     case AnsPid of
       undefined -> ok;
       _ -> AnsPid ! {ok, standard, self()}
@@ -69,11 +68,10 @@ test_event_subscription(Config) ->
 
   % this time there is a subscription for write_event - we should receive message
   ?assert_received({ok, standard, _}),
-  assert_nothing_received(CCM),
+  assert_nothing_received(),
 
   EventHandler2 = fun(WriteEv) ->
-    ?info("eventhandler2 <<---"),
-    AnsPid = proplists:get_value(ans_pid, WriteEv),
+    AnsPid = proplists:get_value("ans_pid", WriteEv),
     case AnsPid of
       undefined -> ok;
       _ -> AnsPid ! {ok, tree, self()}
@@ -86,7 +84,7 @@ test_event_subscription(Config) ->
   % this time there are two handler registered
   ?assert_received({ok, standard, _}),
   ?assert_received({ok, tree, _}, 3000),
-  assert_nothing_received(CCM).
+  assert_nothing_received().
 
 
 test_event_aggregation(Config) ->
@@ -94,35 +92,38 @@ test_event_aggregation(Config) ->
   [CCM | _] = NodesUp,
 
   EventHandler = fun(WriteEv) ->
-    AnsPid = proplists:get_value(ans_pid, WriteEv),
+    ?info("---- bazinga - write handler5689: ~p", [WriteEv]),
+    AnsPid = proplists:get_value("ans_pid", WriteEv),
+    ?info("---- bazinga - write handler5689 -- anspid: ~p", [AnsPid]),
     case AnsPid of
       undefined -> ok;
-      _ -> AnsPid ! {ok, tree, self()}
+      _ ->
+        ?info("---- bazinga - write handler56, anspid: ~p", [AnsPid]),
+        AnsPid ! {ok, tree, self()}
     end
   end,
-  subscribe_for_write_events(CCM, tree, EventHandler, #event_stream_config{config = #aggregator_config{field_name = user_id, fun_field_name = "count", threshold = 4}}),
-  WriteEvent = [{type, write_event}, {user_id, "1234"}, {ans_pid, self()}],
-
-  repeat(2, fun() -> send_event(WriteEvent, CCM) end),
-  send_event(WriteEvent, CCM),
-  assert_nothing_received(CCM),
-
-  send_event(WriteEvent, CCM),
-  ?assert_received({ok, tree, _}),
-  assert_nothing_received(CCM),
+  subscribe_for_write_events(CCM, tree, EventHandler, #event_stream_config{config = #aggregator_config{field_name = "user_id", fun_field_name = "count", threshold = 4}}),
+  WriteEvent = [{"type", "write_event"}, {"user_id", "1234"}, {"ans_pid", self()}],
 
   repeat(3, fun() -> send_event(WriteEvent, CCM) end),
-  assert_nothing_received(CCM),
+  assert_nothing_received(),
+
   send_event(WriteEvent, CCM),
   ?assert_received({ok, tree, _}),
-  assert_nothing_received(CCM).
+  assert_nothing_received(),
+
+  repeat(3, fun() -> send_event(WriteEvent, CCM) end),
+  assert_nothing_received(),
+  send_event(WriteEvent, CCM),
+  ?assert_received({ok, tree, _}),
+  assert_nothing_received().
 
 test_dispatching(Config) ->
   NodesUp = ?config(nodes, Config),
   [CCM | _] = NodesUp,
 
   EventHandler = fun(WriteEv) ->
-    AnsPid = proplists:get_value(ans_pid, WriteEv),
+    AnsPid = proplists:get_value("ans_pid", WriteEv),
     case AnsPid of
       undefined -> ok;
       _ -> AnsPid ! {ok, tree, self()}
@@ -130,11 +131,11 @@ test_dispatching(Config) ->
   end,
   subscribe_for_write_events(CCM, tree, EventHandler),
 
-  WriteEvent1 = [{type, write_event}, {user_id, "1234"}, {ans_pid, self()}],
-  WriteEvent2 = [{type, write_event}, {user_id, "1235"}, {ans_pid, self()}],
-  WriteEvent3 = [{type, write_event}, {user_id, "1334"}, {ans_pid, self()}],
-  WriteEvent4 = [{type, write_event}, {user_id, "1335"}, {ans_pid, self()}],
-  WriteEvent5 = [{type, write_event}, {user_id, "1236"}, {ans_pid, self()}],
+  WriteEvent1 = [{"type", "write_event"}, {"user_id", "1234"}, {"ans_pid", self()}],
+  WriteEvent2 = [{"type", "write_event"}, {"user_id", "1235"}, {"ans_pid", self()}],
+  WriteEvent3 = [{"type", "write_event"}, {"user_id", "1334"}, {"ans_pid", self()}],
+  WriteEvent4 = [{"type", "write_event"}, {"user_id", "1335"}, {"ans_pid", self()}],
+  WriteEvent5 = [{"type", "write_event"}, {"user_id", "1236"}, {"ans_pid", self()}],
   WriteEvents = [WriteEvent1, WriteEvent2, WriteEvent3, WriteEvent4],
   SendWriteEvent = fun (Event) -> send_event(Event, CCM) end,
 
@@ -256,9 +257,8 @@ subscribe_for_write_events(Node, ProcessingMethod, EventHandler) ->
   subscribe_for_write_events(Node, ProcessingMethod, EventHandler, #event_stream_config{}).
 
 subscribe_for_write_events(Node, ProcessingMethod, EventHandler, ProcessingConfig) ->
-  ?info("subscribe_for_write_events"),
   EventHandlerMapFun = fun(WriteEv) ->
-    UserIdString = proplists:get_value(user_id, WriteEv),
+    UserIdString = proplists:get_value("user_id", WriteEv),
     case UserIdString of
       undefined -> ok;
       _ -> string_to_integer(UserIdString)
@@ -266,7 +266,7 @@ subscribe_for_write_events(Node, ProcessingMethod, EventHandler, ProcessingConfi
   end,
 
   EventHandlerDispMapFun = fun(WriteEv) ->
-    UserIdString = proplists:get_value(user_id, WriteEv),
+    UserIdString = proplists:get_value("user_id", WriteEv),
     case UserIdString of
       undefined -> ok;
       _ ->
@@ -276,7 +276,7 @@ subscribe_for_write_events(Node, ProcessingMethod, EventHandler, ProcessingConfi
   end,
 
   EventItem = #event_handler_item{processing_method = ProcessingMethod, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = ProcessingConfig},
-  gen_server:call({?Dispatcher_Name, Node}, {rule_manager, 1, self(), {add_event_handler, {write_event, EventItem}}}),
+  gen_server:call({?Dispatcher_Name, Node}, {rule_manager, 1, self(), {add_event_handler, {"write_event", EventItem}}}),
 
   receive
     ok -> ok
@@ -307,7 +307,7 @@ string_to_integer(SomeString) ->
     _ -> SomeInteger
   end.
 
-assert_nothing_received(Node) ->
+assert_nothing_received() ->
   receive
     Ans ->
       ct:print("assert nothing failed with: ~p", [Ans]),

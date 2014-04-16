@@ -200,10 +200,12 @@ register_quota_exceeded_handler() ->
   EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
 
   %% no client configuration needed - register event handler
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {quota_exceeded_event, EventItem}}}).
+  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {"quota_exceeded_event", EventItem}}}).
 
 register_rm_event_handler() ->
   EventHandler = fun(Event) ->
+    ?info("---- bazinga - inside rm_event_handler"),
+
     CheckQuotaExceeded = fun(UserDn) ->
       case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
         false ->
@@ -253,7 +255,7 @@ register_rm_event_handler() ->
   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "rm_event"},
   EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
 
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {rm_event, EventItem, EventFilterConfig}}}).
+  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {"rm_event", EventItem, EventFilterConfig}}}).
 
 %% Registers handler which will be called every Bytes will be written.
 register_for_write_events(Bytes) ->
@@ -263,7 +265,7 @@ register_for_write_events(Bytes) ->
     case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
       true ->
         ?info("--- bazinga - quota exceeded for user ~p", [UserDn]),
-        cluster_rengine:send_event(?ProtocolVersion, [{type, quota_exceeded_event}, {"user_dn", UserDn}]);
+        cluster_rengine:send_event(?ProtocolVersion, [{"type", "quota_exceeded_event"}, {"user_dn", UserDn}]);
       _ ->
         ok
     end
@@ -294,4 +296,4 @@ register_for_write_events(Bytes) ->
   EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = Bytes, sum_field_name = "bytes"},
   EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
 
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {write_event, EventItem, EventAggregatorConfig}}}).
+  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {"write_event", EventItem, EventAggregatorConfig}}}).
