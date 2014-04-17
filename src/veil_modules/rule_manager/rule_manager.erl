@@ -271,23 +271,8 @@ register_for_write_events(Bytes) ->
     end
   end,
 
-  EventHandlerMapFun = fun(WriteEv) ->
-    UserDnString = proplists:get_value("user_dn", WriteEv),
-    case UserDnString of
-      undefined -> ok;
-      _ -> string:len(UserDnString)
-    end
-  end,
-
-  EventHandlerDispMapFun = fun(WriteEv) ->
-    UserDnString = proplists:get_value("user_dn", WriteEv),
-    case UserDnString of
-      undefined -> ok;
-      _ ->
-        UserIdInt = string:len(UserDnString),
-        UserIdInt div 10
-    end
-  end,
+  EventHandlerMapFun = get_standard_map_fun(),
+  EventHandlerDispMapFun = get_standard_disp_map_fun(),
   EventItem = #event_handler_item{processing_method = tree, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = #event_stream_config{config = #aggregator_config{field_name = "user_dn", fun_field_name = "bytes", threshold = Bytes}}},
 
   %% client configuration
@@ -297,3 +282,23 @@ register_for_write_events(Bytes) ->
   EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
 
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {"write_event", EventItem, EventAggregatorConfig}}}).
+
+get_standard_map_fun() ->
+  fun(WriteEv) ->
+    UserDnString = proplists:get_value("user_dn", WriteEv),
+    case UserDnString of
+      undefined -> ok;
+      _ -> string:len(UserDnString)
+    end
+  end.
+
+get_standard_disp_map_fun() ->
+  fun(WriteEv) ->
+    UserDnString = proplists:get_value("user_dn", WriteEv),
+    case UserDnString of
+      undefined -> ok;
+      _ ->
+        UserIdInt = string:len(UserDnString),
+        UserIdInt div 10
+    end
+  end.
