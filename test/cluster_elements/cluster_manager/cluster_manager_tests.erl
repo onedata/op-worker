@@ -56,6 +56,11 @@ wrong_request_test() ->
   application:set_env(?APP_Name, worker_load_memory_size, 1000),
   application:set_env(?APP_Name, initialization_time, 10),
   application:set_env(?APP_Name, cluster_monitoring_period, 300),
+  application:set_env(?APP_Name, node_monitoring_initialization, 10),
+  application:set_env(?APP_Name, cluster_monitoring_initialization, 30),
+  application:set_env(?APP_Name, short_monitoring_time_window, 60),
+  application:set_env(?APP_Name, medium_monitoring_time_window, 300),
+  application:set_env(?APP_Name, long_monitoring_time_window, 900),
 
   cluster_manager:start_link(test),
 
