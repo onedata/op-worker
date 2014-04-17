@@ -664,12 +664,6 @@ get_network_stats(NetworkStats) ->
   Dir = "/sys/class/net/",
   case file:list_dir(Dir) of
     {ok, Interfaces} ->
-      PhysicalInterfaces = lists:filter(
-        fun(Interface) -> case file:read_link_all(Dir ++ Interface) of
-                            {ok, Info} ->
-                              string:str(Info, "virtual") =:= 0;
-                            _ -> false end
-        end, Interfaces),
       CurrentNetworkStats = lists:foldl(
         fun(Interface, Stats) -> [
           {<<"net_rx_b_", (list_to_binary(Interface))/binary>>, get_interface_stats(Interface, "rx_bytes")},
@@ -677,7 +671,7 @@ get_network_stats(NetworkStats) ->
           {<<"net_rx_pps_", (list_to_binary(Interface))/binary>>, get_interface_stats(Interface, "rx_packets") / Period},
           {<<"net_tx_pps_", (list_to_binary(Interface))/binary>>, get_interface_stats(Interface, "tx_packets") / Period} |
           Stats
-        ] end, [], PhysicalInterfaces),
+        ] end, [], Interfaces),
       gen_server:cast(?Node_Manager_Name, {update_network_stats, CurrentNetworkStats}),
       calculate_network_stats(CurrentNetworkStats, NetworkStats, []);
     _ -> []

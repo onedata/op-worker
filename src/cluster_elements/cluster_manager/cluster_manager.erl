@@ -1366,9 +1366,6 @@ calculate_node_load(Nodes, Period) ->
   AvgLoad :: float() | undefined.
 %% ====================================================================
 map_node_stats_to_load(NodesStats) ->
-
-  lager:info("~nNodesStats: ~n~p~n", [NodesStats]),
-
   %% Unify diffrent nodes stats to common pattern
   UnifiedNodesStats = lists:map(fun
     ({Node, undefined}) -> {Node, undefined};
@@ -1376,8 +1373,6 @@ map_node_stats_to_load(NodesStats) ->
       {Node, lists:zip(["cpu", "mem", "net_rx_b", "net_tx_b", "net_rx_pps", "net_tx_pps", "ports_rx_b", "ports_tx_b"],
         merge_nodes_stats([{Node, NodeStats}]))}
   end, NodesStats),
-
-  lager:info("~nUnifiedNodesStats: ~n~p~n", [UnifiedNodesStats]),
 
   %% Create list of maximum values for each statistical data
   MaxStats = lists:foldl(fun
