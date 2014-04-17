@@ -312,7 +312,14 @@ update_crl(CADir, {OtpCert, [URL | URLs], Name}) ->
                             lager:info("GSI Handler: Saving new CLR of ~p", [Name]),
                             PemEntry = public_key:pem_entry_encode('CertificateList', CertList),
                             Data = public_key:pem_encode([PemEntry]),
-                            file:write_file(filename:join(CADir, Name ++ ".crl"), Data),
+                            Filename = filename:join(CADir, Name ++ ".crl"),
+                            case file:write_file(Filename, Data) of
+                                ok ->
+                                    file:change_mode(Filename, 8#644);
+
+                                {error, Reason} ->
+                                    lager:error("GSI Handler: Failed to save CLR of ~p (path: ~p, reason: ~p)", [Name, Filename, Reason])
+                            end,
                             ok;
 
                         false ->
