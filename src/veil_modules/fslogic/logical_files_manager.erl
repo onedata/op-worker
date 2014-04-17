@@ -447,7 +447,15 @@ truncate(FileStr, Size) ->
       case Response of
         ok ->
           {Storage_helper_info, FileId} = Response2,
-          storage_files_manager:truncate(Storage_helper_info, FileId, Size);
+          Res = storage_files_manager:truncate(Storage_helper_info, FileId, Size),
+          case {Res, event_production_enabled("truncate_event")} of
+            {ok, true} ->
+              TruncateEvent = [{"type", "truncate_event"}, {"user_dn", get(user_id)}, {"filePath", FileStr}],
+              gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEvent}});
+            _ ->
+              ok
+          end,
+          Res;
         _ -> {Response, Response2}
   end.
 

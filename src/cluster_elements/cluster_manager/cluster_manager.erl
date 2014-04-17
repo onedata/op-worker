@@ -457,7 +457,6 @@ handle_cast({synch_cache_clearing, Cache, ReturnPid}, State) ->
 
 %% this handler notify all logical_files_manager that event production of EventType should be enabled/disabled
 handle_cast({notify_lfm, EventType, Enabled}, State) ->
-  ?info("-- bazinga - cm - notify_lfm: ~p, ~p", [EventType, Enabled]),
   NotifyFn = fun(Node) ->
       gen_server:cast({?Node_Manager_Name, Node}, {notify_lfm, EventType, Enabled})
   end,

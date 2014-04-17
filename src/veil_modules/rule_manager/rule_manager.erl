@@ -164,14 +164,18 @@ notify_fuses(ProducerConfig) ->
 
   lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, ProducerConfig, "fuse_messages") end, UniqueFuseIds).
 
-%% TODO: add proper spec
+%% generate_tree_name/0
+%% ====================================================================
+%% @doc Generate tree name for subprocess tree.
+%% @end
+-spec generate_tree_name() -> atom().
+%% ====================================================================
 generate_tree_name() ->
   [{_, Id}] = ets:lookup(?HANDLER_TREE_ID_ETS, current_id),
   ets:insert(?HANDLER_TREE_ID_ETS, {current_id, Id + 1}),
   list_to_atom("event_" ++ integer_to_list(Id)).
 
 %% Helper function for fetching rows from view
-%% TODO: add proper spec
 fetch_rows(ViewName, QueryArgs) ->
   case dao:list_records(ViewName, QueryArgs) of
     {ok, #view_result{rows = Rows}} ->
@@ -181,11 +185,16 @@ fetch_rows(ViewName, QueryArgs) ->
       throw(invalid_data)
   end.
 
-%% Register rules that should registered just after cluster startup
-%% TODO: add proper spec
+%% register_default_rules/1
+%% ====================================================================
+%% @doc Register rules that should be registered just after cluster startup.
+%% @end
+-spec register_default_rules(WriteBytesThreshold :: integer()) -> ok.
+%% ====================================================================
 register_default_rules(WriteBytesThreshold) ->
   rule_definitions:register_quota_exceeded_handler(),
   rule_definitions:register_rm_event_handler(),
   rule_definitions:register_for_write_events(WriteBytesThreshold),
   rule_definitions:register_for_truncate_events(),
-  ?info("default rule_manager rules registered").
+  ?info("default rule_manager rules registered"),
+  ok.
