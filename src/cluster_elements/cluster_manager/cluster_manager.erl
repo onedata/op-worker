@@ -130,7 +130,8 @@ init([]) ->
                          end,
   erlang:send_after(LoggerAndDAOInterval * 1000 + 100, Pid, {timer, start_central_logger}),
   erlang:send_after(LoggerAndDAOInterval * 1000 + 200, Pid, {timer, get_state_from_db}),
-  erlang:send_after(30000, Pid, {timer, start_cluster_monitoring}),
+  {ok, MonitoringInitialization} = application:get_env(?APP_Name, cluster_monitoring_initialization),
+  erlang:send_after(1000 * MonitoringInitialization, self(), {timer, start_cluster_monitoring}),
   case ?REGISTER_DEFAULT_RULES of
     true -> erlang:send_after(30000, Pid, {timer, register_default_rules});
     _ -> ok
@@ -734,11 +735,11 @@ check_cluster_state(State) ->
 
                      MinV = case [NodeLoad || {_Node, NodeLoad, _ModulesLoads} <- Load, NodeLoad =/= error] of
                               [] -> 0;
-                              NonEmptyList -> lists:min(NonEmptyList)
+                              NonEmptyMinList -> lists:min(NonEmptyMinList)
                             end,
                      MaxV = case [NodeLoad || {_Node, NodeLoad, _ModulesLoads} <- Load, NodeLoad =/= error] of
                               [] -> 0;
-                              NonEmptyList -> lists:max(NonEmptyList)
+                              NonEmptyMaxList -> lists:max(NonEmptyMaxList)
                             end,
                      case (MinV > 0) and (((MaxV >= 2 * MinV) and (MaxV >= 1.5 * AvgLoad)) or (MaxV >= 5 * MinV)) of
                        true ->

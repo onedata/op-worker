@@ -118,7 +118,8 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
         [
           {env, [{dispatch, Dispatch}]}
         ]),
-      erlang:send_after(10000, self(), {timer, start_node_monitoring});
+      {ok, MonitoringInitialization} = application:get_env(?APP_Name, node_monitoring_initialization),
+      erlang:send_after(1000 * MonitoringInitialization, self(), {timer, start_node_monitoring});
     false -> ok
   end,
 
@@ -133,7 +134,8 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
 
 init([Type]) when Type =:= test_worker ->
   process_flag(trap_exit, true),
-  erlang:send_after(10000, self(), {timer, start_node_monitoring}),
+  {ok, MonitoringInitialization} = application:get_env(?APP_Name, node_monitoring_initialization),
+  erlang:send_after(1000 * MonitoringInitialization, self(), {timer, start_node_monitoring}),
   erlang:send_after(10, self(), {timer, do_heart_beat}),
 
   {ok, #node_state{node_type = worker, ccm_con_status = not_connected}};

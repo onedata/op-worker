@@ -94,8 +94,18 @@ veil_cluster_node_env:
       value: 60
 
   - parameter:
+      name: cluster_monitoring_initialization
+      description: How long (in seconds) cluster manager should wait before it starts monitoring
+      value: 30
+
+  - parameter:
       name: node_monitoring_period
       description: How often should node manager wait between successive checks of node status
+      value: 10
+
+  - parameter:
+      name: node_monitoring_initialization
+      description: How long (in seconds) node manager should wait before it starts monitoring
       value: 10
 
   - parameter:
