@@ -89,15 +89,7 @@ dn_and_storage_defined() ->
 -spec can_view_logs() -> boolean().
 %% ====================================================================
 can_view_logs() ->
-    try
-        Teams = user_logic:get_teams(wf:session(user_doc)),
-        lists:foldl(
-            fun(Team, Acc) ->
-                Acc orelse (string:str(Team, "plggveilfs") > 0)
-            end, false, Teams)
-    catch _:_ ->
-        false
-    end.
+    user_logic:get_role(wf:session(user_doc)) /= user.
 
 
 %% apply_or_redirect/3

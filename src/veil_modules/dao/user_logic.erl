@@ -23,7 +23,7 @@
 %% ====================================================================
 -export([sign_in/1, create_user/5, get_user/1, remove_user/1]).
 -export([get_login/1, get_name/1, get_teams/1, update_teams/2]).
--export([get_email_list/1, update_email_list/2, get_dn_list/1, update_dn_list/2]).
+-export([get_email_list/1, update_email_list/2, get_dn_list/1, update_dn_list/2, get_role/1, update_role/2]).
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
 -export([get_team_names/1]).
@@ -331,6 +331,54 @@ update_dn_list(#veil_document{record = UserInfo} = UserDoc, NewDnList) ->
     case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
         {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
         {error, Reason} -> {error, Reason}
+    end.
+
+%% get_role/1
+%% ====================================================================
+%% @doc
+%% Convinience function to get user role from #veil_document encapsulating #user record.
+%% @end
+-spec get_role(User) -> Result when
+    User :: user_doc(),
+    Result :: atom().
+%% ====================================================================
+get_role(User) ->
+    User#veil_document.record#user.role.
+
+
+%% update_role/2
+%% ====================================================================
+%% @doc
+%% Update #veil_document encapsulating #user record with user role and save it to DB.
+%% First argument can also be a key to get user from DB, as in get_user/1.
+%% @end
+-spec update_role(User, NewRole) -> Result when
+    User :: user_doc() | 
+{login, Login :: string()} |
+{email, Email :: string()} |
+{uuid, UUID :: user()} |
+{dn, DN :: string()} |
+{rdnSequence, [#'AttributeTypeAndValue'{}]},
+    NewRole :: atom(),
+    Result :: {ok, user_doc()} | {error, any()}.
+%% ====================================================================
+update_role(#veil_document{record = UserInfo} = UserDoc, NewRole) ->
+    NewDoc = UserDoc#veil_document{record = UserInfo#user{role = NewRole}},
+    case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
+        {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
+        {error, Reason} -> {error, Reason}
+    end;
+
+update_role(Key, NewRole) ->
+    case get_user(Key) of
+        {ok, UserDoc} ->
+            #veil_document{record = UserInfo} = UserDoc,
+            NewDoc = UserDoc#veil_document{record = UserInfo#user{role = NewRole}},
+            case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
+                {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
+                {error, Reason} -> {error, Reason}
+            end;
+        Other -> Other
     end.
 
 %% get_quota/1

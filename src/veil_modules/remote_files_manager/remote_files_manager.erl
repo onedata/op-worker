@@ -17,6 +17,7 @@
 -include("communication_protocol_pb.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao.hrl").
+-include("logging.hrl").
 
 %% ====================================================================
 %% API
@@ -292,7 +293,7 @@ get_helper_and_id(Combined, ProtocolVersion) ->
       case dao_lib:apply(dao_vfs, get_storage, [{id, Storage}], ProtocolVersion) of
         {ok, #veil_document{record = StorageRecord}} ->
           SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, StorageRecord),
-          lager:debug("SHI and info for remote operation: ~p", [{SHI, File}]),
+          ?debug("SHI and info for remote operation: ~p", [{SHI, File}]),
           {SHI, File};
         Other ->
           lager:warning("Can not get storage from id: ~p", [Other]),

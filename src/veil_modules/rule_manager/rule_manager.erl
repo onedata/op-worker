@@ -27,9 +27,6 @@
 %% ====================================================================
 -export([init/1, handle/2, cleanup/0]).
 
-%% functions for manual tests
--export([register_quota_exceeded_handler/0, register_rm_event_handler/0, register_for_write_events/1]).
-
 %% name of ets that store event_handler_item records registered in rule_manager as values and event types as keys
 -define(RULE_MANAGER_ETS, rule_manager).
 
@@ -40,9 +37,6 @@
 %% name of ets for tree id generation
 %% TODO: consider using worker_host state instead
 -define(HANDLER_TREE_ID_ETS, handler_tree_id_ets).
-
--define(ProtocolVersion, 1).
--define(VIEW_UPDATE_DELAY, 5000).
 
 init(_Args) ->
   ets:new(?RULE_MANAGER_ETS, [named_table, public, set, {read_concurrency, true}]),
@@ -89,16 +83,17 @@ handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem, Produ
     [{_EventType, EventHandlers}] -> ets:insert(?RULE_MANAGER_ETS, {EventType, [NewEventItem | EventHandlers]})
   end,
 
-  case ets:lookup(?PRODUCERS_RULES_ETS, producer_configs) of
-    [] -> ets:insert(?PRODUCERS_RULES_ETS, {producer_configs, [ProducerConfig]});
-    [{_, ListOfConfigs}] -> ets:insert(?PRODUCERS_RULES_ETS, {producer_configs, [ProducerConfig | ListOfConfigs]})
-  end,
+  register_producer_config(ProducerConfig),
 
   notify_cluster_rengines(NewEventItem, EventType),
   notify_producers(ProducerConfig, EventType),
 
   ?info("New handler for event ~p registered.", [EventType]),
   ok;
+
+handle(_ProtocolVersion, {register_producer_config, ProducerConfig}) ->
+  register_producer_config(ProducerConfig),
+  notify_fuses(ProducerConfig);
 
 handle(_ProtocolVersion, {get_event_handlers, EventType}) ->
   EventHandlerItems = ets:lookup(?RULE_MANAGER_ETS, EventType),
@@ -141,27 +136,46 @@ notify_cluster_rengines(EventHandlerItem, EventType) ->
 %% ====================================================================
 %% @doc Notify event producers about new ProducerConfig.
 %% @end
--spec notify_producers(ProducerConfig :: #eventstreamconfig{}, EventType :: atom()) -> term().
+-spec notify_producers(ProducerConfig :: #eventstreamconfig{}, EventType :: string()) -> term().
 %% ====================================================================
 notify_producers(ProducerConfig, EventType) ->
+  notify_fuses(ProducerConfig),
+
+  %% notify logical_files_manager
+  ?info("---bazinga -notify lfms!"),
+  gen_server:cast({global, ?CCM}, {notify_lfm, EventType, true}).
+
+register_producer_config(ProducerConfig) ->
+  case ets:lookup(?PRODUCERS_RULES_ETS, producer_configs) of
+    [] -> ets:insert(?PRODUCERS_RULES_ETS, {producer_configs, [ProducerConfig]});
+    [{_, ListOfConfigs}] -> ets:insert(?PRODUCERS_RULES_ETS, {producer_configs, [ProducerConfig | ListOfConfigs]})
+  end.
+
+%% notify_fuses/1
+%% ====================================================================
+%% @doc Notify all fuses about new ProducerConfig.
+%% @end
+-spec notify_fuses(ProducerConfig :: #eventstreamconfig{}) -> term().
+%% ====================================================================
+notify_fuses(ProducerConfig) ->
   Rows = fetch_rows(?FUSE_CONNECTIONS_VIEW, #view_query_args{}),
   FuseIds = lists:map(fun(#view_row{key = FuseId}) -> FuseId end, Rows),
   UniqueFuseIds = sets:to_list(sets:from_list(FuseIds)),
 
-  %% notify all fuses
-  lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, ProducerConfig, "fuse_messages") end, UniqueFuseIds),
+  lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, ProducerConfig, "fuse_messages") end, UniqueFuseIds).
 
-  %% notify logical_files_manager
-  gen_server:cast({global, ?CCM}, {notify_lfm, EventType, true}).
-
-%% TODO: add proper spec
+%% generate_tree_name/0
+%% ====================================================================
+%% @doc Generate tree name for subprocess tree.
+%% @end
+-spec generate_tree_name() -> atom().
+%% ====================================================================
 generate_tree_name() ->
   [{_, Id}] = ets:lookup(?HANDLER_TREE_ID_ETS, current_id),
   ets:insert(?HANDLER_TREE_ID_ETS, {current_id, Id + 1}),
   list_to_atom("event_" ++ integer_to_list(Id)).
 
 %% Helper function for fetching rows from view
-%% TODO: add proper spec
 fetch_rows(ViewName, QueryArgs) ->
   case dao:list_records(ViewName, QueryArgs) of
     {ok, #view_result{rows = Rows}} ->
@@ -171,129 +185,16 @@ fetch_rows(ViewName, QueryArgs) ->
       throw(invalid_data)
   end.
 
-%% Register rules that should registered just after cluster startup
-%% TODO: add proper spec
+%% register_default_rules/1
+%% ====================================================================
+%% @doc Register rules that should be registered just after cluster startup.
+%% @end
+-spec register_default_rules(WriteBytesThreshold :: integer()) -> ok.
+%% ====================================================================
 register_default_rules(WriteBytesThreshold) ->
-  register_quota_exceeded_handler(),
-  register_rm_event_handler(),
-  register_for_write_events(WriteBytesThreshold),
-  ?info("default rule_manager rules registered").
-
-change_write_enabled(UserDn, true) ->
-  worker_host:send_to_user({dn, UserDn}, #atom{value = "write_enabled"}, "communication_protocol", ?ProtocolVersion),
-  gen_server:cast({global, ?CCM}, {update_user_write_enabled, UserDn, true});
-change_write_enabled(UserDn, false) ->
-  worker_host:send_to_user({dn, UserDn}, #atom{value = "write_disabled"}, "communication_protocol", ?ProtocolVersion),
-  gen_server:cast({global, ?CCM}, {update_user_write_enabled, UserDn, false}).
-
-
-%% ====================================================================
-%% Rule definitions
-%% ====================================================================
-register_quota_exceeded_handler() ->
-  EventHandler = fun(Event) ->
-    UserDn = proplists:get_value("user_dn", Event),
-    change_write_enabled(UserDn, false)
-  end,
-  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
-
-  %% no client configuration needed - register event handler
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {"quota_exceeded_event", EventItem}}}).
-
-register_rm_event_handler() ->
-  EventHandler = fun(Event) ->
-
-    CheckQuotaExceeded = fun(UserDn) ->
-      case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
-        false ->
-          change_write_enabled(UserDn, true),
-          false;
-        _ ->
-          true
-      end
-    end,
-
-    %% this function returns boolean true only if check quota is needed and quota is exceeded
-    CheckQuotaIfNeeded = fun(UserDn) ->
-      case user_logic:get_user({dn, UserDn}) of
-        {ok, UserDoc} ->
-          case user_logic:get_quota(UserDoc) of
-            {ok, #quota{exceeded = true}} ->
-              %% calling CheckQuota causes view reloading so we call it only when needed (quota has been already exceeded)
-              CheckQuotaExceeded(UserDn);
-            _ -> false
-          end;
-        Error ->
-          ?warning("cannot get user with dn: ~p, Error: ~p", [UserDn, Error]),
-          false
-      end
-    end,
-
-    UserDn = proplists:get_value("user_dn", Event),
-    Exceeded = CheckQuotaIfNeeded(UserDn),
-
-    %% if quota is exceeded check quota one more time after 5s - in meanwhile db view might get reloaded
-    case Exceeded of
-      true ->
-        spawn(fun() ->
-          receive
-            _ -> ok
-          after ?VIEW_UPDATE_DELAY ->
-            CheckQuotaExceeded(UserDn)
-          end
-        end);
-      _ ->
-        ok
-    end
-  end,
-  EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
-
-  %% client configuration
-  EventFilter = #eventfilterconfig{field_name = "type", desired_value = "rm_event"},
-  EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
-
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {"rm_event", EventItem, EventFilterConfig}}}).
-
-%% Registers handler which will be called every Bytes will be written.
-register_for_write_events(Bytes) ->
-  EventHandler = fun(Event) ->
-    UserDn = proplists:get_value("user_dn", Event),
-    case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
-      true ->
-        cluster_rengine:send_event(?ProtocolVersion, [{"type", "quota_exceeded_event"}, {"user_dn", UserDn}]);
-      _ ->
-        ok
-    end
-  end,
-
-  EventHandlerMapFun = get_standard_map_fun(),
-  EventHandlerDispMapFun = get_standard_disp_map_fun(),
-  EventItem = #event_handler_item{processing_method = tree, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = #event_stream_config{config = #aggregator_config{field_name = "user_dn", fun_field_name = "bytes", threshold = Bytes}}},
-
-  %% client configuration
-  EventFilter = #eventfilterconfig{field_name = "type", desired_value = "write_event"},
-  EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
-  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = Bytes, sum_field_name = "bytes"},
-  EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
-
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {"write_event", EventItem, EventAggregatorConfig}}}).
-
-get_standard_map_fun() ->
-  fun(WriteEv) ->
-    UserDnString = proplists:get_value("user_dn", WriteEv),
-    case UserDnString of
-      undefined -> ok;
-      _ -> string:len(UserDnString)
-    end
-  end.
-
-get_standard_disp_map_fun() ->
-  fun(WriteEv) ->
-    UserDnString = proplists:get_value("user_dn", WriteEv),
-    case UserDnString of
-      undefined -> ok;
-      _ ->
-        UserIdInt = string:len(UserDnString),
-        UserIdInt div 10
-    end
-  end.
+  rule_definitions:register_quota_exceeded_handler(),
+  rule_definitions:register_rm_event_handler(),
+  rule_definitions:register_for_write_events(WriteBytesThreshold),
+  rule_definitions:register_for_truncate_events(),
+  ?info("default rule_manager rules registered"),
+  ok.

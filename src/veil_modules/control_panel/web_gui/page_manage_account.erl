@@ -12,6 +12,7 @@
 -module(page_manage_account).
 -compile(export_all).
 -include("veil_modules/control_panel/common.hrl").
+-include("logging.hrl").
 
 %% Template points to the template file, which will be filled with content
 main() -> #template{file = "./gui_static/templates/bare.html"}.
