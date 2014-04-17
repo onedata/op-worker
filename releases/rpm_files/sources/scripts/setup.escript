@@ -10,7 +10,7 @@
 -define(default_group_storage_prefix,"/mnt/"++?default_group_name_prefix).
 
 %Ports that needs to be free
--define(ports_to_check,[53,443,5555,8443]).
+-define(ports_to_check,[53,80,443,5555,8443]).
 
 % Curl options
 -define(curl_opts,"--connect-timeout 5 -s").
@@ -280,7 +280,7 @@ setup_new_ccm_plus_worker(IsThisMainCCM,FuseGroups) ->
 					ok_storage_defined_in_main
 			end,
 			info("Starting node(s)..."),
-			os:cmd(?init_d_script_path ++ " start_veil")
+			os:cmd(?init_d_script_path ++ " start_veil 1>/dev/null")
 	end.
 
 
@@ -343,7 +343,7 @@ setup_new_worker() ->
 		ok ->  
 			install_veil_node(worker, WorkerName, WorkerPath),
 			info("Starting node(s)..."),
-			os:cmd(?init_d_script_path ++ " start_veil")
+			os:cmd(?init_d_script_path ++ " start_veil 1>/dev/null")
 	end.
 
 
@@ -513,7 +513,7 @@ install_db_node(Name, Path) ->
 	actualize_db_hostname(Path,Name),
 
 	info("Starting node..."),
-	open_port({spawn, ?init_d_script_path ++ " start_db"}, [out]).
+	open_port({spawn, ?init_d_script_path ++ " start_db 1>/dev/null"}, [out]).
 
 % add configured db node to existing cluster
 add_db_to_cluster(DbName,OtherNodeHost) ->

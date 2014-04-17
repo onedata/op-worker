@@ -224,7 +224,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, upda
             throw(invalid_updatetimes_request);
         _ -> ok
     end,
-    lager:debug("Updating times for file: ~p, Request: ~p", [FileName, Record]),
+    ?debug("Updating times for file: ~p, Request: ~p", [FileName, Record]),
     case FileNameFindingAns of
         ok ->
             case get_file(ProtocolVersion, FileName, FuseID) of
@@ -379,7 +379,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getf
     {FileNameFindingAns, FileName} = get_full_file_name(Record#getfileattr.file_logic_name, getfileattr),
     case FileNameFindingAns of
       ok ->
-        lager:debug("FileAttr for ~p", [FileName]),
+        ?debug("FileAttr for ~p", [FileName]),
         {DocFindStatus, FileDoc} = get_file(ProtocolVersion, FileName, FuseID),
         getfileattr(ProtocolVersion, DocFindStatus, FileDoc);
       ?VEPERM -> #fileattr{answer = ?VEPERM, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = ""};
@@ -1089,7 +1089,7 @@ get_waiting_file(ProtocolVersion, File, FuseID) ->
   Result :: term().
 %% ====================================================================
 get_file_helper(ProtocolVersion, File, FuseID, Fun) ->
-    lager:debug("get_file(File: ~p, FuseID: ~p)", [File, FuseID]),
+    ?debug("get_file(File: ~p, FuseID: ~p)", [File, FuseID]),
     case string:tokens(File, "/") of
         [?GROUPS_BASE_DIR_NAME, GroupName | _] -> %% Check if group that user is tring to access is avaliable to him
             case get(user_id) of %% Internal call, allow all group access
@@ -1696,7 +1696,7 @@ getfileattr(ProtocolVersion, DocFindStatus, FileDoc) ->
 
       #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime, type = Type, size = Size, uname = UName, gname = GName, uid = UID, gid = UID, links = Links};
     {error, file_not_found} ->
-      lager:debug("FileAttr: ENOENT"),
+      ?debug("FileAttr: ENOENT"),
       #fileattr{answer = ?VENOENT, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = "", links = -1};
     _ ->
       #fileattr{answer = ?VEREMOTEIO, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = "", links = -1}
