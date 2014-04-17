@@ -21,6 +21,10 @@ vm_arguments:
       description: Increase number of concurrent ports/sockets
       value: -env ERL_MAX_PORTS 4096
 
+  - argument:
+      name: max_processes
+      description: Increase number of processes
+      value: +P 1000000
 
 
 veil_cluster_node_env:
