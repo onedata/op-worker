@@ -315,7 +315,7 @@ update_crl(CADir, {OtpCert, [URL | URLs], Name}) ->
                             Filename = filename:join(CADir, Name ++ ".crl"),
                             case file:write_file(Filename, Data) of
                                 ok ->
-                                    file:change_mode(Filename, 8#444);
+                                    file:change_mode(Filename, 8#644);
 
                                 {error, Reason} ->
                                     lager:error("GSI Handler: Failed to save CLR of ~p (path: ~p, reason: ~p)", [Name, Filename, Reason])
