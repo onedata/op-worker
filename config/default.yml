@@ -314,7 +314,7 @@ veil_cluster_node_env:
       name: quota_check_freq
       description: |
         This variable determines after how many bytes written quota check is performed.
-      value: 52428800 # 50MB
+      value: 10485760 # 10MB
 
 obsolete:
   - parameter:
