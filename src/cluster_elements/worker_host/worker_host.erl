@@ -30,7 +30,7 @@
 %% API
 %% ====================================================================
 -export([start_link/3, stop/1, start_sub_proc/5, start_sub_proc/6, generate_sub_proc_list/1, generate_sub_proc_list/5, generate_sub_proc_list/6, send_to_user/4, send_to_user_with_ack/5]).
--export([create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_sub_procs_cache/2, clear_sipmle_cache/3]).
+-export([create_permanent_cache/1, create_permanent_cache/2, create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_sipmle_cache/3]).
 
 %% ====================================================================
 %% Test API
@@ -87,22 +87,22 @@ stop(PlugIn) ->
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 init([PlugIn, PlugInArgs, LoadMemorySize]) ->
-  process_flag(trap_exit, true),
-  InitAns = PlugIn:init(PlugInArgs),
-  case InitAns of
-    IDesc when is_record(IDesc, initial_host_description) ->
-      Pid = self(),
-      DispatcherRequestMapState = case InitAns#initial_host_description.request_map of
-        non -> true;
-        _ ->
-          erlang:send_after(200, Pid, {timer, register_disp_map}),
-          false
-      end,
-      erlang:send_after(200, Pid, {timer, register_sub_proc_caches}),
-      {ok, #host_state{plug_in = PlugIn, request_map = InitAns#initial_host_description.request_map, sub_procs = InitAns#initial_host_description.sub_procs,
-      dispatcher_request_map = InitAns#initial_host_description.dispatcher_request_map, dispatcher_request_map_ok = DispatcherRequestMapState, plug_in_state = InitAns#initial_host_description.plug_in_state, load_info = {[], [], 0, LoadMemorySize}}};
-    _ -> {ok, #host_state{plug_in = PlugIn, plug_in_state = InitAns, load_info = {[], [], 0, LoadMemorySize}}}
-  end.
+    process_flag(trap_exit, true),
+    InitAns = PlugIn:init(PlugInArgs),
+    case InitAns of
+      IDesc when is_record(IDesc, initial_host_description) ->
+        Pid = self(),
+        DispatcherRequestMapState = case InitAns#initial_host_description.request_map of
+          non -> true;
+          _ ->
+            erlang:send_after(200, Pid, {timer, register_disp_map}),
+            false
+        end,
+        erlang:send_after(200, Pid, {timer, register_sub_proc_caches}),
+        {ok, #host_state{plug_in = PlugIn, request_map = InitAns#initial_host_description.request_map, sub_procs = InitAns#initial_host_description.sub_procs,
+        dispatcher_request_map = InitAns#initial_host_description.dispatcher_request_map, dispatcher_request_map_ok = DispatcherRequestMapState, plug_in_state = InitAns#initial_host_description.plug_in_state, load_info = {[], [], 0, LoadMemorySize}}};
+      _ -> {ok, #host_state{plug_in = PlugIn, plug_in_state = InitAns, load_info = {[], [], 0, LoadMemorySize}}}
+    end.
 
 %% handle_call/3
 %% ====================================================================
@@ -160,20 +160,11 @@ handle_call(dispatcher_map_unregistered, _From, State) ->
 
 %% For tests
 handle_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM}, _From, State) ->
-  Pid = self(),
-  SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun),
-  erlang:send_after(200, Pid, {timer, register_disp_map}),
-  {reply, ok, State#host_state{request_map = RM, sub_procs = SubProcList,
-  dispatcher_request_map = DM, dispatcher_request_map_ok = false}};
+  handle_test_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM}, _From, State);
 
 %% For tests
 handle_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, Cache}, _From, State) ->
-  Pid = self(),
-  SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache),
-  erlang:send_after(200, Pid, {timer, register_disp_map}),
-  erlang:send_after(200, Pid, {timer, register_sub_proc_caches}),
-  {reply, ok, State#host_state{request_map = RM, sub_procs = SubProcList,
-  dispatcher_request_map = DM, dispatcher_request_map_ok = false}};
+  handle_test_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, Cache}, _From, State);
 
 handle_call(Request, _From, State) when is_tuple(Request) -> %% Proxy call. Each cast can be achieved by instant proxy-call which ensures
                                                              %% that request was made, unlike cast because cast ignores state of node/gen_server
@@ -184,6 +175,31 @@ handle_call(check, _From, State) ->
 
 handle_call(_Request, _From, State) ->
     {reply, wrong_request, State}.
+
+%% handle_test_call/3
+%% ====================================================================
+%% @doc Handles calls used during tests
+-spec handle_test_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result :: term().
+%% ====================================================================
+-ifdef(TEST).
+handle_test_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM}, _From, State) ->
+  Pid = self(),
+  SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun),
+  erlang:send_after(200, Pid, {timer, register_disp_map}),
+  {reply, ok, State#host_state{request_map = RM, sub_procs = SubProcList,
+  dispatcher_request_map = DM, dispatcher_request_map_ok = false}};
+
+handle_test_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, Cache}, _From, State) ->
+  Pid = self(),
+  SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache),
+  erlang:send_after(200, Pid, {timer, register_disp_map}),
+  erlang:send_after(200, Pid, {timer, register_sub_proc_caches}),
+  {reply, ok, State#host_state{request_map = RM, sub_procs = SubProcList,
+  dispatcher_request_map = DM, dispatcher_request_map_ok = false}}.
+-else.
+handle_test_call(_Request, _From, State) ->
+  {reply, not_supported_in_normal_mode, State}.
+-endif.
 
 %% handle_cast/2
 %% ====================================================================
@@ -211,7 +227,7 @@ handle_cast({asynch, ProtocolVersion, Msg}, State) ->
   NewSubProcList = proc_standard_request(State#host_state.request_map, State#host_state.sub_procs, PlugIn, ProtocolVersion, Msg, non, non),
 	{noreply, State#host_state{sub_procs = NewSubProcList}};
 
-handle_cast({asynch, ProtocolVersion, Msg, MsgId, FuseID}, State) ->
+handle_cast({asynch, _ProtocolVersion, _Msg, MsgId, FuseID}, State) ->
   HandlerTuple = ets:lookup(?ACK_HANDLERS, MsgId),
   case HandlerTuple of
     [{_, {Callback, SuccessFuseIds, FailFuseIds, Length, Pid}}] ->
@@ -943,7 +959,8 @@ send_to_user_with_ack(UserKey, Message, MessageDecoder, OnCompleteCallback, Prot
 %% create_simple_cache/1
 %% ====================================================================
 %% @doc Creates simple cache.
--spec create_simple_cache(Name :: atom()) -> Result when
+-spec create_simple_cache(Name :: CacheName) -> Result when
+  CacheName :: atom() | {permanent_cache, atom()} | {permanent_cache, atom(), term()},
   Result :: ok | error_during_cache_registration.
 %% ====================================================================
 create_simple_cache(Name) ->
@@ -952,7 +969,8 @@ create_simple_cache(Name) ->
 %% create_simple_cache/3
 %% ====================================================================
 %% @doc Creates simple cache.
--spec create_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term()) -> Result when
+-spec create_simple_cache(Name :: CacheName, CacheLoop, ClearFun :: term()) -> Result when
+  CacheName :: atom() | {permanent_cache, atom()} | {permanent_cache, atom(), term()},
   Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
   CacheLoop :: integer() | atom().
 %% ====================================================================
@@ -962,7 +980,8 @@ create_simple_cache(Name, CacheLoop, ClearFun) ->
 %% create_simple_cache/4
 %% ====================================================================
 %% @doc Creates simple cache.
--spec create_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean()) -> Result when
+-spec create_simple_cache(Name :: CacheName, CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean()) -> Result when
+  CacheName :: atom() | {permanent_cache, atom()} | {permanent_cache, atom(), term()},
   Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
   CacheLoop :: integer() | atom().
 %% ====================================================================
@@ -973,15 +992,22 @@ create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection) ->
 %% create_simple_cache/5
 %% ====================================================================
 %% @doc Creates simple cache.
--spec create_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean(), Pid :: pid()) -> Result when
+-spec create_simple_cache(Name :: CacheName, CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean(), Pid :: pid()) -> Result when
+  CacheName :: atom() | {permanent_cache, atom()} | {permanent_cache, atom(), term()},
   Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
   CacheLoop :: integer() | atom().
 %% ====================================================================
 create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPid) ->
   %% Init Cache-ETS. Ignore the fact that other DAO worker could have created this table. In this case, this call will
   %% fail, but table is present anyway, so everyone is happy.
-  case ets:info(Name) of
-    undefined   -> ets:new(Name, [named_table, public, set, {read_concurrency, true}]);
+  EtsName = case Name of
+    {permanent_cache, PCache} -> PCache;
+    {permanent_cache, PCache2, _} -> PCache2;
+    _ -> Name
+  end,
+
+  case ets:info(EtsName) of
+    undefined   -> ets:new(EtsName, [named_table, public, set, {read_concurrency, true}]);
     [_ | _]     -> ok
   end,
 
@@ -990,7 +1016,10 @@ create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPi
 %% register_simple_cache/5
 %% ====================================================================
 %% @doc Registers simple cache.
--spec register_simple_cache(Name :: atom(), CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean(), ClearingPid :: pid()) -> Result when
+-spec register_simple_cache(Name :: CacheName, CacheLoop, ClearFun :: term(), StrongCacheConnection :: boolean(), ClearingPid :: pid()) -> Result when
+  CacheName :: atom() | {permanent_cache, atom()} | {permanent_cache, atom(), term()} | {sub_proc_cache, {PlugIn, SubProcName}},
+  PlugIn :: atom(),
+  SubProcName :: atom(),
   Result :: ok | error_during_cache_registration | loop_time_not_a_number_error,
   CacheLoop :: integer() | atom().
 %% ====================================================================
@@ -1024,6 +1053,24 @@ register_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Clearing
   after 500 ->
     error_during_cache_registration
   end.
+
+%% create_permanent_cache/1
+%% ====================================================================
+%% @doc Creates permanent cache.
+-spec create_permanent_cache(Name :: atom()) -> Result when
+  Result :: ok | error_during_cache_registration.
+%% ====================================================================
+create_permanent_cache(Name) ->
+  create_simple_cache({permanent_cache, Name}).
+
+%% create_permanent_cache/2
+%% ====================================================================
+%% @doc Creates permanent cache.
+-spec create_permanent_cache(Name :: atom(), CacheCheckFun :: term()) -> Result when
+  Result :: ok | error_during_cache_registration.
+%% ====================================================================
+create_permanent_cache(Name, CacheCheckFun) ->
+  create_simple_cache({permanent_cache, Name, CacheCheckFun}).
 
 %% clear_cache/1
 %% ====================================================================
@@ -1153,8 +1200,21 @@ register_sub_proc_simple_cache(Name, CacheLoop, ClearFun, ClearingPid) ->
 %% clear_sub_procs_cache/1
 %% ====================================================================
 %% @doc Clears caches of sub_proc
--spec clear_sub_procs_cache({PlugIn :: atom(), Cache :: atom()}) -> ok | error.
+-spec clear_sub_procs_cache(Cache :: CacheDesc) -> ok | error when
+  CacheDesc :: {PlugIn :: atom(), Cache :: atom()} | {{PlugIn :: atom(), Cache :: atom()}, Key :: term()}.
 %% ====================================================================
+clear_sub_procs_cache({{PlugIn, Cache}, Key}) ->
+  gen_server:cast(PlugIn, {clear_sub_procs_cache, self(), {Cache, Key}}),
+  receive
+    {sub_proc_cache_cleared, ClearAns} ->
+      case ClearAns of
+        true -> ok;
+        _ -> error
+      end
+  after ?SUB_PROC_CACHE_CLEAR_TIME ->
+    error
+  end;
+
 clear_sub_procs_cache({PlugIn, Cache}) ->
   gen_server:cast(PlugIn, {clear_sub_procs_cache, self(), Cache}),
   receive
@@ -1167,22 +1227,6 @@ clear_sub_procs_cache({PlugIn, Cache}) ->
     error
   end.
 
-%% clear_sub_procs_cache/2
-%% ====================================================================
-%% @doc Clears caches of sub_proc
--spec clear_sub_procs_cache({PlugIn :: atom(), Cache :: atom()}, Key :: term()) -> ok | error.
-%% ====================================================================
-clear_sub_procs_cache({PlugIn, Cache}, Key) ->
-  gen_server:cast(PlugIn, {clear_sub_procs_cache, self(), {Cache, Key}}),
-  receive
-    {sub_proc_cache_cleared, ClearAns} ->
-      case ClearAns of
-        true -> ok;
-        _ -> error
-      end
-  after ?SUB_PROC_CACHE_CLEAR_TIME ->
-    error
-  end.
 
 %% clear_sipmle_cache/3
 %% ====================================================================

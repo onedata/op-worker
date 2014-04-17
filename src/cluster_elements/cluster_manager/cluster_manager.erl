@@ -1609,8 +1609,8 @@ clear_cache(State, Cache) ->
       ok = gen_server:call({?Node_Manager_Name, Node}, {clear_cache, Cache}, 500),
       {TmpState, TmpWorkersFound}
     catch
-      _:_ ->
-        lager:error([{mod, ?MODULE}], "Can not clear cache ~p of node: ~p", [Cache, Node]),
+      E1:E2 ->
+        lager:error([{mod, ?MODULE}], "Can not clear cache ~p of node: ~p, error: ~p:~p", [Cache, Node, E1, E2]),
         {NewState, WorkersFound} = node_down(Node, State),
         {NewState, TmpWorkersFound or WorkersFound}
     end
