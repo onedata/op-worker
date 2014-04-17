@@ -1711,7 +1711,7 @@ merge_nodes_stats(NodesStats) ->
 %% ====================================================================
 merge_nodes_stats([], SumStats) ->
   AvgFun = fun
-    ({_, 0}) -> 0;
+    ({_, 0}) -> 0.0;
     ({Sum, Counter}) -> Sum / Counter
   end,
   [
