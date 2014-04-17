@@ -149,7 +149,6 @@ update_meta_attr(#file{meta_doc = MetaUUID} = File, Attr, Value, RetryCount) ->
                         mtime when Value > 0 -> MetaRec#file_meta{uid = File#file.uid, mtime = Value};
                         atime when Value > 0 -> MetaRec#file_meta{uid = File#file.uid, atime = Value};
                         size when Value >= 0 ->
-                          ?info("--- bazinga update_meta_attr size, ~p", [File#file.name]),
                           MetaRec#file_meta{uid = File#file.uid, size = Value};
                         _ ->
                             MetaRec

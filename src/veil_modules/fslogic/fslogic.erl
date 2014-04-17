@@ -118,7 +118,6 @@ handle(ProtocolVersion, {delete_old_descriptors_test, Time}) ->
   handle_test(ProtocolVersion, {delete_old_descriptors_test, Time});
 
 handle(ProtocolVersion, {update_user_files_size_view, Pid}) ->
-  ?info("---- bazinga - update_user_files_size_view"),
   update_user_files_size_view(ProtocolVersion),
   {ok, Interval} = application:get_env(veil_cluster_node, user_files_size_view_update_period),
   erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size_view, Pid}}}),

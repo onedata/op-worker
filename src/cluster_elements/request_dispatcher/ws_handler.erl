@@ -304,7 +304,6 @@ encode_and_send({ResponsePid, Message, MessageDecoder, MsgID}, MessageIdForClien
     case list_to_atom(AnsRecord#answer.answer_status) of
       push ->
         ResponsePid ! {self(), MsgID, ok},
-        ?info("----- bazinga - wsh - sending push message"),
         {reply, {binary, erlang:iolist_to_binary(communication_protocol_pb:encode_answer(AnsRecord))}, Req, State};
       Other ->
         ResponsePid ! {self(), MsgID, Other},

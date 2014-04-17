@@ -55,7 +55,6 @@ handle(_ProtocolVersion, ping) ->
   pong;
 
 handle(ProtocolVersion, EventMessage) when is_record(EventMessage, eventmessage) ->
-  ?info("---- bazinga: received eventmessage from client, numkeys: ~p, numValues: ~p, stringkeys: ~p, stringValues: ~p",
     [EventMessage#eventmessage.numeric_properties_keys, EventMessage#eventmessage.numeric_properties_values, EventMessage#eventmessage.string_properties_keys, EventMessage#eventmessage.string_properties_values]),
 
   Properties = lists:zip(EventMessage#eventmessage.numeric_properties_keys, EventMessage#eventmessage.numeric_properties_values)

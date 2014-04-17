@@ -92,13 +92,10 @@ test_event_aggregation(Config) ->
   [CCM | _] = NodesUp,
 
   EventHandler = fun(WriteEv) ->
-    ?info("---- bazinga - write handler5689: ~p", [WriteEv]),
     AnsPid = proplists:get_value("ans_pid", WriteEv),
-    ?info("---- bazinga - write handler5689 -- anspid: ~p", [AnsPid]),
     case AnsPid of
       undefined -> ok;
       _ ->
-        ?info("---- bazinga - write handler56, anspid: ~p", [AnsPid]),
         AnsPid ! {ok, tree, self()}
     end
   end,

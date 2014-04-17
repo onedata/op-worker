@@ -828,7 +828,6 @@ send_to_fuse(FuseId, Message, MessageDecoder, SendNum) ->
             non -> channel_not_found;
             _ ->
               MsgID = gen_server:call({?Node_Manager_Name, Node}, get_next_callback_msg_id),
-              ?info("----- bazinga - req disp - sending to fuse message: ~p, FuseId: ~p", [Message, FuseId]),
               Callback ! {self(), Message, MessageDecoder, MsgID},
               receive
                 {Callback, MsgID, Response} -> Response
