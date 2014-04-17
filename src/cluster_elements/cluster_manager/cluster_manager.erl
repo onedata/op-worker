@@ -1367,7 +1367,7 @@ calculate_node_load(Nodes, Period) ->
 %% ====================================================================
 map_node_stats_to_load(NodesStats) ->
 
-  ct:print("~nNodesStats: ~n~p~n", [NodesStats]),
+  lager:info("~nNodesStats: ~n~p~n", [NodesStats]),
 
   %% Unify diffrent nodes stats to common pattern
   UnifiedNodesStats = lists:map(fun
@@ -1377,7 +1377,7 @@ map_node_stats_to_load(NodesStats) ->
         merge_nodes_stats([{Node, NodeStats}]))}
   end, NodesStats),
 
-  ct:print("~nUnifiedNodesStats: ~n~p~n", [UnifiedNodesStats]),
+  lager:info("~nUnifiedNodesStats: ~n~p~n", [UnifiedNodesStats]),
 
   %% Create list of maximum values for each statistical data
   MaxStats = lists:foldl(fun
