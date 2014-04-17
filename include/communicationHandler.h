@@ -11,6 +11,7 @@
 
 #include <numeric>
 #include <string>
+#include <boost/atomic.hpp>
 #include <boost/thread.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/unordered_map.hpp>
@@ -105,6 +106,8 @@ typedef boost::function<CertificateInfo()> cert_info_fun;
  */
 class CommunicationHandler
 {
+private:
+    boost::atomic<error::Error> m_lastError;
 
 protected:
 
@@ -206,6 +209,10 @@ public:
      */
     virtual             protocol::communication_protocol::Answer communicate(protocol::communication_protocol::ClusterMsg &msg, uint8_t retry, uint32_t timeout = 0);
 
+    /**
+     * @returns Last error encountered by the connection.
+     */
+    error::Error getLastError() const;
 };
 
 } // namespace veil

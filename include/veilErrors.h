@@ -32,6 +32,12 @@
 
 namespace veil {
 
+    namespace error {
+        enum Error {
+            SERVER_CERT_VERIFICATION_FAILED
+        };
+    }
+
     /**
      * errno translator.
      * Translates internal VeilClient error codes (strings) to
