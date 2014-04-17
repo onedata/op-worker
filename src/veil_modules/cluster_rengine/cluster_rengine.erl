@@ -55,8 +55,6 @@ handle(_ProtocolVersion, ping) ->
   pong;
 
 handle(ProtocolVersion, EventMessage) when is_record(EventMessage, eventmessage) ->
-    [EventMessage#eventmessage.numeric_properties_keys, EventMessage#eventmessage.numeric_properties_values, EventMessage#eventmessage.string_properties_keys, EventMessage#eventmessage.string_properties_values]),
-
   Properties = lists:zip(EventMessage#eventmessage.numeric_properties_keys, EventMessage#eventmessage.numeric_properties_values)
            ++ lists:zip(EventMessage#eventmessage.string_properties_keys, EventMessage#eventmessage.string_properties_values),
 
