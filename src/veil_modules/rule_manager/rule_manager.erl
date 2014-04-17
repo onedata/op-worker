@@ -142,7 +142,6 @@ notify_producers(ProducerConfig, EventType) ->
   notify_fuses(ProducerConfig),
 
   %% notify logical_files_manager
-  ?info("---bazinga -notify lfms!"),
   gen_server:cast({global, ?CCM}, {notify_lfm, EventType, true}).
 
 register_producer_config(ProducerConfig) ->

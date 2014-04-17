@@ -209,7 +209,7 @@ handle_call(check, _From, State) ->
 
 handle_call(get_next_callback_msg_id, _From, State) ->
   case get(callback_msg_ID) of
-    ID when is_integer(ID) and ID > ?MIN_MSG_ID ->
+    ID when is_integer(ID) and (ID > ?MIN_MSG_ID) ->
       put(callback_msg_ID, ID - 1);
     _ ->
       put(callback_msg_ID, -1)

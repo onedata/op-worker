@@ -215,7 +215,6 @@ cleanup() ->
   Result :: term().
 %% ====================================================================
 handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, updatetimes) ->
-    ?info("-----===== bazinga - udpatetimes for: ~p,", [Record#updatetimes.file_logic_name]),
     {FileNameFindingAns, FileName} = get_full_file_name(Record#updatetimes.file_logic_name, updatetimes),
     case FileName of
         [?PATH_SEPARATOR] ->

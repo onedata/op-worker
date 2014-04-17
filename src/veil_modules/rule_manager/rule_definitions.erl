@@ -65,12 +65,10 @@ register_for_truncate_events() ->
 
 %% Registers handler which will be called every Bytes will be written.
 register_for_write_events(Bytes) ->
-  ?info("-- bazinga - register_for_write_events with freq: ~p", [Bytes]),
   EventHandler = fun(Event) ->
     UserDn = proplists:get_value("user_dn", Event),
     case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
       true ->
-        ?info("--- bazinga - quota exceeded for user ~p", [UserDn]),
         cluster_rengine:send_event(?ProtocolVersion, [{"type", "quota_exceeded_event"}, {"user_dn", UserDn}]);
       _ ->
         ok
@@ -95,11 +93,9 @@ register_for_write_events(Bytes) ->
 %% ====================================================================
 
 change_write_enabled(UserDn, true) ->
-  ?info("----- bazinga - change_write_enabled true"),
   worker_host:send_to_user({dn, UserDn}, #atom{value = "write_enabled"}, "communication_protocol", ?ProtocolVersion),
   gen_server:cast({global, ?CCM}, {update_user_write_enabled, UserDn, true});
 change_write_enabled(UserDn, false) ->
-  ?info("----- bazinga - change_write_enabled false"),
   worker_host:send_to_user({dn, UserDn}, #atom{value = "write_disabled"}, "communication_protocol", ?ProtocolVersion),
   gen_server:cast({global, ?CCM}, {update_user_write_enabled, UserDn, false}).
 
@@ -126,7 +122,6 @@ get_standard_disp_map_fun() ->
 
 get_rm_event_handler() ->
   fun(Event) ->
-    ?info("---- bazinga - inside rm_event_handler"),
 
     CheckQuotaExceeded = fun(UserDn) ->
       case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of

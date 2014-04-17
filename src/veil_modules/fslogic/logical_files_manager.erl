@@ -495,11 +495,9 @@ delete(FileStr) ->
                     ?VOK ->
                       case event_production_enabled("rm_event") of
                         true ->
-                          ?info("--- bazinga rm_event production enabled"),
                           RmEvent = [{"type", "rm_event"}, {"user_dn", get(user_id)}],
                           gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, RmEvent}});
                         _ ->
-                          ?info("--- bazinga rm_event production disabled"),
                           ok
                       end,
                       ok;
@@ -1087,9 +1085,6 @@ check_utf(FileName) ->
 -spec event_production_enabled(EventName :: string()) -> boolean().
 %% ====================================================================
 event_production_enabled(EventName) ->
-  %MatchingItems = ets:match(?LFM_EVENT_PRODUCTION_ENABLED_ETS, {'$1', '$2'}),
-  %?info("--bazinga --eventprodenabled: ~p", [MatchingItems]),
-
   case ets:lookup(?LFM_EVENT_PRODUCTION_ENABLED_ETS, EventName) of
     [{_Key, _Value}] -> true;
     _ -> false
