@@ -298,6 +298,7 @@ handle_cast(stop_load_logging, State) ->
   {noreply, State};
 
 handle_cast({notify_lfm, EventType, Enabled}, State) ->
+  ?info("-- bazinga - node_manager - notify_lfm: ~p, ~p", [EventType, Enabled]),
   case Enabled of
     true -> ets:insert(?LFM_EVENT_PRODUCTION_ENABLED_ETS, {EventType, true});
     _ -> ets:delete(?LFM_EVENT_PRODUCTION_ENABLED_ETS, EventType)

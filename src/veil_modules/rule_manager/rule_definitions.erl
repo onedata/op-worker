@@ -128,7 +128,7 @@ register_for_truncate_events() ->
   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "truncate_event"},
   EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
   EventTransformer = #eventtransformerconfig{field_names_to_replace = ["type"], values_to_replace = ["truncate_event"], new_values = ["rm_event"]},
-  EventTransformerConfig = #eventstreamconfig{transformer_config = EventTransformer},
+  EventTransformerConfig = #eventstreamconfig{transformer_config = EventTransformer, wrapped_config = EventFilterConfig},
 
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {register_producer_config, EventTransformerConfig}}).
 

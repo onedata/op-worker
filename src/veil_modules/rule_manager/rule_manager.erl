@@ -142,6 +142,7 @@ notify_producers(ProducerConfig, EventType) ->
   notify_fuses(ProducerConfig),
 
   %% notify logical_files_manager
+  ?info("---bazinga -notify lfms!"),
   gen_server:cast({global, ?CCM}, {notify_lfm, EventType, true}).
 
 register_producer_config(ProducerConfig) ->
@@ -186,5 +187,5 @@ register_default_rules(WriteBytesThreshold) ->
   rule_definitions:register_quota_exceeded_handler(),
   rule_definitions:register_rm_event_handler(),
   rule_definitions:register_for_write_events(WriteBytesThreshold),
-  %rule_definitions:register_for_truncate_events(),
+  rule_definitions:register_for_truncate_events(),
   ?info("default rule_manager rules registered").
