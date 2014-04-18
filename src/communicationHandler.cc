@@ -472,6 +472,11 @@ context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
                          boost::asio::ssl::context::no_sslv2 |
                          boost::asio::ssl::context::single_dh_use);
 
+        ctx->set_default_verify_paths();
+        ctx->set_verify_mode(helpers::config::checkCertificate.load()
+                             ? boost::asio::ssl::verify_peer
+                             : boost::asio::ssl::verify_none);
+
         SSL_CTX *ssl_ctx = ctx->native_handle();
         long mode = SSL_CTX_get_session_cache_mode(ssl_ctx);
         mode |= SSL_SESS_CACHE_CLIENT;
@@ -565,7 +570,21 @@ void CommunicationHandler::onFail(websocketpp::connection_hdl hdl)
     m_connectCond.notify_all();
     m_receiveCond.notify_all();
 
-    LOG(ERROR) << "WebSocket handshake error";
+    const ws_client::connection_ptr conn = m_endpoint->get_con_from_hdl(hdl);
+    if(conn)
+    {
+        const int verifyResult =
+            SSL_get_verify_result(conn->get_socket().native_handle());
+
+        if(verifyResult != 0)
+        {
+            LOG(ERROR) << "Server certificate verification failed." <<
+                          " OpenSSL error " << verifyResult;
+            m_lastError.store(error::SERVER_CERT_VERIFICATION_FAILED);
+        }
+    }
+
+    LOG(ERROR) << "WebSocket handshake error.";
 }
 
 bool CommunicationHandler::onPing(websocketpp::connection_hdl hdl, std::string msg)
@@ -590,6 +609,11 @@ void CommunicationHandler::onInterrupt(websocketpp::connection_hdl hdl)
     LOG(WARNING) << "WebSocket connection was interrupted";
     unique_lock lock(m_connectMutex);
     m_connectStatus = TRANSPORT_ERROR;
+}
+
+error::Error CommunicationHandler::getLastError() const
+{
+    return m_lastError.load();
 }
 
 } // namespace veil

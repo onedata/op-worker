@@ -90,6 +90,8 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(Pool
             break;
         }
 
+        m_lastError.store(conn->getLastError());
+
         lock.lock();
         conn.reset();
         LOG(WARNING) << "Cannot connect to host: " << connectTo << ":" << m_port;
@@ -126,7 +128,7 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(P
     if(poolInfo.connections.size() == 0 && toStart <= 0)
         toStart = 1;
 
-    DLOG(INFO) << "Current pool size: " << poolInfo.connections.size() << ", connections in construcion: " << poolInfo.currWorkers << ", expected: " << poolInfo.size;
+    DLOG(INFO) << "Current pool size: " << poolInfo.connections.size() << ", connections in construction: " << poolInfo.currWorkers << ", expected: " << poolInfo.size;
 
     while(toStart --> 0) // Current pool is too small, we should create some connection(s)
     {
@@ -155,6 +157,11 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(P
 void SimpleConnectionPool::releaseConnection(boost::shared_ptr<CommunicationHandler> conn)
 {
     return;
+}
+
+error::Error SimpleConnectionPool::getLastError() const
+{
+    return m_lastError.load();
 }
 
 void SimpleConnectionPool::setPoolSize(PoolType type, unsigned int s)

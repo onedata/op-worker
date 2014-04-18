@@ -6,7 +6,7 @@
  */
 
 #ifndef STORAGE_HELPER_FACTORY_H
-#define STORAGE_HELPER_FACTORY_H 
+#define STORAGE_HELPER_FACTORY_H
 
 #include <memory>
 #include <string>
@@ -15,6 +15,7 @@
 #include "helpers/IStorageHelper.h"
 #include "simpleConnectionPool.h"
 #include <boost/thread/thread_time.hpp>
+#include <boost/atomic.hpp>
 
 #define PROTOCOL_VERSION 1
 
@@ -27,6 +28,7 @@ namespace config {
     extern unsigned int clusterPort;
     extern std::string  proxyCert;
     extern std::string  clusterHostname;
+    extern boost::atomic<bool> checkCertificate;
 
     namespace {
         extern boost::shared_ptr<SimpleConnectionPool> connectionPool;
@@ -48,12 +50,12 @@ namespace buffers {
 } // namespace buffers
 
 
-} // namespace config   
+} // namespace config
 
 namespace utils {
 
     std::string tolower(std::string input);
-    
+
     template<typename T>
     T fromString(std::string in) {
         T out;
@@ -65,13 +67,13 @@ namespace utils {
     template<typename T>
     T mtime()
     {
-        boost::posix_time::ptime time_t_epoch(boost::gregorian::date(1970,1,1)); 
+        boost::posix_time::ptime time_t_epoch(boost::gregorian::date(1970,1,1));
         boost::posix_time::ptime now = boost::posix_time::microsec_clock::local_time();
         boost::posix_time::time_duration diff = now - time_t_epoch;
 
         return diff.total_milliseconds();
-    } 
-    
+    }
+
 } // namespace utils
 
 /**
@@ -82,7 +84,7 @@ class StorageHelperFactory {
 	public:
 
         StorageHelperFactory();
-		virtual ~StorageHelperFactory();	
+		virtual ~StorageHelperFactory();
 
         /**
          * Produces storage helper object.
@@ -93,7 +95,7 @@ class StorageHelperFactory {
         virtual boost::shared_ptr<IStorageHelper> getStorageHelper(std::string sh, std::vector<std::string> args);
 };
 
-} // namespace helpers   
+} // namespace helpers
 } // namespace veil
 
 #endif // STORAGE_HELPER_FACTORY_H
