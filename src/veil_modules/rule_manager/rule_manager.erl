@@ -27,6 +27,9 @@
 %% ====================================================================
 -export([init/1, handle/2, cleanup/0]).
 
+%% Just for test purposes:
+-export([send_push_msg/1]).
+
 %% name of ets that store event_handler_item records registered in rule_manager as values and event types as keys
 -define(RULE_MANAGER_ETS, rule_manager).
 
@@ -123,10 +126,6 @@ handle(_ProtocolVersion, register_default_rules) ->
 handle(_ProtocolVersion, _Msg) ->
   ok.
 
-handle_cast(register_default_rules, State) ->
-  gen_server:call(?Dispatcher_Name, {rule_manager, 1, register_default_rules}),
-  {noreply, State};
-
 cleanup() ->
 	ok.
 
@@ -214,3 +213,25 @@ register_default_rules(WriteBytesThreshold) ->
   rule_definitions:register_for_truncate_events(),
   ?info("default rule_manager rules registered"),
   ok.
+
+%% ====================================================================
+%% Test functions
+%% ====================================================================
+
+on_complete(Message, SuccessFuseIds, FailFuseIds) ->
+  ?info("oncomplete called"),
+  case FailFuseIds of
+    [] -> ?info("------- ack success --------");
+    _ -> ?info("-------- ack fail, success: ~p, fail: ~p ---------", [length(SuccessFuseIds), length(FailFuseIds)])
+  end.
+
+%% Uuid :: string()
+send_push_msg(Uuid) ->
+  TestAtom = #atom{value = "test_atom2"},
+  OnComplete = fun(SuccessFuseIds, FailFuseIds) -> on_complete(TestAtom, SuccessFuseIds, FailFuseIds) end,
+  worker_host:send_to_user_with_ack({uuid, Uuid}, TestAtom, "communication_protocol", OnComplete, 1).
+
+send_push_msg_ack(Uuid) ->
+  TestAtom = #atom{value = "test_atom2_ack"},
+  OnComplete = fun(SuccessFuseIds, FailFuseIds) -> on_complete(TestAtom, SuccessFuseIds, FailFuseIds) end,
+  worker_host:send_to_user_with_ack({uuid, Uuid}, TestAtom, "communication_protocol", OnComplete, 1).
