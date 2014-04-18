@@ -7,7 +7,7 @@
 
 #include "communicationHandler.h"
 #include "fuse_messages.pb.h"
-#include "glog/logging.h"
+#include "logging.h"
 #include "helpers/storageHelperFactory.h"
 #include <google/protobuf/descriptor.h>
 #include <iostream>
@@ -27,7 +27,6 @@ using websocketpp::lib::bind;
 
 namespace veil {
 
-volatile int CommunicationHandler::instancesCount = 0;
 boost::recursive_mutex CommunicationHandler::m_instanceMutex;
 SSL_SESSION* CommunicationHandler::m_session = 0;
 
@@ -41,8 +40,6 @@ CommunicationHandler::CommunicationHandler(string p_hostname, int p_port, cert_i
       m_isPushChannel(false),
       m_lastConnectTime(0)
 {
-    unique_lock lock(m_instanceMutex);
-    ++instancesCount;
 }
 
 void CommunicationHandler::setCertFun(cert_info_fun p_getCertInfo)
@@ -55,7 +52,7 @@ CommunicationHandler::~CommunicationHandler()
 {
     closeConnection();
 
-    DLOG(INFO) << "Destructing connection: " << this;
+    DLOG_TO_SINK(NULL, INFO) << "Destructing connection: " << this;
     if(m_endpoint)
     {
         m_endpoint->stop();
@@ -71,10 +68,7 @@ CommunicationHandler::~CommunicationHandler()
         pthread_cancel(m_worker2.native_handle());
     }
 
-    unique_lock lock(m_instanceMutex);
-    --instancesCount;
-
-    DLOG(INFO) << "Connection: " << this << " deleted";
+    DLOG_TO_SINK(NULL, INFO) << "Connection: " << this << " deleted";
 }
 
 unsigned int CommunicationHandler::getErrorCount()
@@ -348,10 +342,7 @@ int CommunicationHandler::sendMessage(ClusterMsg& msg, int32_t msgId)
 int32_t CommunicationHandler::getMsgId()
 {
     unique_lock lock(m_msgIdMutex);
-    ++m_currentMsgId;
-    if(m_currentMsgId <= 0) // Skip 0 and negative values
-        m_currentMsgId = 1;
-
+    m_currentMsgId = (m_currentMsgId % MAX_GENERATED_MSG_ID) + 1;
     return m_currentMsgId;
 }
 
@@ -463,12 +454,6 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
     }
 
     return answer;
-}
-
-int CommunicationHandler::getInstancesCount()
-{
-    unique_lock lock(m_instanceMutex);
-    return instancesCount;
 }
 
 context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)

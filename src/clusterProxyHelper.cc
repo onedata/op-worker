@@ -9,7 +9,7 @@
 #include <limits.h>
 
 #include <boost/algorithm/string.hpp>
-#include "glog/logging.h"
+#include "logging.h"
 #include "clusterProxyHelper.h"
 #include "helpers/storageHelperFactory.h"
 #include <google/protobuf/descriptor.h>

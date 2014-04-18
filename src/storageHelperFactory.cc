@@ -19,25 +19,25 @@ namespace helpers {
 
 namespace config {
 
-    // Variables below are used as default values when ConnectionPool object is wasnt set 
+    // Variables below are used as default values when ConnectionPool object is wasnt set
     // but storage helper tries to use TCP/IP connection. It should not happen.
-    unsigned int    clusterPort;
+    unsigned int    clusterPort = 0;
     cert_info_fun   getCertInfo;
     string          clusterHostname;
-    
+
 
     namespace {
         boost::shared_ptr<SimpleConnectionPool> connectionPool;
     }
 
-    void setConnectionPool(boost::shared_ptr<SimpleConnectionPool> pool) 
+    void setConnectionPool(boost::shared_ptr<SimpleConnectionPool> pool)
     {
         connectionPool = pool;
     }
 
     boost::shared_ptr<SimpleConnectionPool> getConnectionPool()
     {
-        if(!connectionPool)
+        if(!connectionPool && getCertInfo && !clusterHostname.empty())
             connectionPool.reset(new SimpleConnectionPool(clusterHostname, clusterPort, getCertInfo));
 
         return connectionPool;
@@ -56,22 +56,22 @@ namespace buffers {
 } // namespace buffers
 
 } // namespace config
-    
+
 
 namespace utils {
-    
+
     string tolower(string input) {
         boost::algorithm::to_lower(input);
         return input;
     }
-    
+
 } // namespace utils
 
-StorageHelperFactory::StorageHelperFactory() 
+StorageHelperFactory::StorageHelperFactory()
 {
 }
 
-StorageHelperFactory::~StorageHelperFactory() 
+StorageHelperFactory::~StorageHelperFactory()
 {
 }
 

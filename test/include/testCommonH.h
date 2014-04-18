@@ -11,7 +11,7 @@
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
 #include "boost/bind.hpp" 
-#include "glog/logging.h"
+#include "logging.h"
 
 using namespace testing;
 using namespace boost;
