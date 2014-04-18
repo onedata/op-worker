@@ -330,6 +330,8 @@ write(FileStr, Offset, Buf) ->
         ok ->
           {Storage_helper_info, FileId} = Response2,
           Res = storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf),
+
+          %% TODO - check if asynchronous processing needed
           case {is_integer(Res), event_production_enabled("write_event")} of
             {true, true} ->
               WriteEvent = [{"type", "write_event"}, {"user_dn", get(user_id)}, {"count", binary:referenced_byte_size(Buf)}],

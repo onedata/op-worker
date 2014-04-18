@@ -122,6 +122,7 @@ init([Type]) when Type =:= worker ; Type =:= ccm ; Type =:= ccm_test ->
     false -> ok
   end,
 
+  %% TODO: replace with permanent cache
   ets:new(?LFM_EVENT_PRODUCTION_ENABLED_ETS, [set, named_table, public]),
   ets:new(?WRITE_DISABLED_USERS, [set, named_table, public]),
   ets:new(?ACK_HANDLERS, [set, named_table, public]),

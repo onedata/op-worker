@@ -38,11 +38,24 @@
 %% TODO: consider using worker_host state instead
 -define(HANDLER_TREE_ID_ETS, handler_tree_id_ets).
 
+-ifdef(TEST).
+-define(REGISTER_DEFAULT_RULES, false).
+-else.
+-define(REGISTER_DEFAULT_RULES, true).
+-endif.
+
+-define(ProtocolVersion, 1).
+
 init(_Args) ->
   ets:new(?RULE_MANAGER_ETS, [named_table, public, set, {read_concurrency, true}]),
   ets:new(?PRODUCERS_RULES_ETS, [named_table, public, set, {read_concurrency, true}]),
   ets:new(?HANDLER_TREE_ID_ETS, [named_table, public, set]),
   ets:insert(?HANDLER_TREE_ID_ETS, {current_id, 1}),
+
+  case ?REGISTER_DEFAULT_RULES of
+    true -> erlang:send_after(30000, self(), {timer, {asynch, ?ProtocolVersion, register_default_rules}});
+    _ -> ok
+  end,
 	[].
 
 handle(_ProtocolVersion, ping) ->
@@ -109,6 +122,10 @@ handle(_ProtocolVersion, register_default_rules) ->
 
 handle(_ProtocolVersion, _Msg) ->
   ok.
+
+handle_cast(register_default_rules, State) ->
+  gen_server:call(?Dispatcher_Name, {rule_manager, 1, register_default_rules}),
+  {noreply, State};
 
 cleanup() ->
 	ok.

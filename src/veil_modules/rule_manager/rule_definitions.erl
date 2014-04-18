@@ -13,7 +13,6 @@
 %% ==================================================================
 
 -module(rule_definitions).
--author("Michal Sitko").
 
 -include("logging.hrl").
 -include("registered_names.hrl").
@@ -67,11 +66,16 @@ register_for_truncate_events() ->
 register_for_write_events(Bytes) ->
   EventHandler = fun(Event) ->
     UserDn = proplists:get_value("user_dn", Event),
-    case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
-      true ->
-        cluster_rengine:send_event(?ProtocolVersion, [{"type", "quota_exceeded_event"}, {"user_dn", UserDn}]);
-      _ ->
-        ok
+    try
+      case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
+        true ->
+          cluster_rengine:send_event(?ProtocolVersion, [{"type", "quota_exceeded_event"}, {"user_dn", UserDn}]);
+        _ ->
+          ok
+      end
+    catch
+      throw:{cannot_fetch_user, Error} ->
+        ?warning("cannot fetch user when checking if quota exceeded for user_dn: ~p, error: ~p", [UserDn, Error])
     end
   end,
 
@@ -124,12 +128,17 @@ get_rm_event_handler() ->
   fun(Event) ->
 
     CheckQuotaExceeded = fun(UserDn) ->
-      case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
-        false ->
-          change_write_enabled(UserDn, true),
-          false;
-        _ ->
-          true
+      try
+        case user_logic:quota_exceeded({dn, UserDn}, ?ProtocolVersion) of
+          false ->
+            change_write_enabled(UserDn, true),
+            false;
+          _ ->
+            true
+        end
+      catch
+        throw:{cannot_fetch_user, Error} ->
+          ?warning("cannot fetch user when checking if quota exceeded for user_dn: ~p, error: ~p", [UserDn, Error])
       end
     end,
 

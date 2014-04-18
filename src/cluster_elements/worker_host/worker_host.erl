@@ -215,15 +215,19 @@ handle_cast({asynch, ProtocolVersion, Msg, MsgId, FuseID}, State) ->
   HandlerTuple = ets:lookup(?ACK_HANDLERS, MsgId),
   case HandlerTuple of
     [{_, {Callback, SuccessFuseIds, FailFuseIds, Length, Pid}}] ->
-      NewSuccessFuseIds = [FuseID | SuccessFuseIds],
-      NewFailFuseIds = lists:delete(FuseID, FailFuseIds),
+      case lists:member(FuseID, FailFuseIds) of
+        true ->
+          NewSuccessFuseIds = [FuseID | SuccessFuseIds],
+          NewFailFuseIds = lists:delete(FuseID, FailFuseIds),
 
-      %% TODO: refactoring needed - Length not needed, we can replace NewFailFuseIds with AllFuseIds and then we will always have Length and we will not have to delete anything from this list
-      ets:insert(?ACK_HANDLERS, {MsgId, {Callback, NewSuccessFuseIds, NewFailFuseIds, Length, Pid}}),
-      case length(NewSuccessFuseIds) of
-        Length ->
-          % we dont need to cancel timer set with send_after which sends the same message - receiver process should be dead after call_on_complete_callback
-          Pid ! {call_on_complete_callback};
+          %% TODO: refactoring needed - Length not needed, we can replace NewFailFuseIds with AllFuseIds and then we will always have Length and we will not have to delete anything from this list
+          ets:insert(?ACK_HANDLERS, {MsgId, {Callback, NewSuccessFuseIds, NewFailFuseIds, Length, Pid}}),
+          case length(NewSuccessFuseIds) of
+            Length ->
+              % we dont need to cancel timer set with send_after which sends the same message - receiver process should be dead after call_on_complete_callback
+              Pid ! {call_on_complete_callback};
+            _ -> ok
+          end;
         _ -> ok
       end;
     _ -> ok

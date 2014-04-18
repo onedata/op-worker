@@ -48,7 +48,7 @@ init(_Args) ->
   ets:new(?EVENT_TREES_MAPPING, [named_table, public, set, {read_concurrency, true}]),
 
   Pid = self(),
-  erlang:send_after(5000, Pid, {timer, {asynch, 1, get_event_handlers}}),
+  erlang:send_after(5000, Pid, {timer, {asynch, 1, configure_event_handlers}}),
   ok.
 
 handle(_ProtocolVersion, ping) ->
@@ -68,7 +68,7 @@ handle(_ProtocolVersion, healthcheck) ->
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
-handle(ProtocolVersion, get_event_handlers) ->
+handle(ProtocolVersion, configure_event_handlers) ->
   gen_server:call(?Dispatcher_Name, {rule_manager, ProtocolVersion, self(), get_event_handlers}),
 
   receive
@@ -76,13 +76,13 @@ handle(ProtocolVersion, get_event_handlers) ->
       lists:foreach(fun({EventType, EventHandlerItem}) ->
         update_event_handler(1, EventType, EventHandlerItem) end, EventHandlers);
     _ ->
-      ?warning("rule_manager sent back unexpected structure for get_event_handlers")
+      ?warning("rule_manager get_event_handlers handler sent back unexpected structure")
   after 1000 ->
-    ?warning("rule manager did not replied for get_event_handlers")
+    ?warning("rule_manager get_event_handlers handler did not replied")
   end;
 
 handle(_ProtocolVersion, {final_stage_tree, _TreeId, _Event}) ->
-  ?warning("cluster_rengine final_stage_tree handler should be always called in subprocess tree process");
+  ?info("cluster_rengine final_stage_tree handler should be always called in subprocess tree process");
 
 handle(ProtocolVersion, {update_cluster_rengine, EventType, EventHandlerItem}) ->
   ?info("--- cluster_rengines update_cluster_rengine"),
@@ -92,7 +92,7 @@ handle(ProtocolVersion, {event_arrived, Event}) ->
   EventType = proplists:get_value("type", Event),
   case ets:lookup(?EVENT_TREES_MAPPING, EventType) of
     [] ->
-      %% event arrived but no handlers - ok
+      ?warning("No handler for event of type: ~p", [EventType]),
       ok;
     % mapping for event found - forward event
     [{_, EventToTreeMappings}] ->
@@ -188,6 +188,17 @@ create_process_tree_for_handler(ProtocolVersion, #event_handler_item{tree_id = T
     end
   end.
 
+%% fun_from_config/1
+%% ====================================================================
+%% @doc Returns function that can be called as proc_fun in sub_proc.
+%% Additionally returned function will satisfy another requirement - it
+%% returns non if processed event should not be processed further. Otherwise
+%% it returns event (in the form of proplist) that should be processed further.
+%% Returned function is construced according to event_stream_config passed
+%% as the argument.
+%% @end
+-spec fun_from_config(#event_stream_config{}) -> fun().
+%% ====================================================================
 fun_from_config(#event_stream_config{config = ActualConfig, wrapped_config = WrappedConfig}) ->
   WrappedFun = case WrappedConfig of
     undefined -> non;
