@@ -35,6 +35,8 @@
 % Convinience macro to print to screen (debug etc.)
 -define(dump(Term), io:format("~p~n", [Term])).
 
+% System limit values
+-define(ulimits_config_path,?prefix ++ "scripts/ulimits.cfg").
 
 main(Args) ->
 	{{Year,Month,Day},{Hour,Min,Sec}} = erlang:localtime(),
@@ -46,7 +48,7 @@ main(Args) ->
 		io_lib:fwrite("\n\n==============================\n~4..0w-~2..0w-~2..0w ~2..0w:~2..0w:~2..0w  [~s]\n\n", [Year, Month, Day, Hour, Min, Sec, ScriptArg]), [append]),
 	put(hostname, "@" ++ os:cmd("hostname -f") -- "\n"),
 	set_up_net_kernel(),
-		
+	get_ulimits_from_config(),
 	try
 		try lists:nth(1, Args) of
 			"start_veil" -> start_veil_nodes();
@@ -119,7 +121,7 @@ stop_db_node() ->
 start_db({db_node, _Name, Path}) ->
 	BigcouchStartScript = Path++"/"++?db_start_command_suffix,
 	NohupOut = Path++"/"++?nohup_output,
-	open_port({spawn, "nohup "++BigcouchStartScript++" > "++NohupOut++" 2>&1 &"}, [out]).
+	open_port({spawn, "sh -c \"" ++ get(set_ulimits_cmd) ++" ; "++"nohup "++BigcouchStartScript++" > "++NohupOut++" 2>&1 &" ++ "\" 2>&1 &"}, [out]).
 
 stop_db({db_node, _Name, Path}) ->
 	os:cmd("kill -TERM `ps aux | grep beam | grep "++Path++" | cut -d'\t' -f2 | awk '{print $2}'`").
@@ -157,7 +159,7 @@ start_worker({worker, Name, Path}) ->
 	{[MainCCM|OptCCMs], DBNodes, _WorkerList} = discover_cluster([OldMainCCM|OldOptCCMs]),
 
 	reconfigure_node(Name, Path, MainCCM, OptCCMs, DBNodes),
-	os:cmd(Path ++ atom_to_list(Name) ++ "/" ++ ?start_command_suffix).
+	os:cmd(get(set_ulimits_cmd) ++" ; "++Path ++ atom_to_list(Name) ++ "/" ++ ?start_command_suffix).
 
 
 % Stop a worker running on this machine, right after saving latest configuration
@@ -178,8 +180,8 @@ start_ccm_plus_worker({ccm, CCMName, CCMPath}, {worker, WorkerName, WorkerPath})
 	LongCCMName = atom_to_list(CCMName) ++ get(hostname),
 	case OldMainCCM =:= LongCCMName andalso length(OldOptCCMs) =:= 0 of
 		true -> 
-			os:cmd(CCMPath ++ atom_to_list(CCMName) ++ "/" ++ ?start_command_suffix),
-			os:cmd(WorkerPath ++ atom_to_list(WorkerName) ++ "/" ++ ?start_command_suffix);
+			os:cmd(get(set_ulimits_cmd) ++" ; "++CCMPath ++ atom_to_list(CCMName) ++ "/" ++ ?start_command_suffix),
+			os:cmd(get(set_ulimits_cmd) ++" ; "++WorkerPath ++ atom_to_list(WorkerName) ++ "/" ++ ?start_command_suffix);
 
 		false -> 	
 			{[MainCCM|OptCCMs], DBNodes, WorkerList} = discover_cluster([OldMainCCM|OldOptCCMs]),
@@ -197,10 +199,10 @@ start_ccm_plus_worker({ccm, CCMName, CCMPath}, {worker, WorkerName, WorkerPath})
 
 
 			reconfigure_node(CCMName, CCMPath, MainCCM, NewOptCCMs, DBNodes),
-			os:cmd(CCMPath ++ atom_to_list(CCMName) ++ "/" ++ ?start_command_suffix),
+			os:cmd(get(set_ulimits_cmd) ++" ; "++CCMPath ++ atom_to_list(CCMName) ++ "/" ++ ?start_command_suffix),
 
 			reconfigure_node(WorkerName, WorkerPath, MainCCM, NewOptCCMs, DBNodes),
-			os:cmd(WorkerPath ++ atom_to_list(WorkerName) ++ "/" ++ ?start_command_suffix)
+			os:cmd(get(set_ulimits_cmd) ++" ; " ++WorkerPath ++ atom_to_list(WorkerName) ++ "/" ++ ?start_command_suffix)
 	end.
 
 
@@ -289,8 +291,18 @@ reconfigure_and_restart_ccm(NodeName, MainCCM, OptCCMs, DBNodes) ->
 		_ -> skip
 	end.
 
-	
 
+get_ulimits_from_config() ->
+	case file:consult(?ulimits_config_path) of
+		{ok,[{open_files,OpenFiles},{process_limit,Processes}]} ->
+			put(set_ulimits_cmd,"ulimit -n "++OpenFiles++" ; ulimit -u "++Processes);
+		{ok,Terms} ->
+			?error("Wrong format of ~p file: ~p",[?ulimits_config_path,Terms]),
+			halt(1);
+		Err ->
+			?error("Cannot parse file ~p, error: ~p",[?ulimits_config_path,Err]),
+			halt(1)
+	end.
 
 % Ensure EPMD is running and set up net kernel
 set_up_net_kernel() ->
