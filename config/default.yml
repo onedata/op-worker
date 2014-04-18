@@ -64,6 +64,11 @@ veil_cluster_node_env:
       value: 10
 
   - parameter:
+      name: callback_ack_time
+      description: After callback_ack_time seconds node_manager stops wainting for ack
+      value: 10
+
+  - parameter:
       name: heart_beat
       description: How long (in sec) should worker sleep before next connection try (when it cannot connect to ccm)
       value: 60

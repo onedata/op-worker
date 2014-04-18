@@ -28,7 +28,7 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% Just for test purposes:
--export([send_push_msg/1]).
+-export([send_push_msg/1, send_push_msg_ack/1]).
 
 %% name of ets that store event_handler_item records registered in rule_manager as values and event types as keys
 -define(RULE_MANAGER_ETS, rule_manager).

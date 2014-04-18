@@ -24,12 +24,11 @@
 -define(MAX_CHILD_WAIT_TIME, 60000000).
 -define(MAX_CALCULATION_WAIT_TIME, 10000000).
 -define(SUB_PROC_CACHE_CLEAR_TIME, 2000).
--define(WAIT_FOR_ACK_MS, 4000).
 
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_link/3, stop/1, start_sub_proc/5, start_sub_proc/6, generate_sub_proc_list/1, generate_sub_proc_list/5, generate_sub_proc_list/6, send_to_user/4, send_to_user_with_ack/5]).
+-export([start_link/3, stop/1, start_sub_proc/5, start_sub_proc/6, generate_sub_proc_list/1, generate_sub_proc_list/5, generate_sub_proc_list/6, send_to_user/4, send_to_user_with_ack/5, send_to_fuses_with_ack/4]).
 -export([create_permanent_cache/1, create_permanent_cache/2, create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_sipmle_cache/3]).
 
 %% ====================================================================
@@ -899,7 +898,7 @@ send_to_user(UserKey, Message, MessageDecoder, ProtocolVersion) ->
 %% send_to_user_with_ack/5
 %% ====================================================================
 %% @doc Sends message with ack to all active fuses belonging to user. OnCompleteCallback function will be called in
-%% newly created proces when all acks will come back or timeout is reached.
+%% newly created process when all acks will come back or timeout is reached.
 -spec send_to_user_with_ack(UserKey :: user_key(), Message :: term(), MessageDecoder :: string(),
     OnCompleteCallback :: fun((SuccessFuseIds :: list(), FailFuseIds :: list()) -> term()), ProtocolVersion :: integer()) -> Result when
     Result :: ok | {error, Error :: term()}.
@@ -919,6 +918,14 @@ send_to_user_with_ack(UserKey, Message, MessageDecoder, OnCompleteCallback, Prot
       {error, Error}
   end.
 
+%% send_to_fuses_with_ack/4
+%% ====================================================================
+%% @doc Sends message with ack to all fuses from FuseIds list.
+%% OnComplete function will be called in newly created process when all acks will come back or timeout is reached.
+-spec send_to_fuses_with_ack(FuseIds :: list(string()), Message :: term(), MessageDecoder :: string(),
+    OnCompleteCallback :: fun((SuccessFuseIds :: list(), FailFuseIds :: list()) -> term())) -> Result when
+  Result :: ok | {error, Error :: term()}.
+%% ====================================================================
 send_to_fuses_with_ack(FuseIds, Message, MessageDecoder, OnCompleteCallback) ->
   try
     MsgId = gen_server:call({?Node_Manager_Name, node()}, get_next_callback_msg_id),
@@ -939,7 +946,8 @@ send_to_fuses_with_ack(FuseIds, Message, MessageDecoder, OnCompleteCallback) ->
     lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse_ack(FuseId, Message, MessageDecoder, MsgId) end, FuseIds),
 
     %% TODO change to receive .. after
-    erlang:send_after(?WAIT_FOR_ACK_MS, Pid, {call_on_complete_callback}),
+    {ok, CallbackAckTimeSeconds} = application:get_env(?APP_Name, callback_ack_time),
+    erlang:send_after(CallbackAckTimeSeconds * 1000, Pid, {call_on_complete_callback}),
     ok
   catch
     E1:E2 ->
