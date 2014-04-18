@@ -14,7 +14,9 @@
 #include <ctime>
 #include <boost/shared_ptr.hpp>
 #include <boost/enable_shared_from_this.hpp>
+#include <boost/atomic.hpp>
 #include "communicationHandler.h"
+#include "veilErrors.h"
 
 #define DEFAULT_POOL_SIZE 2
 #define MAX_CONNECTION_ERROR_COUNT 5
@@ -26,17 +28,17 @@ typedef std::list<std::pair<boost::shared_ptr<CommunicationHandler>, time_t> > c
 class SimpleConnectionPool : public boost::enable_shared_from_this<SimpleConnectionPool>
 {
 public:
-    
+
     enum PoolType {
         META_POOL = 0,  ///< Connection for meta data
         DATA_POOL       ///< Connection for file data
     };
-    
+
     struct ConnectionPoolInfo {
-        
+
         ConnectionPoolInfo(unsigned int s) : currWorkers(0), size(s) {}
         ConnectionPoolInfo() : size(DEFAULT_POOL_SIZE) {}
-        
+
         connection_pool_t connections;
         int currWorkers;
         unsigned int size;
@@ -44,7 +46,7 @@ public:
 
     SimpleConnectionPool(std::string hostname, int port, cert_info_fun, int metaPoolSize = DEFAULT_POOL_SIZE, int dataPoolSize = DEFAULT_POOL_SIZE);
     virtual ~SimpleConnectionPool();
-    
+
     virtual void setPoolSize(PoolType type, unsigned int);                  ///< Sets size of connection pool. Default for each pool is: 2
     virtual void setPushCallback(std::string fuseId, push_callback);        ///< Sets fuseID and callback function that will be registered for
                                                                             ///< PUSH channel for every new META connection
@@ -61,6 +63,11 @@ public:
                                                                                         ///< @deprecated Since selectConnection does not pass connection ownership, this
                                                                                         ///< method is useless, so it does nothing.
 
+    /**
+     * @returns Last error encountered while creating or managing connections.
+     */
+    error::Error getLastError() const;
+
 protected:
     std::string          m_hostname;
     int                  m_port;
@@ -68,31 +75,34 @@ protected:
     std::string          m_fuseId;
 
     push_callback        m_pushCallback;
-    
+
     boost::recursive_mutex      m_access;
     boost::condition_variable   m_accessCond;
     std::map<PoolType, ConnectionPoolInfo>  m_connectionPools;                      ///< Connection pool. @see SimpleConnectionPool::selectConnection
     std::list<std::string> m_hostnamePool;
-    
-    virtual boost::shared_ptr<CommunicationHandler> newConnection(PoolType type);   ///< Creates new active connection and adds it to connection pool. Convenience method for testing (makes connection mocking easier) 
+
+    virtual boost::shared_ptr<CommunicationHandler> newConnection(PoolType type);   ///< Creates new active connection and adds it to connection pool. Convenience method for testing (makes connection mocking easier)
     virtual std::list<std::string> dnsQuery(std::string hostname);                  ///< Fetch IP list from DNS for given hostname.
 
-    /// Increments givent int while constructing and deincrement while destructing. 
+    /// Increments givent int while constructing and deincrement while destructing.
     struct CounterRAII {
         int &c;
 
-        CounterRAII(int &c) 
-          : c(c) 
+        CounterRAII(int &c)
+          : c(c)
         {
             ++c;
         }
 
-        ~CounterRAII() 
+        ~CounterRAII()
         {
             --c;
         }
 
     };
+
+private:
+    boost::atomic<error::Error> m_lastError;
 };
 
 } // namespace veil

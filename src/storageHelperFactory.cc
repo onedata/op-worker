@@ -25,6 +25,8 @@ namespace config {
     cert_info_fun   getCertInfo;
     string          clusterHostname;
 
+    boost::atomic<bool> checkCertificate(true);
+
 
     namespace {
         boost::shared_ptr<SimpleConnectionPool> connectionPool;
