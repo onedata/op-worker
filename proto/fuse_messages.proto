@@ -160,12 +160,11 @@ message HandshakeAck {
     required string fuse_id = 1;
 }
 
-message CreateStorageTestFile {
+message CreateStorageTestFileRequest {
     required int32 storage_id = 1;
 }
 
-message CreateStorageTestFileAnswer {
-    required string answer = 1;
+message CreateStorageTestFileResponse {
     optional string relative_path = 2 [default = ""];
     optional string text = 3 [default = ""];
 }
@@ -174,10 +173,6 @@ message StorageTestFileModified {
     required int32  storage_id = 1;
     required string relative_path = 2;
     required string text = 3;
-}
-
-message StorageTestFileAck {
-    required bool answer = 1;
 }
 
 message GetStatFS {}
