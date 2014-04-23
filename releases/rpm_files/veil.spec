@@ -54,11 +54,13 @@ Veil service - allows installation of veil cluster nodes.
 %post
 chkconfig --add veil
 ln -s %{_prefix}/setup /usr/bin/veil_setup
+ln -s %{_prefix}/addusers /usr/bin/veil_addusers
 
 %preun
 %{_prefix}/scripts/erl_launcher escript %{_prefix}/scripts/init.escript stop
 chkconfig --del veil
 rm -f /usr/bin/veil_setup
+rm -f /usr/bin/veil_addusers
 
 %clean
 rm -rf $RPM_BUILD_ROOT

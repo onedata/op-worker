@@ -17,7 +17,7 @@
 
 
 % How often should comet process check for changes in current dir
--define(AUTOREFRESH_PERIOD, 500).
+-define(AUTOREFRESH_PERIOD, 1000).
 
 
 % Item is either a file or a dir represented in manager
@@ -216,7 +216,6 @@ reset_wire_accumulator() ->
     put(to_wire, []).
 
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Handling events
 api_event("escape_pressed", _, _) ->
     event({action, hide_popup}).
@@ -266,9 +265,6 @@ comet_loop_init(UserId, RequestedHostname) ->
     set_item_list_rev(item_list_md5(get_item_list())),
     set_clipboard_items([]),
     set_clipboard_type(none),
-
-
-    % Render elements depending on page state
     reset_wire_accumulator(),
     refresh_workspace(),
     do_wiring(),
@@ -793,18 +789,9 @@ grid_view_body() ->
                                  end;
                              _ -> <<"">>
                          end,
-            ImageUrl = case item_is_dir(Item) of
-                           true ->
-                               case FullPath of
-                                   "/groups" -> <<"/images/folder_groups64.png">>;
-                                   "/groups" ++ Rest -> case string:rstr(Rest, "/") of
-                                                            1 -> <<"/images/folder_groups64.png">>;
-                                                            _ -> <<"/images/folder64.png">>
-                                                        end;
-                                   _ -> <<"/images/folder64.png">>
-                               end;
-                           false ->
-                               <<"/images/file64.png">>
+            ImageUrl = case is_group_dir(FullPath) of
+                           true -> <<"/images/folder_groups64.png">>;
+                           false -> <<"/images/folder64.png">>
                        end,
             LinkID = <<"grid_item_", (integer_to_binary(Counter))/binary>>,
             % Item won't hightlight if the link is clicked.
@@ -908,18 +895,9 @@ list_view_body() ->
                                  end;
                              _ -> <<"">>
                          end,
-            ImageUrl = case item_is_dir(Item) of
-                           true ->
-                               case FullPath of
-                                   "/groups" -> <<"/images/folder_groups32.png">>;
-                                   "/groups" ++ Rest -> case string:rstr(Rest, "/") of
-                                                            1 -> <<"/images/folder_groups32.png">>;
-                                                            _ -> <<"/images/folder32.png">>
-                                                        end;
-                                   _ -> <<"/images/folder32.png">>
-                               end;
-                           false ->
-                               <<"/images/file32.png">>
+            ImageUrl = case is_group_dir(FullPath) of
+                           true -> <<"/images/folder_groups32.png">>;
+                           false -> <<"/images/folder32.png">>
                        end,
             LinkID = <<"list_item_", (integer_to_binary(Counter))/binary>>,
             % Item won't hightlight if the link is clicked.
@@ -1083,6 +1061,17 @@ item_list_md5(ItemList) ->
         end, <<"">>, ItemList).
 
 
+is_group_dir(Path) ->
+    case Path of
+        "/groups" -> true;
+        "/groups" ++ Rest -> case string:rstr(Rest, "/") of
+                                 1 -> true;
+                                 _ -> false
+                             end;
+        _ -> false
+    end.
+
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% logical_files_manager interfacing
 fs_get_attributes(Path) ->
@@ -1103,12 +1092,17 @@ fs_remove(Path) ->
 
 
 fs_remove_dir(DirPath) ->
-    ItemList = fs_list_dir(DirPath),
-    lists:foreach(
-        fun(Item) ->
-            fs_remove(item_path(Item))
-        end, ItemList),
-    logical_files_manager:rmdir(DirPath).
+    case is_group_dir(DirPath) of
+        true ->
+            skip;
+        false ->
+            ItemList = fs_list_dir(DirPath),
+            lists:foreach(
+                fun(Item) ->
+                    fs_remove(item_path(Item))
+                end, ItemList),
+            logical_files_manager:rmdir(DirPath)
+    end.
 
 
 fs_list_dir(Dir) ->

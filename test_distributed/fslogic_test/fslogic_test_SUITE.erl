@@ -55,9 +55,9 @@ groups_permissions_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   nodes_manager:wait_for_cluster_init(),
 
-  Team = "team1",
-  Team2 = "team2",
-  Team3 = "team3",
+  Team = ?TEST_GROUP,
+  Team2 = ?TEST_GROUP2,
+  Team3 = ?TEST_GROUP3,
   TestFile = "groups/" ++ Team ++ "/groups_permissions_test_file",
   TestFileNewName = TestFile ++ "2",
   TestFile2 = "groups/" ++ Team2 ++ "/groups_permissions_test_file",
@@ -74,7 +74,7 @@ groups_permissions_test(Config) ->
   ?assertEqual(ok, ConvertAns),
   DnList = [DN],
 
-  Login = "user1",
+  Login = ?TEST_USER,
   Name = "user1 user1",
   Teams = [Team],
   Email = "user1@email.net",
@@ -89,7 +89,7 @@ groups_permissions_test(Config) ->
   ?assertEqual(ok, ConvertAns2),
   DnList2 = [DN2],
 
-  Login2 = "user2",
+  Login2 = ?TEST_USER2,
   Name2 = "user2 user2",
   Email2 = "user2@email.net",
   {CreateUserAns2, UserDoc2} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, [Team, Team2], Email2, DnList2]),
@@ -333,7 +333,7 @@ concurrent_file_creation_test(Config) ->
 
   MainProc = self(),
   TestFun = fun(File) ->
-    spawn(Node1, fun() ->
+    spawn_link(Node1, fun() ->
       CreateAns = logical_files_manager:create(File),
       MainProc ! {create_ans, CreateAns}
     end)
@@ -463,7 +463,7 @@ groups_test(Config) ->
     %% files_manager call with given user's DN
     FM = fun(M, A, DN) ->
             Me = self(),
-            Pid = spawn(Node, fun() -> put(user_id, DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
+            Pid = spawn_link(Node, fun() -> put(user_id, DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
             receive
                 {Pid, Resp} -> Resp
             end
@@ -735,9 +735,9 @@ user_file_counting_test(Config) ->
   ?assertEqual(ok, ConvertAns),
   DnList = [DN],
 
-  Login = "user1",
+  Login = ?TEST_USER,
   Name = "user1 user1",
-  Teams = ["user1 team"],
+  Teams = [?TEST_GROUP],
   Email = "user1@email.net",
   {CreateUserAns, #veil_document{uuid = UserID1}} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
@@ -750,9 +750,9 @@ user_file_counting_test(Config) ->
   ?assertEqual(ok, ConvertAns2),
   DnList2 = [DN2],
 
-  Login2 = "user2",
+  Login2 = ?TEST_USER2,
   Name2 = "user2 user2",
-  Teams2 = ["user2 team"],
+  Teams2 = [?TEST_GROUP2],
   Email2 = "user2@email.net",
   {CreateUserAns2, #veil_document{uuid = UserID2}} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
   ?assertEqual(ok, CreateUserAns2),
@@ -859,7 +859,7 @@ user_file_size_test(Config) ->
   %% files_manager call with given user's DN
   FM = fun(M, A, DN) ->
     Me = self(),
-    Pid = spawn(Node, fun() -> put(user_id, DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
+    Pid = spawn_link(Node, fun() -> put(user_id, DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
     receive
       {Pid, Resp} -> Resp
     end
@@ -1183,20 +1183,24 @@ user_creation_test(Config) ->
   ?assertEqual(User, User2),
   ?assertEqual(false, Group =:= Group2),
 
-  {OwnStatus3, User3, Group3} = files_tester:get_owner(?TEST_ROOT ++ "/users/" ++ Login),
+  {OwnStatus3, User3, _Group3} = files_tester:get_owner(?TEST_ROOT ++ "/users/" ++ Login),
   ?assertEqual(ok, OwnStatus3),
   ?assertEqual(User, User3),
-  ?assertEqual(Group, Group3),
+
+  %% Groups are not changed currently in this context
+  %% ?assertEqual(Group, Group3),
 
   {OwnStatus4, User4, Group4} = files_tester:get_owner(?TEST_ROOT ++ "/groups/" ++ Team1),
   ?assertEqual(ok, OwnStatus4),
   ?assertEqual(User0, User4),
   ?assertEqual(Group2, Group4),
 
-  {OwnStatus5, User5, Group5} = files_tester:get_owner(?TEST_ROOT2 ++ "/users/" ++ Login),
+  {OwnStatus5, User5, _Group5} = files_tester:get_owner(?TEST_ROOT2 ++ "/users/" ++ Login),
   ?assertEqual(ok, OwnStatus5),
   ?assertEqual(User, User5),
-  ?assertEqual(Group, Group5),
+
+  %% Groups are not changed currently in this context
+  %% ?assertEqual(Group, Group5),
 
   {OwnStatus6, User6, Group6} = files_tester:get_owner(?TEST_ROOT2 ++ "/groups/" ++ Team1),
   ?assertEqual(ok, OwnStatus6),
@@ -1358,9 +1362,9 @@ dir_mv_test(Config) ->
   ?assertEqual(ok, ConvertAns),
   DnList = [DN],
 
-  Login = "user1",
+  Login = ?TEST_USER,
   Name = "user1 user1",
-  Teams = ["user1 team"],
+  Teams = [?TEST_GROUP],
   Email = "user1@email.net",
   {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
@@ -1435,9 +1439,9 @@ file_sharing_test(Config) ->
   ?assertEqual(ok, ConvertAns),
   DnList = [DN],
 
-  Login = "user1",
+  Login = ?TEST_USER,
   Name = "user1 user1",
-  Teams = ["user1 team"],
+  Teams = [?TEST_GROUP],
   Email = "user1@email.net",
   {CreateUserAns, User_Doc} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
@@ -1609,9 +1613,9 @@ fuse_requests_test(Config) ->
   ?assertEqual(ok, ConvertAns),
   DnList = [DN],
 
-  Login = "user1",
+  Login = ?TEST_USER,
   Name = "user1 user1",
-  Teams = ["user1 team"],
+  Teams = [?TEST_GROUP],
   Email = "user1@email.net",
   {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
@@ -1918,9 +1922,9 @@ users_separation_test(Config) ->
   ?assertEqual(ok, ConvertAns),
   DnList = [DN],
 
-  Login = "user1",
+  Login = ?TEST_USER,
   Name = "user1 user1",
-  Teams = ["user1 team"],
+  Teams = [?TEST_GROUP],
   Email = "user1@email.net",
   {CreateUserAns, #veil_document{uuid = UserID1}} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
@@ -1933,9 +1937,9 @@ users_separation_test(Config) ->
   ?assertEqual(ok, ConvertAns2),
   DnList2 = [DN2],
 
-  Login2 = "user2",
+  Login2 = ?TEST_USER2,
   Name2 = "user2 user2",
-  Teams2 = ["user2 team"],
+  Teams2 = [?TEST_GROUP2],
   Email2 = "user2@email.net",
   {CreateUserAns2, #veil_document{uuid = UserID2}} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
   ?assertEqual(ok, CreateUserAns2),

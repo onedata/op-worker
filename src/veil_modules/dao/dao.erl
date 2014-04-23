@@ -488,7 +488,7 @@ term_to_doc(Field) when is_pid(Field) ->
 term_to_doc(Field) when is_binary(Field) ->
     <<<<?RECORD_FIELD_BINARY_PREFIX>>/binary, Field/binary>>;   %% Binary is saved as string, so we add a prefix
 term_to_doc(Field) when is_list(Field) ->
-    case io_lib:printable_list(Field) of
+    case io_lib:printable_unicode_list(Field) of
         true -> dao_helper:name(Field);
         false -> [term_to_doc(X) || X <- Field]
     end;
@@ -510,14 +510,7 @@ term_to_doc(Field) when is_tuple(Field) ->
                 true ->
                     {_, Fields, _} = ?dao_record_info(RecName),
 
-                    % TODO temporary fix that enables use of diacritic chars in file names
-                    Value = case {RecName, lists:nth(Poz, Fields)} of
-                                % Exclusively for filenames, apply conversion to binary
-                                {file, name} -> list_to_binary(Elem);
-                                % Standard conversion
-                                _ -> term_to_doc(Elem)
-                            end,
-                    % </endfix>
+                    Value = term_to_doc(Elem),
 
                     {Poz + 1, dao_json:mk_field(AccIn, atom_to_list(lists:nth(Poz, Fields)), Value)};
                 false ->
@@ -547,10 +540,18 @@ doc_to_term(Field) when is_binary(Field) -> %% Binary type means that it is atom
     AtomPref = string:str(SField, ?RECORD_FIELD_ATOM_PREFIX),
     PidPref = string:str(SField, ?RECORD_FIELD_PID_PREFIX),
     if
-        BinPref == 1 -> list_to_binary(string:sub_string(SField, length(?RECORD_FIELD_BINARY_PREFIX) + 1));
-        AtomPref == 1 -> list_to_atom(string:sub_string(SField, length(?RECORD_FIELD_ATOM_PREFIX) + 1));
-        PidPref == 1 -> list_to_pid(string:sub_string(SField, length(?RECORD_FIELD_PID_PREFIX) + 1));
-        true -> SField
+	    BinPref == 1 -> list_to_binary(string:sub_string(SField, length(?RECORD_FIELD_BINARY_PREFIX) + 1));
+	    AtomPref == 1 -> list_to_atom(string:sub_string(SField, length(?RECORD_FIELD_ATOM_PREFIX) + 1));
+	    PidPref == 1 ->
+		PidString = string:sub_string(SField, length(?RECORD_FIELD_PID_PREFIX) + 1),
+		try list_to_pid(PidString) of %(temporary fix) todo change our pid storing mechanisms, so such conversion won't fail
+			Pid -> Pid
+		catch
+			_:_Error ->
+				?warning("Cannot convert document to term: cannot read PID ~p. Node missing?", [PidString]),
+				undefined
+		end;
+	    true -> unicode:characters_to_list(list_to_binary(SField))
     end;
 doc_to_term(Field) when is_list(Field) ->
     [doc_to_term(X) || X <- Field];

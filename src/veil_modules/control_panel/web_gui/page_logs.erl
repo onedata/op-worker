@@ -213,8 +213,8 @@ comet_loop(Counter, PageState = #page_state{first_log = FirstLog, auto_scroll = 
                 comet_loop(Counter, PageState)
         end
     catch _Type:_Msg ->
-        ?debug_stacktrace("~p ~p", [_Type, _Msg]),
-        gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}}),
+        ?error_stacktrace("Error in page_logs comet_loop - ~p: ~p", [_Type, _Msg]),
+        catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}}),
         gui_utils:insert_bottom("main_table", comet_error()),
         gui_utils:flush()
     end.
@@ -397,16 +397,13 @@ api_event("escape_pressed", _, _) ->
     event(hide_filters_popup).
 
 
-event(terminate) ->
-    gui_utils:kill_comet(get(comet_pid));
-
-
 event(init) ->
     put(filters, #page_state{}),
     % Start a comet process
     {ok, Pid} = gui_utils:comet(fun() -> comet_loop_init() end),
     put(comet_pid, Pid),
     % Subscribe for logs at central_logger
+    %% TODO - what if central loger is down?
     gen_server:call(?Dispatcher_Name, {central_logger, 1, {subscribe, Pid}});
 
 

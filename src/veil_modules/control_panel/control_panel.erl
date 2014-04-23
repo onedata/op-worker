@@ -26,7 +26,8 @@
 -define(static_paths, ["/css/", "/fonts/", "/images/", "/js/", "/n2o/"]).
 
 % Cowboy listener reference
--define(https_listener, http).
+-define(https_listener, https).
+-define(http_redirector_listener, http).
 -define(rest_listener, rest).
 
 %% ===================================================================
@@ -79,7 +80,26 @@ init(_Args) ->
             {timeout, Timeout}
         ]),
 
-    ok,
+
+    {ok, RedirectPort} = application:get_env(veil_cluster_node, control_panel_redirect_port),
+    {ok, RedirectNbAcceptors} = application:get_env(veil_cluster_node, control_panel_number_of_http_acceptors),
+    % Start the listener that will redirect all requests of http to https
+    RedirectDispatch = [
+        {'_', [
+            {'_', redirect_handler, []}
+        ]}
+    ],
+
+    {ok, _} = cowboy:start_http(?http_redirector_listener, RedirectNbAcceptors,
+        [
+            {port, RedirectPort}
+        ],
+        [
+            {env, [{dispatch, cowboy_router:compile(RedirectDispatch)}]},
+            {max_keepalive, 1},
+            {timeout, Timeout}
+        ]),
+
 
     % Get REST port from env and setup dispatch opts for cowboy
     {ok, RestPort} = application:get_env(veil_cluster_node, rest_port),
@@ -139,6 +159,7 @@ handle(_ProtocolVersion, _Msg) ->
 cleanup() ->
     cowboy:stop_listener(?https_listener),
     cowboy:stop_listener(?rest_listener),
+    cowboy:stop_listener(?http_redirector_listener),
     ok.
 
 

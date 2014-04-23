@@ -25,10 +25,6 @@
 
 %% TODO zmierzyć czy bardziej się opłaca przechowywać dane o modułach
 %% jako stan (jak teraz) czy jako ets i ewentualnie przejść na ets
-%% TODO - sprawdzić czy dispatcher wytrzyma obciążenie - alternatywą jest
-%% przejście z round robin na losowość co wyłacza updatowanie stanu
-%% Można też wyłączyć potwierdzenie znajdowania noda co
-%% da jeszcze większe przyspieszenie
 
 %% ====================================================================
 %% Test API
@@ -134,112 +130,145 @@ handle_call({get_workers, Module}, _From, State) ->
   {reply, get_workers(Module, State), State};
 
 handle_call({Task, ProtocolVersion, AnsPid, MsgId, Request}, _From, State) ->
-  Ans = get_worker_node(Task, Request, State),
-  case Ans of
-    {Node, NewState} ->
-      case Node of
-        non ->
-          case Task of
-            central_logger -> ok;
-            _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
-          end,
-          {reply, worker_not_found, State};
-        _N ->
-          gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}),
-          {reply, ok, NewState}
-      end;
-    Other -> {reply, Other, State}
+  case State#dispatcher_state.asnych_mode of
+    true ->
+      forward_request(false, Task, Request, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}, State);
+    false ->
+      Ans = get_worker_node(Task, Request, State),
+      case Ans of
+        {Node, NewState} ->
+          case Node of
+            non ->
+              case Task of
+                central_logger -> ok;
+                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+              end,
+              {reply, worker_not_found, State};
+            _N ->
+              gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}),
+              {reply, ok, NewState}
+          end;
+        Other -> {reply, Other, State}
+      end
   end;
 
 handle_call({Task, ProtocolVersion, AnsPid, Request}, _From, State) ->
-  Ans = get_worker_node(Task, Request, State),
-  case Ans of
-    {Node, NewState} ->
-      case Node of
-        non ->
-          case Task of
-            central_logger -> ok;
-            _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
-          end,
-          {reply, worker_not_found, State};
-        _N ->
-          gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, {proc, AnsPid}}),
-          {reply, ok, NewState}
-      end;
-    Other -> {reply, Other, State}
+  case State#dispatcher_state.asnych_mode of
+    true ->
+      forward_request(false, Task, Request, {synch, ProtocolVersion, Request, {proc, AnsPid}}, State);
+    false ->
+      Ans = get_worker_node(Task, Request, State),
+      case Ans of
+        {Node, NewState} ->
+          case Node of
+            non ->
+              case Task of
+                central_logger -> ok;
+                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+              end,
+              {reply, worker_not_found, State};
+            _N ->
+              gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, {proc, AnsPid}}),
+              {reply, ok, NewState}
+          end;
+        Other -> {reply, Other, State}
+      end
   end;
 
 handle_call({Task, ProtocolVersion, Request}, _From, State) ->
-  Ans = get_worker_node(Task, Request, State),
-  case Ans of
-    {Node, NewState} ->
-      case Node of
-        non ->
-          case Task of
-            central_logger -> ok;
-            _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
-          end,
-          {reply, worker_not_found, State};
-        _N ->
-          gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request}),
-          {reply, ok, NewState}
-      end;
-    Other -> {reply, Other, State}
+  case State#dispatcher_state.asnych_mode of
+    true ->
+      forward_request(false, Task, Request, {asynch, ProtocolVersion, Request}, State);
+    false ->
+      Ans = get_worker_node(Task, Request, State),
+      case Ans of
+        {Node, NewState} ->
+          case Node of
+            non ->
+              case Task of
+                central_logger -> ok;
+                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+              end,
+              {reply, worker_not_found, State};
+            _N ->
+              gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request}),
+              {reply, ok, NewState}
+          end;
+        Other -> {reply, Other, State}
+      end
   end;
 
 handle_call({node_chosen, {Task, ProtocolVersion, AnsPid, Request}}, _From, State) ->
-  Ans = check_worker_node(Task, Request, State),
-  case Ans of
-    {Node, NewState} ->
-      case Node of
-        non ->
-          case Task of
-            central_logger -> ok;
-            _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
-          end,
-          {reply, worker_not_found, State};
-        _N ->
-          gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, {proc, AnsPid}}),
-          {reply, ok, NewState}
-      end;
-    Other -> {reply, Other, State}
+  case State#dispatcher_state.asnych_mode of
+    true ->
+      forward_request(true, Task, Request, {synch, ProtocolVersion, Request, {proc, AnsPid}}, State);
+    false ->
+      Ans = check_worker_node(Task, Request, State),
+      case Ans of
+        {Node, NewState} ->
+          case Node of
+            non ->
+              case Task of
+                central_logger -> ok;
+                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+              end,
+              {reply, worker_not_found, State};
+            _N ->
+              gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, {proc, AnsPid}}),
+              {reply, ok, NewState}
+          end;
+        Other -> {reply, Other, State}
+      end
   end;
 
 handle_call({node_chosen, {Task, ProtocolVersion, AnsPid, MsgId, Request}}, _From, State) ->
-  Ans = check_worker_node(Task, Request, State),
-  case Ans of
-    {Node, NewState} ->
-      case Node of
-        non ->
-          case Task of
-            central_logger -> ok;
-            _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
-          end,
-          {reply, worker_not_found, State};
-        _N ->
-          gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}),
-          {reply, ok, NewState}
-      end;
-    Other -> {reply, Other, State}
+  case State#dispatcher_state.asnych_mode of
+    true ->
+      forward_request(true, Task, Request, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}, State);
+    false ->
+      Ans = check_worker_node(Task, Request, State),
+      case Ans of
+        {Node, NewState} ->
+          case Node of
+            non ->
+              case Task of
+                central_logger -> ok;
+                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+              end,
+              {reply, worker_not_found, State};
+            _N ->
+              gen_server:cast({Task, Node}, {synch, ProtocolVersion, Request, MsgId, {proc, AnsPid}}),
+              {reply, ok, NewState}
+          end;
+        Other -> {reply, Other, State}
+      end
   end;
 
 handle_call({node_chosen, {Task, ProtocolVersion, Request}}, _From, State) ->
-  Ans = check_worker_node(Task, Request, State),
-  case Ans of
-    {Node, NewState} ->
-      case Node of
-        non ->
-          case Task of
-            central_logger -> ok;
-            _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
-          end,
-          {reply, worker_not_found, State};
-        _N ->
-          gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request}),
-          {reply, ok, NewState}
-      end;
-    Other -> {reply, Other, State}
+  case State#dispatcher_state.asnych_mode of
+    true ->
+      forward_request(true, Task, Request, {asynch, ProtocolVersion, Request}, State);
+    false ->
+      Ans = check_worker_node(Task, Request, State),
+      case Ans of
+        {Node, NewState} ->
+          case Node of
+            non ->
+              case Task of
+                central_logger -> ok;
+                _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+              end,
+              {reply, worker_not_found, State};
+            _N ->
+              gen_server:cast({Task, Node}, {asynch, ProtocolVersion, Request}),
+              {reply, ok, NewState}
+          end;
+        Other -> {reply, Other, State}
+      end
   end;
+
+handle_call({set_asnych_mode, AsnychMode}, _From, State) ->
+  {reply, ok, State#dispatcher_state{asnych_mode = AsnychMode}};
 
 handle_call({get_callback, Fuse}, _From, State) ->
   {reply, get_callback(Fuse), State};
@@ -263,6 +292,7 @@ handle_call({check_worker_node, Module}, _From, State) ->
   handle_test_call({check_worker_node, Module}, _From, State);
 
 handle_call(_Request, _From, State) ->
+  ?error("Error: wrong call: ~p", [_Request]),
   {reply, wrong_request, State}.
 
 %% handle_test_call/3
@@ -310,61 +340,69 @@ handle_test_call(_Request, _From, State) ->
 handle_cast({update_state, NewStateNum, NewCallbacksNum}, State) ->
   case {State#dispatcher_state.state_num == NewStateNum, State#dispatcher_state.callbacks_num == NewCallbacksNum} of
     {true, true} ->
-      gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewStateNum, NewCallbacksNum}),
-      {noreply, State};
+      gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewStateNum, NewCallbacksNum});
     {false, true} ->
-      {Ans, NewState} = pull_state(State),
-
-      case Ans of
-        ok ->
-          lager:info([{mod, ?MODULE}], "Dispatcher had old state number, data updated"),
-          gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState#dispatcher_state.state_num, NewCallbacksNum});
-        _ ->
-          lager:error([{mod, ?MODULE}], "Dispatcher had old state number but could not update data"),
-          error
-      end,
-
-      {noreply, NewState};
+      spawn(fun() ->
+        lager:info([{mod, ?MODULE}], "Dispatcher had old state number, starting update"),
+        {WorkersList, StateNum} = pull_state(State#dispatcher_state.state_num),
+        gen_server:cast(?Dispatcher_Name, {update_pulled_state, WorkersList, StateNum, non, non})
+      end);
     {true, false} ->
-      case pull_callbacks() of
-        error ->
-          lager:error([{mod, ?MODULE}], "Dispatcher had old callbacks number but could not update data"),
-          {noreply, State};
-        Number ->
-          lager:info([{mod, ?MODULE}], "Dispatcher had old callbacks number, data updated"),
-          gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewStateNum, Number}),
-          {noreply, State#dispatcher_state{callbacks_num = Number}}
-      end;
+      spawn(fun() ->
+        lager:info([{mod, ?MODULE}], "Dispatcher had old callbacks number, starting update"),
+        {AnsList, AnsNum} = pull_callbacks(State#dispatcher_state.callbacks_num),
+        gen_server:cast(?Dispatcher_Name, {update_pulled_state, non, non, AnsList, AnsNum})
+      end);
     {false, false} ->
-      {Ans, NewState} = pull_state(State),
+      spawn(fun() ->
+        lager:info([{mod, ?MODULE}], "Dispatcher had old state number, starting update"),
+        {WorkersList, StateNum} = pull_state(State#dispatcher_state.state_num),
+        lager:info([{mod, ?MODULE}], "Dispatcher had old callbacks number, starting update"),
+        {AnsList, AnsNum} = pull_callbacks(State#dispatcher_state.callbacks_num),
+        gen_server:cast(?Dispatcher_Name, {update_pulled_state, WorkersList, StateNum, AnsList, AnsNum})
+      end)
+  end,
+  {noreply, State};
 
-      case Ans of
-        ok ->
-          lager:info([{mod, ?MODULE}], "Dispatcher had old state number, data updated"),
-          ok;
-        _ ->
-          lager:error([{mod, ?MODULE}], "Dispatcher had old state number but could not update data"),
-          error
+handle_cast({update_pulled_state, WorkersList, StateNum, CallbacksList, CallbacksNum}, State) ->
+  NewState = case WorkersList of
+    non ->
+      State;
+    error ->
+      lager:error([{mod, ?MODULE}], "Dispatcher had old state number but could not update data"),
+      State;
+    _ ->
+      TmpState = update_workers(WorkersList, State#dispatcher_state.state_num, State#dispatcher_state.current_load, State#dispatcher_state.avg_load, ?Modules),
+      lager:info([{mod, ?MODULE}], "Dispatcher state updated, state num: ~p", [StateNum]),
+      TmpState#dispatcher_state{state_num = StateNum}
+  end,
+
+  NewState2 = case CallbacksList of
+    non ->
+      NewState;
+    error ->
+      lager:error([{mod, ?MODULE}], "Dispatcher had old callbacks number but could not update data"),
+      NewState;
+    _ ->
+      UpdateCallbacks = fun({Fuse, NodesList}) ->
+        ets:insert(?CALLBACKS_TABLE, {Fuse, NodesList})
       end,
+      lists:foreach(UpdateCallbacks, CallbacksList),
+      lager:info([{mod, ?MODULE}], "Dispatcher callbacks updated"),
+      NewState#dispatcher_state{callbacks_num = CallbacksNum}
+  end,
 
-      case pull_callbacks() of
-        error ->
-          lager:error([{mod, ?MODULE}], "Dispatcher had old callbacks number but could not update data"),
-          gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState#dispatcher_state.state_num, NewCallbacksNum}),
-          {noreply, NewState};
-        Number ->
-          lager:info([{mod, ?MODULE}], "Dispatcher had old callbacks number, data updated"),
-          gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState#dispatcher_state.state_num, Number}),
-          {noreply, NewState#dispatcher_state{callbacks_num = Number}}
-      end
-  end;
+  gen_server:cast(?Node_Manager_Name, {dispatcher_updated, NewState2#dispatcher_state.state_num, NewState2#dispatcher_state.callbacks_num}),
+  {noreply, NewState2};
 
 handle_cast({update_workers, WorkersList, RequestMap, NewStateNum, CurLoad, AvgLoad}, _State) ->
   NewState = update_workers(WorkersList, NewStateNum, CurLoad, AvgLoad, ?Modules),
+  lager:info([{mod, ?MODULE}], "Dispatcher state updated, state num: ~p", [NewStateNum]),
   {noreply, NewState#dispatcher_state{request_map = RequestMap}};
 
 handle_cast({update_workers, WorkersList, RequestMap, NewStateNum, CurLoad, AvgLoad, Modules}, _State) ->
   NewState = update_workers(WorkersList, NewStateNum, CurLoad, AvgLoad, Modules),
+  lager:info([{mod, ?MODULE}], "Dispatcher state updated, state num: ~p", [NewStateNum]),
   {noreply, NewState#dispatcher_state{request_map = RequestMap}};
 
 handle_cast({update_loads, CurLoad, AvgLoad}, State) ->
@@ -382,6 +420,7 @@ handle_cast({delete_callback, FuseId, Node, CallbacksNum}, State) ->
   {noreply, State#dispatcher_state{callbacks_num = CallbacksNum}};
 
 handle_cast(_Msg, State) ->
+  ?error("Error: wrong cast: ~p", [_Msg]),
   {noreply, State}.
 
 %% handle_info/2
@@ -396,6 +435,7 @@ handle_cast(_Msg, State) ->
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 handle_info(_Info, State) ->
+  ?error("Error: wrong info: ~p", [_Info]),
   {noreply, State}.
 
 
@@ -586,20 +626,18 @@ update_workers(WorkersList, SNum, CLoad, ALoad, Modules) ->
 %% pull_state/1
 %% ====================================================================
 %% @doc Pulls workers list from cluster manager.
--spec pull_state(State :: term()) -> Result when
-  Result :: {ok, NewState} | {error, State},
-  State :: term(),
-  NewState :: term().
+-spec pull_state(CurrentStateNum :: integer()) -> Result when
+  Result :: {WorkersList, StateNum} | {error, StateNum},
+  StateNum :: integer(),
+  WorkersList :: list().
 %% ====================================================================
-pull_state(State) ->
+pull_state(CurrentStateNum) ->
   try
-    {WorkersList, StateNum} = gen_server:call({global, ?CCM}, get_workers, 1000),
-    NewState = update_workers(WorkersList, State#dispatcher_state.state_num, State#dispatcher_state.current_load, State#dispatcher_state.avg_load, ?Modules),
-    {ok, NewState#dispatcher_state{state_num = StateNum}}
+    gen_server:call({global, ?CCM}, get_workers, 1000)
   catch
     _:_ ->
       lager:error([{mod, ?MODULE}], "Dispatcher on node: ~s: can not pull workers list", [node()]),
-      {error, State}
+      {error, CurrentStateNum}
   end.
 
 %% get_workers/2
@@ -702,25 +740,20 @@ get_callback(Fuse) ->
       not_found
   end.
 
-%% pull_callbacks/0
+%% pull_callbacks/1
 %% ====================================================================
 %% @doc Pulls info about callbacks from CCM
--spec pull_callbacks() -> Result when
+-spec pull_callbacks(OldCallbacksNum :: integer()) -> Result when
   Result :: error | CallbacksNum,
   CallbacksNum :: integer().
 %% ====================================================================
-pull_callbacks() ->
+pull_callbacks(OldCallbacksNum) ->
   try
-    {CallbacksList, CallbacksNum} = gen_server:call({global, ?CCM}, get_callbacks, 1000),
-    UpdateCallbacks = fun({Fuse, NodesList}) ->
-      ets:insert(?CALLBACKS_TABLE, {Fuse, NodesList})
-    end,
-    lists:foreach(UpdateCallbacks, CallbacksList),
-    CallbacksNum
+    gen_server:call({global, ?CCM}, get_callbacks, 1000)
   catch
     _:_ ->
       lager:error([{mod, ?MODULE}], "Dispatcher on node: ~s: can not pull callbacks list", [node()]),
-      error
+      {error, OldCallbacksNum}
   end.
 
 %% get_callbacks/0
@@ -848,4 +881,85 @@ choose_node_by_map(Module, Msg, State) ->
       end
   end.
 
-
+%% forward_request/5
+%% ====================================================================
+%% @doc Forwards request. Uses asynchronous process if RequestMap is used.
+-spec forward_request(NodeChosen :: boolean(), Task :: atom(), Request :: term(), Message :: term(), State) -> Result when
+  Result :: {reply, Ans, State},
+  Ans :: wrong_worker_type | worker_not_found | ok,
+  State :: term().
+%% ====================================================================
+forward_request(NodeChosen, Task, Request, Message, State) ->
+  ModulesList = proplists:get_value(Task, State#dispatcher_state.modules_const_list, wrong_worker_type),
+  Ans = case ModulesList of
+    wrong_worker_type -> wrong_worker_type;
+    _ ->
+      ModulesListLength = length(ModulesList),
+      case ModulesListLength of
+        0 -> worker_not_found;
+        1 ->
+          [Node | _] = ModulesList,
+          gen_server:cast({Task, Node}, Message),
+          ok;
+        _ ->
+          RequestMapList = State#dispatcher_state.request_map,
+          RequestMap = proplists:get_value(Task, RequestMapList, non),
+          case RequestMap of
+            non ->
+              Action = case NodeChosen of
+                true ->
+                  ThisNode = node(),
+                  case lists:member(ThisNode, ModulesList) of
+                    true ->
+                      gen_server:cast({Task, ThisNode}, Message),
+                      forwarded;
+                    false ->
+                      ok
+                  end;
+                false ->
+                  ok
+              end,
+              case Action of
+                forwarded ->
+                  ok;
+                _ ->
+                  random:seed(now()),
+                  Node2 = lists:nth(random:uniform(ModulesListLength), ModulesList),
+                  gen_server:cast({Task, Node2}, Message)
+              end;
+            _ ->
+              spawn(fun() ->
+                try
+                  RequestNum = RequestMap(Message),
+                  case RequestNum of
+                    Num when is_integer(Num) ->
+                      Node3 = lists:nth(Num rem ModulesListLength + 1, ModulesList),
+                      gen_server:cast({Task, Node3}, Message);
+                    WrongAns ->
+                      lager:error("Dispatcher (request map) wrong answer for module ~p and request ~p: ~p", [Task, Message, WrongAns]),
+                      random:seed(now()),
+                      Node4 = lists:nth(random:uniform(ModulesListLength), ModulesList),
+                      gen_server:cast({Task, Node4}, Message)
+                  end
+                catch
+                  Type:Error ->
+                    lager:error("Dispatcher (request map) error for module ~p and request ~p: ~p:~p ~n ~p", [Task, Message, Type, Error, erlang:get_stacktrace()]),
+                    random:seed(now()),
+                    Node5 = lists:nth(random:uniform(ModulesListLength), ModulesList),
+                    gen_server:cast({Task, Node5}, Message)
+                end
+              end)
+          end,
+          ok
+      end
+  end,
+  case Ans of
+    ok ->
+      {reply, ok, State};
+    Other ->
+      case Task of
+        central_logger -> ok;
+        _ -> ?warning("Worker not found, dispatcher state: ~p, task: ~p, request: ~p", [State, Task, Request])
+      end,
+      {reply, Other, State}
+  end.

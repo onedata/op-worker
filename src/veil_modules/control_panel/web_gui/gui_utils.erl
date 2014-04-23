@@ -17,7 +17,7 @@
 -export([user_logged_in/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0]).
 -export([redirect_to_login/1, redirect_from_login/0, maybe_redirect/4]).
 -export([apply_or_redirect/3, apply_or_redirect/4, top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
--export([comet/1, init_comet/2, comet_supervisor/2, flush/0]).
+-export([comet/1, init_comet/2, comet_supervisor/2, is_comet_process/0, flush/0]).
 -export([register_escape_event/1, script_for_enter_submission/2, script_to_bind_element_click/2]).
 -export([update/2, replace/2, insert_top/2, insert_bottom/2, insert_before/2, insert_after/2, remove/1]).
 -export([to_list/1, to_binary/1, join_to_binary/1]).
@@ -109,15 +109,7 @@ dn_and_storage_defined() ->
 -spec can_view_logs() -> boolean().
 %% ====================================================================
 can_view_logs() ->
-    try
-        Teams = user_logic:get_teams(wf:session(user_doc)),
-        lists:foldl(
-            fun(Team, Acc) ->
-                Acc orelse (string:str(Team, "plggveilfs") > 0)
-            end, false, Teams)
-    catch _:_ ->
-        false
-    end.
+    user_logic:get_role(wf:session(user_doc)) /= user.
 
 
 %% maybe_redirect/4
@@ -212,7 +204,13 @@ apply_or_redirect(Module, Fun, Args, NeedDN) ->
     catch Type:Message ->
         ?error_stacktrace("Error in ~p - ~p:~p", [Module, Type, Message]),
         page_error:redirect_with_error(<<"Internal server error">>,
-            <<"Server encountered an unexpected error. Please contact the site administrator if the problem persists.">>)
+            <<"Server encountered an unexpected error. Please contact the site administrator if the problem persists.">>),
+        case is_comet_process() of
+            true ->
+                flush();
+            false ->
+                skip
+        end
     end.
 
 
@@ -379,6 +377,16 @@ comet_supervisor(CallingPid, CometPid) ->
     receive
         {'DOWN', MonitorRef, _, _, _} -> exit(CometPid, kill)
     end.
+
+
+%% is_comet_process/0
+%% ====================================================================
+%% @doc Returns true if calling process is a comet process.
+%% @end
+-spec is_comet_process() -> boolean().
+%% ====================================================================
+is_comet_process() ->
+    get(ws_process) /= undefined.
 
 
 %% flush/0

@@ -21,6 +21,10 @@ vm_arguments:
       description: Increase number of concurrent ports/sockets
       value: -env ERL_MAX_PORTS 4096
 
+  - argument:
+      name: max_processes
+      description: Increase number of processes
+      value: +P 1000000
 
 
 veil_cluster_node_env:
@@ -75,13 +79,6 @@ veil_cluster_node_env:
       value: 1000
 
   - parameter:
-      name: hot_swapping_time
-      description: |
-        Time in ms after witch code of loops will be reloaded
-        e.g. if value is 10000 hot_swap message will be sent to loops 10 seconds after release_handler:install_release execution
-      value: 2000
-
-  - parameter:
       name: ssl_cert_path
       description: Path to certificate used by ranch_ssl
       value: |
@@ -121,24 +118,24 @@ veil_cluster_node_env:
       name: ports_in_use
       description: Ports used by application, that need to be free before veil can start
       value: |
-          ["control_panel_port","dns_port","dispatcher_port","rest_port"]
+          ["control_panel_port","control_panel_redirect_port","dns_port","dispatcher_port","rest_port"]
       erlang_term: |
-          [control_panel_port,dns_port,dispatcher_port,rest_port]
+          [control_panel_port,control_panel_redirect_port,dns_port,dispatcher_port,rest_port]
 
   # LOGGING
   - parameter:
       name: current_loglevel
       description: |
         Current loglevel in the cluster. Logs with lower importance will be completely discarded
-        Available loglevels are 0-7, respectively: debug, info, notice, warning, error, critical, alert, emergency 
-      value: 0
+        Available loglevels are 0-7, respectively: debug, info, notice, warning, error, critical, alert, emergency
+      value: 1
 
   - parameter:
       name: default_loglevel
       description: |
-        Used to reset loglevel to default. 
-        Available loglevels are 0-7, respectively: debug, info, notice, warning, error, critical, alert, emergency 
-      value: 0
+        Used to reset loglevel to default.
+        Available loglevels are 0-7, respectively: debug, info, notice, warning, error, critical, alert, emergency
+      value: 1
 
   - parameter:
       name: include_stacktrace
@@ -172,6 +169,11 @@ veil_cluster_node_env:
       description: path to dir containing CA and CRL certs used by GSI handler
       value: cacerts
 
+  - parameter:
+      name: crl_update_interval
+      description: the interval between CRL updates done by GSI handler
+      value: 3600000
+
 
   # CONTROL PANEL
   - parameter:
@@ -179,6 +181,11 @@ veil_cluster_node_env:
       description: Port on which control_panel is available
       value: 443
       # NOTE! to change gui port, n2o entry in sys.config must be modified too!
+
+  - parameter:
+      name: control_panel_redirect_port
+      description: Port on which standard HTTP will be opened to redirect requests to HTTPS
+      value: 80
 
   - parameter:
       name: rest_port
@@ -196,6 +203,11 @@ veil_cluster_node_env:
       name: control_panel_number_of_acceptors
       description: Number of accepting processes in control_panel listener
       value: 100
+
+  - parameter:
+      name: control_panel_number_of_http_acceptors
+      description: Number of accepting processes on port 80 (redirecting to https)
+      value: 50
 
   - parameter:
       name: control_panel_max_keepalive
@@ -220,7 +232,7 @@ veil_cluster_node_env:
   - parameter:
       name: control_panel_download_buffer
       description: Buffer size used to send file to a client
-      value: 1048576 
+      value: 1048576
 
   - parameter:
       name: control_panel_upload_buffer

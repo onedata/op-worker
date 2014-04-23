@@ -94,6 +94,7 @@ permissions_test(Config) ->
   %% Get FuseId
   {ok, Socket2} = wss:connect(Host, Port, [{certfile, Cert2}, {cacertfile, Cert2}]),
   FuseId2 = wss:handshakeInit(Socket2, "hostname", []),
+  wss:handshakeAck(Socket2,FuseId2),
 
   {Status0, _, _, Id0, _, AnswerOpt0} = create_file(Host, Cert2, Port, TestFile, FuseId2),
   ?assertEqual("ok", Status0),
@@ -322,11 +323,12 @@ storage_helpers_management_test(Config) ->
   {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
 
-  {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
-  FuseId1 = wss:handshakeInit(Socket, "hostname", [{testvar1, "testvalue1"}, {group_id, "group1"}]), %% Get first fuseId
-  FuseId2 = wss:handshakeInit(Socket, "hostname", [{testvar1, "testvalue1"}, {group_id, "group2"}]), %% Get second fuseId
-  wss:close(Socket),
-
+  {ok, Socket1} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
+  {ok, Socket2} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
+  FuseId1 = wss:handshakeInit(Socket1, "hostname", [{testvar1, "testvalue1"}, {group_id, "group1"}]), %% Get first fuseId
+  FuseId2 = wss:handshakeInit(Socket2, "hostname", [{testvar1, "testvalue1"}, {group_id, "group2"}]), %% Get second fuseId
+  wss:handshakeAck(Socket1,FuseId1),
+  wss:handshakeAck(Socket2,FuseId2),
   Fuse_groups = [#fuse_group_info{name = "group2", storage_helper = #storage_helper_info{name = ST_Helper, init_args = ?ARG_TEST_ROOT2}}],
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, [ST_Helper, ?ARG_TEST_ROOT, Fuse_groups]),
   ?assertEqual(ok, InsertStorageAns),
@@ -356,6 +358,8 @@ storage_helpers_management_test(Config) ->
   ?assertEqual("ok", Status4),
   ?assertEqual(list_to_atom(?VOK), Answer4),
 
+  wss:close(Socket1),
+  wss:close(Socket2),
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
@@ -414,35 +418,19 @@ helper_requests_test(Config) ->
   ?assertEqual(ok, ConvertAns2),
   DnList2 = [DN2],
 
+%% 	try to create user who is not present in system (it should fail during dirs chown)
   Login2 = "user2",
   Name2 = "user2 user2",
   Team2 = "user2 team",
   Teams2 = [Team2],
   Email2 = "user2@email.net",
-  {CreateUserAns2, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
-  ?assertEqual(ok, CreateUserAns2),
-
-  %% Get FuseId
-  {ok, Socket2} = wss:connect(Host, Port, [{certfile, Cert2}, {cacertfile, Cert2}]),
-  FuseId2 = wss:handshakeInit(Socket2, "hostname", []),
-	wss:close(Socket2),
-  {User2_Status0, Helper0, _, User2_Id, _, User2_AnswerOpt0} = create_file(Host, Cert2, Port, TestFile, FuseId2),
-  ?assertEqual("ok", User2_Status0),
-  ?assertEqual(?VOK, User2_AnswerOpt0),
-  ?assertEqual(ST_Helper, Helper0),
-
-  {CreationAckStatus, CreationAckAnswerOpt} = send_creation_ack(Host, Cert2, Port, TestFile, FuseId2),
-  ?assertEqual("ok", CreationAckStatus),
-  ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt),
-
-  {User2_Status2, User2_Answer2} = create_file_on_storage(Host, Cert2, Port, User2_Id),
-  ?assertEqual("ok", User2_Status2),
-  ?assertEqual(list_to_atom(?VEREMOTEIO), User2_Answer2),
+  CreateUserAns2 = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
+  ?assertEqual({error,dir_chown_error}, CreateUserAns2),
 
   %% Get FuseId
   {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   FuseId = wss:handshakeInit(Socket, "hostname", []),
-	wss:close(Socket),
+  wss:handshakeAck(Socket,FuseId),
 
   {Status, Helper, _, Id, _Validity, AnswerOpt} = create_file(Host, Cert, Port, TestFile, FuseId),
   ?assertEqual("ok", Status),
@@ -474,7 +462,9 @@ helper_requests_test(Config) ->
   {OwnStatus, User, Group} = files_tester:get_owner(?TEST_ROOT ++ "/users/" ++ Dir ++ "/" ++ NameEnding),
   ?assertEqual(ok, OwnStatus),
   ?assert(User /= 0),
-  ?assert(Group /= 0),
+
+  %% Group is not set for files in user-only-context
+  %% ?assert(Group /= 0),
 
   {WriteStatus, WriteAnswer, BytesWritten} = write(Host, Cert, Port, Id, 0, list_to_binary("abcdefgh")),
   ?assertEqual("ok", WriteStatus),
@@ -515,16 +505,6 @@ helper_requests_test(Config) ->
   ?assertEqual(?VOK, ReadAnswer5),
   ?assertEqual("abc12", binary_to_list(ReadData5)),
 
-  %% The file was not created with ok asnwer because of chmod fail (user not present in the system)
-  %% However it is still present at storage
-  {DeleteStatus, DeleteAnswer} = delete_file_on_storage(Host, Cert2, Port, User2_Id),
-  ?assertEqual("ok", DeleteStatus),
-  ?assertEqual(list_to_atom(?VOK), DeleteAnswer),
-
-  {Status4, Answer4} = delete_file(Host, Cert2, Port, TestFile, FuseId2),
-  ?assertEqual("ok", Status4),
-  ?assertEqual(list_to_atom(?VOK), Answer4),
-
   {Status3, Answer3} = delete_file_on_storage(Host, Cert, Port, Id),
   ?assertEqual("ok", Status3),
   ?assertEqual(list_to_atom(?VOK), Answer3),
@@ -533,18 +513,15 @@ helper_requests_test(Config) ->
   ?assertEqual("ok", Status4),
   ?assertEqual(list_to_atom(?VOK), Answer4),
 
+  wss:close(Socket),
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
   ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team1], ?ProtocolVersion])),
-  ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/" ++ Team2], ?ProtocolVersion])),
   ?assertEqual(ok, rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_file, ["groups/"], ?ProtocolVersion])),
 
   RemoveUserAns = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN}]),
-  ?assertEqual(ok, RemoveUserAns),
-
-  RemoveUserAns2 = rpc:call(FSLogicNode, user_logic, remove_user, [{dn, DN2}]),
-  ?assertEqual(ok, RemoveUserAns2).
+  ?assertEqual(ok, RemoveUserAns).
 
 %% ====================================================================
 %% SetUp and TearDown functions
@@ -598,7 +575,6 @@ create_file(Host, Cert, Port, FileName, FuseID) ->
 
   wss:send(Socket, MessageBytes),
   {SendAns, Ans} = wss:recv(Socket, 5000),
-	wss:close(Socket),
   ?assertEqual(ok, SendAns),
 
   wss:close(Socket),

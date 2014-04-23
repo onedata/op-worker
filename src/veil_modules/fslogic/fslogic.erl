@@ -193,7 +193,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, upda
             throw(invalid_updatetimes_request);
         _ -> ok
     end,
-    lager:debug("Updating times for file: ~p, Request: ~p", [FileName, Record]),
+    ?debug("Updating times for file: ~p, Request: ~p", [FileName, Record]),
     case FileNameFindingAns of
         ok ->
             case get_file(ProtocolVersion, FileName, FuseID) of
@@ -348,7 +348,7 @@ handle_fuse_message(ProtocolVersion, Record, FuseID) when is_record(Record, getf
     {FileNameFindingAns, FileName} = get_full_file_name(Record#getfileattr.file_logic_name, getfileattr),
     case FileNameFindingAns of
       ok ->
-        lager:debug("FileAttr for ~p", [FileName]),
+        ?debug("FileAttr for ~p", [FileName]),
         {DocFindStatus, FileDoc} = get_file(ProtocolVersion, FileName, FuseID),
         getfileattr(ProtocolVersion, DocFindStatus, FileDoc);
       ?VEPERM -> #fileattr{answer = ?VEPERM, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = ""};
@@ -1058,7 +1058,7 @@ get_waiting_file(ProtocolVersion, File, FuseID) ->
   Result :: term().
 %% ====================================================================
 get_file_helper(ProtocolVersion, File, FuseID, Fun) ->
-    lager:debug("get_file(File: ~p, FuseID: ~p)", [File, FuseID]),
+    ?debug("get_file(File: ~p, FuseID: ~p)", [File, FuseID]),
     case string:tokens(File, "/") of
         [?GROUPS_BASE_DIR_NAME, GroupName | _] -> %% Check if group that user is tring to access is avaliable to him
             case get(user_id) of %% Internal call, allow all group access
@@ -1363,7 +1363,15 @@ get_new_file_id(File, UserDoc, SHInfo, ProtocolVersion) ->
       end
   end,
 
-  File_id_beg ++ dao_helper:gen_uuid() ++ re:replace(File, "/", "___", [global, {return,list}]).
+  WithoutSpecial = lists:foldl(fun(Char, Ans) ->
+    case Char > 255 of
+      true ->
+        Ans;
+      false ->
+        [Char | Ans]
+    end
+  end, [], lists:reverse(File)),
+  File_id_beg ++ dao_helper:gen_uuid() ++ re:replace(WithoutSpecial, "/", "___", [global, {return,list}]).
 
 %% create_dirs/4
 %% ====================================================================
@@ -1375,8 +1383,7 @@ get_new_file_id(File, UserDoc, SHInfo, ProtocolVersion) ->
 create_dirs(Count, CountingBase, SHInfo, TmpAns) ->
   case Count > CountingBase of
     true ->
-      {S1,S2,S3} = now(),
-      random:seed(S1,S2,S3),
+      random:seed(now()),
       DirName = TmpAns ++ integer_to_list(random:uniform(CountingBase)) ++ "/",
       case storage_files_manager:mkdir(SHInfo, DirName) of
         ok -> create_dirs(Count div CountingBase, CountingBase, SHInfo, DirName);
@@ -1658,7 +1665,7 @@ getfileattr(ProtocolVersion, DocFindStatus, FileDoc) ->
 
       #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime, type = Type, size = Size, uname = UName, gname = GName, uid = UID, gid = UID, links = Links};
     {error, file_not_found} ->
-      lager:debug("FileAttr: ENOENT"),
+      ?debug("FileAttr: ENOENT"),
       #fileattr{answer = ?VENOENT, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = "", links = -1};
     _ ->
       #fileattr{answer = ?VEREMOTEIO, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = "", links = -1}
@@ -1726,7 +1733,14 @@ check_file_perms(FileName, UserDocStatus, UserDoc, FileDoc, CheckType) ->
 update_parent_ctime(Dir, CTime) ->
     case fslogic_utils:strip_path_leaf(Dir) of
         [?PATH_SEPARATOR] -> ok;
-        ParentPath -> gen_server:call(?Dispatcher_Name, {fslogic, 1, #veil_request{subject = get(user_id), request = {internal_call, #updatetimes{file_logic_name = ParentPath, mtime = CTime}}}})
+        ParentPath ->
+          try
+            gen_server:call(?Dispatcher_Name, {fslogic, 1, #veil_request{subject = get(user_id), request = {internal_call, #updatetimes{file_logic_name = ParentPath, mtime = CTime}}}})
+          catch
+            E1:E2 ->
+              lager:error("update_parent_ctime error: ~p:~p", [E1, E2]),
+              error
+          end
     end.
 
 %% Verify filename

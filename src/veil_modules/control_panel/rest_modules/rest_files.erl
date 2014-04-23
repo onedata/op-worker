@@ -171,8 +171,8 @@ put(Req, <<"1.0">>, _Id, _Data) ->
 %% ====================================================================
 handle_multipart_data(Req, _Version, Method, Id) ->
     case Method of
-        <<"POST">> -> file_transfer_handler:handle_rest_upload(Req, Id, false);
-        <<"PUT">> -> file_transfer_handler:handle_rest_upload(Req, Id, true)
+        <<"POST">> -> file_upload_handler:handle_rest_upload(Req, Id, false);
+        <<"PUT">> -> file_upload_handler:handle_rest_upload(Req, Id, true)
     end.
 
 

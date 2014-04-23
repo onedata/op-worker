@@ -65,7 +65,8 @@
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-mkdir(DirName) ->
+mkdir(DirNameStr) ->
+  DirName = check_utf(DirNameStr),
   {ModeStatus, NewFileLogicMode} = get_mode(DirName),
   case ModeStatus of
     ok ->
@@ -93,7 +94,8 @@ mkdir(DirName) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-rmdir(DirName) ->
+rmdir(DirNameStr) ->
+  DirName = check_utf(DirNameStr),
   Record = #deletefile{file_logic_name = DirName},
   {Status, TmpAns} = contact_fslogic(Record),
   case Status of
@@ -115,7 +117,9 @@ rmdir(DirName) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-mv(From, To) ->
+mv(FromStr, ToStr) ->
+  From = check_utf(FromStr),
+  To = check_utf(ToStr),
   Record = #renamefile{from_file_logic_name = From, to_file_logic_name  = To},
   {Status, TmpAns} = contact_fslogic(Record),
   case Status of
@@ -137,7 +141,8 @@ mv(From, To) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-chown(FileName, Uname, Uid) ->
+chown(FileNameStr, Uname, Uid) ->
+  FileName = check_utf(FileNameStr),
   Record = #changefileowner{file_logic_name = FileName, uname = Uname, uid = Uid},
   {Status, TmpAns} = contact_fslogic(Record),
   case Status of
@@ -160,14 +165,16 @@ chown(FileName, Uname, Uid) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-ls(DirName, ChildrenNum, Offset) ->
+ls(DirNameStr, ChildrenNum, Offset) ->
+  DirName = check_utf(DirNameStr),
   Record = #getfilechildren{dir_logic_name = DirName, children_num = ChildrenNum, offset = Offset},
   {Status, TmpAns} = contact_fslogic(Record),
   case Status of
     ok ->
       Response = TmpAns#filechildren.answer,
       case Response of
-        ?VOK -> {ok, TmpAns#filechildren.child_logic_name};
+        % TODO delete map when GUI will use N20
+        ?VOK -> {ok, lists:map(fun(Child) -> binary_to_list(unicode:characters_to_binary(Child)) end, TmpAns#filechildren.child_logic_name)};
         _ -> {logical_file_system_error, Response}
       end;
     _ -> {Status, TmpAns}
@@ -186,7 +193,8 @@ ls(DirName, ChildrenNum, Offset) ->
 getfileattr({uuid, UUID}) ->
   getfileattr(getfileattr, UUID);
 
-getfileattr(FileName) ->
+getfileattr(FileNameStr) ->
+  FileName = check_utf(FileNameStr),
   Record = #getfileattr{file_logic_name = FileName},
   getfileattr(internal_call, Record).
 
@@ -241,7 +249,8 @@ getfileattr(Message, Value) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-read(File, Offset, Size) ->
+read(FileStr, Offset, Size) ->
+  File = check_utf(FileStr),
   {Response, Response2} = getfilelocation(File),
       case Response of
         ok ->
@@ -262,7 +271,8 @@ read(File, Offset, Size) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-write(File, Buf) ->
+write(FileStr, Buf) ->
+  File = check_utf(FileStr),
   {Response, Response2} = getfilelocation(File),
       case Response of
         ok ->
@@ -283,7 +293,8 @@ write(File, Buf) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-write(File, Offset, Buf) ->
+write(FileStr, Offset, Buf) ->
+  File = check_utf(FileStr),
   {Response, Response2} = getfilelocation(File),
       case Response of
         ok ->
@@ -304,7 +315,8 @@ write(File, Offset, Buf) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-write_from_stream(File, Buf) ->
+write_from_stream(FileStr, Buf) ->
+  File = check_utf(FileStr),
   {Response, Response2} = getfilelocation(File),
   case Response of
     ok ->
@@ -325,7 +337,8 @@ write_from_stream(File, Buf) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-create(File) ->
+create(FileStr) ->
+  File = check_utf(FileStr),
   {ModeStatus, NewFileLogicMode} = get_mode(File),
   case ModeStatus of
     ok ->
@@ -374,7 +387,8 @@ create(File) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-truncate(File, Size) ->
+truncate(FileStr, Size) ->
+  File = check_utf(FileStr),
   {Response, Response2} = getfilelocation(File),
       case Response of
         ok ->
@@ -395,7 +409,8 @@ truncate(File, Size) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-delete(File) ->
+delete(FileStr) ->
+  File = check_utf(FileStr),
   {Response, Response2} = getfilelocation(File),
       case Response of
         ok ->
@@ -434,7 +449,8 @@ delete(File) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-change_file_perm(FileName, NewPerms) ->
+change_file_perm(FileNameStr, NewPerms) ->
+  FileName = check_utf(FileNameStr),
   Record = #changefileperms{file_logic_name = FileName, perms = NewPerms},
   {Status, TmpAns} = contact_fslogic(Record),
   case Status of
@@ -463,7 +479,8 @@ change_file_perm(FileName, NewPerms) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-exists(FileName) ->
+exists(FileNameStr) ->
+  FileName = check_utf(FileNameStr),
   {FileNameFindingAns, File} = fslogic:get_full_file_name(FileName),
   case FileNameFindingAns of
     ok ->
@@ -511,24 +528,30 @@ contact_fslogic(Message, Value) ->
             _ -> put(files_manager_msg_id, 0)
           end,
 
-  CallAns = case Message of
-    internal_call ->
-      UserID = get(user_id),
-      case UserID of
-        undefined -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {internal_call, Value}});
-        _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, #veil_request{subject = UserID, request = {internal_call, Value}}})
-      end;
-    _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {Message, Value}})
-  end,
+  try
+    CallAns = case Message of
+      internal_call ->
+        UserID = get(user_id),
+        case UserID of
+          undefined -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {internal_call, Value}});
+          _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, #veil_request{subject = UserID, request = {internal_call, Value}}})
+        end;
+      _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {Message, Value}})
+    end,
 
-  case CallAns of
-    ok ->
-      receive
-        {worker_answer, MsgId, Resp} -> {ok, Resp}
-      after 7000 ->
-        {error, timeout}
-      end;
-    _ -> {error, CallAns}
+    case CallAns of
+      ok ->
+        receive
+          {worker_answer, MsgId, Resp} -> {ok, Resp}
+        after 7000 ->
+          {error, timeout}
+        end;
+      _ -> {error, CallAns}
+    end
+  catch
+    E1:E2 ->
+      lager:error("Logical files manager: error during contact with fslogic: ~p:~p", [E1, E2]),
+      {error, dispatcher_error}
   end.
 
 %% get_file_by_uuid/1
@@ -563,7 +586,8 @@ get_file_user_dependent_name_by_uuid(UUID) ->
         UserDN ->
           case dao_lib:apply(dao_users, get_user, [{dn, UserDN}], 1) of
             {ok, #veil_document { record=#user { login=Login } } } ->
-              {ok, string:sub_string(FullPath, length(Login ++ "/") + 1)};
+              % TODO delete format change when GUI will use N20
+              {ok, binary_to_list(unicode:characters_to_binary(string:sub_string(FullPath, length(Login ++ "/") + 1)))};
             {ErrorGeneral, ErrorDetail} ->
               {ErrorGeneral, ErrorDetail}
           end
@@ -584,7 +608,8 @@ get_file_user_dependent_name_by_uuid(UUID) ->
 %% ====================================================================
 get_file_name_by_uuid(UUID) ->
   case get_file_by_uuid(UUID) of
-    {ok, #veil_document{record = FileRec}} -> {ok, FileRec#file.name};
+    % TODO delete format change when GUI will use N20
+    {ok, #veil_document{record = FileRec}} -> {ok, binary_to_list(unicode:characters_to_binary(FileRec#file.name))};
     _ -> {error, {get_file_by_uuid, UUID}}
   end.
 
@@ -648,7 +673,8 @@ create_standard_share(File) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-create_share(File, Share_With) ->
+create_share(FileStr, Share_With) ->
+  File = check_utf(FileStr),
   {Status, FullName} = fslogic:get_full_file_name(File),
   {Status2, UID} = fslogic:get_user_id(),
   case {Status, Status2} of
@@ -719,7 +745,8 @@ add_share(Share_info) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-get_share({file, File}) ->
+get_share({file, FileStr}) ->
+  File = check_utf(FileStr),
   {Status, FullName} = fslogic:get_full_file_name(File),
   case Status of
     ok ->
@@ -751,7 +778,8 @@ get_share(Key) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-remove_share({file, File}) ->
+remove_share({file, FileStr}) ->
+  File = check_utf(FileStr),
   {Status, FullName} = fslogic:get_full_file_name(File),
   case Status of
     ok ->
@@ -961,3 +989,21 @@ get_mode(FileName) ->
     undefined -> {error, undefined};
     _ -> TmpAns
   end.
+
+%% check_utf/1
+%% ====================================================================
+%% @doc Checks if string is in proper format and converts it if needed.
+%% @end
+-spec check_utf(FileName :: string()) -> string().
+%% ====================================================================
+% TODO delete format change when GUI will use N20
+check_utf(FileName) when is_list(FileName) ->
+  case io_lib:printable_unicode_list(FileName) of
+    true ->
+      FileName;
+    false ->
+      unicode:characters_to_list(list_to_binary(FileName))
+  end;
+
+check_utf(FileName) ->
+  FileName.

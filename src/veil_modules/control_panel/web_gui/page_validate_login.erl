@@ -51,10 +51,19 @@ body() ->
                         wf:user(Login),
                         wf:session(user_doc, UserDoc),
                         gui_utils:redirect_from_login()
-                    catch Type:Message ->
-                        ?error_stacktrace("Error in validate_login - ~p:~p", [Type, Message]),
-                        page_error:redirect_with_error("Internal server error",
-                            "Server encountered an unexpected error. Please contact the site administrator if the problem persists.")
+                    catch
+                        throw:dir_creation_error ->
+                            lager:error("Error in validate_login - ~p:~p~n~p", [throw, dir_creation_error, erlang:get_stacktrace()]),
+                            page_error:redirect_with_error("User creation error",
+                                "Server could not create user directories. Please contact the site administrator if the problem persists.");
+                        throw:dir_chown_error ->
+                            lager:error("Error in validate_login - ~p:~p~n~p", [throw, dir_chown_error, erlang:get_stacktrace()]),
+                            page_error:redirect_with_error("User creation error",
+                                "Server could not change owner of user directories. Please contact the site administrator if the problem persists.");
+                        Type:Message ->
+                            lager:error("Error in validate_login - ~p:~p~n~p", [Type, Message, erlang:get_stacktrace()]),
+                            page_error:redirect_with_error("Internal server error",
+                                "Server encountered an unexpected error. Please contact the site administrator if the problem persists.")
                     end
             end
     end.
