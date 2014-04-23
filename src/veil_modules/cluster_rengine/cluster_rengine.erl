@@ -60,6 +60,7 @@ handle(ProtocolVersion, EventMessage) when is_record(EventMessage, eventmessage)
 
   AdditionalProperties = [{"user_dn", get(user_id)}, {"fuse_id", get(fuse_id)}],
   Event = Properties ++ AdditionalProperties,
+  ?debug("Event from client arrived, type: ~p", [proplists:lookup("type", Event)]),
   handle(ProtocolVersion, {event_arrived, Event ++ AdditionalProperties});
 
 handle(_ProtocolVersion, healthcheck) ->

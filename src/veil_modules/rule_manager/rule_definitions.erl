@@ -35,6 +35,7 @@
 register_quota_exceeded_handler() ->
   EventHandler = fun(Event) ->
     UserDn = proplists:get_value("user_dn", Event),
+    ?debug("Quota exceeded for user: ~p", [UserDn]),
     change_write_enabled(UserDn, false)
   end,
   EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
