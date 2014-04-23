@@ -43,11 +43,10 @@
 
 %% Template points to the template file, which will be filled with content
 main() ->
-    case gui_utils:user_logged_in() of
-        false ->
-            gui_utils:redirect_to_login(true),
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+    case gui_utils:maybe_redirect(true, false, false, true) of
         true ->
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+        false ->
             case gui_utils:can_view_logs() of
                 false ->
                     wf:redirect(<<"/">>),

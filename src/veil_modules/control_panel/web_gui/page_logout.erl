@@ -22,7 +22,9 @@ title() -> <<"Logout page">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    wf:logout(),
+    wf:user(undefined),
+    wf:session(user_doc, undefined),
+    %wf:logout(), % Not yet implemented in n2o stable realease
     #panel{style = <<"position: relative;">>, body =
     [
         #panel{class = <<"alert alert-success login-page">>, body = [

@@ -17,11 +17,10 @@
 
 %% Template points to the template file, which will be filled with content
 main() ->
-    case gui_utils:user_logged_in() and gui_utils:dn_and_storage_defined() of
-        false ->
-            gui_utils:redirect_to_login(true),
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+    case gui_utils:maybe_redirect(true, true, true, true) of
         true ->
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+        false ->
             #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}
     end.
 

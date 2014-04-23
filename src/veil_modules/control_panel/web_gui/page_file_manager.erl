@@ -30,11 +30,10 @@
 
 %% Check if user is logged in and has dn defined.
 main() ->
-    case gui_utils:user_logged_in() and gui_utils:dn_and_storage_defined() of
-        false ->
-            gui_utils:redirect_to_login(true),
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+    case gui_utils:maybe_redirect(true, true, true, true) of
         true ->
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+        false ->
             #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}
     end.
 
@@ -88,7 +87,7 @@ manager_submenu() ->
                     <<"fui-folder">>, {action, show_popup, [create_directory]}) ++
                     tool_button("tb_upload_files", <<"Upload file(s)">>, <<"padding: 18px 14px;">>,
                         <<"fui-plus-inverted">>, {action, show_popup, [file_upload]}) ++
-                    tool_button_and_dummy("tb_share", <<"Share">>, <<"padding: 18px 14px;">>,
+                    tool_button_and_dummy("tb_share_file", <<"Share">>, <<"padding: 18px 14px;">>,
                         <<"fui-link">>, {action, show_popup, [share_file]})
 
                 },
@@ -319,7 +318,10 @@ comet_loop(IsUploadInProgress) ->
         end
 
     catch Type:Message ->
-        ?error_stacktrace("Error in file_manager comet_loop - ~p:~p", [Type, Message])
+        ?error_stacktrace("Error in file_manager comet_loop - ~p:~p", [Type, Message]),
+        page_error:redirect_with_error(<<"Internal server error">>,
+            <<"Server encountered an unexpected error. Please contact the site administrator if the problem persists.">>),
+        gui_utils:flush()
     end.
 
 
@@ -430,7 +432,7 @@ refresh_tool_buttons() ->
     NFiles = length(get_item_list()),
     IsDir = try item_is_dir(item_find(lists:nth(1, get_selected_items()))) catch _:_ -> false end,
     enable_tool_button("tb_up_one_level", get_working_directory() /= "/"),
-    enable_tool_button("tb_share", (Count =:= 1) andalso (not IsDir)),
+    enable_tool_button("tb_share_file", (Count =:= 1) andalso (not IsDir)),
     enable_tool_button("tb_rename", Count =:= 1),
     enable_tool_button("tb_remove", Count > 0),
     enable_tool_button("tb_cut", Count > 0),

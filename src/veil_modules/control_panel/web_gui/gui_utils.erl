@@ -15,7 +15,7 @@
 
 -export([get_requested_hostname/0, get_requested_page/0, get_user_dn/0]).
 -export([user_logged_in/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0]).
--export([redirect_to_login/1, redirect_from_login/0]).
+-export([redirect_to_login/1, redirect_from_login/0, maybe_redirect/4]).
 -export([apply_or_redirect/3, apply_or_redirect/4, top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
 -export([comet/1, init_comet/2, comet_supervisor/2, flush/0]).
 -export([register_escape_event/1, script_for_enter_submission/2, script_to_bind_element_click/2]).
@@ -117,6 +117,38 @@ can_view_logs() ->
             end, false, Teams)
     catch _:_ ->
         false
+    end.
+
+
+%% maybe_redirect/4
+%% ====================================================================
+%% @doc Decides if user can view the page, depending on arguments.
+%% Returns false if no redirection is needed.
+%% Otherwise, it issues a redirection and returns true.
+%% Setting "SaveSourcePage" on true will allow a redirect back from login.
+%% NOTE: Should be called from page:main().
+%% @end
+-spec maybe_redirect(boolean(), boolean(), boolean(), boolean()) -> ok.
+%% ====================================================================
+maybe_redirect(NeedLogin, NeedDN, NeedStorage, SaveSourcePage) ->
+    case NeedLogin and (not user_logged_in()) of
+        true ->
+            gui_utils:redirect_to_login(SaveSourcePage),
+            true;
+        false ->
+            case NeedDN and (get_user_dn() =:= undefined) of
+                true ->
+                    wf:redirect(<<"/manage_account">>),
+                    true;
+                false ->
+                    case NeedStorage and (not storage_defined()) of
+                        true ->
+                            wf:redirect(<<"/manage_account">>),
+                            true;
+                        false ->
+                            false
+                    end
+            end
     end.
 
 
