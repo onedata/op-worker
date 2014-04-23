@@ -121,8 +121,9 @@ websocket_handle({Type, Data}, Req, State) ->
   ?warning("Unknown WebSocket request. Type: ~p, Payload: ~p", [Type, Data]),
   {ok, Req, State}.
 
-handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #createstoragetestfilerequest{storage_id = StorageId} = TestReq, MsgId, Answer_type}, #hander_state{peer_dn = DnString} = State) ->
-  ?info("Create storage test file request: ~p", [TestReq]),
+handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #createstoragetestfilerequest{storage_id = StorageId} = Test, MsgId, Answer_type}, #hander_state{peer_dn = DnString} = State) ->
+  ?debug("Create storage test file request: ~p", [Test]),
+  lager:info("=======> Create storage test file request: ~p", [Test]),
   Login = %% Fetch user's login
   case dao_lib:apply(dao_users, get_user, [{dn, DnString}], ProtocolVersion) of
     {ok, #veil_document{record = #user{login = UserLogin}}} ->
@@ -131,7 +132,7 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #createstoragetestfiler
       ?error("VeilClient storage test file creation failed. User ~p data is not available due to DAO error: ~p", [DnString, Error]),
       throw({no_user_found_error, Error, MsgId})
   end,
-  Path = "users/" ++ Login,
+  Path = "users/" ++ Login ++ "/vfs_storage.test",
   Length = 20,
   Text = list_to_binary(lists:foldl(fun(_, Acc) -> [random:uniform(93) + 33 | Acc] end, [], lists:seq(1, Length))),
   case dao_lib:apply(dao_vfs, get_storage, [{id, StorageId}], ProtocolVersion) of
@@ -139,12 +140,34 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #createstoragetestfiler
       StorageHelperInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, StorageInfo),
       case storage_files_manager:create(StorageHelperInfo, Path) of
         ok -> case storage_files_manager:write(StorageHelperInfo, Path, Text) of
-                Length -> {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #createstoragetestfileresponse{relative_path = Path, text = Text})}, Req, State};
-                _ -> {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #createstoragetestfileresponse{relative_path = "", text = ""})}, Req, State}
+                Length ->
+                  {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #createstoragetestfileresponse{relative_path = Path, text = Text})}, Req, State};
+                _ ->
+                  {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #createstoragetestfileresponse{relative_path = "", text = ""})}, Req, State}
               end;
-        _ -> {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #createstoragetestfileresponse{relative_path = Path, text = Text})}, Req, State}
+        _ ->
+          {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #createstoragetestfileresponse{relative_path = Path, text = Text})}, Req, State}
       end;
-    _ -> {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #createstoragetestfileresponse{relative_path = Path, text = Text})}, Req, State}
+    _ ->
+      {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #createstoragetestfileresponse{relative_path = Path, text = Text})}, Req, State}
+  end;
+
+handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #storagetestfilemodified{storage_id = StorageId, relative_path = Path, text = ExpectedText} = Test, MsgId, Answer_type}, State) ->
+  ?debug("Storage test file modified: ~p", [Test]),
+  lager:info("=======> Storage test file modified: ~p", [Test]),
+  case dao_lib:apply(dao_vfs, get_storage, [{id, StorageId}], ProtocolVersion) of
+    {ok, #veil_document{record = StorageInfo}} ->
+      StorageHelperInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, StorageInfo),
+      case storage_files_manager:read(StorageHelperInfo, Path, 0, length(ExpectedText)) of
+        BinaryText ->
+          ActualText = binary_to_list(BinaryText),
+          Answer = ExpectedText =:= ActualText,
+          {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #storagetestfilemodifiedack{answer = Answer})}, Req, State};
+        _ ->
+          {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #storagetestfilemodifiedack{answer = false})}, Req, State}
+      end;
+    _ ->
+      {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #storagetestfilemodifiedack{answer = false})}, Req, State}
   end;
 
 %% Internal websocket_handle method implementation
