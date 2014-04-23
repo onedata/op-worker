@@ -170,12 +170,25 @@ message CreateStorageTestFileResponse {
 }
 
 message StorageTestFileModified {
-    required int32  storage_id = 1;
+    required int32 storage_id = 1;
     required string relative_path = 2;
     required string text = 3;
 }
 
-message GetStatFS {}
+message StorageTestFileModifiedAck {
+    required bool answer = 1;
+}
+
+message DirectIOStorageInfo {
+    message StorageInfo {
+        required int32 storage_id = 1;
+        required string absolute_path = 2;
+    }
+    repeated StorageInfo storage_info = 1;
+}
+
+message GetStatFS {
+}
 
 message StatFSInfo {
     optional string answer = 1 [default = "ok"];
