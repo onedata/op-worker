@@ -46,6 +46,7 @@
         fuse_session        -> ?record_info_gen(fuse_session);
         connection_info     -> ?record_info_gen(connection_info);
         quota               -> ?record_info_gen(quota);
+        fuse_group_hash     -> ?record_info_gen(fuse_group_hash);
         %next_record        -> ?record_info_gen(next_record);
         _ -> {error, unsupported_record}
     end).
@@ -98,6 +99,7 @@
 -define(FILES_NUMBER_DESIGN_NAME, "files_number").
 -define(FILES_SIZE_DESIGN_NAME, "files_size").
 -define(FUSE_SESSIONS_DESIGN_NAME, "fuse_sessions").
+-define(FUSE_GROUPS_DESIGN_NAME, "fuse_groups").
 
 %% Views
 -define(FILE_TREE_VIEW, #view_info{name = "file_tree", design = ?VFS_BASE_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
@@ -126,6 +128,7 @@
 %% FUSE Sessions
 -define(FUSE_CONNECTIONS_VIEW, #view_info{name = "fuse_connections", design = ?FUSE_SESSIONS_DESIGN_NAME, db_name = ?SYSTEM_DB_NAME}).
 -define(EXPIRED_FUSE_SESSIONS_VIEW, #view_info{name = "expired_fuse_sessions", design = ?FUSE_SESSIONS_DESIGN_NAME, db_name = ?SYSTEM_DB_NAME}).
+-define(FUSE_GROUP_BY_HASH_VIEW, #view_info{name = "fuse_group_by_hash", design = ?FUSE_GROUPS_DESIGN_NAME, db_name = ?SYSTEM_DB_NAME}).
 
 %% Others
 -define(RECORD_INSTANCES_DOC_PREFIX, "record_instances_").
@@ -142,7 +145,7 @@
                     ?FILES_BY_UID_AND_FILENAME, ?FILE_META_BY_TIMES, ?FILES_BY_META_DOC,
                     ?USER_BY_EMAIL_VIEW, ?USER_BY_LOGIN_VIEW, ?USER_BY_DN_VIEW, ?USER_BY_UID_VIEW, ?STORAGE_BY_ID_VIEW,
                     ?SHARE_BY_FILE_VIEW, ?SHARE_BY_USER_VIEW, ?USER_FILES_NUMBER_VIEW, ?USER_FILES_SIZE_VIEW, ?GROUP_FILES_NUMBER_VIEW,
-                    ?FUSE_CONNECTIONS_VIEW, ?EXPIRED_FUSE_SESSIONS_VIEW]).
+                    ?FUSE_CONNECTIONS_VIEW, ?EXPIRED_FUSE_SESSIONS_VIEW, ?FUSE_GROUP_BY_HASH_VIEW]).
 %% Default database name
 -define(DEFAULT_DB, lists:nth(1, ?DB_LIST)).
 

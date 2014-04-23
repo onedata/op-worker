@@ -26,7 +26,7 @@
 
 -import(dao_helper, [name/1]).
 
--define(init_storage_after_seconds,1).
+-define(init_storage_after_seconds, 1).
 
 -ifdef(TEST).
 -compile([export_all]).
@@ -37,7 +37,7 @@
 
 %% API
 -export([save_record/1, exist_record/1, get_record/1, remove_record/1, list_records/2, load_view_def/2, set_db/1]).
--export([doc_to_term/1,init_storage/0]).
+-export([doc_to_term/1, init_storage/0]).
 
 %% ===================================================================
 %% Behaviour callback functions
@@ -47,77 +47,77 @@
 %% ====================================================================
 %% @doc {@link worker_plugin_behaviour} callback init/1
 -spec init(Args :: term()) -> Result when
-    Result :: ok | {error, Error},
-    Error :: term().
+  Result :: ok | {error, Error},
+  Error :: term().
 %% ====================================================================
 init({Args, {init_status, undefined}}) ->
-    ets:new(db_host_store, [named_table, public, bag, {read_concurrency, true}]),
-    init({Args, {init_status, table_initialized}});
+  ets:new(db_host_store, [named_table, public, bag, {read_concurrency, true}]),
+  init({Args, {init_status, table_initialized}});
 init({_Args, {init_status, table_initialized}}) -> %% Final stage of initialization. ETS table was initialized
-    case application:get_env(veil_cluster_node, db_nodes) of
-        {ok, Nodes} when is_list(Nodes) ->
-            [dao_hosts:insert(Node) || Node <- Nodes, is_atom(Node)],
-            catch setup_views(?DATABASE_DESIGN_STRUCTURE);
-        _ ->
-            lager:warning("There are no DB hosts given in application env variable.")
-    end,
+  case application:get_env(veil_cluster_node, db_nodes) of
+    {ok, Nodes} when is_list(Nodes) ->
+      [dao_hosts:insert(Node) || Node <- Nodes, is_atom(Node)],
+      catch setup_views(?DATABASE_DESIGN_STRUCTURE);
+    _ ->
+      lager:warning("There are no DB hosts given in application env variable.")
+  end,
 
-    ProcFun = fun(ProtocolVersion, {Target, Method, Args}) ->
-      handle(ProtocolVersion, {Target, Method, Args})
-    end,
+  ProcFun = fun(ProtocolVersion, {Target, Method, Args}) ->
+    handle(ProtocolVersion, {Target, Method, Args})
+  end,
 
-    MapFun = fun({_, _, [File, _]}) ->
-      lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, File)
-    end,
+  MapFun = fun({_, _, [File, _]}) ->
+    lists:foldl(fun(Char, Sum) -> 10 * Sum + Char end, 0, File)
+  end,
 
-    SubProcList = worker_host:generate_sub_proc_list(id_generation, 6, 10, ProcFun, MapFun),
+  SubProcList = worker_host:generate_sub_proc_list(id_generation, 6, 10, ProcFun, MapFun),
 
-    RequestMap = fun
-      ({T, M, _}) ->
-        case {T, M} of
-          {dao_vfs, save_new_file} -> id_generation;
-          _ -> non
-        end;
-      (_) -> non
-    end,
+  RequestMap = fun
+    ({T, M, _}) ->
+      case {T, M} of
+        {dao_vfs, save_new_file} -> id_generation;
+        _ -> non
+      end;
+    (_) -> non
+  end,
 
-    DispMapFun = fun
-      ({T2, M2, [File, _]}) ->
-        case {T2, M2} of
-          {dao_vfs, save_new_file} ->
-            lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, File);
-          _ -> non
-        end;
-      (_) -> non
-    end,
+  DispMapFun = fun
+    ({T2, M2, [File, _]}) ->
+      case {T2, M2} of
+        {dao_vfs, save_new_file} ->
+          lists:foldl(fun(Char, Sum) -> 2 * Sum + Char end, 0, File);
+        _ -> non
+      end;
+    (_) -> non
+  end,
 
-		erlang:send_after(?init_storage_after_seconds * 1000, self(), {timer, {asynch, 1, {utils,init_storage,[]}}}),
+  erlang:send_after(?init_storage_after_seconds * 1000, self(), {timer, {asynch, 1, {utils, init_storage, []}}}),
 
-    #initial_host_description{request_map = RequestMap, dispatcher_request_map = DispMapFun, sub_procs = SubProcList, plug_in_state = ok};
+  #initial_host_description{request_map = RequestMap, dispatcher_request_map = DispMapFun, sub_procs = SubProcList, plug_in_state = ok};
 init({Args, {init_status, _TableInfo}}) ->
-    init({Args, {init_status, table_initialized}});
+  init({Args, {init_status, table_initialized}});
 init(Args) ->
-    ClearFun = fun() -> cache_guard() end,
-    ClearFun2 = fun() -> ets:delete_all_objects(storage_cache) end,
-    ClearFun3 = fun() -> ets:delete_all_objects(users_cache) end,
-    %% TODO - check if simple cache is enough for users and fuses; if not, change to advanced cache (sub processes)
-    %% We assume that cached data do not change!
-    Cache1 = worker_host:create_simple_cache(dao_fuse_cache, dao_fuse_cache_loop_time, ClearFun),
-    case Cache1 of
-      ok ->
-        Cache2 = worker_host:create_simple_cache(storage_cache, storage_cache_loop_time, ClearFun2),
-        case Cache2 of
-          ok ->
-            Cache3 = worker_host:create_simple_cache(users_cache, users_cache_loop_time, ClearFun3),
-            case Cache3 of
-              ok ->
-                init({Args, {init_status, ets:info(db_host_store)}});
-              _ -> throw({error, {users_cache_error, Cache3}})
-            end;
-          _ -> throw({error, {storage_cache_error, Cache2}})
-        end;
-      _ -> throw({error, {dao_fuse_cache_error, Cache1}})
-    end.
+  ClearFun = fun() -> cache_guard() end,
+  ClearFun2 = fun() -> ets:delete_all_objects(storage_cache) end,
+  ClearFun3 = fun() -> ets:delete_all_objects(users_cache) end,
+  %% TODO - check if simple cache is enough for users and fuses; if not, change to advanced cache (sub processes)
+  %% We assume that cached data do not change!
+  Cache1 = worker_host:create_simple_cache(dao_fuse_cache, dao_fuse_cache_loop_time, ClearFun),
+  case Cache1 of
+    ok ->
+      Cache2 = worker_host:create_simple_cache(storage_cache, storage_cache_loop_time, ClearFun2),
+      case Cache2 of
+        ok ->
+          Cache3 = worker_host:create_simple_cache(users_cache, users_cache_loop_time, ClearFun3),
+          case Cache3 of
+            ok ->
+              init({Args, {init_status, ets:info(db_host_store)}});
+            _ -> throw({error, {users_cache_error, Cache3}})
+          end;
+        _ -> throw({error, {storage_cache_error, Cache2}})
+      end;
+    _ -> throw({error, {dao_fuse_cache_error, Cache1}})
+  end.
 
 %% handle/2
 %% ====================================================================
@@ -132,68 +132,68 @@ init(Args) ->
 %% E.g. calling handle(_, {save_record, [Id, Rec]}) will execute dao_cluster:save_record(Id, Rec) and normalize return value.
 %% @end
 -spec handle(ProtocolVersion :: term(), Request) -> Result when
-    Request :: {Method, Args} | {Mod :: atom(), Method, Args} | ping | healthcheck | get_version,
-    Method :: atom(),
-    Args :: list(),
-    Result :: ok | {ok, Response} | {error, Error} | pong | Version,
-    Response :: term(),
-    Version :: term(),
-    Error :: term().
+  Request :: {Method, Args} | {Mod :: atom(), Method, Args} | ping | healthcheck | get_version,
+  Method :: atom(),
+  Args :: list(),
+  Result :: ok | {ok, Response} | {error, Error} | pong | Version,
+  Response :: term(),
+  Version :: term(),
+  Error :: term().
 %% ====================================================================
 handle(_ProtocolVersion, ping) ->
   pong;
 
 handle(ProtocolVersion, healthcheck) ->
-	{Status,Msg} = dao_lib:apply(dao_helper,list_dbs,[],ProtocolVersion),
-	case Status of
-		ok ->
-			ok;
-		_ ->
-			lager:error("Healthchecking database filed with error: ~p",Msg),
-			{error,db_healthcheck_failed}
-	end;
+  {Status, Msg} = dao_lib:apply(dao_helper, list_dbs, [], ProtocolVersion),
+  case Status of
+    ok ->
+      ok;
+    _ ->
+      lager:error("Healthchecking database filed with error: ~p", Msg),
+      {error, db_healthcheck_failed}
+  end;
 
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
 handle(ProtocolVersion, {Target, Method, Args}) when is_atom(Target), is_atom(Method), is_list(Args) ->
-    put(protocol_version, ProtocolVersion), %% Some sub-modules may need it to communicate with DAO' gen_server
-    Module =
-        case atom_to_list(Target) of
-            "utils" -> dao;
-            [$d, $a, $o, $_ | T] -> list_to_atom("dao_" ++ T);
-            T -> list_to_atom("dao_" ++ T)
-        end,
-    try apply(Module, Method, Args) of
-        {error, Err} ->
-            lager:error("Handling ~p:~p with args ~p returned error: ~p", [Module, Method, Args, Err]),
-            {error, Err};
-        {ok, Response} -> {ok, Response};
-        ok -> ok;
-        Other ->
-            lager:error("Handling ~p:~p with args ~p returned unknown response: ~p", [Module, Method, Args, Other]),
-            {error, Other}
-    catch
-        error:{badmatch, {error, Err}} -> {error, Err};
-        _Type:Error ->
+  put(protocol_version, ProtocolVersion), %% Some sub-modules may need it to communicate with DAO' gen_server
+  Module =
+    case atom_to_list(Target) of
+      "utils" -> dao;
+      [$d, $a, $o, $_ | T] -> list_to_atom("dao_" ++ T);
+      T -> list_to_atom("dao_" ++ T)
+    end,
+  try apply(Module, Method, Args) of
+    {error, Err} ->
+      lager:error("Handling ~p:~p with args ~p returned error: ~p", [Module, Method, Args, Err]),
+      {error, Err};
+    {ok, Response} -> {ok, Response};
+    ok -> ok;
+    Other ->
+      lager:error("Handling ~p:~p with args ~p returned unknown response: ~p", [Module, Method, Args, Other]),
+      {error, Other}
+  catch
+    error:{badmatch, {error, Err}} -> {error, Err};
+    _Type:Error ->
 %%             lager:error("Handling ~p:~p with args ~p interrupted by exception: ~p:~p ~n ~p", [Module, Method, Args, Type, Error, erlang:get_stacktrace()]),
-            {error, Error}
-    end;
+      {error, Error}
+  end;
 handle(ProtocolVersion, {Method, Args}) when is_atom(Method), is_list(Args) ->
-    handle(ProtocolVersion, {cluster, Method, Args});
+  handle(ProtocolVersion, {cluster, Method, Args});
 handle(_ProtocolVersion, _Request) ->
-    lager:error("Unknown request ~p (protocol ver.: ~p)", [_Request, _ProtocolVersion]),
-    {error, wrong_args}.
+  lager:error("Unknown request ~p (protocol ver.: ~p)", [_Request, _ProtocolVersion]),
+  {error, wrong_args}.
 
 %% cleanup/0
 %% ====================================================================
 %% @doc {@link worker_plugin_behaviour} callback cleanup/0
 -spec cleanup() -> Result when
-    Result :: ok | {error, Error},
-    Error :: timeout | term().
+  Result :: ok | {error, Error},
+  Error :: timeout | term().
 %% ====================================================================
 cleanup() ->
-    ok.
+  ok.
 
 %% ===================================================================
 %% API functions
@@ -209,43 +209,43 @@ cleanup() ->
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec save_record(term() | #veil_document{uuid :: string(), rev_info :: term(), record :: term(), force_update :: boolean()}) ->
-    {ok, DocId :: string()} |
-    {error, conflict} |
-    no_return(). % erlang:error(any()) | throw(any())
+  {ok, DocId :: string()} |
+  {error, conflict} |
+  no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 save_record(#veil_document{uuid = "", record = Rec} = Doc) when is_tuple(Rec) ->
-    save_record(Doc#veil_document{uuid = dao_helper:gen_uuid()});
+  save_record(Doc#veil_document{uuid = dao_helper:gen_uuid()});
 save_record(#veil_document{uuid = Id, record = Rec} = Doc) when is_tuple(Rec), is_atom(Id) ->
-    save_record(Doc#veil_document{uuid = atom_to_list(Id)});
-save_record(#veil_document{uuid = Id, rev_info = RevInfo, record = Rec, force_update = IsForced}) when is_tuple(Rec), is_list(Id)->
-    Valid = is_valid_record(Rec),
+  save_record(Doc#veil_document{uuid = atom_to_list(Id)});
+save_record(#veil_document{uuid = Id, rev_info = RevInfo, record = Rec, force_update = IsForced}) when is_tuple(Rec), is_list(Id) ->
+  Valid = is_valid_record(Rec),
+  if
+    Valid -> ok;
+    true ->
+      lager:error("Cannot save record: ~p because it's not supported", [Rec]),
+      throw(unsupported_record)
+  end,
+  Revs =
     if
-        Valid -> ok;
-        true ->
-            lager:error("Cannot save record: ~p because it's not supported", [Rec]),
-            throw(unsupported_record)
+      IsForced -> %% If Mode == update, we need to open existing doc in order to get revs
+        case dao_helper:open_doc(get_db(), Id) of
+          {ok, #doc{revs = RevDef}} -> RevDef;
+          _ -> #doc{revs = RevDef} = #doc{}, RevDef
+        end;
+      RevInfo =/= 0 ->
+        RevInfo;
+      true ->
+        #doc{revs = RevDef} = #doc{},
+        RevDef
     end,
-    Revs =
-        if
-            IsForced -> %% If Mode == update, we need to open existing doc in order to get revs
-                case dao_helper:open_doc(get_db(), Id) of
-                    {ok, #doc{revs = RevDef}} -> RevDef;
-                    _ -> #doc{revs = RevDef} = #doc{}, RevDef
-                end;
-            RevInfo =/= 0 ->
-                RevInfo;
-            true ->
-                #doc{revs = RevDef} = #doc{},
-                RevDef
-        end,
-    case dao_helper:insert_doc(get_db(), #doc{id = dao_helper:name(Id), revs = Revs, body = term_to_doc(Rec)}) of
-        {ok, _} ->
-          {ok, Id};
-        {error, Err} ->
-          {error, Err}
-    end;
+  case dao_helper:insert_doc(get_db(), #doc{id = dao_helper:name(Id), revs = Revs, body = term_to_doc(Rec)}) of
+    {ok, _} ->
+      {ok, Id};
+    {error, Err} ->
+      {error, Err}
+  end;
 save_record(Rec) when is_tuple(Rec) ->
-    save_record(#veil_document{record = Rec}).
+  save_record(#veil_document{record = Rec}).
 
 
 %% exist_record/1
@@ -256,16 +256,16 @@ save_record(Rec) when is_tuple(Rec) ->
 -spec exist_record(Id :: atom() | string()) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_record(Id) when is_atom(Id) ->
-    exist_record(atom_to_list(Id));
+  exist_record(atom_to_list(Id));
 exist_record(Id) when is_list(Id) ->
-    case dao_helper:open_doc(get_db(), Id) of
-        {ok, _} ->
-          {ok, true};
-        {error, {not_found, _}} ->
-          {ok, false};
-        Other ->
-          Other
-    end.
+  case dao_helper:open_doc(get_db(), Id) of
+    {ok, _} ->
+      {ok, true};
+    {error, {not_found, _}} ->
+      {ok, false};
+    Other ->
+      Other
+  end.
 
 
 %% get_record/1
@@ -277,25 +277,25 @@ exist_record(Id) when is_list(Id) ->
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec get_record(Id :: atom() | string()) ->
-    {ok,#veil_document{record :: tuple()}} |
-    {error, Error :: term()} |
-    no_return(). % erlang:error(any()) | throw(any())
+  {ok, #veil_document{record :: tuple()}} |
+  {error, Error :: term()} |
+  no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 get_record(Id) when is_atom(Id) ->
-    get_record(atom_to_list(Id));
+  get_record(atom_to_list(Id));
 get_record(Id) when is_list(Id) ->
-    case dao_helper:open_doc(get_db(), Id) of
-        {ok, #doc{body = Body, revs = RevInfo}} ->
-            try {doc_to_term(Body), RevInfo} of
-                {Term, RInfo} ->
-                  {ok, #veil_document{uuid = Id, rev_info = RInfo, record = Term}}
-            catch
-                _:Err ->
-                  {error, {invalid_document, Err}}
-            end;
-        {error, Error} ->
-          Error
-    end.
+  case dao_helper:open_doc(get_db(), Id) of
+    {ok, #doc{body = Body, revs = RevInfo}} ->
+      try {doc_to_term(Body), RevInfo} of
+        {Term, RInfo} ->
+          {ok, #veil_document{uuid = Id, rev_info = RInfo, record = Term}}
+      catch
+        _:Err ->
+          {error, {invalid_document, Err}}
+      end;
+    {error, Error} ->
+      Error
+  end.
 
 
 %% remove_record/1
@@ -304,13 +304,13 @@ get_record(Id) when is_list(Id) ->
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec remove_record(Id :: atom() | uuid()) ->
-    ok |
-    {error, Error :: term()}.
+  ok |
+  {error, Error :: term()}.
 %% ====================================================================
 remove_record(Id) when is_atom(Id) ->
-    remove_record(atom_to_list(Id));
+  remove_record(atom_to_list(Id));
 remove_record(Id) when is_list(Id) ->
-    dao_helper:delete_doc(get_db(), Id).
+  dao_helper:delete_doc(get_db(), Id).
 
 
 %% list_records/2
@@ -320,37 +320,37 @@ remove_record(Id) when is_list(Id) ->
 %% the caller has to do it by himself.
 %% @end
 -spec list_records(ViewInfo :: #view_info{}, QueryArgs :: #view_query_args{}) ->
-    {ok, QueryResult :: #view_result{}} | {error, term()}.
+  {ok, QueryResult :: #view_result{}} | {error, term()}.
 %% ====================================================================
 list_records(#view_info{name = ViewName, design = DesignName, db_name = DbName}, QueryArgs) ->
-    FormatKey =  %% Recursive lambda:
-    fun(F, K) when is_list(K) -> [F(F, X) || X <- K];
-      (_F, K) when is_binary(K) -> binary_to_list(K);
-      (_F, K) -> K
-    end,
-    FormatDoc =
-    fun([{doc, {[ {_id, Id} | [ {_rev, RevInfo} | D ] ]}}]) ->
+  FormatKey =  %% Recursive lambda:
+  fun(F, K) when is_list(K) -> [F(F, X) || X <- K];
+    (_F, K) when is_binary(K) -> binary_to_list(K);
+    (_F, K) -> K
+  end,
+  FormatDoc =
+    fun([{doc, {[{_id, Id} | [{_rev, RevInfo} | D]]}}]) ->
       #veil_document{record = doc_to_term({D}), uuid = binary_to_list(Id), rev_info = dao_helper:revision(RevInfo)};
       (_) -> none
     end,
 
-        case dao_helper:query_view(DbName, DesignName, ViewName, QueryArgs) of
-            {ok, [{total_and_offset, Total, Offset} | Rows]} ->
-              FormattedRows =
-                [#view_row{id = binary_to_list(Id), key = FormatKey(FormatKey, Key), value = Value, doc = FormatDoc(Doc)}
-                  || {row, {[ {id, Id} | [ {key, Key} | [ {value, Value} | Doc ] ] ]}} <- Rows],
-              {ok, #view_result{total = Total, offset = Offset, rows = FormattedRows}};
+  case dao_helper:query_view(DbName, DesignName, ViewName, QueryArgs) of
+    {ok, [{total_and_offset, Total, Offset} | Rows]} ->
+      FormattedRows =
+        [#view_row{id = binary_to_list(Id), key = FormatKey(FormatKey, Key), value = Value, doc = FormatDoc(Doc)}
+          || {row, {[{id, Id} | [{key, Key} | [{value, Value} | Doc]]]}} <- Rows],
+      {ok, #view_result{total = Total, offset = Offset, rows = FormattedRows}};
 
-            {ok, Rows2} when is_list(Rows2)->
-              FormattedRows2 =
-                [#view_row{id = non, key = FormatKey(FormatKey, Key), value = Value, doc = non}
-                  || {row, {[ {key, Key} | [ {value, Value} ] ]}} <- Rows2],
-              {ok, #view_result{total = length(Rows2), offset = 0, rows = FormattedRows2}};
-          {error, _} = E -> throw(E);
-            Other ->
-                lager:error("dao_helper:query_view has returned unknown query result: ~p", [Other]),
-                throw({unknown_query_result, Other})
-        end.
+    {ok, Rows2} when is_list(Rows2) ->
+      FormattedRows2 =
+        [#view_row{id = non, key = FormatKey(FormatKey, Key), value = Value, doc = non}
+          || {row, {[{key, Key} | [{value, Value}]]}} <- Rows2],
+      {ok, #view_result{total = length(Rows2), offset = 0, rows = FormattedRows2}};
+    {error, _} = E -> throw(E);
+    Other ->
+      lager:error("dao_helper:query_view has returned unknown query result: ~p", [Other]),
+      throw({unknown_query_result, Other})
+  end.
 
 
 %% ===================================================================
@@ -364,7 +364,7 @@ list_records(#view_info{name = ViewName, design = DesignName, db_name = DbName},
 -spec set_db(DbName :: string()) -> ok.
 %% ====================================================================
 set_db(DbName) ->
-    put(current_db, DbName).
+  put(current_db, DbName).
 
 %% get_db/0
 %% ====================================================================
@@ -373,12 +373,12 @@ set_db(DbName) ->
 -spec get_db() -> DbName :: string().
 %% ====================================================================
 get_db() ->
-    case get(current_db) of
-        DbName when is_list(DbName) ->
-            DbName;
-        _ ->
-            ?DEFAULT_DB
-    end.
+  case get(current_db) of
+    DbName when is_list(DbName) ->
+      DbName;
+    _ ->
+      ?DEFAULT_DB
+  end.
 
 %% setup_views/1
 %% ====================================================================
@@ -387,54 +387,55 @@ get_db() ->
 -spec setup_views(DesignStruct :: list()) -> ok.
 %% ====================================================================
 setup_views(DesignStruct) ->
-    DesignFun = fun(#design_info{name = Name, views = ViewList}, DbName) ->  %% Foreach design document
-            LastCTX = %% Calculate MD5 sum of current views (read from files)
-                lists:foldl(fun(#view_info{name = ViewName}, CTX) ->
-                            crypto:hash_update(CTX, load_view_def(ViewName, map) ++ load_view_def(ViewName, reduce))
-                        end, crypto:hash_init(md5), ViewList),
+  DesignFun = fun(#design_info{name = Name, views = ViewList}, DbName) ->  %% Foreach design document
+    LastCTX = %% Calculate MD5 sum of current views (read from files)
+    lists:foldl(fun(#view_info{name = ViewName}, CTX) ->
+      crypto:hash_update(CTX, load_view_def(ViewName, map) ++ load_view_def(ViewName, reduce))
+    end, crypto:hash_init(md5), ViewList),
 
-            LocalVersion = dao_helper:name(integer_to_list(binary:decode_unsigned(crypto:hash_final(LastCTX)), 16)),
-            NewViewList =
-                case dao_helper:open_design_doc(DbName, Name) of
-                    {ok, #doc{body = Body}} -> %% Design document exists, so lets calculate MD5 sum of its views
-                        ViewsField = dao_json:get_field(Body, "views"),
-                        DbViews = [ dao_json:get_field(ViewsField, ViewName) || #view_info{name = ViewName} <- ViewList ],
-                        EmptyString = fun(Str) when is_binary(Str) -> binary_to_list(Str); %% Helper function converting non-string value to empty string
-                                         (_) -> "" end,
-                        VStrings = [ EmptyString(dao_json:get_field(V, "map")) ++ EmptyString(dao_json:get_field(V, "reduce")) || {L}=V <- DbViews, is_list(L)],
-                        LastCTX1 = lists:foldl(fun(VStr, CTX) -> crypto:hash_update(CTX, VStr) end, crypto:hash_init(md5), VStrings),
-                        DbVersion = dao_helper:name(integer_to_list(binary:decode_unsigned(crypto:hash_final(LastCTX1)), 16)),
-                        case DbVersion of %% Compare DbVersion with LocalVersion
-                            LocalVersion ->
-                                lager:info("DB version of design ~p is ~p and matches local version. Design is up to date", [Name, LocalVersion]),
-                                [];
-                            _Other ->
-                                lager:info("DB version of design ~p is ~p and does not match ~p. Rebuilding design document", [Name, _Other, LocalVersion]),
-                                ViewList
-                        end;
-                    _ ->
-                        lager:info("Design document ~p in DB ~p not exists. Creating...", [Name, DbName]),
-                        ViewList
-                end,
+    LocalVersion = dao_helper:name(integer_to_list(binary:decode_unsigned(crypto:hash_final(LastCTX)), 16)),
+    NewViewList =
+      case dao_helper:open_design_doc(DbName, Name) of
+        {ok, #doc{body = Body}} -> %% Design document exists, so lets calculate MD5 sum of its views
+          ViewsField = dao_json:get_field(Body, "views"),
+          DbViews = [dao_json:get_field(ViewsField, ViewName) || #view_info{name = ViewName} <- ViewList],
+          EmptyString = fun(Str) when is_binary(Str) ->
+            binary_to_list(Str); %% Helper function converting non-string value to empty string
+            (_) -> "" end,
+          VStrings = [EmptyString(dao_json:get_field(V, "map")) ++ EmptyString(dao_json:get_field(V, "reduce")) || {L} = V <- DbViews, is_list(L)],
+          LastCTX1 = lists:foldl(fun(VStr, CTX) -> crypto:hash_update(CTX, VStr) end, crypto:hash_init(md5), VStrings),
+          DbVersion = dao_helper:name(integer_to_list(binary:decode_unsigned(crypto:hash_final(LastCTX1)), 16)),
+          case DbVersion of %% Compare DbVersion with LocalVersion
+            LocalVersion ->
+              lager:info("DB version of design ~p is ~p and matches local version. Design is up to date", [Name, LocalVersion]),
+              [];
+            _Other ->
+              lager:info("DB version of design ~p is ~p and does not match ~p. Rebuilding design document", [Name, _Other, LocalVersion]),
+              ViewList
+          end;
+        _ ->
+          lager:info("Design document ~p in DB ~p not exists. Creating...", [Name, DbName]),
+          ViewList
+      end,
 
-            lists:map(fun(#view_info{name = ViewName}) -> %% Foreach view
-                case dao_helper:create_view(DbName, Name, ViewName, load_view_def(ViewName, map), load_view_def(ViewName, reduce), LocalVersion) of
-                    ok ->
-                        lager:info("View ~p in design ~p, DB ~p has been created.", [ViewName, Name, DbName]);
-                    _Err ->
-                        lager:error("View ~p in design ~p, DB ~p creation failed. Error: ~p", [ViewName, Name, DbName, _Err])
-                end
-            end, NewViewList),
-            DbName
-        end,
+    lists:map(fun(#view_info{name = ViewName}) -> %% Foreach view
+      case dao_helper:create_view(DbName, Name, ViewName, load_view_def(ViewName, map), load_view_def(ViewName, reduce), LocalVersion) of
+        ok ->
+          lager:info("View ~p in design ~p, DB ~p has been created.", [ViewName, Name, DbName]);
+        _Err ->
+          lager:error("View ~p in design ~p, DB ~p creation failed. Error: ~p", [ViewName, Name, DbName, _Err])
+      end
+    end, NewViewList),
+    DbName
+  end,
 
-    DbFun = fun(#db_info{name = Name, designs = Designs}) -> %% Foreach database
-            dao_helper:create_db(Name, []),
-            lists:foldl(DesignFun, Name, Designs)
-        end,
+  DbFun = fun(#db_info{name = Name, designs = Designs}) -> %% Foreach database
+    dao_helper:create_db(Name, []),
+    lists:foldl(DesignFun, Name, Designs)
+  end,
 
-    lists:map(DbFun, DesignStruct),
-    ok.
+  lists:map(DbFun, DesignStruct),
+  ok.
 
 %% load_view_def/2
 %% ====================================================================
@@ -443,10 +444,11 @@ setup_views(DesignStruct) ->
 -spec load_view_def(Name :: string(), Type :: map | reduce) -> string().
 %% ====================================================================
 load_view_def(Name, Type) ->
-    case file:read_file(?VIEW_DEF_LOCATION ++ Name ++ (case Type of map -> ?MAP_DEF_SUFFIX; reduce -> ?REDUCE_DEF_SUFFIX end)) of
-        {ok, Data} -> binary_to_list(Data);
-        _ -> ""
-    end.
+  case file:read_file(?VIEW_DEF_LOCATION ++ Name ++ (case Type of map -> ?MAP_DEF_SUFFIX; reduce ->
+    ?REDUCE_DEF_SUFFIX end)) of
+    {ok, Data} -> binary_to_list(Data);
+    _ -> ""
+  end.
 
 %% is_valid_record/1
 %% ====================================================================
@@ -455,21 +457,20 @@ load_view_def(Name, Type) ->
 -spec is_valid_record(Record :: atom() | string() | tuple()) -> boolean().
 %% ====================================================================
 is_valid_record(Record) when is_list(Record) ->
-    is_valid_record(list_to_atom(Record));
+  is_valid_record(list_to_atom(Record));
 is_valid_record(Record) when is_atom(Record) ->
-    case ?dao_record_info(Record) of
-        {_Size, _Fields, _} -> true;    %% When checking only name of record, we omit size check
-        _ -> false
-    end;
+  case ?dao_record_info(Record) of
+    {_Size, _Fields, _} -> true;    %% When checking only name of record, we omit size check
+    _ -> false
+  end;
 is_valid_record(Record) when not is_tuple(Record); not is_atom(element(1, Record)) ->
-    false;
+  false;
 is_valid_record(Record) ->
-    case ?dao_record_info(element(1, Record)) of
-        {Size, Fields, _} when is_list(Fields), tuple_size(Record) =:= Size ->
-            true;
-        _ -> false
-    end.
-
+  case ?dao_record_info(element(1, Record)) of
+    {Size, Fields, _} when is_list(Fields), tuple_size(Record) =:= Size ->
+      true;
+    _ -> false
+  end.
 
 
 %% term_to_doc/1
@@ -480,48 +481,48 @@ is_valid_record(Record) ->
 -spec term_to_doc(Field :: term()) -> term().
 %% ====================================================================
 term_to_doc(Field) when is_number(Field) ->
-    Field;
+  Field;
 term_to_doc(Field) when is_boolean(Field); Field =:= null ->
-    Field;
+  Field;
 term_to_doc(Field) when is_pid(Field) ->
-    list_to_binary(?RECORD_FIELD_PID_PREFIX ++ pid_to_list(Field));
+  list_to_binary(?RECORD_FIELD_PID_PREFIX ++ pid_to_list(Field));
 term_to_doc(Field) when is_binary(Field) ->
-    <<<<?RECORD_FIELD_BINARY_PREFIX>>/binary, Field/binary>>;   %% Binary is saved as string, so we add a prefix
+  <<<<?RECORD_FIELD_BINARY_PREFIX>>/binary, Field/binary>>;   %% Binary is saved as string, so we add a prefix
 term_to_doc(Field) when is_list(Field) ->
-    case io_lib:printable_unicode_list(Field) of
-        true -> dao_helper:name(Field);
-        false -> [term_to_doc(X) || X <- Field]
-    end;
+  case io_lib:printable_unicode_list(Field) of
+    true -> dao_helper:name(Field);
+    false -> [term_to_doc(X) || X <- Field]
+  end;
 term_to_doc(Field) when is_atom(Field) ->
-    term_to_doc(?RECORD_FIELD_ATOM_PREFIX ++ atom_to_list(Field));  %% Atom is saved as string, so we add a prefix
+  term_to_doc(?RECORD_FIELD_ATOM_PREFIX ++ atom_to_list(Field));  %% Atom is saved as string, so we add a prefix
 term_to_doc(Field) when is_tuple(Field) ->
-    IsRec = is_valid_record(Field),
+  IsRec = is_valid_record(Field),
 
-    {InitObj, LField, RecName} =  %% Prepare initial structure for record or simple tuple
-        case IsRec of
-            true ->
-                [RecName1 | Res] = tuple_to_list(Field),
-                {dao_json:mk_field(dao_json:mk_obj(), ?RECORD_META_FIELD_NAME, dao_json:mk_str(atom_to_list(RecName1))), Res, RecName1};
-            false ->
-                {dao_json:mk_obj(), tuple_to_list(Field), none}
-        end,
-    FoldFun = fun(Elem, {Poz, AccIn}) ->  %% Function used in lists:foldl/3. It parses given record/tuple field
-            case IsRec of                 %% and adds to Accumulator object
-                true ->
-                    {_, Fields, _} = ?dao_record_info(RecName),
+  {InitObj, LField, RecName} =  %% Prepare initial structure for record or simple tuple
+  case IsRec of
+    true ->
+      [RecName1 | Res] = tuple_to_list(Field),
+      {dao_json:mk_field(dao_json:mk_obj(), ?RECORD_META_FIELD_NAME, dao_json:mk_str(atom_to_list(RecName1))), Res, RecName1};
+    false ->
+      {dao_json:mk_obj(), tuple_to_list(Field), none}
+  end,
+  FoldFun = fun(Elem, {Poz, AccIn}) ->  %% Function used in lists:foldl/3. It parses given record/tuple field
+    case IsRec of                 %% and adds to Accumulator object
+      true ->
+        {_, Fields, _} = ?dao_record_info(RecName),
 
-                    Value = term_to_doc(Elem),
+        Value = term_to_doc(Elem),
 
-                    {Poz + 1, dao_json:mk_field(AccIn, atom_to_list(lists:nth(Poz, Fields)), Value)};
-                false ->
-                    {Poz + 1, dao_json:mk_field(AccIn, ?RECORD_TUPLE_FIELD_NAME_PREFIX ++ integer_to_list(Poz), term_to_doc(Elem))}
-            end
-        end,
-    {_, {Ret}} = lists:foldl(FoldFun, {1, InitObj}, LField),
-    {lists:reverse(Ret)};
+        {Poz + 1, dao_json:mk_field(AccIn, atom_to_list(lists:nth(Poz, Fields)), Value)};
+      false ->
+        {Poz + 1, dao_json:mk_field(AccIn, ?RECORD_TUPLE_FIELD_NAME_PREFIX ++ integer_to_list(Poz), term_to_doc(Elem))}
+    end
+  end,
+  {_, {Ret}} = lists:foldl(FoldFun, {1, InitObj}, LField),
+  {lists:reverse(Ret)};
 term_to_doc(Field) ->
-    lager:error("Cannot convert term to document because field: ~p is not supported", [Field]),
-    throw({unsupported_field, Field}).
+  lager:error("Cannot convert term to document because field: ~p is not supported", [Field]),
+  throw({unsupported_field, Field}).
 
 
 %% doc_to_term/1
@@ -533,60 +534,60 @@ term_to_doc(Field) ->
 -spec doc_to_term(Field :: term()) -> term().
 %% ====================================================================
 doc_to_term(Field) when is_number(Field); is_atom(Field) ->
-    Field;
+  Field;
 doc_to_term(Field) when is_binary(Field) -> %% Binary type means that it is atom, string or binary.
-    SField = binary_to_list(Field),         %% Prefix tells us which type is it
-    BinPref = string:str(SField, ?RECORD_FIELD_BINARY_PREFIX),
-    AtomPref = string:str(SField, ?RECORD_FIELD_ATOM_PREFIX),
-    PidPref = string:str(SField, ?RECORD_FIELD_PID_PREFIX),
-    if
-	    BinPref == 1 -> list_to_binary(string:sub_string(SField, length(?RECORD_FIELD_BINARY_PREFIX) + 1));
-	    AtomPref == 1 -> list_to_atom(string:sub_string(SField, length(?RECORD_FIELD_ATOM_PREFIX) + 1));
-	    PidPref == 1 ->
-		PidString = string:sub_string(SField, length(?RECORD_FIELD_PID_PREFIX) + 1),
-		try list_to_pid(PidString) of %(temporary fix) todo change our pid storing mechanisms, so such conversion won't fail
-			Pid -> Pid
-		catch
-			_:_Error ->
-				?warning("Cannot convert document to term: cannot read PID ~p. Node missing?", [PidString]),
-				undefined
-		end;
-	    true -> unicode:characters_to_list(list_to_binary(SField))
-    end;
+  SField = binary_to_list(Field),         %% Prefix tells us which type is it
+  BinPref = string:str(SField, ?RECORD_FIELD_BINARY_PREFIX),
+  AtomPref = string:str(SField, ?RECORD_FIELD_ATOM_PREFIX),
+  PidPref = string:str(SField, ?RECORD_FIELD_PID_PREFIX),
+  if
+    BinPref == 1 -> list_to_binary(string:sub_string(SField, length(?RECORD_FIELD_BINARY_PREFIX) + 1));
+    AtomPref == 1 -> list_to_atom(string:sub_string(SField, length(?RECORD_FIELD_ATOM_PREFIX) + 1));
+    PidPref == 1 ->
+      PidString = string:sub_string(SField, length(?RECORD_FIELD_PID_PREFIX) + 1),
+      try list_to_pid(PidString) of %(temporary fix) todo change our pid storing mechanisms, so such conversion won't fail
+        Pid -> Pid
+      catch
+        _:_Error ->
+          ?warning("Cannot convert document to term: cannot read PID ~p. Node missing?", [PidString]),
+          undefined
+      end;
+    true -> unicode:characters_to_list(list_to_binary(SField))
+  end;
 doc_to_term(Field) when is_list(Field) ->
-    [doc_to_term(X) || X <- Field];
+  [doc_to_term(X) || X <- Field];
 doc_to_term({Fields}) when is_list(Fields) -> %% Object stores tuple which can be an erlang record
-    Fields1 = [{binary_to_list(X), Y} || {X, Y} <- Fields],
-    {IsRec, FieldsInit, RecName} =
-        case lists:keyfind(?RECORD_META_FIELD_NAME, 1, Fields1) of  %% Search for record meta field
-            {_, RecName1} -> %% Meta field found. Check if it is valid record name. Either way - prepare initial working structures
-                {case is_valid_record(binary_to_list(RecName1)) of true -> true; _ -> partial end,
-                    lists:keydelete(?RECORD_META_FIELD_NAME, 1, Fields1), list_to_atom(binary_to_list(RecName1))};
-            _ ->
-                DataTmp = [{list_to_integer(lists:filter(fun(E) -> (E >= $0) andalso (E =< $9) end, Num)), Data} || {Num, Data} <- Fields1],
-                {false, lists:sort(fun({A, _}, {B, _}) -> A < B end, DataTmp), none}
-        end,
-    case IsRec of
-        false -> %% Object is an tuple. Simply create tuple from successive fields
-            list_to_tuple([doc_to_term(Data) || {_, Data} <- FieldsInit]);
-        partial -> %% Object is an unsupported record. We are gonna build record based only on current structure from DB
-            list_to_tuple([RecName | [doc_to_term(Data) || {_, Data} <- FieldsInit]]);
-        true -> %% Object is an supported record. We are gonna build record based on current erlang record structure (new fields will get default values)
-            {_, FNames, InitRec} = ?dao_record_info(RecName),
-            FoldFun = fun(Elem, {Poz, AccIn}) ->
-                    case lists:keyfind(atom_to_list(Elem), 1, FieldsInit) of
-                        {_, Data} ->
-                            {Poz + 1, setelement(Poz, AccIn, doc_to_term(Data))};
-                        _ ->
-                            {Poz + 1, AccIn}
-                    end
-                end,
-            {_, Ret} = lists:foldl(FoldFun, {2, InitRec}, FNames),
-            Ret
-    end;
+  Fields1 = [{binary_to_list(X), Y} || {X, Y} <- Fields],
+  {IsRec, FieldsInit, RecName} =
+    case lists:keyfind(?RECORD_META_FIELD_NAME, 1, Fields1) of  %% Search for record meta field
+      {_, RecName1} -> %% Meta field found. Check if it is valid record name. Either way - prepare initial working structures
+        {case is_valid_record(binary_to_list(RecName1)) of true -> true; _ -> partial end,
+          lists:keydelete(?RECORD_META_FIELD_NAME, 1, Fields1), list_to_atom(binary_to_list(RecName1))};
+      _ ->
+        DataTmp = [{list_to_integer(lists:filter(fun(E) ->
+          (E >= $0) andalso (E =< $9) end, Num)), Data} || {Num, Data} <- Fields1],
+        {false, lists:sort(fun({A, _}, {B, _}) -> A < B end, DataTmp), none}
+    end,
+  case IsRec of
+    false -> %% Object is an tuple. Simply create tuple from successive fields
+      list_to_tuple([doc_to_term(Data) || {_, Data} <- FieldsInit]);
+    partial -> %% Object is an unsupported record. We are gonna build record based only on current structure from DB
+      list_to_tuple([RecName | [doc_to_term(Data) || {_, Data} <- FieldsInit]]);
+    true -> %% Object is an supported record. We are gonna build record based on current erlang record structure (new fields will get default values)
+      {_, FNames, InitRec} = ?dao_record_info(RecName),
+      FoldFun = fun(Elem, {Poz, AccIn}) ->
+        case lists:keyfind(atom_to_list(Elem), 1, FieldsInit) of
+          {_, Data} ->
+            {Poz + 1, setelement(Poz, AccIn, doc_to_term(Data))};
+          _ ->
+            {Poz + 1, AccIn}
+        end
+      end,
+      {_, Ret} = lists:foldl(FoldFun, {2, InitRec}, FNames),
+      Ret
+  end;
 doc_to_term(_) ->
-    throw(invalid_document).
-
+  throw(invalid_document).
 
 
 %% cache_guard/1
@@ -600,8 +601,8 @@ doc_to_term(_) ->
 -spec cache_guard() -> no_return().
 %% ====================================================================
 cache_guard() ->
-    [_ | _] = ets:info(dao_fuse_cache),
-    dao_cluster:clear_sessions(). %% Clear FUSE session
+  [_ | _] = ets:info(dao_fuse_cache),
+  dao_cluster:clear_sessions(). %% Clear FUSE session
 
 %% init_storage/0
 %% ====================================================================
@@ -611,71 +612,81 @@ cache_guard() ->
 -spec init_storage() -> ok | {error, Error :: term()}.
 %% ====================================================================
 init_storage() ->
-	try
-		%get storage config file path
-		GetEnvResult = application:get_env(veil_cluster_node,storage_config_path),
-		case GetEnvResult of
-			{ok,_} -> ok;
-			undefined ->
-				lager:error("Could not get 'storage_config_path' environment variable"),
-				throw(get_env_error)
-		end,
-		{ok,StorageFilePath} = GetEnvResult,
+  try
+    %get storage config file path
+    GetEnvResult = application:get_env(veil_cluster_node, storage_config_path),
+    case GetEnvResult of
+      {ok, _} -> ok;
+      undefined ->
+        lager:error("Could not get 'storage_config_path' environment variable"),
+        throw(get_env_error)
+    end,
+    {ok, StorageFilePath} = GetEnvResult,
 
-		%get storage list from db
-		{Status1,ListStorageValue} = dao_lib:apply(dao_vfs, list_storage, [],1),
-		case Status1 of
-			ok -> ok;
-			error ->
-				lager:error("Could not list existing storages"),
-				throw(ListStorageValue)
-		end,
-		ActualDbStorages = [X#veil_document.record || X <- ListStorageValue],
+    %get storage list from db
+    {Status1, ListStorageValue} = dao_lib:apply(dao_vfs, list_storage, [], 1),
+    case Status1 of
+      ok -> ok;
+      error ->
+        lager:error("Could not list existing storages"),
+        throw(ListStorageValue)
+    end,
+    ActualDbStorages = [X#veil_document.record || X <- ListStorageValue],
 
-		case ActualDbStorages of
-			[] -> %db empty, insert storage
-				%read from file
-				{Status2,FileConsultValue} = file:consult(StorageFilePath),
-				case Status2 of
-					ok -> ok;
-					error ->
-						lager:error("Could not read storage config file"),
-						throw(FileConsultValue)
-				end,
-				[StoragePreferences] = FileConsultValue,
+    case ActualDbStorages of
+      [] -> %db empty, insert storage
+        %read from file
+        {Status2, FileConsultValue} = file:consult(StorageFilePath),
+        case Status2 of
+          ok -> ok;
+          error ->
+            lager:error("Could not read storage config file"),
+            throw(FileConsultValue)
+        end,
+        [StoragePreferences] = FileConsultValue,
 
-				%parse storage preferences
-				UserPreferenceToGroupInfo = fun (GroupPreference) ->
-					case GroupPreference of
-						[{name,cluster_fuse_id},{root,Root}] ->
-							#fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}};
-						[{name,Name},{root,Root}] ->
-							#fuse_group_info{name = Name, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}}
-					end
-				end,
-				FuseGroups=try
-					lists:map(UserPreferenceToGroupInfo,StoragePreferences)
-				catch
-					_Type:Err ->
-						lager:error("Wrong format of storage config file"),
-						throw(Err)
-				end,
+        %parse storage preferences
+        UserPreferenceToGroupInfo = fun(GroupPreference) ->
+          case GroupPreference of
+            [{name, cluster_fuse_id}, {root, Root}] ->
+              #fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}};
+            [{name, Name}, {root, Root}] ->
+              #fuse_group_info{name = Name, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}}
+          end
+        end,
+        FuseGroups = try
+          lists:map(UserPreferenceToGroupInfo, StoragePreferences)
+                     catch
+                       _Type:Err ->
+                         lager:error("Wrong format of storage config file"),
+                         throw(Err)
+                     end,
 
-				%create storage
-				{Status3, Value} = apply(fslogic_storage, insert_storage, ["ClusterProxy", [], FuseGroups]),
-				case Status3 of
-					ok ->
-						ok;
-					error ->
-						lager:error("Error during inserting storage to db"),
-						throw(Value)
-				end;
+        %create storage
+        {Status3, Value} = apply(fslogic_storage, insert_storage, ["ClusterProxy", [], FuseGroups]),
+        case Status3 of
+          ok ->
+            case dao_lib:apply(dao_vfs, get_storage, [{uuid, Value}], 1) of
+              {ok, #veil_document{record = #storage_info{id = Id}}} ->
+                lists:foreach(fun
+                  ([{name, Name}, {root, Root}]) ->
+                    {ok, Hash} = dao_lib:apply(dao_vfs, gen_fuse_group_hash, [[{Id, Root}]], 1),
+                    dao_lib:apply(dao_vfs, save_fuse_group_hash, [#fuse_group_hash{hash = Hash, name = Name}], 1);
+                  (_) -> ok
+                end, StoragePreferences),
+                ok;
+              Other -> throw(Other)
+            end;
+          error ->
+            lager:error("Error during inserting storage to db"),
+            throw(Value)
+        end;
 
-			_NotEmptyList -> %db not empty
-				ok
-		end
-	catch
-		Type:Error ->
-			lager:error("Error during storage init: ~p:~p",[Type,Error]),
-			{error,Error}
-	end.
+      _NotEmptyList -> %db not empty
+        ok
+    end
+  catch
+    Type:Error ->
+      lager:error("Error during storage init: ~p:~p", [Type, Error]),
+      {error, Error}
+  end.

@@ -12,9 +12,9 @@
 %% white lists defined as lists of pairs {user_type, white_list_for_user_type}
 -define(MessagesWhiteList, [
   {standard_user, [fusemessage, remotefilemangement, channelregistration, channelclose, atom, handshakerequest, handshakeack,
-    createstoragetestfilerequest, createstoragetestfileresponse, storagetestfilemodified, storagetestfilemodifiedack]},
+    createstoragetestfilerequest, createstoragetestfileresponse, storagetestfilemodified, storagetestfilemodifiedack, directiostorageinfo]},
   {developer, [fusemessage, remotefilemangement, channelregistration, channelclose, atom, handshakerequest, handshakeack,
-    createstoragetestfilerequest, createstoragetestfileresponse, storagetestfilemodified, storagetestfilemodifiedack]}
+    createstoragetestfilerequest, createstoragetestfileresponse, storagetestfilemodified, storagetestfilemodifiedack, directiostorageinfo]}
 ]).
 -define(AtomsWhiteList, [
   {standard_user, [ping]},

@@ -45,4 +45,8 @@
 -type file_share_info() :: #share_desc{}.
 -type file_share_doc() :: #veil_document{record :: #share_desc{}}.
 
+-type fuse_group_hash() :: uuid().
+-type fuse_group_hash_info() :: #fuse_group_hash{}.
+-type fuse_group_hash_doc() :: #veil_document{record :: #fuse_group_hash{}}.
+
 -endif.

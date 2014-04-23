@@ -121,9 +121,8 @@ websocket_handle({Type, Data}, Req, State) ->
   ?warning("Unknown WebSocket request. Type: ~p, Payload: ~p", [Type, Data]),
   {ok, Req, State}.
 
-handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #createstoragetestfilerequest{storage_id = StorageId} = Test, MsgId, Answer_type}, #hander_state{peer_dn = DnString} = State) ->
-  ?debug("Create storage test file request: ~p", [Test]),
-  lager:info("=======> Create storage test file request: ~p", [Test]),
+handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #createstoragetestfilerequest{storage_id = StorageId} = SReq, MsgId, Answer_type}, #hander_state{peer_dn = DnString} = State) ->
+  ?debug("Create storage test file request: ~p", [SReq]),
   Login = %% Fetch user's login
   case dao_lib:apply(dao_users, get_user, [{dn, DnString}], ProtocolVersion) of
     {ok, #veil_document{record = #user{login = UserLogin}}} ->
@@ -132,42 +131,85 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #createstoragetestfiler
       ?error("VeilClient storage test file creation failed. User ~p data is not available due to DAO error: ~p", [DnString, Error]),
       throw({no_user_found_error, Error, MsgId})
   end,
-  Path = "users/" ++ Login ++ "/vfs_storage.test",
   Length = 20,
+  {A, B, C} = now(),
+  random:seed(A, B, C),
   Text = list_to_binary(lists:foldl(fun(_, Acc) -> [random:uniform(93) + 33 | Acc] end, [], lists:seq(1, Length))),
+  %% Delete storage test file after one minute
+  DeleteStorageTestFile = fun(StorageHelperInfo, Path) ->
+    timer:sleep(60 * 1000),
+    storage_files_manager:delete(StorageHelperInfo, Path)
+  end,
   case dao_lib:apply(dao_vfs, get_storage, [{id, StorageId}], ProtocolVersion) of
     {ok, #veil_document{record = StorageInfo}} ->
       StorageHelperInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, StorageInfo),
-      case storage_files_manager:create(StorageHelperInfo, Path) of
-        ok -> case storage_files_manager:write(StorageHelperInfo, Path, Text) of
-                Length ->
-                  {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #createstoragetestfileresponse{relative_path = Path, text = Text})}, Req, State};
-                _ ->
-                  {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #createstoragetestfileresponse{relative_path = "", text = ""})}, Req, State}
-              end;
+      case createStorageTestFile(StorageHelperInfo, Login) of
+        {ok, Path} ->
+          spawn(fun() -> DeleteStorageTestFile(StorageHelperInfo, Path) end),
+          case storage_files_manager:write(StorageHelperInfo, Path, Text) of
+            Length ->
+              {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #createstoragetestfileresponse{relative_path = Path, text = Text})}, Req, State};
+            _ ->
+              {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #createstoragetestfileresponse{relative_path = "", text = ""})}, Req, State}
+          end;
         _ ->
-          {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #createstoragetestfileresponse{relative_path = Path, text = Text})}, Req, State}
+          {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #createstoragetestfileresponse{relative_path = "", text = Text})}, Req, State}
       end;
     _ ->
-      {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #createstoragetestfileresponse{relative_path = Path, text = Text})}, Req, State}
+      {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #createstoragetestfileresponse{relative_path = "", text = Text})}, Req, State}
   end;
 
-handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #storagetestfilemodified{storage_id = StorageId, relative_path = Path, text = ExpectedText} = Test, MsgId, Answer_type}, State) ->
-  ?debug("Storage test file modified: ~p", [Test]),
-  lager:info("=======> Storage test file modified: ~p", [Test]),
+handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #storagetestfilemodified{storage_id = StorageId, relative_path = Path, text = ExpectedText} = SReq, MsgId, Answer_type}, State) ->
+  ?debug("Storage test file modified request: ~p", [SReq]),
   case dao_lib:apply(dao_vfs, get_storage, [{id, StorageId}], ProtocolVersion) of
     {ok, #veil_document{record = StorageInfo}} ->
       StorageHelperInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, StorageInfo),
       case storage_files_manager:read(StorageHelperInfo, Path, 0, length(ExpectedText)) of
-        BinaryText ->
-          ActualText = binary_to_list(BinaryText),
+        {ok, Bytes} ->
+          ActualText = binary_to_list(Bytes),
           Answer = ExpectedText =:= ActualText,
+          storage_files_manager:delete(StorageHelperInfo, Path),
           {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #storagetestfilemodifiedack{answer = Answer})}, Req, State};
         _ ->
           {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #storagetestfilemodifiedack{answer = false})}, Req, State}
       end;
     _ ->
       {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #storagetestfilemodifiedack{answer = false})}, Req, State}
+  end;
+
+handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #directiostorageinfo{storage_info = StorageInfo} = SReq, MsgId, Answer_type}, #hander_state{fuse_id = FuseId} = State) ->
+  ?debug("Direct IO storage request: ~p", [SReq]),
+  case dao_lib:apply(dao_cluster, get_fuse_session, [FuseId], ProtocolVersion) of
+    {ok, #veil_document{record = #fuse_session{env_vars = EnvVars} = FuseSession} = FuseSessionDoc} ->
+      case proplists:get_value(group_id, EnvVars) of
+        undefined ->
+          NewStorageInfo = lists:map(fun({_, StorageId, Root}) -> {StorageId, Root} end, StorageInfo),
+          {ok, Hash} = dao_lib:apply(dao_vfs, gen_fuse_group_hash, [NewStorageInfo], ProtocolVersion),
+          {ok, GroupId} = case dao_lib:apply(dao_vfs, exist_fuse_group_hash, [{hash, Hash}], ProtocolVersion) of
+                            {ok, true} ->
+                              {ok, FuseGroupHashDoc} = dao_lib:apply(dao_vfs, get_fuse_group_hash, [{hash, Hash}], ProtocolVersion),
+                              FuseGroupHashDoc#veil_document.record#fuse_group_hash.name;
+                            _ ->
+                              dao_lib:apply(dao_vfs, save_fuse_group_hash, [#fuse_group_hash{hash = Hash, name = Hash}], ProtocolVersion),
+                              {ok, Hash}
+                          end,
+          lists:foreach(fun
+            ({StorageId, Root}) ->
+              FuseGroup = #fuse_group_info{name = GroupId, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}},
+              case dao_lib:apply(dao_vfs, get_storage, [{id, StorageId}], ProtocolVersion) of
+                {ok, #veil_document{record = #storage_info{fuse_groups = FuseGroups} = StgInfo} = StgInfoDoc} ->
+                  dao_lib:apply(dao_vfs, save_storage,
+                    [StgInfoDoc#veil_document{record = StgInfo#storage_info{fuse_groups = [FuseGroup | FuseGroups]}}], ProtocolVersion)
+              end
+          end, NewStorageInfo),
+          dao_lib:apply(dao_cluster, save_fuse_session,
+            [FuseSessionDoc#veil_document{record = FuseSession#fuse_session{env_vars = [{group_id, GroupId} | EnvVars]}}], ProtocolVersion),
+          {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req, State};
+        _ ->
+          {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req, State}
+      end;
+    _ ->
+      {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VEREMOTEIO})}, Req, State}
   end;
 
 %% Internal websocket_handle method implementation
@@ -184,10 +226,10 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #handshakerequest{hostn
       throw({no_user_found_error, Error, MsgId})
   end,
 
-  %% Env Vars list. Entry format: {Name :: atom(), value :: string()}
+%% Env Vars list. Entry format: {Name :: atom(), value :: string()}
   EnvVars = [{list_to_atom(string:to_lower(Name)), Value} || #handshakerequest_envvariable{name = Name, value = Value} <- Vars],
 
-  %% Save received data to DB
+%% Save received data to DB
   FuseEnv = #veil_document{uuid = NewFuseId, record = #fuse_session{uid = UID, hostname = Hostname, env_vars = EnvVars}},
   case dao_lib:apply(dao_cluster, save_fuse_session, [FuseEnv], ProtocolVersion) of
     {ok, _} -> ok;
@@ -196,7 +238,7 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #handshakerequest{hostn
       throw({handshake_error, Error1, MsgId})
   end,
 
-  %% Update connection state with new FUSE_ID and send it to client
+%% Update connection state with new FUSE_ID and send it to client
   NewState = State#hander_state{fuse_id = NewFuseId},
   {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #handshakeresponse{fuse_id = NewFuseId})}, Req, NewState};
 
@@ -211,13 +253,13 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
       throw({no_user_found_error, Error, MsgId})
   end,
 
-  %% Fetch session data (using FUSE ID)
+%% Fetch session data (using FUSE ID)
   case dao_lib:apply(dao_cluster, get_fuse_session, [NewFuseId], ProtocolVersion) of
     {ok, #veil_document{uuid = SessID, record = #fuse_session{uid = UID}}} ->
-      %% Save connection's location (node and pid) to DB or crash, sice failure leaves no way of recovering
+%% Save connection's location (node and pid) to DB or crash, sice failure leaves no way of recovering
       {ok, ConnID} = dao_lib:apply(dao_cluster, save_connection_info, [#connection_info{session_id = SessID, controlling_node = node(), controlling_pid = self()}], ProtocolVersion),
 
-      %% Double check if session is valid. We cant leave any connections with invalid session ID. Zombies are bad. Really, really bad.
+%% Double check if session is valid. We cant leave any connections with invalid session ID. Zombies are bad. Really, really bad.
       case dao_lib:apply(dao_cluster, get_fuse_session, [NewFuseId, {stale, update_before}], ProtocolVersion) of
         {ok, _} -> ok;  %% Everything is fine, just continue
         {error, Reason} ->      %% Session has been destroyed, let client know that it's invalidated
@@ -226,11 +268,11 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
           throw({invalid_fuse_id, MsgId})                                                 %% ...and crash
       end,
 
-      %% Session data found, and its user ID matches -> send OK status and update current connection state
+%% Session data found, and its user ID matches -> send OK status and update current connection state
       ?debug("User ~p assigned FUSE ID ~p to the connection (PID: ~p)", [DnString, NewFuseId, self()]),
       {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req, State#hander_state{fuse_id = NewFuseId, connection_id = ConnID}};
     {ok, #veil_document{record = #fuse_session{uid = OtherUID}}} ->
-      %% Current user does not match session owner
+%% Current user does not match session owner
       ?warning("User ~p tried to access someone else's session (fuse ID: ~p, session owner UID: ~p)", [DnString, NewFuseId, OtherUID]),
       throw({invalid_fuse_id, MsgId});
     {error, Error1} ->
@@ -240,7 +282,7 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
 
 %% Handle other messages
 handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type}, #hander_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID} = State) ->
-  %% Check if received message requires FuseId
+%% Check if received message requires FuseId
   MsgType = case Msg of
               M0 when is_tuple(M0) -> erlang:element(1, M0); %% Record
               M1 when is_atom(M1) -> atom                   %% Atom
@@ -479,3 +521,29 @@ checkMessage(Msg, DN) ->
 %% ====================================================================
 genFuseId(#handshakerequest{} = _HReq) ->
   dao_helper:gen_uuid().
+
+%% createStorageTestFile/2
+%% ====================================================================
+%% @doc Creates storage test file with random filename. If file already exists new name is generated.
+-spec createStorageTestFile(StorageHelperInfo :: #storage_helper_info{}, Login :: string()) -> Result :: nonempty_string().
+%% ====================================================================
+createStorageTestFile(StorageHelperInfo, Login) ->
+  createStorageTestFile(StorageHelperInfo, Login, 20).
+
+%% createStorageTestFile/3
+%% ====================================================================
+%% @doc Creates storage test file with random filename. If file already exists new name is generated.
+-spec createStorageTestFile(StorageHelperInfo :: #storage_helper_info{}, Login :: string(), Attempts :: integer()) -> Result :: nonempty_string().
+%% ====================================================================
+createStorageTestFile(_, _, 0) ->
+  {error, attempts_number_exceeded};
+createStorageTestFile(StorageHelperInfo, Login, Attempts) ->
+  {A, B, C} = now(),
+  random:seed(A, B, C),
+  Filename = lists:foldl(fun(_, Acc) -> [random:uniform(26) + 96 | Acc] end, [], lists:seq(1, 8)),
+  lager:info("======> Creating file: ~p", [Filename]),
+  Path = "users/" ++ Login ++ "/" ++ Filename,
+  case storage_files_manager:create(StorageHelperInfo, Path) of
+    ok -> {ok, Path};
+    _ -> createStorageTestFile(StorageHelperInfo, Login, Attempts - 1)
+  end.
