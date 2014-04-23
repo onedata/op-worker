@@ -789,10 +789,17 @@ grid_view_body() ->
                                  end;
                              _ -> <<"">>
                          end,
-            ImageUrl = case is_group_dir(FullPath) of
-                           true -> <<"/images/folder_groups64.png">>;
-                           false -> <<"/images/folder64.png">>
+
+            ImageUrl = case item_is_dir(Item) of
+                           true ->
+                               case is_group_dir(FullPath) of
+                                   true -> <<"/images/folder_groups64.png">>;
+                                   false -> <<"/images/folder64.png">>
+                               end;
+                           false ->
+                               <<"/images/file64.png">>
                        end,
+
             LinkID = <<"grid_item_", (integer_to_binary(Counter))/binary>>,
             % Item won't hightlight if the link is clicked.
             wire_script(wf:f("$('.wfid_~s').click(function(e) { e.stopPropagation();});", [LinkID])),
@@ -895,10 +902,16 @@ list_view_body() ->
                                  end;
                              _ -> <<"">>
                          end,
+
             ImageUrl = case is_group_dir(FullPath) of
-                           true -> <<"/images/folder_groups32.png">>;
-                           false -> <<"/images/folder32.png">>
+                           true ->
+                               case is_group_dir(FullPath) of
+                                   true -> <<"/images/folder_groups32.png">>;
+                                   false -> <<"/images/folder32.png">>
+                               end;
+                           false -> <<"/images/file32.png">>
                        end,
+
             LinkID = <<"list_item_", (integer_to_binary(Counter))/binary>>,
             % Item won't hightlight if the link is clicked.
             wire_script(wf:f("$('#~s').click(function(e) { e.stopPropagation(); });", [LinkID])),

@@ -50,7 +50,7 @@ about_table() ->
             #td{style = <<"border-width: 0px; padding: 10px 10px">>, body =
             #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Contact">>}},
             #td{style = <<"border-width: 0px; padding: 10px 10px">>, body =
-            #link{style = <<"font-size: 18px; padding: 5px 0;">>, body = <<?contact_email>>, url = <<"mailto:", ?contact_email>>}}
+            #link{style = <<"font-size: 18px; padding: 5px 0;">>, body = <<?CONTACT_EMAIL>>, url = <<"mailto:", ?CONTACT_EMAIL>>}}
         ]},
 
         #tr{cells = [
