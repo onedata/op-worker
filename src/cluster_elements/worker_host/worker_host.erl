@@ -464,7 +464,11 @@ proc_standard_request(RequestMap, SubProcs, PlugIn, ProtocolVersion, Msg, MsgId,
             case is_process_alive(SubProcPid) of
               false ->
                 {Name, MaxDepth, MaxWidth, NewProcFun, NewMapFun} = SubProcArgs,
-                SubProcPid2 = start_sub_proc(Name, MaxDepth, MaxWidth, NewProcFun, NewMapFun),
+                CacheType = case SubProcCache of
+                  non -> non;
+                  _ -> use_cache
+                end,
+                SubProcPid2 = start_sub_proc(Name, CacheType, MaxDepth, MaxWidth, NewProcFun, NewMapFun),
                 SubProcPid2 ! {PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo},
                 SubProc2Desc = {Name, {SubProcArgs, SubProcCache, SubProcPid2}},
                 [SubProc2Desc | proplists:delete(Name, SubProcs)];
