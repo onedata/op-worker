@@ -9,7 +9,7 @@ namespace helpers {
 
 using namespace std;
 
-FileCache::FileCache(uint32_t blockSize, bool isBuffer) 
+FileCache::FileCache(uint32_t blockSize, bool isBuffer)
   : m_isBuffer(isBuffer),
     m_curBlockNo(1),
     m_blockSize(blockSize),
@@ -17,7 +17,7 @@ FileCache::FileCache(uint32_t blockSize, bool isBuffer)
 {
 }
 
-FileCache::~FileCache() 
+FileCache::~FileCache()
 {
 }
 
@@ -29,18 +29,18 @@ bool FileCache::readData(off_t offset, size_t size, std::string &buff)
     buff.resize(0);
 
     multiset<block_ptr>::const_iterator it = m_fileBlocks.upper_bound(block_ptr(new FileBlock(offset)));
-    
+
     if(it == m_fileBlocks.begin())
         return false;
 
-    for(--it; it != m_fileBlocks.end() && buff.size() < size; ++it) 
+    for(--it; it != m_fileBlocks.end() && buff.size() < size; ++it)
     {
-        if((*it)->offset > offset + buff.size())
+        if(static_cast<size_t>((*it)->offset) > offset + buff.size())
             break;
 
-        off_t startFrom = offset + buff.size() - (*it)->offset;
+        size_t startFrom = offset + buff.size() - (*it)->offset;
         if(startFrom < (*it)->size()) {
-            buff += (*it)->data.substr( startFrom ,  min( (size_t)size - buff.size(), (size_t)startFrom - (*it)->size() ));
+            buff += (*it)->data.substr( startFrom ,  min( size - buff.size(), startFrom - (*it)->size() ));
         }
     }
 
@@ -70,7 +70,7 @@ void FileCache::debugPrint()
 }
 
 
-block_ptr FileCache::removeOldestBlock() 
+block_ptr FileCache::removeOldestBlock()
 {
     boost::unique_lock<boost::recursive_mutex> guard(m_fileBlocksMutex);
 
@@ -99,7 +99,7 @@ bool FileCache::insertBlock(const FileBlock &block)
     off_t offset = block.offset;
 
     // repeat while the is still data to save
-    do 
+    do
     {
         multiset<block_ptr>::iterator it = m_fileBlocks.upper_bound(block_ptr(new FileBlock(offset)));
         multiset<block_ptr>::iterator next;
@@ -113,7 +113,7 @@ bool FileCache::insertBlock(const FileBlock &block)
                 ++next;
 
             // At least one byte starting with 'offset' of the block (but not all of them) does not overlap others
-            if( ((*it)->offset + (*it)->size() <= offset) || ((*it)->offset > offset) )
+            if( ((*it)->offset + (*it)->size() <= static_cast<size_t>(offset)) || ((*it)->offset > offset) )
             {
                 size_t tmpSize = next == m_fileBlocks.end() ? cBuff.size() : min((size_t)((*next)->offset - offset ), cBuff.size());
                 block_ptr tmp = block_ptr(new FileBlock(offset, cBuff.substr(0, tmpSize)));
@@ -125,11 +125,11 @@ bool FileCache::insertBlock(const FileBlock &block)
                 break;
             }
             // At least one byte (starting with 'offset') overlaps with older blocks
-            else if ( (*it)->offset <= offset && (*it)->offset + (*it)->size() > offset) 
+            else if ( (*it)->offset <= offset && (*it)->offset + (*it)->size() > static_cast<size_t>(offset))
             {
                 off_t tStart = offset - (*it)->offset;
                 size_t toCpy = min( (size_t)((*it)->offset + (*it)->size() - offset), cBuff.size() );
-                
+
                 (*it)->data.replace(tStart, toCpy, cBuff.substr(0, toCpy));
                 cBuff = cBuff.substr(toCpy);
                 offset += toCpy;
@@ -139,11 +139,11 @@ bool FileCache::insertBlock(const FileBlock &block)
         }
 
         // Whole current data block does not overlap with older ones
-        if(it == m_fileBlocks.end()) 
+        if(it == m_fileBlocks.end())
         {
             block_ptr tmp = block_ptr(new FileBlock(offset, cBuff));
             forceInsertBlock(tmp, it);
-            
+
             cBuff = "";
         }
 
@@ -152,12 +152,12 @@ bool FileCache::insertBlock(const FileBlock &block)
     return true;
 }
 
-void FileCache::forceInsertBlock(block_ptr block, std::multiset<block_ptr>::iterator whereTo) 
+void FileCache::forceInsertBlock(block_ptr block, std::multiset<block_ptr>::iterator whereTo)
 {
     boost::unique_lock<boost::recursive_mutex> guard(m_fileBlocksMutex);
 
     // This method asumes that given block does not overlap at all with others
-    // This is where block merging thakes place 
+    // This is where block merging thakes place
 
     if(block->size() == 0)
         return;
@@ -165,7 +165,7 @@ void FileCache::forceInsertBlock(block_ptr block, std::multiset<block_ptr>::iter
     // Set expiration time if it isn't set yet
     if(block->valid_to == 0)
         block->valid_to = m_isBuffer ? ++m_curBlockNo : utils::mtime<uint64_t>() + 5000;
-    
+
     multiset<block_ptr>::iterator it, next, origNext, tmp;
     it = next = origNext = m_fileBlocks.insert(whereTo, block);
     m_blockExpire.insert(block);
@@ -185,7 +185,7 @@ void FileCache::forceInsertBlock(block_ptr block, std::multiset<block_ptr>::iter
 
     // Iterate from block before the given until merging is done
     do {
-        if((*it)->offset + (*it)->size() == (*next)->offset && (*it)->size() < m_blockSize)
+        if((*it)->offset + (*it)->size() == static_cast<size_t>((*next)->offset) && (*it)->size() < m_blockSize)
         {
             size_t toCpy = min(m_blockSize - (*it)->size(), (*next)->size());
             (*it)->data += (*next)->data.substr(0, toCpy);
@@ -193,7 +193,7 @@ void FileCache::forceInsertBlock(block_ptr block, std::multiset<block_ptr>::iter
             (*next)->offset += toCpy;
 
             // If merge process generates empty block, delete it
-            if((*next)->size() == 0) 
+            if((*next)->size() == 0)
             {
                 m_blockExpire.erase(*next);
                 tmp = next, tmp++;
@@ -224,11 +224,11 @@ size_t FileCache::blockCount()
 
 void FileCache::discardExpired()
 {
-    if(m_isBuffer) 
+    if(m_isBuffer)
         return;
 
     boost::unique_lock<boost::recursive_mutex> guard(m_fileBlocksMutex);
-    while(!m_blockExpire.empty()) 
+    while(!m_blockExpire.empty())
     {
         block_ptr tmp = *m_blockExpire.begin();
 
@@ -237,12 +237,12 @@ void FileCache::discardExpired()
 
         m_blockExpire.erase(tmp);
         m_fileBlocks.erase(tmp);
-        
+
         m_byteSize -= tmp->size();
 
     }
 }
 
 
-} // namespace helpers 
+} // namespace helpers
 } // namespace veil

@@ -328,7 +328,7 @@ int ClusterProxyHelper::doRead(const string &path, std::string &buf, size_t size
     FileData answer;
     string inputData = msg.SerializeAsString();
 
-    uint64_t timeout = timeout = size * 2; // 2ms for each byte (minimum of 500B/s);
+    uint64_t timeout = size * 2; // 2ms for each byte (minimum of 500B/s);
 
     if(!answer.ParseFromString(
         requestMessage(msg.GetDescriptor()->name(), answer.GetDescriptor()->name(), inputData, timeout)))

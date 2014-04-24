@@ -232,7 +232,7 @@ int BufferAgent::onRead(const std::string &path, std::string &buf, size_t size, 
 
     {
         unique_lock buffGuard(wrapper->mutex);
-        if(offset + buf.size() > wrapper->endOfFile)
+        if(offset + static_cast<off_t>(buf.size()) > wrapper->endOfFile)
             wrapper->endOfFile = 0;
     }
 
@@ -267,7 +267,7 @@ int BufferAgent::onFlush(const std::string &path, ffi_type ffi)
                     (void) wrapper->buffer->removeOldestBlock();
                 }
                 return res;
-            } else if(res < block->data.size()) {
+            } else if(static_cast<size_t>(res) < block->data.size()) {
                 // Send wasn't complete
                 block->offset += res;
                 block->data = block->data.substr(res);
@@ -377,7 +377,7 @@ void BufferAgent::readerLoop()
                 guard.lock();
                 unique_lock buffGuard(wrapper->mutex);
 
-                if(ret > 0 && tmp.size() >= ret) {
+                if(ret > 0 && tmp.size() >= static_cast<size_t>(ret)) {
                     // Save dowloaded bytes in cache
                     wrapper->buffer->writeData(effectiveOffset, tmp);
                     updateRdBufferSize(job.fileName, wrapper->buffer->byteSize());
@@ -456,7 +456,7 @@ void BufferAgent::writerLoop()
 
                         wrapper->lastError = writeRes;
                     }
-                    else if(writeRes < block->data.size())
+                    else if(static_cast<size_t>(writeRes) < block->data.size())
                     {
                         block->offset += writeRes;
                         block->data = block->data.substr(writeRes);
