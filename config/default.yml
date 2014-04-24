@@ -180,7 +180,6 @@ veil_cluster_node_env:
       name: control_panel_port
       description: Port on which control_panel is available
       value: 443
-      # NOTE! to change gui port, n2o entry in sys.config must be modified too!
 
   - parameter:
       name: control_panel_redirect_port

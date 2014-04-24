@@ -66,6 +66,13 @@ init(_Args) ->
             {'_', n2o_cowboy, []}
         ]}
     ],
+
+    % Set envs needed by n2o
+    % Transition port - the same as gui port
+    ok = application:set_env(n2o, transition_port, GuiPort),
+    % Custom route handler
+    ok = application:set_env(n2o, route, gui_routes),
+
     % Start the listener for web gui and nagios handler
     {ok, _} = cowboy:start_https(?https_listener, GuiNbAcceptors,
         [
