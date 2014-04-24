@@ -575,11 +575,9 @@ create_directory(Name) ->
 
 remove_selected() ->
     SelectedItems = get_selected_items(),
-    ?dump(get(user_id)),
-    ?dump(SelectedItems),
     lists:foreach(
         fun(Path) ->
-            ?dump(fs_remove(Path))
+            fs_remove(Path)
         end, SelectedItems),
     clear_clipboard(),
     clear_manager().
