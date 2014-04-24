@@ -121,40 +121,49 @@ content_disposition_attachment_headers(Req, FileName) ->
 -spec handle_user_content_request(req(), string()) -> {ok, req()}.
 %% ====================================================================
 handle_user_content_request(Req, Path) ->
-    try
-        try_or_throw(
-            fun() ->
-                Context = wf_context:init_context(Req),
-                SessionHandler = proplists:get_value(session, Context#context.handlers),
-                SessionHandler:init([], Context),
-                UserID = wf:session(user_doc),
-                true = (UserID /= undefined),
-                put(user_id, lists:nth(1, user_logic:get_dn_list(UserID)))
-            end, not_logged_in),
-
-        {Filepath, Size} = try_or_throw(
-            fun() ->
-                TryFilepath = binary_to_list(Path),
-                {ok, Fileattr} = logical_files_manager:getfileattr(TryFilepath),
-                "REG" = Fileattr#fileattributes.type,
-                TrySize = Fileattr#fileattributes.size,
-                {TryFilepath, TrySize}
-            end, file_not_found),
-
-        {ok, _NewReq} = try_or_throw(
-            fun() ->
-                send_file(Req, Filepath, filename:basename(Filepath), Size)
-            end, {sending_failed, Filepath})
-
-    catch Type:Message ->
-        case Message of
-            {sending_failed, Path} ->
-                ?error_stacktrace("Error while sending file ~p to user ~p - ~p:~p",
-                    [Path, user_logic:get_login(get(user_id)), Type, Message]);
-            _ ->
-                skip
+    % Try to retrieve user's session
+    InitSession =
+        try
+            Context = wf_context:init_context(Req),
+            SessionHandler = proplists:get_value(session, Context#context.handlers),
+            SessionHandler:init([], Context),
+            UserID = wf:session(user_doc),
+            true = (UserID /= undefined),
+            put(user_id, lists:nth(1, user_logic:get_dn_list(UserID))),
+            ok
+        catch _:_ ->
+            error
         end,
-        {ok, _RedirectReq} = page_error:user_content_request_error(Message, Req)
+
+    case InitSession of
+        error ->
+            {ok, _RedirectReq} = page_error:user_content_request_error(not_logged_in, Req);
+        ok ->
+            % Try to get file by given path
+            FileInfo =
+                try
+                    TryFilepath = binary_to_list(Path),
+                    {ok, Fileattr} = logical_files_manager:getfileattr(TryFilepath),
+                    "REG" = Fileattr#fileattributes.type,
+                    TrySize = Fileattr#fileattributes.size,
+                    {TryFilepath, TrySize}
+                catch _:_ ->
+                    error
+                end,
+
+            case FileInfo of
+                error ->
+                    {ok, _RedirectReq} = page_error:user_content_request_error(file_not_found, Req);
+                {Filepath, Size} ->
+                    % Send the file
+                    try
+                        {ok, _NewReq} = send_file(Req, Filepath, filename:basename(Filepath), Size)
+                    catch Type:Message ->
+                        ?error_stacktrace("Error while sending file ~p to user ~p - ~p:~p",
+                            [Filepath, user_logic:get_login(get(user_id)), Type, Message]),
+                        {ok, _FinReq} = cowboy_req:reply(500, Req#http_req{connection = close})
+                    end
+            end
     end.
 
 
@@ -168,34 +177,35 @@ handle_user_content_request(Req, Path) ->
 -spec handle_shared_files_request(string(), req()) -> {ok, req()}.
 %% ====================================================================
 handle_shared_files_request(Req, ShareID) ->
-    try
-        {FileID, FileName, Size} = try_or_throw(
-            fun() ->
-                put(user_id, undefined),
-                true = (ShareID /= <<"">>),
+% Try to get file by share uuid
+    FileInfo =
+        try
+            put(user_id, undefined),
+            true = (ShareID /= <<"">>),
 
-                {ok, #veil_document{record = #share_desc{file = FileID}}} =
-                    logical_files_manager:get_share({uuid, binary_to_list(ShareID)}),
-                {ok, FileName} = logical_files_manager:get_file_name_by_uuid(FileID),
-                {ok, Fileattr} = logical_files_manager:getfileattr({uuid, FileID}),
-                "REG" = Fileattr#fileattributes.type,
-                TrySize = Fileattr#fileattributes.size,
-                {FileID, FileName, TrySize}
-            end, file_not_found),
-
-        {ok, _NewReq} = try_or_throw(
-            fun() ->
-                send_file(Req, {uuid, FileID}, FileName, Size)
-            end, {sending_failed, FileName})
-
-    catch Type:Message ->
-        case Message of
-            {sending_failed, Path} ->
-                ?error_stacktrace("Error while sending shared file ~p - ~p:~p", [Path, Type, Message]);
-            _ ->
-                skip
+            {ok, #veil_document{record = #share_desc{file = TFileID}}} =
+                logical_files_manager:get_share({uuid, binary_to_list(ShareID)}),
+            {ok, TFileName} = logical_files_manager:get_file_name_by_uuid(TFileID),
+            {ok, Fileattr} = logical_files_manager:getfileattr({uuid, TFileID}),
+            "REG" = Fileattr#fileattributes.type,
+            TSize = Fileattr#fileattributes.size,
+            {TFileID, TFileName, TSize}
+        catch _:_ ->
+            error
         end,
-        {ok, _RedirectReq} = page_error:shared_file_request_error(Message, Req)
+
+    % Redirect to error page if the link was incorrect, or send the file
+    case FileInfo of
+        error ->
+            {ok, _RedirectReq} = page_error:shared_file_request_error(file_not_found, Req);
+        {FileID, FileName, Size} ->
+            try
+                {ok, _NewReq} = send_file(Req, {uuid, FileID}, FileName, Size)
+            catch Type:Message ->
+                ?error_stacktrace("Error while sending shared file ~p - ~p:~p",
+                    [FileID, Type, Message]),
+                {ok, _FinReq} = cowboy_req:reply(500, Req#http_req{connection = close})
+            end
     end.
 
 
@@ -247,18 +257,3 @@ get_download_buffer_size() ->
                     ?error("Could not read 'control_panel_download_buffer' from config. Make sure it is present in config.yml and .app.src."),
                     ?DOWNLOAD_BUFFER_SIZE
             end.
-
-
-%% try_or_throw/2
-%% ====================================================================
-%% @doc Convienience function to envelope a piece of code in try throw statement.
-%% Used for clear code where multiple try catches are nested.
-%% @end
--spec try_or_throw(function(), term()) -> term() | no_return().
-%% ====================================================================
-try_or_throw(Fun, ThrowWhat) ->
-    try
-        Fun()
-    catch _:_ ->
-        throw(ThrowWhat)
-    end.

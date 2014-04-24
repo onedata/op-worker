@@ -541,7 +541,7 @@ rename_item(OldPath, NewName) ->
             NewPath = filename:absname(NewName, get_working_directory()),
             case item_find(NewPath) of
                 undefined ->
-                    logical_files_manager:mv(OldPath, NewPath),
+                    fs_mv(OldPath, get_working_directory(), NewName),
                     clear_clipboard(),
                     clear_manager(),
                     select_item(NewPath);
@@ -628,7 +628,8 @@ show_popup(Type) ->
                     #p{body = <<"Rename <b>", (gui_utils:to_binary(Filename))/binary, "</b>">>},
                     #form{class = <<"control-group">>, body = [
                         #textbox{id = wire_enter("new_name_textbox", "new_name_submit"), class = <<"flat">>,
-                            style = <<"width: 350px;">>, placeholder = <<"New name">>, value = gui_utils:to_binary(Filename)},
+                            style = <<"width: 350px;">>, placeholder = <<"New name">>, value = gui_utils:to_binary(Filename),
+                            data_fields = [{<<"onfocus">>, <<"this.select(); this.selAll=1;">>}]},
                         #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>,
                             id = wire_click("new_name_submit", ["new_name_textbox"], {action, rename_item, [OldLocation, {q, "new_name_textbox"}]})}
                     ]}
@@ -654,11 +655,11 @@ show_popup(Type) ->
             share_file ->
                 Path = lists:nth(1, get_selected_items()),
                 Filename = filename:basename(lists:nth(1, get_selected_items())),
-                {Status, ShareID} = case logical_files_manager:get_share({file, Path}) of
+                {Status, ShareID} = case fs_get_share_by_filepath(Path) of
                                         {ok, #veil_document{uuid = UUID}} ->
                                             {exists, gui_utils:to_binary(UUID)};
                                         _ ->
-                                            {ok, ID} = logical_files_manager:create_standard_share(Path),
+                                            {ok, ID} = fs_create_share(Path),
                                             {new, gui_utils:to_binary(ID)}
                                     end,
                 clear_workspace(),
@@ -903,7 +904,7 @@ list_view_body() ->
                              _ -> <<"">>
                          end,
 
-            ImageUrl = case is_group_dir(FullPath) of
+            ImageUrl = case item_is_dir(Item) of
                            true ->
                                case is_group_dir(FullPath) of
                                    true -> <<"/images/folder_groups32.png">>;
@@ -985,7 +986,7 @@ item_new(FullPath) ->
                    "DIR" -> FA#fileattributes{size = -1};
                    _ -> FA
                end,
-    IsShared = case logical_files_manager:get_share({file, FullPath}) of
+    IsShared = case fs_get_share_by_filepath(FullPath) of
                    {ok, _} -> true;
                    _ -> false
                end,
@@ -1141,13 +1142,17 @@ fs_list_dir(Path, Offset, Count, Result) ->
             {error, not_a_dir}
     end.
 
-fs_mv(Path, TargetPath) ->
-    case filename:dirname(Path) of
+fs_mv(Path, TargetDir) ->
+    fs_mv(Path, TargetDir, filename:basename(Path)).
+
+fs_mv(Path, TargetDir, TargetName) ->
+    TargetPath = filename:absname(TargetName, TargetDir),
+    case Path of
         TargetPath -> ok;
         _ ->
-            case logical_files_manager:mv(Path, filename:absname(filename:basename(Path), TargetPath)) of
+            case logical_files_manager:mv(Path, TargetPath) of
                 ok -> ok;
-                _ -> wf:wire(#alert{text = "Unable to move " ++ filename:basename(Path) ++
+                _ -> wf:wire(#alert{text = "Unable to move " ++ TargetName ++
                     ". File exists."})
             end
     end.
@@ -1170,6 +1175,12 @@ fs_unique_filename(RequestedPath, Counter) ->
         undefined -> NewName;
         _ -> fs_unique_filename(RequestedPath, Counter + 1)
     end.
+
+fs_create_share(Filepath) ->
+    logical_files_manager:create_standard_share(Filepath).
+
+fs_get_share_by_filepath(Filepath) ->
+    logical_files_manager:get_share({file, Filepath}).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
