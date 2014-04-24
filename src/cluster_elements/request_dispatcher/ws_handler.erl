@@ -168,10 +168,12 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #storagetestrequest{typ
       StorageHelperInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, StorageInfo),
       case storage_files_manager:read(StorageHelperInfo, Path, 0, length(ExpectedText)) of
         {ok, Bytes} ->
-          ActualText = binary_to_list(Bytes),
-          Answer = ExpectedText =:= ActualText,
+          Answer = case binary_to_list(Bytes) of
+                     ExpectedText -> "ok";
+                     _ -> "error"
+                   end,
           storage_files_manager:delete(StorageHelperInfo, Path),
-          {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #storagetestresponse{answer = "ok"})}, Req, State};
+          {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #storagetestresponse{answer = Answer})}, Req, State};
         _ ->
           {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #storagetestresponse{answer = "error"})}, Req, State}
       end;
