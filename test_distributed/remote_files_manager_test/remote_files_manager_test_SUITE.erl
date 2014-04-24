@@ -94,6 +94,7 @@ permissions_test(Config) ->
   %% Get FuseId
   {ok, Socket2} = wss:connect(Host, Port, [{certfile, Cert2}, {cacertfile, Cert2}]),
   FuseId2 = wss:handshakeInit(Socket2, "hostname", []),
+  wss:handshakeAck(Socket2,FuseId2),
 
   {Status0, _, _, Id0, _, AnswerOpt0} = create_file(Host, Cert2, Port, TestFile, FuseId2),
   ?assertEqual("ok", Status0),
@@ -322,11 +323,12 @@ storage_helpers_management_test(Config) ->
   {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
 
-  {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
-  FuseId1 = wss:handshakeInit(Socket, "hostname", [{testvar1, "testvalue1"}, {group_id, "group1"}]), %% Get first fuseId
-  FuseId2 = wss:handshakeInit(Socket, "hostname", [{testvar1, "testvalue1"}, {group_id, "group2"}]), %% Get second fuseId
-  wss:close(Socket),
-
+  {ok, Socket1} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
+  {ok, Socket2} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
+  FuseId1 = wss:handshakeInit(Socket1, "hostname", [{testvar1, "testvalue1"}, {group_id, "group1"}]), %% Get first fuseId
+  FuseId2 = wss:handshakeInit(Socket2, "hostname", [{testvar1, "testvalue1"}, {group_id, "group2"}]), %% Get second fuseId
+  wss:handshakeAck(Socket1,FuseId1),
+  wss:handshakeAck(Socket2,FuseId2),
   Fuse_groups = [#fuse_group_info{name = "group2", storage_helper = #storage_helper_info{name = ST_Helper, init_args = ?ARG_TEST_ROOT2}}],
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, [ST_Helper, ?ARG_TEST_ROOT, Fuse_groups]),
   ?assertEqual(ok, InsertStorageAns),
@@ -356,6 +358,8 @@ storage_helpers_management_test(Config) ->
   ?assertEqual("ok", Status4),
   ?assertEqual(list_to_atom(?VOK), Answer4),
 
+  wss:close(Socket1),
+  wss:close(Socket2),
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
@@ -426,7 +430,7 @@ helper_requests_test(Config) ->
   %% Get FuseId
   {ok, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
   FuseId = wss:handshakeInit(Socket, "hostname", []),
-	wss:close(Socket),
+  wss:handshakeAck(Socket,FuseId),
 
   {Status, Helper, _, Id, _Validity, AnswerOpt} = create_file(Host, Cert, Port, TestFile, FuseId),
   ?assertEqual("ok", Status),
@@ -509,6 +513,7 @@ helper_requests_test(Config) ->
   ?assertEqual("ok", Status4),
   ?assertEqual(list_to_atom(?VOK), Answer4),
 
+  wss:close(Socket),
   RemoveStorageAns = rpc:call(FSLogicNode, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns),
 
@@ -570,7 +575,6 @@ create_file(Host, Cert, Port, FileName, FuseID) ->
 
   wss:send(Socket, MessageBytes),
   {SendAns, Ans} = wss:recv(Socket, 5000),
-	wss:close(Socket),
   ?assertEqual(ok, SendAns),
 
   wss:close(Socket),

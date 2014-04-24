@@ -111,6 +111,7 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
         [
           {port, Port},
           {certfile, atom_to_list(CertFile)},
+          {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs())},
           {keyfile, atom_to_list(CertFile)},
           {password, ""},
           {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}}
@@ -123,6 +124,7 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
     false -> ok
   end,
 
+  %% TODO: replace with permanent cache
   ets:new(?LFM_EVENT_PRODUCTION_ENABLED_ETS, [set, named_table, public]),
   ets:new(?WRITE_DISABLED_USERS, [set, named_table, public]),
   ets:new(?ACK_HANDLERS, [set, named_table, public]),
@@ -218,10 +220,11 @@ handle_call(check, _From, State) ->
 
 handle_call(get_next_callback_msg_id, _From, State) ->
   case get(callback_msg_ID) of
-    ID when is_integer(ID) and ID > ?MIN_MSG_ID ->
+    ID when is_integer(ID) and (ID > ?MIN_MSG_ID) ->
       put(callback_msg_ID, ID - 1);
     _ ->
-      put(callback_msg_ID, -1)
+      %% we are starting from -2 because -1 is value reserved for non-ack messages
+      put(callback_msg_ID, -2)
   end,
   {reply, get(callback_msg_ID), State};
 

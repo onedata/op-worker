@@ -30,6 +30,8 @@ cluster_rengine_test_() ->
     [fun fun_from_config/0, fun fun_from_config_with_wrapped/0
     ]}.
 
+%% Checks if handler functions are created correctly from stream configuration.
+%% Verifies function construction by invoking constructed functions and checking if returns expected results.
 fun_from_config() ->
   AggregatorConfig = #aggregator_config{field_name = user_id, fun_field_name = bytes, threshold = 100},
   Config = #event_stream_config{config = AggregatorConfig},
@@ -51,6 +53,8 @@ fun_from_config() ->
   Output3 = Fun(1, {final_stage_tree, "TreeId1", Event2}, fun_from_config_test),
   ?assertEqual([{user_id, "2"}, {bytes, 110}], Output3).
 
+%% Checks if handler functions are created correctly from stream configuration with wrapped configuration.
+%% Verifies function construction by invoking constructed functions and checking if returns expected results.
 fun_from_config_with_wrapped() ->
   AggregatorConfig = #aggregator_config{field_name = user_id, fun_field_name = bytes, threshold = 100},
   FilterConfig = #filter_config{field_name = type, desired_value = write_event},

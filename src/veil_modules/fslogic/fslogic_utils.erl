@@ -12,6 +12,7 @@
 
 -include("files_common.hrl").
 -include("veil_modules/dao/dao.hrl").
+-include("logging.hrl").
 
 %% API
 -export([strip_path_leaf/1, basename/1, get_parent_and_name_from_path/2, create_children_list/1, create_children_list/2, update_meta_attr/3, time/0, get_user_id_from_system/1]).
@@ -147,7 +148,8 @@ update_meta_attr(#file{meta_doc = MetaUUID} = File, Attr, Value, RetryCount) ->
                         ctime when Value > 0 -> MetaRec#file_meta{uid = File#file.uid, ctime = Value};
                         mtime when Value > 0 -> MetaRec#file_meta{uid = File#file.uid, mtime = Value};
                         atime when Value > 0 -> MetaRec#file_meta{uid = File#file.uid, atime = Value};
-                        size when Value >= 0 -> MetaRec#file_meta{uid = File#file.uid, size = Value};
+                        size when Value >= 0 ->
+                          MetaRec#file_meta{uid = File#file.uid, size = Value};
                         _ ->
                             MetaRec
                     end,

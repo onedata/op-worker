@@ -18,7 +18,7 @@
 
 -deprecated([proxy_subject/1]).
 
--export([init/0, verify_callback/3, load_certs/1, update_crls/1, proxy_subject/1, call/3, is_proxy_certificate/1, find_eec_cert/3]).
+-export([init/0, verify_callback/3, load_certs/1, update_crls/1, proxy_subject/1, call/3, is_proxy_certificate/1, find_eec_cert/3, get_ca_certs/0, strip_self_signed_ca/1]).
 %% ===================================================================
 %% API
 %% ===================================================================
@@ -75,6 +75,38 @@ init() ->
 
     ok.
 
+%% get_ca_certs/0
+%% ====================================================================
+%% @doc Returns all CA certificates as an list of DER encoded entities
+%% @end
+-spec get_ca_certs() -> [binary()] | no_return().
+%% ====================================================================
+get_ca_certs() ->
+    {ok, CADir1} = application:get_env(?APP_Name, ca_dir),
+    CADir = atom_to_list(CADir1),
+    {ok, Files} = file:list_dir(CADir),
+
+    %% Get only files with .pem extension
+    CA1 = [{strip_filename_ext(Name), file:read_file(filename:join(CADir, Name))} || Name <- Files, lists:suffix(".pem", Name)],
+    CA2 = [ lists:map(fun(Y) -> {Name, Y} end, public_key:pem_decode(X)) || {Name, {ok, X}} <- CA1],
+    _CA2 = [ X || {Name, {'Certificate', X, not_encrypted}} <- lists:flatten(CA2)].
+
+%% strip_self_signed_ca/1
+%% ====================================================================
+%% @doc Returns given list of certificates but without self-signed ones.
+%% @end
+-spec strip_self_signed_ca([binary()]) -> [binary()] | no_return().
+%% ====================================================================
+strip_self_signed_ca(DERList) when is_list(DERList) ->
+    Stripped = lists:map(
+        fun(DER) ->
+            OTPCert = public_key:der_decode('OTPCertificate', DER),
+            case public_key:pkix_is_self_signed(OTPCert) of
+                true    -> [];
+                false   -> [DER]
+            end
+        end, DERList),
+    lists:flatten(Stripped).
 
 %% verify_callback/3
 %% ====================================================================
@@ -312,7 +344,14 @@ update_crl(CADir, {OtpCert, [URL | URLs], Name}) ->
                             lager:info("GSI Handler: Saving new CLR of ~p", [Name]),
                             PemEntry = public_key:pem_entry_encode('CertificateList', CertList),
                             Data = public_key:pem_encode([PemEntry]),
-                            file:write_file(filename:join(CADir, Name ++ ".crl"), Data),
+                            Filename = filename:join(CADir, Name ++ ".crl"),
+                            case file:write_file(Filename, Data) of
+                                ok ->
+                                    file:change_mode(Filename, 8#644);
+
+                                {error, Reason} ->
+                                    lager:error("GSI Handler: Failed to save CLR of ~p (path: ~p, reason: ~p)", [Name, Filename, Reason])
+                            end,
                             ok;
 
                         false ->
@@ -420,9 +459,18 @@ make_code_path() ->
 %% ====================================================================
 get_dp_url(OtpCert = #'OTPCertificate'{}) ->
     Ext = OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.extensions,
-    DPs = lists:flatten([X || #'Extension'{extnValue = X} <- Ext, is_list(X)]),
-    GNames = [GenNames || #'DistributionPoint'{distributionPoint = {fullName, GenNames}} <- DPs],
-    [URL || {uniformResourceIdentifier, URL} <- lists:flatten(GNames), lists:prefix("http", URL)].
+    try Ext of
+        List when is_list(List) ->
+            DPs = lists:flatten([X || #'Extension'{extnValue = X} <- Ext, is_list(X)]),
+            GNames = [GenNames || #'DistributionPoint'{distributionPoint = {fullName, GenNames}} <- DPs],
+            [URL || {uniformResourceIdentifier, URL} <- lists:flatten(GNames), lists:prefix("http", URL)];
+        _ ->
+            []
+    catch
+        Type:Reason ->
+            ?error("Cannot read extensions from certificate ~p due to ~p: ~p", [OtpCert, Type, Reason]),
+            []
+    end.
 
 
 %% strip_filename_ext/1

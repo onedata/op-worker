@@ -48,15 +48,20 @@ init(_Args) ->
   ets:new(?EVENT_TREES_MAPPING, [named_table, public, set, {read_concurrency, true}]),
 
   Pid = self(),
-  erlang:send_after(5000, Pid, {timer, {asynch, 1, get_event_handlers}}),
+  erlang:send_after(5000, Pid, {timer, {asynch, 1, configure_event_handlers}}),
   ok.
 
 handle(_ProtocolVersion, ping) ->
   pong;
 
-handle(ProtocolVersion, #eventmessage{type = Type, count = Count}) ->
-  Event = [{type, list_to_atom(Type)}, {user_dn, get(user_id)}, {fuse_id, get(fuse_id)}, {count, Count}],
-  handle(ProtocolVersion, {event_arrived, Event});
+handle(ProtocolVersion, EventMessage) when is_record(EventMessage, eventmessage) ->
+  Properties = lists:zip(EventMessage#eventmessage.numeric_properties_keys, EventMessage#eventmessage.numeric_properties_values)
+           ++ lists:zip(EventMessage#eventmessage.string_properties_keys, EventMessage#eventmessage.string_properties_values),
+
+  AdditionalProperties = [{"user_dn", get(user_id)}, {"fuse_id", get(fuse_id)}],
+  Event = Properties ++ AdditionalProperties,
+  ?debug("Event from client arrived, type: ~p", [proplists:lookup("type", Event)]),
+  handle(ProtocolVersion, {event_arrived, Event ++ AdditionalProperties});
 
 handle(_ProtocolVersion, healthcheck) ->
   ok;
@@ -64,7 +69,7 @@ handle(_ProtocolVersion, healthcheck) ->
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
-handle(ProtocolVersion, get_event_handlers) ->
+handle(ProtocolVersion, configure_event_handlers) ->
   gen_server:call(?Dispatcher_Name, {rule_manager, ProtocolVersion, self(), get_event_handlers}),
 
   receive
@@ -72,23 +77,23 @@ handle(ProtocolVersion, get_event_handlers) ->
       lists:foreach(fun({EventType, EventHandlerItem}) ->
         update_event_handler(1, EventType, EventHandlerItem) end, EventHandlers);
     _ ->
-      ?warning("rule_manager sent back unexpected structure for get_event_handlers")
+      ?warning("rule_manager get_event_handlers handler sent back unexpected structure")
   after 1000 ->
-    ?warning("rule manager did not replied for get_event_handlers")
+    ?warning("rule_manager get_event_handlers handler did not replied")
   end;
 
 handle(_ProtocolVersion, {final_stage_tree, _TreeId, _Event}) ->
-  ?warning("cluster_rengine final_stage_tree handler should be always called in subprocess tree process");
+  ?info("cluster_rengine final_stage_tree handler should be always called in subprocess tree process");
 
 handle(ProtocolVersion, {update_cluster_rengine, EventType, EventHandlerItem}) ->
   ?info("--- cluster_rengines update_cluster_rengine"),
   update_event_handler(ProtocolVersion, EventType, EventHandlerItem);
 
 handle(ProtocolVersion, {event_arrived, Event}) ->
-  EventType = proplists:get_value(type, Event),
+  EventType = proplists:get_value("type", Event),
   case ets:lookup(?EVENT_TREES_MAPPING, EventType) of
     [] ->
-      %% event arrived but no handlers - ok
+      ?warning("No handler for event of type: ~p", [EventType]),
       ok;
   % mapping for event found - forward event
     [{_, EventToTreeMappings}] ->
@@ -184,6 +189,17 @@ create_process_tree_for_handler(ProtocolVersion, #event_handler_item{tree_id = T
          end
   end.
 
+%% fun_from_config/1
+%% ====================================================================
+%% @doc Returns function that can be called as proc_fun in sub_proc.
+%% Additionally returned function will satisfy another requirement - it
+%% returns non if processed event should not be processed further. Otherwise
+%% it returns event (in the form of proplist) that should be processed further.
+%% Returned function is construced according to event_stream_config passed
+%% as the argument.
+%% @end
+-spec fun_from_config(#event_stream_config{}) -> fun().
+%% ====================================================================
 fun_from_config(#event_stream_config{config = ActualConfig, wrapped_config = WrappedConfig}) ->
   WrappedFun = case WrappedConfig of
                  undefined -> non;
@@ -222,9 +238,9 @@ fun_from_config(#event_stream_config{config = ActualConfig, wrapped_config = Wra
                 case NewValue >= ActualConfig#aggregator_config.threshold of
                   true ->
                     ets:insert(EtsName, {Key, 0}),
-                    case proplists:get_value(ans_pid, ActualEvent) of
+                    case proplists:get_value("ans_pid", ActualEvent) of
                       undefined -> [{FieldName, FieldValue}, {FunFieldName, NewValue}];
-                      _ -> [{FieldName, FieldValue}, {FunFieldName, NewValue}, {ans_pid, proplists:get_value(ans_pid, ActualEvent)}]
+                      AnsPid -> [{FieldName, FieldValue}, {FunFieldName, NewValue}, {"ans_pid", AnsPid}]
                     end;
                   _ ->
                     ets:insert(EtsName, {Key, NewValue}),

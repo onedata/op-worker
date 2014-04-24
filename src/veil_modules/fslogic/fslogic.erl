@@ -983,12 +983,19 @@ handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, get
       case user_logic:get_quota(UserDoc) of
         {ok, Quota} ->
           case user_logic:get_files_size(UserDoc#veil_document.uuid, ProtocolVersion) of
-            {ok, Size} -> #statfsinfo{answer = ?VOK, quota_size = Quota#quota.size, files_size = Size};
-            _ -> #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
+            {ok, Size} when Size>Quota#quota.size ->
+              %% df -h cannot handle situation when files_size is greater than quota_size
+              #statfsinfo{answer = ?VOK, quota_size = Quota#quota.size, files_size = Quota#quota.size};
+            {ok, Size} ->
+              #statfsinfo{answer = ?VOK, quota_size = Quota#quota.size, files_size = Size};
+            _ ->
+              #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
           end;
-        _ -> #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
+        _ ->
+          #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
       end;
-    _ -> #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
+    _ ->
+      #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
   end.
 
 %% save_file_descriptor/3

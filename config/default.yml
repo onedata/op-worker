@@ -21,6 +21,10 @@ vm_arguments:
       description: Increase number of concurrent ports/sockets
       value: -env ERL_MAX_PORTS 4096
 
+  - argument:
+      name: max_processes
+      description: Increase number of processes
+      value: +P 1000000
 
 
 veil_cluster_node_env:
@@ -60,6 +64,11 @@ veil_cluster_node_env:
       value: 10
 
   - parameter:
+      name: callback_ack_time
+      description: After callback_ack_time seconds node_manager stops wainting for ack
+      value: 10
+
+  - parameter:
       name: heart_beat
       description: How long (in sec) should worker sleep before next connection try (when it cannot connect to ccm)
       value: 60
@@ -73,8 +82,8 @@ veil_cluster_node_env:
       name: ssl_cert_path
       description: Path to certificate used by ranch_ssl
       value: |
-        "\'./cacerts/veilfs.pem\'"
-      erlang_term: "'./cacerts/veilfs.pem'"
+        "\'./cacerts/VeilFSServer.pem\'"
+      erlang_term: "'./cacerts/VeilFSServer.pem'"
       # this has to be in double quotes so that single quotes are preserved after
       # conversion to list and it ends up correct in app.src
 
@@ -349,7 +358,7 @@ veil_cluster_node_env:
       name: quota_check_freq
       description: |
         This variable determines after how many bytes written quota check is performed.
-      value: 52428800 # 50MB
+      value: 10485760 # 10MB
 
 obsolete:
   - parameter:
