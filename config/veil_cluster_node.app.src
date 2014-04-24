@@ -17,7 +17,6 @@
         {applications, [
             kernel,
             stdlib,
-            xmerl,
             sasl,
             public_key,
             lager,
@@ -26,12 +25,7 @@
             ibrowse,
             os_mon,
             ranch,
-            cowboy,
-            gproc,
-            n2o,
-            erlydtl,
-            mimetypes,
-            inets
+            cowboy
         ]},
         {mod, {veil_cluster_node_app, []}},
         {env, [
