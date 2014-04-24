@@ -111,16 +111,6 @@ private:
 
 protected:
 
-    /// Current connection status codes
-    enum ConnectionStatus
-    {
-        TIMEOUT             = -4,
-        HANDSHAKE_ERROR     = -3,
-        TRANSPORT_ERROR     = -2,
-        CLOSED              = -1,
-        CONNECTED           = 0
-    };
-
     std::string                 m_hostname;
     int                         m_port;
     cert_info_fun               m_getCertInfo;
@@ -174,6 +164,19 @@ protected:
                                                                             ///< as PUSH channel
 
 public:
+
+    /// Current connection status codes
+    enum ConnectionStatus
+    {
+        UNDERLYING_LIB_ERROR= -5,
+        TIMEOUT             = -4,
+        HANDSHAKE_ERROR     = -3,
+        TRANSPORT_ERROR     = -2,
+        CLOSED              = -1,
+        CONNECTED           = 0,
+        NO_ERROR            = 0
+    };
+
     CommunicationHandler(std::string hostname, int port, cert_info_fun);
     virtual ~CommunicationHandler();
 
@@ -192,9 +195,14 @@ public:
     virtual int         openConnection();                                   ///< Opens WebSoscket connection. Returns 0 on success, non-zero otherwise.
     virtual void        closeConnection();                                  ///< Closes active connection.
 
-    /// Sends ClusterMsg using current WebSocket session. Will fail if there isn't one.
-    /// @return Positive - message ID that shall be used to receive response, negative - error ID
-    virtual int         sendMessage(protocol::communication_protocol::ClusterMsg& message, int32_t msgID = 0);
+    /// Sends ClusterMsg using current WebSocket session. Will fail if there isn't one. No throw version.
+    /// @param ec error code (CommunicationHandler::ConnectionStatus)
+    /// @return message ID that shall be used to receive response
+    virtual int32_t     sendMessage(protocol::communication_protocol::ClusterMsg& message, int32_t msgID, ConnectionStatus &ec) throw();
+
+    /// Sends ClusterMsg using current WebSocket session. Will fail if there isn't one. Throws CommunicationHandler::ConnectionStatus on error.
+    /// @return message ID that shall be used to receive response
+    virtual int32_t     sendMessage(protocol::communication_protocol::ClusterMsg& message, int32_t msgID = 0);
 
     /// Receives Answer using current WebSocket session. Will fail if there isn't one.
     virtual int         receiveMessage(protocol::communication_protocol::Answer& answer, int32_t msgID, uint32_t timeout = RECV_TIMEOUT);

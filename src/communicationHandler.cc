@@ -318,10 +318,10 @@ void CommunicationHandler::closePushChannel()
     Answer ans = communicate(msg, 0);    // Send PUSH channel close request
 }
 
-int CommunicationHandler::sendMessage(ClusterMsg& msg, int32_t msgId)
+int32_t CommunicationHandler::sendMessage(ClusterMsg& msg, int32_t msgId)
 {
     if(m_connectStatus != CONNECTED)
-        return m_connectStatus;
+        throw m_connectStatus;
 
     // If message ID is not set, generate new one
     if (!msgId)
@@ -335,8 +335,23 @@ int CommunicationHandler::sendMessage(ClusterMsg& msg, int32_t msgId)
     if(ec.value())
         ++m_errorCount;
 
-    // Return msg ID ot negative error code
-    return ec.value() == 0 ? msgId : (ec.value() > 0 ? -ec.value() : ec.value());
+    if(ec.value() != 0) {
+        LOG(ERROR) << "Cannot send message (ID: " << msgId << ") due to websocketpp's error: " << ec.message();
+        throw UNDERLYING_LIB_ERROR;
+    }
+
+    return msgId;
+}
+
+int32_t CommunicationHandler::sendMessage(ClusterMsg& msg, int32_t msgId, ConnectionStatus &ec) throw()
+{
+    try {
+        return sendMessage(msg, msgId);
+    } catch(ConnectionStatus &e) {
+        ec = e;
+    }
+
+    return 0;
 }
 
 int32_t CommunicationHandler::getMsgId()
@@ -388,8 +403,9 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
     {
         unsigned int msgId = getMsgId();
 
-
-        if(sendMessage(msg, msgId) < 0)
+        ConnectionStatus ec;
+        sendMessage(msg, msgId, ec);
+        if(ec != NO_ERROR)
         {
             if(retry > 0)
             {
