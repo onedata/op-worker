@@ -13,6 +13,7 @@
 
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("logging.hrl").
+-include("registered_names.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
 
@@ -27,7 +28,7 @@
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
 -export([get_team_names/1]).
 -export([create_dirs_at_storage/3]).
--export([get_quota/1, update_quota/2, get_files_size/2]).
+-export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/2]).
 
 -define(UserRootPerms, 8#600).
 
@@ -176,10 +177,7 @@ create_user(Login, Name, Teams, Email, DnList) ->
 %% @doc
 %% Retrieves user from DB by login, email, uuid, DN or rdnSequence proplist. Returns veil_document wrapping a #user record.
 %% @end
--spec get_user(Key :: {login, Login :: string()} |
-{email, Email :: string()} |
-{uuid, UUID :: user()} |
-{dn, DN :: string()} |
+-spec get_user(Key :: user_key() |
 {rdnSequence, [#'AttributeTypeAndValue'{}]}) ->
     {ok, user_doc()} | {error, any()}.
 %% ====================================================================
@@ -195,10 +193,7 @@ get_user(Key) ->
 %% @doc
 %% Removes user from DB by login.
 %% @end
--spec remove_user(Key :: {login, Login :: string()} |
-{email, Email :: string()} |
-{uuid, UUID :: user()} |
-{dn, DN :: string()} |
+-spec remove_user(Key :: user_key() |
 {rdnSequence, [#'AttributeTypeAndValue'{}]}) ->
     Result :: ok | {error, any()}.
 %% ====================================================================
@@ -412,12 +407,14 @@ get_quota(User) ->
   Result :: {ok, quota()} | {error, any()}.
 %% ====================================================================
 update_quota(User, NewQuota) ->
-  case get_quota(User) of
+  Quota = dao_lib:apply(dao_users, get_quota, [User#veil_document.record#user.quota_doc], 1),
+  case Quota of
     {ok, QuotaDoc} ->
       NewQuotaDoc = QuotaDoc#veil_document{record = NewQuota},
       dao_lib:apply(dao_users, save_quota, [NewQuotaDoc], 1);
     {error, Error} -> {error, {get_quota_error, Error}};
-    Other -> Other
+    Other ->
+      Other
   end.
 
 %% get_files_size/2
@@ -775,3 +772,43 @@ create_team_dir(TeamName) ->
 		Error ->
 			Error
 	end.
+
+%% quota_exceeded/2
+%% ====================================================================
+%% @doc
+%% Return true if quota is exceeded for user. Saves result to quota doc related to user. Throws an exception when user does not exists.
+%% @end
+-spec quota_exceeded(Key :: {login, Login :: string()} |
+{email, Email :: string()} |
+{uuid, UUID :: user()} |
+{dn, DN :: string()} |
+{rdnSequence, [#'AttributeTypeAndValue'{}]}, ProtocolVersion :: integer()) ->
+  {boolean() | no_return()}.
+%% ====================================================================
+quota_exceeded(UserQuery, ProtocolVersion) ->
+  case user_logic:get_user(UserQuery) of
+    {ok, UserDoc} ->
+      Uuid = UserDoc#veil_document.uuid,
+      {ok, SpaceUsed} = user_logic:get_files_size(Uuid, ProtocolVersion),
+      {ok, #quota{size = Quota}} = user_logic:get_quota(UserDoc),
+      ?info("user has used: ~p, quota: ~p", [SpaceUsed, Quota]),
+
+      %% TODO: there is one little problem with this - we dont recognize situation in which quota has been manually changed to
+      %% exactly the same value as default_quota
+      {ok, DefaultQuotaSize} = application:get_env(?APP_Name, default_quota),
+      QuotaToInsert = case Quota =:= DefaultQuotaSize of
+                        true -> ?DEFAULT_QUOTA_DB_TAG;
+                        _ -> Quota
+                      end,
+
+      case SpaceUsed > Quota of
+        true ->
+          update_quota(UserDoc, #quota{size = QuotaToInsert, exceeded = true}),
+          true;
+        _ ->
+          update_quota(UserDoc, #quota{size = QuotaToInsert, exceeded = false}),
+          false
+      end;
+    Error ->
+      throw({cannot_fetch_user, Error})
+  end.

@@ -128,6 +128,7 @@
 %% FUSE Sessions
 -define(FUSE_CONNECTIONS_VIEW, #view_info{name = "fuse_connections", design = ?FUSE_SESSIONS_DESIGN_NAME, db_name = ?SYSTEM_DB_NAME}).
 -define(EXPIRED_FUSE_SESSIONS_VIEW, #view_info{name = "expired_fuse_sessions", design = ?FUSE_SESSIONS_DESIGN_NAME, db_name = ?SYSTEM_DB_NAME}).
+-define(FUSE_SESSIONS_BY_USER_ID_VIEW, #view_info{name = "fuse_sessions_by_user_id", design = ?FUSE_SESSIONS_DESIGN_NAME, db_name = ?SYSTEM_DB_NAME}).
 -define(FUSE_GROUP_BY_HASH_VIEW, #view_info{name = "fuse_group_by_hash", design = ?FUSE_GROUPS_DESIGN_NAME, db_name = ?SYSTEM_DB_NAME}).
 
 %% Others
@@ -145,7 +146,7 @@
                     ?FILES_BY_UID_AND_FILENAME, ?FILE_META_BY_TIMES, ?FILES_BY_META_DOC,
                     ?USER_BY_EMAIL_VIEW, ?USER_BY_LOGIN_VIEW, ?USER_BY_DN_VIEW, ?USER_BY_UID_VIEW, ?STORAGE_BY_ID_VIEW,
                     ?SHARE_BY_FILE_VIEW, ?SHARE_BY_USER_VIEW, ?USER_FILES_NUMBER_VIEW, ?USER_FILES_SIZE_VIEW, ?GROUP_FILES_NUMBER_VIEW,
-                    ?FUSE_CONNECTIONS_VIEW, ?EXPIRED_FUSE_SESSIONS_VIEW, ?FUSE_GROUP_BY_HASH_VIEW]).
+                    ?FUSE_CONNECTIONS_VIEW, ?EXPIRED_FUSE_SESSIONS_VIEW, ?FUSE_SESSIONS_BY_USER_ID_VIEW, ?FUSE_GROUP_BY_HASH_VIEW]).
 %% Default database name
 -define(DEFAULT_DB, lists:nth(1, ?DB_LIST)).
 

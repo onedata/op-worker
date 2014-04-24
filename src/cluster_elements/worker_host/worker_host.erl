@@ -18,6 +18,7 @@
 -include("registered_names.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include("logging.hrl").
+-include("veil_modules/dao/dao_types.hrl").
 
 -define(BORTER_CHILD_WAIT_TIME, 10000).
 -define(MAX_CHILD_WAIT_TIME, 60000000).
@@ -27,7 +28,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_link/3, stop/1, start_sub_proc/5, start_sub_proc/6, generate_sub_proc_list/1, generate_sub_proc_list/5, generate_sub_proc_list/6]).
+-export([start_link/3, stop/1, start_sub_proc/5, start_sub_proc/6, generate_sub_proc_list/1, generate_sub_proc_list/5, generate_sub_proc_list/6, send_to_user/4, send_to_user_with_ack/5, send_to_fuses_with_ack/4]).
 -export([create_permanent_cache/1, create_permanent_cache/2, create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_sipmle_cache/3]).
 
 %% ====================================================================
@@ -85,22 +86,22 @@ stop(PlugIn) ->
 	Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 init([PlugIn, PlugInArgs, LoadMemorySize]) ->
-    process_flag(trap_exit, true),
-    InitAns = PlugIn:init(PlugInArgs),
-    case InitAns of
-      IDesc when is_record(IDesc, initial_host_description) ->
-        Pid = self(),
-        DispatcherRequestMapState = case InitAns#initial_host_description.request_map of
-          non -> true;
-          _ ->
-            erlang:send_after(200, Pid, {timer, register_disp_map}),
-            false
-        end,
-        erlang:send_after(200, Pid, {timer, register_sub_proc_caches}),
-        {ok, #host_state{plug_in = PlugIn, request_map = InitAns#initial_host_description.request_map, sub_procs = InitAns#initial_host_description.sub_procs,
-        dispatcher_request_map = InitAns#initial_host_description.dispatcher_request_map, dispatcher_request_map_ok = DispatcherRequestMapState, plug_in_state = InitAns#initial_host_description.plug_in_state, load_info = {[], [], 0, LoadMemorySize}}};
-      _ -> {ok, #host_state{plug_in = PlugIn, plug_in_state = InitAns, load_info = {[], [], 0, LoadMemorySize}}}
-    end.
+  process_flag(trap_exit, true),
+  InitAns = PlugIn:init(PlugInArgs),
+  case InitAns of
+    IDesc when is_record(IDesc, initial_host_description) ->
+      Pid = self(),
+      DispatcherRequestMapState = case InitAns#initial_host_description.request_map of
+        non -> true;
+        _ ->
+          erlang:send_after(200, Pid, {timer, register_disp_map}),
+          false
+      end,
+      erlang:send_after(200, Pid, {timer, register_sub_proc_caches}),
+      {ok, #host_state{plug_in = PlugIn, request_map = InitAns#initial_host_description.request_map, sub_procs = InitAns#initial_host_description.sub_procs,
+      dispatcher_request_map = InitAns#initial_host_description.dispatcher_request_map, dispatcher_request_map_ok = DispatcherRequestMapState, plug_in_state = InitAns#initial_host_description.plug_in_state, load_info = {[], [], 0, LoadMemorySize}}};
+    _ -> {ok, #host_state{plug_in = PlugIn, plug_in_state = InitAns, load_info = {[], [], 0, LoadMemorySize}}}
+  end.
 
 %% handle_call/3
 %% ====================================================================
@@ -158,11 +159,20 @@ handle_call(dispatcher_map_unregistered, _From, State) ->
 
 %% For tests
 handle_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM}, _From, State) ->
-  handle_test_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM}, _From, State);
+  Pid = self(),
+  SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun),
+  erlang:send_after(200, Pid, {timer, register_disp_map}),
+  {reply, ok, State#host_state{request_map = RM, sub_procs = SubProcList,
+  dispatcher_request_map = DM, dispatcher_request_map_ok = false}};
 
 %% For tests
 handle_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, Cache}, _From, State) ->
-  handle_test_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, Cache}, _From, State);
+  Pid = self(),
+  SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache),
+  erlang:send_after(200, Pid, {timer, register_disp_map}),
+  erlang:send_after(200, Pid, {timer, register_sub_proc_caches}),
+  {reply, ok, State#host_state{request_map = RM, sub_procs = SubProcList,
+  dispatcher_request_map = DM, dispatcher_request_map_ok = false}};
 
 handle_call(Request, _From, State) when is_tuple(Request) -> %% Proxy call. Each cast can be achieved by instant proxy-call which ensures
                                                              %% that request was made, unlike cast because cast ignores state of node/gen_server
@@ -173,31 +183,6 @@ handle_call(check, _From, State) ->
 
 handle_call(_Request, _From, State) ->
     {reply, wrong_request, State}.
-
-%% handle_test_call/3
-%% ====================================================================
-%% @doc Handles calls used during tests
--spec handle_test_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result :: term().
-%% ====================================================================
--ifdef(TEST).
-handle_test_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM}, _From, State) ->
-  Pid = self(),
-  SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun),
-  erlang:send_after(200, Pid, {timer, register_disp_map}),
-  {reply, ok, State#host_state{request_map = RM, sub_procs = SubProcList,
-  dispatcher_request_map = DM, dispatcher_request_map_ok = false}};
-
-handle_test_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, Cache}, _From, State) ->
-  Pid = self(),
-  SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache),
-  erlang:send_after(200, Pid, {timer, register_disp_map}),
-  erlang:send_after(200, Pid, {timer, register_sub_proc_caches}),
-  {reply, ok, State#host_state{request_map = RM, sub_procs = SubProcList,
-  dispatcher_request_map = DM, dispatcher_request_map_ok = false}}.
--else.
-handle_test_call(_Request, _From, State) ->
-  {reply, not_supported_in_normal_mode, State}.
--endif.
 
 %% handle_cast/2
 %% ====================================================================
@@ -224,6 +209,29 @@ handle_cast({asynch, ProtocolVersion, Msg}, State) ->
 	PlugIn = State#host_state.plug_in,
   NewSubProcList = proc_standard_request(State#host_state.request_map, State#host_state.sub_procs, PlugIn, ProtocolVersion, Msg, non, non),
 	{noreply, State#host_state{sub_procs = NewSubProcList}};
+
+handle_cast({asynch, ProtocolVersion, Msg, MsgId, FuseID}, State) ->
+  HandlerTuple = ets:lookup(?ACK_HANDLERS, MsgId),
+  case HandlerTuple of
+    [{_, {Callback, SuccessFuseIds, FailFuseIds, Length, Pid}}] ->
+      case lists:member(FuseID, FailFuseIds) of
+        true ->
+          NewSuccessFuseIds = [FuseID | SuccessFuseIds],
+          NewFailFuseIds = lists:delete(FuseID, FailFuseIds),
+
+          %% TODO: refactoring needed - Length not needed, we can replace NewFailFuseIds with AllFuseIds and then we will always have Length and we will not have to delete anything from this list
+          ets:insert(?ACK_HANDLERS, {MsgId, {Callback, NewSuccessFuseIds, NewFailFuseIds, Length, Pid}}),
+          case length(NewSuccessFuseIds) of
+            Length ->
+              % we dont need to cancel timer set with send_after which sends the same message - receiver process should be dead after call_on_complete_callback
+              Pid ! {call_on_complete_callback};
+            _ -> ok
+          end;
+        _ -> ok
+      end;
+    _ -> ok
+  end,
+  {noreply, State};
 
 handle_cast({sequential_synch, ProtocolVersion, Msg, MsgId, ReplyTo}, State) ->
     PlugIn = State#host_state.plug_in,
@@ -456,7 +464,11 @@ proc_standard_request(RequestMap, SubProcs, PlugIn, ProtocolVersion, Msg, MsgId,
             case is_process_alive(SubProcPid) of
               false ->
                 {Name, MaxDepth, MaxWidth, NewProcFun, NewMapFun} = SubProcArgs,
-                SubProcPid2 = start_sub_proc(Name, MaxDepth, MaxWidth, NewProcFun, NewMapFun),
+                CacheType = case SubProcCache of
+                  non -> non;
+                  _ -> use_cache
+                end,
+                SubProcPid2 = start_sub_proc(Name, CacheType, MaxDepth, MaxWidth, NewProcFun, NewMapFun),
                 SubProcPid2 ! {PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo},
                 SubProc2Desc = {Name, {SubProcArgs, SubProcCache, SubProcPid2}},
                 [SubProc2Desc | proplists:delete(Name, SubProcs)];
@@ -863,6 +875,90 @@ del_sub_procs(Key, Name) ->
     _ -> ok
   end,
   del_sub_procs(ets:next(Name, Key), Name).
+
+%% send_to_user/4
+%% ====================================================================
+%% @doc Sends message to all active fuses belonging to user.
+-spec send_to_user(UserKey :: user_key(), Message :: term(), MessageDecoder :: string(), ProtocolVersion :: integer()) -> Result when
+  Result :: ok | {error, Error :: term()}.
+%% ====================================================================
+%% TODO: move to request_dispatcher
+send_to_user(UserKey, Message, MessageDecoder, ProtocolVersion) ->
+  case user_logic:get_user(UserKey) of
+    {ok, UserDoc} ->
+      case dao_lib:apply(dao_cluster, get_sessions_by_user, [UserDoc#veil_document.uuid], ProtocolVersion) of
+        {ok, FuseIds} ->
+          lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse(FuseId, Message, MessageDecoder) end, FuseIds),
+          ok;
+        {error, Error} ->
+          ?warning("cannot get fuse ids for user, error: ~p", [Error]),
+          {error, Error}
+      end;
+    {error, Error} ->
+      ?warning("cannot get user in send_to_user: ~p", [Error]),
+      {error, Error}
+  end.
+
+%% send_to_user_with_ack/5
+%% ====================================================================
+%% @doc Sends message with ack to all active fuses belonging to user. OnCompleteCallback function will be called in
+%% newly created process when all acks will come back or timeout is reached.
+-spec send_to_user_with_ack(UserKey :: user_key(), Message :: term(), MessageDecoder :: string(),
+    OnCompleteCallback :: fun((SuccessFuseIds :: list(), FailFuseIds :: list()) -> term()), ProtocolVersion :: integer()) -> Result when
+    Result :: ok | {error, Error :: term()}.
+%% ====================================================================
+send_to_user_with_ack(UserKey, Message, MessageDecoder, OnCompleteCallback, ProtocolVersion) ->
+  case user_logic:get_user(UserKey) of
+    {ok, UserDoc} ->
+      case dao_lib:apply(dao_cluster, get_sessions_by_user, [UserDoc#veil_document.uuid], ProtocolVersion) of
+        {ok, FuseIds} ->
+          send_to_fuses_with_ack(FuseIds, Message, MessageDecoder, OnCompleteCallback);
+        {error, Error} ->
+          ?warning("cannot get fuse ids for user"),
+          {error, Error}
+      end;
+    {error, Error} ->
+      ?warning("cannot get user in send_to_user"),
+      {error, Error}
+  end.
+
+%% send_to_fuses_with_ack/4
+%% ====================================================================
+%% @doc Sends message with ack to all fuses from FuseIds list.
+%% OnComplete function will be called in newly created process when all acks will come back or timeout is reached.
+-spec send_to_fuses_with_ack(FuseIds :: list(string()), Message :: term(), MessageDecoder :: string(),
+    OnCompleteCallback :: fun((SuccessFuseIds :: list(), FailFuseIds :: list()) -> term())) -> Result when
+  Result :: ok | {error, Error :: term()}.
+%% ====================================================================
+send_to_fuses_with_ack(FuseIds, Message, MessageDecoder, OnCompleteCallback) ->
+  try
+    MsgId = gen_server:call({?Node_Manager_Name, node()}, get_next_callback_msg_id),
+
+    Pid = spawn(fun() ->
+      receive
+        {call_on_complete_callback} ->
+          [{_Key, {_, SucessFuseIds, FailFuseIds, _Length, _Pid}}] = ets:lookup(?ACK_HANDLERS, MsgId),
+          ets:delete(?ACK_HANDLERS, MsgId),
+          OnCompleteCallback(SucessFuseIds, FailFuseIds)
+      end
+    end),
+
+    % we need to create and insert to ets ack handler before sending a push message
+    ets:insert(?ACK_HANDLERS, {MsgId, {OnCompleteCallback, [], FuseIds, length(FuseIds), Pid}}),
+
+    % now we can send messages to fuses
+    lists:foreach(fun(FuseId) -> request_dispatcher:send_to_fuse_ack(FuseId, Message, MessageDecoder, MsgId) end, FuseIds),
+
+    %% TODO change to receive .. after
+    {ok, CallbackAckTimeSeconds} = application:get_env(?APP_Name, callback_ack_time),
+    erlang:send_after(CallbackAckTimeSeconds * 1000, Pid, {call_on_complete_callback}),
+    ok
+  catch
+    E1:E2 ->
+      ?warning("cannot get callback message id, Error: ~p:~p", [E1, E2]),
+      {error, E2}
+  end.
+
 
 %% create_simple_cache/1
 %% ====================================================================

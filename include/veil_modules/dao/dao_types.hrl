@@ -36,6 +36,10 @@
 -type user() :: uuid().
 -type user_info() :: #user{}.
 -type user_doc() :: #veil_document{record :: #user{}}.
+-type user_key() :: {login, Login :: string()} |
+                    {email, Email :: string()} |
+                    {uuid, UUID :: uuid()} |
+                    {dn, DN :: string()}.
 
 -type quota() :: uuid().
 -type quota_info() :: #quota{}.

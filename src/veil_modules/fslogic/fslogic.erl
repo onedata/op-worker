@@ -78,6 +78,35 @@ init(_Args) ->
 handle(_ProtocolVersion, ping) ->
   pong;
 
+%% this handler is intended to be called by newly connected clients
+%% TODO: create generic mechanism for getting configuration on client startup
+handle(ProtocolVersion, is_write_enabled) ->
+  try
+    case user_logic:get_user({dn, get(user_id)}) of
+      {ok, UserDoc} ->
+        case user_logic:get_quota(UserDoc) of
+          {ok, #quota{exceeded = Exceeded}} when is_boolean(Exceeded) ->
+            %% we can simply return not(Exceeded) but if quota had been exceeded then user deleted file and for some reason
+            %% there was no event handler for rm_event then it would need manual trigger to enable writing
+            %% in most cases Exceeded == true so in most cases we will not call user_logic:quota_exceeded
+            case Exceeded of
+              true -> not(user_logic:quota_exceeded({dn, get(user_id)}, ProtocolVersion));
+              _ -> true
+            end;
+          Error ->
+            ?warning("cannot get quota doc for user with dn: ~p, Error: ~p", [get(user_id), Error]),
+            false
+        end;
+      Error ->
+        ?warning("cannot get user with dn: ~p, Error: ~p", [get(user_id), Error]),
+        false
+    end
+  catch
+    E1:E2 ->
+      ?warning("Error in is_write_enabled handler, Error: ~p:~p", [E1, E2]),
+      false
+  end;
+
 handle(_ProtocolVersion, healthcheck) ->
 	ok;
 
@@ -954,12 +983,19 @@ handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, get
       case user_logic:get_quota(UserDoc) of
         {ok, Quota} ->
           case user_logic:get_files_size(UserDoc#veil_document.uuid, ProtocolVersion) of
-            {ok, Size} -> #statfsinfo{answer = ?VOK, quota_size = Quota#quota.size, files_size = Size};
-            _ -> #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
+            {ok, Size} when Size>Quota#quota.size ->
+              %% df -h cannot handle situation when files_size is greater than quota_size
+              #statfsinfo{answer = ?VOK, quota_size = Quota#quota.size, files_size = Quota#quota.size};
+            {ok, Size} ->
+              #statfsinfo{answer = ?VOK, quota_size = Quota#quota.size, files_size = Size};
+            _ ->
+              #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
           end;
-        _ -> #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
+        _ ->
+          #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
       end;
-    _ -> #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
+    _ ->
+      #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
   end.
 
 %% save_file_descriptor/3
