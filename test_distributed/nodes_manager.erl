@@ -172,8 +172,23 @@ start_app(Node, Args) ->
 -spec start_app_on_nodes(Nodes :: list(), Args  :: list()) -> Result when
   Result ::  list().
 %% ====================================================================
+-ifndef(verbose).
 start_app_on_nodes([], _Args) ->
   [];
+
+start_app_on_nodes([Node | Nodes], [Arg | Args]) ->
+    Deps = rpc:call(Node, nodes_manager, start_deps, []),
+    App = start_app(Node, Arg),
+    Ans = case (Deps =:= ok) and (App =:= ok) of
+              true -> ok;
+              false -> error
+          end,
+    [Ans | start_app_on_nodes(Nodes, Args)].
+-endif.
+
+-ifdef(verbose).
+start_app_on_nodes([], _Args) ->
+    [];
 
 start_app_on_nodes([Node | Nodes], [Arg | Args]) ->
   Deps = rpc:call(Node, nodes_manager, start_deps, []),
@@ -182,8 +197,9 @@ start_app_on_nodes([Node | Nodes], [Arg | Args]) ->
     true -> ok;
     false -> error
   end,
-  ct:print("Tentego: ~p~n", [{Node, Deps, App}]),
+  ct:print("start_app_on_node: ~p~n", [{Node, Deps, App}]),
   [Ans | start_app_on_nodes(Nodes, Args)].
+-endif.
 
 %% stop_app/1
 %% ====================================================================
