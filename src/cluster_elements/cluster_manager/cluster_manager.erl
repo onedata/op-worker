@@ -780,14 +780,14 @@ check_cluster_state(State) ->
 %% plan_next_cluster_state_check/0
 %% ====================================================================
 %% @doc Decides when cluster state should be checked next time and sets
-%% the timer (cluster_clontrol_period environment variable is used).
+%% the timer (cluster_monitoring_period environment variable is used).
 -spec plan_next_cluster_state_check() -> Result when
   Result :: {ok, TRef} | {error, Reason},
   TRef :: term(),
   Reason :: term().
 %% ====================================================================
 plan_next_cluster_state_check() ->
-  {ok, Interval} = application:get_env(veil_cluster_node, cluster_clontrol_period),
+  {ok, Interval} = application:get_env(?APP_Name, cluster_monitoring_period),
   erlang:send_after(Interval * 1000, self(), {timer, check_cluster_state}).
 
 %% start_worker/4
@@ -801,7 +801,7 @@ plan_next_cluster_state_check() ->
 %% ====================================================================
 start_worker(Node, Module, WorkerArgs, State) ->
   try
-    {ok, LoadMemorySize} = application:get_env(veil_cluster_node, worker_load_memory_size),
+    {ok, LoadMemorySize} = application:get_env(?APP_Name, worker_load_memory_size),
     {ok, ChildPid} = supervisor:start_child({?Supervisor_Name, Node}, ?Sup_Child(Module, worker_host, transient, [Module, WorkerArgs, LoadMemorySize])),
     Workers = State#cm_state.workers,
     lager:info([{mod, ?MODULE}], "Worker: ~s started at node: ~s", [Module, Node]),

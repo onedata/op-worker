@@ -31,7 +31,7 @@
 %% works as a dispatcher.
 -define(Dispatcher_Name, request_dispatcher).
 
-%% Name of Round Robin Database that collects summary cluster load statistics
+%% Name of Round Robin Database that collects, unifies and stores nodes statistical data
 -define(Cluster_Stats_RRD_Name, <<"cluster_stats.rrd">>).
 
 %% Name of Round Robin Database that collects node load statistics
