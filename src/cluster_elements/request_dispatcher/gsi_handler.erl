@@ -442,9 +442,18 @@ make_code_path() ->
 %% ====================================================================
 get_dp_url(OtpCert = #'OTPCertificate'{}) ->
     Ext = OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.extensions,
-    DPs = lists:flatten([X || #'Extension'{extnValue = X} <- Ext, is_list(X)]),
-    GNames = [GenNames || #'DistributionPoint'{distributionPoint = {fullName, GenNames}} <- DPs],
-    [URL || {uniformResourceIdentifier, URL} <- lists:flatten(GNames), lists:prefix("http", URL)].
+    try Ext of
+        List when is_list(List) ->
+            DPs = lists:flatten([X || #'Extension'{extnValue = X} <- Ext, is_list(X)]),
+            GNames = [GenNames || #'DistributionPoint'{distributionPoint = {fullName, GenNames}} <- DPs],
+            [URL || {uniformResourceIdentifier, URL} <- lists:flatten(GNames), lists:prefix("http", URL)];
+        _ ->
+            []
+    catch
+        Type:Reason ->
+            ?error("Cannot read extensions from certificate ~p due to ~p: ~p", [OtpCert, Type, Reason]),
+            []
+    end.
 
 
 %% strip_filename_ext/1
