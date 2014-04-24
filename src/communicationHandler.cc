@@ -30,7 +30,7 @@ namespace veil {
 boost::recursive_mutex CommunicationHandler::m_instanceMutex;
 SSL_SESSION* CommunicationHandler::m_session = 0;
 
-CommunicationHandler::CommunicationHandler(string p_hostname, int p_port, cert_info_fun p_getCertInfo)
+CommunicationHandler::CommunicationHandler(const string &p_hostname, int p_port, cert_info_fun p_getCertInfo)
     : m_hostname(p_hostname),
       m_port(p_port),
       m_getCertInfo(p_getCertInfo),
@@ -76,7 +76,7 @@ unsigned int CommunicationHandler::getErrorCount()
     return m_errorCount;
 }
 
-void CommunicationHandler::setFuseID(string fuseId)
+void CommunicationHandler::setFuseID(const std::string &fuseId)
 {
     m_fuseID = fuseId;
 }

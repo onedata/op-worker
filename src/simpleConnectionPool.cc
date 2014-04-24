@@ -22,7 +22,7 @@ using namespace std;
 
 namespace veil {
 
-SimpleConnectionPool::SimpleConnectionPool(string hostname, int port, cert_info_fun certInfoFun, int metaPoolSize, int dataPoolSize) :
+SimpleConnectionPool::SimpleConnectionPool(const string &hostname, int port, cert_info_fun certInfoFun, int metaPoolSize, int dataPoolSize) :
     m_hostname(hostname),
     m_port(port),
     m_getCertInfo(certInfoFun)
@@ -177,13 +177,13 @@ void SimpleConnectionPool::setPoolSize(PoolType type, unsigned int s)
     }
 }
 
-void SimpleConnectionPool::setPushCallback(std::string fuseId, push_callback hdl)
+void SimpleConnectionPool::setPushCallback(const string &fuseId, push_callback hdl)
 {
     m_fuseId = fuseId;
     m_pushCallback = hdl;
 }
 
-list<string> SimpleConnectionPool::dnsQuery(string hostname)
+list<string> SimpleConnectionPool::dnsQuery(const string &hostname)
 {
     boost::unique_lock< boost::recursive_mutex > lock(m_access);
 

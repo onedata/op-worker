@@ -57,7 +57,7 @@ namespace utils {
     std::string tolower(std::string input);
 
     template<typename T>
-    T fromString(std::string in) {
+    T fromString(const std::string &in) {
         T out;
         std::istringstream iss(in);
         iss >> out;
@@ -81,10 +81,10 @@ namespace utils {
  */
 class StorageHelperFactory {
 
-	public:
+    public:
 
         StorageHelperFactory();
-		virtual ~StorageHelperFactory();
+        virtual ~StorageHelperFactory();
 
         /**
          * Produces storage helper object.
@@ -92,7 +92,7 @@ class StorageHelperFactory {
          * @param args Arguments vector passed as argument to storge helper's constructor.
          * @return Pointer to storage helper object along with its ownership.
          */
-        virtual boost::shared_ptr<IStorageHelper> getStorageHelper(std::string sh, std::vector<std::string> args);
+        virtual boost::shared_ptr<IStorageHelper> getStorageHelper(const std::string &sh, const std::vector<std::string> &args);
 };
 
 } // namespace helpers

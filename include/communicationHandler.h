@@ -177,11 +177,11 @@ public:
         NO_ERROR            = 0
     };
 
-    CommunicationHandler(std::string hostname, int port, cert_info_fun);
+    CommunicationHandler(const std::string &hostname, int port, cert_info_fun);
     virtual ~CommunicationHandler();
 
     virtual void setCertFun(cert_info_fun certFun);                         ///< Setter for function that returns CommunicationHandler::CertificateInfo struct.
-    virtual void setFuseID(std::string);                                    ///< Setter for field m_fuseID.
+    virtual void setFuseID(const std::string&);                             ///< Setter for field m_fuseID.
     virtual void setPushCallback(push_callback);                            ///< Setter for field m_pushCallback.
     virtual void enablePushChannel();                                       ///< Enables PUSH channel on this connection.
                                                                             ///< Note that PUSH callback has to be set with setPushCallback before invocing this method.

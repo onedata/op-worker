@@ -46,7 +46,7 @@ namespace veil {
      * @param verr literal name of POSIX error code
      * @return POSIX error code multiplied by -1
      */
-    int translateError(std::string verr);
+    int translateError(const std::string &verr);
 
 } // namespace veil
 
