@@ -160,17 +160,24 @@ message HandshakeAck {
     required string fuse_id = 1;
 }
 
-message StorageTestRequest {
-    required string type = 1;
-    required int32 storage_id = 2;
-    optional string relative_path = 3 [default = ""];
-    optional string text = 4 [default = ""];
+message CreateStorageTestFileRequest {
+    required int32 storage_id = 1;
 }
 
-message StorageTestResponse {
-    required string answer = 1;
+message CreateStorageTestFileResponse {
+    required bool answer = 1;
     optional string relative_path = 2 [default = ""];
     optional string text = 3 [default = ""];
+}
+
+message StorageTestFileModifiedRequest {
+    required int32 storage_id = 1;
+    optional string relative_path = 2 [default = ""];
+    optional string text = 3 [default = ""];
+}
+
+message StorageTestFileModifiedResponse {
+    required bool answer = 1;
 }
 
 message ClientStorageInfo {
