@@ -121,16 +121,17 @@ content_disposition_attachment_headers(Req, FileName) ->
 -spec handle_user_content_request(req(), string()) -> {ok, req()}.
 %% ====================================================================
 handle_user_content_request(Req, Path) ->
-    % Try to retrieve user's session
+    % Try to initialize session handler and retrieve user's session
     InitSession =
         try
-            Context = wf_context:init_context(Req),
-            SessionHandler = proplists:get_value(session, Context#context.handlers),
-            SessionHandler:init([], Context),
+            Context1 = wf_context:init_context(Req),
+            SessHandler = proplists:get_value(session, Context1#context.handlers),
+            {ok, St, Context2} = SessHandler:init([], Context1),
+            wf_context:context(Context2),
             UserID = wf:session(user_doc),
             true = (UserID /= undefined),
             put(user_id, lists:nth(1, user_logic:get_dn_list(UserID))),
-            ok
+            {St, Context2, SessHandler}
         catch _:_ ->
             error
         end,
@@ -138,7 +139,7 @@ handle_user_content_request(Req, Path) ->
     case InitSession of
         error ->
             {ok, _RedirectReq} = page_error:user_content_request_error(not_logged_in, Req);
-        ok ->
+        {State, NewContext, SessionHandler} ->
             % Try to get file by given path
             FileInfo =
                 try
@@ -157,7 +158,11 @@ handle_user_content_request(Req, Path) ->
                 {Filepath, Size} ->
                     % Send the file
                     try
-                        {ok, _NewReq} = send_file(Req, Filepath, filename:basename(Filepath), Size)
+                        % Finalize session handler, set new cookie
+                        {ok, [], FinalCtx} = SessionHandler:finish(State, NewContext),
+                        Req2 = cowboy_req:set_resp_header(<<"content-type">>, <<"application/json">>,
+                            FinalCtx#context.req),
+                        {ok, _NewReq} = send_file(Req2, Filepath, filename:basename(Filepath), Size)
                     catch Type:Message ->
                         ?error_stacktrace("Error while sending file ~p to user ~p - ~p:~p",
                             [Filepath, user_logic:get_login(get(user_id)), Type, Message]),

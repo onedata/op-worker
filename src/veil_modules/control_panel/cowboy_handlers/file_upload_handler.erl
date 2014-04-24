@@ -78,18 +78,21 @@ terminate(_Reason, _Req, _State) ->
 -spec handle_upload_request(req()) -> {ok, req()}.
 %% ====================================================================
 handle_upload_request(Req) ->
+    % Try to initialize session handler and retrieve user's session
     try
-        {State, NewContext, SessionHandler} = try_or_throw(
-            fun() ->
-                Context = wf_context:init_context(Req),
-                SessHandler = proplists:get_value(session, Context#context.handlers),
-                {ok, St, NewCtx} = SessHandler:init([], Context),
-                wf_context:context(NewCtx),
+        {State, NewContext, SessionHandler} =
+            try
+                Context1 = wf_context:init_context(Req),
+                SessHandler = proplists:get_value(session, Context1#context.handlers),
+                {ok, St, Context2} = SessHandler:init([], Context1),
+                wf_context:context(Context2),
                 UserID = wf:session(user_doc),
                 true = (UserID /= undefined),
                 put(user_id, lists:nth(1, user_logic:get_dn_list(UserID))),
-                {St, NewCtx, SessHandler}
-            end, not_logged_in),
+                {St, Context2, SessHandler}
+            catch _:_ ->
+                throw(not_logged_in)
+            end,
 
         % Params and _FilePath are not currently used but there are cases when they could be useful
         {ok, _Params, [{OriginalFileName, _FilePath}]} = parse_multipart(Req, [], []),
@@ -104,6 +107,7 @@ handle_upload_request(Req) ->
                 ]}
             ]}),
 
+        % Finalize session handler, set new cookie
         {ok, [], FinalCtx} = SessionHandler:finish(State, NewContext),
         Req2 = cowboy_req:set_resp_header(<<"content-type">>, <<"application/json">>,
             FinalCtx#context.req),
@@ -400,21 +404,6 @@ get_upload_buffer_size() ->
                     ?error("Could not read 'control_panel_upload_buffer' from config. Make sure it is present in config.yml and .app.src."),
                     ?UPLOAD_BUFFER_SIZE
             end.
-
-
-%% try_or_throw/2
-%% ====================================================================
-%% @doc Convienience function to envelope a piece of code in try throw statement.
-%% Used for clear code where multiple try catches are nested.
-%% @end
--spec try_or_throw(function(), term()) -> term() | no_return().
-%% ====================================================================
-try_or_throw(Fun, ThrowWhat) ->
-    try
-        Fun()
-    catch _:_ ->
-        throw(ThrowWhat)
-    end.
 
 
 %% ====================================================================
