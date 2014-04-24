@@ -87,8 +87,8 @@ veil_cluster_node_env:
       name: ssl_cert_path
       description: Path to certificate used by ranch_ssl
       value: |
-        "\'./cacerts/veilfs.pem\'"
-      erlang_term: "'./cacerts/veilfs.pem'"
+        "\'./cacerts/VeilFSServer.pem\'"
+      erlang_term: "'./cacerts/VeilFSServer.pem'"
       # this has to be in double quotes so that single quotes are preserved after
       # conversion to list and it ends up correct in app.src
 

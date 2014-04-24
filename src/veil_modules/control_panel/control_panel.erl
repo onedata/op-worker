@@ -105,6 +105,7 @@ init(_Args) ->
             {port, RestPort},
             {certfile, CertString},
             {keyfile, CertString},
+            {cacerts, gsi_handler:get_ca_certs()},
             {password, ""},
             {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}}
         ],

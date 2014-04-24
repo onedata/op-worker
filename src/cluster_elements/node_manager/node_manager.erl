@@ -112,6 +112,7 @@ init([Type]) when Type =:= worker ; Type =:= ccm ; Type =:= ccm_test ->
         [
           {port, Port},
           {certfile, atom_to_list(CertFile)},
+          {cacerts, gsi_handler:get_ca_certs()},
           {keyfile, atom_to_list(CertFile)},
           {password, ""},
           {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}}
