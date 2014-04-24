@@ -121,8 +121,9 @@ websocket_handle({Type, Data}, Req, State) ->
   ?warning("Unknown WebSocket request. Type: ~p, Payload: ~p", [Type, Data]),
   {ok, Req, State}.
 
-handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #createstoragetestfilerequest{storage_id = StorageId} = SReq, MsgId, Answer_type}, #hander_state{peer_dn = DnString} = State) ->
+handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #storagetestrequest{type = "create_storage_test_file", storage_id = StorageId} = SReq, MsgId, Answer_type}, #hander_state{peer_dn = DnString} = State) ->
   ?debug("Create storage test file request: ~p", [SReq]),
+  lager:info("=========> Create storage test file request: ~p", [SReq]),
   Login = %% Fetch user's login
   case dao_lib:apply(dao_users, get_user, [{dn, DnString}], ProtocolVersion) of
     {ok, #veil_document{record = #user{login = UserLogin}}} ->
@@ -143,24 +144,25 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #createstoragetestfiler
   case dao_lib:apply(dao_vfs, get_storage, [{id, StorageId}], ProtocolVersion) of
     {ok, #veil_document{record = StorageInfo}} ->
       StorageHelperInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, StorageInfo),
-      case createStorageTestFile(StorageHelperInfo, Login) of
+      case create_storage_test_file(StorageHelperInfo, Login) of
         {ok, Path} ->
           spawn(fun() -> DeleteStorageTestFile(StorageHelperInfo, Path) end),
           case storage_files_manager:write(StorageHelperInfo, Path, Text) of
             Length ->
-              {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #createstoragetestfileresponse{relative_path = Path, text = Text})}, Req, State};
+              {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #storagetestresponse{answer = "ok", relative_path = Path, text = Text})}, Req, State};
             _ ->
-              {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #createstoragetestfileresponse{relative_path = "", text = ""})}, Req, State}
+              {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #storagetestresponse{answer = "error"})}, Req, State}
           end;
         _ ->
-          {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #createstoragetestfileresponse{relative_path = "", text = Text})}, Req, State}
+          {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #storagetestresponse{answer = "error"})}, Req, State}
       end;
     _ ->
-      {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #createstoragetestfileresponse{relative_path = "", text = Text})}, Req, State}
+      {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #storagetestresponse{answer = "error"})}, Req, State}
   end;
 
-handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #storagetestfilemodified{storage_id = StorageId, relative_path = Path, text = ExpectedText} = SReq, MsgId, Answer_type}, State) ->
+handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #storagetestrequest{type = "storage_test_file_modified", storage_id = StorageId, relative_path = Path, text = ExpectedText} = SReq, MsgId, Answer_type}, State) ->
   ?debug("Storage test file modified request: ~p", [SReq]),
+  lager:info("=======> Storage test file modified request: ~p", [SReq]),
   case dao_lib:apply(dao_vfs, get_storage, [{id, StorageId}], ProtocolVersion) of
     {ok, #veil_document{record = StorageInfo}} ->
       StorageHelperInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, StorageInfo),
@@ -169,42 +171,46 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #storagetestfilemodifie
           ActualText = binary_to_list(Bytes),
           Answer = ExpectedText =:= ActualText,
           storage_files_manager:delete(StorageHelperInfo, Path),
-          {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #storagetestfilemodifiedack{answer = Answer})}, Req, State};
+          {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #storagetestresponse{answer = "ok"})}, Req, State};
         _ ->
-          {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #storagetestfilemodifiedack{answer = false})}, Req, State}
+          {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #storagetestresponse{answer = "error"})}, Req, State}
       end;
     _ ->
-      {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #storagetestfilemodifiedack{answer = false})}, Req, State}
+      {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #storagetestresponse{answer = "error"})}, Req, State}
   end;
 
-handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #directiostorageinfo{storage_info = StorageInfo} = SReq, MsgId, Answer_type}, #hander_state{fuse_id = FuseId} = State) ->
-  ?debug("Direct IO storage request: ~p", [SReq]),
+handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #clientstorageinfo{storage_info = ClientStorageInfo} = SReq, MsgId, Answer_type}, #hander_state{fuse_id = FuseId} = State) ->
+  ?debug("Client storage info: ~p", [SReq]),
+  lager:info("===========> Got client storage info: ~p", [ClientStorageInfo]),
   case dao_lib:apply(dao_cluster, get_fuse_session, [FuseId], ProtocolVersion) of
     {ok, #veil_document{record = #fuse_session{env_vars = EnvVars} = FuseSession} = FuseSessionDoc} ->
       case proplists:get_value(group_id, EnvVars) of
         undefined ->
-          NewStorageInfo = lists:map(fun({_, StorageId, Root}) -> {StorageId, Root} end, StorageInfo),
-          {ok, Hash} = dao_lib:apply(dao_vfs, gen_fuse_group_hash, [NewStorageInfo], ProtocolVersion),
-          {ok, GroupId} = case dao_lib:apply(dao_vfs, exist_fuse_group_hash, [{hash, Hash}], ProtocolVersion) of
-                            {ok, true} ->
-                              {ok, FuseGroupHashDoc} = dao_lib:apply(dao_vfs, get_fuse_group_hash, [{hash, Hash}], ProtocolVersion),
-                              FuseGroupHashDoc#veil_document.record#fuse_group_hash.name;
-                            _ ->
-                              dao_lib:apply(dao_vfs, save_fuse_group_hash, [#fuse_group_hash{hash = Hash, name = Hash}], ProtocolVersion),
-                              {ok, Hash}
-                          end,
-          lists:foreach(fun
-            ({StorageId, Root}) ->
-              FuseGroup = #fuse_group_info{name = GroupId, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}},
-              case dao_lib:apply(dao_vfs, get_storage, [{id, StorageId}], ProtocolVersion) of
-                {ok, #veil_document{record = #storage_info{fuse_groups = FuseGroups} = StgInfo} = StgInfoDoc} ->
-                  dao_lib:apply(dao_vfs, save_storage,
-                    [StgInfoDoc#veil_document{record = StgInfo#storage_info{fuse_groups = [FuseGroup | FuseGroups]}}], ProtocolVersion)
-              end
-          end, NewStorageInfo),
-          dao_lib:apply(dao_cluster, save_fuse_session,
-            [FuseSessionDoc#veil_document{record = FuseSession#fuse_session{env_vars = [{group_id, GroupId} | EnvVars]}}], ProtocolVersion),
-          {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req, State};
+          lager:info("===========> Fuse group undefined."),
+          case get_fuse_group_name(ClientStorageInfo, ProtocolVersion) of
+            {new_fuse_group, Name} ->
+              lager:info("===========> New fuse group created."),
+              try
+                ok = add_fuse_group_to_storages(Name, ClientStorageInfo, ProtocolVersion),
+                ok = save_fuse_group_name_in_client_session(Name, FuseSession, FuseSessionDoc, ProtocolVersion),
+                {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req, State}
+              catch
+                _:_ ->
+                  {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VEREMOTEIO})}, Req, State}
+              end;
+            {existing_fuse_group, Name} ->
+              lager:info("===========> Existing fuse group reused."),
+              try
+                ok = save_fuse_group_name_in_client_session(Name, FuseSession, FuseSessionDoc, ProtocolVersion),
+                {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req, State}
+              catch
+                _:_ ->
+                  {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VEREMOTEIO})}, Req, State}
+              end;
+            error ->
+              lager:info("===========> Error while getting fuse group name."),
+              {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VEREMOTEIO})}, Req, State}
+          end;
         _ ->
           {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req, State}
       end;
@@ -216,7 +222,7 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #directiostorageinfo{st
 %% Handle Handshake request - FUSE ID negotiation
 handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #handshakerequest{hostname = Hostname, variable = Vars} = HReq, MsgId, Answer_type}, #hander_state{peer_dn = DnString} = State) ->
   ?debug("Handshake request: ~p", [HReq]),
-  NewFuseId = genFuseId(HReq),
+  NewFuseId = gen_fuse_id(HReq),
   UID = %% Fetch user's ID
   case dao_lib:apply(dao_users, get_user, [{dn, DnString}], ProtocolVersion) of
     {ok, #veil_document{uuid = UID1}} ->
@@ -514,36 +520,113 @@ checkMessage(Msg, DN) ->
   false.
 
 
-%% genFuseId/1
+%% gen_fuse_id/1
 %% ====================================================================
 %% @doc Generates new fuseId. Returned values will be used as document UUID in DB. All returned values shall be unique.
--spec genFuseId(#handshakerequest{}) -> Result :: nonempty_string().
+-spec gen_fuse_id(#handshakerequest{}) -> Result :: nonempty_string().
 %% ====================================================================
-genFuseId(#handshakerequest{} = _HReq) ->
+gen_fuse_id(#handshakerequest{} = _HReq) ->
   dao_helper:gen_uuid().
 
-%% createStorageTestFile/2
+%% create_storage_test_file/2
 %% ====================================================================
 %% @doc Creates storage test file with random filename. If file already exists new name is generated.
--spec createStorageTestFile(StorageHelperInfo :: #storage_helper_info{}, Login :: string()) -> Result :: nonempty_string().
+-spec create_storage_test_file(StorageHelperInfo :: #storage_helper_info{}, Login :: string()) -> Result when
+  Result :: {ok, Path :: string()} | {error, attempts_limit_excceded}.
 %% ====================================================================
-createStorageTestFile(StorageHelperInfo, Login) ->
-  createStorageTestFile(StorageHelperInfo, Login, 20).
+create_storage_test_file(StorageHelperInfo, Login) ->
+  create_storage_test_file(StorageHelperInfo, Login, 20).
 
-%% createStorageTestFile/3
+%% create_storage_test_file/3
 %% ====================================================================
 %% @doc Creates storage test file with random filename. If file already exists new name is generated.
--spec createStorageTestFile(StorageHelperInfo :: #storage_helper_info{}, Login :: string(), Attempts :: integer()) -> Result :: nonempty_string().
+-spec create_storage_test_file(StorageHelperInfo :: #storage_helper_info{}, Login :: string(), Attempts :: integer()) -> Result when
+  Result :: {ok, Path :: string()} | {error, attempts_limit_excceded}.
 %% ====================================================================
-createStorageTestFile(_, _, 0) ->
-  {error, attempts_number_exceeded};
-createStorageTestFile(StorageHelperInfo, Login, Attempts) ->
+create_storage_test_file(_, _, 0) ->
+  {error, attempts_limit_exceeded};
+create_storage_test_file(StorageHelperInfo, Login, Attempts) ->
   {A, B, C} = now(),
   random:seed(A, B, C),
   Filename = lists:foldl(fun(_, Acc) -> [random:uniform(26) + 96 | Acc] end, [], lists:seq(1, 8)),
-  lager:info("======> Creating file: ~p", [Filename]),
   Path = "users/" ++ Login ++ "/" ++ Filename,
   case storage_files_manager:create(StorageHelperInfo, Path) of
     ok -> {ok, Path};
-    _ -> createStorageTestFile(StorageHelperInfo, Login, Attempts - 1)
+    _ -> create_storage_test_file(StorageHelperInfo, Login, Attempts - 1)
   end.
+
+%% get_fuse_group_name/2
+%% ====================================================================
+%% @doc Creates storage test file with random filename. If file already exists new name is generated.
+-spec get_fuse_group_name(ClientStorageInfo, ProtocolVersion) -> Result when
+  ClientStorageInfo :: [{FieldName :: atom(), StorageId :: integer(), Path :: string()}],
+  ProtocolVersion :: integer(),
+  Result :: {new_group, Name :: string()} | {exist_group, Name :: string()} | error.
+%% ====================================================================
+get_fuse_group_name(ClientStorageInfo, ProtocolVersion) ->
+  try
+    NewClientStorageInfo = lists:map(fun({_, StorageId, Path}) -> {StorageId, Path} end, ClientStorageInfo),
+    lager:info("===========> Client storage info: ~p.", [NewClientStorageInfo]),
+    {ok, Hash} = dao_lib:apply(dao_vfs, gen_fuse_group_name, [NewClientStorageInfo], ProtocolVersion),
+    lager:info("===========> Hash: ~p.", [Hash]),
+    case dao_lib:apply(dao_vfs, exist_fuse_group_name, [{hash, Hash}], ProtocolVersion) of
+      {ok, true} ->
+        lager:info("===========> Get fuse exists."),
+        {ok, #veil_document{record = #fuse_group_name{name = Name}}} =
+          dao_lib:apply(dao_vfs, get_fuse_group_name, [{hash, Hash}], ProtocolVersion),
+        lager:info("===========> Get fuse group name (existing): ~p.", [Name]),
+        {exist_fuse_group, Name};
+      {ok, false} ->
+        lager:info("===========> Get fuse dose not exist."),
+        {ok, _} = dao_lib:apply(dao_vfs, save_fuse_group_name, [#fuse_group_name{name = Hash, hash = Hash}], ProtocolVersion),
+        lager:info("===========> Get fuse group name (new): ~p.", [Hash]),
+        {new_fuse_group, Hash};
+      _ ->
+        lager:info("===========> Get fuse group name: ERROR"),
+        error
+    end
+  catch
+    _:_ -> error
+  end.
+
+%% save_fuse_group_name_in_client_session/4
+%% ====================================================================
+%% @doc Saves fuse group name in client session
+-spec save_fuse_group_name_in_client_session(Name, FuseSession, FuseSessionDoc, ProtocolVersion) -> Result when
+  Name :: string(),
+  FuseSession :: #fuse_session{},
+  FuseSessionDoc :: #veil_document{},
+  ProtocolVersion :: integer(),
+  Result :: ok | error.
+%% ====================================================================
+save_fuse_group_name_in_client_session(Name, FuseSession, FuseSessionDoc, ProtocolVersion) ->
+  lager:info("===========> Saving fuse group name in client session."),
+  EnvVars = FuseSession#fuse_session.env_vars,
+  NewFuseSessionDoc = FuseSessionDoc#veil_document{record = FuseSession#fuse_session{env_vars = [{group_id, Name} | EnvVars]}},
+  case dao_lib:apply(dao_cluster, save_fuse_session, [NewFuseSessionDoc], ProtocolVersion) of
+    {ok, _} -> ok;
+    _ -> error
+  end.
+
+%% add_fuse_group_to_storages/3
+%% ====================================================================
+%% @doc Add fuse group to specified storages
+-spec add_fuse_group_to_storages(Name, ClientStorageInfo, ProtocolVersion) -> Result when
+  Name :: string(),
+  ClientStorageInfo :: [{FieldName :: atom(), StorageId :: integer(), Path :: string()}],
+  ProtocolVersion :: integer(),
+  Result :: ok | error.
+%% ====================================================================
+add_fuse_group_to_storages(Name, ClientStorageInfo, ProtocolVersion) ->
+  lager:info("===========> Adding fuse group name to storages."),
+  lists:foreach(fun({_, StorageId, Root}) ->
+    FuseGroup = #fuse_group_info{name = Name, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}},
+    case dao_lib:apply(dao_vfs, get_storage, [{id, StorageId}], ProtocolVersion) of
+      {ok, #veil_document{record = #storage_info{fuse_groups = FuseGroups} = StorageInfo} = StorageInfoDoc} ->
+        case dao_lib:apply(dao_vfs, save_storage, [StorageInfoDoc#veil_document{record = StorageInfo#storage_info{fuse_groups = [FuseGroup | FuseGroups]}}], ProtocolVersion) of
+          {ok, _} -> ok;
+          _ -> error
+        end;
+      _ -> error
+    end
+  end, ClientStorageInfo).

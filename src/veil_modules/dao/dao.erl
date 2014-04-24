@@ -670,8 +670,8 @@ init_storage() ->
               {ok, #veil_document{record = #storage_info{id = Id}}} ->
                 lists:foreach(fun
                   ([{name, Name}, {root, Root}]) ->
-                    {ok, Hash} = dao_lib:apply(dao_vfs, gen_fuse_group_hash, [[{Id, Root}]], 1),
-                    dao_lib:apply(dao_vfs, save_fuse_group_hash, [#fuse_group_hash{hash = Hash, name = Name}], 1);
+                    {ok, Hash} = dao_lib:apply(dao_vfs, gen_fuse_group_name, [[{Id, Root}]], 1),
+                    dao_lib:apply(dao_vfs, save_fuse_group_name, [#fuse_group_name{hash = Hash, name = Name}], 1);
                   (_) -> ok
                 end, StoragePreferences),
                 ok;

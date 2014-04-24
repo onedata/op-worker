@@ -24,7 +24,7 @@
 -export([save_new_file/2, save_file/1, remove_file/1, exist_file/1, get_file/1, get_waiting_file/1, get_path_info/1]). %% Base file management API function
 -export([save_storage/1, remove_storage/1, exist_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
 -export([save_file_meta/1, remove_file_meta/1, exist_file_meta/1, get_file_meta/1]).
--export([save_fuse_group_hash/1, remove_fuse_group_hash/1, exist_fuse_group_hash/1, get_fuse_group_hash/1, gen_fuse_group_hash/1]).
+-export([save_fuse_group_name/1, remove_fuse_group_name/1, exist_fuse_group_name/1, get_fuse_group_name/1, gen_fuse_group_name/1]).
 
 
 -ifdef(TEST).
@@ -1140,59 +1140,59 @@ next_char(Other) ->
 %% Fuse group hashs management functions
 %% ===================================================================
 
-%% save_fuse_group_hash/1
+%% save_fuse_group_name/1
 %% ====================================================================
-%% @doc Saves fuse group hash to DB. Argument should be either #fuse_group_hash{} record
+%% @doc Saves fuse group hash to DB. Argument should be either #fuse_group_name{} record
 %% (if you want to save it as new document) <br/>
-%% or #veil_document{} that wraps #fuse_group_hash{} if you want to update fuse group info in DB. <br/>
+%% or #veil_document{} that wraps #fuse_group_name{} if you want to update fuse group info in DB. <br/>
 %% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec save_fuse_group_hash(FuseGroupHash :: fuse_group_hash_info() | fuse_group_hash_doc()) -> {ok, uuid()} | {error, any()} | no_return().
+-spec save_fuse_group_name(FuseGroupHash :: fuse_group_name_info() | fuse_group_name_doc()) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
-save_fuse_group_hash(#fuse_group_hash{} = FuseGroupHash) ->
-  save_fuse_group_hash(#veil_document{record = FuseGroupHash});
-save_fuse_group_hash(#veil_document{} = FuseGroupHashDoc) ->
+save_fuse_group_name(#fuse_group_name{} = FuseGroupHash) ->
+  save_fuse_group_name(#veil_document{record = FuseGroupHash});
+save_fuse_group_name(#veil_document{} = FuseGroupHashDoc) ->
   dao:set_db(?SYSTEM_DB_NAME),
   dao:save_record(FuseGroupHashDoc).
 
-%% remove_fuse_group_hash/1
+%% remove_fuse_group_name/1
 %% ====================================================================
 %% @doc Removes fuse group hash from DB. Argument should be uuid() of fuse group hash document or hash of fuse group <br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec remove_fuse_group_hash({uuid, DocUUID :: uuid()} | {hash, Hash :: string()}) -> ok | {error, any()} | no_return().
+-spec remove_fuse_group_name({uuid, DocUUID :: uuid()} | {hash, Hash :: string()}) -> ok | {error, any()} | no_return().
 %% ====================================================================
-remove_fuse_group_hash({uuid, DocUUID}) when is_list(DocUUID) ->
-  case get_fuse_group_hash({uuid, DocUUID}) of
+remove_fuse_group_name({uuid, DocUUID}) when is_list(DocUUID) ->
+  case get_fuse_group_name({uuid, DocUUID}) of
     {ok, _} ->
       dao:set_db(?SYSTEM_DB_NAME),
       dao:remove_record(DocUUID);
     {error, Error} -> {error, Error}
   end;
-remove_fuse_group_hash({hash, Hash}) when is_list(Hash) ->
-  case get_fuse_group_hash({hash, Hash}) of
+remove_fuse_group_name({hash, Hash}) when is_list(Hash) ->
+  case get_fuse_group_name({hash, Hash}) of
     {ok, FuseGroupHashDoc} ->
       dao:set_db(?SYSTEM_DB_NAME),
       dao:remove_record(FuseGroupHashDoc#veil_document.uuid);
     {error, Error} -> {error, Error}
   end.
 
-%% exist_fuse_group_hash/1
+%% exist_fuse_group_name/1
 %% ====================================================================
 %% @doc Checks whether fuse group hash exists in DB. Argument should be uuid() of storage document or hash of fuse group. <br/>
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
--spec exist_fuse_group_hash({uuid, DocUUID :: uuid()} | {hash, Hash :: string()}) ->
+-spec exist_fuse_group_name({uuid, DocUUID :: uuid()} | {hash, Hash :: string()}) ->
   {ok, true | false} | {error, any()}.
 %% ====================================================================
-exist_fuse_group_hash({uuid, DocUUID}) when is_list(DocUUID) ->
+exist_fuse_group_name({uuid, DocUUID}) when is_list(DocUUID) ->
   dao:set_db(?SYSTEM_DB_NAME),
   dao:exist_record(DocUUID);
-exist_fuse_group_hash({hash, Hash}) when is_list(Hash) ->
+exist_fuse_group_name({hash, Hash}) when is_list(Hash) ->
   QueryArgs = #view_query_args{keys = [dao_helper:name(Hash)], include_docs = true},
   case dao:list_records(?FUSE_GROUP_BY_HASH_VIEW, QueryArgs) of
-    {ok, #view_result{rows = [#view_row{doc = #veil_document{record = #fuse_group_hash{}}} | _]}} ->
+    {ok, #view_result{rows = [#view_row{doc = #veil_document{record = #fuse_group_name{}}} | _]}} ->
       {ok, true};
     {ok, #view_result{rows = []}} ->
       {ok, false};
@@ -1200,32 +1200,32 @@ exist_fuse_group_hash({hash, Hash}) when is_list(Hash) ->
   end.
 
 
-%% get_fuse_group_hash/1
+%% get_fuse_group_name/1
 %% ====================================================================
 %% @doc Gets fuse group hash from DB. Argument should be uuid() of storage document or hash of fuse group. <br/>
-%% Non-error return value is always {ok, #veil_document{record = #fuse_group_hash{}}.
+%% Non-error return value is always {ok, #veil_document{record = #fuse_group_name{}}.
 %% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec get_fuse_group_hash({uuid, DocUUID :: uuid()} | {hash, Hash :: string()}) -> {ok, fuse_group_hash_doc()} | {error, any()} | no_return().
+-spec get_fuse_group_name({uuid, DocUUID :: uuid()} | {hash, Hash :: string()}) -> {ok, fuse_group_name_doc()} | {error, any()} | no_return().
 %% ====================================================================
-get_fuse_group_hash({uuid, DocUUID}) when is_list(DocUUID) ->
+get_fuse_group_name({uuid, DocUUID}) when is_list(DocUUID) ->
   dao:set_db(?SYSTEM_DB_NAME),
   case dao:get_record(DocUUID) of
-    {ok, #veil_document{record = #fuse_group_hash{}} = Doc} ->
+    {ok, #veil_document{record = #fuse_group_name{}} = Doc} ->
       {ok, Doc};
     {ok, #veil_document{}} ->
-      {error, invalid_fuse_group_hash_record};
+      {error, invalid_fuse_group_name_record};
     Other ->
       Other
   end;
-get_fuse_group_hash({hash, Hash}) when is_list(Hash) ->
+get_fuse_group_name({hash, Hash}) when is_list(Hash) ->
   dao:set_db(?SYSTEM_DB_NAME),
   QueryArgs = #view_query_args{keys = [dao_helper:name(Hash)], include_docs = true},
   case dao:list_records(?FUSE_GROUP_BY_HASH_VIEW, QueryArgs) of
-    {ok, #view_result{rows = [#view_row{doc = #veil_document{record = #fuse_group_hash{}} = Doc}]}} ->
+    {ok, #view_result{rows = [#view_row{doc = #veil_document{record = #fuse_group_name{}} = Doc}]}} ->
       {ok, Doc};
-    {ok, #view_result{rows = [#view_row{doc = #veil_document{record = #fuse_group_hash{}} = Doc} | _] = Rows}} ->
+    {ok, #view_result{rows = [#view_row{doc = #veil_document{record = #fuse_group_name{}} = Doc} | _] = Rows}} ->
       lager:warning("Fuse group with hash ~p is duplicated. Returning first copy. All: ~p", [Hash, Rows]),
       {ok, Doc};
     {ok, #view_result{rows = []}} ->
@@ -1236,14 +1236,14 @@ get_fuse_group_hash({hash, Hash}) when is_list(Hash) ->
       throw(inavlid_data)
   end.
 
-%% gen_fuse_group_hash/1
+%% gen_fuse_group_name/1
 %% ====================================================================
 %% @doc Generetes fuse group hash using list of pairs or storage id and absolute path to storage
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec gen_fuse_group_hash([{StorageId :: integer(), AbsPath :: string()}]) -> {ok, Hash :: string()}.
+-spec gen_fuse_group_name([{StorageId :: integer(), AbsPath :: string()}]) -> {ok, Hash :: string()}.
 %% ====================================================================
-gen_fuse_group_hash(StorageInfoList) ->
+gen_fuse_group_name(StorageInfoList) ->
   LastCTX = %% Calculate MD5 sum of storage info data (each entry is of form {storage_id, absolute_path_to_storage})
   lists:foldl(fun({StorageId, AbsPath}, CTX) ->
     crypto:hash_update(CTX, integer_to_list(StorageId) ++ AbsPath)

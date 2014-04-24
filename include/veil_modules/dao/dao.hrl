@@ -46,7 +46,7 @@
         fuse_session        -> ?record_info_gen(fuse_session);
         connection_info     -> ?record_info_gen(connection_info);
         quota               -> ?record_info_gen(quota);
-        fuse_group_hash     -> ?record_info_gen(fuse_group_hash);
+        fuse_group_name     -> ?record_info_gen(fuse_group_name);
         %next_record        -> ?record_info_gen(next_record);
         _ -> {error, unsupported_record}
     end).
