@@ -27,10 +27,11 @@
             os_mon,
             ranch,
             cowboy,
-%%             gproc,
-%%             n2o,
-%%             erlydtl,
-            mimetypes
+            gproc,
+            n2o,
+            erlydtl,
+            mimetypes,
+            inets
         ]},
         {mod, {veil_cluster_node_app, []}},
         {env, [

@@ -262,8 +262,9 @@ start_deps() ->
   application:start(os_mon),
   application:start(ranch),
   application:start(cowboy),
-%%   application:start(gproc),
-%%   application:start(n2o),
+  application:start(erlydtl),
+  application:start(gproc),
+  application:start(n2o),
   application:start(mimetypes),
   application:start(ibrowse),
   application:load(?APP_Name).
@@ -283,8 +284,9 @@ stop_deps() ->
   application:stop(cowboy),
   application:stop(lager),
   application:stop(sasl),
-%%   application:start(gproc),
-%%   application:stop(n2o),
+  application:start(erlydtl),
+  application:start(gproc),
+  application:stop(n2o),
   application:stop(mimetypes),
   application:stop(ibrowse),
   application:unload(?APP_Name).
