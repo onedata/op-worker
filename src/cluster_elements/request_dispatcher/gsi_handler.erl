@@ -91,7 +91,7 @@ get_ca_certs() ->
     CA2 = [ lists:map(fun(Y) -> {Name, Y} end, public_key:pem_decode(X)) || {Name, {ok, X}} <- CA1],
     _CA2 = [ X || {Name, {'Certificate', X, not_encrypted}} <- lists:flatten(CA2)].
 
-%% strip_self_signed_ca/0
+%% strip_self_signed_ca/1
 %% ====================================================================
 %% @doc Returns given list of certificates but without self-signed ones.
 %% @end
