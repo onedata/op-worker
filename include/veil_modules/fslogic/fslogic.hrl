@@ -22,6 +22,7 @@
 -define(VEREMOTEIO, "eremoteio").%% Remote I/O error
 -define(VEPERM,     "eperm").    %% Operation not permitted
 -define(VEINVAL,    "einval").   %% Invalid argument
+-define(VEDQUOT,    "edquot").   %% Quota exceeded
 
 
 %% POSIX & FUSE C structures definitions ported to erlang. For documentation please refer linux & fuse man pages.

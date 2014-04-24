@@ -20,6 +20,7 @@
 -include("fuse_messages_pb.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
+-include("veil_modules/cluster_rengine/cluster_rengine.hrl").
 -include("logging.hrl").
 -include("veil_modules/dao/dao.hrl").
 -include_lib("public_key/include/public_key.hrl").
@@ -228,8 +229,14 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
             end;
         false ->
             try
-                Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Request}}),
-                {reply, {binary, encode_answer(Ans, MsgId)}, Req, State}
+                case Msg of
+                  ack ->
+                    gen_server:call(?Dispatcher_Name, {node_chosen_for_ack, {Task, ProtocolVersion, Request, MsgId, FuseID}}),
+                    {ok, Req, State};
+                  _ ->
+                    Ans = gen_server:call(?Dispatcher_Name, {node_chosen, {Task, ProtocolVersion, Request}}),
+                    {reply, {binary, encode_answer(Ans, MsgId)}, Req, State}
+                end
             catch
                 _:_ -> {reply, {binary, encode_answer(dispatcher_error, MsgId)}, Req, State}
             end
@@ -253,23 +260,9 @@ websocket_info({Pid, shutdown}, Req, State) -> %% Handler internal shutdown requ
     Pid ! ok,
     {shutdown, Req, State};
 websocket_info({ResponsePid, Message, MessageDecoder, MsgID}, Req, State) ->
-    try
-      [MessageType | _] = tuple_to_list(Message),
-      AnsRecord = encode_answer_record(push, -1, atom_to_list(MessageType), MessageDecoder, Message),
-      case list_to_atom(AnsRecord#answer.answer_status) of
-        push ->
-          ResponsePid ! {self(), MsgID, ok},
-          {reply, {binary, erlang:iolist_to_binary(communication_protocol_pb:encode_answer(AnsRecord))}, Req, State};
-        Other ->
-          ResponsePid ! {self(), MsgID, Other},
-          {ok, Req, State}
-      end
-    catch
-      Type:Error ->
-        lager:error("Ranch handler callback error for message ~p, error: ~p:~p", [Message, Type, Error]),
-        ResponsePid ! {self(), MsgID, handler_error},
-        {ok, Req, State}
-    end;
+  encode_and_send({ResponsePid, Message, MessageDecoder, MsgID}, -1, Req, State);
+websocket_info({with_ack, ResponsePid, Message, MessageDecoder, MsgID}, Req, State) ->
+  encode_and_send({ResponsePid, Message, MessageDecoder, MsgID}, MsgID, Req, State);
 websocket_info(_Msg, Req, State) ->
     ?warning("Unknown WebSocket PUSH request. Message: ~p", [_Msg]),
     {ok, Req, State}.
@@ -292,6 +285,36 @@ websocket_terminate(_Reason, _Req, #hander_state{peer_serial = _Serial, connecti
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+
+%% encode_and_send/4
+%% ====================================================================
+%% @doc encode message and send to client. There is difference between MsgId and MessageIdForClient.
+%% MsgId is value that will be send back to caller and MessageIdForClient is value generated inside ws_handler
+%% and is useful when sending message to client with ack.
+-spec encode_and_send(Msg :: term(), MessageIdForClient :: integer(), Req, State) ->
+  {reply, {Type :: atom(), Data :: term()}, Req, State} | {ok, Req, State} | {shutdown, Req, State}
+  when
+  Req :: term(),
+  State :: #hander_state{}.
+%% ====================================================================
+encode_and_send({ResponsePid, Message, MessageDecoder, MsgID}, MessageIdForClient, Req, State) ->
+  try
+    [MessageType | _] = tuple_to_list(Message),
+    AnsRecord = encode_answer_record(push, MessageIdForClient, atom_to_list(MessageType), MessageDecoder, Message),
+    case list_to_atom(AnsRecord#answer.answer_status) of
+      push ->
+        ResponsePid ! {self(), MsgID, ok},
+        {reply, {binary, erlang:iolist_to_binary(communication_protocol_pb:encode_answer(AnsRecord))}, Req, State};
+      Other ->
+        ResponsePid ! {self(), MsgID, Other},
+        {ok, Req, State}
+    end
+  catch
+    Type:Error ->
+      lager:error("Ranch handler callback error for message ~p, error: ~p:~p", [Message, Type, Error]),
+      ResponsePid ! {self(), MsgID, handler_error},
+      {ok, Req, State}
+  end.
 
 %% decode_protocol_buffer/2
 %% ====================================================================

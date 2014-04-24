@@ -19,6 +19,9 @@
 
 -define(CALLBACKS_TABLE, callbacks_table).
 
+%% Singleton modules are modules which are supposed to have only one instance.
+-define(SINGLETON_MODULES, [control_panel, central_logger, rule_manager]).
+
 %% ====================================================================
 %% API
 %% ====================================================================
@@ -197,6 +200,19 @@ handle_call(get_callbacks, _From, State) ->
   {reply, {get_callbacks(), State#cm_state.callbacks_num}, State};
 
 handle_call(check, _From, State) ->
+  {reply, ok, State};
+
+%% TODO: add generic mechanism that do the same thing
+handle_call({update_cluster_rengines, EventType, EventHandlerItem}, _From, State) ->
+  Workers = State#cm_state.workers,
+  UpdateClusterRengine = fun ({_Node, Module, Pid}) ->
+    case Module of
+      cluster_rengine -> gen_server:cast(Pid, {asynch, 1, {update_cluster_rengine, EventType, EventHandlerItem}});
+      _ -> ok
+    end
+  end,
+
+  lists:foreach(UpdateClusterRengine, Workers),
   {reply, ok, State};
 
 %% Test call
@@ -425,6 +441,23 @@ handle_cast({synch_cache_clearing, Cache, ReturnPid}, State) ->
   ReturnPid ! {cache_cleared, Cache},
   {noreply, New_State};
 
+%% this handler notify all logical_files_manager that event production of EventType should be enabled/disabled
+handle_cast({notify_lfm, EventType, Enabled}, State) ->
+  NotifyFn = fun(Node) ->
+      gen_server:cast({?Node_Manager_Name, Node}, {notify_lfm, EventType, Enabled})
+  end,
+
+  lists:foreach(NotifyFn, State#cm_state.nodes),
+  {noreply, State};
+
+handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
+  NotifyFn = fun(Node) ->
+      gen_server:cast({?Node_Manager_Name, Node}, {update_user_write_enabled, UserDn, Enabled})
+  end,
+
+  lists:foreach(NotifyFn, State#cm_state.nodes),
+  {noreply, State};
+
 handle_cast({start_load_logging, Path}, State) ->
   lager:info("Start load logging on nodes: ~p", State#cm_state.nodes),
   lists:map(fun(Node) -> gen_server:cast({?Node_Manager_Name, Node}, {start_load_logging, Path}) end, State#cm_state.nodes),
@@ -607,10 +640,8 @@ check_cluster_state(State) ->
                              MinWorkers = [Module || {Module, _MLoad} <- MinNodeModulesLoads, Module == MaxModule],
                              case MinWorkers =:= [] of
                                true ->
-                                 case MaxModule of
-                                   control_panel ->
-                                     State;
-                                   central_logger ->
+                                 case lists:member(MaxModule, ?SINGLETON_MODULES) of
+                                   true ->
                                      State;
                                    _ ->
                                      lager:info([{mod, ?MODULE}], "Worker: ~s will be started at node: ~s", [MaxModule, MinNode]),
