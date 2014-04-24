@@ -160,26 +160,20 @@ message HandshakeAck {
     required string fuse_id = 1;
 }
 
-message CreateStorageTestFileRequest {
-    required int32 storage_id = 1;
+message StorageTestRequest {
+    required string type = 1;
+    required int32 storage_id = 2;
+    optional string relative_path = 3 [default = ""];
+    optional string text = 4 [default = ""];
 }
 
-message CreateStorageTestFileResponse {
+message StorageTestResponse {
+    required string answer = 1;
     optional string relative_path = 2 [default = ""];
     optional string text = 3 [default = ""];
 }
 
-message StorageTestFileModified {
-    required int32 storage_id = 1;
-    required string relative_path = 2;
-    required string text = 3;
-}
-
-message StorageTestFileModifiedAck {
-    required bool answer = 1;
-}
-
-message DirectIOStorageInfo {
+message ClientStorageInfo {
     message StorageInfo {
         required int32 storage_id = 1;
         required string absolute_path = 2;
