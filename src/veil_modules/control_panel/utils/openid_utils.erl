@@ -151,8 +151,7 @@ retrieve_user_info() ->
             _ -> ok
         end,
         Name = gui_utils:to_list(wf:q(<<?openid_name_key>>)),
-        Teams = parse_teams(binary_to_list(wf:q(<<?openid_teams_key>>))),
-        ?dump(wf:q(<<"dupa">>)),
+        Teams = parse_teams(gui_utils:to_list(wf:q(<<?openid_teams_key>>))),
         Email = gui_utils:to_list(wf:q(<<?openid_email_key>>)),
         DN1 = gui_utils:to_list(wf:q(<<?openid_dn1_key>>)),
         DN2 = gui_utils:to_list(wf:q(<<?openid_dn2_key>>)),

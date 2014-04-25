@@ -111,13 +111,14 @@ main_table() ->
 team_list_body() ->
     User = wf:session(user_doc),
     Teams = user_logic:get_teams(User),
-    #list{numbered = true, body =
-    lists:map(
+    _Body = case lists:map(
         fun(Team) ->
             #li{style = <<"font-size: 18px; padding: 5px 0;">>,
                 body = list_to_binary(re:replace(Team, "\\(", " (", [global, {return, list}]))}
-        end, Teams)
-    }.
+        end, Teams) of
+               [] -> #p{body = <<"none">>};
+               List -> #list{numbered = true, body = List}
+           end.
 
 
 % HTML list with emails printed
