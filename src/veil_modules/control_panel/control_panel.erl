@@ -73,6 +73,13 @@ init(_Args) ->
     % Custom route handler
     ok = application:set_env(n2o, route, gui_routes),
 
+    % Ets tables need by n2o
+    ets:new(cookies,[set,named_table,{keypos,1},public]),
+    ets:new(actions,[set,named_table,{keypos,1},public]),
+    ets:new(globals,[set,named_table,{keypos,1},public]),
+    ets:new(caching,[set,named_table,{keypos,1},public]),
+    ets:insert(globals,{onlineusers,0}),
+
     % Start the listener for web gui and nagios handler
     {ok, _} = cowboy:start_https(?https_listener, GuiNbAcceptors,
         [
