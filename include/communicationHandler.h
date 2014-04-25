@@ -198,7 +198,7 @@ public:
     /// Sends ClusterMsg using current WebSocket session. Will fail if there isn't one. No throw version.
     /// @param ec error code (CommunicationHandler::ConnectionStatus)
     /// @return message ID that shall be used to receive response
-    virtual int32_t     sendMessage(protocol::communication_protocol::ClusterMsg& message, int32_t msgID, ConnectionStatus &ec) throw();
+    virtual int32_t     sendMessage(protocol::communication_protocol::ClusterMsg& message, int32_t msgID, ConnectionStatus &ec);
 
     /// Sends ClusterMsg using current WebSocket session. Will fail if there isn't one. Throws CommunicationHandler::ConnectionStatus on error.
     /// @return message ID that shall be used to receive response
