@@ -172,8 +172,8 @@ message CreateStorageTestFileResponse {
 
 message StorageTestFileModifiedRequest {
     required int32 storage_id = 1;
-    optional string relative_path = 2 [default = ""];
-    optional string text = 3 [default = ""];
+    required string relative_path = 2 [default = ""];
+    required string text = 3 [default = ""];
 }
 
 message StorageTestFileModifiedResponse {
