@@ -135,7 +135,7 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(P
         LOG(INFO) << "Connection pool (" << type << " is to small (" << poolInfo.connections.size() << " connections - expected: " << poolInfo.size << "). Opening new connection...";
 
         if(poolInfo.connections.size() > 0) {
-            boost::thread t = thread(boost::bind(&SimpleConnectionPool::newConnection, shared_from_this(), type));
+            boost::thread t = boost::thread(boost::bind(&SimpleConnectionPool::newConnection, shared_from_this(), type));
             t.detach();
         }
         else
@@ -172,7 +172,7 @@ void SimpleConnectionPool::setPoolSize(PoolType type, unsigned int s)
     // Insert new connections to pool if needed (async)
     long toStart = m_connectionPools[type].size - m_connectionPools[type].connections.size();
     while(toStart-- > 0) {
-        boost::thread t = thread(boost::bind(&SimpleConnectionPool::newConnection, shared_from_this(), type));
+        boost::thread t = boost::thread(boost::bind(&SimpleConnectionPool::newConnection, shared_from_this(), type));
         t.detach();
     }
 }
