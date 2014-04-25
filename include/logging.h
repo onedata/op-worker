@@ -18,13 +18,15 @@
 
 #include <glog/logging.h>
 
+#include <atomic>
+#include <memory>
 #include <queue>
 #include <string>
 
 
 #ifndef NDEBUG
 #   undef DLOG
-#   define DLOG(severity) LOG_TO_SINK(&veil::logging::debugLogSink, severity)
+#   define DLOG(severity) LOG_TO_SINK(veil::logging::_debugLogSink, severity)
 #   define DLOG_TO_SINK(sink, severity) LOG_TO_SINK(sink, severity)
 #else
 #   define DLOG_TO_SINK(sink, severity) \
@@ -32,7 +34,7 @@
 #endif
 
 #undef LOG
-#define LOG(severity) LOG_TO_SINK(&veil::logging::logSink, severity)
+#define LOG(severity) LOG_TO_SINK(veil::logging::_logSink, severity)
 
 namespace veil
 {
@@ -48,24 +50,16 @@ typedef protocol::logging::LogLevel RemoteLogLevel;
 class RemoteLogWriter;
 class RemoteLogSink;
 
-/**
- * A writer used by logSink and debugLogSink. Useful to subscribe
- * RemoteLogWriter::handleThresholdChange to a push listener.
- * @see veil::logging::logSink
- * @see veil::logging::debugLogSink
- */
-extern boost::shared_ptr<RemoteLogWriter> logWriter;
+extern std::atomic<RemoteLogSink*> _logSink;
+extern std::atomic<RemoteLogSink*> _debugLogSink;
 
 /**
- * A sink for use with the LOG macro.
+ * Sets RemoteLogSink objects used for logging normal and debug messages.
+ * The setLogSinks function takes ownership of the pointers.
+ * @param logSink The new log sink.
+ * @param debugLogSink The new debug log sink.
  */
-extern RemoteLogSink logSink;
-
-/**
- * A sink for use with the DLOG macro. This sink has forced message severity of
- * RemoteLogLevel::LDEBUG.
- */
-extern RemoteLogSink debugLogSink;
+extern void setLogSinks(RemoteLogSink *logSink, RemoteLogSink *debugLogSink);
 
 /**
  * The RemoteLogWriter class is responsible for sending log messages to a

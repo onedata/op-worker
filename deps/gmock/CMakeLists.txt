@@ -18,6 +18,7 @@ if(${GMOCK_FIND_LIBRARY} MATCHES GMOCK_FIND_LIBRARY-NOTFOUND OR ${GTEST_FIND_LIB
                    -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
                    -DCMAKE_CXX_FLAGS_DEBUG=${CMAKE_CXX_FLAGS_DEBUG}
                    -DCMAKE_CXX_FLAGS_RELEASE=${CMAKE_CXX_FLAGS_RELEASE}
+                   --no-warn-unused-cli
     )
 
     # Export dep includes and lib paths

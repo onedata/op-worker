@@ -31,10 +31,6 @@ namespace veil
 namespace logging
 {
 
-boost::shared_ptr<RemoteLogWriter> logWriter(new RemoteLogWriter);
-RemoteLogSink logSink(logWriter);
-RemoteLogSink debugLogSink(logWriter, protocol::logging::LDEBUG);
-
 static RemoteLogLevel glogToLevel(google::LogSeverity glevel)
 {
     switch(glevel)
@@ -192,6 +188,24 @@ void RemoteLogSink::send(google::LogSeverity severity,
 
     m_writer->buffer(level, base_filename, line, timestamp,
                      std::string(message, message_len));
+}
+
+std::atomic<RemoteLogSink*> _logSink{nullptr};
+std::atomic<RemoteLogSink*> _debugLogSink{nullptr};
+
+void setLogSinks(RemoteLogSink *logSink, RemoteLogSink *debugLogSink)
+{
+    static auto del = [](RemoteLogSink *p){ _logSink = nullptr; delete p; };
+    static auto debugDel = [](RemoteLogSink *p){ _debugLogSink = nullptr; delete p; };
+
+    static std::unique_ptr<RemoteLogSink, decltype(del)> s_logSink{nullptr, del};
+    static std::unique_ptr<RemoteLogSink, decltype(debugDel)> s_debugLogSink{nullptr, debugDel};
+
+    s_logSink.reset(logSink);
+    s_debugLogSink.reset(debugLogSink);
+
+    _logSink = s_logSink.get();
+    _debugLogSink = s_debugLogSink.get();
 }
 
 } // namespace logging
