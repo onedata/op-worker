@@ -14,6 +14,10 @@ if(${GMOCK_FIND_LIBRARY} MATCHES GMOCK_FIND_LIBRARY-NOTFOUND OR ${GTEST_FIND_LIB
         SVN_REPOSITORY http://googlemock.googlecode.com/svn/trunk/
         INSTALL_COMMAND ""
         UPDATE_COMMAND ""
+        CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+                   -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
+                   -DCMAKE_CXX_FLAGS_DEBUG=${CMAKE_CXX_FLAGS_DEBUG}
+                   -DCMAKE_CXX_FLAGS_RELEASE=${CMAKE_CXX_FLAGS_RELEASE}
     )
 
     # Export dep includes and lib paths
