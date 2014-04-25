@@ -73,7 +73,7 @@ init(_Args) ->
     % Custom route handler
     ok = application:set_env(n2o, route, gui_routes),
 
-    % Ets tables need by n2o
+    % Ets tables needed by n2o
     ets:new(cookies,[set,named_table,{keypos,1},public]),
     ets:new(actions,[set,named_table,{keypos,1},public]),
     ets:new(globals,[set,named_table,{keypos,1},public]),
