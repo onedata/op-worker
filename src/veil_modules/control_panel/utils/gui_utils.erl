@@ -13,7 +13,7 @@
 -include("veil_modules/control_panel/common.hrl").
 -include("logging.hrl").
 
--export([get_requested_hostname/0, get_requested_page/0, get_user_dn/0]).
+-export([get_requested_hostname/0, get_requested_page/0, get_user_dn/0, get_request_params/0]).
 -export([user_logged_in/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0]).
 -export([redirect_to_login/1, redirect_from_login/0, maybe_redirect/4]).
 -export([apply_or_redirect/3, apply_or_redirect/4, top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
@@ -67,6 +67,19 @@ get_user_dn() ->
         undefined
     end.
 
+
+%% get_request_params/0
+%% ====================================================================
+%% @doc Returns current http request params.
+%% @end
+-spec get_request_params() -> [tuple()].
+%% ====================================================================
+get_request_params() ->
+    try
+        ?CTX#context.params
+    catch _:_ ->
+        []
+    end.
 
 %% user_logged_in/0
 %% ====================================================================

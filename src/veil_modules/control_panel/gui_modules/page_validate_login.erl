@@ -46,22 +46,27 @@ body() ->
 
                 ok ->
                     try
-                        {ok, Proplist} = openid_utils:retrieve_user_info(),
-                        {Login, UserDoc} = user_logic:sign_in(Proplist),
-                        wf:user(Login),
-                        wf:session(user_doc, UserDoc),
-                        gui_utils:redirect_from_login()
+                        case openid_utils:retrieve_user_info() of
+                            {error, invalid_request} ->
+                                page_error:redirect_with_error("Login error",
+                                    "Could not process OpenID response. Please contact the site administrator if the problem persists.");
+                            {ok, Proplist} ->
+                                {Login, UserDoc} = user_logic:sign_in(Proplist),
+                                wf:user(Login),
+                                wf:session(user_doc, UserDoc),
+                                gui_utils:redirect_from_login()
+                        end
                     catch
                         throw:dir_creation_error ->
-                            lager:error("Error in validate_login - ~p:~p~n~p", [throw, dir_creation_error, erlang:get_stacktrace()]),
+                            ?error_stacktrace("Error in validate_login - ~p:~p", [throw, dir_creation_error]),
                             page_error:redirect_with_error("User creation error",
                                 "Server could not create user directories. Please contact the site administrator if the problem persists.");
                         throw:dir_chown_error ->
-                            lager:error("Error in validate_login - ~p:~p~n~p", [throw, dir_chown_error, erlang:get_stacktrace()]),
+                            ?error_stacktrace("Error in validate_login - ~p:~p", [throw, dir_chown_error]),
                             page_error:redirect_with_error("User creation error",
                                 "Server could not change owner of user directories. Please contact the site administrator if the problem persists.");
                         Type:Message ->
-                            lager:error("Error in validate_login - ~p:~p~n~p", [Type, Message, erlang:get_stacktrace()]),
+                            ?error_stacktrace("Error in validate_login - ~p:~p", [Type, Message]),
                             page_error:redirect_with_error("Internal server error",
                                 "Server encountered an unexpected error. Please contact the site administrator if the problem persists.")
                     end

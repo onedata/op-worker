@@ -14,6 +14,7 @@
 
 -include_lib("xmerl/include/xmerl.hrl").
 -include_lib("ibrowse/include/ibrowse.hrl").
+-include_lib("n2o/include/wf.hrl").
 -include("veil_modules/control_panel/openid_utils.hrl").
 -include("logging.hrl").
 
@@ -52,7 +53,7 @@ get_login_url(HostName, RedirectParams) ->
         "&", ?openid_ext1_type_teams,
         "&", ?openid_ext1_if_available>>
     catch Type:Message ->
-        ?error_stacktrace("Unable to resolve OpenID Provider endpoint. ~p: ~p", [Type, Message]),
+        ?error_stacktrace("Unable to resolve OpenID Provider endpoint - ~p: ~p", [Type, Message]),
         {error, endpoint_unavailable}
     end.
 
@@ -94,7 +95,7 @@ prepare_validation_parameters() ->
         {gui_utils:to_list(EndpointURL), gui_utils:to_list(ValidationRequestBody)}
 
     catch Type:Message ->
-        ?error_stacktrace("Failed to process login validation request.~n~p: ~p", [Type, Message]),
+        ?error_stacktrace("Failed to process login validation request - ~p: ~p", [Type, Message]),
         {error, invalid_request}
     end.
 
@@ -119,12 +120,12 @@ validate_openid_login({EndpointURL, ValidationRequestBody}) ->
         case Response of
             ?valid_auth_info -> ok;
             _ ->
-                ?alert("Security breach attempt spotted. Invalid redirect URL contained: ~p", [string:tokens(ValidationRequestBody, "&")]),
+                ?alert("Security breach attempt spotted. Invalid redirect URL contained:~n~p", [gui_utils:get_request_params()]),
                 {error, auth_invalid}
         end
 
     catch Type:Message ->
-        ?error_stacktrace("Failed to connect to OpenID provider.~n~p: ~p", [Type, Message]),
+        ?error_stacktrace("Failed to connect to OpenID provider - ~p: ~p", [Type, Message]),
         {error, no_connection}
     end.
 
@@ -144,6 +145,11 @@ validate_openid_login({EndpointURL, ValidationRequestBody}) ->
 retrieve_user_info() ->
     try
         Login = gui_utils:to_list(wf:q(<<?openid_login_key>>)),
+        % Login must be retrieved from OpenID, other info is not mandatory.
+        case Login of
+            [] -> throw(login_undefined);
+            _ -> ok
+        end,
         Name = gui_utils:to_list(wf:q(<<?openid_name_key>>)),
         Teams = parse_teams(binary_to_list(wf:q(<<?openid_teams_key>>))),
         Email = gui_utils:to_list(wf:q(<<?openid_email_key>>)),
@@ -162,7 +168,8 @@ retrieve_user_info() ->
             {dn_list, lists:usort(DnList)}
         ]}
     catch Type:Message ->
-        ?error_stacktrace("Failed to retrieve user info - ~p: ~p", [Type, Message]),
+        ?error_stacktrace("Failed to retrieve user info - ~p: ~p~nOpenID redirect args were:~n~p",
+            [Type, Message, gui_utils:get_request_params()]),
         {error, invalid_request}
     end.
 
@@ -278,10 +285,14 @@ normalise_response(X) -> X.
 %% parse_teams/1
 %% ====================================================================
 %% @doc
-%% Parses user's teams from XML to a list of strings.
+%% Parses user's teams from XML to a list of strings. Returns an empty list
+%% for empty XML.
 %% @end
 -spec parse_teams(string()) -> [string()].
 %% ====================================================================
+parse_teams([]) ->
+    [];
+
 parse_teams(XMLContent) ->
     {XML, _} = xmerl_scan:string(XMLContent),
     #xmlElement{content = TeamList} = find_XML_node(teams, XML),
