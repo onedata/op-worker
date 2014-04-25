@@ -67,11 +67,6 @@ init([NodeType]) when NodeType =:= worker ->
     ]}};
 
 init([NodeType]) when NodeType =:= ccm_test ->
-%%     ets:new(cookies,[set,named_table,{keypos,1},public]),
-%%     ets:new(actions,[set,named_table,{keypos,1},public]),
-%%     ets:new(globals,[set,named_table,{keypos,1},public]),
-%%     ets:new(caching,[set,named_table,{keypos,1},public]),
-%%     ets:insert(globals,{onlineusers,0}),
   handle_test_init(NodeType);
 
 init([NodeType]) when NodeType =:= ccm ->
