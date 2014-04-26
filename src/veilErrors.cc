@@ -10,7 +10,7 @@
 
 namespace veil {
 
-    int translateError(std::string verr) 
+    int translateError(const std::string &verr)
     {
         if(verr == VOK)
             return 0;

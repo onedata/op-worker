@@ -57,7 +57,7 @@ void BufferAgent::updateWrBufferSize(fd_type key, size_t size)
     }
 }
 
-void BufferAgent::updateRdBufferSize(std::string key, size_t size)
+void BufferAgent::updateRdBufferSize(const std::string &key, size_t size)
 {
     unique_lock guard(m_bufferSizeMutex);
     rdbuf_size_mem_t::iterator it = m_rdBufferSizeMem.find(key);
@@ -93,7 +93,7 @@ size_t BufferAgent::getReadBufferSize()
     return m_rdBufferTotalSize;
 }
 
-int BufferAgent::onOpen(std::string path, ffi_type ffi)
+int BufferAgent::onOpen(const std::string &path, ffi_type ffi)
 {
     DLOG(INFO) << "BufferAgent::onOpen(" << path << ")";
     // Initialize write buffer's holder
@@ -132,7 +132,7 @@ int BufferAgent::onOpen(std::string path, ffi_type ffi)
     return 0;
 }
 
-int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, off_t offset, ffi_type ffi)
+int BufferAgent::onWrite(const std::string &path, const std::string &buf, size_t size, off_t offset, ffi_type ffi)
 {
     DLOG(INFO) << "BufferAgent::onWrite(path: " << path << ", size: " << size << ", offset: " << offset <<")";
     unique_lock guard(m_wrMutex);
@@ -180,7 +180,7 @@ int BufferAgent::onWrite(std::string path, const std::string &buf, size_t size, 
     return size;
 }
 
-int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t offset, ffi_type ffi)
+int BufferAgent::onRead(const std::string &path, std::string &buf, size_t size, off_t offset, ffi_type ffi)
 {
     unique_lock guard(m_rdMutex);
         read_buffer_ptr wrapper = m_rdCacheMap[path];
@@ -241,7 +241,7 @@ int BufferAgent::onRead(std::string path, std::string &buf, size_t size, off_t o
     return buf.size();
 }
 
-int BufferAgent::onFlush(std::string path, ffi_type ffi)
+int BufferAgent::onFlush(const std::string &path, ffi_type ffi)
 {
     write_buffer_ptr wrapper;
     {
@@ -286,7 +286,7 @@ int BufferAgent::onFlush(std::string path, ffi_type ffi)
     return 0;
 }
 
-int BufferAgent::onRelease(std::string path, ffi_type ffi)
+int BufferAgent::onRelease(const std::string &path, ffi_type ffi)
 {
     // Cleanup
     {

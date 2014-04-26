@@ -44,11 +44,11 @@ public:
         unsigned int size;
     };
 
-    SimpleConnectionPool(std::string hostname, int port, cert_info_fun, int metaPoolSize = DEFAULT_POOL_SIZE, int dataPoolSize = DEFAULT_POOL_SIZE);
+    SimpleConnectionPool(const std::string &hostname, int port, cert_info_fun, int metaPoolSize = DEFAULT_POOL_SIZE, int dataPoolSize = DEFAULT_POOL_SIZE);
     virtual ~SimpleConnectionPool();
 
     virtual void setPoolSize(PoolType type, unsigned int);                  ///< Sets size of connection pool. Default for each pool is: 2
-    virtual void setPushCallback(std::string fuseId, push_callback);        ///< Sets fuseID and callback function that will be registered for
+    virtual void setPushCallback(const std::string &fuseId, push_callback); ///< Sets fuseID and callback function that will be registered for
                                                                             ///< PUSH channel for every new META connection
 
     virtual void resetAllConnections(PoolType type);                        ///< Drops all connections from the pool.
@@ -82,7 +82,7 @@ protected:
     std::list<std::string> m_hostnamePool;
 
     virtual boost::shared_ptr<CommunicationHandler> newConnection(PoolType type);   ///< Creates new active connection and adds it to connection pool. Convenience method for testing (makes connection mocking easier)
-    virtual std::list<std::string> dnsQuery(std::string hostname);                  ///< Fetch IP list from DNS for given hostname.
+    virtual std::list<std::string> dnsQuery(const std::string &hostname);           ///< Fetch IP list from DNS for given hostname.
 
     /// Increments givent int while constructing and deincrement while destructing.
     struct CounterRAII {
