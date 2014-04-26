@@ -53,7 +53,7 @@ string ClusterProxyHelper::requestMessage(string inputType, string answerType, s
     Answer answer = sendCluserMessage(clm, timeout);
 
     return answer.worker_answer();
-}   
+}
 
 string ClusterProxyHelper::requestAtom(string inputType, string inputData) {
     ClusterMsg clm = commonClusterMsgSetup(inputType, inputData);
@@ -74,7 +74,7 @@ string ClusterProxyHelper::requestAtom(string inputType, string inputData) {
 
 Answer ClusterProxyHelper::sendCluserMessage(ClusterMsg &msg, uint32_t timeout) {
     boost::shared_ptr<CommunicationHandler> connection = m_connectionPool ? m_connectionPool->selectConnection(SimpleConnectionPool::DATA_POOL) : config::getConnectionPool()->selectConnection();
-    if(!connection) 
+    if(!connection)
     {
         LOG(ERROR) << "Cannot select connection from connectionPool";
         return Answer();
@@ -84,7 +84,7 @@ Answer ClusterProxyHelper::sendCluserMessage(ClusterMsg &msg, uint32_t timeout) 
     if(answer.answer_status() != VEIO)
         config::getConnectionPool()->releaseConnection(connection);
 
-    if(answer.answer_status() != VOK) 
+    if(answer.answer_status() != VOK)
         LOG(WARNING) << "Cluster send non-ok message. status = " << answer.answer_status();
 
     return answer;
@@ -113,7 +113,7 @@ int ClusterProxyHelper::sh_mknod(const char *path, mode_t mode, dev_t rdev)
 
     CreateFile msg;
     msg.set_file_id(string(path));
-    
+
     return translateError(requestAtom(msg.GetDescriptor()->name(), msg.SerializeAsString()));
 }
 
@@ -123,7 +123,7 @@ int ClusterProxyHelper::sh_unlink(const char *path)
 
     DeleteFileAtStorage msg;
     msg.set_file_id(string(path));
-    
+
     return translateError(requestAtom(msg.GetDescriptor()->name(), msg.SerializeAsString()));
 }
 
@@ -144,7 +144,7 @@ int ClusterProxyHelper::sh_truncate(const char *path, off_t size)
     TruncateFile msg;
     msg.set_file_id(string(path));
     msg.set_length(size);
-    
+
     return translateError(requestAtom(msg.GetDescriptor()->name(), msg.SerializeAsString()));
 }
 
@@ -160,7 +160,7 @@ int ClusterProxyHelper::sh_read(const char *path, char *buf, size_t size, off_t 
             struct fuse_file_info *fi)
 {
     DLOG(INFO) << "CluserProxyHelper read(path: " << string(path) << ", size: " << size << ", offset: " << offset << ")";
-    
+
     string tmpBuff;
 
     // Proxy this call to Buffer Agent
@@ -176,7 +176,7 @@ int ClusterProxyHelper::sh_write(const char *path, const char *buf, size_t size,
              off_t offset, struct fuse_file_info *fi)
 {
     DLOG(INFO) << "CluserProxyHelper write(path: " << string(path) << ", size: " << size << ", offset: " << offset << ")";
-    
+
     // Proxy this call to Buffer Agent
     return m_bufferAgent.onWrite(string(path), string(buf, size), size, offset, fi);
 }
@@ -294,7 +294,7 @@ int ClusterProxyHelper::sh_removexattr(const char *path, const char *name)
 int ClusterProxyHelper::doWrite(std::string path, const std::string &buf, size_t size, off_t offset, ffi_type)
 {
     LOG(INFO) << "CluserProxyHelper doWrite(path: " << string(path) << ", size: " << size << ", offset: " << offset << ")";
-    
+
     WriteFile msg;
     msg.set_file_id(path);
     msg.set_data(buf);
@@ -328,7 +328,7 @@ int ClusterProxyHelper::doRead(std::string path, std::string &buf, size_t size, 
     FileData answer;
     string inputData = msg.SerializeAsString();
 
-    uint64_t timeout = timeout = size * 2; // 2ms for each byte (minimum of 500B/s);
+    uint64_t timeout = size * 2; // 2ms for each byte (minimum of 500B/s);
 
     if(!answer.ParseFromString(
         requestMessage(msg.GetDescriptor()->name(), answer.GetDescriptor()->name(), inputData, timeout)))
@@ -338,7 +338,7 @@ int ClusterProxyHelper::doRead(std::string path, std::string &buf, size_t size, 
     }
 
     DLOG(INFO) << "CluserProxyHelper(offset: " << offset << ", size: " << size << ") read answer_status: " << answer.answer_status() << ", read real size: " << answer.data().size();
- 
+
     if(answer.answer_status() == VOK) {
         size_t readSize = (answer.data().size() > size ? size : answer.data().size());
 
