@@ -31,7 +31,7 @@ typedef boost::function<int(std::string path, std::string &buf, size_t, off_t, f
  * The BufferAgent decides if and when, real read/write operation will be used in order to improve theirs preformance.
  * For write operations BufferAgent will accumulate date to increase block size in for write operations.
  * For read calls, BufferAgent will try to prefetch data before they are actually needed.
- * In order to use BufferAgent, open, release, write, read and flush methods of Storage Helper shall be replaced with the class 
+ * In order to use BufferAgent, open, release, write, read and flush methods of Storage Helper shall be replaced with the class
  * onOpen, onRelease, onWrite, onRead and onFlush methods respectively. Also real Storage helpers callback shall be provided with the
  * BufferAgent constructor.
  */
@@ -39,10 +39,10 @@ class BufferAgent
 {
 public:
 
-    /// State holder for write operations for the file 
+    /// State holder for write operations for the file
     struct WriteCache {
         boost::shared_ptr<FileCache>    buffer;     ///< Actual buffer object.
-        boost::recursive_mutex          mutex;    
+        boost::recursive_mutex          mutex;
         boost::recursive_mutex          sendMutex;
         boost::condition_variable_any   cond;
         std::string                     fileName;
@@ -57,7 +57,7 @@ public:
         }
     };
 
-    /// State holder for read operations for the file 
+    /// State holder for read operations for the file
     struct ReadCache {
         boost::shared_ptr<FileCache>    buffer;         ///< Actual buffer object.
         boost::recursive_mutex          mutex;
@@ -79,14 +79,14 @@ public:
 
     /// Internal type of Prefetching workers' job
     /// Every time that BufferAgent thinks data prefetch is needed, the PrefetchJob
-    /// object end up in worker threads' job queue 
+    /// object end up in worker threads' job queue
     struct PrefetchJob {
         std::string     fileName;
         off_t           offset;
         size_t          size;
         fd_type         fh;
 
-        PrefetchJob(std::string &fileName, off_t offset, size_t size, fd_type fh) 
+        PrefetchJob(const std::string &fileName, off_t offset, size_t size, fd_type fh)
           : fileName(fileName),
             offset(offset),
             size(size),
@@ -95,7 +95,7 @@ public:
         }
 
         /// Orders PrefetchJob by its offset and size.
-        bool operator< (const PrefetchJob &other) 
+        bool operator< (const PrefetchJob &other)
         {
             return (offset < other.offset) || (offset == other.offset && size < other.size);
         }
@@ -104,7 +104,7 @@ public:
     /// Comparator for PrefetchJob struct that ordes them by block offset that they refer to
     struct PrefetchJobCompare
     {
-        bool operator() (const PrefetchJob &a, const PrefetchJob &b) 
+        bool operator() (const PrefetchJob &a, const PrefetchJob &b)
         {
             return a.offset < b.offset || (a.offset == b.offset && a.size < b.size);
         }
@@ -125,21 +125,21 @@ public:
     virtual ~BufferAgent();
 
     /// onWrite shall be called on each write operation that filesystem user requests - accumulates data while sending it asynchronously.
-    virtual int onWrite(std::string path, const std::string &buf, size_t size, off_t offset, ffi_type);
-    
+    virtual int onWrite(const std::string &path, const std::string &buf, size_t size, off_t offset, ffi_type);
+
     /// onRead shall be called on each read operation that filesystem user requests.
     /// onRead returns buffered data if available.
-    virtual int onRead(std::string path, std::string &buf, size_t size, off_t offset, ffi_type);
-    
+    virtual int onRead(const std::string &path, std::string &buf, size_t size, off_t offset, ffi_type);
+
     /// onFlush shall be called on each flush operation that filesystem user requests.
     /// This metod flushes all buffered data.
-    virtual int onFlush(std::string path, ffi_type);
-    
+    virtual int onFlush(const std::string &path, ffi_type);
+
     /// onRelease shall be called on each release operation that filesystem user requests
-    virtual int onRelease(std::string path, ffi_type);
-    
+    virtual int onRelease(const std::string &path, ffi_type);
+
     /// onOpen shall be called on each open operation that filesystem user requests
-    virtual int onOpen(std::string path, ffi_type);
+    virtual int onOpen(const std::string &path, ffi_type);
 
     /// Starts BufferAgent worker threads
     /// @param worker_count How many worker threads shall be stared to process prefetch request and send buffored data.
@@ -170,7 +170,7 @@ private:
 
     /// Real read function pointer (storage helpers' read method)
     read_fun                                doRead;
-    
+
     virtual void writerLoop();  ///< Main loop for worker thread that sends buffored data.
     virtual void readerLoop();  ///< Main loop for worker thread that prefetches data.
 
@@ -189,14 +189,14 @@ private:
 
     static void updateWrBufferSize(fd_type, size_t size);       ///< Updates size of buffored data for the specified file.
                                                                 ///< @param size Shall be set to current buffer size.
-    static void updateRdBufferSize(std::string, size_t size);   ///< Updates size of prefetched data for the specified file.
+    static void updateRdBufferSize(const std::string &, size_t size);  ///< Updates size of prefetched data for the specified file.
                                                                 ///< @param size Shall be set to current buffer size.
-    
+
     static size_t getWriteBufferSize();                         ///< Returns current total size of buffored data.
     static size_t getReadBufferSize();                          ///< Returns current total size of prefetched data.
 };
 
 
-} // namespace helpers 
+} // namespace helpers
 } // namespace veil
 

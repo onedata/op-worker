@@ -177,11 +177,11 @@ public:
         NO_ERROR            = 0
     };
 
-    CommunicationHandler(std::string hostname, int port, cert_info_fun);
+    CommunicationHandler(const std::string &hostname, int port, cert_info_fun);
     virtual ~CommunicationHandler();
 
     virtual void setCertFun(cert_info_fun certFun);                         ///< Setter for function that returns CommunicationHandler::CertificateInfo struct.
-    virtual void setFuseID(std::string);                                    ///< Setter for field m_fuseID.
+    virtual void setFuseID(const std::string&);                             ///< Setter for field m_fuseID.
     virtual void setPushCallback(push_callback);                            ///< Setter for field m_pushCallback.
     virtual void enablePushChannel();                                       ///< Enables PUSH channel on this connection.
                                                                             ///< Note that PUSH callback has to be set with setPushCallback before invocing this method.
@@ -198,7 +198,7 @@ public:
     /// Sends ClusterMsg using current WebSocket session. Will fail if there isn't one. No throw version.
     /// @param ec error code (CommunicationHandler::ConnectionStatus)
     /// @return message ID that shall be used to receive response
-    virtual int32_t     sendMessage(protocol::communication_protocol::ClusterMsg& message, int32_t msgID, ConnectionStatus &ec) throw();
+    virtual int32_t     sendMessage(protocol::communication_protocol::ClusterMsg& message, int32_t msgID, ConnectionStatus &ec);
 
     /// Sends ClusterMsg using current WebSocket session. Will fail if there isn't one. Throws CommunicationHandler::ConnectionStatus on error.
     /// @return message ID that shall be used to receive response

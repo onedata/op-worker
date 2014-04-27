@@ -30,7 +30,7 @@ namespace veil {
 boost::recursive_mutex CommunicationHandler::m_instanceMutex;
 SSL_SESSION* CommunicationHandler::m_session = 0;
 
-CommunicationHandler::CommunicationHandler(string p_hostname, int p_port, cert_info_fun p_getCertInfo)
+CommunicationHandler::CommunicationHandler(const string &p_hostname, int p_port, cert_info_fun p_getCertInfo)
     : m_hostname(p_hostname),
       m_port(p_port),
       m_getCertInfo(p_getCertInfo),
@@ -76,7 +76,7 @@ unsigned int CommunicationHandler::getErrorCount()
     return m_errorCount;
 }
 
-void CommunicationHandler::setFuseID(string fuseId)
+void CommunicationHandler::setFuseID(const std::string &fuseId)
 {
     m_fuseID = fuseId;
 }
@@ -343,11 +343,15 @@ int32_t CommunicationHandler::sendMessage(ClusterMsg& msg, int32_t msgId)
     return msgId;
 }
 
-int32_t CommunicationHandler::sendMessage(ClusterMsg& msg, int32_t msgId, ConnectionStatus &ec) throw()
+int32_t CommunicationHandler::sendMessage(ClusterMsg& msg, int32_t msgId, ConnectionStatus &ec)
 {
-    try {
+    try
+    {
+        ec = NO_ERROR;
         return sendMessage(msg, msgId);
-    } catch(ConnectionStatus &e) {
+    }
+    catch(ConnectionStatus &e)
+    {
         ec = e;
     }
 
@@ -403,9 +407,11 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
     {
         unsigned int msgId = getMsgId();
 
-        ConnectionStatus ec;
-        sendMessage(msg, msgId, ec);
-        if(ec != NO_ERROR)
+        try
+        {
+            sendMessage(msg, msgId);
+        }
+        catch(ConnectionStatus)
         {
             if(retry > 0)
             {

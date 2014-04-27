@@ -148,7 +148,13 @@ void RemoteLogWriter::writeLoop()
         clm.set_message_type(boost::algorithm::to_lower_copy(msg.GetDescriptor()->name()));
         msg.SerializeToString(clm.mutable_input());
 
-        connection->sendMessage(clm, IGNORE_ANSWER_MSG_ID);
+        try
+        {
+            connection->sendMessage(clm, IGNORE_ANSWER_MSG_ID);
+        }
+        catch(CommunicationHandler::ConnectionStatus)
+        {
+        }
     }
 }
 

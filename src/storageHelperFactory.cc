@@ -77,7 +77,7 @@ StorageHelperFactory::~StorageHelperFactory()
 {
 }
 
-boost::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(std::string sh_name, std::vector<std::string> args) {
+boost::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(const string &sh_name, const std::vector<string> &args) {
     if(sh_name == "DirectIO")
         return boost::shared_ptr<IStorageHelper>(new DirectIOHelper(args));
     else if(sh_name == "ClusterProxy")
