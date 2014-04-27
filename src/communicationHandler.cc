@@ -52,7 +52,7 @@ CommunicationHandler::~CommunicationHandler()
 {
     closeConnection();
 
-    DLOG_TO_SINK(NULL, INFO) << "Destructing connection: " << this;
+    DLOG(INFO) << "Destructing connection: " << this;
     if(m_endpoint)
     {
         m_endpoint->stop();
@@ -68,7 +68,7 @@ CommunicationHandler::~CommunicationHandler()
         pthread_cancel(m_worker2.native_handle());
     }
 
-    DLOG_TO_SINK(NULL, INFO) << "Connection: " << this << " deleted";
+    DLOG(INFO) << "Connection: " << this << " deleted";
 }
 
 unsigned int CommunicationHandler::getErrorCount()
@@ -174,8 +174,8 @@ int CommunicationHandler::openConnection()
 
     // Start worker thread(s)
     // Second worker should not be started if WebSocket client lib cannot handle full-duplex connections
-    m_worker1 = websocketpp::lib::thread(&ws_client::run, m_endpoint);
-    //m_worker2 = websocketpp::lib::thread(&ws_client::run, m_endpoint);
+    m_worker1 = boost::thread(&ws_client::run, m_endpoint);
+    //m_worker2 = boost::thread(&ws_client::run, m_endpoint);
 
     // Wait for WebSocket handshake
     m_connectCond.timed_wait(lock, boost::posix_time::milliseconds(CONNECT_TIMEOUT));
@@ -228,6 +228,7 @@ void CommunicationHandler::closeConnection()
         try {
             if(m_endpointConnection) {
                 LOG(INFO) << "WebSocket: Lowest layer socket closed.";
+                boost::system::error_code ec;
                 m_endpointConnection->get_socket().lowest_layer().cancel(ec);  // Explicite close underlying socket to make sure that all ongoing operations will be canceld
                 m_endpointConnection->get_socket().lowest_layer().close(ec);
             }

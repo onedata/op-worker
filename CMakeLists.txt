@@ -9,16 +9,18 @@ set(VeilHelpers_VERSION $(VeilHelpers_VERSION_MAJOR).$(VeilHelpers_VERSION_MINOR
 
 
 # CMake config
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+add_definitions(-D_WEBSOCKETPP_CPP11_STL_)
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 set(DEPS_DIR "deps")
 link_directories(${PROJECT_BINARY_DIR})
 
 string( TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_L )
-if(CMAKE_BUILD_TYPE_L MATCHES "debug")  
+if(CMAKE_BUILD_TYPE_L MATCHES "debug")
     set(VeilHelpers_DEBUG 1)
-else() 
+else()
     set(VeilHelpers_DEBUG 0)
-endif() 
+endif()
 
 configure_file (
     "${PROJECT_SOURCE_DIR}/include/veilConfig.h.in"
@@ -128,13 +130,13 @@ execute_process(COMMAND ${GIT_EXECUTABLE} submodule init
                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 execute_process(COMMAND ${GIT_EXECUTABLE} submodule update
                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
-execute_process(COMMAND ${GIT_EXECUTABLE} submodule foreach git checkout 
+execute_process(COMMAND ${GIT_EXECUTABLE} submodule foreach git checkout
                 WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 
 # Compile .proto files
 file(GLOB PROTO_FILES "${PROJECT_SOURCE_DIR}/veilprotocol/proto/*.proto")
 PROTOBUF_GENERATE_CPP(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
-include_directories(${CMAKE_CURRENT_BINARY_DIR}) 
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 # Setup sources
 file(GLOB HELPER_SOURCES "src/[a-zA-Z]*.cc")
@@ -201,7 +203,7 @@ target_link_libraries(veilprotocol
 )
 
 
-install(TARGETS veilhelpers veilhelpersShared 
+install(TARGETS veilhelpers veilhelpersShared
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
 )
@@ -221,7 +223,7 @@ include_directories(${GMOCK_INCLUDE_DIR})
 
 add_custom_target(cunit)
 macro(run_test test_target)
-  string(REGEX REPLACE "_test" "" test_name "${test_target}")  
+  string(REGEX REPLACE "_test" "" test_name "${test_target}")
   add_custom_target(${test_target}_runtest
       COMMAND ${test_target} --gtest_output="xml:cunit_results/TEST-${test_name}.xml"
       DEPENDS ${test_target}
@@ -244,7 +246,7 @@ foreach(file ${files})
         ${FUSE_LIBRARIES}
         veilhelpers
         ${PLATFORM_EXTRA_LIBS}
-    )    
+    )
     add_test(${TEST_NAME} ${TEST_NAME})
     run_test(${TEST_NAME})
 endforeach()

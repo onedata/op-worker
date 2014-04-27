@@ -25,7 +25,7 @@ protected:
     FileCacheTest() : cache(10) {}
 
     virtual void SetUp() {
-        
+
     }
 
     virtual void TearDown() {
@@ -69,7 +69,7 @@ TEST_F(FileCacheTest, MultiBlockNoOverlappingTest)
     EXPECT_TRUE(cache.writeData(12, "c"));
 
     EXPECT_EQ(11, cache.byteSize());
-    
+
     EXPECT_FALSE(cache.readData(13, 2, buff));
     EXPECT_FALSE(cache.readData(11, 1, buff));
 
@@ -151,21 +151,20 @@ TEST_F(FileCacheTest, OldestBlockSelectionTest)
     EXPECT_TRUE(cache.writeData(0, "0123"));
     EXPECT_TRUE(cache.writeData(12, "c"));
     EXPECT_TRUE(cache.writeData(10, "a"));
-    
+
     block_ptr block;
 
     block = cache.removeOldestBlock();
-    EXPECT_TRUE(block);
+    EXPECT_TRUE(block.get());
     EXPECT_EQ(0, block->offset);
 
     EXPECT_FALSE(cache.readData(3, 1, buff));
 
     block = cache.removeOldestBlock();
-    EXPECT_TRUE(block);
+    EXPECT_TRUE(block.get());
     EXPECT_EQ(12, block->offset);
 
     block = cache.removeOldestBlock();
-    EXPECT_TRUE(block);
+    EXPECT_TRUE(block.get());
     EXPECT_EQ(10, block->offset);
-
 }
