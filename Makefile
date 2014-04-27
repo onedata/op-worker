@@ -12,7 +12,7 @@ build: release
 	@echo "*****************************************************"
 	@echo "'build' target is obsolete, use 'release' instead !"
 	@echo "*****************************************************"
-	@ln -sf ${RELEASE_DIR} build
+	@ln -sfn ${RELEASE_DIR} build
 
 release: 
 	mkdir -p ${RELEASE_DIR}
