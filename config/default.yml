@@ -215,7 +215,7 @@ veil_cluster_node_env:
 
   - parameter:
       name: control_panel_max_keepalive
-      description: Maximum number of HTTP requests without closing session
+      description: Maximum number of HTTP requests without closing the connection (HTTP/1.1 only)
       value: 30
       # This is used only by n2o GUI. REST, HTTP on port 80 and upload handler all have max_keepalive = 1
 
