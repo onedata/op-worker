@@ -24,7 +24,6 @@
 -export([save_new_file/2, save_file/1, remove_file/1, exist_file/1, get_file/1, get_waiting_file/1, get_path_info/1]). %% Base file management API function
 -export([save_storage/1, remove_storage/1, exist_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
 -export([save_file_meta/1, remove_file_meta/1, exist_file_meta/1, get_file_meta/1]).
--export([save_fuse_group_name/1, remove_fuse_group_name/1, exist_fuse_group_name/1, get_fuse_group_name/1, gen_fuse_group_name/1]).
 
 
 -ifdef(TEST).
@@ -50,10 +49,10 @@
 -spec save_descriptor(Fd :: fd_info() | fd_doc()) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
 save_descriptor(#file_descriptor{} = Fd) ->
-  save_descriptor(#veil_document{record = Fd});
+    save_descriptor(#veil_document{record = Fd});
 save_descriptor(#veil_document{record = #file_descriptor{}} = FdDoc) ->
-  dao:set_db(?DESCRIPTORS_DB_NAME),
-  dao:save_record(FdDoc).
+    dao:set_db(?DESCRIPTORS_DB_NAME),
+    dao:save_record(FdDoc).
 
 
 %% remove_descriptor/1
@@ -64,19 +63,19 @@ save_descriptor(#veil_document{record = #file_descriptor{}} = FdDoc) ->
 -spec remove_descriptor(Fd :: fd() | fd_select()) -> ok | {error, any()} | no_return().
 %% ====================================================================
 remove_descriptor(ListSpec) when is_tuple(ListSpec) ->
-  remove_descriptor3(ListSpec, 1000, 0);
+    remove_descriptor3(ListSpec, 1000, 0);
 remove_descriptor(Fd) when is_list(Fd) ->
-  dao:set_db(?DESCRIPTORS_DB_NAME),
-  dao:remove_record(Fd).
+    dao:set_db(?DESCRIPTORS_DB_NAME),
+    dao:remove_record(Fd).
 
 remove_descriptor3(ListSpec, BatchSize, Offset) ->
-  case list_descriptors(ListSpec, BatchSize, Offset) of
-    {ok, []} -> ok;
-    {ok, Docs} ->
-      [remove_descriptor(Fd) || #veil_document{uuid = Fd} <- Docs, is_list(Fd)],
-      remove_descriptor3(ListSpec, BatchSize, Offset + BatchSize);
-    Other -> Other
-  end.
+    case list_descriptors(ListSpec, BatchSize, Offset) of
+        {ok, []} -> ok;
+        {ok, Docs} ->
+            [remove_descriptor(Fd) || #veil_document{uuid = Fd} <- Docs, is_list(Fd)],
+            remove_descriptor3(ListSpec, BatchSize, Offset + BatchSize);
+        Other -> Other
+    end.
 
 %% exist_descriptor/1
 %% ====================================================================
@@ -86,8 +85,8 @@ remove_descriptor3(ListSpec, BatchSize, Offset) ->
 -spec exist_descriptor(Fd :: fd()) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_descriptor(Fd) ->
-  dao:set_db(?DESCRIPTORS_DB_NAME),
-  dao:exist_record(Fd).
+    dao:set_db(?DESCRIPTORS_DB_NAME),
+    dao:exist_record(Fd).
 
 %% get_descriptor/1
 %% ====================================================================
@@ -99,15 +98,15 @@ exist_descriptor(Fd) ->
 -spec get_descriptor(Fd :: fd()) -> {ok, fd_doc()} | {error, any()} | no_return().
 %% ====================================================================
 get_descriptor(Fd) ->
-  dao:set_db(?DESCRIPTORS_DB_NAME),
-  case dao:get_record(Fd) of
-    {ok, #veil_document{record = #file_descriptor{}} = Doc} ->
-      {ok, Doc};
-    {ok, #veil_document{}} ->
-      {error, invalid_fd_record};
-    Other ->
-      Other
-  end.
+    dao:set_db(?DESCRIPTORS_DB_NAME),
+    case dao:get_record(Fd) of
+        {ok, #veil_document{record = #file_descriptor{}} = Doc} ->
+            {ok, Doc};
+        {ok, #veil_document{}} ->
+            {error, invalid_fd_record};
+        Other ->
+            Other
+    end.
 
 %% list_descriptors/3
 %% ====================================================================
@@ -120,39 +119,38 @@ get_descriptor(Fd) ->
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec list_descriptors(MatchCriteria :: fd_select(), N :: pos_integer(), Offset :: non_neg_integer()) ->
-  {ok, fd_doc()} | {error, any()} | no_return().
+    {ok, fd_doc()} | {error, any()} | no_return().
 %% ====================================================================
 list_descriptors({by_file, File}, N, Offset) when N > 0, Offset >= 0 ->
-  list_descriptors({by_file_n_owner, {File, ""}}, N, Offset);
+    list_descriptors({by_file_n_owner, {File, ""}}, N, Offset);
 list_descriptors({by_file_n_owner, {File, Owner}}, N, Offset) when N > 0, Offset >= 0 ->
-  {ok, #veil_document{uuid = FileId}} = get_file(File),
-  list_descriptors({by_uuid_n_owner, {FileId, Owner}}, N, Offset);
+    {ok, #veil_document{uuid = FileId}} = get_file(File),
+    list_descriptors({by_uuid_n_owner, {FileId, Owner}}, N, Offset);
 list_descriptors({by_uuid_n_owner, {FileId, Owner}}, N, Offset) when N > 0, Offset >= 0 ->
-  StartKey = [dao_helper:name(FileId), dao_helper:name(Owner)],
-  EndKey = case Owner of "" -> [dao_helper:name(uca_increment(FileId)), dao_helper:name("")]; _ ->
-    [dao_helper:name((FileId)), dao_helper:name(uca_increment(Owner))] end,
-  QueryArgs = #view_query_args{start_key = StartKey, end_key = EndKey, include_docs = true, limit = N, skip = Offset},
-  case dao:list_records(?FD_BY_FILE_VIEW, QueryArgs) of
-    {ok, #view_result{rows = Rows}} ->
-      {ok, [FdDoc || #view_row{doc = #veil_document{record = #file_descriptor{file = FileId1, fuse_id = OwnerId}} = FdDoc} <- Rows,
-        FileId1 == FileId, OwnerId == Owner orelse Owner == ""]};
-    Data ->
-      lager:error("Invalid file descriptor view response: ~p", [Data]),
-      throw({inavlid_data, Data})
-  end;
+    StartKey = [dao_helper:name(FileId), dao_helper:name(Owner)],
+    EndKey = case Owner of "" -> [dao_helper:name(uca_increment(FileId)), dao_helper:name("")]; _ -> [dao_helper:name((FileId)), dao_helper:name(uca_increment(Owner))] end,
+    QueryArgs = #view_query_args{start_key = StartKey, end_key = EndKey, include_docs = true, limit = N, skip = Offset},
+    case dao:list_records(?FD_BY_FILE_VIEW, QueryArgs) of
+        {ok, #view_result{rows = Rows}} ->
+            {ok, [FdDoc || #view_row{doc = #veil_document{record = #file_descriptor{file = FileId1, fuse_id = OwnerId}} = FdDoc} <- Rows,
+                FileId1 == FileId, OwnerId == Owner orelse Owner == ""]};
+        Data ->
+            lager:error("Invalid file descriptor view response: ~p", [Data]),
+            throw({inavlid_data, Data})
+    end;
 list_descriptors({by_expired_before, Time}, N, Offset) when N > 0, Offset >= 0 ->
-  StartKey = 0,
-  EndKey = Time,
-  QueryArgs = #view_query_args{start_key = StartKey, end_key = EndKey, include_docs = true, limit = N, skip = Offset},
-  case dao:list_records(?FD_BY_EXPIRED_BEFORE_VIEW, QueryArgs) of
-    {ok, #view_result{rows = Rows}} ->
-      {ok, [FdDoc || #view_row{doc = #veil_document{record = #file_descriptor{}} = FdDoc} <- Rows]};
-    Data ->
-      lager:error("Invalid file descriptor view response: ~p", [Data]),
-      throw({inavlid_data, Data})
-  end;
+    StartKey = 0,
+    EndKey = Time,
+    QueryArgs = #view_query_args{start_key = StartKey, end_key = EndKey, include_docs = true, limit = N, skip = Offset},
+    case dao:list_records(?FD_BY_EXPIRED_BEFORE_VIEW, QueryArgs) of
+        {ok, #view_result{rows = Rows}} ->
+            {ok, [FdDoc || #view_row{doc = #veil_document{record = #file_descriptor{}} = FdDoc} <- Rows]};
+        Data ->
+            lager:error("Invalid file descriptor view response: ~p", [Data]),
+            throw({inavlid_data, Data})
+    end;
 list_descriptors({_Type, _Resource}, _N, _Offset) when _N > 0, _Offset >= 0 ->
-  not_yet_implemented.
+    not_yet_implemented.
 
 
 %% ===================================================================
@@ -170,10 +168,10 @@ list_descriptors({_Type, _Resource}, _N, _Offset) when _N > 0, _Offset >= 0 ->
 -spec save_file_meta(FMeta :: #file_meta{} | #veil_document{}) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
 save_file_meta(#file_meta{} = FMeta) ->
-  save_file_meta(#veil_document{record = FMeta});
+    save_file_meta(#veil_document{record = FMeta});
 save_file_meta(#veil_document{record = #file_meta{}} = FMetaDoc) ->
-  dao:set_db(?FILES_DB_NAME),
-  dao:save_record(FMetaDoc).
+    dao:set_db(?FILES_DB_NAME),
+    dao:save_record(FMetaDoc).
 
 %% remove_file_meta/1
 %% ====================================================================
@@ -183,8 +181,8 @@ save_file_meta(#veil_document{record = #file_meta{}} = FMetaDoc) ->
 -spec remove_file_meta(FMeta :: uuid()) -> ok | {error, any()} | no_return().
 %% ====================================================================
 remove_file_meta(FMeta) ->
-  dao:set_db(?FILES_DB_NAME),
-  dao:remove_record(FMeta).
+    dao:set_db(?FILES_DB_NAME),
+    dao:remove_record(FMeta).
 
 %% exist_file_meta/1
 %% ====================================================================
@@ -194,8 +192,8 @@ remove_file_meta(FMeta) ->
 -spec exist_file_meta(Fd :: fd()) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_file_meta(FMetaUUID) ->
-  dao:set_db(?FILES_DB_NAME),
-  dao:exist_record(FMetaUUID).
+    dao:set_db(?FILES_DB_NAME),
+    dao:exist_record(FMetaUUID).
 
 %% get_file_meta/1
 %% ====================================================================
@@ -207,8 +205,8 @@ exist_file_meta(FMetaUUID) ->
 -spec get_file_meta(Fd :: fd()) -> {ok, fd_doc()} | {error, any()} | no_return().
 %% ====================================================================
 get_file_meta(FMetaUUID) ->
-  dao:set_db(?FILES_DB_NAME),
-  {ok, #veil_document{record = #file_meta{}}} = dao:get_record(FMetaUUID).
+    dao:set_db(?FILES_DB_NAME),
+    {ok, #veil_document{record = #file_meta{}}} = dao:get_record(FMetaUUID).  
 
 
 %% ===================================================================
@@ -337,10 +335,10 @@ save_new_not_reg_file(FilePath, #file{type = Type} = File) when Type > ?REG_TYPE
 -spec save_file(File :: file_info() | file_doc()) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
 save_file(#file{} = File) ->
-  save_file(#veil_document{record = File});
+    save_file(#veil_document{record = File});
 save_file(#veil_document{record = #file{}} = FileDoc) ->
-  dao:set_db(?FILES_DB_NAME),
-  dao:save_record(FileDoc).
+    dao:set_db(?FILES_DB_NAME),
+    dao:save_record(FileDoc).
 
 %% remove_file/1
 %% ====================================================================
@@ -350,39 +348,39 @@ save_file(#veil_document{record = #file{}} = FileDoc) ->
 -spec remove_file(File :: file()) -> ok | {error, any()} | no_return().
 %% ====================================================================
 remove_file(File) ->
-  dao:set_db(?FILES_DB_NAME),
-  {ok, FData} = get_file(File),
+    dao:set_db(?FILES_DB_NAME),
+    {ok, FData} = get_file(File),
 
-  %% Remove file meta
-  case FData of
-    #veil_document{record = #file{meta_doc = FMeta}} when is_list(FMeta) ->
-      case remove_file_meta(FMeta) of
+    %% Remove file meta
+    case FData of 
+        #veil_document{record = #file{meta_doc = FMeta}} when is_list(FMeta) ->
+            case remove_file_meta(FMeta) of 
+                ok -> ok;
+                {error, Reason} ->
+                    ?warning("Cannot remove file_meta ~p due to error: ~p", [FMeta, Reason])
+            end;
+        _ -> ok
+    end,
+
+    %% Remove file shares
+    try dao_share:remove_file_share({file, FData#veil_document.uuid}) of
         ok -> ok;
-        {error, Reason} ->
-          ?warning("Cannot remove file_meta ~p due to error: ~p", [FMeta, Reason])
-      end;
-    _ -> ok
-  end,
+        {error, Reason2} ->
+            ?warning("Cannot clear shares for file ~p due to error: ~p", [File, Reason2])
+    catch
+        throw:share_not_found -> ok;
+        ErrType:Reason3 ->
+            ?warning("Cannot clear shares for file ~p due to ~p: ~p", [File, ErrType, Reason3])
+    end,
 
-  %% Remove file shares
-  try dao_share:remove_file_share({file, FData#veil_document.uuid}) of
-    ok -> ok;
-    {error, Reason2} ->
-      ?warning("Cannot clear shares for file ~p due to error: ~p", [File, Reason2])
-  catch
-    throw:share_not_found -> ok;
-    ErrType:Reason3 ->
-      ?warning("Cannot clear shares for file ~p due to ~p: ~p", [File, ErrType, Reason3])
-  end,
+    %% Remove descriptors
+    case remove_descriptor({by_file, {uuid, FData#veil_document.uuid}}) of
+        ok -> ok;
+        {error, Reason1} ->
+            ?warning("Cannot remove file_descriptors ~p due to error: ~p", [{by_file, {uuid, FData#veil_document.uuid}}, Reason1])
+    end,
 
-  %% Remove descriptors
-  case remove_descriptor({by_file, {uuid, FData#veil_document.uuid}}) of
-    ok -> ok;
-    {error, Reason1} ->
-      ?warning("Cannot remove file_descriptors ~p due to error: ~p", [{by_file, {uuid, FData#veil_document.uuid}}, Reason1])
-  end,
-
-  dao:remove_record(FData#veil_document.uuid).
+    dao:remove_record(FData#veil_document.uuid).
 
 %% exist_file/1
 %% ====================================================================
@@ -412,23 +410,23 @@ exist_waiting_file(Args) ->
 -spec exist_file_helper(File :: file(), View :: term) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_file_helper({internal_path, [], []}, _View) ->
-  {ok, true};
+    {ok, true};
 exist_file_helper({internal_path, [Dir | Path], Root}, View) ->
-  QueryArgs =
-    #view_query_args{keys = [[dao_helper:name(Root), dao_helper:name(Dir)]],
-      include_docs = case Path of [] -> true; _ -> false end},
-  case dao:list_records(View, QueryArgs) of
-    {ok, #view_result{rows = [#view_row{id = Id, doc = _Doc} | _Tail]}} ->
-      case Path of
-        [] -> {ok, true};
-        _ -> exist_file_helper({internal_path, Path, Id}, View)
-      end;
-    {ok, #view_result{rows = []}} -> {ok, false};
-    Other -> Other
-  end;
+    QueryArgs =
+        #view_query_args{keys = [[dao_helper:name(Root), dao_helper:name(Dir)]],
+        include_docs = case Path of [] -> true; _ -> false end},
+    case dao:list_records(View, QueryArgs) of
+        {ok, #view_result{rows = [#view_row{id = Id, doc = _Doc} | _Tail]}} ->
+            case Path of
+                [] -> {ok, true};
+                _ -> exist_file_helper({internal_path, Path, Id}, View)
+            end;
+        {ok, #view_result{rows = []}} -> {ok, false};
+        Other -> Other
+    end;
 exist_file_helper({uuid, UUID}, _View) ->
-  dao:set_db(?FILES_DB_NAME),
-  dao:exist_record(UUID);
+    dao:set_db(?FILES_DB_NAME),
+    dao:exist_record(UUID);
 exist_file_helper(Path, View) ->
   exist_file_helper(file_path_analyze(Path), View).
 
@@ -480,19 +478,19 @@ get_waiting_file({internal_path, [Dir | Path], Root}, MultiError) ->
 -spec get_file_helper(File :: file(), View :: term()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
 get_file_helper({internal_path, [], []}, _View) -> %% Root dir query
-  {ok, #veil_document{uuid = "", record = #file{type = ?DIR_TYPE, perms = ?RD_ALL_PERM bor ?WR_ALL_PERM bor ?EX_ALL_PERM}}};
+    {ok, #veil_document{uuid = "", record = #file{type = ?DIR_TYPE, perms = ?RD_ALL_PERM bor ?WR_ALL_PERM bor ?EX_ALL_PERM}}};
 get_file_helper({internal_path, [Dir | Path], Root}, View) ->
   get_file_helper({internal_path, [Dir | Path], Root}, false, View);
 get_file_helper({uuid, UUID}, _View) ->
-  dao:set_db(?FILES_DB_NAME),
-  case dao:get_record(UUID) of
-    {ok, #veil_document{record = #file{}} = Doc} ->
-      {ok, Doc};
-    {ok, #veil_document{}} ->
-      {error, invalid_file_record};
-    Other ->
-      Other
-  end;
+    dao:set_db(?FILES_DB_NAME),
+    case dao:get_record(UUID) of
+        {ok, #veil_document{record = #file{}} = Doc} ->
+            {ok, Doc};
+        {ok, #veil_document{}} ->
+            {error, invalid_file_record};
+        Other ->
+            Other
+    end;
 get_file_helper(Path, View) ->
   get_file_helper(file_path_analyze(Path), View).
 
@@ -506,7 +504,7 @@ get_file_helper(Path, View) ->
 get_file_helper({internal_path, [Dir | Path], Root}, MultiError, View) ->
   QueryArgs =
     #view_query_args{keys = [[dao_helper:name(Root), dao_helper:name(Dir)]],
-      include_docs = case Path of [] -> true; _ -> false end}, %% Include doc representing leaf of our file path
+    include_docs = case Path of [] -> true; _ -> false end}, %% Include doc representing leaf of our file path
   {NewRoot, FileDoc} =
     case dao:list_records(View, QueryArgs) of
       {ok, #view_result{rows = [#view_row{id = Id, doc = FDoc}]}} ->
@@ -539,14 +537,14 @@ get_file_helper({internal_path, [Dir | Path], Root}, MultiError, View) ->
 -spec get_path_info(File :: file_path()) -> {ok, [file_doc()]} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
 get_path_info({internal_path, Path, Root}) ->
-  {FullPath, _} =
-    lists:foldl(fun(Elem, {AccIn, AccRoot}) ->
-      {ok, FileInfo = #veil_document{uuid = NewRoot}} = get_file({relative_path, [Elem], AccRoot}),
-      {[FileInfo | AccIn], NewRoot}
-    end, {[], Root}, Path),
-  {ok, lists:reverse(FullPath)};
+    {FullPath, _} =
+        lists:foldl(fun(Elem, {AccIn, AccRoot}) ->
+            {ok, FileInfo = #veil_document{uuid = NewRoot}} = get_file({relative_path, [Elem], AccRoot}),
+            {[FileInfo | AccIn], NewRoot}
+        end, {[], Root}, Path),
+    {ok, lists:reverse(FullPath)};
 get_path_info(File) ->
-  get_path_info(file_path_analyze(File)).
+    get_path_info(file_path_analyze(File)).
 
 
 %% rename_file/2
@@ -557,8 +555,8 @@ get_path_info(File) ->
 -spec rename_file(File :: file(), NewName :: string()) -> {ok, NewUUID :: uuid()} | no_return().
 %% ====================================================================
 rename_file(File, NewName) ->
-  {ok, #veil_document{record = FileInfo} = FileDoc} = get_file(File),
-  {ok, _} = save_file(FileDoc#veil_document{record = FileInfo#file{name = NewName}}).
+    {ok, #veil_document{record = FileInfo} = FileDoc} = get_file(File),
+    {ok, _} = save_file(FileDoc#veil_document{record = FileInfo#file{name = NewName}}).
 
 
 %% list_dir/3
@@ -570,26 +568,26 @@ rename_file(File, NewName) ->
 -spec list_dir(Dir :: file(), N :: pos_integer(), Offset :: non_neg_integer()) -> {ok, [file_doc()]}.
 %% ====================================================================
 list_dir(Dir, N, Offset) ->
-  Id =
-    case get_file(Dir) of
-      {ok, #veil_document{record = #file{type = ?DIR_TYPE}, uuid = UUID}} ->
-        UUID;
-      R ->
-        lager:error("Directory ~p not found. Error: ~p", [Dir, R]),
-        throw({dir_not_found, R})
-    end,
-  NextId = uca_increment(Id), %% Dirty hack needed because `inclusive_end` option does not work in BigCouch for some reason
-  QueryArgs =
-    #view_query_args{start_key = [dao_helper:name(Id), dao_helper:name("")], end_key = [dao_helper:name(NextId), dao_helper:name("")],
-      limit = N, include_docs = true, skip = Offset, inclusive_end = false}, %% Inclusive end does not work, disable to be sure
-  case dao:list_records(?FILE_TREE_VIEW, QueryArgs) of
-    {ok, #view_result{rows = Rows}} -> %% We need to strip results that don't match search criteria (tail of last query possibly), because
-      %% `end_key` seems to behave strange combined with `limit` option. TODO: get rid of it after DBMS switch
-      {ok, [FileDoc || #view_row{doc = #veil_document{record = #file{parent = Parent}} = FileDoc} <- Rows, Parent == Id]};
-    _Other ->
-      lager:error("Invalid view response: ~p", [_Other]),
-      throw(inavlid_data)
-  end.
+    Id =
+        case get_file(Dir) of
+            {ok, #veil_document{record = #file{type = ?DIR_TYPE}, uuid = UUID}} ->
+                UUID;
+            R ->
+                lager:error("Directory ~p not found. Error: ~p", [Dir, R]),
+                throw({dir_not_found, R})
+        end,
+    NextId =  uca_increment(Id), %% Dirty hack needed because `inclusive_end` option does not work in BigCouch for some reason
+    QueryArgs =
+        #view_query_args{start_key = [dao_helper:name(Id), dao_helper:name("")], end_key = [dao_helper:name(NextId), dao_helper:name("")],
+            limit = N, include_docs = true, skip = Offset, inclusive_end = false}, %% Inclusive end does not work, disable to be sure
+    case dao:list_records(?FILE_TREE_VIEW, QueryArgs) of
+        {ok, #view_result{rows = Rows}} -> %% We need to strip results that don't match search criteria (tail of last query possibly), because
+                                           %% `end_key` seems to behave strange combined with `limit` option. TODO: get rid of it after DBMS switch
+            {ok, [FileDoc || #view_row{doc = #veil_document{record = #file{parent = Parent} } = FileDoc } <- Rows, Parent == Id]};
+        _Other ->
+            lager:error("Invalid view response: ~p", [_Other]),
+            throw(inavlid_data)
+    end.
 
 %% count_subdirs/1
 %% ====================================================================
@@ -598,20 +596,20 @@ list_dir(Dir, N, Offset) ->
 -spec count_subdirs({uuid, UUID :: uuid()}) -> {ok, non_neg_integer()}.
 %% ====================================================================
 count_subdirs({uuid, Id}) ->
-  NextId = uca_increment(Id),
-  QueryArgs = #view_query_args{
-    start_key = [dao_helper:name(Id), dao_helper:name("")],
-    end_key = [dao_helper:name(NextId), dao_helper:name("")],
-    view_type = reduce,
-    inclusive_end = false
-  },
-  case dao:list_records(?FILE_SUBDIRS_VIEW, QueryArgs) of
-    {ok, #view_result{rows = [#view_row{value = Sum}]}} -> {ok, Sum};
-    {ok, #view_result{rows = []}} -> {ok, 0};
-    _Other ->
-      lager:error("Invalid view response: ~p", [_Other]),
-      throw(invalid_data)
-  end.
+    NextId = uca_increment(Id),
+    QueryArgs = #view_query_args{
+        start_key = [dao_helper:name(Id), dao_helper:name("")],
+        end_key = [dao_helper:name(NextId), dao_helper:name("")],
+        view_type = reduce,
+        inclusive_end = false
+    },
+    case dao:list_records(?FILE_SUBDIRS_VIEW, QueryArgs) of
+        {ok, #view_result{rows = [#view_row{value = Sum}]}} -> {ok, Sum};
+        {ok, #view_result{rows = []}} -> {ok, 0};
+        _Other ->
+            lager:error("Invalid view response: ~p", [_Other]),
+            throw(invalid_data)
+    end.
 
 %% lock_file/3
 %% ====================================================================
@@ -622,7 +620,7 @@ count_subdirs({uuid, Id}) ->
 -spec lock_file(UserID :: string(), FileID :: string(), Mode :: write | read) -> not_yet_implemented.
 %% ====================================================================
 lock_file(_UserID, _FileID, _Mode) ->
-  not_yet_implemented.
+    not_yet_implemented.
 
 
 %% unlock_file/3
@@ -634,7 +632,7 @@ lock_file(_UserID, _FileID, _Mode) ->
 -spec unlock_file(UserID :: string(), FileID :: string(), Mode :: write | read) -> not_yet_implemented.
 %% ====================================================================
 unlock_file(_UserID, _FileID, _Mode) ->
-  not_yet_implemented.
+    not_yet_implemented.
 
 
 %% ===================================================================
@@ -653,7 +651,7 @@ unlock_file(_UserID, _FileID, _Mode) ->
 -spec save_storage(Storage :: #storage_info{} | #veil_document{}) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
 save_storage(#storage_info{} = Storage) ->
-  save_storage(#veil_document{record = Storage}, false);
+    save_storage(#veil_document{record = Storage}, false);
 save_storage(StorageDoc) ->
   save_storage(StorageDoc, true).
 
@@ -668,15 +666,15 @@ save_storage(StorageDoc) ->
 -spec save_storage(Storage :: #storage_info{} | #veil_document{}, ClearCache :: boolean()) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
 save_storage(#veil_document{record = #storage_info{}} = StorageDoc, ClearCache) ->
-  case ClearCache of
-    true ->
-      Doc = StorageDoc#veil_document.record,
-      clear_cache([{uuid, StorageDoc#veil_document.uuid}, {id, Doc#storage_info.id}]);
-    false ->
-      ok
-  end,
-  dao:set_db(?SYSTEM_DB_NAME),
-  dao:save_record(StorageDoc).
+    case ClearCache of
+      true ->
+        Doc = StorageDoc#veil_document.record,
+        clear_cache([{uuid, StorageDoc#veil_document.uuid}, {id, Doc#storage_info.id}]);
+      false ->
+        ok
+    end,
+    dao:set_db(?SYSTEM_DB_NAME),
+    dao:save_record(StorageDoc).
 
 
 %% remove_storage/1
@@ -687,25 +685,25 @@ save_storage(#veil_document{record = #storage_info{}} = StorageDoc, ClearCache) 
 -spec remove_storage({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) -> ok | {error, any()} | no_return().
 %% ====================================================================
 remove_storage({uuid, DocUUID}) when is_list(DocUUID) ->
-  {Ans, SData} = get_storage({uuid, DocUUID}),
-  case Ans of
-    ok ->
-      Doc = SData#veil_document.record,
-      clear_cache([{uuid, DocUUID}, {id, Doc#storage_info.id}]),
+    {Ans, SData} = get_storage({uuid, DocUUID}),
+    case Ans of
+      ok ->
+        Doc = SData#veil_document.record,
+        clear_cache([{uuid, DocUUID}, {id, Doc#storage_info.id}]),
 
-      dao:set_db(?SYSTEM_DB_NAME),
-      dao:remove_record(DocUUID);
-    _ -> {Ans, SData}
-  end;
+        dao:set_db(?SYSTEM_DB_NAME),
+        dao:remove_record(DocUUID);
+      _ -> {Ans, SData}
+    end;
 remove_storage({id, StorageID}) when is_integer(StorageID) ->
-  {Ans, SData} = get_storage({id, StorageID}),
-  case Ans of
-    ok ->
-      clear_cache([{uuid, SData#veil_document.uuid}, {id, StorageID}]),
-      dao:set_db(?SYSTEM_DB_NAME),
-      dao:remove_record(SData#veil_document.uuid);
-    _ -> {Ans, SData}
-  end.
+    {Ans, SData} = get_storage({id, StorageID}),
+    case Ans of
+      ok ->
+        clear_cache([{uuid, SData#veil_document.uuid}, {id, StorageID}]),
+        dao:set_db(?SYSTEM_DB_NAME),
+        dao:remove_record(SData#veil_document.uuid);
+      _ -> {Ans, SData}
+    end.
 
 %% exist_storage/1
 %% ====================================================================
@@ -713,13 +711,13 @@ remove_storage({id, StorageID}) when is_integer(StorageID) ->
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec exist_storage({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) ->
-  {ok, true | false} | {error, any()}.
+    {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_storage(Key) ->
-  case ets:lookup(storage_cache, Key) of
-    [] -> exist_storage_in_db(Key);
-    [{_, _Ans}] -> {ok, true}
-  end.
+    case ets:lookup(storage_cache, Key) of
+        [] -> exist_storage_in_db(Key);
+        [{_, _Ans}] -> {ok, true}
+    end.
 
 %% get_storage/1
 %% ====================================================================
@@ -751,20 +749,20 @@ get_storage(Key) ->
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec exist_storage_in_db({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) ->
-  {ok, true | false} | {error, any()}.
+    {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_storage_in_db({uuid, DocUUID}) when is_list(DocUUID) ->
-  dao:set_db(?SYSTEM_DB_NAME),
-  dao:exist_record(DocUUID);
+    dao:set_db(?SYSTEM_DB_NAME),
+    dao:exist_record(DocUUID);
 exist_storage_in_db({id, StorageID}) when is_integer(StorageID) ->
-  QueryArgs = #view_query_args{keys = [StorageID], include_docs = true},
-  case dao:list_records(?STORAGE_BY_ID_VIEW, QueryArgs) of
-    {ok, #view_result{rows = [#view_row{doc = #veil_document{record = #storage_info{}} = _Doc} | _Tail]}} ->
-      {ok, true};
-    {ok, #view_result{rows = []}} ->
-      {ok, false};
-    Other -> Other
-  end.
+    QueryArgs = #view_query_args{keys = [StorageID], include_docs = true},
+    case dao:list_records(?STORAGE_BY_ID_VIEW, QueryArgs) of
+        {ok, #view_result{rows = [#view_row{doc = #veil_document{record = #storage_info{}} = _Doc} | _Tail]}} ->
+            {ok, true};
+        {ok, #view_result{rows = []}} ->
+            {ok, false};
+        Other -> Other
+    end.
 
 
 %% get_storage_from_db/1
@@ -777,30 +775,30 @@ exist_storage_in_db({id, StorageID}) when is_integer(StorageID) ->
 -spec get_storage_from_db({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) -> {ok, storage_doc()} | {error, any()} | no_return().
 %% ====================================================================
 get_storage_from_db({uuid, DocUUID}) when is_list(DocUUID) ->
-  dao:set_db(?SYSTEM_DB_NAME),
-  case dao:get_record(DocUUID) of
-    {ok, #veil_document{record = #storage_info{}} = Doc} ->
-      {ok, Doc};
-    {ok, #veil_document{}} ->
-      {error, invalid_storage_record};
-    Other ->
-      Other
-  end;
+    dao:set_db(?SYSTEM_DB_NAME),
+    case dao:get_record(DocUUID) of
+        {ok, #veil_document{record = #storage_info{}} = Doc} ->
+            {ok, Doc};
+        {ok, #veil_document{}} ->
+            {error, invalid_storage_record};
+        Other ->
+            Other
+    end;
 get_storage_from_db({id, StorageID}) when is_integer(StorageID) ->
-  QueryArgs =
-    #view_query_args{keys = [StorageID], include_docs = true},
-  case dao:list_records(?STORAGE_BY_ID_VIEW, QueryArgs) of
-    {ok, #view_result{rows = [Row]}} ->
-      #view_row{doc = #veil_document{record = #storage_info{}} = Doc} = Row,
-      {ok, Doc};
-    {ok, #view_result{rows = Rows}} ->
-      [#view_row{doc = #veil_document{record = #storage_info{}} = Doc} | _Tail] = Rows,
-      lager:warning("Storage with ID ~p is duplicated. Returning first copy. All: ~p", [StorageID, Rows]),
-      {ok, Doc};
-    _Other ->
-      lager:error("Invalid view response: ~p", [_Other]),
-      throw(inavlid_data)
-  end.
+    QueryArgs =
+        #view_query_args{keys = [StorageID], include_docs = true}, 
+    case dao:list_records(?STORAGE_BY_ID_VIEW, QueryArgs) of
+        {ok, #view_result{rows = [Row]}} ->
+            #view_row{doc = #veil_document{record = #storage_info{} } = Doc } = Row,
+            {ok, Doc};
+        {ok, #view_result{rows = Rows}} ->
+            [#view_row{doc = #veil_document{record = #storage_info{} } = Doc } | _Tail] = Rows,
+            lager:warning("Storage with ID ~p is duplicated. Returning first copy. All: ~p", [StorageID, Rows]),
+            {ok, Doc};
+        _Other ->
+            lager:error("Invalid view response: ~p", [_Other]),
+            throw(inavlid_data)
+    end. 
 
 
 %% list_storage/0
@@ -812,15 +810,15 @@ get_storage_from_db({id, StorageID}) when is_integer(StorageID) ->
 -spec list_storage() -> {ok, [storage_doc()]} | no_return().
 %% ====================================================================
 list_storage() ->
-  QueryArgs =
-    #view_query_args{start_key = 0, end_key = 1, include_docs = true}, %% All keys are (int)0 so will get all documents
-  case dao:list_records(?ALL_STORAGE_VIEW, QueryArgs) of
-    {ok, #view_result{rows = Rows}} ->
-      {ok, [Doc || #view_row{doc = #veil_document{record = #storage_info{}} = Doc} <- Rows]};
-    _Other ->
-      lager:error("Invalid view response: ~p", [_Other]),
-      throw(inavlid_data)
-  end.
+    QueryArgs =
+        #view_query_args{start_key = 0, end_key = 1, include_docs = true}, %% All keys are (int)0 so will get all documents
+    case dao:list_records(?ALL_STORAGE_VIEW, QueryArgs) of
+        {ok, #view_result{rows = Rows}} ->
+            {ok, [Doc || #view_row{doc = #veil_document{record = #storage_info{} } = Doc } <- Rows]};
+        _Other ->
+            lager:error("Invalid view response: ~p", [_Other]),
+            throw(inavlid_data)
+    end.
 
 %% find_files/1
 %% @doc Returns list of uuids of files that matches to criteria passed as FileCriteria <br/>
@@ -837,7 +835,7 @@ find_files(FileCriteria) when is_record(FileCriteria, file_criteria) ->
       case are_time_criteria_set(FileCriteria) of
         true -> find_by_times(FileCriteria);
 
-      % no restrictions set - find_file_when_file_name_or_uuid_set handles this case
+        % no restrictions set - find_file_when_file_name_or_uuid_set handles this case
         _ -> find_file_by_file_name_or_uuid(FileCriteria)
       end
   end.
@@ -1066,18 +1064,18 @@ get_file_meta_ids(FileCriteria) ->
 -spec file_path_analyze(Path :: file_path()) -> {internal_path, TokenList :: list(), RootUUID :: uuid()}.
 %% ====================================================================
 file_path_analyze({Path, Root}) when is_list(Path), is_list(Root) ->
-  file_path_analyze({relative_path, Path, Root});
+    file_path_analyze({relative_path, Path, Root});
 file_path_analyze(Path) when is_list(Path) ->
-  file_path_analyze({relative_path, Path, ""});
+    file_path_analyze({relative_path, Path, ""});
 file_path_analyze({absolute_path, Path}) when is_list(Path) ->
-  file_path_analyze({relative_path, Path, ""});
+    file_path_analyze({relative_path, Path, ""});
 file_path_analyze({relative_path, [?PATH_SEPARATOR | Path], Root}) when is_list(Path), is_list(Root) ->
-  file_path_analyze({relative_path, Path, Root});
+    file_path_analyze({relative_path, Path, Root});
 file_path_analyze({relative_path, Path, Root}) when is_list(Path), is_list(Root) ->
-  TokenPath = string:tokens(Path, [?PATH_SEPARATOR]),
-  {internal_path, TokenPath, Root};
+    TokenPath = string:tokens(Path, [?PATH_SEPARATOR]),
+    {internal_path, TokenPath, Root};
 file_path_analyze(Path) ->
-  throw({invalid_file_path, Path}).
+    throw({invalid_file_path, Path}).
 
 
 %% uca_increment/1
@@ -1088,164 +1086,50 @@ file_path_analyze(Path) ->
 -spec uca_increment(Id :: string()) -> string().
 %% ====================================================================
 uca_increment(Str) when is_list(Str) ->
-  case try_toupper(Str) of
-    {Str1, true} -> Str1;
-    {_, false} ->
-      case lists:reverse(uca_increment({lists:reverse(Str), true})) of
-        [10 | T] -> [$Z || _ <- T] ++ [10];
-        Other -> Other
-      end
-  end;
+    case try_toupper(Str) of 
+        {Str1, true} -> Str1;
+        {_, false} ->   
+            case lists:reverse(uca_increment({lists:reverse(Str), true})) of
+                [10 | T] -> [$Z || _ <- T] ++ [10];
+                Other -> Other
+            end
+    end;
 uca_increment({Tail, false}) ->
-  Tail;
+    Tail;
 uca_increment({[], true}) ->
-  [10];
+    [10];
 uca_increment({[C | Tail], true}) ->
-  {NC, Continue} = next_char(C),
-  [NC | uca_increment({Tail, Continue})].
+    {NC, Continue} = next_char(C),
+    [NC | uca_increment({Tail ,Continue})].
 
 %% Internal helper function used by uca_increment/1
 try_toupper(Str) when is_list(Str) ->
-  {Return, Status} = try_toupper({lists:reverse(Str), true}),
-  {lists:reverse(Return), Status};
+    {Return, Status} = try_toupper({lists:reverse(Str), true}),
+    {lists:reverse(Return), Status};
 try_toupper({"", true}) ->
-  {"", false};
+    {"", false};
 try_toupper({[C | Tail], true}) when C >= $a, C =< $z ->
-  {[(C - 32) | Tail], true};
+    { [(C - 32) | Tail], true };
 try_toupper({[C | Tail], true}) ->
-  {NewTail, Status} = try_toupper({Tail, true}),
-  {[C | NewTail], Status}.
+    { NewTail, Status} = try_toupper({Tail, true}),
+    { [ C | NewTail], Status }.
 
 %% Internal helper function used by uca_increment/1
 next_char(C) when C >= $a, C < $z; C >= $A, C < $Z; C >= $0, C < $9 ->
-  {C + 1, false};
+    {C + 1, false};
 next_char($9) ->
-  {$a, false};
+    {$a, false};
 next_char($z) ->
-  {$0, true};
+    {$0, true};
 next_char($Z) ->
-  {$0, true};
+    {$0, true};
 next_char($$) ->
-  {$0, false};
+    {$0, false};
 next_char(Other) ->
-  Collation = " `^_-,;:!?.'\"()[]{}@*/\\&#%+<=>|~$",
-  Res =
-    case lists:dropwhile(fun(Char) -> Char =/= Other end, Collation) of
-      [Other | [Next | _]] -> Next;
-      [] -> throw({unsupported_char, Other})
-    end,
-  {Res, false}.
-
-%% ===================================================================
-%% Fuse group hashs management functions
-%% ===================================================================
-
-%% save_fuse_group_name/1
-%% ====================================================================
-%% @doc Saves fuse group hash to DB. Argument should be either #fuse_group_name{} record
-%% (if you want to save it as new document) <br/>
-%% or #veil_document{} that wraps #fuse_group_name{} if you want to update fuse group info in DB. <br/>
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
-%% @end
--spec save_fuse_group_name(FuseGroupHash :: fuse_group_name_info() | fuse_group_name_doc()) -> {ok, uuid()} | {error, any()} | no_return().
-%% ====================================================================
-save_fuse_group_name(#fuse_group_name{} = FuseGroupHash) ->
-  save_fuse_group_name(#veil_document{record = FuseGroupHash});
-save_fuse_group_name(#veil_document{} = FuseGroupHashDoc) ->
-  dao:set_db(?SYSTEM_DB_NAME),
-  dao:save_record(FuseGroupHashDoc).
-
-%% remove_fuse_group_name/1
-%% ====================================================================
-%% @doc Removes fuse group hash from DB. Argument should be uuid() of fuse group hash document or hash of fuse group <br/>
-%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
-%% @end
--spec remove_fuse_group_name({uuid, DocUUID :: uuid()} | {hash, Hash :: string()}) -> ok | {error, any()} | no_return().
-%% ====================================================================
-remove_fuse_group_name({uuid, DocUUID}) when is_list(DocUUID) ->
-  case get_fuse_group_name({uuid, DocUUID}) of
-    {ok, _} ->
-      dao:set_db(?SYSTEM_DB_NAME),
-      dao:remove_record(DocUUID);
-    {error, Error} -> {error, Error}
-  end;
-remove_fuse_group_name({hash, Hash}) when is_list(Hash) ->
-  case get_fuse_group_name({hash, Hash}) of
-    {ok, FuseGroupHashDoc} ->
-      dao:set_db(?SYSTEM_DB_NAME),
-      dao:remove_record(FuseGroupHashDoc#veil_document.uuid);
-    {error, Error} -> {error, Error}
-  end.
-
-%% exist_fuse_group_name/1
-%% ====================================================================
-%% @doc Checks whether fuse group hash exists in DB. Argument should be uuid() of storage document or hash of fuse group. <br/>
-%% Should not be used directly, use {@link dao:handle/2} instead.
-%% @end
--spec exist_fuse_group_name({uuid, DocUUID :: uuid()} | {hash, Hash :: string()}) ->
-  {ok, true | false} | {error, any()}.
-%% ====================================================================
-exist_fuse_group_name({uuid, DocUUID}) when is_list(DocUUID) ->
-  dao:set_db(?SYSTEM_DB_NAME),
-  dao:exist_record(DocUUID);
-exist_fuse_group_name({hash, Hash}) when is_list(Hash) ->
-  QueryArgs = #view_query_args{keys = [dao_helper:name(Hash)], include_docs = true},
-  case dao:list_records(?FUSE_GROUP_BY_HASH_VIEW, QueryArgs) of
-    {ok, #view_result{rows = [#view_row{doc = #veil_document{record = #fuse_group_name{}}} | _]}} ->
-      {ok, true};
-    {ok, #view_result{rows = []}} ->
-      {ok, false};
-    Other -> Other
-  end.
-
-
-%% get_fuse_group_name/1
-%% ====================================================================
-%% @doc Gets fuse group hash from DB. Argument should be uuid() of storage document or hash of fuse group. <br/>
-%% Non-error return value is always {ok, #veil_document{record = #fuse_group_name{}}.
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
-%% @end
--spec get_fuse_group_name({uuid, DocUUID :: uuid()} | {hash, Hash :: string()}) -> {ok, fuse_group_name_doc()} | {error, any()} | no_return().
-%% ====================================================================
-get_fuse_group_name({uuid, DocUUID}) when is_list(DocUUID) ->
-  dao:set_db(?SYSTEM_DB_NAME),
-  case dao:get_record(DocUUID) of
-    {ok, #veil_document{record = #fuse_group_name{}} = Doc} ->
-      {ok, Doc};
-    {ok, #veil_document{}} ->
-      {error, invalid_fuse_group_name_record};
-    Other ->
-      Other
-  end;
-get_fuse_group_name({hash, Hash}) when is_list(Hash) ->
-  dao:set_db(?SYSTEM_DB_NAME),
-  QueryArgs = #view_query_args{keys = [dao_helper:name(Hash)], include_docs = true},
-  case dao:list_records(?FUSE_GROUP_BY_HASH_VIEW, QueryArgs) of
-    {ok, #view_result{rows = [#view_row{doc = #veil_document{record = #fuse_group_name{}} = Doc}]}} ->
-      {ok, Doc};
-    {ok, #view_result{rows = [#view_row{doc = #veil_document{record = #fuse_group_name{}} = Doc} | _] = Rows}} ->
-      lager:warning("Fuse group with hash ~p is duplicated. Returning first copy. All: ~p", [Hash, Rows]),
-      {ok, Doc};
-    {ok, #view_result{rows = []}} ->
-      lager:error("Fuse group by hash: ~p not found.", [Hash]),
-      throw(fuse_group_missing);
-    Other ->
-      lager:error("Invalid view response: ~p", [Other]),
-      throw(inavlid_data)
-  end.
-
-%% gen_fuse_group_name/1
-%% ====================================================================
-%% @doc Generetes fuse group hash using list of pairs or storage id and absolute path to storage
-%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
-%% @end
--spec gen_fuse_group_name([{StorageId :: integer(), AbsPath :: string()}]) -> {ok, Hash :: string()}.
-%% ====================================================================
-gen_fuse_group_name(StorageInfoList) ->
-  LastCTX = %% Calculate MD5 sum of storage info data (each entry is of form {storage_id, absolute_path_to_storage})
-  lists:foldl(fun({StorageId, AbsPath}, CTX) ->
-    crypto:hash_update(CTX, integer_to_list(StorageId) ++ AbsPath)
-  end, crypto:hash_init(md5), lists:sort(StorageInfoList)),
-  {ok, integer_to_list(binary:decode_unsigned(crypto:hash_final(LastCTX)), 16)}.
+    Collation = " `^_-,;:!?.'\"()[]{}@*/\\&#%+<=>|~$",
+    Res = 
+        case lists:dropwhile(fun(Char) -> Char =/= Other end, Collation) of 
+            [Other | [ Next | _ ]] -> Next;
+            [] -> throw({unsupported_char, Other})
+        end,
+    {Res, false}.

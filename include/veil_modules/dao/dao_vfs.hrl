@@ -56,7 +56,4 @@
 %% This record contains information about storage (ways to access it)
 -record(storage_info, {id = 0, name = "", last_update = 0, default_storage_helper = #storage_helper_info{}, fuse_groups = []}).
 
-%% This record maps hash of client direct IO storage paths to fuse group name
--record(fuse_group_name, {hash = "", name = ""}).
-
 -endif.

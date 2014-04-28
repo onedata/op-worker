@@ -996,6 +996,57 @@ handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, get
       end;
     _ ->
       #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
+  end;
+
+handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, createstoragetestfilerequest) ->
+  try
+    StorageId = Record#createstoragetestfilerequest.storage_id,
+    Length = 20,
+    {A, B, C} = now(),
+    random:seed(A, B, C),
+    Text = list_to_binary(lists:foldl(fun(_, Acc) -> [random:uniform(93) + 33 | Acc] end, [], lists:seq(1, Length))),
+    {ok, DeleteStorageTestFileTime} = application:get_env(?APP_Name, delete_storage_test_file_time),
+    {ok, #veil_document{record = #user{login = Login}}} = get_user_doc(),
+    {ok, #veil_document{record = StorageInfo}} = dao_lib:apply(dao_vfs, get_storage, [{id, StorageId}], ProtocolVersion),
+    StorageHelperInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, StorageInfo),
+    {ok, Path} = create_storage_test_file(StorageHelperInfo, Login),
+    % Delete storage test file after 'delete_storage_test_file_time' seconds
+    spawn(fun() ->
+      timer:sleep(DeleteStorageTestFileTime * 1000),
+      storage_files_manager:delete(StorageHelperInfo, Path)
+    end),
+    Length = storage_files_manager:write(StorageHelperInfo, Path, Text),
+    #createstoragetestfileresponse{answer = true, relative_path = Path, text = Text}
+  catch
+    _:_ -> #createstoragetestfileresponse{answer = false}
+  end;
+
+handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, storagetestfilemodifiedrequest) ->
+  try
+    StorageId = Record#storagetestfilemodifiedrequest.storage_id,
+    Path = Record#storagetestfilemodifiedrequest.relative_path,
+    Text = Record#storagetestfilemodifiedrequest.text,
+    {ok, #veil_document{record = StorageInfo}} = dao_lib:apply(dao_vfs, get_storage, [{id, StorageId}], ProtocolVersion),
+    StorageHelperInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, StorageInfo),
+    {ok, Bytes} = storage_files_manager:read(StorageHelperInfo, Path, 0, length(Text)),
+    Text = binary_to_list(Bytes),
+    storage_files_manager:delete(StorageHelperInfo, Path),
+    #storagetestfilemodifiedresponse{answer = true}
+  catch
+    _:_ -> #storagetestfilemodifiedresponse{answer = false}
+  end;
+
+handle_fuse_message(ProtocolVersion, Record, FuseId) when is_record(Record, clientstorageinfo) ->
+  try
+    {ok, #veil_document{record = FuseSession} = FuseSessionDoc} = dao_lib:apply(dao_cluster, get_fuse_session, [FuseId], ProtocolVersion),
+    ClientStorageInfo = lists:map(fun({_, StorageId, Root}) ->
+      {StorageId, Root} end, Record#clientstorageinfo.storage_info),
+    NewFuseSessionDoc = FuseSessionDoc#veil_document{record = FuseSession#fuse_session{storage_info = ClientStorageInfo}},
+    {ok, _} = dao_lib:apply(dao_cluster, save_fuse_session, [NewFuseSessionDoc], ProtocolVersion),
+    lager:info("Client storage info saved in session."),
+    #atom{value = ?VOK}
+  catch
+    _:_ -> #atom{value = ?VEREMOTEIO}
   end.
 
 %% save_file_descriptor/3
@@ -1763,6 +1814,33 @@ check_file_perms(FileName, UserDocStatus, UserDoc, FileDoc, CheckType) ->
         _ ->
           {ok, true}
       end
+  end.
+
+%% create_storage_test_file/2
+%% ====================================================================
+%% @doc Creates storage test file with random filename in user home directory. If file already exists new name is generated.
+-spec create_storage_test_file(StorageHelperInfo :: #storage_helper_info{}, Login :: string()) -> Result when
+  Result :: {ok, Path :: string()} | {error, attempts_limit_excceded}.
+%% ====================================================================
+create_storage_test_file(StorageHelperInfo, Login) ->
+  create_storage_test_file(StorageHelperInfo, Login, 20).
+
+%% create_storage_test_file/3
+%% ====================================================================
+%% @doc Creates storage test file with random filename in user home directory. If file already exists new name is generated.
+-spec create_storage_test_file(StorageHelperInfo :: #storage_helper_info{}, Login :: string(), Attempts :: integer()) -> Result when
+  Result :: {ok, Path :: string()} | {error, attempts_limit_excceded}.
+%% ====================================================================
+create_storage_test_file(_, _, 0) ->
+  {error, attempts_limit_exceeded};
+create_storage_test_file(StorageHelperInfo, Login, Attempts) ->
+  {A, B, C} = now(),
+  random:seed(A, B, C),
+  Filename = lists:foldl(fun(_, Acc) -> [random:uniform(26) + 96 | Acc] end, [], lists:seq(1, 8)),
+  Path = "users/" ++ Login ++ "/" ++ Filename,
+  case storage_files_manager:create(StorageHelperInfo, Path) of
+    ok -> {ok, Path};
+    _ -> create_storage_test_file(StorageHelperInfo, Login, Attempts - 1)
   end.
 
 %% Updates modification time for parent of Dir
