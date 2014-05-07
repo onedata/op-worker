@@ -1004,7 +1004,7 @@ handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, cre
     Length = 20,
     {A, B, C} = now(),
     random:seed(A, B, C),
-    Text = list_to_binary(lists:foldl(fun(_, Acc) -> [random:uniform(93) + 33 | Acc] end, [], lists:seq(1, Length))),
+    Text = list_to_binary(random_ascii_lowercase_sequence(Length)),
     {ok, DeleteStorageTestFileTime} = application:get_env(?APP_Name, delete_storage_test_file_time),
     {ok, #veil_document{record = #user{login = Login}}} = get_user_doc(),
     {ok, #veil_document{record = StorageInfo}} = dao_lib:apply(dao_vfs, get_storage, [{id, StorageId}], ProtocolVersion),
@@ -1040,8 +1040,8 @@ handle_fuse_message(ProtocolVersion, Record, FuseId) when is_record(Record, clie
   try
     {ok, #veil_document{record = FuseSession} = FuseSessionDoc} = dao_lib:apply(dao_cluster, get_fuse_session, [FuseId], ProtocolVersion),
     ClientStorageInfo = lists:map(fun({_, StorageId, Root}) ->
-      {StorageId, Root} end, Record#clientstorageinfo.storage_info),
-    NewFuseSessionDoc = FuseSessionDoc#veil_document{record = FuseSession#fuse_session{storage_info = ClientStorageInfo}},
+      {StorageId, #storage_helper_info{name = "DirectIO", init_args = [Root]}} end, Record#clientstorageinfo.storage_info),
+    NewFuseSessionDoc = FuseSessionDoc#veil_document{record = FuseSession#fuse_session{client_storage_info = ClientStorageInfo}},
     {ok, _} = dao_lib:apply(dao_cluster, save_fuse_session, [NewFuseSessionDoc], ProtocolVersion),
     lager:info("Client storage info saved in session."),
     #atom{value = ?VOK}
@@ -1836,12 +1836,20 @@ create_storage_test_file(_, _, 0) ->
 create_storage_test_file(StorageHelperInfo, Login, Attempts) ->
   {A, B, C} = now(),
   random:seed(A, B, C),
-  Filename = lists:foldl(fun(_, Acc) -> [random:uniform(26) + 96 | Acc] end, [], lists:seq(1, 8)),
+  Filename = random_ascii_lowercase_sequence(8),
   Path = "users/" ++ Login ++ "/" ++ Filename,
   case storage_files_manager:create(StorageHelperInfo, Path) of
     ok -> {ok, Path};
     _ -> create_storage_test_file(StorageHelperInfo, Login, Attempts - 1)
   end.
+
+%% random_ascii_lowercase_sequence
+%% ====================================================================
+%% @doc Create random sequence consisting of lowercase ASCII letters.
+-spec random_ascii_lowercase_sequence(Length :: integer()) -> list().
+%% ====================================================================
+random_ascii_lowercase_sequence(Length) ->
+  lists:foldl(fun(_, Acc) -> [random:uniform(26) + 96 | Acc] end, [], lists:seq(1, Length)).
 
 %% Updates modification time for parent of Dir
 update_parent_ctime(Dir, CTime) ->

@@ -37,9 +37,9 @@ get_sh_for_fuse(FuseID, Storage) ->
   case FuseGroup of
     default ->
       case dao_lib:apply(dao_cluster, get_fuse_session, [FuseID], 1) of
-        {ok, #veil_document{record = #fuse_session{storage_info = ClientStorageInfo}}} ->
+        {ok, #veil_document{record = #fuse_session{client_storage_info = ClientStorageInfo}}} ->
           case proplists:get_value(Storage#storage_info.id, ClientStorageInfo) of
-            Root when is_list(Root) -> #storage_helper_info{name = "DirectIO", init_args = [Root]};
+            Record when is_record(Record, storage_helper_info) -> Record;
             _ -> Storage#storage_info.default_storage_helper
           end;
         _ -> Storage#storage_info.default_storage_helper
