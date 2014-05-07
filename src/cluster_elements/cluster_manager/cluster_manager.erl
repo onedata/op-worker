@@ -47,6 +47,9 @@
 -ifdef(TEST).
 -export([update_dns_state/3, update_dispatcher_state/6, calculate_load/2, calculate_worker_load/1, calculate_node_load/2,
   merge_nodes_stats/1, map_node_stats_to_load/1]).
+-define(REGISTER_DEFAULT_RULES, false).
+-else.
+-define(REGISTER_DEFAULT_RULES, true).
 -endif.
 
 %% ====================================================================
@@ -1647,7 +1650,10 @@ create_cluster_stats_rrd() ->
       lager:error([{mod, ?MODULE}], "Can not create cluster stats RRD: ~p", [Error]),
       {error, Error};
     _ ->
-      gen_server:cast({global, ?CCM}, register_io_event_handler),
+      case ?REGISTER_DEFAULT_RULES of
+        true -> gen_server:cast({global, ?CCM}, register_io_event_handler);
+        _ -> ok
+      end,
       gen_server:cast({global, ?CCM}, monitor_cluster),
       ok
   end.
