@@ -431,7 +431,7 @@ void BufferAgent::writerLoop()
                 block = wrapper->buffer->removeOldestBlock();
             }
 
-            int writeRes;
+            int writeRes = 0;
             if(block)
             {
                 // Write data to filesystem

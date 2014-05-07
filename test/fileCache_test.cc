@@ -42,7 +42,7 @@ TEST_F(FileCacheTest, OneBlockTest)
     EXPECT_FALSE(cache.readData(2, 2, buff));
     EXPECT_FALSE(cache.readData(10, 1, buff));
 
-    EXPECT_EQ(4, cache.byteSize());
+    EXPECT_EQ(4u, cache.byteSize());
 
     EXPECT_TRUE(cache.readData(5, 5, buff));
     EXPECT_EQ("abcd", buff);
@@ -68,7 +68,7 @@ TEST_F(FileCacheTest, MultiBlockNoOverlappingTest)
     EXPECT_TRUE(cache.writeData(10, "a"));
     EXPECT_TRUE(cache.writeData(12, "c"));
 
-    EXPECT_EQ(11, cache.byteSize());
+    EXPECT_EQ(11u, cache.byteSize());
 
     EXPECT_FALSE(cache.readData(13, 2, buff));
     EXPECT_FALSE(cache.readData(11, 1, buff));
@@ -117,14 +117,14 @@ TEST_F(FileCacheTest, MultiBlockOverlappingTest)
 
     EXPECT_TRUE(cache.writeData(3, "cdef"));
 
-    EXPECT_EQ(11, cache.byteSize());
+    EXPECT_EQ(11u, cache.byteSize());
 
     EXPECT_TRUE(cache.readData(2, 6, buff));
     EXPECT_EQ("2cdef7", buff);
 
     EXPECT_TRUE(cache.writeData(3, "3456789"));
 
-    EXPECT_EQ(12, cache.byteSize());
+    EXPECT_EQ(12u, cache.byteSize());
 
     EXPECT_TRUE(cache.readData(1, 8, buff));
     EXPECT_EQ("12345678", buff);

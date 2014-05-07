@@ -167,7 +167,7 @@ TEST_F(RemoteLogWriterFixture, ShouldSendCurrentPIDInTheMessage)
     const veil::protocol::logging::LogMessage sentMessage =
             sendMessage(veil::protocol::logging::INFO, "", 0, 0, "");
 
-    EXPECT_EQ(getpid(), sentMessage.pid());
+    EXPECT_EQ(getpid(), static_cast<pid_t>(sentMessage.pid()));
 }
 
 TEST_F(RemoteLogWriterFixture, ShouldSendAMessageWithIGNORE_ANSWER_MSG_ID)
