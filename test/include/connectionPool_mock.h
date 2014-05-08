@@ -11,7 +11,7 @@
 #include "simpleConnectionPool.h"
 #include "gmock/gmock.h"
 
-using namespace veil; 
+using namespace veil;
 
 class MockConnectionPool
     : public SimpleConnectionPool {
@@ -20,8 +20,8 @@ public:
     ~MockConnectionPool() {};
 
     MOCK_METHOD2(setPoolSize, void(PoolType, unsigned int));
-    MOCK_METHOD2(setPushCallback, void(std::string, push_callback));
-        
+    MOCK_METHOD2(setPushCallback, void(const std::string&, push_callback));
+
     MOCK_METHOD1(selectConnection, boost::shared_ptr<CommunicationHandler>(SimpleConnectionPool::PoolType));
     MOCK_METHOD1(releaseConnection, void(boost::shared_ptr<CommunicationHandler>));
 

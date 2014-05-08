@@ -20,7 +20,7 @@ public:
     MOCK_METHOD5(buffer, void(const RemoteLogLevel, const std::string&,
                               const int, const time_t, const std::string&));
 
-    MOCK_METHOD1(handleThresholdChange, bool(const protocol::communication_protocol::Answer));
+    MOCK_METHOD1(handleThresholdChange, bool(const protocol::communication_protocol::Answer&));
 };
 
 
