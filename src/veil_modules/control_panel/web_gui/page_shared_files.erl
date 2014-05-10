@@ -37,7 +37,7 @@ render_body() ->
 
 % Main table   
 main_panel() ->
-    put(user_id, gui_utils:get_user_dn()),
+    put(user_dn, gui_utils:get_user_dn()),
     ShareEntries = lists:foldl(
         fun(#veil_document{uuid = UUID, record = #share_desc{file = FileID}}, Acc) ->
             case logical_files_manager:get_file_user_dependent_name_by_uuid(FileID) of

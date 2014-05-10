@@ -75,7 +75,7 @@ handle_upload_request(Req, UserDoc) ->
                     {error, incorrect_session};
                 List when is_list(List) ->
                     % This will cause logical_files_manager to create the file for proper user
-                    put(user_id, lists:nth(1, List)),
+                    put(user_dn, lists:nth(1, List)),
                     {ok, _Params, _Files} = parse_multipart(Req, [], [])
             end
     end.
@@ -124,7 +124,7 @@ handle_user_content_request(Req) ->
         wf_handler:call(session_handler, init),
         UserID = wf:session(user_doc),
         true = (UserID /= undefined),
-        put(user_id, lists:nth(1, user_logic:get_dn_list(UserID))),
+        put(user_dn, lists:nth(1, user_logic:get_dn_list(UserID))),
         ok
     catch _:_ ->
         error
@@ -156,7 +156,7 @@ handle_user_content_request(Req) ->
                         {true, NewReq}
                     catch Type:Message ->
                         ?error_stacktrace("Error while sending file ~p to user ~p - ~p:~p",
-                            [Filepath, user_logic:get_login(get(user_id)), Type, Message]),
+                            [Filepath, user_logic:get_login(get(user_dn)), Type, Message]),
                         {ok, FinReq} = cowboy_req:reply(500, Req#http_req{connection = close}),
                         {true, FinReq}
                     end
@@ -168,7 +168,7 @@ handle_user_content_request(Req) ->
 handle_shared_file_request(Req) ->
     % Try to get file by share uuid
     FileInfo = try
-        put(user_id, undefined),
+        put(user_dn, undefined),
         {TPath, _} = cowboy_req:path(Req),
         <<"/share/", ShareID/binary>> = TPath,
         true = (ShareID /= <<"">>),

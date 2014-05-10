@@ -58,7 +58,7 @@ handle(ProtocolVersion, EventMessage) when is_record(EventMessage, eventmessage)
   Properties = lists:zip(EventMessage#eventmessage.numeric_properties_keys, EventMessage#eventmessage.numeric_properties_values)
            ++ lists:zip(EventMessage#eventmessage.string_properties_keys, EventMessage#eventmessage.string_properties_values),
 
-  AdditionalProperties = [{"user_dn", get(user_id)}, {"fuse_id", get(fuse_id)}],
+  AdditionalProperties = [{"user_dn", get(user_dn)}, {"fuse_id", get(fuse_id)}],
   Event = Properties ++ AdditionalProperties,
   ?debug("Event from client arrived, type: ~p", [proplists:lookup("type", Event)]),
   handle(ProtocolVersion, {event_arrived, Event ++ AdditionalProperties});

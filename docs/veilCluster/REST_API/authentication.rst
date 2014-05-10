@@ -27,7 +27,7 @@ Authentication
 
 		.. sourcecode:: guess
 
-			curl -i -k --cert proxy_cert -X GET https://example.com:${rest_port}/rest/latest/files/dir
+			curl -i -k --cert proxy_cert -X GET https://example.com:/rest/latest/files/dir
 
 		.. warning:: 
 

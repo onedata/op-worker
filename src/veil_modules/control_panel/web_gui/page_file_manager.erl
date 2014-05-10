@@ -193,7 +193,7 @@ tool_button_and_dummy(ID, Title, Style, Icon, Postback) ->
 
 init_session_state() ->
     put_key(requested_hostname, gui_utils:get_requested_hostname()),
-    put(user_id, gui_utils:get_user_dn()),
+    put(user_dn, gui_utils:get_user_dn()),
     put_key_if_undefined(working_directory, "/"),
     put_key(selected_items, []),
     put_key_if_undefined(display_style, list),
@@ -359,7 +359,7 @@ process_event({action, Fun, Args}) ->
     % Make sure the lock is obtained or crash otherwise
     ok = sync_lock(0),
     reset_wire_accumulator(),
-    put(user_id, gui_utils:get_user_dn()),
+    put(user_dn, gui_utils:get_user_dn()),
     erlang:apply(?MODULE, Fun, Args),
     wf:wire(spinner, #hide { }),
     do_wiring(),
@@ -385,7 +385,7 @@ comet_loop() ->
                         sync_release(),
                         wf:redirect("/manage_account");
                     DN ->    
-                        put(user_id, DN),
+                        put(user_dn, DN),
                         comet_maybe_refresh(),
                         sync_release(),
                         timer:sleep(?AUTOREFRESH_PERIOD)
@@ -1055,7 +1055,7 @@ finish_upload_event(_Tag, undefined, _, _) ->
 
 
 finish_upload_event(_Tag, _FileName, _LocalFileData, _Node) ->
-    %put(user_id, gui_utils:get_user_dn()),
+    %put(user_dn, gui_utils:get_user_dn()),
     %reset_wire_accumulator(),
     %clear_workspace(),
     %do_wiring(),

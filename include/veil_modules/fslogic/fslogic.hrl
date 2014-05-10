@@ -9,6 +9,8 @@
 %% @end
 %% ===================================================================
 
+-ifndef(FSLOGIC_HRL).
+-define(FSLOGIC_HRL, 1).
 
 %% POSIX error names
 -define(VOK,        "ok").       %% Everything is just great
@@ -58,3 +60,16 @@
 
 %% burst size for listing
 -define(DAO_LIST_BURST_SIZE,100).
+
+
+-define(LOCATION_VALIDITY, 60*15).
+
+-define(FILE_COUNTING_BASE, 256).
+
+%% Which fuse operations (messages) are allowed to operate on base group directory ("/groups")
+-define(GROUPS_BASE_ALLOWED_ACTIONS,    [getfileattr, updatetimes, getfilechildren]).
+
+%% Which fuse operations (messages) are allowed to operate on second level group directory (e.g. "/groups/grpName")
+-define(GROUPS_ALLOWED_ACTIONS,         [getfileattr, getnewfilelocation, createdir, updatetimes, createlink, getfilechildren]).
+
+-endif.
