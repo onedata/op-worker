@@ -78,7 +78,7 @@ get_new_file_location(FullFileName, Mode) ->
 
                                         {UserIdStatus, UserId} = case {UserDocStatus, UserDoc} of
                                                                      {ok, _} -> {ok, UserDoc#veil_document.uuid};
-                                                                     {error, get_user_id_error} -> {ok, ?CLUSTER_USER_ID};
+                                                                     {error, {?VEPERM, get_user_id_error}} -> {ok, ?CLUSTER_USER_ID};
                                                                      _ -> {UserDocStatus, UserDoc}
                                                                  end,
 

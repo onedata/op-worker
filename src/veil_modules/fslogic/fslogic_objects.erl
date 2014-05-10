@@ -34,10 +34,12 @@
 
 get_user(#veil_document{record = #user{}} = UserDoc) ->
     {ok, UserDoc};
-get_user({uid, UserID}) when is_list(UserID) ->
-    dao_lib:apply(dao_users, get_user, [{id, UserID}], 1);
-get_user({dn, UserDN}) when is_list(UserDN) ->
-    dao_lib:apply(dao_users, get_user, [{dn, UserDN}], 1).
+get_user({dn, UserDN}) ->
+    case UserDN of
+        undefined -> {error, {?VEPERM, get_user_id_error}};
+        DN ->
+            user_logic:get_user({dn, DN})
+    end.
 
 get_user() ->
     get_user({dn, fslogic_context:get_user_dn()}).

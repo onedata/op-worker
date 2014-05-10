@@ -28,6 +28,7 @@
 %% API
 %% ====================================================================
 -export([init/1, handle/2, cleanup/0]).
+-export([handle_test/2]).
 
 %% ====================================================================
 %% Test API
@@ -138,7 +139,7 @@ handle(ProtocolVersion, {getfileattr, UUID}) ->
 
 handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
     RequestBody = Record#fusemessage.input,
-    RequestType = element(1, Record),
+    RequestType = element(1, RequestBody),
     try
         fslogic_context:set_fuse_id(get(fuse_id)),
         fslogic_context:set_protocol_version(ProtocolVersion),
@@ -149,17 +150,19 @@ handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
         ErrorMsg when is_tuple(ErrorMsg) ->
             ErrorMsg;
         ErrorCode when is_atom(ErrorCode) ; is_list(ErrorCode) ->
+            ?error_stacktrace("Cannot process request ~p due to error (code: ~p)", [RequestBody, ErrorCode]),
             fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
         error:{badmatch, {error, ErrorCode}} when is_atom(ErrorCode) ; is_list(ErrorCode) ->
+            ?error_stacktrace("Cannot process request ~p due to error (code: ~p)", [RequestBody, ErrorCode]),
             fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
         error:{badmatch, {error, {ErrorCode, ErrorDetails}}} when is_atom(ErrorCode) ; is_list(ErrorCode) ->
-            ?error("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
+            ?error_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode))
     end;
 
 handle(ProtocolVersion, {internal_call, Record}) ->
     put(fuse_id, ?CLUSTER_FUSE_ID),
-    handle(ProtocolVersion, #fusemessage{input = Record});
+    handle(ProtocolVersion, #fusemessage{input = Record, message_type = atom_to_list(vcn_utils:record_type(Record))});
 
 handle(_ProtocolVersion, Record) when is_record(Record, callback) ->
   Answer = case Record#callback.action of
