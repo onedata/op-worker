@@ -110,7 +110,8 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
           {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs())},
           {keyfile, atom_to_list(CertFile)},
           {password, ""},
-          {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}}
+          {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}},
+          {ciphers, gsi_handler:get_ciphers()}
         ],
         [
           {env, [{dispatch, Dispatch}]}
