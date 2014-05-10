@@ -35,12 +35,12 @@
 %% ====================================================================
 
 verify_file_name_test() ->
-  ?assertEqual({error, wrong_filename}, fslogic:verify_file_name("..")),
-  ?assertEqual({error, wrong_filename}, fslogic:verify_file_name("../dir1/dir2/file")),
-  ?assertEqual({error, wrong_filename}, fslogic:verify_file_name("dir1/../dir2/./file")),
-  ?assertEqual({ok, []}, fslogic:verify_file_name(".")),
-  ?assertEqual({ok, ["dir", "file"]}, fslogic:verify_file_name("././././dir/././file")),
-  ?assertEqual({ok, ["dir1", "dir2", "file"]}, fslogic:verify_file_name("./dir1/./dir2/./file/.")).
+  ?assertEqual({error, wrong_filename}, fslogic_utils:verify_file_name("..")),
+  ?assertEqual({error, wrong_filename}, fslogic_utils:verify_file_name("../dir1/dir2/file")),
+  ?assertEqual({error, wrong_filename}, fslogic_utils:verify_file_name("dir1/../dir2/./file")),
+  ?assertEqual({ok, []}, fslogic_utils:verify_file_name(".")),
+  ?assertEqual({ok, ["dir", "file"]}, fslogic_utils:verify_file_name("././././dir/././file")),
+  ?assertEqual({ok, ["dir1", "dir2", "file"]}, fslogic_utils:verify_file_name("./dir1/./dir2/./file/.")).
 
 %% This test checks if dispatcher can decode messages to fslogic
 protocol_buffers_test() ->
