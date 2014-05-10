@@ -150,8 +150,8 @@ load_certs(CADir) ->
             fun({Name, {Type, X, _}}, {CAs, CRLs}) ->
                 case Type of
                     'Certificate' ->
-                        {ok, {_SerialNumber, Issuer}} = public_key:pkix_issuer_id(X, self),
-                        ets:insert(gsi_state, {{ca, Issuer}, X, Name}),
+                        {ok, {SerialNumber, Issuer}} = public_key:pkix_issuer_id(X, self),
+                        ets:insert(gsi_state, {{ca, {SerialNumber, Issuer}}, X, Name}),
                         {CAs + 1, CRLs};
 
                     'CertificateList' ->
