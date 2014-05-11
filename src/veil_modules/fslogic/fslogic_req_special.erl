@@ -30,13 +30,13 @@
 %% ====================================================================
 
 create_dir(FullFileName, Mode) ->
-    NewFileName = fslogic_utils:basename(FullFileName),
-    ParentFileName = fslogic_utils:strip_path_leaf(FullFileName),
+    NewFileName = fslogic_path:basename(FullFileName),
+    ParentFileName = fslogic_path:strip_path_leaf(FullFileName),
     {ok, #veil_document{record = #file{}} = ParentDoc} = fslogic_objects:get_file(ParentFileName),
 
     {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
 
-    case fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, ParentDoc, write) of
+    case fslogic_perms:check_file_perms(FullFileName, UserDocStatus, UserDoc, ParentDoc, write) of
         {ok, true} -> ok;
         {ok, false} ->
             lager:warning("Creating directory without permissions: ~p", [FullFileName]),
@@ -48,17 +48,17 @@ create_dir(FullFileName, Mode) ->
 
     {ok, UserId} = fslogic_context:get_user_id(),
 
-    Groups = fslogic_utils:get_group_owner(fslogic_utils:get_user_file_name(FullFileName)), %% Get owner group name based on file access path
+    Groups = fslogic_utils:get_group_owner(fslogic_path:get_user_file_name(FullFileName)), %% Get owner group name based on file access path
 
     FileInit = #file{type = ?DIR_TYPE, name = NewFileName, uid = UserId, gids = Groups, parent = ParentDoc#veil_document.uuid, perms = Mode},
     %% Async *times update
-    CTime = fslogic_utils:time(),
+    CTime = vcn_utils:time(),
     File = fslogic_meta:update_meta_attr(FileInit, times, {CTime, CTime, CTime}),
 
     {Status, TmpAns} = dao_lib:apply(dao_vfs, save_new_file, [FullFileName, File], fslogic_context:get_protocol_version()),
     case {Status, TmpAns} of
         {ok, _} ->
-            fslogic_meta:update_parent_ctime(fslogic_utils:get_user_file_name(FullFileName), CTime),
+            fslogic_meta:update_parent_ctime(fslogic_path:get_user_file_name(FullFileName), CTime),
             #atom{value = ?VOK};
         {error, file_exists} ->
             #atom{value = ?VEEXIST};
@@ -68,7 +68,7 @@ create_dir(FullFileName, Mode) ->
     end.
 
 get_file_children(FullFileName, ROffset, RCount) ->
-    UserFilePath = fslogic_utils:get_user_file_name(FullFileName),
+    UserFilePath = fslogic_path:get_user_file_name(FullFileName),
     TokenizedPath = string:tokens(UserFilePath, "/"),
     {Num, Offset} =
         case {ROffset, TokenizedPath} of
@@ -96,15 +96,15 @@ get_file_children(FullFileName, ROffset, RCount) ->
     end.
 
 create_link(FullFileName, LinkValue) ->
-    UserFilePath = fslogic_utils:get_user_file_name(FullFileName),
+    UserFilePath = fslogic_path:get_user_file_name(FullFileName),
 
-    NewFileName = fslogic_utils:basename(FullFileName),
-    ParentFileName = fslogic_utils:strip_path_leaf(FullFileName),
+    NewFileName = fslogic_path:basename(FullFileName),
+    ParentFileName = fslogic_path:strip_path_leaf(FullFileName),
     {ok, #veil_document{record = #file{}} = ParentDoc} = fslogic_objects:get_file(ParentFileName),
 
     {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
 
-    case fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, ParentDoc, write) of
+    case fslogic_perms:check_file_perms(FullFileName, UserDocStatus, UserDoc, ParentDoc, write) of
         {ok, true} -> ok;
         {ok, false} ->
             lager:warning("Creating link without permissions: ~p", [FullFileName]),
@@ -119,7 +119,7 @@ create_link(FullFileName, LinkValue) ->
     Groups = fslogic_utils:get_group_owner(UserFilePath), %% Get owner group name based on file access path
 
     LinkDocInit = #file{type = ?LNK_TYPE, name = NewFileName, uid = UserId, gids = Groups, ref_file = LinkValue, parent = ParentDoc#veil_document.uuid},
-    CTime = fslogic_utils:time(),
+    CTime = vcn_utils:time(),
     LinkDoc = fslogic_meta:update_meta_attr(LinkDocInit, times, {CTime, CTime, CTime}),
 
     case dao_lib:apply(dao_vfs, save_new_file, [FullFileName, LinkDoc], fslogic_context:get_protocol_version()) of

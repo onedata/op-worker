@@ -646,7 +646,7 @@ check_perms(File, Storage_helper_info, CheckType) ->
       {AccesType, AccessName} = AccessAns,
       case AccesType of
         user ->
-          {UsrStatus, UserRoot} = fslogic_utils:get_user_root(),
+          {UsrStatus, UserRoot} = fslogic_path:get_user_root(),
           case UsrStatus of
             ok ->
               [CleanUserRoot | _] = string:tokens(UserRoot, "/"),
@@ -709,13 +709,13 @@ check_perms(File, Storage_helper_info, CheckType) ->
 -spec derive_gid_from_parent(Storage_helper_info :: record(), File :: string()) -> ok | {error, ErrNo :: integer()}.
 %% ====================================================================
 derive_gid_from_parent(SHInfo, File) ->
-  case veilhelpers:exec(getattr, SHInfo, [fslogic_utils:strip_path_leaf(File)]) of
+  case veilhelpers:exec(getattr, SHInfo, [fslogic_path:strip_path_leaf(File)]) of
     {0, #st_stat{st_gid = GID}} ->
       Res = chown(SHInfo, File, -1, GID),
       ?debug("Changing gid of file ~p to ~p. Status: ~p", [File, GID, Res]),
       Res;
     {ErrNo, _} ->
-      ?error("Cannot fetch parent dir ~p attrs. Error: ~p", [fslogic_utils:strip_path_leaf(File), ErrNo]),
+      ?error("Cannot fetch parent dir ~p attrs. Error: ~p", [fslogic_path:strip_path_leaf(File), ErrNo]),
       {error, ErrNo}
   end.
 

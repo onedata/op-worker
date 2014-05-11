@@ -698,7 +698,7 @@ dirs_creating_test(Config) ->
 
   SHInfo = #storage_helper_info{name = ?SH, init_args = ?ARG_TEST_ROOT},
 
-  AnsCreate = rpc:call(Node1, fslogic_utils, create_dirs, [50, 5, SHInfo, "/"]),
+  AnsCreate = rpc:call(Node1, fslogic_storage, create_dirs, [50, 5, SHInfo, "/"]),
   ?assertEqual(2, length(string:tokens(AnsCreate, "/"))),
   ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ AnsCreate)).
 
@@ -1952,7 +1952,7 @@ users_separation_test(Config) ->
   ?assertEqual(ok, ConAns1),
 
   %% Current time
-  Time = fslogic_utils:time(),
+  Time = vcn_utils:time(),
   nodes_manager:wait_for_db_reaction(),
 
   %% Users have different (and next to each other) IDs

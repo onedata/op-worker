@@ -24,12 +24,27 @@
 -include("logging.hrl").
 
 %% API
--export([update_parent_ctime/2, update_meta_attr/3]).
+-export([update_parent_ctime/2, update_meta_attr/3, update_user_files_size_view/1]).
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
 
+%% update_user_files_size_view
+%% ====================================================================
+%% @doc Updates user files size view in db
+%% @end
+-spec update_user_files_size_view(ProtocolVersion :: term()) -> term().
+%% ====================================================================
+update_user_files_size_view(ProtocolVersion) ->
+    case dao_lib:apply(dao_users, update_files_size, [], ProtocolVersion) of
+        ok ->
+            lager:info([{mod, ?MODULE}], "User files size view updated"),
+            ok;
+        Other ->
+            lager:error([{mod, ?MODULE}], "Error during updating user files size view: ~p", [Other]),
+            Other
+    end.
 
 %% update_meta_attr/3
 %% ====================================================================
@@ -49,7 +64,7 @@ update_meta_attr(File, Attr, Value) ->
 
 %% Updates modification time for parent of Dir
 update_parent_ctime(Dir, CTime) ->
-    case fslogic_utils:strip_path_leaf(Dir) of
+    case fslogic_path:strip_path_leaf(Dir) of
         [?PATH_SEPARATOR] -> ok;
         ParentPath ->
             try

@@ -180,7 +180,7 @@ start_cluster(Node) ->
   nodes_manager:wait_for_cluster_init().
 
 create_file(Node, #path_with_times{path = FilePath, times = {ATime, MTime, CTime}}, Uid, FileType) ->
-  {ParentFound, ParentInfo} = rpc:call(Node, fslogic_utils, get_parent_and_name_from_path , [FilePath, ?ProtocolVersion]),
+  {ParentFound, ParentInfo} = rpc:call(Node, fslogic_path, get_parent_and_name_from_path , [FilePath, ?ProtocolVersion]),
   ?assertEqual(ok, ParentFound),
   {FileName, Parent} = ParentInfo,
   File = #file{type = FileType, name = FileName, uid = Uid, parent = Parent#veil_document.uuid, perms = 8#600},

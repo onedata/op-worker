@@ -553,7 +553,7 @@ change_file_perm(FileNameStr, NewPerms) ->
 %% ====================================================================
 exists(FileNameStr) ->
   FileName = check_utf(FileNameStr),
-  {FileNameFindingAns, File} = fslogic_utils:get_full_file_name(FileName),
+  {FileNameFindingAns, File} = fslogic_path:get_full_file_name(FileName),
   case FileNameFindingAns of
     ok ->
       {Status, TmpAns} = fslogic_objects:get_file(1, File, ?CLUSTER_FUSE_ID),
@@ -747,7 +747,7 @@ create_standard_share(File) ->
 %% ====================================================================
 create_share(FileStr, Share_With) ->
   File = check_utf(FileStr),
-  {Status, FullName} = fslogic_utils:get_full_file_name(File),
+  {Status, FullName} = fslogic_path:get_full_file_name(File),
   {Status2, UID} = fslogic_context:get_user_id(),
   case {Status, Status2} of
     {ok, ok} ->
@@ -819,7 +819,7 @@ add_share(Share_info) ->
 %% ====================================================================
 get_share({file, FileStr}) ->
   File = check_utf(FileStr),
-  {Status, FullName} = fslogic_utils:get_full_file_name(File),
+  {Status, FullName} = fslogic_path:get_full_file_name(File),
   case Status of
     ok ->
       case fslogic_objects:get_file(1, FullName, ?CLUSTER_FUSE_ID) of
@@ -852,7 +852,7 @@ get_share(Key) ->
 %% ====================================================================
 remove_share({file, FileStr}) ->
   File = check_utf(FileStr),
-  {Status, FullName} = fslogic_utils:get_full_file_name(File),
+  {Status, FullName} = fslogic_path:get_full_file_name(File),
   case Status of
     ok ->
       case fslogic_objects:get_file(1, FullName, ?CLUSTER_FUSE_ID) of

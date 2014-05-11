@@ -617,12 +617,12 @@ shortname_to_oid_code(Shortname) ->
 -spec create_root(Dir :: string(), Uid :: term()) -> {ok, uuid()} | {error,atom()}.
 %% ====================================================================
 create_root(Dir, Uid) ->
-    {ParentFound, ParentInfo} = fslogic_utils:get_parent_and_name_from_path(Dir, 1),
+    {ParentFound, ParentInfo} = fslogic_path:get_parent_and_name_from_path(Dir, 1),
     case ParentFound of
         ok ->
             {FileName, Parent} = ParentInfo,
             File = #file{type = ?DIR_TYPE, name = FileName, uid = Uid, parent = Parent#veil_document.uuid, perms = ?UserRootPerms},
-            CTime = fslogic_utils:time(),
+            CTime = vcn_utils:time(),
             FileDoc = fslogic_meta:update_meta_attr(File, times, {CTime, CTime, CTime}),
             dao_lib:apply(dao_vfs, save_new_file, [Dir, FileDoc], 1);
         _ParentError -> {error,parent_error}
@@ -769,7 +769,7 @@ get_team_names(UserQuery) ->
 -spec create_team_dir(Dir :: string()) -> {ok, UUID :: uuid()} | {error, Reason :: any()} | no_return().
 %% ====================================================================
 create_team_dir(TeamName) ->
-	CTime = fslogic_utils:time(),
+	CTime = vcn_utils:time(),
 	GroupsBase = case dao_lib:apply(dao_vfs, exist_file, ["/" ++ ?GROUPS_BASE_DIR_NAME], 1) of
 		{ok,true} ->
 			case dao_lib:apply(dao_vfs, get_file, ["/" ++ ?GROUPS_BASE_DIR_NAME], 1) of

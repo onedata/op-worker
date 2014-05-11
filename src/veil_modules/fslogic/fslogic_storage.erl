@@ -16,13 +16,66 @@
 -include_lib("files_common.hrl").
 
 %% API
--export([get_sh_for_fuse/2, select_storage/2, insert_storage/2, insert_storage/3]).
+-export([get_sh_for_fuse/2, select_storage/2, insert_storage/2, insert_storage/3, get_new_file_id/4]).
 
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
 
+%% get_new_file_id/4
+%% ====================================================================
+%% @doc Returns id for a new file
+%% @end
+-spec get_new_file_id(File :: string(), UserDoc :: term(), SHInfo :: term(), ProtocolVersion :: integer()) -> string().
+%% ====================================================================
+get_new_file_id(File, UserDoc, SHInfo, ProtocolVersion) ->
+    {Root1, {CountStatus, FilesCount}} =
+        case {string:tokens(File, "/"), UserDoc} of
+            {[?GROUPS_BASE_DIR_NAME, GroupName | _], _} -> %% Group dir context
+                {"/" ++ ?GROUPS_BASE_DIR_NAME ++ "/" ++ GroupName, fslogic_utils:get_files_number(group, GroupName, ProtocolVersion)};
+            {_, get_user_id_error} -> {"/", {error, get_user_id_error}}; %% Unknown context
+            _ -> {"/users/" ++ fslogic_path:get_user_root(UserDoc), fslogic_utils:get_files_number(user, UserDoc#veil_document.uuid, ProtocolVersion)}
+        end,
+    File_id_beg = case Root1 of
+                      get_user_id_error -> "/";
+                      _ ->
+                          case CountStatus of
+                              ok -> create_dirs(FilesCount, ?FILE_COUNTING_BASE, SHInfo, Root1 ++ "/");
+                              _ -> Root1 ++ "/"
+                          end
+                  end,
+
+    WithoutSpecial = lists:foldl(fun(Char, Ans) ->
+        case Char > 255 of
+            true ->
+                Ans;
+            false ->
+                [Char | Ans]
+        end
+    end, [], lists:reverse(File)),
+    File_id_beg ++ dao_helper:gen_uuid() ++ re:replace(WithoutSpecial, "/", "___", [global, {return,list}]).
+
+
+%% create_dirs/4
+%% ====================================================================
+%% @doc Creates dir at storage for files (if needed). Returns the path
+%% that contains created dirs.
+%% @end
+-spec create_dirs(Count :: integer(), CountingBase :: integer(), SHInfo :: term(), TmpAns :: string()) -> string().
+%% ====================================================================
+create_dirs(Count, CountingBase, SHInfo, TmpAns) ->
+    case Count > CountingBase of
+        true ->
+            random:seed(now()),
+            DirName = TmpAns ++ integer_to_list(random:uniform(CountingBase)) ++ "/",
+            case storage_files_manager:mkdir(SHInfo, DirName) of
+                ok -> create_dirs(Count div CountingBase, CountingBase, SHInfo, DirName);
+                {error, dir_or_file_exists} -> create_dirs(Count div CountingBase, CountingBase, SHInfo, DirName);
+                _ -> create_dirs(Count div CountingBase, CountingBase, SHInfo, TmpAns)
+            end;
+        false -> TmpAns
+    end.
 
 %% get_sh_for_fuse/2
 %% ====================================================================

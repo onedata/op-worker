@@ -57,7 +57,7 @@ change_file_owner(FullFileName, NewUID, NewUName) ->
     {ok, #veil_document{record = #file{} = File} = FileDoc} = fslogic_objects:get_file(FullFileName),
     {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
 
-    case fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, FileDoc, root) of
+    case fslogic_perms:check_file_perms(FullFileName, UserDocStatus, UserDoc, FileDoc, root) of
         {ok, true} -> ok;
         {ok, false} ->
             lager:warning("Changing file's owner without permissions: ~p", [FullFileName]),
@@ -87,7 +87,7 @@ change_file_owner(FullFileName, NewUID, NewUName) ->
                 lager:error("chown: cannot find user with uid ~p due to error: ~p", [NewUID, Reason1]),
                 throw(?VEREMOTEIO)
         end,
-    NewFile1 = fslogic_meta:update_meta_attr(NewFile, ctime, fslogic_utils:time()),
+    NewFile1 = fslogic_meta:update_meta_attr(NewFile, ctime, vcn_utils:time()),
 
     {ok, _} = fslogic_objects:save_file(FileDoc#veil_document{record = NewFile1}),
 
@@ -100,7 +100,7 @@ change_file_perms(FullFileName, Perms) ->
     {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
     {ok, #veil_document{record = #file{} = File} = FileDoc} = fslogic_objects:get_file(FullFileName),
 
-    case fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, FileDoc) of
+    case fslogic_perms:check_file_perms(FullFileName, UserDocStatus, UserDoc, FileDoc) of
         {ok, true} -> ok;
         {ok, false} ->
             lager:warning("Changing file's permissions without permissions: ~p", [FullFileName]),
@@ -110,7 +110,7 @@ change_file_perms(FullFileName, Perms) ->
             throw(?VEREMOTEIO)
     end,
 
-    NewFile = fslogic_meta:update_meta_attr(File, ctime, fslogic_utils:time()),
+    NewFile = fslogic_meta:update_meta_attr(File, ctime, vcn_utils:time()),
     NewFile1 = FileDoc#veil_document{record = NewFile#file{perms = Perms}},
 
     {ok, _} = fslogic_objects:save_file(NewFile1),
@@ -167,7 +167,7 @@ delete_file(FullFileName) ->
     {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
     {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
 
-    case fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, FileDoc) of
+    case fslogic_perms:check_file_perms(FullFileName, UserDocStatus, UserDoc, FileDoc) of
         {ok, true} -> ok;
         {ok, false} ->
             lager:warning("Deleting file without permissions: ~p", [FullFileName]),
@@ -189,7 +189,7 @@ delete_file(FullFileName) ->
         0 ->
             ok = dao_lib:apply(dao_vfs, remove_file, [FullFileName], fslogic_context:get_protocol_version()),
 
-            fslogic_meta:update_parent_ctime(fslogic_utils:get_user_file_name(FullFileName), fslogic_utils:time()),
+            fslogic_meta:update_parent_ctime(fslogic_path:get_user_file_name(FullFileName), vcn_utils:time()),
             #atom{value = ?VOK};
         _Other ->
             lager:error([{mod, ?MODULE}], "Error: can not remove directory (it's not empty): ~s", [FullFileName]),
@@ -202,7 +202,7 @@ rename_file(FullFileName, FullNewFileName) ->
 
     {ok, #veil_document{record = #file{} = OldFile} = OldDoc} = fslogic_objects:get_file(FullFileName),
 
-    case fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, OldDoc) of
+    case fslogic_perms:check_file_perms(FullFileName, UserDocStatus, UserDoc, OldDoc) of
         {ok, true} -> ok;
         {ok, false} ->
             lager:warning("Renaming file without permissions: ~p", [FullFileName]),
@@ -221,7 +221,7 @@ rename_file(FullFileName, FullNewFileName) ->
             ok
     end,
 
-    NewDir = fslogic_utils:strip_path_leaf(FullNewFileName),
+    NewDir = fslogic_path:strip_path_leaf(FullNewFileName),
 
     case (OldFile#file.type =:= ?DIR_TYPE) and (string:str(NewDir, FullFileName) == 1) of
         true ->
@@ -232,11 +232,11 @@ rename_file(FullFileName, FullNewFileName) ->
 
     {ok, #veil_document{uuid = NewParent} = NewParentDoc} = fslogic_objects:get_file(NewDir),
 
-    OldDir = fslogic_utils:strip_path_leaf(FullFileName),
+    OldDir = fslogic_path:strip_path_leaf(FullFileName),
     {ok, OldParentDoc} = fslogic_objects:get_file(OldDir),
 
-    {PermsStat1, PermsOK1} = fslogic_utils:check_file_perms(NewDir, UserDocStatus, UserDoc, NewParentDoc, write),
-    {PermsStat2, PermsOK2} = fslogic_utils:check_file_perms(OldDir, UserDocStatus, UserDoc, OldParentDoc, write),
+    {PermsStat1, PermsOK1} = fslogic_perms:check_file_perms(NewDir, UserDocStatus, UserDoc, NewParentDoc, write),
+    {PermsStat2, PermsOK2} = fslogic_perms:check_file_perms(OldDir, UserDocStatus, UserDoc, OldParentDoc, write),
 
     case {{PermsStat1, PermsStat2}, {PermsOK1, PermsOK2}} of
         {{ok, ok}, {true, true}} -> ok;
@@ -270,7 +270,7 @@ rename_file(FullFileName, FullNewFileName) ->
                     throw(?VEREMOTEIO)
             end,
             SHInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage), %% Storage helper for cluster
-            NewFileID = fslogic_utils:get_new_file_id(FullNewFileName, UserDoc, SHInfo, fslogic_context:get_protocol_version()),
+            NewFileID = fslogic_storage:get_new_file_id(FullNewFileName, UserDoc, SHInfo, fslogic_context:get_protocol_version()),
 
             %% Change group owner if needed
             case fslogic_utils:get_group_owner(FullNewFileName) of
@@ -298,7 +298,7 @@ rename_file(FullFileName, FullNewFileName) ->
 
     %% Check if we need to move file on storage and do it when we do need it
     NewFile =
-        case {string:tokens(fslogic_utils:get_user_file_name(FullFileName), "/"), string:tokens(fslogic_utils:get_user_file_name(FullNewFileName), "/")} of
+        case {string:tokens(fslogic_path:get_user_file_name(FullFileName), "/"), string:tokens(fslogic_path:get_user_file_name(FullNewFileName), "/")} of
             {_, [?GROUPS_BASE_DIR_NAME, _InvalidTarget]} -> %% Moving into ?GROUPS_BASE_DIR_NAME dir is not allowed
                 ?info("Attempt to move file to base group directory. Query: ~p", [stub]),
                 throw(?VEPERM);
@@ -324,18 +324,18 @@ rename_file(FullFileName, FullNewFileName) ->
 
     RenamedFileInit =
         case fslogic_utils:get_group_owner(FullNewFileName) of %% Do we need to update group owner?
-            [] -> NewFile#file{parent = NewParent, name = fslogic_utils:basename(FullNewFileName)}; %% Dont change group owner
+            [] -> NewFile#file{parent = NewParent, name = fslogic_path:basename(FullNewFileName)}; %% Dont change group owner
             [_NewGroup | _] = GIDs -> %% We are moving file to group folder -> change owner
-                NewFile#file{parent = NewParent, name = fslogic_utils:basename(FullNewFileName), gids = GIDs}
+                NewFile#file{parent = NewParent, name = fslogic_path:basename(FullNewFileName), gids = GIDs}
         end,
-    RenamedFile = fslogic_meta:update_meta_attr(RenamedFileInit, ctime, fslogic_utils:time()),
+    RenamedFile = fslogic_meta:update_meta_attr(RenamedFileInit, ctime, vcn_utils:time()),
     Renamed = OldDoc#veil_document{record = RenamedFile},
 
     {ok, _} = fslogic_objects:save_file(Renamed),
 
-    CTime = fslogic_utils:time(),
-    fslogic_meta:update_parent_ctime(fslogic_utils:get_user_file_name(FullNewFileName), CTime),
-    fslogic_meta:update_parent_ctime(fslogic_utils:get_user_file_name(FullFileName), CTime),
+    CTime = vcn_utils:time(),
+    fslogic_meta:update_parent_ctime(fslogic_path:get_user_file_name(FullNewFileName), CTime),
+    fslogic_meta:update_parent_ctime(fslogic_path:get_user_file_name(FullFileName), CTime),
     #atom{value = ?VOK}.
 
 get_statfs() ->

@@ -108,7 +108,7 @@ handle(ProtocolVersion, {delete_old_descriptors_test, Time}) ->
   handle_test(ProtocolVersion, {delete_old_descriptors_test, Time});
 
 handle(ProtocolVersion, {update_user_files_size_view, Pid}) ->
-  fslogic_utils:update_user_files_size_view(ProtocolVersion),
+  fslogic_meta:update_user_files_size_view(ProtocolVersion),
   {ok, Interval} = application:get_env(veil_cluster_node, user_files_size_view_update_period),
   erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size_view, Pid}}}),
   ok;
@@ -132,7 +132,7 @@ handle(ProtocolVersion, {getfilelocation_uuid, UUID}) ->
   fslogic_req_regular:get_file_location(FileDoc);
 
 handle(ProtocolVersion, {getfileattr, UUID}) ->
-  {DocFindStatus, FileDoc} = dao_lib:apply(dao_vfs, get_file, [{uuid, UUID}], ProtocolVersion),
+  {ok, FileDoc} = fslogic_objects:get_file({uuid, UUID}),
   fslogic_context:set_protocol_version(ProtocolVersion),
   fslogic_req_generic:get_file_attr(FileDoc);
 
@@ -229,70 +229,70 @@ cleanup() ->
   Result :: term().
 %% ====================================================================
 handle_fuse_message(Req = #updatetimes{file_logic_name = FName, atime = ATime, mtime = MTime, ctime = CTime}) ->
-    {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_generic:update_times(FullFileName, ATime, MTime, CTime);
 
 handle_fuse_message(Req = #changefileowner{file_logic_name = FName, uid = UID, uname = UName}) ->
-    {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_generic:change_file_owner(FullFileName, UID, UName);
 
 handle_fuse_message(Req = #changefilegroup{file_logic_name = FName, gid = GID, gname = GName}) ->
-    {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_generic:change_file_group(FullFileName, GID, GName);
 
 handle_fuse_message(Req = #changefileperms{file_logic_name = FName, perms = Perms}) ->
-    {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_generic:change_file_perms(FullFileName, Perms);
 
 handle_fuse_message(Req = #getfileattr{file_logic_name = FName}) ->
-    {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_generic:get_file_attr(FullFileName);
 
 handle_fuse_message(Req = #getfilelocation{file_logic_name = FName}) ->
-    {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_regular:get_file_location(FullFileName);
 
 handle_fuse_message(Req = #getnewfilelocation{file_logic_name = FName, mode = Mode}) ->
-    {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_regular:get_new_file_location(FullFileName, Mode);
 
 handle_fuse_message(Req = #createfileack{file_logic_name = FName}) ->
-    {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_regular:create_file_ack(FullFileName);
 
 handle_fuse_message(Req = #filenotused{file_logic_name = FName}) ->
-    {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_regular:file_not_used(FullFileName);
 
 handle_fuse_message(Req = #renewfilelocation{file_logic_name = FName}) ->
-    {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_regular:renew_file_location(FullFileName);
 
 handle_fuse_message(Req = #createdir{dir_logic_name = FName, mode = Mode}) ->
-    {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_special:create_dir(FullFileName, Mode);
 
 handle_fuse_message(Req = #getfilechildren{dir_logic_name = FName, offset = Offset, children_num = Count}) ->
-    {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_special:get_file_children(FullFileName, Offset, Count);
 
 handle_fuse_message(Req = #deletefile{file_logic_name = FName}) ->
-    {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_generic:delete_file(FullFileName);
 
 handle_fuse_message(Req = #renamefile{from_file_logic_name = FromFName, to_file_logic_name = ToFName}) ->
-  {ok, FullFileName} = fslogic_utils:get_full_file_name(FromFName, vcn_utils:record_type(Req)),
-  {ok, FullNewFileName} = fslogic_utils:get_full_file_name(ToFName, vcn_utils:record_type(Req)),
+  {ok, FullFileName} = fslogic_path:get_full_file_name(FromFName, vcn_utils:record_type(Req)),
+  {ok, FullNewFileName} = fslogic_path:get_full_file_name(ToFName, vcn_utils:record_type(Req)),
   fslogic_req_generic:rename_file(FullFileName, FullNewFileName);
 
 %% Symbolic link creation. From - link name, To - path pointed by new link
 handle_fuse_message(Req = #createlink{from_file_logic_name = FName, to_file_logic_name = LinkValue}) ->
-    {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_special:create_link(FullFileName, LinkValue);
 
 %% Fetch link data (target path)
 handle_fuse_message(Req = #getlink{file_logic_name = FName}) ->
-    {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
+    {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_special:get_link(FullFileName);
 
 handle_fuse_message(_Req = #getstatfs{}) ->

@@ -98,11 +98,13 @@ signing_in_test_() ->
     {foreach,
         fun() ->
             meck:new(dao_lib),
-            meck:new(fslogic_utils)
+            meck:new(fslogic_utils),
+            meck:new(vcn_utils)
         end,
         fun(_) ->
             ok = meck:unload(dao_lib),
-            ok = meck:unload(fslogic_utils)
+            ok = meck:unload(fslogic_utils),
+            ok = meck:unload(vcn_utils)
         end,
         [
             {"new user -> create_user",
@@ -149,11 +151,11 @@ signing_in_test_() ->
 	                        (dao_vfs, get_file,["/" ++ ?GROUPS_BASE_DIR_NAME],_) -> {ok,#veil_document{uuid="group_dir_uuid"}}
                         end),
 
-                    meck:expect(fslogic_utils, get_parent_and_name_from_path,
+                    meck:expect(fslogic_path, get_parent_and_name_from_path,
                         fun("new_user", _) -> {ok, {"some", #veil_document{}}} end),
 
                     Tim = 12345677,
-                    meck:expect(fslogic_utils, time, fun() -> Tim end),
+                    meck:expect(vcn_utils, time, fun() -> Tim end),
                     meck:expect(fslogic_meta, update_meta_attr, fun(File, times, {Tim2, Tim2, Tim2}) -> File end),
 
                     ?assertEqual({"new_user", NewUserRecord}, user_logic:sign_in(NewUserInfoProplist)),
@@ -228,7 +230,7 @@ signing_in_test_() ->
                         end),
 
                     Tim = 12345677,
-                    meck:expect(fslogic_utils, time, fun() -> Tim end),
+                    meck:expect(vcn_utils, time, fun() -> Tim end),
                     meck:expect(fslogic_meta, update_meta_attr, fun(File, times, {Tim2, Tim2, Tim2}) -> File end),
 
                     ?assertEqual({"existing_user", SynchronizedUser}, user_logic:sign_in(ExistingUserInfoProplist)),

@@ -140,7 +140,7 @@ save_fuse_session(#veil_document{record = #fuse_session{valid_to = OldTime}} = D
             {ok, ETime} -> ETime;
             _           -> 60*60*3 %% Hardcoded 3h, just in case (e.g. eunit tests dont use env variables)
         end,
-    CurrTime = fslogic_utils:time(), %% Get current time
+    CurrTime = vcn_utils:time(), %% Get current time
     NewTime =   %% Decide which time shall be used (pre-set or generated just now)
         case OldTime of
             OTime when OTime > CurrTime -> OTime;
@@ -364,7 +364,7 @@ list_connection_info({by_session_id, SessID}) ->
     ok | no_return().
 %% ====================================================================
 clear_sessions() ->
-    CurrentTime = fslogic_utils:time(),
+    CurrentTime = vcn_utils:time(),
     ?debug("FUSE session cleanup started. Time: ~p", [CurrentTime]),
 
     %% List of worker processes that validates sessions in background
@@ -389,7 +389,7 @@ clear_sessions(Sessions) ->
                 {Pid, ok} -> %% Sessions seems to be active, extend it's expire time
                     {ok, Doc} = get_fuse_session(SessID, {stale, update_before}), %% Get fresh session document
                     {ok, SessionExpireTime} = application:get_env(veil_cluster_node, fuse_session_expire_time),
-                    NewTime = fslogic_utils:time() + SessionExpireTime,
+                    NewTime = vcn_utils:time() + SessionExpireTime,
                     NewDoc = Doc#veil_document{record = Doc#veil_document.record#fuse_session{valid_to = NewTime}}, %% Update expire time
                     save_fuse_session(NewDoc), %% Save updated document
                     ok;
