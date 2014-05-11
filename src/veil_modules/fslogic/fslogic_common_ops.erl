@@ -87,8 +87,8 @@ change_file_owner(FullFileName, NewUID, NewUName) ->
                 lager:error("chown: cannot find user with uid ~p due to error: ~p", [NewUID, Reason1]),
                 throw(?VEREMOTEIO)
         end,
-
     NewFile1 = fslogic_utils:update_meta_attr(NewFile, ctime, fslogic_utils:time()),
+
     case dao_lib:apply(dao_vfs, save_file, [FileDoc#veil_document{record = NewFile1}], fslogic_context:get_protocol_version()) of
         {ok, _} -> #atom{value = ?VOK};
         Other1 ->
@@ -101,32 +101,25 @@ change_file_group(_FullFileName, _GID, _GName) ->
 
 change_file_perms(FullFileName, Perms) ->
     {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
-    case fslogic_objects:get_file(FullFileName) of
-        {ok, #veil_document{record = #file{} = File} = Doc} ->
-            {PermsStat, PermsOK} = fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, Doc),
-            case PermsStat of
-                ok ->
-                    case PermsOK of
-                        true ->
-                            File1 = fslogic_utils:update_meta_attr(File, ctime, fslogic_utils:time()),
-                            NewFile = Doc#veil_document{record = File1#file{perms = Perms}},
-                            case dao_lib:apply(dao_vfs, save_file, [NewFile], fslogic_context:get_protocol_version()) of
-                                {ok, _} -> #atom{value = ?VOK};
-                                Other1 ->
-                                    lager:error("fslogic could not save file ~p due to: ~p", [FullFileName, Other1]),
-                                    #atom{value = ?VEREMOTEIO}
-                            end;
-                        false ->
-                            lager:warning("Changing file's perms file without permissions: ~p", [FullFileName]),
-                            #atom{value = ?VEPERM}
-                    end;
-                _ ->
-                    lager:warning("Cannot check permissions of file. Reason: ~p:~p", [PermsStat, PermsOK]),
-                    #atom{value = ?VEREMOTEIO}
-            end;
-        {error, file_not_found} -> #atom{value = ?VENOENT};
-        Other ->
-            lager:error("fslogic could not get file ~p due to: ~p", [FullFileName, Other]),
+    {ok, #veil_document{record = #file{} = File} = FileDoc} = fslogic_objects:get_file(FullFileName),
+
+    case fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, FileDoc, root) of
+        {ok, true} -> ok;
+        {ok, true} ->
+            lager:warning("Changing file's permissions without permissions: ~p", [FullFileName]),
+            throw(?VEPERM);
+        {PermsStat, PermsOK} ->
+            lager:warning("Cannot check permissions of file. Reason: ~p:~p", [PermsStat, PermsOK]),
+            throw(?VEREMOTEIO)
+    end,
+
+    NewFile = fslogic_utils:update_meta_attr(File, ctime, fslogic_utils:time()),
+    NewFile1 = FileDoc#veil_document{record = NewFile#file{perms = Perms}},
+
+    case dao_lib:apply(dao_vfs, save_file, [NewFile1], fslogic_context:get_protocol_version()) of
+        {ok, _} -> #atom{value = ?VOK};
+        Other1 ->
+            lager:error("fslogic could not save file ~p due to: ~p", [FullFileName, Other1]),
             #atom{value = ?VEREMOTEIO}
     end.
 
