@@ -194,7 +194,7 @@ init_per_testcase(_, Config) ->
   ?INIT_DIST_TEST,
   nodes_manager:start_deps_for_tester_node(),
 
-  NodesUp = nodes_manager:start_test_on_nodes(2, true),
+  NodesUp = nodes_manager:start_test_on_nodes(2, false),
   [CCM | WorkerNodes] = NodesUp,
   DBNode = nodes_manager:get_db_node(),
 
