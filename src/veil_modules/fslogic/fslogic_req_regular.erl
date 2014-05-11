@@ -107,7 +107,7 @@ get_new_file_location(FullFileName, Mode) ->
             fslogic_meta:update_parent_ctime(FileBaseName, CTime),
             {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileUUID, fslogic_context:get_fuse_id(), Validity),
 
-            {SH, File_id2} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, File_id),
+            {SH, File_id2} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileId),
             #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
             #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = SHName, storage_helper_args = SHArgs}
     end.
