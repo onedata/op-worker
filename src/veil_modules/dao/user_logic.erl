@@ -21,7 +21,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([sign_in/1, create_user/5, get_user/1, remove_user/1]).
+-export([sign_in/1, create_user/5, get_user/1, remove_user/1, list_all_users/0]).
 -export([get_login/1, get_name/1, get_teams/1, update_teams/2]).
 -export([get_email_list/1, update_email_list/2, get_dn_list/1, update_dn_list/2, get_role/1, update_role/2]).
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
@@ -211,6 +211,37 @@ remove_user(Key) ->
         _ -> error
     end,
     dao_lib:apply(dao_users, remove_user, [Key], 1).
+
+
+%% list_all_users/0
+%% ====================================================================
+%% @doc Lists all users
+%% @end
+-spec list_all_users() ->
+    {ok, DocList :: list(#veil_document{record :: #user{}})} |
+    {error,atom()}.
+%% ====================================================================
+list_all_users() ->
+    list_all_users(?DAO_LIST_BURST_SIZE, 0, []).
+
+%% list_all_users/3
+%% ====================================================================
+%% @doc Returns given Actual list, concatenated with all users beginning
+%%  from Offset (they will be get from dao in packages of size N)
+%% @end
+-spec list_all_users(N :: pos_integer(), Offset :: non_neg_integer(), Actual :: list(#veil_document{record :: #user{}})) ->
+    {ok, DocList :: list(#veil_document{record :: #user{}})} |
+    {error,atom()}.
+%% ====================================================================
+list_all_users(N, Offset, Actual) ->
+    case dao_lib:apply(dao_users, list_users, [N, Offset], 1) of
+        {ok, UserList} when length(UserList)==N ->
+            list_all_users(N,Offset+N, Actual++UserList);
+        {ok, FinalUserList}   ->
+            {ok, Actual ++ FinalUserList};
+        {error, Error} ->
+            {error, Error}
+    end.
 
 
 %% get_login/1

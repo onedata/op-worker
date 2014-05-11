@@ -172,7 +172,7 @@ get_fuse_group(FuseID) ->
 	Result :: ok | {error, Error :: atom()}.
 %% ====================================================================
 add_dirs_for_existing_users(Storage) ->
-	case list_users() of
+	case user_logic:list_all_users() of
 		{ok,Users} ->
 			LoginsAndTeams = lists:map(fun(X) -> {user_logic:get_login(X), user_logic:get_team_names(X)} end, Users),
 			CreateDirs =
@@ -188,35 +188,5 @@ add_dirs_for_existing_users(Storage) ->
 			lists:foldl(CreateDirs, ok, LoginsAndTeams);
 		{error, Error} ->
 			lager:error("Can not list all users, error: ~p",[Error]),
-			{error, Error}
-	end.
-
-%% list_users/0
-%% ====================================================================
-%% @doc Lists all users
-%% @end
--spec list_users() ->
-	{ok, DocList :: list(#veil_document{record :: #user{}})} |
-	{error,atom()}.
-%% ====================================================================
-list_users() ->
-	list_users(?DAO_LIST_BURST_SIZE, 0, []).
-
-%% list_users/3
-%% ====================================================================
-%% @doc Returns given Actual list, concatenated with all users beginning
-%%  from Offset (they will be get from dao in packages of size N)
-%% @end
--spec list_users(N :: pos_integer(), Offset :: non_neg_integer(), Actual :: list(#veil_document{record :: #user{}})) ->
-	{ok, DocList :: list(#veil_document{record :: #user{}})} |
-	{error,atom()}.
-%% ====================================================================
-list_users(N, Offset, Actual) ->
-	case dao_lib:apply(dao_users,list_users,[N,Offset],1) of
-		{ok, UserList} when length(UserList)==N ->
-			list_users(N,Offset+N, Actual++UserList);
-		{ok, FinalUserList}   ->
-			{ok, Actual ++ FinalUserList};
-		{error, Error} ->
 			{error, Error}
 	end.
