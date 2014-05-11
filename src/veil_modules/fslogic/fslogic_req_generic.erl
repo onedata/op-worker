@@ -198,158 +198,144 @@ delete_file(FullFileName) ->
 
 rename_file(FullFileName, FullNewFileName) ->
     {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
-    case fslogic_objects:get_file(FullFileName) of
-        {ok, #veil_document{record = #file{} = OldFile} = OldDoc} ->
-            {PermsStat, PermsOK} = fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, OldDoc),
-            case PermsStat of
-                ok ->
-                    case PermsOK of
-                        true ->
-                            case fslogic_objects:get_file(FullNewFileName) of
-                                {error, file_not_found} ->
-                                    NewDir = fslogic_utils:strip_path_leaf(FullNewFileName),
-                                    case (OldFile#file.type =:= ?DIR_TYPE) and (string:str(NewDir, FullFileName) == 1) of
-                                        true ->
-                                            lager:warning("Moving dir ~p to its child: ~p", [FullFileName, NewDir]),
-                                            #atom{value = ?VEREMOTEIO};
-                                        false ->
-                                            case fslogic_objects:get_file(NewDir) of
-                                                {ok, #veil_document{uuid = NewParent} = NewParentDoc} ->
-                                                    OldDir = fslogic_utils:strip_path_leaf(FullFileName),
-                                                    case fslogic_objects:get_file(OldDir) of
-                                                        {ok, OldParentDoc} ->
-                                                            {PermsStat1, PermsOK1} = fslogic_utils:check_file_perms(NewDir, UserDocStatus, UserDoc, NewParentDoc, write),
-                                                            {PermsStat2, PermsOK2} = fslogic_utils:check_file_perms(OldDir, UserDocStatus, UserDoc, OldParentDoc, write),
-                                                            case {PermsStat1, PermsStat2} of
-                                                                {ok, ok} ->
-                                                                    case {PermsOK1, PermsOK2} of
-                                                                        {true, true} ->
-                                                                            MoveOnStorage =
-                                                                                fun(#file{type = ?REG_TYPE}) -> %% Returns new file record with updated file_id field or throws excpetion
-                                                                                    %%                                         case {UserDocStatus, RootStatus} of %% Assert user doc && user root get status
-                                                                                    %%                                             {ok, ok} -> ok;
-                                                                                    %%                                             _ ->
-                                                                                    %%                                                 ?error("Cannot fetch user doc or user root for file ~p.", [File]),
-                                                                                    %%                                                 ?debug("get_user_doc response: ~p", [{UserDocStatus, UserDoc}]),
-                                                                                    %%                                                 ?debug("get_user_root response: ~p", [{RootStatus, Root}]),
-                                                                                    %%                                                 throw(gen_error_message(renamefile, ?VEREMOTEIO))
-                                                                                    %%                                         end,
 
-                                                                                    %% Get storage info
-                                                                                    StorageID   = OldFile#file.location#file_location.storage_id,
-                                                                                    FileID      = OldFile#file.location#file_location.file_id,
-                                                                                    Storage = %% Storage info for the file
-                                                                                    case dao_lib:apply(dao_vfs, get_storage, [{uuid, StorageID}], 1) of
-                                                                                        {ok, #veil_document{record = #storage_info{} = S}} -> S;
-                                                                                        {error, MReason} ->
-                                                                                            ?error("Cannot fetch storage (ID: ~p) information for file ~p. Reason: ~p", [StorageID, FullFileName, MReason]),
-                                                                                            throw(?VEREMOTEIO)
-                                                                                    end,
-                                                                                    SHInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage), %% Storage helper for cluster
-                                                                                    NewFileID = fslogic_utils:get_new_file_id(FullNewFileName, UserDoc, SHInfo, fslogic_context:get_protocol_version()),
+    {ok, #veil_document{record = #file{} = OldFile} = OldDoc} = fslogic_objects:get_file(FullFileName),
 
-                                                                                    %% Change group owner if needed
-                                                                                    case fslogic_utils:get_group_owner(FullNewFileName) of
-                                                                                        [] -> ok; %% Dont change group owner
-                                                                                        [NewGroup | _] -> %% We are moving file to group folder -> change owner
-                                                                                            case storage_files_manager:chown(SHInfo, FileID, "", NewGroup) of
-                                                                                                ok -> ok;
-                                                                                                MReason1 ->
-                                                                                                    ?error("Cannot change group owner for file (ID: ~p) to ~p due to: ~p.", [FileID, NewGroup, MReason1]),
-                                                                                                    throw(?VEREMOTEIO)
-                                                                                            end
-                                                                                    end,
+    case fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, OldDoc) of
+        {ok, true} -> ok;
+        {ok, false} ->
+            lager:warning("Renaming file without permissions: ~p", [FullFileName]),
+            throw(?VEPERM);
+        {PermsStat, PermsOK} ->
+            lager:warning("Cannot check permissions of file ~p. Reason: ~p:~p", [FullFileName, PermsStat, PermsOK]),
+            throw(?VEREMOTEIO)
+    end,
 
-                                                                                    %% Move file to new location on storage
-                                                                                    ActionR = storage_files_manager:mv(SHInfo, FileID, NewFileID),
-                                                                                    _NewFile =
-                                                                                        case ActionR of
-                                                                                            ok -> OldFile#file{location = OldFile#file.location#file_location{file_id = NewFileID}};
-                                                                                            MReason0 ->
-                                                                                                ?error("Cannot move file (from ID ~p, to ID: ~p) on storage due to: ~p", [FileID, NewFileID, MReason0]),
-                                                                                                throw(?VEREMOTEIO)
-                                                                                        end;
-                                                                                    (_) -> ok %% Dont move non-regular files
-                                                                                end, %% end fun()
-
-                                                                            %% Check if we need to move file on storage and do it when we do need it
-                                                                            NewFile =
-                                                                                case {string:tokens(fslogic_utils:get_user_file_name(FullFileName), "/"), string:tokens(fslogic_utils:get_user_file_name(FullNewFileName), "/")} of
-                                                                                    {_, [?GROUPS_BASE_DIR_NAME, _InvalidTarget]} -> %% Moving into ?GROUPS_BASE_DIR_NAME dir is not allowed
-                                                                                        ?info("Attemt to move file to base group directory. Query: ~p", [stub]),
-                                                                                        throw(?VEPERM);
-                                                                                    {[?GROUPS_BASE_DIR_NAME, _InvalidSource], _} -> %% Moving from ?GROUPS_BASE_DIR_NAME dir is not allowed
-                                                                                        ?info("Attemt to move base group directory. Query: ~p", [stub]),
-                                                                                        throw(?VEPERM);
-
-                                                                                    {[?GROUPS_BASE_DIR_NAME, X | _FromF0], [?GROUPS_BASE_DIR_NAME, X | _ToF0]} -> %% Local (group dir) move, no storage actions are required
-                                                                                        OldFile;
-
-                                                                                    {[?GROUPS_BASE_DIR_NAME, _FromGrp0 | _FromF0], [?GROUPS_BASE_DIR_NAME, _ToGrp0 | _ToF0]} -> %% From group X to Y
-                                                                                        MoveOnStorage(OldFile);
-                                                                                    {[?GROUPS_BASE_DIR_NAME, _FromGrp1 | _FromF1], _} ->
-                                                                                        %% From group X user dir
-                                                                                        MoveOnStorage(OldFile);
-                                                                                    {_, [?GROUPS_BASE_DIR_NAME, _ToGrp2 | _ToF2]} ->
-                                                                                        %% From user dir to group X
-                                                                                        MoveOnStorage(OldFile);
-
-                                                                                    {_, _} -> %% Local (user dir) move, no storage actions are required
-                                                                                        OldFile
-                                                                                end,
-
-                                                                            RenamedFileInit =
-                                                                                case fslogic_utils:get_group_owner(FullNewFileName) of %% Do we need to update group owner?
-                                                                                    [] -> NewFile#file{parent = NewParent, name = fslogic_utils:basename(FullNewFileName)}; %% Dont change group owner
-                                                                                    [_NewGroup | _] = GIDs -> %% We are moving file to group folder -> change owner
-                                                                                        NewFile#file{parent = NewParent, name = fslogic_utils:basename(FullNewFileName), gids = GIDs}
-                                                                                end,
-                                                                            RenamedFile = fslogic_meta:update_meta_attr(RenamedFileInit, ctime, fslogic_utils:time()),
-                                                                            Renamed = OldDoc#veil_document{record = RenamedFile},
-                                                                            case dao_lib:apply(dao_vfs, save_file, [Renamed], fslogic_context:get_protocol_version()) of
-                                                                                {ok, _} ->
-                                                                                    CTime = fslogic_utils:time(),
-                                                                                    fslogic_meta:update_parent_ctime(fslogic_utils:get_user_file_name(FullNewFileName), CTime),
-                                                                                    fslogic_meta:update_parent_ctime(fslogic_utils:get_user_file_name(FullFileName), CTime),
-                                                                                    #atom{value = ?VOK};
-                                                                                Other ->
-                                                                                    lager:warning("Cannot save file document. Reason: ~p", [Other]),
-                                                                                    #atom{value = ?VEREMOTEIO}
-                                                                            end;
-                                                                        _ ->
-                                                                            lager:warning("Moving of file without permissions: ~p", [FullFileName]),
-                                                                            #atom{value = ?VEPERM}
-                                                                    end;
-                                                                _ ->
-                                                                    lager:warning("Cannot move file. Reason: ~p:~p", [{PermsStat1, PermsStat2}, {PermsOK1, PermsOK2}]),
-                                                                    #atom{value = ?VEREMOTEIO}
-                                                            end;
-                                                        _ -> #atom{value = ?VEREMOTEIO}
-                                                    end;
-                                                {error, file_not_found} ->
-                                                    lager:warning("Cannot find destination dir: ~p", [NewDir]),
-                                                    #atom{value = ?VENOENT};
-                                                _ -> #atom{value = ?VEREMOTEIO}
-                                            end
-                                    end;
-                                {ok, #veil_document{}} ->
-                                    lager:warning("Destination file already exists: ~p", [FullFileName]),
-                                    #atom{value = ?VEEXIST};
-                                _ -> #atom{value = ?VEREMOTEIO}
-                            end;
-                        false ->
-                            lager:warning("Renaming file without permissions: ~p", [FullFileName]),
-                            #atom{value = ?VEPERM}
-                    end;
-                _ ->
-                    lager:warning("Cannot check permissions of file. Reason: ~p:~p", [PermsStat, PermsOK]),
-                    #atom{value = ?VEREMOTEIO}
-            end;
+    %% Check if destination file exists
+    case fslogic_objects:get_file(FullNewFileName) of
+        {ok, #veil_document{}} ->
+            lager:warning("Destination file already exists: ~p", [FullFileName]),
+            throw(?VEEXIST);
         {error, file_not_found} ->
-            lager:warning("Cannot find source file: ~p", [FullFileName]),
-            #atom{value = ?VENOENT};
-        _ -> #atom{value = ?VEREMOTEIO}
-    end.
+            ok
+    end,
+
+    NewDir = fslogic_utils:strip_path_leaf(FullNewFileName),
+
+    case (OldFile#file.type =:= ?DIR_TYPE) and (string:str(NewDir, FullFileName) == 1) of
+        true ->
+            lager:warning("Moving dir ~p to its child: ~p", [FullFileName, NewDir]),
+            throw(?VEREMOTEIO);
+        false -> ok
+    end,
+
+    {ok, #veil_document{uuid = NewParent} = NewParentDoc} = fslogic_objects:get_file(NewDir),
+
+    OldDir = fslogic_utils:strip_path_leaf(FullFileName),
+    {ok, OldParentDoc} = fslogic_objects:get_file(OldDir),
+
+    {PermsStat1, PermsOK1} = fslogic_utils:check_file_perms(NewDir, UserDocStatus, UserDoc, NewParentDoc, write),
+    {PermsStat2, PermsOK2} = fslogic_utils:check_file_perms(OldDir, UserDocStatus, UserDoc, OldParentDoc, write),
+
+    case {{PermsStat1, PermsOK1}, {PermsStat2, PermsOK2}} of
+        {{ok, ok}, {true, true}} -> ok;
+        {{ok, ok}, _} ->
+            lager:warning("Moving file without permissions: ~p", [FullFileName]),
+            throw(?VEPERM);
+        {PermsStats, PermsOKs} ->
+            lager:warning("Cannot check permissions of files ~p and ~p. Reason: ~p:~p", [FullFileName, FullNewFileName, PermsStats, PermsOKs]),
+            throw(?VEREMOTEIO)
+    end,
+
+    MoveOnStorage =
+        fun(#file{type = ?REG_TYPE}) -> %% Returns new file record with updated file_id field or throws excpetion
+            %%                                         case {UserDocStatus, RootStatus} of %% Assert user doc && user root get status
+            %%                                             {ok, ok} -> ok;
+            %%                                             _ ->
+            %%                                                 ?error("Cannot fetch user doc or user root for file ~p.", [File]),
+            %%                                                 ?debug("get_user_doc response: ~p", [{UserDocStatus, UserDoc}]),
+            %%                                                 ?debug("get_user_root response: ~p", [{RootStatus, Root}]),
+            %%                                                 throw(gen_error_message(renamefile, ?VEREMOTEIO))
+            %%                                         end,
+
+            %% Get storage info
+            StorageID   = OldFile#file.location#file_location.storage_id,
+            FileID      = OldFile#file.location#file_location.file_id,
+            Storage = %% Storage info for the file
+            case dao_lib:apply(dao_vfs, get_storage, [{uuid, StorageID}], 1) of
+                {ok, #veil_document{record = #storage_info{} = S}} -> S;
+                {error, MReason} ->
+                    ?error("Cannot fetch storage (ID: ~p) information for file ~p. Reason: ~p", [StorageID, FullFileName, MReason]),
+                    throw(?VEREMOTEIO)
+            end,
+            SHInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage), %% Storage helper for cluster
+            NewFileID = fslogic_utils:get_new_file_id(FullNewFileName, UserDoc, SHInfo, fslogic_context:get_protocol_version()),
+
+            %% Change group owner if needed
+            case fslogic_utils:get_group_owner(FullNewFileName) of
+                [] -> ok; %% Dont change group owner
+                [NewGroup | _] -> %% We are moving file to group folder -> change owner
+                    case storage_files_manager:chown(SHInfo, FileID, "", NewGroup) of
+                        ok -> ok;
+                        MReason1 ->
+                            ?error("Cannot change group owner for file (ID: ~p) to ~p due to: ~p.", [FileID, NewGroup, MReason1]),
+                            throw(?VEREMOTEIO)
+                    end
+            end,
+
+            %% Move file to new location on storage
+            ActionR = storage_files_manager:mv(SHInfo, FileID, NewFileID),
+            _NewFile =
+                case ActionR of
+                    ok -> OldFile#file{location = OldFile#file.location#file_location{file_id = NewFileID}};
+                    MReason0 ->
+                        ?error("Cannot move file (from ID ~p, to ID: ~p) on storage due to: ~p", [FileID, NewFileID, MReason0]),
+                        throw(?VEREMOTEIO)
+                end;
+            (_) -> ok %% Dont move non-regular files
+        end, %% end fun()
+
+    %% Check if we need to move file on storage and do it when we do need it
+    NewFile =
+        case {string:tokens(fslogic_utils:get_user_file_name(FullFileName), "/"), string:tokens(fslogic_utils:get_user_file_name(FullNewFileName), "/")} of
+            {_, [?GROUPS_BASE_DIR_NAME, _InvalidTarget]} -> %% Moving into ?GROUPS_BASE_DIR_NAME dir is not allowed
+                ?info("Attempt to move file to base group directory. Query: ~p", [stub]),
+                throw(?VEPERM);
+            {[?GROUPS_BASE_DIR_NAME, _InvalidSource], _} -> %% Moving from ?GROUPS_BASE_DIR_NAME dir is not allowed
+                ?info("Attemt to move base group directory. Query: ~p", [stub]),
+                throw(?VEPERM);
+
+            {[?GROUPS_BASE_DIR_NAME, X | _FromF0], [?GROUPS_BASE_DIR_NAME, X | _ToF0]} -> %% Local (group dir) move, no storage actions are required
+                OldFile;
+
+            {[?GROUPS_BASE_DIR_NAME, _FromGrp0 | _FromF0], [?GROUPS_BASE_DIR_NAME, _ToGrp0 | _ToF0]} -> %% From group X to Y
+                MoveOnStorage(OldFile);
+            {[?GROUPS_BASE_DIR_NAME, _FromGrp1 | _FromF1], _} ->
+                %% From group X user dir
+                MoveOnStorage(OldFile);
+            {_, [?GROUPS_BASE_DIR_NAME, _ToGrp2 | _ToF2]} ->
+                %% From user dir to group X
+                MoveOnStorage(OldFile);
+
+            {_, _} -> %% Local (user dir) move, no storage actions are required
+                OldFile
+        end,
+
+    RenamedFileInit =
+        case fslogic_utils:get_group_owner(FullNewFileName) of %% Do we need to update group owner?
+            [] -> NewFile#file{parent = NewParent, name = fslogic_utils:basename(FullNewFileName)}; %% Dont change group owner
+            [_NewGroup | _] = GIDs -> %% We are moving file to group folder -> change owner
+                NewFile#file{parent = NewParent, name = fslogic_utils:basename(FullNewFileName), gids = GIDs}
+        end,
+    RenamedFile = fslogic_meta:update_meta_attr(RenamedFileInit, ctime, fslogic_utils:time()),
+    Renamed = OldDoc#veil_document{record = RenamedFile},
+
+    {ok, _} = fslogic_objects:save_file(Renamed),
+
+    CTime = fslogic_utils:time(),
+    fslogic_meta:update_parent_ctime(fslogic_utils:get_user_file_name(FullNewFileName), CTime),
+    fslogic_meta:update_parent_ctime(fslogic_utils:get_user_file_name(FullFileName), CTime),
+    #atom{value = ?VOK}.
 
 get_link(FullFileName) ->
     {ok, #veil_document{record = #file{ref_file = Target}}} = fslogic_objects:get_file(FullFileName),
