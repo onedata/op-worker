@@ -151,7 +151,7 @@ delete_file(FullFileName) ->
     {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
     {ok, UserDoc} = fslogic_objects:get_user(),
 
-    ok = fslogic_perms:check_file_perms(FullFileName, UserDocStatus, UserDoc, FileDoc),
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc),
 
     FileDesc = FileDoc#veil_document.record,
     {ok, ChildrenTmpAns} =

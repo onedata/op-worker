@@ -24,14 +24,14 @@
 -include("logging.hrl").
 
 %% API
--export([check_file_perms/4, check_file_perms/4]).
+-export([check_file_perms/3, check_file_perms/4]).
 -export([assert_group_access/3]).
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
 
-%% check_file_perms/4
+%% check_file_perms/3
 %% ====================================================================
 %% @doc Checks if the user has permission to modify file (e,g. change owner).
 %% @end
@@ -42,7 +42,7 @@
 check_file_perms(FileName, UserDoc, FileDoc) ->
     check_file_perms(FileName, UserDoc, FileDoc, perms).
 
-%% check_file_perms/5
+%% check_file_perms/4
 %% ====================================================================
 %% @doc Checks if the user has permission to modify file (e,g. change owner).
 %% @end
@@ -67,8 +67,8 @@ check_file_perms(FileName, UserDoc, FileDoc, CheckType) ->
 
             case CheckOwn of
                 true ->
-                    case UserDoc#veil_document.uuid of
-                        FileRecord#file.uid ->
+                    case UserDoc#veil_document.uuid =:= FileRecord#file.uid of
+                        true ->
                             ok;
                         _ ->
                             {error, {permission_denied, {{user, UserDoc}, {file, FileName}, {check, CheckType}}}}

@@ -190,7 +190,7 @@ get_user_root(#user{login = Login}) ->
 %% ====================================================================
 
 get_user_root(ok, UserDoc) ->
-    get_user_root(UserDoc);
+    {ok, get_user_root(UserDoc)};
 get_user_root(error, Reason) ->
     {error, Reason}.
 

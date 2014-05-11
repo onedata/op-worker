@@ -51,7 +51,7 @@ get_user(#veil_document{record = #user{}} = UserDoc) ->
     {ok, UserDoc};
 get_user({dn, UserDN}) ->
     case UserDN of
-        undefined -> {ok, #veil_document{uuid = "0", record = #user{login = "root", role = admin}}};
+        undefined -> {ok, #veil_document{uuid = ?CLUSTER_USER_ID, record = #user{login = "root", role = admin}}};
         DN ->
             case user_logic:get_user({dn, DN}) of
                 {ok, #veil_document{}} = OKRet -> OKRet;
