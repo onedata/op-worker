@@ -97,27 +97,7 @@ change_file_owner(FullFileName, NewUID, NewUName) ->
     end.
 
 change_file_group(FullFileName, GID, GName) ->
-    case fslogic_objects:get_file(FullFileName) of
-        {ok, #veil_document{record = #file{} = File} = Doc} ->
-            {Return, NewFile} = {?VENOTSUP, File}, %% @TODO: not implemented, add permission checking during the implementation
-
-            case Return of
-                ?VOK ->
-                    NewFile1 = fslogic_utils:update_meta_attr(NewFile, ctime, fslogic_utils:time()),
-                    case dao_lib:apply(dao_vfs, save_file, [Doc#veil_document{record = NewFile1}], fslogic_context:get_protocol_version()) of
-                        {ok, _} -> #atom{value = ?VOK};
-                        Other1 ->
-                            lager:error("fslogic could not save file ~p due to: ~p", [FullFileName, Other1]),
-                            #atom{value = ?VEREMOTEIO}
-                    end;
-                OtherReturn ->
-                    #atom{value = OtherReturn}
-            end;
-        {error, file_not_found} -> #atom{value = ?VENOENT};
-        Other ->
-            lager:error("fslogic could not get file ~p due to: ~p", [FullFileName, Other]),
-            #atom{value = ?VEREMOTEIO}
-    end.
+    #atom{value = ?VENOTSUP}.
 
 change_file_perms(FullFileName, Perms) ->
     {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
