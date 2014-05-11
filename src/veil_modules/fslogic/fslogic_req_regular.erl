@@ -33,27 +33,22 @@
 get_file_location(FileDoc = #veil_document{record = #file{}}) ->
     Validity = ?LOCATION_VALIDITY,
     case FileDoc#veil_document.record#file.type of
-        ?REG_TYPE ->
-            {Status2, TmpAns2} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileDoc#veil_document.uuid, fslogic_context:get_fuse_id(), Validity),
-            case Status2 of
-                ok ->
-                    FileDesc = FileDoc#veil_document.record,
-                    FileLoc = FileDesc#file.location,
-                    case dao_lib:apply(dao_vfs, get_storage, [{uuid, FileLoc#file_location.storage_id}], fslogic_context:get_protocol_version()) of
-                        {ok, #veil_document{record = Storage}} ->
-                            {SH, File_id} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileLoc#file_location.file_id),
-                            #filelocation{storage_id = Storage#storage_info.id, file_id = File_id, validity = Validity,
-                                storage_helper_name = SH#storage_helper_info.name, storage_helper_args = SH#storage_helper_info.init_args};
-                        Other ->
-                            lager:error("Cannot fetch storage: ~p for file: ~p, reason: ~p", [FileLoc#file_location.storage_id, FileDoc#veil_document.uuid, Other]),
-                            #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
-                    end;
-                _BadStatus2 ->
-                    lager:warning("Unknown fslogic error during descriptor saving: ~p", [TmpAns2]),
-                    #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
-            end;
-        _ -> #filelocation{answer = ?VENOTSUP, storage_id = -1, file_id = "", validity = 0}
-    end;
+        ?REG_TYPE -> ok;
+        UnSuppType ->
+            ?error("Unsupported operation: get_file_location for file [UUID ~p] with type: ~p", [FileDoc#veil_document.uuid, UnSuppType]),
+            throw(?VENOTSUP)
+    end,
+
+    {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileDoc#veil_document.uuid, fslogic_context:get_fuse_id(), Validity),
+
+    FileDesc = FileDoc#veil_document.record,
+    FileLoc = fslogic_file:get_file_local_location(FileDesc),
+
+    {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({id, FileLoc#file_location.storage_id}),
+
+    {SH, File_id} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileLoc#file_location.file_id),
+    #filelocation{storage_id = Storage#storage_info.id, file_id = File_id, validity = Validity,
+        storage_helper_name = SH#storage_helper_info.name, storage_helper_args = SH#storage_helper_info.init_args};
 get_file_location(FullFileName) ->
     {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
     get_file_location(FileDoc).

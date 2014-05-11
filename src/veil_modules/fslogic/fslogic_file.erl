@@ -25,7 +25,7 @@
 
 %% API
 -export([normalize_file_type/2]).
--export([update_file_size/1, update_file_size/2, get_real_file_size/1, get_file_owner/1]).
+-export([update_file_size/1, update_file_size/2, get_real_file_size/1, get_file_owner/1, get_file_local_location/1]).
 
 %% ====================================================================
 %% API functions
@@ -45,7 +45,7 @@ get_file_owner(FilePath) ->
 
 get_file_local_location(#veil_document{record = #file{} = File}) ->
     get_file_local_location(File);
-get_file_local_location(File = #file{location = #file_location{} = LocationField}) ->
+get_file_local_location(_File = #file{location = #file_location{} = LocationField}) ->
     get_file_local_location(LocationField);
 get_file_local_location(#file_location{} = FLoc) ->
     FLoc.
