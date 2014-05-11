@@ -26,6 +26,9 @@
 -define(VEINVAL,    "einval").   %% Invalid argument
 -define(VEDQUOT,    "edquot").   %% Quota exceeded
 
+-define(ALL_ERROR_CODES, [?VOK, ?VENOENT, ?VEACCES, ?VEEXIST, ?VENOTSUP, ?VENOTEMPTY, ?VEREMOTEIO,
+                          ?VEPERM, ?VEINVAL, ?VEDQUOT]).
+
 
 %% POSIX & FUSE C structures definitions ported to erlang. For documentation please refer linux & fuse man pages.
 %% Names of these records are the same as correspondent C struct, except "st_" prefix.

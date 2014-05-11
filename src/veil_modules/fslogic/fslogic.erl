@@ -148,10 +148,9 @@ handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
 
         handle_fuse_message(RequestBody)
     catch
-        ErrorMsg when is_tuple(ErrorMsg) ->
-            ErrorMsg;
-        ErrorCode when is_atom(ErrorCode) ; is_list(ErrorCode) ->
-            ?error_stacktrace("Cannot process request ~p due to error (code: ~p)", [RequestBody, ErrorCode]),
+        Reason ->
+            {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
+            ?error_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
         error:{badmatch, {error, Reason}} ->
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),

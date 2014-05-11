@@ -119,46 +119,17 @@ change_file_perms(FullFileName, Perms) ->
 
 get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
     #veil_document{record = #file{} = File, uuid = FileUUID} = FileDoc,
-    {Type, Size} =
-        case File#file.type of
-            ?DIR_TYPE -> {"DIR", 0};
-            ?REG_TYPE ->
-                FileLoc = File#file.location,
-                S =
-                    case dao_lib:apply(dao_vfs, get_storage, [{uuid, FileLoc#file_location.storage_id}], fslogic_context:get_protocol_version()) of
-                        {ok, #veil_document{record = Storage}} ->
-                            {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
-                            case veilhelpers:exec(getattr, SH, [File_id]) of
-                                {0, #st_stat{st_size = ST_Size} = _Stat} ->
-                                    fslogic_utils:update_meta_attr(File, size, ST_Size),
-                                    ST_Size;
-                                {Errno, _} ->
-                                    lager:error("Cannot fetch attributes for file: ~p, errno: ~p", [FileUUID, Errno]),
-                                    0
-                            end;
-                        Other ->
-                            lager:error("Cannot fetch storage: ~p for file: ~p, reason: ~p", [FileLoc#file_location.storage_id, FileUUID, Other]),
-                            0
-                    end,
-                {"REG", S};
-            ?LNK_TYPE -> {"LNK", 0};
-            _ -> "UNK"
-        end,
+    Type = fslogic_file:normalize_file_type(protocol, File#file.type),
+    Size = fslogic_file:get_real_file_size(File),
 
     %% Get owner
-    {UName, UID} =
-        case dao_lib:apply(dao_users, get_user, [{uuid, File#file.uid}], fslogic_context:get_protocol_version()) of
-            {ok, #veil_document{record = #user{}} = UserDoc} ->
-                {user_logic:get_login(UserDoc), list_to_integer(UserDoc#veil_document.uuid)};
-            {error, UError} ->
-                lager:error("Owner of file ~p not found due to error: ~p", [FileUUID, UError]),
-                {"", -1}
-        end,
+    {UName, UID} = fslogic_file:get_file_owner(File),
+
     GName = %% Get group name
-    case File#file.gids of
-        [GNam | _] -> GNam; %% Select first one as main group
-        [] -> UName
-    end,
+        case File#file.gids of
+            [GNam | _] -> GNam; %% Select first one as main group
+            [] -> UName
+        end,
 
     %% Get attributes
     {CTime, MTime, ATime, _SizeFromDB} =

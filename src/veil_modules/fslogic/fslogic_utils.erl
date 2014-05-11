@@ -29,9 +29,11 @@
 -export([get_user_file_name/1, get_user_file_name/2, create_dirs/4]).
 -export([get_group_owner/1, get_new_file_id/4, update_parent_ctime/2, check_file_perms/5, check_file_perms/4, get_user_groups/2, update_user_files_size_view/1]).
 
+
 %% ====================================================================
 %% API functions
 %% ====================================================================
+
 
 %% get_new_file_id/5
 %% ====================================================================

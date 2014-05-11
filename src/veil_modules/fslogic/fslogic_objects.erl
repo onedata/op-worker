@@ -27,7 +27,7 @@
 -export([get_file/1, get_waiting_file/1, get_file/3, get_waiting_file/3]).
 -export([save_file_descriptor/3, save_file_descriptor/4, save_new_file_descriptor/4, update_file_descriptor/2, delete_old_descriptors/2]).
 -export([get_user/0]).
--export([save_file/1]).
+-export([save_file/1, get_storage/1]).
 
 %% ====================================================================
 %% API functions
@@ -37,6 +37,14 @@ save_file(FileDoc = #veil_document{record = #file{}}) ->
     case dao_lib:apply(dao_vfs, save_file, [FileDoc], fslogic_context:get_protocol_version()) of
         {ok, UUID}      -> {ok, UUID};
         {error, Reason} -> {error, {failed_to_save_file, {Reason, FileDoc}}}
+    end.
+
+get_storage({id, StorageID}) ->
+    case dao_lib:apply(dao_vfs, get_storage, [{uuid, StorageID}], fslogic_context:get_protocol_version()) of
+        {ok, #veil_document{record = #storage_info{}} = SInfo} ->
+            {ok, SInfo};
+        {error, Reason} ->
+            {error, {failed_to_get_storage, {Reason, {storage_id, StorageID}}}}
     end.
 
 get_user(#veil_document{record = #user{}} = UserDoc) ->
@@ -58,6 +66,8 @@ get_user() ->
 -spec get_file(FullFileName :: string()) -> Result when
     Result :: term().
 %% ====================================================================
+get_file(#veil_document{record = #file{}} = FileDoc) ->
+    {ok, FileDoc};
 get_file(FullFileName) ->
     get_file(fslogic_context:get_protocol_version(), FullFileName, fslogic_context:get_fuse_id()).
 
