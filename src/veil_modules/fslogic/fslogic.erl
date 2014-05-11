@@ -155,6 +155,14 @@ handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
         error:{badmatch, {error, Reason}} ->
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
             ?error_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
+            fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
+        error:{case_clause, {error, Reason}} ->
+            {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
+            ?error_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
+            fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
+        error:UnkError ->
+            {ErrorCode, ErrorDetails} = {?VEREMOTEIO, UnkError},
+            ?error_stacktrace("Cannot process request ~p due to unknown error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode))
     end;
 
