@@ -748,7 +748,7 @@ create_standard_share(File) ->
 create_share(FileStr, Share_With) ->
   File = check_utf(FileStr),
   {Status, FullName} = fslogic_utils:get_full_file_name(File),
-  {Status2, UID} = fslogic_utils:get_user_id(),
+  {Status2, UID} = fslogic_context:get_user_id(),
   case {Status, Status2} of
     {ok, ok} ->
       case fslogic_objects:get_file(1, FullName, ?CLUSTER_FUSE_ID) of

@@ -25,7 +25,7 @@
 %% API
 -export([strip_path_leaf/1, basename/1, get_parent_and_name_from_path/2, create_children_list/1, create_children_list/2, time/0, get_user_id_from_system/1]).
 -export([verify_file_name/1, get_full_file_name/1, get_full_file_name/2, get_full_file_name/4]).
--export([get_sh_and_id/3, get_user_id/0, get_files_number/3]).
+-export([get_sh_and_id/3, get_user_id/0, get_files_number/3, get_user_root/0]).
 -export([get_user_file_name/1, get_user_file_name/2, create_dirs/4]).
 -export([get_group_owner/1, get_new_file_id/4, check_file_perms/5, check_file_perms/4, get_user_groups/2, update_user_files_size_view/1]).
 
@@ -369,17 +369,7 @@ get_user_groups(UserDocStatus, UserDoc) ->
     ErrorDesc :: atom.
 %% ====================================================================
 get_user_id() ->
-    UserId = get(user_dn),
-    case UserId of
-        undefined -> {ok, ?CLUSTER_USER_ID};
-        DN ->
-            {GetUserAns, User} = user_logic:get_user({dn, DN}),
-            case GetUserAns of
-                ok ->
-                    {ok, User#veil_document.uuid};
-                _ -> {error, get_user_error}
-            end
-    end.
+    fslogic_context:get_fuse_id().
 
 %% get_files_number/3
 %% ====================================================================

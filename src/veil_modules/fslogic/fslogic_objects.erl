@@ -26,7 +26,7 @@
 %% API
 -export([get_file/1, get_waiting_file/1, get_file/3, get_waiting_file/3]).
 -export([save_file_descriptor/3, save_file_descriptor/4, save_new_file_descriptor/4, update_file_descriptor/2, delete_old_descriptors/2]).
--export([get_user/0]).
+-export([get_user/0, get_user/1]).
 -export([save_file/1, get_storage/1]).
 
 %% ====================================================================
@@ -53,7 +53,11 @@ get_user({dn, UserDN}) ->
     case UserDN of
         undefined -> {error, get_user_id_error};
         DN ->
-            user_logic:get_user({dn, DN})
+            case user_logic:get_user({dn, DN}) of
+                {ok, #veil_document{}} = OKRet -> OKRet;
+                {error, Reason} ->
+                    {error, {get_user_error, {Reason, {dn, DN}}}}
+            end
     end.
 get_user() ->
     get_user({dn, fslogic_context:get_user_dn()}).

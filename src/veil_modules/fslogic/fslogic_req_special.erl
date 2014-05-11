@@ -31,48 +31,41 @@
 
 create_dir(FullFileName, Mode) ->
     {ParentFound, ParentInfo} = fslogic_utils:get_parent_and_name_from_path(FullFileName, fslogic_context:get_protocol_version()),
+
+    NewFileName = fslogic_utils:basename(FullFileName),
+    ParentFileName = fslogic_utils:strip_path_leaf(FullFileName),
+    {ok, #veil_document{record = #file{}} = ParentDoc} = fslogic_objects:get_file(ParentFileName),
+
     {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
-    case ParentFound of
-        ok ->
-            {FileName, Parent} = ParentInfo,
-            {PermsStat, PermsOK} = fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, Parent, write),
-            case PermsStat of
-                ok ->
-                    case PermsOK of
-                        true ->
-                            {UserIdStatus, UserId} = fslogic_utils:get_user_id(),
-                            case UserIdStatus of
-                                ok ->
-                                    Groups = fslogic_utils:get_group_owner(fslogic_utils:get_user_file_name(FullFileName)), %% Get owner group name based on file access path
 
-                                    FileInit = #file{type = ?DIR_TYPE, name = FileName, uid = UserId, gids = Groups, parent = Parent#veil_document.uuid, perms = Mode},
-                                    %% Async *times update
-                                    CTime = fslogic_utils:time(),
-                                    File = fslogic_meta:update_meta_attr(FileInit, times, {CTime, CTime, CTime}),
+    case fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, ParentDoc, write) of
+        {ok, true} -> ok;
+        {ok, false} ->
+            lager:warning("Creating directory without permissions: ~p", [FullFileName]),
+            throw(?VEPERM);
+        {PermsStat, PermsOK} ->
+            lager:warning("Cannot check permissions of file ~p. Reason: ~p:~p", [ParentFileName, PermsStat, PermsOK]),
+            throw(?VEREMOTEIO)
+    end,
 
-                                    {Status, TmpAns} = dao_lib:apply(dao_vfs, save_new_file, [FullFileName, File], fslogic_context:get_protocol_version()),
-                                    case {Status, TmpAns} of
-                                        {ok, _} ->
-                                            fslogic_meta:update_parent_ctime(fslogic_utils:get_user_file_name(FullFileName), CTime),
-                                            #atom{value = ?VOK};
-                                        {error, file_exists} ->
-                                            #atom{value = ?VEEXIST};
-                                        _BadStatus ->
-                                            lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s, error: ~p", [FullFileName, _BadStatus]),
-                                            #atom{value = ?VEREMOTEIO}
-                                    end;
-                                _ -> #atom{value = ?VEREMOTEIO}
-                            end;
-                        false ->
-                            lager:warning("Creating directory without permissions: ~p", [FileName]),
-                            #atom{value = ?VEPERM}
-                    end;
-                _ ->
-                    lager:warning("Cannot create directory. Reason: ~p:~p", [PermsStat, PermsOK]),
-                    #atom{value = ?VEREMOTEIO}
-            end;
-        _ParentError ->
-            lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s, parentInfo: ~p", [FullFileName, _ParentError]),
+    {ok, UserId} = fslogic_context:get_user_id(),
+
+    Groups = fslogic_utils:get_group_owner(fslogic_utils:get_user_file_name(FullFileName)), %% Get owner group name based on file access path
+
+    FileInit = #file{type = ?DIR_TYPE, name = NewFileName, uid = UserId, gids = Groups, parent = ParentDoc#veil_document.uuid, perms = Mode},
+    %% Async *times update
+    CTime = fslogic_utils:time(),
+    File = fslogic_meta:update_meta_attr(FileInit, times, {CTime, CTime, CTime}),
+
+    {Status, TmpAns} = dao_lib:apply(dao_vfs, save_new_file, [FullFileName, File], fslogic_context:get_protocol_version()),
+    case {Status, TmpAns} of
+        {ok, _} ->
+            fslogic_meta:update_parent_ctime(fslogic_utils:get_user_file_name(FullFileName), CTime),
+            #atom{value = ?VOK};
+        {error, file_exists} ->
+            #atom{value = ?VEEXIST};
+        _BadStatus ->
+            lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s, error: ~p", [FullFileName, _BadStatus]),
             #atom{value = ?VEREMOTEIO}
     end.
 

@@ -110,7 +110,7 @@ check_perms_group_perms_file() ->
   meck:expect(fslogic, get_user_doc, fun() -> {ok, #veil_document{record = #user{login = "testuser"}}} end),
   meck:expect(fslogic, get_user_groups, fun(_, _) -> {ok, [xyz, abc, "testgroup", g123]} end),
   meck:expect(veilhelpers, exec, fun(getattr, _, _) -> {0, #st_stat{st_uid = 1000}} end),
-  meck:expect(fslogic_utils, get_user_id_from_system, fun
+  meck:expect(fslogic_context, get_user_id_from_system, fun
     ("testuser") -> "1000\n";
     (_) -> "error\n"
   end),
@@ -151,7 +151,7 @@ check_perms_group_write_file() ->
 
   EtsName = logical_files_manager:get_ets_name(),
   ets:delete(EtsName),
-  meck:expect(fslogic_utils, get_user_id_from_system, fun
+  meck:expect(fslogic_context, get_user_id_from_system, fun
     ("testuser") -> "1000\n";
     (_) -> "error\n"
   end),
