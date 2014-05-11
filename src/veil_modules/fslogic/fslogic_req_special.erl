@@ -30,8 +30,6 @@
 %% ====================================================================
 
 create_dir(FullFileName, Mode) ->
-    {ParentFound, ParentInfo} = fslogic_utils:get_parent_and_name_from_path(FullFileName, fslogic_context:get_protocol_version()),
-
     NewFileName = fslogic_utils:basename(FullFileName),
     ParentFileName = fslogic_utils:strip_path_leaf(FullFileName),
     {ok, #veil_document{record = #file{}} = ParentDoc} = fslogic_objects:get_file(ParentFileName),
@@ -82,24 +80,19 @@ get_file_children(FullFileName, ROffset, RCount) ->
                 {RCount, Off2}
         end,
 
-    {Status, TmpAns} = dao_lib:apply(dao_vfs, list_dir, [FullFileName, Num, Offset], fslogic_context:get_protocol_version()),
-    case Status of
-        ok ->
-            Children = fslogic_utils:create_children_list(TmpAns),
-            case {ROffset, TokenizedPath} of
-                {0, []}    -> %% When asking about root, add virtual ?GROUPS_BASE_DIR_NAME entry
-                    #filechildren{child_logic_name = Children ++ [?GROUPS_BASE_DIR_NAME]}; %% Only for offset = 0
-                {_, [?GROUPS_BASE_DIR_NAME]} -> %% For group list query ignore DB result and generate list based on user's teams
-                    Teams = user_logic:get_team_names({dn, get(user_dn)}),
-                    {_Head, Tail} = lists:split(min(Offset, length(Teams)), Teams),
-                    {Ret, _} = lists:split(min(Num, length(Tail)), Tail),
-                    #filechildren{child_logic_name = Ret};
-                _ ->
-                    #filechildren{child_logic_name = Children}
-            end;
-        _BadStatus ->
-            lager:error([{mod, ?MODULE}], "Error: can not list files in dir: ~s", [FullFileName]),
-            #filechildren{answer = ?VEREMOTEIO, child_logic_name = []}
+    {ok, TmpAns} = dao_lib:apply(dao_vfs, list_dir, [FullFileName, Num, Offset], fslogic_context:get_protocol_version()),
+
+    Children = fslogic_utils:create_children_list(TmpAns),
+    case {ROffset, TokenizedPath} of
+        {0, []}    -> %% When asking about root, add virtual ?GROUPS_BASE_DIR_NAME entry
+            #filechildren{child_logic_name = Children ++ [?GROUPS_BASE_DIR_NAME]}; %% Only for offset = 0
+        {_, [?GROUPS_BASE_DIR_NAME]} -> %% For group list query ignore DB result and generate list based on user's teams
+            Teams = user_logic:get_team_names({dn, get(user_dn)}),
+            {_Head, Tail} = lists:split(min(Offset, length(Teams)), Teams),
+            {Ret, _} = lists:split(min(Num, length(Tail)), Tail),
+            #filechildren{child_logic_name = Ret};
+        _ ->
+            #filechildren{child_logic_name = Children}
     end.
 
 create_link(FullFileName, LinkValue) ->
