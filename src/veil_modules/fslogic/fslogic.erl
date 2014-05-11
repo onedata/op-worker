@@ -285,7 +285,7 @@ handle_fuse_message(Req = #createlink{from_file_logic_name = FName, to_file_logi
 %% Fetch link data (target path)
 handle_fuse_message(Req = #getlink{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_req_generic:get_link(FullFileName);
+    fslogic_req_special:get_link(FullFileName);
 
 handle_fuse_message(_Req = #getstatfs{}) ->
     fslogic_req_generic:get_statfs();

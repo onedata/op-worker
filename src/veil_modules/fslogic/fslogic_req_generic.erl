@@ -24,7 +24,7 @@
 
 
 %% API
--export([update_times/4, change_file_owner/3, change_file_group/3, change_file_perms/2, get_file_attr/1, delete_file/1, rename_file/2, get_link/1, get_statfs/0]).
+-export([update_times/4, change_file_owner/3, change_file_group/3, change_file_perms/2, get_file_attr/1, delete_file/1, rename_file/2, get_statfs/0]).
 
 %% ====================================================================
 %% API functions
@@ -337,10 +337,6 @@ rename_file(FullFileName, FullNewFileName) ->
     fslogic_meta:update_parent_ctime(fslogic_utils:get_user_file_name(FullNewFileName), CTime),
     fslogic_meta:update_parent_ctime(fslogic_utils:get_user_file_name(FullFileName), CTime),
     #atom{value = ?VOK}.
-
-get_link(FullFileName) ->
-    {ok, #veil_document{record = #file{ref_file = Target}}} = fslogic_objects:get_file(FullFileName),
-    #linkinfo{file_logic_name = Target}.
 
 get_statfs() ->
     {ok, UserDoc} = fslogic_objects:get_user(),

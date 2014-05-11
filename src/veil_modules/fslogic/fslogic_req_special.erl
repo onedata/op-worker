@@ -23,7 +23,7 @@
 -include("logging.hrl").
 
 %% API
--export([create_dir/2, get_file_children/3, create_link/2]).
+-export([create_dir/2, get_file_children/3, create_link/2, get_link/1]).
 
 %% ====================================================================
 %% API functions
@@ -96,52 +96,47 @@ get_file_children(FullFileName, ROffset, RCount) ->
     end.
 
 create_link(FullFileName, LinkValue) ->
-    {ParentFound, ParentInfo} = fslogic_utils:get_parent_and_name_from_path(FullFileName, fslogic_context:get_protocol_version()),
-    {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
     UserFilePath = fslogic_utils:get_user_file_name(FullFileName),
-    case ParentFound of
-        ok ->
-            {FileName, Parent} = ParentInfo,
-            {PermsStat, PermsOK} = fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, Parent, write),
-            case PermsStat of
-                ok ->
-                    case PermsOK of
-                        true ->
-                            UserId =
-                                case UserDoc of
-                                    get_user_id_error -> ?CLUSTER_USER_ID;
-                                    _ -> UserDoc#veil_document.uuid
-                                end,
 
-                            Groups = fslogic_utils:get_group_owner(UserFilePath), %% Get owner group name based on file access path
+    NewFileName = fslogic_utils:basename(FullFileName),
+    ParentFileName = fslogic_utils:strip_path_leaf(FullFileName),
+    {ok, #veil_document{record = #file{}} = ParentDoc} = fslogic_objects:get_file(ParentFileName),
 
-                            LinkDocInit = #file{type = ?LNK_TYPE, name = FileName, uid = UserId, gids = Groups, ref_file = LinkValue, parent = Parent#veil_document.uuid},
-                            CTime = fslogic_utils:time(),
-                            LinkDoc = fslogic_meta:update_meta_attr(LinkDocInit, times, {CTime, CTime, CTime}),
+    {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
 
-                            case dao_lib:apply(dao_vfs, save_new_file, [FullFileName, LinkDoc], fslogic_context:get_protocol_version()) of
-                                {ok, _} ->
-                                    fslogic_meta:update_parent_ctime(UserFilePath, CTime),
-                                    #atom{value = ?VOK};
-                                {error, file_exists} ->
-                                    lager:error("Cannot create link - file already exists: ~p", [FullFileName]),
-                                    #atom{value = ?VEEXIST};
-                                {error, Reason} ->
-                                    lager:error("Cannot save link file (from ~p to ~p) due to error: ~p", [FullFileName, LinkValue, Reason]),
-                                    #atom{value = ?VEREMOTEIO}
-                            end;
-                        false ->
-                            lager:warning("Creation of link without permissions: from ~p to ~p", [FullFileName, LinkValue]),
-                            #atom{value = ?VEPERM}
-                    end;
-                _ ->
-                    lager:warning("Cannot create link. Reason: ~p:~p", [PermsStat, PermsOK]),
-                    #atom{value = ?VEREMOTEIO}
-            end;
-        {error, Reason1} ->
-            lager:error("Cannot fetch file information for file ~p due to error: ~p", [FullFileName, Reason1]),
+    case fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, ParentDoc, write) of
+        {ok, true} -> ok;
+        {ok, false} ->
+            lager:warning("Creating link without permissions: ~p", [FullFileName]),
+            throw(?VEPERM);
+        {PermsStat, PermsOK} ->
+            lager:warning("Cannot check permissions of file ~p. Reason: ~p:~p", [ParentFileName, PermsStat, PermsOK]),
+            throw(?VEREMOTEIO)
+    end,
+
+    {ok, UserId} = fslogic_context:get_fuse_id(),
+
+    Groups = fslogic_utils:get_group_owner(UserFilePath), %% Get owner group name based on file access path
+
+    LinkDocInit = #file{type = ?LNK_TYPE, name = NewFileName, uid = UserId, gids = Groups, ref_file = LinkValue, parent = ParentDoc#veil_document.uuid},
+    CTime = fslogic_utils:time(),
+    LinkDoc = fslogic_meta:update_meta_attr(LinkDocInit, times, {CTime, CTime, CTime}),
+
+    case dao_lib:apply(dao_vfs, save_new_file, [FullFileName, LinkDoc], fslogic_context:get_protocol_version()) of
+        {ok, _} ->
+            fslogic_meta:update_parent_ctime(UserFilePath, CTime),
+            #atom{value = ?VOK};
+        {error, file_exists} ->
+            lager:error("Cannot create link - file already exists: ~p", [FullFileName]),
+            #atom{value = ?VEEXIST};
+        {error, Reason} ->
+            lager:error("Cannot save link file (from ~p to ~p) due to error: ~p", [FullFileName, LinkValue, Reason]),
             #atom{value = ?VEREMOTEIO}
     end.
+
+get_link(FullFileName) ->
+    {ok, #veil_document{record = #file{ref_file = Target}}} = fslogic_objects:get_file(FullFileName),
+    #linkinfo{file_logic_name = Target}.
 
 %% ====================================================================
 %% Internal functions
