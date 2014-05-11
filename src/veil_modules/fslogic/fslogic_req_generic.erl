@@ -177,7 +177,7 @@ rename_file(FullFileName, FullNewFileName) ->
     {ok, UserDoc} = fslogic_objects:get_user(),
     {ok, #veil_document{record = #file{} = OldFile} = OldDoc} = fslogic_objects:get_file(FullFileName),
 
-    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, UserDoc, OldDoc),
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, OldDoc),
 
     %% Check if destination file exists
     case fslogic_objects:get_file(FullNewFileName) of

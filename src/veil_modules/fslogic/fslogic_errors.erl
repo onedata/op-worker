@@ -23,6 +23,33 @@
 %% API functions
 %% ====================================================================
 
+gen_error_code({error, Reason}) ->
+    gen_error_code(Reason);
+gen_error_code(file_not_found) ->
+    {?VENOENT, no_details};
+gen_error_code({permission_denied, Details}) ->
+    {?VEPERM, {permission_denied, Details}};
+gen_error_code(user_not_found) ->
+    {?VEPERM, user_not_found};
+gen_error_code(user_doc_not_found) ->
+    {?VEPERM, user_doc_not_found};
+gen_error_code(invalid_group_access) ->
+    {?VEPERM, invalid_group_access};
+gen_error_code(file_exists) ->
+    {?VEEXIST, file_already_exists};
+gen_error_code(ErrorCode) when is_list(ErrorCode) ->
+    case lists:member(ErrorCode, ?ALL_ERROR_CODES) of
+        true    -> {ErrorCode, no_details};
+        false   -> {?VEREMOTEIO, ErrorCode}
+    end;
+gen_error_code({ErrorCode, ErrorDetails}) when is_list(ErrorCode) ->
+    case lists:member(ErrorCode, ?ALL_ERROR_CODES) of
+        true    -> {ErrorCode, ErrorDetails};
+        false   -> {?VEREMOTEIO, {ErrorCode, ErrorDetails}}
+    end;
+gen_error_code(UnknownReason) ->
+    {?VEREMOTEIO, UnknownReason}.
+
 %% gen_error_message/2
 %% ====================================================================
 %% @doc Convinience method that returns protobuf answer message that is build base on given error code
@@ -72,33 +99,6 @@ normalize_error_code(ErrorCode) when is_atom(ErrorCode) ->
     atom_to_list(ErrorCode);
 normalize_error_code(ErrorCode) when is_list(ErrorCode) ->
     ErrorCode.
-
-gen_error_code({error, Reason}) ->
-    gen_error_code(Reason);
-gen_error_code(file_not_found) ->
-    {?VENOENT, no_details};
-gen_error_code({permission_denied, Details}) ->
-    {?VEPERM, {permission_denied, Details}};
-gen_error_code(user_not_found) ->
-    {?VEPERM, user_not_found};
-gen_error_code(user_doc_not_found) ->
-    {?VEPERM, user_doc_not_found};
-gen_error_code(invalid_group_access) ->
-    {?VEPERM, invalid_group_access};
-gen_error_code(file_exists) ->
-    {?VEEXIST, file_already_exists};
-gen_error_code(ErrorCode) when is_list(ErrorCode) ->
-    case lists:member(ErrorCode, ?ALL_ERROR_CODES) of
-        true    -> {ErrorCode, no_details};
-        false   -> {?VEREMOTEIO, ErrorCode}
-    end;
-gen_error_code({ErrorCode, ErrorDetails}) when is_list(ErrorCode) ->
-    case lists:member(ErrorCode, ?ALL_ERROR_CODES) of
-        true    -> {ErrorCode, ErrorDetails};
-        false   -> {?VEREMOTEIO, {ErrorCode, ErrorDetails}}
-    end;
-gen_error_code(UnknownReason) ->
-    {?VEREMOTEIO, UnknownReason}.
 
 %% ====================================================================
 %% Internal functions
