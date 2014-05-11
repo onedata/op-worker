@@ -89,7 +89,7 @@ change_file_owner(FullFileName, NewUID, NewUName) ->
         end,
     NewFile1 = fslogic_meta:update_meta_attr(NewFile, ctime, fslogic_utils:time()),
 
-    {ok, _} = fslogic_objects:save_file(NewFile1),
+    {ok, _} = fslogic_objects:save_file(FileDoc#veil_document{record = NewFile1}),
 
     #atom{value = ?VOK}.
 
@@ -100,7 +100,7 @@ change_file_perms(FullFileName, Perms) ->
     {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
     {ok, #veil_document{record = #file{} = File} = FileDoc} = fslogic_objects:get_file(FullFileName),
 
-    case fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, FileDoc, root) of
+    case fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, FileDoc) of
         {ok, true} -> ok;
         {ok, false} ->
             lager:warning("Changing file's permissions without permissions: ~p", [FullFileName]),
@@ -155,7 +155,8 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
                 _ -> -1
             end,
 
-    #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime, type = Type, size = Size, uname = UName, gname = GName, uid = UID, gid = UID, links = Links};
+    #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
+        type = Type, size = Size, uname = UName, gname = GName, uid = UID, gid = UID, links = Links};
 get_file_attr(FullFileName) ->
     ?debug("FileAttr for ~p", [FullFileName]),
     {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
@@ -237,7 +238,7 @@ rename_file(FullFileName, FullNewFileName) ->
     {PermsStat1, PermsOK1} = fslogic_utils:check_file_perms(NewDir, UserDocStatus, UserDoc, NewParentDoc, write),
     {PermsStat2, PermsOK2} = fslogic_utils:check_file_perms(OldDir, UserDocStatus, UserDoc, OldParentDoc, write),
 
-    case {{PermsStat1, PermsOK1}, {PermsStat2, PermsOK2}} of
+    case {{PermsStat1, PermsStat2}, {PermsOK1, PermsOK2}} of
         {{ok, ok}, {true, true}} -> ok;
         {{ok, ok}, _} ->
             lager:warning("Moving file without permissions: ~p", [FullFileName]),

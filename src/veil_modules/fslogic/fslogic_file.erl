@@ -101,11 +101,11 @@ normalize_file_type(internal, ?REG_TYPE_PROT) ->
     ?REG_TYPE;
 normalize_file_type(internal, ?LNK_TYPE_PROT) ->
     ?LNK_TYPE;
-normalize_file_type(protocol, ?DIR_TYPE) ->
+normalize_file_type(internal, ?DIR_TYPE) ->
     ?DIR_TYPE;
-normalize_file_type(protocol, ?REG_TYPE) ->
+normalize_file_type(internal, ?REG_TYPE) ->
     ?REG_TYPE;
-normalize_file_type(protocol, ?LNK_TYPE) ->
+normalize_file_type(internal, ?LNK_TYPE) ->
     ?LNK_TYPE;
 normalize_file_type(internal, Type) ->
     ?error("Unknown file type: ~p", [Type]),
