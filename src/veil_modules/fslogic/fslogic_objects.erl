@@ -40,7 +40,6 @@ get_user({dn, UserDN}) ->
         DN ->
             user_logic:get_user({dn, DN})
     end.
-
 get_user() ->
     get_user({dn, fslogic_context:get_user_dn()}).
 
