@@ -156,24 +156,12 @@ create_file_ack(FullFileName) ->
     case fslogic_objects:get_waiting_file(FullFileName) of
         {ok, #veil_document{record = #file{} = OldFile} = OldDoc} ->
             ChangedFile = OldDoc#veil_document{record = OldFile#file{created = true}},
-            case dao_lib:apply(dao_vfs, save_file, [ChangedFile], fslogic_context:get_protocol_version()) of
-                {ok, _} ->
-                    #atom{value = ?VOK};
-                Other ->
-                    lager:warning("Cannot save file document. Reason: ~p", [Other]),
-                    #atom{value = ?VEREMOTEIO}
-            end;
+            {ok, _} = fslogic_objects:save_file(ChangedFile),
+
+            #atom{value = ?VOK};
         {error, file_not_found} ->
-            case fslogic_objects:get_file(FullFileName) of
-                {ok, _} ->
-                    #atom{value = ?VOK};
-                _ ->
-                    lager:warning("Cannot find waiting file: ~p", [FullFileName]),
-                    #atom{value = ?VENOENT}
-            end;
-        UnknownError ->
-            ?error("create_file_ack unknown error: ~p", [UnknownError]),
-            #atom{value = ?VEREMOTEIO}
+            {ok, _} = fslogic_objects:get_file(FullFileName),
+            #atom{value = ?VOK}
     end.
 
 file_not_used(FullFileName) ->
