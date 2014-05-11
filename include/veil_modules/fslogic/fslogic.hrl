@@ -75,4 +75,9 @@
 %% Which fuse operations (messages) are allowed to operate on second level group directory (e.g. "/groups/grpName")
 -define(GROUPS_ALLOWED_ACTIONS,         [getfileattr, getnewfilelocation, createdir, updatetimes, createlink, getfilechildren]).
 
+
+-define(REG_TYPE_PROT, "REG").
+-define(DIR_TYPE_PROT, "DIR").
+-define(LNK_TYPE_PROT, "LNK").
+
 -endif.

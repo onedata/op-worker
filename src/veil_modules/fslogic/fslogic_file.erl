@@ -45,8 +45,10 @@ get_file_owner(FilePath) ->
 
 get_file_local_location(#veil_document{record = #file{} = File}) ->
     get_file_local_location(File);
-get_file_local_location(File = #file{location = #file_location{} = Location}) ->
-    Location.
+get_file_local_location(File = #file{location = #file_location{} = LocationField}) ->
+    get_file_local_location(LocationField);
+get_file_local_location(#file_location{} = FLoc) ->
+    FLoc.
 
 get_real_file_size(#file{type = ?REG_TYPE} = File) ->
     FileLoc = get_file_local_location(File#file.location),
@@ -77,20 +79,34 @@ update_file_size(File, Size) ->
 
 
 normalize_file_type(protocol, ?DIR_TYPE) ->
-    "DIR";
+    ?DIR_TYPE_PROT;
 normalize_file_type(protocol, ?REG_TYPE) ->
-    "REG";
+    ?REG_TYPE_PROT;
 normalize_file_type(protocol, ?LNK_TYPE) ->
-    "LNK";
-normalize_file_type(protocol, _) ->
-    "UNK";
-normalize_file_type(internal, "DIR") ->
+    ?LNK_TYPE_PROT;
+normalize_file_type(protocol, ?DIR_TYPE_PROT) ->
+    ?DIR_TYPE_PROT;
+normalize_file_type(protocol, ?REG_TYPE_PROT) ->
+    ?REG_TYPE_PROT;
+normalize_file_type(protocol, ?LNK_TYPE_PROT) ->
+    ?LNK_TYPE_PROT;
+normalize_file_type(protocol, Type) ->
+    ?error("Unknown file type: ~p", [Type]),
+    throw({unknown_file_type, Type});
+normalize_file_type(internal, ?DIR_TYPE_PROT) ->
     ?DIR_TYPE;
-normalize_file_type(internal, "REG") ->
+normalize_file_type(internal, ?REG_TYPE_PROT) ->
     ?REG_TYPE;
-normalize_file_type(internal, "LNK") ->
+normalize_file_type(internal, ?LNK_TYPE_PROT) ->
+    ?LNK_TYPE;
+normalize_file_type(protocol, ?DIR_TYPE) ->
+    ?DIR_TYPE;
+normalize_file_type(protocol, ?REG_TYPE) ->
+    ?REG_TYPE;
+normalize_file_type(protocol, ?LNK_TYPE) ->
     ?LNK_TYPE;
 normalize_file_type(internal, Type) ->
+    ?error("Unknown file type: ~p", [Type]),
     throw({unknown_file_type, Type}).
 
 %% ====================================================================

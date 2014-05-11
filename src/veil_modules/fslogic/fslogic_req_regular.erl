@@ -8,7 +8,7 @@
 %% @doc: Write me !
 %% @end
 %% ===================================================================
--module(fslogic_regular_files).
+-module(fslogic_req_regular).
 -author("Rafal Slota").
 
 -include("registered_names.hrl").

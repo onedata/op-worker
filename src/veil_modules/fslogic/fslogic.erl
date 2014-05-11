@@ -129,12 +129,12 @@ handle(ProtocolVersion, {getfilelocation_uuid, UUID}) ->
   {ok, FileDoc} = dao_lib:apply(dao_vfs, get_file, [{uuid, UUID}], ProtocolVersion),
   fslogic_context:set_fuse_id(?CLUSTER_FUSE_ID),
   fslogic_context:set_protocol_version(ProtocolVersion),
-  fslogic_regular_files:get_file_location(FileDoc);
+  fslogic_req_regular:get_file_location(FileDoc);
 
 handle(ProtocolVersion, {getfileattr, UUID}) ->
   {DocFindStatus, FileDoc} = dao_lib:apply(dao_vfs, get_file, [{uuid, UUID}], ProtocolVersion),
   fslogic_context:set_protocol_version(ProtocolVersion),
-  fslogic_common_ops:get_file_attr(FileDoc);
+  fslogic_req_generic:get_file_attr(FileDoc);
 
 
 handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
@@ -222,77 +222,75 @@ cleanup() ->
 %% ====================================================================
 handle_fuse_message(Req = #updatetimes{file_logic_name = FName, atime = ATime, mtime = MTime, ctime = CTime}) ->
     {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_common_ops:update_times(FullFileName, ATime, MTime, CTime);
+    fslogic_req_generic:update_times(FullFileName, ATime, MTime, CTime);
 
 handle_fuse_message(Req = #changefileowner{file_logic_name = FName, uid = UID, uname = UName}) ->
     {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_common_ops:change_file_owner(FullFileName, UID, UName);
+    fslogic_req_generic:change_file_owner(FullFileName, UID, UName);
 
 handle_fuse_message(Req = #changefilegroup{file_logic_name = FName, gid = GID, gname = GName}) ->
     {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_common_ops:change_file_group(FullFileName, GID, GName);
+    fslogic_req_generic:change_file_group(FullFileName, GID, GName);
 
 handle_fuse_message(Req = #changefileperms{file_logic_name = FName, perms = Perms}) ->
     {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_common_ops:change_file_perms(FullFileName, Perms);
+    fslogic_req_generic:change_file_perms(FullFileName, Perms);
 
 handle_fuse_message(Req = #getfileattr{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_common_ops:get_file_attr(FullFileName);
+    fslogic_req_generic:get_file_attr(FullFileName);
 
 handle_fuse_message(Req = #getfilelocation{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_regular_files:get_file_location(FullFileName);
+    fslogic_req_regular:get_file_location(FullFileName);
 
 handle_fuse_message(Req = #getnewfilelocation{file_logic_name = FName, mode = Mode}) ->
     {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_regular_files:get_new_file_location(FullFileName, Mode);
+    fslogic_req_regular:get_new_file_location(FullFileName, Mode);
 
 handle_fuse_message(Req = #createfileack{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_regular_files:create_file_ack(FullFileName);
+    fslogic_req_regular:create_file_ack(FullFileName);
 
 handle_fuse_message(Req = #filenotused{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_regular_files:file_not_used(FullFileName);
+    fslogic_req_regular:file_not_used(FullFileName);
 
 handle_fuse_message(Req = #renewfilelocation{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_regular_files:renew_file_location(FullFileName);
+    fslogic_req_regular:renew_file_location(FullFileName);
 
 handle_fuse_message(Req = #createdir{dir_logic_name = FName, mode = Mode}) ->
     {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_special_files:create_dir(FullFileName, Mode);
+    fslogic_req_special:create_dir(FullFileName, Mode);
 
 handle_fuse_message(Req = #getfilechildren{dir_logic_name = FName, offset = Offset, children_num = Count}) ->
     {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_special_files:get_file_children(FullFileName, Offset, Count);
+    fslogic_req_special:get_file_children(FullFileName, Offset, Count);
 
 handle_fuse_message(Req = #deletefile{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_common_ops:delete_file(FullFileName);
+    fslogic_req_generic:delete_file(FullFileName);
 
 handle_fuse_message(Req = #renamefile{from_file_logic_name = FromFName, to_file_logic_name = ToFName}) ->
   {ok, FullFileName} = fslogic_utils:get_full_file_name(FromFName, vcn_utils:record_type(Req)),
   {ok, FullNewFileName} = fslogic_utils:get_full_file_name(ToFName, vcn_utils:record_type(Req)),
-  fslogic_common_ops:rename_file(FullFileName, FullNewFileName);
+  fslogic_req_generic:rename_file(FullFileName, FullNewFileName);
 
 %% Symbolic link creation. From - link name, To - path pointed by new link
 handle_fuse_message(Req = #createlink{from_file_logic_name = FName, to_file_logic_name = LinkValue}) ->
     {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_special_files:create_link(FullFileName, LinkValue);
+    fslogic_req_special:create_link(FullFileName, LinkValue);
 
 %% Fetch link data (target path)
 handle_fuse_message(Req = #getlink{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_common_ops:get_link(FullFileName);
+    fslogic_req_generic:get_link(FullFileName);
+
+handle_fuse_message(_Req = #getstatfs{}) ->
+    fslogic_req_generic:get_statfs();
 
 %% Test message
 handle_fuse_message(_Req = #testchannel{answer_delay_in_ms = Interval, answer_message = Answer}) ->
   timer:apply_after(Interval, gen_server, cast, [?MODULE, {asynch, fslogic_context:get_protocol_version(), {answer_test_message, fslogic_context:get_fuse_id(), Answer}}]),
-  #atom{value = "ok"};
-
-handle_fuse_message(_Req = #getstatfs{}) ->
-    fslogic_common_ops:get_statfs().
-
-
+  #atom{value = "ok"}.
