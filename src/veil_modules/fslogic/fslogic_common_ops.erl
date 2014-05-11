@@ -38,6 +38,7 @@ update_times(FullFileName, ATime, MTime, CTime) ->
             throw(invalid_updatetimes_request);
         _ -> ok
     end,
+
     {ok, #veil_document{record = #file{} = File} = FileDoc} = fslogic_objects:get_file(FullFileName),
 
     File1 = fslogic_utils:update_meta_attr(File, times, {ATime, MTime}),
@@ -47,14 +48,13 @@ update_times(FullFileName, ATime, MTime, CTime) ->
     if
         Status -> #atom{value = ?VOK};
         true ->
-            dao_lib:apply(dao_vfs, save_file, [FileDoc#veil_document{record = File2}], fslogic_context:get_protocol_version()),
-            #atom{value = ?VOK}
+            {ok, _} = fslogic_objects:save_file(FileDoc#veil_document{record = File2})
     end.
 
 change_file_owner(FullFileName, NewUID, NewUName) ->
     ?debug("change_file_owner(FullFileName: ~p, NewUID: ~p, NewUName: ~p)", [FullFileName, NewUID, NewUName]),
 
-    #veil_document{record = #file{} = File} = FileDoc = fslogic_objects:get_file(FullFileName),
+    {ok, #veil_document{record = #file{} = File} = FileDoc} = fslogic_objects:get_file(FullFileName),
     {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
 
     case fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, FileDoc, root) of
@@ -89,12 +89,9 @@ change_file_owner(FullFileName, NewUID, NewUName) ->
         end,
     NewFile1 = fslogic_utils:update_meta_attr(NewFile, ctime, fslogic_utils:time()),
 
-    case dao_lib:apply(dao_vfs, save_file, [FileDoc#veil_document{record = NewFile1}], fslogic_context:get_protocol_version()) of
-        {ok, _} -> #atom{value = ?VOK};
-        Other1 ->
-            lager:error("fslogic could not save file ~p due to: ~p", [FullFileName, Other1]),
-            #atom{value = ?VEREMOTEIO}
-    end.
+    {ok, _} = fslogic_objects:save_file(NewFile1),
+
+    #atom{value = ?VOK}.
 
 change_file_group(_FullFileName, _GID, _GName) ->
     #atom{value = ?VENOTSUP}.
@@ -116,12 +113,9 @@ change_file_perms(FullFileName, Perms) ->
     NewFile = fslogic_utils:update_meta_attr(File, ctime, fslogic_utils:time()),
     NewFile1 = FileDoc#veil_document{record = NewFile#file{perms = Perms}},
 
-    case dao_lib:apply(dao_vfs, save_file, [NewFile1], fslogic_context:get_protocol_version()) of
-        {ok, _} -> #atom{value = ?VOK};
-        Other1 ->
-            lager:error("fslogic could not save file ~p due to: ~p", [FullFileName, Other1]),
-            #atom{value = ?VEREMOTEIO}
-    end.
+    {ok, _} = fslogic_objects:save_file(NewFile1),
+
+    #atom{value = ?VOK}.
 
 get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
     #veil_document{record = #file{} = File, uuid = FileUUID} = FileDoc,

@@ -27,10 +27,17 @@
 -export([get_file/1, get_waiting_file/1, get_file/3, get_waiting_file/3]).
 -export([save_file_descriptor/3, save_file_descriptor/4, save_new_file_descriptor/4, update_file_descriptor/2, delete_old_descriptors/2]).
 -export([get_user/0]).
+-export([save_file/1]).
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
+
+save_file(FileDoc = #veil_document{record = #file{}}) ->
+    case dao_lib:apply(dao_vfs, save_file, [FileDoc], fslogic_context:get_protocol_version()) of
+        {ok, UUID}      -> {ok, UUID};
+        {error, Reason} -> {error, {failed_to_save_file, {Reason, FileDoc}}}
+    end.
 
 get_user(#veil_document{record = #user{}} = UserDoc) ->
     {ok, UserDoc};
