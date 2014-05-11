@@ -25,7 +25,7 @@
 %% API
 -export([test_event_subscription/1, test_event_aggregation/1, test_dispatching/1]).
 
--export([ccm_code1/0, worker_code/0]).
+-export([ccm_code1/0, ccm_code2/0, worker_code/0]).
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 all() -> [test_event_subscription, test_event_aggregation, test_dispatching].
@@ -49,7 +49,7 @@ test_event_subscription(Config) ->
 
   [CCM | _] = NodesUp,
 
-  WriteEvent = [{"type", "write_event"}, {"user_id", "1234"}, {"ans_pid", self()}],
+  WriteEvent = [{"type", "write_event_ct_test"}, {"user_id", "1234"}, {"ans_pid", self()}],
 
   % there was no subscription for events - sending events has no effect
   send_event(WriteEvent, CCM),
@@ -60,21 +60,21 @@ test_event_subscription(Config) ->
     AnsPid = proplists:get_value("ans_pid", WriteEv),
     case AnsPid of
       undefined -> ok;
-      _ -> AnsPid ! {ok, standard, self()}
+      _ -> AnsPid ! {event_handled, standard, self()}
     end
   end,
   subscribe_for_write_events(CCM, standard, EventHandler), % subscribing for events
   send_event(WriteEvent, CCM),
 
   % this time there is a subscription for write_event - we should receive message
-  ?assert_received({ok, standard, _}),
+  ?assert_received({event_handled, standard, _}),
   assert_nothing_received(),
 
   EventHandler2 = fun(WriteEv) ->
     AnsPid = proplists:get_value("ans_pid", WriteEv),
     case AnsPid of
       undefined -> ok;
-      _ -> AnsPid ! {ok, tree, self()}
+      _ -> AnsPid ! {event_handled, tree, self()}
     end
   end,
   
@@ -82,8 +82,8 @@ test_event_subscription(Config) ->
   send_event(WriteEvent, CCM),
 
   % this time there are two handler registered
-  ?assert_received({ok, standard, _}),
-  ?assert_received({ok, tree, _}, 3000),
+  ?assert_received({event_handled, standard, _}),
+  ?assert_received({event_handled, tree, _}, 3000),
   assert_nothing_received().
 
 
@@ -96,23 +96,23 @@ test_event_aggregation(Config) ->
     case AnsPid of
       undefined -> ok;
       _ ->
-        AnsPid ! {ok, tree, self()}
+        AnsPid ! {event_handled, tree, self()}
     end
   end,
   subscribe_for_write_events(CCM, tree, EventHandler, #event_stream_config{config = #aggregator_config{field_name = "user_id", fun_field_name = "count", threshold = 4}}),
-  WriteEvent = [{"type", "write_event"}, {"user_id", "1234"}, {"ans_pid", self()}],
+  WriteEvent = [{"type", "write_event_ct_test"}, {"user_id", "1234"}, {"ans_pid", self()}],
 
   repeat(3, fun() -> send_event(WriteEvent, CCM) end),
   assert_nothing_received(),
 
   send_event(WriteEvent, CCM),
-  ?assert_received({ok, tree, _}),
+  ?assert_received({event_handled, tree, _}),
   assert_nothing_received(),
 
   repeat(3, fun() -> send_event(WriteEvent, CCM) end),
   assert_nothing_received(),
   send_event(WriteEvent, CCM),
-  ?assert_received({ok, tree, _}),
+  ?assert_received({event_handled, tree, _}),
   assert_nothing_received().
 
 test_dispatching(Config) ->
@@ -123,16 +123,16 @@ test_dispatching(Config) ->
     AnsPid = proplists:get_value("ans_pid", WriteEv),
     case AnsPid of
       undefined -> ok;
-      _ -> AnsPid ! {ok, tree, self()}
+      _ -> AnsPid ! {event_handled, tree, self()}
     end
   end,
   subscribe_for_write_events(CCM, tree, EventHandler),
 
-  WriteEvent1 = [{"type", "write_event"}, {"user_id", "1234"}, {"ans_pid", self()}],
-  WriteEvent2 = [{"type", "write_event"}, {"user_id", "1235"}, {"ans_pid", self()}],
-  WriteEvent3 = [{"type", "write_event"}, {"user_id", "1334"}, {"ans_pid", self()}],
-  WriteEvent4 = [{"type", "write_event"}, {"user_id", "1335"}, {"ans_pid", self()}],
-  WriteEvent5 = [{"type", "write_event"}, {"user_id", "1236"}, {"ans_pid", self()}],
+  WriteEvent1 = [{"type", "write_event_ct_test"}, {"user_id", "1234"}, {"ans_pid", self()}],
+  WriteEvent2 = [{"type", "write_event_ct_test"}, {"user_id", "1235"}, {"ans_pid", self()}],
+  WriteEvent3 = [{"type", "write_event_ct_test"}, {"user_id", "1334"}, {"ans_pid", self()}],
+  WriteEvent4 = [{"type", "write_event_ct_test"}, {"user_id", "1335"}, {"ans_pid", self()}],
+  WriteEvent5 = [{"type", "write_event_ct_test"}, {"user_id", "1236"}, {"ans_pid", self()}],
   WriteEvents = [WriteEvent1, WriteEvent2, WriteEvent3, WriteEvent4],
   SendWriteEvent = fun (Event) -> send_event(Event, CCM) end,
 
@@ -194,13 +194,13 @@ init_per_testcase(_, Config) ->
   ?INIT_DIST_TEST,
   nodes_manager:start_deps_for_tester_node(),
 
-  NodesUp = nodes_manager:start_test_on_nodes(2, false),
+  NodesUp = nodes_manager:start_test_on_nodes(2, true),
   [CCM | WorkerNodes] = NodesUp,
   DBNode = nodes_manager:get_db_node(),
 
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, [
-    [{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {control_panel_port, 2308}, {rest_port, 3308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}],
-    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {control_panel_port, 2309}, {rest_port, 3309}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}]]),
+    [{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1313}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1314}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}]]),
 
   Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
   Res = lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config),
@@ -213,22 +213,20 @@ init_per_testcase(_, Config) ->
     nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
-
+  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
+  nodes_manager:wait_for_cluster_init(),
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers),
 
   StartAdditionalWorker = fun(Node, Module) ->
     case lists:member({Node, Module}, Workers) of
       true -> ok;
       false ->
-        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, Module, []}),
+        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, Module, []}, 3000),
         ?assertEqual(ok, StartAns)
     end
   end,
 
-  StartAdditionalWorker(CCM, rule_manager),
   lists:foreach(fun(Node) -> StartAdditionalWorker(Node, cluster_rengine) end, NodesUp),
-  lists:foreach(fun(Node) -> StartAdditionalWorker(Node, dao) end, NodesUp),
-
   nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
   Res.
 
@@ -273,7 +271,7 @@ subscribe_for_write_events(Node, ProcessingMethod, EventHandler, ProcessingConfi
   end,
 
   EventItem = #event_handler_item{processing_method = ProcessingMethod, handler_fun = EventHandler, map_fun = EventHandlerMapFun, disp_map_fun = EventHandlerDispMapFun, config = ProcessingConfig},
-  gen_server:call({?Dispatcher_Name, Node}, {rule_manager, 1, self(), {add_event_handler, {"write_event", EventItem}}}),
+  gen_server:call({?Dispatcher_Name, Node}, {rule_manager, 1, self(), {add_event_handler, {"write_event_ct_test", EventItem}}}),
 
   receive
     ok -> ok
@@ -292,6 +290,10 @@ ccm_code1() ->
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
   ok.
 
+ccm_code2() ->
+  gen_server:cast({global, ?CCM}, init_cluster),
+  ok.
+
 worker_code() ->
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
   ok.
@@ -306,7 +308,7 @@ string_to_integer(SomeString) ->
 
 assert_nothing_received() ->
   receive
-    Ans ->
+    Ans = {event_handled, _, _} ->
       ct:print("assert nothing failed with: ~p", [Ans]),
       ?assert(false)
   after 1000
@@ -319,7 +321,7 @@ send_event(Event, Node) ->
 count_answers(ToReceive) ->
   Set = sets:new(),
   receive
-    {ok, _, Pid} -> count_answers(ToReceive - 1, sets:add_element(Pid, Set));
+    {event_handled, _, Pid} -> count_answers(ToReceive - 1, sets:add_element(Pid, Set));
     _ -> count_answers(ToReceive, Set)
   after 2000 ->
     {ToReceive, Set}
@@ -330,7 +332,7 @@ count_answers(0, Set) ->
 count_answers(ToReceive, Set) ->
   receive
     {'EXIT', _, _} -> count_answers(ToReceive, Set);
-    {ok, _, Pid} -> count_answers(ToReceive - 1, sets:add_element(Pid, Set));
+    {event_handled, _, Pid} -> count_answers(ToReceive - 1, sets:add_element(Pid, Set));
     _ -> count_answers(ToReceive, Set)
   after 2000 ->
     {ToReceive, Set}
