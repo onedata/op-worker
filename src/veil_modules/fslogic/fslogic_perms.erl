@@ -88,7 +88,8 @@ check_file_perms(FileName, UserDoc, FileDoc, CheckType) ->
 %% ====================================================================
 assert_group_access(_UserDoc, cluster_request, _LogicalPath) ->
     ok;
-
+assert_group_access(#veil_document{uuid = ?CLUSTER_USER_ID}, _Request, _LogicalPath) ->
+    ok;
 assert_group_access(UserDoc, Request, LogicalPath) ->
     assert_grp_access(UserDoc, Request, string:tokens(LogicalPath, "/")).
 
