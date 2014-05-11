@@ -646,7 +646,7 @@ check_perms(File, Storage_helper_info, CheckType) ->
       {AccesType, AccessName} = AccessAns,
       case AccesType of
         user ->
-          {UsrStatus, UserRoot} = fslogic:get_user_root(),
+          {UsrStatus, UserRoot} = fslogic_utils:get_user_root(),
           case UsrStatus of
             ok ->
               [CleanUserRoot | _] = string:tokens(UserRoot, "/"),
@@ -654,8 +654,8 @@ check_perms(File, Storage_helper_info, CheckType) ->
             _ -> {error, can_not_get_user_root}
           end;
         group ->
-          {UserDocStatus, UserDoc} = fslogic:get_user_doc(),
-          {UsrStatus2, UserGroups} = fslogic:get_user_groups(UserDocStatus, UserDoc),
+          {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
+          {UsrStatus2, UserGroups} = fslogic_utils:get_user_groups(UserDocStatus, UserDoc),
           case UsrStatus2 of
             ok ->
               case lists:member(AccessName, UserGroups) of

@@ -141,6 +141,7 @@ handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
     RequestBody = Record#fusemessage.input,
     RequestType = element(1, RequestBody),
     try
+        %% Setup context
         fslogic_context:set_fuse_id(get(fuse_id)),
         fslogic_context:set_protocol_version(ProtocolVersion),
         fslogic_context:set_user_dn(get(user_dn)),
@@ -184,6 +185,7 @@ handle(_ProtocolVersion, Record) when is_record(Record, callback) ->
 %% Handle requests that have wrong structure.
 handle(_ProtocolVersion, _Msg) ->
   wrong_request.
+
 
 %% handle_test/3
 %% ====================================================================
@@ -272,8 +274,8 @@ handle_fuse_message(Req = #deletefile{file_logic_name = FName}) ->
     fslogic_common_ops:delete_file(FullFileName);
 
 handle_fuse_message(Req = #renamefile{from_file_logic_name = FromFName, to_file_logic_name = ToFName}) ->
-  {ok, FullFileName} = fslogic_utils:get_full_file_name(FromFName, renamefile),
-  {ok, FullNewFileName} = fslogic_utils:get_full_file_name(ToFName, renamefile),
+  {ok, FullFileName} = fslogic_utils:get_full_file_name(FromFName, vcn_utils:record_type(Req)),
+  {ok, FullNewFileName} = fslogic_utils:get_full_file_name(ToFName, vcn_utils:record_type(Req)),
   fslogic_common_ops:rename_file(FullFileName, FullNewFileName);
 
 %% Symbolic link creation. From - link name, To - path pointed by new link
@@ -291,7 +293,7 @@ handle_fuse_message(_Req = #testchannel{answer_delay_in_ms = Interval, answer_me
   timer:apply_after(Interval, gen_server, cast, [?MODULE, {asynch, fslogic_context:get_protocol_version(), {answer_test_message, fslogic_context:get_fuse_id(), Answer}}]),
   #atom{value = "ok"};
 
-handle_fuse_message(Req = #getstatfs{}) ->
+handle_fuse_message(_Req = #getstatfs{}) ->
     fslogic_common_ops:get_statfs().
 
 

@@ -31,29 +31,24 @@
 %% ====================================================================
 
 update_times(FullFileName, ATime, MTime, CTime) ->
+    ?debug("update_times(~p, ~p, ~p, ~p)", [FullFileName, ATime, MTime, CTime]),
     case FullFileName of
         [?PATH_SEPARATOR] ->
-            lager:warning("Trying to update times for root directory. fslogic_context:get_fuse_id(): ~p, Request: ~p. Aborting.", [fslogic_context:get_fuse_id(), stub]),
+            lager:warning("Trying to update times for root directory. FuseID: ~p. Aborting.", [fslogic_context:get_fuse_id()]),
             throw(invalid_updatetimes_request);
         _ -> ok
     end,
-    ?debug("Updating times for file: ~p, Request: ~p", [FullFileName, stub]),
-    case fslogic_objects:get_file(FullFileName) of
-        {ok, #veil_document{record = #file{} = File} = Doc} ->
-            File1 = fslogic_utils:update_meta_attr(File, times, {ATime, MTime}),
-            File2 = fslogic_utils:update_meta_attr(File1, ctime, CTime),
+    {ok, #veil_document{record = #file{} = File} = FileDoc} = fslogic_objects:get_file(FullFileName),
 
-            Status = string:equal(File2#file.meta_doc, File#file.meta_doc),
-            if
-                Status -> #atom{value = ?VOK};
-                true ->
-                    %% TODO it may cause a problem with other operations (confilicts in DB) - it should be checked
-                    dao_lib:apply(dao_vfs, {asynch, save_file}, [Doc#veil_document{record = File2}], fslogic_context:get_protocol_version()),
-                    #atom{value = ?VOK}
-            end;
-        Other ->
-            lager:error("updatetimes: fslogic could not get file ~p due to: ~p", [FullFileName, Other]),
-            #atom{value = ?VEREMOTEIO}
+    File1 = fslogic_utils:update_meta_attr(File, times, {ATime, MTime}),
+    File2 = fslogic_utils:update_meta_attr(File1, ctime, CTime),
+
+    Status = string:equal(File2#file.meta_doc, File#file.meta_doc),
+    if
+        Status -> #atom{value = ?VOK};
+        true ->
+            dao_lib:apply(dao_vfs, save_file, [FileDoc#veil_document{record = File2}], fslogic_context:get_protocol_version()),
+            #atom{value = ?VOK}
     end.
 
 change_file_owner(FullFileName, NewUID, NewUName) ->
