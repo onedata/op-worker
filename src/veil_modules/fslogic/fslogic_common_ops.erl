@@ -368,16 +368,8 @@ rename_file(FullFileName, FullNewFileName) ->
     end.
 
 get_link(FullFileName) ->
-    case fslogic_objects:get_file(FullFileName) of
-        {ok, #veil_document{record = #file{ref_file = Target}}} ->
-            #linkinfo{file_logic_name = Target};
-        {error, file_not_found} ->
-            lager:error("Link ~p does not exist.", [FullFileName]),
-            #linkinfo{answer = ?VENOENT, file_logic_name = ""};
-        {error, Reason} ->
-            lager:error("Cannot read link ~p due to error: ~p", [FullFileName, Reason]),
-            #linkinfo{answer = ?VEREMOTEIO, file_logic_name = ""}
-    end.
+    {ok, #veil_document{record = #file{ref_file = Target}}} = fslogic_objects:get_file(FullFileName),
+    #linkinfo{file_logic_name = Target}.
 
 get_statfs() ->
     {ok, UserDoc} = fslogic_objects:get_user(),
