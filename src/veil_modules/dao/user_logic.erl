@@ -592,7 +592,7 @@ create_root(Dir, Uid) ->
             {FileName, Parent} = ParentInfo,
             File = #file{type = ?DIR_TYPE, name = FileName, uid = Uid, parent = Parent#veil_document.uuid, perms = ?UserRootPerms},
             CTime = fslogic_utils:time(),
-            FileDoc = fslogic_utils:update_meta_attr(File, times, {CTime, CTime, CTime}),
+            FileDoc = fslogic_meta:update_meta_attr(File, times, {CTime, CTime, CTime}),
             dao_lib:apply(dao_vfs, save_new_file, [Dir, FileDoc], 1);
         _ParentError -> {error,parent_error}
     end.
@@ -750,7 +750,7 @@ create_team_dir(TeamName) ->
 			end;
 		{ok,false}->
 			GFile = #file{type = ?DIR_TYPE, name = ?GROUPS_BASE_DIR_NAME, uid = "0", parent = "", perms = 8#555},
-			GFileDoc = fslogic_utils:update_meta_attr(GFile, times, {CTime, CTime, CTime}),
+			GFileDoc = fslogic_meta:update_meta_attr(GFile, times, {CTime, CTime, CTime}),
 			case dao_lib:apply(dao_vfs, save_new_file, ["/" ++ ?GROUPS_BASE_DIR_NAME, GFileDoc], 1) of
 				{ok, UUID} -> UUID;
 				{error, Reason} ->
@@ -767,7 +767,7 @@ create_team_dir(TeamName) ->
 			{error, dir_exists};
 		{ok,false}->
 			TFile = #file{type = ?DIR_TYPE, name = TeamName, uid = "0", gids = [TeamName], parent = GroupsBase, perms = 8#770},
-			TFileDoc = fslogic_utils:update_meta_attr(TFile, times, {CTime, CTime, CTime}),
+			TFileDoc = fslogic_meta:update_meta_attr(TFile, times, {CTime, CTime, CTime}),
 			dao_lib:apply(dao_vfs, save_new_file, ["/" ++ ?GROUPS_BASE_DIR_NAME ++ "/" ++ TeamName, TFileDoc], 1);
 		Error ->
 			Error

@@ -41,8 +41,8 @@ update_times(FullFileName, ATime, MTime, CTime) ->
 
     {ok, #veil_document{record = #file{} = File} = FileDoc} = fslogic_objects:get_file(FullFileName),
 
-    File1 = fslogic_utils:update_meta_attr(File, times, {ATime, MTime}),
-    File2 = fslogic_utils:update_meta_attr(File1, ctime, CTime),
+    File1 = fslogic_meta:update_meta_attr(File, times, {ATime, MTime}),
+    File2 = fslogic_meta:update_meta_attr(File1, ctime, CTime),
 
     Status = string:equal(File2#file.meta_doc, File#file.meta_doc),
     if
@@ -87,7 +87,7 @@ change_file_owner(FullFileName, NewUID, NewUName) ->
                 lager:error("chown: cannot find user with uid ~p due to error: ~p", [NewUID, Reason1]),
                 throw(?VEREMOTEIO)
         end,
-    NewFile1 = fslogic_utils:update_meta_attr(NewFile, ctime, fslogic_utils:time()),
+    NewFile1 = fslogic_meta:update_meta_attr(NewFile, ctime, fslogic_utils:time()),
 
     {ok, _} = fslogic_objects:save_file(NewFile1),
 
@@ -110,7 +110,7 @@ change_file_perms(FullFileName, Perms) ->
             throw(?VEREMOTEIO)
     end,
 
-    NewFile = fslogic_utils:update_meta_attr(File, ctime, fslogic_utils:time()),
+    NewFile = fslogic_meta:update_meta_attr(File, ctime, fslogic_utils:time()),
     NewFile1 = FileDoc#veil_document{record = NewFile#file{perms = Perms}},
 
     {ok, _} = fslogic_objects:save_file(NewFile1),
@@ -121,6 +121,8 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
     #veil_document{record = #file{} = File, uuid = FileUUID} = FileDoc,
     Type = fslogic_file:normalize_file_type(protocol, File#file.type),
     Size = fslogic_file:get_real_file_size(File),
+
+    fslogic_file:update_file_size(File, Size),
 
     %% Get owner
     {UName, UID} = fslogic_file:get_file_owner(File),
@@ -184,7 +186,7 @@ delete_file(FullFileName) ->
                                             Status = dao_lib:apply(dao_vfs, remove_file, [FullFileName], fslogic_context:get_protocol_version()),
                                             case Status of
                                                 ok ->
-                                                    fslogic_utils:update_parent_ctime(fslogic_utils:get_user_file_name(FullFileName), fslogic_utils:time()),
+                                                    fslogic_meta:update_parent_ctime(fslogic_utils:get_user_file_name(FullFileName), fslogic_utils:time()),
                                                     #atom{value = ?VOK};
                                                 _BadStatus ->
                                                     lager:error([{mod, ?MODULE}], "Error: can not remove file: ~s", [FullFileName]),
@@ -320,13 +322,13 @@ rename_file(FullFileName, FullNewFileName) ->
                                                                                     [_NewGroup | _] = GIDs -> %% We are moving file to group folder -> change owner
                                                                                         NewFile#file{parent = NewParent, name = fslogic_utils:basename(FullNewFileName), gids = GIDs}
                                                                                 end,
-                                                                            RenamedFile = fslogic_utils:update_meta_attr(RenamedFileInit, ctime, fslogic_utils:time()),
+                                                                            RenamedFile = fslogic_meta:update_meta_attr(RenamedFileInit, ctime, fslogic_utils:time()),
                                                                             Renamed = OldDoc#veil_document{record = RenamedFile},
                                                                             case dao_lib:apply(dao_vfs, save_file, [Renamed], fslogic_context:get_protocol_version()) of
                                                                                 {ok, _} ->
                                                                                     CTime = fslogic_utils:time(),
-                                                                                    fslogic_utils:update_parent_ctime(fslogic_utils:get_user_file_name(FullNewFileName), CTime),
-                                                                                    fslogic_utils:update_parent_ctime(fslogic_utils:get_user_file_name(FullFileName), CTime),
+                                                                                    fslogic_meta:update_parent_ctime(fslogic_utils:get_user_file_name(FullNewFileName), CTime),
+                                                                                    fslogic_meta:update_parent_ctime(fslogic_utils:get_user_file_name(FullFileName), CTime),
                                                                                     #atom{value = ?VOK};
                                                                                 Other ->
                                                                                     lager:warning("Cannot save file document. Reason: ~p", [Other]),

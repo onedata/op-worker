@@ -91,14 +91,14 @@ get_new_file_location(FullFileName, Mode) ->
 
                                                 FileRecordInit = #file{type = ?REG_TYPE, name = FileName, uid = UserId, gids = Groups, parent = Parent#veil_document.uuid, perms = Mode, location = FileLocation, created = false},
                                                 %% Async *times update
-                                                FileRecord = fslogic_utils:update_meta_attr(FileRecordInit, times, {CTime, CTime, CTime}),
+                                                FileRecord = fslogic_meta:update_meta_attr(FileRecordInit, times, {CTime, CTime, CTime}),
 
                                                 Status = dao_lib:apply(dao_vfs, save_new_file, [FullFileName, FileRecord], fslogic_context:get_protocol_version()),
                                                 Validity = ?LOCATION_VALIDITY,
                                                 case Status of
                                                     {ok, {waiting_file, ExistingWFile}} ->
                                                         ExistingWFileUUID = ExistingWFile#veil_document.uuid,
-                                                        fslogic_utils:update_parent_ctime(FileBaseName, CTime),
+                                                        fslogic_meta:update_parent_ctime(FileBaseName, CTime),
                                                         {ExistingWFileStatus2, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), ExistingWFileUUID, fslogic_context:get_fuse_id(), Validity),
                                                         case ExistingWFileStatus2 of
                                                             ok ->
@@ -119,7 +119,7 @@ get_new_file_location(FullFileName, Mode) ->
                                                                 #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
                                                         end;
                                                     {ok, FileUUID} ->
-                                                        fslogic_utils:update_parent_ctime(FileBaseName, CTime),
+                                                        fslogic_meta:update_parent_ctime(FileBaseName, CTime),
                                                         {Status2, _TmpAns2} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileUUID, fslogic_context:get_fuse_id(), Validity),
                                                         case Status2 of
                                                             ok ->

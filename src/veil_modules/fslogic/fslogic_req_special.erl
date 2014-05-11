@@ -48,12 +48,12 @@ create_dir(FullFileName, Mode) ->
                                     FileInit = #file{type = ?DIR_TYPE, name = FileName, uid = UserId, gids = Groups, parent = Parent#veil_document.uuid, perms = Mode},
                                     %% Async *times update
                                     CTime = fslogic_utils:time(),
-                                    File = fslogic_utils:update_meta_attr(FileInit, times, {CTime, CTime, CTime}),
+                                    File = fslogic_meta:update_meta_attr(FileInit, times, {CTime, CTime, CTime}),
 
                                     {Status, TmpAns} = dao_lib:apply(dao_vfs, save_new_file, [FullFileName, File], fslogic_context:get_protocol_version()),
                                     case {Status, TmpAns} of
                                         {ok, _} ->
-                                            fslogic_utils:update_parent_ctime(fslogic_utils:get_user_file_name(FullFileName), CTime),
+                                            fslogic_meta:update_parent_ctime(fslogic_utils:get_user_file_name(FullFileName), CTime),
                                             #atom{value = ?VOK};
                                         {error, file_exists} ->
                                             #atom{value = ?VEEXIST};
@@ -131,11 +131,11 @@ create_link(FullFileName, LinkValue) ->
 
                             LinkDocInit = #file{type = ?LNK_TYPE, name = FileName, uid = UserId, gids = Groups, ref_file = LinkValue, parent = Parent#veil_document.uuid},
                             CTime = fslogic_utils:time(),
-                            LinkDoc = fslogic_utils:update_meta_attr(LinkDocInit, times, {CTime, CTime, CTime}),
+                            LinkDoc = fslogic_meta:update_meta_attr(LinkDocInit, times, {CTime, CTime, CTime}),
 
                             case dao_lib:apply(dao_vfs, save_new_file, [FullFileName, LinkDoc], fslogic_context:get_protocol_version()) of
                                 {ok, _} ->
-                                    fslogic_utils:update_parent_ctime(UserFilePath, CTime),
+                                    fslogic_meta:update_parent_ctime(UserFilePath, CTime),
                                     #atom{value = ?VOK};
                                 {error, file_exists} ->
                                     lager:error("Cannot create link - file already exists: ~p", [FullFileName]),

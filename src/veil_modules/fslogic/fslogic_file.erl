@@ -69,12 +69,14 @@ get_real_file_size(FileDocOrPath) ->
     {ok, #veil_document{record = #file{} = File}} = fslogic_objects:get_file(FileDocOrPath),
     get_real_file_size(File).
 
-update_file_size(#file{} = File) ->
+update_file_size(#file{type = ?REG_TYPE} = File) ->
     Size = get_real_file_size(File),
-    update_file_size(File, Size).
+    update_file_size(File, Size);
+update_file_size(#file{} = File) ->
+    File.
 
-update_file_size(File, Size) ->
-    fslogic_utils:update_meta_attr(File, size, Size).
+update_file_size(#file{} = File, Size) ->
+    fslogic_meta:update_meta_attr(File, size, Size).
 
 
 
