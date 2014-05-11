@@ -181,31 +181,19 @@ file_not_used(FullFileName) ->
     #atom{value = ?VOK}.
 
 renew_file_location(FullFileName) ->
-    {Status, TmpAns} = dao_lib:apply(dao_vfs, list_descriptors, [{by_file_n_owner, {FullFileName, fslogic_context:get_fuse_id()}}, 10, 0], fslogic_context:get_protocol_version()),
-    case Status of
-        ok ->
-            case length(TmpAns) of
-                0 ->
-                    lager:error([{mod, ?MODULE}], "Error: can not renew file location for file: ~s, descriptor not found", [FullFileName]),
-                    #filelocationvalidity{answer = ?VENOENT, validity = 0};
-                1 ->
-                    [VeilDoc | _] = TmpAns,
-                    Validity = ?LOCATION_VALIDITY,
+    {ok, Descriptors} = dao_lib:apply(dao_vfs, list_descriptors, [{by_file_n_owner, {FullFileName, fslogic_context:get_fuse_id()}}, 10, 0], fslogic_context:get_protocol_version()),
+    case length(Descriptors) of
+        0 ->
+            ?error("Error: can not renew file location for file: ~s, descriptor not found", [FullFileName]),
+            #filelocationvalidity{answer = ?VENOENT, validity = 0};
+        1 ->
+            [VeilDoc | _] = Descriptors,
+            Validity = ?LOCATION_VALIDITY,
 
-                    {Status2, _TmpAns2} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), VeilDoc, Validity),
-                    case Status2 of
-                        ok ->
-                            #filelocationvalidity{answer = ?VOK, validity = Validity};
-                        _BadStatus2 ->
-                            lager:error([{mod, ?MODULE}], "Error: can not renew file location for file: ~s", [FullFileName]),
-                            #filelocationvalidity{answer = ?VEREMOTEIO, validity = 0}
-                    end;
-                _Many ->
-                    lager:error([{mod, ?MODULE}], "Error: can not renew file location for file: ~s, too many file descriptors", [FullFileName]),
-                    #filelocationvalidity{answer = ?VEREMOTEIO, validity = 0}
-            end;
-        _Other ->
-            lager:error([{mod, ?MODULE}], "Error: can not renew file location for file: ~s", [FullFileName]),
+            {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), VeilDoc, Validity),
+            #filelocationvalidity{answer = ?VOK, validity = Validity};
+        _Many ->
+            ?error("Error: can not renew file location for file: ~s, too many file descriptors", [FullFileName]),
             #filelocationvalidity{answer = ?VEREMOTEIO, validity = 0}
     end.
 

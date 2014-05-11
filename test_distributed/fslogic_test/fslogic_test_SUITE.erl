@@ -1753,7 +1753,7 @@ fuse_requests_test(Config) ->
 
   {Status8_1, Answer8_1} = delete_file(Socket, FirstFileInDir),
   ?assertEqual("ok", Status8_1),
-  ?assertEqual(list_to_atom(?VEREMOTEIO), Answer8_1),
+  ?assertEqual(list_to_atom(?VENOENT), Answer8_1),
 
   {Status9, Files9, AnswerOpt9} = ls(Socket, DirName, 10, non),
   ?assertEqual("ok", Status9),
@@ -2393,7 +2393,7 @@ files_manager_standard_files_test(Config) ->
   ?assertEqual(ok, AnsDirDelete),
 
   AnsDirDelete2 = rpc:call(Node1, logical_files_manager, rmdir, [DirName]),
-  ?assertEqual({logical_file_system_error, ?VEREMOTEIO}, AnsDirDelete2),
+  ?assertEqual({logical_file_system_error, ?VENOENT}, AnsDirDelete2),
 
   RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns).
