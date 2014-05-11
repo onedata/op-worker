@@ -55,17 +55,9 @@ change_file_owner(FullFileName, NewUID, NewUName) ->
     ?debug("change_file_owner(FullFileName: ~p, NewUID: ~p, NewUName: ~p)", [FullFileName, NewUID, NewUName]),
 
     {ok, #veil_document{record = #file{} = File} = FileDoc} = fslogic_objects:get_file(FullFileName),
-    {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
+    {ok, UserDoc} = fslogic_objects:get_user(),
 
-    case fslogic_perms:check_file_perms(FullFileName, UserDocStatus, UserDoc, FileDoc, root) of
-        {ok, true} -> ok;
-        {ok, false} ->
-            lager:warning("Changing file's owner without permissions: ~p", [FullFileName]),
-            throw(?VEPERM);
-        {PermsStat, PermsOK} ->
-            lager:warning("Cannot check permissions of file ~p. Reason: ~p:~p", [FullFileName, PermsStat, PermsOK]),
-            throw(?VEREMOTEIO)
-    end,
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, root),
 
     NewFile =
         case user_logic:get_user({login, NewUName}) of
@@ -97,18 +89,10 @@ change_file_group(_FullFileName, _GID, _GName) ->
     #atom{value = ?VENOTSUP}.
 
 change_file_perms(FullFileName, Perms) ->
-    {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
+    {ok, UserDoc} = fslogic_objects:get_user(),
     {ok, #veil_document{record = #file{} = File} = FileDoc} = fslogic_objects:get_file(FullFileName),
 
-    case fslogic_perms:check_file_perms(FullFileName, UserDocStatus, UserDoc, FileDoc) of
-        {ok, true} -> ok;
-        {ok, false} ->
-            lager:warning("Changing file's permissions without permissions: ~p", [FullFileName]),
-            throw(?VEPERM);
-        {PermsStat, PermsOK} ->
-            lager:warning("Cannot check permissions of file ~p. Reason: ~p:~p", [FullFileName, PermsStat, PermsOK]),
-            throw(?VEREMOTEIO)
-    end,
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc),
 
     NewFile = fslogic_meta:update_meta_attr(File, ctime, vcn_utils:time()),
     NewFile1 = FileDoc#veil_document{record = NewFile#file{perms = Perms}},
@@ -165,17 +149,9 @@ get_file_attr(FullFileName) ->
 
 delete_file(FullFileName) ->
     {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
-    {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
+    {ok, UserDoc} = fslogic_objects:get_user(),
 
-    case fslogic_perms:check_file_perms(FullFileName, UserDocStatus, UserDoc, FileDoc) of
-        {ok, true} -> ok;
-        {ok, false} ->
-            lager:warning("Deleting file without permissions: ~p", [FullFileName]),
-            throw(?VEPERM);
-        {PermsStat, PermsOK} ->
-            lager:warning("Cannot check permissions of file ~p. Reason: ~p:~p", [FullFileName, PermsStat, PermsOK]),
-            throw(?VEREMOTEIO)
-    end,
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDocStatus, UserDoc, FileDoc),
 
     FileDesc = FileDoc#veil_document.record,
     {ok, ChildrenTmpAns} =
@@ -198,19 +174,10 @@ delete_file(FullFileName) ->
 
 
 rename_file(FullFileName, FullNewFileName) ->
-    {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
-
+    {ok, UserDoc} = fslogic_objects:get_user(),
     {ok, #veil_document{record = #file{} = OldFile} = OldDoc} = fslogic_objects:get_file(FullFileName),
 
-    case fslogic_perms:check_file_perms(FullFileName, UserDocStatus, UserDoc, OldDoc) of
-        {ok, true} -> ok;
-        {ok, false} ->
-            lager:warning("Renaming file without permissions: ~p", [FullFileName]),
-            throw(?VEPERM);
-        {PermsStat, PermsOK} ->
-            lager:warning("Cannot check permissions of file ~p. Reason: ~p:~p", [FullFileName, PermsStat, PermsOK]),
-            throw(?VEREMOTEIO)
-    end,
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, UserDoc, OldDoc),
 
     %% Check if destination file exists
     case fslogic_objects:get_file(FullNewFileName) of
@@ -235,18 +202,8 @@ rename_file(FullFileName, FullNewFileName) ->
     OldDir = fslogic_path:strip_path_leaf(FullFileName),
     {ok, OldParentDoc} = fslogic_objects:get_file(OldDir),
 
-    {PermsStat1, PermsOK1} = fslogic_perms:check_file_perms(NewDir, UserDocStatus, UserDoc, NewParentDoc, write),
-    {PermsStat2, PermsOK2} = fslogic_perms:check_file_perms(OldDir, UserDocStatus, UserDoc, OldParentDoc, write),
-
-    case {{PermsStat1, PermsStat2}, {PermsOK1, PermsOK2}} of
-        {{ok, ok}, {true, true}} -> ok;
-        {{ok, ok}, _} ->
-            lager:warning("Moving file without permissions: ~p", [FullFileName]),
-            throw(?VEPERM);
-        {PermsStats, PermsOKs} ->
-            lager:warning("Cannot check permissions of files ~p and ~p. Reason: ~p:~p", [FullFileName, FullNewFileName, PermsStats, PermsOKs]),
-            throw(?VEREMOTEIO)
-    end,
+    ok = fslogic_perms:check_file_perms(NewDir, UserDoc, NewParentDoc, write),
+    ok = fslogic_perms:check_file_perms(OldDir, UserDoc, OldParentDoc, write),
 
     MoveOnStorage =
         fun(#file{type = ?REG_TYPE}) -> %% Returns new file record with updated file_id field or throws excpetion

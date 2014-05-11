@@ -24,7 +24,7 @@
 -include("logging.hrl").
 
 %% API
--export([check_file_perms/4, check_file_perms/5]).
+-export([check_file_perms/4, check_file_perms/4]).
 -export([assert_group_access/3]).
 
 %% ====================================================================
@@ -35,58 +35,49 @@
 %% ====================================================================
 %% @doc Checks if the user has permission to modify file (e,g. change owner).
 %% @end
--spec check_file_perms(FileName :: string(), UserDocStatus :: atom(), UserDoc :: term(), FileDoc :: term()) -> Result when
+-spec check_file_perms(FileName :: string(), UserDoc :: term(), FileDoc :: term()) -> Result when
     Result :: {ok, boolean()} | {error, ErrorDetail},
     ErrorDetail :: term().
 %% ====================================================================
-check_file_perms(FileName, UserDocStatus, UserDoc, FileDoc) ->
-    check_file_perms(FileName, UserDocStatus, UserDoc, FileDoc, perms).
+check_file_perms(FileName, UserDoc, FileDoc) ->
+    check_file_perms(FileName, UserDoc, FileDoc, perms).
 
 %% check_file_perms/5
 %% ====================================================================
 %% @doc Checks if the user has permission to modify file (e,g. change owner).
 %% @end
--spec check_file_perms(FileName :: string(), UserDocStatus :: atom(), UserDoc :: term(), FileDoc :: term(), CheckType :: atom()) -> Result when
+-spec check_file_perms(FileName :: string(), UserDoc :: term(), FileDoc :: term(), CheckType :: atom()) -> Result when
     Result :: {ok, boolean()} | {error, ErrorDetail},
     ErrorDetail :: term().
 %% ====================================================================
-check_file_perms(FileName, UserDocStatus, UserDoc, FileDoc, CheckType) ->
-    case CheckType of
-        root ->
-            case {UserDocStatus, UserDoc} of
-                {ok, _} ->
-                    {ok, false};
-                {error, get_user_id_error} -> {ok, true};
-                _ -> {UserDocStatus, UserDoc}
+check_file_perms(_FileName, #veil_document{uuid = ?CLUSTER_USER_ID}, _FileDoc, _CheckType) ->
+    ok;
+check_file_perms(FileName, UserDoc, _FileDoc, root = CheckType) ->
+    {error, {permission_denied, {{user, UserDoc}, {file, FileName}, {check, CheckType}}}};
+check_file_perms(FileName, UserDoc, FileDoc, CheckType) ->
+    case string:tokens(FileName, "/") of
+        [?GROUPS_BASE_DIR_NAME | _] ->
+            FileRecord = FileDoc#veil_document.record,
+            CheckOwn =
+                case CheckType of
+                    perms -> true;
+                    _ -> %write
+                        FileRecord#file.perms band ?WR_GRP_PERM =:= 0
+                end,
+
+            case CheckOwn of
+                true ->
+                    case UserDoc#veil_document.uuid of
+                        FileRecord#file.uid ->
+                            ok;
+                        _ ->
+                            {error, {permission_denied, {{user, UserDoc}, {file, FileName}, {check, CheckType}}}}
+                    end;
+                false ->
+                    ok
             end;
         _ ->
-            case string:tokens(FileName, "/") of
-                [?GROUPS_BASE_DIR_NAME | _] ->
-                    FileRecord = FileDoc#veil_document.record,
-                    CheckOwn = case CheckType of
-                                   perms -> true;
-                                   _ -> %write
-                                       case FileRecord#file.perms band ?WR_GRP_PERM of
-                                           0 -> true;
-                                           _ -> false
-                                       end
-                               end,
-
-                    case CheckOwn of
-                        true ->
-                            case {UserDocStatus, UserDoc} of
-                                {ok, _} ->
-                                    UserUuid = UserDoc#veil_document.uuid,
-                                    {ok, FileRecord#file.uid =:= UserUuid};
-                                {error, get_user_id_error} -> {ok, true};
-                                _ -> {UserDocStatus, UserDoc}
-                            end;
-                        false ->
-                            {ok, true}
-                    end;
-                _ ->
-                    {ok, true}
-            end
+            ok
     end.
 
 %% assert_group_access/3

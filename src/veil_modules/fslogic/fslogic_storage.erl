@@ -18,6 +18,10 @@
 %% API
 -export([get_sh_for_fuse/2, select_storage/2, insert_storage/2, insert_storage/3, get_new_file_id/4]).
 
+-ifdef(TEST).
+-export([create_dirs/4]).
+-endif.
+
 
 %% ====================================================================
 %% API functions
@@ -34,17 +38,14 @@ get_new_file_id(File, UserDoc, SHInfo, ProtocolVersion) ->
         case {string:tokens(File, "/"), UserDoc} of
             {[?GROUPS_BASE_DIR_NAME, GroupName | _], _} -> %% Group dir context
                 {"/" ++ ?GROUPS_BASE_DIR_NAME ++ "/" ++ GroupName, fslogic_utils:get_files_number(group, GroupName, ProtocolVersion)};
-            {_, get_user_id_error} -> {"/", {error, get_user_id_error}}; %% Unknown context
+            {_, #veil_document{uuid = ?CLUSTER_USER_ID}} -> {"/", fslogic_utils:get_files_number(user, UserDoc#veil_document.uuid, ProtocolVersion)};
             _ -> {"/users/" ++ fslogic_path:get_user_root(UserDoc), fslogic_utils:get_files_number(user, UserDoc#veil_document.uuid, ProtocolVersion)}
         end,
-    File_id_beg = case Root1 of
-                      get_user_id_error -> "/";
-                      _ ->
-                          case CountStatus of
-                              ok -> create_dirs(FilesCount, ?FILE_COUNTING_BASE, SHInfo, Root1 ++ "/");
-                              _ -> Root1 ++ "/"
-                          end
-                  end,
+    File_id_beg =
+        case CountStatus of
+            ok -> create_dirs(FilesCount, ?FILE_COUNTING_BASE, SHInfo, Root1 ++ "/");
+            _  -> Root1 ++ "/"
+        end,
 
     WithoutSpecial = lists:foldl(fun(Char, Ans) ->
         case Char > 255 of

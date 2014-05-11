@@ -51,7 +51,7 @@ get_user(#veil_document{record = #user{}} = UserDoc) ->
     {ok, UserDoc};
 get_user({dn, UserDN}) ->
     case UserDN of
-        undefined -> {error, get_user_id_error};
+        undefined -> {ok, #veil_document{uuid = "0", record = #user{login = "root", role = admin}}};
         DN ->
             case user_logic:get_user({dn, DN}) of
                 {ok, #veil_document{}} = OKRet -> OKRet;
@@ -75,12 +75,12 @@ get_file(#veil_document{record = #file{}} = FileDoc) ->
 get_file(FullFileName) ->
     get_file(fslogic_context:get_protocol_version(), FullFileName, fslogic_context:get_fuse_id()).
 
+
+get_file(ProtocolVersion, File, _FuseID) when is_tuple(File) ->
+    dao_lib:apply(dao_vfs, get_file, [File], ProtocolVersion);
 get_file(_ProtocolVersion, FullFileName, _FuseID) ->
-    case get_file_helper(FullFileName, get_file) of
-        {error, file_not_found} -> {error, file_not_found};
-        {error, Reason} -> {error, Reason};
-        {ok, FileDoc} -> {ok, FileDoc}
-    end.
+    get_file_helper(FullFileName, get_file).
+
 
 %% get_waiting_file/3
 %% ====================================================================
@@ -93,11 +93,7 @@ get_waiting_file(FullFileName) ->
     get_waiting_file(fslogic_context:get_protocol_version(), FullFileName, fslogic_context:get_fuse_id()).
 
 get_waiting_file(_ProtocolVersion, FullFileName, _FuseID) ->
-    case get_file_helper(FullFileName, get_waiting_file) of
-        {error, file_not_found} -> {error, file_not_found};
-        {error, Reason} -> {error, Reason};
-        {ok, FileDoc} -> {ok, FileDoc}
-    end.
+    get_file_helper(FullFileName, get_waiting_file).
 
 get_file_helper(File, Fun) ->
     get_file_helper(fslogic_context:get_protocol_version(), File, fslogic_context:get_fuse_id(), Fun).

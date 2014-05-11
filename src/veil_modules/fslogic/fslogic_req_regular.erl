@@ -58,21 +58,13 @@ get_new_file_location(FullFileName, Mode) ->
     ParentFileName = fslogic_path:strip_path_leaf(FullFileName),
     {ok, #veil_document{record = #file{}} = ParentDoc} = fslogic_objects:get_file(ParentFileName),
 
-    {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
+    {ok, UserDoc} = fslogic_objects:get_user(),
     FileBaseName = fslogic_path:get_user_file_name(FullFileName, UserDoc),
 
-    case fslogic_perms:check_file_perms(FileBaseName, UserDocStatus, UserDoc, ParentDoc, write) of
-        {ok, true} -> ok;
-        {ok, false} ->
-            lager:warning("Create file without permissions: ~p", [FullFileName]),
-            throw(?VEPERM);
-        {PermsStat, PermsOK} ->
-            lager:warning("Cannot check permissions of file ~p. Reason: ~p:~p", [FullFileName, PermsStat, PermsOK]),
-            throw(?VEREMOTEIO)
-    end,
+    ok = fslogic_perms:check_file_perms(FileBaseName, UserDoc, ParentDoc, write),
 
     {ok, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], fslogic_context:get_protocol_version()),
-    {ok, #veil_document{uuid = UUID, record = #storage_info{} = Storage}} = fslogic_storage:select_storage(fslogic_context:get_fuse_id(), StorageList),
+    #veil_document{uuid = UUID, record = #storage_info{} = Storage} = fslogic_storage:select_storage(fslogic_context:get_fuse_id(), StorageList),
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
     FileId = fslogic_storage:get_new_file_id(FileBaseName, UserDoc, SHI, fslogic_context:get_protocol_version()),
     FileLocation = #file_location{storage_id = UUID, file_id = FileId},

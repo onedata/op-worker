@@ -167,7 +167,7 @@ handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
     end;
 
 handle(ProtocolVersion, {internal_call, Record}) ->
-    put(fuse_id, ?CLUSTER_FUSE_ID),
+    fslogic_context:set_fuse_id(?CLUSTER_FUSE_ID),
     handle(ProtocolVersion, #fusemessage{input = Record, message_type = atom_to_list(vcn_utils:record_type(Record))});
 
 handle(_ProtocolVersion, Record) when is_record(Record, callback) ->

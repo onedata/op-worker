@@ -34,17 +34,9 @@ create_dir(FullFileName, Mode) ->
     ParentFileName = fslogic_path:strip_path_leaf(FullFileName),
     {ok, #veil_document{record = #file{}} = ParentDoc} = fslogic_objects:get_file(ParentFileName),
 
-    {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
+    {ok, UserDoc} = fslogic_objects:get_user(),
 
-    case fslogic_perms:check_file_perms(FullFileName, UserDocStatus, UserDoc, ParentDoc, write) of
-        {ok, true} -> ok;
-        {ok, false} ->
-            lager:warning("Creating directory without permissions: ~p", [FullFileName]),
-            throw(?VEPERM);
-        {PermsStat, PermsOK} ->
-            lager:warning("Cannot check permissions of file ~p. Reason: ~p:~p", [ParentFileName, PermsStat, PermsOK]),
-            throw(?VEREMOTEIO)
-    end,
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, ParentDoc, write),
 
     {ok, UserId} = fslogic_context:get_user_id(),
 
@@ -102,17 +94,9 @@ create_link(FullFileName, LinkValue) ->
     ParentFileName = fslogic_path:strip_path_leaf(FullFileName),
     {ok, #veil_document{record = #file{}} = ParentDoc} = fslogic_objects:get_file(ParentFileName),
 
-    {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
+    {ok, UserDoc} = fslogic_objects:get_user(),
 
-    case fslogic_perms:check_file_perms(FullFileName, UserDocStatus, UserDoc, ParentDoc, write) of
-        {ok, true} -> ok;
-        {ok, false} ->
-            lager:warning("Creating link without permissions: ~p", [FullFileName]),
-            throw(?VEPERM);
-        {PermsStat, PermsOK} ->
-            lager:warning("Cannot check permissions of file ~p. Reason: ~p:~p", [ParentFileName, PermsStat, PermsOK]),
-            throw(?VEREMOTEIO)
-    end,
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, ParentDoc, write),
 
     {ok, UserId} = fslogic_context:get_user_id(),
 

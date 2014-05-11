@@ -107,10 +107,7 @@ get_user_groups(UserDocStatus, UserDoc) ->
         ok ->
             {ok, user_logic:get_team_names(UserDoc)};
         _ ->
-            case UserDoc of
-                get_user_id_error -> {error, get_user_groups_error};
-                _ -> {error, get_user_error}
-            end
+            {error, UserDoc}
     end.
 
 %% get_files_number/3

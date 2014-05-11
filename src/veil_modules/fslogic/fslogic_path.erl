@@ -29,7 +29,7 @@
 -export([verify_file_name/1]).
 -export([strip_path_leaf/1, basename/1]).
 -export([get_parent_and_name_from_path/2]).
--export([get_user_root/0, get_user_root/2]).
+-export([get_user_root/0, get_user_root/2, get_user_root/1]).
 
 %% ====================================================================
 %% API functions
@@ -42,13 +42,9 @@ get_user_file_name(FullFileName) ->
 get_user_file_name(FullFileName, UserDoc) ->
     {ok, Tokens} = verify_file_name(FullFileName),
 
-    UserName =
-        case UserDoc of
-            get_user_id_error -> "root";
-            _ ->
-                UserRec = dao_lib:strip_wrappers(UserDoc),
-                UserRec#user.login
-        end,
+    UserRec = dao_lib:strip_wrappers(UserDoc),
+    UserName = UserRec#user.login,
+
     case Tokens of
         [UserName | UserTokens] -> "/" ++ string:join(UserTokens, "/");
         _ -> "/" ++ string:join(Tokens, "/")
@@ -109,10 +105,7 @@ get_full_file_name(FileName, Request, UserDocStatus, UserDoc) ->
                 _ -> {error, invalid_group_access}
             end;
         _ ->
-            case UserDoc of
-                get_user_id_error -> {ok, VerifiedFileName};
-                _                   -> {error, {user_doc_not_found, UserDoc}}
-            end
+            {error, {user_doc_not_found, UserDoc}}
     end.
 
 verify_file_name(FileName) ->
@@ -178,9 +171,12 @@ get_parent_and_name_from_path(Path, ProtocolVersion) ->
     ErrorDesc :: atom.
 %% ====================================================================
 
-get_user_root(UserDoc) ->
-    UserRecord = UserDoc#veil_document.record,
-    "/" ++ UserRecord#user.login.
+get_user_root(#veil_document{uuid = ?CLUSTER_USER_ID}) ->
+    "";
+get_user_root(#veil_document{record = UserRec}) ->
+    get_user_root(UserRec);
+get_user_root(#user{login = Login}) ->
+    "/" ++ Login.
 
 
 %% get_user_root/2
@@ -193,16 +189,10 @@ get_user_root(UserDoc) ->
     ErrorDesc :: atom.
 %% ====================================================================
 
-get_user_root(UserDocStatus, UserDoc) ->
-    case UserDocStatus of
-        ok ->
-            {ok, get_user_root(UserDoc)};
-        _ ->
-            case UserDoc of
-                get_user_id_error -> get_user_id_error;
-                _ -> {error, get_user_error}
-            end
-    end.
+get_user_root(ok, UserDoc) ->
+    get_user_root(UserDoc);
+get_user_root(error, Reason) ->
+    {error, Reason}.
 
 %% get_user_root/0
 %% ====================================================================

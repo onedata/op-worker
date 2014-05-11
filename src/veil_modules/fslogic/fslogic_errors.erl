@@ -62,6 +62,8 @@ gen_error_message(getlink, Error) ->
     #linkinfo{answer = Error, file_logic_name = ""};
 gen_error_message(testchannel, Error) ->
     #atom{value = Error};
+gen_error_message(createfileack, Error) ->
+    #atom{value = Error};
 gen_error_message(RecordName, _Error) ->
     ?error("Unsupported record: ~p", [RecordName]),
     throw({unsupported_record, RecordName}).
@@ -75,8 +77,8 @@ gen_error_code({error, Reason}) ->
     gen_error_code(Reason);
 gen_error_code(file_not_found) ->
     {?VENOENT, no_details};
-gen_error_code(get_user_id_error) ->
-    {?VEPERM, get_user_id_error};
+gen_error_code({permission_denied, Details}) ->
+    {?VEPERM, {permission_denied, Details}};
 gen_error_code(user_not_found) ->
     {?VEPERM, user_not_found};
 gen_error_code(user_doc_not_found) ->

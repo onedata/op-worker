@@ -55,7 +55,7 @@ get_user_id() ->
         DN ->
             case fslogic_objects:get_user({dn, DN}) of
                 {ok, #veil_document{uuid = UID}} -> {ok, UID};
-                _ -> {error, get_user_error}
+                Error -> Error
             end
     end.
 
