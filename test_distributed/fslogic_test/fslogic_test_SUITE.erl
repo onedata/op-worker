@@ -1873,7 +1873,7 @@ fuse_requests_test(Config) ->
   ?assertEqual(list_to_atom(?VOK), Answer14),
   {Status14_1, Answer14_1} = delete_file(Socket, DirName),
   ?assertEqual("ok", Status14_1),
-  ?assertEqual(list_to_atom(?VEREMOTEIO), Answer14_1),
+  ?assertEqual(list_to_atom(?VENOENT), Answer14_1),
 
   {Status15, Answer15} = delete_file(Socket, TestFile),
   ?assertEqual("ok", Status15),

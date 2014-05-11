@@ -83,6 +83,8 @@ gen_error_code(user_doc_not_found) ->
     {?VEPERM, user_doc_not_found};
 gen_error_code(invalid_group_access) ->
     {?VEPERM, invalid_group_access};
+gen_error_code(file_exists) ->
+    {?VEEXIST, file_already_exists};
 gen_error_code(ErrorCode) when is_list(ErrorCode) ->
     case lists:member(ErrorCode, ?ALL_ERROR_CODES) of
         true    -> {ErrorCode, no_details};

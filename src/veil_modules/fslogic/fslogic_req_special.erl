@@ -114,7 +114,7 @@ create_link(FullFileName, LinkValue) ->
             throw(?VEREMOTEIO)
     end,
 
-    {ok, UserId} = fslogic_context:get_fuse_id(),
+    {ok, UserId} = fslogic_context:get_user_id(),
 
     Groups = fslogic_utils:get_group_owner(UserFilePath), %% Get owner group name based on file access path
 

@@ -137,7 +137,11 @@ get_file_helper(ProtocolVersion, File, FuseID, Fun) ->
 
 save_file_descriptor(ProtocolVersion, File, Validity) ->
     Descriptor = update_file_descriptor(File#veil_document.record, Validity),
-    dao_lib:apply(dao_vfs, save_descriptor, [File#veil_document{record = Descriptor}], ProtocolVersion).
+    case dao_lib:apply(dao_vfs, save_descriptor, [File#veil_document{record = Descriptor}], ProtocolVersion) of
+        {error, Reason} ->
+            {error, {save_file_descriptor, {Reason, Descriptor}}};
+        Other -> Other
+    end.
 
 
 %% save_file_descriptor/4
@@ -179,7 +183,11 @@ save_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
 
 save_new_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
     Descriptor = update_file_descriptor(#file_descriptor{file = Uuid, fuse_id = FuseID}, Validity),
-    dao_lib:apply(dao_vfs, save_descriptor, [Descriptor], ProtocolVersion).
+    case dao_lib:apply(dao_vfs, save_descriptor, [Descriptor], ProtocolVersion) of
+        {error, Reason} ->
+            {error, {save_new_file_descriptor, {Reason, Descriptor}}};
+        Other -> Other
+    end.
 
 %% update_file_descriptor/2
 %% ====================================================================
