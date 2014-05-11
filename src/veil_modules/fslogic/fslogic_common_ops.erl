@@ -380,22 +380,20 @@ get_link(FullFileName) ->
     end.
 
 get_statfs() ->
-    case fslogic_objects:get_user() of
-        {ok, UserDoc} ->
-            case user_logic:get_quota(UserDoc) of
-                {ok, Quota} ->
-                    case user_logic:get_files_size(UserDoc#veil_document.uuid, fslogic_context:get_protocol_version()) of
-                        {ok, Size} when Size>Quota#quota.size ->
-                            %% df -h cannot handle situation when files_size is greater than quota_size
-                            #statfsinfo{answer = ?VOK, quota_size = Quota#quota.size, files_size = Quota#quota.size};
-                        {ok, Size} ->
-                            #statfsinfo{answer = ?VOK, quota_size = Quota#quota.size, files_size = Size};
-                        _ ->
-                            #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
-                    end;
-                _ ->
-                    #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
-            end;
+    {ok, UserDoc} = fslogic_objects:get_user(),
+    Quota =
+        case user_logic:get_quota(UserDoc) of
+            {ok, QuotaRes} -> QuotaRes;
+            {error, Reason} ->
+                throw({?VEREMOTEIO, {failed_to_get_quota, Reason}})
+        end,
+
+    case user_logic:get_files_size(UserDoc#veil_document.uuid, fslogic_context:get_protocol_version()) of
+        {ok, Size} when Size>Quota#quota.size ->
+            %% df -h cannot handle situation when files_size is greater than quota_size
+            #statfsinfo{answer = ?VOK, quota_size = Quota#quota.size, files_size = Quota#quota.size};
+        {ok, Size} ->
+            #statfsinfo{answer = ?VOK, quota_size = Quota#quota.size, files_size = Size};
         _ ->
             #statfsinfo{answer = ?VEREMOTEIO, quota_size = -1, files_size = -1}
     end.
