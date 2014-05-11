@@ -24,7 +24,7 @@
 -include("logging.hrl").
 
 %% API
--export([get_file/1, get_waiting_file/1]).
+-export([get_file/1, get_waiting_file/1, get_file/3, get_waiting_file/3]).
 -export([save_file_descriptor/3, save_file_descriptor/4, save_new_file_descriptor/4, update_file_descriptor/2, delete_old_descriptors/2]).
 -export([get_user/0]).
 
@@ -36,7 +36,7 @@ get_user(#veil_document{record = #user{}} = UserDoc) ->
     {ok, UserDoc};
 get_user({dn, UserDN}) ->
     case UserDN of
-        undefined -> {error, {?VEPERM, get_user_id_error}};
+        undefined -> {error, get_user_id_error};
         DN ->
             user_logic:get_user({dn, DN})
     end.
@@ -53,9 +53,12 @@ get_user() ->
     Result :: term().
 %% ====================================================================
 get_file(FullFileName) ->
+    get_file(fslogic_context:get_protocol_version(), FullFileName, fslogic_context:get_fuse_id()).
+
+get_file(_ProtocolVersion, FullFileName, _FuseID) ->
     case get_file_helper(FullFileName, get_file) of
-        {error, file_not_found} -> {error, {?VENOENT, file_not_found}};
-        {error, Reason} -> {error, {?VEREMOTEIO, Reason}};
+        {error, file_not_found} -> {error, file_not_found};
+        {error, Reason} -> {error, Reason};
         {ok, FileDoc} -> {ok, FileDoc}
     end.
 
@@ -67,9 +70,12 @@ get_file(FullFileName) ->
     Result :: term().
 %% ====================================================================
 get_waiting_file(FullFileName) ->
+    get_waiting_file(fslogic_context:get_protocol_version(), FullFileName, fslogic_context:get_fuse_id()).
+
+get_waiting_file(_ProtocolVersion, FullFileName, _FuseID) ->
     case get_file_helper(FullFileName, get_waiting_file) of
-        {error, file_not_found} -> {error, {?VENOENT, file_not_found}};
-        {error, Reason} -> {error, {?VEREMOTEIO, Reason}};
+        {error, file_not_found} -> {error, file_not_found};
+        {error, Reason} -> {error, Reason};
         {ok, FileDoc} -> {ok, FileDoc}
     end.
 

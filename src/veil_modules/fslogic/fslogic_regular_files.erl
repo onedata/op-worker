@@ -30,9 +30,7 @@
 %% API functions
 %% ====================================================================
 
-
-get_file_location(FullFileName) ->
-    {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
+get_file_location(FileDoc = #veil_document{record = #file{}}) ->
     Validity = ?LOCATION_VALIDITY,
     case FileDoc#veil_document.record#file.type of
         ?REG_TYPE ->
@@ -55,7 +53,10 @@ get_file_location(FullFileName) ->
                     #filelocation{answer = ?VEREMOTEIO, storage_id = -1, file_id = "", validity = 0}
             end;
         _ -> #filelocation{answer = ?VENOTSUP, storage_id = -1, file_id = "", validity = 0}
-    end.
+    end;
+get_file_location(FullFileName) ->
+    {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
+    get_file_location(FileDoc).
 
 get_new_file_location(FullFileName, Mode) ->
     {ParentFound, ParentInfo} = fslogic_utils:get_parent_and_name_from_path(FullFileName, fslogic_context:get_protocol_version()),
@@ -78,7 +79,7 @@ get_new_file_location(FullFileName, Mode) ->
 
                                         {UserIdStatus, UserId} = case {UserDocStatus, UserDoc} of
                                                                      {ok, _} -> {ok, UserDoc#veil_document.uuid};
-                                                                     {error, {?VEPERM, get_user_id_error}} -> {ok, ?CLUSTER_USER_ID};
+                                                                     {error, get_user_id_error} -> {ok, ?CLUSTER_USER_ID};
                                                                      _ -> {UserDocStatus, UserDoc}
                                                                  end,
 
@@ -175,7 +176,9 @@ create_file_ack(FullFileName) ->
                     lager:warning("Cannot find waiting file: ~p", [FullFileName]),
                     #atom{value = ?VENOENT}
             end;
-        _ -> #atom{value = ?VEREMOTEIO}
+        UnknownError ->
+            ?error("create_file_ack unknown error: ~p", [UnknownError]),
+            #atom{value = ?VEREMOTEIO}
     end.
 
 file_not_used(FullFileName) ->

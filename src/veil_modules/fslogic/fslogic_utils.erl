@@ -25,8 +25,8 @@
 %% API
 -export([strip_path_leaf/1, basename/1, get_parent_and_name_from_path/2, create_children_list/1, create_children_list/2, update_meta_attr/3, time/0, get_user_id_from_system/1]).
 -export([verify_file_name/1, get_full_file_name/1, get_full_file_name/2, get_full_file_name/4]).
--export([get_sh_and_id/3, get_user_id/0]).
--export([get_user_file_name/1, get_user_file_name/2]).
+-export([get_sh_and_id/3, get_user_id/0, get_files_number/3]).
+-export([get_user_file_name/1, get_user_file_name/2, create_dirs/4]).
 -export([get_group_owner/1, get_new_file_id/4, update_parent_ctime/2, check_file_perms/5, check_file_perms/4, get_user_groups/2, update_user_files_size_view/1]).
 
 %% ====================================================================
@@ -75,7 +75,7 @@ get_user_file_name(FullFileName, UserDoc) ->
 
     UserName =
         case UserDoc of
-            {_, get_user_id_error} -> "root";
+            get_user_id_error -> "root";
             _ ->
                 UserRec = dao_lib:strip_wrappers(UserDoc),
                 UserRec#user.login
@@ -156,19 +156,19 @@ get_full_file_name(FileName, Request, UserDocStatus, UserDoc) ->
                             Root = get_user_root(UserDoc),
                             {ok, Root ++ "/" ++ VerifiedFileName}
                     end;
-                _ -> {error, {?VEPERM, invalid_group_access}}
+                _ -> {error, invalid_group_access}
             end;
         _ ->
             case UserDoc of
-                {_, get_user_id_error} -> {ok, VerifiedFileName};
-                _                   -> {error, {?VEPERM, {user_doc_not_found, UserDoc}}}
+                get_user_id_error -> {ok, VerifiedFileName};
+                _                   -> {error, {user_doc_not_found, UserDoc}}
             end
     end.
 
 verify_file_name(FileName) ->
     Tokens = lists:filter(fun(X) -> X =/= "." end, string:tokens(FileName, "/")),
     case lists:any(fun(X) -> X =:= ".." end, Tokens) of
-        true -> {error, {?VEREMOTEIO, wrong_filename}};
+        true -> {error, wrong_filename};
         _ -> {ok, Tokens}
     end.
 
@@ -410,7 +410,7 @@ get_user_root(UserDocStatus, UserDoc) ->
             {ok, get_user_root(UserDoc)};
         _ ->
             case UserDoc of
-                {_, get_user_id_error} -> {error, get_user_id_error};
+                get_user_id_error -> get_user_id_error;
                 _ -> {error, get_user_error}
             end
     end.
@@ -445,7 +445,7 @@ get_user_groups(UserDocStatus, UserDoc) ->
             {ok, user_logic:get_team_names(UserDoc)};
         _ ->
             case UserDoc of
-                {_, get_user_id_error} -> {error, get_user_groups_error};
+                get_user_id_error -> {error, get_user_groups_error};
                 _ -> {error, get_user_error}
             end
     end.
@@ -597,7 +597,7 @@ check_file_perms(FileName, UserDocStatus, UserDoc, FileDoc, CheckType) ->
             case {UserDocStatus, UserDoc} of
                 {ok, _} ->
                     {ok, false};
-                {error, {_, get_user_id_error}} -> {ok, true};
+                {error, get_user_id_error} -> {ok, true};
                 _ -> {UserDocStatus, UserDoc}
             end;
         _ ->
@@ -619,7 +619,7 @@ check_file_perms(FileName, UserDocStatus, UserDoc, FileDoc, CheckType) ->
                                 {ok, _} ->
                                     UserUuid = UserDoc#veil_document.uuid,
                                     {ok, FileRecord#file.uid =:= UserUuid};
-                                {error, {_, get_user_id_error}} -> {ok, true};
+                                {error, get_user_id_error} -> {ok, true};
                                 _ -> {UserDocStatus, UserDoc}
                             end;
                         false ->

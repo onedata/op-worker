@@ -553,10 +553,10 @@ change_file_perm(FileNameStr, NewPerms) ->
 %% ====================================================================
 exists(FileNameStr) ->
   FileName = check_utf(FileNameStr),
-  {FileNameFindingAns, File} = fslogic:get_full_file_name(FileName),
+  {FileNameFindingAns, File} = fslogic_utils:get_full_file_name(FileName),
   case FileNameFindingAns of
     ok ->
-      {Status, TmpAns} = fslogic:get_file(1, File, ?CLUSTER_FUSE_ID),
+      {Status, TmpAns} = fslogic_objects:get_file(1, File, ?CLUSTER_FUSE_ID),
       case {Status, TmpAns} of
         {ok, _} -> true;
         {error, file_not_found} -> false;
@@ -747,11 +747,11 @@ create_standard_share(File) ->
 %% ====================================================================
 create_share(FileStr, Share_With) ->
   File = check_utf(FileStr),
-  {Status, FullName} = fslogic:get_full_file_name(File),
-  {Status2, UID} = fslogic:get_user_id(),
+  {Status, FullName} = fslogic_utils:get_full_file_name(File),
+  {Status2, UID} = fslogic_utils:get_user_id(),
   case {Status, Status2} of
     {ok, ok} ->
-      case fslogic:get_file(1, FullName, ?CLUSTER_FUSE_ID) of
+      case fslogic_objects:get_file(1, FullName, ?CLUSTER_FUSE_ID) of
         {ok, #veil_document{uuid = FUuid}} ->
           Share_info = #share_desc{file = FUuid, user = UID, share_with = Share_With},
           add_share(Share_info);
@@ -819,10 +819,10 @@ add_share(Share_info) ->
 %% ====================================================================
 get_share({file, FileStr}) ->
   File = check_utf(FileStr),
-  {Status, FullName} = fslogic:get_full_file_name(File),
+  {Status, FullName} = fslogic_utils:get_full_file_name(File),
   case Status of
     ok ->
-      case fslogic:get_file(1, FullName, ?CLUSTER_FUSE_ID) of
+      case fslogic_objects:get_file(1, FullName, ?CLUSTER_FUSE_ID) of
         {ok, #veil_document{uuid = FUuid}} ->
           GetAns = get_share({file_uuid, FUuid}),
           GetAns;
@@ -852,10 +852,10 @@ get_share(Key) ->
 %% ====================================================================
 remove_share({file, FileStr}) ->
   File = check_utf(FileStr),
-  {Status, FullName} = fslogic:get_full_file_name(File),
+  {Status, FullName} = fslogic_utils:get_full_file_name(File),
   case Status of
     ok ->
-      case fslogic:get_file(1, FullName, ?CLUSTER_FUSE_ID) of
+      case fslogic_objects:get_file(1, FullName, ?CLUSTER_FUSE_ID) of
         {ok, #veil_document{uuid = FUuid}} ->
           dao_lib:apply(dao_share, remove_file_share, [{file, FUuid}], 1);
         Other -> Other

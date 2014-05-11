@@ -14,9 +14,10 @@
 -include("fuse_messages_pb.hrl").
 -include("communication_protocol_pb.hrl").
 -include("logging.hrl").
+-include("veil_modules/fslogic/fslogic.hrl").
 
 %% API
--export([gen_error_message/2, normalize_error_code/1]).
+-export([gen_error_message/2, normalize_error_code/1, gen_error_code/1]).
 
 %% ====================================================================
 %% API functions
@@ -69,6 +70,21 @@ normalize_error_code(ErrorCode) when is_atom(ErrorCode) ->
     atom_to_list(ErrorCode);
 normalize_error_code(ErrorCode) when is_list(ErrorCode) ->
     ErrorCode.
+
+gen_error_code({error, Reason}) ->
+    gen_error_code(Reason);
+gen_error_code(file_not_found) ->
+    {?VENOENT, no_details};
+gen_error_code(get_user_id_error) ->
+    {?VEPERM, get_user_id_error};
+gen_error_code(user_not_found) ->
+    {?VEPERM, user_not_found};
+gen_error_code(user_doc_not_found) ->
+    {?VEPERM, user_doc_not_found};
+gen_error_code(invalid_group_access) ->
+    {?VEPERM, invalid_group_access};
+gen_error_code(UnknownReason) ->
+    {?VEREMOTEIO, UnknownReason}.
 
 %% ====================================================================
 %% Internal functions

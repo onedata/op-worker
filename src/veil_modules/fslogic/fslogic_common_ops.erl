@@ -56,7 +56,7 @@ update_times(FullFileName, ATime, MTime, CTime) ->
             #atom{value = ?VEREMOTEIO}
     end.
 
-change_file_owner(FullFileName, UID, UName) ->
+change_file_owner(FullFileName, NewUID, NewUName) ->
     {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
 
     case fslogic_objects:get_file(FullFileName) of
@@ -67,23 +67,23 @@ change_file_owner(FullFileName, UID, UName) ->
                     case PermsOK of
                         true ->
                             {Return, NewFile} =
-                                case dao_lib:apply(dao_users, get_user, [{login, UName}], fslogic_context:get_protocol_version()) of
+                                case dao_lib:apply(dao_users, get_user, [{login, NewUName}], fslogic_context:get_protocol_version()) of
                                     {ok, #veil_document{record = #user{}, uuid = UID}} ->
                                         {?VOK, File#file{uid = UID}};
                                     {error, user_not_found} ->
-                                        lager:warning("chown: cannot find user with name ~p. lTrying UID (~p) lookup...", [UName, UID]),
-                                        case dao_lib:apply(dao_users, get_user, [{uuid, integer_to_list(UID)}], fslogic_context:get_protocol_version()) of
+                                        lager:warning("chown: cannot find user with name ~p. lTrying UID (~p) lookup...", [NewUName, NewUID]),
+                                        case dao_lib:apply(dao_users, get_user, [{uuid, integer_to_list(NewUID)}], fslogic_context:get_protocol_version()) of
                                             {ok, #veil_document{record = #user{}, uuid = UID1}} ->
                                                 {?VOK, File#file{uid = UID1}};
                                             {error, {not_found, missing}} ->
-                                                lager:warning("chown: cannot find user with uid ~p", [UID]),
+                                                lager:warning("chown: cannot find user with uid ~p", [NewUID]),
                                                 {?VEINVAL, File};
                                             {error, Reason1} ->
-                                                lager:error("chown: cannot find user with uid ~p due to error: ~p", [UID, Reason1]),
+                                                lager:error("chown: cannot find user with uid ~p due to error: ~p", [NewUID, Reason1]),
                                                 {?VEREMOTEIO, File}
                                         end;
                                     {error, Reason1} ->
-                                        lager:error("chown: cannot find user with uid ~p due to error: ~p", [UID, Reason1]),
+                                        lager:error("chown: cannot find user with uid ~p due to error: ~p", [NewUID, Reason1]),
                                         {?VEREMOTEIO, File}
                                 end,
 
@@ -167,81 +167,77 @@ change_file_perms(FullFileName, Perms) ->
             #atom{value = ?VEREMOTEIO}
     end.
 
-get_file_attr(FullFileName) ->
-    ?debug("FileAttr for ~p", [FullFileName]),
-    {DocFindStatus, FileDoc} = fslogic_objects:get_file(FullFileName),
-    case {DocFindStatus, FileDoc} of
-        {ok, #veil_document{record = #file{} = File, uuid = FileUUID}} ->
-            {Type, Size} =
-                case File#file.type of
-                    ?DIR_TYPE -> {"DIR", 0};
-                    ?REG_TYPE ->
-                        FileLoc = File#file.location,
-                        S =
-                            case dao_lib:apply(dao_vfs, get_storage, [{uuid, FileLoc#file_location.storage_id}], fslogic_context:get_protocol_version()) of
-                                {ok, #veil_document{record = Storage}} ->
-                                    {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
-                                    case veilhelpers:exec(getattr, SH, [File_id]) of
-                                        {0, #st_stat{st_size = ST_Size} = _Stat} ->
-                                            fslogic_utils:update_meta_attr(File, size, ST_Size),
-                                            ST_Size;
-                                        {Errno, _} ->
-                                            lager:error("Cannot fetch attributes for file: ~p, errno: ~p", [FileUUID, Errno]),
-                                            0
-                                    end;
-                                Other ->
-                                    lager:error("Cannot fetch storage: ~p for file: ~p, reason: ~p", [FileLoc#file_location.storage_id, FileUUID, Other]),
+get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
+    #veil_document{record = #file{} = File, uuid = FileUUID} = FileDoc,
+    {Type, Size} =
+        case File#file.type of
+            ?DIR_TYPE -> {"DIR", 0};
+            ?REG_TYPE ->
+                FileLoc = File#file.location,
+                S =
+                    case dao_lib:apply(dao_vfs, get_storage, [{uuid, FileLoc#file_location.storage_id}], fslogic_context:get_protocol_version()) of
+                        {ok, #veil_document{record = Storage}} ->
+                            {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
+                            case veilhelpers:exec(getattr, SH, [File_id]) of
+                                {0, #st_stat{st_size = ST_Size} = _Stat} ->
+                                    fslogic_utils:update_meta_attr(File, size, ST_Size),
+                                    ST_Size;
+                                {Errno, _} ->
+                                    lager:error("Cannot fetch attributes for file: ~p, errno: ~p", [FileUUID, Errno]),
                                     0
-                            end,
-                        {"REG", S};
-                    ?LNK_TYPE -> {"LNK", 0};
-                    _ -> "UNK"
-                end,
+                            end;
+                        Other ->
+                            lager:error("Cannot fetch storage: ~p for file: ~p, reason: ~p", [FileLoc#file_location.storage_id, FileUUID, Other]),
+                            0
+                    end,
+                {"REG", S};
+            ?LNK_TYPE -> {"LNK", 0};
+            _ -> "UNK"
+        end,
 
-            %% Get owner
-            {UName, UID} =
-                case dao_lib:apply(dao_users, get_user, [{uuid, File#file.uid}], fslogic_context:get_protocol_version()) of
-                    {ok, #veil_document{record = #user{}} = UserDoc} ->
-                        {user_logic:get_login(UserDoc), list_to_integer(UserDoc#veil_document.uuid)};
-                    {error, UError} ->
-                        lager:error("Owner of file ~p not found due to error: ~p", [FileUUID, UError]),
-                        {"", -1}
-                end,
-            GName = %% Get group name
-            case File#file.gids of
-                [GNam | _] -> GNam; %% Select first one as main group
-                [] -> UName
+    %% Get owner
+    {UName, UID} =
+        case dao_lib:apply(dao_users, get_user, [{uuid, File#file.uid}], fslogic_context:get_protocol_version()) of
+            {ok, #veil_document{record = #user{}} = UserDoc} ->
+                {user_logic:get_login(UserDoc), list_to_integer(UserDoc#veil_document.uuid)};
+            {error, UError} ->
+                lager:error("Owner of file ~p not found due to error: ~p", [FileUUID, UError]),
+                {"", -1}
+        end,
+    GName = %% Get group name
+    case File#file.gids of
+        [GNam | _] -> GNam; %% Select first one as main group
+        [] -> UName
+    end,
+
+    %% Get attributes
+    {CTime, MTime, ATime, _SizeFromDB} =
+        case dao_lib:apply(dao_vfs, get_file_meta, [File#file.meta_doc], 1) of
+            {ok, #veil_document{record = FMeta}} ->
+                {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size};
+            {error, Error} ->
+                lager:warning("Cannot fetch file_meta for file (uuid ~p) due to error: ~p", [FileUUID, Error]),
+                {0, 0, 0, 0}
+        end,
+
+    %% Get file links
+    Links = case Type of
+                "DIR" -> case dao_lib:apply(dao_vfs, count_subdirs, [{uuid, FileUUID}], fslogic_context:get_protocol_version()) of
+                             {ok, Sum} -> Sum + 2;
+                             _Other ->
+                                 lager:error([{mod, ?MODULE}], "Error: can not get number of links for file: ~s", [File]),
+                                 -1
+                         end;
+                "REG" -> 1;
+                _ -> -1
             end,
 
-            %% Get attributes
-            {CTime, MTime, ATime, _SizeFromDB} =
-                case dao_lib:apply(dao_vfs, get_file_meta, [File#file.meta_doc], 1) of
-                    {ok, #veil_document{record = FMeta}} ->
-                        {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size};
-                    {error, Error} ->
-                        lager:warning("Cannot fetch file_meta for file (uuid ~p) due to error: ~p", [FileUUID, Error]),
-                        {0, 0, 0, 0}
-                end,
+    #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime, type = Type, size = Size, uname = UName, gname = GName, uid = UID, gid = UID, links = Links};
+get_file_attr(FullFileName) ->
+    ?debug("FileAttr for ~p", [FullFileName]),
+    {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
+    get_file_attr(FileDoc).
 
-            %% Get file links
-            Links = case Type of
-                        "DIR" -> case dao_lib:apply(dao_vfs, count_subdirs, [{uuid, FileUUID}], fslogic_context:get_protocol_version()) of
-                                     {ok, Sum} -> Sum + 2;
-                                     _Other ->
-                                         lager:error([{mod, ?MODULE}], "Error: can not get number of links for file: ~s", [File]),
-                                         -1
-                                 end;
-                        "REG" -> 1;
-                        _ -> -1
-                    end,
-
-            #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime, type = Type, size = Size, uname = UName, gname = GName, uid = UID, gid = UID, links = Links};
-        {error, file_not_found} ->
-            ?debug("FileAttr: ENOENT"),
-            #fileattr{answer = ?VENOENT, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = "", links = -1};
-        _ ->
-            #fileattr{answer = ?VEREMOTEIO, mode = 0, uid = -1, gid = -1, atime = 0, ctime = 0, mtime = 0, type = "", links = -1}
-    end.
 
 delete_file(FullFileName) ->
     {FindStatus, FindTmpAns} = fslogic_objects:get_file(FullFileName),

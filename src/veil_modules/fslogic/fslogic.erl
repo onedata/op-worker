@@ -152,10 +152,8 @@ handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
         ErrorCode when is_atom(ErrorCode) ; is_list(ErrorCode) ->
             ?error_stacktrace("Cannot process request ~p due to error (code: ~p)", [RequestBody, ErrorCode]),
             fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
-        error:{badmatch, {error, ErrorCode}} when is_atom(ErrorCode) ; is_list(ErrorCode) ->
-            ?error_stacktrace("Cannot process request ~p due to error (code: ~p)", [RequestBody, ErrorCode]),
-            fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
-        error:{badmatch, {error, {ErrorCode, ErrorDetails}}} when is_atom(ErrorCode) ; is_list(ErrorCode) ->
+        error:{badmatch, {error, Reason}} ->
+            {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
             ?error_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode))
     end;
@@ -251,7 +249,7 @@ handle_fuse_message(Req = #getnewfilelocation{file_logic_name = FName, mode = Mo
 
 handle_fuse_message(Req = #createfileack{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_regular_files:create_file_ack(FName);
+    fslogic_regular_files:create_file_ack(FullFileName);
 
 handle_fuse_message(Req = #filenotused{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_utils:get_full_file_name(FName, vcn_utils:record_type(Req)),

@@ -391,7 +391,7 @@ get_by_uuid_test(Config) ->
   {FileLocationAns, FileLocation} = rpc:call(Node1, files_tester, get_file_location, [TestFile]),
   ?assertEqual(ok, FileLocationAns),
 
-  {DocFindStatus, FileDoc} = rpc:call(Node1, fslogic, get_file, [1, TestFile, ?CLUSTER_FUSE_ID]),
+  {DocFindStatus, FileDoc} = rpc:call(Node1, fslogic_objects, get_file, [1, TestFile, ?CLUSTER_FUSE_ID]),
   ?assertEqual(ok, DocFindStatus),
   FileLocation2 = rpc:call(Node1, fslogic, handle, [1, {getfilelocation_uuid, FileDoc#veil_document.uuid}]),
   ?assertEqual(?VOK, FileLocation2#filelocation.answer),
@@ -698,7 +698,7 @@ dirs_creating_test(Config) ->
 
   SHInfo = #storage_helper_info{name = ?SH, init_args = ?ARG_TEST_ROOT},
 
-  AnsCreate = rpc:call(Node1, fslogic, create_dirs, [50, 5, SHInfo, "/"]),
+  AnsCreate = rpc:call(Node1, fslogic_utils, create_dirs, [50, 5, SHInfo, "/"]),
   ?assertEqual(2, length(string:tokens(AnsCreate, "/"))),
   ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ AnsCreate)).
 
@@ -757,15 +757,15 @@ user_file_counting_test(Config) ->
   {CreateUserAns2, #veil_document{uuid = UserID2}} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
   ?assertEqual(ok, CreateUserAns2),
 
-  rpc:call(FSLogicNode, fslogic, get_files_number, [user, "not_existing_id", 1]),
+  rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, "not_existing_id", 1]),
   nodes_manager:wait_for_db_reaction(),
-  {CountStatus0, Count0} = rpc:call(FSLogicNode, fslogic, get_files_number, [user, "not_existing_id", 1]),
+  {CountStatus0, Count0} = rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, "not_existing_id", 1]),
   ?assertEqual(ok, CountStatus0),
   ?assertEqual(0, Count0),
 
-  rpc:call(FSLogicNode, fslogic, get_files_number, [user, UserID1, 1]),
+  rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID1, 1]),
   nodes_manager:wait_for_db_reaction(),
-  {CountStatus00, Count00} = rpc:call(FSLogicNode, fslogic, get_files_number, [user, UserID1, 1]),
+  {CountStatus00, Count00} = rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID1, 1]),
   ?assertEqual(ok, CountStatus00),
   ?assertEqual(0, Count00),
 
@@ -799,15 +799,15 @@ user_file_counting_test(Config) ->
     ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt2)
   end, User2FilesEnding),
 
-  rpc:call(FSLogicNode, fslogic, get_files_number, [user, UserID1, 1]),
+  rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID1, 1]),
   nodes_manager:wait_for_db_reaction(),
-  {CountStatus, Count} = rpc:call(FSLogicNode, fslogic, get_files_number, [user, UserID1, 1]),
+  {CountStatus, Count} = rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID1, 1]),
   ?assertEqual(ok, CountStatus),
   ?assertEqual(length(User1FilesEnding), Count),
 
-  rpc:call(FSLogicNode, fslogic, get_files_number, [user, UserID2, 1]),
+  rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID2, 1]),
   nodes_manager:wait_for_db_reaction(),
-  {CountStatus2, Count2} = rpc:call(FSLogicNode, fslogic, get_files_number, [user, UserID2, 1]),
+  {CountStatus2, Count2} = rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID2, 1]),
   ?assertEqual(ok, CountStatus2),
   ?assertEqual(length(User2FilesEnding), Count2),
 
@@ -907,13 +907,13 @@ user_file_size_test(Config) ->
   User1TestUpdateFile = FileBeg ++ "_update",
   FileSize = 100,
 
-  rpc:call(Node, fslogic, get_files_size, ["not_existing_id", 1]),
+  rpc:call(Node, fslogic_utils, get_files_size, ["not_existing_id", 1]),
   nodes_manager:wait_for_db_reaction(),
   {CountStatus0, Count0} = rpc:call(Node, user_logic, get_files_size, ["not_existing_id", 1]),
   ?assertEqual(ok, CountStatus0),
   ?assertEqual(0, Count0),
 
-  rpc:call(Node, fslogic, get_files_size, [UserID1, 1]),
+  rpc:call(Node, fslogic_utils, get_files_size, [UserID1, 1]),
   nodes_manager:wait_for_db_reaction(),
   {CountStatus00, Count00} = rpc:call(Node, user_logic, get_files_size, [UserID1, 1]),
   ?assertEqual(ok, CountStatus00),

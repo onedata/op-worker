@@ -123,7 +123,7 @@ create_link(FullFileName, LinkValue) ->
                         true ->
                             UserId =
                                 case UserDoc of
-                                    {?VEPERM, get_user_id_error} -> ?CLUSTER_USER_ID;
+                                    get_user_id_error -> ?CLUSTER_USER_ID;
                                     _ -> UserDoc#veil_document.uuid
                                 end,
 
