@@ -59,11 +59,11 @@ change_file_owner(FullFileName, NewUID, NewUName) ->
 
     case fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, FileDoc, root) of
         {ok, true} -> ok;
-        {ok, true} ->
+        {ok, false} ->
             lager:warning("Changing file's owner without permissions: ~p", [FullFileName]),
             throw(?VEPERM);
         {PermsStat, PermsOK} ->
-            lager:warning("Cannot check permissions of file. Reason: ~p:~p", [PermsStat, PermsOK]),
+            lager:warning("Cannot check permissions of file ~p. Reason: ~p:~p", [FullFileName, PermsStat, PermsOK]),
             throw(?VEREMOTEIO)
     end,
 
@@ -102,11 +102,11 @@ change_file_perms(FullFileName, Perms) ->
 
     case fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, FileDoc, root) of
         {ok, true} -> ok;
-        {ok, true} ->
+        {ok, false} ->
             lager:warning("Changing file's permissions without permissions: ~p", [FullFileName]),
             throw(?VEPERM);
         {PermsStat, PermsOK} ->
-            lager:warning("Cannot check permissions of file. Reason: ~p:~p", [PermsStat, PermsOK]),
+            lager:warning("Cannot check permissions of file ~p. Reason: ~p:~p", [FullFileName, PermsStat, PermsOK]),
             throw(?VEREMOTEIO)
     end,
 
@@ -163,54 +163,36 @@ get_file_attr(FullFileName) ->
 
 
 delete_file(FullFileName) ->
-    {FindStatus, FindTmpAns} = fslogic_objects:get_file(FullFileName),
+    {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
     {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
-    case FindStatus of
-        ok ->
-            {PermsStat, PermsOK} = fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, FindTmpAns),
-            case PermsStat of
-                ok ->
-                    case PermsOK of
-                        true ->
-                            FileDesc = FindTmpAns#veil_document.record,
-                            {ChildrenStatus, ChildrenTmpAns} = case FileDesc#file.type of
-                                                                   ?DIR_TYPE ->
-                                                                       dao_lib:apply(dao_vfs, list_dir, [FullFileName, 10, 0], fslogic_context:get_protocol_version());
-                                                                   _OtherType -> {ok, []}
-                                                               end,
 
-                            case ChildrenStatus of
-                                ok ->
-                                    case length(ChildrenTmpAns) of
-                                        0 ->
-                                            Status = dao_lib:apply(dao_vfs, remove_file, [FullFileName], fslogic_context:get_protocol_version()),
-                                            case Status of
-                                                ok ->
-                                                    fslogic_meta:update_parent_ctime(fslogic_utils:get_user_file_name(FullFileName), fslogic_utils:time()),
-                                                    #atom{value = ?VOK};
-                                                _BadStatus ->
-                                                    lager:error([{mod, ?MODULE}], "Error: can not remove file: ~s", [FullFileName]),
-                                                    #atom{value = ?VEREMOTEIO}
-                                            end;
-                                        _Other ->
-                                            lager:error([{mod, ?MODULE}], "Error: can not remove file (it has children): ~s", [FullFileName]),
-                                            #atom{value = ?VENOTEMPTY}
-                                    end;
-                                _Other2 ->
-                                    lager:error([{mod, ?MODULE}], "Error: can not remove file (can not check children): ~s", [FullFileName]),
-                                    #atom{value = ?VEREMOTEIO}
-                            end;
-                        false ->
-                            lager:warning("Deleting file without permissions: ~p", [FullFileName]),
-                            #atom{value = ?VEPERM}
-                    end;
-                _ ->
-                    lager:warning("Cannot check permissions of file. Reason: ~p:~p", [PermsStat, PermsOK]),
-                    #atom{value = ?VEREMOTEIO}
-            end;
-        _FindError ->
-            lager:error([{mod, ?MODULE}], "Error: can not remove file (can not check file type): ~s", [FullFileName]),
-            #atom{value = ?VEREMOTEIO}
+    case fslogic_utils:check_file_perms(FullFileName, UserDocStatus, UserDoc, FileDoc) of
+        {ok, true} -> ok;
+        {ok, false} ->
+            lager:warning("Deleting file without permissions: ~p", [FullFileName]),
+            throw(?VEPERM);
+        {PermsStat, PermsOK} ->
+            lager:warning("Cannot check permissions of file ~p. Reason: ~p:~p", [FullFileName, PermsStat, PermsOK]),
+            throw(?VEREMOTEIO)
+    end,
+
+    FileDesc = FileDoc#veil_document.record,
+    {ok, ChildrenTmpAns} =
+        case FileDesc#file.type of
+            ?DIR_TYPE ->
+                dao_lib:apply(dao_vfs, list_dir, [FullFileName, 1, 0], fslogic_context:get_protocol_version());
+            _OtherType -> {ok, []}
+        end,
+
+    case length(ChildrenTmpAns) of
+        0 ->
+            ok = dao_lib:apply(dao_vfs, remove_file, [FullFileName], fslogic_context:get_protocol_version()),
+
+            fslogic_meta:update_parent_ctime(fslogic_utils:get_user_file_name(FullFileName), fslogic_utils:time()),
+            #atom{value = ?VOK};
+        _Other ->
+            lager:error([{mod, ?MODULE}], "Error: can not remove directory (it's not empty): ~s", [FullFileName]),
+            #atom{value = ?VENOTEMPTY}
     end.
 
 
