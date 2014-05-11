@@ -177,13 +177,8 @@ create_file_ack(FullFileName) ->
     end.
 
 file_not_used(FullFileName) ->
-    Status = dao_lib:apply(dao_vfs, remove_descriptor, [{by_file_n_owner, {FullFileName, fslogic_context:get_fuse_id()}}], fslogic_context:get_protocol_version()),
-    case Status of
-        ok -> #atom{value = ?VOK};
-        _Other ->
-            lager:error([{mod, ?MODULE}], "Error: for file not used message, file: ~s", [FullFileName, _Other]),
-            #atom{value = ?VEREMOTEIO}
-    end.
+    ok = dao_lib:apply(dao_vfs, remove_descriptor, [{by_file_n_owner, {FullFileName, fslogic_context:get_fuse_id()}}], fslogic_context:get_protocol_version()),
+    #atom{value = ?VOK}.
 
 renew_file_location(FullFileName) ->
     {Status, TmpAns} = dao_lib:apply(dao_vfs, list_descriptors, [{by_file_n_owner, {FullFileName, fslogic_context:get_fuse_id()}}, 10, 0], fslogic_context:get_protocol_version()),
