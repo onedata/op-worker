@@ -84,7 +84,7 @@ do
     mkdir /tmp/veilfs
     mkdir /tmp/veilfs2
     mkdir /tmp/veilfs3
-    ct_run -pa ../deps/**/ebin -pa ../ebin -pa ./ -noshell -name tester -setcookie $COOKIE -spec  $TEST
+    ct_run -pa ../deps/**/ebin -pa ../.eunit -pa ./ -noshell -name tester -setcookie $COOKIE -spec  $TEST
 done
 
 find . -name "*.beam" -exec rm -rf {} \;

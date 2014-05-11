@@ -96,7 +96,7 @@ change_file_owner(FullFileName, NewUID, NewUName) ->
             #atom{value = ?VEREMOTEIO}
     end.
 
-change_file_group(FullFileName, GID, GName) ->
+change_file_group(_FullFileName, _GID, _GName) ->
     #atom{value = ?VENOTSUP}.
 
 change_file_perms(FullFileName, Perms) ->
