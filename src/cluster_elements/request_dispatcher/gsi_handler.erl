@@ -330,7 +330,7 @@ get_ciphers() ->
         fun
             ({_, des_cbc, _})   -> false;
             ({_, _, _})         -> true
-        end, ssl:cipher_suites()).
+        end, ssl:cipher_suites(all)).
 
 %% update_crl/2
 %% ====================================================================
