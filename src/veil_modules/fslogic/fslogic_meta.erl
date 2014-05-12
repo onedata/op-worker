@@ -90,7 +90,9 @@ update_parent_ctime(Dir, CTime) ->
     Attr :: atime | mtime | ctime | size | times.
 update_meta_attr(#file{meta_doc = MetaUUID} = File, Attr, Value, RetryCount) ->
     {File1, #veil_document{record = MetaRec} = MetaDoc} = init_file_meta(File),
-    RunSync = File#file.uid =/= MetaRec#file_meta.uid or MetaUUID =/= MetaDoc#veil_document.uuid,
+    MetaDocChanged = MetaUUID =/= MetaDoc#veil_document.uuid,
+    FileOwnerChanged = File#file.uid =/= MetaRec#file_meta.uid,
+    RunSync = MetaDocChanged or FileOwnerChanged,
     SyncTask = fun() ->
         NewMeta =
             case Attr of
