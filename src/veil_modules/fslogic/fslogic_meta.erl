@@ -129,14 +129,14 @@ update_meta_attr(#file{meta_doc = MetaUUID} = File, Attr, Value, RetryCount) ->
                 File
         end
     end, %% SyncTask = fun()
-
-    case MetaUUID of
-        UUID when is_list(UUID) -> %% When MetaUUID is set, run this method async
-            spawn(SyncTask),
-            File;
-        _ ->
-            SyncTask()
-    end.
+    SyncTask().
+%%     case MetaUUID of
+%%         UUID when is_list(UUID) -> %% When MetaUUID is set, run this method async
+%%             spawn(SyncTask),
+%%             File;
+%%         _ ->
+%%             SyncTask()
+%%     end.
 
 
 %% init_file_meta/1
