@@ -89,54 +89,53 @@ update_parent_ctime(Dir, CTime) ->
 -spec update_meta_attr(File :: #file{}, Attr, Value :: term(), RetryCount :: integer()) -> Result :: #file{} when
     Attr :: atime | mtime | ctime | size | times.
 update_meta_attr(#file{meta_doc = MetaUUID} = File, Attr, Value, RetryCount) ->
+    {File1, #veil_document{record = MetaRec} = MetaDoc} = init_file_meta(File),
+    RunSync = File#file.uid =/= MetaRec#file_meta.uid,
     SyncTask = fun() ->
-        case init_file_meta(File) of
-            {File1, #veil_document{record = MetaRec} = MetaDoc} ->
-                NewMeta =
-                    case Attr of
-                        times ->
-                            case Value of
-                                {ATime, MTime, CTime}                    -> MetaRec#file_meta{uid = File#file.uid, atime = ATime, mtime = MTime, ctime = CTime};
-                                {ATime, MTime} when ATime > 0, MTime > 0 -> MetaRec#file_meta{uid = File#file.uid, atime = ATime, mtime = MTime};
-                                {ATime, _MTime} when ATime > 0           -> MetaRec#file_meta{uid = File#file.uid, atime = ATime};
-                                {_ATime, MTime} when MTime > 0           -> MetaRec#file_meta{uid = File#file.uid, mtime = MTime}
-                            end;
-                        ctime when Value > 0 -> MetaRec#file_meta{uid = File#file.uid, ctime = Value};
-                        mtime when Value > 0 -> MetaRec#file_meta{uid = File#file.uid, mtime = Value};
-                        atime when Value > 0 -> MetaRec#file_meta{uid = File#file.uid, atime = Value};
-                        size when Value >= 0 ->
-                            MetaRec#file_meta{uid = File#file.uid, size = Value};
-                        _ ->
-                            MetaRec
-                    end,
-                case MetaRec of
-                    NewMeta -> File1;
-                    _ ->
-                        NewDoc = MetaDoc#veil_document{record = NewMeta},
-                        case dao_lib:apply(dao_vfs, save_file_meta, [NewDoc], 1) of
-                            {ok, _} -> File1;
-                            {error, conflict} when RetryCount > 0 ->
-                                lager:warning("Conflict when saveing file_meta record for file (name = ~p, parent = ~p). Retring...", [File#file.name, File#file.parent]),
-                                {_, _, M} = now(),
-                                timer:sleep(M rem 100), %% If case of conflict we should wait a little bit before next try (max 100ms)
-                                update_meta_attr(File1, Attr, Value, RetryCount - 1);
-                            {error, Error} ->
-                                lager:warning("Cannot save file_meta record for file (name = ~p, parent = ~p) due to error: ~p", [File#file.name, File#file.parent, Error])
-                        end
-                end;
-            _Error ->
-                lager:warning("Cannot init file_meta record for file (name = ~p, parent = ~p) due to previous errors", [File#file.name, File#file.parent]),
-                File
+        NewMeta =
+            case Attr of
+                times ->
+                    case Value of
+                        {ATime, MTime, CTime}                    -> MetaRec#file_meta{uid = File#file.uid,
+                                                                        atime = max(ATime, MetaRec#file_meta.atime),
+                                                                        mtime = max(MTime, MetaRec#file_meta.mtime),
+                                                                        ctime = max(CTime, MetaRec#file_meta.ctime)};
+                        {ATime, MTime} when ATime > 0, MTime > 0 -> MetaRec#file_meta{uid = File#file.uid,
+                                                                        atime = max(ATime, MetaRec#file_meta.atime),
+                                                                        mtime = max(MTime, MetaRec#file_meta.mtime)};
+                        {ATime, _MTime} when ATime > 0           -> MetaRec#file_meta{uid = File#file.uid, atime = max(ATime, MetaRec#file_meta.atime)};
+                        {_ATime, MTime} when MTime > 0           -> MetaRec#file_meta{uid = File#file.uid, mtime = max(MTime, MetaRec#file_meta.mtime)}
+                    end;
+                ctime when Value > 0 -> MetaRec#file_meta{uid = File#file.uid, ctime = max(Value, MetaRec#file_meta.ctime)};
+                mtime when Value > 0 -> MetaRec#file_meta{uid = File#file.uid, mtime = max(Value, MetaRec#file_meta.mtime)};
+                atime when Value > 0 -> MetaRec#file_meta{uid = File#file.uid, atime = max(Value, MetaRec#file_meta.atime)};
+                size when Value >= 0 ->
+                    MetaRec#file_meta{uid = File#file.uid, size = Value};
+                _ ->
+                    MetaRec
+            end,
+        case MetaRec of
+            NewMeta -> File1;
+            _ ->
+                NewDoc = MetaDoc#veil_document{record = NewMeta},
+                case dao_lib:apply(dao_vfs, save_file_meta, [NewDoc], 1) of
+                    {ok, _} -> File1;
+                    {error, conflict} when RetryCount > 0 ->
+                        lager:warning("Conflict when saveing file_meta record for file (name = ~p, parent = ~p). Retring...", [File#file.name, File#file.parent]),
+                        {_, _, M} = now(),
+                        timer:sleep(M rem 100), %% If case of conflict we should wait a little bit before next try (max 100ms)
+                        update_meta_attr(File1, Attr, Value, RetryCount - 1);
+                    {error, Error} ->
+                        lager:warning("Cannot save file_meta record for file (name = ~p, parent = ~p) due to error: ~p", [File#file.name, File#file.parent, Error])
+                end
         end
     end, %% SyncTask = fun()
-    SyncTask().
-%%     case MetaUUID of
-%%         UUID when is_list(UUID) -> %% When MetaUUID is set, run this method async
-%%             spawn(SyncTask),
-%%             File;
-%%         _ ->
-%%             SyncTask()
-%%     end.
+    case RunSync of
+        true -> SyncTask();
+        false ->
+            spawn(SyncTask),
+            File
+    end.
 
 
 %% init_file_meta/1
