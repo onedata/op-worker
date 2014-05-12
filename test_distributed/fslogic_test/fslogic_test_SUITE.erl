@@ -1771,7 +1771,8 @@ fuse_requests_test(Config) ->
 
 
   %% updatetimes message test
-  {Status20, Answer20} = update_times(Socket, SecondFileInDir, 1234, 5678),
+  CurrentTime = vcn_utils:time(),
+  {Status20, Answer20} = update_times(Socket, SecondFileInDir, CurrentTime + 1234, CurrentTime + 4321),
   ?assertEqual("ok", Status20),
   ?assertEqual(list_to_atom(?VOK), Answer20),
 
@@ -1780,8 +1781,8 @@ fuse_requests_test(Config) ->
   {Status21, Attr4} = get_file_attr(Socket, SecondFileInDir),
   ?assertEqual("ok", Status21),
 
-  ?assertEqual(1234, Attr4#fileattr.atime),
-  ?assertEqual(5678, Attr4#fileattr.mtime),
+  ?assertEqual(CurrentTime + 1234, Attr4#fileattr.atime),
+  ?assertEqual(CurrentTime + 4321, Attr4#fileattr.mtime),
   %% updatetimes message test end
 
 
