@@ -70,7 +70,7 @@ connect(Host, Port, Opts) ->
     ssl:start(),
     Opts1 = Opts -- [auto_handshake],
     Monitored =
-        case websocket_client:start_link("wss://" ++ Host ++ ":" ++ integer_to_list(Port) ++ "/veilclient" , ?MODULE, [self()], Opts1 ++ [{reuse_sessions, false}]) of
+        case websocket_client:start_link("wss://" ++ Host ++ ":" ++ integer_to_list(Port) ++ "/veilclient" , ?MODULE, [self()], Opts1 ++ [{reuse_sessions, false}, {ciphers, gsi_handler:get_ciphers()}]) of
             {ok, Proc}      -> erlang:monitor(process, Proc), Proc;
             {error, Error}  -> self() ! {error, Error}, ok;
             Error1          -> self() ! {error, Error1}, ok
