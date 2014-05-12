@@ -479,8 +479,8 @@ validation_test(Config) ->
   {ConAns4, _} = wss:connect('localhost', Port, [{certfile, ?TEST_FILE("certs/proxy_unknown_ca.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
   ?assertEqual(error, ConAns4),
   {ConAns5, Socket1} = wss:connect('localhost', Port, [{certfile, ?TEST_FILE("certs/proxy_valid.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
-  wss:close(Socket1),
-  ?assertEqual(ok, ConAns5).
+  ?assertEqual(ok, ConAns5),
+  wss:close(Socket1).
 
 %% This test checks if client outside the cluster can ping all modules via dispatcher.
 ping_test(Config) ->
@@ -630,12 +630,18 @@ init_per_testcase(TestCase, Config) ->
 
 end_per_testcase(type1, Config) ->
   Nodes = ?config(nodes, Config),
+  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
+  StopAns = nodes_manager:stop_nodes(Nodes),
+
   test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
   test_node_starter:stop_test_nodes(Nodes);
 
 end_per_testcase(type2, Config) ->
   Nodes = ?config(nodes, Config),
   test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
+  StopAns = nodes_manager:stop_nodes(Nodes),
+  nodes_manager:stop_deps_for_tester_node(),
+
   test_node_starter:stop_test_nodes(Nodes),
   test_node_starter:stop_deps_for_tester_node();
 
