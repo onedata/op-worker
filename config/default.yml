@@ -21,6 +21,10 @@ vm_arguments:
       description: Increase number of concurrent ports/sockets
       value: -env ERL_MAX_PORTS 4096
 
+  - argument:
+      name: max_processes
+      description: Increase number of processes
+      value: +P 1000000
 
 
 veil_cluster_node_env:
@@ -83,8 +87,8 @@ veil_cluster_node_env:
       name: ssl_cert_path
       description: Path to certificate used by ranch_ssl
       value: |
-        "\'./cacerts/veilfs.pem\'"
-      erlang_term: "'./cacerts/veilfs.pem'"
+        "\'./cacerts/VeilFSServer.pem\'"
+      erlang_term: "'./cacerts/VeilFSServer.pem'"
       # this has to be in double quotes so that single quotes are preserved after
       # conversion to list and it ends up correct in app.src
 
@@ -119,9 +123,9 @@ veil_cluster_node_env:
       name: ports_in_use
       description: Ports used by application, that need to be free before veil can start
       value: |
-          ["control_panel_port","dns_port","dispatcher_port","rest_port"]
+          ["control_panel_port","control_panel_redirect_port","dns_port","dispatcher_port","rest_port"]
       erlang_term: |
-          [control_panel_port,dns_port,dispatcher_port,rest_port]
+          [control_panel_port,control_panel_redirect_port,dns_port,dispatcher_port,rest_port]
 
   # LOGGING
   - parameter:
@@ -129,14 +133,14 @@ veil_cluster_node_env:
       description: |
         Current loglevel in the cluster. Logs with lower importance will be completely discarded
         Available loglevels are 0-7, respectively: debug, info, notice, warning, error, critical, alert, emergency
-      value: 0
+      value: 1
 
   - parameter:
       name: default_loglevel
       description: |
         Used to reset loglevel to default.
         Available loglevels are 0-7, respectively: debug, info, notice, warning, error, critical, alert, emergency
-      value: 0
+      value: 1
 
   - parameter:
       name: include_stacktrace
@@ -183,6 +187,11 @@ veil_cluster_node_env:
       value: 443
 
   - parameter:
+      name: control_panel_redirect_port
+      description: Port on which standard HTTP will be opened to redirect requests to HTTPS
+      value: 80
+
+  - parameter:
       name: rest_port
       description: Port on which REST API is available
       value: 8443
@@ -198,6 +207,11 @@ veil_cluster_node_env:
       name: control_panel_number_of_acceptors
       description: Number of accepting processes in control_panel listener
       value: 100
+
+  - parameter:
+      name: control_panel_number_of_http_acceptors
+      description: Number of accepting processes on port 80 (redirecting to https)
+      value: 50
 
   - parameter:
       name: control_panel_max_keepalive
@@ -319,7 +333,7 @@ veil_cluster_node_env:
       name: quota_check_freq
       description: |
         This variable determines after how many bytes written quota check is performed.
-      value: 52428800 # 50MB
+      value: 10485760 # 10MB
 
 obsolete:
   - parameter:

@@ -376,7 +376,7 @@ info(Text,Args) ->
 	io:format("[info] "++Text++"~n",Args).
 
 warn(Text,Args) ->
-	io:format("[waring] "++ Text++"~n",Args).
+	io:format("[warning] "++ Text++"~n",Args).
 
 print_error(Text) ->
 	print_error(Text,[]).

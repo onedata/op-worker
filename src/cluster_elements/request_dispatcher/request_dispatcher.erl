@@ -829,7 +829,7 @@ send_to_fuse(FuseId, Message, MessageDecoder, SendNum) ->
             _ ->
               Callback ! {self(), Message, MessageDecoder, -1},
               receive
-                {Callback, MsgID, Response} -> Response
+                {Callback, -1, Response} -> Response
               after 500 ->
                 socket_error
               end

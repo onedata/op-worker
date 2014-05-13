@@ -108,6 +108,7 @@ init([Type]) when Type =:= worker ; Type =:= ccm ; Type =:= ccm_test ->
         [
           {port, Port},
           {certfile, atom_to_list(CertFile)},
+          {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs())},
           {keyfile, atom_to_list(CertFile)},
           {password, ""},
           {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}}
@@ -118,6 +119,7 @@ init([Type]) when Type =:= worker ; Type =:= ccm ; Type =:= ccm_test ->
     false -> ok
   end,
 
+  %% TODO: replace with permanent cache
   ets:new(?LFM_EVENT_PRODUCTION_ENABLED_ETS, [set, named_table, public]),
   ets:new(?WRITE_DISABLED_USERS, [set, named_table, public]),
   ets:new(?ACK_HANDLERS, [set, named_table, public]),
@@ -414,6 +416,7 @@ heart_beat_response(New_state_num, CallbacksNum, State) ->
     false ->
       %% TODO find a method which do not force clearing of all simple caches at all nodes when only one worker/node is added/deleted
       %% Now all caches are canceled because we do not know if state number change is connected with network problems (so cache of node may be not valid)
+      %% TODO during refactoring integrate simple and permanent cache (cache clearing can be triggered as CacheCheckFun)
       clear_simple_caches(State#node_state.simple_caches)
   end,
 
@@ -765,6 +768,8 @@ clear_simple_caches(Caches) ->
   lists:foreach(fun
     ({sub_proc_cache, Cache}) ->
       worker_host:clear_sub_procs_cache(Cache);
+    ({permanent_cache, _Cache}) -> ok;
+    ({permanent_cache, _Cache, CacheCheckFun}) -> CacheCheckFun();
     (Cache) -> ets:delete_all_objects(Cache)
   end, Caches).
 
@@ -774,41 +779,29 @@ clear_simple_caches(Caches) ->
 -spec clear_cache(Cache :: term(), Caches :: list()) -> ok.
 %% ====================================================================
 clear_cache(Cache, Caches) ->
-  case Cache of
+  Method = case Cache of
     CacheName when is_atom(CacheName) ->
-      case lists:member(Cache, Caches) of
-        true ->
-          ets:delete_all_objects(Cache),
-          ok;
-        false ->
-          ok
-      end;
+      {Cache, all, Cache};
+    {permanent_cache, CacheName2} ->
+      {Cache, all, CacheName2};
+    {permanent_cache, CacheName3, _} ->
+      {Cache, all, CacheName3};
     {sub_proc_cache, SubProcCache} ->
-      case lists:member(Cache, Caches) of
-        true -> worker_host:clear_sub_procs_cache(SubProcCache);
-        false -> ok
-      end;
+      {Cache, sub_proc, SubProcCache};
     {{sub_proc_cache, SubProcCache2}, SubProcKey} ->
-      case lists:member({sub_proc_cache, SubProcCache2}, Caches) of
-        true -> worker_host:clear_sub_procs_cache(SubProcCache2, SubProcKey);
-        false -> ok
-      end;
-    {CacheName3, Keys} when is_list(Keys) ->
-      case lists:member(CacheName3, Caches) of
-        true ->
-          lists:foreach(fun(K) -> ets:delete(CacheName3, K) end, Keys),
-          ok;
-        false ->
-          ok
-      end;
-    {CacheName2, Key} ->
-      case lists:member(CacheName2, Caches) of
-        true ->
-          ets:delete(CacheName2, Key),
-          ok;
-        false ->
-          ok
-      end;
+      {{sub_proc_cache, SubProcCache2}, sub_proc, {SubProcCache2, SubProcKey}};
+    {{permanent_cache, CacheName4}, Keys} when is_list(Keys) ->
+      {{permanent_cache, CacheName4}, list, {CacheName4, Keys}};
+    {{permanent_cache, CacheName5}, Key} ->
+      {{permanent_cache, CacheName5}, simple, {CacheName5, Key}};
+    {{permanent_cache, CacheName6, _}, Keys2} when is_list(Keys2) ->
+      {{permanent_cache, CacheName6}, list, {CacheName6, Keys2}};
+    {{permanent_cache, CacheName7, _}, Key2} ->
+      {{permanent_cache, CacheName7}, simple, {CacheName7, Key2}};
+    {CacheName8, Keys3} when is_list(Keys3) ->
+      {CacheName8, list, {CacheName8, Keys3}};
+    {CacheName9, Key3} ->
+      {CacheName9, simple, {CacheName9, Key3}};
     [] ->
       ok;
     [H | T] ->
@@ -818,4 +811,28 @@ clear_cache(Cache, Caches) ->
         {ok, ok} -> ok;
         _ -> error
       end
+  end,
+  case Method of
+    {CName, ClearingMethod, ClearingMethodAttr} ->
+      case lists:member(CName, Caches) of
+        true ->
+          case ClearingMethod of
+            simple ->
+              {EtsName, EtsKey} = ClearingMethodAttr,
+              ets:delete(EtsName, EtsKey),
+              ok;
+            all ->
+              ets:delete_all_objects(ClearingMethodAttr),
+              ok;
+            sub_proc ->
+              worker_host:clear_sub_procs_cache(ClearingMethodAttr);
+            list ->
+              {EtsName2, KeysToDel} = ClearingMethodAttr,
+              lists:foreach(fun(K) -> ets:delete(EtsName2, K) end, KeysToDel),
+              ok
+          end;
+        false ->
+          ok
+      end;
+    _ -> Method
   end.

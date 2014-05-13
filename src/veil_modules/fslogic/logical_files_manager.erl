@@ -256,7 +256,21 @@ read(FileStr, Offset, Size) ->
       case Response of
         ok ->
           {Storage_helper_info, FileId} = Response2,
-          storage_files_manager:read(Storage_helper_info, FileId, Offset, Size);
+          Res = storage_files_manager:read(Storage_helper_info, FileId, Offset, Size),
+          case Res of
+            {ok, _} ->
+              case event_production_enabled("read_event") of
+                true ->
+                  % TODO: add filePath
+                  ReadEvent = [{"type", "read_event"}, {"user_dn", get(user_id)}, {"bytes", Size}],
+                  gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, ReadEvent}});
+                _ ->
+                  ok
+              end;
+            _ ->
+              ok
+          end,
+          Res;
         _ -> {Response, Response2}
   end.
 
@@ -281,9 +295,9 @@ write(FileStr, Buf) ->
         ok ->
           {Storage_helper_info, FileId} = Response2,
           Res = storage_files_manager:write(Storage_helper_info, FileId, Buf),
-          case {is_integer(Res), event_production_enabled(write_event)} of
+          case {is_integer(Res), event_production_enabled("write_event")} of
             {true, true} ->
-              WriteEvent = [{type, write_event}, {user_dn, get(user_id)}, {count, binary:referenced_byte_size(Buf)}],
+              WriteEvent = [{"type", "write_event"}, {"user_dn", get(user_id)}, {"bytes", binary:referenced_byte_size(Buf)}],
               gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}});
             _ ->
               ok
@@ -316,9 +330,11 @@ write(FileStr, Offset, Buf) ->
         ok ->
           {Storage_helper_info, FileId} = Response2,
           Res = storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf),
-          case {is_integer(Res), event_production_enabled(write_event)} of
+
+          %% TODO - check if asynchronous processing needed
+          case {is_integer(Res), event_production_enabled("write_event")} of
             {true, true} ->
-              WriteEvent = [{type, write_event}, {user_dn, get(user_id)}, {count, binary:referenced_byte_size(Buf)}],
+              WriteEvent = [{"type", "write_event"}, {"user_dn", get(user_id)}, {"count", binary:referenced_byte_size(Buf)}],
               gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}});
             _ ->
               ok
@@ -352,9 +368,9 @@ write_from_stream(FileStr, Buf) ->
           {Storage_helper_info, FileId} = Response2,
           Offset = cache_size(File, byte_size(Buf)),
           Res = storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf),
-          case {is_integer(Res), event_production_enabled(write_event)} of
+          case {is_integer(Res), event_production_enabled("write_event")} of
             {true, true} ->
-              WriteEvent = [{type, write_event}, {user_dn, get(user_id)}, {count, binary:referenced_byte_size(Buf)}],
+              WriteEvent = [{"type", "write_event"}, {"user_dn", get(user_id)}, {"count", binary:referenced_byte_size(Buf)}],
               gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}});
             _ ->
               ok
@@ -433,7 +449,15 @@ truncate(FileStr, Size) ->
       case Response of
         ok ->
           {Storage_helper_info, FileId} = Response2,
-          storage_files_manager:truncate(Storage_helper_info, FileId, Size);
+          Res = storage_files_manager:truncate(Storage_helper_info, FileId, Size),
+          case {Res, event_production_enabled("truncate_event")} of
+            {ok, true} ->
+              TruncateEvent = [{"type", "truncate_event"}, {"user_dn", get(user_id)}, {"filePath", FileStr}],
+              gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEvent}});
+            _ ->
+              ok
+          end,
+          Res;
         _ -> {Response, Response2}
   end.
 
@@ -471,9 +495,9 @@ delete(FileStr) ->
                   Response3 = TmpAns3#atom.value,
                   case Response3 of
                     ?VOK ->
-                      case event_production_enabled(rm_event) of
+                      case event_production_enabled("rm_event") of
                         true ->
-                          RmEvent = [{type, rm_event}, {user_dn, get(user_id)}],
+                          RmEvent = [{"type", "rm_event"}, {"user_dn", get(user_id)}],
                           gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, RmEvent}});
                         _ ->
                           ok
@@ -1060,7 +1084,7 @@ check_utf(FileName) ->
 %% ====================================================================
 %% @doc Returns true if event of type EventName should be produced.
 %% @end
--spec event_production_enabled(EventName :: atom()) -> boolean().
+-spec event_production_enabled(EventName :: string()) -> boolean().
 %% ====================================================================
 event_production_enabled(EventName) ->
   case ets:lookup(?LFM_EVENT_PRODUCTION_ENABLED_ETS, EventName) of

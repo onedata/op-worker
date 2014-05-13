@@ -10,7 +10,7 @@
 -define(default_group_storage_prefix,"/mnt/"++?default_group_name_prefix).
 
 %Ports that needs to be free
--define(ports_to_check,[53,443,5555,8443]).
+-define(ports_to_check,[53,80,443,5555,8443]).
 
 % Curl options
 -define(curl_opts,"--connect-timeout 5 -s").
@@ -20,6 +20,11 @@
 
 % Location of configured_nodes.cfg
 -define(configured_nodes_path, ?prefix ++ "scripts/configured_nodes.cfg").
+
+% System limit values
+-define(ulimits_config_path,?prefix ++ "scripts/ulimits.cfg").
+-define(default_open_files,"65535").
+-define(default_processes,"65535").
 
 % Location of init.d script
 -define(init_d_script_path, "/etc/init.d/veil").
@@ -77,6 +82,7 @@ setup_start() ->
 	h1("Veil SETUP"),
 	info("Erlang nodes configured on this machine will use its hostname: " ++ get(hostname)),
 	warn("Make sure it is resolvable by other hosts in the network (i. e. by adding adequate mapping to /etc/hosts)"),
+	set_ulimits(),
 	Option = interaction_choose_option(what_to_do, "What do you want to do?", 
 		[
 			{manage_db, "Manage database nodes"},
@@ -89,6 +95,19 @@ setup_start() ->
 		exit -> halt(1)
 	end.
 
+% Set system limits
+set_ulimits() ->
+	case file:consult(?ulimits_config_path) of
+		{ok,[]} ->
+			info("Set system limits for new nodes:"),
+			OpenFiles = interaction_get_string(open_files_limit,"Open files: ",?default_open_files),
+			Processes = interaction_get_string(process_limit,"Processes: ",?default_processes),
+			file:write_file(?ulimits_config_path, io_lib:fwrite("~p.\n~p.\n", [{open_files,OpenFiles},{process_limit,Processes}]), [append]);
+		{ok,_} ->
+			already_defined;
+		Err ->
+			?error("Cannot parse file ~p, error: ~p",[?ulimits_config_path,Err])
+	end.
 
 % Manage veil cluster nodes
 setup_manage_veil() ->	
@@ -280,7 +299,7 @@ setup_new_ccm_plus_worker(IsThisMainCCM,FuseGroups) ->
 					ok_storage_defined_in_main
 			end,
 			info("Starting node(s)..."),
-			os:cmd(?init_d_script_path ++ " start_veil")
+			os:cmd(?init_d_script_path ++ " start_veil 1>/dev/null")
 	end.
 
 
@@ -343,7 +362,7 @@ setup_new_worker() ->
 		ok ->  
 			install_veil_node(worker, WorkerName, WorkerPath),
 			info("Starting node(s)..."),
-			os:cmd(?init_d_script_path ++ " start_veil")
+			os:cmd(?init_d_script_path ++ " start_veil 1>/dev/null")
 	end.
 
 
@@ -513,7 +532,7 @@ install_db_node(Name, Path) ->
 	actualize_db_hostname(Path,Name),
 
 	info("Starting node..."),
-	open_port({spawn, ?init_d_script_path ++ " start_db"}, [out]).
+	open_port({spawn, ?init_d_script_path ++ " start_db 1>/dev/null"}, [out]).
 
 % add configured db node to existing cluster
 add_db_to_cluster(DbName,OtherNodeHost) ->
@@ -727,17 +746,24 @@ save_storage_in_config(Storage) ->
 
 % Consult the batch file specified in args (if any), looking for {Id, Value} entry
 read_from_batch_file(Id) ->
+	read_from_batch_file(Id,none).
+read_from_batch_file(Id,Default) ->
 	case get(batch_file) of 
 		undefined -> 
 			no_batch_mode;
-
 		File ->
 			try
 				{ok, AnswerProplist} = file:consult(File),
 				{Id, Value} = proplists:lookup(Id, AnswerProplist),
 				{ok, Value}
 			catch _:_ ->
-				?error("Batch file error - could not find entry for '~p'", [Id])
+				case Default of
+					none ->
+						?error("Batch file error - could not find entry for '~p'", [Id]);
+					_ ->
+						warn("No entry for ~p, using default value: ~p",[Id,Default]),
+						{ok,Default}
+				end
 			end
 	end.
 
@@ -777,39 +803,46 @@ try_reading_integer(Prompt, Min, Max) ->
 
 
 % Get a string from the console or retrieve it from batch file
-interaction_get_string(Id, Prompt,Default) ->
-	NewPrompt = Prompt ++ " (default: "++Default++"): ",
-	Result = interaction_get_string(Id, NewPrompt),
-	case Result of
-		"" ->
-			Default;
-		_ ->
-			Result
-	end.
 interaction_get_string(Id, Prompt) ->
 	case read_from_batch_file(Id) of
-		{ok, Answer} -> 
+		{ok, Answer} ->
 			Answer;
-
-		_ ->
-			try 
-				Line = io:get_line("> " ++ Prompt),
-				true = is_list(Line),
-
-				%deletes \n from end of the string
-				[$\n | ReversedLine] = lists:reverse(Line),
-				Result = lists:reverse(ReversedLine),
-
-				% assert no whitespace
-				0 = string:str(Result," "),
-				0 = string:str(Result,"\t"),
-				0 = string:str(Result,"\n"),
-
-				Result
-			catch _:_ ->
-				io:format("~nEh?~n"),
-				interaction_get_string(Id, Prompt)
+		no_batch_mode ->
+			read_from_console(Prompt)
+	end.
+interaction_get_string(Id, Prompt,Default) ->
+	NewPrompt = Prompt ++ " (default: "++Default++"): ",
+	case read_from_batch_file(Id,Default) of
+		{ok, Answer} ->
+			Answer;
+		no_batch_mode ->
+			case read_from_console(NewPrompt) of
+				"" ->
+					Default;
+				Result ->
+					Result
 			end
+	end.
+
+% Read user input from console
+read_from_console(Prompt) ->
+	try
+		Line = io:get_line("> " ++ Prompt),
+		true = is_list(Line),
+
+		%deletes \n from end of the string
+		[$\n | ReversedLine] = lists:reverse(Line),
+		Result = lists:reverse(ReversedLine),
+
+		% assert no whitespace
+		0 = string:str(Result," "),
+		0 = string:str(Result,"\t"),
+		0 = string:str(Result,"\n"),
+
+		Result
+	catch _:_ ->
+		io:format("~nEh?~n"),
+		read_from_console(Prompt)
 	end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -856,7 +889,10 @@ li(Text) ->
 	io:format(" - ~s~n", [Text]).
 
 warn(Text) ->
-	io:format("(!) ~s~n", [Text]).
+	warn(Text,[]).
+
+warn(Text,Args) ->
+	io:format("(!) "++Text++"~n", Args).
 
 info(Text) ->
 	io:format("~~ ~s~n", [Text]).

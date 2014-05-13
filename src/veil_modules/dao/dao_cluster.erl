@@ -212,10 +212,17 @@ remove_fuse_session(FuseId) ->
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 close_fuse_session(FuseId) ->
-    ok = remove_fuse_session(FuseId), %% Remove session from DB
-    {ok, Connections} = list_connection_info({by_session_id, FuseId}), %% List all it's connections
-    [close_connection(X) || #veil_document{uuid = X}  <- Connections], %% and close them all
-    ok.
+    Ans = remove_fuse_session(FuseId), %% Remove session from DB
+    case Ans of
+	ok ->
+	    {ok, Connections} = list_connection_info({by_session_id, FuseId}), %% List all it's connections
+	    [close_connection(X) || #veil_document{uuid = X}  <- Connections], %% and close them all
+	    ok;
+	{error,deleted} ->
+		ok;
+	Other ->
+		throw(Other)
+	end.
 
 
 %% list_fuse_sessions/1
@@ -239,11 +246,11 @@ list_fuse_sessions({by_valid_to, Time}) ->
 
 %% get_sessions_by_user/1
 %% ====================================================================
-%% @doc Returns fuse_session records for user of given uuid.
+%% @doc Returns fuse_session ids for user of given uuid.
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec get_sessions_by_user(Uuid :: string()) ->
-  {ok, [#veil_document{}]} | {error, any()}.
+  {ok, [integer()]} | {error, any()}.
 %% ====================================================================
 get_sessions_by_user(Uuid) ->
   QueryArgs = #view_query_args{keys = [dao_helper:name(Uuid)]},
@@ -287,14 +294,24 @@ get_connection_info(SessID) ->
 %% remove_connection_info/1
 %% ====================================================================
 %% @doc Removes connection_info record with given SessID form DB.
+%% 		If it's last connection for session, session is deleted also.
 %%      Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec remove_connection_info(SessID :: uuid()) ->
     ok |
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
+remove_connection_info("") ->
+	ok;
 remove_connection_info(SessID) ->
-    dao:remove_record(SessID).
+	{ok, #veil_document{record = #connection_info{session_id = SessionID}}} = get_connection_info(SessID),
+	case list_connection_info({by_session_id, SessionID}) of
+		{ok,[_OneConnection]} ->
+			remove_fuse_session(SessionID);
+		{ok,_} ->
+			ok
+	end,
+	dao:remove_record(SessID).
 
 
 %% close_connection/1
@@ -347,21 +364,24 @@ list_connection_info({by_session_id, SessID}) ->
     ok | no_return().
 %% ====================================================================
 clear_sessions() ->
-    SPid = self(),
     CurrentTime = fslogic_utils:time(),
     ?debug("FUSE session cleanup started. Time: ~p", [CurrentTime]),
 
     %% List of worker processes that validates sessions in background
-    PidList =
-        case list_fuse_sessions({by_valid_to, CurrentTime}) of
-            {ok, Sessions} ->
-                %% [{#veil_document{record = #fuse_session}, {Pid, MRef}}]
-                [{X, spawn_monitor(fun() -> SPid ! {self(), check_session(X)} end)} || X <- Sessions];
-            {error, Reason} ->
-                ?error("Cannot cleanup old fuse sessions. Expired session list fetch failed: ~p", [Reason]),
-                exit(Reason)
-        end,
+    Res = case list_fuse_sessions({by_valid_to, CurrentTime}) of
+        {ok, Sessions} ->
+            Splitted = split_list(Sessions,1000),
+            [clear_sessions(Part) || Part <- Splitted];
+        {error, Reason} ->
+            ?error("Cannot cleanup old fuse sessions. Expired session list fetch failed: ~p", [Reason]),
+            exit(Reason)
+    end,
+	?debug("FUSE session cleanup ended. Status: ~p", [Res]),
+	ok.
 
+clear_sessions(Sessions) ->
+	SPid = self(),
+	PidList = [{X, spawn_monitor(fun() -> SPid ! {self(), check_session(X)} end)} || X <- Sessions],
     %% Helper function that fetches and processes check_session result from given worker process
     ProcessSession =
         fun(#veil_document{uuid = SessID}, Pid) ->
@@ -381,12 +401,8 @@ clear_sessions() ->
                 timeout
             end
         end,
-
     %% Iterate over all check_session results and apply ProcessSession/2 on each
-    _Res = [ProcessSession(Doc, Pid) || {Doc, {Pid, _}} <- PidList],
-
-    ?debug("FUSE session cleanup ended. Status: ~p", [_Res]),
-    ok.
+    [ProcessSession(Doc, Pid) || {Doc, {Pid, _}} <- PidList].
 
 
 %% check_session/1
@@ -454,14 +470,35 @@ check_session(#veil_document{record = #fuse_session{}, uuid = SessID}) ->
 %% ====================================================================
 check_connection(Connection = #veil_document{record = #connection_info{session_id = SessID, controlling_node = CNode, controlling_pid = CPid}}) ->
     SPid = self(),
-    spawn(CNode, fun() -> CPid ! {SPid, get_session_id} end),   %% Send ping to connection controlling process
-    receive
-        {ok, SessID} ->         %% Connection is alive and has valid session ID. Leave it be.
-            ok;
-        {ok, Inval} ->          %% Connection has invalid session ID. Close it.
-            ?warning("Connection ~p has invalid session ID (~p)", [Connection, Inval]),
-            {error, invalid_session_id}
-    after 3000 ->
-        ?warning("Connection ~p is not avalilable due to timeout.", [Connection]),
-        {error, timeout}
-    end.
+	case is_pid(CPid) of %(temporary fix) todo change our pid storing mechanisms, so we would always have proper pid here (see also dao:doc_to_term/1 todo)
+		true->
+			spawn(CNode, fun() -> CPid ! {SPid, get_session_id} end),   %% Send ping to connection controlling process
+		    receive
+		        {ok, SessID} ->         %% Connection is alive and has valid session ID. Leave it be.
+		            ok;
+		        {ok, Inval} ->          %% Connection has invalid session ID. Close it.
+		            ?warning("Connection ~p has invalid session ID (~p)", [Connection, Inval]),
+		            {error, invalid_session_id}
+		    after 3000 ->
+		        ?warning("Connection ~p is not avalilable due to timeout.", [Connection]),
+		        {error, timeout}
+		    end;
+		false->
+			?error("Connection pid unknown"),
+			ok % we cannot return error since we don't know whether connection is ok or not
+	end.
+
+%% split_list/2
+%% ====================================================================
+%% @doc Slit list to 'Max' sized chunks.
+-spec split_list(list(),integer()) -> list(list()).
+%% ====================================================================
+split_list(List, Max) ->
+	element(1, lists:foldl(fun
+		(E, {[Buff|Acc], 1}) ->
+			{[[E],Buff|Acc], Max};
+		(E, {[Buff|Acc], C}) ->
+			{[[E|Buff]|Acc], C-1};
+		(E, {[], _}) ->
+			{[[E]], Max}
+	end, {[], Max}, List)).

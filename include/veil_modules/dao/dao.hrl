@@ -147,6 +147,9 @@
 %% Default database name
 -define(DEFAULT_DB, lists:nth(1, ?DB_LIST)).
 
+%% Session cleanup burst size
+-define(SESSION_CLEANUP_BURST_SIZE,1000).
+
 %% Do not try to read this macro (3 nested list comprehensions). All it does is:
 %% Create an list containing #db_info structures base on ?DB_LIST
 %% Inside every #db_info, list of #design_info is created based on views list (?VIEW_LIST)
