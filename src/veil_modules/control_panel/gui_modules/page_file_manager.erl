@@ -295,7 +295,7 @@ comet_loop(IsUploadInProgress) ->
             upload_finished ->
                 comet_loop(false);
             Other ->
-                ?debug("Unrecognized comet message in page_logs: ~p", [Other]),
+                ?debug("Unrecognized comet message in page_file_manager: ~p", [Other]),
                 comet_loop(IsUploadInProgress)
 
         after ?AUTOREFRESH_PERIOD ->
