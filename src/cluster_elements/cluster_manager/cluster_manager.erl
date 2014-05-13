@@ -490,12 +490,12 @@ handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
   {noreply, State};
 
 handle_cast({start_load_logging, Path}, State) ->
-  lager:info("Start load logging on nodes: ~p", State#cm_state.nodes),
+  ?info("Start load logging on nodes: ~p", State#cm_state.nodes),
   lists:map(fun(Node) -> gen_server:cast({?Node_Manager_Name, Node}, {start_load_logging, Path}) end, State#cm_state.nodes),
   {noreply, State};
 
 handle_cast(stop_load_logging, State) ->
-  lager:info("Stop load logging on nodes: ~p", State#cm_state.nodes),
+  ?info("Stop load logging on nodes: ~p", State#cm_state.nodes),
   lists:map(fun(Node) -> gen_server:cast({?Node_Manager_Name, Node}, stop_load_logging) end, State#cm_state.nodes),
   {noreply, State};
 
@@ -511,7 +511,7 @@ handle_cast(monitor_cluster, State) ->
       _ -> {Node, undefined}
     catch
       _:_ ->
-        lager:error([{mod, ?MODULE}], "Can not get statistics of node: ~s", [Node]),
+        ?error("Can not get statistics of node: ~s", [Node]),
         {Node, undefined}
     end
   end,
@@ -1337,7 +1337,7 @@ calculate_node_load(Nodes, Period) ->
       _ -> {Node, undefined}
     catch
       _:_ ->
-        lager:error([{mod, ?MODULE}], "Can not get statistics of node: ~s", [Node]),
+        ?error("Can not get statistics of node: ~s", [Node]),
         {Node, undefined}
     end
   end,
@@ -1647,7 +1647,7 @@ create_cluster_stats_rrd() ->
 
   case rrderlang:create(?Cluster_Stats_RRD_Name, Options, DSs, RRAs) of
     {error, Error} ->
-      lager:error([{mod, ?MODULE}], "Can not create cluster stats RRD: ~p", [Error]),
+      ?error("Can not create cluster stats RRD: ~p", [Error]),
       {error, Error};
     _ ->
       case ?REGISTER_DEFAULT_RULES of
@@ -1670,7 +1670,7 @@ save_cluster_stats_to_rrd(NodesStats, #cm_state{storage_stats = StorageStats}) -
   Values = merge_nodes_stats(NodesStats) ++ get_storage_stats(StorageStats),
   case rrderlang:update(?Cluster_Stats_RRD_Name, <<>>, Values, Timestamp) of
     {error, Error} ->
-      lager:error([{mod, ?MODULE}], "Can not save node stats to RRD: ~p", [Error]),
+      ?error("Can not save node stats to RRD: ~p", [Error]),
       {error, Error};
     _ -> ok
   end.

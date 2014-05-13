@@ -295,7 +295,7 @@ handle_cast({register_simple_cache, Cache, ReturnPid}, State) ->
   {noreply, State#node_state{simple_caches = NewCaches}};
 
 handle_cast({start_load_logging, Path}, State) ->
-  lager:info("Start load logging on node: ~p", [node()]),
+  ?info("Start load logging on node: ~p", [node()]),
   {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
   {MegaSecs, Secs, MicroSecs} = erlang:now(),
   StartTime = MegaSecs * 1000000 + Secs + MicroSecs / 1000000,
@@ -319,7 +319,7 @@ handle_cast({log_load, StartTime, PrevTime}, State) ->
   {noreply, State};
 
 handle_cast(stop_load_logging, State) ->
-  lager:info("Stop load logging on node: ~p", [node()]),
+  ?info("Stop load logging on node: ~p", [node()]),
   case State#node_state.load_logging_fd of
     undefined -> ok;
     Fd -> file:close(Fd)
@@ -575,16 +575,17 @@ create_node_stats_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkS
 
   case rrderlang:create(?Node_Stats_RRD_Name, Options, DSs, RRAs) of
     {error, Error} ->
-      lager:error([{mod, ?MODULE}], "Can not create node stats RRD: ~p", [Error]),
+      ?error("Can not create node stats RRD: ~p", [Error]),
       {error, Error};
     _ ->
       gen_server:cast(?Node_Manager_Name, monitor_node),
       ok
   end.
 
-%% get_node_stats/1
+%% get_node_stats/2
 %% ====================================================================
 %% @doc Get statistics about node load
+%% TimeWindow - time in seconds since now, that defines interval for which statistics will be fetched
 -spec get_node_stats(TimeWindow :: short | medium | long | integer(), Format :: default | json) -> Result when
   Result :: [{Name :: atom(), Value :: float()}] | {error, term()}.
 %% ====================================================================
@@ -600,15 +601,17 @@ get_node_stats(TimeWindow, Format) ->
   StartTime = EndTime - Interval,
   get_node_stats(StartTime, EndTime, Format).
 
-%% get_node_stats/2
+%% get_node_stats/3
 %% ====================================================================
 %% @doc Get statistics about node load
+%% StartTime. EndTime - time in seconds since epoch (1970-01-01), that defines interval
+%% for which statistics will be fetched
 -spec get_node_stats(StartTime :: integer(), EndTime :: integer(), Format :: default | json) -> Result when
   Result :: [{Name :: string(), Value :: float()}] | {error, term()}.
 %% ====================================================================
 get_node_stats(StartTime, EndTime, Format) ->
-  BinaryEndTime = integer_to_binary(EndTime),
   BinaryStartTime = integer_to_binary(StartTime),
+  BinaryEndTime = integer_to_binary(EndTime),
   Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
   FetchFunction = case Format of
                     json -> fun rrderlang:fetch_json/3;
@@ -649,7 +652,7 @@ save_node_stats_to_rrd(#node_state{cpu_stats = CpuStats, network_stats = Network
   Values = lists:map(fun({_, Value}) -> Value end, Stats),
   case rrderlang:update(?Node_Stats_RRD_Name, <<>>, Values, Timestamp) of
     {error, Error} ->
-      lager:error([{mod, ?MODULE}], "Can not save node stats to RRD: ~p", [Error]),
+      ?error("Can not save node stats to RRD: ~p", [Error]),
       {error, Error};
     _ -> ok
   end.
