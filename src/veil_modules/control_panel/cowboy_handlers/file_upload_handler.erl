@@ -332,7 +332,6 @@ ensure_unique_filename(RequestedPath, Counter) ->
     NewName = lists:flatten(io_lib:format("~s(~B)~s", [Rootname, Counter, Ext])),
     case logical_files_manager:create(NewName) of
         ok -> NewName;
-        {_, ?VEEXIST} -> ensure_unique_filename(RequestedPath, Counter + 1);
         {_, file_exists} -> ensure_unique_filename(RequestedPath, Counter + 1);
         Error -> throw({"Error in ensure_unique_filename", Error})
     end.

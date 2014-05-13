@@ -207,9 +207,14 @@ comet_loop(Counter, PageState = #page_state{first_log = FirstLog, auto_scroll = 
                 comet_loop(Counter, PageState#page_state{max_logs = MaxLogs, first_log = NewFirstLog});
             {set_filter, FilterName, Filter} ->
                 comet_loop(Counter, set_filter(PageState, FilterName, Filter));
+            display_error ->
+                gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}}),
+                gui_utils:insert_bottom("main_table", comet_error()),
+                gui_utils:flush();
             {'EXIT', _, _Reason} ->
                 gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}});
-            _ ->
+            Other ->
+                ?debug("Unrecognized comet message in page_logs: ~p", [Other]),
                 comet_loop(Counter, PageState)
         end
     catch _Type:_Msg ->
@@ -403,8 +408,13 @@ event(init) ->
     {ok, Pid} = gui_utils:comet(fun() -> comet_loop_init() end),
     put(comet_pid, Pid),
     % Subscribe for logs at central_logger
-    %% TODO - what if central loger is down?
-    gen_server:call(?Dispatcher_Name, {central_logger, 1, {subscribe, Pid}});
+    case gen_server:call(?Dispatcher_Name, {central_logger, 1, {subscribe, Pid}}) of
+        ok -> ok;
+        Other ->
+            ?error("central_logger is unreachable. RPC call returned: ~p", [Other]),
+            Pid ! display_error
+    end,
+    ok;
 
 
 event(toggle_auto_scroll) ->

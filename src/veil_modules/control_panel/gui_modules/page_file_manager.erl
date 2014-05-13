@@ -293,7 +293,10 @@ comet_loop(IsUploadInProgress) ->
             upload_started ->
                 comet_loop(true);
             upload_finished ->
-                comet_loop(false)
+                comet_loop(false);
+            Other ->
+                ?debug("Unrecognized comet message in page_logs: ~p", [Other]),
+                comet_loop(IsUploadInProgress)
 
         after ?AUTOREFRESH_PERIOD ->
             % Refresh file list if it has changed

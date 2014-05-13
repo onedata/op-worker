@@ -575,11 +575,11 @@ remove(Target) -> wf:wire(#jquery{target = Target, method = ["remove"]}).
 %% @doc Sets a response header, but prevents duplicate entries. Header must
 %% be normalized to lowercase (e. g. content-type and not Content-Type)
 %% @end
--spec cowboy_ensure_header(binary(), binary(), req()) -> ok.
+-spec cowboy_ensure_header(binary(), binary(), req()) -> req().
 %% ====================================================================
 cowboy_ensure_header(Name, Value, Req) when is_binary(Name) and is_binary(Value) ->
     Req2 = cowboy_req:delete_resp_header(Name, Req),
-    _Req3 = cowboy_req:set_resp_header(Name, Value, Req2).
+    cowboy_req:set_resp_header(Name, Value, Req2).
 
 
 % old_menu_captions() ->
