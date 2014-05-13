@@ -1013,12 +1013,17 @@ handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, cre
     % Delete storage test file after 'delete_storage_test_file_time' seconds
     spawn(fun() ->
       timer:sleep(DeleteStorageTestFileTime * 1000),
-      storage_files_manager:delete(StorageHelperInfo, Path)
+      case storage_files_manager:delete(StorageHelperInfo, Path) of
+        ok -> ok;
+        {_, Error} -> ?error("Error while deleting  storage test file: ~p", [Error])
+      end
     end),
     Length = storage_files_manager:write(StorageHelperInfo, Path, Text),
     #createstoragetestfileresponse{answer = true, relative_path = Path, text = Text}
   catch
-    _:_ -> #createstoragetestfileresponse{answer = false}
+    _:_ ->
+      ?error("Error while creating storage test file."),
+      #createstoragetestfileresponse{answer = false}
   end;
 
 handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, storagetestfilemodifiedrequest) ->
@@ -1030,10 +1035,15 @@ handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, sto
     StorageHelperInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, StorageInfo),
     {ok, Bytes} = storage_files_manager:read(StorageHelperInfo, Path, 0, length(Text)),
     Text = binary_to_list(Bytes),
-    storage_files_manager:delete(StorageHelperInfo, Path),
+    case storage_files_manager:delete(StorageHelperInfo, Path) of
+      ok -> ok;
+      {_, Error} -> ?error("Error while deleting  storage test file: ~p", [Error])
+    end,
     #storagetestfilemodifiedresponse{answer = true}
   catch
-    _:_ -> #storagetestfilemodifiedresponse{answer = false}
+    _:_ ->
+      ?error("Error while checking storage test file modification."),
+      #storagetestfilemodifiedresponse{answer = false}
   end;
 
 handle_fuse_message(ProtocolVersion, Record, FuseId) when is_record(Record, clientstorageinfo) ->
@@ -1043,10 +1053,12 @@ handle_fuse_message(ProtocolVersion, Record, FuseId) when is_record(Record, clie
       {StorageId, #storage_helper_info{name = "DirectIO", init_args = [Root]}} end, Record#clientstorageinfo.storage_info),
     NewFuseSessionDoc = FuseSessionDoc#veil_document{record = FuseSession#fuse_session{client_storage_info = ClientStorageInfo}},
     {ok, _} = dao_lib:apply(dao_cluster, save_fuse_session, [NewFuseSessionDoc], ProtocolVersion),
-    lager:info("Client storage info saved in session."),
+    ?info("Client storage info saved in session."),
     #atom{value = ?VOK}
   catch
-    _:_ -> #atom{value = ?VEREMOTEIO}
+    _:_ ->
+      ?error("Error while saving client storage info in client session."),
+      #atom{value = ?VEREMOTEIO}
   end.
 
 %% save_file_descriptor/3
@@ -1837,7 +1849,7 @@ create_storage_test_file(StorageHelperInfo, Login, Attempts) ->
   {A, B, C} = now(),
   random:seed(A, B, C),
   Filename = random_ascii_lowercase_sequence(8),
-  Path = "users/" ++ Login ++ "/" ++ Filename,
+  Path = "users/" ++ Login ++ "/storage_test_" ++ Filename,
   case storage_files_manager:create(StorageHelperInfo, Path) of
     ok -> {ok, Path};
     _ -> create_storage_test_file(StorageHelperInfo, Login, Attempts - 1)
