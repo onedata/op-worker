@@ -23,12 +23,12 @@
 -include("veil_modules/cluster_rengine/cluster_rengine.hrl").
 
 %% API
--export([test_event_subscription/1, test_event_aggregation/1, test_dispatching/1]).
+-export([test_event_subscription/1, test_multiple_trees/1, test_event_aggregation/1, test_dispatching/1]).
 
 -export([ccm_code1/0, ccm_code2/0, worker_code/0]).
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
-all() -> [test_event_subscription, test_event_aggregation, test_dispatching].
+all() -> [test_event_subscription, test_multiple_trees, test_event_aggregation, test_dispatching].
 
 -define(assert_received(ResponsePattern), receive
                                             ResponsePattern -> ok
@@ -86,6 +86,47 @@ test_event_subscription(Config) ->
   ?assert_received({event_handled, tree, _}, 3000),
   assert_nothing_received().
 
+test_multiple_trees(Config) ->
+  NodesUp = ?config(nodes, Config),
+  [CCM | _] = NodesUp,
+
+  WriteEvent = [{"type", "write_event_ct_test"}, {"user_id", "1234"}, {"ans_pid", self()}],
+
+  CreateEventHandler = fun(HandlerId) ->
+    fun(WriteEv) ->
+      AnsPid = proplists:get_value("ans_pid", WriteEv),
+      case AnsPid of
+        undefined -> ok;
+        _ ->
+          AnsPid ! {event_handled, HandlerId, self()}
+      end
+    end
+  end,
+
+  subscribe_for_write_events(CCM, tree, CreateEventHandler(tree1), #event_stream_config{}),
+  subscribe_for_write_events(CCM, tree, CreateEventHandler(tree2), #event_stream_config{}),
+  send_event(WriteEvent, CCM),
+
+  ?assert_received({event_handled, tree1, _}, 3000),
+  ?assert_received({event_handled, tree2, _}, 3000),
+
+  lists:foreach(fun(Node) ->
+    SubProcList = gen_server:call({cluster_rengine, Node}, getSubProcs),
+    ?assert(is_list(SubProcList)),
+    ?assertEqual(2, length(SubProcList))
+  end, NodesUp),
+
+  subscribe_for_write_events(CCM, tree, CreateEventHandler(tree3), #event_stream_config{}),
+  send_event(WriteEvent, CCM),
+
+  ?assert_received({event_handled, tree1, _}, 3000),
+  ?assert_received({event_handled, tree2, _}, 3000),
+  ?assert_received({event_handled, tree3, _}, 3000),
+  lists:foreach(fun(Node) ->
+    SubProcList = gen_server:call({cluster_rengine, Node}, getSubProcs),
+    ?assert(is_list(SubProcList)),
+    ?assertEqual(3, length(SubProcList))
+  end, NodesUp).
 
 test_event_aggregation(Config) ->
   NodesUp = ?config(nodes, Config),

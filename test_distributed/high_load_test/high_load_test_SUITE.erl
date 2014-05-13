@@ -217,7 +217,7 @@ sub_proc_load_test(Config) ->
   end,
 
   RegisterSubProc = fun(Node) ->
-    RegAns = gen_server:call({fslogic, Node}, {register_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun}, 1000),
+    RegAns = gen_server:call({fslogic, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun}, 1000),
     ?assertEqual(ok, RegAns),
     nodes_manager:wait_for_cluster_cast({fslogic, Node})
   end,

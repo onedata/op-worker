@@ -54,8 +54,8 @@
 	PlugIn :: atom(),
 	PlugInArgs :: any(),
 	LoadMemorySize :: integer(),
-	Result ::  {ok,Pid} 
-			| ignore 
+	Result ::  {ok,Pid}
+			| ignore
 			| {error,Error},
 	Pid :: pid(),
 	Error :: {already_started,Pid} | term().
@@ -137,6 +137,9 @@ handle_call(getLoadInfo, _From, State) ->
 handle_call(getFullLoadInfo, _From, State) ->
     {reply, State#host_state.load_info, State};
 
+handle_call(getSubProcs, _From, State) ->
+    {reply, State#host_state.sub_procs, State};
+
 handle_call(clearLoadInfo, _From, State) ->
 	{_New, _Old, _NewListSize, Max} = State#host_state.load_info,
     Reply = ok,
@@ -157,22 +160,49 @@ handle_call(dispatcher_map_unregistered, _From, State) ->
               end,
   {reply, ok, State#host_state{dispatcher_request_map_ok = DMapState}};
 
-%% For tests
-handle_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM}, _From, State) ->
-  Pid = self(),
-  SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun),
-  erlang:send_after(200, Pid, {timer, register_disp_map}),
-  {reply, ok, State#host_state{request_map = RM, sub_procs = SubProcList,
-  dispatcher_request_map = DM, dispatcher_request_map_ok = false}};
+%% If sub_proc with Name already existed then returns exists. Otherwise register new sub_proc
+handle_call({register_new_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, Cache}, _From, State) ->
+  case lists:keyfind(Name, 1, State#host_state.sub_procs) of
+    false ->
+      SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache) ++ State#host_state.sub_procs,
+      NewState = upgrade_sub_proc_list(SubProcList, RM, DM, Cache, State),
+      {reply, ok, NewState};
+    _ ->
+      {reply, exists, State}
+  end;
 
-%% For tests
-handle_call({register_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, Cache}, _From, State) ->
-  Pid = self(),
-  SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache),
-  erlang:send_after(200, Pid, {timer, register_disp_map}),
-  erlang:send_after(200, Pid, {timer, register_sub_proc_caches}),
-  {reply, ok, State#host_state{request_map = RM, sub_procs = SubProcList,
-  dispatcher_request_map = DM, dispatcher_request_map_ok = false}};
+handle_call({register_new_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM}, _From, State) ->
+  handle_call({register_new_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, non}, _From, State);
+
+%% If sub_proc with Name has not existed before than returns not_exists. Otherwise overwrite existing sub_proc
+%% with newly added sub_proc
+handle_call({update_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, Cache}, _From, State) ->
+  case lists:keyfind(Name, 1, State#host_state.sub_procs) of
+    false ->
+      {reply, not_exists, State};
+    OldSubProcTuple ->
+      WithoutOldSubProc = lists:delete(OldSubProcTuple, State#host_state.sub_procs),
+      SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache) ++ WithoutOldSubProc,
+      NewState = upgrade_sub_proc_list(SubProcList, RM, DM, Cache, State),
+      {reply, ok, NewState}
+  end;
+
+handle_call({update_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM}, _From, State) ->
+  handle_call({update_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, non}, _From, State);
+
+%% Register sub_proc, may overwrite existing for the same Name.
+handle_call({register_or_update_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, Cache}, _From, State) ->
+  SubProcList = case lists:keyfind(Name, 1, State#host_state.sub_procs) of
+    false -> worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache) ++ State#host_state.sub_procs;
+    OldSubProcTuple ->
+      WithoutOldSubProc = lists:delete(OldSubProcTuple, State#host_state.sub_procs),
+      worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache) ++ WithoutOldSubProc
+  end,
+  NewState = upgrade_sub_proc_list(SubProcList, RM, DM, Cache, State),
+  {reply, ok, NewState};
+
+handle_call({register_or_update_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM}, _From, State) ->
+  handle_call({register_or_update_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, non}, _From, State);
 
 handle_call(Request, _From, State) when is_tuple(Request) -> %% Proxy call. Each cast can be achieved by instant proxy-call which ensures
                                                              %% that request was made, unlike cast because cast ignores state of node/gen_server
@@ -425,7 +455,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% @doc Processes client request using PlugIn:handle function. Afterwards,
 %% it sends the answer to dispatcher and logs info about processing time.
 -spec proc_request(PlugIn :: atom(), ProtocolVersion :: integer(), Msg :: term(), MsgId :: term(), ReplyDisp :: term()) -> Result when
-	Result ::  atom(). 
+	Result ::  atom().
 %% ====================================================================
 proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
 	BeforeProcessingRequest = os:timestamp(),
@@ -533,7 +563,7 @@ send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo) ->
 %% @doc Adds information about ended request to host memory (ccm uses
 %% it to control cluster load).
 -spec save_progress(Report :: term(), LoadInfo :: term()) -> NewLoadInfo when
-	NewLoadInfo ::  term(). 
+	NewLoadInfo ::  term().
 %% ====================================================================
 save_progress(Report, {New, Old, NewListSize, Max}) ->
 	case NewListSize + 1 of
@@ -547,7 +577,7 @@ save_progress(Report, {New, Old, NewListSize, Max}) ->
 %% ====================================================================
 %% @doc Provides averaged information about last requests.
 -spec load_info(LoadInfo :: term()) -> Result when
-	Result ::  term(). 
+	Result ::  term().
 %% ====================================================================
 load_info({New, Old, NewListSize, Max}) ->
 	Load = lists:sum(lists:map(fun({_Time, Load}) -> Load end, New)) + lists:sum(lists:map(fun({_Time, Load}) -> Load end, lists:sublist(Old, Max-NewListSize))),
@@ -557,7 +587,7 @@ load_info({New, Old, NewListSize, Max}) ->
 		_L -> case NewListSize of
 			Max -> lists:last(New);
 			_S -> lists:nth(Max-NewListSize, Old)
-		end	
+		end
 	end,
 	{Time, Load}.
 
@@ -578,6 +608,22 @@ update_wait_time(WaitFrom, AvgWaitTime) ->
   end,
   NewAvgWaitTime = TimeDif / 10 + AvgWaitTime * 9 / 10,
   {Now, NewAvgWaitTime}.
+
+%% upgrade_sub_proc_list/5
+%% ====================================================================
+%% @doc Starts sub proc
+-spec upgrade_sub_proc_list(SubProcList :: list(), RM :: fun(), DM :: fun(), Cache :: atom(), State :: #host_state{}) -> Result when
+  Result ::  pid().
+%% ====================================================================
+upgrade_sub_proc_list(SubProcList, RM, DM, Cache, State) ->
+  Pid = self(),
+  erlang:send_after(200, Pid, {timer, register_disp_map}),
+  case Cache of
+    non -> ok;
+    _ -> erlang:send_after(200, Pid, {timer, register_sub_proc_caches})
+  end,
+  State#host_state{request_map = RM, sub_procs = SubProcList,
+  dispatcher_request_map = DM, dispatcher_request_map_ok = false}.
 
 %% start_sub_proc/5
 %% ====================================================================

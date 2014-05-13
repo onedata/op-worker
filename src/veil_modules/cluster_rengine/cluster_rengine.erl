@@ -159,7 +159,7 @@ save_to_caches(EventType, #event_handler_item{processing_method = ProcessingMeth
 create_process_tree_for_handler(ProtocolVersion, #event_handler_item{tree_id = TreeId, map_fun = MapFun, handler_fun = HandlerFun, config = #event_stream_config{config = ActualConfig} = Config}) ->
   ProcFun = case ActualConfig of
               undefined ->
-                fun(_ProtocolVersion, {final_stage_tree, TreeId2, Event}) ->
+                fun(_ProtocolVersion, {final_stage_tree, _TreeId2, Event}) ->
                   HandlerFun(Event)
                 end;
               _ ->
@@ -193,10 +193,10 @@ create_process_tree_for_handler(ProtocolVersion, #event_handler_item{tree_id = T
 
   LocalCacheName = list_to_atom(atom_to_list(TreeId) ++ "_local_cache"),
   case ActualConfig of
-    undefined -> gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM});
+    undefined -> gen_server:call({cluster_rengine, Node}, {register_or_update_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM});
     _ -> case element(1, ActualConfig) of
-           aggregator_config -> gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM, LocalCacheName});
-           _ -> gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM})
+           aggregator_config -> gen_server:call({cluster_rengine, Node}, {register_or_update_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM, LocalCacheName});
+           _ -> gen_server:call({cluster_rengine, Node}, {register_or_update_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM})
          end
   end.
 
@@ -220,7 +220,7 @@ fun_from_config(#event_stream_config{config = ActualConfig, wrapped_config = Wra
   case element(1, ActualConfig) of
     aggregator_config ->
       fun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName) ->
-        InitCounterIfNeeded = fun(EtsName, Key) ->
+        InitCounterIfNeeded = fun(Key) ->
           case ets:lookup(EtsName, Key) of
             [] -> ets:insert(EtsName, {Key, 0});
             _ -> ok
@@ -243,7 +243,7 @@ fun_from_config(#event_stream_config{config = ActualConfig, wrapped_config = Wra
             case FieldValue of
               FieldValue2 when not is_tuple(FieldValue2) ->
                 Key = "sum_" ++ FieldValue,
-                InitCounterIfNeeded(EtsName, Key),
+                InitCounterIfNeeded(Key),
                 [{_Key, Val}] = ets:lookup(EtsName, Key),
                 NewValue = Val + Incr,
                 case NewValue >= ActualConfig#aggregator_config.threshold of
