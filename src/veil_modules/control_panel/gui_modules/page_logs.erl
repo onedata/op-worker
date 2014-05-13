@@ -208,11 +208,11 @@ comet_loop(Counter, PageState = #page_state{first_log = FirstLog, auto_scroll = 
             {set_filter, FilterName, Filter} ->
                 comet_loop(Counter, set_filter(PageState, FilterName, Filter));
             display_error ->
-                gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}}),
+                catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}}),
                 gui_utils:insert_bottom("main_table", comet_error()),
                 gui_utils:flush();
             {'EXIT', _, _Reason} ->
-                gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}});
+                catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}});
             Other ->
                 ?debug("Unrecognized comet message in page_logs: ~p", [Other]),
                 comet_loop(Counter, PageState)
