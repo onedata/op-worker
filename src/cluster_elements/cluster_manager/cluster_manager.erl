@@ -529,7 +529,10 @@ handle_cast({update_storage_read_b, Bytes}, #cm_state{storage_stats = #storage_s
 handle_cast(register_io_event_handler, State) ->
   IOWriteEventHandler = fun(Event) ->
     Bytes = proplists:get_value(count, Event),
-    gen_server:cast({global, ?CCM}, {update_storage_write_b, Bytes})
+    case is_integer(Bytes) of
+      true -> gen_server:cast({global, ?CCM}, {update_storage_write_b, Bytes});
+      _ -> ?error("Write for stats handler received wrong data: ~p", [Bytes])
+    end
   end,
 
   WriteEventItem = #event_handler_item{processing_method = standard, handler_fun = IOWriteEventHandler},
@@ -546,7 +549,10 @@ handle_cast(register_io_event_handler, State) ->
 
   IOReadEventHandler = fun(Event) ->
     Bytes = proplists:get_value(count, Event),
-    gen_server:cast({global, ?CCM}, {update_storage_read_b, Bytes})
+    case is_integer(Bytes) of
+      true -> gen_server:cast({global, ?CCM}, {update_storage_read_b, Bytes});
+      _ -> ?error("Read for stats handler received wrong data: ~p", [Bytes])
+    end
   end,
 
   ReadEventItem = #event_handler_item{processing_method = standard, handler_fun = IOReadEventHandler},
