@@ -22,12 +22,6 @@
 %% Singleton modules are modules which are supposed to have only one instance.
 -define(SINGLETON_MODULES, [control_panel, central_logger, rule_manager]).
 
--ifdef(TEST).
--define(REGISTER_DEFAULT_RULES, false).
--else.
--define(REGISTER_DEFAULT_RULES, true).
--endif.
-
 %% Minimal message ID that can be used - it is limited by type of Answer.message_id in protocol buffers
 %% TODO: change type of message_id to sint32, more at https://developers.google.com/protocol-buffers/docs/proto#scalar
 -define(MIN_MSG_ID, -1073741824). %% 1073741824 = 2^30
@@ -233,8 +227,8 @@ handle_call({node_for_ack, NodeForAck}, _From, State) ->
       put(callback_msg_ID, ID - 1),
       ID - 1;
     _ ->
-      put(callback_msg_ID, -1),
-      -1
+      put(callback_msg_ID, -2),
+      -2
   end,
 
   SendToNodes = fun(Node) ->
