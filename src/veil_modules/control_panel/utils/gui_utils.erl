@@ -13,14 +13,23 @@
 -include("veil_modules/control_panel/common.hrl").
 -include("logging.hrl").
 
+% Functions connected with page / session context
 -export([get_requested_hostname/0, get_requested_page/0, get_user_dn/0, get_request_params/0]).
+% Functions connected with user's session
 -export([user_logged_in/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0]).
+% Functions used for redirecting to and from login
 -export([redirect_to_login/1, redirect_from_login/0, maybe_redirect/4]).
+% Functions to check for user's session and generate page elements
 -export([apply_or_redirect/3, apply_or_redirect/4, top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
+% Comet API
 -export([comet/1, init_comet/2, comet_supervisor/2, is_comet_process/0, flush/0]).
+% Useful functions for binding custom events
 -export([register_escape_event/1, script_for_enter_submission/2, script_to_bind_element_click/2]).
+% jQuery wrappers for page updates
 -export([update/2, replace/2, insert_top/2, insert_bottom/2, insert_before/2, insert_after/2, remove/1]).
+% Conversion utils
 -export([to_list/1, to_binary/1, join_to_binary/1]).
+% Convinience function to set headers in cowboy response
 -export([cowboy_ensure_header/3]).
 
 
