@@ -16,14 +16,9 @@
 -include("supervision_macros.hrl").
 -include("modules_and_args.hrl").
 -include("logging.hrl").
--include("veil_modules/cluster_rengine/cluster_rengine.hrl").
--include("fuse_messages_pb.hrl").
--include("communication_protocol_pb.hrl").
 
 -define(STATS_WEIGHTS, [{"cpu", 100}, {"mem", 100}]).
 -define(CALLBACKS_TABLE, callbacks_table).
-%% Defines how often io event is generated in terms of read or written bytes
--define(IO_BYTES_THRESHOLD, 1024 * 1024).
 
 %% Singleton modules are modules which are supposed to have only one instance.
 -define(SINGLETON_MODULES, [control_panel, central_logger, rule_manager]).
@@ -47,9 +42,6 @@
 -ifdef(TEST).
 -export([update_dns_state/3, update_dispatcher_state/6, calculate_load/2, calculate_worker_load/1, calculate_node_load/2,
   merge_nodes_stats/1, map_node_stats_to_load/1]).
--define(REGISTER_DEFAULT_RULES, false).
--else.
--define(REGISTER_DEFAULT_RULES, true).
 -endif.
 
 %% ====================================================================
@@ -525,48 +517,6 @@ handle_cast({update_storage_write_b, Bytes}, #cm_state{storage_stats = #storage_
 
 handle_cast({update_storage_read_b, Bytes}, #cm_state{storage_stats = #storage_stats{read_bytes = RB} = Stats} = State) ->
   {noreply, State#cm_state{storage_stats = Stats#storage_stats{read_bytes = RB + Bytes}}};
-
-handle_cast(register_io_event_handler, State) ->
-  IOWriteEventHandler = fun(Event) ->
-    Bytes = proplists:get_value(count, Event),
-    case is_integer(Bytes) of
-      true -> gen_server:cast({global, ?CCM}, {update_storage_write_b, Bytes});
-      _ -> ?error("Write for stats handler received wrong data: ~p", [Bytes])
-    end
-  end,
-
-  WriteEventItem = #event_handler_item{processing_method = standard, handler_fun = IOWriteEventHandler},
-
-  WriteEventFilter = #eventfilterconfig{field_name = "type", desired_value = "write_event"},
-  WriteEventFilterConfig = #eventstreamconfig{filter_config = WriteEventFilter},
-
-  WriteEventAggregator = #eventaggregatorconfig{field_name = "type", threshold = ?IO_BYTES_THRESHOLD, sum_field_name = "bytes"},
-  WriteEventAggregatorConfig = #eventstreamconfig{aggregator_config = WriteEventAggregator, wrapped_config = WriteEventFilterConfig},
-
-  WriteEventTransformer = #eventtransformerconfig{field_names_to_replace = ["type"], values_to_replace = ["write_event"], new_values = ["write_for_stats"]},
-  WriteEventTransformerConfig = #eventstreamconfig{transformer_config = WriteEventTransformer, wrapped_config = WriteEventAggregatorConfig},
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {"write_for_stats", WriteEventItem, WriteEventTransformerConfig}}}),
-
-  IOReadEventHandler = fun(Event) ->
-    Bytes = proplists:get_value(count, Event),
-    case is_integer(Bytes) of
-      true -> gen_server:cast({global, ?CCM}, {update_storage_read_b, Bytes});
-      _ -> ?error("Read for stats handler received wrong data: ~p", [Bytes])
-    end
-  end,
-
-  ReadEventItem = #event_handler_item{processing_method = standard, handler_fun = IOReadEventHandler},
-
-  ReadEventFilter = #eventfilterconfig{field_name = "type", desired_value = "read_event"},
-  ReadEventFilterConfig = #eventstreamconfig{filter_config = ReadEventFilter},
-
-  ReadEventAggregator = #eventaggregatorconfig{field_name = "type", threshold = ?IO_BYTES_THRESHOLD, sum_field_name = "bytes"},
-  ReadEventAggregatorConfig = #eventstreamconfig{aggregator_config = ReadEventAggregator, wrapped_config = ReadEventFilterConfig},
-
-  ReadEventTransformer = #eventtransformerconfig{field_names_to_replace = ["type"], values_to_replace = ["read_event"], new_values = ["read_for_stats"]},
-  ReadEventTransformerConfig = #eventstreamconfig{transformer_config = ReadEventTransformer, wrapped_config = ReadEventAggregatorConfig},
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, 1, self(), {add_event_handler, {"read_for_stats", ReadEventItem, ReadEventTransformerConfig}}}),
-  {noreply, State};
 
 handle_cast(_Msg, State) ->
   {noreply, State}.
@@ -1628,9 +1578,9 @@ clear_cache(State, Cache) ->
 %% ====================================================================
 create_cluster_stats_rrd() ->
   {ok, Period} = application:get_env(?APP_Name, cluster_monitoring_period),
+  {ok, Steps} = application:get_env(?APP_Name, rrd_steps),
   Heartbeat = 2 * Period,
   RRASize = round(60 * 60 / Period), % one day in seconds devided by monitoring period
-  Steps = [1, 24, 24 * 7, 24 * 30, 24 * 365], % defines how many primary data points are used to build a consolidated data point which then goes into the archive, it is an equivalent of [1 hour, 1 day, 7 days, 30 days, 365 days]
   BinaryPeriod = integer_to_binary(Period),
   BinaryHeartbeat = integer_to_binary(Heartbeat),
   RRASizeBinary = integer_to_binary(RRASize),
@@ -1656,10 +1606,6 @@ create_cluster_stats_rrd() ->
       ?error("Can not create cluster stats RRD: ~p", [Error]),
       {error, Error};
     _ ->
-      case ?REGISTER_DEFAULT_RULES of
-        true -> gen_server:cast({global, ?CCM}, register_io_event_handler);
-        _ -> ok
-      end,
       gen_server:cast({global, ?CCM}, monitor_cluster),
       ok
   end.

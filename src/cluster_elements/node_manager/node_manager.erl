@@ -553,9 +553,9 @@ log_load(Fd, StartTime, PrevTime, CurrTime) ->
 %% ====================================================================
 create_node_stats_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkStats, ports_stats = PortsStats}) ->
   {ok, Period} = application:get_env(?APP_Name, node_monitoring_period),
+  {ok, Steps} = application:get_env(?APP_Name, rrd_steps),
   Heartbeat = 2 * Period,
   RRASize = round(60 * 60 / Period), % one hour in seconds devided by monitoring period
-  Steps = [1, 24, 24 * 7, 24 * 30, 24 * 365], % defines how many primary data points are used to build a consolidated data point which then goes into the archive, it is an equivalent of [1 day, 7 days, 30 days, 365 days]
   BinaryPeriod = integer_to_binary(Period),
   BinaryHeartbeat = integer_to_binary(Heartbeat),
   RRASizeBinary = integer_to_binary(RRASize),
