@@ -47,6 +47,7 @@ setup() ->
     application:set_env(?APP_Name, short_monitoring_time_window, 60),
     application:set_env(?APP_Name, medium_monitoring_time_window, 300),
     application:set_env(?APP_Name, long_monitoring_time_window, 900),
+    application:set_env(?APP_Name, rrd_steps, [1,24,168,720,8760]),
     node_manager:start_link(test_worker),
     {ok, _} = worker_host:start_link(dao, [], 10).
 
