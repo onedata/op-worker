@@ -48,7 +48,10 @@ init(_Args) ->
   ets:new(?EVENT_HANDLERS_CACHE, [named_table, public, set, {read_concurrency, true}]),
   ets:new(?EVENT_TREES_MAPPING, [named_table, public, set, {read_concurrency, true}]),
 
-  configure_event_handlers(),
+  %% no need to wait for rule_manager - if it starts after cluster_rengine it will notify about handlers
+  %% send_after just to do it in another process
+  Pid = self(),
+  erlang:send_after(10, Pid, {timer, {asynch, ?PROTOCOL_VERSION, configure_event_handlers}}),
   ok.
 
 handle(_ProtocolVersion, ping) ->
@@ -68,6 +71,25 @@ handle(_ProtocolVersion, healthcheck) ->
 
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
+
+%% Get all EventHandlerItems registered in rule_manager and create process tree for each of them.
+handle(ProtocolVersion, configure_event_handlers) ->
+  gen_server:call(?Dispatcher_Name, {rule_manager, ProtocolVersion, self(), get_event_handlers}),
+  receive
+    {ok, EventHandlers} ->
+      lists:foreach(fun({EventType, EventHandlerItems}) ->
+        lists:foreach(fun(EventHandlerItem) ->
+          update_event_handler(1, EventType, EventHandlerItem)
+        end, EventHandlerItems)
+      end, EventHandlers),
+      ok;
+    _ ->
+      ?warning("rule_manager get_event_handlers handler sent back unexpected structure"),
+      error
+  after 1000 ->
+    ?info("rule_manager get_event_handlers handler did not replied"),
+    error
+  end;
 
 handle(_ProtocolVersion, {final_stage_tree, _TreeId, _Event}) ->
   ?info("cluster_rengine final_stage_tree handler should be always called in subprocess tree process");
@@ -104,30 +126,6 @@ cleanup() ->
   ok.
 
 % inner functions
-
-%% configure_event_handlers/0
-%% ====================================================================
-%% @doc Get all EventHandlerItems registered in rule_manager and create process tree for each of them.
-%% @end
--spec configure_event_handlers() -> ok | error.
-configure_event_handlers() ->
-  gen_server:call(?Dispatcher_Name, {rule_manager, ?PROTOCOL_VERSION, self(), get_event_handlers}),
-
-  receive
-    {ok, EventHandlers} ->
-      lists:foreach(fun({EventType, EventHandlerItems}) ->
-        lists:foreach(fun(EventHandlerItem) ->
-          update_event_handler(1, EventType, EventHandlerItem)
-        end, EventHandlerItems)
-      end, EventHandlers),
-      ok;
-    _ ->
-      ?warning("rule_manager get_event_handlers handler sent back unexpected structure"),
-      error
-  after 1000 ->
-    ?warning("rule_manager get_event_handlers handler did not replied"),
-    error
-  end.
 
 % returns if during update at least one process tree has been registered
 update_event_handler(ProtocolVersion, EventType, #event_handler_item{processing_method = ProcessingMethod, tree_id = TreeId} = EventHandlerItem) ->
