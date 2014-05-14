@@ -139,10 +139,11 @@ veil_cluster_node_env:
 
   - parameter:
       name: rrd_steps
-      description: |
-        Defines how many primary data points are used to build a consolidated data point
-        which then goes into the archive, it is an equivalent of [1 hour, 1 day, 7 days, 30 days, 365 days]
-      value: [1, 24, 24 * 7, 24 * 30, 24 * 365]
+      description: Defines how many primary data points are used to build a consolidated data point which then goes into the archive
+      value: |
+          ["1", "24", "168", "720", "8760"] # 1 hour, 1 day, 7 days, 30 days, 365 days
+      erlang_term: |
+          [1, 24, 168, 720, 8760]
 
   - parameter:
       name: nif_prefix
@@ -356,7 +357,7 @@ veil_cluster_node_env:
       name: io_bytes_threshold
       description: |
            Defines how often io event is generated in terms of read or written bytes
-      value: 1024 * 1024 # 1MB
+      value: 1048576 # 1MB
 
   # Quota management
   - parameter:
