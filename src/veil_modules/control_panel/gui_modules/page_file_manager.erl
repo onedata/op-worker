@@ -242,8 +242,12 @@ event({action, Fun, Args}) ->
     NewArgs = lists:map(
         fun(Arg) ->
             case Arg of
-                {q, FieldName} -> gui_utils:to_list(wf:q(FieldName));
-                Other -> Other
+                {q, FieldName} ->
+                    % This tuple means, that element with id-FieldName has to be queried
+                    % and the result be put in function args
+                    gui_utils:to_list(wf:q(FieldName));
+                Other ->
+                    Other
             end
         end, Args),
     gui_utils:apply_or_redirect(erlang, send, [get(comet_pid), {action, Fun, NewArgs}], true).
