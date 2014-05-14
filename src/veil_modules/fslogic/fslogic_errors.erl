@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: Write me !
+%% @doc: This module provides error translators for generic fslogic errors
 %% @end
 %% ===================================================================
 -module(fslogic_errors).
@@ -23,6 +23,13 @@
 %% API functions
 %% ====================================================================
 
+
+%% gen_error_code/1
+%% ====================================================================
+%% @doc Translates given error that was thrown to {ErrorCode :: fslogic_error(), ErrorDetails :: term()}.
+%%      This function is intended to be extended when new translation is needed.
+-spec gen_error_code(Error :: term()) -> {ErrorCode :: fslogic_error(), ErrorDetails :: term()}.
+%% ====================================================================
 gen_error_code({error, Reason}) ->
     gen_error_code(Reason);
 gen_error_code(file_not_found) ->
@@ -101,6 +108,13 @@ gen_error_message(RecordName, _Error) ->
     ?error("Unsupported record: ~p", [RecordName]),
     throw({unsupported_record, RecordName}).
 
+
+%% normalize_error_code/1
+%% ====================================================================
+%% @doc Normalizes format of given ErrorCode. It's unspecified if fslogic_error() macros are
+%%      string() or atom(). This method shall behave accordingly to current fslogic_error() type implementation.
+-spec normalize_error_code(ErrorCode :: atom() | string()) -> ErrorCode :: fslogic_error().
+%% ====================================================================
 normalize_error_code(ErrorCode) when is_atom(ErrorCode) ->
     atom_to_list(ErrorCode);
 normalize_error_code(ErrorCode) when is_list(ErrorCode) ->

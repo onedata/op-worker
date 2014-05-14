@@ -12,6 +12,8 @@
 -ifndef(FSLOGIC_HRL).
 -define(FSLOGIC_HRL, 1).
 
+-include("veil_modules/fslogic/fslogic_types.hrl").
+
 %% POSIX error names
 -define(VOK,        "ok").       %% Everything is just great
 -define(VENOENT,    "enoent").   %% File not found
