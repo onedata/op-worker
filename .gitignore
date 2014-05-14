@@ -4,7 +4,7 @@
 .dialyzer.plt
 .idea
 
-veilcluster.iml
+*.iml
 *.sublime*
 
 releases/veil_cluster_node

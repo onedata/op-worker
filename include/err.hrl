@@ -13,7 +13,7 @@
 %% @end
 %% ===================================================================
 
-% Note, logging.hrl is automaticaly include wherever err.hrl is.
+% Note, logging.hrl is automaticaly included wherever err.hrl is.
 -include("logging.hrl").
 
 -type status() :: warning | error | alert.
