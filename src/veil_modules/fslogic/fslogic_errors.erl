@@ -44,6 +44,8 @@ gen_error_code(invalid_group_access) ->
     {?VEPERM, invalid_group_access};
 gen_error_code(file_exists) ->
     {?VEEXIST, file_already_exists};
+
+%% Generic translations below. All custom translations shall be defined ^above this line.
 gen_error_code(ErrorCode) when is_list(ErrorCode) ->
     case lists:member(ErrorCode, ?ALL_ERROR_CODES) of
         true    -> {ErrorCode, no_details};
