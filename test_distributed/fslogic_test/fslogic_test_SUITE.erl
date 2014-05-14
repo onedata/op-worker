@@ -463,7 +463,7 @@ groups_test(Config) ->
     %% files_manager call with given user's DN
     FM = fun(M, A, DN) ->
             Me = self(),
-            Pid = spawn_link(Node, fun() -> put(user_dn, DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
+            Pid = spawn_link(Node, fun() -> fslogic_context:set_user_dn(DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
             receive
                 {Pid, Resp} -> Resp
             end
@@ -859,7 +859,7 @@ user_file_size_test(Config) ->
   %% files_manager call with given user's DN
   FM = fun(M, A, DN) ->
     Me = self(),
-    Pid = spawn_link(Node, fun() -> put(user_dn, DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
+    Pid = spawn_link(Node, fun() -> fslogic_context:set_user_dn(DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
     receive
       {Pid, Resp} -> Resp
     end
@@ -1445,7 +1445,7 @@ file_sharing_test(Config) ->
   Email = "user1@email.net",
   {CreateUserAns, User_Doc} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
-  put(user_dn, DN),
+  fslogic_context:set_user_dn(DN),
 
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}, auto_handshake]),
   ?assertEqual(ok, ConAns),
@@ -2869,13 +2869,13 @@ clear_old_descriptors(Node) ->
   nodes_manager:wait_for_db_reaction().
 
 create_standard_share(TestFile, DN) ->
-  put(user_dn, DN),
+  fslogic_context:set_user_dn(DN),
   logical_files_manager:create_standard_share(TestFile).
 
 create_share(TestFile, Share_With, DN) ->
-  put(user_dn, DN),
+  fslogic_context:set_user_dn(DN),
   logical_files_manager:create_share(TestFile, Share_With).
 
 get_share(Key, DN) ->
-  put(user_dn, DN),
+  fslogic_context:set_user_dn(DN),
   logical_files_manager:get_share(Key).

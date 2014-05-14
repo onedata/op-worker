@@ -262,7 +262,7 @@ read(FileStr, Offset, Size) ->
               case event_production_enabled("read_event") of
                 true ->
                   % TODO: add filePath
-                  ReadEvent = [{"type", "read_event"}, {"user_dn", get(user_dn)}, {"bytes", Size}],
+                  ReadEvent = [{"type", "read_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"bytes", Size}],
                   gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, ReadEvent}});
                 _ ->
                   ok
@@ -287,7 +287,7 @@ read(FileStr, Offset, Size) ->
   ErrorDetail :: term().
 %% ====================================================================
 write(FileStr, Buf) ->
-  case write_enabled(get(user_dn)) of
+  case write_enabled(fslogic_context:get_user_dn()) of
     true ->
       File = check_utf(FileStr),
       {Response, Response2} = getfilelocation(File),
@@ -297,7 +297,7 @@ write(FileStr, Buf) ->
           Res = storage_files_manager:write(Storage_helper_info, FileId, Buf),
           case {is_integer(Res), event_production_enabled("write_event")} of
             {true, true} ->
-              WriteEvent = [{"type", "write_event"}, {"user_dn", get(user_dn)}, {"bytes", binary:referenced_byte_size(Buf)}],
+              WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"bytes", binary:referenced_byte_size(Buf)}],
               gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}});
             _ ->
               ok
@@ -322,7 +322,7 @@ write(FileStr, Buf) ->
   ErrorDetail :: term().
 %% ====================================================================
 write(FileStr, Offset, Buf) ->
-  case write_enabled(get(user_dn)) of
+  case write_enabled(fslogic_context:get_user_dn()) of
     true ->
       File = check_utf(FileStr),
       {Response, Response2} = getfilelocation(File),
@@ -334,7 +334,7 @@ write(FileStr, Offset, Buf) ->
           %% TODO - check if asynchronous processing needed
           case {is_integer(Res), event_production_enabled("write_event")} of
             {true, true} ->
-              WriteEvent = [{"type", "write_event"}, {"user_dn", get(user_dn)}, {"count", binary:referenced_byte_size(Buf)}],
+              WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"count", binary:referenced_byte_size(Buf)}],
               gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}});
             _ ->
               ok
@@ -359,7 +359,7 @@ write(FileStr, Offset, Buf) ->
   ErrorDetail :: term().
 %% ====================================================================
 write_from_stream(FileStr, Buf) ->
-  case write_enabled(get(user_dn)) of
+  case write_enabled(fslogic_context:get_user_dn()) of
     true ->
       File = check_utf(FileStr),
       {Response, Response2} = getfilelocation(File),
@@ -370,7 +370,7 @@ write_from_stream(FileStr, Buf) ->
           Res = storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf),
           case {is_integer(Res), event_production_enabled("write_event")} of
             {true, true} ->
-              WriteEvent = [{"type", "write_event"}, {"user_dn", get(user_dn)}, {"count", binary:referenced_byte_size(Buf)}],
+              WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"count", binary:referenced_byte_size(Buf)}],
               gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}});
             _ ->
               ok
@@ -452,7 +452,7 @@ truncate(FileStr, Size) ->
           Res = storage_files_manager:truncate(Storage_helper_info, FileId, Size),
           case {Res, event_production_enabled("truncate_event")} of
             {ok, true} ->
-              TruncateEvent = [{"type", "truncate_event"}, {"user_dn", get(user_dn)}, {"filePath", FileStr}],
+              TruncateEvent = [{"type", "truncate_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", FileStr}],
               gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEvent}});
             _ ->
               ok
@@ -497,7 +497,7 @@ delete(FileStr) ->
                     ?VOK ->
                       case event_production_enabled("rm_event") of
                         true ->
-                          RmEvent = [{"type", "rm_event"}, {"user_dn", get(user_dn)}],
+                          RmEvent = [{"type", "rm_event"}, {"user_dn", fslogic_context:get_user_dn()}],
                           gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, RmEvent}});
                         _ ->
                           ok
@@ -603,7 +603,7 @@ contact_fslogic(Message, Value) ->
   try
     CallAns = case Message of
       internal_call ->
-        UserID = get(user_dn),
+        UserID = fslogic_context:get_user_dn(),
         case UserID of
           undefined -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {internal_call, Value}});
           _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, #veil_request{subject = UserID, request = {internal_call, Value}}})
@@ -652,7 +652,7 @@ get_file_by_uuid(UUID) ->
 get_file_user_dependent_name_by_uuid(UUID) ->
   case get_file_full_name_by_uuid(UUID) of
     {ok, FullPath} ->
-      case get(user_dn) of
+      case fslogic_context:get_user_dn() of
         undefined -> 
           {ok, FullPath};
         UserDN ->

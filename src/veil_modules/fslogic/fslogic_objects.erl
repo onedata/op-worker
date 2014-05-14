@@ -109,7 +109,7 @@ get_file_helper(ProtocolVersion, File, FuseID, Fun) ->
     ?debug("get_file(File: ~p, FuseID: ~p)", [File, FuseID]),
     case string:tokens(File, "/") of
         [?GROUPS_BASE_DIR_NAME, GroupName | _] -> %% Check if group that user is tring to access is avaliable to him
-            case get(user_dn) of %% Internal call, allow all group access
+            case fslogic_context:get_user_dn() of %% Internal call, allow all group access
                 undefined   -> dao_lib:apply(dao_vfs, Fun, [File], ProtocolVersion);
                 UserDN      -> %% Check if user has access to this group
                     Teams = user_logic:get_team_names({dn, UserDN}),

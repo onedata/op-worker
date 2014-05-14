@@ -76,7 +76,7 @@ mkdir(Storage_helper_info, Dir) ->
             0 ->
               derive_gid_from_parent(Storage_helper_info, Dir),
 
-              UserID = get(user_dn),
+              UserID = fslogic_context:get_user_dn(),
 
               case UserID of
                 undefined -> ok;
@@ -361,7 +361,7 @@ create(Storage_helper_info, File) ->
                 0 ->
                   derive_gid_from_parent(Storage_helper_info, File),
 
-                  UserID = get(user_dn),
+                  UserID = fslogic_context:get_user_dn(),
 
                   case UserID of
                     undefined -> ok;

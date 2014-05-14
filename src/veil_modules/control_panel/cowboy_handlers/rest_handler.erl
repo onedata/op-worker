@@ -319,7 +319,7 @@ do_init(Req, DnString) ->
     Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"application/json">>, Req),
     case user_logic:get_user({dn, DnString}) of
         {ok, _} ->
-            put(user_dn, DnString),
+            fslogic_context:set_user_dn(DnString),
             ?info("[REST] Peer connected using certificate with subject: ~p ~n", [DnString]),
             {PathInfo, _} = cowboy_req:path_info(Req2),
             case rest_routes:route(PathInfo) of

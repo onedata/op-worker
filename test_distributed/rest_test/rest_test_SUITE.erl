@@ -370,7 +370,7 @@ setup_user_in_db(DN) ->
     ?assertEqual(ok, Ans5),
 
 
-    put(user_dn, DN),
+    fslogic_context:set_user_dn(DN),
     Ans6 = rpc:call(CCM, logical_files_manager, mkdir, [?TEST_USER ++ "/dir"]),
     ?assertEqual(ok, Ans6),
 

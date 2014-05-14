@@ -77,7 +77,7 @@ handle(_ProtocolVersion, get_version) ->
 %% TODO: create generic mechanism for getting configuration on client startup
 handle(ProtocolVersion, is_write_enabled) ->
   try
-    case user_logic:get_user({dn, get(user_dn)}) of
+    case user_logic:get_user({dn, fslogic_context:get_user_dn()}) of
       {ok, UserDoc} ->
         case user_logic:get_quota(UserDoc) of
           {ok, #quota{exceeded = Exceeded}} when is_boolean(Exceeded) ->
@@ -85,15 +85,15 @@ handle(ProtocolVersion, is_write_enabled) ->
             %% there was no event handler for rm_event then it would need manual trigger to enable writing
             %% in most cases Exceeded == true so in most cases we will not call user_logic:quota_exceeded
             case Exceeded of
-              true -> not(user_logic:quota_exceeded({dn, get(user_dn)}, ProtocolVersion));
+              true -> not(user_logic:quota_exceeded({dn, fslogic_context:get_user_dn()}, ProtocolVersion));
               _ -> true
             end;
           Error ->
-            ?warning("cannot get quota doc for user with dn: ~p, Error: ~p", [get(user_dn), Error]),
+            ?warning("cannot get quota doc for user with dn: ~p, Error: ~p", [fslogic_context:get_user_dn(), Error]),
             false
         end;
       Error ->
-        ?warning("cannot get user with dn: ~p, Error: ~p", [get(user_dn), Error]),
+        ?warning("cannot get user with dn: ~p, Error: ~p", [fslogic_context:get_user_dn(), Error]),
         false
     end
   catch
@@ -144,7 +144,7 @@ handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
         %% Setup context
         fslogic_context:set_fuse_id(get(fuse_id)),
         fslogic_context:set_protocol_version(ProtocolVersion),
-        fslogic_context:set_user_dn(get(user_dn)),
+        fslogic_context:set_user_dn(fslogic_context:get_user_dn()),
 
         handle_fuse_message(RequestBody)
     catch

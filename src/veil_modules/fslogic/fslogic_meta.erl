@@ -68,7 +68,7 @@ update_parent_ctime(Dir, CTime) ->
         [?PATH_SEPARATOR] -> ok;
         ParentPath ->
             try
-                gen_server:call(?Dispatcher_Name, {fslogic, 1, #veil_request{subject = get(user_dn), request = {internal_call, #updatetimes{file_logic_name = ParentPath, mtime = CTime}}}})
+                gen_server:call(?Dispatcher_Name, {fslogic, 1, #veil_request{subject = fslogic_context:get_user_dn(), request = {internal_call, #updatetimes{file_logic_name = ParentPath, mtime = CTime}}}})
             catch
                 E1:E2 ->
                     lager:error("update_parent_ctime error: ~p:~p", [E1, E2]),
