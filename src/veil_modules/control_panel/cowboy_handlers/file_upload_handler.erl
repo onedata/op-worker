@@ -90,7 +90,7 @@ handle_upload_request(Req) ->
             put(user_id, lists:nth(1, user_logic:get_dn_list(UserID))),
             {St, Context2, SessHandler}
         catch T1:M1 ->
-            ?warning_stacktrace("Cannot establish session context for user content request - ~p:~p", [T1, M1]),
+            ?warning("Cannot establish session context for user content request - ~p:~p", [T1, M1]),
             error
         end,
 
