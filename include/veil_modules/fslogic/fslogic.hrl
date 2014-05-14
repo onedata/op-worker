@@ -76,8 +76,13 @@
 -define(GROUPS_ALLOWED_ACTIONS,         [getfileattr, getnewfilelocation, createdir, updatetimes, createlink, getfilechildren]).
 
 
+%% File types used in protocol. Use fslogic_file:normalize_file_type to translate types from/to normal macros like ?REG_TYPE.
 -define(REG_TYPE_PROT, "REG").
 -define(DIR_TYPE_PROT, "DIR").
 -define(LNK_TYPE_PROT, "LNK").
+
+
+%% Storage test file prefix for testing client;s storage availability
+-define(STORAGE_TEST_FILE_PREFIX, "storage_test_").
 
 -endif.
