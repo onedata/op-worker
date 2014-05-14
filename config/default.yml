@@ -215,8 +215,9 @@ veil_cluster_node_env:
 
   - parameter:
       name: control_panel_max_keepalive
-      description: Max time in sec to keep a connection alive
-      value: 1
+      description: Maximum number of HTTP requests without closing the connection (HTTP/1.1 only)
+      value: 30
+      # This is used only by n2o GUI. REST, HTTP on port 80 and upload handler all have max_keepalive = 1
 
   - parameter:
       name: control_panel_socket_timeout

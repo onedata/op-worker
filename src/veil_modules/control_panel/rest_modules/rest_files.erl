@@ -97,19 +97,9 @@ get(Req, <<"1.0">>, Id) ->
             % File attrs were cached in exists/3
             Fileattr = erlang:get(file_attr),
             Size = Fileattr#fileattributes.size,
-            BufferSize = file_transfer_handler:get_download_buffer_size(),
-            StreamFun = fun(Socket, Transport) ->
-                stream_file(Socket, Transport, FilePath, Size, BufferSize)
-            end,
-            Filename = filename:basename(FilePath),
-            HeaderValue = "attachment;" ++
-                % Replace spaces with underscores
-                " filename=" ++ re:replace(Filename, " ", "_", [global, {return, list}]) ++
-                % Offer safely-encoded UTF-8 filename for browsers supporting it
-                "; filename*=UTF-8''" ++ http_uri:encode(Filename),
-
-            NewReq = cowboy_req:set_resp_header("content-disposition", HeaderValue, Req),
-            Mimetype = list_to_binary(mimetypes:path_to_mimes(FilePath)),
+            StreamFun = file_download_handler:cowboy_file_stream_fun(FilePath, Size),
+            NewReq = file_download_handler:content_disposition_attachment_headers(Req, filename:basename(FilePath)),
+            [Mimetype] = mimetypes:path_to_mimes(FilePath),
             {{stream, Size, StreamFun, Mimetype}, NewReq}
     end.
 
@@ -181,35 +171,14 @@ put(Req, <<"1.0">>, _Id, _Data) ->
 %% ====================================================================
 handle_multipart_data(Req, _Version, Method, Id) ->
     case Method of
-        <<"POST">> -> file_transfer_handler:handle_rest_upload(Req, Id, false);
-        <<"PUT">> -> file_transfer_handler:handle_rest_upload(Req, Id, true)
+        <<"POST">> -> file_upload_handler:handle_rest_upload(Req, Id, false);
+        <<"PUT">> -> file_upload_handler:handle_rest_upload(Req, Id, true)
     end.
 
 
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
-
-
-% TODO przeniesc do jakiejs wspolnej lokacji jak n2o zostanie zintegrowane
-%% stream_file/5
-%% ====================================================================
-%% @doc Cowboy style steaming function used to serve file via HTTP.
-%% @end
--spec stream_file(term(), atom(), string(), integer(), integer()) -> ok.
-%% ====================================================================
-stream_file(Socket, Transport, Filepath, Size, BufferSize) ->
-    stream_file(Socket, Transport, Filepath, Size, 0, BufferSize).
-
-stream_file(Socket, Transport, Filepath, Size, Sent, BufferSize) ->
-    {ok, BytesRead} = logical_files_manager:read(Filepath, Sent, BufferSize),
-    ok = Transport:send(Socket, BytesRead),
-    NewSent = Sent + size(BytesRead),
-    if
-        NewSent =:= Size -> ok;
-        true -> stream_file(Socket, Transport, Filepath, Size, NewSent, BufferSize)
-    end.
-
 
 %% list_dir_to_json/1
 %% ====================================================================

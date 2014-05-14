@@ -28,9 +28,6 @@
 %% RecordToMap = #some_record{id=123, message="mess"}
 %% Fields = [id, message]
 %% The function will produce: [{id, 123},{message, "mess"}]
-%%
-%% NOTE: rest_utils.hrl contains convienience macro that will include
-%% this function in code with Fields listed for given record name
 %% @end
 -spec map(record(), [atom()]) -> [tuple()].
 %% ====================================================================
@@ -49,9 +46,6 @@ map(RecordToMap, Fields) ->
 %% RecordTuple = #some_record{}
 %% Fields = [id, message]
 %% The function will produce: #some_record{id=123, message="mess"}
-%%
-%% NOTE: rest_utils.hrl contains convienience macro that will include
-%% this function in code with Fields listed for given record name
 %% @end
 -spec unmap([tuple()], record(), [atom()]) -> [tuple()].
 %% ====================================================================
@@ -63,7 +57,7 @@ unmap([{KeyBin, Val} | Proplist], RecordTuple, Fields) ->
     Value = case Val of
                 I when is_integer(I) -> Val;
                 A when is_atom(A) -> Val;
-                _ -> wf:to_list(Val)
+                _ -> gui_utils:to_list(Val)
             end,
     Index = string:str(Fields, [Key]) + 1,
     true = (Index > 1),
