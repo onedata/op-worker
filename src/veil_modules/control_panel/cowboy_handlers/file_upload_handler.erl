@@ -123,7 +123,7 @@ handle_upload_request(Req) ->
 
             catch Type:Message ->
                 ?error_stacktrace("Error while processing file upload from user ~p - ~p:~p",
-                    [get(user_id), Type, Message]),
+                    [get(user_dn), Type, Message]),
                 {ok, _ErrorReq} = cowboy_req:reply(500, Req#http_req{connection = close})
             end
     end.

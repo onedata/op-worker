@@ -77,7 +77,7 @@ handle(_ProtocolVersion, get_version) ->
 %% TODO: create generic mechanism for getting configuration on client startup
 handle(ProtocolVersion, is_write_enabled) ->
   try
-    case user_logic:get_user({dn, get(user_id)}) of
+    case user_logic:get_user({dn, get(user_dn)}) of
       {ok, UserDoc} ->
         case user_logic:get_quota(UserDoc) of
           {ok, #quota{exceeded = Exceeded}} when is_boolean(Exceeded) ->
@@ -85,15 +85,15 @@ handle(ProtocolVersion, is_write_enabled) ->
             %% there was no event handler for rm_event then it would need manual trigger to enable writing
             %% in most cases Exceeded == true so in most cases we will not call user_logic:quota_exceeded
             case Exceeded of
-              true -> not(user_logic:quota_exceeded({dn, get(user_id)}, ProtocolVersion));
+              true -> not(user_logic:quota_exceeded({dn, get(user_dn)}, ProtocolVersion));
               _ -> true
             end;
           Error ->
-            ?warning("cannot get quota doc for user with dn: ~p, Error: ~p", [get(user_id), Error]),
+            ?warning("cannot get quota doc for user with dn: ~p, Error: ~p", [get(user_dn), Error]),
             false
         end;
       Error ->
-        ?warning("cannot get user with dn: ~p, Error: ~p", [get(user_id), Error]),
+        ?warning("cannot get user with dn: ~p, Error: ~p", [get(user_dn), Error]),
         false
     end
   catch
@@ -108,7 +108,7 @@ handle(ProtocolVersion, {delete_old_descriptors_test, Time}) ->
   handle_test(ProtocolVersion, {delete_old_descriptors_test, Time});
 
 handle(ProtocolVersion, {update_user_files_size_view, Pid}) ->
-  update_user_files_size_view(ProtocolVersion),
+  fslogic_meta:update_user_files_size_view(ProtocolVersion),
   {ok, Interval} = application:get_env(veil_cluster_node, user_files_size_view_update_period),
   erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size_view, Pid}}}),
   ok;
@@ -120,14 +120,16 @@ handle(_ProtocolVersion, {answer_test_message, FuseID, Message}) ->
 handle(ProtocolVersion, {delete_old_descriptors, Pid}) ->
   {Megaseconds,Seconds, _Microseconds} = os:timestamp(),
   Time = 1000000*Megaseconds + Seconds - 15,
-  delete_old_descriptors(ProtocolVersion, Time),
+  fslogic_objects:delete_old_descriptors(ProtocolVersion, Time),
   {ok, Interval} = application:get_env(veil_cluster_node, fslogic_cleaning_period),
   erlang:send_after(Interval * 1000, Pid, {timer, {asynch, ProtocolVersion, {delete_old_descriptors, Pid}}}),
   ok;
 
 handle(ProtocolVersion, {getfilelocation_uuid, UUID}) ->
-  {DocFindStatus, FileDoc} = dao_lib:apply(dao_vfs, get_file, [{uuid, UUID}], ProtocolVersion),
-  getfilelocation(ProtocolVersion, DocFindStatus, FileDoc, ?CLUSTER_FUSE_ID);
+  {ok, FileDoc} = dao_lib:apply(dao_vfs, get_file, [{uuid, UUID}], ProtocolVersion),
+  fslogic_context:set_fuse_id(?CLUSTER_FUSE_ID),
+  fslogic_context:set_protocol_version(ProtocolVersion),
+  fslogic_req_regular:get_file_location(FileDoc);
 
 handle(ProtocolVersion, {getfileattr, UUID}) ->
   {ok, FileDoc} = fslogic_objects:get_file({uuid, UUID}),
@@ -296,11 +298,6 @@ handle_fuse_message(Req = #getlink{file_logic_name = FName}) ->
 handle_fuse_message(_Req = #getstatfs{}) ->
     fslogic_req_generic:get_statfs();
 
-%% Test message
-handle_fuse_message(_Req = #testchannel{answer_delay_in_ms = Interval, answer_message = Answer}) ->
-  timer:apply_after(Interval, gen_server, cast, [?MODULE, {asynch, fslogic_context:get_protocol_version(), {answer_test_message, fslogic_context:get_fuse_id(), Answer}}]),
-  #atom{value = "ok"};
-
 handle_fuse_message(_Req = #createstoragetestfilerequest{storage_id = StorageId}) ->
     fslogic_req_storage:create_storage_test_file(StorageId);
 
@@ -308,4 +305,9 @@ handle_fuse_message(_Req = #storagetestfilemodifiedrequest{storage_id = StorageI
     fslogic_req_storage:storage_test_file_modified(StorageId, RelPath, Text);
 
 handle_fuse_message(_Req = #clientstorageinfo{storage_info = SInfo}) ->
-    fslogic_req_storage:client_storage_info(SInfo).
+    fslogic_req_storage:client_storage_info(SInfo);
+
+%% Test message
+handle_fuse_message(_Req = #testchannel{answer_delay_in_ms = Interval, answer_message = Answer}) ->
+    timer:apply_after(Interval, gen_server, cast, [?MODULE, {asynch, fslogic_context:get_protocol_version(), {answer_test_message, fslogic_context:get_fuse_id(), Answer}}]),
+    #atom{value = "ok"}.
