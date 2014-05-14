@@ -28,6 +28,8 @@
 
 -define(FILE_COUNTING_BASE, 256).
 
+-define(STORAGE_TEST_FILE_PREFIX, "storage_test_").
+
 %% Which fuse operations (messages) are allowed to operate on base group directory ("/groups")
 -define(GROUPS_BASE_ALLOWED_ACTIONS,    [getfileattr, updatetimes, getfilechildren]).
 
@@ -1849,7 +1851,7 @@ create_storage_test_file(StorageHelperInfo, Login, Attempts) ->
   {A, B, C} = now(),
   random:seed(A, B, C),
   Filename = random_ascii_lowercase_sequence(8),
-  Path = "users/" ++ Login ++ "/storage_test_" ++ Filename,
+  Path = "users/" ++ Login ++ "/" ++ ?STORAGE_TEST_FILE_PREFIX ++ Filename,
   case storage_files_manager:create(StorageHelperInfo, Path) of
     ok -> {ok, Path};
     _ -> create_storage_test_file(StorageHelperInfo, Login, Attempts - 1)
