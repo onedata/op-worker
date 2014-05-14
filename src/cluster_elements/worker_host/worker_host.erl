@@ -137,10 +137,8 @@ handle_call(getLoadInfo, _From, State) ->
 handle_call(getFullLoadInfo, _From, State) ->
     {reply, State#host_state.load_info, State};
 
--ifdef(TEST).
 handle_call(getSubProcs, _From, State) ->
-    {reply, State#host_state.sub_procs, State};
--else.
+    handle_test_call(getSubProcs, _From, State);
 
 handle_call(clearLoadInfo, _From, State) ->
 	{_New, _Old, _NewListSize, Max} = State#host_state.load_info,
@@ -215,6 +213,20 @@ handle_call(check, _From, State) ->
 
 handle_call(_Request, _From, State) ->
     {reply, wrong_request, State}.
+
+%% handle_test_call/3
+%% ====================================================================
+%% @doc Handles calls used during tests
+-spec handle_test_call(Request :: term(), From :: {pid(), Tag :: term()}, State :: term()) -> Result :: term().
+%% ====================================================================
+-ifdef(TEST).
+handle_test_call(getSubProcs, _From, State) ->
+  {reply, State#host_state.sub_procs, State}.
+-else.
+handle_test_call(_Request, _From, State) ->
+  {reply, not_supported_in_normal_mode, State}.
+-endif.
+
 
 %% handle_cast/2
 %% ====================================================================
