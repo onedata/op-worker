@@ -141,9 +141,9 @@ veil_cluster_node_env:
       name: rrd_steps
       description: Defines how many primary data points are used to build a consolidated data point which then goes into the archive
       value: |
-          ["1", "24", "168", "720", "8760"] # 1 hour, 1 day, 7 days, 30 days, 365 days
+          ["1","24","168","720","8760"] # 1 hour, 1 day, 7 days, 30 days, 365 days
       erlang_term: |
-          [1, 24, 168, 720, 8760]
+          [1,24,168,720,8760]
 
   - parameter:
       name: nif_prefix
