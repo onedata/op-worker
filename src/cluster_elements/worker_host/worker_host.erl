@@ -137,8 +137,10 @@ handle_call(getLoadInfo, _From, State) ->
 handle_call(getFullLoadInfo, _From, State) ->
     {reply, State#host_state.load_info, State};
 
+-ifdef(TEST).
 handle_call(getSubProcs, _From, State) ->
     {reply, State#host_state.sub_procs, State};
+-else.
 
 handle_call(clearLoadInfo, _From, State) ->
 	{_New, _Old, _NewListSize, Max} = State#host_state.load_info,
