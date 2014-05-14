@@ -243,7 +243,7 @@ event({action, Fun, Args}) ->
         fun(Arg) ->
             case Arg of
                 {q, FieldName} ->
-                    % This tuple means, that element with id-FieldName has to be queried
+                    % This tuple means, that element with id=FieldName has to be queried
                     % and the result be put in function args
                     gui_utils:to_list(wf:q(FieldName));
                 Other ->
