@@ -94,7 +94,7 @@ register_for_write_events(Bytes) ->
 
 register_write_for_stats_events(Bytes) ->
   EventHandler = fun(Event) ->
-    Bytes = proplists:get_value(bytes, Event),
+    Bytes = proplists:get_value("bytes", Event),
     case is_integer(Bytes) of
       true -> gen_server:cast({global, ?CCM}, {update_storage_write_b, Bytes});
       _ -> ?error("Write for stats handler received wrong data: ~p, ~p", [Bytes, Event])
@@ -114,7 +114,7 @@ register_write_for_stats_events(Bytes) ->
 
 register_read_for_stats_events(Bytes) ->
   EventHandler = fun(Event) ->
-    Bytes = proplists:get_value(bytes, Event),
+    Bytes = proplists:get_value("bytes", Event),
     case is_integer(Bytes) of
       true -> gen_server:cast({global, ?CCM}, {update_storage_read_b, Bytes});
       _ -> ?error("Read for stats handler received wrong data: ~p, ~p", [Bytes, Event])
