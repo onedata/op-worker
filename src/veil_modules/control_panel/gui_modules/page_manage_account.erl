@@ -5,7 +5,8 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This file contains n2o website code
+%% @doc: This file contains n2o website code.
+%% The page displays information about the user and allows some editing.
 %% @end
 %% ===================================================================
 
@@ -116,26 +117,26 @@ team_list_body() ->
             #li{style = <<"font-size: 18px; padding: 5px 0;">>,
                 body = list_to_binary(re:replace(Team, "\\(", " (", [global, {return, list}]))}
         end, Teams) of
-               [] -> #p{body = <<"none">>};
-               List -> #list{numbered = true, body = List}
-           end.
+                [] -> #p{body = <<"none">>};
+                List -> #list{numbered = true, body = List}
+            end.
 
 
 % HTML list with emails printed
 email_list_body() ->
     User = wf:session(user_doc),
-    #list{numbered = true, body =
-    lists:map(
-        fun(Email) ->
-            #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
+    {CurrentEmails, _} = lists:mapfoldl(
+        fun(Email, Acc) ->
+            Body = #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
             [
                 Email,
-                #link{id = <<"remove_email_button">>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
+                #link{id = <<"remove_email_button", (integer_to_binary(Acc))/binary>>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
                     postback = {action, update_email, [User, {remove, Email}]}, body =
                     #span{class = <<"fui-cross">>, style = <<"font-size: 16px;">>}}
-            ]}}
-        end, user_logic:get_email_list(User))
-    ++ [
+            ]}},
+            {Body, Acc + 1}
+        end, 1, user_logic:get_email_list(User)),
+    NewEmail = [
         #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
             #link{id = <<"add_email_button">>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
                 postback = {action, show_email_adding, [true]}, body =
@@ -150,24 +151,25 @@ email_list_body() ->
                 postback = {action, show_email_adding, [false]}, body =
                 #span{class = <<"fui-cross-inverted">>, style = <<"font-size: 20px;">>}}
         ]}
-    ]}.
+    ],
+    #list{numbered = true, body = CurrentEmails ++ NewEmail}.
 
 
 % HTML list with DNs printed
 dn_list_body() ->
     User = wf:session(user_doc),
-    #list{numbered = true, body =
-    lists:map(
-        fun(DN) ->
-            #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
+    {CurrentDNs, _} = lists:mapfoldl(
+        fun(DN, Acc) ->
+            Body = #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
             [
                 DN,
-                #link{id = <<"remove_dn_button">>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
+                #link{id = <<"remove_dn_button", (integer_to_binary(Acc))/binary>>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
                     postback = {action, update_dn, [User, {remove, DN}]}, body =
                     #span{class = <<"fui-cross">>, style = <<"font-size: 16px;">>}}
-            ]}}
-        end, user_logic:get_dn_list(User))
-    ++ [
+            ]}},
+            {Body, Acc + 1}
+        end, 1, user_logic:get_dn_list(User)),
+    NewDN = [
         #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
             #link{id = <<"add_dn_button">>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
                 postback = {action, show_dn_adding, [true]}, body =
@@ -182,7 +184,8 @@ dn_list_body() ->
                 postback = {action, show_dn_adding, [false]}, body =
                 #span{class = <<"fui-cross-inverted">>, style = <<"font-size: 20px;">>}}
         ]}
-    ]}.
+    ],
+    #list{numbered = true, body = CurrentDNs ++ NewDN}.
 
 
 % Postback event handling
@@ -208,7 +211,8 @@ update_email(User, AddOrRemove) ->
                                 _ ->
                                     user_logic:update_email_list(User, OldEmailList ++ [NewEmail])
                             end;
-                        {remove, Email} -> user_logic:update_email_list(User, OldEmailList -- [Email])
+                        {remove, Email} ->
+                            user_logic:update_email_list(User, OldEmailList -- [Email])
                     end,
     wf:session(user_doc, NewUser),
     gui_utils:update("main_table", main_table()).

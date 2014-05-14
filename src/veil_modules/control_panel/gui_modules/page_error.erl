@@ -5,7 +5,8 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This file contains n2o website code
+%% @doc: This file contains n2o website code.
+%% The page is displayed whenever an error occurs.
 %% @end
 %% ===================================================================
 

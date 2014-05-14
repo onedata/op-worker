@@ -132,7 +132,8 @@ handle_user_content_request(Req, Path) ->
             true = (UserID /= undefined),
             put(user_id, lists:nth(1, user_logic:get_dn_list(UserID))),
             {St, Context2, SessHandler}
-        catch _:_ ->
+        catch T1:M1 ->
+            ?warning("Cannot establish session context for user content request - ~p:~p", [T1, M1]),
             error
         end,
 
@@ -148,7 +149,8 @@ handle_user_content_request(Req, Path) ->
                     "REG" = Fileattr#fileattributes.type,
                     TrySize = Fileattr#fileattributes.size,
                     {TryFilepath, TrySize}
-                catch _:_ ->
+                catch T2:M2 ->
+                    ?warning("Cannot resolve fileattributes for user content request - ~p:~p", [T2, M2]),
                     error
                 end,
 
@@ -195,7 +197,8 @@ handle_shared_files_request(Req, ShareID) ->
             "REG" = Fileattr#fileattributes.type,
             TSize = Fileattr#fileattributes.size,
             {TFileID, TFileName, TSize}
-        catch _:_ ->
+        catch T1:M1 ->
+            ?warning("Cannot resolve fileattributes for shared file request - ~p:~p", [T1, M1]),
             error
         end,
 

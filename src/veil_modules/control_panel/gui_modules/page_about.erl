@@ -5,7 +5,8 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This file contains n2o website code
+%% @doc: This file contains n2o website code.
+%% The page contains information about the project, licence and contact for support.
 %% @end
 %% ===================================================================
 
@@ -92,3 +93,6 @@ get_team() ->
             #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = Member}
         end, Members)
     }.
+
+event(init) ->
+    ok.

@@ -18,7 +18,7 @@
 % Relative suffix of GUI address, leading to shared files
 -define(shared_files_download_path, "/share/").
 
-% Identifier for requests of user content
+% Identifier for requests of shared files
 -define(shared_files_request_type, shared_files).
 
 % Relative suffix of GUI address, leading to user content download

@@ -5,7 +5,8 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This file contains Nitrogen website code
+%% @doc: This file contains n2o website code.
+%% The page contains a list of currently shared files to view or delete.
 %% @end
 %% ===================================================================
 

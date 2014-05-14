@@ -79,51 +79,53 @@ terminate(_Reason, _Req, _State) ->
 %% ====================================================================
 handle_upload_request(Req) ->
     % Try to initialize session handler and retrieve user's session
-    try
-        {State, NewContext, SessionHandler} =
-            try
-                Context1 = wf_context:init_context(Req),
-                SessHandler = proplists:get_value(session, Context1#context.handlers),
-                {ok, St, Context2} = SessHandler:init([], Context1),
-                wf_context:context(Context2),
-                UserID = wf:session(user_doc),
-                true = (UserID /= undefined),
-                put(user_id, lists:nth(1, user_logic:get_dn_list(UserID))),
-                {St, Context2, SessHandler}
-            catch _:_ ->
-                throw(not_logged_in)
-            end,
-
-        % Params and _FilePath are not currently used but there are cases when they could be useful
-        {ok, _Params, [{OriginalFileName, _FilePath}]} = parse_multipart(Req, [], []),
-
-        % Return a struct conforming to upload plugin requirements
-        RespBody = rest_utils:encode_to_json(
-            {struct, [
-                {files, [
-                    {struct, [
-                        {name, list_to_binary(OriginalFileName)}
-                    ]}
-                ]}
-            ]}),
-
-        % Finalize session handler, set new cookie
-        {ok, [], FinalCtx} = SessionHandler:finish(State, NewContext),
-        Req2 = cowboy_req:set_resp_header(<<"content-type">>, <<"application/json">>,
-            FinalCtx#context.req),
-        Req3 = cowboy_req:set_resp_body(RespBody, Req2),
-        % Force connection to close, so that every upload is in
-        {ok, _FinReq} = cowboy_req:reply(200, Req3#http_req{connection = close})
-
-    catch Type:Message ->
-        case Message of
-            not_logged_in ->
-                skip;
-            _ ->
-                ?error_stacktrace("Error while processing file upload from user ~p - ~p:~p",
-                    [get(user_id), Type, Message])
+    InitSession =
+        try
+            Context1 = wf_context:init_context(Req),
+            SessHandler = proplists:get_value(session, Context1#context.handlers),
+            {ok, St, Context2} = SessHandler:init([], Context1),
+            wf_context:context(Context2),
+            UserID = wf:session(user_doc),
+            true = (UserID /= undefined),
+            put(user_id, lists:nth(1, user_logic:get_dn_list(UserID))),
+            {St, Context2, SessHandler}
+        catch T1:M1 ->
+            ?warning_stacktrace("Cannot establish session context for user content request - ~p:~p", [T1, M1]),
+            error
         end,
-        {ok, _ErrorReq} = cowboy_req:reply(500, Req#http_req{connection = close})
+
+    case InitSession of
+        error ->
+            {ok, _ErrorReq} = cowboy_req:reply(500, Req#http_req{connection = close});
+
+        {State, NewContext, SessionHandler} ->
+            try
+                % Params and _FilePath are not currently used but there are cases when they could be useful
+                {ok, _Params, [{OriginalFileName, _FilePath}]} = parse_multipart(Req, [], []),
+
+                % Return a struct conforming to upload plugin requirements
+                RespBody = rest_utils:encode_to_json(
+                    {struct, [
+                        {files, [
+                            {struct, [
+                                {name, list_to_binary(OriginalFileName)}
+                            ]}
+                        ]}
+                    ]}),
+
+                % Finalize session handler, set new cookie
+                {ok, [], FinalCtx} = SessionHandler:finish(State, NewContext),
+                Req2 = cowboy_req:set_resp_header(<<"content-type">>, <<"application/json">>,
+                    FinalCtx#context.req),
+                Req3 = cowboy_req:set_resp_body(RespBody, Req2),
+                % Force connection to close, so that every upload is in
+                {ok, _FinReq} = cowboy_req:reply(200, Req3#http_req{connection = close})
+
+            catch Type:Message ->
+                ?error_stacktrace("Error while processing file upload from user ~p - ~p:~p",
+                    [get(user_id), Type, Message]),
+                {ok, _ErrorReq} = cowboy_req:reply(500, Req#http_req{connection = close})
+            end
     end.
 
 
@@ -447,8 +449,8 @@ unquote_header([C | Rest], Acc) -> unquote_header(Rest, [C | Acc]).
 %% <em>{body, Data}</em> tuples and finally <em>end_of_part</em>. When there
 %% is no part to parse anymore, <em>eof</em> is returned.
 -spec multipart_data(Req)
-            -> {headers, cowboy:http_headers(), Req} | {body, binary(), Req}
-        | {end_of_part | eof, Req} when Req :: req().
+        -> {headers, cowboy:http_headers(), Req} | {body, binary(), Req}
+    | {end_of_part | eof, Req} when Req :: req().
 multipart_data(Req = #http_req{body_state = waiting}) ->
     {ok, {<<"multipart">>, _SubType, Params}, Req2} =
         cowboy_req:parse_header(<<"content-type">>, Req),
@@ -469,7 +471,7 @@ multipart_data(Req, Length, {end_of_part, Cont}) ->
 multipart_data(Req, 0, eof) ->
     {eof, Req#http_req{body_state = done, multipart = undefined}};
 multipart_data(Req = #http_req{socket = Socket, transport = Transport},
-        Length, eof) ->
+    Length, eof) ->
     %% We just want to skip so no need to stream data here.
     {ok, _Data} = Transport:recv(Socket, Length, 5000),
     {eof, Req#http_req{body_state = done, multipart = undefined}};
@@ -537,7 +539,7 @@ stream_body(MaxLength, Req) ->
     stream_body_recv(MaxLength, Req).
 
 -spec stream_body_recv(non_neg_integer(), Req)
-            -> {ok, binary(), Req} | {error, atom()} when Req :: req().
+        -> {ok, binary(), Req} | {error, atom()} when Req :: req().
 stream_body_recv(MaxLength, Req = #http_req{
     transport = Transport, socket = Socket, buffer = Buffer,
     body_state = {stream, Length, _, _, _}}) ->
@@ -551,7 +553,7 @@ stream_body_recv(MaxLength, Req = #http_req{
     end.
 
 -spec transfer_decode(binary(), Req)
-            -> {ok, binary(), Req} | {error, atom()} when Req :: req().
+        -> {ok, binary(), Req} | {error, atom()} when Req :: req().
 transfer_decode(Data, Req = #http_req{body_state = {stream, _,
     TransferDecode, TransferState, ContentDecode}}) ->
     case TransferDecode(Data, TransferState) of
@@ -578,7 +580,7 @@ transfer_decode(Data, Req = #http_req{body_state = {stream, _,
     end.
 
 -spec transfer_decode_done(non_neg_integer(), binary(), Req)
-            -> Req when Req :: req().
+        -> Req when Req :: req().
 transfer_decode_done(Length, Rest, Req = #http_req{
     headers = Headers, p_headers = PHeaders}) ->
     Headers2 = lists:keystore(<<"content-length">>, 1, Headers,
@@ -593,7 +595,7 @@ transfer_decode_done(Length, Rest, Req = #http_req{
 
 %% @todo Probably needs a Rest.
 -spec content_decode(content_decode_fun(), binary(), Req)
-            -> {ok, binary(), Req} | {error, atom()} when Req :: req().
+        -> {ok, binary(), Req} | {error, atom()} when Req :: req().
 content_decode(ContentDecode, Data, Req) ->
     case ContentDecode(Data) of
         {ok, Data2} -> {ok, Data2, Req};
