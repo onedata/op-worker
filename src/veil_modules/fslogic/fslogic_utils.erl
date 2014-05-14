@@ -26,6 +26,7 @@
 -export([create_children_list/1, create_children_list/2, get_user_id_from_system/1]).
 -export([get_sh_and_id/3, get_files_number/3]).
 -export([get_group_owner/1, get_user_groups/2]).
+-export([random_ascii_lowercase_sequence/1]).
 
 
 %% ====================================================================
@@ -82,6 +83,14 @@ create_children_list([File | Rest], Ans) ->
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+
+%% random_ascii_lowercase_sequence
+%% ====================================================================
+%% @doc Create random sequence consisting of lowercase ASCII letters.
+-spec random_ascii_lowercase_sequence(Length :: integer()) -> list().
+%% ====================================================================
+random_ascii_lowercase_sequence(Length) ->
+    lists:foldl(fun(_, Acc) -> [random:uniform(26) + 96 | Acc] end, [], lists:seq(1, Length)).
 
 %% get_user_id_from_system/1
 %% ====================================================================
