@@ -113,6 +113,11 @@ veil_cluster_node_env:
       value: 10
 
   - parameter:
+      name: delete_storage_test_file_time
+      description: After delete_storage_test_file_time seconds storage test file will be deleted
+      value: 60
+
+  - parameter:
       name: nif_prefix
       description: Prefix to c_lib directory containing NIF libs
       value: |

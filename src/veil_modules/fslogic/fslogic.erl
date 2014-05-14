@@ -77,7 +77,7 @@ handle(_ProtocolVersion, get_version) ->
 %% TODO: create generic mechanism for getting configuration on client startup
 handle(ProtocolVersion, is_write_enabled) ->
   try
-    case user_logic:get_user({dn, get(user_dn)}) of
+    case user_logic:get_user({dn, get(user_id)}) of
       {ok, UserDoc} ->
         case user_logic:get_quota(UserDoc) of
           {ok, #quota{exceeded = Exceeded}} when is_boolean(Exceeded) ->
@@ -85,15 +85,15 @@ handle(ProtocolVersion, is_write_enabled) ->
             %% there was no event handler for rm_event then it would need manual trigger to enable writing
             %% in most cases Exceeded == true so in most cases we will not call user_logic:quota_exceeded
             case Exceeded of
-              true -> not(user_logic:quota_exceeded({dn, get(user_dn)}, ProtocolVersion));
+              true -> not(user_logic:quota_exceeded({dn, get(user_id)}, ProtocolVersion));
               _ -> true
             end;
           Error ->
-            ?warning("cannot get quota doc for user with dn: ~p, Error: ~p", [get(user_dn), Error]),
+            ?warning("cannot get quota doc for user with dn: ~p, Error: ~p", [get(user_id), Error]),
             false
         end;
       Error ->
-        ?warning("cannot get user with dn: ~p, Error: ~p", [get(user_dn), Error]),
+        ?warning("cannot get user with dn: ~p, Error: ~p", [get(user_id), Error]),
         false
     end
   catch
@@ -108,7 +108,7 @@ handle(ProtocolVersion, {delete_old_descriptors_test, Time}) ->
   handle_test(ProtocolVersion, {delete_old_descriptors_test, Time});
 
 handle(ProtocolVersion, {update_user_files_size_view, Pid}) ->
-  fslogic_meta:update_user_files_size_view(ProtocolVersion),
+  update_user_files_size_view(ProtocolVersion),
   {ok, Interval} = application:get_env(veil_cluster_node, user_files_size_view_update_period),
   erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size_view, Pid}}}),
   ok;
@@ -120,16 +120,14 @@ handle(_ProtocolVersion, {answer_test_message, FuseID, Message}) ->
 handle(ProtocolVersion, {delete_old_descriptors, Pid}) ->
   {Megaseconds,Seconds, _Microseconds} = os:timestamp(),
   Time = 1000000*Megaseconds + Seconds - 15,
-  fslogic_objects:delete_old_descriptors(ProtocolVersion, Time),
+  delete_old_descriptors(ProtocolVersion, Time),
   {ok, Interval} = application:get_env(veil_cluster_node, fslogic_cleaning_period),
   erlang:send_after(Interval * 1000, Pid, {timer, {asynch, ProtocolVersion, {delete_old_descriptors, Pid}}}),
   ok;
 
 handle(ProtocolVersion, {getfilelocation_uuid, UUID}) ->
-  {ok, FileDoc} = dao_lib:apply(dao_vfs, get_file, [{uuid, UUID}], ProtocolVersion),
-  fslogic_context:set_fuse_id(?CLUSTER_FUSE_ID),
-  fslogic_context:set_protocol_version(ProtocolVersion),
-  fslogic_req_regular:get_file_location(FileDoc);
+  {DocFindStatus, FileDoc} = dao_lib:apply(dao_vfs, get_file, [{uuid, UUID}], ProtocolVersion),
+  getfilelocation(ProtocolVersion, DocFindStatus, FileDoc, ?CLUSTER_FUSE_ID);
 
 handle(ProtocolVersion, {getfileattr, UUID}) ->
   {ok, FileDoc} = fslogic_objects:get_file({uuid, UUID}),
@@ -301,4 +299,55 @@ handle_fuse_message(_Req = #getstatfs{}) ->
 %% Test message
 handle_fuse_message(_Req = #testchannel{answer_delay_in_ms = Interval, answer_message = Answer}) ->
   timer:apply_after(Interval, gen_server, cast, [?MODULE, {asynch, fslogic_context:get_protocol_version(), {answer_test_message, fslogic_context:get_fuse_id(), Answer}}]),
-  #atom{value = "ok"}.
+  #atom{value = "ok"};
+
+handle_fuse_message(Record) when is_record(Record, createstoragetestfilerequest) ->
+    try
+        StorageId = Record#createstoragetestfilerequest.storage_id,
+        Length = 20,
+        {A, B, C} = now(),
+        random:seed(A, B, C),
+        Text = list_to_binary(random_ascii_lowercase_sequence(Length)),
+        {ok, DeleteStorageTestFileTime} = application:get_env(?APP_Name, delete_storage_test_file_time),
+        {ok, #veil_document{record = #user{login = Login}}} = get_user_doc(),
+        {ok, #veil_document{record = StorageInfo}} = dao_lib:apply(dao_vfs, get_storage, [{id, StorageId}], ProtocolVersion),
+        StorageHelperInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, StorageInfo),
+        {ok, Path} = create_storage_test_file(StorageHelperInfo, Login),
+        % Delete storage test file after 'delete_storage_test_file_time' seconds
+        spawn(fun() ->
+            timer:sleep(DeleteStorageTestFileTime * 1000),
+            storage_files_manager:delete(StorageHelperInfo, Path)
+        end),
+        Length = storage_files_manager:write(StorageHelperInfo, Path, Text),
+        #createstoragetestfileresponse{answer = true, relative_path = Path, text = Text}
+    catch
+        _:_ -> #createstoragetestfileresponse{answer = false}
+    end;
+
+handle_fuse_message(ProtocolVersion, Record, _FuseID) when is_record(Record, storagetestfilemodifiedrequest) ->
+    try
+        StorageId = Record#storagetestfilemodifiedrequest.storage_id,
+        Path = Record#storagetestfilemodifiedrequest.relative_path,
+        Text = Record#storagetestfilemodifiedrequest.text,
+        {ok, #veil_document{record = StorageInfo}} = dao_lib:apply(dao_vfs, get_storage, [{id, StorageId}], ProtocolVersion),
+        StorageHelperInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, StorageInfo),
+        {ok, Bytes} = storage_files_manager:read(StorageHelperInfo, Path, 0, length(Text)),
+        Text = binary_to_list(Bytes),
+        storage_files_manager:delete(StorageHelperInfo, Path),
+        #storagetestfilemodifiedresponse{answer = true}
+    catch
+        _:_ -> #storagetestfilemodifiedresponse{answer = false}
+    end;
+
+handle_fuse_message(ProtocolVersion, Record, FuseId) when is_record(Record, clientstorageinfo) ->
+    try
+        {ok, #veil_document{record = FuseSession} = FuseSessionDoc} = dao_lib:apply(dao_cluster, get_fuse_session, [FuseId], ProtocolVersion),
+        ClientStorageInfo = lists:map(fun({_, StorageId, Root}) ->
+            {StorageId, #storage_helper_info{name = "DirectIO", init_args = [Root]}} end, Record#clientstorageinfo.storage_info),
+        NewFuseSessionDoc = FuseSessionDoc#veil_document{record = FuseSession#fuse_session{client_storage_info = ClientStorageInfo}},
+        {ok, _} = dao_lib:apply(dao_cluster, save_fuse_session, [NewFuseSessionDoc], ProtocolVersion),
+        lager:info("Client storage info saved in session."),
+        #atom{value = ?VOK}
+    catch
+        _:_ -> #atom{value = ?VEREMOTEIO}
+    end.

@@ -89,7 +89,15 @@ create_dirs(Count, CountingBase, SHInfo, TmpAns) ->
 get_sh_for_fuse(FuseID, Storage) ->
   FuseGroup = get_fuse_group(FuseID),
   case FuseGroup of
-    default ->  Storage#storage_info.default_storage_helper;
+    default ->
+      case dao_lib:apply(dao_cluster, get_fuse_session, [FuseID], 1) of
+        {ok, #veil_document{record = #fuse_session{client_storage_info = ClientStorageInfo}}} ->
+          case proplists:get_value(Storage#storage_info.id, ClientStorageInfo) of
+            Record when is_record(Record, storage_helper_info) -> Record;
+            _ -> Storage#storage_info.default_storage_helper
+          end;
+        _ -> Storage#storage_info.default_storage_helper
+      end;
     _ ->
       Match = [SH || #fuse_group_info{name = FuseGroup1, storage_helper = #storage_helper_info{} = SH} <- Storage#storage_info.fuse_groups, FuseGroup == FuseGroup1],
       case Match of
