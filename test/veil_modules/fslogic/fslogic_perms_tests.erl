@@ -31,8 +31,10 @@ check_file_perms_test() ->
 
     GroupPath = "/" ++ ?GROUPS_BASE_DIR_NAME ++ "/some/path",
     ?assertMatch(ok, fslogic_perms:check_file_perms(GroupPath, OwnerUserDoc, FileDoc)),
-    ?assertMatch({permission_denied, _}, fslogic_perms:check_file_perms(GroupPath, UserDoc, FileDoc)),
+    ?assertMatch({error, {permission_denied, _}}, fslogic_perms:check_file_perms(GroupPath, UserDoc, FileDoc)),
     ?assertMatch(ok, fslogic_perms:check_file_perms(GroupPath, UserDoc, FileDoc, write)),
-    ?assertMatch({permission_denied, _}, fslogic_perms:check_file_perms(GroupPath, UserDoc, NonWriteableFileDoc, write)).
+    ?assertMatch({error, {permission_denied, _}}, fslogic_perms:check_file_perms(GroupPath, UserDoc, NonWriteableFileDoc, write)),
+    ?assertMatch(ok, fslogic_perms:check_file_perms(GroupPath, OwnerUserDoc, NonWriteableFileDoc, write)),
+    ?assertMatch(ok, fslogic_perms:check_file_perms(GroupPath, RootUserDoc, NonWriteableFileDoc, write)).
 
 -endif.
