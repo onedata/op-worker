@@ -22,6 +22,10 @@
 %% Singleton modules are modules which are supposed to have only one instance.
 -define(SINGLETON_MODULES, [control_panel, central_logger, rule_manager]).
 
+%% Minimal message ID that can be used - it is limited by type of Answer.message_id in protocol buffers
+%% TODO: change type of message_id to sint32, more at https://developers.google.com/protocol-buffers/docs/proto#scalar
+-define(MIN_MSG_ID, -1073741824). %% 1073741824 = 2^30
+
 %% ====================================================================
 %% API
 %% ====================================================================
@@ -214,6 +218,25 @@ handle_call({update_cluster_rengines, EventType, EventHandlerItem}, _From, State
 
   lists:foreach(UpdateClusterRengine, Workers),
   {reply, ok, State};
+
+%% TODO if callbacks with ack will be used intensively, information should be forwarded to nodes without ccm usage
+%% (e.g. request dispatchers can have nodes list)
+handle_call({node_for_ack, NodeForAck}, _From, State) ->
+  MsgID = case get(callback_msg_ID) of
+    ID when is_integer(ID) and (ID > ?MIN_MSG_ID) ->
+      put(callback_msg_ID, ID - 1),
+      ID - 1;
+    _ ->
+      put(callback_msg_ID, -2),
+      -2
+  end,
+
+  SendToNodes = fun(Node) ->
+    gen_server:cast({?Node_Manager_Name, Node}, {node_for_ack, MsgID, NodeForAck})
+  end,
+  lists:foreach(SendToNodes, State#cm_state.nodes),
+
+  {reply, MsgID, State};
 
 %% Test call
 handle_call({start_worker, Node, Module, WorkerArgs}, _From, State) ->
@@ -431,6 +454,7 @@ handle_cast({stop_worker, Node, Module}, State) ->
 handle_cast(stop, State) ->
   {stop, normal, State};
 
+%% TODO if cashes will be cleared more frequently, it should be done without ccm usage
 handle_cast({clear_cache, Cache, ReturnPid}, State) ->
   ReturnPid ! {cache_cleared, Cache},
   New_State = clear_cache(State, Cache),
