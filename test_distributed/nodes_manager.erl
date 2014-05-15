@@ -279,11 +279,11 @@ start_deps() ->
 
 
   ssl:start(),
-  application:start(os_mon),
   application:start(ranch),
   application:start(cowboy),
   application:start(mimetypes),
   application:start(ibrowse),
+  application:start(rrderlang),
   application:load(?APP_Name).
 
 %% stop_deps/0
@@ -294,7 +294,6 @@ start_deps() ->
 
 stop_deps() ->
   application:stop(ranch),
-  application:stop(os_mon),
   application:stop(ssl),
   application:stop(crypto),
   application:stop(public_key),
@@ -303,6 +302,7 @@ stop_deps() ->
   application:stop(sasl),
   application:stop(mimetypes),
   application:stop(ibrowse),
+  application:stop(rrderlang),
   application:unload(?APP_Name).
 
 %% start_app_local/1
@@ -675,8 +675,7 @@ wait_for_cluster_init(ModulesNum) ->
   E2 :: term().
 %% ====================================================================
 wait_for_cluster_init(ModulesNum, 0) ->
-%%   ?assert(check_init(ModulesNum))
-  check_init(ModulesNum);
+  ?assert(check_init(ModulesNum));
 
 wait_for_cluster_init(ModulesNum, TriesNum) ->
   case check_init(ModulesNum) of

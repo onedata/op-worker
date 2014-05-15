@@ -399,7 +399,8 @@ init_per_testcase(main_test, Config) ->
             {dispatcher_port, 5055},
             {ccm_nodes, [Node1]},
             {dns_port, 1308},
-            {db_nodes, [DB_Node]}]]),
+            {db_nodes, [DB_Node]},
+            {heart_beat, 1}]]),
 
     Assertions = [{false, lists:member(error, Nodes)}, {false, lists:member(error, StartLog)}],
     lists:append([{nodes, Nodes}, {assertions, Assertions}], Config).

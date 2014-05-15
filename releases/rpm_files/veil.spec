@@ -37,7 +37,7 @@ BuildArch: %{arch}
 
 # Disable auto dependency recognition and list required deps explicitely
 AutoReqProv: no
-requires: /bin/bash /bin/sh /usr/bin/env ld-linux-x86-64.so.2()(64bit) ld-linux-x86-64.so.2(GLIBC_2.3)(64bit)
+requires: /bin/bash /bin/sh /usr/bin/env ld-linux-x86-64.so.2()(64bit) ld-linux-x86-64.so.2(GLIBC_2.3)(64bit) rrdtool
 
 %description
 Veil service - allows installation of veil cluster nodes.

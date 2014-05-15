@@ -30,6 +30,7 @@
 -include_lib("veil_modules/dao/dao_types.hrl").
 
 -define(PROCESSOR_ETS_NAME, "processor_ets_name").
+-define(PROTOCOL_VERSION, 1).
 
 %% ====================================================================
 %% API functions
@@ -47,8 +48,10 @@ init(_Args) ->
   ets:new(?EVENT_HANDLERS_CACHE, [named_table, public, set, {read_concurrency, true}]),
   ets:new(?EVENT_TREES_MAPPING, [named_table, public, set, {read_concurrency, true}]),
 
+  %% no need to wait for rule_manager - if it starts after cluster_rengine it will notify about handlers
+  %% send_after just to do it in another process
   Pid = self(),
-  erlang:send_after(5000, Pid, {timer, {asynch, 1, configure_event_handlers}}),
+  erlang:send_after(10, Pid, {timer, {asynch, ?PROTOCOL_VERSION, configure_event_handlers}}),
   ok.
 
 handle(_ProtocolVersion, ping) ->
@@ -64,22 +67,28 @@ handle(ProtocolVersion, EventMessage) when is_record(EventMessage, eventmessage)
   handle(ProtocolVersion, {event_arrived, Event ++ AdditionalProperties});
 
 handle(_ProtocolVersion, healthcheck) ->
-	ok;
+  ok;
 
 handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
+%% Get all EventHandlerItems registered in rule_manager and create process tree for each of them.
 handle(ProtocolVersion, configure_event_handlers) ->
   gen_server:call(?Dispatcher_Name, {rule_manager, ProtocolVersion, self(), get_event_handlers}),
-
   receive
     {ok, EventHandlers} ->
-      lists:foreach(fun({EventType, EventHandlerItem}) ->
-        update_event_handler(1, EventType, EventHandlerItem) end, EventHandlers);
+      lists:foreach(fun({EventType, EventHandlerItems}) ->
+        lists:foreach(fun(EventHandlerItem) ->
+          update_event_handler(1, EventType, EventHandlerItem)
+        end, EventHandlerItems)
+      end, EventHandlers),
+      ok;
     _ ->
-      ?warning("rule_manager get_event_handlers handler sent back unexpected structure")
+      ?warning("rule_manager get_event_handlers handler sent back unexpected structure"),
+      error
   after 1000 ->
-    ?warning("rule_manager get_event_handlers handler did not replied")
+    ?info("rule_manager get_event_handlers handler did not replied"),
+    error
   end;
 
 handle(_ProtocolVersion, {final_stage_tree, _TreeId, _Event}) ->
@@ -95,7 +104,7 @@ handle(ProtocolVersion, {event_arrived, Event}) ->
     [] ->
       ?warning("No handler for event of type: ~p", [EventType]),
       ok;
-    % mapping for event found - forward event
+  % mapping for event found - forward event
     [{_, EventToTreeMappings}] ->
       ForwardEvent = fun(EventToTreeMapping) ->
         case EventToTreeMapping of
@@ -114,7 +123,7 @@ handle(_ProtocolVersion, _Msg) ->
   wrong_request.
 
 cleanup() ->
-	ok.
+  ok.
 
 % inner functions
 
@@ -148,8 +157,8 @@ save_to_caches(EventType, #event_handler_item{processing_method = ProcessingMeth
 create_process_tree_for_handler(ProtocolVersion, #event_handler_item{tree_id = TreeId, map_fun = MapFun, handler_fun = HandlerFun, config = #event_stream_config{config = ActualConfig} = Config}) ->
   ProcFun = case ActualConfig of
               undefined ->
-                fun(_ProtocolVersion, {final_stage_tree, TreeId2, Event}) ->
-                    HandlerFun(Event)
+                fun(_ProtocolVersion, {final_stage_tree, _TreeId2, Event}) ->
+                  HandlerFun(Event)
                 end;
               _ ->
                 FromConfigFun = fun_from_config(Config),
@@ -182,11 +191,11 @@ create_process_tree_for_handler(ProtocolVersion, #event_handler_item{tree_id = T
 
   LocalCacheName = list_to_atom(atom_to_list(TreeId) ++ "_local_cache"),
   case ActualConfig of
-    undefined -> gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM});
+    undefined -> gen_server:call({cluster_rengine, Node}, {register_or_update_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM});
     _ -> case element(1, ActualConfig) of
-     aggregator_config -> gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM, LocalCacheName});
-     _ -> gen_server:call({cluster_rengine, Node}, {register_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM})
-    end
+           aggregator_config -> gen_server:call({cluster_rengine, Node}, {register_or_update_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM, LocalCacheName});
+           _ -> gen_server:call({cluster_rengine, Node}, {register_or_update_sub_proc, TreeId, 2, 2, ProcFun, NewMapFun, RM, DM})
+         end
   end.
 
 %% fun_from_config/1
@@ -202,14 +211,14 @@ create_process_tree_for_handler(ProtocolVersion, #event_handler_item{tree_id = T
 %% ====================================================================
 fun_from_config(#event_stream_config{config = ActualConfig, wrapped_config = WrappedConfig}) ->
   WrappedFun = case WrappedConfig of
-    undefined -> non;
-    _ -> fun_from_config(WrappedConfig)
-  end,
+                 undefined -> non;
+                 _ -> fun_from_config(WrappedConfig)
+               end,
 
   case element(1, ActualConfig) of
     aggregator_config ->
       fun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName) ->
-        InitCounterIfNeeded = fun(EtsName, Key) ->
+        InitCounterIfNeeded = fun(Key) ->
           case ets:lookup(EtsName, Key) of
             [] -> ets:insert(EtsName, {Key, 0});
             _ -> ok
@@ -217,9 +226,9 @@ fun_from_config(#event_stream_config{config = ActualConfig, wrapped_config = Wra
         end,
 
         ActualEvent = case WrappedFun of
-          non -> Event;
-          _ -> WrappedFun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName)
-        end,
+                        non -> Event;
+                        _ -> WrappedFun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName)
+                      end,
 
         case ActualEvent of
           non -> non;
@@ -232,7 +241,7 @@ fun_from_config(#event_stream_config{config = ActualConfig, wrapped_config = Wra
             case FieldValue of
               FieldValue2 when not is_tuple(FieldValue2) ->
                 Key = "sum_" ++ FieldValue,
-                InitCounterIfNeeded(EtsName, Key),
+                InitCounterIfNeeded(Key),
                 [{_Key, Val}] = ets:lookup(EtsName, Key),
                 NewValue = Val + Incr,
                 case NewValue >= ActualConfig#aggregator_config.threshold of
@@ -248,14 +257,14 @@ fun_from_config(#event_stream_config{config = ActualConfig, wrapped_config = Wra
                 end;
               _ -> non
             end
-          end
-        end;
+        end
+      end;
     filter_config ->
       fun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName) ->
         ActualEvent = case WrappedFun of
-          non -> Event;
-          _ -> WrappedFun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName)
-        end,
+                        non -> Event;
+                        _ -> WrappedFun(ProtocolVersion, {final_stage_tree, TreeId, Event}, EtsName)
+                      end,
 
         case ActualEvent of
           non -> non;

@@ -74,11 +74,6 @@ veil_cluster_node_env:
       value: 60
 
   - parameter:
-      name: cluster_clontrol_period
-      description: How long (in sec) should ccm wait between successive checks of cluster status
-      value: 60
-
-  - parameter:
       name: worker_load_memory_size
       description: Memory size which stores information about worker load
       value: 1000
@@ -103,9 +98,24 @@ veil_cluster_node_env:
       value: 60 # 1 min
 
   - parameter:
+      name: cluster_monitoring_period
+      description: How often should central cluster manager wait between successive checks of node status
+      value: 60
+
+  - parameter:
+      name: cluster_monitoring_initialization
+      description: How long (in seconds) cluster manager should wait before it starts monitoring
+      value: 30
+
+  - parameter:
       name: node_monitoring_period
       description: How often should node manager wait between successive checks of node status
-      value: 15
+      value: 10
+
+  - parameter:
+      name: node_monitoring_initialization
+      description: How long (in seconds) node manager should wait before it starts monitoring
+      value: 10
 
   - parameter:
       name: node_load_logging_period
@@ -116,6 +126,29 @@ veil_cluster_node_env:
       name: delete_storage_test_file_time
       description: After delete_storage_test_file_time seconds storage test file will be deleted
       value: 60
+
+  - parameter:
+      name: short_monitoring_time_window
+      description: Short time window (in seconds) for which Round Robin Database will be queried
+      value: 60
+
+  - parameter:
+      name: medium_monitoring_time_window
+      description: Medium time window (in seconds) for which Round Robin Database will be queried
+      value: 300
+
+  - parameter:
+      name: long_monitoring_time_window
+      description: Long time window (in seconds) for which Round Robin Database will be queried
+      value: 900
+
+  - parameter:
+      name: rrd_steps
+      description: Defines how many primary data points are used to build a consolidated data point which then goes into the archive
+      value: |
+          ["1","24","168","720","8760"] # 1 hour, 1 day, 7 days, 30 days, 365 days
+      erlang_term: |
+          [1,24,168,720,8760]
 
   - parameter:
       name: nif_prefix
@@ -325,6 +358,12 @@ veil_cluster_node_env:
        description: |
          This variable determinates how often DAO storage cache should be cleared (in seconds).
        value: 86400 # 24h
+
+  - parameter:
+      name: io_bytes_threshold
+      description: |
+           Defines how often io event is generated in terms of read or written bytes
+      value: 1048576 # 1MB
 
   # Quota management
   - parameter:
