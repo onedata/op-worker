@@ -263,9 +263,7 @@ read(FileStr, Offset, Size) ->
                 true ->
                   % TODO: add filePath
                   ReadEvent = [{"type", "read_event"}, {"user_dn", get(user_id)}, {"bytes", Size}],
-                  gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, ReadEvent}}),
-                  ReadEventStats = [{"type", "read_for_stats"}, {"user_dn", get(user_id)}, {"bytes", Size}],
-                  gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, ReadEventStats}});
+                  gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, ReadEvent}});
                 _ ->
                   ok
               end;

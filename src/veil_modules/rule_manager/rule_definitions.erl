@@ -96,11 +96,12 @@ register_write_for_stats_events(BytesThreshold) ->
   EventHandler = fun(Event) ->
     Bytes = proplists:get_value("bytes", Event),
     case is_integer(Bytes) of
-      true -> gen_server:cast({global, ?CCM}, {update_storage_write_b, Bytes});
+      true ->
+        gen_server:cast({global, ?CCM}, {update_storage_write_b, Bytes});
       _ -> ?error("Write for stats handler received wrong data: ~p, ~p", [Bytes, Event])
     end
   end,
-  
+
   EventItem = #event_handler_item{processing_method = standard, handler_fun = EventHandler},
 
   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "write_event"},
@@ -128,9 +129,7 @@ register_read_for_stats_events(BytesThreshold) ->
   EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = BytesThreshold, sum_field_name = "bytes"},
   EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
 
-  EventTransformer = #eventtransformerconfig{field_names_to_replace = ["type"], values_to_replace = ["read_event"], new_values = ["read_for_stats"]},
-  EventTransformerConfig = #eventstreamconfig{transformer_config = EventTransformer, wrapped_config = EventAggregatorConfig},
-  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {"read_for_stats", EventItem, EventTransformerConfig}}}).
+  gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {"read_event", EventItem, EventAggregatorConfig}}}).
 
 %% ====================================================================
 %% Helper functions.
