@@ -121,7 +121,8 @@ handle(_ProtocolVersion, {get_event_handlers, EventType}) ->
 
 handle(_ProtocolVersion, register_default_rules) ->
   {ok, QuotaCheckFreq} = application:get_env(?APP_Name, quota_check_freq),
-  register_default_rules(QuotaCheckFreq);
+  {ok, IOBytesThreshold} = application:get_env(?APP_Name, io_bytes_threshold),
+  register_default_rules(QuotaCheckFreq, IOBytesThreshold);
 
 handle(_ProtocolVersion, _Msg) ->
   ok.
@@ -204,13 +205,15 @@ fetch_rows(ViewName, QueryArgs) ->
 %% ====================================================================
 %% @doc Register rules that should be registered just after cluster startup.
 %% @end
--spec register_default_rules(WriteBytesThreshold :: integer()) -> ok.
+-spec register_default_rules(WriteBytesThreshold :: integer(), IOBytesThreshold :: integer()) -> ok.
 %% ====================================================================
-register_default_rules(WriteBytesThreshold) ->
+register_default_rules(WriteBytesThreshold, IOBytesThreshold) ->
   rule_definitions:register_quota_exceeded_handler(),
   rule_definitions:register_rm_event_handler(),
   rule_definitions:register_for_write_events(WriteBytesThreshold),
   rule_definitions:register_for_truncate_events(),
+  rule_definitions:register_read_for_stats_events(IOBytesThreshold),
+  rule_definitions:register_write_for_stats_events(IOBytesThreshold),
   ?info("default rule_manager rules registered"),
   ok.
 

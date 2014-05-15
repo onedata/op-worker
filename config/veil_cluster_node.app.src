@@ -23,9 +23,9 @@
             crypto,
             ssl,
             ibrowse,
-            os_mon,
             ranch,
-            cowboy
+            cowboy,
+            rrderlang
         ]},
         {mod, {veil_cluster_node_app, []}},
         {env, [
