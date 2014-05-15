@@ -23,7 +23,6 @@
             crypto,
             ssl,
             ibrowse,
-            os_mon,
             ranch,
             cowboy,
             rrderlang
