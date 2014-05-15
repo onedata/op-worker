@@ -24,6 +24,14 @@
 %% API functions
 %% ====================================================================
 
+
+%% create_dir/2
+%% ====================================================================
+%% @doc Creates new directory.
+%% @end
+-spec create_dir(FullFileName :: string(), Mode :: non_neg_integer()) ->
+    #atom{} | no_return().
+%% ====================================================================
 create_dir(FullFileName, Mode) ->
     ?debug("create_dir(FullFileName ~p, Mode: ~p)", [FullFileName, Mode]),
 
@@ -56,6 +64,14 @@ create_dir(FullFileName, Mode) ->
             #atom{value = ?VEREMOTEIO}
     end.
 
+
+%% get_file_children/3
+%% ====================================================================
+%% @doc Lists directory. Start with ROffset entity and limit returned list to RCount size.
+%% @end
+-spec get_file_children(FullFileName :: string(), ROffset :: non_neg_integer(), RCount :: non_neg_integer()) ->
+    #filechildren{} | no_return().
+%% ====================================================================
 get_file_children(FullFileName, ROffset, RCount) ->
     ?debug("get_file_children(FullFileName ~p, ROffset: ~p, RCount: ~p)", [FullFileName, ROffset, RCount]),
 
@@ -86,6 +102,14 @@ get_file_children(FullFileName, ROffset, RCount) ->
             #filechildren{child_logic_name = Children}
     end.
 
+
+%% create_link/2
+%% ====================================================================
+%% @doc Creates new symbolic link.
+%% @end
+-spec create_link(FullFileName :: string(), LinkValue :: string()) ->
+    #atom{} | no_return().
+%% ====================================================================
 create_link(FullFileName, LinkValue) ->
     ?debug("create_link(FullFileName ~p, LinkValue: ~p)", [FullFileName, LinkValue]),
 
@@ -119,6 +143,14 @@ create_link(FullFileName, LinkValue) ->
             #atom{value = ?VEREMOTEIO}
     end.
 
+
+%% get_link/1
+%% ====================================================================
+%% @doc Gets value of symbolic link.
+%% @end
+-spec get_link(FullFileName :: string()) ->
+    #linkinfo{} | no_return().
+%% ====================================================================
 get_link(FullFileName) ->
     ?debug("get_link(FullFileName ~p)", [FullFileName]),
 
