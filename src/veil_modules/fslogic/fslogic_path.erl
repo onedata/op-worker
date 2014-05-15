@@ -27,6 +27,15 @@
 %% API functions
 %% ====================================================================
 
+%% get_user_file_name/1
+%% ====================================================================
+%% @doc Gets user's file name. This method reverses get_full_file_name.
+%%      Throws on error (e.g. file path was invalid). <br/>
+%%      Note: this method requires user context! Without it you'll get input path.
+%% @end
+-spec get_user_file_name(FullFileName :: string()) -> Result when
+    Result :: UserFileName :: string() | no_return().
+%% ====================================================================
 get_user_file_name(FullFileName) ->
     {_, UserDoc} = fslogic_objects:get_user(),
     get_user_file_name(FullFileName, UserDoc).
