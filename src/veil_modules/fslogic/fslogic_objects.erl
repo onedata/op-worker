@@ -106,6 +106,13 @@ get_file(FullFileName) ->
     get_file(fslogic_context:get_protocol_version(), FullFileName, fslogic_context:get_fuse_id()).
 
 
+%% get_file/3
+%% ====================================================================
+%% @doc Gets file info from DB. Context independent version of get_file/1
+%% @end
+-spec get_file(ProtocolVersion :: term(), FullFileName :: file() | file_doc(), FuseID :: term()) -> Result when
+    Result :: {ok, FileDoc :: file_doc()} | {error, file_not_found} | {error, any()}.
+%% ====================================================================
 get_file(ProtocolVersion, File, _FuseID) when is_tuple(File) ->
     dao_lib:apply(dao_vfs, get_file, [File], ProtocolVersion);
 get_file(_ProtocolVersion, FullFileName, _FuseID) ->

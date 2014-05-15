@@ -5,7 +5,8 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: Write me !
+%% @doc: This module provides mathods for #file_meta record manipulation
+%%       such as e.g. access times update.
 %% @end
 %% ===================================================================
 -module(fslogic_meta).
