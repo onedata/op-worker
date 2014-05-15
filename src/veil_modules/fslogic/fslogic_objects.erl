@@ -5,22 +5,17 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: Write me !
+%% @doc: This module consists of DAO objects/records accessors. <br/>
+%%       All methods wrap DAO operations while adding some fslogic-specific logic
+%%       and/or error translations.
 %% @end
 %% ===================================================================
 -module(fslogic_objects).
 -author("Rafal Slota").
 
--include("registered_names.hrl").
 -include("veil_modules/dao/dao.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
--include("files_common.hrl").
--include("fuse_messages_pb.hrl").
--include("communication_protocol_pb.hrl").
--include("veil_modules/dao/dao_users.hrl").
 -include("veil_modules/dao/dao_types.hrl").
--include("cluster_elements/request_dispatcher/gsi_handler.hrl").
--include("veil_modules/fslogic/fslogic.hrl").
 -include("logging.hrl").
 
 %% API

@@ -11,11 +11,11 @@
 -module(fslogic_req_storage).
 -author("Rafal Slota").
 
--include("fuse_messages_pb.hrl").
 -include("veil_modules/dao/dao.hrl").
--include("registered_names.hrl").
--include("veil_modules/fslogic/fslogic.hrl").
 -include("communication_protocol_pb.hrl").
+-include("fuse_messages_pb.hrl").
+-include("veil_modules/fslogic/fslogic.hrl").
+-include("logging.hrl").
 
 %% API
 -export([create_storage_test_file/1, storage_test_file_modified/3, client_storage_info/1]).
