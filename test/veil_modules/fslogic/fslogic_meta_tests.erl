@@ -20,7 +20,7 @@ setup() ->
     meck:new([dao_lib]).
 
 teardown(_) ->
-    ok = meck:unload().
+    meck:unload().
 
 file_meta_test_() ->
     {foreach, fun setup/0, fun teardown/1, [fun init_file_meta/0]}.

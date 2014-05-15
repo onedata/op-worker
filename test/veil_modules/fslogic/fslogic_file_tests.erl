@@ -23,7 +23,7 @@ setup() ->
     meck:new([user_logic]).
 
 teardown(_) ->
-    ok = meck:unload().
+    meck:unload().
 
 
 normalize_file_type_test() ->
@@ -61,6 +61,10 @@ get_file_owner_test_() ->
     {foreach, fun setup/0, fun teardown/1, [fun get_file_owner/0]}.
 
 get_file_owner() ->
+    meck:expect(user_logic, get_login,
+        fun (#veil_document{record = #user{login = Login}}) ->
+            Login
+        end),
     meck:expect(user_logic, get_user,
         fun ({uuid, "123"}) ->
                 {ok, #veil_document{uuid = "123", record = #user{login = "login"}}};

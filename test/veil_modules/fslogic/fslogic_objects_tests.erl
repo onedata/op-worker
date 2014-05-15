@@ -21,20 +21,22 @@ setup() ->
     meck:new([dao_lib, user_logic]).
 
 teardown(_) ->
-    ok = meck:unload([dao_lib]).
+    meck:unload().
 
 getters_test_() ->
     {foreach, fun setup/0, fun teardown/1,
-        [fun get_storage/0, get_user/0]}.
+        [fun get_storage/0, fun get_user/0]}.
 
 get_storage() ->
+    fslogic_context:set_protocol_version(1),
+
     meck:expect(dao_lib, apply,
-        fun (dao_vfs, get_storage, [{id, StorageID}], _) ->
+        fun (dao_vfs, get_storage, [{uuid, "non-ex"}], _) ->
+                {error, reason};
+            (dao_vfs, get_storage, [{id, StorageID}], _) ->
                 {ok, #veil_document{record = #storage_info{id = StorageID}, uuid = "uuid"}};
             (dao_vfs, get_storage, [{uuid, StorageUUID}], _) ->
-                {ok, #veil_document{record = #storage_info{id = 2}, uuid = StorageUUID}};
-            (dao_vfs, get_storage, [{uuid, "non-ex"}], _) ->
-                {error, reason}
+                {ok, #veil_document{record = #storage_info{id = 2}, uuid = StorageUUID}}
         end),
 
     ?assertMatch({ok, #veil_document{uuid = "123"}}, fslogic_objects:get_storage({uuid, "123"})),
@@ -45,6 +47,8 @@ get_storage() ->
     ?assert(meck:validate(dao_lib)).
 
 get_user() ->
+    fslogic_context:set_protocol_version(1),
+
     meck:expect(user_logic, get_user,
         fun ({dn, "dn"}) ->
                 {ok, #veil_document{uuid = "uuid"}};

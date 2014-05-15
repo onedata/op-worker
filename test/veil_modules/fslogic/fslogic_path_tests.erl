@@ -22,7 +22,7 @@ setup() ->
     meck:new([dao_lib]).
 
 teardown(_) ->
-    ok = meck:unload([dao_lib]).
+    meck:unload().
 
 get_parent_and_name_from_path_test_() ->
     {foreach, fun setup/0, fun teardown/1, [fun get_parent_and_name_from_path/0]}.
