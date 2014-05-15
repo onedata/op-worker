@@ -11,13 +11,23 @@
 %% ===================================================================
 -module(fslogic_utils_tests).
 
-%% TODO dodać testy dla przypadków brzegowych (kiedy strip_path_leaf i basename
-%% zwracają [?PATH_SEPARATOR]
-
-%% TODO dodać test get_parent_and_name_from_path
-
 -ifdef(TEST).
+-include("veil_modules/fslogic/fslogic.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
+get_group_owner_test() ->
+    [GroupName0] = fslogic_utils:get_group_owner("/" ++ ?GROUPS_BASE_DIR_NAME ++ "/name0/file"),
+    ?assertMatch("name0", GroupName0),
+
+    [GroupName1] = fslogic_utils:get_group_owner("/" ++ ?GROUPS_BASE_DIR_NAME ++ "/name1/"),
+    ?assertMatch("name1", GroupName1),
+
+    [GroupName2] = fslogic_utils:get_group_owner("/" ++ ?GROUPS_BASE_DIR_NAME ++ "/name2"),
+    ?assertMatch("name2", GroupName2),
+
+    ?assertMatch([], fslogic_utils:get_group_owner("/dir")),
+    ?assertMatch([], fslogic_utils:get_group_owner("/dir/file")),
+    ?assertMatch([], fslogic_utils:get_group_owner("/dir/file/")).
 
 
 -endif.

@@ -29,7 +29,7 @@
 
 %% get_sh_and_id/3
 %% ====================================================================
-%% @doc Returns storage hel[per info and new file id (it may be changed for Cluster Proxy).
+%% @doc Returns storage helper info and new file id (it may be changed for Cluster Proxy).
 %% @end
 -spec get_sh_and_id(FuseID :: string(), Storage :: term(), File_id :: string()) -> Result when
     Result :: {SHI, NewFileId},

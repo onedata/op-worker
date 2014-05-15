@@ -28,7 +28,7 @@ file_meta_test_() ->
 init_file_meta() ->
     File = #file{uid = "1"},
     meck:expect(dao_lib, apply,
-        fun (dao_vfs, save_file_meta, #file_meta{uid = File#file.uid}, _) ->
+        fun (dao_vfs, save_file_meta, [#file_meta{uid = "1"}], _) ->
                 {ok, "uuid"};
             (dao_vfs, get_file_meta, ["uuid"], _) ->
                 {ok, #veil_document{uuid = "uuid", record = #file_meta{uid = File#file.uid}}}
