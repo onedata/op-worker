@@ -263,7 +263,9 @@ read(FileStr, Offset, Size) ->
                 true ->
                   % TODO: add filePath
                   ReadEvent = [{"type", "read_event"}, {"user_dn", get(user_id)}, {"bytes", Size}],
-                  gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, ReadEvent}});
+                  gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, ReadEvent}}),
+                  ReadEventStats = [{"type", "read_for_stats"}, {"user_dn", get(user_id)}, {"bytes", Size}],
+                  gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, ReadEventStats}});
                 _ ->
                   ok
               end;
@@ -298,7 +300,9 @@ write(FileStr, Buf) ->
           case {is_integer(Res), event_production_enabled("write_event")} of
             {true, true} ->
               WriteEvent = [{"type", "write_event"}, {"user_dn", get(user_id)}, {"bytes", binary:referenced_byte_size(Buf)}],
-              gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}});
+              gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
+              WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", get(user_id)}, {"bytes", binary:referenced_byte_size(Buf)}],
+              gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}});
             _ ->
               ok
           end,
@@ -335,7 +339,9 @@ write(FileStr, Offset, Buf) ->
           case {is_integer(Res), event_production_enabled("write_event")} of
             {true, true} ->
               WriteEvent = [{"type", "write_event"}, {"user_dn", get(user_id)}, {"count", binary:referenced_byte_size(Buf)}],
-              gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}});
+              gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
+              WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", get(user_id)}, {"bytes", binary:referenced_byte_size(Buf)}],
+              gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}});
             _ ->
               ok
           end,
@@ -371,7 +377,9 @@ write_from_stream(FileStr, Buf) ->
           case {is_integer(Res), event_production_enabled("write_event")} of
             {true, true} ->
               WriteEvent = [{"type", "write_event"}, {"user_dn", get(user_id)}, {"count", binary:referenced_byte_size(Buf)}],
-              gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}});
+              gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
+              WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", get(user_id)}, {"bytes", binary:referenced_byte_size(Buf)}],
+              gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}});
             _ ->
               ok
           end,
