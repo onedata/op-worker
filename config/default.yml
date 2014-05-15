@@ -65,8 +65,8 @@ veil_cluster_node_env:
 
   - parameter:
       name: callback_ack_time
-      description: After callback_ack_time seconds node_manager stops wainting for ack
-      value: 10
+      description: After callback_ack_time node_manager stops waiting for ack
+      value: 60
 
   - parameter:
       name: heart_beat
