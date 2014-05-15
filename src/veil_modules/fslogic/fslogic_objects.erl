@@ -46,18 +46,18 @@ save_file(FileDoc = #veil_document{record = #file{}}) ->
 
 %% get_storage/1
 %% ====================================================================
-%% @doc Gets storage document from DB by ID (storage ID, not UUID of document).
+%% @doc Gets storage document from DB by ID or UUID of document).
 %% @end
 -spec get_storage({id, StorageID :: integer()}) ->
     {ok, StorageDoc :: storage_doc()} |
-    {error, {failed_to_get_storage, {Reason :: any(), {storage_id, StorageID :: integer()}}}}.
+    {error, {failed_to_get_storage, {Reason :: any(), {storage, Type :: atom, StorageID :: integer()}}}}.
 %% ====================================================================
-get_storage({id, StorageID}) ->
-    case dao_lib:apply(dao_vfs, get_storage, [{uuid, StorageID}], fslogic_context:get_protocol_version()) of
+get_storage({Type, StorageID}) ->
+    case dao_lib:apply(dao_vfs, get_storage, [{Type, StorageID}], fslogic_context:get_protocol_version()) of
         {ok, #veil_document{record = #storage_info{}} = SInfo} ->
             {ok, SInfo};
         {error, Reason} ->
-            {error, {failed_to_get_storage, {Reason, {storage_id, StorageID}}}}
+            {error, {failed_to_get_storage, {Reason, {storage, Type, StorageID}}}}
     end.
 
 

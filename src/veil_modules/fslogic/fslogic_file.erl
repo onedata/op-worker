@@ -69,7 +69,7 @@ get_file_local_location(#file_location{} = FLoc) ->
 %% ====================================================================
 get_real_file_size(#file{type = ?REG_TYPE} = File) ->
     FileLoc = get_file_local_location(File#file.location),
-    {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({id, FileLoc#file_location.storage_id}),
+    {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
 
     {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
     case veilhelpers:exec(getattr, SH, [File_id]) of

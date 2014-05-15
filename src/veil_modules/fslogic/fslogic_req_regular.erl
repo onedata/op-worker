@@ -47,7 +47,7 @@ get_file_location(FileDoc = #veil_document{record = #file{}}) ->
     FileDesc = FileDoc#veil_document.record,
     FileLoc = fslogic_file:get_file_local_location(FileDesc),
 
-    {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({id, FileLoc#file_location.storage_id}),
+    {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
 
     {SH, File_id} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileLoc#file_location.file_id),
     #filelocation{storage_id = Storage#storage_info.id, file_id = File_id, validity = Validity,
@@ -105,7 +105,7 @@ get_new_file_location(FullFileName, Mode) ->
             ExistingWFileRecord = ExistingWFile#veil_document.record,
             ExistingWFileLocation= ExistingWFileRecord#file.location,
 
-            {ok, #veil_document{record = ExistingWFileStorage}} = fslogic_objects:get_storage({id, ExistingWFileLocation#file_location.storage_id}),
+            {ok, #veil_document{record = ExistingWFileStorage}} = fslogic_objects:get_storage({uuid, ExistingWFileLocation#file_location.storage_id}),
             {SH, File_id2} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), ExistingWFileStorage, ExistingWFileLocation#file_location.file_id),
             #storage_helper_info{name = ExistingWFileStorageSHName, init_args = ExistingWFileStorageSHArgs} = SH,
             #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = ExistingWFileStorageSHName, storage_helper_args = ExistingWFileStorageSHArgs};
