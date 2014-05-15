@@ -48,7 +48,7 @@ save_file(FileDoc = #veil_document{record = #file{}}) ->
 %% ====================================================================
 %% @doc Gets storage document from DB by ID or UUID of document).
 %% @end
--spec get_storage({id, StorageID :: integer()}) ->
+-spec get_storage({Type :: id | uuid, StorageID :: integer()}) ->
     {ok, StorageDoc :: storage_doc()} |
     {error, {failed_to_get_storage, {Reason :: any(), {storage, Type :: atom, StorageID :: integer()}}}}.
 %% ====================================================================

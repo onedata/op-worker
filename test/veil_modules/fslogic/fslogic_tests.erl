@@ -34,14 +34,6 @@
 %% Test functions
 %% ====================================================================
 
-verify_file_name_test() ->
-  ?assertEqual({error, wrong_filename}, fslogic_path:verify_file_name("..")),
-  ?assertEqual({error, wrong_filename}, fslogic_path:verify_file_name("../dir1/dir2/file")),
-  ?assertEqual({error, wrong_filename}, fslogic_path:verify_file_name("dir1/../dir2/./file")),
-  ?assertEqual({ok, []}, fslogic_path:verify_file_name(".")),
-  ?assertEqual({ok, ["dir", "file"]}, fslogic_path:verify_file_name("././././dir/././file")),
-  ?assertEqual({ok, ["dir1", "dir2", "file"]}, fslogic_path:verify_file_name("./dir1/./dir2/./file/.")).
-
 %% This test checks if dispatcher can decode messages to fslogic
 protocol_buffers_test() ->
   FileLocationMessage = #getfilelocation{file_logic_name = "some_file"},
@@ -69,39 +61,5 @@ protocol_buffers_test() ->
   InternalMsg = Msg#fusemessage.input,
   ?assert(is_record(InternalMsg, getfilelocation)),
   ?assert(InternalMsg#getfilelocation.file_logic_name =:= "some_file").
-
-%% getfilelocation_test() ->
-%%   PVersion = 1,
-%%   File = "fslogic_test_file",
-%%   FuseID = "1",
-%%   SHelper = "1",
-%%   FileId = File ++ "ID",
-%%
-%%   {ok, Mock} = gen_server_mock:new(),
-%%   gen_server_mock:expect_call(Mock, fun({dao, ProtocolVersion, Pid, 30, {vfs, get_file, [File]}}, _From, _State) ->
-%%     FileLoc = #file_location{storage_helper_id = SHelper, file_id = FileId},
-%%     FileRec = #file{location = FileLoc},
-%%     DaoAns = #veil_document{uuid = "1", record = FileRec},
-%%     Pid ! DaoAns,
-%%     ok
-%%   end),
-%%
-%%   gen_server_mock:expect_call(Mock, fun({dao, ProtocolVersion, Pid, 20, {vfs, list_descriptors, [{by_file_n_owner, {File, FuseID}}, 10, 0]}}, _From, _State) ->
-%%     Pid ! {ok, []},
-%%     ok
-%%   end),
-%%
-%%   gen_server_mock:expect_call(Mock, fun({dao, ProtocolVersion, Pid, 100, {vfs, save_descriptor, [Descriptor]}}, _From, _State) ->
-%%     Pid ! {ok, ok},
-%%     ok
-%%   end),
-%%
-%%   Record = #getfilelocation{file_logic_name = File},
-%%   Ans = fslogic:handle_fuse_message(PVersion, Record, FuseID),
-%%   gen_server_mock:assert_expectations(Mock),
-%%   ?assertEqual(SHelper, Ans#filelocation.storage_helper),
-%%   ?assertEqual(FileId, Ans#filelocation.file_id),
-%%   ?assertEqual(?LOCATION_VALIDITY, Ans#filelocation.validity),
-%%   ok.
 
 -endif.

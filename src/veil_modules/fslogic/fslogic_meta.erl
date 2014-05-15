@@ -23,6 +23,10 @@
 %% API
 -export([update_parent_ctime/2, update_meta_attr/3, update_user_files_size_view/1]).
 
+-ifdef(TEST).
+-export([init_file_meta/1]).
+-endif.
+
 %% ====================================================================
 %% API functions
 %% ====================================================================
