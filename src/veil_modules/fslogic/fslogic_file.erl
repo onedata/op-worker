@@ -5,7 +5,8 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: Write me !
+%% @doc: This module provides convenience methods that helps with managing #file{} record.
+%%       It also provides some abstract getters/setters for some #file{} record in case further changes.
 %% @end
 %% ===================================================================
 -module(fslogic_file).
@@ -31,6 +32,14 @@
 %% API functions
 %% ====================================================================
 
+%% get_file_owner/1
+%% ====================================================================
+%% @doc Fetches owner's username and UID for given file.
+%%      Returns {"", -1} on error.
+-spec get_file_owner(File :: file_doc() | file_info() | file()) -> Owner | Error when
+    Owner :: {Login :: string(), UID :: integer()} |
+    Error :: {[], -1}.
+%% ====================================================================
 get_file_owner(#file{} = File) ->
     case user_logic:get_user({uuid, File#file.uid}) of
         {ok, #veil_document{record = #user{}} = UserDoc} ->
@@ -43,6 +52,13 @@ get_file_owner(FilePath) ->
     {ok, #veil_document{record = #file{} = File}} = fslogic_objects:get_file(FilePath),
     get_file_owner(File).
 
+
+%% get_file_local_location/1
+%% ====================================================================
+%% @doc Fetches local #file_location{} from #file{} record.
+%%      #file_location{} shall never be accessed directly since this could be subject to change.
+-spec get_file_local_location(File :: file_doc() | file_info()) -> #file_location{}.
+%% ====================================================================
 get_file_local_location(#veil_document{record = #file{} = File}) ->
     get_file_local_location(File);
 get_file_local_location(_File = #file{location = #file_location{} = LocationField}) ->
@@ -53,7 +69,7 @@ get_file_local_location(#file_location{} = FLoc) ->
 
 %% get_real_file_size/1
 %% ====================================================================
-%% @doc Fetch real file size from underlying storage. Returns 0 for non-regular file.
+%% @doc Fetches real file size from underlying storage. Returns 0 for non-regular file.
 %%      Also errors are silently dropped (return value 0).
 -spec get_real_file_size(File :: file() | file_doc() | file_info()) -> FileSize :: non_neg_integer().
 %% ====================================================================
@@ -106,7 +122,9 @@ update_file_size(#file{} = File, Size) when Size >= 0 ->
 %% normalize_file_type/2
 %% ====================================================================
 %% @doc Translates given file type into internal or protocol representation
-%%      (types file_type() and file_type_protocol() respectively)
+%%      (types file_type() and file_type_protocol() respectively) <br/>
+%%      This method can and should be used in order to ensure that given file_type
+%%      has requested format.
 -spec normalize_file_type(protocol | internal, file_type() | file_type_protocol()) -> file_type() | file_type_protocol().
 %% ====================================================================
 normalize_file_type(protocol, ?DIR_TYPE) ->
