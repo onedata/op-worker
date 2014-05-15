@@ -15,7 +15,6 @@
 -behaviour(rest_module_behaviour).
 
 -include("veil_modules/control_panel/common.hrl").
--include("veil_modules/control_panel/rest_utils.hrl").
 -include("veil_modules/control_panel/rest_messages.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao_share.hrl").

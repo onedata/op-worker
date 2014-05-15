@@ -7,12 +7,15 @@
 %% ===================================================================
 %% @doc: This module implements worker_plugin_behaviour callbacks.
 %% It is responsible for setting up cowboy listener and registering
-%% nitrogen_handler as the handler.
+%% handlers for n2o (GUI) and REST.
 %% @end
 %% ===================================================================
 
 -module(control_panel).
 -behaviour(worker_plugin_behaviour).
+
+-include("veil_modules/control_panel/common.hrl").
+-include("logging.hrl").
 
 %% ====================================================================
 %% API functions
@@ -20,7 +23,7 @@
 -export([init/1, handle/2, cleanup/0]).
 
 % Paths in gui static directory
--define(static_paths, ["css/", "fonts/", "images/", "js/", "nitrogen/"]).
+-define(static_paths, ["/css/", "/fonts/", "/images/", "/js/", "/n2o/"]).
 
 % Cowboy listener reference
 -define(https_listener, https).
@@ -34,8 +37,7 @@
 %% init/1
 %% ====================================================================
 %% @doc {@link worker_plugin_behaviour} callback init/1 <br />
-%% Sets up cowboy dispatch with nitrogen handler and starts
-%% cowboy service on desired port.
+%% Sets up cowboy handlers for GUI and REST.
 %% @end
 -spec init(Args :: term()) -> Result when
     Result :: ok | {error, Error},
@@ -44,7 +46,6 @@
 init(_Args) ->
     % Get params from env for gui
     {ok, DocRoot} = application:get_env(veil_cluster_node, control_panel_static_files_root),
-    Dispatch = init_dispatch(atom_to_list(DocRoot), ?static_paths),
 
     {ok, Cert} = application:get_env(veil_cluster_node, ssl_cert_path),
     CertString = atom_to_list(Cert),
@@ -54,9 +55,31 @@ init(_Args) ->
     {ok, MaxKeepAlive} = application:get_env(veil_cluster_node, control_panel_max_keepalive),
     {ok, Timeout} = application:get_env(veil_cluster_node, control_panel_socket_timeout),
 
-    % Set prefix of nitrogen page modules. This cannot be set in sys.config, 
-    % because nitrogen does not start as an application.
-    application:set_env(nitrogen, module_prefix, "page"),
+    % Setup GUI dispatch opts for cowboy
+    GUIDispatch = [
+        {'_', static_dispatches(atom_to_list(DocRoot), ?static_paths) ++ [
+            {"/nagios/[...]", nagios_handler, []},
+            {?user_content_download_path ++ "/:path", file_download_handler, [{type, ?user_content_request_type}]},
+            {?shared_files_download_path ++ "/:path", file_download_handler, [{type, ?shared_files_request_type}]},
+            {?file_upload_path, file_upload_handler, []},
+            {"/ws/[...]", bullet_handler, [{handler, n2o_bullet}]},
+            {'_', n2o_cowboy, []}
+        ]}
+    ],
+
+    % Set envs needed by n2o
+    % Transition port - the same as gui port
+    ok = application:set_env(n2o, transition_port, GuiPort),
+    % Custom route handler
+    ok = application:set_env(n2o, route, gui_routes),
+
+    % Ets tables needed by n2o
+    ets:new(cookies,[set,named_table,{keypos,1},public]),
+    ets:new(actions,[set,named_table,{keypos,1},public]),
+    ets:new(globals,[set,named_table,{keypos,1},public]),
+    ets:new(caching,[set,named_table,{keypos,1},public]),
+    ets:insert(globals,{onlineusers,0}),
+
     % Start the listener for web gui and nagios handler
     {ok, _} = cowboy:start_https(?https_listener, GuiNbAcceptors,
         [
@@ -67,7 +90,7 @@ init(_Args) ->
             {password, ""}
         ],
         [
-            {env, [{dispatch, Dispatch}]},
+            {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
             {max_keepalive, MaxKeepAlive},
             {timeout, Timeout}
         ]),
@@ -112,7 +135,7 @@ init(_Args) ->
         ],
         [
             {env, [{dispatch, cowboy_router:compile(RestDispatch)}]},
-            {max_keepalive, MaxKeepAlive},
+            {max_keepalive, 1},
             {timeout, Timeout}
         ]),
     ok.
@@ -132,7 +155,7 @@ handle(_ProtocolVersion, ping) ->
     pong;
 
 handle(_ProtocolVersion, healthcheck) ->
-		ok;
+    ok;
 
 handle(_ProtocolVersion, get_version) ->
     node_manager:check_vsn();
@@ -153,62 +176,22 @@ cleanup() ->
     cowboy:stop_listener(?https_listener),
     cowboy:stop_listener(?rest_listener),
     cowboy:stop_listener(?http_redirector_listener),
+    ets:delete(cookies),
+    ets:delete(actions),
+    ets:delete(globals),
+    ets:delete(caching),
     ok.
 
 
 %% ====================================================================
 %% Auxiliary functions
 %% ====================================================================
-
-%% Compiles dispatch options to the format cowboy expects
-init_dispatch(DocRoot, StaticPaths) ->
-    Handler = cowboy_static,
-    StaticDispatches = lists:map(fun(Dir) ->
-        Path = reformat_path(Dir),
+%% Generates static file routing for cowboy.
+static_dispatches(DocRoot, StaticPaths) ->
+    _StaticDispatches = lists:map(fun(Dir) ->
         Opts = [
-            {mimetypes, {fun mimetypes:path_to_mimes/2, default}}
-            | localized_dir_file(DocRoot, Dir)
+            {mimetypes, {fun mimetypes:path_to_mimes/2, default}},
+            {directory, DocRoot ++ Dir}
         ],
-        {Path, Handler, Opts}
-    end, StaticPaths),
-
-    % Set up dispatch
-    Dispatch = [
-        % Nitrogen will handle everything that's not handled in the StaticDispatches
-        {'_', StaticDispatches ++ [
-            {"/nagios/[...]", nagios_handler, []},
-            {'_', nitrogen_handler, []}
-        ]}
-    ],
-    cowboy_router:compile(Dispatch).
-
-
-localized_dir_file(DocRoot, Path) ->
-    NewPath = case hd(Path) of
-                  $/ -> DocRoot ++ Path;
-                  _ -> DocRoot ++ "/" ++ Path
-              end,
-    _NewPath2 = case lists:last(Path) of
-                    $/ -> [{directory, NewPath}];
-                    _ ->
-                        Dir = filename:dirname(NewPath),
-                        File = filename:basename(NewPath),
-                        [
-                            {directory, Dir},
-                            {file, File}
-                        ]
-                end.
-
-% Ensure the paths start with /, and if a path ends with /, then add "[...]" to it
-reformat_path(Path) ->
-    Path2 = case hd(Path) of
-                $/ -> Path;
-                $\ -> Path;
-                _ -> [$/ | Path]
-            end,
-    Path3 = case lists:last(Path) of
-                $/ -> Path2 ++ "[...]";
-                $\ -> Path2 ++ "[...]";
-                _ -> Path2
-            end,
-    Path3.
+        {Dir ++ "[...]", cowboy_static, Opts}
+    end, StaticPaths).

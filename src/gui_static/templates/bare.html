@@ -1,19 +1,15 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" lang="pl">
 <head>
-    <title>[[[page:title()]]]</title>
+    <title>{{title}}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
 
-    <!-- Loading Nitrogen -->
-    <link rel="stylesheet" href="/nitrogen/jquery-ui/jquery.ui.all.css" type="text/css" media="screen" charset="utf-8" />	
-    <link rel="stylesheet" href="/nitrogen/nitrogen.css" type="text/css" media="screen" charset="utf-8" />
-
-    <!-- Loading Bootstrap -->
+    <!-- Bootstrap -->
     <link rel="stylesheet"  href="/css/bootstrap.css" type="text/css" media="screen" charset="utf-8" />
     <link rel="stylesheet"  href="/css/bootstrap-responsive.css" type="text/css" media="screen" charset="utf-8" />
 
-    <!-- Loading Flat UI -->
+    <!-- Flat UI -->
     <link rel="stylesheet" href="/css/flat-ui.css" type="text/css" media="screen" charset="utf-8" />
 
     <link rel="stylesheet" href="/css/style.css" type="text/css" media="screen" charset="utf-8" />
@@ -21,16 +17,10 @@
     <!-- link rel="shortcut icon" href="" -->
 </head>
 <body>
-    [[[page:body()]]]
-    <!-- Nitrogen scripts -->
-    <script src='/nitrogen/jquery.js' type='text/javascript' charset='utf-8'></script>
-    <script src='/nitrogen/jquery-ui.js' type='text/javascript' charset='utf-8'></script>
-    <script src='/nitrogen/livevalidation.js' type='text/javascript' charset='utf-8'></script>
-    <script src='/nitrogen/nitrogen.js' type='text/javascript' charset='utf-8'></script>
-    <script src='/nitrogen/bert.js' type='text/javascript' charset='utf-8'></script>
+    {{body}}
 
-    <!-- Custom file upload script based off Nitrogen -->
-    <script src='/js/veil_upload.js' type='text/javascript' charset='utf-8'></script>
+    <!-- transition process -->
+    <script>{{script}}</script>
 
     <!-- bootstrap / flat-ui scripts -->
     <script src="/js/jquery-1.8.3.min.js"></script>
@@ -43,7 +33,15 @@
     <script src="/js/flatui-radio.js"></script>
     <script src="/js/jquery.tagsinput.js"></script>
     <script src="/js/jquery.placeholder.js"></script>
-    <script src="/js/jquery.stacktable.js"></script>    
-    <script>[[[script]]]</script>
+    <script src="/js/jquery.stacktable.js"></script>
+
+    <!-- n2o scripts -->
+    <!--script src='/n2o/jquery.js' type='text/javascript' charset='utf-8'></script-->
+    <script src='/n2o/bullet.js' type='text/javascript' charset='utf-8'></script>
+    <script src='/n2o/n2o.js' type='text/javascript' charset='utf-8'></script>
+    <script src='/n2o/bert.js' type='text/javascript' charset='utf-8'></script>
+
+    <!-- Custom file upload script based on Nitrogen's -->
+    <script src='/js/veil_upload.js' type='text/javascript' charset='utf-8'></script>
 </body>
 </html>

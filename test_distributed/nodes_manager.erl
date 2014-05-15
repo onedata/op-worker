@@ -21,6 +21,9 @@
 -define(FUSE_SESSION_EXP_TIME, 8000).
 -define(REQUEST_HANDLING_TIME, 1000).
 
+%% Uncomment for verbosity
+%% -define(verbose, 1).
+
 %% ====================================================================
 %% API
 %% ====================================================================
@@ -172,8 +175,23 @@ start_app(Node, Args) ->
 -spec start_app_on_nodes(Nodes :: list(), Args  :: list()) -> Result when
   Result ::  list().
 %% ====================================================================
+-ifndef(verbose).
 start_app_on_nodes([], _Args) ->
   [];
+
+start_app_on_nodes([Node | Nodes], [Arg | Args]) ->
+    Deps = rpc:call(Node, nodes_manager, start_deps, []),
+    App = start_app(Node, Arg),
+    Ans = case (Deps =:= ok) and (App =:= ok) of
+              true -> ok;
+              false -> error
+          end,
+    [Ans | start_app_on_nodes(Nodes, Args)].
+-endif.
+
+-ifdef(verbose).
+start_app_on_nodes([], _Args) ->
+    [];
 
 start_app_on_nodes([Node | Nodes], [Arg | Args]) ->
   Deps = rpc:call(Node, nodes_manager, start_deps, []),
@@ -182,7 +200,9 @@ start_app_on_nodes([Node | Nodes], [Arg | Args]) ->
     true -> ok;
     false -> error
   end,
+  ct:print("start_app_on_node: ~p~n", [{Node, Deps, App}]),
   [Ans | start_app_on_nodes(Nodes, Args)].
+-endif.
 
 %% stop_app/1
 %% ====================================================================
@@ -260,10 +280,7 @@ start_deps() ->
 
   ssl:start(),
   application:start(ranch),
-  application:start(nprocreg),
   application:start(cowboy),
-  application:start(nitrogen_core),
-  application:start(simple_bridge),
   application:start(mimetypes),
   application:start(ibrowse),
   application:start(rrderlang),
@@ -280,13 +297,10 @@ stop_deps() ->
   application:stop(ssl),
   application:stop(crypto),
   application:stop(public_key),
-  application:stop(nprocreg),
   application:stop(cowboy),
   application:stop(lager),
   application:stop(sasl),
-  application:stop(nitrogen_core),
   application:stop(mimetypes),
-  application:stop(simple_bridge),
   application:stop(ibrowse),
   application:stop(rrderlang),
   application:unload(?APP_Name).
