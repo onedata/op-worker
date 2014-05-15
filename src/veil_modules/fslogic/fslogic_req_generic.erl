@@ -32,7 +32,7 @@
 %% @end
 -spec update_times(FullFileName :: string(), ATime :: non_neg_integer(),
     MTime :: non_neg_integer(), CTime :: non_neg_integer()) ->
-    #atom{}.
+    #atom{} | no_return().
 %% ====================================================================
 update_times(FullFileName, ATime, MTime, CTime) ->
     ?debug("update_times(FullFileName: ~p, ATime: ~p, MTime: ~p, CTime: ~p)", [FullFileName, ATime, MTime, CTime]),
@@ -54,6 +54,14 @@ update_times(FullFileName, ATime, MTime, CTime) ->
             {ok, _} = fslogic_objects:save_file(FileDoc#veil_document{record = File1})
     end.
 
+
+%% change_file_owner/3
+%% ====================================================================
+%% @doc Changes file's owner.
+%% @end
+-spec change_file_owner(FullFileName :: string(), NewUID :: non_neg_integer(), NewUName :: string()) ->
+    #atom{} | no_return().
+%% ====================================================================
 change_file_owner(FullFileName, NewUID, NewUName) ->
     ?debug("change_file_owner(FullFileName: ~p, NewUID: ~p, NewUName: ~p)", [FullFileName, NewUID, NewUName]),
 
@@ -88,10 +96,27 @@ change_file_owner(FullFileName, NewUID, NewUName) ->
 
     #atom{value = ?VOK}.
 
+
+%% change_file_group/3
+%% ====================================================================
+%% @doc Changes file's group owner.
+%%      Operation currently not supported.
+%% @end
+-spec change_file_group(FullFileName :: string(), NewGID :: non_neg_integer(), NewGName :: string()) ->
+    #atom{} | no_return().
+%% ====================================================================
 change_file_group(_FullFileName, _GID, _GName) ->
     ?debug("change_file_group(FullFileName: ~p, GID: ~p, GName: ~p)", [_FullFileName, _GID, _GName]),
     #atom{value = ?VENOTSUP}.
 
+
+%% change_file_perms/2
+%% ====================================================================
+%% @doc Changes file permissions.
+%% @end
+-spec change_file_perms(FullFileName :: string(), Perms :: non_neg_integer()) ->
+    #atom{} | no_return().
+%% ====================================================================
 change_file_perms(FullFileName, Perms) ->
     ?debug("change_file_perms(FullFileName: ~p, Perms: ~p)", [FullFileName, Perms]),
     {ok, UserDoc} = fslogic_objects:get_user(),
@@ -106,6 +131,14 @@ change_file_perms(FullFileName, Perms) ->
 
     #atom{value = ?VOK}.
 
+
+%% get_file_attr/2
+%% ====================================================================
+%% @doc Gets file's attributes.
+%% @end
+-spec get_file_attr(FullFileName :: string()) ->
+    #fileattr{} | no_return().
+%% ====================================================================
 get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
     #veil_document{record = #file{} = File, uuid = FileUUID} = FileDoc,
     Type = fslogic_file:normalize_file_type(protocol, File#file.type),
@@ -156,6 +189,13 @@ get_file_attr(FullFileName) ->
     end.
 
 
+%% delete_file/1
+%% ====================================================================
+%% @doc Deletes file.
+%% @end
+-spec delete_file(FullFileName :: string()) ->
+    #atom{} | no_return().
+%% ====================================================================
 delete_file(FullFileName) ->
     ?debug("delete_file(FullFileName: ~p)", [FullFileName]),
     {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
@@ -183,6 +223,13 @@ delete_file(FullFileName) ->
     end.
 
 
+%% rename_file/2
+%% ====================================================================
+%% @doc Renames file.
+%% @end
+-spec rename_file(FullFileName :: string(), FullNewFileName :: string()) ->
+    #atom{} | no_return().
+%% ====================================================================
 rename_file(FullFileName, FullNewFileName) ->
     ?debug("rename_file(FullFileName: ~p, FullNewFileName: ~p)", [FullFileName, FullNewFileName]),
     {ok, UserDoc} = fslogic_objects:get_user(),
@@ -297,6 +344,14 @@ rename_file(FullFileName, FullNewFileName) ->
     fslogic_meta:update_parent_ctime(fslogic_path:get_user_file_name(FullFileName), CTime),
     #atom{value = ?VOK}.
 
+
+%% get_statfs/0
+%% ====================================================================
+%% @doc Gets file system statistics.
+%% @end
+-spec get_statfs() ->
+    #statfsinfo{} | no_return().
+%% ====================================================================
 get_statfs() ->
     ?debug("get_statfs()"),
     {ok, UserDoc} = fslogic_objects:get_user(),
