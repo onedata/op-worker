@@ -40,6 +40,16 @@ get_user_file_name(FullFileName) ->
     {_, UserDoc} = fslogic_objects:get_user(),
     get_user_file_name(FullFileName, UserDoc).
 
+
+%% get_user_file_name/2
+%% ====================================================================
+%% @doc Gets user's file name. This method reverses get_full_file_name.
+%%      Throws on error (e.g. file path was invalid). <br/>
+%%      Uses UserDoc as context.
+%% @end
+-spec get_user_file_name(FullFileName :: string(), UserDoc :: #veil_document{}) -> Result when
+    Result :: UserFileName :: string() | no_return().
+%% ====================================================================
 get_user_file_name(FullFileName, UserDoc) ->
     {ok, Tokens} = verify_file_name(FullFileName),
 
@@ -109,6 +119,14 @@ get_full_file_name(FileName, Request, UserDocStatus, UserDoc) ->
             {error, {user_doc_not_found, UserDoc}}
     end.
 
+
+%% verify_file_name/1
+%% ====================================================================
+%% @doc Strips '.' from path. Also if '..' path element if present, path is considered invalid.
+%% @end
+-spec verify_file_name(FileName :: string()) -> Result when
+    Result :: {ok, Tokens :: list()} | {error, wrong_filename}.
+%% ====================================================================
 verify_file_name(FileName) ->
     Tokens = lists:filter(fun(X) -> X =/= "." end, string:tokens(FileName, "/")),
     case lists:any(fun(X) -> X =:= ".." end, Tokens) of

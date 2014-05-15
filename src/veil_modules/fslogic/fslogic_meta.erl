@@ -63,7 +63,11 @@ update_user_files_size_view(ProtocolVersion) ->
 update_meta_attr(File, Attr, Value) ->
     update_meta_attr(File, Attr, Value, 5).
 
-%% Updates modification time for parent of Dir
+%% update_parent_ctime/2
+%% ====================================================================
+%% @doc Sends #updatetimes request for parent of given directory.
+-spec update_parent_ctime(Dir :: string(), CTime :: non_neg_integer()) -> ok | error.
+%% ====================================================================
 update_parent_ctime(Dir, CTime) ->
     case fslogic_path:strip_path_leaf(Dir) of
         [?PATH_SEPARATOR] -> ok;

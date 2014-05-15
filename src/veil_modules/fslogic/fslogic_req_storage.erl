@@ -25,6 +25,14 @@
 %% API functions
 %% ====================================================================
 
+%% create_storage_test_file/1
+%% ====================================================================
+%% @doc Creates test file on given storage for the user, so that
+%%      it would be possible to verify storage file access on client side.
+%% @end
+-spec create_storage_test_file(StorageId :: non_neg_integer()) ->
+    #createstoragetestfileresponse{} | no_return().
+%% ====================================================================
 create_storage_test_file(StorageId) ->
     ?debug("create_storage_test_file(StorageId: ~p)", [StorageId]),
     Length = 20,
@@ -44,6 +52,14 @@ create_storage_test_file(StorageId) ->
     Length = storage_files_manager:write(StorageHelperInfo, Path, Text),
     #createstoragetestfileresponse{answer = true, relative_path = Path, text = Text}.
 
+
+%% storage_test_file_modified/3
+%% ====================================================================
+%% @doc Handles test file modification and validates contents of the file.
+%% @end
+-spec storage_test_file_modified(StorageId :: non_neg_integer(), RelPath :: string(), Text :: string()) ->
+    #storagetestfilemodifiedresponse{} | no_return().
+%% ====================================================================
 storage_test_file_modified(StorageId, RelPath, Text) ->
     ?debug("storage_test_file_modified(StorageId: ~p, RelPath: ~p, Text: ~p)", [StorageId, RelPath, Text]),
     {ok, #veil_document{record = StorageInfo}} = fslogic_objects:get_storage({id, StorageId}),
@@ -53,6 +69,15 @@ storage_test_file_modified(StorageId, RelPath, Text) ->
     storage_files_manager:delete(StorageHelperInfo, RelPath),
     #storagetestfilemodifiedresponse{answer = true}.
 
+
+%% client_storage_info/1
+%% ====================================================================
+%% @doc Handles client's storage availability request.
+%%      Client's claims are saved to its session (#fuse_session{}).
+%% @end
+-spec client_storage_info(SInfo :: list()) ->
+    #atom{} | no_return().
+%% ====================================================================
 client_storage_info(SInfo) ->
     ?debug("client_storage_info(SInfo: ~p)", [SInfo]),
     {ok, #veil_document{record = FuseSession} = FuseSessionDoc} = dao_lib:apply(dao_cluster, get_fuse_session, [fslogic_context:get_fuse_id()], fslogic_context:get_protocol_version()),

@@ -187,6 +187,13 @@ cleanup() ->
 %% Internal functions
 %% ====================================================================
 
+
+%% fslogic_runner/3
+%% ====================================================================
+%% @doc Runs Method(RequestBody) while catching errors and translating them with
+%%      fslogic_errors module.
+-spec fslogic_runner(Method :: function(), RequestType :: atom(), RequestBody :: term()) -> Response :: term().
+%% ====================================================================
 fslogic_runner(Method, RequestType, RequestBody) when is_function(Method) ->
     try
         ?debug("Processing request (type ~p): ~p", [RequestType, RequestBody]),
