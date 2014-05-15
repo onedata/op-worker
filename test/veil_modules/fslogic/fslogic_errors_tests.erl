@@ -27,7 +27,7 @@ gen_error_code_test() ->
     ?assertMatch({?VEPERM, user_not_found}, fslogic_errors:gen_error_code(user_not_found)),
     ?assertMatch({?VEPERM, user_doc_not_found}, fslogic_errors:gen_error_code(user_doc_not_found)),
     ?assertMatch({?VEPERM, invalid_group_access}, fslogic_errors:gen_error_code(invalid_group_access)),
-    ?assertMatch({?VEEXIST, _}, fslogic_errors:gen_error_code(file_already_exists)).
+    ?assertMatch({?VEEXIST, _}, fslogic_errors:gen_error_code(file_exists)).
 
 normalize_error_code_test() ->
     ?assertMatch("code", fslogic_errors:normalize_error_code(code)),
