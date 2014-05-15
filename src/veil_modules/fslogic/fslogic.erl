@@ -292,6 +292,7 @@ handle_fuse_message(Req = #getlink{file_logic_name = FName}) ->
 handle_fuse_message(_Req = #getstatfs{}) ->
     fslogic_req_generic:get_statfs();
 
+%% Storage requests
 handle_fuse_message(_Req = #createstoragetestfilerequest{storage_id = StorageId}) ->
     fslogic_req_storage:create_storage_test_file(StorageId);
 
@@ -307,10 +308,7 @@ handle_fuse_message(_Req = #testchannel{answer_delay_in_ms = Interval, answer_me
     #atom{value = "ok"}.
 
 
-handle_custom_request({getfileattr, UUID}) ->
-    {ok, FileDoc} = fslogic_objects:get_file({uuid, UUID}),
-    fslogic_req_generic:get_file_attr(FileDoc);
-
+%% Custom internal request handlers
 handle_custom_request({getfileattr, UUID}) ->
     {ok, FileDoc} = fslogic_objects:get_file({uuid, UUID}),
     fslogic_req_generic:get_file_attr(FileDoc);

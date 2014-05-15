@@ -15,6 +15,7 @@
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
+-include("veil_modules/dao/dao_types.hrl").
 -include("logging.hrl").
 
 %% API
@@ -24,6 +25,14 @@
 %% API functions
 %% ====================================================================
 
+
+%% get_file_location/1
+%% ====================================================================
+%% @doc Gets file location (implicit file open operation).
+%% @end
+-spec get_file_location(FullFileName :: string() | file_doc()) ->
+    #filelocation{} | no_return().
+%% ====================================================================
 get_file_location(FileDoc = #veil_document{record = #file{}}) ->
     Validity = ?LOCATION_VALIDITY,
     case FileDoc#veil_document.record#file.type of
@@ -48,6 +57,14 @@ get_file_location(FullFileName) ->
     {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
     get_file_location(FileDoc).
 
+
+%% get_new_file_location/2
+%% ====================================================================
+%% @doc Gets new file location (implicit mknod operation).
+%% @end
+-spec get_new_file_location(FullFileName :: string(), Mode :: non_neg_integer()) ->
+    #filelocation{} | no_return().
+%% ====================================================================
 get_new_file_location(FullFileName, Mode) ->
     ?debug("get_new_file_location(FullFileName ~p, Mode: ~p)", [FullFileName, Mode]),
 
@@ -101,6 +118,14 @@ get_new_file_location(FullFileName, Mode) ->
             #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = SHName, storage_helper_args = SHArgs}
     end.
 
+
+%% create_file_ack/1
+%% ====================================================================
+%% @doc ACK file creation on storage.
+%% @end
+-spec create_file_ack(FullFileName :: string()) ->
+    #atom{} | no_return().
+%% ====================================================================
 create_file_ack(FullFileName) ->
     ?debug("create_file_ack(FullFileName ~p)", [FullFileName]),
 
@@ -115,12 +140,28 @@ create_file_ack(FullFileName) ->
             #atom{value = ?VOK}
     end.
 
+
+%% file_not_used/1
+%% ====================================================================
+%% @doc Marks the file as not-used by the FUSE (implicit last-release operation).
+%% @end
+-spec file_not_used(FullFileName :: string()) ->
+    #atom{} | no_return().
+%% ====================================================================
 file_not_used(FullFileName) ->
     ?debug("file_not_used(FullFileName ~p)", [FullFileName]),
 
     ok = dao_lib:apply(dao_vfs, remove_descriptor, [{by_file_n_owner, {FullFileName, fslogic_context:get_fuse_id()}}], fslogic_context:get_protocol_version()),
     #atom{value = ?VOK}.
 
+
+%% renew_file_location/1
+%% ====================================================================
+%% @doc Renew file location lock.
+%% @end
+-spec renew_file_location(FullFileName :: string()) ->
+    #filelocationvalidity{} | no_return().
+%% ====================================================================
 renew_file_location(FullFileName) ->
     ?debug("renew_file_location(FullFileName ~p)", [FullFileName]),
 

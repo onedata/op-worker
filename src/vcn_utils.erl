@@ -112,5 +112,14 @@ time() ->
     {M, S, _} = now(),
     M * 1000000 + S.
 
+
+%% record_type/1
+%% ====================================================================
+%% @doc Gets record type for given record. Since the is now way of knowing whether
+%%      given tuple is record, this method behaviour is unspecified for non-record tuples.
+%% @end
+-spec record_type(Record :: tuple()) ->
+    atom() | no_return().
+%% ====================================================================
 record_type(Record) when is_tuple(Record) ->
     element(1, Record).
