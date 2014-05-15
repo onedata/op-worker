@@ -28,12 +28,30 @@
 %% API functions
 %% ====================================================================
 
+
+%% save_file/1
+%% ====================================================================
+%% @doc Updates given #file{} to DB.
+%% @end
+-spec save_file(FileDoc :: file_doc()) ->
+    {ok, UUID :: uuid()} |
+    {error, {failed_to_save_file, {Reason :: any(), FileDoc :: file_doc()}}}.
+%% ====================================================================
 save_file(FileDoc = #veil_document{record = #file{}}) ->
     case dao_lib:apply(dao_vfs, save_file, [FileDoc], fslogic_context:get_protocol_version()) of
         {ok, UUID}      -> {ok, UUID};
         {error, Reason} -> {error, {failed_to_save_file, {Reason, FileDoc}}}
     end.
 
+
+%% get_storage/1
+%% ====================================================================
+%% @doc Gets storage document from DB by ID (storage ID, not UUID of document).
+%% @end
+-spec get_storage({id, StorageID :: integer()}) ->
+    {ok, StorageDoc :: storage_doc()} |
+    {error, {failed_to_get_storage, {Reason :: any(), {storage_id, StorageID :: integer()}}}}.
+%% ====================================================================
 get_storage({id, StorageID}) ->
     case dao_lib:apply(dao_vfs, get_storage, [{uuid, StorageID}], fslogic_context:get_protocol_version()) of
         {ok, #veil_document{record = #storage_info{}} = SInfo} ->
@@ -42,6 +60,14 @@ get_storage({id, StorageID}) ->
             {error, {failed_to_get_storage, {Reason, {storage_id, StorageID}}}}
     end.
 
+
+%% get_user/1
+%% ====================================================================
+%% @doc Gets user associated with given DN
+%%      If DN is 'undefined', ROOT user is returned.
+%% @end
+-spec get_user({dn, DN :: string()} | user_doc()) -> {ok, UserDoc :: user_doc()} | {error, any()}.
+%% ====================================================================
 get_user(#veil_document{record = #user{}} = UserDoc) ->
     {ok, UserDoc};
 get_user({dn, UserDN}) ->
@@ -54,16 +80,25 @@ get_user({dn, UserDN}) ->
                     {error, {get_user_error, {Reason, {dn, DN}}}}
             end
     end.
+
+
+%% get_user/0
+%% ====================================================================
+%% @doc Gets user associated with current session from DB
+%%      If there is no user associated with current session, ROOT user is returned.
+%% @end
+-spec get_user() -> {ok, UserDoc :: user_doc()} | {error, any()}.
+%% ====================================================================
 get_user() ->
     get_user({dn, fslogic_context:get_user_dn()}).
 
 
-%% get_file/3
+%% get_file/1
 %% ====================================================================
 %% @doc Gets file info from DB
 %% @end
--spec get_file(FullFileName :: string()) -> Result when
-    Result :: term().
+-spec get_file(FullFileName :: file() | file_doc()) -> Result when
+    Result :: {ok, FileDoc :: file_doc()} | {error, file_not_found} | {error, any()}.
 %% ====================================================================
 get_file(#veil_document{record = #file{}} = FileDoc) ->
     {ok, FileDoc};
