@@ -192,22 +192,28 @@ cleanup() ->
 
 fslogic_runner(Method, RequestType, RequestBody) when is_function(Method) ->
     try
+        ?debug("Processing request (type ~p): ~p", [RequestType, RequestBody]),
         Method(RequestBody)
     catch
         Reason ->
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
-            ?error_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
+            %% Manually thrown error, normal interrupt case.
+            ?debug_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
         error:{badmatch, {error, Reason}} ->
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
-            ?error_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
+            %% Bad Match assertion - something went wrong, but it could be expected.
+            ?warning("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
+            ?debug_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
         error:{case_clause, {error, Reason}} ->
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
+            %% Bad Match assertion - something went seriously wrong and we should know about it.
             ?error_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
         error:UnkError ->
             {ErrorCode, ErrorDetails} = {?VEREMOTEIO, UnkError},
+            %% Bad Match assertion - something went horribly wrong. This should not happen.
             ?error_stacktrace("Cannot process request ~p due to unknown error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode))
     end.

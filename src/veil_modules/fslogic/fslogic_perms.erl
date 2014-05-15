@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: Write me !
+%% @doc: This module provides methods for permission management and assertions.
 %% @end
 %% ===================================================================
 -module(fslogic_perms).

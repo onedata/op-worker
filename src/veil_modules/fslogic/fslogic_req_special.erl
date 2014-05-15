@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: Write me !
+%% @doc: FSLogic request handlers for special files.
 %% @end
 %% ===================================================================
 -module(fslogic_req_special).
@@ -25,6 +25,8 @@
 %% ====================================================================
 
 create_dir(FullFileName, Mode) ->
+    ?debug("create_dir(FullFileName ~p, Mode: ~p)", [FullFileName, Mode]),
+
     NewFileName = fslogic_path:basename(FullFileName),
     ParentFileName = fslogic_path:strip_path_leaf(FullFileName),
     {ok, #veil_document{record = #file{}} = ParentDoc} = fslogic_objects:get_file(ParentFileName),
@@ -55,6 +57,8 @@ create_dir(FullFileName, Mode) ->
     end.
 
 get_file_children(FullFileName, ROffset, RCount) ->
+    ?debug("get_file_children(FullFileName ~p, ROffset: ~p, RCount: ~p)", [FullFileName, ROffset, RCount]),
+
     UserFilePath = fslogic_path:get_user_file_name(FullFileName),
     TokenizedPath = string:tokens(UserFilePath, "/"),
     {Num, Offset} =
@@ -83,6 +87,8 @@ get_file_children(FullFileName, ROffset, RCount) ->
     end.
 
 create_link(FullFileName, LinkValue) ->
+    ?debug("create_link(FullFileName ~p, LinkValue: ~p)", [FullFileName, LinkValue]),
+
     UserFilePath = fslogic_path:get_user_file_name(FullFileName),
 
     NewFileName = fslogic_path:basename(FullFileName),
@@ -114,6 +120,8 @@ create_link(FullFileName, LinkValue) ->
     end.
 
 get_link(FullFileName) ->
+    ?debug("get_link(FullFileName ~p)", [FullFileName]),
+
     {ok, #veil_document{record = #file{ref_file = Target}}} = fslogic_objects:get_file(FullFileName),
     #linkinfo{file_logic_name = Target}.
 

@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: Write me !
+%% @doc: This module provides set of path processing methods.
 %% @end
 %% ===================================================================
 -module(fslogic_path).

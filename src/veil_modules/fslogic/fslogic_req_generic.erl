@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: Write me !
+%% @doc: FSLogic generic request handlers.
 %% @end
 %% ===================================================================
 -module(fslogic_req_generic).
@@ -80,9 +80,11 @@ change_file_owner(FullFileName, NewUID, NewUName) ->
     #atom{value = ?VOK}.
 
 change_file_group(_FullFileName, _GID, _GName) ->
+    ?debug("change_file_group(FullFileName: ~p, GID: ~p, GName: ~p)", [_FullFileName, _GID, _GName]),
     #atom{value = ?VENOTSUP}.
 
 change_file_perms(FullFileName, Perms) ->
+    ?debug("change_file_perms(FullFileName: ~p, Perms: ~p)", [FullFileName, Perms]),
     {ok, UserDoc} = fslogic_objects:get_user(),
     {ok, #veil_document{record = #file{} = File} = FileDoc} = fslogic_objects:get_file(FullFileName),
 
@@ -136,12 +138,17 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
     #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
         type = Type, size = Size, uname = UName, gname = GName, uid = UID, gid = UID, links = Links};
 get_file_attr(FullFileName) ->
-    ?debug("FileAttr for ~p", [FullFileName]),
-    {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
-    get_file_attr(FileDoc).
+    ?debug("get_file_attr(FullFileName: ~p)", [FullFileName]),
+    case fslogic_objects:get_file(FullFileName) of
+        {ok, FileDoc} ->            %% Throw VENOENT in order not to trigger error-log
+            get_file_attr(FileDoc); %% which would be unnecessary since get_file_attr is also used to check
+        {error, file_not_found} ->  %% if file exists
+            throw(?VENOENT)
+    end.
 
 
 delete_file(FullFileName) ->
+    ?debug("delete_file(FullFileName: ~p)", [FullFileName]),
     {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
     {ok, UserDoc} = fslogic_objects:get_user(),
 
@@ -168,6 +175,7 @@ delete_file(FullFileName) ->
 
 
 rename_file(FullFileName, FullNewFileName) ->
+    ?debug("rename_file(FullFileName: ~p, FullNewFileName: ~p)", [FullFileName, FullNewFileName]),
     {ok, UserDoc} = fslogic_objects:get_user(),
     {ok, #veil_document{record = #file{} = OldFile} = OldDoc} = fslogic_objects:get_file(FullFileName),
 
@@ -201,15 +209,6 @@ rename_file(FullFileName, FullNewFileName) ->
 
     MoveOnStorage =
         fun(#file{type = ?REG_TYPE}) -> %% Returns new file record with updated file_id field or throws excpetion
-            %%                                         case {UserDocStatus, RootStatus} of %% Assert user doc && user root get status
-            %%                                             {ok, ok} -> ok;
-            %%                                             _ ->
-            %%                                                 ?error("Cannot fetch user doc or user root for file ~p.", [File]),
-            %%                                                 ?debug("get_user_doc response: ~p", [{UserDocStatus, UserDoc}]),
-            %%                                                 ?debug("get_user_root response: ~p", [{RootStatus, Root}]),
-            %%                                                 throw(gen_error_message(renamefile, ?VEREMOTEIO))
-            %%                                         end,
-
             %% Get storage info
             StorageID   = OldFile#file.location#file_location.storage_id,
             FileID      = OldFile#file.location#file_location.file_id,
@@ -290,6 +289,7 @@ rename_file(FullFileName, FullNewFileName) ->
     #atom{value = ?VOK}.
 
 get_statfs() ->
+    ?debug("get_statfs()"),
     {ok, UserDoc} = fslogic_objects:get_user(),
     Quota =
         case user_logic:get_quota(UserDoc) of

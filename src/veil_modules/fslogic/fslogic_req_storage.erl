@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: Write me !
+%% @doc: FSLogic request handlers for storage operations.
 %% @end
 %% ===================================================================
 -module(fslogic_req_storage).
@@ -25,6 +25,7 @@
 %% ====================================================================
 
 create_storage_test_file(StorageId) ->
+    ?debug("create_storage_test_file(StorageId: ~p)", [StorageId]),
     Length = 20,
     {A, B, C} = now(),
     random:seed(A, B, C),
@@ -43,6 +44,7 @@ create_storage_test_file(StorageId) ->
     #createstoragetestfileresponse{answer = true, relative_path = Path, text = Text}.
 
 storage_test_file_modified(StorageId, RelPath, Text) ->
+    ?debug("storage_test_file_modified(StorageId: ~p, RelPath: ~p, Text: ~p)", [StorageId, RelPath, Text]),
     {ok, #veil_document{record = StorageInfo}} = fslogic_objects:get_storage({id, StorageId}),
     StorageHelperInfo = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, StorageInfo),
     {ok, Bytes} = storage_files_manager:read(StorageHelperInfo, RelPath, 0, length(Text)),
@@ -51,6 +53,7 @@ storage_test_file_modified(StorageId, RelPath, Text) ->
     #storagetestfilemodifiedresponse{answer = true}.
 
 client_storage_info(SInfo) ->
+    ?debug("client_storage_info(SInfo: ~p)", [SInfo]),
     {ok, #veil_document{record = FuseSession} = FuseSessionDoc} = dao_lib:apply(dao_cluster, get_fuse_session, [fslogic_context:get_fuse_id()], fslogic_context:get_protocol_version()),
     ClientStorageInfo = lists:map(fun({_, StorageId, Root}) ->
         {StorageId, #storage_helper_info{name = "DirectIO", init_args = [Root]}} end, SInfo),

@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: Write me !
+%% @doc: FSLogic request handlers for regular files.
 %% @end
 %% ===================================================================
 -module(fslogic_req_regular).
@@ -44,10 +44,13 @@ get_file_location(FileDoc = #veil_document{record = #file{}}) ->
     #filelocation{storage_id = Storage#storage_info.id, file_id = File_id, validity = Validity,
         storage_helper_name = SH#storage_helper_info.name, storage_helper_args = SH#storage_helper_info.init_args};
 get_file_location(FullFileName) ->
+    ?debug("get_file_location(FullFileName ~p)", [FullFileName]),
     {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
     get_file_location(FileDoc).
 
 get_new_file_location(FullFileName, Mode) ->
+    ?debug("get_new_file_location(FullFileName ~p, Mode: ~p)", [FullFileName, Mode]),
+
     NewFileName = fslogic_path:basename(FullFileName),
     ParentFileName = fslogic_path:strip_path_leaf(FullFileName),
     {ok, #veil_document{record = #file{}} = ParentDoc} = fslogic_objects:get_file(ParentFileName),
@@ -99,6 +102,8 @@ get_new_file_location(FullFileName, Mode) ->
     end.
 
 create_file_ack(FullFileName) ->
+    ?debug("create_file_ack(FullFileName ~p)", [FullFileName]),
+
     case fslogic_objects:get_waiting_file(FullFileName) of
         {ok, #veil_document{record = #file{} = OldFile} = OldDoc} ->
             ChangedFile = OldDoc#veil_document{record = OldFile#file{created = true}},
@@ -111,10 +116,14 @@ create_file_ack(FullFileName) ->
     end.
 
 file_not_used(FullFileName) ->
+    ?debug("file_not_used(FullFileName ~p)", [FullFileName]),
+
     ok = dao_lib:apply(dao_vfs, remove_descriptor, [{by_file_n_owner, {FullFileName, fslogic_context:get_fuse_id()}}], fslogic_context:get_protocol_version()),
     #atom{value = ?VOK}.
 
 renew_file_location(FullFileName) ->
+    ?debug("renew_file_location(FullFileName ~p)", [FullFileName]),
+
     {ok, Descriptors} = dao_lib:apply(dao_vfs, list_descriptors, [{by_file_n_owner, {FullFileName, fslogic_context:get_fuse_id()}}, 10, 0], fslogic_context:get_protocol_version()),
     case length(Descriptors) of
         0 ->
