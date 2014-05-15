@@ -391,7 +391,7 @@ get_by_uuid_test(Config) ->
   {FileLocationAns, FileLocation} = rpc:call(Node1, files_tester, get_file_location, [TestFile]),
   ?assertEqual(ok, FileLocationAns),
 
-  {DocFindStatus, FileDoc} = rpc:call(Node1, fslogic, get_file, [1, TestFile, ?CLUSTER_FUSE_ID]),
+  {DocFindStatus, FileDoc} = rpc:call(Node1, fslogic_objects, get_file, [1, TestFile, ?CLUSTER_FUSE_ID]),
   ?assertEqual(ok, DocFindStatus),
   FileLocation2 = rpc:call(Node1, fslogic, handle, [1, {getfilelocation_uuid, FileDoc#veil_document.uuid}]),
   ?assertEqual(?VOK, FileLocation2#filelocation.answer),
@@ -463,7 +463,7 @@ groups_test(Config) ->
     %% files_manager call with given user's DN
     FM = fun(M, A, DN) ->
             Me = self(),
-            Pid = spawn_link(Node, fun() -> put(user_id, DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
+            Pid = spawn_link(Node, fun() -> fslogic_context:set_user_dn(DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
             receive
                 {Pid, Resp} -> Resp
             end
@@ -698,7 +698,7 @@ dirs_creating_test(Config) ->
 
   SHInfo = #storage_helper_info{name = ?SH, init_args = ?ARG_TEST_ROOT},
 
-  AnsCreate = rpc:call(Node1, fslogic, create_dirs, [50, 5, SHInfo, "/"]),
+  AnsCreate = rpc:call(Node1, fslogic_storage, create_dirs, [50, 5, SHInfo, "/"]),
   ?assertEqual(2, length(string:tokens(AnsCreate, "/"))),
   ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ AnsCreate)).
 
@@ -757,15 +757,15 @@ user_file_counting_test(Config) ->
   {CreateUserAns2, #veil_document{uuid = UserID2}} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
   ?assertEqual(ok, CreateUserAns2),
 
-  rpc:call(FSLogicNode, fslogic, get_files_number, [user, "not_existing_id", 1]),
+  rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, "not_existing_id", 1]),
   nodes_manager:wait_for_db_reaction(),
-  {CountStatus0, Count0} = rpc:call(FSLogicNode, fslogic, get_files_number, [user, "not_existing_id", 1]),
+  {CountStatus0, Count0} = rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, "not_existing_id", 1]),
   ?assertEqual(ok, CountStatus0),
   ?assertEqual(0, Count0),
 
-  rpc:call(FSLogicNode, fslogic, get_files_number, [user, UserID1, 1]),
+  rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID1, 1]),
   nodes_manager:wait_for_db_reaction(),
-  {CountStatus00, Count00} = rpc:call(FSLogicNode, fslogic, get_files_number, [user, UserID1, 1]),
+  {CountStatus00, Count00} = rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID1, 1]),
   ?assertEqual(ok, CountStatus00),
   ?assertEqual(0, Count00),
 
@@ -799,15 +799,15 @@ user_file_counting_test(Config) ->
     ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt2)
   end, User2FilesEnding),
 
-  rpc:call(FSLogicNode, fslogic, get_files_number, [user, UserID1, 1]),
+  rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID1, 1]),
   nodes_manager:wait_for_db_reaction(),
-  {CountStatus, Count} = rpc:call(FSLogicNode, fslogic, get_files_number, [user, UserID1, 1]),
+  {CountStatus, Count} = rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID1, 1]),
   ?assertEqual(ok, CountStatus),
   ?assertEqual(length(User1FilesEnding), Count),
 
-  rpc:call(FSLogicNode, fslogic, get_files_number, [user, UserID2, 1]),
+  rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID2, 1]),
   nodes_manager:wait_for_db_reaction(),
-  {CountStatus2, Count2} = rpc:call(FSLogicNode, fslogic, get_files_number, [user, UserID2, 1]),
+  {CountStatus2, Count2} = rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID2, 1]),
   ?assertEqual(ok, CountStatus2),
   ?assertEqual(length(User2FilesEnding), Count2),
 
@@ -859,7 +859,7 @@ user_file_size_test(Config) ->
   %% files_manager call with given user's DN
   FM = fun(M, A, DN) ->
     Me = self(),
-    Pid = spawn_link(Node, fun() -> put(user_id, DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
+    Pid = spawn_link(Node, fun() -> fslogic_context:set_user_dn(DN), Me ! {self(), apply(logical_files_manager, M, A)} end),
     receive
       {Pid, Resp} -> Resp
     end
@@ -907,13 +907,13 @@ user_file_size_test(Config) ->
   User1TestUpdateFile = FileBeg ++ "_update",
   FileSize = 100,
 
-  rpc:call(Node, fslogic, get_files_size, ["not_existing_id", 1]),
+  rpc:call(Node, fslogic_utils, get_files_size, ["not_existing_id", 1]),
   nodes_manager:wait_for_db_reaction(),
   {CountStatus0, Count0} = rpc:call(Node, user_logic, get_files_size, ["not_existing_id", 1]),
   ?assertEqual(ok, CountStatus0),
   ?assertEqual(0, Count0),
 
-  rpc:call(Node, fslogic, get_files_size, [UserID1, 1]),
+  rpc:call(Node, fslogic_utils, get_files_size, [UserID1, 1]),
   nodes_manager:wait_for_db_reaction(),
   {CountStatus00, Count00} = rpc:call(Node, user_logic, get_files_size, [UserID1, 1]),
   ?assertEqual(ok, CountStatus00),
@@ -1445,7 +1445,7 @@ file_sharing_test(Config) ->
   Email = "user1@email.net",
   {CreateUserAns, User_Doc} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
-  put(user_id, DN),
+  fslogic_context:set_user_dn(DN),
 
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}, auto_handshake]),
   ?assertEqual(ok, ConAns),
@@ -1753,7 +1753,7 @@ fuse_requests_test(Config) ->
 
   {Status8_1, Answer8_1} = delete_file(Socket, FirstFileInDir),
   ?assertEqual("ok", Status8_1),
-  ?assertEqual(list_to_atom(?VEREMOTEIO), Answer8_1),
+  ?assertEqual(list_to_atom(?VENOENT), Answer8_1),
 
   {Status9, Files9, AnswerOpt9} = ls(Socket, DirName, 10, non),
   ?assertEqual("ok", Status9),
@@ -1771,7 +1771,8 @@ fuse_requests_test(Config) ->
 
 
   %% updatetimes message test
-  {Status20, Answer20} = update_times(Socket, SecondFileInDir, 1234, 5678),
+  CurrentTime = vcn_utils:time(),
+  {Status20, Answer20} = update_times(Socket, SecondFileInDir, CurrentTime + 1234, CurrentTime + 4321),
   ?assertEqual("ok", Status20),
   ?assertEqual(list_to_atom(?VOK), Answer20),
 
@@ -1780,8 +1781,8 @@ fuse_requests_test(Config) ->
   {Status21, Attr4} = get_file_attr(Socket, SecondFileInDir),
   ?assertEqual("ok", Status21),
 
-  ?assertEqual(1234, Attr4#fileattr.atime),
-  ?assertEqual(5678, Attr4#fileattr.mtime),
+  ?assertEqual(CurrentTime + 1234, Attr4#fileattr.atime),
+  ?assertEqual(CurrentTime + 4321, Attr4#fileattr.mtime),
   %% updatetimes message test end
 
 
@@ -1873,7 +1874,7 @@ fuse_requests_test(Config) ->
   ?assertEqual(list_to_atom(?VOK), Answer14),
   {Status14_1, Answer14_1} = delete_file(Socket, DirName),
   ?assertEqual("ok", Status14_1),
-  ?assertEqual(list_to_atom(?VEREMOTEIO), Answer14_1),
+  ?assertEqual(list_to_atom(?VENOENT), Answer14_1),
 
   {Status15, Answer15} = delete_file(Socket, TestFile),
   ?assertEqual("ok", Status15),
@@ -1952,7 +1953,7 @@ users_separation_test(Config) ->
   ?assertEqual(ok, ConAns1),
 
   %% Current time
-  Time = fslogic_utils:time(),
+  Time = vcn_utils:time(),
   nodes_manager:wait_for_db_reaction(),
 
   %% Users have different (and next to each other) IDs
@@ -2393,7 +2394,7 @@ files_manager_standard_files_test(Config) ->
   ?assertEqual(ok, AnsDirDelete),
 
   AnsDirDelete2 = rpc:call(Node1, logical_files_manager, rmdir, [DirName]),
-  ?assertEqual({logical_file_system_error, ?VEREMOTEIO}, AnsDirDelete2),
+  ?assertEqual({logical_file_system_error, ?VENOENT}, AnsDirDelete2),
 
   RemoveStorageAns = rpc:call(Node1, dao_lib, apply, [dao_vfs, remove_storage, [{uuid, StorageUUID}], ?ProtocolVersion]),
   ?assertEqual(ok, RemoveStorageAns).
@@ -2868,13 +2869,13 @@ clear_old_descriptors(Node) ->
   nodes_manager:wait_for_db_reaction().
 
 create_standard_share(TestFile, DN) ->
-  put(user_id, DN),
+  fslogic_context:set_user_dn(DN),
   logical_files_manager:create_standard_share(TestFile).
 
 create_share(TestFile, Share_With, DN) ->
-  put(user_id, DN),
+  fslogic_context:set_user_dn(DN),
   logical_files_manager:create_share(TestFile, Share_With).
 
 get_share(Key, DN) ->
-  put(user_id, DN),
+  fslogic_context:set_user_dn(DN),
   logical_files_manager:get_share(Key).

@@ -11,7 +11,7 @@
 -module(vcn_utils).
 
 %% API
--export([ensure_running/1, pmap/2, pforeach/2]).
+-export([ensure_running/1, pmap/2, pforeach/2, time/0, record_type/1]).
 
 %% ====================================================================
 %% API functions
@@ -102,3 +102,24 @@ pforeach_gather(N, Ref) ->
     receive
         Ref -> pforeach_gather(N - 1, Ref)
     end.
+
+%% time/0
+%% ====================================================================
+%% @doc Returns time in seconds.
+%% @end
+-spec time() -> Result :: integer().
+time() ->
+    {M, S, _} = now(),
+    M * 1000000 + S.
+
+
+%% record_type/1
+%% ====================================================================
+%% @doc Gets record type for given record. Since the is now way of knowing whether
+%%      given tuple is record, this method behaviour is unspecified for non-record tuples.
+%% @end
+-spec record_type(Record :: tuple()) ->
+    atom() | no_return().
+%% ====================================================================
+record_type(Record) when is_tuple(Record) ->
+    element(1, Record).

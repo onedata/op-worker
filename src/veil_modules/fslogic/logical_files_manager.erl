@@ -262,7 +262,7 @@ read(FileStr, Offset, Size) ->
               case event_production_enabled("read_event") of
                 true ->
                   % TODO: add filePath
-                  ReadEvent = [{"type", "read_event"}, {"user_dn", get(user_id)}, {"bytes", Size}],
+                  ReadEvent = [{"type", "read_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"bytes", Size}],
                   gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, ReadEvent}});
                 _ ->
                   ok
@@ -287,7 +287,7 @@ read(FileStr, Offset, Size) ->
   ErrorDetail :: term().
 %% ====================================================================
 write(FileStr, Buf) ->
-  case write_enabled(get(user_id)) of
+  case write_enabled(fslogic_context:get_user_dn()) of
     true ->
       File = check_utf(FileStr),
       {Response, Response2} = getfilelocation(File),
@@ -297,9 +297,9 @@ write(FileStr, Buf) ->
           Res = storage_files_manager:write(Storage_helper_info, FileId, Buf),
           case {is_integer(Res), event_production_enabled("write_event")} of
             {true, true} ->
-              WriteEvent = [{"type", "write_event"}, {"user_dn", get(user_id)}, {"bytes", binary:referenced_byte_size(Buf)}],
+              WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"bytes", binary:referenced_byte_size(Buf)}],
               gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
-              WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", get(user_id)}, {"bytes", binary:referenced_byte_size(Buf)}],
+              WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()}, {"bytes", binary:referenced_byte_size(Buf)}],
               gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}});
             _ ->
               ok
@@ -324,7 +324,7 @@ write(FileStr, Buf) ->
   ErrorDetail :: term().
 %% ====================================================================
 write(FileStr, Offset, Buf) ->
-  case write_enabled(get(user_id)) of
+  case write_enabled(fslogic_context:get_user_dn()) of
     true ->
       File = check_utf(FileStr),
       {Response, Response2} = getfilelocation(File),
@@ -336,9 +336,9 @@ write(FileStr, Offset, Buf) ->
           %% TODO - check if asynchronous processing needed
           case {is_integer(Res), event_production_enabled("write_event")} of
             {true, true} ->
-              WriteEvent = [{"type", "write_event"}, {"user_dn", get(user_id)}, {"count", binary:referenced_byte_size(Buf)}],
+              WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"count", binary:referenced_byte_size(Buf)}],
               gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
-              WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", get(user_id)}, {"bytes", binary:referenced_byte_size(Buf)}],
+              WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()}, {"bytes", binary:referenced_byte_size(Buf)}],
               gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}});
             _ ->
               ok
@@ -363,7 +363,7 @@ write(FileStr, Offset, Buf) ->
   ErrorDetail :: term().
 %% ====================================================================
 write_from_stream(FileStr, Buf) ->
-  case write_enabled(get(user_id)) of
+  case write_enabled(fslogic_context:get_user_dn()) of
     true ->
       File = check_utf(FileStr),
       {Response, Response2} = getfilelocation(File),
@@ -374,9 +374,9 @@ write_from_stream(FileStr, Buf) ->
           Res = storage_files_manager:write(Storage_helper_info, FileId, Offset, Buf),
           case {is_integer(Res), event_production_enabled("write_event")} of
             {true, true} ->
-              WriteEvent = [{"type", "write_event"}, {"user_dn", get(user_id)}, {"count", binary:referenced_byte_size(Buf)}],
+              WriteEvent = [{"type", "write_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"count", binary:referenced_byte_size(Buf)}],
               gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEvent}}),
-              WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", get(user_id)}, {"bytes", binary:referenced_byte_size(Buf)}],
+              WriteEventStats = [{"type", "write_for_stats"}, {"user_dn", fslogic_context:get_user_dn()}, {"bytes", binary:referenced_byte_size(Buf)}],
               gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, WriteEventStats}});
             _ ->
               ok
@@ -458,7 +458,7 @@ truncate(FileStr, Size) ->
           Res = storage_files_manager:truncate(Storage_helper_info, FileId, Size),
           case {Res, event_production_enabled("truncate_event")} of
             {ok, true} ->
-              TruncateEvent = [{"type", "truncate_event"}, {"user_dn", get(user_id)}, {"filePath", FileStr}],
+              TruncateEvent = [{"type", "truncate_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", FileStr}],
               gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEvent}});
             _ ->
               ok
@@ -503,7 +503,7 @@ delete(FileStr) ->
                     ?VOK ->
                       case event_production_enabled("rm_event") of
                         true ->
-                          RmEvent = [{"type", "rm_event"}, {"user_dn", get(user_id)}],
+                          RmEvent = [{"type", "rm_event"}, {"user_dn", fslogic_context:get_user_dn()}],
                           gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, RmEvent}});
                         _ ->
                           ok
@@ -559,10 +559,10 @@ change_file_perm(FileNameStr, NewPerms) ->
 %% ====================================================================
 exists(FileNameStr) ->
   FileName = check_utf(FileNameStr),
-  {FileNameFindingAns, File} = fslogic:get_full_file_name(FileName),
+  {FileNameFindingAns, File} = fslogic_path:get_full_file_name(FileName),
   case FileNameFindingAns of
     ok ->
-      {Status, TmpAns} = fslogic:get_file(1, File, ?CLUSTER_FUSE_ID),
+      {Status, TmpAns} = fslogic_objects:get_file(1, File, ?CLUSTER_FUSE_ID),
       case {Status, TmpAns} of
         {ok, _} -> true;
         {error, file_not_found} -> false;
@@ -609,7 +609,7 @@ contact_fslogic(Message, Value) ->
   try
     CallAns = case Message of
       internal_call ->
-        UserID = get(user_id),
+        UserID = fslogic_context:get_user_dn(),
         case UserID of
           undefined -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {internal_call, Value}});
           _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, #veil_request{subject = UserID, request = {internal_call, Value}}})
@@ -658,7 +658,7 @@ get_file_by_uuid(UUID) ->
 get_file_user_dependent_name_by_uuid(UUID) ->
   case get_file_full_name_by_uuid(UUID) of
     {ok, FullPath} ->
-      case get(user_id) of
+      case fslogic_context:get_user_dn() of
         undefined -> 
           {ok, FullPath};
         UserDN ->
@@ -753,11 +753,11 @@ create_standard_share(File) ->
 %% ====================================================================
 create_share(FileStr, Share_With) ->
   File = check_utf(FileStr),
-  {Status, FullName} = fslogic:get_full_file_name(File),
-  {Status2, UID} = fslogic:get_user_id(),
+  {Status, FullName} = fslogic_path:get_full_file_name(File),
+  {Status2, UID} = fslogic_context:get_user_id(),
   case {Status, Status2} of
     {ok, ok} ->
-      case fslogic:get_file(1, FullName, ?CLUSTER_FUSE_ID) of
+      case fslogic_objects:get_file(1, FullName, ?CLUSTER_FUSE_ID) of
         {ok, #veil_document{uuid = FUuid}} ->
           Share_info = #share_desc{file = FUuid, user = UID, share_with = Share_With},
           add_share(Share_info);
@@ -825,10 +825,10 @@ add_share(Share_info) ->
 %% ====================================================================
 get_share({file, FileStr}) ->
   File = check_utf(FileStr),
-  {Status, FullName} = fslogic:get_full_file_name(File),
+  {Status, FullName} = fslogic_path:get_full_file_name(File),
   case Status of
     ok ->
-      case fslogic:get_file(1, FullName, ?CLUSTER_FUSE_ID) of
+      case fslogic_objects:get_file(1, FullName, ?CLUSTER_FUSE_ID) of
         {ok, #veil_document{uuid = FUuid}} ->
           GetAns = get_share({file_uuid, FUuid}),
           GetAns;
@@ -858,10 +858,10 @@ get_share(Key) ->
 %% ====================================================================
 remove_share({file, FileStr}) ->
   File = check_utf(FileStr),
-  {Status, FullName} = fslogic:get_full_file_name(File),
+  {Status, FullName} = fslogic_path:get_full_file_name(File),
   case Status of
     ok ->
-      case fslogic:get_file(1, FullName, ?CLUSTER_FUSE_ID) of
+      case fslogic_objects:get_file(1, FullName, ?CLUSTER_FUSE_ID) of
         {ok, #veil_document{uuid = FUuid}} ->
           dao_lib:apply(dao_share, remove_file_share, [{file, FUuid}], 1);
         Other -> Other

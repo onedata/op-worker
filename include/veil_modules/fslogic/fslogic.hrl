@@ -9,6 +9,10 @@
 %% @end
 %% ===================================================================
 
+-ifndef(FSLOGIC_HRL).
+-define(FSLOGIC_HRL, 1).
+
+-include("veil_modules/fslogic/fslogic_types.hrl").
 
 %% POSIX error names
 -define(VOK,        "ok").       %% Everything is just great
@@ -23,6 +27,11 @@
 -define(VEPERM,     "eperm").    %% Operation not permitted
 -define(VEINVAL,    "einval").   %% Invalid argument
 -define(VEDQUOT,    "edquot").   %% Quota exceeded
+
+
+%% @todo: add test that verifies if the macro contains all available error code
+-define(ALL_ERROR_CODES, [?VOK, ?VENOENT, ?VEACCES, ?VEEXIST, ?VENOTSUP, ?VENOTEMPTY, ?VEREMOTEIO,
+                          ?VEPERM, ?VEINVAL, ?VEDQUOT]).
 
 
 %% POSIX & FUSE C structures definitions ported to erlang. For documentation please refer linux & fuse man pages.
@@ -50,7 +59,7 @@
 -record(callback, {fuse = 0, pid = 0, node = non, action = non}).
 
 -define(REMOTE_HELPER_SEPARATOR, "///").
--define(CLUSTER_USER_ID, cluster_uid).
+-define(CLUSTER_USER_ID, "cluster_uid").
 -define(CLUSTER_FUSE_ID, "cluster_fid").
 
 %% Name of direcotry that contains all group dirs
@@ -58,3 +67,29 @@
 
 %% burst size for listing
 -define(DAO_LIST_BURST_SIZE,100).
+
+
+-define(LOCATION_VALIDITY, 60*15).
+
+-define(FILE_COUNTING_BASE, 256).
+
+%% Which fuse operations (messages) are allowed to operate on base group directory ("/groups")
+-define(GROUPS_BASE_ALLOWED_ACTIONS,    [getfileattr, updatetimes, getfilechildren]).
+
+%% Which fuse operations (messages) are allowed to operate on second level group directory (e.g. "/groups/grpName")
+-define(GROUPS_ALLOWED_ACTIONS,         [getfileattr, getnewfilelocation, createdir, updatetimes, createlink, getfilechildren]).
+
+
+%% File types used in protocol. Use fslogic_file:normalize_file_type to translate types from/to normal macros like ?REG_TYPE.
+-define(REG_TYPE_PROT, "REG").
+-define(DIR_TYPE_PROT, "DIR").
+-define(LNK_TYPE_PROT, "LNK").
+
+
+%% Storage test file prefix for testing client;s storage availability
+-define(STORAGE_TEST_FILE_PREFIX, "storage_test_").
+
+%% Maximum time (in ms) after which document conflict resolution shall occur
+-define(MAX_SLEEP_TIME_CONFLICT_RESOLUTION, 100).
+
+-endif.

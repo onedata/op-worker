@@ -11,46 +11,23 @@
 %% ===================================================================
 -module(fslogic_utils_tests).
 
-%% TODO dodać testy dla przypadków brzegowych (kiedy strip_path_leaf i basename
-%% zwracają [?PATH_SEPARATOR]
-
-%% TODO dodać test get_parent_and_name_from_path
-
 -ifdef(TEST).
-
+-include("veil_modules/fslogic/fslogic.hrl").
 -include_lib("eunit/include/eunit.hrl").
--include_lib("veil_modules/dao/dao.hrl").
 
-setup() ->
-  meck:new([dao_lib]).
+get_group_owner_test() ->
+    [GroupName0] = fslogic_utils:get_group_owner("/" ++ ?GROUPS_BASE_DIR_NAME ++ "/name0/file"),
+    ?assertMatch("name0", GroupName0),
 
-teardown(_) ->
-  ok = meck:unload([dao_lib]).
+    [GroupName1] = fslogic_utils:get_group_owner("/" ++ ?GROUPS_BASE_DIR_NAME ++ "/name1/"),
+    ?assertMatch("name1", GroupName1),
 
-get_parent_and_name_from_path_test_() ->
-  {foreach, fun setup/0, fun teardown/1, [fun get_parent_and_name_from_path/0]}.
+    [GroupName2] = fslogic_utils:get_group_owner("/" ++ ?GROUPS_BASE_DIR_NAME ++ "/name2"),
+    ?assertMatch("name2", GroupName2),
 
-strip_path_leaf_test() ->
-    ?assertMatch("/some/path", fslogic_utils:strip_path_leaf("/some/path/leaf")),
-    ?assertMatch("/", fslogic_utils:strip_path_leaf("/leaf")),
-    ?assertMatch("/", fslogic_utils:strip_path_leaf("/")),
-    ?assertMatch("/", fslogic_utils:strip_path_leaf("")),
-    ?assertMatch("/base", fslogic_utils:strip_path_leaf("/base/leaf/")).
+    ?assertMatch([], fslogic_utils:get_group_owner("/dir")),
+    ?assertMatch([], fslogic_utils:get_group_owner("/dir/file")),
+    ?assertMatch([], fslogic_utils:get_group_owner("/dir/file/")).
 
-basename_test() ->
-    ?assertMatch("leaf", fslogic_utils:basename("/root/dir/leaf")),
-    ?assertMatch("/", fslogic_utils:basename("/")),
-    ?assertMatch("/", fslogic_utils:basename("")),
-    ?assertMatch("leaf", fslogic_utils:basename("leaf")).
-
-get_parent_and_name_from_path() ->
-  Doc = #veil_document{uuid = "test_id"},
-  meck:expect(dao_lib, apply, fun(_, _, ["/some/path"], _) -> {ok, Doc} end),
-  ?assertEqual({ok, {"leaf", Doc}}, fslogic_utils:get_parent_and_name_from_path("/some/path/leaf", 1)),
-
-  meck:expect(dao_lib, apply, fun(_, _, ["/not_existing_dir"], _) -> {error, "my_error"} end),
-  ?assertEqual({error, "Error: cannot find parent: my_error"}, fslogic_utils:get_parent_and_name_from_path("/not_existing_dir/leaf", 1)),
-
-  ?assert(meck:validate(dao_lib)).
 
 -endif.

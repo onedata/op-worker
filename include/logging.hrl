@@ -107,9 +107,9 @@
 -define(gather_metadata,
     [{node, node()}, {pid, self()}, {line, ?LINE}] ++
         logger:parse_process_info(process_info(self(), current_function)) ++
-        case get(user_id) of
+        case fslogic_context:get_user_dn() of
             undefined -> [];
-            _ -> [{dn, get(user_id)}]
+            _ -> [{dn, fslogic_context:get_user_dn()}]
         end
 ).
 

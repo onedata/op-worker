@@ -16,13 +16,67 @@
 -include_lib("files_common.hrl").
 
 %% API
--export([get_sh_for_fuse/2, select_storage/2, insert_storage/2, insert_storage/3]).
+-export([get_sh_for_fuse/2, select_storage/2, insert_storage/2, insert_storage/3, get_new_file_id/4]).
+
+-ifdef(TEST).
+-export([create_dirs/4]).
+-endif.
 
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
 
+%% get_new_file_id/4
+%% ====================================================================
+%% @doc Returns id for a new file
+%% @end
+-spec get_new_file_id(File :: string(), UserDoc :: term(), SHInfo :: term(), ProtocolVersion :: integer()) -> string().
+%% ====================================================================
+get_new_file_id(File, UserDoc, SHInfo, ProtocolVersion) ->
+    {Root1, {CountStatus, FilesCount}} =
+        case {string:tokens(File, "/"), UserDoc} of
+            {[?GROUPS_BASE_DIR_NAME, GroupName | _], _} -> %% Group dir context
+                {"/" ++ ?GROUPS_BASE_DIR_NAME ++ "/" ++ GroupName, fslogic_utils:get_files_number(group, GroupName, ProtocolVersion)};
+            {_, #veil_document{uuid = ?CLUSTER_USER_ID}} -> {"/", fslogic_utils:get_files_number(user, UserDoc#veil_document.uuid, ProtocolVersion)};
+            _ -> {"/users/" ++ fslogic_path:get_user_root(UserDoc), fslogic_utils:get_files_number(user, UserDoc#veil_document.uuid, ProtocolVersion)}
+        end,
+    File_id_beg =
+        case CountStatus of
+            ok -> create_dirs(FilesCount, ?FILE_COUNTING_BASE, SHInfo, Root1 ++ "/");
+            _  -> Root1 ++ "/"
+        end,
+
+    WithoutSpecial = lists:foldl(fun(Char, Ans) ->
+        case Char > 255 of
+            true ->
+                Ans;
+            false ->
+                [Char | Ans]
+        end
+    end, [], lists:reverse(File)),
+    File_id_beg ++ dao_helper:gen_uuid() ++ re:replace(WithoutSpecial, "/", "___", [global, {return,list}]).
+
+
+%% create_dirs/4
+%% ====================================================================
+%% @doc Creates dir at storage for files (if needed). Returns the path
+%% that contains created dirs.
+%% @end
+-spec create_dirs(Count :: integer(), CountingBase :: integer(), SHInfo :: term(), TmpAns :: string()) -> string().
+%% ====================================================================
+create_dirs(Count, CountingBase, SHInfo, TmpAns) ->
+    case Count > CountingBase of
+        true ->
+            random:seed(now()),
+            DirName = TmpAns ++ integer_to_list(random:uniform(CountingBase)) ++ "/",
+            case storage_files_manager:mkdir(SHInfo, DirName) of
+                ok -> create_dirs(Count div CountingBase, CountingBase, SHInfo, DirName);
+                {error, dir_or_file_exists} -> create_dirs(Count div CountingBase, CountingBase, SHInfo, DirName);
+                _ -> create_dirs(Count div CountingBase, CountingBase, SHInfo, TmpAns)
+            end;
+        false -> TmpAns
+    end.
 
 %% get_sh_for_fuse/2
 %% ====================================================================
@@ -180,7 +234,7 @@ get_fuse_group(FuseID) ->
 	Result :: ok | {error, Error :: atom()}.
 %% ====================================================================
 add_dirs_for_existing_users(Storage) ->
-	case list_users() of
+	case user_logic:list_all_users() of
 		{ok,Users} ->
 			LoginsAndTeams = lists:map(fun(X) -> {user_logic:get_login(X), user_logic:get_team_names(X)} end, Users),
 			CreateDirs =
@@ -196,35 +250,5 @@ add_dirs_for_existing_users(Storage) ->
 			lists:foldl(CreateDirs, ok, LoginsAndTeams);
 		{error, Error} ->
 			lager:error("Can not list all users, error: ~p",[Error]),
-			{error, Error}
-	end.
-
-%% list_users/0
-%% ====================================================================
-%% @doc Lists all users
-%% @end
--spec list_users() ->
-	{ok, DocList :: list(#veil_document{record :: #user{}})} |
-	{error,atom()}.
-%% ====================================================================
-list_users() ->
-	list_users(?DAO_LIST_BURST_SIZE, 0, []).
-
-%% list_users/3
-%% ====================================================================
-%% @doc Returns given Actual list, concatenated with all users beginning
-%%  from Offset (they will be get from dao in packages of size N)
-%% @end
--spec list_users(N :: pos_integer(), Offset :: non_neg_integer(), Actual :: list(#veil_document{record :: #user{}})) ->
-	{ok, DocList :: list(#veil_document{record :: #user{}})} |
-	{error,atom()}.
-%% ====================================================================
-list_users(N, Offset, Actual) ->
-	case dao_lib:apply(dao_users,list_users,[N,Offset],1) of
-		{ok, UserList} when length(UserList)==N ->
-			list_users(N,Offset+N, Actual++UserList);
-		{ok, FinalUserList}   ->
-			{ok, Actual ++ FinalUserList};
-		{error, Error} ->
 			{error, Error}
 	end.

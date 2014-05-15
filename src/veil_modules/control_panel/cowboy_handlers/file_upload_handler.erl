@@ -87,7 +87,7 @@ handle_upload_request(Req) ->
             wf_context:context(Context2),
             UserID = wf:session(user_doc),
             true = (UserID /= undefined),
-            put(user_id, lists:nth(1, user_logic:get_dn_list(UserID))),
+            fslogic_context:set_user_dn(lists:nth(1, user_logic:get_dn_list(UserID))),
             {St, Context2, SessHandler}
         catch T1:M1 ->
             ?warning("Cannot establish session context for user content request - ~p:~p", [T1, M1]),
@@ -123,7 +123,7 @@ handle_upload_request(Req) ->
 
             catch Type:Message ->
                 ?error_stacktrace("Error while processing file upload from user ~p - ~p:~p",
-                    [get(user_id), Type, Message]),
+                    [fslogic_context:get_user_dn(), Type, Message]),
                 {ok, _ErrorReq} = cowboy_req:reply(500, Req#http_req{connection = close})
             end
     end.

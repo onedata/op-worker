@@ -21,7 +21,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([sign_in/1, create_user/5, get_user/1, remove_user/1]).
+-export([sign_in/1, create_user/5, get_user/1, remove_user/1, list_all_users/0]).
 -export([get_login/1, get_name/1, get_teams/1, update_teams/2]).
 -export([get_email_list/1, update_email_list/2, get_dn_list/1, update_dn_list/2, get_role/1, update_role/2]).
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
@@ -211,6 +211,37 @@ remove_user(Key) ->
         _ -> error
     end,
     dao_lib:apply(dao_users, remove_user, [Key], 1).
+
+
+%% list_all_users/0
+%% ====================================================================
+%% @doc Lists all users
+%% @end
+-spec list_all_users() ->
+    {ok, DocList :: list(#veil_document{record :: #user{}})} |
+    {error,atom()}.
+%% ====================================================================
+list_all_users() ->
+    list_all_users(?DAO_LIST_BURST_SIZE, 0, []).
+
+%% list_all_users/3
+%% ====================================================================
+%% @doc Returns given Actual list, concatenated with all users beginning
+%%  from Offset (they will be get from dao in packages of size N)
+%% @end
+-spec list_all_users(N :: pos_integer(), Offset :: non_neg_integer(), Actual :: list(#veil_document{record :: #user{}})) ->
+    {ok, DocList :: list(#veil_document{record :: #user{}})} |
+    {error,atom()}.
+%% ====================================================================
+list_all_users(N, Offset, Actual) ->
+    case dao_lib:apply(dao_users, list_users, [N, Offset], 1) of
+        {ok, UserList} when length(UserList)==N ->
+            list_all_users(N,Offset+N, Actual++UserList);
+        {ok, FinalUserList}   ->
+            {ok, Actual ++ FinalUserList};
+        {error, Error} ->
+            {error, Error}
+    end.
 
 
 %% get_login/1
@@ -586,13 +617,13 @@ shortname_to_oid_code(Shortname) ->
 -spec create_root(Dir :: string(), Uid :: term()) -> {ok, uuid()} | {error,atom()}.
 %% ====================================================================
 create_root(Dir, Uid) ->
-    {ParentFound, ParentInfo} = fslogic_utils:get_parent_and_name_from_path(Dir, 1),
+    {ParentFound, ParentInfo} = fslogic_path:get_parent_and_name_from_path(Dir, 1),
     case ParentFound of
         ok ->
             {FileName, Parent} = ParentInfo,
             File = #file{type = ?DIR_TYPE, name = FileName, uid = Uid, parent = Parent#veil_document.uuid, perms = ?UserRootPerms},
-            CTime = fslogic_utils:time(),
-            FileDoc = fslogic_utils:update_meta_attr(File, times, {CTime, CTime, CTime}),
+            CTime = vcn_utils:time(),
+            FileDoc = fslogic_meta:update_meta_attr(File, times, {CTime, CTime, CTime}),
             dao_lib:apply(dao_vfs, save_new_file, [Dir, FileDoc], 1);
         _ParentError -> {error,parent_error}
     end.
@@ -738,7 +769,7 @@ get_team_names(UserQuery) ->
 -spec create_team_dir(Dir :: string()) -> {ok, UUID :: uuid()} | {error, Reason :: any()} | no_return().
 %% ====================================================================
 create_team_dir(TeamName) ->
-	CTime = fslogic_utils:time(),
+	CTime = vcn_utils:time(),
 	GroupsBase = case dao_lib:apply(dao_vfs, exist_file, ["/" ++ ?GROUPS_BASE_DIR_NAME], 1) of
 		{ok,true} ->
 			case dao_lib:apply(dao_vfs, get_file, ["/" ++ ?GROUPS_BASE_DIR_NAME], 1) of
@@ -750,7 +781,7 @@ create_team_dir(TeamName) ->
 			end;
 		{ok,false}->
 			GFile = #file{type = ?DIR_TYPE, name = ?GROUPS_BASE_DIR_NAME, uid = "0", parent = "", perms = 8#555},
-			GFileDoc = fslogic_utils:update_meta_attr(GFile, times, {CTime, CTime, CTime}),
+			GFileDoc = fslogic_meta:update_meta_attr(GFile, times, {CTime, CTime, CTime}),
 			case dao_lib:apply(dao_vfs, save_new_file, ["/" ++ ?GROUPS_BASE_DIR_NAME, GFileDoc], 1) of
 				{ok, UUID} -> UUID;
 				{error, Reason} ->
@@ -767,7 +798,7 @@ create_team_dir(TeamName) ->
 			{error, dir_exists};
 		{ok,false}->
 			TFile = #file{type = ?DIR_TYPE, name = TeamName, uid = "0", gids = [TeamName], parent = GroupsBase, perms = 8#770},
-			TFileDoc = fslogic_utils:update_meta_attr(TFile, times, {CTime, CTime, CTime}),
+			TFileDoc = fslogic_meta:update_meta_attr(TFile, times, {CTime, CTime, CTime}),
 			dao_lib:apply(dao_vfs, save_new_file, ["/" ++ ?GROUPS_BASE_DIR_NAME ++ "/" ++ TeamName, TFileDoc], 1);
 		Error ->
 			Error

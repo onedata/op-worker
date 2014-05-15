@@ -257,7 +257,7 @@ event({action, Fun, Args}) ->
 %% Comet loop and functions evaluated by comet
 comet_loop_init(UserId, RequestedHostname) ->
     % Initialize page state
-    put(user_id, UserId),
+    fslogic_context:set_user_dn(UserId),
     set_requested_hostname(RequestedHostname),
     set_working_directory("/"),
     set_selected_items([]),
