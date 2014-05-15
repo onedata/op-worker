@@ -19,9 +19,12 @@
 -include_lib("eunit/include/eunit.hrl").
 
 user_dn_test() ->
+    fslogic_context:clear_user_dn(),
     ?assertMatch(undefined, fslogic_context:get_user_dn()),
     ?assertMatch(undefined, fslogic_context:set_user_dn("abc")),
-    ?assertMatch("abc", fslogic_context:get_user_dn()).
+    ?assertMatch("abc", fslogic_context:get_user_dn()),
+    fslogic_context:clear_user_dn(),
+    ?assertMatch(undefined, fslogic_context:get_user_dn()).
 
 fuse_id_test() ->
     ?assertMatch(undefined, fslogic_context:get_fuse_id()),
@@ -34,6 +37,8 @@ protocol_version_test() ->
     ?assertMatch("abc", fslogic_context:get_protocol_version()).
 
 user_id_test() ->
+    fslogic_context:clear_user_dn(),
+
     ?assertMatch({ok, ?CLUSTER_USER_ID}, fslogic_context:get_user_id()),
 
     fslogic_context:set_user_dn("dn"),

@@ -23,7 +23,7 @@ gen_error_code_test() ->
     ?assertMatch({?VENOENT, some_details}, fslogic_errors:gen_error_code({?VENOENT, some_details})),
 
     ?assertMatch({?VENOENT, _}, fslogic_errors:gen_error_code(file_not_found)),
-    ?assertMatch({?VEPERM, some_details}, fslogic_errors:gen_error_code({permission_denied, some_details})),
+    ?assertMatch({?VEPERM, {permission_denied, some_details}}, fslogic_errors:gen_error_code({permission_denied, some_details})),
     ?assertMatch({?VEPERM, user_not_found}, fslogic_errors:gen_error_code(user_not_found)),
     ?assertMatch({?VEPERM, user_doc_not_found}, fslogic_errors:gen_error_code(user_doc_not_found)),
     ?assertMatch({?VEPERM, invalid_group_access}, fslogic_errors:gen_error_code(invalid_group_access)),

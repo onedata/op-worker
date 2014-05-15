@@ -16,7 +16,7 @@
 -include("veil_modules/dao/dao.hrl").
 
 %% API
--export([get_fuse_id/0, set_fuse_id/1, get_user_dn/0, set_user_dn/1, set_protocol_version/1, get_protocol_version/0, get_user_id/0]).
+-export([get_fuse_id/0, set_fuse_id/1, get_user_dn/0, set_user_dn/1, clear_user_dn/0, set_protocol_version/1, get_protocol_version/0, get_user_id/0]).
 
 %% ====================================================================
 %% API functions
@@ -38,6 +38,15 @@ get_user_dn() ->
 %% ====================================================================
 set_user_dn(UserDN) ->
     put(user_dn, UserDN).
+
+
+%% clear_user_dn/1
+%% ====================================================================
+%% @doc Clears user's DN for current request.
+-spec clear_user_dn() -> OldValue :: term().
+%% ====================================================================
+clear_user_dn() ->
+    set_user_dn(undefined).
 
 
 %% get_fuse_id/0
