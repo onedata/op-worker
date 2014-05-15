@@ -25,6 +25,15 @@
 %% API functions
 %% ====================================================================
 
+
+%% update_times/4
+%% ====================================================================
+%% @doc Updates file's access times.
+%% @end
+-spec update_times(FullFileName :: string(), ATime :: non_neg_integer(),
+    MTime :: non_neg_integer(), CTime :: non_neg_integer()) ->
+    #atom{}.
+%% ====================================================================
 update_times(FullFileName, ATime, MTime, CTime) ->
     ?debug("update_times(FullFileName: ~p, ATime: ~p, MTime: ~p, CTime: ~p)", [FullFileName, ATime, MTime, CTime]),
     case FullFileName of

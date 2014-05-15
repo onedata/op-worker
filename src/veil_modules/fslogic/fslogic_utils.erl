@@ -11,6 +11,7 @@
 -module(fslogic_utils).
 
 -include("veil_modules/dao/dao.hrl").
+-include("veil_modules/dao/dao_types.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("logging.hrl").
 

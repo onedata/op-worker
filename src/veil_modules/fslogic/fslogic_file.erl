@@ -30,9 +30,9 @@
 %% ====================================================================
 %% @doc Fetches owner's username and UID for given file.
 %%      Returns {"", -1} on error.
--spec get_file_owner(File :: file_doc() | file_info() | file()) -> Owner | Error when
-    Owner :: {Login :: string(), UID :: integer()} |
-    Error :: {[], -1}.
+-spec get_file_owner(File :: file_doc() | file_info() | file()) ->
+    {Login :: string(), UID :: integer()} |
+    {[], -1}.
 %% ====================================================================
 get_file_owner(#file{} = File) ->
     case user_logic:get_user({uuid, File#file.uid}) of
