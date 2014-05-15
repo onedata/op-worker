@@ -92,7 +92,7 @@ register_for_write_events(Bytes) ->
 
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {"write_event", EventItem, EventAggregatorConfig}}}).
 
-register_write_for_stats_events(Bytes) ->
+register_write_for_stats_events(BytesThreshold) ->
   EventHandler = fun(Event) ->
     Bytes = proplists:get_value("bytes", Event),
     case is_integer(Bytes) of
@@ -105,14 +105,14 @@ register_write_for_stats_events(Bytes) ->
 
   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "write_event"},
   EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
-  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = Bytes, sum_field_name = "bytes"},
+  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = BytesThreshold, sum_field_name = "bytes"},
   EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
 
   EventTransformer = #eventtransformerconfig{field_names_to_replace = ["type"], values_to_replace = ["write_event"], new_values = ["write_for_stats"]},
   EventTransformerConfig = #eventstreamconfig{transformer_config = EventTransformer, wrapped_config = EventAggregatorConfig},
   gen_server:call({?Dispatcher_Name, node()}, {rule_manager, ?ProtocolVersion, self(), {add_event_handler, {"write_for_stats", EventItem, EventTransformerConfig}}}).
 
-register_read_for_stats_events(Bytes) ->
+register_read_for_stats_events(BytesThreshold) ->
   EventHandler = fun(Event) ->
     Bytes = proplists:get_value("bytes", Event),
     case is_integer(Bytes) of
@@ -125,7 +125,7 @@ register_read_for_stats_events(Bytes) ->
 
   EventFilter = #eventfilterconfig{field_name = "type", desired_value = "read_event"},
   EventFilterConfig = #eventstreamconfig{filter_config = EventFilter},
-  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = Bytes, sum_field_name = "bytes"},
+  EventAggregator = #eventaggregatorconfig{field_name = "type", threshold = BytesThreshold, sum_field_name = "bytes"},
   EventAggregatorConfig = #eventstreamconfig{aggregator_config = EventAggregator, wrapped_config = EventFilterConfig},
 
   EventTransformer = #eventtransformerconfig{field_names_to_replace = ["type"], values_to_replace = ["read_event"], new_values = ["read_for_stats"]},
