@@ -30,15 +30,6 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% ====================================================================
-%% Test API
-%% ====================================================================
--ifdef(TEST).
-%% eunit
--export([handle_fuse_message/1]).
-%% ct
--endif.
-
-%% ====================================================================
 %% API functions
 %% ====================================================================
 
@@ -125,45 +116,24 @@ handle(ProtocolVersion, {delete_old_descriptors, Pid}) ->
   ok;
 
 handle(ProtocolVersion, {getfilelocation_uuid, UUID}) ->
-  {ok, FileDoc} = dao_lib:apply(dao_vfs, get_file, [{uuid, UUID}], ProtocolVersion),
   fslogic_context:set_fuse_id(?CLUSTER_FUSE_ID),
   fslogic_context:set_protocol_version(ProtocolVersion),
-  fslogic_req_regular:get_file_location(FileDoc);
+  fslogic_runner(fun handle_custom_request/1, getfilelocation_by_uuid, {getfilelocation, UUID});
 
 handle(ProtocolVersion, {getfileattr, UUID}) ->
-  {ok, FileDoc} = fslogic_objects:get_file({uuid, UUID}),
   fslogic_context:set_protocol_version(ProtocolVersion),
-  fslogic_req_generic:get_file_attr(FileDoc);
+  fslogic_runner(fun handle_custom_request/1, getfileattr_by_uuid, {getfileattr, UUID});
 
 
 handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
     RequestBody = Record#fusemessage.input,
     RequestType = element(1, RequestBody),
-    try
-        %% Setup context
-        fslogic_context:set_fuse_id(get(fuse_id)),
-        fslogic_context:set_protocol_version(ProtocolVersion),
-        fslogic_context:set_user_dn(fslogic_context:get_user_dn()),
 
-        handle_fuse_message(RequestBody)
-    catch
-        Reason ->
-            {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
-            ?error_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
-            fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
-        error:{badmatch, {error, Reason}} ->
-            {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
-            ?error_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
-            fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
-        error:{case_clause, {error, Reason}} ->
-            {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
-            ?error_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
-            fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
-        error:UnkError ->
-            {ErrorCode, ErrorDetails} = {?VEREMOTEIO, UnkError},
-            ?error_stacktrace("Cannot process request ~p due to unknown error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
-            fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode))
-    end;
+    %% Setup context
+    fslogic_context:set_fuse_id(get(fuse_id)),
+    fslogic_context:set_protocol_version(ProtocolVersion),
+
+    fslogic_runner(fun handle_fuse_message/1, RequestType, RequestBody);
 
 handle(ProtocolVersion, {internal_call, Record}) ->
     fslogic_context:set_fuse_id(?CLUSTER_FUSE_ID),
@@ -193,7 +163,7 @@ handle(_ProtocolVersion, _Msg) ->
   wrong_request.
 
 
-%% handle_test/3
+%% handle_test/2
 %% ====================================================================
 %% @doc Handles calls used during tests
 -spec handle_test(ProtocolVersion :: term(), Request :: term()) -> Result when
@@ -220,7 +190,29 @@ cleanup() ->
 %% Internal functions
 %% ====================================================================
 
-%% handle_fuse_message/3
+fslogic_runner(Method, RequestType, RequestBody) when is_function(Method) ->
+    try
+        Method(RequestBody)
+    catch
+        Reason ->
+            {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
+            ?error_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
+            fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
+        error:{badmatch, {error, Reason}} ->
+            {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
+            ?error_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
+            fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
+        error:{case_clause, {error, Reason}} ->
+            {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
+            ?error_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
+            fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
+        error:UnkError ->
+            {ErrorCode, ErrorDetails} = {?VEREMOTEIO, UnkError},
+            ?error_stacktrace("Cannot process request ~p due to unknown error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
+            fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode))
+    end.
+
+%% handle_fuse_message/1
 %% ====================================================================
 %% @doc Processes requests from FUSE.
 %% @end
@@ -310,3 +302,17 @@ handle_fuse_message(_Req = #clientstorageinfo{storage_info = SInfo}) ->
 handle_fuse_message(_Req = #testchannel{answer_delay_in_ms = Interval, answer_message = Answer}) ->
     timer:apply_after(Interval, gen_server, cast, [?MODULE, {asynch, fslogic_context:get_protocol_version(), {answer_test_message, fslogic_context:get_fuse_id(), Answer}}]),
     #atom{value = "ok"}.
+
+
+handle_custom_request({getfileattr, UUID}) ->
+    {ok, FileDoc} = fslogic_objects:get_file({uuid, UUID}),
+    fslogic_req_generic:get_file_attr(FileDoc);
+
+handle_custom_request({getfileattr, UUID}) ->
+    {ok, FileDoc} = fslogic_objects:get_file({uuid, UUID}),
+    fslogic_req_generic:get_file_attr(FileDoc);
+
+handle_custom_request({getfilelocation, UUID}) ->
+    {ok, FileDoc} = dao_lib:apply(dao_vfs, get_file, [{uuid, UUID}], fslogic_context:get_protocol_version()),
+    fslogic_req_regular:get_file_location(FileDoc).
+

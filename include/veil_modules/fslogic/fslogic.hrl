@@ -28,6 +28,8 @@
 -define(VEINVAL,    "einval").   %% Invalid argument
 -define(VEDQUOT,    "edquot").   %% Quota exceeded
 
+
+%% @todo: add test that verifies if the macro contains all available error code
 -define(ALL_ERROR_CODES, [?VOK, ?VENOENT, ?VEACCES, ?VEEXIST, ?VENOTSUP, ?VENOTEMPTY, ?VEREMOTEIO,
                           ?VEPERM, ?VEINVAL, ?VEDQUOT]).
 
@@ -86,5 +88,8 @@
 
 %% Storage test file prefix for testing client;s storage availability
 -define(STORAGE_TEST_FILE_PREFIX, "storage_test_").
+
+%% Maximum time (in ms) after which document conflict resolution shall occur
+-define(MAX_SLEEP_TIME_CONFLICT_RESOLUTION, 100).
 
 -endif.

@@ -40,7 +40,7 @@ set_user_dn(UserDN) ->
     put(user_dn, UserDN).
 
 
-%% clear_user_dn/1
+%% clear_user_dn/0
 %% ====================================================================
 %% @doc Clears user's DN for current request.
 -spec clear_user_dn() -> OldValue :: term().

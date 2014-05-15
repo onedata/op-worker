@@ -41,14 +41,13 @@ update_times(FullFileName, ATime, MTime, CTime) ->
 
     {ok, #veil_document{record = #file{} = File} = FileDoc} = fslogic_objects:get_file(FullFileName),
 
-    File1 = fslogic_meta:update_meta_attr(File, times, {ATime, MTime}),
-    File2 = fslogic_meta:update_meta_attr(File1, ctime, CTime),
+    File1 = fslogic_meta:update_meta_attr(File, times, {ATime, MTime, CTime}),
 
-    Status = string:equal(File2#file.meta_doc, File#file.meta_doc),
+    Status = string:equal(File1#file.meta_doc, File#file.meta_doc),
     if
         Status -> #atom{value = ?VOK};
         true ->
-            {ok, _} = fslogic_objects:save_file(FileDoc#veil_document{record = File2})
+            {ok, _} = fslogic_objects:save_file(FileDoc#veil_document{record = File1})
     end.
 
 change_file_owner(FullFileName, NewUID, NewUName) ->

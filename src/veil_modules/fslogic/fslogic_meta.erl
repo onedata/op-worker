@@ -39,10 +39,10 @@
 update_user_files_size_view(ProtocolVersion) ->
     case dao_lib:apply(dao_users, update_files_size, [], ProtocolVersion) of
         ok ->
-            lager:info([{mod, ?MODULE}], "User files size view updated"),
+            ?debug("User files size view updated"),
             ok;
         Other ->
-            lager:error([{mod, ?MODULE}], "Error during updating user files size view: ~p", [Other]),
+            ?error("Error during updating user files size view: ~p", [Other]),
             Other
     end.
 
@@ -71,7 +71,7 @@ update_parent_ctime(Dir, CTime) ->
                 gen_server:call(?Dispatcher_Name, {fslogic, 1, #veil_request{subject = fslogic_context:get_user_dn(), request = {internal_call, #updatetimes{file_logic_name = ParentPath, mtime = CTime}}}})
             catch
                 E1:E2 ->
-                    lager:error("update_parent_ctime error: ~p:~p", [E1, E2]),
+                    ?error("update_parent_ctime error: ~p:~p", [E1, E2]),
                     error
             end
     end.
@@ -123,12 +123,12 @@ update_meta_attr(#file{meta_doc = MetaUUID} = File, Attr, Value, RetryCount) ->
                 case dao_lib:apply(dao_vfs, save_file_meta, [NewDoc], 1) of
                     {ok, _} -> File1;
                     {error, conflict} when RetryCount > 0 ->
-                        lager:warning("Conflict when saveing file_meta record for file (name = ~p, parent = ~p). Retring...", [File#file.name, File#file.parent]),
+                        ?warning("Conflict when saveing file_meta record for file (name = ~p, parent = ~p). Retring...", [File#file.name, File#file.parent]),
                         {_, _, M} = now(),
-                        timer:sleep(M rem 100), %% If case of conflict we should wait a little bit before next try (max 100ms)
+                        timer:sleep(M rem ?MAX_SLEEP_TIME_CONFLICT_RESOLUTION), %% If case of conflict we should wait a little bit before next try (max 100ms)
                         update_meta_attr(File1, Attr, Value, RetryCount - 1);
                     {error, Error} ->
-                        lager:warning("Cannot save file_meta record for file (name = ~p, parent = ~p) due to error: ~p", [File#file.name, File#file.parent, Error])
+                        ?warning("Cannot save file_meta record for file (name = ~p, parent = ~p) due to error: ~p", [File#file.name, File#file.parent, Error])
                 end
         end
     end, %% SyncTask = fun()
@@ -150,13 +150,13 @@ init_file_meta(#file{meta_doc = MetaUUID} = File) when is_list(MetaUUID) ->
     case dao_lib:apply(dao_vfs, get_file_meta, [MetaUUID], 1)  of
         {ok, #veil_document{} = MetaDoc} -> {File, MetaDoc};
         Error ->
-            lager:error("File (name = ~p, parent = ~p) points to file_meta (uuid = ~p) that is not available. DAO response: ~p", [File#file.name, File#file.parent, MetaUUID, Error]),
+            ?error("File (name = ~p, parent = ~p) points to file_meta (uuid = ~p) that is not available. DAO response: ~p", [File#file.name, File#file.parent, MetaUUID, Error]),
             {File, #veil_document{uuid = MetaUUID, record = #file_meta{}}}
     end;
 init_file_meta(#file{} = File) ->
     case dao_lib:apply(dao_vfs, save_file_meta, [#file_meta{uid = File#file.uid}], 1) of
         {ok, MetaUUID} when is_list(MetaUUID) -> init_file_meta(File#file{meta_doc = MetaUUID});
         Error ->
-            lager:error("Cannot save file_meta record for file (name = ~p, parent = ~p) due to: ~p", [File#file.name, File#file.parent, Error]),
+            ?error("Cannot save file_meta record for file (name = ~p, parent = ~p) due to: ~p", [File#file.name, File#file.parent, Error]),
             {File, undefined}
     end.
