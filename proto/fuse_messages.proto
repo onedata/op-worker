@@ -223,7 +223,7 @@ message EventStreamConfig {
     optional EventFilterConfig filter_config = 2;
     optional EventAggregatorConfig aggregator_config = 3;
     optional EventTransformerConfig transformer_config = 4;
-    repeated string envsNeeded = 5; // list of environment variables needed for EventStream
+    repeated string needed_envs = 5; // list of environment variables needed for EventStream
 }
 
 message EventProducerConfig {
