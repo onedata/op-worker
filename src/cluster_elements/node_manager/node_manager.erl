@@ -27,10 +27,6 @@
 %% Path (relative to domain) on which cowboy expects client's requests
 -define(VEILCLIENT_URI_PATH, "/veilclient").
 
-%% Minimal message ID that can be used - it is limited by type of Answer.message_id in protocol buffers
-%% TODO: change type of message_id to sint32, more at https://developers.google.com/protocol-buffers/docs/proto#scalar
--define(MIN_MSG_ID, -1073741824). %% 1073741824 = 2^30
-
 %% ====================================================================
 %% API
 %% ====================================================================
@@ -218,16 +214,6 @@ handle_call({clear_cache, Cache}, _From, State) ->
 handle_call(check, _From, State) ->
   {reply, ok, State};
 
-handle_call(get_next_callback_msg_id, _From, State) ->
-  case get(callback_msg_ID) of
-    ID when is_integer(ID) and (ID > ?MIN_MSG_ID) ->
-      put(callback_msg_ID, ID - 1);
-    _ ->
-      %% we are starting from -2 because -1 is value reserved for non-ack messages
-      put(callback_msg_ID, -2)
-  end,
-  {reply, get(callback_msg_ID), State};
-
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
 
@@ -340,6 +326,13 @@ handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
   end,
   {noreply, State};
 
+handle_cast({node_for_ack, MsgID, Node}, State) ->
+  ets:insert(?ACK_HANDLERS, {{chosen_node, MsgID}, Node}),
+  {ok, Interval} = application:get_env(veil_cluster_node, callback_ack_time),
+  Pid = self(),
+  erlang:send_after(Interval * 1000, Pid, {delete_node_for_ack, MsgID}),
+  {noreply, State};
+
 handle_cast({update_cpu_stats, CpuStats}, State) ->
   {noreply, State#node_state{cpu_stats = CpuStats}};
 
@@ -365,6 +358,10 @@ handle_cast(_Msg, State) ->
 %% ====================================================================
 handle_info({timer, Msg}, State) ->
   gen_server:cast(?Node_Manager_Name, Msg),
+  {noreply, State};
+
+handle_info({delete_node_for_ack, MsgID}, State) ->
+  ets:delete(?ACK_HANDLERS, {chosen_node, MsgID}),
   {noreply, State};
 
 handle_info({nodedown, _Node}, State) ->

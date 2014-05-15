@@ -870,6 +870,7 @@ send_to_fuse_ack(FuseId, Message, MessageDecoder, MessageId) ->
 -spec send_to_fuse_ack(FuseId :: string(), Message :: term(), MessageDecoder :: string(), MessageId :: integer(), SendNum :: integer()) -> Result when
   Result :: callback_node_not_found | node_manager_error | dispatcher_error | ok | term().
 %% ====================================================================
+%% TODO how sender can get ack from fuse?
 send_to_fuse_ack(FuseId, Message, MessageDecoder, MessageId, SendNum) ->
   Ans = try
     Node = gen_server:call(?Dispatcher_Name, {get_callback, FuseId}, 500),

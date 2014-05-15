@@ -254,26 +254,18 @@ handle_cast({asynch, ProtocolVersion, Msg}, State) ->
   NewSubProcList = proc_standard_request(State#host_state.request_map, State#host_state.sub_procs, PlugIn, ProtocolVersion, Msg, non, non),
 	{noreply, State#host_state{sub_procs = NewSubProcList}};
 
-handle_cast({asynch, ProtocolVersion, Msg, MsgId, FuseID}, State) ->
-  HandlerTuple = ets:lookup(?ACK_HANDLERS, MsgId),
-  case HandlerTuple of
-    [{_, {Callback, SuccessFuseIds, FailFuseIds, Length, Pid}}] ->
-      case lists:member(FuseID, FailFuseIds) of
-        true ->
-          NewSuccessFuseIds = [FuseID | SuccessFuseIds],
-          NewFailFuseIds = lists:delete(FuseID, FailFuseIds),
-
-          %% TODO: refactoring needed - Length not needed, we can replace NewFailFuseIds with AllFuseIds and then we will always have Length and we will not have to delete anything from this list
-          ets:insert(?ACK_HANDLERS, {MsgId, {Callback, NewSuccessFuseIds, NewFailFuseIds, Length, Pid}}),
-          case length(NewSuccessFuseIds) of
-            Length ->
-              % we dont need to cancel timer set with send_after which sends the same message - receiver process should be dead after call_on_complete_callback
-              Pid ! {call_on_complete_callback};
-            _ -> ok
-          end;
-        _ -> ok
+% Ack from FUSE client
+handle_cast({asynch, _ProtocolVersion, _Msg, MsgId, FuseID}, State) ->
+  OldCallbacks = ets:lookup(?ACK_HANDLERS, {chosen_node, MsgId}),
+  case OldCallbacks of
+    [{{chosen_node, MsgId}, Node}] ->
+      ThisNode = node(),
+      case Node of
+        ThisNode -> handle_fuse_ack(MsgId, FuseID);
+        _ -> gen_server:cast({State#host_state.plug_in, Node}, {asynch, _ProtocolVersion, _Msg, MsgId, FuseID})
       end;
-    _ -> ok
+    _ ->
+      handle_fuse_ack(MsgId, FuseID)
   end,
   {noreply, State};
 
@@ -317,7 +309,7 @@ handle_cast({sequential, job_check}, State) ->
 
 handle_cast({progress_report, Report}, State) ->
 	NewLoadInfo = save_progress(Report, State#host_state.load_info),
-    {noreply, State#host_state{load_info = NewLoadInfo}};
+  {noreply, State#host_state{load_info = NewLoadInfo}};
 
 handle_cast(register_disp_map, State) ->
   case State#host_state.dispatcher_request_map_ok of
@@ -992,7 +984,8 @@ send_to_user_with_ack(UserKey, Message, MessageDecoder, OnCompleteCallback, Prot
 %% ====================================================================
 send_to_fuses_with_ack(FuseIds, Message, MessageDecoder, OnCompleteCallback) ->
   try
-    MsgId = gen_server:call({?Node_Manager_Name, node()}, get_next_callback_msg_id),
+    ThisNode = node(),
+    MsgId = gen_server:call({global, ?CCM}, {node_for_ack, ThisNode}),
 
     Pid = spawn(fun() ->
       receive
@@ -1323,3 +1316,20 @@ clear_sub_proc_sipmle_cache(Name, LoopTime, Fun, SubProcs) ->
       SubProcPid ! {sub_proc_management, sub_proc_automatic_cache_clearing, Fun}
   end.
 
+handle_fuse_ack(MsgId, FuseID) ->
+  HandlerTuple = ets:lookup(?ACK_HANDLERS, MsgId),
+  case HandlerTuple of
+    [{_, {Callback, SuccessFuseIds, FailFuseIds, Length, Pid}}] ->
+      NewSuccessFuseIds = [FuseID | SuccessFuseIds],
+      NewFailFuseIds = lists:delete(FuseID, FailFuseIds),
+
+      %% TODO: refactoring needed - Length not needed, we can replace NewFailFuseIds with AllFuseIds and then we will always have Length and we will not have to delete anything from this list
+      ets:insert(?ACK_HANDLERS, {MsgId, {Callback, NewSuccessFuseIds, NewFailFuseIds, Length, Pid}}),
+      case length(NewSuccessFuseIds) of
+        Length ->
+          % we dont need to cancel timer set with send_after which sends the same message - receiver process should be dead after call_on_complete_callback
+          Pid ! {call_on_complete_callback};
+        _ -> ok
+      end;
+    _ -> ok
+  end.

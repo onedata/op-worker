@@ -65,8 +65,8 @@ veil_cluster_node_env:
 
   - parameter:
       name: callback_ack_time
-      description: After callback_ack_time seconds node_manager stops wainting for ack
-      value: 10
+      description: After callback_ack_time node_manager stops waiting for ack
+      value: 60
 
   - parameter:
       name: heart_beat
@@ -121,6 +121,11 @@ veil_cluster_node_env:
       name: node_load_logging_period
       description: How often (in seconds) should load of each node be logged
       value: 10
+
+  - parameter:
+      name: delete_storage_test_file_time
+      description: After delete_storage_test_file_time seconds storage test file will be deleted
+      value: 60
 
   - parameter:
       name: short_monitoring_time_window

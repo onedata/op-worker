@@ -17,17 +17,18 @@
 -include("modules_and_args.hrl").
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
+-include_lib("veil_modules/dao/dao.hrl").
 
 -define(ProtocolVersion, 1).
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([fuse_session_cleanup_test/1, main_test/1, callbacks_test/1]).
+-export([fuse_session_cleanup_test/1, main_test/1, callbacks_test/1, fuse_ack_routing_test/1]).
 
 %% export nodes' codes
 -export([ccm_code1/0, ccm_code2/0, worker_code/0]).
 
-all() -> [fuse_session_cleanup_test, main_test, callbacks_test].
+all() -> [fuse_session_cleanup_test, main_test, callbacks_test, fuse_ack_routing_test].
 
 %% ====================================================================
 %% Code of nodes used during the test
@@ -46,11 +47,240 @@ worker_code() ->
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
   ok.
 
-
 %% ====================================================================
 %% Test function
 %% ====================================================================
 
+%% This test checks if acks from fuse are routed correctly
+fuse_ack_routing_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
+  NodesUp = ?config(nodes, Config),
+
+  [CCM | WorkerNodes] = NodesUp,
+
+  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
+  nodes_manager:wait_for_cluster_cast(),
+  RunWorkerCode = fun(Node) ->
+    ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
+    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+  end,
+  lists:foreach(RunWorkerCode, WorkerNodes),
+  ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
+  nodes_manager:wait_for_cluster_init(),
+
+  {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
+  StartAdditionalWorker = fun(Node) ->
+    case lists:member({Node, fslogic}, Workers) of
+      true -> ok;
+      false ->
+        StartAns = gen_server:call({global, ?CCM}, {start_worker, Node, fslogic, []}, 3000),
+        ?assertEqual(ok, StartAns)
+    end
+  end,
+  lists:foreach(StartAdditionalWorker, NodesUp),
+  nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
+
+  [Worker1, Worker2, Worker3] = WorkerNodes,
+
+  PeerCert = ?COMMON_FILE("peer.pem"),
+
+  %% Add test users since cluster wont generate FuseId without full authentication
+  {ReadFileAns, PemBin} = file:read_file(PeerCert),
+  ?assertEqual(ok, ReadFileAns),
+  {ExtractAns, RDNSequence} = rpc:call(Worker1, user_logic, extract_dn_from_cert, [PemBin], 2000),
+  ?assertEqual(rdnSequence, ExtractAns),
+  {ConvertAns, DN} = rpc:call(Worker1, user_logic, rdn_sequence_to_dn_string, [RDNSequence], 2000),
+  ?assertEqual(ok, ConvertAns),
+  DnList = [DN],
+
+  Login = "user1",
+  Name = "user1 user1",
+  Teams = ["user1 team"],
+  Email = "user1@email.net",
+  {CreateUserAns, UserDoc} = rpc:call(Worker1, user_logic, create_user, [Login, Name, Teams, Email, DnList], 2000),
+  ?assertEqual(ok, CreateUserAns),
+  %% END Add user
+
+  {ConAns0, Socket0} = wss:connect('localhost', 6666, [{certfile, PeerCert}, {cacertfile, PeerCert}]),
+  ?assertEqual(ok, ConAns0),
+  FuseId1 = wss:handshakeInit(Socket0, "hostname", []), %% Get first fuseId
+  FuseId2 = wss:handshakeInit(Socket0, "hostname", []), %% Get second fuseId
+  wss:close(Socket0),
+
+  Reg1 = #channelregistration{fuse_id = FuseId1},
+  Reg1Bytes = erlang:iolist_to_binary(fuse_messages_pb:encode_channelregistration(Reg1)),
+  Message1 = #clustermsg{module_name = "fslogic", message_type = "channelregistration",
+  message_decoder_name = "fuse_messages", answer_type = "atom",
+  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = Reg1Bytes},
+  Msg1 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message1)),
+
+  Reg2 = #channelregistration{fuse_id = FuseId2},
+  Reg2Bytes = erlang:iolist_to_binary(fuse_messages_pb:encode_channelregistration(Reg2)),
+  Message2 = #clustermsg{module_name = "fslogic", message_type = "channelregistration",
+  message_decoder_name = "fuse_messages", answer_type = "atom",
+  answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, input = Reg2Bytes},
+  Msg2 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message2)),
+
+  Ans = #atom{value = "ok"},
+  AnsBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ans)),
+  RegAns = #answer{answer_status = "ok", worker_answer = AnsBytes},
+  RegAnsBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(RegAns)),
+
+  FuseId1Port = 5055,
+  FuseId2Port = 7777,
+  TestPort1 = 6666,
+  TestPort2 = 8888,
+
+  {ConAns, Socket} = wss:connect('localhost', FuseId1Port, [{certfile, PeerCert}]),
+  ?assertEqual(ok, ConAns),
+
+  HandshakeRes = wss:handshakeAck(Socket, FuseId1), %% Set fuseId for this connection
+  ?assertEqual(ok, HandshakeRes),
+
+  ?assertEqual(ok, wss:send(Socket, Msg1)),
+  {RecvAns, SendAns} = wss:recv(Socket, 5000),
+  ?assertEqual(ok, RecvAns),
+  ?assertEqual(RegAnsBytes, SendAns),
+
+  {ConAns2, Socket2} = wss:connect('localhost', FuseId2Port, [{certfile, PeerCert}]),
+  ?assertEqual(ok, ConAns2),
+
+  HandshakeRes2 = wss:handshakeAck(Socket2, FuseId2), %% Set fuseId for this connection
+  ?assertEqual(ok, HandshakeRes2),
+
+  ?assertEqual(ok, wss:send(Socket2, Msg2)),
+  {RecvAns2, SendAns2} = wss:recv(Socket2, 5000),
+  ?assertEqual(ok, RecvAns2),
+  ?assertEqual(RegAnsBytes, SendAns2),
+
+  nodes_manager:wait_for_request_handling(),
+
+  Pid = self(),
+  OnCompleteCallback = fun(SucessFuseIds, FailFuseIds) ->
+    Pid ! {on_complete_callback, length(SucessFuseIds), length(FailFuseIds), node()}
+  end,
+
+  MsgAtom = #atom{value = "some_message"},
+  ?assertEqual(ok, rpc:call(Worker2, worker_host, send_to_user_with_ack, [{uuid, UserDoc#veil_document.uuid}, MsgAtom, "communication_protocol", OnCompleteCallback, ?ProtocolVersion])),
+
+  MsgId1 = gen_server:call({global, ?CCM}, {node_for_ack, node()}) + 1,
+
+  MsgAtomBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(MsgAtom)),
+  MsgAtomAns = #answer{answer_status = "push", worker_answer = MsgAtomBytes, message_type = "atom", message_id = MsgId1},
+  MessageAtomAns = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(MsgAtomAns)),
+
+  Ack = #atom{value = "ack"},
+  AckBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Ack)),
+  AckMessage = #clustermsg{module_name = "fslogic", message_type = "atom",
+  message_decoder_name = "communication_protocol", answer_type = "atom",
+  answer_decoder_name = "communication_protocol", synch = false, protocol_version = 1, message_id = MsgId1, input = AckBytes},
+  AckMessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(AckMessage)),
+
+  {CallbackRecvAns, CallbackAns} = wss:recv(Socket, 1000),
+  ?assertEqual(ok, CallbackRecvAns),
+  ?assertEqual(MessageAtomAns, CallbackAns),
+
+  {CallbackRecvAns2, CallbackAns2} = wss:recv(Socket2, 1000),
+  ?assertEqual(ok, CallbackRecvAns2),
+  ?assertEqual(MessageAtomAns, CallbackAns2),
+
+  {ConAns3, Socket3} = wss:connect('localhost', TestPort1, [{certfile, PeerCert}]),
+  HandshakeRes3 = wss:handshakeAck(Socket3, FuseId1), %% Set fuseId for this connection
+  ?assertEqual(ok, HandshakeRes3),
+  ?assertEqual(ok, ConAns3),
+  ?assertEqual(ok, wss:send(Socket3, AckMessageBytes)),
+
+  {ConAns4, Socket4} = wss:connect('localhost', TestPort2, [{certfile, PeerCert}]),
+  HandshakeRes4 = wss:handshakeAck(Socket4, FuseId2), %% Set fuseId for this connection
+  ?assertEqual(ok, HandshakeRes4),
+  ?assertEqual(ok, ConAns4),
+  ?assertEqual(ok, wss:send(Socket4, AckMessageBytes)),
+
+  ?assertEqual([Worker2], check_answers(1)),
+
+  ?assertEqual(ok, rpc:call(Worker2, worker_host, send_to_user_with_ack, [{uuid, UserDoc#veil_document.uuid}, MsgAtom, "communication_protocol", OnCompleteCallback, ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(Worker2, worker_host, send_to_user_with_ack, [{uuid, UserDoc#veil_document.uuid}, MsgAtom, "communication_protocol", OnCompleteCallback, ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(Worker1, worker_host, send_to_user_with_ack, [{uuid, UserDoc#veil_document.uuid}, MsgAtom, "communication_protocol", OnCompleteCallback, ?ProtocolVersion])),
+  ?assertEqual(ok, rpc:call(Worker3, worker_host, send_to_user_with_ack, [{uuid, UserDoc#veil_document.uuid}, MsgAtom, "communication_protocol", OnCompleteCallback, ?ProtocolVersion])),
+  MsgId2 = MsgId1 - 2,
+  MsgId3 = MsgId2 - 1,
+  MsgId4 = MsgId3 - 1,
+  MsgId5 = MsgId4 - 1,
+
+  MsgAtomAns2 = #answer{answer_status = "push", worker_answer = MsgAtomBytes, message_type = "atom", message_id = MsgId2},
+  MessageAtomAns2 = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(MsgAtomAns2)),
+
+  MsgAtomAns3 = #answer{answer_status = "push", worker_answer = MsgAtomBytes, message_type = "atom", message_id = MsgId3},
+  MessageAtomAns3 = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(MsgAtomAns3)),
+
+  MsgAtomAns4 = #answer{answer_status = "push", worker_answer = MsgAtomBytes, message_type = "atom", message_id = MsgId4},
+  MessageAtomAns4 = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(MsgAtomAns4)),
+
+  MsgAtomAns5 = #answer{answer_status = "push", worker_answer = MsgAtomBytes, message_type = "atom", message_id = MsgId5},
+  MessageAtomAns5 = erlang:iolist_to_binary(communication_protocol_pb:encode_answer(MsgAtomAns5)),
+
+  AckMessage2 = #clustermsg{module_name = "fslogic", message_type = "atom",
+  message_decoder_name = "communication_protocol", answer_type = "atom",
+  answer_decoder_name = "communication_protocol", synch = false, protocol_version = 1, message_id = MsgId2, input = AckBytes},
+  AckMessageBytes2 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(AckMessage2)),
+
+  AckMessage3 = #clustermsg{module_name = "fslogic", message_type = "atom",
+  message_decoder_name = "communication_protocol", answer_type = "atom",
+  answer_decoder_name = "communication_protocol", synch = false, protocol_version = 1, message_id = MsgId3, input = AckBytes},
+  AckMessageBytes3 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(AckMessage3)),
+
+  AckMessage4 = #clustermsg{module_name = "fslogic", message_type = "atom",
+  message_decoder_name = "communication_protocol", answer_type = "atom",
+  answer_decoder_name = "communication_protocol", synch = false, protocol_version = 1, message_id = MsgId4, input = AckBytes},
+  AckMessageBytes4 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(AckMessage4)),
+
+  AckMessage5 = #clustermsg{module_name = "fslogic", message_type = "atom",
+  message_decoder_name = "communication_protocol", answer_type = "atom",
+  answer_decoder_name = "communication_protocol", synch = false, protocol_version = 1, message_id = MsgId5, input = AckBytes},
+  AckMessageBytes5 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(AckMessage5)),
+
+  {CallbackRecvAns3, CallbackAns3} = wss:recv(Socket, 1000),
+  ?assertEqual(ok, CallbackRecvAns3),
+  {CallbackRecvAns4, CallbackAns4} = wss:recv(Socket, 1000),
+  ?assertEqual(ok, CallbackRecvAns4),
+  {CallbackRecvAns5, CallbackAns5} = wss:recv(Socket, 1000),
+  ?assertEqual(ok, CallbackRecvAns5),
+  {CallbackRecvAns6, CallbackAns6} = wss:recv(Socket, 1000),
+  ?assertEqual(ok, CallbackRecvAns6),
+  CallbackAnsList = [CallbackAns3, CallbackAns4, CallbackAns5, CallbackAns6],
+  MessagesList = [MessageAtomAns2, MessageAtomAns3, MessageAtomAns4, MessageAtomAns5],
+  lists:foreach(fun(M) -> ?assert(lists:member(M, CallbackAnsList)) end, MessagesList),
+
+  {CallbackRecvAns7, CallbackAns7} = wss:recv(Socket2, 1000),
+  ?assertEqual(ok, CallbackRecvAns7),
+  {CallbackRecvAns8, CallbackAns8} = wss:recv(Socket2, 1000),
+  ?assertEqual(ok, CallbackRecvAns8),
+  {CallbackRecvAns9, CallbackAns9} = wss:recv(Socket2, 1000),
+  ?assertEqual(ok, CallbackRecvAns9),
+  {CallbackRecvAns10, CallbackAns10} = wss:recv(Socket2, 1000),
+  ?assertEqual(ok, CallbackRecvAns10),
+  CallbackAnsList2 = [CallbackAns7, CallbackAns8, CallbackAns9, CallbackAns10],
+  lists:foreach(fun(M) -> ?assert(lists:member(M, CallbackAnsList2)) end, MessagesList),
+
+  ?assertEqual(ok, wss:send(Socket3, AckMessageBytes2)),
+  ?assertEqual(ok, wss:send(Socket3, AckMessageBytes3)),
+  ?assertEqual(ok, wss:send(Socket3, AckMessageBytes4)),
+  ?assertEqual(ok, wss:send(Socket3, AckMessageBytes5)),
+  ?assertEqual(ok, wss:send(Socket4, AckMessageBytes4)),
+  ?assertEqual(ok, wss:send(Socket4, AckMessageBytes3)),
+  ?assertEqual(ok, wss:send(Socket4, AckMessageBytes2)),
+  ?assertEqual(ok, wss:send(Socket4, AckMessageBytes5)),
+
+  AnsNodes = check_answers(4),
+  ?assertEqual(4, length(AnsNodes)),
+  ?assertEqual(false, lists:member(error, AnsNodes)),
+  AnsNodes2 = lists:delete(Worker2, AnsNodes),
+  ?assertEqual(3, length(AnsNodes2)),
+  lists:foreach(fun(M) -> ?assert(lists:member(M, AnsNodes2)) end, WorkerNodes),
+
+  wss:close(Socket),
+  wss:close(Socket2),
+  wss:close(Socket3).
 
 %% This test checks if FUSE sessions are cleared properly
 fuse_session_cleanup_test(Config) ->
@@ -507,3 +737,14 @@ end_per_testcase(_, Config) ->
   ?assertEqual(false, lists:member(error, StopLog)),
   ?assertEqual(ok, StopAns).
 
+check_answers(0) ->
+  [];
+check_answers(Num) ->
+  receive
+    {on_complete_callback, OkNum, ErrorNum, AnsNode} ->
+      ?assertEqual(2, OkNum),
+      ?assertEqual(0, ErrorNum),
+      [AnsNode | check_answers(Num - 1)]
+  after 5000 ->
+    [error]
+  end.
