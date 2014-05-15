@@ -130,7 +130,7 @@ handle_user_content_request(Req, Path) ->
             wf_context:context(Context2),
             UserID = wf:session(user_doc),
             true = (UserID /= undefined),
-            put(user_id, lists:nth(1, user_logic:get_dn_list(UserID))),
+            fslogic_context:set_user_dn(lists:nth(1, user_logic:get_dn_list(UserID))),
             {St, Context2, SessHandler}
         catch T1:M1 ->
             ?warning("Cannot establish session context for user content request - ~p:~p", [T1, M1]),
@@ -187,7 +187,7 @@ handle_shared_files_request(Req, ShareID) ->
 % Try to get file by share uuid
     FileInfo =
         try
-            put(user_id, undefined),
+            fslogic_context:set_user_dn(undefined),
             true = (ShareID /= <<"">>),
 
             {ok, #veil_document{record = #share_desc{file = TFileID}}} =
@@ -221,7 +221,7 @@ handle_shared_files_request(Req, ShareID) ->
 %% ====================================================================
 %% @doc Sends file as a http response, file is given by uuid or filepath (FilePathOrUUID).
 %% Note that to send a file by filepath, user_id must be stored in process dictionary:
-%% put(user_id, UsersDnString)
+%% fslogic_context:set_user_dn(UsersDnString)
 %% @end
 -spec send_file(req(), string() | {uuid, string()}, string(), integer()) -> {ok, req()}.
 %% ====================================================================
