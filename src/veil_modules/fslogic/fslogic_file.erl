@@ -50,6 +50,13 @@ get_file_local_location(_File = #file{location = #file_location{} = LocationFiel
 get_file_local_location(#file_location{} = FLoc) ->
     FLoc.
 
+
+%% get_real_file_size/1
+%% ====================================================================
+%% @doc Fetch real file size from underlying storage. Returns 0 for non-regular file.
+%%      Also errors are silently dropped (return value 0).
+-spec get_real_file_size(File :: file() | file_doc() | file_info()) -> FileSize :: non_neg_integer().
+%% ====================================================================
 get_real_file_size(#file{type = ?REG_TYPE} = File) ->
     FileLoc = get_file_local_location(File#file.location),
     {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({id, FileLoc#file_location.storage_id}),
@@ -57,7 +64,6 @@ get_real_file_size(#file{type = ?REG_TYPE} = File) ->
     {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileLoc#file_location.file_id),
     case veilhelpers:exec(getattr, SH, [File_id]) of
         {0, #st_stat{st_size = ST_Size} = _Stat} ->
-
             ST_Size;
         {Errno, _} ->
             lager:error("Cannot fetch attributes for file: ~p, errno: ~p", [File, Errno]),
@@ -69,17 +75,40 @@ get_real_file_size(FileDocOrPath) ->
     {ok, #veil_document{record = #file{} = File}} = fslogic_objects:get_file(FileDocOrPath),
     get_real_file_size(File).
 
+
+%% update_file_size/1
+%% ====================================================================
+%% @doc Updates file size based on it's real size on underlying storage. Whether this call is asynchronous or not depends on
+%%      fslogic_meta:update_meta_attr implementation. <br/>
+%%      Does nothing if given file_info() corresponds to non-regular file.
+-spec update_file_size(File :: file_info()) ->
+    UpdatedFile :: file_info().
+%% ====================================================================
 update_file_size(#file{type = ?REG_TYPE} = File) ->
     Size = get_real_file_size(File),
     update_file_size(File, Size);
 update_file_size(#file{} = File) ->
     File.
 
-update_file_size(#file{} = File, Size) ->
+
+%% update_file_size/2
+%% ====================================================================
+%% @doc Sets file size to given value. Whether this call is asynchronous or not depends on
+%%      fslogic_meta:update_meta_attr implementation.
+-spec update_file_size(File :: file_info(), Size :: non_neg_integer()) ->
+    UpdatedFile :: file_info().
+%% ====================================================================
+update_file_size(#file{} = File, Size) when Size >= 0 ->
     fslogic_meta:update_meta_attr(File, size, Size).
 
 
 
+%% normalize_file_type/2
+%% ====================================================================
+%% @doc Translates given file type into internal or protocol representation
+%%      (types file_type() and file_type_protocol() respectively)
+-spec normalize_file_type(protocol | internal, file_type() | file_type_protocol()) -> file_type() | file_type_protocol().
+%% ====================================================================
 normalize_file_type(protocol, ?DIR_TYPE) ->
     ?DIR_TYPE_PROT;
 normalize_file_type(protocol, ?REG_TYPE) ->

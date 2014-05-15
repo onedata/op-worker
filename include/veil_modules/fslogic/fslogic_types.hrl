@@ -13,6 +13,10 @@
 -ifndef(FSLOGIC_TYPES_HRL).
 -define(FSLOGIC_TYPES_HRL, 1).
 
--type fslogic_error() :: string() | atom(). %% Note: Only values from ?ALL_ERROR_CODES are allowed for this type.
+-include("files_common.hrl").
+
+-type fslogic_error() :: string() | atom().     %% Values: ?ALL_ERROR_CODES are allowed for this type.
+-type file_type() :: ?DIR_TYPE | ?REG_TYPE | ?LNK_TYPE.
+-type file_type_protocol() :: string().         %% Values: ?DIR_TYPE_PROT, ?REG_TYPE_PROT, ?LNK_TYPE_PROT
 
 -endif.
