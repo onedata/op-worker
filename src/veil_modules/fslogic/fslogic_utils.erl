@@ -73,9 +73,6 @@ create_children_list([File | Rest], Ans) ->
   FileDesc = File#veil_document.record,
   create_children_list(Rest, [FileDesc#file.name | Ans]).
 
-%% ====================================================================
-%% Internal functions
-%% ====================================================================
 
 %% random_ascii_lowercase_sequence
 %% ====================================================================
@@ -85,14 +82,37 @@ create_children_list([File | Rest], Ans) ->
 random_ascii_lowercase_sequence(Length) ->
     lists:foldl(fun(_, Acc) -> [random:uniform(26) + 96 | Acc] end, [], lists:seq(1, Length)).
 
-%% get_user_id_from_system/1
+
+%% get_group_owner/1
 %% ====================================================================
-%% @doc Returns id of user in local system.
+%% @doc Convinience method that returns list of group name(s) that are considered as default owner of file
+%%      created with given path. E.g. when path like "/groups/gname/file1" is passed, the method will
+%%      return ["gname"].
 %% @end
--spec get_user_id_from_system(User :: string()) -> string().
+-spec get_group_owner(FileBasePath :: string()) -> [string()].
 %% ====================================================================
-get_user_id_from_system(User) ->
-  os:cmd("id -u " ++ User).
+get_group_owner(FileBasePath) ->
+    case string:tokens(FileBasePath, "/") of
+        [?GROUPS_BASE_DIR_NAME, GroupName | _] -> [GroupName];
+        _ -> []
+    end.
+
+
+%% get_files_number/3
+%% ====================================================================
+%% @doc Returns number of user's or group's files
+%% @end
+-spec get_files_number(user | group, UUID :: uuid() | string(), ProtocolVersion :: integer()) -> Result when
+    Result :: {ok, Sum} | {error, any()},
+    Sum :: integer().
+%% ====================================================================
+get_files_number(Type, GroupName, ProtocolVersion) ->
+    Ans = dao_lib:apply(dao_users, get_files_number, [Type, GroupName], ProtocolVersion),
+    case Ans of
+        {error, files_number_not_found} -> {ok, 0};
+        _ -> Ans
+    end.
+
 
 %% get_user_groups/0
 %% ====================================================================
@@ -112,33 +132,18 @@ get_user_groups(UserDocStatus, UserDoc) ->
             {error, UserDoc}
     end.
 
-%% get_files_number/3
 %% ====================================================================
-%% @doc Returns number of user's or group's files
-%% @end
--spec get_files_number(user | group, UUID :: uuid() | string(), ProtocolVersion :: integer()) -> Result when
-    Result :: {ok, Sum} | {error, any()},
-    Sum :: integer().
+%% Internal functions
 %% ====================================================================
-get_files_number(Type, GroupName, ProtocolVersion) ->
-    Ans = dao_lib:apply(dao_users, get_files_number, [Type, GroupName], ProtocolVersion),
-    case Ans of
-        {error, files_number_not_found} -> {ok, 0};
-        _ -> Ans
-    end.
 
-%% get_group_owner/1
+
+%% get_user_id_from_system/1
 %% ====================================================================
-%% @doc Convinience method that returns list of group name(s) that are considered as default owner of file
-%%      created with given path. E.g. when path like "/groups/gname/file1" is passed, the method will
-%%      return ["gname"].
+%% @doc Returns id of user in local system.
 %% @end
--spec get_group_owner(FileBasePath :: string()) -> [string()].
+-spec get_user_id_from_system(User :: string()) -> string().
 %% ====================================================================
-get_group_owner(FileBasePath) ->
-    case string:tokens(FileBasePath, "/") of
-        [?GROUPS_BASE_DIR_NAME, GroupName | _] -> [GroupName];
-        _ -> []
-    end.
+get_user_id_from_system(User) ->
+  os:cmd("id -u " ++ User).
 
 
