@@ -150,7 +150,6 @@ retrieve_user_info() ->
         % Check which params were signed by PLGrid
         SignedParamsNoPrefix = binary:split(wf:q(<<?openid_signed_key>>), <<",">>, [global]),
         % Add 'openid.' prefix to all parameters
-        % And add 'openid.sig' and 'openid.signed' params which are required for validation
         SignedParams = lists:map(
             fun(X) ->
                 <<"openid.", X/binary>>
