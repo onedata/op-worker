@@ -135,14 +135,17 @@ parameter_processing_test_() ->
     {foreach,
         fun() ->
             meck:new(wf),
+            meck:new(ibrowse),
             meck:new(lager)
         end,
         fun(_) ->
             meck:unload(wf),
+            meck:unload(ibrowse),
             meck:unload(lager)
         end,
         [{"POST request body correctness",
             fun() ->
+                meck:expect(ibrowse, send_req, fun(_, _, _) -> {ok, "200", [], ?mock_xrds_file} end),
                 KeyValueList = lists:zip(openid_keys(), openid_values()),
                 FullKeyValueList = KeyValueList ++ [
                     {<<"openid.signed">>, <<"op_endpoint,claimed_id,identity,return_to,response_nonce,assoc_handle,",
@@ -200,7 +203,11 @@ parameter_processing_test_() ->
 
             {"User info correctness",
                 fun() ->
-                    KeyValueList = lists:zip(user_info_keys(), user_info_values()),
+                    KeyValueList = lists:zip(user_info_keys(), user_info_values()) ++ [
+                        {<<"openid.signed">>, <<"op_endpoint,claimed_id,identity,return_to,response_nonce,assoc_handle,",
+                        "ns.ext1,ns.sreg,ext1.mode,ext1.type.dn1,ext1.value.dn1,ext1.type.dn2,ext1.value.dn2,ext1.type.dn3,",
+                        "ext1.value.dn3,ext1.type.teams,ext1.value.teams,sreg.nickname,sreg.email,sreg.fullname">>}
+                    ],
                     meck:expect(wf, q,
                         fun(Key) ->
                             proplists:get_value(Key, KeyValueList)
@@ -224,7 +231,11 @@ parameter_processing_test_() ->
 
             {"User info - undefined DN case",
                 fun() ->
-                    KeyValueList = lists:zip(user_info_keys(), user_info_values()),
+                    KeyValueList = lists:zip(user_info_keys(), user_info_values()) ++ [
+                        {<<"openid.signed">>, <<"op_endpoint,claimed_id,identity,return_to,response_nonce,assoc_handle,",
+                        "ns.ext1,ns.sreg,ext1.mode,ext1.type.dn1,ext1.value.dn1,ext1.type.dn2,ext1.value.dn2,ext1.type.dn3,",
+                        "ext1.value.dn3,ext1.type.teams,ext1.value.teams,sreg.nickname,sreg.email,sreg.fullname">>}
+                    ],
                     meck:expect(wf, q,
                         fun(Key) ->
                             case Key of
@@ -282,8 +293,9 @@ openid_keys() ->
 
 % Used in "assert POST request body correctness" test
 % Values are whatever, its important if they were all used.
+% With exception of endpoint
 openid_values() ->
-    lists:map(fun(X) -> integer_to_binary(X) end, lists:seq(1, 17)).
+    [<<"https://openid.plgrid.pl/server">> | lists:map(fun(X) -> integer_to_binary(X) end, lists:seq(1, 16))].
 
 
 % Used in "Retrieve user info" test, names of keys
