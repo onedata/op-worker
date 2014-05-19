@@ -70,6 +70,10 @@ get_login_url(HostName, RedirectParams) ->
 %% ====================================================================
 prepare_validation_parameters() ->
     try
+        % Make sure received endpoint is really the PLGrid endpoint
+        EndpointURL = wf:q(<<?openid_op_endpoint_key>>),
+        true = (discover_op_endpoint(?xrds_url) =:= EndpointURL),
+
         % 'openid.signed' contains parameters that must be contained in validation request
         SignedArgsNoPrefix = binary:split(wf:q(<<?openid_signed_key>>), <<",">>, [global]),
         % Add 'openid.' prefix to all parameters
@@ -91,7 +95,6 @@ prepare_validation_parameters() ->
                 <<Acc/binary, "&", Key/binary, "=", Param/binary>>
             end, <<"">>, SignedArgs),
         ValidationRequestBody = <<?openid_check_authentication_mode, RequestParameters/binary>>,
-        EndpointURL = wf:q(<<?openid_op_endpoint_key>>),
         {gui_utils:to_list(EndpointURL), gui_utils:to_list(ValidationRequestBody)}
 
     catch Type:Message ->
@@ -144,18 +147,27 @@ validate_openid_login({EndpointURL, ValidationRequestBody}) ->
 %% ====================================================================
 retrieve_user_info() ->
     try
-        Login = gui_utils:to_list(wf:q(<<?openid_login_key>>)),
+        % Check which params were signed by PLGrid
+        SignedParamsNoPrefix = binary:split(wf:q(<<?openid_signed_key>>), <<",">>, [global]),
+        % Add 'openid.' prefix to all parameters
+        % And add 'openid.sig' and 'openid.signed' params which are required for validation
+        SignedParams = lists:map(
+            fun(X) ->
+                <<"openid.", X/binary>>
+            end, SignedParamsNoPrefix),
+
+        Login = get_signed_param(<<?openid_login_key>>, SignedParams),
         % Login must be retrieved from OpenID, other info is not mandatory.
         case Login of
             [] -> throw(login_undefined);
             _ -> ok
         end,
-        Name = gui_utils:to_list(wf:q(<<?openid_name_key>>)),
-        Teams = parse_teams(gui_utils:to_list(wf:q(<<?openid_teams_key>>))),
-        Email = gui_utils:to_list(wf:q(<<?openid_email_key>>)),
-        DN1 = gui_utils:to_list(wf:q(<<?openid_dn1_key>>)),
-        DN2 = gui_utils:to_list(wf:q(<<?openid_dn2_key>>)),
-        DN3 = gui_utils:to_list(wf:q(<<?openid_dn3_key>>)),
+        Name = get_signed_param(<<?openid_name_key>>, SignedParams),
+        Teams = parse_teams(get_signed_param(<<?openid_teams_key>>, SignedParams)),
+        Email = get_signed_param(<<?openid_email_key>>, SignedParams),
+        DN1 = get_signed_param(<<?openid_dn1_key>>, SignedParams),
+        DN2 = get_signed_param(<<?openid_dn2_key>>, SignedParams),
+        DN3 = get_signed_param(<<?openid_dn3_key>>, SignedParams),
         DnList = lists:filter(
             fun(X) ->
                 (X /= [])
@@ -177,6 +189,20 @@ retrieve_user_info() ->
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+
+%% get_signed_param/2
+%% ====================================================================
+%% @doc
+%% Retrieves given request parameter, but only if it was signed by the provider
+%% @end
+-spec get_signed_param(binary(), [binary()]) -> string().
+%% ====================================================================
+get_signed_param(ParamName, SignedParams) ->
+    case lists:member(ParamName, SignedParams) of
+        true -> gui_utils:to_list(wf:q(ParamName));
+        false -> []
+    end.
+
 
 %% discover_op_endpoint/1
 %% ====================================================================
