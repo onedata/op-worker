@@ -150,7 +150,7 @@ can_view_logs() ->
 -spec can_view_monitoring() -> boolean().
 %% ====================================================================
 can_view_monitoring() ->
-    user_logic:get_role(wf:session(user_doc)) /= user.
+  user_logic:get_role(wf:session(user_doc)) /= user.
 
 
 %% maybe_redirect/4
@@ -275,19 +275,19 @@ top_menu(ActiveTabID) ->
 %% ====================================================================
 top_menu(ActiveTabID, SubMenuBody) ->
     % Tab, that will be displayed optionally
-    PageCaptions =
-        case can_view_logs() of
-            false -> [];
-            true -> [{logs_tab, #li{body = [
-                #link{style = <<"padding: 18px;">>, url = <<"/logs">>, body = <<"Logs">>}
-            ]}}]
-        end ++
-        case can_view_monitoring() of
-            false -> [];
-            true -> [{monitoring_tab, #li{body = [
-                #link{style = <<"padding: 18px;">>, url = <<"/monitoring">>, body = <<"Monitoring">>}
-            ]}}]
-        end,
+    LogsPageCaptions = case can_view_logs() of
+                           false ->
+                               [];
+                           true ->
+                               [
+                                   {logs_tab, #li{body = [
+                                        #link{style = <<"padding: 18px;">>, url = <<"/logs">>, body = <<"Logs">>}
+                                   ]}},
+                                   {monitoring_tab, #li{body = [
+                                        #link{style = <<"padding: 18px;">>, url = <<"/monitoring">>, body = <<"Monitoring">>}
+                                   ]}}
+                               ]
+                       end,
     % Define menu items with ids, so that proper tab can be made active via function parameter 
     % see old_menu_captions()
     MenuCaptions =
