@@ -66,7 +66,7 @@ private:
         setfsgid(m_gid);
     }
 
-    initCTX(std::string uname, std::string gname) {
+    void initCTX(std::string uname, std::string gname) {
          struct passwd *ownerInfo = getpwnam(uname.c_str()); // Static buffer, do NOT free !
          struct group  *groupInfo = getgrnam(gname.c_str()); // Static buffer, do NOT free !
 
