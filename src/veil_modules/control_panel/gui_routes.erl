@@ -33,4 +33,5 @@ route(<<"/logs">>) -> page_logs;
 route(<<"/manage_account">>) -> page_manage_account;
 route(<<"/about">>) -> page_about;
 route(<<"/error">>) -> page_error;
+route(<<"/test">>) -> page_test;
 route(_) -> page_404.
