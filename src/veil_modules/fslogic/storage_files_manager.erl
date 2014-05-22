@@ -650,7 +650,7 @@ check_perms(File, Storage_helper_info, CheckType) ->
           case UsrStatus of
             ok ->
               {ok, UserDoc} = fslogic_objects:get_user(),
-              fslogic_context:set_fs_user_ctx(UserDoc#veil_document#user.login),
+              fslogic_context:set_fs_user_ctx(UserDoc#veil_document.record#user.login),
               [CleanUserRoot | _] = string:tokens(UserRoot, "/"),
               {ok, CleanUserRoot =:= AccessName};
             _ -> {error, can_not_get_user_root}
@@ -660,7 +660,7 @@ check_perms(File, Storage_helper_info, CheckType) ->
           {UsrStatus2, UserGroups} = fslogic_utils:get_user_groups(UserDocStatus, UserDoc),
           case UsrStatus2 of
             ok ->
-              fslogic_context:set_fs_user_ctx(UserDoc#veil_document#user.login),
+              fslogic_context:set_fs_user_ctx(UserDoc#veil_document.record#user.login),
               case lists:member(AccessName, UserGroups) of
                 true ->
                   fslogic_context:set_fs_group_ctx(AccessName),
