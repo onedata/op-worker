@@ -58,7 +58,7 @@ private:
     uid_t   m_uid;
     gid_t   m_gid;
 
-    initCTX(uid_t uid, gid_t gid) {
+    void initCTX(uid_t uid, gid_t gid) {
         m_uid = uid;
         m_gid = gid;
 
