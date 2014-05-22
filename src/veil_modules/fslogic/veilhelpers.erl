@@ -15,7 +15,7 @@
 -include("veil_modules/dao/dao_vfs.hrl").
 -include_lib("registered_names.hrl").
 
--export([exec/2, exec/3]).
+-export([exec/2, exec/3, exec/4, exec/5]).
 %% ===================================================================
 %% API
 %% ===================================================================
@@ -34,11 +34,18 @@ exec(Method, SHInfo = #storage_helper_info{}, Args) ->
     Args1 = [SHInfo#storage_helper_info.name | [SHInfo#storage_helper_info.init_args | Args]],
     exec(Method, Args1).
 exec(Method, Args) when is_atom(Method), is_list(Args) ->
+    exec("root", "root", Method, Args).
+
+exec(UserName, GroupName, Method, SHInfo = #storage_helper_info{}, Args) ->
+    Args1 = [SHInfo#storage_helper_info.name | [SHInfo#storage_helper_info.init_args | Args]],
+    exec(UserName, GroupName, Method, Args1).
+exec(UserName, GroupName, Method, Args) when is_atom(Method), is_list(Args) ->
 %%     lager:info("veilhelpers:exec with args: ~p ~p", [Method, Args]),
-    case gsi_handler:call(veilhelpers_nif, Method, Args) of 
+    Args1 = [UserName, GroupName] ++ Args,
+    case gsi_handler:call(veilhelpers_nif, Method, Args1) of
         {error, 'NIF_not_loaded'} ->
             ok = load_veilhelpers(),
-            gsi_handler:call(veilhelpers_nif, Method, Args);
+            gsi_handler:call(veilhelpers_nif, Method, Args1);
         Other -> Other
     end.
 
