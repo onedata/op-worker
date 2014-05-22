@@ -76,7 +76,7 @@ private:
          initCTX(uid, gid);
     }
 
-}
+};
 
 StorageHelperFactory SHFactory;     // StorageHelperFactory instance
 
