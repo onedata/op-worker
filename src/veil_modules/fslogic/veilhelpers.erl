@@ -34,7 +34,7 @@ exec(Method, SHInfo = #storage_helper_info{}, Args) ->
     Args1 = [SHInfo#storage_helper_info.name | [SHInfo#storage_helper_info.init_args | Args]],
     exec(Method, Args1).
 exec(Method, Args) when is_atom(Method), is_list(Args) ->
-    exec("root", "root", Method, Args).
+    exec(fslogic_context:get_fs_user_ctx(), fslogic_context:get_fs_group_ctx(), Method, Args).
 
 exec(UserName, GroupName, Method, SHInfo = #storage_helper_info{}, Args) ->
     Args1 = [SHInfo#storage_helper_info.name | [SHInfo#storage_helper_info.init_args | Args]],

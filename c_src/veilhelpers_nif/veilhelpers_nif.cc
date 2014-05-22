@@ -28,7 +28,6 @@
                 boost::shared_ptr<IStorageHelper> sh = SHFactory.getStorageHelper(get_string(env, argv[2]), get_str_vector(env, argv[3])); \
                 if(!sh) \
                     return enif_make_tuple2(env, enif_make_atom(env, "error"), enif_make_atom(env, "unknown_storage_helper")); \
-
                 UserCTX holder(get_string(env, argv[0]), get_string(env, argv[1]));
 
 using namespace std;

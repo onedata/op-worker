@@ -17,6 +17,7 @@
 
 %% API
 -export([get_fuse_id/0, set_fuse_id/1, get_user_dn/0, set_user_dn/1, clear_user_dn/0, set_protocol_version/1, get_protocol_version/0, get_user_id/0]).
+-export([set_fs_user_ctx/1, get_fs_user_ctx/0, set_fs_group_ctx/1, get_fs_group_ctx/0]).
 
 %% ====================================================================
 %% API functions
@@ -103,6 +104,25 @@ get_user_id() ->
                 {ok, #veil_document{uuid = UID}} -> {ok, UID};
                 Error -> Error
             end
+    end.
+
+
+set_fs_user_ctx(UName) ->
+    put(fsctx_uname, UName).
+
+get_fs_user_ctx() ->
+    case get(fsctx_uname) of
+        undefined -> "root";
+        UName -> UName
+    end.
+
+set_fs_group_ctx(GName) ->
+    put(fsctx_gname, GName).
+
+get_fs_group_ctx() ->
+    case get(fsctx_gname) of
+        undefined -> "root";
+        GName -> GName
     end.
 
 %% ====================================================================
