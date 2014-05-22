@@ -37,6 +37,7 @@ route([<<"attrs">>])        -> {rest_attrs, undefined};
 route([<<"attrs">>|Path])   -> {rest_attrs, join_to_path(Path)};
 route([<<"shares">>])       -> {rest_shares, undefined};
 route([<<"shares">>, ID])   -> {rest_shares, ID};
+route([<<"test">>])         -> {rest_test, undefined};
 route(_)                    -> undefined.
 
 
