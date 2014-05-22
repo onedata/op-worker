@@ -28,7 +28,9 @@
                 boost::shared_ptr<IStorageHelper> sh = SHFactory.getStorageHelper(get_string(env, argv[2]), get_str_vector(env, argv[3])); \
                 if(!sh) \
                     return enif_make_tuple2(env, enif_make_atom(env, "error"), enif_make_atom(env, "unknown_storage_helper")); \
-                UserCTX holder(get_string(env, argv[0]), get_string(env, argv[1]));
+                UserCTX holder(get_string(env, argv[0]), get_string(env, argv[1])); \
+                if(holder.uid() == (uid_t)-1 || holder.gid() == (gid_t)-1) \
+                    return -EINVAL;
 
 using namespace std;
 using namespace boost;
@@ -52,6 +54,14 @@ public:
     ~UserCTX() {
         setfsuid(0);
         setfsgid(0);
+    }
+
+    uid_t uid() {
+        return m_uid;
+    }
+
+    gid_t gid() {
+       return m_gid;
     }
 
 private:
