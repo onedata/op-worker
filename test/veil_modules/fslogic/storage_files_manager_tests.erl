@@ -72,6 +72,7 @@ file_name_cache_test() ->
 check_perms_user_file() ->
   SHInfo = #storage_helper_info{name = ?SH, init_args = [?TEST_ROOT]},
 
+  meck:expect(fslogic_objects, get_user, fun() -> {ok, #veil_document{record = #user{login = "testuser"}}} end),
   meck:expect(fslogic_path, get_user_root, fun() -> {ok, "testuser"} end),
   ?assertEqual({ok, true}, storage_files_manager:check_perms("users/testuser/somefile", SHInfo)),
 
