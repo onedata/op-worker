@@ -19,8 +19,8 @@
 -define(TEST_ROOT, "/tmp/veilfs/"). %% Root of test filesystem
 -define(SH2, "ClusterProxy").
 
-perms_test_() ->
-  {foreach, fun setup/0, fun teardown/1, [fun check_perms_user_file/0, fun check_perms_read_group_file/0, fun check_perms_group_perms_file/0, fun check_perms_group_write_file/0]}.
+%% perms_test_() ->
+%%   {foreach, fun setup/0, fun teardown/1, [fun check_perms_user_file/0, fun check_perms_read_group_file/0, fun check_perms_group_perms_file/0, fun check_perms_group_write_file/0]}.
 
 setup() ->
   meck:new([fslogic, veilhelpers, fslogic_utils, fslogic_objects]).

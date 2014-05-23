@@ -17,7 +17,7 @@
 -include("veil_modules/fslogic/fslogic.hrl").
 
 %% API
--export([gen_error_message/2, normalize_error_code/1, gen_error_code/1]).
+-export([gen_error_message/2, normalize_error_code/1, gen_error_code/1, posix_to_veilerror/1]).
 
 %% ====================================================================
 %% API functions
@@ -121,6 +121,29 @@ normalize_error_code(ErrorCode) when is_atom(ErrorCode) ->
     atom_to_list(ErrorCode);
 normalize_error_code(ErrorCode) when is_list(ErrorCode) ->
     ErrorCode.
+
+
+posix_to_veilerror(POSIX) when POSIX < 0 -> %% All error codes are currently negative, so translate accordingly
+    posix_to_veilerror(-POSIX);
+posix_to_veilerror(1) ->
+    ?VEPERM;
+posix_to_veilerror(2) ->
+    ?VENOENT;
+posix_to_veilerror(17) ->
+    ?VEEXIST;
+posix_to_veilerror(13) ->
+    ?VEACCES;
+posix_to_veilerror(122) ->
+    ?VEDQUOT;
+posix_to_veilerror(22) ->
+    ?VEINVAL;
+posix_to_veilerror(39) ->
+    ?VENOTEMPTY;
+posix_to_veilerror(95) ->
+    ?VENOTSUP;
+posix_to_veilerror(Unkwn) ->
+    ?VEREMOTEIO.
+
 
 %% ====================================================================
 %% Internal functions
