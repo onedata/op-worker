@@ -29,6 +29,7 @@
 -define(REST_FILES_SUBPATH, "files/").
 -define(REST_ATTRS_SUBPATH, "attrs/").
 -define(REST_SHARE_SUBPATH, "shares/").
+-define(REST_TEST_SUBPATH, "test/").
 
 
 all() -> [main_test].
@@ -67,7 +68,7 @@ main_test(Config) ->
     test_rest_upload(),
     test_rest_attrs(),
     test_rest_shares(),
-
+    test_rest_test(),
 
     ibrowse:stop(),
     % DB cleanup
@@ -281,6 +282,10 @@ test_rest_shares() ->
     ?assertEqual(Code8, "422"),
     ?assertEqual(list_to_binary(Response8), rest_utils:error_reply(?report_warning(?error_share_cannot_create, ["somepath"]))).
 
+test_rest_test() ->
+    {Code, _Headers, Response} = do_request(?REST_TEST_SUBPATH, get, [], []),
+    ?assertEqual("200", Code),
+    ?assertEqual("rest", Response).
 
 do_request(RestSubpath, Method, Headers, Body) ->
     do_request("latest", RestSubpath, Method, Headers, Body).

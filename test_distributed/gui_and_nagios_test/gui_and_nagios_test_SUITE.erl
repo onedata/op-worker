@@ -41,6 +41,7 @@ main_test(Config) ->
 
 	%tests
 	connection_test(),
+  test_callback_test(),
 	nagios_test(),
 
 	%cleanup
@@ -52,6 +53,14 @@ connection_test() ->
     {_, Code, _, _} = ibrowse:send_req("https://localhost:" ++ integer_to_list(Port) , [], get),
 
     ?assertEqual(Code, "200").
+
+%% Checks if test callback returns "gui"
+test_callback_test() ->
+    {ok, Port} = rpc:call(get(ccm), application, get_env, [veil_cluster_node, control_panel_port]),
+    {_, Code, _, Value} = ibrowse:send_req("https://localhost:" ++ integer_to_list(Port) ++ "/test" , [], get),
+
+    ?assertEqual(Code, "200"),
+    ?assertEqual(Value, "gui").
 
 %% Sends nagios request and check if health status is ok, and if health report contains information about all workers
 nagios_test() ->
