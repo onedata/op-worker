@@ -112,7 +112,13 @@ set_fs_user_ctx(UName) ->
 
 get_fs_user_ctx() ->
     case get(fsctx_uname) of
-        undefined -> "root";
+        undefined ->
+            case fslogic_objects:get_user() of
+                {ok, #veil_document{record = #user{login = Login}}} ->
+                    Login;
+                _ ->
+                    "root"
+            end;
         UName -> UName
     end.
 
@@ -121,7 +127,16 @@ set_fs_group_ctx(GName) ->
 
 get_fs_group_ctx() ->
     case get(fsctx_gname) of
-        undefined -> "root";
+        undefined ->
+            case fslogic_objects:get_user() of
+                 {ok, #veil_document{record = #user{login = Login} = UserRec}} ->
+                     case user_logic:get_team_names(UserRec) of
+                         [Team | _] -> Team;
+                         _          -> Login
+                     end;
+                 _ ->
+                     "root"
+             end;
         GName -> GName
     end.
 

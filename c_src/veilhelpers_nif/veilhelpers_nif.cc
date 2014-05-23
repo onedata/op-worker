@@ -30,7 +30,7 @@
                     return enif_make_tuple2(env, enif_make_atom(env, "error"), enif_make_atom(env, "unknown_storage_helper")); \
                 UserCTX holder(get_string(env, argv[0]), get_string(env, argv[1])); \
                 if(holder.uid() == (uid_t)-1 || holder.gid() == (gid_t)-1) \
-                    return -EINVAL;
+                    return enif_make_int(env, -EINVAL);
 
 using namespace std;
 using namespace boost;

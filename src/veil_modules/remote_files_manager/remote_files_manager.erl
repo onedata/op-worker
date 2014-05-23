@@ -64,7 +64,11 @@ handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
 handle(ProtocolVersion, Record) when is_record(Record, remotefilemangement) ->
-  handle_message(ProtocolVersion, Record#remotefilemangement.input);
+    RequestBody = Record#remotefilemangement.input,
+    RequestType = element(1, RequestBody),
+
+    fslogic_context:set_protocol_version(ProtocolVersion),
+    fslogic:fslogic_runner(fun handle_message/1, RequestType, RequestBody, remote_files_manager_errors);
 
 handle(_ProtocolVersion, _Msg) ->
   ok.
@@ -81,16 +85,16 @@ cleanup() ->
 %% Internal functions
 %% ====================================================================
 
-%% handle_message/2
+%% handle_message/1
 %% ====================================================================
 %% @doc Processes requests from Cluster Proxy.
 %% @end
--spec handle_message(ProtocolVersion :: term(), Record :: tuple()) -> Result when
+-spec handle_message(Record :: tuple()) -> Result when
   Result :: term().
 %% ====================================================================
-handle_message(ProtocolVersion, Record) when is_record(Record, createfile) ->
+handle_message(Record) when is_record(Record, createfile) ->
   FileId = Record#createfile.file_id,
-  SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
+  SH_And_ID = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),
   case SH_And_ID of
     {Storage_helper_info, File} ->
       {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info, read),
@@ -115,9 +119,9 @@ handle_message(ProtocolVersion, Record) when is_record(Record, createfile) ->
     _ -> #atom{value = ?VEREMOTEIO}
   end;
 
-handle_message(ProtocolVersion, Record) when is_record(Record, deletefileatstorage) ->
+handle_message(Record) when is_record(Record, deletefileatstorage) ->
   FileId = Record#deletefileatstorage.file_id,
-  SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
+  SH_And_ID = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),
   case SH_And_ID of
     {Storage_helper_info, File} ->
       {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info, perms),
@@ -142,10 +146,10 @@ handle_message(ProtocolVersion, Record) when is_record(Record, deletefileatstora
     _ -> #atom{value = ?VEREMOTEIO}
   end;
 
-handle_message(ProtocolVersion, Record) when is_record(Record, truncatefile) ->
+handle_message(Record) when is_record(Record, truncatefile) ->
   FileId = Record#truncatefile.file_id,
   Length = Record#truncatefile.length,
-  SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
+  SH_And_ID = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),
   case SH_And_ID of
     {Storage_helper_info, File} ->
       {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info),
@@ -170,11 +174,11 @@ handle_message(ProtocolVersion, Record) when is_record(Record, truncatefile) ->
     _ -> #atom{value = ?VEREMOTEIO}
   end;
 
-handle_message(ProtocolVersion, Record) when is_record(Record, readfile) ->
+handle_message(Record) when is_record(Record, readfile) ->
   FileId = Record#readfile.file_id,
   Size = Record#readfile.size,
   Offset = Record#readfile.offset,
-  SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
+  SH_And_ID = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),
   case SH_And_ID of
     {Storage_helper_info, File} ->
       {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info, read),
@@ -199,11 +203,11 @@ handle_message(ProtocolVersion, Record) when is_record(Record, readfile) ->
     _ -> #filedata{answer_status = ?VEREMOTEIO}
   end;
 
-handle_message(ProtocolVersion, Record) when is_record(Record, writefile) ->
+handle_message(Record) when is_record(Record, writefile) ->
   FileId = Record#writefile.file_id,
   Bytes = Record#writefile.data,
   Offset = Record#writefile.offset,
-  SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
+  SH_And_ID = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),
   case SH_And_ID of
     {Storage_helper_info, File} ->
       {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info),
@@ -228,10 +232,10 @@ handle_message(ProtocolVersion, Record) when is_record(Record, writefile) ->
     _ -> #writeinfo{answer_status = ?VEREMOTEIO}
   end;
 
-handle_message(ProtocolVersion, Record) when is_record(Record, changepermsatstorage) ->
+handle_message(Record) when is_record(Record, changepermsatstorage) ->
   FileId = Record#changepermsatstorage.file_id,
   Perms = Record#changepermsatstorage.perms,
-  SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
+  SH_And_ID = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),
   case SH_And_ID of
     {Storage_helper_info, File} ->
       {PermsStatus, PermsCheck} = storage_files_manager:check_perms(File, Storage_helper_info, perms),

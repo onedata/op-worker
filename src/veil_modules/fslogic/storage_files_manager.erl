@@ -640,67 +640,68 @@ check_perms(File, Storage_helper_info) ->
   ErrorDetail :: atom().
 %% ====================================================================
 check_perms(File, Storage_helper_info, CheckType) ->
-  {AccessTypeStatus, AccessAns} = check_access_type(File),
-  case AccessTypeStatus of
-    ok ->
-      {AccesType, AccessName} = AccessAns,
-      case AccesType of
-        user ->
-          {UsrStatus, UserRoot} = fslogic_path:get_user_root(),
-          case UsrStatus of
-            ok ->
-              {ok, UserDoc} = fslogic_objects:get_user(),
-              fslogic_context:set_fs_user_ctx(UserDoc#veil_document.record#user.login),
-              [CleanUserRoot | _] = string:tokens(UserRoot, "/"),
-              {ok, CleanUserRoot =:= AccessName};
-            _ -> {error, can_not_get_user_root}
-          end;
-        group ->
-          {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
-          {UsrStatus2, UserGroups} = fslogic_utils:get_user_groups(UserDocStatus, UserDoc),
-          case UsrStatus2 of
-            ok ->
-              fslogic_context:set_fs_user_ctx(UserDoc#veil_document.record#user.login),
-              case lists:member(AccessName, UserGroups) of
-                true ->
-                  fslogic_context:set_fs_group_ctx(AccessName),
-                  case CheckType of
-                    read ->
-                      {ok, true};
-                    _ ->
-                      {Status, CheckOk} = case CheckType of
-                                            write -> get_cached_value(File, grp_wr, Storage_helper_info);
-                                            _ -> {ok, false} %perms
-                                          end,
-                      case Status of
-                        ok ->
-                          case CheckOk of
-                            true -> {ok, true};
-                            false ->
-                              UserRecord = UserDoc#veil_document.record,
-                              IdFromSystem = fslogic_utils:get_user_id_from_system(UserRecord#user.login),
-                              IdFromSystem2 = string:substr(IdFromSystem, 1, length(IdFromSystem) - 1),
-                              {OwnWrStatus, Own} = get_cached_value(File, owner, Storage_helper_info),
-                              case OwnWrStatus of
-                                ok ->
-                                  {ok, IdFromSystem2 =:= Own};
-                                _ ->
-                                  {error, can_not_check_file_owner}
-                              end
-                          end;
-                        _ ->
-                          {error, can_not_check_grp_perms}
-                      end
-                  end;
-                false ->
-                  {ok, false}
-              end;
-            _ -> {error, can_not_get_user_groups}
-          end
-      end;
-    _ ->
-      {AccessTypeStatus, AccessAns}
-  end.
+    {ok, true}.
+%%   {AccessTypeStatus, AccessAns} = check_access_type(File),
+%%   case AccessTypeStatus of
+%%     ok ->
+%%       {AccesType, AccessName} = AccessAns,
+%%       case AccesType of
+%%         user ->
+%%           {UsrStatus, UserRoot} = fslogic_path:get_user_root(),
+%%           case UsrStatus of
+%%             ok ->
+%%               {ok, UserDoc} = fslogic_objects:get_user(),
+%%               fslogic_context:set_fs_user_ctx(UserDoc#veil_document.record#user.login),
+%%               [CleanUserRoot | _] = string:tokens(UserRoot, "/"),
+%%               {ok, CleanUserRoot =:= AccessName};
+%%             _ -> {error, can_not_get_user_root}
+%%           end;
+%%         group ->
+%%           {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
+%%           {UsrStatus2, UserGroups} = fslogic_utils:get_user_groups(UserDocStatus, UserDoc),
+%%           case UsrStatus2 of
+%%             ok ->
+%%               fslogic_context:set_fs_user_ctx(UserDoc#veil_document.record#user.login),
+%%               case lists:member(AccessName, UserGroups) of
+%%                 true ->
+%%                   fslogic_context:set_fs_group_ctx(AccessName),
+%%                   case CheckType of
+%%                     read ->
+%%                       {ok, true};
+%%                     _ ->
+%%                       {Status, CheckOk} = case CheckType of
+%%                                             write -> get_cached_value(File, grp_wr, Storage_helper_info);
+%%                                             _ -> {ok, false} %perms
+%%                                           end,
+%%                       case Status of
+%%                         ok ->
+%%                           case CheckOk of
+%%                             true -> {ok, true};
+%%                             false ->
+%%                               UserRecord = UserDoc#veil_document.record,
+%%                               IdFromSystem = fslogic_utils:get_user_id_from_system(UserRecord#user.login),
+%%                               IdFromSystem2 = string:substr(IdFromSystem, 1, length(IdFromSystem) - 1),
+%%                               {OwnWrStatus, Own} = get_cached_value(File, owner, Storage_helper_info),
+%%                               case OwnWrStatus of
+%%                                 ok ->
+%%                                   {ok, IdFromSystem2 =:= Own};
+%%                                 _ ->
+%%                                   {error, can_not_check_file_owner}
+%%                               end
+%%                           end;
+%%                         _ ->
+%%                           {error, can_not_check_grp_perms}
+%%                       end
+%%                   end;
+%%                 false ->
+%%                   {ok, false}
+%%               end;
+%%             _ -> {error, can_not_get_user_groups}
+%%           end
+%%       end;
+%%     _ ->
+%%       {AccessTypeStatus, AccessAns}
+%%   end.
 
 %% ====================================================================
 %% Internal functions
