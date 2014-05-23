@@ -15,6 +15,7 @@
 -include_lib("public_key/include/public_key.hrl").
 -include("veil_modules/control_panel/common.hrl").
 -include("err.hrl").
+-include("veil_modules/control_panel/connection_check_values.hrl").
 
 -record(state, {
     version = <<"latest">> :: binary(),
@@ -50,8 +51,8 @@ init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 %% @end
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
 %% ====================================================================
-rest_init(Req, _Opts) when Req#http_req.path_info =:= [<<"test">>] ->
-    % when testing, continue without cert verification
+rest_init(Req, _Opts) when Req#http_req.path_info =:= [?connection_check_path] ->
+    % when checking connection, continue without cert verification
     do_init(Req);
 rest_init(Req, _Opts) ->
     {OtpCert, Certs} = try

@@ -10,9 +10,10 @@
 %% @end
 %% ===================================================================
 
--module(page_test).
+-module(page_connection_check).
 -compile(export_all).
 -include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/control_panel/connection_check_values.hrl").
 
 %% Template points to the template file, which will be filled with content
-main() -> <<"gui">>.
+main() -> ?gui_connection_check_value.

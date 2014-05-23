@@ -12,6 +12,8 @@
 
 -module(rest_routes).
 
+-include("veil_modules/control_panel/connection_check_values.hrl").
+
 -export([route/1]).
 
 %% ====================================================================
@@ -31,14 +33,14 @@
 %% @end
 -spec route([binary()]) -> {atom(), binary()}.
 %% ====================================================================
-route([<<"files">>])        -> {rest_files, undefined};
-route([<<"files">>|Path])   -> {rest_files, join_to_path(Path)};
-route([<<"attrs">>])        -> {rest_attrs, undefined};
-route([<<"attrs">>|Path])   -> {rest_attrs, join_to_path(Path)};
-route([<<"shares">>])       -> {rest_shares, undefined};
-route([<<"shares">>, ID])   -> {rest_shares, ID};
-route([<<"test">>])         -> {rest_test, undefined};
-route(_)                    -> undefined.
+route([<<"files">>])                -> {rest_files, undefined};
+route([<<"files">>|Path])           -> {rest_files, join_to_path(Path)};
+route([<<"attrs">>])                -> {rest_attrs, undefined};
+route([<<"attrs">>|Path])           -> {rest_attrs, join_to_path(Path)};
+route([<<"shares">>])               -> {rest_shares, undefined};
+route([<<"shares">>, ID])           -> {rest_shares, ID};
+route([?connection_check_path])     -> {rest_test, undefined};
+route(_)                            -> undefined.
 
 
 %% join_to_path/1
