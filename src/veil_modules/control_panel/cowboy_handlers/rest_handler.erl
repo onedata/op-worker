@@ -337,13 +337,14 @@ do_init(Req) ->
 -spec do_init(req(), string()) -> {ok, req(), #state{} | {error, term()}}.
 %% ====================================================================
 do_init(Req, DnString) ->
+    Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"application/json">>, Req),
     case user_logic:get_user({dn, DnString}) of
         {ok, _} ->
             fslogic_context:set_user_dn(DnString),
             ?info("[REST] Peer connected using certificate with subject: ~p ~n", [DnString]),
-            do_init(Req);
+            do_init(Req2);
         _ ->
-            {ok, Req, {error, {user_unknown, DnString}}}
+            {ok, Req2, {error, {user_unknown, DnString}}}
     end.
 
 
