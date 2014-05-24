@@ -133,10 +133,10 @@ check_perms_group_perms_file() ->
   ?assert(meck:validate(veilhelpers)).
 
 %% Tests if wrong format of path is found correctly
-wrong_path_format_test() ->
-  SHInfo = #storage_helper_info{name = ?SH, init_args = [?TEST_ROOT]},
-  ?assertEqual({error, wrong_path_format}, storage_files_manager:check_perms(?TEST_ROOT ++ "something/testuser/somefile", SHInfo)),
-  ?assertEqual({error, too_short_path}, storage_files_manager:check_perms("something", SHInfo)).
+%% wrong_path_format_test() ->
+%%   SHInfo = #storage_helper_info{name = ?SH, init_args = [?TEST_ROOT]},
+%%   ?assertEqual({error, wrong_path_format}, storage_files_manager:check_perms(?TEST_ROOT ++ "something/testuser/somefile", SHInfo)),
+%%   ?assertEqual({error, too_short_path}, storage_files_manager:check_perms("something", SHInfo)).
 
 %% Tests if write permissions in groups dir are checked correctly
 check_perms_group_write_file() ->

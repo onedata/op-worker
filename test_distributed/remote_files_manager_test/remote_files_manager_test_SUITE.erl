@@ -113,12 +113,13 @@ permissions_test(Config) ->
   WrongId1 = string:substr(Id0, 1, UsrBeg - 1) ++ Login ++ string:substr(Id0, UsrBeg + length(Login2)),
   {Status2, AnswerOpt2} = create_file_on_storage(Host, Cert2, Port, WrongId1),
   ?assertEqual("ok", Status2),
-  ?assertEqual(list_to_atom(?VEPERM), AnswerOpt2),
+  ?assertEqual(list_to_atom(?VEACCES), AnswerOpt2),
 
   WrongId2 = string:substr(Id0, 1, UsrBeg - 2) ++ string:substr(Id0, UsrBeg + length(Login2)),
+    io:format(user, "WID: ~p~n", [WrongId2]),
   {Status3, AnswerOpt3} = create_file_on_storage(Host, Cert2, Port, WrongId2),
   ?assertEqual("ok", Status3),
-  ?assertEqual(list_to_atom(?VEREMOTEIO), AnswerOpt3),
+  ?assertEqual(list_to_atom(?VEACCES), AnswerOpt3),
 
   {WriteStatus0, WriteAnswer0, BytesWritten0} = write(Host, Cert2, Port, Id0, 0, list_to_binary("abcdefgh")),
   ?assertEqual("ok", WriteStatus0),
@@ -147,62 +148,62 @@ permissions_test(Config) ->
   WrongId3 = string:substr(Id1, 1, UsrBeg2 - 1) ++ "other_team" ++ string:substr(Id1, UsrBeg2 + length(Team1)),
   {Status6, AnswerOpt6} = create_file_on_storage(Host, Cert2, Port, WrongId3),
   ?assertEqual("ok", Status6),
-  ?assertEqual(list_to_atom(?VEPERM), AnswerOpt6),
+  ?assertEqual(list_to_atom(?VENOENT), AnswerOpt6),
 
 
 
 
   {DeleteStatus, DeleteAnswer} = delete_file_on_storage(Host, Cert, Port, Id0),
   ?assertEqual("ok", DeleteStatus),
-  ?assertEqual(list_to_atom(?VEPERM), DeleteAnswer),
+  ?assertEqual(list_to_atom(?VEACCES), DeleteAnswer),
 
   {WriteStatus, WriteAnswer, _} = write(Host, Cert, Port, Id0, 0, list_to_binary("xyz")),
   ?assertEqual("ok", WriteStatus),
-  ?assertEqual(?VEPERM, WriteAnswer),
+  ?assertEqual(?VEACCES, WriteAnswer),
 
   {TruncateStatus, TruncateAnswer} = truncate_file_on_storage(Host, Cert, Port, Id0, 5),
   ?assertEqual("ok", TruncateStatus),
-  ?assertEqual(list_to_atom(?VEPERM), TruncateAnswer),
+  ?assertEqual(list_to_atom(?VEACCES), TruncateAnswer),
 
   {ReadStatus, ReadAnswer, _} = read(Host, Cert, Port, Id0, 2, 2),
   ?assertEqual("ok", ReadStatus),
-  ?assertEqual(?VEPERM, ReadAnswer),
+  ?assertEqual(?VEACCES, ReadAnswer),
 
 
   {PermStatus, PermAnswer} = change_perm_on_storage(Host, Cert, Port, Id0, 8#521),
   ?assertEqual("ok", PermStatus),
-  ?assertEqual(list_to_atom(?VEPERM), PermAnswer),
+  ?assertEqual(list_to_atom(?VEACCES), PermAnswer),
 
 
 
 
   {DeleteStatus2, DeleteAnswer2} = delete_file_on_storage(Host, Cert, Port, WrongId2),
   ?assertEqual("ok", DeleteStatus2),
-  ?assertEqual(list_to_atom(?VEREMOTEIO), DeleteAnswer2),
+  ?assertEqual(list_to_atom(?VENOENT), DeleteAnswer2),
 
   {WriteStatus2, WriteAnswer2, _} = write(Host, Cert, Port, WrongId2, 0, list_to_binary("xyz")),
   ?assertEqual("ok", WriteStatus2),
-  ?assertEqual(?VEREMOTEIO, WriteAnswer2),
+  ?assertEqual(?VENOENT, WriteAnswer2),
 
   {TruncateStatus2, TruncateAnswer2} = truncate_file_on_storage(Host, Cert, Port, WrongId2, 5),
   ?assertEqual("ok", TruncateStatus2),
-  ?assertEqual(list_to_atom(?VEREMOTEIO), TruncateAnswer2),
+  ?assertEqual(list_to_atom(?VENOENT), TruncateAnswer2),
 
   {ReadStatus2, ReadAnswer2, _} = read(Host, Cert, Port, WrongId2, 2, 2),
   ?assertEqual("ok", ReadStatus2),
-  ?assertEqual(?VEREMOTEIO, ReadAnswer2),
+  ?assertEqual(?VENOENT, ReadAnswer2),
 
 
   {PermStatus2, PermAnswer2} = change_perm_on_storage(Host, Cert, Port, WrongId2, 8#521),
   ?assertEqual("ok", PermStatus2),
-  ?assertEqual(list_to_atom(?VEREMOTEIO), PermAnswer2),
+  ?assertEqual(list_to_atom(?VENOENT), PermAnswer2),
 
 
 
-
-  {DeleteStatus3, DeleteAnswer3} = delete_file_on_storage(Host, Cert, Port, Id1),
-  ?assertEqual("ok", DeleteStatus3),
-  ?assertEqual(list_to_atom(?VEPERM), DeleteAnswer3),
+    %% Normally its possible to delete file when user has permissions to write both file and its parent directory
+%%   {DeleteStatus3, DeleteAnswer3} = delete_file_on_storage(Host, Cert, Port, Id1),
+%%   ?assertEqual("ok", DeleteStatus3),
+%%   ?assertEqual(list_to_atom(?VEACCES), DeleteAnswer3),
 
   {WriteStatus3, WriteAnswer3, BytesWritten3} = write(Host, Cert, Port, Id1, 0, list_to_binary("xyz")),
   ?assertEqual("ok", WriteStatus3),
@@ -233,18 +234,18 @@ permissions_test(Config) ->
 
 
 
-
+io:format(user, "Id1: ~p~n", [os:cmd("ls -al /tmp/veilfs/groups/veilfstestgroup/")]),
   {DeleteStatus4, DeleteAnswer4} = delete_file_on_storage(Host, Cert, Port, Id1),
   ?assertEqual("ok", DeleteStatus4),
   ?assertEqual(list_to_atom(?VEPERM), DeleteAnswer4),
 
   {WriteStatus4, WriteAnswer4, _} = write(Host, Cert, Port, Id1, 0, list_to_binary("qpr")),
   ?assertEqual("ok", WriteStatus4),
-  ?assertEqual(?VEPERM, WriteAnswer4),
+  ?assertEqual(?VEACCES, WriteAnswer4),
 
   {TruncateStatus4, TruncateAnswer4} = truncate_file_on_storage(Host, Cert, Port, Id1, 3),
   ?assertEqual("ok", TruncateStatus4),
-  ?assertEqual(list_to_atom(?VEPERM), TruncateAnswer4),
+  ?assertEqual(list_to_atom(?VEACCES), TruncateAnswer4),
 
   {ReadStatus4, ReadAnswer4, ReadData4} = read(Host, Cert, Port, Id1, 2, 2),
   ?assertEqual("ok", ReadStatus4),

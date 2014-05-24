@@ -632,6 +632,10 @@ groups_test(Config) ->
     A25 = FM(create, ["/f1"], DN1),
     ?assertEqual(ok, A25),
 
+    io:format(user, "~p~n", [os:cmd("id " ++ ?TEST_USER)]),
+    io:format(user, "~p~n", [os:cmd("id " ++ ?TEST_USER2)]),
+    io:format(user, "~p~n", [os:cmd("ls -al /tmp/veilfs/groups")]),
+
     A26 = FM(create, ["/groups/" ++ ?TEST_GROUP2 ++ "/f2"], DN2),
     ?assertEqual(ok, A26),
 
@@ -1100,19 +1104,19 @@ user_creation_test(Config) ->
 
   {PermStatusUsersDir, PermsUsersDir} = files_tester:get_permissions(?TEST_ROOT ++ "/users"),
   ?assertEqual(ok, PermStatusUsersDir),
-  ?assertEqual(8#773, PermsUsersDir rem 8#01000),
+  ?assertEqual(8#711, PermsUsersDir rem 8#01000),
 
   {PermStatusGroupsDir, PermsUserGroupsDir} = files_tester:get_permissions(?TEST_ROOT ++ "/groups"),
   ?assertEqual(ok, PermStatusGroupsDir),
-  ?assertEqual(8#773, PermsUserGroupsDir rem 8#01000),
+  ?assertEqual(8#711, PermsUserGroupsDir rem 8#01000),
 
   {PermStatusUsersDir2, PermsUsersDir2} = files_tester:get_permissions(?TEST_ROOT2 ++ "/users"),
   ?assertEqual(ok, PermStatusUsersDir2),
-  ?assertEqual(8#773, PermsUsersDir2 rem 8#01000),
+  ?assertEqual(8#711, PermsUsersDir2 rem 8#01000),
 
   {PermStatusGroupsDir2, PermsUserGroupsDir2} = files_tester:get_permissions(?TEST_ROOT2 ++ "/groups"),
   ?assertEqual(ok, PermStatusGroupsDir2),
-  ?assertEqual(8#773, PermsUserGroupsDir2 rem 8#01000),
+  ?assertEqual(8#711, PermsUserGroupsDir2 rem 8#01000),
 
   {ReadFileAns, PemBin} = file:read_file(Cert),
   ?assertEqual(ok, ReadFileAns),

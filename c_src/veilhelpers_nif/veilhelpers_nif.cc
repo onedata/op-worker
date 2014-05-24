@@ -72,6 +72,7 @@ private:
         m_uid = uid;
         m_gid = gid;
 
+        setegid(-1);
         setfsuid(m_uid);
         setfsgid(m_gid);
     }
@@ -81,7 +82,8 @@ private:
          struct group  *groupInfo = getgrnam(gname.c_str()); // Static buffer, do NOT free !
 
          uid_t uid = (ownerInfo ? ownerInfo->pw_uid : -1);
-         gid_t gid = (groupInfo ? groupInfo->gr_gid : -1);
+         gid_t primary_gid = (ownerInfo ? ownerInfo->pw_gid : -1);
+         gid_t gid = (groupInfo ? groupInfo->gr_gid : primary_gid);
 
          initCTX(uid, gid);
     }

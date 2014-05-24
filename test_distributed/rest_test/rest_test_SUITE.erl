@@ -164,7 +164,7 @@ test_rest_files_regulars() ->
 
     {Code6, _Headers6, Response6} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", put, [{"content-type", "multipart/form-data"}], []),
     ?assertEqual(Code6, "422"),
-    ?assertEqual(list_to_binary(Response6), rest_utils:error_reply(?report_error(?error_upload_unprocessable))),
+    ?assertEqual(list_to_binary(Response6), rest_utils:error_reply(?report_error(?error_upload_cannot_create))),
 
     {Code7, _Headers7, Response7} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", delete, [], []),
     ?assertEqual(Code7, "200"),
@@ -388,7 +388,7 @@ init_per_testcase(main_test, Config) ->
     ?INIT_DIST_TEST,
     nodes_manager:start_deps_for_tester_node(),
 
-    Nodes = nodes_manager:start_test_on_nodes(1),
+    Nodes = nodes_manager:start_test_on_nodes(1, true),
     [Node1 | _] = Nodes,
 
 

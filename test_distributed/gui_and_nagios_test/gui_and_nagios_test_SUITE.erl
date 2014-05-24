@@ -51,7 +51,7 @@ connection_test() ->
     {ok, Port} = rpc:call(get(ccm), application, get_env, [veil_cluster_node, control_panel_port]),
     {_, Code, _, _} = ibrowse:send_req("https://localhost:" ++ integer_to_list(Port) , [], get),
 
-    ?assertEqual(Code, "200").
+    ?assertEqual("200", Code).
 
 %% Sends nagios request and check if health status is ok, and if health report contains information about all workers
 nagios_test() ->
@@ -82,7 +82,7 @@ init_per_testcase(main_test, Config) ->
     ?INIT_DIST_TEST,
     nodes_manager:start_deps_for_tester_node(),
 
-    Nodes = nodes_manager:start_test_on_nodes(1),
+    Nodes = nodes_manager:start_test_on_nodes(1, true),
     [Node1 | _] = Nodes,
 
 	DB_Node = nodes_manager:get_db_node(),

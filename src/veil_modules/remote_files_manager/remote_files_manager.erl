@@ -93,31 +93,21 @@ cleanup() ->
   Result :: term().
 %% ====================================================================
 handle_message(Record) when is_record(Record, createfile) ->
-  FileId = Record#createfile.file_id,
-  SH_And_ID = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),
-  case SH_And_ID of
+    FileId = Record#createfile.file_id,
+    SH_And_ID = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),
+    case SH_And_ID of
     {Storage_helper_info, File} ->
-      {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info, read),
-      case PermsStatus of
-        ok ->
-          case Perms of
-            true ->
-              TmpAns = storage_files_manager:create(Storage_helper_info, File),
-              case TmpAns of
+        TmpAns = storage_files_manager:create(Storage_helper_info, File),
+            case TmpAns of
                 ok -> #atom{value = ?VOK};
+                {_, ErrorCode} when is_integer(ErrorCode) ->
+                    throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
-                  lager:warning("storage_files_manager:create error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
-                  #atom{value = ?VEREMOTEIO}
-              end;
-            false ->
-              #atom{value = ?VEPERM}
-          end;
-        _ ->
-          lager:warning("createfile error: can not check permissions, shi: ~p, file: ~p, error: ~p", [Storage_helper_info, File, {PermsStatus, Perms}]),
-          #atom{value = ?VEREMOTEIO}
-      end;
-    _ -> #atom{value = ?VEREMOTEIO}
-  end;
+                    lager:warning("storage_files_manager:create error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
+                    #atom{value = ?VEREMOTEIO}
+            end;
+        _ -> #atom{value = ?VEREMOTEIO}
+    end;
 
 handle_message(Record) when is_record(Record, deletefileatstorage) ->
   FileId = Record#deletefileatstorage.file_id,
@@ -132,6 +122,8 @@ handle_message(Record) when is_record(Record, deletefileatstorage) ->
               TmpAns = storage_files_manager:delete(Storage_helper_info, File),
               case TmpAns of
                 ok -> #atom{value = ?VOK};
+                  {_, ErrorCode} when is_integer(ErrorCode) ->
+                      throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
                   lager:warning("storage_files_manager:delete error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
                   #atom{value = ?VEREMOTEIO}
@@ -160,6 +152,8 @@ handle_message(Record) when is_record(Record, truncatefile) ->
               TmpAns = storage_files_manager:truncate(Storage_helper_info, File, Length),
               case TmpAns of
                 ok -> #atom{value = ?VOK};
+                  {_, ErrorCode} when is_integer(ErrorCode) ->
+                      throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
                   lager:warning("storage_files_manager:truncate error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
                   #atom{value = ?VEREMOTEIO}
@@ -189,6 +183,8 @@ handle_message(Record) when is_record(Record, readfile) ->
               TmpAns = storage_files_manager:read(Storage_helper_info, File, Offset, Size),
               case TmpAns of
                 {ok, Bytes} -> #filedata{answer_status = ?VOK, data = Bytes};
+                  {_, ErrorCode} when is_integer(ErrorCode) ->
+                      throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
                   lager:warning("storage_files_manager:read error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
                   #filedata{answer_status = ?VEREMOTEIO}
@@ -218,6 +214,8 @@ handle_message(Record) when is_record(Record, writefile) ->
               TmpAns = storage_files_manager:write(Storage_helper_info, File, Offset, Bytes),
               case TmpAns of
                 BytesNum when is_integer(BytesNum) -> #writeinfo{answer_status = ?VOK, bytes_written = BytesNum};
+                  {_, ErrorCode} when is_integer(ErrorCode) ->
+                      throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
                   lager:warning("storage_files_manager:write error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
                   #writeinfo{answer_status = ?VEREMOTEIO}
@@ -246,6 +244,8 @@ handle_message(Record) when is_record(Record, changepermsatstorage) ->
               TmpAns = storage_files_manager:chmod(Storage_helper_info, File, Perms),
               case TmpAns of
                 ok -> #atom{value = ?VOK};
+                  {_, ErrorCode} when is_integer(ErrorCode) ->
+                      throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
                   lager:warning("storage_files_manager:chmod error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
                   #atom{value = ?VEREMOTEIO}

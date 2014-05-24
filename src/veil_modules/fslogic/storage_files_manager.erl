@@ -163,6 +163,7 @@ delete_dir(Storage_helper_info, File) ->
   ErrorDetail :: term().
 %% ====================================================================
 chmod(Storage_helper_info, File, Mode) ->
+    setup_ctx(File),
   ErrorCode = veilhelpers:exec(chmod, Storage_helper_info, [File, Mode]),
   case ErrorCode of
     0 -> ok;
@@ -179,6 +180,7 @@ chmod(Storage_helper_info, File, Mode) ->
   ErrorDetail :: term().
 %% ====================================================================
 chown(Storage_helper_info, File, User, Group) when is_integer(User), is_integer(Group) ->
+    setup_ctx(File),
     ErrorCode = veilhelpers:exec(chown, Storage_helper_info, [File, User, Group]),
     case ErrorCode of
         0 -> ok;
@@ -208,6 +210,7 @@ chown(Storage_helper_info, File, User, Group) ->
   ErrorDetail :: term().
 %% ====================================================================
 read(Storage_helper_info, File, Offset, Size) ->
+    setup_ctx(File),
   {ErrorCode, CValue} = get_cached_value(File, size, Storage_helper_info),
   case ErrorCode of
     ok ->
@@ -260,6 +263,7 @@ read(Storage_helper_info, File, Offset, Size) ->
   ErrorDetail :: term().
 %% ====================================================================
 write(Storage_helper_info, File, Offset, Buf) ->
+    setup_ctx(File),
   {ErrorCode, Stat} = get_cached_value(File, is_reg, Storage_helper_info),
   case ErrorCode of
     ok ->
@@ -303,6 +307,7 @@ write(Storage_helper_info, File, Offset, Buf) ->
   ErrorDetail :: term().
 %% ====================================================================
 write(Storage_helper_info, File, Buf) ->
+    setup_ctx(File),
   {ErrorCode, CValue} = get_cached_value(File, size, Storage_helper_info),
   case ErrorCode of
     ok ->
@@ -345,6 +350,7 @@ write(Storage_helper_info, File, Buf) ->
   ErrorDetail :: term().
 %% ====================================================================
 create(Storage_helper_info, File) ->
+    setup_ctx(File),
   {ModeStatus, NewFileStorageMode} = get_mode(File),
   case ModeStatus of
     ok ->
@@ -353,6 +359,7 @@ create(Storage_helper_info, File) ->
         0 -> {error, file_exists};
         error -> {ErrorCode, Stat};
         _ ->
+            ?info("DEBUG ~p ~p", [fslogic_context:get_fs_user_ctx(), fslogic_context:get_fs_group_ctx()]),
           ErrorCode2 = veilhelpers:exec(mknod, Storage_helper_info, [File, NewFileStorageMode bor ?S_IFREG, 0]),
           case ErrorCode2 of
             0 ->
@@ -386,7 +393,7 @@ create(Storage_helper_info, File) ->
               end;
             {error, 'NIF_not_loaded'} -> ErrorCode2;
             _ ->
-              lager:error("Can not create file %p, code: %p, helper info: %p, mode: %p%n", [File, ErrorCode2, Storage_helper_info, NewFileStorageMode bor ?S_IFREG]),
+              ?error("Can not create file ~p, code: ~p, helper info: ~p, mode: ~p", [File, ErrorCode2, Storage_helper_info, NewFileStorageMode bor ?S_IFREG]),
               {wrong_mknod_return_code, ErrorCode2}
           end
       end;
@@ -404,6 +411,7 @@ create(Storage_helper_info, File) ->
   ErrorDetail :: term().
 %% ====================================================================
 truncate(Storage_helper_info, File, Size) ->
+    setup_ctx(File),
   {ErrorCode, Stat} = get_cached_value(File, is_reg, Storage_helper_info),
   case ErrorCode of
     ok ->
@@ -432,6 +440,7 @@ truncate(Storage_helper_info, File, Size) ->
   ErrorDetail :: term().
 %% ====================================================================
 delete(Storage_helper_info, File) ->
+    setup_ctx(File),
   {ErrorCode, Stat} = get_cached_value(File, is_reg, Storage_helper_info),
   case ErrorCode of
     ok ->
@@ -778,3 +787,18 @@ check_access_type(File) ->
     false ->
       {error, too_short_path}
   end.
+
+
+setup_ctx(File) ->
+    case fslogic_objects:get_user() of
+        {ok, #veil_document{record = #user{login = UserName} = UserRec}} ->
+            fslogic_context:set_fs_user_ctx(UserName),
+            case check_access_type(File) of
+                {ok, {group, GroupName}} ->
+                    SelectedGroup = [X || X <- user_logic:get_team_names(UserRec), GroupName =:= X],
+                    NewGroupCtx = SelectedGroup ++ user_logic:get_team_names(UserRec),
+                    fslogic_context:set_fs_group_ctx(NewGroupCtx);
+                _ -> ok
+            end;
+        _ -> ok
+    end.

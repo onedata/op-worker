@@ -666,7 +666,7 @@ create_dirs_at_storage(Root, Teams, Storage) ->
 		case Ans of
 			SuccessAns when SuccessAns == ok orelse SuccessAns == {error, dir_or_file_exists} ->
 				Ans2 = storage_files_manager:chown(SHI, DirName, "", Dir),
-				Ans3 = storage_files_manager:chmod(SHI, DirName, 8#730),
+				Ans3 = storage_files_manager:chmod(SHI, DirName, 8#1730),
 				case {Ans2, Ans3} of
 					{ok, ok} ->
 						TmpAns;
