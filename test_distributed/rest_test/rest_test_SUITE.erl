@@ -283,7 +283,8 @@ test_rest_shares() ->
     ?assertEqual(list_to_binary(Response8), rest_utils:error_reply(?report_warning(?error_share_cannot_create, ["somepath"]))).
 
 test_rest_connection_check() ->
-    {Code, _Headers, Response} = do_request(binary_to_list(<<?connection_check_path,"/">>), get, [], []),
+    {Code, _Headers, Response} = do_request(binary_to_list(?connection_check_path), get, [], []),
+    ct:print("~p, ~n~p",[Response,_Headers]),
     ?assertEqual("200", Code),
     ?assertEqual(binary_to_list(?rest_connection_check_value), Response).
 
