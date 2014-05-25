@@ -17,3 +17,5 @@
 
 %% Template points to the template file, which will be filled with content
 main() -> ?gui_connection_check_value.
+
+event(init) -> ok.
