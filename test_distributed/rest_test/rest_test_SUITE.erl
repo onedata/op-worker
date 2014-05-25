@@ -283,7 +283,7 @@ test_rest_shares() ->
     ?assertEqual(list_to_binary(Response8), rest_utils:error_reply(?report_warning(?error_share_cannot_create, ["somepath"]))).
 
 test_rest_connection_check() ->
-    {Code, _Headers, Response} = do_request(binary_to_list(?connection_check_path), get, [], []),
+    {Code, _Headers, Response} = do_request(binary_to_list(<<?connection_check_path,"/">>), get, [], []),
     ?assertEqual("200", Code),
     ?assertEqual(binary_to_list(?rest_connection_check_value), Response).
 
@@ -400,7 +400,7 @@ init_per_testcase(main_test, Config) ->
     ?INIT_DIST_TEST,
     nodes_manager:start_deps_for_tester_node(),
 
-    Nodes = nodes_manager:start_test_on_nodes(1),
+    Nodes = nodes_manager:start_test_on_nodes(1,true),
     [Node1 | _] = Nodes,
 
 
