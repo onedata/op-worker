@@ -60,8 +60,8 @@ connection_check_test() ->
     {ok, Port} = rpc:call(get(ccm), application, get_env, [veil_cluster_node, control_panel_port]),
     {_, Code, _, Value} = ibrowse:send_req("https://localhost:" ++ integer_to_list(Port) ++ "/" ++binary_to_list(?connection_check_path), [], get),
 
-    ?assertEqual(Code, "200"),
-    ?assertEqual(Value, ?gui_connection_check_value).
+    ?assertEqual("200",Code),
+    ?assertEqual(binary_to_list(?gui_connection_check_value),Value).
 
 %% Sends nagios request and check if health status is ok, and if health report contains information about all workers
 nagios_test() ->
