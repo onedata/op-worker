@@ -33,5 +33,5 @@ route(<<"/logs">>) -> page_logs;
 route(<<"/manage_account">>) -> page_manage_account;
 route(<<"/about">>) -> page_about;
 route(<<"/error">>) -> page_error;
-route(<<"/connection_check">>) -> page_connection_check;
+route(ConnectionCheck) when ConnectionCheck==<<"/",(?connection_check_path)/binary>> -> page_connection_check;
 route(_) -> page_404.
