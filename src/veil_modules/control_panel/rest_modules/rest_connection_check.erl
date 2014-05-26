@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module implements rest_module_behaviour, handles GET requests directed at /rest/test, and always returns <<"rest">>,
+%% @doc: This module implements rest_module_behaviour, handles GET requests directed at /rest/connection_check, and always returns <<"rest">>,
 %% it's used by globalregistry to test connection
 %% @end
 %% ===================================================================
@@ -22,7 +22,7 @@
 -export([methods_and_versions_info/1, exists/3]).
 -export([get/3, delete/3, post/4, put/4]).
 
-%% methods_and_versions_info/2
+%% methods_and_versions_info/1
 %% ====================================================================
 %% @doc Should return list of tuples, where each tuple consists of version of API version and
 %% list of methods available in the API version. Latest version must be at the end of list.
