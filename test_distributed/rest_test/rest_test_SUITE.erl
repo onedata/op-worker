@@ -284,7 +284,6 @@ test_rest_shares() ->
 
 test_rest_connection_check() ->
     {Code, _Headers, Response} = do_request(binary_to_list(?connection_check_path), get, [], []),
-    ct:print("~p, ~n~p",[Response,_Headers]),
     ?assertEqual("200", Code),
     ?assertEqual(binary_to_list(?rest_connection_check_value), Response).
 
@@ -394,7 +393,7 @@ init_per_testcase(main_test, Config) ->
     ?INIT_DIST_TEST,
     nodes_manager:start_deps_for_tester_node(),
 
-    Nodes = nodes_manager:start_test_on_nodes(1,true),
+    Nodes = nodes_manager:start_test_on_nodes(1),
     [Node1 | _] = Nodes,
 
 
