@@ -107,35 +107,52 @@ get_user_id() ->
     end.
 
 
+%% set_fs_user_ctx/1
+%% ====================================================================
+%% @doc Sets user name that shall be used for file system permissions checks.
+%% @end
+-spec set_fs_user_ctx(UName :: string()) -> OldValue :: term().
+%% ====================================================================
 set_fs_user_ctx(UName) ->
     put(fsctx_uname, UName).
 
+
+%% get_fs_user_ctx/0
+%% ====================================================================
+%% @doc Gets user name that is used for the file system permissions checks.
+%% @end
+-spec get_fs_user_ctx() -> UserName :: string().
+%% ====================================================================
 get_fs_user_ctx() ->
     case get(fsctx_uname) of
         undefined ->
             "root";
-%%             case fslogic_objects:get_user() of
-%%                 {ok, #veil_document{record = #user{login = Login}}} ->
-%%                     Login;
-%%                 _ ->
-%%                     "root"
-%%             end;
         UName -> UName
     end.
 
+
+%% set_fs_group_ctx/1
+%% ====================================================================
+%% @doc Sets user's group names that shall be used for file system permissions checks.
+%% @end
+-spec set_fs_group_ctx(GName :: [string()]) -> OldValue :: term().
+%% ====================================================================
 set_fs_group_ctx(GNames) ->
     put(fsctx_gname, GNames).
 
+
+%% get_fs_group_ctx/0
+%% ====================================================================
+%% @doc Gets user's group list that is used for file system permissions checks.
+%%      If the is no context set, "root" group is returned.
+%% @end
+-spec get_fs_group_ctx() -> Groups when
+    Groups :: [string()].
+%% ====================================================================
 get_fs_group_ctx() ->
     case get(fsctx_gname) of
         undefined ->
             ["root"];
-%%             case fslogic_objects:get_user() of
-%%                  {ok, #veil_document{record = #user{login = Login} = UserRec}} ->
-%%                      user_logic:get_team_names(UserRec) ++ [Login];
-%%                  _ ->
-%%                      ["root"]
-%%              end;
         GName -> GName
     end.
 

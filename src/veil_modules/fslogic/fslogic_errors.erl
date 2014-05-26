@@ -123,6 +123,11 @@ normalize_error_code(ErrorCode) when is_list(ErrorCode) ->
     ErrorCode.
 
 
+%% posix_to_veilerror/1
+%% ====================================================================
+%% @doc Translates POSIX error code to internal fslogic_error().
+-spec posix_to_veilerror(POSIXErrorCode :: integer()) -> ErrorCode :: fslogic_error().
+%% ====================================================================
 posix_to_veilerror(POSIX) when POSIX < 0 -> %% All error codes are currently negative, so translate accordingly
     posix_to_veilerror(-POSIX);
 posix_to_veilerror(1) ->

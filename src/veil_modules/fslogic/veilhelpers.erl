@@ -37,6 +37,14 @@ exec(Method, Args) when is_atom(Method), is_list(Args) ->
     [EGroup | _] = fslogic_context:get_fs_group_ctx() ++ [fslogic_context:get_fs_user_ctx()],
     exec(fslogic_context:get_fs_user_ctx(), EGroup, Method, Args).
 
+%% exec/5
+%% ====================================================================
+%% @doc Same as exec/3 but allows to set UserName and GroupName for file system permissions check.
+%%
+%% @end
+-spec exec(UserName :: string(), GroupName :: string(), Method :: atom(), SHInfo :: #storage_helper_info{}, [Arg :: term()]) ->
+    {error, Reason :: term()} | Response when Response :: term().
+%% ====================================================================
 exec(UserName, GroupName, Method, SHInfo = #storage_helper_info{}, Args) ->
     Args1 = [SHInfo#storage_helper_info.name | [SHInfo#storage_helper_info.init_args | Args]],
     exec(UserName, GroupName, Method, Args1).

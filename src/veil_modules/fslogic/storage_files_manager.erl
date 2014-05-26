@@ -646,7 +646,7 @@ check_perms(File, Storage_helper_info) ->
 %% check_perms/3
 %% ====================================================================
 %% @doc Checks if the user has permission to modify file (e,g. change owner).
-%%      @todo:
+%%      @todo: remove this function. Currently this functionality is provided by operating system via veilhelpers
 %% @end
 -spec check_perms(File :: string(), Storage_helper_info :: record(), CheckType :: boolean()) -> Result when
   Result :: {ok, Value} | {ErrorGeneral, ErrorDetail},
@@ -795,6 +795,13 @@ check_access_type(File) ->
   end.
 
 
+%% setup_ctx/1
+%% ====================================================================
+%% @doc Setups user filesystem context (uid and gid for veilhelpers)
+%%      based on current fslogic user context and access path (group name -> primary GID)
+%% @end
+-spec setup_ctx(File :: string()) -> ok | {error, no_user}.
+%% ====================================================================
 setup_ctx(File) ->
     case fslogic_objects:get_user() of
         {ok, #veil_document{record = #user{login = UserName} = UserRec}} ->
@@ -807,5 +814,5 @@ setup_ctx(File) ->
                 _ ->
                     fslogic_context:set_fs_group_ctx([])
             end;
-        _ -> ok
+        _ -> {error, no_user}
     end.
