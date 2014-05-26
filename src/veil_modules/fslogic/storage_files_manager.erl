@@ -351,6 +351,7 @@ write(Storage_helper_info, File, Buf) ->
 %% ====================================================================
 create(Storage_helper_info, File) ->
     setup_ctx(File),
+    ?info("create: ~p ~p", [fslogic_context:get_fs_user_ctx(), fslogic_context:get_fs_group_ctx()]),
   {ModeStatus, NewFileStorageMode} = get_mode(File),
   case ModeStatus of
     ok ->
@@ -412,7 +413,9 @@ create(Storage_helper_info, File) ->
 %% ====================================================================
 truncate(Storage_helper_info, File, Size) ->
     setup_ctx(File),
+    ?info("Truncate: ~p ~p", [fslogic_context:get_fs_user_ctx(), fslogic_context:get_fs_group_ctx()]),
   {ErrorCode, Stat} = get_cached_value(File, is_reg, Storage_helper_info),
+    ?info("Truncate1: ~p ~p", [ErrorCode, Stat]),
   case ErrorCode of
     ok ->
       case Stat of
@@ -421,7 +424,9 @@ truncate(Storage_helper_info, File, Size) ->
           case ErrorCode2 of
             0 -> ok;
             {error, 'NIF_not_loaded'} -> ErrorCode2;
-            _ -> {wrong_truncate_return_code, ErrorCode2}
+            _ ->
+                ?info("Truncateq: ~p ~p", [File, ErrorCode2]),
+                {wrong_truncate_return_code, ErrorCode2}
           end;
         false -> {error, not_regular_file}
       end;
@@ -799,7 +804,8 @@ setup_ctx(File) ->
                     SelectedGroup = [X || X <- user_logic:get_team_names(UserRec), GroupName =:= X],
                     NewGroupCtx = SelectedGroup ++ user_logic:get_team_names(UserRec),
                     fslogic_context:set_fs_group_ctx(NewGroupCtx);
-                _ -> ok
+                _ ->
+                    fslogic_context:set_fs_group_ctx([])
             end;
         _ -> ok
     end.

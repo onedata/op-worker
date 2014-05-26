@@ -72,8 +72,11 @@ private:
         m_uid = uid;
         m_gid = gid;
 
-        seteuid(-1);
-        setegid(-1);
+        if(uid != 0) {
+            seteuid(-1);
+            setegid(-1);
+        }
+
         setfsuid(m_uid);
         setfsgid(m_gid);
     }

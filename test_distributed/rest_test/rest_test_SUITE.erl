@@ -164,7 +164,7 @@ test_rest_files_regulars() ->
 
     {Code6, _Headers6, Response6} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", put, [{"content-type", "multipart/form-data"}], []),
     ?assertEqual(Code6, "422"),
-    ?assertEqual(list_to_binary(Response6), rest_utils:error_reply(?report_error(?error_upload_cannot_create))),
+    ?assertEqual(list_to_binary(Response6), rest_utils:error_reply(?report_error(?error_upload_unprocessable))),
 
     {Code7, _Headers7, Response7} = do_request(?REST_FILES_SUBPATH ++ "dir/file.txt", delete, [], []),
     ?assertEqual(Code7, "200"),
@@ -369,13 +369,20 @@ setup_user_in_db(DN) ->
     {Ans5, _} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
     ?assertEqual(ok, Ans5),
 
-
     fslogic_context:set_user_dn(DN),
-    Ans6 = rpc:call(CCM, logical_files_manager, mkdir, [?TEST_USER ++ "/dir"]),
+    Ans6 = rpc:call(CCM, erlang, apply, [
+        fun() ->
+            fslogic_context:set_user_dn(DN),
+            logical_files_manager:mkdir("/dir")
+        end, [] ]),
     ?assertEqual(ok, Ans6),
 
 
-    Ans7 = rpc:call(CCM, logical_files_manager, create, [?TEST_USER ++ "/dir/file.txt"]),
+    Ans7 = rpc:call(CCM, erlang, apply, [
+        fun() ->
+            fslogic_context:set_user_dn(DN),
+            logical_files_manager:create("/dir/file.txt")
+        end, [] ]),
     ?assertEqual(ok, Ans7),
 
     StorageUUID.
