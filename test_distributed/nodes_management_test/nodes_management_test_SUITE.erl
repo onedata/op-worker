@@ -18,6 +18,7 @@
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
+-include_lib("ctool/include/assertions.hrl").
 
 -define(ProtocolVersion, 1).
 

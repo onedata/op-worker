@@ -24,6 +24,7 @@
 -include("veil_modules/dao/dao_share.hrl").
 -include("logging.hrl").
 -include_lib("veil_modules/dao/couch_db.hrl").
+-include_lib("ctool/include/assertions.hrl").
 
 %% API
 -export([dao_vfs_find_test/1]).

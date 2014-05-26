@@ -18,6 +18,7 @@
 -include("fuse_messages_pb.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao_vfs.hrl").
+-include_lib("ctool/include/assertions.hrl").
 
 -define(SH, "DirectIO").
 -define(TEST_FILE1, "testfile1").

@@ -13,6 +13,7 @@
 -module(example_SUITE).
 -include("nodes_manager.hrl").
 -include("registered_names.hrl").
+-include_lib("ctool/include/assertions.hrl").
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
