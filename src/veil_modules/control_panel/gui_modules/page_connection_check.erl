@@ -6,7 +6,7 @@
 %% @end
 %% ===================================================================
 %% @doc: This file contains n2o website code.
-%% The page used by globalregistry to test connection.
+%% The page is used by globalregistry to test connection.
 %% @end
 %% ===================================================================
 
