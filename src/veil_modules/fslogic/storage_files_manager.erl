@@ -211,6 +211,7 @@ chown(Storage_helper_info, File, User, Group) ->
 %% ====================================================================
 read(Storage_helper_info, File, Offset, Size) ->
     setup_ctx(File),
+    ?info("User CTX: ~p ~p", [fslogic_context:get_fs_user_ctx(), fslogic_context:get_fs_group_ctx()]),
   {ErrorCode, CValue} = get_cached_value(File, size, Storage_helper_info),
   case ErrorCode of
     ok ->
