@@ -133,6 +133,7 @@ check_perms_group_perms_file() ->
   ?assert(meck:validate(veilhelpers)).
 
 %% Tests if wrong format of path is found correctly
+%% @todo: remove this test when storage_files_manager:check_perms gets permanently removed
 %% wrong_path_format_test() ->
 %%   SHInfo = #storage_helper_info{name = ?SH, init_args = [?TEST_ROOT]},
 %%   ?assertEqual({error, wrong_path_format}, storage_files_manager:check_perms(?TEST_ROOT ++ "something/testuser/somefile", SHInfo)),
