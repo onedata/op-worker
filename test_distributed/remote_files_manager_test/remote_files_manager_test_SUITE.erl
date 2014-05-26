@@ -234,7 +234,6 @@ permissions_test(Config) ->
 
 
 
-io:format(user, "Id1: ~p~n", [os:cmd("ls -al /tmp/veilfs/groups/veilfstestgroup/")]),
   {DeleteStatus4, DeleteAnswer4} = delete_file_on_storage(Host, Cert, Port, Id1),
   ?assertEqual("ok", DeleteStatus4),
   ?assertEqual(list_to_atom(?VEPERM), DeleteAnswer4),
