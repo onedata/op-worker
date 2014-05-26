@@ -632,10 +632,6 @@ groups_test(Config) ->
     A25 = FM(create, ["/f1"], DN1),
     ?assertEqual(ok, A25),
 
-    io:format(user, "~p~n", [os:cmd("id " ++ ?TEST_USER)]),
-    io:format(user, "~p~n", [os:cmd("id " ++ ?TEST_USER2)]),
-    io:format(user, "~p~n", [os:cmd("ls -al /tmp/veilfs/groups")]),
-
     A26 = FM(create, ["/groups/" ++ ?TEST_GROUP2 ++ "/f2"], DN2),
     ?assertEqual(ok, A26),
 
