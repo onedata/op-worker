@@ -16,6 +16,7 @@
 
 -include("nodes_manager.hrl").
 -include("registered_names.hrl").
+-include_lib("ctool/include/assertions.hrl").
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([dns_worker_env_test/1, dns_udp_handler_responds_to_dns_queries/1, dns_ranch_tcp_handler_responds_to_dns_queries/1, distributed_test/1]).

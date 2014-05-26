@@ -21,6 +21,7 @@
 -include("logging.hrl").
 -include("registered_names.hrl").
 -include("veil_modules/cluster_rengine/cluster_rengine.hrl").
+-include_lib("ctool/include/assertions.hrl").
 
 %% API
 -export([test_event_subscription/1, test_multiple_trees/1, test_event_aggregation/1, test_dispatching/1, test_io_events_for_stats/1]).

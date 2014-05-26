@@ -16,6 +16,7 @@
 -include("communication_protocol_pb.hrl").
 -include("nodes_manager.hrl").
 -include("fuse_messages_pb.hrl").
+-include_lib("ctool/include/assertions.hrl").
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).

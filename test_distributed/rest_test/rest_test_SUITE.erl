@@ -16,7 +16,7 @@
 -include("veil_modules/control_panel/rest_messages.hrl").
 -include("err.hrl").
 -include("registered_names.hrl").
--include("veil_modules/control_panel/connection_check_values.hrl").
+-include_lib("ctool/include/assertions.hrl").
 
 -define(ProtocolVersion, 1).
 

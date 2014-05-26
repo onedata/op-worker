@@ -15,6 +15,7 @@
 -include("registered_names.hrl").
 -include("veil_modules/control_panel/connection_check_values.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
+-include_lib("ctool/include/assertions.hrl").
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
