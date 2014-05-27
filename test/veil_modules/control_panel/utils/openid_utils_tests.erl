@@ -102,6 +102,7 @@ validate_login_test_() ->
             {"Login invalid case",
                 fun() ->
                     meck:expect(gui_utils, https_post, fun("mock", _, "me") -> {ok, <<"is_valid: false\n">>} end),
+                    meck:expect(gui_utils, get_request_params, fun() -> [] end),
                     meck:expect(lager, log, fun(alert, _, _) -> ok end),
                     ?assertEqual({error, auth_invalid}, openid_utils:validate_openid_login({"mock", "me"})),
                     ?assert(meck:validate(gui_utils)),
