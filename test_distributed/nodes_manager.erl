@@ -29,7 +29,7 @@
 %% ====================================================================
 -export([start_test_on_nodes/1, start_test_on_nodes/2, stop_nodes/1, start_test_on_local_node/0, start_app_on_nodes/2, stop_app_on_nodes/1, stop_test_on_local_nod/0, check_start_assertions/1]).
 -export([start_test_on_nodes_with_dist_app/2, start_test_on_nodes_with_dist_app/3, start_node/2, stop_node/1]).
--export([start_deps/0, start_app/2, start_app_local/1, stop_deps/0, stop_app/1, stop_app_local/0, start_deps_for_tester_node/0, stop_deps_for_tester_node/0, get_db_node/0]).
+-export([start_deps/0, start_app/2, start_app_local/1, stop_deps/0, stop_app/1, stop_app_local/0, get_db_node/0]).
 
 %% Functions to use instead of timer
 -export([wait_for_cluster_cast/0, wait_for_cluster_cast/1, wait_for_nodes_registration/1, wait_for_cluster_init/0, wait_for_cluster_init/1, wait_for_state_loading/0, wait_for_db_reaction/0, wait_for_fuse_session_exp/0, wait_for_request_handling/0]).
@@ -46,40 +46,6 @@
 check_start_assertions(Config) ->
   Assertions = ?config(assertions, Config),
   lists:foreach(fun({Exp, Real}) -> ?assertEqual(Exp, Real) end, Assertions).
-
-%% start_deps_for_tester_node/0
-%% ====================================================================
-%% @doc Starts dependencies needed by tester node (node that does not
-%% host application but coordinates test).
--spec start_deps_for_tester_node() -> Result when
-  Result ::  ok | {error, Reason},
-  Reason :: term().
-%% ====================================================================
-start_deps_for_tester_node() ->
-  %% SASL reboot/start in order to disable TTY logging
-  %% Normally `error_logger:tty(false)` should be enough, but some apps could start SASL anyway without our boot options
-  application:stop(sasl),
-  application:unload(sasl),
-  application:load(sasl),
-  application:set_env(sasl, sasl_error_logger, false),
-  application:start(sasl),
-  error_logger:tty(false),
-
-  %% Start all deps
-  ssl:start().
-
-%% stop_deps_for_tester_node/0
-%% ====================================================================
-%% @doc Stops dependencies needed by tester node (node that does not
-%% host application but coordinates test).
--spec stop_deps_for_tester_node() -> Result when
-  Result ::  ok | {error, Reason},
-  Reason :: term().
-%% ====================================================================
-stop_deps_for_tester_node() ->
-  application:stop(ssl),
-  application:stop(crypto),
-  application:stop(public_key).
 
 %% start_test_on_local_node/0
 %% ====================================================================

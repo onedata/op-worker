@@ -229,7 +229,7 @@ count_logs(UnknownSourceLogs, ErrorLoggerLogs, LagerLogs, Expected, StartTime) -
 
 init_per_testcase(logging_test, Config) ->
   ?INIT_DIST_TEST,
-  nodes_manager:start_deps_for_tester_node(),
+  test_node_starter:start_deps_for_tester_node(),
 
   Nodes = nodes_manager:start_test_on_nodes(5),
   [CCM | _] = Nodes,
@@ -262,7 +262,7 @@ init_per_testcase(logging_test, Config) ->
 
 init_per_testcase(init_and_cleanup_test, Config) ->
   ?INIT_DIST_TEST,
-  nodes_manager:start_deps_for_tester_node(),
+  test_node_starter:start_deps_for_tester_node(),
 
   Nodes = nodes_manager:start_test_on_nodes(2),
   [CCM | _] = Nodes,
