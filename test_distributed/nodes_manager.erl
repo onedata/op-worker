@@ -29,7 +29,7 @@
 %% ====================================================================
 -export([start_test_on_local_node/0, start_app_on_nodes/2, stop_app_on_nodes/1, stop_test_on_local_nod/0, check_start_assertions/1]).
 -export([start_test_on_nodes_with_dist_app/2, start_test_on_nodes_with_dist_app/3, start_node/2, stop_node/1]).
--export([start_deps/0, start_app/2, start_app_local/1, stop_deps/0, stop_app/1, stop_app_local/0, get_db_node/0]).
+-export([start_deps/0, start_app/2, start_app_local/1, stop_deps/0, stop_app/1, stop_app_local/0]).
 
 %% Functions to use instead of timer
 -export([wait_for_cluster_cast/0, wait_for_cluster_cast/1, wait_for_nodes_registration/1, wait_for_cluster_init/0, wait_for_cluster_init/1, wait_for_state_loading/0, wait_for_db_reaction/0, wait_for_fuse_session_exp/0, wait_for_request_handling/0]).
@@ -247,17 +247,6 @@ start_app_local(Vars) ->
 
 stop_app_local() ->
   application:stop(?APP_Name).
-
-%% get_db_node/0
-%% ====================================================================
-%% @doc This function returns db node.
--spec get_db_node() -> atom().
-%% ====================================================================
-
-get_db_node() ->
-  Node = atom_to_list(node()),
-  [_, Host] = string:tokens(Node, "@"),
-  list_to_atom("db@" ++ Host).
 
 %% start_node/2
 %% ====================================================================

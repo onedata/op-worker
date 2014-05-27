@@ -536,7 +536,7 @@ init_per_testcase(_, Config) ->
   NodesUp = test_node_starter:start_test_nodes(1),
   [FSLogicNode | _] = NodesUp,
 
-  DB_Node = nodes_manager:get_db_node(),
+  DB_Node = test_node_starter:get_db_node(),
   Port = 6666,
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1}]]),
 

@@ -87,7 +87,7 @@ init_per_testcase(main_test, Config) ->
     Nodes = test_node_starter:start_test_nodes(1),
     [Node1 | _] = Nodes,
 
-	DB_Node = nodes_manager:get_db_node(),
+	DB_Node = test_node_starter:get_db_node(),
 
 	StartLog = nodes_manager:start_app_on_nodes(Nodes,
 		[[{node_type, ccm_test},
