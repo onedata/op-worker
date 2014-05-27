@@ -282,7 +282,7 @@ init_per_testcase(main_test, Config) ->
   NodesUp = test_node_starter:start_test_nodes(1),
   [Node1 | _] = NodesUp,
 
-  DB_Node = nodes_manager:get_db_node(),
+  DB_Node = test_node_starter:get_db_node(),
   Port = 6666,
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [Node1]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1}]]),
 
@@ -295,7 +295,7 @@ init_per_testcase(_, Config) ->
 
   NodesUp = test_node_starter:start_test_nodes(4),
   [CCM | _] = NodesUp,
-  DBNode = nodes_manager:get_db_node(),
+  DBNode = test_node_starter:get_db_node(),
 
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, [
     [{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}],
