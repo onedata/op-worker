@@ -277,7 +277,7 @@ sub_proc_load_test(Config) ->
 
 init_per_testcase(main_test, Config) ->
   ?INIT_DIST_TEST,
-  nodes_manager:start_deps_for_tester_node(),
+  test_node_starter:start_deps_for_tester_node(),
 
   NodesUp = nodes_manager:start_test_on_nodes(1),
   [Node1 | _] = NodesUp,
@@ -291,7 +291,7 @@ init_per_testcase(main_test, Config) ->
 
 init_per_testcase(_, Config) ->
   ?INIT_DIST_TEST,
-  nodes_manager:start_deps_for_tester_node(),
+  test_node_starter:start_deps_for_tester_node(),
 
   NodesUp = nodes_manager:start_test_on_nodes(4),
   [CCM | _] = NodesUp,

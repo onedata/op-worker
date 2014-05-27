@@ -2484,7 +2484,7 @@ get_file_links_test(Config) ->
 
 init_per_testcase(user_file_size_test, Config) ->
   ?INIT_DIST_TEST,
-  nodes_manager:start_deps_for_tester_node(),
+  test_node_starter:start_deps_for_tester_node(),
 
   NodesUp = nodes_manager:start_test_on_nodes(1),
   [FSLogicNode | _] = NodesUp,
@@ -2498,7 +2498,7 @@ init_per_testcase(user_file_size_test, Config) ->
 
 init_per_testcase(_, Config) ->
   ?INIT_DIST_TEST,
-  nodes_manager:start_deps_for_tester_node(),
+  test_node_starter:start_deps_for_tester_node(),
 
   NodesUp = nodes_manager:start_test_on_nodes(1),
   [FSLogicNode | _] = NodesUp,

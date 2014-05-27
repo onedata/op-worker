@@ -378,7 +378,7 @@ callbacks_test(Config) ->
 
 init_per_testcase(_, Config) ->
   ?INIT_DIST_TEST,
-  nodes_manager:start_deps_for_tester_node(),
+  test_node_starter:start_deps_for_tester_node(),
 
   {NodesUp, Params} = nodes_manager:start_test_on_nodes_with_dist_app(4, 2),
   [CCM | NodesUp2] = NodesUp,
