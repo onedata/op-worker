@@ -231,7 +231,7 @@ init_per_testcase(logging_test, Config) ->
   ?INIT_DIST_TEST,
   test_node_starter:start_deps_for_tester_node(),
 
-  Nodes = nodes_manager:start_test_on_nodes(5),
+  Nodes = test_node_starter:start_test_nodes(5),
   [CCM | _] = Nodes,
 
   StartLog = nodes_manager:start_app_on_nodes(Nodes, 
@@ -264,7 +264,7 @@ init_per_testcase(init_and_cleanup_test, Config) ->
   ?INIT_DIST_TEST,
   test_node_starter:start_deps_for_tester_node(),
 
-  Nodes = nodes_manager:start_test_on_nodes(2),
+  Nodes = test_node_starter:start_test_nodes(2),
   [CCM | _] = Nodes,
    
   StartLog = nodes_manager:start_app_on_nodes(Nodes, 

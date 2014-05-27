@@ -279,7 +279,7 @@ init_per_testcase(main_test, Config) ->
   ?INIT_DIST_TEST,
   test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = nodes_manager:start_test_on_nodes(1),
+  NodesUp = test_node_starter:start_test_nodes(1),
   [Node1 | _] = NodesUp,
 
   DB_Node = nodes_manager:get_db_node(),
@@ -293,7 +293,7 @@ init_per_testcase(_, Config) ->
   ?INIT_DIST_TEST,
   test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = nodes_manager:start_test_on_nodes(4),
+  NodesUp = test_node_starter:start_test_nodes(4),
   [CCM | _] = NodesUp,
   DBNode = nodes_manager:get_db_node(),
 
