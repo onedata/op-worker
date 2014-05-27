@@ -17,6 +17,7 @@
 -include("err.hrl").
 -include("registered_names.hrl").
 -include_lib("ctool/include/assertions.hrl").
+-include_lib("ctool/include/test_node_starter.hrl").
 
 -define(ProtocolVersion, 1).
 
