@@ -356,7 +356,7 @@ end_per_testcase(distributed_test, Config) ->
   test_node_starter:stop_test_nodes(Nodes),
   test_node_starter:stop_deps_for_tester_node(),
 
-  ?assertEqual(false, lists:member(error, StopLog)).
+  ?assertEqual(false, lists:member(error, StopLog));
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
