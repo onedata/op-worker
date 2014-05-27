@@ -27,7 +27,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([stop_nodes/1, start_test_on_local_node/0, start_app_on_nodes/2, stop_app_on_nodes/1, stop_test_on_local_nod/0, check_start_assertions/1]).
+-export([start_test_on_local_node/0, start_app_on_nodes/2, stop_app_on_nodes/1, stop_test_on_local_nod/0, check_start_assertions/1]).
 -export([start_test_on_nodes_with_dist_app/2, start_test_on_nodes_with_dist_app/3, start_node/2, stop_node/1]).
 -export([start_deps/0, start_app/2, start_app_local/1, stop_deps/0, stop_app/1, stop_app_local/0, get_db_node/0]).
 
@@ -164,18 +164,6 @@ stop_app_on_nodes([Node | Nodes]) ->
     false -> error
   end,
   [Ans | stop_app_on_nodes(Nodes)].
-
-%% stop_nodes/1
-%% ====================================================================
-%% @doc Stops nodes.
--spec stop_nodes(Nodes :: list()) -> ok.
-%% ====================================================================
-stop_nodes([]) ->
-  ok;
-
-stop_nodes([Node | Nodes]) ->
-  stop_node(Node),
-  stop_nodes(Nodes).
 
 %% stop_test_on_local_nod/0
 %% ====================================================================

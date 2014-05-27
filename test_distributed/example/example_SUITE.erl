@@ -116,7 +116,7 @@ init_per_testcase(local_test, Config) ->
 end_per_testcase(distributed_test, Config) ->
   Nodes = ?config(nodes, Config),
   StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  StopAns = nodes_manager:stop_nodes(Nodes),
+  StopAns = test_node_starter:stop_test_nodes(Nodes),
   %% use assertions AFTER all code that should be executed (they will show info for user but do not disturb cleaning up)
   ?assertEqual(false, lists:member(error, StopLog)),
   ?assertEqual(ok, StopAns);
