@@ -94,7 +94,7 @@ init_per_testcase(main_test, Config) ->
     ?INIT_DIST_TEST,
     test_node_starter:start_deps_for_tester_node(),
 
-    Nodes = nodes_manager:start_test_on_nodes(1),
+    Nodes = test_node_starter:start_test_nodes(1),
     [Node1 | _] = Nodes,
 
 	DB_Node = nodes_manager:get_db_node(),

@@ -146,7 +146,7 @@ init_per_testcase(_, Config) ->
   ?INIT_DIST_TEST,
   test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = nodes_manager:start_test_on_nodes(1),
+  NodesUp = test_node_starter:start_test_nodes(1),
   [FSLogicNode | _] = NodesUp,
 
   DB_Node = nodes_manager:get_db_node(),

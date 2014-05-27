@@ -94,9 +94,9 @@ local_test(Config) ->
 init_per_testcase(distributed_test, Config) ->
   ?INIT_DIST_TEST,
 
-  %% To see slaves output use nodes_manager:start_test_on_nodes with 2 arguments (second argument should be true)
-  %% e.g. nodes_manager:start_test_on_nodes(2, true)
-  Nodes = nodes_manager:start_test_on_nodes(2),
+  %% To see slaves output use test_node_starter:start_test_nodes with 2 arguments (second argument should be true)
+  %% e.g. test_node_starter:start_test_nodes(2, true)
+  Nodes = test_node_starter:start_test_nodes(2),
   [Node1 | _] = Nodes,
 
   StartLog = nodes_manager:start_app_on_nodes(Nodes, [[{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [Node1]}, {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {heart_beat, 1}],

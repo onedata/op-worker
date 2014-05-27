@@ -380,7 +380,7 @@ init_per_testcase(_, Config) ->
   ?INIT_DIST_TEST,
   test_node_starter:start_deps_for_tester_node(),
 
-  {NodesUp, Params} = nodes_manager:start_test_on_nodes_with_dist_app(4, 2),
+  {NodesUp, Params} = test_node_starter:start_test_nodes_with_dist_app(4, 2),
   [CCM | NodesUp2] = NodesUp,
   [CCM2 | _] = NodesUp2,
   DB_Node = nodes_manager:get_db_node(),

@@ -274,7 +274,7 @@ init_per_testcase(test_io_events_for_stats, Config) ->
   ?INIT_DIST_TEST,
   test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = nodes_manager:start_test_on_nodes(2),
+  NodesUp = test_node_starter:start_test_nodes(2),
   [CCM | WorkerNodes] = NodesUp,
   DBNode = nodes_manager:get_db_node(),
 
@@ -314,7 +314,7 @@ init_per_testcase(_, Config) ->
   ?INIT_DIST_TEST,
   test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = nodes_manager:start_test_on_nodes(2),
+  NodesUp = test_node_starter:start_test_nodes(2),
   [CCM | WorkerNodes] = NodesUp,
   DBNode = nodes_manager:get_db_node(),
 
