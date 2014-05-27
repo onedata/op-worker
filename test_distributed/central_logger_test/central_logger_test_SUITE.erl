@@ -256,7 +256,7 @@ init_per_testcase(logging_test, Config) ->
       {ccm_nodes, [CCM]}, 
       {dns_port, 1312}, {control_panel_port, 2312}, {control_panel_redirect_port, 1358}, {rest_port, 3312}, {heart_beat, 1}]]),
 
-  Assertions = [{false, lists:member(error, Nodes)}, {false, lists:member(error, StartLog)}],
+  Assertions = [{false, lists:member(error, StartLog)}],
   lists:append([{nodes, Nodes}, {assertions, Assertions}], Config);
 
 
@@ -277,13 +277,12 @@ init_per_testcase(init_and_cleanup_test, Config) ->
       {ccm_nodes, [CCM]}, 
       {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355},  {rest_port, 3309}, {heart_beat, 1}]]),
 
-  Assertions = [{false, lists:member(error, Nodes)}, {false, lists:member(error, StartLog)}],
+  Assertions = [{false, lists:member(error, StartLog)}],
   lists:append([{nodes, Nodes}, {assertions, Assertions}], Config).
 
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
   StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  StopAns = test_node_starter:stop_test_nodes(Nodes),
-  ?assertEqual(false, lists:member(error, StopLog)),
-  ?assertEqual(ok, StopAns).
+  test_node_starter:stop_test_nodes(Nodes),
+  ?assertEqual(false, lists:member(error, StopLog)).

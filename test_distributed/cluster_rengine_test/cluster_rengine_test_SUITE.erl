@@ -282,7 +282,7 @@ init_per_testcase(test_io_events_for_stats, Config) ->
     [{node_type, ccm}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1313}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {cluster_monitoring_initialization, 5}, {cluster_monitoring_period, 5}, {heart_beat, 1}],
     [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1314}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {cluster_monitoring_initialization, 5}, {cluster_monitoring_period, 5}, {heart_beat, 1}]]),
 
-  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
+  Assertions = [{false, lists:member(error, StartLog)}],
   Res = lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config),
   nodes_manager:check_start_assertions(Res),
 
@@ -322,7 +322,7 @@ init_per_testcase(_, Config) ->
     [{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1313}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}],
     [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1314}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}]]),
 
-  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
+  Assertions = [{false, lists:member(error, StartLog)}],
   Res = lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config),
   nodes_manager:check_start_assertions(Res),
 
@@ -353,19 +353,17 @@ init_per_testcase(_, Config) ->
 end_per_testcase(distributed_test, Config) ->
   Nodes = ?config(nodes, Config),
   StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  StopAns = test_node_starter:stop_test_nodes(Nodes),
+  test_node_starter:stop_test_nodes(Nodes),
   test_node_starter:stop_deps_for_tester_node(),
 
-  ?assertEqual(false, lists:member(error, StopLog)),
-  ?assertEqual(ok, StopAns);
+  ?assertEqual(false, lists:member(error, StopLog)).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
   StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  StopAns = test_node_starter:stop_test_nodes(Nodes),
+  test_node_starter:stop_test_nodes(Nodes),
 
-  ?assertEqual(false, lists:member(error, StopLog)),
-  ?assertEqual(ok, StopAns).
+  ?assertEqual(false, lists:member(error, StopLog)).
 
 
 subscribe_for_write_events(Node, ProcessingMethod, EventHandler) ->
