@@ -648,7 +648,7 @@ init_per_testcase(TestCase, Config) ->
 end_per_testcase(type1, Config) ->
   Nodes = ?config(nodes, Config),
   StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  StopAns = nodes_manager:stop_nodes(Nodes),
+  StopAns = test_node_starter:stop_test_nodes(Nodes),
 
   ?assertEqual(false, lists:member(error, StopLog)),
   ?assertEqual(ok, StopAns);
@@ -656,8 +656,8 @@ end_per_testcase(type1, Config) ->
 end_per_testcase(type2, Config) ->
   Nodes = ?config(nodes, Config),
   StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  StopAns = nodes_manager:stop_nodes(Nodes),
-  nodes_manager:stop_deps_for_tester_node(),
+  StopAns = test_node_starter:stop_test_nodes(Nodes),
+  test_node_starter:stop_deps_for_tester_node(),
 
   ?assertEqual(false, lists:member(error, StopLog)),
   ?assertEqual(ok, StopAns);

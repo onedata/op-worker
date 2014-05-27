@@ -284,6 +284,6 @@ init_per_testcase(init_and_cleanup_test, Config) ->
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
   StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  StopAns = nodes_manager:stop_nodes(Nodes),
+  StopAns = test_node_starter:stop_test_nodes(Nodes),
   ?assertEqual(false, lists:member(error, StopLog)),
   ?assertEqual(ok, StopAns).
