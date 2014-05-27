@@ -45,36 +45,36 @@
 get_url_test_() ->
     {foreach,
         fun() ->
-            meck:new(ibrowse),
+            meck:new(gui_utils),
             meck:new(lager)
         end,
         fun(_) ->
-            ok = meck:unload(ibrowse),
+            ok = meck:unload(gui_utils),
             ok = meck:unload(lager)
         end,
         [
             {"URL correctness",
                 fun() ->
-                    meck:expect(ibrowse, send_req, fun(_, _, _) -> {ok, "200", [], ?mock_xrds_file} end),
+                    meck:expect(gui_utils, https_get, fun(_, _) -> {ok, <<?mock_xrds_file>>} end),
                     ?assertEqual(?correct_request_url, openid_utils:get_login_url(<<?hostname>>, <<?redirect_params>>)),
-                    ?assert(meck:validate(ibrowse))
+                    ?assert(meck:validate(gui_utils))
                 end},
 
             {"No 200 code case",
                 fun() ->
-                    meck:expect(ibrowse, send_req, fun(_, _, _) -> {ok, "404", [], []} end),
+                    meck:expect(gui_utils, https_get, fun(_, _) -> {error, nxdomain} end),
                     meck:expect(lager, log, fun(error, _, _) -> ok end),
                     ?assertEqual({error, endpoint_unavailable}, openid_utils:get_login_url(<<?hostname>>, <<?redirect_params>>)),
-                    ?assert(meck:validate(ibrowse)),
+                    ?assert(meck:validate(gui_utils)),
                     ?assert(meck:validate(lager))
                 end},
 
             {"Connection refused case",
                 fun() ->
-                    meck:expect(ibrowse, send_req, fun(_, _, _) -> {error, econnrefused} end),
+                    meck:expect(gui_utils, https_get, fun(_, _) -> {error, econnrefused} end),
                     meck:expect(lager, log, fun(error, _, _) -> ok end),
                     ?assertEqual({error, endpoint_unavailable}, openid_utils:get_login_url(<<?hostname>>, <<?redirect_params>>)),
-                    ?assert(meck:validate(ibrowse)),
+                    ?assert(meck:validate(gui_utils)),
                     ?assert(meck:validate(lager))
                 end}
         ]}.
@@ -84,46 +84,45 @@ get_url_test_() ->
 validate_login_test_() ->
     {foreach,
         fun() ->
-            meck:new(ibrowse),
+            meck:new(gui_utils),
             meck:new(lager)
         end,
         fun(_) ->
-            meck:unload(ibrowse),
+            meck:unload(gui_utils),
             meck:unload(lager)
         end,
         [
             {"Login valid case",
                 fun() ->
-                    meck:expect(ibrowse, send_req, fun("mock", _, post, "me") -> {ok, "200", [], ?valid_auth_info} end),
+                    meck:expect(gui_utils, https_post, fun("mock", _, "me") -> {ok, <<?valid_auth_info>>} end),
                     ?assertEqual(ok, openid_utils:validate_openid_login({"mock", "me"})),
-                    ?assert(meck:validate(ibrowse))
+                    ?assert(meck:validate(gui_utils))
                 end},
 
             {"Login invalid case",
                 fun() ->
-                    meck:expect(ibrowse, send_req, fun("mock", _, post, "me") ->
-                        {ok, "200", [], "is_valid: false\n"} end),
+                    meck:expect(gui_utils, https_post, fun("mock", _, "me") -> {ok, <<"is_valid: false\n">>} end),
                     meck:expect(lager, log, fun(alert, _, _) -> ok end),
                     ?assertEqual({error, auth_invalid}, openid_utils:validate_openid_login({"mock", "me"})),
-                    ?assert(meck:validate(ibrowse)),
+                    ?assert(meck:validate(gui_utils)),
                     ?assert(meck:validate(lager))
                 end},
 
             {"No 200 code case",
                 fun() ->
-                    meck:expect(ibrowse, send_req, fun("mock", _, post, "me") -> {ok, "404", [], []} end),
+                    meck:expect(gui_utils, https_post, fun("mock", _, "me") -> {error, nxdomain} end),
                     meck:expect(lager, log, fun(error, _, _) -> ok end),
                     ?assertEqual({error, no_connection}, openid_utils:validate_openid_login({"mock", "me"})),
-                    ?assert(meck:validate(ibrowse)),
+                    ?assert(meck:validate(gui_utils)),
                     ?assert(meck:validate(lager))
                 end},
 
             {"Connection refused case",
                 fun() ->
-                    meck:expect(ibrowse, send_req, fun("mock", _, post, "me") -> {error, econnrefused} end),
+                    meck:expect(gui_utils, https_post, fun("mock", _, "me") -> {error, econnrefused} end),
                     meck:expect(lager, log, fun(error, _, _) -> ok end),
                     ?assertEqual({error, no_connection}, openid_utils:validate_openid_login({"mock", "me"})),
-                    ?assert(meck:validate(ibrowse)),
+                    ?assert(meck:validate(gui_utils)),
                     ?assert(meck:validate(lager))
                 end}
         ]}.
@@ -135,17 +134,19 @@ parameter_processing_test_() ->
     {foreach,
         fun() ->
             meck:new(wf),
-            meck:new(ibrowse),
+            meck:new(gui_utils),
             meck:new(lager)
         end,
         fun(_) ->
             meck:unload(wf),
-            meck:unload(ibrowse),
+            meck:unload(gui_utils),
             meck:unload(lager)
         end,
         [{"POST request body correctness",
             fun() ->
-                meck:expect(ibrowse, send_req, fun(_, _, _) -> {ok, "200", [], ?mock_xrds_file} end),
+                meck:expect(gui_utils, https_get, fun(_, _) -> {ok, <<?mock_xrds_file>>} end),
+                meck:expect(gui_utils, to_list, fun(Arg) -> to_list(Arg) end),
+                meck:expect(gui_utils, to_binary, fun(Arg) -> to_binary(Arg) end),
                 KeyValueList = lists:zip(openid_keys(), openid_values()),
                 FullKeyValueList = KeyValueList ++ [
                     {<<"openid.signed">>, <<"op_endpoint,claimed_id,identity,return_to,response_nonce,assoc_handle,",
@@ -165,6 +166,7 @@ parameter_processing_test_() ->
                         end, "", FullKeyValueList),
                 Server = binary_to_list(proplists:get_value(<<"openid.op_endpoint">>, FullKeyValueList)),
                 ?assertEqual({Server, CorrectRequest}, openid_utils:prepare_validation_parameters()),
+                ?assert(meck:validate(gui_utils)),
                 ?assert(meck:validate(wf))
             end},
 
@@ -175,10 +177,13 @@ parameter_processing_test_() ->
                             (<<"openid.op_endpoint">>) -> undefined
                         end),
                     meck:expect(lager, log, fun(error, _, _) -> ok end),
+                    meck:expect(gui_utils, to_list, fun(Arg) -> to_list(Arg) end),
+                    meck:expect(gui_utils, to_binary, fun(Arg) -> to_binary(Arg) end),
 
                     ?assertEqual({error, invalid_request},
                         openid_utils:prepare_validation_parameters()),
                     ?assert(meck:validate(wf)),
+                    ?assert(meck:validate(gui_utils)),
                     ?assert(meck:validate(lager))
                 end},
 
@@ -194,10 +199,13 @@ parameter_processing_test_() ->
                     meck:expect(lager, log, fun(error, _, _) -> ok end),
                     meck:expect(wf, q, fun(_) -> [] end),
                     meck:expect(wf, url_encode, fun(Key) -> Key end),
+                    meck:expect(gui_utils, to_list, fun(Arg) -> to_list(Arg) end),
+                    meck:expect(gui_utils, to_binary, fun(Arg) -> to_binary(Arg) end),
 
                     ?assertEqual({error, invalid_request},
                         openid_utils:prepare_validation_parameters()),
                     ?assert(meck:validate(wf)),
+                    ?assert(meck:validate(gui_utils)),
                     ?assert(meck:validate(lager))
                 end},
 
@@ -212,6 +220,8 @@ parameter_processing_test_() ->
                         fun(Key) ->
                             proplists:get_value(Key, KeyValueList)
                         end),
+                    meck:expect(gui_utils, to_list, fun(Arg) -> to_list(Arg) end),
+                    meck:expect(gui_utils, to_binary, fun(Arg) -> to_binary(Arg) end),
 
                     CorrectResult =
                         [
@@ -226,7 +236,8 @@ parameter_processing_test_() ->
                         fun(Key) ->
                             ?assertEqual(proplists:get_value(Key, Result), proplists:get_value(Key, CorrectResult))
                         end, [login, name, teams, email, dn_list]),
-                    ?assert(meck:validate(wf))
+                    ?assert(meck:validate(wf)),
+                    ?assert(meck:validate(gui_utils))
                 end},
 
             {"User info - undefined DN case",
@@ -245,6 +256,8 @@ parameter_processing_test_() ->
                                 OtherKey -> proplists:get_value(OtherKey, KeyValueList)
                             end
                         end),
+                    meck:expect(gui_utils, to_list, fun(Arg) -> to_list(Arg) end),
+                    meck:expect(gui_utils, to_binary, fun(Arg) -> to_binary(Arg) end),
 
                     CorrectResult =
                         [
@@ -260,7 +273,8 @@ parameter_processing_test_() ->
                         fun(Key) ->
                             ?assertEqual(proplists:get_value(Key, Result), proplists:get_value(Key, CorrectResult))
                         end, [login, name, teams, email, dn_list]),
-                    ?assert(meck:validate(wf))
+                    ?assert(meck:validate(wf)),
+                    ?assert(meck:validate(gui_utils))
                 end}
         ]}.
 
@@ -333,5 +347,19 @@ user_info_processed_values() ->
         "dn2",
         "dn3"
     ].
+
+
+to_list(undefined) -> [];
+to_list(Term) when is_list(Term) -> Term;
+to_list(Term) when is_binary(Term) -> binary_to_list(Term);
+to_list(Term) ->
+    try
+        wf:to_list(Term)
+    catch _:_ ->
+        lists:flatten(io_lib:format("~p", [Term]))
+    end.
+
+to_binary(Term) when is_binary(Term) -> Term;
+to_binary(Term) -> list_to_binary(to_list(Term)).
 
 -endif.
