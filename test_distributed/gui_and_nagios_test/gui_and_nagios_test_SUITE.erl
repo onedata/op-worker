@@ -15,6 +15,7 @@
 -include("registered_names.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 -include_lib("ctool/include/assertions.hrl").
+-include_lib("ctool/include/test_node_starter.hrl").
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).

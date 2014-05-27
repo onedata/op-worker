@@ -14,6 +14,7 @@
 -include("nodes_manager.hrl").
 -include("registered_names.hrl").
 -include_lib("ctool/include/assertions.hrl").
+-include_lib("ctool/include/test_node_starter.hrl").
 
 %% API
 -export([main_test/1, sub_proc_load_test/1, multi_node_test/1]).

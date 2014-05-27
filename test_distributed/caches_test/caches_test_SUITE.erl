@@ -18,6 +18,7 @@
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 -include_lib("ctool/include/assertions.hrl").
+-include_lib("ctool/include/test_node_starter.hrl").
 
 -define(ProtocolVersion, 1).
 -define(CacheClearingTime, 4).
