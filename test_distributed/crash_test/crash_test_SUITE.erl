@@ -380,7 +380,7 @@ init_per_testcase(_, Config) ->
   ?INIT_DIST_TEST,
   test_node_starter:start_deps_for_tester_node(),
 
-  {NodesUp, Params} = test_node_starter:start_test_nodes_with_dist_app(4, 2),
+  {NodesUp, Params} = nodes_manager:start_test_nodes_with_dist_app(4, 2),
   [CCM | NodesUp2] = NodesUp,
   [CCM2 | _] = NodesUp2,
   DB_Node = test_node_starter:get_db_node(),
@@ -397,8 +397,7 @@ init_per_testcase(_, Config) ->
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
   StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  StopAns = test_node_starter:stop_test_nodes(Nodes),
+  test_node_starter:stop_test_nodes(Nodes),
   test_node_starter:stop_deps_for_tester_node(),
 
-  ?assertEqual(false, lists:member(error, StopLog)),
-  ?assertEqual(ok, StopAns).
+  ?assertEqual(false, lists:member(error, StopLog)).

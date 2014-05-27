@@ -404,13 +404,12 @@ init_per_testcase(main_test, Config) ->
             {db_nodes, [DB_Node]},
             {heart_beat, 1}]]),
 
-    Assertions = [{false, lists:member(error, Nodes)}, {false, lists:member(error, StartLog)}],
+    Assertions = [{false, lists:member(error, StartLog)}],
     lists:append([{nodes, Nodes}, {assertions, Assertions}], Config).
 
 
 end_per_testcase(main_test, Config) ->
     Nodes = ?config(nodes, Config),
     StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-    StopAns = test_node_starter:stop_test_nodes(Nodes),
-    ?assertEqual(false, lists:member(error, StopLog)),
-    ?assertEqual(ok, StopAns).
+    test_node_starter:stop_test_nodes(Nodes),
+    ?assertEqual(false, lists:member(error, StopLog)).

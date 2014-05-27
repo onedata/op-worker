@@ -938,7 +938,7 @@ init_per_testcase(_, Config) ->
     [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {control_panel_port, 2310}, {control_panel_redirect_port, 1356}, {rest_port, 3310}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}],
     [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {control_panel_port, 2311}, {control_panel_redirect_port, 1357}, {rest_port, 3311}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}]]),
 
-  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
+  Assertions = [{false, lists:member(error, StartLog)}],
   lists:append([{nodes, NodesUp}, {assertions, Assertions}, {dbnode, DBNode}], Config).
 
 end_per_testcase(_, Config) ->

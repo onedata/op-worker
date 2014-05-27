@@ -153,17 +153,16 @@ init_per_testcase(_, Config) ->
   Port = 6666,
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1}]]),
 
-  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
+  Assertions = [{false, lists:member(error, StartLog)}],
   lists:append([{port, Port}, {nodes, NodesUp}, {assertions, Assertions}], Config).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
   StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  StopAns = test_node_starter:stop_test_nodes(Nodes),
+  test_node_starter:stop_test_nodes(Nodes),
   test_node_starter:stop_deps_for_tester_node(),
 
-  ?assertEqual(false, lists:member(error, StopLog)),
-  ?assertEqual(ok, StopAns).
+  ?assertEqual(false, lists:member(error, StopLog)).
 
 %% ====================================================================
 %% Helper functions

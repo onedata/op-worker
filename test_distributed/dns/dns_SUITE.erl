@@ -183,7 +183,7 @@ init_per_testcase(distributed_test, Config) ->
     [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {control_panel_redirect_port, 1356}, {rest_port, 8445}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1}],
     [{node_type, worker}, {dispatcher_port, 8888}, {control_panel_port, 1353}, {control_panel_redirect_port, 1357}, {rest_port, 8446}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1}]]),
 
-  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
+  Assertions = [{false, lists:member(error, StartLog)}],
   lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config);
 
 init_per_testcase(_, Config) ->
@@ -197,26 +197,24 @@ init_per_testcase(_, Config) ->
 
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, [Env]),
 
-  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
+  Assertions = [{false, lists:member(error, StartLog)}],
   lists:append([{dns_port, DNS_Port}, {nodes, NodesUp}, {assertions, Assertions}], Config).
 
 
 end_per_testcase(distributed_test, Config) ->
   Nodes = ?config(nodes, Config),
   StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  StopAns = test_node_starter:stop_test_nodes(Nodes),
+  test_node_starter:stop_test_nodes(Nodes),
   test_node_starter:stop_deps_for_tester_node(),
 
-  ?assertEqual(false, lists:member(error, StopLog)),
-  ?assertEqual(ok, StopAns);
+  ?assertEqual(false, lists:member(error, StopLog));
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
   StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  StopAns = test_node_starter:stop_test_nodes(Nodes),
+  test_node_starter:stop_test_nodes(Nodes),
 
-  ?assertEqual(false, lists:member(error, StopLog)),
-  ?assertEqual(ok, StopAns).
+  ?assertEqual(false, lists:member(error, StopLog)).
 
 %% ====================================================================
 %% Helping functions
