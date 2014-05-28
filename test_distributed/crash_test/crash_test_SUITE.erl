@@ -94,7 +94,7 @@ main_test(Config) ->
   PongsNum = lists:foldl(CheckNodes, 0, Ports),
   ?assertEqual(PongsNum, length(Jobs) * length(Ports)),
 
-  nodes_manager:stop_node(CCM),
+  test_node_starter:stop_test_nodes([CCM]),
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
   nodes_manager:wait_for_state_loading(),
   nodes_manager:wait_for_cluster_init(),
@@ -106,7 +106,7 @@ main_test(Config) ->
   PongsNum2 = lists:foldl(CheckNodes, 0, Ports),
   ?assertEqual(PongsNum2, length(Jobs) * length(Ports)),
 
-  {StartAns, NewNode} = nodes_manager:start_node(CCM, CCMParams),
+  {StartAns, NewNode} = test_node_starter:start_test_node(?GET_NODE_NAME(CCM),?GET_HOST(CCM),false, CCMParams),
   ?assertEqual(ok, StartAns),
   ?assertEqual(CCM, NewNode),
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, [CCM], [CCMArgs]),
@@ -122,7 +122,7 @@ main_test(Config) ->
   PongsNum3 = lists:foldl(CheckNodes, 0, Ports),
   ?assertEqual(PongsNum3, length(Jobs) * length(Ports)),
 
-  nodes_manager:stop_node(Worker1),
+  test_node_starter:stop_test_nodes([Worker1]),
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes) - 1),
   nodes_manager:wait_for_cluster_init(),
 
@@ -133,8 +133,7 @@ main_test(Config) ->
   PongsNum4 = lists:foldl(CheckNodes, 0, Ports2),
   ?assertEqual(PongsNum4, length(Jobs) * length(Ports2)),
 
-  {StartAns2, NewNode2} = nodes_manager:start_node(Worker1, WorkerParams),
-  ?assertEqual(ok, StartAns2),
+  NewNode2 = test_node_starter:start_test_node(?GET_NODE_NAME(Worker1),?GET_HOST(Worker1),false,WorkerParams),
   ?assertEqual(Worker1, NewNode2),
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, [Worker1], [WorkerArgs]),
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
@@ -291,7 +290,7 @@ callbacks_test(Config) ->
   lists:foldl(CheckCallbacks, DispatcherCorrectAns1, lists:zip(WorkerNodes, FuseInfo1)),
 
   lists:foreach(fun(X) -> wss:close(X) end, CreatedSockets),
-  nodes_manager:stop_node(CCM),
+  test_node_starter:stop_test_nodes([CCM]),
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
   nodes_manager:wait_for_state_loading(),
   nodes_manager:wait_for_cluster_init(),
@@ -302,7 +301,7 @@ callbacks_test(Config) ->
   CheckDispatcherAns(DispatcherCorrectAns2, CCMTest2),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns2, lists:zip(WorkerNodes, FuseInfo1)),
 
-  {StartAns, NewNode} = nodes_manager:start_node(CCM, CCMParams),
+  {StartAns, NewNode} = test_node_starter:start_test_node(?GET_NODE_NAME(CCM),?GET_HOST(CCM),false, CCMParams),
   ?assertEqual(ok, StartAns),
   ?assertEqual(CCM, NewNode),
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, [CCM], [CCMArgs]),
@@ -319,7 +318,7 @@ callbacks_test(Config) ->
 
 
 
-  nodes_manager:stop_node(Worker1),
+  test_node_starter:stop_test_nodes([Worker1]),
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes) - 1),
   nodes_manager:wait_for_cluster_init(),
 
@@ -331,7 +330,7 @@ callbacks_test(Config) ->
 
 
 
-  {StartAns2, NewNode2} = nodes_manager:start_node(Worker1, WorkerParams),
+  {StartAns2, NewNode2} = test_node_starter:start_test_node(?GET_NODE_NAME(Worker1),?GET_HOST(Worker1),false, WorkerParams),
   ?assertEqual(ok, StartAns2),
   ?assertEqual(Worker1, NewNode2),
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, [Worker1], [WorkerArgs]),
@@ -342,7 +341,7 @@ callbacks_test(Config) ->
   CheckDispatcherAns(DispatcherCorrectAns4, CCMTest5),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns4, lists:zip(Worker2, FuseInfo4)),
 
-  nodes_manager:stop_node(Worker1),
+  test_node_starter:stop_test_nodes([Worker1]),
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes) - 1),
   nodes_manager:wait_for_cluster_init(),
 
@@ -350,7 +349,7 @@ callbacks_test(Config) ->
   CheckDispatcherAns(DispatcherCorrectAns4, CCMTest6),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns4, lists:zip(Worker2, FuseInfo4)),
 
-  {StartAns3, NewNode3} = nodes_manager:start_node(Worker1, WorkerParams),
+  {StartAns3, NewNode3} = test_node_starter:start_test_node(?GET_NODE_NAME(Worker1),?GET_HOST(Worker1),false, WorkerParams),
   ?assertEqual(ok, StartAns3),
   ?assertEqual(Worker1, NewNode3),
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, [Worker1], [WorkerArgs]),
@@ -375,7 +374,7 @@ init_per_testcase(_, Config) ->
   ?INIT_DIST_TEST,
   test_node_starter:start_deps_for_tester_node(),
 
-  {NodesUp, Params} = nodes_manager:start_test_on_nodes_with_dist_app(4, 2),
+  {NodesUp, Params} = test_node_starter:start_test_nodes_with_dist_app(4, 2),
   [CCM | NodesUp2] = NodesUp,
   [CCM2 | _] = NodesUp2,
   DB_Node = test_node_starter:get_db_node(),
