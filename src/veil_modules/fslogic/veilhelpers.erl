@@ -33,9 +33,19 @@
 exec(Method, SHInfo = #storage_helper_info{}, Args) ->
     Args1 = [SHInfo#storage_helper_info.name | [SHInfo#storage_helper_info.init_args | Args]],
     exec(Method, Args1).
+
+
+%% exec/2
+%% ====================================================================
+%% @doc Executes apply(veilhelper_nif, Method, Args) through slave node. <br/>
+%% @end
+-spec exec(Method :: atom(), SHInfo :: #storage_helper_info{}, [Arg :: term()]) ->
+    {error, Reason :: term()} | Response when Response :: term().
+%% ====================================================================
 exec(Method, Args) when is_atom(Method), is_list(Args) ->
     [EGroup | _] = fslogic_context:get_fs_group_ctx() ++ [fslogic_context:get_fs_user_ctx()],
     exec(fslogic_context:get_fs_user_ctx(), EGroup, Method, Args).
+
 
 %% exec/5
 %% ====================================================================
@@ -48,6 +58,16 @@ exec(Method, Args) when is_atom(Method), is_list(Args) ->
 exec(UserName, GroupName, Method, SHInfo = #storage_helper_info{}, Args) ->
     Args1 = [SHInfo#storage_helper_info.name | [SHInfo#storage_helper_info.init_args | Args]],
     exec(UserName, GroupName, Method, Args1).
+
+
+%% exec/4
+%% ====================================================================
+%% @doc Same as exec/2 but allows to set UserName and GroupName for file system permissions check.
+%%
+%% @end
+-spec exec(UserName :: string(), GroupName :: string(), Method :: atom(), [Arg :: term()]) ->
+    {error, Reason :: term()} | Response when Response :: term().
+%% ====================================================================
 exec(UserName, GroupName, Method, Args) when is_atom(Method), is_list(Args) ->
 %%     lager:info("veilhelpers:exec with args: ~p ~p", [Method, Args]),
     Args1 = [UserName, GroupName] ++ Args,
