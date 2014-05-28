@@ -11,10 +11,10 @@
 %% @end
 %% ===================================================================
 
--module(nodes_manager).
+-module(test_utils).
 
 -include("registered_names.hrl").
--include("nodes_manager.hrl").
+-include("test_utils.hrl").
 -include("modules_and_args.hrl").
 
 -define(VIEW_REBUILDING_TIME, 2000).
@@ -23,10 +23,6 @@
 
 %% Functions to use instead of timer
 -export([wait_for_cluster_cast/0, wait_for_cluster_cast/1, wait_for_nodes_registration/1, wait_for_cluster_init/0, wait_for_cluster_init/1, wait_for_state_loading/0, wait_for_db_reaction/0, wait_for_fuse_session_exp/0, wait_for_request_handling/0]).
-
-%% ====================================================================
-%% Internal functions
-%% ====================================================================
 
 %% wait_for_cluster_cast/0
 %% ====================================================================

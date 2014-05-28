@@ -11,7 +11,7 @@
 %% ===================================================================
 
 -module(gui_and_nagios_test_SUITE).
--include("nodes_manager.hrl").
+-include("test_utils.hrl").
 -include("registered_names.hrl").
 -include("veil_modules/control_panel/connection_check_values.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
@@ -36,9 +36,9 @@ main_test(Config) ->
 	put(ccm, CCM),
 	gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
 	gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-	nodes_manager:wait_for_cluster_cast(),
+	test_utils:wait_for_cluster_cast(),
 	gen_server:cast({global, ?CCM}, init_cluster),
-	nodes_manager:wait_for_cluster_init(),
+	test_utils:wait_for_cluster_init(),
 	ibrowse:start(),
 
 	%tests

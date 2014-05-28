@@ -12,7 +12,7 @@
 %% ==================================================================
 -module(cluster_rengine_test_SUITE).
 
--include("nodes_manager.hrl").
+-include("test_utils.hrl").
 -include("veil_modules/dao/dao.hrl").
 -include("veil_modules/dao/dao_vfs.hrl").
 -include_lib("veil_modules/dao/dao_helper.hrl").
@@ -283,14 +283,14 @@ init_per_testcase(test_io_events_for_stats, Config) ->
     [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1314}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {cluster_monitoring_initialization, 5}, {cluster_monitoring_period, 5}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers),
 
   StartAdditionalWorker = fun(Node, Module) ->
@@ -303,7 +303,7 @@ init_per_testcase(test_io_events_for_stats, Config) ->
   end,
 
   lists:foreach(fun(Node) -> StartAdditionalWorker(Node, cluster_rengine) end, NodesUp),
-  nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
   lists:append([{nodes, NodesUp}], Config);
 
 init_per_testcase(_, Config) ->
@@ -319,14 +319,14 @@ init_per_testcase(_, Config) ->
     [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1314}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers),
 
   StartAdditionalWorker = fun(Node, Module) ->
@@ -339,7 +339,7 @@ init_per_testcase(_, Config) ->
   end,
 
   lists:foreach(fun(Node) -> StartAdditionalWorker(Node, cluster_rengine) end, NodesUp),
-  nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
   lists:append([{nodes, NodesUp}], Config).
 
 end_per_testcase(distributed_test, Config) ->

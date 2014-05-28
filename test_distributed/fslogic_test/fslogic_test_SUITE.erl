@@ -12,7 +12,7 @@
 
 -module(fslogic_test_SUITE).
 
--include("nodes_manager.hrl").
+-include("test_utils.hrl").
 -include("registered_names.hrl").
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
@@ -52,9 +52,9 @@ groups_permissions_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   Team = ?TEST_GROUP,
   Team2 = ?TEST_GROUP2,
@@ -320,9 +320,9 @@ concurrent_file_creation_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
@@ -373,9 +373,9 @@ get_by_uuid_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
@@ -454,9 +454,9 @@ groups_test(Config) ->
     %% Cluster init
     gen_server:cast({?Node_Manager_Name, Node}, do_heart_beat),
     gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-    nodes_manager:wait_for_cluster_cast(),
+    test_utils:wait_for_cluster_cast(),
     gen_server:cast({global, ?CCM}, init_cluster),
-    nodes_manager:wait_for_cluster_init(),
+    test_utils:wait_for_cluster_init(),
 
     %% files_manager call with given user's DN
     FM = fun(M, A, DN) ->
@@ -689,9 +689,9 @@ dirs_creating_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   SHInfo = #storage_helper_info{name = ?SH, init_args = ?ARG_TEST_ROOT},
 
@@ -716,9 +716,9 @@ user_file_counting_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
@@ -754,13 +754,13 @@ user_file_counting_test(Config) ->
   ?assertEqual(ok, CreateUserAns2),
 
   rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, "not_existing_id", 1]),
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {CountStatus0, Count0} = rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, "not_existing_id", 1]),
   ?assertEqual(ok, CountStatus0),
   ?assertEqual(0, Count0),
 
   rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID1, 1]),
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {CountStatus00, Count00} = rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID1, 1]),
   ?assertEqual(ok, CountStatus00),
   ?assertEqual(0, Count00),
@@ -796,13 +796,13 @@ user_file_counting_test(Config) ->
   end, User2FilesEnding),
 
   rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID1, 1]),
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {CountStatus, Count} = rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID1, 1]),
   ?assertEqual(ok, CountStatus),
   ?assertEqual(length(User1FilesEnding), Count),
 
   rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID2, 1]),
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {CountStatus2, Count2} = rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, UserID2, 1]),
   ?assertEqual(ok, CountStatus2),
   ?assertEqual(length(User2FilesEnding), Count2),
@@ -847,9 +847,9 @@ user_file_size_test(Config) ->
   %% Cluster init
   gen_server:cast({?Node_Manager_Name, Node}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   %% files_manager call with given user's DN
   FM = fun(M, A, DN) ->
@@ -903,13 +903,13 @@ user_file_size_test(Config) ->
   FileSize = 100,
 
   rpc:call(Node, fslogic_utils, get_files_size, ["not_existing_id", 1]),
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {CountStatus0, Count0} = rpc:call(Node, user_logic, get_files_size, ["not_existing_id", 1]),
   ?assertEqual(ok, CountStatus0),
   ?assertEqual(0, Count0),
 
   rpc:call(Node, fslogic_utils, get_files_size, [UserID1, 1]),
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {CountStatus00, Count00} = rpc:call(Node, user_logic, get_files_size, [UserID1, 1]),
   ?assertEqual(ok, CountStatus00),
   ?assertEqual(0, Count00),
@@ -935,13 +935,13 @@ user_file_size_test(Config) ->
   end, User2FilesEnding),
 
   rpc:call(Node, user_logic, get_files_size, [UserID1, 1]),
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {CountStatus, Count} = rpc:call(Node, user_logic, get_files_size, [UserID1, 1]),
   ?assertEqual(ok, CountStatus),
   ?assertEqual(length(User1FilesEnding) * FileSize, Count),
 
   rpc:call(Node, user_logic, get_files_size, [UserID2, 1]),
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {CountStatus2, Count2} = rpc:call(Node, user_logic, get_files_size, [UserID2, 1]),
   ?assertEqual(ok, CountStatus2),
   ?assertEqual(length(User2FilesEnding) * FileSize, Count2),
@@ -953,7 +953,7 @@ user_file_size_test(Config) ->
   ?assertEqual(ok, AnsTruncate),
   {AnsGetFileAttr, _} = FM(getfileattr, [User1TestUpdateFile], DN1),
   ?assertEqual(ok, AnsGetFileAttr),
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {ok, Interval} = rpc:call(Node, application, get_env, [?APP_Name, user_files_size_view_update_period]),
   timer:sleep(Interval * 1000),
 
@@ -972,9 +972,9 @@ permissions_management_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   SHInfo = #storage_helper_info{name = ?SH, init_args = ?ARG_TEST_ROOT},
   File = "permissions_management_test_file",
@@ -1075,9 +1075,9 @@ user_creation_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
@@ -1279,9 +1279,9 @@ storage_management_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   SHInfo = #storage_helper_info{name = ?SH, init_args = ?ARG_TEST_ROOT},
   File = "storage_management_test_file",
@@ -1335,9 +1335,9 @@ dir_mv_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   DirName = "dir_mv_test_dir",
   DirName2 = "dir_mv_test_dir2",
@@ -1410,9 +1410,9 @@ file_sharing_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   TestFile = "file_sharing_test_file",
   TestFile2 = "file_sharing_test_file2",
@@ -1578,9 +1578,9 @@ fuse_requests_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   TestFile = "fslogic_test_file",
   TestFile2 = "fslogic_test_file2",
@@ -1766,7 +1766,7 @@ fuse_requests_test(Config) ->
   ?assertEqual(list_to_atom(?VOK), Answer20),
 
   %% times update is async so we need to wait for it
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {Status21, Attr4} = get_file_attr(Socket, SecondFileInDir),
   ?assertEqual("ok", Status21),
 
@@ -1775,13 +1775,13 @@ fuse_requests_test(Config) ->
   %% updatetimes message test end
 
 
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {Status10, Answer10} = rename_file(Socket, SecondFileInDir, NewNameOfFIle),
   ?assertEqual("ok", Status10),
   ?assertEqual(list_to_atom(?VOK), Answer10),
 
   %% ctime update is async so we need to wait for it
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
 
   {Status17, Attr1} = get_file_attr(Socket, NewNameOfFIle),
   ?assertEqual("ok", Status17),
@@ -1790,13 +1790,13 @@ fuse_requests_test(Config) ->
   ?assert(Attr1#fileattr.ctime > Attr3#fileattr.ctime),
 
 
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   {Status10_2, Answer10_2} = change_file_perms(Socket, NewNameOfFIle, 8#400),
   ?assertEqual("ok", Status10_2),
   ?assertEqual(list_to_atom(?VOK), Answer10_2),
 
   %% ctime update is async so we need to wait for it
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
 
   {Status18, Attr2} = get_file_attr(Socket, NewNameOfFIle),
   ?assertEqual("ok", Status18),
@@ -1896,9 +1896,9 @@ users_separation_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
@@ -1942,7 +1942,7 @@ users_separation_test(Config) ->
 
   %% Current time
   Time = vcn_utils:time(),
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
 
   %% Users have different (and next to each other) IDs
   UID1 = list_to_integer(UserID1),
@@ -1996,7 +1996,7 @@ users_separation_test(Config) ->
   ?assertEqual(UID1, Attr1#fileattr.uid),
   ?assertEqual(UID2, Attr2#fileattr.uid),
 
-  nodes_manager:wait_for_db_reaction(),
+  test_utils:wait_for_db_reaction(),
   
   %% chown test
   {Status23, Answer23} = chown(Socket, TestFile, 77777, "unknown"),
@@ -2119,9 +2119,9 @@ files_manager_tmp_files_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   SHInfo = #storage_helper_info{name = ?SH, init_args = ?ARG_TEST_ROOT},
   File = "files_manager_test_file1",
@@ -2196,9 +2196,9 @@ files_manager_standard_files_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
   ?assertEqual(ok, InsertStorageAns),
@@ -2391,9 +2391,9 @@ get_file_links_test(Config) ->
 
     gen_server:cast({?Node_Manager_Name, Node1}, do_heart_beat),
     gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-    nodes_manager:wait_for_cluster_cast(),
+    test_utils:wait_for_cluster_cast(),
     gen_server:cast({global, ?CCM}, init_cluster),
-    nodes_manager:wait_for_cluster_init(),
+    test_utils:wait_for_cluster_init(),
 
     {InsertStorageAns, StorageUUID} = rpc:call(Node1, fslogic_storage, insert_storage, ["DirectIO", ?ARG_TEST_ROOT]),
     ?assertEqual(ok, InsertStorageAns),
@@ -2846,7 +2846,7 @@ clear_old_descriptors(Node) ->
   {Megaseconds,Seconds, _Microseconds} = os:timestamp(),
   Time = 1000000*Megaseconds + Seconds + 60*15 + 1,
   gen_server:call({?Dispatcher_Name, Node}, {fslogic, 1, {delete_old_descriptors_test, Time}}, 1000),
-  nodes_manager:wait_for_db_reaction().
+  test_utils:wait_for_db_reaction().
 
 create_standard_share(TestFile, DN) ->
   fslogic_context:set_user_dn(DN),

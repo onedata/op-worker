@@ -11,7 +11,7 @@
 %% ===================================================================
 -module(finding_test_SUITE).
 
--include("nodes_manager.hrl").
+-include("test_utils.hrl").
 -include("registered_names.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
 -include_lib("files_common.hrl").
@@ -172,9 +172,9 @@ test_find_usage(Node, FileCriteria, ExpectedUuids) ->
 start_cluster(Node) ->
   gen_server:cast({?Node_Manager_Name, Node}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init().
+  test_utils:wait_for_cluster_init().
 
 create_file(Node, #path_with_times{path = FilePath, times = {ATime, MTime, CTime}}, Uid, FileType) ->
   {ParentFound, ParentInfo} = rpc:call(Node, fslogic_path, get_parent_and_name_from_path , [FilePath, ?ProtocolVersion]),
