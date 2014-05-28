@@ -617,7 +617,7 @@ init_per_testcase(type2, Config) ->
 
   PeerCert = ?COMMON_FILE("peer.pem"),
   Port = 6666,
-  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [CCM]}, {dns_port, 1315}, {db_nodes, [test_node_starter:get_db_node()]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [CCM]}, {dns_port, 1315}, {db_nodes, [?DB_NODE]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
   Assertions = [],
   lists:append([{port, Port}, {peer_cert, PeerCert}, {nodes, NodesUp}, {assertions, Assertions}], Config);
@@ -628,7 +628,7 @@ init_per_testcase(monitoring_test, Config) ->
 
   NodesUp = test_node_starter:start_test_nodes(4),
   [CCM | _] = NodesUp,
-  DBNode = test_node_starter:get_db_node(),
+  DBNode = ?DB_NODE,
 
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [
     [{node_type, ccm}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],

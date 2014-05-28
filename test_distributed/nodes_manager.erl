@@ -21,9 +21,6 @@
 -define(FUSE_SESSION_EXP_TIME, 8000).
 -define(REQUEST_HANDLING_TIME, 1000).
 
-%% Uncomment for verbosity
-%% -define(verbose, 1).
-
 %% ====================================================================
 %% API
 %% ====================================================================
