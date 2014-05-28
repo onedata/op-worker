@@ -55,7 +55,6 @@ worker_code() ->
 
 %% This test checks if acks from fuse are routed correctly
 fuse_ack_routing_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
@@ -286,7 +285,6 @@ fuse_ack_routing_test(Config) ->
 
 %% This test checks if FUSE sessions are cleared properly
 fuse_session_cleanup_test(Config) ->
-    nodes_manager:check_start_assertions(Config),
     NodesUp = ?config(nodes, Config),
     DBNode = ?config(dbnode, Config),
     [CCM | WorkerNodes] = NodesUp,
@@ -424,7 +422,6 @@ fuse_session_cleanup_test(Config) ->
     ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{login, "user1"}])).
 
 main_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
@@ -495,7 +492,6 @@ main_test(Config) ->
   ?assertEqual(PongsNum2, length(Jobs) * length(Ports)).
 
 callbacks_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
@@ -727,8 +723,7 @@ init_per_testcase(_, Config) ->
     [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {control_panel_redirect_port, 1356}, {rest_port, 8445}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
     [{node_type, worker}, {dispatcher_port, 8888}, {control_panel_port, 1353}, {control_panel_redirect_port, 1357}, {rest_port, 8446}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [],
-  lists:append([{nodes, NodesUp}, {assertions, Assertions}, {dbnode, DBNode}], Config).
+  lists:append([{nodes, NodesUp}, {dbnode, DBNode}], Config).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),

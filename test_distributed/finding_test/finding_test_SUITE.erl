@@ -45,7 +45,6 @@ all() -> [dao_vfs_find_test].
 %% Before testing it clears documents that may affect test and after testing it clears created documents.
 %% @end
 dao_vfs_find_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node1 | _] = NodesUp,
   start_cluster(Node1),
@@ -153,8 +152,7 @@ init_per_testcase(_, Config) ->
   Port = 6666,
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [],
-  lists:append([{port, Port}, {nodes, NodesUp}, {assertions, Assertions}], Config).
+  lists:append([{port, Port}, {nodes, NodesUp}], Config).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),

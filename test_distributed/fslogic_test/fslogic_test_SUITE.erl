@@ -42,7 +42,6 @@ all() -> [groups_test, files_manager_tmp_files_test, files_manager_standard_file
 
 %% Tests if not permitted operations can not be executed by fslogic
 groups_permissions_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   Cert = ?COMMON_FILE("peer.pem"),
@@ -316,7 +315,6 @@ groups_permissions_test(Config) ->
 
 %% This test checks if creation of file works well when many concurrent creation requests are sent
 concurrent_file_creation_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node1 | _] = NodesUp,
 
@@ -370,7 +368,6 @@ concurrent_file_creation_test(Config) ->
 
 %% Test file and data getting by uuid (fslogic normally uses path instead of uuid)
 get_by_uuid_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node1 | _] = NodesUp,
 
@@ -445,7 +442,6 @@ get_by_uuid_test(Config) ->
 %% This test checks if groups are working as intended.
 %% I.e all users see files moved/created in theirs group directory and users see only their groups
 groups_test(Config) ->
-    nodes_manager:check_start_assertions(Config),
     NodesUp = ?config(nodes, Config),
     [Node | _] = NodesUp,
 
@@ -688,7 +684,6 @@ groups_test(Config) ->
 %% The test creates path for a new file that contains 2 directories
 %% (fslogic uses it when the user has a lot of files).
 dirs_creating_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node1 | _] = NodesUp,
 
@@ -707,7 +702,6 @@ dirs_creating_test(Config) ->
 %% Checks user counting view.
 %% The test creates some files for two users, and then checks if the view counts them properly.
 user_file_counting_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   FileBeg = "user_dirs_at_storage_test_file",
@@ -841,7 +835,6 @@ user_file_counting_test(Config) ->
 %% Checks user files size view.
 %% The test creates some files for two users, and then checks if the view counts their size properly.
 user_file_size_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node | _] = NodesUp,
 
@@ -974,7 +967,6 @@ user_file_size_test(Config) ->
 %% Checks permissions management functions
 %% The tests checks some files and then changes their permissions. Erlang functions are used to test if permissions were change properly.
 permissions_management_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node1 | _] = NodesUp,
 
@@ -1041,7 +1033,6 @@ permissions_management_test(Config) ->
 %% The test checks if directories for user and group files are created when the user is added to the system,
 %% and when new storage is created (after adding users)
 user_creation_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   Cert = ?COMMON_FILE("peer.pem"),
@@ -1283,7 +1274,6 @@ user_creation_test(Config) ->
 %% Checks storage management functions
 %% The tests checks if functions used to manage user's files at storage (e.g. mv, mkdir) works well.
 storage_management_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node1 | _] = NodesUp,
 
@@ -1336,7 +1326,6 @@ storage_management_test(Config) ->
 %% Checks directory moving.
 %% The test checks if fslogic blocks dir moving to its child.
 dir_mv_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   Cert = ?COMMON_FILE("peer.pem"),
@@ -1412,7 +1401,6 @@ dir_mv_test(Config) ->
 
 %% Checks file sharing functions
 file_sharing_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   Cert = ?COMMON_FILE("peer.pem"),
@@ -1581,7 +1569,6 @@ file_sharing_test(Config) ->
 
 %% Checks fslogic integration with dao and db
 fuse_requests_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   Cert = ?COMMON_FILE("peer.pem"),
@@ -1897,7 +1884,6 @@ fuse_requests_test(Config) ->
 %% Checks fslogic integration with dao and db
 %% This test also checks chown & chgrp behaviour
 users_separation_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   Cert = ?COMMON_FILE("peer.pem"),
@@ -2128,7 +2114,6 @@ users_separation_test(Config) ->
 
 %% Checks files manager (manipulation on tmp files copies)
 files_manager_tmp_files_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node1 | _] = NodesUp,
 
@@ -2206,7 +2191,6 @@ files_manager_tmp_files_test(Config) ->
 
 %% Checks files manager (manipulation on users' files)
 files_manager_standard_files_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node1 | _] = NodesUp,
 
@@ -2402,7 +2386,6 @@ files_manager_standard_files_test(Config) ->
   ?assertEqual(ok, RemoveStorageAns).
 
 get_file_links_test(Config) ->
-    nodes_manager:check_start_assertions(Config),
     NodesUp = ?config(nodes, Config),
     [Node1 | _] = NodesUp,
 
@@ -2493,8 +2476,7 @@ init_per_testcase(user_file_size_test, Config) ->
   Port = 6666,
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {user_files_size_view_update_period, 2}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [],
-  lists:append([{port, Port}, {nodes, NodesUp}, {assertions, Assertions}], Config);
+  lists:append([{port, Port}, {nodes, NodesUp}], Config);
 
 init_per_testcase(_, Config) ->
   ?INIT_DIST_TEST,
@@ -2507,8 +2489,7 @@ init_per_testcase(_, Config) ->
   Port = 6666,
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [],
-  lists:append([{port, Port}, {nodes, NodesUp}, {assertions, Assertions}], Config).
+  lists:append([{port, Port}, {nodes, NodesUp}], Config).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),

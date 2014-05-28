@@ -42,7 +42,6 @@ dns_worker_env_test_code() ->
 
 %% Checks if all necessary variables are declared in application
 dns_worker_env_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   {Node, _DNS_Port} = extract_node_and_dns_port(Config),
 
   ?assertEqual(ok, rpc:call(Node, ?MODULE, dns_worker_env_test_code, [])).
@@ -95,7 +94,6 @@ dns_ranch_tcp_handler_responds_to_dns_queries(Config) ->
 
 %% This test checks if dns works well with multi-node cluster
 distributed_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
@@ -183,8 +181,7 @@ init_per_testcase(distributed_test, Config) ->
     [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {control_panel_redirect_port, 1356}, {rest_port, 8445}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
     [{node_type, worker}, {dispatcher_port, 8888}, {control_panel_port, 1353}, {control_panel_redirect_port, 1357}, {rest_port, 8446}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [],
-  lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config);
+  lists:append([{nodes, NodesUp}], Config);
 
 init_per_testcase(_, Config) ->
   ?INIT_DIST_TEST,
@@ -197,9 +194,7 @@ init_per_testcase(_, Config) ->
 
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [Env]),
 
-  Assertions = [],
-  lists:append([{dns_port, DNS_Port}, {nodes, NodesUp}, {assertions, Assertions}], Config).
-
+  lists:append([{dns_port, DNS_Port}, {nodes, NodesUp}], Config).
 
 end_per_testcase(distributed_test, Config) ->
   Nodes = ?config(nodes, Config),
@@ -219,7 +214,6 @@ end_per_testcase(_, Config) ->
 %% Helper function setting test timeout, checking start assertions and waiting for cluster creation
 prepare_test_and_start_cluster(Config) ->
   ct:timetrap({seconds, 120}),
-  nodes_manager:check_start_assertions(Config),
   start_cluster(Config),
   nodes_manager:wait_for_cluster_init().
 

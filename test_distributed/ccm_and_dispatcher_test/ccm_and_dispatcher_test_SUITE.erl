@@ -52,7 +52,6 @@ application_start_test_code2() ->
 
 %% This function tests if ccm application starts properly
 application_start_test1(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node | _] = NodesUp,
 
@@ -61,7 +60,6 @@ application_start_test1(Config) ->
 
 %% This function tests if worker application starts properly
 application_start_test2(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node | _] = NodesUp,
 
@@ -70,7 +68,6 @@ application_start_test2(Config) ->
 
 %% This function tests if ccm is able to start and connect (using gen_server messages) workers
 modules_start_and_ping_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [CCM | _] = NodesUp,
 
@@ -114,7 +111,6 @@ modules_start_and_ping_test(Config) ->
 
 %% This tests check if client may connect to dispatcher.
 dispatcher_connection_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | _] = NodesUp,
@@ -159,7 +155,6 @@ dispatcher_connection_test(Config) ->
 
 %% This test checks if FuseId negotiation works correctly
 veil_handshake_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | _] = NodesUp,
@@ -170,8 +165,6 @@ veil_handshake_test(Config) ->
   gen_server:cast({global, ?CCM}, init_cluster),
   nodes_manager:wait_for_cluster_init(),
 
-
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   Port = ?config(port, Config),
@@ -329,7 +322,6 @@ veil_handshake_test(Config) ->
 
 %% This test checks if workers list inside dispatcher is refreshed correctly.
 workers_list_actualization_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   Jobs = ?Modules,
@@ -353,7 +345,6 @@ workers_list_actualization_test(Config) ->
 
 %% This test checks if callbacks list inside dispatcher is refreshed correctly.
 callbacks_list_actualization_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [CCM | _] = NodesUp,
 
@@ -468,7 +459,6 @@ callbacks_list_actualization_test(Config) ->
   ?assertEqual([], Test22).
 
 validation_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | _] = NodesUp,
@@ -494,7 +484,6 @@ validation_test(Config) ->
 
 %% This test checks if client outside the cluster can ping all modules via dispatcher.
 ping_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   Jobs = ?Modules,
@@ -540,7 +529,6 @@ ping_test(Config) ->
 
 %% Tests cluster and nodes monitoring
 monitoring_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   Nodes = ?config(nodes, Config),
   [CCM | _] = Nodes,
 
@@ -583,8 +571,7 @@ init_per_testcase(application_start_test1, Config) ->
 
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [],
-  lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config);
+  lists:append([{nodes, NodesUp}], Config);
 
 init_per_testcase(application_start_test2, Config) ->
   ?INIT_DIST_TEST,
@@ -594,8 +581,7 @@ init_per_testcase(application_start_test2, Config) ->
 
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [],
-  lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config);
+  lists:append([{nodes, NodesUp}], Config);
 
 init_per_testcase(type1, Config) ->
   ?INIT_DIST_TEST,
@@ -605,8 +591,7 @@ init_per_testcase(type1, Config) ->
 
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, 6666}, {ccm_nodes, [CCM]}, {dns_port, 1312}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [],
-  lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config);
+  lists:append([{nodes, NodesUp}], Config);
 
 init_per_testcase(type2, Config) ->
   ?INIT_DIST_TEST,
@@ -619,8 +604,7 @@ init_per_testcase(type2, Config) ->
   Port = 6666,
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [CCM]}, {dns_port, 1315}, {db_nodes, [?DB_NODE]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [],
-  lists:append([{port, Port}, {peer_cert, PeerCert}, {nodes, NodesUp}, {assertions, Assertions}], Config);
+  lists:append([{port, Port}, {peer_cert, PeerCert}, {nodes, NodesUp}], Config);
 
 init_per_testcase(monitoring_test, Config) ->
   ?INIT_DIST_TEST,
@@ -636,8 +620,7 @@ init_per_testcase(monitoring_test, Config) ->
     [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {control_panel_port, 2310}, {control_panel_redirect_port, 1356}, {rest_port, 3310}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
     [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {control_panel_port, 2311}, {control_panel_redirect_port, 1357}, {rest_port, 3311}, {db_nodes, [DBNode]}, {cluster_monitoring_initialization, 5}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [],
-  lists:append([{nodes, NodesUp}, {assertions, Assertions}, {dbnode, DBNode}], Config);
+  lists:append([{nodes, NodesUp}, {dbnode, DBNode}], Config);
 
 init_per_testcase(TestCase, Config) ->
   case lists:member(TestCase, [modules_start_and_ping_test, workers_list_actualization_test, callbacks_list_actualization_test]) of

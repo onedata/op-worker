@@ -42,8 +42,6 @@ all() -> [main_test].
 %% Main test, sets up a single-node cluster, initializes database with single user
 %% having one directory and one file in filesystem and performs REST requests.
 main_test(Config) ->
-    nodes_manager:check_start_assertions(Config),
-
     NodesUp = ?config(nodes, Config),
     [CCM | _] = NodesUp,
     put(ccm, CCM),
@@ -418,8 +416,7 @@ init_per_testcase(main_test, Config) ->
             {ca_dir, './cacerts/'}
         ]]),
 
-    Assertions = [],
-    lists:append([{nodes, Nodes}, {assertions, Assertions}], Config).
+    lists:append([{nodes, Nodes}], Config).
 
 
 end_per_testcase(main_test, Config) ->

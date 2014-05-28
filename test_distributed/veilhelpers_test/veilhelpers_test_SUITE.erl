@@ -42,8 +42,7 @@ all() -> [integration_test].
 %%   - slave nodes are correctly started (otherwise proxy method veilhelpers:exec wouldn't work)
 %%   - NIF module is fully loaded on those slave nodes
 %%   - Arguments and return values are correctly translated.
-integration_test(Config) ->    
-    nodes_manager:check_start_assertions(Config),
+integration_test(Config) ->
     NodesUp = ?config(nodes, Config),
     [FSLogicNode | _] = NodesUp,
 
@@ -119,12 +118,11 @@ init_per_testcase(_, Config) ->
     Port = 6666,
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-    Assertions = [],
     FSRoot = ?TEST_ROOT,
     file:delete(FSRoot ++ ?TEST_FILE1),
     file:delete(FSRoot ++ ?TEST_FILE2), 
 
-    lists:append([{port, Port}, {nodes, NodesUp}, {assertions, Assertions}], Config).
+    lists:append([{port, Port}, {nodes, NodesUp}], Config).
 
 end_per_testcase(_, Config) ->
     Nodes = ?config(nodes, Config),

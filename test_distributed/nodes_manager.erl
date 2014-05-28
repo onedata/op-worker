@@ -21,31 +21,12 @@
 -define(FUSE_SESSION_EXP_TIME, 8000).
 -define(REQUEST_HANDLING_TIME, 1000).
 
-%% ====================================================================
-%% API
-%% ====================================================================
--export([check_start_assertions/1]).
-
 %% Functions to use instead of timer
 -export([wait_for_cluster_cast/0, wait_for_cluster_cast/1, wait_for_nodes_registration/1, wait_for_cluster_init/0, wait_for_cluster_init/1, wait_for_state_loading/0, wait_for_db_reaction/0, wait_for_fuse_session_exp/0, wait_for_request_handling/0]).
 
 %% ====================================================================
-%% API functions
-%% ====================================================================
-
-%% check_start_assertions/1
-%% ====================================================================
-%% @doc Checks if test was initialized properly.
--spec check_start_assertions(Config :: term()) -> ok.
-%% ====================================================================
-check_start_assertions(Config) ->
-  Assertions = ?config(assertions, Config),
-  lists:foreach(fun({Exp, Real}) -> ?assertEqual(Exp, Real) end, Assertions).
-
-%% ====================================================================
 %% Internal functions
 %% ====================================================================
-
 
 %% wait_for_cluster_cast/0
 %% ====================================================================

@@ -65,7 +65,6 @@ cache_loop() ->
 
 %% Tests if caches are updated properly after node recovery
 error_permanent_nodes_cache_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
@@ -140,7 +139,6 @@ error_permanent_nodes_cache_test(Config) ->
 
 %% This node-wide permanent caches
 permanent_node_cache_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
@@ -202,7 +200,6 @@ permanent_node_cache_test(Config) ->
 
 %% Tests if caches are cleared properly after node error
 sub_procs_error_cache_clearing_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
@@ -349,7 +346,6 @@ sub_procs_error_cache_clearing_test(Config) ->
 
 %% Tests if caches are cleared properly after node error
 error_nodes_cache_clearing_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
@@ -411,7 +407,6 @@ error_nodes_cache_clearing_test(Config) ->
 
 %% Tests if caches are cleared properly if automatic clearing is set
 sub_procs_automatic_cache_clearing_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
@@ -547,7 +542,6 @@ sub_procs_automatic_cache_clearing_test(Config) ->
 
 %% Tests if caches are cleared properly if automatic clearing is set
 automatic_nodes_cache_clearing_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
@@ -603,7 +597,6 @@ automatic_nodes_cache_clearing_test(Config) ->
 
 %% This test checks sub procs management (if requests are forwarded to apropriate sub procs)
 sub_proc_cache_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
@@ -755,7 +748,6 @@ sub_proc_cache_test(Config) ->
 
 %% This node-wide caches
 node_cache_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
@@ -823,7 +815,6 @@ node_cache_test(Config) ->
 
 %% This test checks sub procs management (if requests are forwarded to apropriate sub procs)
 sub_proc_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
@@ -938,8 +929,7 @@ init_per_testcase(_, Config) ->
     [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {control_panel_port, 2310}, {control_panel_redirect_port, 1356}, {rest_port, 3310}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
     [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {control_panel_port, 2311}, {control_panel_redirect_port, 1357}, {rest_port, 3311}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [],
-  lists:append([{nodes, NodesUp}, {assertions, Assertions}, {dbnode, DBNode}], Config).
+  lists:append([{nodes, NodesUp}, {dbnode, DBNode}], Config).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
