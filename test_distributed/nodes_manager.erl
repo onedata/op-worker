@@ -37,7 +37,7 @@
 %% API functions
 %% ====================================================================
 
-%% check_start_assertions/0
+%% check_start_assertions/1
 %% ====================================================================
 %% @doc Checks if test was initialized properly.
 -spec check_start_assertions(Config :: term()) -> ok.
@@ -80,7 +80,6 @@ start_test_on_nodes_with_dist_app(NodesNum, CCMNum, Verbose) ->
       {start_nodes(Nodes, Params2), Params2};
     false -> []
   end.
--endif.
 
 %% start_node/2
 %% ====================================================================
