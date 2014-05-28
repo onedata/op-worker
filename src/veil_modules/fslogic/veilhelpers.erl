@@ -39,7 +39,7 @@ exec(Method, SHInfo = #storage_helper_info{}, Args) ->
 %% ====================================================================
 %% @doc Executes apply(veilhelper_nif, Method, Args) through slave node. <br/>
 %% @end
--spec exec(Method :: atom(), SHInfo :: #storage_helper_info{}, [Arg :: term()]) ->
+-spec exec(Method :: atom(), [Arg :: term()]) ->
     {error, Reason :: term()} | Response when Response :: term().
 %% ====================================================================
 exec(Method, Args) when is_atom(Method), is_list(Args) ->
