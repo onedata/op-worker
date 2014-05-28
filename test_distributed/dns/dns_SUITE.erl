@@ -175,7 +175,7 @@ init_per_testcase(distributed_test, Config) ->
 
   NodesUp = test_node_starter:start_test_nodes(4),
   [CCM | _] = NodesUp,
-  DBNode = test_node_starter:get_db_node(),
+  DBNode = ?DB_NODE,
 
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [
     [{node_type, ccm_test}, {dispatcher_port, 5055}, {control_panel_port, 1350}, {control_panel_redirect_port, 1354}, {rest_port, 8443}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],

@@ -276,7 +276,7 @@ init_per_testcase(test_io_events_for_stats, Config) ->
 
   NodesUp = test_node_starter:start_test_nodes(2),
   [CCM | WorkerNodes] = NodesUp,
-  DBNode = test_node_starter:get_db_node(),
+  DBNode = ?DB_NODE,
 
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [
     [{node_type, ccm}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1313}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {cluster_monitoring_initialization, 5}, {cluster_monitoring_period, 5}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
@@ -312,7 +312,7 @@ init_per_testcase(_, Config) ->
 
   NodesUp = test_node_starter:start_test_nodes(2),
   [CCM | WorkerNodes] = NodesUp,
-  DBNode = test_node_starter:get_db_node(),
+  DBNode = ?DB_NODE,
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [
     [{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1313}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
