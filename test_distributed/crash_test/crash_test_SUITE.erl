@@ -109,8 +109,7 @@ main_test(Config) ->
   {StartAns, NewNode} = nodes_manager:start_node(CCM, CCMParams),
   ?assertEqual(ok, StartAns),
   ?assertEqual(CCM, NewNode),
-  StartLog = nodes_manager:start_app_on_nodes([CCM], [CCMArgs]),
-  ?assertEqual(false, lists:member(error, StartLog)),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, [CCM], [CCMArgs]),
 
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
   nodes_manager:wait_for_state_loading(),
@@ -137,8 +136,7 @@ main_test(Config) ->
   {StartAns2, NewNode2} = nodes_manager:start_node(Worker1, WorkerParams),
   ?assertEqual(ok, StartAns2),
   ?assertEqual(Worker1, NewNode2),
-  StartLog2 = nodes_manager:start_app_on_nodes([Worker1], [WorkerArgs]),
-  ?assertEqual(false, lists:member(error, StartLog2)),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, [Worker1], [WorkerArgs]),
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
   nodes_manager:wait_for_cluster_init(),
 
@@ -307,8 +305,7 @@ callbacks_test(Config) ->
   {StartAns, NewNode} = nodes_manager:start_node(CCM, CCMParams),
   ?assertEqual(ok, StartAns),
   ?assertEqual(CCM, NewNode),
-  StartLog = nodes_manager:start_app_on_nodes([CCM], [CCMArgs]),
-  ?assertEqual(false, lists:member(error, StartLog)),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, [CCM], [CCMArgs]),
 
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
   nodes_manager:wait_for_state_loading(),
@@ -337,8 +334,7 @@ callbacks_test(Config) ->
   {StartAns2, NewNode2} = nodes_manager:start_node(Worker1, WorkerParams),
   ?assertEqual(ok, StartAns2),
   ?assertEqual(Worker1, NewNode2),
-  StartLog2 = nodes_manager:start_app_on_nodes([Worker1], [WorkerArgs]),
-  ?assertEqual(false, lists:member(error, StartLog2)),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, [Worker1], [WorkerArgs]),
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
   nodes_manager:wait_for_cluster_init(),
 
@@ -357,8 +353,7 @@ callbacks_test(Config) ->
   {StartAns3, NewNode3} = nodes_manager:start_node(Worker1, WorkerParams),
   ?assertEqual(ok, StartAns3),
   ?assertEqual(Worker1, NewNode3),
-  StartLog3 = nodes_manager:start_app_on_nodes([Worker1], [WorkerArgs]),
-  ?assertEqual(false, lists:member(error, StartLog3)),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, [Worker1], [WorkerArgs]),
   nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
   nodes_manager:wait_for_cluster_init(),
 
@@ -384,20 +379,18 @@ init_per_testcase(_, Config) ->
   [CCM | NodesUp2] = NodesUp,
   [CCM2 | _] = NodesUp2,
   DB_Node = test_node_starter:get_db_node(),
-  Args = [[{node_type, ccm}, {dispatcher_port, 5055}, {control_panel_port, 1350}, {control_panel_redirect_port, 1354}, {rest_port, 8443}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1308}, {db_nodes, [DB_Node]}, {initialization_time, 5}, {cluster_clontrol_period, 1}, {heart_beat, 1}],
-    [{node_type, ccm}, {dispatcher_port, 6666}, {control_panel_port, 1351}, {control_panel_redirect_port, 1355}, {rest_port, 8445}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1309}, {db_nodes, [DB_Node]}, {initialization_time, 5}, {cluster_clontrol_period, 1}, {heart_beat, 1}],
-    [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {control_panel_redirect_port, 1356}, {rest_port, 8446}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1310}, {db_nodes, [DB_Node]}, {heart_beat, 1}],
-    [{node_type, worker}, {dispatcher_port, 8888}, {control_panel_port, 1353}, {control_panel_redirect_port, 1357}, {rest_port, 8447}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1311}, {db_nodes, [DB_Node]}, {heart_beat, 1}]],
+  Args = [[{node_type, ccm}, {dispatcher_port, 5055}, {control_panel_port, 1350}, {control_panel_redirect_port, 1354}, {rest_port, 8443}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1308}, {db_nodes, [DB_Node]}, {initialization_time, 5}, {cluster_clontrol_period, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, ccm}, {dispatcher_port, 6666}, {control_panel_port, 1351}, {control_panel_redirect_port, 1355}, {rest_port, 8445}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1309}, {db_nodes, [DB_Node]}, {initialization_time, 5}, {cluster_clontrol_period, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {control_panel_redirect_port, 1356}, {rest_port, 8446}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1310}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, worker}, {dispatcher_port, 8888}, {control_panel_port, 1353}, {control_panel_redirect_port, 1357}, {rest_port, 8447}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1311}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]],
 
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, Args),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, Args),
 
-  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
+  Assertions = [{false, lists:member(error, NodesUp)}],
   lists:append([{nodes, NodesUp}, {params, Params}, {args, Args}, {assertions, Assertions}], Config).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
-  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
+  test_node_starter:stop_app_on_nodes(Nodes),
   test_node_starter:stop_test_nodes(Nodes),
-  test_node_starter:stop_deps_for_tester_node(),
-
-  ?assertEqual(false, lists:member(error, StopLog)).
+  test_node_starter:stop_deps_for_tester_node().

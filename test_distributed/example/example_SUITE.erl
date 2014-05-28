@@ -99,10 +99,10 @@ init_per_testcase(distributed_test, Config) ->
   Nodes = test_node_starter:start_test_nodes(2),
   [Node1 | _] = Nodes,
 
-  StartLog = nodes_manager:start_app_on_nodes(Nodes, [[{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [Node1]}, {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {heart_beat, 1}],
-    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [Node1]}, {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {heart_beat, 1}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes, [[{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [Node1]}, {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [Node1]}, {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [{false, lists:member(error, StartLog)}],
+  Assertions = [],
   lists:append([{nodes, Nodes}, {assertions, Assertions}], Config);
 
 init_per_testcase(local_test, Config) ->
@@ -115,10 +115,8 @@ init_per_testcase(local_test, Config) ->
 
 end_per_testcase(distributed_test, Config) ->
   Nodes = ?config(nodes, Config),
-  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  test_node_starter:stop_test_nodes(Nodes),
-  %% use assertions AFTER all code that should be executed (they will show info for user but do not disturb cleaning up)
-  ?assertEqual(false, lists:member(error, StopLog));
+  test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
+  test_node_starter:stop_test_nodes(Nodes);
 
 end_per_testcase(local_test, _Config) ->
   StopAns = nodes_manager:stop_test_on_local_nod(),
