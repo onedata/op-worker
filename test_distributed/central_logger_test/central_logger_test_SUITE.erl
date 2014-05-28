@@ -283,5 +283,5 @@ init_per_testcase(init_and_cleanup_test, Config) ->
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
-  test_node_starter:stop_app_on_nodes(Nodes),
+  test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
   test_node_starter:stop_test_nodes(Nodes).
