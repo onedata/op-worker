@@ -36,7 +36,8 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% API
--export([save_record/1, exist_record/1, get_record/1, remove_record/1, list_records/2, load_view_def/2, set_db/1]).
+-export([get_db_structure/0, get_all_views/0]).
+-export([save_record/1, exist_record/1, get_record/1, remove_record/1, list_records/2, set_db/1]).
 -export([doc_to_term/1,init_storage/0]).
 
 %% ===================================================================
@@ -57,7 +58,7 @@ init({_Args, {init_status, table_initialized}}) -> %% Final stage of initializat
     case application:get_env(veil_cluster_node, db_nodes) of
         {ok, Nodes} when is_list(Nodes) ->
             [dao_hosts:insert(Node) || Node <- Nodes, is_atom(Node)],
-            catch setup_views(?DATABASE_DESIGN_STRUCTURE);
+            catch dao_update:setup_views(get_db_structure());
         _ ->
             lager:warning("There are no DB hosts given in application env variable.")
     end,
@@ -200,6 +201,12 @@ cleanup() ->
 %% ===================================================================
 
 
+get_db_structure() ->
+    ?DATABASE_DESIGN_STRUCTURE.
+
+get_all_views() ->
+    ?VIEW_LIST.
+
 %% save_record/1
 %% ====================================================================
 %% @doc Saves record to DB. Argument has to be either Record :: term() which will be saved<br/>
@@ -322,7 +329,7 @@ remove_record(Id) when is_list(Id) ->
 -spec list_records(ViewInfo :: #view_info{}, QueryArgs :: #view_query_args{}) ->
     {ok, QueryResult :: #view_result{}} | {error, term()}.
 %% ====================================================================
-list_records(#view_info{name = ViewName, design = DesignName, db_name = DbName}, QueryArgs) ->
+list_records(#view_info{name = ViewName, design = DesignName, db_name = DbName, version = ViewVersion}, QueryArgs) ->
     FormatKey =  %% Recursive lambda:
     fun(F, K) when is_list(K) -> [F(F, X) || X <- K];
       (_F, K) when is_binary(K) -> binary_to_list(K);
@@ -334,7 +341,7 @@ list_records(#view_info{name = ViewName, design = DesignName, db_name = DbName},
       (_) -> none
     end,
 
-        case dao_helper:query_view(DbName, DesignName, ViewName, QueryArgs) of
+        case dao_helper:query_view(DbName, DesignName, get_, QueryArgs) of
             {ok, [{total_and_offset, Total, Offset} | Rows]} ->
               FormattedRows =
                 [#view_row{id = binary_to_list(Id), key = FormatKey(FormatKey, Key), value = Value, doc = FormatDoc(Doc)}
@@ -378,74 +385,6 @@ get_db() ->
             DbName;
         _ ->
             ?DEFAULT_DB
-    end.
-
-%% setup_views/1
-%% ====================================================================
-%% @doc Creates or updates design documents
-%% @end
--spec setup_views(DesignStruct :: list()) -> ok.
-%% ====================================================================
-setup_views(DesignStruct) ->
-    DesignFun = fun(#design_info{name = Name, views = ViewList}, DbName) ->  %% Foreach design document
-            LastCTX = %% Calculate MD5 sum of current views (read from files)
-                lists:foldl(fun(#view_info{name = ViewName}, CTX) ->
-                            crypto:hash_update(CTX, load_view_def(ViewName, map) ++ load_view_def(ViewName, reduce))
-                        end, crypto:hash_init(md5), ViewList),
-
-            LocalVersion = dao_helper:name(integer_to_list(binary:decode_unsigned(crypto:hash_final(LastCTX)), 16)),
-            NewViewList =
-                case dao_helper:open_design_doc(DbName, Name) of
-                    {ok, #doc{body = Body}} -> %% Design document exists, so lets calculate MD5 sum of its views
-                        ViewsField = dao_json:get_field(Body, "views"),
-                        DbViews = [ dao_json:get_field(ViewsField, ViewName) || #view_info{name = ViewName} <- ViewList ],
-                        EmptyString = fun(Str) when is_binary(Str) -> binary_to_list(Str); %% Helper function converting non-string value to empty string
-                                         (_) -> "" end,
-                        VStrings = [ EmptyString(dao_json:get_field(V, "map")) ++ EmptyString(dao_json:get_field(V, "reduce")) || {L}=V <- DbViews, is_list(L)],
-                        LastCTX1 = lists:foldl(fun(VStr, CTX) -> crypto:hash_update(CTX, VStr) end, crypto:hash_init(md5), VStrings),
-                        DbVersion = dao_helper:name(integer_to_list(binary:decode_unsigned(crypto:hash_final(LastCTX1)), 16)),
-                        case DbVersion of %% Compare DbVersion with LocalVersion
-                            LocalVersion ->
-                                lager:info("DB version of design ~p is ~p and matches local version. Design is up to date", [Name, LocalVersion]),
-                                [];
-                            _Other ->
-                                lager:info("DB version of design ~p is ~p and does not match ~p. Rebuilding design document", [Name, _Other, LocalVersion]),
-                                ViewList
-                        end;
-                    _ ->
-                        lager:info("Design document ~p in DB ~p not exists. Creating...", [Name, DbName]),
-                        ViewList
-                end,
-
-            lists:map(fun(#view_info{name = ViewName}) -> %% Foreach view
-                case dao_helper:create_view(DbName, Name, ViewName, load_view_def(ViewName, map), load_view_def(ViewName, reduce), LocalVersion) of
-                    ok ->
-                        lager:info("View ~p in design ~p, DB ~p has been created.", [ViewName, Name, DbName]);
-                    _Err ->
-                        lager:error("View ~p in design ~p, DB ~p creation failed. Error: ~p", [ViewName, Name, DbName, _Err])
-                end
-            end, NewViewList),
-            DbName
-        end,
-
-    DbFun = fun(#db_info{name = Name, designs = Designs}) -> %% Foreach database
-            dao_helper:create_db(Name, []),
-            lists:foldl(DesignFun, Name, Designs)
-        end,
-
-    lists:map(DbFun, DesignStruct),
-    ok.
-
-%% load_view_def/2
-%% ====================================================================
-%% @doc Loads view definition from file.
-%% @end
--spec load_view_def(Name :: string(), Type :: map | reduce) -> string().
-%% ====================================================================
-load_view_def(Name, Type) ->
-    case file:read_file(?VIEW_DEF_LOCATION ++ Name ++ (case Type of map -> ?MAP_DEF_SUFFIX; reduce -> ?REDUCE_DEF_SUFFIX end)) of
-        {ok, Data} -> binary_to_list(Data);
-        _ -> ""
     end.
 
 %% is_valid_record/1
