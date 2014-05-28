@@ -107,9 +107,9 @@ init_per_testcase(distributed_test, Config) ->
 
 init_per_testcase(local_test, Config) ->
   ?INIT_DIST_TEST,
-  StartTestAns = nodes_manager:start_test_on_local_node(),
-  StartAppAns = nodes_manager:start_app_local([{node_type, ccm_test}, {dispatcher_port, 7777}, {ccm_nodes, [node()]}, {dns_port, 1312}]),
-  Assertions = [{ok, StartTestAns}, {ok, StartAppAns}],
+  test_node_starter:start_deps(?VEIL_DEPS),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS,[node()],[[{node_type, ccm_test}, {dispatcher_port, 7777}, {ccm_nodes, [node()]}, {dns_port, 1312},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+  Assertions = [],
   lists:append([{assertions, Assertions}], Config).
 
 
@@ -119,5 +119,4 @@ end_per_testcase(distributed_test, Config) ->
   test_node_starter:stop_test_nodes(Nodes);
 
 end_per_testcase(local_test, _Config) ->
-  StopAns = nodes_manager:stop_test_on_local_nod(),
-  ?assertEqual(ok, StopAns).
+  test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, [node()]).

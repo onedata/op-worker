@@ -27,9 +27,8 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([start_test_on_local_node/0, start_app_on_nodes/2, stop_app_on_nodes/1, stop_test_on_local_nod/0, check_start_assertions/1]).
+-export([check_start_assertions/1]).
 -export([start_test_on_nodes_with_dist_app/2, start_test_on_nodes_with_dist_app/3, start_node/2, stop_node/1]).
--export([start_deps/0, start_app/2, start_app_local/1, stop_deps/0, stop_app/1, stop_app_local/0]).
 
 %% Functions to use instead of timer
 -export([wait_for_cluster_cast/0, wait_for_cluster_cast/1, wait_for_nodes_registration/1, wait_for_cluster_init/0, wait_for_cluster_init/1, wait_for_state_loading/0, wait_for_db_reaction/0, wait_for_fuse_session_exp/0, wait_for_request_handling/0]).
@@ -47,17 +46,6 @@ check_start_assertions(Config) ->
   Assertions = ?config(assertions, Config),
   lists:foreach(fun({Exp, Real}) -> ?assertEqual(Exp, Real) end, Assertions).
 
-%% start_test_on_local_node/0
-%% ====================================================================
-%% @doc Starts dependencies needed when test is run locally on one node.
--spec start_test_on_local_node() -> Result when
-  Result ::  ok | {error, Reason},
-  Reason :: term().
-%% ====================================================================
-start_test_on_local_node() ->
-  set_deps(),
-  start_deps().
-
 %% start_test_on_nodes_with_dist_app/2
 %% ====================================================================
 %% @doc Starts nodes needed for test.
@@ -74,7 +62,6 @@ start_test_on_nodes_with_dist_app(NodesNum, CCMNum) ->
   Result ::  list().
 %% ====================================================================
 start_test_on_nodes_with_dist_app(NodesNum, CCMNum, Verbose) ->
-  set_deps(),
 
   case NodesNum > 0 of
     true ->
@@ -93,160 +80,7 @@ start_test_on_nodes_with_dist_app(NodesNum, CCMNum, Verbose) ->
       {start_nodes(Nodes, Params2), Params2};
     false -> []
   end.
-
-%% start_app/2
-%% ====================================================================
-%% @doc Starts application (with arguments) on node.
--spec start_app(Node :: atom(), Args  :: list()) -> Result when
-  Result ::  list().
-%% ====================================================================
-start_app(Node, Args) ->
-  rpc:call(Node, nodes_manager, start_app_local, [Args]).
-
-%% start_app_on_nodes/2
-%% ====================================================================
-%% @doc Starts application (with arguments) on nodes.
--spec start_app_on_nodes(Nodes :: list(), Args  :: list()) -> Result when
-  Result ::  list().
-%% ====================================================================
--ifndef(verbose).
-start_app_on_nodes([], _Args) ->
-  [];
-
-start_app_on_nodes([Node | Nodes], [Arg | Args]) ->
-    Deps = rpc:call(Node, nodes_manager, start_deps, []),
-    App = start_app(Node, Arg),
-    Ans = case (Deps =:= ok) and (App =:= ok) of
-              true -> ok;
-              false -> error
-          end,
-    [Ans | start_app_on_nodes(Nodes, Args)].
 -endif.
-
--ifdef(verbose).
-start_app_on_nodes([], _Args) ->
-    [];
-
-start_app_on_nodes([Node | Nodes], [Arg | Args]) ->
-  Deps = rpc:call(Node, nodes_manager, start_deps, []),
-  App = start_app(Node, Arg),
-  Ans = case (Deps =:= ok) and (App =:= ok) of
-    true -> ok;
-    false -> error
-  end,
-  ct:print("start_app_on_node: ~p~n", [{Node, Deps, App}]),
-  [Ans | start_app_on_nodes(Nodes, Args)].
--endif.
-
-%% stop_app/1
-%% ====================================================================
-%% @doc Stops application on node.
--spec stop_app(Node :: atom()) -> Result when
-  Result ::  list().
-%% ====================================================================
-stop_app(Node) ->
-  rpc:call(Node, nodes_manager, stop_app_local, []).
-
-%% stop_app_on_nodes/1
-%% ====================================================================
-%% @doc Stops application on nodes.
--spec stop_app_on_nodes(Nodes :: list()) -> Result when
-  Result ::  list().
-%% ====================================================================
-stop_app_on_nodes([]) ->
-  [];
-
-stop_app_on_nodes([Node | Nodes]) ->
-  App = stop_app(Node),
-  Deps = rpc:call(Node, nodes_manager, stop_deps, []),
-  Ans = case (Deps =:= ok) and (App =:= ok) of
-    true -> ok;
-    false -> error
-  end,
-  [Ans | stop_app_on_nodes(Nodes)].
-
-%% stop_test_on_local_nod/0
-%% ====================================================================
-%% @doc Stops dependencies needed when test is run locally on one node.
--spec stop_test_on_local_nod() -> Result when
-  Result ::  ok | error.
-%% ====================================================================
-stop_test_on_local_nod() ->
-  App = stop_app_local(),
-  Deps = stop_deps(),
-  case (Deps =:= ok) and (App =:= ok) of
-    true -> ok;
-    false -> error
-  end.
-
-%% start_deps/0
-%% ====================================================================
-%% @doc This function sets environment for application.
--spec start_deps() -> ok.
-%% ====================================================================
-start_deps() ->
-  stop_deps(), %% Stop all applications (if any)
-
-  application:start(sasl),
-
-  % Load configuration from sys.config so that lager starts with proper configuration
-  application:load(lager),
-  {ok, [Data]} = file:consult("sys.config"),
-  Config = proplists:get_value(lager, Data),
-  lists:foreach(
-    fun(Key) -> 
-      application:set_env(lager, Key, proplists:get_value(Key, Config)) 
-    end, proplists:get_keys(Config)),
-  lager:start(),
-
-
-  ssl:start(),
-  application:start(ranch),
-  application:start(cowboy),
-  application:start(mimetypes),
-  application:start(ibrowse),
-  application:start(rrderlang),
-  application:load(?APP_Name).
-
-%% stop_deps/0
-%% ====================================================================
-%% @doc This function clears after the test.
--spec stop_deps() -> ok.
-%% ====================================================================
-
-stop_deps() ->
-  application:stop(ranch),
-  application:stop(ssl),
-  application:stop(crypto),
-  application:stop(public_key),
-  application:stop(cowboy),
-  application:stop(lager),
-  application:stop(sasl),
-  application:stop(mimetypes),
-  application:stop(ibrowse),
-  application:stop(rrderlang),
-  application:unload(?APP_Name).
-
-%% start_app_local/1
-%% ====================================================================
-%% @doc This function starts the application ands sets environment
-%% variables for it.
--spec start_app_local(Vars :: list()) -> ok.
-%% ====================================================================
-
-start_app_local(Vars) ->
-  set_env_vars([{nif_prefix, './'}, {ca_dir, './cacerts/'}] ++ Vars),
-  application:stop(?APP_Name), %% Make sure that veil_cluster isn't running before starting new instance
-  application:start(?APP_Name).
-
-%% stop_app_local/0
-%% ====================================================================
-%% @doc This function stops the application.
--spec stop_app_local() -> ok.
-%% ====================================================================
-
-stop_app_local() ->
-  application:stop(?APP_Name).
 
 %% start_node/2
 %% ====================================================================
@@ -256,7 +90,6 @@ stop_app_local() ->
   Ans :: term(),
   Node :: atom().
 %% ====================================================================
-
 start_node(Node, Params) ->
   NodeStr = atom_to_list(Node),
   [BegStr, HostStr] = string:tokens(NodeStr, "@"),
@@ -407,47 +240,6 @@ get_host() ->
 make_code_path() ->
   lists:foldl(fun(Node, Path) -> " -pa " ++ Node ++ Path end,
     [], code:get_path()).
-
-%% set_deps/0
-%% ====================================================================
-%% @doc Sets paths to dependencies.
-%% @end
--spec set_deps() -> Result when
-  Result :: true | {error, What},
-  What :: bad_directory | bad_path.
-%% ====================================================================
-set_deps() ->
-  timer:sleep(1000),
-  code:add_path("../ebin"),
-  {ok, Dirs} = file:list_dir("../deps"),
-  Deps = list_deps(Dirs, "../deps/", "/ebin", []),
-  code:add_paths(Deps).
-
-%% list_deps/4
-%% ====================================================================
-%% @doc This function lists the directories with dependencies of application.
--spec list_deps(Dirs :: list(), Beg :: string(), End  :: string(), Ans :: list()) -> FinalAns when
-  FinalAns :: list().
-%% ====================================================================
-
-list_deps([], _Beg, _End, Ans) ->
-  Ans;
-
-list_deps([D | Dirs], Beg, End, Ans) ->
-  list_deps(Dirs, Beg, End, [Beg ++ D ++ End | Ans]).
-
-%% set_env_vars/1
-%% ====================================================================
-%% @doc This function sets environment variables for application.
--spec set_env_vars(EnvVars :: list()) -> ok.
-%% ====================================================================
-
-set_env_vars([]) ->
-  ok;
-
-set_env_vars([{Variable, Value} | Vars]) ->
-  application:set_env(?APP_Name, Variable, Value),
-  set_env_vars(Vars).
 
 %% wait_for_cluster_cast/0
 %% ====================================================================
