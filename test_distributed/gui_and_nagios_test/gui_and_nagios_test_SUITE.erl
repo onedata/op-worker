@@ -89,20 +89,21 @@ init_per_testcase(main_test, Config) ->
 
 	DB_Node = test_node_starter:get_db_node(),
 
-	StartLog = nodes_manager:start_app_on_nodes(Nodes,
-		[[{node_type, ccm_test},
-			{dispatcher_port, 5055},
-			{ccm_nodes, [Node1]},
-			{dns_port, 1308},
-      {heart_beat, 1},
-			{db_nodes, [DB_Node]}]]),
+    test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
+        [[{node_type, ccm_test},
+            {dispatcher_port, 5055},
+            {ccm_nodes, [Node1]},
+            {dns_port, 1308},
+            {heart_beat, 1},
+            {db_nodes, [DB_Node]},
+            {nif_prefix, './'},
+            {ca_dir, './cacerts/'}]]),
 
-    Assertions = [{false, lists:member(error, StartLog)}],
+    Assertions = [],
     lists:append([{nodes, Nodes}, {assertions, Assertions}], Config).
 
 
 end_per_testcase(main_test, Config) ->
     Nodes = ?config(nodes, Config),
-    StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-    test_node_starter:stop_test_nodes(Nodes),
-    ?assertEqual(false, lists:member(error, StopLog)).
+    test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
+    test_node_starter:stop_test_nodes(Nodes).

@@ -117,9 +117,9 @@ init_per_testcase(_, Config) ->
 
     DB_Node = test_node_starter:get_db_node(),
     Port = 6666,
-    StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}]]),
+    test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-    Assertions = [{false, lists:member(error, StartLog)}],
+    Assertions = [],
     FSRoot = ?TEST_ROOT,
     file:delete(FSRoot ++ ?TEST_FILE1),
     file:delete(FSRoot ++ ?TEST_FILE2), 
@@ -128,8 +128,6 @@ init_per_testcase(_, Config) ->
 
 end_per_testcase(_, Config) ->
     Nodes = ?config(nodes, Config),
-    StopLog = nodes_manager:stop_app_on_nodes(Nodes),
+    test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
     test_node_starter:stop_test_nodes(Nodes),
-    test_node_starter:stop_deps_for_tester_node(),
-
-    ?assertEqual(false, lists:member(error, StopLog)).
+    test_node_starter:stop_deps_for_tester_node().

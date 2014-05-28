@@ -177,13 +177,13 @@ init_per_testcase(distributed_test, Config) ->
   [CCM | _] = NodesUp,
   DBNode = test_node_starter:get_db_node(),
 
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [
-    [{node_type, ccm_test}, {dispatcher_port, 5055}, {control_panel_port, 1350}, {control_panel_redirect_port, 1354}, {rest_port, 8443}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1}],
-    [{node_type, worker}, {dispatcher_port, 6666}, {control_panel_port, 1351}, {control_panel_redirect_port, 1355}, {rest_port, 8444}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1}],
-    [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {control_panel_redirect_port, 1356}, {rest_port, 8445}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1}],
-    [{node_type, worker}, {dispatcher_port, 8888}, {control_panel_port, 1353}, {control_panel_redirect_port, 1357}, {rest_port, 8446}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [
+    [{node_type, ccm_test}, {dispatcher_port, 5055}, {control_panel_port, 1350}, {control_panel_redirect_port, 1354}, {rest_port, 8443}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {control_panel_port, 1351}, {control_panel_redirect_port, 1355}, {rest_port, 8444}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {control_panel_redirect_port, 1356}, {rest_port, 8445}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, worker}, {dispatcher_port, 8888}, {control_panel_port, 1353}, {control_panel_redirect_port, 1357}, {rest_port, 8446}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [{false, lists:member(error, StartLog)}],
+  Assertions = [],
   lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config);
 
 init_per_testcase(_, Config) ->
@@ -193,28 +193,24 @@ init_per_testcase(_, Config) ->
   [Node | _] = NodesUp,
 
   DNS_Port = 1312,
-  Env = [{node_type, ccm_test}, {dispatcher_port, 6666}, {ccm_nodes, [Node]}, {dns_port, DNS_Port}, {heart_beat, 1}],
+  Env = [{node_type, ccm_test}, {dispatcher_port, 6666}, {ccm_nodes, [Node]}, {dns_port, DNS_Port}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
 
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [Env]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [Env]),
 
-  Assertions = [{false, lists:member(error, StartLog)}],
+  Assertions = [],
   lists:append([{dns_port, DNS_Port}, {nodes, NodesUp}, {assertions, Assertions}], Config).
 
 
 end_per_testcase(distributed_test, Config) ->
   Nodes = ?config(nodes, Config),
-  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
+  test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
   test_node_starter:stop_test_nodes(Nodes),
-  test_node_starter:stop_deps_for_tester_node(),
-
-  ?assertEqual(false, lists:member(error, StopLog));
+  test_node_starter:stop_deps_for_tester_node();
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
-  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  test_node_starter:stop_test_nodes(Nodes),
-
-  ?assertEqual(false, lists:member(error, StopLog)).
+  test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
+  test_node_starter:stop_test_nodes(Nodes).
 
 %% ====================================================================
 %% Helping functions
