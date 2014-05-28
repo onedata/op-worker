@@ -11,7 +11,7 @@
 %% ===================================================================
 
 -module(rest_test_SUITE).
--include("nodes_manager.hrl").
+-include("test_utils.hrl").
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/control_panel/rest_messages.hrl").
 -include("err.hrl").
@@ -48,9 +48,9 @@ main_test(Config) ->
 
     gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
     gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-    nodes_manager:wait_for_cluster_cast(),
+    test_utils:wait_for_cluster_cast(),
     gen_server:cast({global, ?CCM}, init_cluster),
-    nodes_manager:wait_for_cluster_init(),
+    test_utils:wait_for_cluster_init(),
 
     ibrowse:start(),
     DN = get_dn_from_cert(),

@@ -12,7 +12,7 @@
 
 -module(caches_test_SUITE).
 
--include("nodes_manager.hrl").
+-include("test_utils.hrl").
 -include("registered_names.hrl").
 -include("modules_and_args.hrl").
 -include("communication_protocol_pb.hrl").
@@ -70,14 +70,14 @@ error_permanent_nodes_cache_test(Config) ->
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   CacheCheckFun = fun() ->
     Node = node(),
@@ -92,7 +92,7 @@ error_permanent_nodes_cache_test(Config) ->
       ?assertEqual(ok, worker_host:create_permanent_cache(test_cache, CacheCheckFun)),
       cache_loop()
     end),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node}),
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node}),
     [Pid | Ans]
   end,
   CachesPids = lists:foldl(CreateCaches, [], WorkerNodes),
@@ -102,7 +102,7 @@ error_permanent_nodes_cache_test(Config) ->
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key2, test_value2}])),
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key3, test_value3}])),
     ?assert(rpc:call(Node, ets, insert, [test_cache, {get_atom_from_node(Node, test_key), get_atom_from_node(Node, test_value)}])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(AddDataToCaches, WorkerNodes),
 
@@ -119,11 +119,11 @@ error_permanent_nodes_cache_test(Config) ->
 
   [W1 | _] = WorkerNodes,
   ?assert(rpc:call(CCM, erlang, disconnect_node, [W1])),
-  nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, W1}),
+  test_utils:wait_for_cluster_cast({?Node_Manager_Name, W1}),
 
   ?assertEqual(ok, rpc:call(W1, ?MODULE, worker_code, [])),
-  nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, W1}),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_cast({?Node_Manager_Name, W1}),
+  test_utils:wait_for_cluster_init(),
 
   CheckCaches2 = fun(Node) ->
     ?assertEqual(3, rpc:call(Node, ets, info, [test_cache, size])),
@@ -144,21 +144,21 @@ permanent_node_cache_test(Config) ->
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   CreateCaches = fun(Node, Ans) ->
     Pid = spawn_link(Node, fun() ->
       ?assertEqual(ok, worker_host:create_permanent_cache(test_cache)),
       cache_loop()
     end),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node}),
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node}),
     [Pid | Ans]
   end,
   CachesPids = lists:foldl(CreateCaches, [], WorkerNodes),
@@ -168,7 +168,7 @@ permanent_node_cache_test(Config) ->
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key2, test_value2}])),
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key3, test_value3}])),
     ?assert(rpc:call(Node, ets, insert, [test_cache, {get_atom_from_node(Node, test_key), get_atom_from_node(Node, test_value)}])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(AddDataToCaches, WorkerNodes),
 
@@ -193,7 +193,7 @@ permanent_node_cache_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
   lists:foreach(CheckCaches, WorkerNodes),
 
   lists:foreach(fun(Pid) -> Pid ! stop_cache end, CachesPids).
@@ -205,14 +205,14 @@ sub_procs_error_cache_clearing_test(Config) ->
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
@@ -224,7 +224,7 @@ sub_procs_error_cache_clearing_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
 
   ProcFun = fun
     (_ProtocolVersion, {update_cache, _, AnsPid, {Key, Value}}, CacheName) ->
@@ -269,10 +269,10 @@ sub_procs_error_cache_clearing_test(Config) ->
   RegisterSubProc = fun(Node) ->
     RegAns = gen_server:call({fslogic, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun, simple}, 1000),
     ?assertEqual(ok, RegAns),
-    nodes_manager:wait_for_cluster_cast({fslogic, Node})
+    test_utils:wait_for_cluster_cast({fslogic, Node})
   end,
   lists:foreach(RegisterSubProc, NodesUp),
-  nodes_manager:wait_for_request_handling(),
+  test_utils:wait_for_request_handling(),
 
   Pid = self(),
 
@@ -324,11 +324,11 @@ sub_procs_error_cache_clearing_test(Config) ->
 
   W1 = gen_server:call({?Dispatcher_Name, CCM}, {get_worker_node, {{get_from_cache, 11, k1}, fslogic}}, 500),
   ?assert(rpc:call(CCM, erlang, disconnect_node, [W1])),
-  nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, W1}),
+  test_utils:wait_for_cluster_cast({?Node_Manager_Name, W1}),
 
   ?assertEqual(ok, rpc:call(W1, ?MODULE, worker_code, [])),
-  nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, W1}),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_cast({?Node_Manager_Name, W1}),
+  test_utils:wait_for_cluster_init(),
 
   VerNums = [11,12,13,21,22,23,31,32,33,41,42,43],
   VerifyAllCaches = fun(Key) ->
@@ -351,21 +351,21 @@ error_nodes_cache_clearing_test(Config) ->
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   CreateCaches = fun(Node, Ans) ->
     Pid = spawn_link(Node, fun() ->
       ?assertEqual(ok, worker_host:create_simple_cache(test_cache)),
       cache_loop()
     end),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node}),
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node}),
     [Pid | Ans]
   end,
   CachesPids = lists:foldl(CreateCaches, [], WorkerNodes),
@@ -375,7 +375,7 @@ error_nodes_cache_clearing_test(Config) ->
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key2, test_value2}])),
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key3, test_value3}])),
     ?assert(rpc:call(Node, ets, insert, [test_cache, {get_atom_from_node(Node, test_key), get_atom_from_node(Node, test_value)}])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(AddDataToCaches, WorkerNodes),
 
@@ -392,11 +392,11 @@ error_nodes_cache_clearing_test(Config) ->
 
   [W1 | _] = WorkerNodes,
   ?assert(rpc:call(CCM, erlang, disconnect_node, [W1])),
-  nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, W1}),
+  test_utils:wait_for_cluster_cast({?Node_Manager_Name, W1}),
 
   ?assertEqual(ok, rpc:call(W1, ?MODULE, worker_code, [])),
-  nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, W1}),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_cast({?Node_Manager_Name, W1}),
+  test_utils:wait_for_cluster_init(),
 
   CheckCaches2 = fun(Node) ->
     ?assertEqual(0, rpc:call(Node, ets, info, [test_cache, size]))
@@ -412,14 +412,14 @@ sub_procs_automatic_cache_clearing_test(Config) ->
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
@@ -431,7 +431,7 @@ sub_procs_automatic_cache_clearing_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
 
   ProcFun = fun
     (_ProtocolVersion, {update_cache, _, AnsPid, {Key, Value}}, CacheName) ->
@@ -477,10 +477,10 @@ sub_procs_automatic_cache_clearing_test(Config) ->
   RegisterSubProc = fun(Node) ->
     RegAns = gen_server:call({fslogic, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun, {simple, ?CacheClearingTime, ClearFun}}, 1000),
     ?assertEqual(ok, RegAns),
-    nodes_manager:wait_for_cluster_cast({fslogic, Node})
+    test_utils:wait_for_cluster_cast({fslogic, Node})
   end,
   lists:foreach(RegisterSubProc, NodesUp),
-  nodes_manager:wait_for_request_handling(),
+  test_utils:wait_for_request_handling(),
 
   Pid = self(),
 
@@ -547,14 +547,14 @@ automatic_nodes_cache_clearing_test(Config) ->
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   ClearFun = fun() -> ets:delete_all_objects(test_cache) end,
   CreateCaches = fun(Node, Ans) ->
@@ -562,7 +562,7 @@ automatic_nodes_cache_clearing_test(Config) ->
       ?assertEqual(ok, worker_host:create_simple_cache(test_cache, ?CacheClearingTime, ClearFun)),
       cache_loop()
     end),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node}),
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node}),
     [Pid | Ans]
   end,
   CachesPids = lists:foldl(CreateCaches, [], WorkerNodes),
@@ -572,7 +572,7 @@ automatic_nodes_cache_clearing_test(Config) ->
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key2, test_value2}])),
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key3, test_value3}])),
     ?assert(rpc:call(Node, ets, insert, [test_cache, {get_atom_from_node(Node, test_key), get_atom_from_node(Node, test_value)}])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(AddDataToCaches, WorkerNodes),
 
@@ -602,14 +602,14 @@ sub_proc_cache_test(Config) ->
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
@@ -621,7 +621,7 @@ sub_proc_cache_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
 
   ProcFun = fun
     (_ProtocolVersion, {update_cache, _, AnsPid, {Key, Value}}, CacheName) ->
@@ -666,10 +666,10 @@ sub_proc_cache_test(Config) ->
   RegisterSubProc = fun(Node) ->
     RegAns = gen_server:call({fslogic, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun, simple}, 1000),
     ?assertEqual(ok, RegAns),
-    nodes_manager:wait_for_cluster_cast({fslogic, Node})
+    test_utils:wait_for_cluster_cast({fslogic, Node})
   end,
   lists:foreach(RegisterSubProc, NodesUp),
-  nodes_manager:wait_for_request_handling(),
+  test_utils:wait_for_request_handling(),
 
   Pid = self(),
 
@@ -753,21 +753,21 @@ node_cache_test(Config) ->
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   CreateCaches = fun(Node, Ans) ->
     Pid = spawn_link(Node, fun() ->
       ?assertEqual(ok, worker_host:create_simple_cache(test_cache)),
       cache_loop()
     end),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node}),
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node}),
     [Pid | Ans]
   end,
   CachesPids = lists:foldl(CreateCaches, [], WorkerNodes),
@@ -777,7 +777,7 @@ node_cache_test(Config) ->
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key2, test_value2}])),
     ?assert(rpc:call(Node, ets, insert, [test_cache, {test_key3, test_value3}])),
     ?assert(rpc:call(Node, ets, insert, [test_cache, {get_atom_from_node(Node, test_key), get_atom_from_node(Node, test_value)}])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(AddDataToCaches, WorkerNodes),
 
@@ -820,14 +820,14 @@ sub_proc_test(Config) ->
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
@@ -839,7 +839,7 @@ sub_proc_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
 
   ProcFun = fun(_ProtocolVersion, {sub_proc_test, _, AnsPid}) ->
     Pid = self(),
@@ -866,10 +866,10 @@ sub_proc_test(Config) ->
   RegisterSubProc = fun(Node) ->
     RegAns = gen_server:call({fslogic, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun}, 1000),
     ?assertEqual(ok, RegAns),
-    nodes_manager:wait_for_cluster_cast({fslogic, Node})
+    test_utils:wait_for_cluster_cast({fslogic, Node})
   end,
   lists:foreach(RegisterSubProc, NodesUp),
-  nodes_manager:wait_for_request_handling(),
+  test_utils:wait_for_request_handling(),
 
   Self = self(),
   TestFun = fun() ->

@@ -11,7 +11,7 @@
 %% ===================================================================
 -module(high_load_test_SUITE).
 
--include("nodes_manager.hrl").
+-include("test_utils.hrl").
 -include("registered_names.hrl").
 -include_lib("ctool/include/assertions.hrl").
 -include_lib("ctool/include/test_node_starter.hrl").
@@ -91,14 +91,14 @@ multi_node_test(Config) ->
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
@@ -129,7 +129,7 @@ multi_node_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  nodes_manager:wait_for_cluster_init(5*length(NodesUp) - 5),
+  test_utils:wait_for_cluster_init(5*length(NodesUp) - 5),
 
   Pid = self(),
   TestFun = fun() ->
@@ -170,14 +170,14 @@ sub_proc_load_test(Config) ->
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
@@ -189,7 +189,7 @@ sub_proc_load_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
 
   ProcFun = fun(_ProtocolVersion, {sub_proc_test, _, AnsPid}) ->
     calc(10000),
@@ -218,10 +218,10 @@ sub_proc_load_test(Config) ->
   RegisterSubProc = fun(Node) ->
     RegAns = gen_server:call({fslogic, Node}, {register_or_update_sub_proc, sub_proc_test_proccess, 2, 3, ProcFun, MapFun, RequestMap, DispMapFun}, 1000),
     ?assertEqual(ok, RegAns),
-    nodes_manager:wait_for_cluster_cast({fslogic, Node})
+    test_utils:wait_for_cluster_cast({fslogic, Node})
   end,
   lists:foreach(RegisterSubProc, NodesUp),
-  nodes_manager:wait_for_request_handling(),
+  test_utils:wait_for_request_handling(),
 
   Self = self(),
   TestFun = fun() ->
@@ -314,9 +314,9 @@ end_per_testcase(_, Config) ->
 start_cluster(Node) ->
   gen_server:cast({?Node_Manager_Name, Node}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init().
+  test_utils:wait_for_cluster_init().
 
 for(N, N, F) -> [F()];
 for(I, N, F) -> [F()|for(I+1, N, F)].

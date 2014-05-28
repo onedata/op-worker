@@ -14,7 +14,7 @@
 -module(dns_SUITE).
 -include_lib("kernel/src/inet_dns.hrl").
 
--include("nodes_manager.hrl").
+-include("test_utils.hrl").
 -include("registered_names.hrl").
 -include_lib("ctool/include/assertions.hrl").
 -include_lib("ctool/include/test_node_starter.hrl").
@@ -101,14 +101,14 @@ distributed_test(Config) ->
   Host = get_host(CCM),
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
@@ -120,7 +120,7 @@ distributed_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
+  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
 
   {ConAns, Socket} = gen_tcp:connect(Host, DNS_Port, [{active, false}, binary, {packet, 2}]),
   ?assertEqual(ok, ConAns),
@@ -215,7 +215,7 @@ end_per_testcase(_, Config) ->
 prepare_test_and_start_cluster(Config) ->
   ct:timetrap({seconds, 120}),
   start_cluster(Config),
-  nodes_manager:wait_for_cluster_init().
+  test_utils:wait_for_cluster_init().
 
 
 %% Helper function for starting cluster
@@ -223,7 +223,7 @@ start_cluster(Config) ->
   [Node | _] = ?config(nodes, Config),
   gen_server:cast({?Node_Manager_Name, Node}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
   ok.
 

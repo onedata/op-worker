@@ -12,7 +12,7 @@
 
 -module(veilhelpers_test_SUITE).
 
--include("nodes_manager.hrl").
+-include("test_utils.hrl").
 -include("registered_names.hrl").
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").

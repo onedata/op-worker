@@ -11,7 +11,7 @@
 %% ===================================================================
 
 -module(example_SUITE).
--include("nodes_manager.hrl").
+-include("test_utils.hrl").
 -include("registered_names.hrl").
 -include_lib("ctool/include/assertions.hrl").
 -include_lib("ctool/include/test_node_starter.hrl").
@@ -41,11 +41,11 @@ distributed_test(Config) ->
   [Node2 | _] = Nodes2,
 
   ?assertEqual(ok, rpc:call(Node1, ?MODULE, node1_code1, [])),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   ?assertEqual(ok, rpc:call(Node2, ?MODULE, node2_code, [])),
-  nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node2}),
+  test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node2}),
   ?assertEqual(ok, rpc:call(Node1, ?MODULE, node1_code2, [])),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   NodesListFromCCM = gen_server:call({global, ?CCM}, get_nodes, 500),
   ?assertEqual(length(Nodes), length(NodesListFromCCM)),
@@ -76,9 +76,9 @@ node2_code() ->
 local_test(Config) ->
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   NodesListFromCCM = gen_server:call({global, ?CCM}, get_nodes, 500),
   ?assertEqual(1, length(NodesListFromCCM)).
@@ -105,7 +105,7 @@ init_per_testcase(local_test, Config) ->
   ?INIT_DIST_TEST,
   test_node_starter:start_deps(?VEIL_DEPS),
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS,[node()],[[{node_type, ccm_test}, {dispatcher_port, 7777}, {ccm_nodes, [node()]}, {dns_port, 1312},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
-  lists:append([{assertions, Assertions}], Config).
+  Config.
 
 
 end_per_testcase(distributed_test, Config) ->
