@@ -30,7 +30,6 @@ all() -> [main_test].
 %% Main test, it initializes cluster and runs all other tests
 main_test(Config) ->
 	%init
-	nodes_manager:check_start_assertions(Config),
 	NodesUp = ?config(nodes, Config),
 	[CCM | _] = NodesUp,
 	put(ccm, CCM),
@@ -99,8 +98,7 @@ init_per_testcase(main_test, Config) ->
             {nif_prefix, './'},
             {ca_dir, './cacerts/'}]]),
 
-    Assertions = [],
-    lists:append([{nodes, Nodes}, {assertions, Assertions}], Config).
+    lists:append([{nodes, Nodes}], Config).
 
 
 end_per_testcase(main_test, Config) ->

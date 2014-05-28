@@ -32,7 +32,6 @@ all() -> [main_test, callbacks_test].
 %% ====================================================================
 
 main_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   Params = ?config(params, Config),
   [CCMParams | Params2] = Params,
@@ -147,7 +146,6 @@ main_test(Config) ->
 
 
 callbacks_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   Params = ?config(params, Config),
   [CCMParams | Params2] = Params,
@@ -385,7 +383,7 @@ init_per_testcase(_, Config) ->
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, Args),
 
   Assertions = [{false, lists:member(error, NodesUp)}],
-  lists:append([{nodes, NodesUp}, {params, Params}, {args, Args}, {assertions, Assertions}], Config).
+  lists:append([{nodes, NodesUp}, {params, Params}, {args, Args}], Config).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),

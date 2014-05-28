@@ -51,7 +51,6 @@ worker_code() ->
 
 %% Tests if one node cluster is able to answer a lot of messages at once
 main_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [CCM | _] = NodesUp,
   start_cluster(CCM),
@@ -87,7 +86,6 @@ main_test(Config) ->
 
 %% Tests if many node cluster is able to answer a lot of messages at once
 multi_node_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
@@ -167,7 +165,6 @@ multi_node_test(Config) ->
 
 %% Tests if many node cluster is able to answer a lot of messages to sub_processes at once
 sub_proc_load_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
@@ -286,8 +283,7 @@ init_per_testcase(main_test, Config) ->
   Port = 6666,
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [Node1]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [],
-  lists:append([{port, Port}, {nodes, NodesUp}, {assertions, Assertions}], Config);
+  lists:append([{port, Port}, {nodes, NodesUp}], Config);
 
 init_per_testcase(_, Config) ->
   ?INIT_DIST_TEST,
@@ -303,8 +299,7 @@ init_per_testcase(_, Config) ->
     [{node_type, worker}, {dispatcher_port, 7777}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {control_panel_port, 2310}, {control_panel_redirect_port, 1356}, {rest_port, 3310}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
     [{node_type, worker}, {dispatcher_port, 8888}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {control_panel_port, 2311}, {control_panel_redirect_port, 1357}, {rest_port, 3311}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [],
-  lists:append([{nodes, NodesUp}, {assertions, Assertions}, {dbnode, DBNode}], Config).
+  lists:append([{nodes, NodesUp}, {dbnode, DBNode}], Config).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),

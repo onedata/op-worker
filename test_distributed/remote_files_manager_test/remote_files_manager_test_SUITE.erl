@@ -35,7 +35,6 @@ all() -> [storage_helpers_management_test, helper_requests_test, permissions_tes
 
 %% Tests if not permitted operations can not be executed
 permissions_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   ST_Helper = "ClusterProxy",
@@ -292,7 +291,6 @@ permissions_test(Config) ->
 
 %% Checks if appropriate storage helpers are used for different users
 storage_helpers_management_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   ST_Helper = "DirectIO",
@@ -373,7 +371,6 @@ storage_helpers_management_test(Config) ->
 
 %% Checks if requests from helper "Cluster Proxy" are handled correctly
 helper_requests_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   ST_Helper = "ClusterProxy",
@@ -540,8 +537,7 @@ init_per_testcase(_, Config) ->
   Port = 6666,
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [],
-  lists:append([{port, Port}, {nodes, NodesUp}, {assertions, Assertions}], Config).
+  lists:append([{port, Port}, {nodes, NodesUp}], Config).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),

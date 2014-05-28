@@ -86,8 +86,6 @@ check_console_loglevel_functionalities() ->
 %% sets up lager traces and if it cleans up after termination
 
 init_and_cleanup_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
-
   NodesUp = ?config(nodes, Config),
   [CCM, W] = NodesUp,
 
@@ -138,8 +136,6 @@ init_and_cleanup_test(Config) ->
 %% central_logger subscribing and log stream
 
 logging_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
-
   NodesUp = ?config(nodes, Config),
   [CCM, W1, W2, W3, W4] = NodesUp,
 
@@ -256,9 +252,7 @@ init_per_testcase(logging_test, Config) ->
       {ccm_nodes, [CCM]}, 
       {dns_port, 1312}, {control_panel_port, 2312}, {control_panel_redirect_port, 1358}, {rest_port, 3312}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [],
-  lists:append([{nodes, Nodes}, {assertions, Assertions}], Config);
-
+  lists:append([{nodes, Nodes}], Config);
 
 init_per_testcase(init_and_cleanup_test, Config) ->
   ?INIT_DIST_TEST,
@@ -277,9 +271,7 @@ init_per_testcase(init_and_cleanup_test, Config) ->
       {ccm_nodes, [CCM]}, 
       {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355},  {rest_port, 3309}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [],
-  lists:append([{nodes, Nodes}, {assertions, Assertions}], Config).
-
+  lists:append([{nodes, Nodes}], Config).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
