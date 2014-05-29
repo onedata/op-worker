@@ -13,8 +13,6 @@
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/dao_helper.hrl").
 
--define(ADMIN_USER_CTX, {user_ctx, #user_ctx{roles = [<<"_admin">>]}}).
-
 -ifdef(TEST).
 -compile([export_all]).
 -endif.
@@ -246,6 +244,8 @@ open_design_doc(DbName, DesignName) ->
 -spec create_view(DbName :: string(), DesignName :: string(), ViewName :: string(), Map :: string(), Reduce :: string(), DesignVersion :: integer()) ->
     [ok | {error, term()}].
 %% ====================================================================
+create_view(_DbName, _Doc = #doc{}, _ViewName, "", _Reduce, _DesignVersion) ->
+    {error, no_map_source};
 create_view(DbName, Doc = #doc{}, ViewName, Map, Reduce, DesignVersion) ->
     {MapRd, MapRdValue} =
         case Reduce of

@@ -12,10 +12,10 @@
 -author("Rafal Slota").
 
 -include("veil_modules/dao/dao.hrl").
--include("veil_modules/dao/couch_db.hrl").
+-include("veil_modules/dao/dao_helper.hrl").
 
 %% API
--export([get_db_structure/0, setup_views/1, get_all_views/0, update_view/1, pre_update/1, pre_reload_modules/1]).
+-export([get_db_structure/0, setup_views/1, get_all_views/0, update_view/1, pre_update/1, pre_reload_modules/1, remove_broken_views/0, remove_outdated_views/0]).
 
 %% ====================================================================
 %% API functions
@@ -42,6 +42,61 @@ pre_update(_Version) ->
 pre_reload_modules(_Version) ->
     [dao_utils, dao].
 
+
+remove_outdated_views() ->
+    lists:foreach(
+        fun(#view_info{db_name = DB, design = Design, version = Vsn, name = ViewName}) ->
+            case dao_helper:open_design_doc(DB, Design) of
+                {ok, #doc{body = Body} = Doc} ->
+                    ViewsField = dao_json:get_field(Body, "views"),
+
+                    ToDel = [dao_utils:get_versioned_view_name(ViewName, OldVsn) || OldVsn <- lists:seq(0, Vsn - 1)],
+                    NewViews = dao_json:rm_fields(ViewsField, ToDel),
+                    NewBody1 = dao_json:mk_field(Body, "views", NewViews),
+                    dao_helper:insert_doc(DB, Doc#doc{body = NewBody1}, [?ADMIN_USER_CTX]),
+                    ok;
+                _ ->
+                    ok
+            end
+        end, get_all_views()),
+    ok.
+
+
+remove_broken_views() ->
+    Designs = [{DbName, Design} || #view_info{design = Design, db_name = DbName} <- get_all_views()],
+    Designs1 = lists:usort(Designs),
+    lists:foreach(
+        fun({DB, Design}) ->
+            lager:info("DB ~p, Design ~p", [DB, Design]),
+            case dao_helper:open_design_doc(DB, Design) of
+                {ok, #doc{body = Body} = Doc} ->
+                    ViewsField = dao_json:get_field(Body, "views"),
+                    Views = dao_json:get_fields(ViewsField),
+                    lager:info("Views: ~p", [Views]),
+                    EmptyString = fun(Str) when is_binary(Str) -> binary_to_list(Str); %% Helper function converting non-string value to empty string
+                        (_) -> "" end,
+                    ToDel =
+                        lists:map(
+                            fun({ViewName, View}) ->
+                                MapFun = EmptyString(dao_json:get_field(View, "map")),
+                                lager:info("View ~p Map: ~p", [ViewName, MapFun]),
+                                case MapFun of
+                                    "" ->
+                                        ViewName;
+                                    _ -> ""
+                                end
+                            end, Views),
+                    NewViews = dao_json:rm_fields(ViewsField, ToDel),
+                    NewBody1 = dao_json:mk_field(Body, "views", NewViews),
+                    DbRes = dao_helper:insert_doc(DB, Doc#doc{body = NewBody1}, [?ADMIN_USER_CTX]),
+                    lager:info("DBRes: ~p", [DbRes]),
+                    ok;
+                _ ->
+                    ok
+            end
+        end, Designs1),
+    ok.
+
 %% setup_views/1
 %% ====================================================================
 %% @doc Creates or updates design documents
@@ -60,7 +115,7 @@ setup_views(DesignStruct) ->
             case dao_helper:open_design_doc(DbName, Name) of
                 {ok, #doc{body = Body}} -> %% Design document exists, so lets calculate MD5 sum of its views
                     ViewsField = dao_json:get_field(Body, "views"),
-                    DbViews = [ dao_json:get_field(ViewsField, ViewName) || #view_info{name = ViewName} <- ViewList ],
+                    DbViews = [ dao_json:get_field(ViewsField, dao_utils:get_versioned_view_name(ViewName, ViewVersion)) || #view_info{name = ViewName, version = ViewVersion} <- ViewList ],
                     EmptyString = fun(Str) when is_binary(Str) -> binary_to_list(Str); %% Helper function converting non-string value to empty string
                         (_) -> "" end,
                     VStrings = [ EmptyString(dao_json:get_field(V, "map")) ++ EmptyString(dao_json:get_field(V, "reduce")) || {L}=V <- DbViews, is_list(L)],
