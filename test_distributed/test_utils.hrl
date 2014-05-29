@@ -1,6 +1,19 @@
--include_lib("common_test/include/ct.hrl").
+%% ===================================================================
+%% @author Tomasz Lichon
+%% @copyright (C): 2014 ACK CYFRONET AGH
+%% This software is released under the MIT license
+%% cited in 'LICENSE.txt'.
+%% @end
+%% ===================================================================
+%% @doc: This file contains ct tests helper macros and defines.
+%% @end
+%% ===================================================================
+
+-ifndef(TEST_UTILS_HRL).
+-define(TEST_UTILS_HRL, 1).
 
 -define(TEST, true).
+-include_lib("common_test/include/ct.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 %% Macro for cleaning test dirs before tests
@@ -38,3 +51,5 @@
 -define(TEST_GROUP_EXTENDED, "veilfstestgroup(Grp)").
 -define(TEST_GROUP2_EXTENDED, "veilfstestgroup2(Grp2)").
 -define(TEST_GROUP3_EXTENDED, "veilfstestgroup3(Grp3)").
+
+-endif.
