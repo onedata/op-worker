@@ -40,7 +40,7 @@ pre_update(_Version) ->
     ok.
 
 pre_reload_modules(_Version) ->
-    [dao_utils].
+    [dao_utils, dao].
 
 %% setup_views/1
 %% ====================================================================

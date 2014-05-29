@@ -341,7 +341,7 @@ list_records(#view_info{name = ViewName, design = DesignName, db_name = DbName, 
       (_) -> none
     end,
 
-        case dao_helper:query_view(DbName, DesignName, get_, QueryArgs) of
+        case dao_helper:query_view(DbName, DesignName, dao_utils:get_versioned_view_name(ViewName, ViewVersion), QueryArgs) of
             {ok, [{total_and_offset, Total, Offset} | Rows]} ->
               FormattedRows =
                 [#view_row{id = binary_to_list(Id), key = FormatKey(FormatKey, Key), value = Value, doc = FormatDoc(Doc)}
