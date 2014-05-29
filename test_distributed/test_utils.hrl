@@ -7,7 +7,8 @@
 -define(CLEAN_TEST_DIRS,begin
                             os:cmd("rm -rf /tmp/veilfs/*"),
                             os:cmd("rm -rf /tmp/veilfs2/*"),
-                            os:cmd("rm -rf /tmp/veilfs3/*")
+                            os:cmd("rm -rf /tmp/veilfs3/*"),
+                            os:cmd("./clear_test_db.sh")
                         end).
 
 %% Veilcluster dependencies
