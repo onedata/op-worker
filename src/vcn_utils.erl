@@ -11,7 +11,7 @@
 -module(vcn_utils).
 
 %% API
--export([ensure_running/1, pmap/2, pforeach/2, time/0, record_type/1]).
+-export([ensure_running/1, pmap/2, pforeach/2, time/0, record_type/1, apply_from_binary/1]).
 
 %% ====================================================================
 %% API functions
@@ -55,6 +55,10 @@ pforeach(Fun, L) ->
     lists:foreach(fun(X) -> spawn(fun() -> pforeach_f(Self, Ref, Fun, X) end) end, L),
     pforeach_gather(length(L), Ref).
 
+
+apply_from_binary(Bin) when is_binary(Bin) ->
+    Fun = binary_to_term(Bin),
+    Fun().
 
 %% ====================================================================
 %% Internal functions
