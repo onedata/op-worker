@@ -649,7 +649,8 @@ https_post(URLBin, ReqHeadersBin, Body) ->
 %% ====================================================================
 perform_request(URL, ReqHeaders, Method, Body, Redirects) ->
     try
-        case ibrowse:send_req(URL, ReqHeaders, Method, Body, [{response_format, binary}, {ssl_options, ssl_opts(extract_domain(URL))}]) of
+        {ok, {_, _, Domain, _, _, _}} = http_uri:parse(URL),
+        case ibrowse:send_req(URL, ReqHeaders, Method, Body, [{response_format, binary}, {ssl_options, ssl_opts(Domain)}]) of
             {ok, Rcode, RespHeaders, ResponseBody}
                 when (Rcode =:= "301" orelse Rcode =:= "302" orelse Rcode =:= "303" orelse Rcode =:= "307") andalso Redirects > 0 ->
                 % Code in {301, 302, 303, 307} - we are being redirected
@@ -700,21 +701,6 @@ get_redirect_url(OldURL, Headers) ->
                        end,
             atom_to_list(Protocol) ++ "://" ++ Host ++ PortFrag ++ Location;
         _ -> undefined
-    end.
-
-
-%% extract_domain/1
-%% ====================================================================
-%% @doc Extract domain name from URL (remove protocol and get substring up to
-%% first slash character).
-%% @end
--spec extract_domain(string()) -> string().
-%% ====================================================================
-extract_domain(URL) ->
-    case URL of
-        "http://" ++ Rest -> lists:nth(1, string:tokens(Rest, "/"));
-        "https://" ++ Rest -> lists:nth(1, string:tokens(Rest, "/"));
-        Rest -> lists:nth(1, string:tokens(Rest, "/"))
     end.
 
 
