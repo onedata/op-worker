@@ -271,7 +271,7 @@ test_dispatching(Config) ->
 %% ====================================================================
 
 init_per_testcase(test_io_events_for_stats, Config) ->
-  ?INIT_DIST_TEST,
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
   test_node_starter:start_deps_for_tester_node(),
 
   NodesUp = test_node_starter:start_test_nodes(2),
@@ -307,7 +307,7 @@ init_per_testcase(test_io_events_for_stats, Config) ->
   lists:append([{nodes, NodesUp}], Config);
 
 init_per_testcase(_, Config) ->
-  ?INIT_DIST_TEST,
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
   test_node_starter:start_deps_for_tester_node(),
 
   NodesUp = test_node_starter:start_test_nodes(2),

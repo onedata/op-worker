@@ -2,15 +2,15 @@
 
 -define(TEST, true).
 -include_lib("eunit/include/eunit.hrl").
--include_lib("ctool/include/test_node_starter.hrl").
 
--define(INIT_DIST_TEST,begin
-                           ?INIT_CODE_PATH,
-                           os:cmd("rm -rf /tmp/veilfs/*"),
-                           os:cmd("rm -rf /tmp/veilfs2/*"),
-                           os:cmd("rm -rf /tmp/veilfs3/*")
-                       end).
+%% Macro for cleaning test dirs before tests
+-define(CLEAN_TEST_DIRS,begin
+                            os:cmd("rm -rf /tmp/veilfs/*"),
+                            os:cmd("rm -rf /tmp/veilfs2/*"),
+                            os:cmd("rm -rf /tmp/veilfs3/*")
+                        end).
 
+%% Veilcluster dependencies
 -define(VEIL_DEPS,[sasl,lager,ssl,ranch,cowboy,mimetypes,ibrowse,rrderlang]).
 
 %% Returns absolute path to given file using virtual CWD which equals to current SUITE directory
