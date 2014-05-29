@@ -16,8 +16,8 @@
 -include("communication_protocol_pb.hrl").
 -include("test_utils.hrl").
 -include("fuse_messages_pb.hrl").
--include_lib("ctool/include/assertions.hrl").
--include_lib("ctool/include/test_node_starter.hrl").
+-include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/test_node_starter.hrl").
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
