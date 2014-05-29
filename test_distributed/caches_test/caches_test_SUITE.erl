@@ -916,7 +916,7 @@ sub_proc_test(Config) ->
 %% ====================================================================
 
 init_per_testcase(_, Config) ->
-  ?INIT_DIST_TEST,
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
   test_node_starter:start_deps_for_tester_node(),
 
   NodesUp = test_node_starter:start_test_nodes(4),

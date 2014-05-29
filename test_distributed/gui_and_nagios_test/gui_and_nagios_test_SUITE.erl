@@ -80,7 +80,7 @@ nagios_test() ->
 %% ====================================================================
 
 init_per_testcase(main_test, Config) ->
-    ?INIT_DIST_TEST,
+    ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
     Nodes = test_node_starter:start_test_nodes(1),

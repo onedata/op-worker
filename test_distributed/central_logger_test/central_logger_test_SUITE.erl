@@ -224,7 +224,7 @@ count_logs(UnknownSourceLogs, ErrorLoggerLogs, LagerLogs, Expected, StartTime) -
 %% ====================================================================
 
 init_per_testcase(logging_test, Config) ->
-  ?INIT_DIST_TEST,
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
   test_node_starter:start_deps_for_tester_node(),
 
   Nodes = test_node_starter:start_test_nodes(5),
@@ -255,7 +255,7 @@ init_per_testcase(logging_test, Config) ->
   lists:append([{nodes, Nodes}], Config);
 
 init_per_testcase(init_and_cleanup_test, Config) ->
-  ?INIT_DIST_TEST,
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
   test_node_starter:start_deps_for_tester_node(),
 
   Nodes = test_node_starter:start_test_nodes(2),

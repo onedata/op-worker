@@ -564,7 +564,7 @@ monitoring_test(Config) ->
 %% ====================================================================
 
 init_per_testcase(application_start_test1, Config) ->
-  ?INIT_DIST_TEST,
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
 
   NodesUp = test_node_starter:start_test_nodes(1),
   [CCM | _] = NodesUp,
@@ -574,7 +574,7 @@ init_per_testcase(application_start_test1, Config) ->
   lists:append([{nodes, NodesUp}], Config);
 
 init_per_testcase(application_start_test2, Config) ->
-  ?INIT_DIST_TEST,
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
 
   NodesUp = test_node_starter:start_test_nodes(1),
   [CCM | _] = NodesUp,
@@ -584,7 +584,7 @@ init_per_testcase(application_start_test2, Config) ->
   lists:append([{nodes, NodesUp}], Config);
 
 init_per_testcase(type1, Config) ->
-  ?INIT_DIST_TEST,
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
 
   NodesUp = test_node_starter:start_test_nodes(1),
   [CCM | _] = NodesUp,
@@ -594,7 +594,7 @@ init_per_testcase(type1, Config) ->
   lists:append([{nodes, NodesUp}], Config);
 
 init_per_testcase(type2, Config) ->
-  ?INIT_DIST_TEST,
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
   test_node_starter:start_deps_for_tester_node(),
 
   NodesUp = test_node_starter:start_test_nodes(1),
@@ -607,7 +607,7 @@ init_per_testcase(type2, Config) ->
   lists:append([{port, Port}, {peer_cert, PeerCert}, {nodes, NodesUp}], Config);
 
 init_per_testcase(monitoring_test, Config) ->
-  ?INIT_DIST_TEST,
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
   test_node_starter:start_deps_for_tester_node(),
 
   NodesUp = test_node_starter:start_test_nodes(4),

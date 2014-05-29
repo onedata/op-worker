@@ -89,7 +89,7 @@ local_test(Config) ->
 %% ====================================================================
 
 init_per_testcase(distributed_test, Config) ->
-  ?INIT_DIST_TEST,
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
 
   %% To see slaves output use test_node_starter:start_test_nodes with 2 arguments (second argument should be true)
   %% e.g. test_node_starter:start_test_nodes(2, true)
@@ -102,7 +102,7 @@ init_per_testcase(distributed_test, Config) ->
   lists:append([{nodes, Nodes}], Config);
 
 init_per_testcase(local_test, Config) ->
-  ?INIT_DIST_TEST,
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
   test_node_starter:start_deps(?VEIL_DEPS),
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS,[node()],[[{node_type, ccm_test}, {dispatcher_port, 7777}, {ccm_nodes, [node()]}, {dns_port, 1312},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
   Config.
