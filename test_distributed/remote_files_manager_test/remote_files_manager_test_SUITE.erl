@@ -116,7 +116,7 @@ permissions_test(Config) ->
   ?assertEqual(list_to_atom(?VEACCES), AnswerOpt2),
 
   WrongId2 = string:substr(Id0, 1, UsrBeg - 2) ++ string:substr(Id0, UsrBeg + length(Login2)),
-    io:format(user, "WID: ~p~n", [WrongId2]),
+
   {Status3, AnswerOpt3} = create_file_on_storage(Host, Cert2, Port, WrongId2),
   ?assertEqual("ok", Status3),
   ?assertEqual(list_to_atom(?VEACCES), AnswerOpt3),
