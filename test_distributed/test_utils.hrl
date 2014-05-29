@@ -2,6 +2,14 @@
 
 -define(TEST, true).
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("ctool/include/test_node_starter.hrl").
+
+-define(INIT_DIST_TEST,begin
+                           ?INIT_CODE_PATH,
+                           os:cmd("rm -rf /tmp/veilfs/*"),
+                           os:cmd("rm -rf /tmp/veilfs2/*"),
+                           os:cmd("rm -rf /tmp/veilfs3/*")
+                       end).
 
 -define(VEIL_DEPS,[sasl,lager,ssl,ranch,cowboy,mimetypes,ibrowse,rrderlang]).
 
