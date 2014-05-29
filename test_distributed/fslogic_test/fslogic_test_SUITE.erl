@@ -21,8 +21,8 @@
 -include("veil_modules/dao/dao_vfs.hrl").
 -include("veil_modules/dao/dao.hrl").
 -include("veil_modules/dao/dao_share.hrl").
--include_lib("ctool/include/assertions.hrl").
--include_lib("ctool/include/test_node_starter.hrl").
+-include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/test_node_starter.hrl").
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([groups_permissions_test/1, files_manager_standard_files_test/1, files_manager_tmp_files_test/1, storage_management_test/1, permissions_management_test/1, user_creation_test/1, get_file_links_test/1,

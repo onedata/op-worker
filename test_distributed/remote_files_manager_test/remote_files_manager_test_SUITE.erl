@@ -19,8 +19,8 @@
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 -include("remote_file_management_pb.hrl").
--include_lib("ctool/include/assertions.hrl").
--include_lib("ctool/include/test_node_starter.hrl").
+-include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/test_node_starter.hrl").
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([storage_helpers_management_test/1, helper_requests_test/1, permissions_test/1]).
