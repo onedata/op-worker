@@ -652,7 +652,7 @@ check_perms(File, Storage_helper_info) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: atom().
 %% ====================================================================
-check_perms(File, Storage_helper_info, CheckType) ->
+check_perms(_File, _Storage_helper_info, _CheckType) ->
     {ok, true}.
 %%   {AccessTypeStatus, AccessAns} = check_access_type(File),
 %%   case AccessTypeStatus of

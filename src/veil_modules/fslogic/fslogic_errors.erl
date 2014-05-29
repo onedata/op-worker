@@ -146,7 +146,7 @@ posix_to_veilerror(39) ->
     ?VENOTEMPTY;
 posix_to_veilerror(95) ->
     ?VENOTSUP;
-posix_to_veilerror(Unkwn) ->
+posix_to_veilerror(_Unkwn) ->
     ?VEREMOTEIO.
 
 
