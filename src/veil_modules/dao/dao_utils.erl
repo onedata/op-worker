@@ -19,7 +19,7 @@
 %% ====================================================================
 
 get_versioned_view_name(Name, Version) ->
-    Name ++ "_" ++ integer_to_list(Version).
+    Name ++ "_v" ++ integer_to_list(Version).
 
 %% ====================================================================
 %% Internal functions
