@@ -15,7 +15,7 @@
 -include("veil_modules/dao/couch_db.hrl").
 
 %% API
--export([get_db_structure/0, setup_views/1, get_all_views/0, update_view/1]).
+-export([get_db_structure/0, setup_views/1, get_all_views/0, update_view/1, pre_update/1, pre_reload_modules/1]).
 
 %% ====================================================================
 %% API functions
@@ -35,6 +35,12 @@ update_view(#view_info{} = View) ->
         {error, Reason} -> {error, Reason}
     end.
 
+
+pre_update(_Version) ->
+    ok.
+
+pre_reload_modules(_Version) ->
+    [dao_utils].
 
 %% setup_views/1
 %% ====================================================================
