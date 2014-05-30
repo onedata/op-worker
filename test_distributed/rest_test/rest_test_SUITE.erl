@@ -369,13 +369,20 @@ setup_user_in_db(DN) ->
     {Ans5, _} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
     ?assertEqual(ok, Ans5),
 
-
     fslogic_context:set_user_dn(DN),
-    Ans6 = rpc:call(CCM, logical_files_manager, mkdir, [?TEST_USER ++ "/dir"]),
+    Ans6 = rpc:call(CCM, erlang, apply, [
+        fun() ->
+            fslogic_context:set_user_dn(DN),
+            logical_files_manager:mkdir("/dir")
+        end, [] ]),
     ?assertEqual(ok, Ans6),
 
 
-    Ans7 = rpc:call(CCM, logical_files_manager, create, [?TEST_USER ++ "/dir/file.txt"]),
+    Ans7 = rpc:call(CCM, erlang, apply, [
+        fun() ->
+            fslogic_context:set_user_dn(DN),
+            logical_files_manager:create("/dir/file.txt")
+        end, [] ]),
     ?assertEqual(ok, Ans7),
 
     StorageUUID.
