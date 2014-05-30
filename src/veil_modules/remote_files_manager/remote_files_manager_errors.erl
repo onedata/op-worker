@@ -35,7 +35,13 @@ gen_error_message(readfile, Error) ->
     #filedata{answer_status = Error};
 gen_error_message(writefile, Error) ->
     #writeinfo{answer_status = Error};
-gen_error_message(_, Error) ->
+gen_error_message(createfile, Error) ->
+    #atom{value = Error};
+gen_error_message(changepermsatstorage, Error) ->
+    #atom{value = Error};
+gen_error_message(truncatefile, Error) ->
+    #atom{value = Error};
+gen_error_message(deletefileatstorage, Error) ->
     #atom{value = Error};
 gen_error_message(RecordName, _Error) ->
     ?error("Unsupported record: ~p", [RecordName]),
