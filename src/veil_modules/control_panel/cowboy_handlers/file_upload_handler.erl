@@ -148,6 +148,7 @@ handle_rest_upload(Req, Path, Overwrite) ->
                             {{error, rest_utils:error_reply(ErrorRec)}, NewReq2}
                     end;
                 {error, _Error} ->
+                    ?error("Cannot upload file due to: ~p", [_Error]),
                     ErrorRec = ?report_error(?error_upload_cannot_create),
                     {{error, rest_utils:error_reply(ErrorRec)}, NewReq}
             end;
