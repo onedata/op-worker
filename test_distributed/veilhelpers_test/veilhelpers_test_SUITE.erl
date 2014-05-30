@@ -12,12 +12,14 @@
 
 -module(veilhelpers_test_SUITE).
 
--include("nodes_manager.hrl").
+-include("test_utils.hrl").
 -include("registered_names.hrl").
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao_vfs.hrl").
+-include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/test_node_starter.hrl").
 
 -define(SH, "DirectIO").
 -define(TEST_FILE1, "testfile1").
@@ -40,8 +42,7 @@ all() -> [integration_test].
 %%   - slave nodes are correctly started (otherwise proxy method veilhelpers:exec wouldn't work)
 %%   - NIF module is fully loaded on those slave nodes
 %%   - Arguments and return values are correctly translated.
-integration_test(Config) ->    
-    nodes_manager:check_start_assertions(Config),
+integration_test(Config) ->
     NodesUp = ?config(nodes, Config),
     [FSLogicNode | _] = NodesUp,
 
@@ -107,28 +108,24 @@ integration_test(Config) ->
     ok.
 
 init_per_testcase(_, Config) ->
-    ?INIT_DIST_TEST,
-    nodes_manager:start_deps_for_tester_node(),
+    ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
+    test_node_starter:start_deps_for_tester_node(),
 
-    NodesUp = nodes_manager:start_test_on_nodes(1),
+    NodesUp = test_node_starter:start_test_nodes(1),
     [FSLogicNode | _] = NodesUp,
 
-    DB_Node = nodes_manager:get_db_node(),
+    DB_Node = ?DB_NODE,
     Port = 6666,
-    StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}]]),
+    test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-    Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
     FSRoot = ?TEST_ROOT,
     file:delete(FSRoot ++ ?TEST_FILE1),
     file:delete(FSRoot ++ ?TEST_FILE2), 
 
-    lists:append([{port, Port}, {nodes, NodesUp}, {assertions, Assertions}], Config).
+    lists:append([{port, Port}, {nodes, NodesUp}], Config).
 
 end_per_testcase(_, Config) ->
     Nodes = ?config(nodes, Config),
-    StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-    StopAns = nodes_manager:stop_nodes(Nodes),
-    nodes_manager:stop_deps_for_tester_node(),
-
-    ?assertEqual(false, lists:member(error, StopLog)),
-    ?assertEqual(ok, StopAns).
+    test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
+    test_node_starter:stop_test_nodes(Nodes),
+    test_node_starter:stop_deps_for_tester_node().
