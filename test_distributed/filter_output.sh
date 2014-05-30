@@ -4,6 +4,7 @@ Visible=non
 DoneSum=0
 AllSum=0
 CompileErrors=0
+Skipped=0
 
 while read line
 do
@@ -58,11 +59,21 @@ do
   then
     CompileErrors=`expr $CompileErrors + 1`
   fi
+
+  if grep -q ".*SKIPPED.*" <<<"$line"
+  then
+    Skipped=`expr $Skipped + 1`
+  fi
 done
 
-echo "Distributed tests OK: $DoneSum, all: $AllSum, Compile errors: $CompileErrors"
+echo "Distributed tests OK: $DoneSum, all: $AllSum, Compile errors: $CompileErrors, Skipped: $Skipped"
 
 if [ $CompileErrors -ne 0 ]
+then
+  exit 1
+fi
+
+if [ $Skipped -ne 0 ]
 then
   exit 1
 fi
