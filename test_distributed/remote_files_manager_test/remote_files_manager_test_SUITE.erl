@@ -12,13 +12,15 @@
 
 -module(remote_files_manager_test_SUITE).
 
--include("nodes_manager.hrl").
+-include("test_utils.hrl").
 -include("registered_names.hrl").
 -include("veil_modules/dao/dao_vfs.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 -include("remote_file_management_pb.hrl").
+-include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/test_node_starter.hrl").
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([storage_helpers_management_test/1, helper_requests_test/1, permissions_test/1]).
@@ -33,7 +35,6 @@ all() -> [storage_helpers_management_test, helper_requests_test, permissions_tes
 
 %% Tests if not permitted operations can not be executed
 permissions_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   ST_Helper = "ClusterProxy",
@@ -49,9 +50,9 @@ permissions_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   Fuse_groups = [#fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = ?ARG_TEST_ROOT}}],
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, [ST_Helper, [], Fuse_groups]),
@@ -113,12 +114,13 @@ permissions_test(Config) ->
   WrongId1 = string:substr(Id0, 1, UsrBeg - 1) ++ Login ++ string:substr(Id0, UsrBeg + length(Login2)),
   {Status2, AnswerOpt2} = create_file_on_storage(Host, Cert2, Port, WrongId1),
   ?assertEqual("ok", Status2),
-  ?assertEqual(list_to_atom(?VEPERM), AnswerOpt2),
+  ?assertEqual(list_to_atom(?VEACCES), AnswerOpt2),
 
   WrongId2 = string:substr(Id0, 1, UsrBeg - 2) ++ string:substr(Id0, UsrBeg + length(Login2)),
+
   {Status3, AnswerOpt3} = create_file_on_storage(Host, Cert2, Port, WrongId2),
   ?assertEqual("ok", Status3),
-  ?assertEqual(list_to_atom(?VEREMOTEIO), AnswerOpt3),
+  ?assertEqual(list_to_atom(?VEACCES), AnswerOpt3),
 
   {WriteStatus0, WriteAnswer0, BytesWritten0} = write(Host, Cert2, Port, Id0, 0, list_to_binary("abcdefgh")),
   ?assertEqual("ok", WriteStatus0),
@@ -147,62 +149,62 @@ permissions_test(Config) ->
   WrongId3 = string:substr(Id1, 1, UsrBeg2 - 1) ++ "other_team" ++ string:substr(Id1, UsrBeg2 + length(Team1)),
   {Status6, AnswerOpt6} = create_file_on_storage(Host, Cert2, Port, WrongId3),
   ?assertEqual("ok", Status6),
-  ?assertEqual(list_to_atom(?VEPERM), AnswerOpt6),
+  ?assertEqual(list_to_atom(?VENOENT), AnswerOpt6),
 
 
 
 
   {DeleteStatus, DeleteAnswer} = delete_file_on_storage(Host, Cert, Port, Id0),
   ?assertEqual("ok", DeleteStatus),
-  ?assertEqual(list_to_atom(?VEPERM), DeleteAnswer),
+  ?assertEqual(list_to_atom(?VEACCES), DeleteAnswer),
 
   {WriteStatus, WriteAnswer, _} = write(Host, Cert, Port, Id0, 0, list_to_binary("xyz")),
   ?assertEqual("ok", WriteStatus),
-  ?assertEqual(?VEPERM, WriteAnswer),
+  ?assertEqual(?VEACCES, WriteAnswer),
 
   {TruncateStatus, TruncateAnswer} = truncate_file_on_storage(Host, Cert, Port, Id0, 5),
   ?assertEqual("ok", TruncateStatus),
-  ?assertEqual(list_to_atom(?VEPERM), TruncateAnswer),
+  ?assertEqual(list_to_atom(?VEACCES), TruncateAnswer),
 
   {ReadStatus, ReadAnswer, _} = read(Host, Cert, Port, Id0, 2, 2),
   ?assertEqual("ok", ReadStatus),
-  ?assertEqual(?VEPERM, ReadAnswer),
+  ?assertEqual(?VEACCES, ReadAnswer),
 
 
   {PermStatus, PermAnswer} = change_perm_on_storage(Host, Cert, Port, Id0, 8#521),
   ?assertEqual("ok", PermStatus),
-  ?assertEqual(list_to_atom(?VEPERM), PermAnswer),
+  ?assertEqual(list_to_atom(?VEACCES), PermAnswer),
 
 
 
 
   {DeleteStatus2, DeleteAnswer2} = delete_file_on_storage(Host, Cert, Port, WrongId2),
   ?assertEqual("ok", DeleteStatus2),
-  ?assertEqual(list_to_atom(?VEREMOTEIO), DeleteAnswer2),
+  ?assertEqual(list_to_atom(?VENOENT), DeleteAnswer2),
 
   {WriteStatus2, WriteAnswer2, _} = write(Host, Cert, Port, WrongId2, 0, list_to_binary("xyz")),
   ?assertEqual("ok", WriteStatus2),
-  ?assertEqual(?VEREMOTEIO, WriteAnswer2),
+  ?assertEqual(?VENOENT, WriteAnswer2),
 
   {TruncateStatus2, TruncateAnswer2} = truncate_file_on_storage(Host, Cert, Port, WrongId2, 5),
   ?assertEqual("ok", TruncateStatus2),
-  ?assertEqual(list_to_atom(?VEREMOTEIO), TruncateAnswer2),
+  ?assertEqual(list_to_atom(?VENOENT), TruncateAnswer2),
 
   {ReadStatus2, ReadAnswer2, _} = read(Host, Cert, Port, WrongId2, 2, 2),
   ?assertEqual("ok", ReadStatus2),
-  ?assertEqual(?VEREMOTEIO, ReadAnswer2),
+  ?assertEqual(?VENOENT, ReadAnswer2),
 
 
   {PermStatus2, PermAnswer2} = change_perm_on_storage(Host, Cert, Port, WrongId2, 8#521),
   ?assertEqual("ok", PermStatus2),
-  ?assertEqual(list_to_atom(?VEREMOTEIO), PermAnswer2),
+  ?assertEqual(list_to_atom(?VENOENT), PermAnswer2),
 
 
 
-
-  {DeleteStatus3, DeleteAnswer3} = delete_file_on_storage(Host, Cert, Port, Id1),
-  ?assertEqual("ok", DeleteStatus3),
-  ?assertEqual(list_to_atom(?VEPERM), DeleteAnswer3),
+    %% Normally its possible to delete file when user has permissions to write both file and its parent directory
+%%   {DeleteStatus3, DeleteAnswer3} = delete_file_on_storage(Host, Cert, Port, Id1),
+%%   ?assertEqual("ok", DeleteStatus3),
+%%   ?assertEqual(list_to_atom(?VEACCES), DeleteAnswer3),
 
   {WriteStatus3, WriteAnswer3, BytesWritten3} = write(Host, Cert, Port, Id1, 0, list_to_binary("xyz")),
   ?assertEqual("ok", WriteStatus3),
@@ -233,18 +235,17 @@ permissions_test(Config) ->
 
 
 
-
   {DeleteStatus4, DeleteAnswer4} = delete_file_on_storage(Host, Cert, Port, Id1),
   ?assertEqual("ok", DeleteStatus4),
   ?assertEqual(list_to_atom(?VEPERM), DeleteAnswer4),
 
   {WriteStatus4, WriteAnswer4, _} = write(Host, Cert, Port, Id1, 0, list_to_binary("qpr")),
   ?assertEqual("ok", WriteStatus4),
-  ?assertEqual(?VEPERM, WriteAnswer4),
+  ?assertEqual(?VEACCES, WriteAnswer4),
 
   {TruncateStatus4, TruncateAnswer4} = truncate_file_on_storage(Host, Cert, Port, Id1, 3),
   ?assertEqual("ok", TruncateStatus4),
-  ?assertEqual(list_to_atom(?VEPERM), TruncateAnswer4),
+  ?assertEqual(list_to_atom(?VEACCES), TruncateAnswer4),
 
   {ReadStatus4, ReadAnswer4, ReadData4} = read(Host, Cert, Port, Id1, 2, 2),
   ?assertEqual("ok", ReadStatus4),
@@ -290,7 +291,6 @@ permissions_test(Config) ->
 
 %% Checks if appropriate storage helpers are used for different users
 storage_helpers_management_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   ST_Helper = "DirectIO",
@@ -303,9 +303,9 @@ storage_helpers_management_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   {ReadFileAns, PemBin} = file:read_file(Cert),
   ?assertEqual(ok, ReadFileAns),
@@ -371,7 +371,6 @@ storage_helpers_management_test(Config) ->
 
 %% Checks if requests from helper "Cluster Proxy" are handled correctly
 helper_requests_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   ST_Helper = "ClusterProxy",
@@ -386,9 +385,9 @@ helper_requests_test(Config) ->
 
   gen_server:cast({?Node_Manager_Name, FSLogicNode}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  nodes_manager:wait_for_cluster_cast(),
+  test_utils:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_cluster_init(),
 
   Fuse_groups = [#fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = ?ARG_TEST_ROOT}}],
   {InsertStorageAns, StorageUUID} = rpc:call(FSLogicNode, fslogic_storage, insert_storage, [ST_Helper, [], Fuse_groups]),
@@ -528,27 +527,23 @@ helper_requests_test(Config) ->
 %% ====================================================================
 
 init_per_testcase(_, Config) ->
-  ?INIT_DIST_TEST,
-  nodes_manager:start_deps_for_tester_node(),
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
+  test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = nodes_manager:start_test_on_nodes(1),
+  NodesUp = test_node_starter:start_test_nodes(1),
   [FSLogicNode | _] = NodesUp,
 
-  DB_Node = nodes_manager:get_db_node(),
+  DB_Node = ?DB_NODE,
   Port = 6666,
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1}]]),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
-  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
-  lists:append([{port, Port}, {nodes, NodesUp}, {assertions, Assertions}], Config).
+  lists:append([{port, Port}, {nodes, NodesUp}], Config).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
-  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  StopAns = nodes_manager:stop_nodes(Nodes),
-  nodes_manager:stop_deps_for_tester_node(),
-
-  ?assertEqual(false, lists:member(error, StopLog)),
-  ?assertEqual(ok, StopAns).
+  test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
+  test_node_starter:stop_test_nodes(Nodes),
+  test_node_starter:stop_deps_for_tester_node().
 
 %% ====================================================================
 %% Helper functions

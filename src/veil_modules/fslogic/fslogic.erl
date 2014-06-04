@@ -24,7 +24,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([init/1, handle/2, cleanup/0]).
+-export([init/1, handle/2, cleanup/0, fslogic_runner/4]).
 
 %% ====================================================================
 %% API functions
@@ -195,6 +195,15 @@ cleanup() ->
 -spec fslogic_runner(Method :: function(), RequestType :: atom(), RequestBody :: term()) -> Response :: term().
 %% ====================================================================
 fslogic_runner(Method, RequestType, RequestBody) when is_function(Method) ->
+    fslogic_runner(Method, RequestType, RequestBody, fslogic_errors).
+
+%% fslogic_runner/4
+%% ====================================================================
+%% @doc Runs Method(RequestBody) while catching errors and translating them with
+%%      given ErrorHandler module. ErrorHandler module has to export at least gen_error_message/2 (see fslogic_errors:gen_error_message/1).
+-spec fslogic_runner(Method :: function(), RequestType :: atom(), RequestBody :: term(), ErrorHandler :: atom()) -> Response :: term().
+%% ====================================================================
+fslogic_runner(Method, RequestType, RequestBody, ErrorHandler) when is_function(Method) ->
     try
         ?debug("Processing request (type ~p): ~p", [RequestType, RequestBody]),
         Method(RequestBody)
@@ -203,23 +212,23 @@ fslogic_runner(Method, RequestType, RequestBody) when is_function(Method) ->
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
             %% Manually thrown error, normal interrupt case.
             ?debug_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
-            fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
+            ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
         error:{badmatch, {error, Reason}} ->
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
             %% Bad Match assertion - something went wrong, but it could be expected.
             ?warning("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             ?debug_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
-            fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
+            ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
         error:{case_clause, {error, Reason}} ->
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
             %% Bad Match assertion - something went seriously wrong and we should know about it.
             ?error_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
-            fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
+            ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
         error:UnkError ->
             {ErrorCode, ErrorDetails} = {?VEREMOTEIO, UnkError},
             %% Bad Match assertion - something went horribly wrong. This should not happen.
             ?error_stacktrace("Cannot process request ~p due to unknown error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
-            fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode))
+            ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode))
     end.
 
 %% handle_fuse_message/1

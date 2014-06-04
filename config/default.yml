@@ -282,6 +282,14 @@ veil_cluster_node_env:
       description: Buffer size used to stream file from a client
       value: 1048576
 
+  - parameter:
+      name: root_cacert_file
+      description: Path to .pem or .crt file containing CA certs installed on the system.
+      value: |
+        "\'/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem\'"
+      erlang_term: "'/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem'"
+
+
 
   # Files management
   - parameter:

@@ -155,7 +155,7 @@ insert_storage(HelperName, HelperArgs, Fuse_groups) ->
       Ans = storage_files_manager:mkdir(SHI, "users"),
       Ans3 = case Ans of
         ok ->
-          Ans2 = storage_files_manager:chmod(SHI, "users", 8#773),
+          Ans2 = storage_files_manager:chmod(SHI, "users", 8#711),
           case Ans2 of
             ok ->
               ok;
@@ -171,7 +171,7 @@ insert_storage(HelperName, HelperArgs, Fuse_groups) ->
       Ans4 = storage_files_manager:mkdir(SHI, "groups"),
       Ans6 = case Ans4 of
                ok ->
-                 Ans5 = storage_files_manager:chmod(SHI, "groups", 8#773),
+                 Ans5 = storage_files_manager:chmod(SHI, "groups", 8#711),
                  case Ans5 of
                    ok ->
                      ok;

@@ -14,8 +14,10 @@
 -include("registered_names.hrl").
 -include("modules_and_args.hrl").
 -include("communication_protocol_pb.hrl").
--include("nodes_manager.hrl").
+-include("test_utils.hrl").
 -include("fuse_messages_pb.hrl").
+-include_lib("ctool/include/test/assertions.hrl").
+-include_lib("ctool/include/test/test_node_starter.hrl").
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
@@ -30,7 +32,6 @@ all() -> [main_test, callbacks_test].
 %% ====================================================================
 
 main_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   Params = ?config(params, Config),
   [CCMParams | Params2] = Params,
@@ -47,9 +48,9 @@ main_test(Config) ->
   [_ | Params3] = Params2,
   [WorkerParams | _] = Params3,
 
-  nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
-  nodes_manager:wait_for_state_loading(),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_nodes_registration(length(WorkerNodes)),
+  test_utils:wait_for_state_loading(),
+  test_utils:wait_for_cluster_init(),
   ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
   Jobs = ?Modules,
@@ -92,10 +93,10 @@ main_test(Config) ->
   PongsNum = lists:foldl(CheckNodes, 0, Ports),
   ?assertEqual(PongsNum, length(Jobs) * length(Ports)),
 
-  nodes_manager:stop_node(CCM),
-  nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
-  nodes_manager:wait_for_state_loading(),
-  nodes_manager:wait_for_cluster_init(),
+  test_node_starter:stop_test_nodes([CCM]),
+  test_utils:wait_for_nodes_registration(length(WorkerNodes)),
+  test_utils:wait_for_state_loading(),
+  test_utils:wait_for_cluster_init(),
   ?assertEqual(CCM2, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
   {Workers2, StateNum2} = gen_server:call({global, ?CCM}, get_workers, 1000),
@@ -104,15 +105,13 @@ main_test(Config) ->
   PongsNum2 = lists:foldl(CheckNodes, 0, Ports),
   ?assertEqual(PongsNum2, length(Jobs) * length(Ports)),
 
-  {StartAns, NewNode} = nodes_manager:start_node(CCM, CCMParams),
-  ?assertEqual(ok, StartAns),
+  NewNode = test_node_starter:start_test_node(?GET_NODE_NAME(CCM),?GET_HOST(CCM),false, CCMParams),
   ?assertEqual(CCM, NewNode),
-  StartLog = nodes_manager:start_app_on_nodes([CCM], [CCMArgs]),
-  ?assertEqual(false, lists:member(error, StartLog)),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, [CCM], [CCMArgs]),
 
-  nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
-  nodes_manager:wait_for_state_loading(),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_nodes_registration(length(WorkerNodes)),
+  test_utils:wait_for_state_loading(),
+  test_utils:wait_for_cluster_init(),
   ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
   {Workers3, StateNum3} = gen_server:call({global, ?CCM}, get_workers, 1000),
@@ -121,9 +120,9 @@ main_test(Config) ->
   PongsNum3 = lists:foldl(CheckNodes, 0, Ports),
   ?assertEqual(PongsNum3, length(Jobs) * length(Ports)),
 
-  nodes_manager:stop_node(Worker1),
-  nodes_manager:wait_for_nodes_registration(length(WorkerNodes) - 1),
-  nodes_manager:wait_for_cluster_init(),
+  test_node_starter:stop_test_nodes([Worker1]),
+  test_utils:wait_for_nodes_registration(length(WorkerNodes) - 1),
+  test_utils:wait_for_cluster_init(),
 
   Ports2 = [8888],
   {Workers4, StateNum4} = gen_server:call({global, ?CCM}, get_workers, 1000),
@@ -132,13 +131,11 @@ main_test(Config) ->
   PongsNum4 = lists:foldl(CheckNodes, 0, Ports2),
   ?assertEqual(PongsNum4, length(Jobs) * length(Ports2)),
 
-  {StartAns2, NewNode2} = nodes_manager:start_node(Worker1, WorkerParams),
-  ?assertEqual(ok, StartAns2),
+  NewNode2 = test_node_starter:start_test_node(?GET_NODE_NAME(Worker1),?GET_HOST(Worker1),false,WorkerParams),
   ?assertEqual(Worker1, NewNode2),
-  StartLog2 = nodes_manager:start_app_on_nodes([Worker1], [WorkerArgs]),
-  ?assertEqual(false, lists:member(error, StartLog2)),
-  nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
-  nodes_manager:wait_for_cluster_init(),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, [Worker1], [WorkerArgs]),
+  test_utils:wait_for_nodes_registration(length(WorkerNodes)),
+  test_utils:wait_for_cluster_init(),
 
   {Workers5, StateNum5} = gen_server:call({global, ?CCM}, get_workers, 1000),
   ?assertEqual(InitialStateNum + 4, StateNum5),
@@ -148,7 +145,6 @@ main_test(Config) ->
 
 
 callbacks_test(Config) ->
-  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   Params = ?config(params, Config),
   [CCMParams | Params2] = Params,
@@ -165,8 +161,8 @@ callbacks_test(Config) ->
   [_ | Params3] = Params2,
   [WorkerParams | _] = Params3,
 
-  nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_nodes_registration(length(WorkerNodes)),
+  test_utils:wait_for_cluster_init(),
   ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
   PeerCert = ?COMMON_FILE("peer.pem"),
@@ -258,7 +254,7 @@ callbacks_test(Config) ->
   end,
 
   CreatedSockets = lists:foldl(RegisterCallbacks, [], Ports),
-  nodes_manager:wait_for_request_handling(),
+  test_utils:wait_for_request_handling(),
 
   CheckDispatcherAns = fun({DispatcherCorrectAnsList, DispatcherCorrectAnsNum}, {TestAnsList, TestAnsNum}) ->
     ?assertEqual(DispatcherCorrectAnsNum, TestAnsNum),
@@ -291,10 +287,10 @@ callbacks_test(Config) ->
   lists:foldl(CheckCallbacks, DispatcherCorrectAns1, lists:zip(WorkerNodes, FuseInfo1)),
 
   lists:foreach(fun(X) -> wss:close(X) end, CreatedSockets),
-  nodes_manager:stop_node(CCM),
-  nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
-  nodes_manager:wait_for_state_loading(),
-  nodes_manager:wait_for_cluster_init(),
+  test_node_starter:stop_test_nodes([CCM]),
+  test_utils:wait_for_nodes_registration(length(WorkerNodes)),
+  test_utils:wait_for_state_loading(),
+  test_utils:wait_for_cluster_init(),
   ?assertEqual(CCM2, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
   DispatcherCorrectAns2 = {[{FuseId1, lists:reverse(WorkerNodes)}, {FuseId2, [Worker1]}], InitialCallbacksNum + 4},
@@ -302,15 +298,13 @@ callbacks_test(Config) ->
   CheckDispatcherAns(DispatcherCorrectAns2, CCMTest2),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns2, lists:zip(WorkerNodes, FuseInfo1)),
 
-  {StartAns, NewNode} = nodes_manager:start_node(CCM, CCMParams),
-  ?assertEqual(ok, StartAns),
+  NewNode = test_node_starter:start_test_node(?GET_NODE_NAME(CCM),?GET_HOST(CCM),false, CCMParams),
   ?assertEqual(CCM, NewNode),
-  StartLog = nodes_manager:start_app_on_nodes([CCM], [CCMArgs]),
-  ?assertEqual(false, lists:member(error, StartLog)),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, [CCM], [CCMArgs]),
 
-  nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
-  nodes_manager:wait_for_state_loading(),
-  nodes_manager:wait_for_cluster_init(),
+  test_utils:wait_for_nodes_registration(length(WorkerNodes)),
+  test_utils:wait_for_state_loading(),
+  test_utils:wait_for_cluster_init(),
   ?assertEqual(CCM, gen_server:call({global, ?CCM}, get_ccm_node, 500)),
 
   DispatcherCorrectAns3 = {[{FuseId1, lists:reverse(WorkerNodes)}, {FuseId2, [Worker1]}], InitialCallbacksNum + 5},
@@ -320,9 +314,9 @@ callbacks_test(Config) ->
 
 
 
-  nodes_manager:stop_node(Worker1),
-  nodes_manager:wait_for_nodes_registration(length(WorkerNodes) - 1),
-  nodes_manager:wait_for_cluster_init(),
+  test_node_starter:stop_test_nodes([Worker1]),
+  test_utils:wait_for_nodes_registration(length(WorkerNodes) - 1),
+  test_utils:wait_for_cluster_init(),
 
   DispatcherCorrectAns4 = {[{FuseId1, Worker2}], InitialCallbacksNum + 6},
   FuseInfo4 = [{[FuseId1], 1,0}],
@@ -332,33 +326,29 @@ callbacks_test(Config) ->
 
 
 
-  {StartAns2, NewNode2} = nodes_manager:start_node(Worker1, WorkerParams),
-  ?assertEqual(ok, StartAns2),
+  NewNode2 = test_node_starter:start_test_node(?GET_NODE_NAME(Worker1),?GET_HOST(Worker1),false, WorkerParams),
   ?assertEqual(Worker1, NewNode2),
-  StartLog2 = nodes_manager:start_app_on_nodes([Worker1], [WorkerArgs]),
-  ?assertEqual(false, lists:member(error, StartLog2)),
-  nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
-  nodes_manager:wait_for_cluster_init(),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, [Worker1], [WorkerArgs]),
+  test_utils:wait_for_nodes_registration(length(WorkerNodes)),
+  test_utils:wait_for_cluster_init(),
 
   CCMTest5 = gen_server:call({global, ?CCM}, get_callbacks, 1000),
   CheckDispatcherAns(DispatcherCorrectAns4, CCMTest5),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns4, lists:zip(Worker2, FuseInfo4)),
 
-  nodes_manager:stop_node(Worker1),
-  nodes_manager:wait_for_nodes_registration(length(WorkerNodes) - 1),
-  nodes_manager:wait_for_cluster_init(),
+  test_node_starter:stop_test_nodes([Worker1]),
+  test_utils:wait_for_nodes_registration(length(WorkerNodes) - 1),
+  test_utils:wait_for_cluster_init(),
 
   CCMTest6 = gen_server:call({global, ?CCM}, get_callbacks, 1000),
   CheckDispatcherAns(DispatcherCorrectAns4, CCMTest6),
   lists:foldl(CheckCallbacks, DispatcherCorrectAns4, lists:zip(Worker2, FuseInfo4)),
 
-  {StartAns3, NewNode3} = nodes_manager:start_node(Worker1, WorkerParams),
-  ?assertEqual(ok, StartAns3),
+  NewNode3 = test_node_starter:start_test_node(?GET_NODE_NAME(Worker1),?GET_HOST(Worker1),false, WorkerParams),
   ?assertEqual(Worker1, NewNode3),
-  StartLog3 = nodes_manager:start_app_on_nodes([Worker1], [WorkerArgs]),
-  ?assertEqual(false, lists:member(error, StartLog3)),
-  nodes_manager:wait_for_nodes_registration(length(WorkerNodes)),
-  nodes_manager:wait_for_cluster_init(),
+  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, [Worker1], [WorkerArgs]),
+  test_utils:wait_for_nodes_registration(length(WorkerNodes)),
+  test_utils:wait_for_cluster_init(),
 
   CCMTest7 = gen_server:call({global, ?CCM}, get_callbacks, 1000),
   CheckDispatcherAns(DispatcherCorrectAns4, CCMTest7),
@@ -375,28 +365,23 @@ callbacks_test(Config) ->
 %% ====================================================================
 
 init_per_testcase(_, Config) ->
-  ?INIT_DIST_TEST,
-  nodes_manager:start_deps_for_tester_node(),
+  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
+  test_node_starter:start_deps_for_tester_node(),
 
-  {NodesUp, Params} = nodes_manager:start_test_on_nodes_with_dist_app(4, 2),
+  {NodesUp, Params} = test_node_starter:start_test_nodes_with_dist_app(4, 2),
   [CCM | NodesUp2] = NodesUp,
   [CCM2 | _] = NodesUp2,
-  DB_Node = nodes_manager:get_db_node(),
-  Args = [[{node_type, ccm}, {dispatcher_port, 5055}, {control_panel_port, 1350}, {control_panel_redirect_port, 1354}, {rest_port, 8443}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1308}, {db_nodes, [DB_Node]}, {initialization_time, 5}, {cluster_clontrol_period, 1}, {heart_beat, 1}],
-    [{node_type, ccm}, {dispatcher_port, 6666}, {control_panel_port, 1351}, {control_panel_redirect_port, 1355}, {rest_port, 8445}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1309}, {db_nodes, [DB_Node]}, {initialization_time, 5}, {cluster_clontrol_period, 1}, {heart_beat, 1}],
-    [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {control_panel_redirect_port, 1356}, {rest_port, 8446}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1310}, {db_nodes, [DB_Node]}, {heart_beat, 1}],
-    [{node_type, worker}, {dispatcher_port, 8888}, {control_panel_port, 1353}, {control_panel_redirect_port, 1357}, {rest_port, 8447}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1311}, {db_nodes, [DB_Node]}, {heart_beat, 1}]],
+  DB_Node = ?DB_NODE,
+  Args = [[{node_type, ccm}, {dispatcher_port, 5055}, {control_panel_port, 1350}, {control_panel_redirect_port, 1354}, {rest_port, 8443}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1308}, {db_nodes, [DB_Node]}, {initialization_time, 5}, {cluster_clontrol_period, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, ccm}, {dispatcher_port, 6666}, {control_panel_port, 1351}, {control_panel_redirect_port, 1355}, {rest_port, 8445}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1309}, {db_nodes, [DB_Node]}, {initialization_time, 5}, {cluster_clontrol_period, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {control_panel_redirect_port, 1356}, {rest_port, 8446}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1310}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+    [{node_type, worker}, {dispatcher_port, 8888}, {control_panel_port, 1353}, {control_panel_redirect_port, 1357}, {rest_port, 8447}, {ccm_nodes, [CCM, CCM2]}, {dns_port, 1311}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]],
+  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, Args),
 
-  StartLog = nodes_manager:start_app_on_nodes(NodesUp, Args),
-
-  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
-  lists:append([{nodes, NodesUp}, {params, Params}, {args, Args}, {assertions, Assertions}], Config).
+  lists:append([{nodes, NodesUp}, {params, Params}, {args, Args}], Config).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
-  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
-  StopAns = nodes_manager:stop_nodes(Nodes),
-  nodes_manager:stop_deps_for_tester_node(),
-
-  ?assertEqual(false, lists:member(error, StopLog)),
-  ?assertEqual(ok, StopAns).
+  test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
+  test_node_starter:stop_test_nodes(Nodes),
+  test_node_starter:stop_deps_for_tester_node().
