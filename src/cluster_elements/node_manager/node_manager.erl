@@ -177,8 +177,8 @@ handle_call({get_node_stats, StartTime, EndTime}, _From, State) ->
   Reply = get_node_stats(StartTime, EndTime),
   {reply, Reply, State};
 
-handle_call({get_node_stats, StartTime, EndTime, Columns}, _From, State) ->
-  Reply = get_node_stats(StartTime, EndTime, Columns),
+handle_call({get_node_stats, Options, CF, Columns}, _From, State) ->
+  Reply = rrderlang:fetch(?Node_Stats_RRD_Name, Options, CF, Columns),
   {reply, Reply, State};
 
 handle_call(get_fuses_list, _From, State) ->
@@ -605,11 +605,10 @@ get_node_stats(TimeWindow) ->
   Result :: [{Name :: string(), Value :: float()}] | {error, term()}.
 %% ====================================================================
 get_node_stats(StartTime, EndTime) ->
-  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   BinaryStartTime = integer_to_binary(StartTime),
   BinaryEndTime = integer_to_binary(EndTime),
   Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
-  case gen_server:call(?RrdErlang_Name, {fetch, ?Node_Stats_RRD_Name, Options, <<"AVERAGE">>}, Timeout) of
+  case rrderlang:fetch(?Node_Stats_RRD_Name, Options, <<"AVERAGE">>) of
     {ok, {Header, Data}} ->
       HeaderList = lists:map(fun(Elem) -> binary_to_list(Elem) end, Header),
       HeaderLen = length(Header),
@@ -1013,38 +1012,38 @@ clear_simple_caches(Caches) ->
 %% ====================================================================
 clear_cache(Cache, Caches) ->
   Method = case Cache of
-    CacheName when is_atom(CacheName) ->
-      {Cache, all, Cache};
-    {permanent_cache, CacheName2} ->
-      {Cache, all, CacheName2};
-    {permanent_cache, CacheName3, _} ->
-      {Cache, all, CacheName3};
-    {sub_proc_cache, SubProcCache} ->
-      {Cache, sub_proc, SubProcCache};
-    {{sub_proc_cache, SubProcCache2}, SubProcKey} ->
-      {{sub_proc_cache, SubProcCache2}, sub_proc, {SubProcCache2, SubProcKey}};
-    {{permanent_cache, CacheName4}, Keys} when is_list(Keys) ->
-      {{permanent_cache, CacheName4}, list, {CacheName4, Keys}};
-    {{permanent_cache, CacheName5}, Key} ->
-      {{permanent_cache, CacheName5}, simple, {CacheName5, Key}};
-    {{permanent_cache, CacheName6, _}, Keys2} when is_list(Keys2) ->
-      {{permanent_cache, CacheName6}, list, {CacheName6, Keys2}};
-    {{permanent_cache, CacheName7, _}, Key2} ->
-      {{permanent_cache, CacheName7}, simple, {CacheName7, Key2}};
-    {CacheName8, Keys3} when is_list(Keys3) ->
-      {CacheName8, list, {CacheName8, Keys3}};
-    {CacheName9, Key3} ->
-      {CacheName9, simple, {CacheName9, Key3}};
-    [] ->
-      ok;
-    [H | T] ->
-      Ans1 = clear_cache(H, Caches),
-      Ans2 = clear_cache(T, Caches),
-      case {Ans1, Ans2} of
-        {ok, ok} -> ok;
-        _ -> error
-      end
-  end,
+             CacheName when is_atom(CacheName) ->
+               {Cache, all, Cache};
+             {permanent_cache, CacheName2} ->
+               {Cache, all, CacheName2};
+             {permanent_cache, CacheName3, _} ->
+               {Cache, all, CacheName3};
+             {sub_proc_cache, SubProcCache} ->
+               {Cache, sub_proc, SubProcCache};
+             {{sub_proc_cache, SubProcCache2}, SubProcKey} ->
+               {{sub_proc_cache, SubProcCache2}, sub_proc, {SubProcCache2, SubProcKey}};
+             {{permanent_cache, CacheName4}, Keys} when is_list(Keys) ->
+               {{permanent_cache, CacheName4}, list, {CacheName4, Keys}};
+             {{permanent_cache, CacheName5}, Key} ->
+               {{permanent_cache, CacheName5}, simple, {CacheName5, Key}};
+             {{permanent_cache, CacheName6, _}, Keys2} when is_list(Keys2) ->
+               {{permanent_cache, CacheName6}, list, {CacheName6, Keys2}};
+             {{permanent_cache, CacheName7, _}, Key2} ->
+               {{permanent_cache, CacheName7}, simple, {CacheName7, Key2}};
+             {CacheName8, Keys3} when is_list(Keys3) ->
+               {CacheName8, list, {CacheName8, Keys3}};
+             {CacheName9, Key3} ->
+               {CacheName9, simple, {CacheName9, Key3}};
+             [] ->
+               ok;
+             [H | T] ->
+               Ans1 = clear_cache(H, Caches),
+               Ans2 = clear_cache(T, Caches),
+               case {Ans1, Ans2} of
+                 {ok, ok} -> ok;
+                 _ -> error
+               end
+           end,
   case Method of
     {CName, ClearingMethod, ClearingMethodAttr} ->
       case lists:member(CName, Caches) of
