@@ -12,11 +12,11 @@ function formatNumber(number) {
 
 function formatTimestamp(timestamp) {
     var date = new Date(parseInt(timestamp));
-    return formatNumber(date.getHours()) + ":" + formatNumber(date.getMinutes()) + ":" + formatNumber(date.getSeconds()) + "\n" +
-        months[date.getMonth()] + " " + date.getDate() + ", " + date.getFullYear();
+    return "\n" + formatNumber(date.getHours()) + ":" + formatNumber(date.getMinutes()) + ":" + formatNumber(date.getSeconds()) + "\n" +
+        months[date.getMonth()] + " " + date.getDate() + ", " + date.getFullYear() + "\n";
 }
 
-function createChart(id, type, title, vAxisTitle, data) {
+function createChart(id, type, title, vAxisTitle, header, body) {
     var chart = {};
 
     if (type == "LineChart") {
@@ -27,7 +27,9 @@ function createChart(id, type, title, vAxisTitle, data) {
         return 0;
     }
 
-    chart.dataTable = google.visualization.arrayToDataTable(data);
+    chart.dataTable = new google.visualization.DataTable(header);
+
+    chart.dataTable.addRows(body);
 
     for (var row = 0; row < chart.dataTable.getNumberOfRows(); row++) {
         var timestamp = chart.dataTable.getValue(row, 0);
@@ -36,7 +38,7 @@ function createChart(id, type, title, vAxisTitle, data) {
 
     chart.options = {
         title: title,
-        height: 300,
+        height: 400,
         legend: 'right',
         hAxis: {
             title: 'Time',
@@ -61,13 +63,15 @@ function createChart(id, type, title, vAxisTitle, data) {
     return !0;
 }
 
-function updateChart(id, row) {
+function updateChart(id, rows) {
     var chart = charts[id];
-    var timestamp = row[0];
-    row[0] = formatTimestamp(timestamp);
 
-    chart.dataTable.removeRow(0);
-    chart.dataTable.addRow(row);
+    for (var row = 0; row < rows.length; row++) {
+        rows[row][0] = formatTimestamp(rows[row][0]);
+    }
+
+    chart.dataTable.removeRows(0, chart.dataTable.getNumberOfRows());
+    chart.dataTable.addRows(rows);
 
     chart.self.draw(chart.dataTable, chart.options);
 }
