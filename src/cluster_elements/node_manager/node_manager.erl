@@ -170,19 +170,15 @@ handle_call(get_ccm_connection_status, _From, State) ->
   {reply, State#node_state.ccm_con_status, State};
 
 handle_call({get_node_stats, TimeWindow}, _From, State) ->
-  Reply = get_node_stats(TimeWindow, default),
-  {reply, Reply, State};
-
-handle_call({get_node_stats_json, TimeWindow}, _From, State) ->
-  Reply = get_node_stats(TimeWindow, json),
+  Reply = get_node_stats(TimeWindow),
   {reply, Reply, State};
 
 handle_call({get_node_stats, StartTime, EndTime}, _From, State) ->
   Reply = get_node_stats(StartTime, EndTime),
   {reply, Reply, State};
 
-handle_call({get_node_stats_json, StartTime, EndTime}, _From, State) ->
-  Reply = get_node_stats(StartTime, EndTime, json),
+handle_call({get_node_stats, Options, CF, Columns}, _From, State) ->
+  Reply = rrderlang:fetch(?Node_Stats_RRD_Name, Options, CF, Columns),
   {reply, Reply, State};
 
 handle_call(get_fuses_list, _From, State) ->
@@ -583,10 +579,10 @@ create_node_stats_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkS
 %% ====================================================================
 %% @doc Get statistics about node load
 %% TimeWindow - time in seconds since now, that defines interval for which statistics will be fetched
--spec get_node_stats(TimeWindow :: short | medium | long | integer(), Format :: default | json) -> Result when
+-spec get_node_stats(TimeWindow :: short | medium | long | integer()) -> Result when
   Result :: [{Name :: atom(), Value :: float()}] | {error, term()}.
 %% ====================================================================
-get_node_stats(TimeWindow, Format) ->
+get_node_stats(TimeWindow) ->
   {ok, Interval} = case TimeWindow of
                      short -> application:get_env(?APP_Name, short_monitoring_time_window);
                      medium -> application:get_env(?APP_Name, medium_monitoring_time_window);
@@ -596,25 +592,21 @@ get_node_stats(TimeWindow, Format) ->
   {MegaSecs, Secs, _} = erlang:now(),
   EndTime = 1000000 * MegaSecs + Secs,
   StartTime = EndTime - Interval,
-  get_node_stats(StartTime, EndTime, Format).
+  get_node_stats(StartTime, EndTime).
 
 %% get_node_stats/3
 %% ====================================================================
 %% @doc Get statistics about node load
-%% StartTime. EndTime - time in seconds since epoch (1970-01-01), that defines interval
+%% StartTime, EndTime - time in seconds since epoch (1970-01-01), that defines interval
 %% for which statistics will be fetched
--spec get_node_stats(StartTime :: integer(), EndTime :: integer(), Format :: default | json) -> Result when
+-spec get_node_stats(StartTime :: integer(), EndTime :: integer()) -> Result when
   Result :: [{Name :: string(), Value :: float()}] | {error, term()}.
 %% ====================================================================
-get_node_stats(StartTime, EndTime, Format) ->
+get_node_stats(StartTime, EndTime) ->
   BinaryStartTime = integer_to_binary(StartTime),
   BinaryEndTime = integer_to_binary(EndTime),
   Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
-  FetchFunction = case Format of
-                    json -> fun rrderlang:fetch_json/3;
-                    _ -> fun rrderlang:fetch/3
-                  end,
-  case FetchFunction(?Node_Stats_RRD_Name, Options, <<"AVERAGE">>) of
+  case rrderlang:fetch(?Node_Stats_RRD_Name, Options, <<"AVERAGE">>) of
     {ok, {Header, Data}} ->
       HeaderList = lists:map(fun(Elem) -> binary_to_list(Elem) end, Header),
       HeaderLen = length(Header),
@@ -998,38 +990,38 @@ clear_simple_caches(Caches) ->
 %% ====================================================================
 clear_cache(Cache, Caches) ->
   Method = case Cache of
-    CacheName when is_atom(CacheName) ->
-      {Cache, all, Cache};
-    {permanent_cache, CacheName2} ->
-      {Cache, all, CacheName2};
-    {permanent_cache, CacheName3, _} ->
-      {Cache, all, CacheName3};
-    {sub_proc_cache, SubProcCache} ->
-      {Cache, sub_proc, SubProcCache};
-    {{sub_proc_cache, SubProcCache2}, SubProcKey} ->
-      {{sub_proc_cache, SubProcCache2}, sub_proc, {SubProcCache2, SubProcKey}};
-    {{permanent_cache, CacheName4}, Keys} when is_list(Keys) ->
-      {{permanent_cache, CacheName4}, list, {CacheName4, Keys}};
-    {{permanent_cache, CacheName5}, Key} ->
-      {{permanent_cache, CacheName5}, simple, {CacheName5, Key}};
-    {{permanent_cache, CacheName6, _}, Keys2} when is_list(Keys2) ->
-      {{permanent_cache, CacheName6}, list, {CacheName6, Keys2}};
-    {{permanent_cache, CacheName7, _}, Key2} ->
-      {{permanent_cache, CacheName7}, simple, {CacheName7, Key2}};
-    {CacheName8, Keys3} when is_list(Keys3) ->
-      {CacheName8, list, {CacheName8, Keys3}};
-    {CacheName9, Key3} ->
-      {CacheName9, simple, {CacheName9, Key3}};
-    [] ->
-      ok;
-    [H | T] ->
-      Ans1 = clear_cache(H, Caches),
-      Ans2 = clear_cache(T, Caches),
-      case {Ans1, Ans2} of
-        {ok, ok} -> ok;
-        _ -> error
-      end
-  end,
+             CacheName when is_atom(CacheName) ->
+               {Cache, all, Cache};
+             {permanent_cache, CacheName2} ->
+               {Cache, all, CacheName2};
+             {permanent_cache, CacheName3, _} ->
+               {Cache, all, CacheName3};
+             {sub_proc_cache, SubProcCache} ->
+               {Cache, sub_proc, SubProcCache};
+             {{sub_proc_cache, SubProcCache2}, SubProcKey} ->
+               {{sub_proc_cache, SubProcCache2}, sub_proc, {SubProcCache2, SubProcKey}};
+             {{permanent_cache, CacheName4}, Keys} when is_list(Keys) ->
+               {{permanent_cache, CacheName4}, list, {CacheName4, Keys}};
+             {{permanent_cache, CacheName5}, Key} ->
+               {{permanent_cache, CacheName5}, simple, {CacheName5, Key}};
+             {{permanent_cache, CacheName6, _}, Keys2} when is_list(Keys2) ->
+               {{permanent_cache, CacheName6}, list, {CacheName6, Keys2}};
+             {{permanent_cache, CacheName7, _}, Key2} ->
+               {{permanent_cache, CacheName7}, simple, {CacheName7, Key2}};
+             {CacheName8, Keys3} when is_list(Keys3) ->
+               {CacheName8, list, {CacheName8, Keys3}};
+             {CacheName9, Key3} ->
+               {CacheName9, simple, {CacheName9, Key3}};
+             [] ->
+               ok;
+             [H | T] ->
+               Ans1 = clear_cache(H, Caches),
+               Ans2 = clear_cache(T, Caches),
+               case {Ans1, Ans2} of
+                 {ok, ok} -> ok;
+                 _ -> error
+               end
+           end,
   case Method of
     {CName, ClearingMethod, ClearingMethodAttr} ->
       case lists:member(CName, Caches) of
