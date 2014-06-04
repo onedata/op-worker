@@ -10,7 +10,6 @@
 %% ===================================================================
 
 -module(page_monitoring).
-%% -compile(export_all).
 -include("veil_modules/control_panel/common.hrl").
 -include("registered_names.hrl").
 -include("logging.hrl").
@@ -21,7 +20,7 @@
 -define(GEN_SERVER_TIMEOUT, 5000).
 
 -record(page_state, {nodes, node, time_range, chart_type, charts = dict:new()}).
--record(chart, {id, node, time_range, type}).
+-record(chart, {id, node, time_range, type, update_period}).
 
 -export([main/0, event/1, comet_loop/2]).
 
@@ -146,8 +145,7 @@ comet_loop(Counter, #page_state{nodes = Nodes, node = Node, time_range = TimeRan
                         reset_dropdowns(Nodes),
                         case create_chart(Counter, Node, TimeRange, ChartType) of
                             {ok, Chart} ->
-                                Period = get_update_period(Node),
-                                erlang:send_after(1000 * Period, self(), {update_chart, Counter}),
+                                erlang:send_after(1000 * Chart#chart.update_period, self(), {update_chart, Counter}),
                                 ?MODULE:comet_loop(Counter + 1, PageState#page_state{node = undefined, time_range = undefined, chart_type = undefined, charts = dict:store(Counter, Chart, Charts)});
                             _ ->
                                 error_message(<<"There has been an error in chart creation. Please try again.">>),
@@ -161,8 +159,7 @@ comet_loop(Counter, #page_state{nodes = Nodes, node = Node, time_range = TimeRan
                 try
                     Chart = dict:fetch(Id, Charts),
                     ok = update_chart(Chart),
-                    Period = get_update_period(Chart#chart.node),
-                    erlang:send_after(1000 * Period, self(), {update_chart, Id})
+                    erlang:send_after(1000 * Chart#chart.update_period, self(), {update_chart, Id})
                 catch
                     _:Error -> ?error("Can not update chart ~p: ~p", [Id, Error])
                 end,
@@ -292,8 +289,8 @@ reset_dropdowns(Nodes) ->
 %% ====================================================================
 create_chart(Counter, Node, TimeRange, ChartType) ->
     try
-        {IdJSON, TypeJSON, TitleJSON, VAxisTitleJSON, HeaderJSON, BodyJSON} = get_json_data(Counter, Node, TimeRange, ChartType),
-        DataJSON = "[" ++ HeaderJSON ++ ", " ++ BodyJSON ++ "]",
+        UpdatePeriod = get_update_period(Node, TimeRange),
+        {IdJSON, TypeJSON, TitleJSON, VAxisTitleJSON, HeaderJSON, BodyJSON} = get_json_data(Counter, Node, TimeRange, ChartType, UpdatePeriod),
         RowID = "row_" ++ integer_to_list(Counter),
         gui_utils:insert_top("main_table", #tr{id = list_to_binary(RowID),
             cells = [
@@ -302,9 +299,9 @@ create_chart(Counter, Node, TimeRange, ChartType) ->
                     body = #span{class = <<"fui-cross">>, style = <<"font-size: 20px;">>}},
                     style = <<"width: 10px;">>}
             ]}),
-        wf:wire("createChart(" ++ IdJSON ++ "," ++ TypeJSON ++ "," ++ TitleJSON ++ "," ++ VAxisTitleJSON ++ "," ++ DataJSON ++ ");"),
+        wf:wire("createChart(" ++ IdJSON ++ "," ++ TypeJSON ++ "," ++ TitleJSON ++ "," ++ VAxisTitleJSON ++ "," ++ HeaderJSON ++ "," ++ BodyJSON ++ ");"),
         gui_utils:flush(),
-        {ok, #chart{id = Counter, node = Node, time_range = TimeRange, type = ChartType}}
+        {ok, #chart{id = Counter, node = Node, time_range = TimeRange, type = ChartType, update_period = UpdatePeriod}}
     catch
         _:_ -> error
     end.
@@ -315,9 +312,9 @@ create_chart(Counter, Node, TimeRange, ChartType) ->
 %% @doc Updates specified chart on page.
 -spec update_chart(Chart :: #chart{}) -> ok | error.
 %% ====================================================================
-update_chart(#chart{id = ID, node = Node, type = ChartType}) ->
+update_chart(#chart{id = ID, node = Node, time_range = TimeRange, type = ChartType, update_period = UpdatePeriod}) ->
     try
-        {IdJSON, _, _, _, _, BodyJSON} = get_json_data(ID, Node, <<"now">>, ChartType),
+        {IdJSON, _, _, _, _, BodyJSON} = get_json_data(ID, Node, TimeRange, ChartType, UpdatePeriod),
         wf:wire("updateChart(" ++ IdJSON ++ "," ++ BodyJSON ++ ");"),
         gui_utils:flush(),
         ok
@@ -329,7 +326,7 @@ update_chart(#chart{id = ID, node = Node, type = ChartType}) ->
 %% get_json_data/4
 %% ====================================================================
 %% @doc Returns data in json format applicable for Google Charts API.
--spec get_json_data(Id :: integer(), Node :: summary | node(), TimeRange :: binary(), ChartType :: binary()) -> Result when
+-spec get_json_data(Id :: integer(), Node :: summary | node(), TimeRange :: binary(), ChartType :: binary(), UpdatePeriod :: integer()) -> Result when
     Result :: {IdJSON, TypeJSON, TitleJSON, VAxisTitleJSON, HeaderJSON, BodyJSON},
     IdJSON :: string(),
     TypeJSON :: string(),
@@ -338,13 +335,11 @@ update_chart(#chart{id = ID, node = Node, type = ChartType}) ->
     HeaderJSON :: string(),
     BodyJSON :: string().
 %% ====================================================================
-get_json_data(Id, summary, TimeRange, ChartType) ->
-    {ok, Period} = application:get_env(?APP_Name, cluster_monitoring_period),
-    get_json_data(Id, summary, Period, {global, ?CCM}, get_cluster_stats, TimeRange, ChartType);
+get_json_data(Id, summary, TimeRange, ChartType, UpdatePeriod) ->
+    get_json_data(Id, summary, UpdatePeriod, {global, ?CCM}, get_cluster_stats, TimeRange, ChartType);
 
-get_json_data(Id, Node, TimeRange, ChartType) ->
-    {ok, Period} = application:get_env(?APP_Name, node_monitoring_period),
-    get_json_data(Id, Node, Period, {?Node_Manager_Name, Node}, get_node_stats, TimeRange, ChartType).
+get_json_data(Id, Node, TimeRange, ChartType, UpdatePeriod) ->
+    get_json_data(Id, Node, UpdatePeriod, {?Node_Manager_Name, Node}, get_node_stats, TimeRange, ChartType).
 
 
 %% get_json_data/7
@@ -362,22 +357,22 @@ get_json_data(Id, Node, TimeRange, ChartType) ->
 %% ====================================================================
 get_json_data(Id, Node, Period, Target, Command, TimeRange, ChartType) ->
     {MegaSecs, Secs, _} = erlang:now(),
-    EndTime = trunc(((1000000 * MegaSecs + Secs - 2 * Period - 1) / Period) * Period),
+    EndTime = trunc(((1000000 * MegaSecs + Secs - 2 * Period) / Period) * Period),
     StartTime = EndTime - time_range_to_integer(TimeRange),
     BinaryStartTime = integer_to_binary(StartTime),
     BinaryEndTime = integer_to_binary(EndTime),
     Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
     {ok, {Header, Body}} = gen_server:call(Target, {Command, Options, <<"AVERAGE">>, chart_type_to_columns(ChartType)}, ?GEN_SERVER_TIMEOUT),
-    HeaderJSON = "['Time', " ++
+    HeaderJSON = "{ cols: [{label: 'Time', type: 'string'}, " ++
         string:join(lists:map(fun(Column) ->
             header_to_json(Column)
-        end, Header), ", ") ++ "]",
-    BodyJSON = string:join(lists:map(fun({Timestamp, Row}) ->
+        end, Header), ", ") ++ "], rows: []}",
+    BodyJSON = "[" ++ string:join(lists:map(fun({Timestamp, Row}) ->
         "['" ++ integer_to_list(1000 * Timestamp) ++ "', " ++
             string:join(lists:map(fun(Value) ->
                 value_to_list(Value)
             end, Row), ", ") ++ "]"
-    end, Body), ", "),
+    end, Body), ", ") ++ "]",
     IdJSON = "'" ++ integer_to_list(Id) ++ "'",
     TypeJSON = chart_type_to_google_chart_type(ChartType),
     TitleJSON = "'" ++ binary_to_list(get_hostname(Node)) ++ " / " ++ binary_to_list(TimeRange) ++ " / " ++ binary_to_list(ChartType) ++ "'",
@@ -385,17 +380,31 @@ get_json_data(Id, Node, Period, Target, Command, TimeRange, ChartType) ->
     {IdJSON, TypeJSON, TitleJSON, VAxisTitleJSON, HeaderJSON, BodyJSON}.
 
 
-%% get_update_period/1
+%% get_update_period/2
 %% ====================================================================
 %% @doc Returns period in seconds that say how often graph should be updated.
--spec get_update_period(Node :: summary | node()) -> integer().
+-spec get_update_period(Node :: summary | node(), TimeRange :: binary()) -> integer().
 %% ====================================================================
-get_update_period(summary) ->
+get_update_period(summary, TimeRange) ->
     {ok, Period} = application:get_env(?APP_Name, cluster_monitoring_period),
-    Period;
-get_update_period(_) ->
+    Period * get_period_multiplication(TimeRange);
+get_update_period(_, TimeRange) ->
     {ok, Period} = application:get_env(?APP_Name, node_monitoring_period),
-    Period.
+    Period * get_period_multiplication(TimeRange).
+
+
+%% get_period_multiplication/1
+%% ====================================================================
+%% @doc Returns update period multiplication in terms of Round Robin Archive size.
+-spec get_period_multiplication(TimeRange :: binary()) -> integer().
+%% ====================================================================
+get_period_multiplication(<<"last 5 minutes">>) -> 1;
+get_period_multiplication(<<"last 15 minutes">>) -> 1;
+get_period_multiplication(<<"last hour">>) -> 24;
+get_period_multiplication(<<"last 24 hours">>) -> 24;
+get_period_multiplication(<<"last 7 days">>) -> 7 * 24;
+get_period_multiplication(<<"last 30 days">>) -> 30 * 24;
+get_period_multiplication(<<"last 365 days">>) -> 365 * 24.
 
 
 %% get_nodes/0
@@ -430,14 +439,13 @@ get_hostname(Node) ->
 %% @doc Maps time ranges to integers.
 -spec time_range_to_integer(TimeRange :: binary()) -> integer().
 %% ====================================================================
-time_range_to_integer(<<"now">>) -> 0;
 time_range_to_integer(<<"last 5 minutes">>) -> 5 * 60;
 time_range_to_integer(<<"last 15 minutes">>) -> 15 * 60;
+time_range_to_integer(<<"last hour">>) -> 60 * 60;
 time_range_to_integer(<<"last 24 hours">>) -> 24 * 60 * 60;
 time_range_to_integer(<<"last 7 days">>) -> 7 * 24 * 60 * 60;
 time_range_to_integer(<<"last 30 days">>) -> 30 * 24 * 60 * 60;
-time_range_to_integer(<<"last 365 days">>) -> 365 * 24 * 60 * 60;
-time_range_to_integer(_) -> 60 * 60.
+time_range_to_integer(<<"last 365 days">>) -> 365 * 24 * 60 * 60.
 
 
 %% chart_type_to_columns/1
@@ -481,21 +489,25 @@ chart_type_to_v_axis_title(<<"storage IO transfer">>) -> "'bytes'".
 %% @doc Maps column header name to chart's legend label.
 -spec header_to_json(Header :: binary()) -> string().
 %% ====================================================================
-header_to_json(<<"cpu">>) -> "'CPU'";
-header_to_json(<<"core", Core/binary>>) -> "'Core " ++ binary_to_list(Core) ++ "'";
-header_to_json(<<"mem">>) -> "'Memory'";
-header_to_json(<<"ports_rx_b">>) -> "'RX bytes'";
-header_to_json(<<"ports_tx_b">>) -> "'TX bytes'";
-header_to_json(<<"storage_read_b">>) -> "'read bytes'";
-header_to_json(<<"storage_write_b">>) -> "'written bytes'";
-header_to_json(<<"net_rx_b">>) -> "'RX bytes'";
-header_to_json(<<"net_tx_b">>) -> "'TX bytes'";
-header_to_json(<<"net_rx_b_", Interface/binary>>) -> "'" ++ binary_to_list(Interface) ++ " RX bytes'";
-header_to_json(<<"net_tx_b_", Interface/binary>>) -> "'" ++ binary_to_list(Interface) ++ " TX bytes'";
-header_to_json(<<"net_rx_pps">>) -> "'RX pps'";
-header_to_json(<<"net_tx_pps">>) -> "'TX pps'";
-header_to_json(<<"net_rx_pps_", Interface/binary>>) -> "'" ++ binary_to_list(Interface) ++ " RX pps'";
-header_to_json(<<"net_tx_pps_", Interface/binary>>) -> "'" ++ binary_to_list(Interface) ++ " TX pps'";
+header_to_json(<<"cpu">>) -> "{label: 'CPU', type: 'number'}";
+header_to_json(<<"core", Core/binary>>) -> "{label: 'Core " ++ binary_to_list(Core) ++ "', type: 'number'}";
+header_to_json(<<"mem">>) -> "{label: 'Memory', type: 'number'}";
+header_to_json(<<"ports_rx_b">>) -> "{label: 'RX bytes', type: 'number'}";
+header_to_json(<<"ports_tx_b">>) -> "{label: 'TX bytes', type: 'number'}";
+header_to_json(<<"storage_read_b">>) -> "{label: 'read bytes', type: 'number'}";
+header_to_json(<<"storage_write_b">>) -> "{label: 'written bytes', type: 'number'}";
+header_to_json(<<"net_rx_b">>) -> "{label: 'RX bytes', type: 'number'}";
+header_to_json(<<"net_tx_b">>) -> "{label: 'TX bytes', type: 'number'}";
+header_to_json(<<"net_rx_b_", Interface/binary>>) ->
+    "{label: '" ++ binary_to_list(Interface) ++ " RX bytes', type: 'number'}";
+header_to_json(<<"net_tx_b_", Interface/binary>>) ->
+    "{label: '" ++ binary_to_list(Interface) ++ " TX bytes', type: 'number'}";
+header_to_json(<<"net_rx_pps">>) -> "{label: 'RX pps', type: 'number'}";
+header_to_json(<<"net_tx_pps">>) -> "{label: 'TX pps', type: 'number'}";
+header_to_json(<<"net_rx_pps_", Interface/binary>>) ->
+    "{label: '" ++ binary_to_list(Interface) ++ " RX pps', type: 'number'}";
+header_to_json(<<"net_tx_pps_", Interface/binary>>) ->
+    "{label: '" ++ binary_to_list(Interface) ++ " TX pps', type: 'number'}";
 header_to_json(_) -> throw(<<"Unknown column.">>).
 
 
