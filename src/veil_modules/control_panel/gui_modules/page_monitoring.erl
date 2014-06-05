@@ -19,7 +19,7 @@
 -define(HOST_CHART_TYPES, [<<"CPU utilization">>, <<"memory usage">>, <<"network throughput">>, <<"network transfer">>, <<"ports transfer">>]).
 -define(GEN_SERVER_TIMEOUT, 5000).
 
--record(page_state, {nodes, node, time_range, chart_type, charts = dict:new()}).
+-record(page_state, {nodes, node, time_range, chart_type, charts = []}).
 -record(chart, {id, node, time_range, type, update_period}).
 
 -export([main/0, event/1, comet_loop/2]).
@@ -140,26 +140,33 @@ comet_loop(Counter, #page_state{nodes = Nodes, node = Node, time_range = TimeRan
             add_chart ->
                 gui_utils:remove("error_message"),
                 gui_utils:flush(),
-                case validate(PageState) of
+                case validate_page_state(PageState) of
                     ok ->
-                        reset_dropdowns(Nodes),
-                        case create_chart(Counter, Node, TimeRange, ChartType) of
-                            {ok, Chart} ->
-                                erlang:send_after(1000 * Chart#chart.update_period, self(), {update_chart, Counter}),
-                                ?MODULE:comet_loop(Counter + 1, PageState#page_state{node = undefined, time_range = undefined, chart_type = undefined, charts = dict:store(Counter, Chart, Charts)});
-                            _ ->
-                                error_message(<<"There has been an error in chart creation. Please try again.">>),
-                                ?MODULE:comet_loop(Counter, PageState#page_state{node = undefined, time_range = undefined, chart_type = undefined})
+                        case validate_chart(Node, TimeRange, ChartType, Charts) of
+                            ok ->
+                                case create_chart(Counter, Node, TimeRange, ChartType) of
+                                    {ok, Chart} ->
+                                        reset_dropdowns(Nodes),
+                                        erlang:send_after(1000 * Chart#chart.update_period, self(), {update_chart, Counter}),
+                                        ?MODULE:comet_loop(Counter + 1, PageState#page_state{node = undefined, time_range = undefined, chart_type = undefined, charts = [{Counter, Chart} | Charts]});
+                                    _ ->
+                                        error_message(<<"There has been an error in chart creation. Please try again.">>)
+                                end;
+                            _ -> error_message(<<"Chart already added.">>)
                         end;
-                    _ ->
-                        ?MODULE:comet_loop(Counter, PageState)
-                end;
+                    _ -> ok
+                end,
+                ?MODULE:comet_loop(Counter, PageState);
 
             {update_chart, Id} ->
                 try
-                    Chart = dict:fetch(Id, Charts),
-                    ok = update_chart(Chart),
-                    erlang:send_after(1000 * Chart#chart.update_period, self(), {update_chart, Id})
+                    case proplists:get_value(Id, Charts) of
+                        undefined ->
+                            ?error("Can not update chart ~p: chart does not exist.", [Id]);
+                        Chart ->
+                            ok = update_chart(Chart),
+                            erlang:send_after(1000 * Chart#chart.update_period, self(), {update_chart, Id})
+                    end
                 catch
                     _:Error -> ?error("Can not update chart ~p: ~p", [Id, Error])
                 end,
@@ -168,7 +175,7 @@ comet_loop(Counter, #page_state{nodes = Nodes, node = Node, time_range = TimeRan
             {delete_chart, Id} ->
                 wf:wire("deleteChart(\"" ++ integer_to_list(Id) ++ "\");"),
                 gui_utils:flush(),
-                ?MODULE:comet_loop(Counter, PageState#page_state{charts = dict:erase(Id, Charts)})
+                ?MODULE:comet_loop(Counter, PageState#page_state{charts = proplists:delete(Id, Charts)})
 
         end
     catch Type:Msg ->
@@ -188,22 +195,36 @@ error_message(Message) ->
     gui_utils:flush().
 
 
-%% validate/1
+%% validate_page_state/1
 %% ====================================================================
-%% @doc Checks whether user has selected all requiered options to plot chart
--spec validate(PageState :: #page_state{}) -> ok | error.
+%% @doc Checks whether user has selected all requiered options to draw chart.
+-spec validate_page_state(PageState :: #page_state{}) -> ok | error.
 %% ====================================================================
-validate(#page_state{node = undefined}) ->
+validate_page_state(#page_state{node = undefined}) ->
     error_message(<<"Please select host.">>),
     error;
-validate(#page_state{time_range = undefined}) ->
+validate_page_state(#page_state{time_range = undefined}) ->
     error_message(<<"Please select time range.">>),
     error;
-validate(#page_state{chart_type = undefined}) ->
+validate_page_state(#page_state{chart_type = undefined}) ->
     error_message(<<"Please select chart type.">>),
     error;
-validate(_) ->
+validate_page_state(_) ->
     ok.
+
+
+%% validate_chart/4
+%% ====================================================================
+%% @doc Checks whether chart can be drawn on page. Chart can be drawn
+%% when it is not already available on page.
+-spec validate_chart(Node :: summary | node(), TimeRange :: binary(), ChartType :: binary(), Charts :: [{Key :: integer(), #chart{}}]) -> ok | error.
+%% ====================================================================
+validate_chart(_, _, _, []) ->
+    ok;
+validate_chart(Node, TimeRange, ChartType, [{_, #chart{node = Node, time_range = TimeRange, type = ChartType}} | _]) ->
+    error;
+validate_chart(Node, TimeRange, ChartType, [_ | Charts]) ->
+    validate_chart(Node, TimeRange, ChartType, Charts).
 
 
 %% host_dropdown_body/0
@@ -357,7 +378,7 @@ get_json_data(Id, Node, TimeRange, ChartType, UpdatePeriod) ->
 %% ====================================================================
 get_json_data(Id, Node, Period, Target, Command, TimeRange, ChartType) ->
     {MegaSecs, Secs, _} = erlang:now(),
-    EndTime = trunc(((1000000 * MegaSecs + Secs - Period - 1) / Period) * Period),
+    EndTime = trunc(((1000000 * MegaSecs + Secs - 2 * Period) / Period) * Period),
     StartTime = EndTime - time_range_to_integer(TimeRange),
     BinaryStartTime = integer_to_binary(StartTime),
     BinaryEndTime = integer_to_binary(EndTime),
