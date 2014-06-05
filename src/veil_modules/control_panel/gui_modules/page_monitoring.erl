@@ -357,7 +357,7 @@ get_json_data(Id, Node, TimeRange, ChartType, UpdatePeriod) ->
 %% ====================================================================
 get_json_data(Id, Node, Period, Target, Command, TimeRange, ChartType) ->
     {MegaSecs, Secs, _} = erlang:now(),
-    EndTime = trunc(((1000000 * MegaSecs + Secs - 2 * Period) / Period) * Period),
+    EndTime = trunc(((1000000 * MegaSecs + Secs - Period - 1) / Period) * Period),
     StartTime = EndTime - time_range_to_integer(TimeRange),
     BinaryStartTime = integer_to_binary(StartTime),
     BinaryEndTime = integer_to_binary(EndTime),
@@ -400,7 +400,7 @@ get_update_period(_, TimeRange) ->
 %% ====================================================================
 get_period_multiplication(<<"last 5 minutes">>) -> 1;
 get_period_multiplication(<<"last 15 minutes">>) -> 1;
-get_period_multiplication(<<"last hour">>) -> 24;
+get_period_multiplication(<<"last hour">>) -> 1;
 get_period_multiplication(<<"last 24 hours">>) -> 24;
 get_period_multiplication(<<"last 7 days">>) -> 7 * 24;
 get_period_multiplication(<<"last 30 days">>) -> 30 * 24;

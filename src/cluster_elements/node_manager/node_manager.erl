@@ -548,7 +548,7 @@ create_node_stats_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkS
   {ok, Period} = application:get_env(?APP_Name, node_monitoring_period),
   {ok, Steps} = application:get_env(?APP_Name, rrd_steps),
   Heartbeat = 2 * Period,
-  RRASize = round(60 * 60 / Period), % one hour in seconds devided by monitoring period
+  RRASize = round(2 * 60 * 60 / Period), % two hours in seconds devided by monitoring period
   BinaryPeriod = integer_to_binary(Period),
   BinaryHeartbeat = integer_to_binary(Heartbeat),
   RRASizeBinary = integer_to_binary(RRASize),
