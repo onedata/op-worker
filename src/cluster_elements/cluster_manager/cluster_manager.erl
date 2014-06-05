@@ -234,8 +234,8 @@ handle_call({get_cluster_stats, StartTime, EndTime}, _From, State) ->
   Reply = get_cluster_stats(StartTime, EndTime),
   {reply, Reply, State};
 
-handle_call({get_cluster_stats, Options, CF, Columns}, _From, State) ->
-  Reply = rrderlang:fetch(?Cluster_Stats_RRD_Name, Options, CF, Columns),
+handle_call({get_cluster_stats, StartTime, EndTime, Columns}, _From, State) ->
+  Reply = get_cluster_stats(StartTime, EndTime, Columns),
   {reply, Reply, State};
 
 %% TODO if callbacks with ack will be used intensively, information should be forwarded to nodes without ccm usage
@@ -1623,7 +1623,7 @@ create_cluster_stats_rrd() ->
   RRAs = lists:map(fun(Step) -> BinaryStep = integer_to_binary(Step),
     <<"RRA:AVERAGE:0.5:", BinaryStep/binary, ":", RRASizeBinary/binary>> end, Steps),
 
-  case rrderlang:create(?Cluster_Stats_RRD_Name, Options, DSs, RRAs) of
+  case gen_server:call(?RrdErlang_Name, {create, ?Cluster_Stats_RRD_Name, Options, DSs, RRAs}, 5000) of
     {error, Error} ->
       ?error("Can not create cluster stats RRD: ~p", [Error]),
       {error, Error};
@@ -1640,9 +1640,9 @@ create_cluster_stats_rrd() ->
 %% ====================================================================
 save_cluster_stats_to_rrd(NodesStats, #cm_state{storage_stats = StorageStats}) ->
   {MegaSecs, Secs, _} = erlang:now(),
-  Timestamp = MegaSecs * 1000000 + Secs,
+  Timestamp = integer_to_binary(MegaSecs * 1000000 + Secs),
   Values = merge_nodes_stats(NodesStats) ++ get_storage_stats(StorageStats),
-  case rrderlang:update(?Cluster_Stats_RRD_Name, <<>>, Values, Timestamp) of
+  case gen_server:call(?RrdErlang_Name, {update, ?Cluster_Stats_RRD_Name, <<>>, Values, Timestamp}, 5000) of
     {error, Error} ->
       ?error("Can not save node stats to RRD: ~p", [Error]),
       {error, Error};
@@ -1744,7 +1744,7 @@ get_cluster_stats(StartTime, EndTime) ->
   BinaryEndTime = integer_to_binary(EndTime),
   BinaryStartTime = integer_to_binary(StartTime),
   Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
-  case rrderlang:fetch(?Cluster_Stats_RRD_Name, Options, <<"AVERAGE">>) of
+  case gen_server:call(?RrdErlang_Name, {fetch, ?Cluster_Stats_RRD_Name, Options, <<"AVERAGE">>}, 5000) of
     {ok, {Header, Data}} ->
       HeaderList = lists:map(fun(Elem) -> binary_to_list(Elem) end, Header),
       HeaderLen = length(Header),
@@ -1764,3 +1764,21 @@ get_cluster_stats(StartTime, EndTime) ->
     Other ->
       Other
   end.
+
+%% get_cluster_stats/3
+%% ====================================================================
+%% @doc Fetch specified columns from cluster statistics Round Robin Database.
+-spec get_cluster_stats(StartTime :: integer(), EndTime :: integer(), Columns) -> Result when
+  Columns :: all | {name, [binary()]} | {starts_with, [binary()]} | {index, [integer()]},
+  Result :: {ok, {Header, Body}} | {error, Error :: term()},
+  Header :: [ColumnNames :: binary()],
+  Body :: [Row],
+  Row :: [{Timestamp, Values}],
+  Timestamp :: integer(),
+  Values :: [integer() | float()].
+%% ====================================================================
+get_cluster_stats(StartTime, EndTime, Columns) ->
+  BinaryStartTime = integer_to_binary(StartTime),
+  BinaryEndTime = integer_to_binary(EndTime),
+  Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
+  gen_server:call(?RrdErlang_Name, {fetch, ?Cluster_Stats_RRD_Name, Options, <<"AVERAGE">>, Columns}, 5000).

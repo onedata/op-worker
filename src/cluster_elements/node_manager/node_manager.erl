@@ -177,8 +177,8 @@ handle_call({get_node_stats, StartTime, EndTime}, _From, State) ->
   Reply = get_node_stats(StartTime, EndTime),
   {reply, Reply, State};
 
-handle_call({get_node_stats, Options, CF, Columns}, _From, State) ->
-  Reply = rrderlang:fetch(?Node_Stats_RRD_Name, Options, CF, Columns),
+handle_call({get_node_stats, StartTime, EndTime, Columns}, _From, State) ->
+  Reply = get_node_stats(StartTime, EndTime, Columns),
   {reply, Reply, State};
 
 handle_call(get_fuses_list, _From, State) ->
@@ -566,7 +566,7 @@ create_node_stats_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkS
   RRAs = lists:map(fun(Step) -> BinaryStep = integer_to_binary(Step),
     <<"RRA:AVERAGE:0.5:", BinaryStep/binary, ":", RRASizeBinary/binary>> end, Steps),
 
-  case rrderlang:create(?Node_Stats_RRD_Name, Options, DSs, RRAs) of
+  case gen_server:call(?RrdErlang_Name, {create, ?Node_Stats_RRD_Name, Options, DSs, RRAs}, 5000) of
     {error, Error} ->
       ?error("Can not create node stats RRD: ~p", [Error]),
       {error, Error};
@@ -594,7 +594,7 @@ get_node_stats(TimeWindow) ->
   StartTime = EndTime - Interval,
   get_node_stats(StartTime, EndTime).
 
-%% get_node_stats/3
+%% get_node_stats/2
 %% ====================================================================
 %% @doc Get statistics about node load
 %% StartTime, EndTime - time in seconds since epoch (1970-01-01), that defines interval
@@ -606,7 +606,7 @@ get_node_stats(StartTime, EndTime) ->
   BinaryStartTime = integer_to_binary(StartTime),
   BinaryEndTime = integer_to_binary(EndTime),
   Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
-  case rrderlang:fetch(?Node_Stats_RRD_Name, Options, <<"AVERAGE">>) of
+  case gen_server:call(?RrdErlang_Name, {fetch, ?Node_Stats_RRD_Name, Options, <<"AVERAGE">>}, 5000) of
     {ok, {Header, Data}} ->
       HeaderList = lists:map(fun(Elem) -> binary_to_list(Elem) end, Header),
       HeaderLen = length(Header),
@@ -627,6 +627,24 @@ get_node_stats(StartTime, EndTime) ->
       Other
   end.
 
+%% get_node_stats/3
+%% ====================================================================
+%% @doc Fetch specified columns from node statistics Round Robin Database.
+-spec get_node_stats(StartTime :: integer(), EndTime :: integer(), Columns) -> Result when
+  Columns :: all | {name, [binary()]} | {starts_with, [binary()]} | {index, [integer()]},
+  Result :: {ok, {Header, Body}} | {error, Error :: term()},
+  Header :: [ColumnNames :: binary()],
+  Body :: [Row],
+  Row :: [{Timestamp, Values}],
+  Timestamp :: integer(),
+  Values :: [integer() | float()].
+%% ====================================================================
+get_node_stats(StartTime, EndTime, Columns) ->
+  BinaryStartTime = integer_to_binary(StartTime),
+  BinaryEndTime = integer_to_binary(EndTime),
+  Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
+  gen_server:call(?RrdErlang_Name, {fetch, ?Node_Stats_RRD_Name, Options, <<"AVERAGE">>, Columns}, 5000).
+
 %% save_node_stats_to_rrd/1
 %% ====================================================================
 %% @doc Saves node stats to Round Robin Database
@@ -635,11 +653,11 @@ get_node_stats(StartTime, EndTime) ->
 %% ====================================================================
 save_node_stats_to_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkStats, ports_stats = PortsStats}) ->
   {MegaSecs, Secs, _} = erlang:now(),
-  Timestamp = MegaSecs * 1000000 + Secs,
+  Timestamp = integer_to_binary(MegaSecs * 1000000 + Secs),
   Stats = get_cpu_stats(CpuStats) ++ get_memory_stats() ++ get_network_stats(NetworkStats) ++
     get_ports_stats(PortsStats),
   Values = lists:map(fun({_, Value}) -> Value end, Stats),
-  case rrderlang:update(?Node_Stats_RRD_Name, <<>>, Values, Timestamp) of
+  case gen_server:call(?RrdErlang_Name, {update, ?Node_Stats_RRD_Name, <<>>, Values, Timestamp}, 5000) of
     {error, Error} ->
       ?error("Can not save node stats to RRD: ~p", [Error]),
       {error, Error};
