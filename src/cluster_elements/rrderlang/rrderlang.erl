@@ -108,6 +108,10 @@ handle_call({update, Filename, Options, Values, Timestamp}, _From, #state{port =
   Command = format_command([<<"update">>, Filename, Options, format_command([Timestamp | BinaryValues], <<":">>), <<"\n">>]),
   Result = execute_command(Port, Command),
   {reply, Result, State};
+handle_call({fetch, Filename, Options, CF}, _From, #state{port = Port} = State) ->
+  Command = format_command([<<"fetch">>, Filename, CF, Options, <<"\n">>]),
+  Result = execute_command(Port, Command, all),
+  {reply, Result, State};
 handle_call({fetch, Filename, Options, CF, Columns}, _From, #state{port = Port} = State) ->
   Command = format_command([<<"fetch">>, Filename, CF, Options, <<"\n">>]),
   Result = execute_command(Port, Command, Columns),
