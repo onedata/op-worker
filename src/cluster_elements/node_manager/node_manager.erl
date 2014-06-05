@@ -177,8 +177,8 @@ handle_call({get_node_stats, StartTime, EndTime}, _From, State) ->
   Reply = get_node_stats(StartTime, EndTime),
   {reply, Reply, State};
 
-handle_call({get_node_stats, Options, CF, Columns}, _From, State) ->
-  Reply = rrderlang:fetch(?Node_Stats_RRD_Name, Options, CF, Columns),
+handle_call({get_node_stats, StartTime, EndTime, Columns}, _From, State) ->
+  Reply = get_node_stats(StartTime, EndTime, Columns),
   {reply, Reply, State};
 
 handle_call(get_fuses_list, _From, State) ->
@@ -568,7 +568,7 @@ create_node_stats_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkS
   RRAs = lists:map(fun(Step) -> BinaryStep = integer_to_binary(Step),
     <<"RRA:AVERAGE:0.5:", BinaryStep/binary, ":", RRASizeBinary/binary>> end, Steps),
 
-  case gen_server:call(?RrdErlang_Name, {create, ?Node_Stats_RRD_Name, Options, DSs, RRAs}, Timeout) of
+  case gen_server:call(?RrdErlang_Name, {create, ?Node_Stats_RRD_Name, Options, DSs, RRAs}, 5000) of
     {error, Error} ->
       ?error("Can not create node stats RRD: ~p", [Error]),
       {error, Error};
@@ -608,7 +608,7 @@ get_node_stats(StartTime, EndTime) ->
   BinaryStartTime = integer_to_binary(StartTime),
   BinaryEndTime = integer_to_binary(EndTime),
   Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
-  case rrderlang:fetch(?Node_Stats_RRD_Name, Options, <<"AVERAGE">>) of
+  case gen_server:call(?RrdErlang_Name, {fetch, ?Node_Stats_RRD_Name, Options, <<"AVERAGE">>}, 5000) of
     {ok, {Header, Data}} ->
       HeaderList = lists:map(fun(Elem) -> binary_to_list(Elem) end, Header),
       HeaderLen = length(Header),
@@ -642,11 +642,10 @@ get_node_stats(StartTime, EndTime) ->
   Values :: [integer() | float()].
 %% ====================================================================
 get_node_stats(StartTime, EndTime, Columns) ->
-  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   BinaryStartTime = integer_to_binary(StartTime),
   BinaryEndTime = integer_to_binary(EndTime),
   Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
-  gen_server:call(?RrdErlang_Name, {fetch, ?Node_Stats_RRD_Name, Options, <<"AVERAGE">>, Columns}, Timeout).
+  gen_server:call(?RrdErlang_Name, {fetch, ?Node_Stats_RRD_Name, Options, <<"AVERAGE">>, Columns}, 5000).
 
 %% save_node_stats_to_rrd/1
 %% ====================================================================
@@ -661,7 +660,7 @@ save_node_stats_to_rrd(#node_state{cpu_stats = CpuStats, network_stats = Network
   Stats = get_cpu_stats(CpuStats) ++ get_memory_stats() ++ get_network_stats(NetworkStats) ++
     get_ports_stats(PortsStats),
   Values = lists:map(fun({_, Value}) -> Value end, Stats),
-  case gen_server:call(?RrdErlang_Name, {update, ?Node_Stats_RRD_Name, <<>>, Values, Timestamp}, Timeout) of
+  case gen_server:call(?RrdErlang_Name, {update, ?Node_Stats_RRD_Name, <<>>, Values, Timestamp}, 5000) of
     {error, Error} ->
       ?error("Can not save node stats to RRD: ~p", [Error]),
       {error, Error};
