@@ -21,9 +21,7 @@ namespace config {
 
     // Variables below are used as default values when ConnectionPool object is wasnt set
     // but storage helper tries to use TCP/IP connection. It should not happen.
-    unsigned int    clusterPort = 0;
     cert_info_fun   getCertInfo;
-    string          clusterHostname;
 
     boost::atomic<bool> checkCertificate(true);
 
@@ -60,7 +58,7 @@ StorageHelperFactory::~StorageHelperFactory()
 {
 }
 
-boost::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(const string &sh_name, const std::vector<string> &args) {
+boost::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(const string &sh_name, const IStorageHelper::ArgsMap &args) {
     if(sh_name == "DirectIO")
         return boost::shared_ptr<IStorageHelper>(new DirectIOHelper(args));
     else if(sh_name == "ClusterProxy")

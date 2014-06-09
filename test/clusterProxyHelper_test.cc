@@ -43,7 +43,7 @@ protected:
     virtual void SetUp() {
         mockPool.reset(new MockConnectionPool());
         mockConnection.reset(new MockCommunicationHandler());
-        proxy.reset(new ProxyClusterProxyHelper(mockPool, vector<string>()));
+        proxy.reset(new ProxyClusterProxyHelper(mockPool, IStorageHelper::ArgsMap{}));
 
         EXPECT_CALL(*mockPool, selectConnection(_)).WillRepeatedly(Return(mockConnection));
         EXPECT_CALL(*mockPool, releaseConnection(_)).WillRepeatedly(Return());

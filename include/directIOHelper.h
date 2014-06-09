@@ -25,7 +25,7 @@ namespace helpers {
 class DirectIOHelper : public IStorageHelper {
 
     public:
-        DirectIOHelper(std::vector<std::string>);               ///< This storage helper uses only the first element of args vector.
+        DirectIOHelper(const ArgsMap&);         ///< This storage helper uses only the first element of args vector.
                                                                 ///< It shall be ablosute path to diretory used by this storage helper as root mount point.
 
         int sh_getattr(const char *path, struct stat *stbuf) ;

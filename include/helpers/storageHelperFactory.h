@@ -8,14 +8,19 @@
 #ifndef STORAGE_HELPER_FACTORY_H
 #define STORAGE_HELPER_FACTORY_H
 
-#include <memory>
-#include <string>
-#include <vector>
-#include <boost/shared_ptr.hpp>
 #include "helpers/IStorageHelper.h"
+
 #include "simpleConnectionPool.h"
-#include <boost/thread/thread_time.hpp>
+
+#include <boost/any.hpp>
 #include <boost/atomic.hpp>
+#include <boost/shared_ptr.hpp>
+#include <boost/thread/thread_time.hpp>
+
+#include <memory>
+#include <vector>
+#include <string>
+#include <unordered_map>
 
 #define PROTOCOL_VERSION 1
 
@@ -83,7 +88,7 @@ public:
      * @param args Arguments vector passed as argument to storge helper's constructor.
      * @return Pointer to storage helper object along with its ownership.
      */
-    virtual boost::shared_ptr<IStorageHelper> getStorageHelper(const std::string &sh, const std::vector<std::string> &args);
+    virtual boost::shared_ptr<IStorageHelper> getStorageHelper(const std::string &sh, const IStorageHelper::ArgsMap &args);
 
 private:
     std::shared_ptr<SimpleConnectionPool> m_connectionPool;

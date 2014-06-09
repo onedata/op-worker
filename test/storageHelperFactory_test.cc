@@ -20,7 +20,7 @@ INIT_AND_RUN_ALL_TESTS(); // TEST RUNNER !
 TEST(StorageHelperFactoryTest, ObjectBuild) {
    StorageHelperFactory factory(std::make_shared<MockConnectionPool>());
 
-   EXPECT_NE((IStorageHelper*)0, factory.getStorageHelper("DirectIO", vector<string>()).get());
+   EXPECT_NE((IStorageHelper*)0, factory.getStorageHelper("DirectIO", IStorageHelper::ArgsMap{}).get());
    
-   EXPECT_EQ((IStorageHelper*)0, factory.getStorageHelper("not existing", vector<string>()).get());
+   EXPECT_EQ((IStorageHelper*)0, factory.getStorageHelper("not existing", IStorageHelper::ArgsMap{}).get());
 }
