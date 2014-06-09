@@ -1599,6 +1599,7 @@ clear_cache(State, Cache) ->
   Result :: ok | {error, Error :: term()}.
 %% ====================================================================
 create_cluster_stats_rrd() ->
+  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   {ok, Period} = application:get_env(?APP_Name, cluster_monitoring_period),
   {ok, Steps} = application:get_env(?APP_Name, rrd_steps),
   {ok, RRDSize} = application:get_env(?APP_Name, rrd_size),
@@ -1624,7 +1625,7 @@ create_cluster_stats_rrd() ->
   RRAs = lists:map(fun(Step) -> BinaryStep = integer_to_binary(Step),
     <<"RRA:AVERAGE:0.5:", BinaryStep/binary, ":", RRASizeBinary/binary>> end, Steps),
 
-  case gen_server:call(?RrdErlang_Name, {create, ?Cluster_Stats_RRD_Name, Options, DSs, RRAs}, 5000) of
+  case gen_server:call(?RrdErlang_Name, {create, ?Cluster_Stats_RRD_Name, Options, DSs, RRAs}, Timeout) of
     {error, Error} ->
       ?error("Can not create cluster stats RRD: ~p", [Error]),
       {error, Error};
@@ -1640,10 +1641,11 @@ create_cluster_stats_rrd() ->
   Result :: ok | {error, Error :: term()}.
 %% ====================================================================
 save_cluster_stats_to_rrd(NodesStats, #cm_state{storage_stats = StorageStats}) ->
+  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   {MegaSecs, Secs, _} = erlang:now(),
   Timestamp = integer_to_binary(MegaSecs * 1000000 + Secs),
   Values = merge_nodes_stats(NodesStats) ++ get_storage_stats(StorageStats),
-  case gen_server:call(?RrdErlang_Name, {update, ?Cluster_Stats_RRD_Name, <<>>, Values, Timestamp}, 5000) of
+  case gen_server:call(?RrdErlang_Name, {update, ?Cluster_Stats_RRD_Name, <<>>, Values, Timestamp}, Timeout) of
     {error, Error} ->
       ?error("Can not save node stats to RRD: ~p", [Error]),
       {error, Error};
@@ -1742,10 +1744,11 @@ get_cluster_stats(TimeWindow) ->
   Result :: [{Name :: string(), Value :: float()}] | {error, term()}.
 %% ====================================================================
 get_cluster_stats(StartTime, EndTime) ->
+  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   BinaryEndTime = integer_to_binary(EndTime),
   BinaryStartTime = integer_to_binary(StartTime),
   Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
-  case gen_server:call(?RrdErlang_Name, {fetch, ?Cluster_Stats_RRD_Name, Options, <<"AVERAGE">>}, 5000) of
+  case gen_server:call(?RrdErlang_Name, {fetch, ?Cluster_Stats_RRD_Name, Options, <<"AVERAGE">>}, Timeout) of
     {ok, {Header, Data}} ->
       HeaderList = lists:map(fun(Elem) -> binary_to_list(Elem) end, Header),
       HeaderLen = length(Header),
@@ -1779,7 +1782,8 @@ get_cluster_stats(StartTime, EndTime) ->
   Values :: [integer() | float()].
 %% ====================================================================
 get_cluster_stats(StartTime, EndTime, Columns) ->
+  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   BinaryStartTime = integer_to_binary(StartTime),
   BinaryEndTime = integer_to_binary(EndTime),
   Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
-  gen_server:call(?RrdErlang_Name, {fetch, ?Cluster_Stats_RRD_Name, Options, <<"AVERAGE">>, Columns}, 5000).
+  gen_server:call(?RrdErlang_Name, {fetch, ?Cluster_Stats_RRD_Name, Options, <<"AVERAGE">>, Columns}, Timeout).
