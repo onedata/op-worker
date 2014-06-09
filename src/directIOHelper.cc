@@ -478,8 +478,8 @@ int DirectIOHelper::sh_removexattr(const char *path, const char *name)
 #endif /* HAVE_SETXATTR */
 
 DirectIOHelper::DirectIOHelper(const ArgsMap &args) {
-    const auto rootPath = args.count("srv_arg1")
-            ? boost::any_cast<std::string>(args.at("srv_arg1")) : std::string{};
+    const auto rootPath = args.count("srv_arg0")
+            ? boost::any_cast<std::string>(args.at("srv_arg0")) : std::string{};
 
     strncpy(root_path, rootPath.c_str(), PATH_MAX);
     root_path_len = strlen(root_path);
