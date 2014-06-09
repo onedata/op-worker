@@ -86,8 +86,7 @@ public:
      * @param bufferTrimSize The size to which the buffer will be trimmed after
      * exceeding @p maxBufferSize .
      */
-    RemoteLogWriter(std::shared_ptr<SimpleConnectionPool> connectionPool,
-                    const RemoteLogLevel initialThreshold = protocol::logging::NONE,
+    RemoteLogWriter(const RemoteLogLevel initialThreshold = protocol::logging::NONE,
                     const BufferSize maxBufferSize = DEFAULT_MAX_MESSAGE_BUFFER_SIZE,
                     const BufferSize bufferTrimSize = DEFAULT_MESSAGE_BUFFER_TRIM_SIZE);
 
@@ -122,13 +121,19 @@ public:
      */
     virtual bool handleThresholdChange(const protocol::communication_protocol::Answer &answer);
 
+    /**
+     * Sets the connection pool used by the writer to send logs to a cluster.
+     * @param connectionPool The pool to be used by the writer.
+     */
+    void setConnectionPool(std::shared_ptr<SimpleConnectionPool> connectionPool);
+
 private:
     void pushMessage(const protocol::logging::LogMessage &msg);
     protocol::logging::LogMessage popMessage();
     void writeLoop();
     void dropExcessMessages();
 
-    const std::shared_ptr<SimpleConnectionPool> m_connectionPool;
+    std::shared_ptr<SimpleConnectionPool> m_connectionPool;
     const pid_t m_pid;
     const BufferSize m_maxBufferSize;
     const BufferSize m_bufferTrimSize;

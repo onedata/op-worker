@@ -43,12 +43,10 @@ static RemoteLogLevel glogToLevel(google::LogSeverity glevel)
     }
 }
 
-RemoteLogWriter::RemoteLogWriter(std::shared_ptr<SimpleConnectionPool> connectionPool,
-                                 const RemoteLogLevel initialThreshold,
+RemoteLogWriter::RemoteLogWriter(const RemoteLogLevel initialThreshold,
                                  const BufferSize maxBufferSize,
                                  const BufferSize bufferTrimSize)
-    : m_connectionPool{std::move(connectionPool)}
-    , m_pid(getpid())
+    : m_pid(getpid())
     , m_maxBufferSize(maxBufferSize)
     , m_bufferTrimSize(bufferTrimSize)
     , m_thresholdLevel(initialThreshold)
@@ -99,6 +97,11 @@ bool RemoteLogWriter::handleThresholdChange(const protocol::communication_protoc
                  " and higher level messages to cluster.";
 
     return true;
+}
+
+void RemoteLogWriter::setConnectionPool(std::shared_ptr<SimpleConnectionPool> connectionPool)
+{
+    m_connectionPool = std::move(connectionPool);
 }
 
 void RemoteLogWriter::pushMessage(const protocol::logging::LogMessage &msg)
