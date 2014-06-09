@@ -143,6 +143,11 @@ veil_cluster_node_env:
       value: 900
 
   - parameter:
+      name: rrd_size
+      description: Defines how many primary data points - divided by monitoring period - are collected
+      value: 7200
+
+  - parameter:
       name: rrd_steps
       description: Defines how many primary data points are used to build a consolidated data point which then goes into the archive
       value: |
