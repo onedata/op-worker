@@ -271,7 +271,7 @@ receive_answer(Port, Acc) ->
     {Port, {data, {eol, Data}}} ->
       receive_answer(Port, [Data | Acc])
   after Timeout ->
-    {error, timeout}
+    {error, <<"timeout">>}
   end.
 
 
@@ -305,7 +305,7 @@ receive_header(Port, Columns, BinaryHeader) ->
     {Port, {data, {eol, Data}}} ->
       receive_header(Port, Columns, Data)
   after Timeout ->
-    {error, timeout}
+    {error, <<"timeout">>}
   end.
 
 
@@ -411,7 +411,7 @@ receive_body(Port, Columns, Body) ->
           {error, Error}
       end
   after Timeout ->
-    {error, timeout}
+    {error, <<"timeout">>}
   end.
 
 
