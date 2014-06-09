@@ -62,9 +62,9 @@ start_link(NodeType) ->
 %% ====================================================================
 init([NodeType]) when NodeType =:= worker ->
   {ok, {{one_for_one, 5, 10}, [
+    ?Sup_Child(rrderlang, rrderlang, permanent, []),
     ?Sup_Child(request_dispatcher, request_dispatcher, permanent, []),
-    ?Sup_Child(node_manager, node_manager, permanent, [NodeType]),
-    ?Sup_Child(rrderlang, rrderlang, permanent, [])
+    ?Sup_Child(node_manager, node_manager, permanent, [NodeType])
   ]}};
 
 init([NodeType]) when NodeType =:= ccm_test ->
@@ -72,10 +72,10 @@ init([NodeType]) when NodeType =:= ccm_test ->
 
 init([NodeType]) when NodeType =:= ccm ->
   {ok, {{one_for_one, 5, 10}, [
+    ?Sup_Child(rrderlang, rrderlang, permanent, []),
     ?Sup_Child(request_dispatcher, request_dispatcher, permanent, []),
     ?Sup_Child(cluster_manager, cluster_manager, permanent, []),
-    ?Sup_Child(node_manager, node_manager, permanent, [NodeType]),
-    ?Sup_Child(rrderlang, rrderlang, permanent, [])
+    ?Sup_Child(node_manager, node_manager, permanent, [NodeType])
   ]}}.
 
 %% handle_test_init/1
@@ -98,10 +98,10 @@ init([NodeType]) when NodeType =:= ccm ->
 -ifdef(TEST).
 handle_test_init(NodeType) ->
   {ok, {{one_for_one, 5, 10}, [
+    ?Sup_Child(rrderlang, rrderlang, permanent, []),
     ?Sup_Child(request_dispatcher, request_dispatcher, permanent, []),
     ?Sup_Child(cluster_manager, cluster_manager, permanent, [test]),
-    ?Sup_Child(node_manager, node_manager, permanent, [NodeType]),
-    ?Sup_Child(rrderlang, rrderlang, permanent, [])
+    ?Sup_Child(node_manager, node_manager, permanent, [NodeType])
   ]}}.
 -else.
 handle_test_init(_NodeType) ->

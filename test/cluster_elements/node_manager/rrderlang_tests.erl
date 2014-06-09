@@ -1,7 +1,7 @@
 %% ===================================================================
 %% @author Krzysztof Trzepla
 %% @copyright (C): 2014 ACK CYFRONET AGH
-%% This software is released under the MIT license
+%% This software is released under the MIT license 
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
@@ -49,7 +49,7 @@ rrderlang_test_() ->
 %% ===================================================================
 
 setup() ->
-  application:set_env(?APP_Name, rrd_timeout, 5000).
+  ok.
 
 teardown(_) ->
   ?assertCmd("rm -f " ++ ?RRD_NAME).
