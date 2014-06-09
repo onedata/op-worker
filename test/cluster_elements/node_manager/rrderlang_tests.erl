@@ -49,7 +49,7 @@ rrderlang_test_() ->
 %% ===================================================================
 
 setup() ->
-  ok.
+  application:set_env(?APP_Name, rrd_timeout, 5000).
 
 teardown(_) ->
   ?assertCmd("rm -f " ++ ?RRD_NAME).
