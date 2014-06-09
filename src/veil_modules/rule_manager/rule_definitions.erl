@@ -16,7 +16,7 @@
 
 -include("logging.hrl").
 -include("registered_names.hrl").
--include("veil_modules/dao/dao_helper.hrl").
+-include_lib("dao/include/dao_helper.hrl").
 -include("veil_modules/dao/dao.hrl").
 -include("veil_modules/cluster_rengine/cluster_rengine.hrl").
 

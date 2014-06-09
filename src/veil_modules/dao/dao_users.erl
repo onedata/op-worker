@@ -11,7 +11,7 @@
 -module(dao_users).
 
 -include_lib("veil_modules/dao/dao.hrl").
--include_lib("veil_modules/dao/dao_helper.hrl").
+-include_lib("dao/include/dao_helper.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
 -include("registered_names.hrl").
 -include("logging.hrl").

@@ -18,11 +18,12 @@
 -behaviour(worker_plugin_behaviour).
 
 -include_lib("veil_modules/dao/dao.hrl").
--include_lib("veil_modules/dao/couch_db.hrl").
+-include_lib("dao/include/couch_db.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
 -include_lib("veil_modules/dao/dao_vfs.hrl").
 -include_lib("veil_modules/fslogic/fslogic.hrl").
 -include_lib("logging.hrl").
+-include_lib("dao/include/common.hrl").
 
 -import(dao_helper, [name/1]).
 

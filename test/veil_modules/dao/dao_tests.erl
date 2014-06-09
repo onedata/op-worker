@@ -17,7 +17,7 @@
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
--include_lib("veil_modules/dao/couch_db.hrl").
+-include_lib("dao/include/couch_db.hrl").
 -endif.
 
 -ifdef(TEST).

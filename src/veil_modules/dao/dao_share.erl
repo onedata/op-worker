@@ -13,7 +13,7 @@
 -include("veil_modules/dao/dao_share.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
--include_lib("veil_modules/dao/dao_helper.hrl").
+-include_lib("dao/include/dao_helper.hrl").
 
 
 %% ===================================================================

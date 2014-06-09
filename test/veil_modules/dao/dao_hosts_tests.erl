@@ -15,7 +15,7 @@
 -ifdef(TEST).
 
 -include_lib("eunit/include/eunit.hrl").
--include_lib("veil_modules/dao/common.hrl").
+-include_lib("dao/include/common.hrl").
 -include("supervision_macros.hrl").
 -include("registered_names.hrl").
 

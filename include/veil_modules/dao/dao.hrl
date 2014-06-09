@@ -17,7 +17,6 @@
 -include_lib("veil_modules/dao/dao_users.hrl").
 -include_lib("veil_modules/dao/dao_share.hrl").
 -include_lib("veil_modules/dao/dao_cluster.hrl").
--include_lib("veil_modules/dao/common.hrl").
 
 %% record definition used in record registration example
 -record(some_record, {field1 = "", field2 = "", field3 = ""}).
