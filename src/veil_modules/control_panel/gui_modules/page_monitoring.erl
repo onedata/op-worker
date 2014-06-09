@@ -32,14 +32,14 @@
 main() ->
   case gui_utils:maybe_redirect(true, false, false, true) of
     true ->
-      #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+      #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
     false ->
       case gui_utils:can_view_monitoring() of
         false ->
           wf:redirect(<<"/">>),
-          #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+          #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         true ->
-          #dtl{file = "monitoring", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}
+          #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, custom()}]}
       end
   end.
 
@@ -52,7 +52,7 @@ title() -> <<"Monitoring">>.
 
 %% body/0
 %% ====================================================================
-%% @doc This will be placed instead of [[[body()]]] tag in template.
+%% @doc This will be placed instead of {{body}} tag in template.
 -spec body() -> [#panel{}].
 %% ====================================================================
 body() ->
@@ -62,6 +62,18 @@ body() ->
       #table{id = <<"main_table">>, class = <<"table table-stripped">>, style = <<"width: 100%;">>}
     ]}
   ].
+
+%% custom/0
+%% ====================================================================
+%% @doc This will be placed instead of {{custom}} tag in template.
+-spec custom() -> binary().
+%% ====================================================================
+custom() ->
+  <<"<script src='/js/jsapi.js' type='text/javascript' charset='utf-8'></script>
+    <script type='text/javascript'>
+        google.load('visualization', '1.1', {'packages': ['corechart']});
+    </script>
+    <script src='/js/charts.js' type='text/javascript' charset='utf-8'></script>">>.
 
 
 %% monitoring_submenu/0

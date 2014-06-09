@@ -1,3 +1,5 @@
+/* Google Charts API - 9.06.2014 */
+
 if(!window['googleLT_']){window['googleLT_']=(new Date()).getTime();}if (!window['google']) {
     window['google'] = {};
 }
