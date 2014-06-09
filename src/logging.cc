@@ -53,8 +53,9 @@ RemoteLogWriter::RemoteLogWriter(const RemoteLogLevel initialThreshold,
 {
 }
 
-void RemoteLogWriter::run()
+void RemoteLogWriter::run(std::shared_ptr<SimpleConnectionPool> connectionPool)
 {
+    m_connectionPool = std::move(connectionPool);
     if(m_thread.get_id() == Thread().get_id()) // Not-a-Thread
     {
         Thread thread(boost::thread(&RemoteLogWriter::writeLoop, this));
@@ -97,11 +98,6 @@ bool RemoteLogWriter::handleThresholdChange(const protocol::communication_protoc
                  " and higher level messages to cluster.";
 
     return true;
-}
-
-void RemoteLogWriter::setConnectionPool(std::shared_ptr<SimpleConnectionPool> connectionPool)
-{
-    m_connectionPool = std::move(connectionPool);
 }
 
 void RemoteLogWriter::pushMessage(const protocol::logging::LogMessage &msg)

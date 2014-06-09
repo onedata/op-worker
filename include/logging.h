@@ -92,8 +92,10 @@ public:
 
     /**
      * Runs the message write loop in a separate thread.
+     * Sets the connection pool used by the writer to send logs to a cluster.
+     * @param connectionPool The pool to be used by the writer.
      */
-    virtual void run();
+    virtual void run(std::shared_ptr<SimpleConnectionPool> connectionPool);
 
     /**
      * Destructor.
@@ -120,12 +122,6 @@ public:
      * @return true.
      */
     virtual bool handleThresholdChange(const protocol::communication_protocol::Answer &answer);
-
-    /**
-     * Sets the connection pool used by the writer to send logs to a cluster.
-     * @param connectionPool The pool to be used by the writer.
-     */
-    void setConnectionPool(std::shared_ptr<SimpleConnectionPool> connectionPool);
 
 private:
     void pushMessage(const protocol::logging::LogMessage &msg);

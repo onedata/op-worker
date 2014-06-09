@@ -39,12 +39,10 @@ struct RemoteLogWriterFixture: public ::testing::Test
         , mockCommunicationHandler(new NiceMock<MockCommunicationHandler>)
         , logWriter(veil::protocol::logging::LDEBUG)
     {
-        logWriter.setConnectionPool(mockConnectionPool);
-
         ON_CALL(*mockConnectionPool, selectConnection(_))
                 .WillByDefault(::testing::Return(mockCommunicationHandler));
 
-        logWriter.run();
+        logWriter.run(mockConnectionPool);
     }
 
     bool areMessagesEqual(const veil::protocol::logging::LogMessage &l,
@@ -143,7 +141,7 @@ TEST_F(RemoteLogSinkFixture, ShouldOverrideSeverityIfSetInConstructor)
 TEST(RemoteLogWriter, ShouldNotHangOnDestroy)
 {
     veil::logging::RemoteLogWriter logWriter;
-    logWriter.run();
+    logWriter.run(nullptr);
 }
 
 TEST_F(RemoteLogWriterFixture, ShouldSendReceivedMessagesThroughConnection)
@@ -191,8 +189,6 @@ TEST_F(RemoteLogWriterFixture, ShouldDropMessagesAfterExceedingMaxBufferSize)
                                           /*maxBufferSize*/ 10,
                                           /*bufferTrimSize*/ 5);
 
-    writer.setConnectionPool(mockConnectionPool);
-
     // The writer.run() is not called yet so the write loop is not running.
     for(int i = 0; i < 11; ++i)
         writer.buffer(veil::protocol::logging::INFO, "", 0, 0, "");
@@ -208,7 +204,7 @@ TEST_F(RemoteLogWriterFixture, ShouldDropMessagesAfterExceedingMaxBufferSize)
     EXPECT_CALL(*mockCommunicationHandler, sendMessage(_, _))
             .Times(5).WillRepeatedly(Return(0)).RetiresOnSaturation();
 
-    writer.run();
+    writer.run(mockConnectionPool);
     waitUntil(messageSent, 10);
 
     veil::protocol::logging::LogMessage log;
