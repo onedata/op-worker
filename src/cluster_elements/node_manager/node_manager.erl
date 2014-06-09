@@ -170,19 +170,15 @@ handle_call(get_ccm_connection_status, _From, State) ->
   {reply, State#node_state.ccm_con_status, State};
 
 handle_call({get_node_stats, TimeWindow}, _From, State) ->
-  Reply = get_node_stats(TimeWindow, default),
-  {reply, Reply, State};
-
-handle_call({get_node_stats_json, TimeWindow}, _From, State) ->
-  Reply = get_node_stats(TimeWindow, json),
+  Reply = get_node_stats(TimeWindow),
   {reply, Reply, State};
 
 handle_call({get_node_stats, StartTime, EndTime}, _From, State) ->
   Reply = get_node_stats(StartTime, EndTime),
   {reply, Reply, State};
 
-handle_call({get_node_stats_json, StartTime, EndTime}, _From, State) ->
-  Reply = get_node_stats(StartTime, EndTime, json),
+handle_call({get_node_stats, StartTime, EndTime, Columns}, _From, State) ->
+  Reply = get_node_stats(StartTime, EndTime, Columns),
   {reply, Reply, State};
 
 handle_call(get_fuses_list, _From, State) ->
@@ -549,10 +545,12 @@ log_load(Fd, StartTime, PrevTime, CurrTime) ->
   Result :: ok | {error, Error :: term()}.
 %% ====================================================================
 create_node_stats_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkStats, ports_stats = PortsStats}) ->
+  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   {ok, Period} = application:get_env(?APP_Name, node_monitoring_period),
   {ok, Steps} = application:get_env(?APP_Name, rrd_steps),
+  {ok, RRDSize} = application:get_env(?APP_Name, rrd_size),
   Heartbeat = 2 * Period,
-  RRASize = round(60 * 60 / Period), % one hour in seconds devided by monitoring period
+  RRASize = round(RRDSize / Period),
   BinaryPeriod = integer_to_binary(Period),
   BinaryHeartbeat = integer_to_binary(Heartbeat),
   RRASizeBinary = integer_to_binary(RRASize),
@@ -570,7 +568,7 @@ create_node_stats_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkS
   RRAs = lists:map(fun(Step) -> BinaryStep = integer_to_binary(Step),
     <<"RRA:AVERAGE:0.5:", BinaryStep/binary, ":", RRASizeBinary/binary>> end, Steps),
 
-  case rrderlang:create(?Node_Stats_RRD_Name, Options, DSs, RRAs) of
+  case gen_server:call(?RrdErlang_Name, {create, ?Node_Stats_RRD_Name, Options, DSs, RRAs}, Timeout) of
     {error, Error} ->
       ?error("Can not create node stats RRD: ~p", [Error]),
       {error, Error};
@@ -583,10 +581,10 @@ create_node_stats_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkS
 %% ====================================================================
 %% @doc Get statistics about node load
 %% TimeWindow - time in seconds since now, that defines interval for which statistics will be fetched
--spec get_node_stats(TimeWindow :: short | medium | long | integer(), Format :: default | json) -> Result when
+-spec get_node_stats(TimeWindow :: short | medium | long | integer()) -> Result when
   Result :: [{Name :: atom(), Value :: float()}] | {error, term()}.
 %% ====================================================================
-get_node_stats(TimeWindow, Format) ->
+get_node_stats(TimeWindow) ->
   {ok, Interval} = case TimeWindow of
                      short -> application:get_env(?APP_Name, short_monitoring_time_window);
                      medium -> application:get_env(?APP_Name, medium_monitoring_time_window);
@@ -596,25 +594,22 @@ get_node_stats(TimeWindow, Format) ->
   {MegaSecs, Secs, _} = erlang:now(),
   EndTime = 1000000 * MegaSecs + Secs,
   StartTime = EndTime - Interval,
-  get_node_stats(StartTime, EndTime, Format).
+  get_node_stats(StartTime, EndTime).
 
-%% get_node_stats/3
+%% get_node_stats/2
 %% ====================================================================
 %% @doc Get statistics about node load
-%% StartTime. EndTime - time in seconds since epoch (1970-01-01), that defines interval
+%% StartTime, EndTime - time in seconds since epoch (1970-01-01), that defines interval
 %% for which statistics will be fetched
--spec get_node_stats(StartTime :: integer(), EndTime :: integer(), Format :: default | json) -> Result when
+-spec get_node_stats(StartTime :: integer(), EndTime :: integer()) -> Result when
   Result :: [{Name :: string(), Value :: float()}] | {error, term()}.
 %% ====================================================================
-get_node_stats(StartTime, EndTime, Format) ->
+get_node_stats(StartTime, EndTime) ->
+  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   BinaryStartTime = integer_to_binary(StartTime),
   BinaryEndTime = integer_to_binary(EndTime),
   Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
-  FetchFunction = case Format of
-                    json -> fun rrderlang:fetch_json/3;
-                    _ -> fun rrderlang:fetch/3
-                  end,
-  case FetchFunction(?Node_Stats_RRD_Name, Options, <<"AVERAGE">>) of
+  case gen_server:call(?RrdErlang_Name, {fetch, ?Node_Stats_RRD_Name, Options, <<"AVERAGE">>}, Timeout) of
     {ok, {Header, Data}} ->
       HeaderList = lists:map(fun(Elem) -> binary_to_list(Elem) end, Header),
       HeaderLen = length(Header),
@@ -635,6 +630,25 @@ get_node_stats(StartTime, EndTime, Format) ->
       Other
   end.
 
+%% get_node_stats/3
+%% ====================================================================
+%% @doc Fetch specified columns from node statistics Round Robin Database.
+-spec get_node_stats(StartTime :: integer(), EndTime :: integer(), Columns) -> Result when
+  Columns :: all | {name, [binary()]} | {starts_with, [binary()]} | {index, [integer()]},
+  Result :: {ok, {Header, Body}} | {error, Error :: term()},
+  Header :: [ColumnNames :: binary()],
+  Body :: [Row],
+  Row :: [{Timestamp, Values}],
+  Timestamp :: integer(),
+  Values :: [integer() | float()].
+%% ====================================================================
+get_node_stats(StartTime, EndTime, Columns) ->
+  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
+  BinaryStartTime = integer_to_binary(StartTime),
+  BinaryEndTime = integer_to_binary(EndTime),
+  Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
+  gen_server:call(?RrdErlang_Name, {fetch, ?Node_Stats_RRD_Name, Options, <<"AVERAGE">>, Columns}, Timeout).
+
 %% save_node_stats_to_rrd/1
 %% ====================================================================
 %% @doc Saves node stats to Round Robin Database
@@ -642,12 +656,13 @@ get_node_stats(StartTime, EndTime, Format) ->
   Result :: ok | {error, Error :: term()}.
 %% ====================================================================
 save_node_stats_to_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkStats, ports_stats = PortsStats}) ->
+  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   {MegaSecs, Secs, _} = erlang:now(),
-  Timestamp = MegaSecs * 1000000 + Secs,
+  Timestamp = integer_to_binary(MegaSecs * 1000000 + Secs),
   Stats = get_cpu_stats(CpuStats) ++ get_memory_stats() ++ get_network_stats(NetworkStats) ++
     get_ports_stats(PortsStats),
   Values = lists:map(fun({_, Value}) -> Value end, Stats),
-  case rrderlang:update(?Node_Stats_RRD_Name, <<>>, Values, Timestamp) of
+  case gen_server:call(?RrdErlang_Name, {update, ?Node_Stats_RRD_Name, <<>>, Values, Timestamp}, Timeout) of
     {error, Error} ->
       ?error("Can not save node stats to RRD: ~p", [Error]),
       {error, Error};
@@ -998,38 +1013,38 @@ clear_simple_caches(Caches) ->
 %% ====================================================================
 clear_cache(Cache, Caches) ->
   Method = case Cache of
-    CacheName when is_atom(CacheName) ->
-      {Cache, all, Cache};
-    {permanent_cache, CacheName2} ->
-      {Cache, all, CacheName2};
-    {permanent_cache, CacheName3, _} ->
-      {Cache, all, CacheName3};
-    {sub_proc_cache, SubProcCache} ->
-      {Cache, sub_proc, SubProcCache};
-    {{sub_proc_cache, SubProcCache2}, SubProcKey} ->
-      {{sub_proc_cache, SubProcCache2}, sub_proc, {SubProcCache2, SubProcKey}};
-    {{permanent_cache, CacheName4}, Keys} when is_list(Keys) ->
-      {{permanent_cache, CacheName4}, list, {CacheName4, Keys}};
-    {{permanent_cache, CacheName5}, Key} ->
-      {{permanent_cache, CacheName5}, simple, {CacheName5, Key}};
-    {{permanent_cache, CacheName6, _}, Keys2} when is_list(Keys2) ->
-      {{permanent_cache, CacheName6}, list, {CacheName6, Keys2}};
-    {{permanent_cache, CacheName7, _}, Key2} ->
-      {{permanent_cache, CacheName7}, simple, {CacheName7, Key2}};
-    {CacheName8, Keys3} when is_list(Keys3) ->
-      {CacheName8, list, {CacheName8, Keys3}};
-    {CacheName9, Key3} ->
-      {CacheName9, simple, {CacheName9, Key3}};
-    [] ->
-      ok;
-    [H | T] ->
-      Ans1 = clear_cache(H, Caches),
-      Ans2 = clear_cache(T, Caches),
-      case {Ans1, Ans2} of
-        {ok, ok} -> ok;
-        _ -> error
-      end
-  end,
+             CacheName when is_atom(CacheName) ->
+               {Cache, all, Cache};
+             {permanent_cache, CacheName2} ->
+               {Cache, all, CacheName2};
+             {permanent_cache, CacheName3, _} ->
+               {Cache, all, CacheName3};
+             {sub_proc_cache, SubProcCache} ->
+               {Cache, sub_proc, SubProcCache};
+             {{sub_proc_cache, SubProcCache2}, SubProcKey} ->
+               {{sub_proc_cache, SubProcCache2}, sub_proc, {SubProcCache2, SubProcKey}};
+             {{permanent_cache, CacheName4}, Keys} when is_list(Keys) ->
+               {{permanent_cache, CacheName4}, list, {CacheName4, Keys}};
+             {{permanent_cache, CacheName5}, Key} ->
+               {{permanent_cache, CacheName5}, simple, {CacheName5, Key}};
+             {{permanent_cache, CacheName6, _}, Keys2} when is_list(Keys2) ->
+               {{permanent_cache, CacheName6}, list, {CacheName6, Keys2}};
+             {{permanent_cache, CacheName7, _}, Key2} ->
+               {{permanent_cache, CacheName7}, simple, {CacheName7, Key2}};
+             {CacheName8, Keys3} when is_list(Keys3) ->
+               {CacheName8, list, {CacheName8, Keys3}};
+             {CacheName9, Key3} ->
+               {CacheName9, simple, {CacheName9, Key3}};
+             [] ->
+               ok;
+             [H | T] ->
+               Ans1 = clear_cache(H, Caches),
+               Ans2 = clear_cache(T, Caches),
+               case {Ans1, Ans2} of
+                 {ok, ok} -> ok;
+                 _ -> error
+               end
+           end,
   case Method of
     {CName, ClearingMethod, ClearingMethodAttr} ->
       case lists:member(CName, Caches) of

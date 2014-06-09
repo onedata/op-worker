@@ -56,9 +56,9 @@
 %% ====================================================================
 %% @doc Starts cluster manager
 -spec start_link() -> Result when
-  Result ::  {ok,Pid}
+  Result :: {ok, Pid}
   | ignore
-  | {error,Error},
+  | {error, Error},
   Pid :: pid(),
   Error :: {already_started, Pid} | term().
 %% ====================================================================
@@ -70,11 +70,11 @@ start_link() ->
 %% @doc Starts cluster manager
 -spec start_link(Mode) -> Result when
   Mode :: test | normal,
-  Result ::  {ok,Pid}
+  Result :: {ok, Pid}
   | ignore
-  | {error,Error},
+  | {error, Error},
   Pid :: pid(),
-  Error :: {already_started,Pid} | term().
+  Error :: {already_started, Pid} | term().
 %% ====================================================================
 start_link(Mode) ->
   Args = case Mode of
@@ -172,11 +172,11 @@ handle_call({addCallback, FuseId, Node, Pid}, _From, State) ->
   try
     gen_server:call({?Node_Manager_Name, Node}, {addCallback, FuseId, Pid}, 500),
     CallbacksNum = case add_callback(Node, FuseId, State#cm_state.nodes, State#cm_state.callbacks_num) of
-      updated ->
-        save_state(),
-        State#cm_state.callbacks_num + 1;
-      _ -> State#cm_state.callbacks_num
-    end,
+                     updated ->
+                       save_state(),
+                       State#cm_state.callbacks_num + 1;
+                     _ -> State#cm_state.callbacks_num
+                   end,
     {reply, ok, State#cm_state{callbacks_num = CallbacksNum}}
   catch
     _:_ ->
@@ -188,18 +188,18 @@ handle_call({delete_callback, FuseId, Node, Pid}, _From, State) ->
   try
     Ans = gen_server:call({?Node_Manager_Name, Node}, {delete_callback, FuseId, Pid}, 500),
     CallbacksNum = case Ans of
-      fuse_deleted ->
-        case delete_callback(Node, FuseId, State#cm_state.nodes, State#cm_state.callbacks_num, true) of
-          updated ->
-            save_state(),
-            State#cm_state.callbacks_num + 1;
-          deleted ->
-            save_state(),
-            State#cm_state.callbacks_num + 1;
-          _ -> State#cm_state.callbacks_num
-        end;
-      _ -> State#cm_state.callbacks_num
-    end,
+                     fuse_deleted ->
+                       case delete_callback(Node, FuseId, State#cm_state.nodes, State#cm_state.callbacks_num, true) of
+                         updated ->
+                           save_state(),
+                           State#cm_state.callbacks_num + 1;
+                         deleted ->
+                           save_state(),
+                           State#cm_state.callbacks_num + 1;
+                         _ -> State#cm_state.callbacks_num
+                       end;
+                     _ -> State#cm_state.callbacks_num
+                   end,
     {reply, ok, State#cm_state{callbacks_num = CallbacksNum}}
   catch
     _:_ ->
@@ -216,7 +216,7 @@ handle_call(check, _From, State) ->
 %% TODO: add generic mechanism that do the same thing
 handle_call({update_cluster_rengines, EventType, EventHandlerItem}, _From, State) ->
   Workers = State#cm_state.workers,
-  UpdateClusterRengine = fun ({_Node, Module, Pid}) ->
+  UpdateClusterRengine = fun({_Node, Module, Pid}) ->
     case Module of
       cluster_rengine -> gen_server:cast(Pid, {asynch, 1, {update_cluster_rengine, EventType, EventHandlerItem}});
       _ -> ok
@@ -227,32 +227,28 @@ handle_call({update_cluster_rengines, EventType, EventHandlerItem}, _From, State
   {reply, ok, State};
 
 handle_call({get_cluster_stats, TimeWindow}, _From, State) ->
-  Reply = get_cluster_stats(TimeWindow, default),
-  {reply, Reply, State};
-
-handle_call({get_cluster_stats_json, TimeWindow}, _From, State) ->
-  Reply = get_cluster_stats(TimeWindow, json),
+  Reply = get_cluster_stats(TimeWindow),
   {reply, Reply, State};
 
 handle_call({get_cluster_stats, StartTime, EndTime}, _From, State) ->
   Reply = get_cluster_stats(StartTime, EndTime),
   {reply, Reply, State};
 
-handle_call({get_cluster_stats_json, StartTime, EndTime}, _From, State) ->
-  Reply = get_cluster_stats(StartTime, EndTime, json),
+handle_call({get_cluster_stats, StartTime, EndTime, Columns}, _From, State) ->
+  Reply = get_cluster_stats(StartTime, EndTime, Columns),
   {reply, Reply, State};
 
 %% TODO if callbacks with ack will be used intensively, information should be forwarded to nodes without ccm usage
 %% (e.g. request dispatchers can have nodes list)
 handle_call({node_for_ack, NodeForAck}, _From, State) ->
   MsgID = case get(callback_msg_ID) of
-    ID when is_integer(ID) and (ID > ?MIN_MSG_ID) ->
-      put(callback_msg_ID, ID - 1),
-      ID - 1;
-    _ ->
-      put(callback_msg_ID, -2),
-      -2
-  end,
+            ID when is_integer(ID) and (ID > ?MIN_MSG_ID) ->
+              put(callback_msg_ID, ID - 1),
+              ID - 1;
+            _ ->
+              put(callback_msg_ID, -2),
+              -2
+          end,
 
   SendToNodes = fun(Node) ->
     gen_server:cast({?Node_Manager_Name, Node}, {node_for_ack, MsgID, NodeForAck})
@@ -461,7 +457,7 @@ handle_cast({worker_answer, cluster_state, Response}, State) ->
                {ok, SavedState} ->
                  lager:info([{mod, ?MODULE}], "State read from DB: ~p", [SavedState]),
                  merge_state(State, SavedState);
-               {error, {not_found,missing}} ->
+               {error, {not_found, missing}} ->
                  save_state(),
                  State#cm_state{state_loaded = true};
                Error ->
@@ -491,7 +487,7 @@ handle_cast({synch_cache_clearing, Cache, ReturnPid}, State) ->
 %% this handler notify all logical_files_manager that event production of EventType should be enabled/disabled
 handle_cast({notify_lfm, EventType, Enabled}, State) ->
   NotifyFn = fun(Node) ->
-      gen_server:cast({?Node_Manager_Name, Node}, {notify_lfm, EventType, Enabled})
+    gen_server:cast({?Node_Manager_Name, Node}, {notify_lfm, EventType, Enabled})
   end,
 
   lists:foreach(NotifyFn, State#cm_state.nodes),
@@ -499,7 +495,7 @@ handle_cast({notify_lfm, EventType, Enabled}, State) ->
 
 handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
   NotifyFn = fun(Node) ->
-      gen_server:cast({?Node_Manager_Name, Node}, {update_user_write_enabled, UserDn, Enabled})
+    gen_server:cast({?Node_Manager_Name, Node}, {update_user_write_enabled, UserDn, Enabled})
   end,
 
   lists:foreach(NotifyFn, State#cm_state.nodes),
@@ -507,7 +503,8 @@ handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
 
 handle_cast({start_load_logging, Path}, State) ->
   ?info("Start load logging on nodes: ~p", State#cm_state.nodes),
-  lists:map(fun(Node) -> gen_server:cast({?Node_Manager_Name, Node}, {start_load_logging, Path}) end, State#cm_state.nodes),
+  lists:map(fun(Node) ->
+    gen_server:cast({?Node_Manager_Name, Node}, {start_load_logging, Path}) end, State#cm_state.nodes),
   {noreply, State};
 
 handle_cast(stop_load_logging, State) ->
@@ -609,7 +606,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% be started (and starts them). Additionally, it sets timer that
 %% initiates checking of cluster state.
 -spec init_cluster(State :: term()) -> NewState when
-  NewState ::  term().
+  NewState :: term().
 %% ====================================================================
 init_cluster(State) ->
   Nodes = State#cm_state.nodes,
@@ -658,7 +655,7 @@ init_cluster(State) ->
 %% @doc Chooses node for workers when there are more nodes than workers.
 -spec init_cluster_nodes_dominance(State :: term(), Nodes :: list(), Jobs1 :: list(),
     Jobs2 :: list(), Args1 :: list(), Args2 :: list()) -> NewState when
-  NewState ::  term().
+  NewState :: term().
 %% ====================================================================
 init_cluster_nodes_dominance(State, [], _Jobs1, _Jobs2, _Args1, _Args2) ->
   State;
@@ -673,7 +670,7 @@ init_cluster_nodes_dominance(State, [N | Nodes], [J | Jobs1], Jobs2, [A | Args1]
 %% @doc Chooses node for workers when there are more workers than nodes.
 -spec init_cluster_jobs_dominance(State :: term(), Jobs :: list(),
     Args :: list(), Nodes1 :: list(), Nodes2 :: list()) -> NewState when
-  NewState ::  term().
+  NewState :: term().
 %% ====================================================================
 init_cluster_jobs_dominance(State, [], [], _Nodes1, _Nodes2) ->
   State;
@@ -688,7 +685,7 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
 %% @doc Checks cluster state and decides if any new component should
 %% be started (currently running ones are overloaded) or stopped.
 -spec check_cluster_state(State :: term()) -> NewState when
-  NewState ::  term().
+  NewState :: term().
 %% ====================================================================
 check_cluster_state(State) ->
   CheckNum = (State#cm_state.cluster_check_num + 1) rem 15,
@@ -891,11 +888,11 @@ add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
 
       MapState = try
         ok = gen_server:call(ChildPid, dispatcher_map_unregistered, 500)
-      catch
-        _:_ ->
-          lager:error([{mod, ?MODULE}], "Error during contact with worker ~p found at node ~s", [Id, Node]),
-          error
-      end,
+                 catch
+                   _:_ ->
+                     lager:error([{mod, ?MODULE}], "Error during contact with worker ~p found at node ~s", [Id, Node]),
+                     error
+                 end,
 
       case MapState of
         ok ->
@@ -931,10 +928,10 @@ node_down(Node, State) ->
   Nodes = State#cm_state.nodes,
   NewNodes = lists:foldl(CreateNewNodesList, [], Nodes),
 
-  {CallbacksNum, WorkersFound2}  = case delete_all_callbacks(Node, State#cm_state.nodes, State#cm_state.callbacks_num) of
-    true -> {State#cm_state.callbacks_num + 1, true};
-    false -> {State#cm_state.callbacks_num, WorkersFound}
-  end,
+  {CallbacksNum, WorkersFound2} = case delete_all_callbacks(Node, State#cm_state.nodes, State#cm_state.callbacks_num) of
+                                    true -> {State#cm_state.callbacks_num + 1, true};
+                                    false -> {State#cm_state.callbacks_num, WorkersFound}
+                                  end,
 
   {State#cm_state{workers = NewWorkers, nodes = NewNodes, callbacks_num = CallbacksNum}, WorkersFound2}.
 
@@ -1008,7 +1005,7 @@ save_state() ->
 %% ====================================================================
 %% @doc This function updates cluster state on the basis of data read
 %% from DB.
--spec merge_state(State :: term(), SavedState:: term()) -> NewState when
+-spec merge_state(State :: term(), SavedState :: term()) -> NewState when
   NewState :: term().
 %% ====================================================================
 merge_state(State, SavedState) ->
@@ -1136,13 +1133,13 @@ update_dispatcher_state(Nodes, Loads, AvgLoad) ->
   AvgLoad :: number().
 %% ====================================================================
 update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
-  MergeByFirstElement = fun (List) -> lists:reverse(lists:foldl(fun({Key, Value}, []) ->  [{Key, [Value]}];
+  MergeByFirstElement = fun(List) -> lists:reverse(lists:foldl(fun({Key, Value}, []) -> [{Key, [Value]}];
     ({Key, Value}, [{Key, AccValues} | Tail]) -> [{Key, [Value | AccValues]} | Tail];
     ({Key, Value}, Acc) -> [{Key, [Value]} | Acc]
   end, [], lists:keysort(1, List)))
   end,
 
-  NodeToIPWithLogging = fun (Node) ->
+  NodeToIPWithLogging = fun(Node) ->
     case node_to_ip(Node) of
       {ok, Address} -> Address;
       {error, Error} ->
@@ -1155,7 +1152,7 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
 
   MergedByModule = MergeByFirstElement(ModuleToNode),
 
-  ModulesToNodes = lists:map(fun ({Module, Nodes}) ->
+  ModulesToNodes = lists:map(fun({Module, Nodes}) ->
     GetLoads = fun({Node, NodeLoad, ModulesLoads}, TmpAns) ->
       case lists:member(Node, Nodes) of
         true ->
@@ -1170,8 +1167,8 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
                   end,
 
           case ModuleV > 0.5 of
-            true -> case (AvgLoad > 0) and (NodeV >= 2*AvgLoad) of
-                      true->
+            true -> case (AvgLoad > 0) and (NodeV >= 2 * AvgLoad) of
+                      true ->
                         V = erlang:min(10, erlang:round(NodeV / AvgLoad)),
                         [{Node, V} | TmpAns];
                       false -> [{Node, 1} | TmpAns]
@@ -1190,7 +1187,7 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
         MinV = lists:min([V || {_Node, V} <- FilteredNodeToLoad]),
         FilteredNodeToLoad2 = case MinV of
                                 1 -> FilteredNodeToLoad;
-                                _ -> [{Node, erlang:round(V/MinV) } || {Node, V} <- FilteredNodeToLoad]
+                                _ -> [{Node, erlang:round(V / MinV)} || {Node, V} <- FilteredNodeToLoad]
                               end,
 
         IPs = [{NodeToIPWithLogging(Node), Param} || {Node, Param} <- FilteredNodeToLoad2],
@@ -1206,9 +1203,10 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
     fun({Node, NodeLoad, _}) ->
       {NodeToIPWithLogging(Node), NodeLoad}
     end, NodeToLoad),
-  UpdateDnsWorker = fun ({_Node, Module, Pid}) ->
+  UpdateDnsWorker = fun({_Node, Module, Pid}) ->
     case Module of
-      dns_worker -> gen_server:cast(Pid, {asynch, 1, {update_state, FilteredModulesToNodes, [{N_IP, N_Load} || {N_IP, N_Load} <- NLoads, N_IP =/= unknownaddress], AvgLoad}});
+      dns_worker ->
+        gen_server:cast(Pid, {asynch, 1, {update_state, FilteredModulesToNodes, [{N_IP, N_Load} || {N_IP, N_Load} <- NLoads, N_IP =/= unknownaddress], AvgLoad}});
       _ -> ok
     end
   end,
@@ -1247,8 +1245,8 @@ check_load(WorkerPlugin) ->
 %% ====================================================================
 node_to_ip(Node) ->
   StrNode = atom_to_list(Node),
-  AddressWith@ = lists:dropwhile(fun (Char) -> Char =/= $@ end, StrNode),
-  Address = lists:dropwhile(fun (Char) -> Char =:= $@ end, AddressWith@),
+  AddressWith@ = lists:dropwhile(fun(Char) -> Char =/= $@ end, StrNode),
+  Address = lists:dropwhile(fun(Char) -> Char =:= $@ end, AddressWith@),
   inet:getaddr(Address, inet).
 
 
@@ -1432,7 +1430,7 @@ calculate_worker_load(Workers) ->
   Result :: list().
 %% ====================================================================
 calculate_load(NodesLoad, WorkersLoad) ->
-  Merge = fun ({Node, NLoad}) ->
+  Merge = fun({Node, NLoad}) ->
     {Node, NLoad, proplists:get_value(Node, WorkersLoad, [])}
   end,
   lists:map(Merge, NodesLoad).
@@ -1587,9 +1585,9 @@ clear_cache(State, Cache) ->
   %% If workers were running on node that is down,
   %% upgrade state.
   State3 = case WF of
-                true -> update_dispatchers_and_dns(State2, true, true);
-                false -> State2
-              end,
+             true -> update_dispatchers_and_dns(State2, true, true);
+             false -> State2
+           end,
 
   save_state(),
   State3.
@@ -1601,10 +1599,12 @@ clear_cache(State, Cache) ->
   Result :: ok | {error, Error :: term()}.
 %% ====================================================================
 create_cluster_stats_rrd() ->
+  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   {ok, Period} = application:get_env(?APP_Name, cluster_monitoring_period),
   {ok, Steps} = application:get_env(?APP_Name, rrd_steps),
+  {ok, RRDSize} = application:get_env(?APP_Name, rrd_size),
   Heartbeat = 2 * Period,
-  RRASize = round(60 * 60 / Period), % one day in seconds devided by monitoring period
+  RRASize = round(RRDSize / Period),
   BinaryPeriod = integer_to_binary(Period),
   BinaryHeartbeat = integer_to_binary(Heartbeat),
   RRASizeBinary = integer_to_binary(RRASize),
@@ -1625,7 +1625,7 @@ create_cluster_stats_rrd() ->
   RRAs = lists:map(fun(Step) -> BinaryStep = integer_to_binary(Step),
     <<"RRA:AVERAGE:0.5:", BinaryStep/binary, ":", RRASizeBinary/binary>> end, Steps),
 
-  case rrderlang:create(?Cluster_Stats_RRD_Name, Options, DSs, RRAs) of
+  case gen_server:call(?RrdErlang_Name, {create, ?Cluster_Stats_RRD_Name, Options, DSs, RRAs}, Timeout) of
     {error, Error} ->
       ?error("Can not create cluster stats RRD: ~p", [Error]),
       {error, Error};
@@ -1641,10 +1641,11 @@ create_cluster_stats_rrd() ->
   Result :: ok | {error, Error :: term()}.
 %% ====================================================================
 save_cluster_stats_to_rrd(NodesStats, #cm_state{storage_stats = StorageStats}) ->
+  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   {MegaSecs, Secs, _} = erlang:now(),
-  Timestamp = MegaSecs * 1000000 + Secs,
+  Timestamp = integer_to_binary(MegaSecs * 1000000 + Secs),
   Values = merge_nodes_stats(NodesStats) ++ get_storage_stats(StorageStats),
-  case rrderlang:update(?Cluster_Stats_RRD_Name, <<>>, Values, Timestamp) of
+  case gen_server:call(?RrdErlang_Name, {update, ?Cluster_Stats_RRD_Name, <<>>, Values, Timestamp}, Timeout) of
     {error, Error} ->
       ?error("Can not save node stats to RRD: ~p", [Error]),
       {error, Error};
@@ -1721,10 +1722,10 @@ get_storage_stats(#storage_stats{read_bytes = RB, write_bytes = WB}) ->
 %% get_cluster_stats/1
 %% ====================================================================
 %% @doc Get statistics about cluster load
--spec get_cluster_stats(TimeWindow :: short | medium | long | integer(), Format :: default | json) -> Result when
+-spec get_cluster_stats(TimeWindow :: short | medium | long | integer()) -> Result when
   Result :: [{Name :: atom(), Value :: float()}] | {error, term()}.
 %% ====================================================================
-get_cluster_stats(TimeWindow, Format) ->
+get_cluster_stats(TimeWindow) ->
   {ok, Interval} = case TimeWindow of
                      short -> application:get_env(?APP_Name, short_monitoring_time_window);
                      medium -> application:get_env(?APP_Name, medium_monitoring_time_window);
@@ -1734,23 +1735,20 @@ get_cluster_stats(TimeWindow, Format) ->
   {MegaSecs, Secs, _} = erlang:now(),
   EndTime = MegaSecs * 1000000 + Secs,
   StartTime = EndTime - Interval,
-  get_cluster_stats(StartTime, EndTime, Format).
+  get_cluster_stats(StartTime, EndTime).
 
 %% get_cluster_stats/2
 %% ====================================================================
 %% @doc Get statistics about cluster load
--spec get_cluster_stats(StartTime :: integer(), EndTime :: integer(), Format :: default | json) -> Result when
+-spec get_cluster_stats(StartTime :: integer(), EndTime :: integer()) -> Result when
   Result :: [{Name :: string(), Value :: float()}] | {error, term()}.
 %% ====================================================================
-get_cluster_stats(StartTime, EndTime, Format) ->
+get_cluster_stats(StartTime, EndTime) ->
+  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   BinaryEndTime = integer_to_binary(EndTime),
   BinaryStartTime = integer_to_binary(StartTime),
   Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
-  FetchFunction = case Format of
-                    json -> fun rrderlang:fetch_json/3;
-                    _ -> fun rrderlang:fetch/3
-                  end,
-  case FetchFunction(?Cluster_Stats_RRD_Name, Options, <<"AVERAGE">>) of
+  case gen_server:call(?RrdErlang_Name, {fetch, ?Cluster_Stats_RRD_Name, Options, <<"AVERAGE">>}, Timeout) of
     {ok, {Header, Data}} ->
       HeaderList = lists:map(fun(Elem) -> binary_to_list(Elem) end, Header),
       HeaderLen = length(Header),
@@ -1770,3 +1768,22 @@ get_cluster_stats(StartTime, EndTime, Format) ->
     Other ->
       Other
   end.
+
+%% get_cluster_stats/3
+%% ====================================================================
+%% @doc Fetch specified columns from cluster statistics Round Robin Database.
+-spec get_cluster_stats(StartTime :: integer(), EndTime :: integer(), Columns) -> Result when
+  Columns :: all | {name, [binary()]} | {starts_with, [binary()]} | {index, [integer()]},
+  Result :: {ok, {Header, Body}} | {error, Error :: term()},
+  Header :: [ColumnNames :: binary()],
+  Body :: [Row],
+  Row :: [{Timestamp, Values}],
+  Timestamp :: integer(),
+  Values :: [integer() | float()].
+%% ====================================================================
+get_cluster_stats(StartTime, EndTime, Columns) ->
+  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
+  BinaryStartTime = integer_to_binary(StartTime),
+  BinaryEndTime = integer_to_binary(EndTime),
+  Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
+  gen_server:call(?RrdErlang_Name, {fetch, ?Cluster_Stats_RRD_Name, Options, <<"AVERAGE">>, Columns}, Timeout).
