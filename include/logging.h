@@ -26,7 +26,7 @@
 
 #ifndef NDEBUG
 #   undef DLOG
-#   define DLOG(severity) LOG_TO_SINK(veil::logging::_debugLogSink, severity)
+#   define DLOG(severity) LOG_TO_SINK(veil::logging::_debugLogSink.lock().get(), severity)
 #   define DLOG_TO_SINK(sink, severity) LOG_TO_SINK(sink, severity)
 #else
 #   define DLOG_TO_SINK(sink, severity) \
@@ -34,7 +34,7 @@
 #endif
 
 #undef LOG
-#define LOG(severity) LOG_TO_SINK(veil::logging::_logSink, severity)
+#define LOG(severity) LOG_TO_SINK(veil::logging::_logSink.lock().get(), severity)
 
 namespace veil
 {
@@ -53,8 +53,8 @@ typedef protocol::logging::LogLevel RemoteLogLevel;
 class RemoteLogWriter;
 class RemoteLogSink;
 
-extern std::atomic<RemoteLogSink*> _logSink;
-extern std::atomic<RemoteLogSink*> _debugLogSink;
+extern std::weak_ptr<RemoteLogSink> _logSink;
+extern std::weak_ptr<RemoteLogSink> _debugLogSink;
 
 /**
  * Sets RemoteLogSink objects used for logging normal and debug messages.
@@ -62,7 +62,7 @@ extern std::atomic<RemoteLogSink*> _debugLogSink;
  * @param logSink The new log sink.
  * @param debugLogSink The new debug log sink.
  */
-extern void setLogSinks(RemoteLogSink *logSink, RemoteLogSink *debugLogSink);
+extern void setLogSinks(const std::shared_ptr<RemoteLogSink> &logSink, const std::shared_ptr<RemoteLogSink> &debugLogSink);
 
 /**
  * The RemoteLogWriter class is responsible for sending log messages to a

@@ -197,22 +197,14 @@ void RemoteLogSink::send(google::LogSeverity severity,
                      std::string(message, message_len));
 }
 
-std::atomic<RemoteLogSink*> _logSink{nullptr};
-std::atomic<RemoteLogSink*> _debugLogSink{nullptr};
+std::weak_ptr<RemoteLogSink> _logSink;
+std::weak_ptr<RemoteLogSink> _debugLogSink;
 
-void setLogSinks(RemoteLogSink *logSink, RemoteLogSink *debugLogSink)
+void setLogSinks(const std::shared_ptr<RemoteLogSink> &logSink,
+                 const std::shared_ptr<RemoteLogSink> &debugLogSink)
 {
-    static auto del = [](RemoteLogSink *p){ _logSink = nullptr; delete p; };
-    static auto debugDel = [](RemoteLogSink *p){ _debugLogSink = nullptr; delete p; };
-
-    static std::unique_ptr<RemoteLogSink, decltype(del)> s_logSink{nullptr, del};
-    static std::unique_ptr<RemoteLogSink, decltype(debugDel)> s_debugLogSink{nullptr, debugDel};
-
-    s_logSink.reset(logSink);
-    s_debugLogSink.reset(debugLogSink);
-
-    _logSink = s_logSink.get();
-    _debugLogSink = s_debugLogSink.get();
+    _logSink = logSink;
+    _debugLogSink = debugLogSink;
 }
 
 } // namespace logging
