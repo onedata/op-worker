@@ -29,14 +29,7 @@ namespace veil {
 namespace helpers {
 
 namespace config {
-
-    extern unsigned int clusterPort;
-    extern std::string  proxyCert;
-    extern std::string  clusterHostname;
-    extern boost::atomic<bool> checkCertificate;
-
 namespace buffers {
-
     extern size_t writeBufferGlobalSizeLimit;
     extern size_t readBufferGlobalSizeLimit;
 

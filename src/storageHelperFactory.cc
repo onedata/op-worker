@@ -18,15 +18,7 @@ namespace veil {
 namespace helpers {
 
 namespace config {
-
-    // Variables below are used as default values when ConnectionPool object is wasnt set
-    // but storage helper tries to use TCP/IP connection. It should not happen.
-    cert_info_fun   getCertInfo;
-
-    boost::atomic<bool> checkCertificate(true);
-
 namespace buffers {
-
     size_t writeBufferGlobalSizeLimit       = 0;
     size_t readBufferGlobalSizeLimit        = 0;
 
