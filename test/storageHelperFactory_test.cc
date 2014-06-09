@@ -10,6 +10,8 @@
 
 #include "connectionPool_mock.h"
 
+#include <boost/make_shared.hpp>
+
 #include <memory>
 
 INIT_AND_RUN_ALL_TESTS(); // TEST RUNNER !
@@ -18,7 +20,7 @@ INIT_AND_RUN_ALL_TESTS(); // TEST RUNNER !
 
 
 TEST(StorageHelperFactoryTest, ObjectBuild) {
-   StorageHelperFactory factory(std::make_shared<MockConnectionPool>());
+   StorageHelperFactory factory(boost::make_shared<MockConnectionPool>());
 
    EXPECT_NE((IStorageHelper*)0, factory.getStorageHelper("DirectIO", IStorageHelper::ArgsMap{}).get());
    

@@ -49,7 +49,7 @@ namespace utils {
 
 } // namespace utils
 
-StorageHelperFactory::StorageHelperFactory(std::shared_ptr<SimpleConnectionPool> connectionPool)
+StorageHelperFactory::StorageHelperFactory(boost::shared_ptr<SimpleConnectionPool> connectionPool)
     : m_connectionPool{std::move(connectionPool)}
 {
 }

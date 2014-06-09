@@ -82,7 +82,7 @@ struct RemoteLogWriterFixture: public ::testing::Test
         return sentMessage;
     }
 
-    std::shared_ptr<NiceMock<MockConnectionPool> > mockConnectionPool;
+    boost::shared_ptr<NiceMock<MockConnectionPool> > mockConnectionPool;
     boost::shared_ptr<NiceMock<MockCommunicationHandler> > mockCommunicationHandler;
     RemoteLogWriter logWriter;
 };

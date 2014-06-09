@@ -53,7 +53,7 @@ RemoteLogWriter::RemoteLogWriter(const RemoteLogLevel initialThreshold,
 {
 }
 
-void RemoteLogWriter::run(std::shared_ptr<SimpleConnectionPool> connectionPool)
+void RemoteLogWriter::run(boost::shared_ptr<SimpleConnectionPool> connectionPool)
 {
     m_connectionPool = std::move(connectionPool);
     if(m_thread.get_id() == Thread().get_id()) // Not-a-Thread

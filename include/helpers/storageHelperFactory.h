@@ -79,7 +79,7 @@ namespace utils {
  */
 class StorageHelperFactory {
 public:
-    StorageHelperFactory(std::shared_ptr<SimpleConnectionPool> connectionPool);
+    StorageHelperFactory(boost::shared_ptr<SimpleConnectionPool> connectionPool);
     virtual ~StorageHelperFactory();
 
     /**
@@ -91,7 +91,7 @@ public:
     virtual boost::shared_ptr<IStorageHelper> getStorageHelper(const std::string &sh, const IStorageHelper::ArgsMap &args);
 
 private:
-    std::shared_ptr<SimpleConnectionPool> m_connectionPool;
+    boost::shared_ptr<SimpleConnectionPool> m_connectionPool;
 };
 
 } // namespace helpers

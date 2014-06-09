@@ -95,7 +95,7 @@ public:
      * Sets the connection pool used by the writer to send logs to a cluster.
      * @param connectionPool The pool to be used by the writer.
      */
-    virtual void run(std::shared_ptr<SimpleConnectionPool> connectionPool);
+    virtual void run(boost::shared_ptr<SimpleConnectionPool> connectionPool);
 
     /**
      * Destructor.
@@ -129,7 +129,7 @@ private:
     void writeLoop();
     void dropExcessMessages();
 
-    std::shared_ptr<SimpleConnectionPool> m_connectionPool;
+    boost::shared_ptr<SimpleConnectionPool> m_connectionPool;
     const pid_t m_pid;
     const BufferSize m_maxBufferSize;
     const BufferSize m_bufferTrimSize;

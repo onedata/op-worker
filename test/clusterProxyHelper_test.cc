@@ -33,7 +33,7 @@ class ClusterProxyHelperTest
     : public ::testing::Test {
 
 protected:
-    std::shared_ptr<MockConnectionPool> mockPool;
+    boost::shared_ptr<MockConnectionPool> mockPool;
     boost::shared_ptr<MockCommunicationHandler> mockConnection;
     boost::shared_ptr<ProxyClusterProxyHelper> proxy;
 

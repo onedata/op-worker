@@ -37,7 +37,7 @@ class ClusterProxyHelper : public IStorageHelper {
 
     public:
         /// This storage helper uses either 0 or 3 arguments. If no arguments are passed, default Veilhelpers connetion pooling will be used.
-        ClusterProxyHelper(std::shared_ptr<SimpleConnectionPool>, const ArgsMap&);
+        ClusterProxyHelper(boost::shared_ptr<SimpleConnectionPool>, const ArgsMap&);
                                                                     ///< Otherwise first argument shall be cluster's hostname, second - cluster's port and third one - path to peer certificate.
         virtual ~ClusterProxyHelper();
 
@@ -100,7 +100,7 @@ class ClusterProxyHelper : public IStorageHelper {
         int doRead(const std::string &path, std::string &buf, size_t, off_t, ffi_type);                    ///< Real implementation of read operation.
 
     private:
-        std::shared_ptr<SimpleConnectionPool> m_connectionPool;
+        boost::shared_ptr<SimpleConnectionPool> m_connectionPool;
 };
 
 } // namespace helpers
