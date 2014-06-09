@@ -10,6 +10,10 @@
 
 #include "clusterProxyHelper.h"
 
+#include "simpleConnectionPool.h"
+
+#include <memory>
+
 using namespace veil;
 using namespace veil::helpers;
 
@@ -20,7 +24,8 @@ using namespace veil::protocol::communication_protocol;
 class ProxyClusterProxyHelper
     : public ClusterProxyHelper {
 public:
-    ProxyClusterProxyHelper(std::vector<std::string> args) : ClusterProxyHelper(args)
+    ProxyClusterProxyHelper(std::shared_ptr<SimpleConnectionPool> pool, std::vector<std::string> args)
+        : ClusterProxyHelper(pool, args)
     {
     }
 

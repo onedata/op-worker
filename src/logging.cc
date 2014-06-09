@@ -43,10 +43,12 @@ static RemoteLogLevel glogToLevel(google::LogSeverity glevel)
     }
 }
 
-RemoteLogWriter::RemoteLogWriter(const RemoteLogLevel initialThreshold,
+RemoteLogWriter::RemoteLogWriter(std::shared_ptr<SimpleConnectionPool> connectionPool,
+                                 const RemoteLogLevel initialThreshold,
                                  const BufferSize maxBufferSize,
                                  const BufferSize bufferTrimSize)
-    : m_pid(getpid())
+    : m_connectionPool{std::move(connectionPool)}
+    , m_pid(getpid())
     , m_maxBufferSize(maxBufferSize)
     , m_bufferTrimSize(bufferTrimSize)
     , m_thresholdLevel(initialThreshold)
@@ -128,11 +130,11 @@ void RemoteLogWriter::writeLoop()
     {
         const protocol::logging::LogMessage msg = popMessage();
 
-        boost::shared_ptr<SimpleConnectionPool> connectionPool = helpers::config::getConnectionPool();
+        auto connectionPool = m_connectionPool;
         if(!connectionPool)
             continue;
 
-        boost::shared_ptr<CommunicationHandler> connection = connectionPool->selectConnection();
+        auto connection = connectionPool->selectConnection();
         if(!connection)
             continue;
 

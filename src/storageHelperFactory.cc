@@ -27,24 +27,6 @@ namespace config {
 
     boost::atomic<bool> checkCertificate(true);
 
-
-    namespace {
-        boost::shared_ptr<SimpleConnectionPool> connectionPool;
-    }
-
-    void setConnectionPool(boost::shared_ptr<SimpleConnectionPool> pool)
-    {
-        connectionPool = pool;
-    }
-
-    boost::shared_ptr<SimpleConnectionPool> getConnectionPool()
-    {
-        if(!connectionPool && getCertInfo && !clusterHostname.empty())
-            connectionPool.reset(new SimpleConnectionPool(clusterHostname, clusterPort, getCertInfo));
-
-        return connectionPool;
-    }
-
 namespace buffers {
 
     size_t writeBufferGlobalSizeLimit       = 0;
@@ -69,7 +51,8 @@ namespace utils {
 
 } // namespace utils
 
-StorageHelperFactory::StorageHelperFactory()
+StorageHelperFactory::StorageHelperFactory(std::shared_ptr<SimpleConnectionPool> connectionPool)
+    : m_connectionPool{std::move(connectionPool)}
 {
 }
 
@@ -81,7 +64,7 @@ boost::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(const s
     if(sh_name == "DirectIO")
         return boost::shared_ptr<IStorageHelper>(new DirectIOHelper(args));
     else if(sh_name == "ClusterProxy")
-        return boost::shared_ptr<IStorageHelper>(new ClusterProxyHelper(args));
+        return boost::shared_ptr<IStorageHelper>(new ClusterProxyHelper(m_connectionPool, args));
     else
     {
         return boost::shared_ptr<IStorageHelper>();

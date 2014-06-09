@@ -38,6 +38,9 @@
 
 namespace veil
 {
+
+class SimpleConnectionPool;
+
 namespace logging
 {
 
@@ -83,7 +86,8 @@ public:
      * @param bufferTrimSize The size to which the buffer will be trimmed after
      * exceeding @p maxBufferSize .
      */
-    RemoteLogWriter(const RemoteLogLevel initialThreshold = protocol::logging::NONE,
+    RemoteLogWriter(std::shared_ptr<SimpleConnectionPool> connectionPool,
+                    const RemoteLogLevel initialThreshold = protocol::logging::NONE,
                     const BufferSize maxBufferSize = DEFAULT_MAX_MESSAGE_BUFFER_SIZE,
                     const BufferSize bufferTrimSize = DEFAULT_MESSAGE_BUFFER_TRIM_SIZE);
 
@@ -124,6 +128,7 @@ private:
     void writeLoop();
     void dropExcessMessages();
 
+    const std::shared_ptr<SimpleConnectionPool> m_connectionPool;
     const pid_t m_pid;
     const BufferSize m_maxBufferSize;
     const BufferSize m_bufferTrimSize;

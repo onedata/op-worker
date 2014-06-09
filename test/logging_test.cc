@@ -37,9 +37,8 @@ struct RemoteLogWriterFixture: public ::testing::Test
     RemoteLogWriterFixture()
         : mockConnectionPool(new NiceMock<MockConnectionPool>)
         , mockCommunicationHandler(new NiceMock<MockCommunicationHandler>)
-        , logWriter(veil::protocol::logging::LDEBUG)
+        , logWriter(mockConnectionPool, veil::protocol::logging::LDEBUG)
     {
-        veil::helpers::config::setConnectionPool(mockConnectionPool);
         ON_CALL(*mockConnectionPool, selectConnection(_))
                 .WillByDefault(::testing::Return(mockCommunicationHandler));
 
@@ -83,7 +82,7 @@ struct RemoteLogWriterFixture: public ::testing::Test
         return sentMessage;
     }
 
-    boost::shared_ptr<NiceMock<MockConnectionPool> > mockConnectionPool;
+    std::shared_ptr<NiceMock<MockConnectionPool> > mockConnectionPool;
     boost::shared_ptr<NiceMock<MockCommunicationHandler> > mockCommunicationHandler;
     RemoteLogWriter logWriter;
 };
@@ -141,7 +140,7 @@ TEST_F(RemoteLogSinkFixture, ShouldOverrideSeverityIfSetInConstructor)
 
 TEST(RemoteLogWriter, ShouldNotHangOnDestroy)
 {
-    veil::logging::RemoteLogWriter logWriter;
+    veil::logging::RemoteLogWriter logWriter{nullptr};
     logWriter.run();
 }
 
@@ -186,7 +185,8 @@ TEST_F(RemoteLogWriterFixture, ShouldSendAMessageWithIGNORE_ANSWER_MSG_ID)
 
 TEST_F(RemoteLogWriterFixture, ShouldDropMessagesAfterExceedingMaxBufferSize)
 {
-    veil::logging::RemoteLogWriter writer(veil::protocol::logging::LDEBUG,
+    veil::logging::RemoteLogWriter writer(mockConnectionPool,
+                                          veil::protocol::logging::LDEBUG,
                                           /*maxBufferSize*/ 10,
                                           /*bufferTrimSize*/ 5);
 

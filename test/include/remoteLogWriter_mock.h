@@ -17,6 +17,8 @@ using namespace veil::logging;
 class MockRemoteLogWriter: public RemoteLogWriter
 {
 public:
+    MockRemoteLogWriter() : RemoteLogWriter{nullptr} {}
+
     MOCK_METHOD5(buffer, void(const RemoteLogLevel, const std::string&,
                               const int, const time_t, const std::string&));
 

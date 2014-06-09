@@ -33,7 +33,7 @@ class ClusterProxyHelperTest
     : public ::testing::Test {
 
 protected:
-    boost::shared_ptr<MockConnectionPool> mockPool;
+    std::shared_ptr<MockConnectionPool> mockPool;
     boost::shared_ptr<MockCommunicationHandler> mockConnection;
     boost::shared_ptr<ProxyClusterProxyHelper> proxy;
 
@@ -43,17 +43,11 @@ protected:
     virtual void SetUp() {
         mockPool.reset(new MockConnectionPool());
         mockConnection.reset(new MockCommunicationHandler());
-        proxy.reset(new ProxyClusterProxyHelper(vector<string>()));
+        proxy.reset(new ProxyClusterProxyHelper(mockPool, vector<string>()));
 
-        config::setConnectionPool(mockPool);
         EXPECT_CALL(*mockPool, selectConnection(_)).WillRepeatedly(Return(mockConnection));
         EXPECT_CALL(*mockPool, releaseConnection(_)).WillRepeatedly(Return());
     }
-
-    virtual void TearDown() {
-        config::setConnectionPool(boost::shared_ptr<SimpleConnectionPool>());
-    }
-
 };
 
 

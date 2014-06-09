@@ -30,13 +30,6 @@ namespace config {
     extern std::string  clusterHostname;
     extern boost::atomic<bool> checkCertificate;
 
-    namespace {
-        extern boost::shared_ptr<SimpleConnectionPool> connectionPool;
-    }
-
-    void setConnectionPool(boost::shared_ptr<SimpleConnectionPool> pool);
-    boost::shared_ptr<SimpleConnectionPool> getConnectionPool();
-
 namespace buffers {
 
     extern size_t writeBufferGlobalSizeLimit;
@@ -80,19 +73,20 @@ namespace utils {
  * Factory providing objects of requested storage helpers.
  */
 class StorageHelperFactory {
+public:
+    StorageHelperFactory(std::shared_ptr<SimpleConnectionPool> connectionPool);
+    virtual ~StorageHelperFactory();
 
-    public:
+    /**
+     * Produces storage helper object.
+     * @param sh Name of storage helper that has to be returned.
+     * @param args Arguments vector passed as argument to storge helper's constructor.
+     * @return Pointer to storage helper object along with its ownership.
+     */
+    virtual boost::shared_ptr<IStorageHelper> getStorageHelper(const std::string &sh, const std::vector<std::string> &args);
 
-        StorageHelperFactory();
-        virtual ~StorageHelperFactory();
-
-        /**
-         * Produces storage helper object.
-         * @param sh Name of storage helper that has to be returned.
-         * @param args Arguments vector passed as argument to storge helper's constructor.
-         * @return Pointer to storage helper object along with its ownership.
-         */
-        virtual boost::shared_ptr<IStorageHelper> getStorageHelper(const std::string &sh, const std::vector<std::string> &args);
+private:
+    std::shared_ptr<SimpleConnectionPool> m_connectionPool;
 };
 
 } // namespace helpers
