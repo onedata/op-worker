@@ -9,6 +9,7 @@
 #include <fcntl.h>
 
 #include "fileCache.h"
+#include "helpers/storageHelperFactory.h"
 
 
 namespace veil {
@@ -118,10 +119,11 @@ public:
 
     /**
      * BufferAgent constructor.
+     * @param bufferLimits Settings limiting buffer sizes.
      * @param write_fun Write function that writes data to filesystem. This shall be storage helpers' write callback. See write_fun type for signature.
      * @param read_fun Read function that provides filesystems' data. This shall be storage helpers' read callback. See read_fun type for signature.
      */
-    BufferAgent(write_fun, read_fun);
+    BufferAgent(const BufferLimits &bufferLimits, write_fun, read_fun);
     virtual ~BufferAgent();
 
     /// onWrite shall be called on each write operation that filesystem user requests - accumulates data while sending it asynchronously.
@@ -194,6 +196,8 @@ private:
 
     static size_t getWriteBufferSize();                         ///< Returns current total size of buffored data.
     static size_t getReadBufferSize();                          ///< Returns current total size of prefetched data.
+
+    const BufferLimits m_bufferLimits;
 };
 
 

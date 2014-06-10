@@ -358,8 +358,10 @@ int ClusterProxyHelper::doRead(const string &path, std::string &buf, size_t size
     return 0;
 }
 
-ClusterProxyHelper::ClusterProxyHelper(boost::shared_ptr<SimpleConnectionPool> connectionPool, const ArgsMap &args)
+ClusterProxyHelper::ClusterProxyHelper(boost::shared_ptr<SimpleConnectionPool> connectionPool,
+                                       const BufferLimits &limits, const ArgsMap &args)
   : m_bufferAgent(
+        limits,
         boost::bind(&ClusterProxyHelper::doWrite, this, _1, _2, _3, _4, _5),
         boost::bind(&ClusterProxyHelper::doRead, this, _1, _2, _3, _4, _5))
   , m_connectionPool{std::move(connectionPool)}

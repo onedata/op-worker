@@ -28,20 +28,19 @@
 namespace veil {
 namespace helpers {
 
-namespace config {
-namespace buffers {
-    extern size_t writeBufferGlobalSizeLimit;
-    extern size_t readBufferGlobalSizeLimit;
+    struct BufferLimits
+    {
+        BufferLimits(const size_t wgl = 0, const size_t rgl = 0, const size_t wfl = 0,
+               const size_t rfl = 0, const size_t pbs = 4 * 1024);
 
-    extern size_t writeBufferPerFileSizeLimit;
-    extern size_t readBufferPerFileSizeLimit;
+        const size_t writeBufferGlobalSizeLimit;
+        const size_t readBufferGlobalSizeLimit;
 
-    extern size_t preferedBlockSize;
+        const size_t writeBufferPerFileSizeLimit;
+        const size_t readBufferPerFileSizeLimit;
 
-} // namespace buffers
-
-
-} // namespace config
+        const size_t preferedBlockSize;
+    };
 
 namespace utils {
 
@@ -72,7 +71,8 @@ namespace utils {
  */
 class StorageHelperFactory {
 public:
-    StorageHelperFactory(boost::shared_ptr<SimpleConnectionPool> connectionPool);
+    StorageHelperFactory(boost::shared_ptr<SimpleConnectionPool> connectionPool,
+                         const BufferLimits &limits);
     virtual ~StorageHelperFactory();
 
     /**
@@ -81,10 +81,12 @@ public:
      * @param args Arguments vector passed as argument to storge helper's constructor.
      * @return Pointer to storage helper object along with its ownership.
      */
-    virtual boost::shared_ptr<IStorageHelper> getStorageHelper(const std::string &sh, const IStorageHelper::ArgsMap &args);
+    virtual boost::shared_ptr<IStorageHelper> getStorageHelper(const std::string &sh,
+                                                               const IStorageHelper::ArgsMap &args);
 
 private:
-    boost::shared_ptr<SimpleConnectionPool> m_connectionPool;
+    const boost::shared_ptr<SimpleConnectionPool> m_connectionPool;
+    const BufferLimits m_limits;
 };
 
 } // namespace helpers

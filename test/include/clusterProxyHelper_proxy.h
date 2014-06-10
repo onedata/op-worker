@@ -25,7 +25,7 @@ class ProxyClusterProxyHelper
     : public ClusterProxyHelper {
 public:
     ProxyClusterProxyHelper(boost::shared_ptr<SimpleConnectionPool> pool, const ArgsMap &args)
-        : ClusterProxyHelper(pool, args)
+        : ClusterProxyHelper(pool, BufferLimits{}, args)
     {
     }
 

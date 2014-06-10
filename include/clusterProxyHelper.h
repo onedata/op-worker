@@ -29,6 +29,8 @@
 namespace veil {
 namespace helpers {
 
+struct BufferLimits;
+
 /**
  * The ClusterProxyHelper class
  * Storage helper used to access files through VeilCluster (accessed over TLS protocol).
@@ -37,7 +39,8 @@ class ClusterProxyHelper : public IStorageHelper {
 
     public:
         /// This storage helper uses either 0 or 3 arguments. If no arguments are passed, default Veilhelpers connetion pooling will be used.
-        ClusterProxyHelper(boost::shared_ptr<SimpleConnectionPool>, const ArgsMap&);
+        ClusterProxyHelper(boost::shared_ptr<SimpleConnectionPool>,
+                           const BufferLimits &limits, const ArgsMap&);
                                                                     ///< Otherwise first argument shall be cluster's hostname, second - cluster's port and third one - path to peer certificate.
         virtual ~ClusterProxyHelper();
 
@@ -100,7 +103,7 @@ class ClusterProxyHelper : public IStorageHelper {
         int doRead(const std::string &path, std::string &buf, size_t, off_t, ffi_type);                    ///< Real implementation of read operation.
 
     private:
-        boost::shared_ptr<SimpleConnectionPool> m_connectionPool;
+        const boost::shared_ptr<SimpleConnectionPool> m_connectionPool;
 };
 
 } // namespace helpers
