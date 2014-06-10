@@ -255,30 +255,35 @@ apply_or_redirect(Module, Fun, Args, NeedDN) ->
 top_menu(ActiveTabID) ->
     top_menu(ActiveTabID, []).
 
+%% top_menu/1
+%% ====================================================================
+%% @doc Convienience function to render top menu in GUI pages.
+%% Item with ActiveTabID will be highlighted as active.
+%% @end
+-spec top_menu(ActiveTabID :: any()) -> list().
+%% ====================================================================
+top_menu(ActiveTabID) ->
+    top_menu(ActiveTabID, []).
+
 %% top_menu/2
 %% ====================================================================
-%% @doc Convienience function to render top menu in GUI pages. 
-%% Item with ActiveTabID will be highlighted as active. 
+%% @doc Convienience function to render top menu in GUI pages.
+%% Item with ActiveTabID will be highlighted as active.
 %% Submenu body (list of n2o elements) will be concatenated below the main menu.
 %% @end
 -spec top_menu(ActiveTabID :: any(), SubMenuBody :: any()) -> list().
 %% ====================================================================
 top_menu(ActiveTabID, SubMenuBody) ->
     % Tab, that will be displayed optionally
-    PageCaptions =
-        case can_view_logs() of
-            false -> [];
-            true -> [{logs_tab, #li{body = [
-                #link{style = <<"padding: 18px;">>, url = <<"/logs">>, body = <<"Logs">>}
-            ]}}]
-        end ++
-        case can_view_monitoring() of
-            false -> [];
-            true -> [{monitoring_tab, #li{body = [
-                #link{style = <<"padding: 18px;">>, url = <<"/monitoring">>, body = <<"Monitoring">>}
-            ]}}]
-        end,
-    % Define menu items with ids, so that proper tab can be made active via function parameter 
+    LogsPageCaptions = case can_view_logs() of
+                           false ->
+                               [];
+                           true ->
+                               [{logs_tab, #li{body = [
+                                   #link{style = <<"padding: 18px;">>, url = <<"/logs">>, body = <<"Logs">>}
+                               ]}}]
+                       end,
+    % Define menu items with ids, so that proper tab can be made active via function parameter
     % see old_menu_captions()
     MenuCaptions =
         [
@@ -288,7 +293,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
             {shared_files_tab, #li{body = [
                 #link{style = <<"padding: 18px;">>, url = <<"/shared_files">>, body = <<"Shared files">>}
             ]}}
-        ] ++ PageCaptions,
+        ] ++ LogsPageCaptions,
 
     MenuIcons =
         [
