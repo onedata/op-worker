@@ -15,6 +15,8 @@
 #include <string>
 #include "helpers/IStorageHelper.h"
 
+#include <boost/filesystem/path.hpp>
+
 namespace veil {
 namespace helpers {
 
@@ -67,6 +69,10 @@ class DirectIOHelper : public IStorageHelper {
         int sh_removexattr(const char *path, const char *name) ;
         #endif // HAVE_SETXATTR
 
+private:
+        boost::filesystem::path root(const boost::filesystem::path &path);
+
+        const boost::filesystem::path m_rootPath;
 };
 
 } // namespace helpers
