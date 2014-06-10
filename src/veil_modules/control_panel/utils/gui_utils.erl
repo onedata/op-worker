@@ -255,16 +255,6 @@ apply_or_redirect(Module, Fun, Args, NeedDN) ->
 top_menu(ActiveTabID) ->
     top_menu(ActiveTabID, []).
 
-%% top_menu/1
-%% ====================================================================
-%% @doc Convienience function to render top menu in GUI pages.
-%% Item with ActiveTabID will be highlighted as active.
-%% @end
--spec top_menu(ActiveTabID :: any()) -> list().
-%% ====================================================================
-top_menu(ActiveTabID) ->
-    top_menu(ActiveTabID, []).
-
 %% top_menu/2
 %% ====================================================================
 %% @doc Convienience function to render top menu in GUI pages.
