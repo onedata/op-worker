@@ -99,7 +99,7 @@ get(Req, <<"1.0">>, Id) ->
             Size = Fileattr#fileattributes.size,
             StreamFun = file_download_handler:cowboy_file_stream_fun(FilePath, Size),
             NewReq = file_download_handler:content_disposition_attachment_headers(Req, filename:basename(FilePath)),
-            {Type, Subtype, _} = cow_mimetypes:all(gui_utils:to_binary(FilePath)),
+            {Type, Subtype, _} = cow_mimetypes:all(gui_convert:to_binary(FilePath)),
             Mimetype = <<Type/binary, "/", Subtype/binary>>,
             {{stream, Size, StreamFun, Mimetype}, NewReq}
     end.

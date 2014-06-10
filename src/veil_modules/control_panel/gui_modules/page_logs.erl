@@ -286,7 +286,7 @@ render_row(Counter, {Message, Timestamp, Severity, Metadata}) ->
         actions = #event{type = "click", postback = {toggle_log, Counter, true}, target = CollapsedId}, cells = [
             #td{body = format_severity(Severity), style = <<?SEVERITY_COLUMN_WIDTH>>},
             #td{body = format_time(Timestamp), style = <<?TIME_COLUMN_WIDTH>>},
-            #td{body = gui_utils:to_binary(Message), style = <<"text-wrap:normal; word-wrap:break-word; white-space: nowrap; overflow: hidden;">>},
+            #td{body = gui_convert:to_binary(Message), style = <<"text-wrap:normal; word-wrap:break-word; white-space: nowrap; overflow: hidden;">>},
             #td{body = CollapsedMetadata, style = <<?METADATA_COLUMN_WIDTH, "white-space: nowrap; overflow: hidden;">>}
         ]},
 
@@ -294,7 +294,7 @@ render_row(Counter, {Message, Timestamp, Severity, Metadata}) ->
         actions = #event{type = "click", postback = {toggle_log, Counter, false}, target = ExpandedId}, cells = [
             #td{body = format_severity(Severity), style = <<?SEVERITY_COLUMN_WIDTH>>},
             #td{body = format_time(Timestamp), style = <<?TIME_COLUMN_WIDTH>>},
-            #td{body = gui_utils:to_binary(Message), style = <<"text-wrap:normal; word-wrap:break-word;">>},
+            #td{body = gui_convert:to_binary(Message), style = <<"text-wrap:normal; word-wrap:break-word;">>},
             #td{body = ExpandedMetadata, style = <<?METADATA_COLUMN_WIDTH>>}
         ]},
 
@@ -310,7 +310,7 @@ loglevel_dropdown_body(Active) ->
                         _ -> <<"">>
                     end,
             ID = <<"loglevel_li_", (atom_to_binary(Loglevel, latin1))/binary>>,
-            #li{id = ID, actions = #event{type = "click", postback = {set_loglevel, Loglevel}, target = gui_utils:to_list(ID)},
+            #li{id = ID, actions = #event{type = "click", postback = {set_loglevel, Loglevel}, target = gui_convert:to_list(ID)},
                 class = Class, body = #link{body = atom_to_binary(Loglevel, latin1)}}
         end, ?LOGLEVEL_LIST).
 
@@ -324,7 +324,7 @@ max_logs_dropdown_body(Active) ->
                         _ -> <<"">>
                     end,
             ID = <<"maxlogs_li_", (integer_to_binary(Number))/binary>>,
-            #li{id = ID, actions = #event{type = "click", postback = {set_max_logs, Number}, target = gui_utils:to_list(ID)},
+            #li{id = ID, actions = #event{type = "click", postback = {set_max_logs, Number}, target = gui_convert:to_list(ID)},
                 class = Class, body = #link{body = integer_to_binary(Number)}}
         end, ?MAX_LOGS_OPTIONS).
 
@@ -372,13 +372,13 @@ format_time(Timestamp) ->
 format_metadata(Tags) ->
     Collapsed = case lists:keyfind(node, 1, Tags) of
                     {Key, Value} ->
-                        <<"<b>", (gui_utils:to_binary(Key))/binary, ":</b> ", (gui_utils:to_binary(Value))/binary, " ...">>;
+                        <<"<b>", (gui_convert:to_binary(Key))/binary, ":</b> ", (gui_convert:to_binary(Value))/binary, " ...">>;
                     _ ->
                         <<"<b>unknown node</b> ...">>
                 end,
     Expanded = lists:foldl(
         fun({Key, Value}, Acc) ->
-            <<Acc/binary, "<b>", (gui_utils:to_binary(Key))/binary, ":</b> ", (gui_utils:to_binary(Value))/binary, "<br />">>
+            <<Acc/binary, "<b>", (gui_convert:to_binary(Key))/binary, ":</b> ", (gui_convert:to_binary(Value))/binary, "<br />">>
         end, <<"">>, Tags),
     {Collapsed, Expanded}.
 
@@ -393,7 +393,7 @@ filter_contains(String, Filter) ->
     case Filter of
         undefined -> true;
         ValidFilter ->
-            binary:match(gui_utils:to_binary(String), ValidFilter) /= nomatch
+            binary:match(gui_convert:to_binary(String), ValidFilter) /= nomatch
     end.
 
 
@@ -483,7 +483,7 @@ event({show_filter, FilterName}) ->
         _ ->
             wf:wire(#jquery{target = get_filter_panel(FilterName), method = ["show"]}),
             wf:wire(#jquery{target = get_filter_none(FilterName), method = ["hide"]}),
-            wf:wire(#jquery{target = get_filter_textbox(FilterName), method = ["val"], args = ["\"" ++ gui_utils:to_list(Filter) ++ "\""]})
+            wf:wire(#jquery{target = get_filter_textbox(FilterName), method = ["val"], args = ["\"" ++ gui_convert:to_list(Filter) ++ "\""]})
     end;
 
 
@@ -506,7 +506,7 @@ event({toggle_filter, FilterName}) ->
 
 % Update patricular filter
 event({update_filter, FilterName}) ->
-    Filter = gui_utils:to_binary(wf:q(get_filter_textbox(FilterName))),
+    Filter = gui_convert:to_binary(wf:q(get_filter_textbox(FilterName))),
     case Filter of
         <<"">> ->
             put(filters, set_filter(get(filters), FilterName, undefined)),

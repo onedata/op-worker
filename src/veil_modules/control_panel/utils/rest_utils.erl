@@ -57,7 +57,7 @@ unmap([{KeyBin, Val} | Proplist], RecordTuple, Fields) ->
     Value = case Val of
                 I when is_integer(I) -> Val;
                 A when is_atom(A) -> Val;
-                _ -> gui_utils:to_list(Val)
+                _ -> gui_convert:to_list(Val)
             end,
     Index = string:str(Fields, [Key]) + 1,
     true = (Index > 1),

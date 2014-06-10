@@ -29,8 +29,6 @@
 -export([register_escape_event/1, script_for_enter_submission/2, script_to_bind_element_click/2]).
 % jQuery wrappers for page updates
 -export([update/2, replace/2, insert_top/2, insert_bottom/2, insert_before/2, insert_after/2, remove/1]).
-% Conversion utils
--export([to_list/1, to_binary/1, join_to_binary/1]).
 % Convinience function to set headers in cowboy response
 -export([cowboy_ensure_header/3]).
 % Functions used to perform secure server-server http requests
@@ -474,49 +472,6 @@ script_to_bind_element_click(ElementID, Javascript) ->
     wf:f("$('#~s').bind('click', function anonymous(event) { ~s });", [ElementID, Javascript]).
 
 
-%% to_list/1
-%% ====================================================================
-%% @doc Converts any term to list.
-%% @end
--spec to_list(term()) -> list().
-%% ====================================================================
-to_list(undefined) -> [];
-to_list(Term) when is_list(Term) -> Term;
-to_list(Term) when is_binary(Term) -> binary_to_list(Term);
-to_list(Term) ->
-    try
-        wf:to_list(Term)
-    catch _:_ ->
-        lists:flatten(io_lib:format("~p", [Term]))
-    end.
-
-
-%% to_binary/1
-%% ====================================================================
-%% @doc Converts any term to binary.
-%% @end
--spec to_binary(term()) -> binary().
-%% ====================================================================
-to_binary(Term) when is_binary(Term) -> Term;
-to_binary(Term) -> list_to_binary(to_list(Term)).
-
-
-%% join_to_binary/1
-%% ====================================================================
-%% @doc Joins any terms to a js-escaped binary.
-%% @end
--spec join_to_binary([term()]) -> binary().
-%% ====================================================================
-join_to_binary(Terms) ->
-    join_to_binary(Terms, <<"">>).
-
-join_to_binary([], Acc) ->
-    Acc;
-
-join_to_binary([H | T], Acc) ->
-    join_to_binary(T, <<Acc/binary, (to_binary(H))/binary>>).
-
-
 % Set of update functions from n2o, slightly changed
 
 
@@ -610,10 +565,10 @@ cowboy_ensure_header(Name, Value, Req) when is_binary(Name) and is_binary(Value)
     {ok, binary()} | {error, unknown_cert} | {error, term()}.
 %% ====================================================================
 https_get(URLBin, ReqHeadersBin) ->
-    URL = gui_utils:to_list(URLBin),
+    URL = gui_convert:to_list(URLBin),
     ReqHeaders = lists:map(
         fun({Key, Value}) ->
-            {gui_utils:to_list(Key), gui_utils:to_list(Value)}
+            {gui_convert:to_list(Key), gui_convert:to_list(Value)}
         end, ReqHeadersBin),
     perform_request(URL, ReqHeaders, get, "", ?max_redirects).
 
@@ -628,13 +583,13 @@ https_get(URLBin, ReqHeadersBin) ->
     {ok, binary()} | {error, unknown_cert} | {error, term()}.
 %% ====================================================================
 https_post(URLBin, ReqHeadersBin, Body) ->
-    URL = gui_utils:to_list(URLBin),
+    URL = gui_convert:to_list(URLBin),
     ReqHeaders = lists:map(
         fun({Key, Value}) ->
-            {gui_utils:to_list(Key), gui_utils:to_list(Value)}
+            {gui_convert:to_list(Key), gui_convert:to_list(Value)}
         end, ReqHeadersBin),
     %% 0 max redirects, according to RFC post requests should not be redirected
-    perform_request(URL, ReqHeaders, post, gui_utils:to_list(Body), 0).
+    perform_request(URL, ReqHeaders, post, gui_convert:to_list(Body), 0).
 
 %% ====================================================================
 %% Internal functions
@@ -710,7 +665,7 @@ do_curl(URL, ReqHeaders, Method, Body) ->
     case Res of
         "" -> {error, curl_failed};
         "\n" -> {error, curl_failed};
-        RespBody -> {ok, "200", [], to_binary(RespBody)}
+        RespBody -> {ok, "200", [], gui_convert:to_binary(RespBody)}
     end.
 
 

@@ -95,7 +95,7 @@ cowboy_file_stream_fun(FilePathOrUUID, Size) ->
 -spec content_disposition_attachment_headers(req(), string()) -> req().
 %% ====================================================================
 content_disposition_attachment_headers(Req, FileName) ->
-    {Type, Subtype, _} = cow_mimetypes:all(gui_utils:to_binary(FileName)),
+    {Type, Subtype, _} = cow_mimetypes:all(gui_convert:to_binary(FileName)),
     Mimetype = <<Type/binary, "/", Subtype/binary>>,
     Headers = [
         {<<"content-type">>, Mimetype},
