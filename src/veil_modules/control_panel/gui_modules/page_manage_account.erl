@@ -57,16 +57,16 @@ body() ->
 % Info to register a DN
 maybe_display_dn_message() ->
     case user_logic:get_dn_list(wf:session(user_doc)) of
-        [] -> wf:wire(#jquery{target = "dn_error_panel", method = ["show"]});
-        _ -> wf:wire(#jquery{target = "dn_error_panel", method = ["hide"]})
+        [] -> gui_jq:show(<<"dn_error_panel">>);
+        _ -> gui_jq:hide(<<"dn_error_panel">>)
     end.
 
 
 % Info to install a storage helper
 maybe_display_helper_message() ->
     case gui_utils:storage_defined() of
-        false -> wf:wire(#jquery{target = "helper_error_panel", method = ["show"]});
-        true -> wf:wire(#jquery{target = "helper_error_panel", method = ["hide"]})
+        false -> gui_jq:show(<<"helper_error_panel">>);
+        true -> gui_jq:hide(<<"helper_error_panel">>)
     end.
 
 
@@ -251,16 +251,16 @@ update_dn(User, AddOrRemove) ->
 show_email_adding(Flag) ->
     case Flag of
         true ->
-            wf:wire(#jquery{target = "add_email_button", method = ["hide"]}),
-            wf:wire(#jquery{target = "new_email_textbox", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jquery{target = "new_email_cancel", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jquery{target = "new_email_submit", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jquery{target = "new_email_textbox", method = ["focus"]});
+            gui_jq:hide(<<"add_email_button">>),
+            gui_jq:fade_in(<<"new_email_textbox">>, 300),
+            gui_jq:fade_in(<<"new_email_cancel">>, 300),
+            gui_jq:fade_in(<<"new_email_submit">>, 300),
+            gui_jq:focus(<<"new_email_textbox">>);
         false ->
-            wf:wire(#jquery{target = "add_email_button", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jquery{target = "new_email_textbox", method = ["hide"]}),
-            wf:wire(#jquery{target = "new_email_cancel", method = ["hide"]}),
-            wf:wire(#jquery{target = "new_email_submit", method = ["hide"]})
+            gui_jq:fade_in(<<"add_email_button">>, 300),
+            gui_jq:hide(<<"new_email_textbox">>),
+            gui_jq:hide(<<"new_email_cancel">>),
+            gui_jq:hide(<<"new_email_submit">>)
     end.
 
 
@@ -268,14 +268,14 @@ show_email_adding(Flag) ->
 show_dn_adding(Flag) ->
     case Flag of
         true ->
-            wf:wire(#jquery{target = "add_dn_button", method = ["hide"]}),
-            wf:wire(#jquery{target = "new_dn_textbox", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jquery{target = "new_dn_submit", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jquery{target = "new_dn_cancel", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jquery{target = "new_dn_textbox", method = ["focus"]});
+            gui_jq:hide(<<"add_dn_button">>),
+            gui_jq:fade_in(<<"new_dn_textbox">>, 300),
+            gui_jq:fade_in(<<"new_dn_cancel">>, 300),
+            gui_jq:fade_in(<<"new_dn_submit">>, 300),
+            gui_jq:focus(<<"new_dn_textbox">>);
         false ->
-            wf:wire(#jquery{target = "add_dn_button", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jquery{target = "new_dn_textbox", method = ["hide"]}),
-            wf:wire(#jquery{target = "new_dn_cancel", method = ["hide"]}),
-            wf:wire(#jquery{target = "new_dn_submit", method = ["hide"]})
+            gui_jq:fade_in(<<"add_dn_button">>, 300),
+            gui_jq:hide(<<"new_dn_textbox">>),
+            gui_jq:hide(<<"new_dn_cancel">>),
+            gui_jq:hide(<<"new_dn_submit">>)
     end.

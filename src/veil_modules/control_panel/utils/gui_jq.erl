@@ -25,7 +25,7 @@
 
 % Commonly used jquery functions
 -export([show/1, hide/1, add_class/2, remove_class/2, slide_up/2, slide_down/2, fade_in/2]).
--export([focus/1, select_text/1]).
+-export([focus/1, select_text/1, set_value/2]).
 
 
 %% wire/1
@@ -72,6 +72,7 @@ wire(Script, Eager) ->
 wire(Target, Method, Args, Eager) ->
     RenderedArgs = case Args of
                        <<"">> -> <<"">>;
+                       <<"''">> -> <<"''">>;
                        _ -> <<"'", Args/binary, "'">>
                    end,
     Script = <<"$('#", Target/binary, "').", Method/binary, "(", RenderedArgs/binary, ");">>,
@@ -244,4 +245,14 @@ focus(Target) ->
 select_text(Target) ->
     Script = <<"$('#", Target/binary, "').focus().select();">>,
     wire(Script).
+
+
+%% set_value/2
+%% ====================================================================
+%% @doc Sets value of an HTML element - e. g. textbox.
+%% @end
+-spec set_value(Target :: binary(), Value :: binary()) -> ok.
+%% ====================================================================
+set_value(Target, Value) ->
+    wire(Target, <<"val">>, Value, false).
 

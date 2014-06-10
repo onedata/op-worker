@@ -168,7 +168,7 @@ filters_panel() ->
 filter_form(FilterType) ->
     #span{style = <<"display: inline-block; position: relative; height: 42px; margin-bottom: 15px; width: 410px; text-align: left;">>, body = [
         #label{id = get_filter_label(FilterType), style = <<"display: inline; margin: 9px 14px;">>,
-            actions = #event{type = "click", postback = {toggle_filter, FilterType}, target = get_filter_label(FilterType)},
+            actions = #event{type = "click", postback = {toggle_filter, FilterType}, target = gui_convert:to_list(get_filter_label(FilterType))},
             class = <<"label label-large label-inverse">>, body = get_filter_name(FilterType)},
         #p{id = get_filter_none(FilterType), style = <<"display: inline;">>, body = <<"off">>},
         #panel{id = get_filter_panel(FilterType), class = <<"input-append">>, style = <<"margin-bottom: 0px; display: inline;">>, body = [
@@ -177,7 +177,7 @@ filter_form(FilterType) ->
             #panel{class = <<"btn-group">>, body = [
                 #button{id = get_filter_submit_button(FilterType), class = <<"btn">>, type = <<"button">>, title = <<"Save">>,
                     body = #span{class = <<"fui-check">>}, postback = {update_filter, FilterType},
-                    source = [get_filter_textbox(FilterType)]}
+                    source = [gui_convert:to_list(get_filter_textbox(FilterType))]}
             ]}
         ]}
     ]}.
@@ -228,15 +228,15 @@ comet_loop(Counter, PageState = #page_state{first_log = FirstLog, auto_scroll = 
 
 % Check if log should be displayed, do if so and remove old logs if needed
 process_log(Counter, {Message, Timestamp, Severity, Metadata},
-        PageState = #page_state{
-            loglevel = Loglevel,
-            auto_scroll = AutoScroll,
-            first_log = FirstLog,
-            max_logs = MaxLogs,
-            message_filter = MessageFilter,
-            node_filter = NodeFilter,
-            module_filter = ModuleFilter,
-            function_filter = FunctionFilter}) ->
+    PageState = #page_state{
+        loglevel = Loglevel,
+        auto_scroll = AutoScroll,
+        first_log = FirstLog,
+        max_logs = MaxLogs,
+        message_filter = MessageFilter,
+        node_filter = NodeFilter,
+        module_filter = ModuleFilter,
+        function_filter = FunctionFilter}) ->
 
     Node = proplists:get_value(node, Metadata, ""),
     Module = proplists:get_value(module, Metadata, ""),
@@ -250,7 +250,7 @@ process_log(Counter, {Message, Timestamp, Severity, Metadata},
                                            {Counter, PageState};
                                        true ->
                                            gui_jq:insert_bottom(<<"main_table">>, render_row(Counter, {Message, Timestamp, Severity, Metadata})),
-                                           wf:wire(#jquery{target = ?EXPANDED_LOG_ROW_ID_PREFIX ++ integer_to_list(Counter), method = ["hide"]}),
+                                           gui_jq:hide(<<?EXPANDED_LOG_ROW_ID_PREFIX, (integer_to_binary(Counter))/binary>>),
                                            NewFirstLog = remove_old_logs(Counter, FirstLog, MaxLogs),
                                            case AutoScroll of
                                                false ->
@@ -271,7 +271,7 @@ remove_old_logs(Counter, FirstLog, MaxLogs) ->
             FirstLog;
         true ->
             gui_jq:remove(<<?COLLAPSED_LOG_ROW_ID_PREFIX, (integer_to_binary(FirstLog))/binary>>),
-            gui_jq:remove(<<?EXPANDED_LOG_ROW_ID_PREFIX , (integer_to_binary(FirstLog))/binary>>),
+            gui_jq:remove(<<?EXPANDED_LOG_ROW_ID_PREFIX, (integer_to_binary(FirstLog))/binary>>),
             remove_old_logs(Counter, FirstLog + 1, MaxLogs)
     end.
 
@@ -434,29 +434,29 @@ event(clear_all_logs) ->
 event({toggle_log, Id, ShowAll}) ->
     case ShowAll of
         true ->
-            wf:wire(#jquery{target = ?EXPANDED_LOG_ROW_ID_PREFIX ++ integer_to_list(Id), method = ["fadeIn"], args = ["300"]}),
-            wf:wire(#jquery{target = ?COLLAPSED_LOG_ROW_ID_PREFIX ++ integer_to_list(Id), method = ["hide"]});
+            gui_jq:fade_in(<<?EXPANDED_LOG_ROW_ID_PREFIX, (integer_to_binary(Id))/binary>>, 300),
+            gui_jq:hide(<<?COLLAPSED_LOG_ROW_ID_PREFIX, (integer_to_binary(Id))/binary>>);
         false ->
-            wf:wire(#jquery{target = ?EXPANDED_LOG_ROW_ID_PREFIX ++ integer_to_list(Id), method = ["hide"]}),
-            wf:wire(#jquery{target = ?COLLAPSED_LOG_ROW_ID_PREFIX ++ integer_to_list(Id), method = ["fadeIn"], args = ["300"]})
+            gui_jq:hide(<<?EXPANDED_LOG_ROW_ID_PREFIX, (integer_to_binary(Id))/binary>>),
+            gui_jq:fade_in(<<?COLLAPSED_LOG_ROW_ID_PREFIX, (integer_to_binary(Id))/binary>>, 300)
     end;
 
 
 % Show filters edition panel
 event(show_filters_popup) ->
-    wf:wire(#jquery{target = "footer_popup", method = ["addClass"], args = ["\"hidden\""]}),
+    gui_jq:add_class(<<"footer_popup">>, <<"hidden">>),
     gui_jq:update(<<"footer_popup">>, filters_panel()),
     lists:foreach(
         fun(FilterType) ->
             wf:wire(gui_utils:script_for_enter_submission(get_filter_textbox(FilterType), get_filter_submit_button(FilterType))),
             event({show_filter, FilterType})
         end, get_filter_types()),
-    wf:wire(#jquery{target = "footer_popup", method = ["removeClass"], args = ["\"hidden\""]});
+    gui_jq:remove_class(<<"footer_popup">>, <<"hidden">>);
 
 
 % Hide filters edition panel
 event(hide_filters_popup) ->
-    wf:wire(#jquery{target = "footer_popup", method = ["addClass"], args = ["\"hidden\""]});
+    gui_jq:add_class(<<"footer_popup">>, <<"hidden">>);
 
 
 % Change loglevel
@@ -478,12 +478,12 @@ event({show_filter, FilterName}) ->
     Filter = get_filter(get(filters), FilterName),
     case (Filter =:= undefined) orelse (Filter =:= <<"">>) of
         true ->
-            wf:wire(#jquery{target = get_filter_panel(FilterName), method = ["hide"]}),
-            wf:wire(#jquery{target = get_filter_none(FilterName), method = ["show"]});
+            gui_jq:hide(get_filter_panel(FilterName)),
+            gui_jq:show(get_filter_none(FilterName));
         _ ->
-            wf:wire(#jquery{target = get_filter_panel(FilterName), method = ["show"]}),
-            wf:wire(#jquery{target = get_filter_none(FilterName), method = ["hide"]}),
-            wf:wire(#jquery{target = get_filter_textbox(FilterName), method = ["val"], args = ["\"" ++ gui_convert:to_list(Filter) ++ "\""]})
+            gui_jq:show(get_filter_panel(FilterName)),
+            gui_jq:hide(get_filter_none(FilterName)),
+            gui_jq:set_value(get_filter_textbox(FilterName), Filter)
     end;
 
 
@@ -492,13 +492,13 @@ event({toggle_filter, FilterName}) ->
     Filter = get_filter(get(filters), FilterName),
     case Filter of
         undefined ->
-            wf:wire(#jquery{target = get_filter_panel(FilterName), method = ["show"]}),
-            wf:wire(#jquery{target = get_filter_none(FilterName), method = ["hide"]}),
-            wf:wire(#jquery{target = get_filter_textbox(FilterName), method = ["val"], args = ["\"\""]}),
+            gui_jq:show(get_filter_panel(FilterName)),
+            gui_jq:hide(get_filter_none(FilterName)),
+            gui_jq:set_value(get_filter_textbox(FilterName), <<"''">>),
             put(filters, set_filter(get(filters), FilterName, <<"">>));
         _ ->
-            wf:wire(#jquery{target = get_filter_panel(FilterName), method = ["hide"]}),
-            wf:wire(#jquery{target = get_filter_none(FilterName), method = ["show"]}),
+            gui_jq:hide(get_filter_panel(FilterName)),
+            gui_jq:show(get_filter_none(FilterName)),
             put(filters, set_filter(get(filters), FilterName, undefined)),
             get(comet_pid) ! {set_filter, FilterName, undefined}
     end;
@@ -506,7 +506,7 @@ event({toggle_filter, FilterName}) ->
 
 % Update patricular filter
 event({update_filter, FilterName}) ->
-    Filter = gui_convert:to_binary(wf:q(get_filter_textbox(FilterName))),
+    Filter = gui_convert:to_binary(wf:q(gui_convert:to_list(get_filter_textbox(FilterName)))),
     case Filter of
         <<"">> ->
             put(filters, set_filter(get(filters), FilterName, undefined)),
@@ -559,28 +559,28 @@ get_filter_placeholder(node_filter) -> <<"Node contains">>;
 get_filter_placeholder(module_filter) -> <<"Module contains">>;
 get_filter_placeholder(function_filter) -> <<"Function contains">>.
 
-get_filter_label(message_filter) -> "message_filter_label";
-get_filter_label(node_filter) -> "node_filter_label";
-get_filter_label(module_filter) -> "module_filter_label";
-get_filter_label(function_filter) -> "function_filter_label".
+get_filter_label(message_filter) -> <<"message_filter_label">>;
+get_filter_label(node_filter) -> <<"node_filter_label">>;
+get_filter_label(module_filter) -> <<"module_filter_label">>;
+get_filter_label(function_filter) -> <<"function_filter_label">>.
 
-get_filter_none(message_filter) -> "message_filter_none";
-get_filter_none(node_filter) -> "node_filter_none";
-get_filter_none(module_filter) -> "module_filter_none";
-get_filter_none(function_filter) -> "function_filter_none".
+get_filter_none(message_filter) -> <<"message_filter_none">>;
+get_filter_none(node_filter) -> <<"node_filter_none">>;
+get_filter_none(module_filter) -> <<"module_filter_none">>;
+get_filter_none(function_filter) -> <<"function_filter_none">>.
 
-get_filter_panel(message_filter) -> "message_filter_panel";
-get_filter_panel(node_filter) -> "node_filter_panel";
-get_filter_panel(module_filter) -> "module_filter_panel";
-get_filter_panel(function_filter) -> "function_filter_panel".
+get_filter_panel(message_filter) -> <<"message_filter_panel">>;
+get_filter_panel(node_filter) -> <<"node_filter_panel">>;
+get_filter_panel(module_filter) -> <<"module_filter_panel">>;
+get_filter_panel(function_filter) -> <<"function_filter_panel">>.
 
-get_filter_textbox(message_filter) -> "message_filter_textbox";
-get_filter_textbox(node_filter) -> "node_filter_textbox";
-get_filter_textbox(module_filter) -> "module_filter_textbox";
-get_filter_textbox(function_filter) -> "function_filter_textbox".
+get_filter_textbox(message_filter) -> <<"message_filter_textbox">>;
+get_filter_textbox(node_filter) -> <<"node_filter_textbox">>;
+get_filter_textbox(module_filter) -> <<"module_filter_textbox">>;
+get_filter_textbox(function_filter) -> <<"function_filter_textbox">>.
 
-get_filter_submit_button(message_filter) -> "message_filter_button";
-get_filter_submit_button(node_filter) -> "node_filter_button";
-get_filter_submit_button(module_filter) -> "module_filter_button";
-get_filter_submit_button(function_filter) -> "function_filter_button".
+get_filter_submit_button(message_filter) -> <<"message_filter_button">>;
+get_filter_submit_button(node_filter) -> <<"node_filter_button">>;
+get_filter_submit_button(module_filter) -> <<"module_filter_button">>;
+get_filter_submit_button(function_filter) -> <<"function_filter_button">>.
 
