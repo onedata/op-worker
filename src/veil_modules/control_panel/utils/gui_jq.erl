@@ -24,7 +24,7 @@
 -export([update/2, replace/2, insert_top/2, insert_bottom/2, insert_before/2, insert_after/2, remove/1]).
 
 % Commonly used jquery functions
--export([show/1, hide/1, add_class/2, remove_class/2]).
+-export([show/1, hide/1, add_class/2, remove_class/2, slide_up/2, slide_down/2]).
 
 
 %% wire/1
@@ -176,7 +176,7 @@ hide(Target) ->
 -spec add_class(Target :: binary(), Class :: binary()) -> ok.
 %% ====================================================================
 add_class(Target, Class) ->
-    wire(Target, <<"addClass">>, <<"\"", Class/binary, "\"">>, false).
+    wire(Target, <<"addClass">>, Class, false).
 
 
 %% remove_class/2
@@ -186,5 +186,25 @@ add_class(Target, Class) ->
 -spec remove_class(Target :: binary(), Class :: binary()) -> ok.
 %% ====================================================================
 remove_class(Target, Class) ->
-    wire(Target, <<"removeClass">>, <<"\"", Class/binary, "\"">>, false).
+    wire(Target, <<"removeClass">>, Class, false).
+
+
+%% slide_up/2
+%% ====================================================================
+%% @doc Animates an HTML element, displaying it in sliding motion.
+%% @end
+-spec slide_up(Target :: binary(), Class :: binary()) -> ok.
+%% ====================================================================
+slide_up(Target, Speed) ->
+    wire(Target, <<"slideUp">>, integer_to_binary(Speed), false).
+
+
+%% slide_down/2
+%% ====================================================================
+%% @doc Animates an HTML element, hiding it in sliding motion.
+%% @end
+-spec slide_down(Target :: binary(), Class :: binary()) -> ok.
+%% ====================================================================
+slide_down(Target, Speed) ->
+    wire(Target, <<"slideDown">>, integer_to_binary(Speed), false).
 

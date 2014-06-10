@@ -51,17 +51,17 @@ event(login) ->
                         Val -> <<"?x=", Val/binary>>
                     end,
     % Resolve hostname, which was requested by a client
-    Hostname = gui_utils:get_requested_hostname(),
+    Hostname = undefined,%%gui_utils:get_requested_hostname(),
     case Hostname of
         undefined ->
             gui_jq:update(<<"error_message">>, <<"Cannot establish requested hostname. Please contact the site administrator.">>),
-            wf:wire(#jquery{target = "error_message", method = ["fadeIn"], args = [300]});
+            gui_jq:slide_up(<<"error_message">>, 300);
         Host ->
             % Get redirect URL and redirect to OpenID login
             case openid_utils:get_login_url(Host, RedirectParam) of
                 {error, _} ->
                     gui_jq:update(<<"error_message">>, <<"Unable to reach OpenID Provider. Please try again later.">>),
-                    wf:wire(#jquery{target = "error_message", method = ["fadeIn"], args = [300]});
+                    gui_jq:slide_up(<<"error_message">>, 300);
                 URL ->
                     wf:redirect(URL)
             end

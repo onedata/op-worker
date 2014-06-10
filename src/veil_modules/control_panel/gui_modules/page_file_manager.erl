@@ -435,16 +435,16 @@ refresh_tool_buttons() ->
     Count = length(get_selected_items()),
     NFiles = length(get_item_list()),
     IsDir = try item_is_dir(item_find(lists:nth(1, get_selected_items()))) catch _:_ -> false end,
-    enable_tool_button("tb_up_one_level", get_working_directory() /= "/"),
-    enable_tool_button("tb_share_file", (Count =:= 1) andalso (not IsDir)),
-    enable_tool_button("tb_rename", Count =:= 1),
-    enable_tool_button("tb_remove", Count > 0),
-    enable_tool_button("tb_cut", Count > 0),
-    enable_tool_button("tb_copy", false),
-    enable_tool_button("tb_paste", length(get_clipboard_items()) > 0),
-    gui_jq:update(<<"clipboard_size_label">>, integer_to_list(length(get_clipboard_items()))),
-    enable_tool_button("tb_select_all", Count < NFiles),
-    enable_tool_button("tb_deselect_all", Count > 0).
+    enable_tool_button(<<"tb_up_one_level">>, get_working_directory() /= "/"),
+    enable_tool_button(<<"tb_share_file">>, (Count =:= 1) andalso (not IsDir)),
+    enable_tool_button(<<"tb_rename">>, Count =:= 1),
+    enable_tool_button(<<"tb_remove">>, Count > 0),
+    enable_tool_button(<<"tb_cut">>, Count > 0),
+    enable_tool_button(<<"tb_copy">>, false),
+    enable_tool_button(<<"tb_paste">>, length(get_clipboard_items()) > 0),
+    gui_jq:update(<<"clipboard_size_label">>, integer_to_binary(length(get_clipboard_items()))),
+    enable_tool_button(<<"tb_select_all">>, Count < NFiles),
+    enable_tool_button(<<"tb_deselect_all">>, Count > 0).
 
 
 enable_tool_button(ID, Flag) ->
@@ -452,16 +452,13 @@ enable_tool_button(ID, Flag) ->
         true ->
             gui_jq:remove_class(ID, <<"hidden">>),
             gui_jq:add_class(<<ID/binary, "_dummy">>, <<"hidden">>),
-
-            wf:wire(#jquery{target = ID, method = ["removeClass"], args = ["\"hidden\""]}),
-            wf:wire(#jquery{target = ID ++ "_dummy", method = ["addClass"], args = ["\"hidden\""]}),
-            wf:wire(#jquery{target = ID, method = ["show"], args = ["0"]}),
-            wf:wire(#jquery{target = ID ++ "_dummy", method = ["hide"], args = ["0"]});
+            gui_jq:show(ID),
+            gui_jq:hide(<<ID/binary, "_dummy">>);
         false ->
-            wf:wire(#jquery{target = ID, method = ["addClass"], args = ["\"hidden\""]}),
-            wf:wire(#jquery{target = ID ++ "_dummy", method = ["removeClass"], args = ["\"hidden\""]}),
-            wf:wire(#jquery{target = ID, method = ["hide"], args = ["0"]}),
-            wf:wire(#jquery{target = ID ++ "_dummy", method = ["show"], args = ["0"]})
+            gui_jq:add_class(ID, <<"hidden">>),
+            gui_jq:remove_class(<<ID/binary, "_dummy">>, <<"hidden">>),
+            gui_jq:hide(ID),
+            gui_jq:show(<<ID/binary, "_dummy">>)
     end.
 
 
@@ -490,10 +487,10 @@ select_item(Path) ->
             case lists:member(Path, SelectedItems) of
                 false ->
                     set_selected_items(SelectedItems ++ [Path]),
-                    wf:wire(#jquery{target = item_id(Item), method = ["addClass"], args = ["\"selected-item\""]});
+                    gui_jq:add_class(item_id(Item), <<"selected-item">>);
                 true ->
                     set_selected_items(SelectedItems -- [Path]),
-                    wf:wire(#jquery{target = item_id(Item), method = ["removeClass"], args = ["\"selected-item\""]})
+                    gui_jq:remove_class(item_id(Item), <<"selected-item">>)
             end
     end,
     refresh_tool_buttons().
@@ -504,7 +501,7 @@ select_all() ->
     lists:foreach(
         fun(Item) ->
             set_selected_items(get_selected_items() ++ [item_path(Item)]),
-            wf:wire(#jquery{target = item_id(Item), method = ["addClass"], args = ["\"selected-item\""]})
+            gui_jq:add_class(item_id(Item), <<"selected-item">>)
         end, get_item_list()),
     refresh_tool_buttons().
 
@@ -512,7 +509,7 @@ select_all() ->
 deselect_all() ->
     lists:foreach(
         fun(Item) ->
-            wf:wire(#jquery{target = item_id(Item), method = ["removeClass"], args = ["\"selected-item\""]})
+            gui_jq:remove_class(item_id(Item), <<"selected-item">>)
         end, get_item_list()),
     set_selected_items([]),
     refresh_tool_buttons().
@@ -751,8 +748,8 @@ show_popup(Type) ->
                 style = <<"position: absolute; top: 8px; right: 8px; z-index: 3;">>,
                 body = #span{class = <<"fui-cross">>, style = <<"font-size: 20px;">>}},
             gui_jq:update(<<"footer_popup">>, [CloseButton | FooterBody]),
-            wf:wire(#jquery{target = "footer_popup", method = ["removeClass"], args = ["\"hidden\""]}),
-            wf:wire(#jquery{target = "footer_popup", method = ["slideDown"], args = ["200"]})
+            gui_jq:remove_class(<<"footer_popup">>, <<"hidden">>),
+            gui_jq:slide_down(<<"footer_popup">>, 200)
     end,
     case Script of
         undefined -> skip;
@@ -763,8 +760,8 @@ show_popup(Type) ->
 % Hides the footer popup
 hide_popup() ->
     gui_jq:update(<<"footer_popup">>, []),
-    wf:wire(#jquery{target = "footer_popup", method = ["addClass"], args = ["\"hidden\""]}),
-    wf:wire(#jquery{target = "footer_popup", method = ["slideUp"], args = ["200"]}).
+    gui_jq:add_class(<<"footer_popup">>, <<"hidden">>),
+    gui_jq:slide_up(<<"footer_popup">>, 200).
 
 
 % Render path navigator
