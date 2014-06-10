@@ -143,14 +143,6 @@ veil_cluster_node_env:
       value: 900
 
   - parameter:
-      name: rrd_steps
-      description: Defines how many primary data points are used to build a consolidated data point which then goes into the archive
-      value: |
-          ["1","24","168","720","8760"] # 1 hour, 1 day, 7 days, 30 days, 365 days
-      erlang_term: |
-          [1,24,168,720,8760]
-
-  - parameter:
       name: nif_prefix
       description: Prefix to c_lib directory containing NIF libs
       value: |
@@ -164,6 +156,25 @@ veil_cluster_node_env:
           ["control_panel_port","control_panel_redirect_port","dns_port","dispatcher_port","rest_port"]
       erlang_term: |
           [control_panel_port,control_panel_redirect_port,dns_port,dispatcher_port,rest_port]
+
+  # RRDERLANG
+  - parameter:
+      name: rrd_timeout
+      description: Time in ms after which rrderlang answers with error
+      value: 5000
+
+  - parameter:
+      name: rrd_size
+      description: Defines how many primary data points - divided by monitoring period - are collected
+      value: 7200
+
+  - parameter:
+      name: rrd_steps
+      description: Defines how many primary data points are used to build a consolidated data point which then goes into the archive
+      value: |
+          ["1","24","168","720","8760"] # 1 hour, 1 day, 7 days, 30 days, 365 days
+      erlang_term: |
+          [1,24,168,720,8760]
 
   # LOGGING
   - parameter:
