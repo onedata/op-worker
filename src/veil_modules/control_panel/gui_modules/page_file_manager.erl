@@ -57,6 +57,7 @@ body() ->
     do_wiring(),
     Body.
 
+
 % Submenu that will be glued below the top menu
 manager_submenu() ->
     [
