@@ -273,7 +273,7 @@ comet_loop_init(UserId, RequestedHostname) ->
     reset_wire_accumulator(),
     refresh_workspace(),
     do_wiring(),
-    wf:wire(#jquery{target = "spinner", method = ["hide"]}),
+    gui_jq:hide(<<"spinner">>),
     gui_utils:flush(),
 
     % Enter comet loop for event processing and autorefreshing
@@ -292,7 +292,7 @@ comet_loop(IsUploadInProgress) ->
                         erlang:apply(?MODULE, Fun, Args),
                         do_wiring()
                 end,
-                wf:wire(#jquery{target = "spinner", method = ["hide"]}),
+                gui_jq:hide(<<"spinner">>),
                 gui_utils:flush(),
                 comet_loop(IsUploadInProgress);
             upload_started ->
@@ -408,11 +408,11 @@ sort_reverse() ->
 refresh_tool_buttons() ->
     % View toggling buttons
     {EnableID, DisableID} = case get_display_style() of
-                                list -> {"list_view_button", "grid_view_button"};
-                                grid -> {"grid_view_button", "list_view_button"}
+                                list -> {<<"list_view_button">>, <<"grid_view_button">>};
+                                grid -> {<<"grid_view_button">>, <<"list_view_button">>}
                             end,
-    wf:wire(#jquery{target = EnableID, method = ["addClass"], args = ["\"active\""]}),
-    wf:wire(#jquery{target = DisableID, method = ["removeClass"], args = ["\"active\""]}),
+    gui_jq:add_class(EnableID, <<"active">>),
+    gui_jq:remove_class(DisableID, <<"active">>),
 
     % Sort dropdown
     DropdownBody = case get_display_style() of
@@ -450,6 +450,9 @@ refresh_tool_buttons() ->
 enable_tool_button(ID, Flag) ->
     case Flag of
         true ->
+            gui_jq:remove_class(ID, <<"hidden">>),
+            gui_jq:add_class(<<ID/binary, "_dummy">>, <<"hidden">>),
+
             wf:wire(#jquery{target = ID, method = ["removeClass"], args = ["\"hidden\""]}),
             wf:wire(#jquery{target = ID ++ "_dummy", method = ["addClass"], args = ["\"hidden\""]}),
             wf:wire(#jquery{target = ID, method = ["show"], args = ["0"]}),

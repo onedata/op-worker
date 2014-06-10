@@ -63,17 +63,18 @@ join_to_binary([H | T], Acc) ->
 %% ====================================================================
 %% @doc Escapes all javascript - sensitive characters.
 %% @end
--spec join_to_binary([term()]) -> binary().
+-spec js_escape(binary() | string()) -> binary().
 %% ====================================================================
-js_escape(undefined) -> [];
+js_escape(undefined) -> <<"">>;
 js_escape(Value) when is_list(Value) -> js_escape(iolist_to_binary(Value));
-js_escape(Value) -> js_escape(Value, <<>>).
+js_escape(Value) -> js_escape(Value, <<"">>).
 js_escape(<<"\\", Rest/binary>>, Acc) -> js_escape(Rest, <<Acc/binary, "\\\\">>);
 js_escape(<<"\r", Rest/binary>>, Acc) -> js_escape(Rest, <<Acc/binary, "\\r">>);
 js_escape(<<"\n", Rest/binary>>, Acc) -> js_escape(Rest, <<Acc/binary, "\\n">>);
+%% No need to escape quotes as we will use apostrophes everywhere
 js_escape(<<"\"", Rest/binary>>, Acc) -> js_escape(Rest, <<Acc/binary, "\\\"">>);
 js_escape(<<"'", Rest/binary>>, Acc) -> js_escape(Rest, <<Acc/binary, "\\'">>);
-js_escape(<<"<", Rest/binary>>, Acc) -> js_escape(Rest, <<Acc/binary, "&lt;">>);
-js_escape(<<">", Rest/binary>>, Acc) -> js_escape(Rest, <<Acc/binary, "&gt;">>);
+js_escape(<<"<script", Rest/binary>>, Acc) -> js_escape(Rest, <<Acc/binary, "&lt;script">>);
+js_escape(<<"script>", Rest/binary>>, Acc) -> js_escape(Rest, <<Acc/binary, "script&gt;">>);
 js_escape(<<C, Rest/binary>>, Acc) -> js_escape(Rest, <<Acc/binary, C>>);
-js_escape(<<>>, Acc) -> Acc.
+js_escape(<<"">>, Acc) -> Acc.

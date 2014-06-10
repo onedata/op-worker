@@ -37,8 +37,8 @@ function WebSocketsInit(){
         ws.onmessage = function (evt) {
 
             try { // try to parse JSON envelop {eval:"",data:""}
-                console.log("evt: " + evt.data);
                 msg = JSON.parse(evt.data);
+                console.log("eval: " + msg.eval);
 
                 if (typeof handle_web_socket == 'function' && msg.data) { // Data
 //                    addStatus("Received: " + bert.decodebuf(msg.data));
