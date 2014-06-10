@@ -57,10 +57,6 @@ body() ->
     do_wiring(),
     Body.
 
-%% This will be placed in the template instead of {{custom}} tag
-custom() ->
-    <<"<script src='/js/veil_upload.js' type='text/javascript' charset='utf-8'></script>">>.
-
 % Submenu that will be glued below the top menu
 manager_submenu() ->
     [
