@@ -15,7 +15,7 @@
 -include("veil_modules/control_panel/common.hrl").
 
 %% Template points to the template file, which will be filled with content
-main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
+main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}.
 
 %% Page title
 title() -> <<"Login page">>.
