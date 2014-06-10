@@ -20,9 +20,9 @@
 main() ->
     case gui_utils:maybe_redirect(true, true, true, true) of
         true ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}
     end.
 
 %% Page title
@@ -135,7 +135,7 @@ show_link(ShareID) ->
                 class = <<"btn btn-success btn-wide">>, body = <<"Ok">>}
         ]}
     ],
-    wf:update(footer_popup, Body),
+    gui_utils:update(footer_popup, Body),
     wf:wire(#jquery{target = "footer_popup", method = ["removeClass"], args = ["\"hidden\""]}),
     wf:wire(#jquery{target = "footer_popup", method = ["slideDown"], args = ["200"]}),
     wf:wire(#jquery{target = "shared_link_textbox", method = ["focus", "select"]}),
@@ -155,7 +155,7 @@ remove_link_prompt(ShareID, Filename) ->
                 #button{class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>, postback = {action, hide_popup}}
             ]}
         ],
-    wf:update(footer_popup, Body),
+    gui_utils:update(footer_popup, Body),
     wf:wire(#jquery{target = "footer_popup", method = ["removeClass"], args = ["\"hidden\""]}),
     wf:wire(#jquery{target = "footer_popup", method = ["slideDown"], args = ["200"]}),
     wf:wire(#jquery{target = "ok_button", method = ["focus"]}).

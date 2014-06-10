@@ -189,9 +189,5 @@ cleanup() ->
 %% Generates static file routing for cowboy.
 static_dispatches(DocRoot, StaticPaths) ->
     _StaticDispatches = lists:map(fun(Dir) ->
-        Opts = [
-            {mimetypes, {fun mimetypes:path_to_mimes/2, default}},
-            {directory, DocRoot ++ Dir}
-        ],
-        {Dir ++ "[...]", cowboy_static, Opts}
+        {Dir ++ "[...]", cowboy_static, {dir, DocRoot ++ Dir}}
     end, StaticPaths).

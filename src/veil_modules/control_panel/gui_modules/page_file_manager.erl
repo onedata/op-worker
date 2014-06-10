@@ -33,9 +33,9 @@
 main() ->
     case gui_utils:maybe_redirect(true, true, true, true) of
         true ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, custom()}]}
     end.
 
 
@@ -57,6 +57,9 @@ body() ->
     do_wiring(),
     Body.
 
+%% This will be placed in the template instead of {{custom}} tag
+custom() ->
+    <<"<script src='/js/veil_upload.js' type='text/javascript' charset='utf-8'></script>">>.
 
 % Submenu that will be glued below the top menu
 manager_submenu() ->
@@ -175,21 +178,17 @@ tool_button_and_dummy(ID, Title, Style, Icon, Postback) ->
 %% Wiring postbacks. Thanks to this wrapper every time a postback is initiated,
 %% there will be spinner showing up in 150ms. It gets hidden when reply is received.
 wire_click(ID, Tag) ->
-    put(to_wire, get(to_wire) ++ [{ID, ID, #event{type = click, target = ID, postback = Tag}, true}]),
+    put(to_wire, get(to_wire) ++ [{#event{type = click, target = gui_utils:to_list(ID), postback = Tag}, true}]),
     ID.
 
 wire_click(ID, Source, Tag) ->
-    put(to_wire, get(to_wire) ++ [{ID, ID, #event{type = click, target = ID, source = Source, postback = Tag}, true}]),
+    put(to_wire, get(to_wire) ++ [{#event{type = click, target = gui_utils:to_list(ID), source = Source, postback = Tag}, true}]),
     ID.
 
 wire_enter(ID, ButtonToClickID) ->
     % No need to show the spinner, as this only performs a click on a submit button
-    put(to_wire, get(to_wire) ++ [gui_utils:script_for_enter_submission(ID, ButtonToClickID)]),
+    put(to_wire, get(to_wire) ++ [gui_utils:script_for_enter_submission(gui_utils:to_list(ID), ButtonToClickID)]),
     ID.
-
-wire_event(TriggerID, TargetID, Event) ->
-    put(to_wire, get(to_wire) ++ [{TriggerID, TargetID, Event, false}]),
-    TriggerID.
 
 wire_script(Script) ->
     put(to_wire, get(to_wire) ++ [Script]).
@@ -199,14 +198,14 @@ wire_script(Script) ->
 % wire_xxx() will accumulate wiring clauses, and do_wiring will flush it.
 do_wiring() ->
     lists:foreach(
-        fun({TriggerID, TargetID, Event, ShowSpinner}) ->
+        fun({#event{target = TriggerID} = Event, ShowSpinner}) ->
             case ShowSpinner of
                 false ->
                     skip;
                 true ->
                     wf:wire(gui_utils:script_to_bind_element_click(TriggerID, "$('#spinner').show(150);"))
             end,
-            wf:wire(TriggerID, TargetID, Event);
+            wf:wire(Event);
             (Script) ->
                 wf:wire(Script)
         end, get(to_wire)),
@@ -232,6 +231,10 @@ event(init) ->
             {ok, Pid} = gui_utils:comet(fun() -> comet_loop_init(UserID, Hostname) end),
             put(comet_pid, Pid)
     end;
+
+
+event(terminate) ->
+    ok;
 
 
 event({action, Fun}) ->

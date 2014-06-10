@@ -31,7 +31,7 @@
 %% ====================================================================
 
 
-%% methods_and_versions_info/2
+%% methods_and_versions_info/1
 %% ====================================================================
 %% @doc Should return list of tuples, where each tuple consists of version of API version and
 %% list of methods available in the API version. Latest version must be at the end of list.
@@ -99,7 +99,8 @@ get(Req, <<"1.0">>, Id) ->
             Size = Fileattr#fileattributes.size,
             StreamFun = file_download_handler:cowboy_file_stream_fun(FilePath, Size),
             NewReq = file_download_handler:content_disposition_attachment_headers(Req, filename:basename(FilePath)),
-            [Mimetype] = mimetypes:path_to_mimes(FilePath),
+            {Type, Subtype, _} = cow_mimetypes:all(gui_utils:to_binary(FilePath)),
+            Mimetype = <<Type/binary, "/", Subtype/binary>>,
             {{stream, Size, StreamFun, Mimetype}, NewReq}
     end.
 

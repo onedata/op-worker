@@ -46,14 +46,14 @@
 main() ->
     case gui_utils:maybe_redirect(true, false, false, true) of
         true ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
             case gui_utils:can_view_logs() of
                 false ->
                     wf:redirect(<<"/">>),
-                    #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+                    #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
                 true ->
-                    #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}
+                    #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}
             end
     end.
 
@@ -310,7 +310,7 @@ loglevel_dropdown_body(Active) ->
                         _ -> <<"">>
                     end,
             ID = <<"loglevel_li_", (atom_to_binary(Loglevel, latin1))/binary>>,
-            #li{id = ID, actions = #event{type = "click", postback = {set_loglevel, Loglevel}, target = ID},
+            #li{id = ID, actions = #event{type = "click", postback = {set_loglevel, Loglevel}, target = gui_utils:to_list(ID)},
                 class = Class, body = #link{body = atom_to_binary(Loglevel, latin1)}}
         end, ?LOGLEVEL_LIST).
 
@@ -324,7 +324,7 @@ max_logs_dropdown_body(Active) ->
                         _ -> <<"">>
                     end,
             ID = <<"maxlogs_li_", (integer_to_binary(Number))/binary>>,
-            #li{id = ID, actions = #event{type = "click", postback = {set_max_logs, Number}, target = ID},
+            #li{id = ID, actions = #event{type = "click", postback = {set_max_logs, Number}, target = gui_utils:to_list(ID)},
                 class = Class, body = #link{body = integer_to_binary(Number)}}
         end, ?MAX_LOGS_OPTIONS).
 
@@ -415,6 +415,10 @@ event(init) ->
             ?error("central_logger is unreachable. RPC call returned: ~p", [Other]),
             Pid ! display_error
     end,
+    ok;
+
+
+event(terminate) ->
     ok;
 
 

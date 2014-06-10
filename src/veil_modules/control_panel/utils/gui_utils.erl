@@ -18,7 +18,7 @@
 % Functions connected with page / session context
 -export([get_requested_hostname/0, get_requested_page/0, get_user_dn/0, get_request_params/0]).
 % Functions connected with user's session
--export([user_logged_in/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0]).
+-export([user_logged_in/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0, can_view_monitoring/0]).
 % Functions used for redirecting to and from login
 -export([redirect_to_login/1, redirect_from_login/0, maybe_redirect/4]).
 % Functions to check for user's session and generate page elements
@@ -140,6 +140,16 @@ dn_and_storage_defined() ->
 -spec can_view_logs() -> boolean().
 %% ====================================================================
 can_view_logs() ->
+    user_logic:get_role(wf:session(user_doc)) /= user.
+
+
+%% can_view_monitoring/0
+%% ====================================================================
+%% @doc Determines if current user is allowed to view cluster monitoring.
+%% @end
+-spec can_view_monitoring() -> boolean().
+%% ====================================================================
+can_view_monitoring() ->
     user_logic:get_role(wf:session(user_doc)) /= user.
 
 
@@ -265,14 +275,19 @@ top_menu(ActiveTabID) ->
 %% ====================================================================
 top_menu(ActiveTabID, SubMenuBody) ->
     % Tab, that will be displayed optionally
-    LogsPageCaptions = case can_view_logs() of
-                           false ->
-                               [];
-                           true ->
-                               [{logs_tab, #li{body = [
-                                   #link{style = <<"padding: 18px;">>, url = <<"/logs">>, body = <<"Logs">>}
-                               ]}}]
-                       end,
+    PageCaptions =
+        case can_view_logs() of
+            false -> [];
+            true -> [{logs_tab, #li{body = [
+                #link{style = <<"padding: 18px;">>, url = <<"/logs">>, body = <<"Logs">>}
+            ]}}]
+        end ++
+        case can_view_monitoring() of
+            false -> [];
+            true -> [{monitoring_tab, #li{body = [
+                #link{style = <<"padding: 18px;">>, url = <<"/monitoring">>, body = <<"Monitoring">>}
+            ]}}]
+        end,
     % Define menu items with ids, so that proper tab can be made active via function parameter 
     % see old_menu_captions()
     MenuCaptions =
@@ -283,7 +298,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
             {shared_files_tab, #li{body = [
                 #link{style = <<"padding: 18px;">>, url = <<"/shared_files">>, body = <<"Shared files">>}
             ]}}
-        ] ++ LogsPageCaptions,
+        ] ++ PageCaptions,
 
     MenuIcons =
         [
@@ -650,7 +665,12 @@ https_post(URLBin, ReqHeadersBin, Body) ->
 perform_request(URL, ReqHeaders, Method, Body, Redirects) ->
     try
         {ok, {_, _, Domain, _, _, _}} = http_uri:parse(URL),
-        case ibrowse:send_req(URL, ReqHeaders, Method, Body, [{response_format, binary}, {ssl_options, ssl_opts(Domain)}]) of
+%%         There is a bug in Erlang 17.0, that has been fixed in 17.1 (which is not yet released).
+%%         The bug makes the ssl gen_server crash on tls handshake, so for now https connections are off the table
+%%         http://erlang.org/pipermail/erlang-questions/2014-April/078654.html
+%%         curl will be used until 17.1 is released
+%%         case ibrowse:send_req(URL, ReqHeaders, Method, Body, [{response_format, binary}, {ssl_options, ssl_opts(Domain)}]) of
+        case do_curl(URL, ReqHeaders, Method, Body) of
             {ok, Rcode, RespHeaders, ResponseBody}
                 when (Rcode =:= "301" orelse Rcode =:= "302" orelse Rcode =:= "303" orelse Rcode =:= "307") andalso Redirects > 0 ->
                 % Code in {301, 302, 303, 307} - we are being redirected
@@ -677,6 +697,35 @@ perform_request(URL, ReqHeaders, Method, Body, Redirects) ->
     catch
         _:M ->
             {error, M}
+    end.
+
+
+%% do_curl/4
+%% ====================================================================
+%% @doc
+%% Temporary alternative for erlang ssl (which does not work in 17.0)
+%% @end
+-spec do_curl(string(), string(), string(), string()) -> term().
+%% ====================================================================
+do_curl(URL, ReqHeaders, Method, Body) ->
+    MethodString = case Method of
+                       get -> " -X GET ";
+                       post -> " -X POST "
+                   end,
+    BodyString = case Body of
+                     [] -> "";
+                     _ -> " -d \"" ++ Body ++ "\" "
+                 end,
+    HeadersString = lists:foldl(
+        fun({Key, Value}, Acc) ->
+            Acc ++ " -H \"" ++ Key ++ ": " ++ Value ++ "\""
+        end, " ", ReqHeaders),
+    CurlCommand = "curl -sL" ++ MethodString ++ URL ++ BodyString ++ HeadersString,
+    Res = os:cmd(CurlCommand),
+    case Res of
+        "" -> {error, curl_failed};
+        "\n" -> {error, curl_failed};
+        RespBody -> {ok, "200", [], to_binary(RespBody)}
     end.
 
 

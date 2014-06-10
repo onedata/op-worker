@@ -95,7 +95,8 @@ cowboy_file_stream_fun(FilePathOrUUID, Size) ->
 -spec content_disposition_attachment_headers(req(), string()) -> req().
 %% ====================================================================
 content_disposition_attachment_headers(Req, FileName) ->
-    [Mimetype] = mimetypes:path_to_mimes(FileName),
+    {Type, Subtype, _} = cow_mimetypes:all(gui_utils:to_binary(FileName)),
+    Mimetype = <<Type/binary, "/", Subtype/binary>>,
     Headers = [
         {<<"content-type">>, Mimetype},
         {<<"content-disposition">>, <<"attachment;",
@@ -167,7 +168,7 @@ handle_user_content_request(Req, Path) ->
                         {ok, _NewReq} = send_file(Req2, Filepath, filename:basename(Filepath), Size)
                     catch Type:Message ->
                         ?error_stacktrace("Error while sending file ~p to user ~p - ~p:~p",
-                            [Filepath, user_logic:get_login(fslogic_context:get_user_dn()), Type, Message]),
+                            [Filepath, user_logic:get_login(wf:session(user_doc)), Type, Message]),
                         {ok, _FinReq} = cowboy_req:reply(500, Req#http_req{connection = close})
                     end
             end
