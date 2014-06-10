@@ -136,9 +136,9 @@ show_link(ShareID) ->
         ]}
     ],
     gui_jq:update(<<"footer_popup">>, Body),
-    wf:wire(#jquery{target = "footer_popup", method = ["removeClass"], args = ["\"hidden\""]}),
-    wf:wire(#jquery{target = "footer_popup", method = ["slideDown"], args = ["200"]}),
-    wf:wire(#jquery{target = "shared_link_textbox", method = ["focus", "select"]}),
+    gui_jq:remove_class(<<"footer_popup">>, <<"hidden">>),
+    gui_jq:slide_down(<<"footer_popup">>, 200),
+    gui_jq:select_text(<<"shared_link_textbox">>),
     wf:wire(gui_utils:script_for_enter_submission("shared_link_textbox", "shared_link_submit")).
 
 
@@ -156,9 +156,9 @@ remove_link_prompt(ShareID, Filename) ->
             ]}
         ],
     gui_jq:update(<<"footer_popup">>, Body),
-    wf:wire(#jquery{target = "footer_popup", method = ["removeClass"], args = ["\"hidden\""]}),
-    wf:wire(#jquery{target = "footer_popup", method = ["slideDown"], args = ["200"]}),
-    wf:wire(#jquery{target = "ok_button", method = ["focus"]}).
+    gui_jq:remove_class(<<"footer_popup">>, <<"hidden">>),
+    gui_jq:slide_down(<<"footer_popup">>, 200),
+    gui_jq:focus(<<"ok_button">>).
 
 
 % Actually remove a link
@@ -171,5 +171,5 @@ remove_link(ShareID) ->
 % Hide popup panel 
 hide_popup() ->
     gui_jq:update(<<"footer_popup">>, []),
-    wf:wire(#jquery{target = "footer_popup", method = ["addClass"], args = ["\"hidden\""]}),
-    wf:wire(#jquery{target = "footer_popup", method = ["slideUp"], args = ["200"]}).
+    gui_jq:add_class(<<"footer_popup">>, <<"hidden">>),
+    gui_jq:slide_up(<<"footer_popup">>, 200).

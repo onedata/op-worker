@@ -24,7 +24,8 @@
 -export([update/2, replace/2, insert_top/2, insert_bottom/2, insert_before/2, insert_after/2, remove/1]).
 
 % Commonly used jquery functions
--export([show/1, hide/1, add_class/2, remove_class/2, slide_up/2, slide_down/2]).
+-export([show/1, hide/1, add_class/2, remove_class/2, slide_up/2, slide_down/2, fade_in/2]).
+-export([focus/1, select_text/1]).
 
 
 %% wire/1
@@ -69,7 +70,11 @@ wire(Script, Eager) ->
 -spec wire(Target :: binary(), Method :: binary(), Args :: binary(), Eager :: boolean()) -> ok.
 %% ====================================================================
 wire(Target, Method, Args, Eager) ->
-    Script = <<"$('#", Target/binary, "').", Method/binary, "('", Args/binary, "');">>,
+    RenderedArgs = case Args of
+                       <<"">> -> <<"">>;
+                       _ -> <<"'", Args/binary, "'">>
+                   end,
+    Script = <<"$('#", Target/binary, "').", Method/binary, "(", RenderedArgs/binary, ");">>,
     wire(Script, Eager).
 
 
@@ -193,7 +198,7 @@ remove_class(Target, Class) ->
 %% ====================================================================
 %% @doc Animates an HTML element, displaying it in sliding motion.
 %% @end
--spec slide_up(Target :: binary(), Class :: binary()) -> ok.
+-spec slide_up(Target :: binary(), Speed :: integer()) -> ok.
 %% ====================================================================
 slide_up(Target, Speed) ->
     wire(Target, <<"slideUp">>, integer_to_binary(Speed), false).
@@ -203,8 +208,40 @@ slide_up(Target, Speed) ->
 %% ====================================================================
 %% @doc Animates an HTML element, hiding it in sliding motion.
 %% @end
--spec slide_down(Target :: binary(), Class :: binary()) -> ok.
+-spec slide_down(Target :: binary(), Speed :: integer()) -> ok.
 %% ====================================================================
 slide_down(Target, Speed) ->
     wire(Target, <<"slideDown">>, integer_to_binary(Speed), false).
+
+
+%% fade_in/2
+%% ====================================================================
+%% @doc Animates an HTML element, making it appear over time.
+%% @end
+-spec fade_in(Target :: binary(), Speed :: integer()) -> ok.
+%% ====================================================================
+fade_in(Target, Speed) ->
+    wire(Target, <<"fadeIn">>, integer_to_binary(Speed), false).
+
+
+%% focus/1
+%% ====================================================================
+%% @doc Focuses an HTML element.
+%% @end
+-spec focus(Target :: binary()) -> ok.
+%% ====================================================================
+focus(Target) ->
+    wire(Target, <<"focus">>, <<"">>, false).
+
+
+
+%% select_text/1
+%% ====================================================================
+%% @doc Focuses an HTML element (e. g. a textbox) and selects its text.
+%% @end
+-spec select_text(Target :: binary()) -> ok.
+%% ====================================================================
+select_text(Target) ->
+    Script = <<"$('#", Target/binary, "').focus().select();">>,
+    wire(Script).
 
