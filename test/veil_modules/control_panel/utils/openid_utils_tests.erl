@@ -146,8 +146,6 @@ parameter_processing_test_() ->
         [{"POST request body correctness",
             fun() ->
                 meck:expect(gui_utils, https_get, fun(_, _) -> {ok, <<?mock_xrds_file>>} end),
-                meck:expect(gui_utils, to_list, fun(Arg) -> to_list(Arg) end),
-                meck:expect(gui_utils, to_binary, fun(Arg) -> to_binary(Arg) end),
                 KeyValueList = lists:zip(openid_keys(), openid_values()),
                 FullKeyValueList = KeyValueList ++ [
                     {<<"openid.signed">>, <<"op_endpoint,claimed_id,identity,return_to,response_nonce,assoc_handle,",
@@ -178,13 +176,10 @@ parameter_processing_test_() ->
                             (<<"openid.op_endpoint">>) -> undefined
                         end),
                     meck:expect(lager, log, fun(error, _, _) -> ok end),
-                    meck:expect(gui_utils, to_list, fun(Arg) -> to_list(Arg) end),
-                    meck:expect(gui_utils, to_binary, fun(Arg) -> to_binary(Arg) end),
 
                     ?assertEqual({error, invalid_request},
                         openid_utils:prepare_validation_parameters()),
                     ?assert(meck:validate(wf)),
-                    ?assert(meck:validate(gui_utils)),
                     ?assert(meck:validate(lager))
                 end},
 
@@ -200,13 +195,10 @@ parameter_processing_test_() ->
                     meck:expect(lager, log, fun(error, _, _) -> ok end),
                     meck:expect(wf, q, fun(_) -> [] end),
                     meck:expect(wf, url_encode, fun(Key) -> Key end),
-                    meck:expect(gui_utils, to_list, fun(Arg) -> to_list(Arg) end),
-                    meck:expect(gui_utils, to_binary, fun(Arg) -> to_binary(Arg) end),
 
                     ?assertEqual({error, invalid_request},
                         openid_utils:prepare_validation_parameters()),
                     ?assert(meck:validate(wf)),
-                    ?assert(meck:validate(gui_utils)),
                     ?assert(meck:validate(lager))
                 end},
 
@@ -221,8 +213,6 @@ parameter_processing_test_() ->
                         fun(Key) ->
                             proplists:get_value(Key, KeyValueList)
                         end),
-                    meck:expect(gui_utils, to_list, fun(Arg) -> to_list(Arg) end),
-                    meck:expect(gui_utils, to_binary, fun(Arg) -> to_binary(Arg) end),
 
                     CorrectResult =
                         [
@@ -237,8 +227,7 @@ parameter_processing_test_() ->
                         fun(Key) ->
                             ?assertEqual(proplists:get_value(Key, Result), proplists:get_value(Key, CorrectResult))
                         end, [login, name, teams, email, dn_list]),
-                    ?assert(meck:validate(wf)),
-                    ?assert(meck:validate(gui_utils))
+                    ?assert(meck:validate(wf))
                 end},
 
             {"User info - undefined DN case",
@@ -257,8 +246,6 @@ parameter_processing_test_() ->
                                 OtherKey -> proplists:get_value(OtherKey, KeyValueList)
                             end
                         end),
-                    meck:expect(gui_utils, to_list, fun(Arg) -> to_list(Arg) end),
-                    meck:expect(gui_utils, to_binary, fun(Arg) -> to_binary(Arg) end),
 
                     CorrectResult =
                         [
@@ -274,8 +261,7 @@ parameter_processing_test_() ->
                         fun(Key) ->
                             ?assertEqual(proplists:get_value(Key, Result), proplists:get_value(Key, CorrectResult))
                         end, [login, name, teams, email, dn_list]),
-                    ?assert(meck:validate(wf)),
-                    ?assert(meck:validate(gui_utils))
+                    ?assert(meck:validate(wf))
                 end}
         ]}.
 

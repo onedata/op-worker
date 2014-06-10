@@ -215,7 +215,7 @@ update_email(User, AddOrRemove) ->
                             user_logic:update_email_list(User, OldEmailList -- [Email])
                     end,
     wf:session(user_doc, NewUser),
-    gui_utils:update("main_table", main_table()).
+    gui_jq:update(<<"main_table">>, main_table()).
 
 
 % Update DN list - add or remove one and save new user doc
@@ -244,7 +244,7 @@ update_dn(User, AddOrRemove) ->
             {ok, NewUser} = user_logic:update_dn_list(User, OldDnList -- [DN]),
             wf:session(user_doc, NewUser)
     end,
-    gui_utils:update("main_table", main_table()).
+    gui_jq:update(<<"main_table">>, main_table()).
 
 
 % Show email adding form

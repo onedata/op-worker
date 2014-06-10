@@ -135,7 +135,7 @@ manager_submenu() ->
                         class = <<"btn btn-inverse btn-small">>, body = "Sort"},
                     #button{title = "Sort by", class = <<"btn btn-inverse btn-small dropdown-toggle">>,
                         data_fields = [{<<"data-toggle">>, <<"dropdown">>}], body = #span{class = <<"caret">>}},
-                    #list{id = sort_dropdown, class = <<"dropdown-menu dropdown-inverse">>, body = []}
+                    #list{id = <<"sort_dropdown">>, class = <<"dropdown-menu dropdown-inverse">>, body = []}
                 ]}
             ]}
         ]}
@@ -333,7 +333,7 @@ comet_loop(IsUploadInProgress) ->
 %% Event handling
 clear_manager() ->
     hide_popup(),
-    gui_utils:update("path_navigator", path_navigator_body(get_working_directory())),
+    gui_jq:update(<<"path_navigator">>, path_navigator_body(get_working_directory())),
     clear_workspace().
 
 
@@ -351,7 +351,7 @@ refresh_workspace() ->
                   list -> list_view_body();
                   grid -> grid_view_body()
               end,
-    gui_utils:update("manager_workspace", NewBody).
+    gui_jq:update(<<"manager_workspace">>, NewBody).
 
 
 sort_item_list() ->
@@ -430,7 +430,7 @@ refresh_tool_buttons() ->
                                        class = Class, body = #link{body = attr_to_name(Attr)}}]
                                end, [], [name | get_displayed_file_attributes()])
                    end,
-    gui_utils:update(sort_dropdown, DropdownBody),
+    gui_jq:update(<<"sort_dropdown">>, DropdownBody),
 
     Count = length(get_selected_items()),
     NFiles = length(get_item_list()),
@@ -442,7 +442,7 @@ refresh_tool_buttons() ->
     enable_tool_button("tb_cut", Count > 0),
     enable_tool_button("tb_copy", false),
     enable_tool_button("tb_paste", length(get_clipboard_items()) > 0),
-    gui_utils:update("clipboard_size_label", integer_to_list(length(get_clipboard_items()))),
+    gui_jq:update(<<"clipboard_size_label">>, integer_to_list(length(get_clipboard_items()))),
     enable_tool_button("tb_select_all", Count < NFiles),
     enable_tool_button("tb_deselect_all", Count > 0).
 
@@ -747,7 +747,7 @@ show_popup(Type) ->
             CloseButton = #link{id = wire_click("close_button", CloseButtonAction), title = <<"Hide">>, class = <<"glyph-link">>,
                 style = <<"position: absolute; top: 8px; right: 8px; z-index: 3;">>,
                 body = #span{class = <<"fui-cross">>, style = <<"font-size: 20px;">>}},
-            gui_utils:update("footer_popup", [CloseButton | FooterBody]),
+            gui_jq:update(<<"footer_popup">>, [CloseButton | FooterBody]),
             wf:wire(#jquery{target = "footer_popup", method = ["removeClass"], args = ["\"hidden\""]}),
             wf:wire(#jquery{target = "footer_popup", method = ["slideDown"], args = ["200"]})
     end,
@@ -759,7 +759,7 @@ show_popup(Type) ->
 
 % Hides the footer popup
 hide_popup() ->
-    gui_utils:update("footer_popup", []),
+    gui_jq:update(<<"footer_popup">>, []),
     wf:wire(#jquery{target = "footer_popup", method = ["addClass"], args = ["\"hidden\""]}),
     wf:wire(#jquery{target = "footer_popup", method = ["slideUp"], args = ["200"]}).
 

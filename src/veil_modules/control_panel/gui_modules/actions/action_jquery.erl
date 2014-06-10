@@ -27,7 +27,7 @@ render_action(Record = #jquery{property = undefined, target = Target, method = M
                        _ -> PreRenderedArgs
                        end,
     string:join([wf:f("$('#~s').~s(" ++ Record#jquery.format ++ ");",
-        [gui_convert:to_list(Target), gui_convert:to_list(Method), RenderedArgs]) || Method <- Methods], []);
+        [gui_convert:to_binary(Target), gui_convert:to_binary(Method), RenderedArgs]) || Method <- Methods], []);
 
 render_action(#jquery{target = Target, method = undefined, property = Property, args = simple, right = Right}) ->
     wf:f("~s.~s = ~s;", [gui_convert:to_list(Target), gui_convert:to_list(Property), wf:render(Right)]);

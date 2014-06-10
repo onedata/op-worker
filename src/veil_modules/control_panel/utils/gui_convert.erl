@@ -45,7 +45,7 @@ to_binary(Term) -> list_to_binary(to_list(Term)).
 
 %% join_to_binary/1
 %% ====================================================================
-%% @doc Joins any terms to a js-escaped binary.
+%% @doc Joins any terms to a binary.
 %% @end
 -spec join_to_binary([term()]) -> binary().
 %% ====================================================================
@@ -65,5 +65,15 @@ join_to_binary([H | T], Acc) ->
 %% @end
 -spec join_to_binary([term()]) -> binary().
 %% ====================================================================
-js_escape(Term) ->
-    wf:js_escape(Term).
+js_escape(undefined) -> [];
+js_escape(Value) when is_list(Value) -> js_escape(iolist_to_binary(Value));
+js_escape(Value) -> js_escape(Value, <<>>).
+js_escape(<<"\\", Rest/binary>>, Acc) -> js_escape(Rest, <<Acc/binary, "\\\\">>);
+js_escape(<<"\r", Rest/binary>>, Acc) -> js_escape(Rest, <<Acc/binary, "\\r">>);
+js_escape(<<"\n", Rest/binary>>, Acc) -> js_escape(Rest, <<Acc/binary, "\\n">>);
+js_escape(<<"\"", Rest/binary>>, Acc) -> js_escape(Rest, <<Acc/binary, "\\\"">>);
+js_escape(<<"'", Rest/binary>>, Acc) -> js_escape(Rest, <<Acc/binary, "\\'">>);
+js_escape(<<"<", Rest/binary>>, Acc) -> js_escape(Rest, <<Acc/binary, "&lt;">>);
+js_escape(<<">", Rest/binary>>, Acc) -> js_escape(Rest, <<Acc/binary, "&gt;">>);
+js_escape(<<C, Rest/binary>>, Acc) -> js_escape(Rest, <<Acc/binary, C>>);
+js_escape(<<>>, Acc) -> Acc.

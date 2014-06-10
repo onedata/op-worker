@@ -135,7 +135,7 @@ show_link(ShareID) ->
                 class = <<"btn btn-success btn-wide">>, body = <<"Ok">>}
         ]}
     ],
-    gui_utils:update(footer_popup, Body),
+    gui_jq:update(<<"footer_popup">>, Body),
     wf:wire(#jquery{target = "footer_popup", method = ["removeClass"], args = ["\"hidden\""]}),
     wf:wire(#jquery{target = "footer_popup", method = ["slideDown"], args = ["200"]}),
     wf:wire(#jquery{target = "shared_link_textbox", method = ["focus", "select"]}),
@@ -155,7 +155,7 @@ remove_link_prompt(ShareID, Filename) ->
                 #button{class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>, postback = {action, hide_popup}}
             ]}
         ],
-    gui_utils:update(footer_popup, Body),
+    gui_jq:update(<<"footer_popup">>, Body),
     wf:wire(#jquery{target = "footer_popup", method = ["removeClass"], args = ["\"hidden\""]}),
     wf:wire(#jquery{target = "footer_popup", method = ["slideDown"], args = ["200"]}),
     wf:wire(#jquery{target = "ok_button", method = ["focus"]}).
@@ -164,12 +164,12 @@ remove_link_prompt(ShareID, Filename) ->
 % Actually remove a link
 remove_link(ShareID) ->
     ok = logical_files_manager:remove_share({uuid, binary_to_list(ShareID)}),
-    gui_utils:replace(main_table, main_panel()),
+    gui_jq:replace(<<"main_table">>, main_panel()),
     hide_popup().
 
 
 % Hide popup panel 
 hide_popup() ->
-    gui_utils:update(footer_popup, []),
+    gui_jq:update(<<"footer_popup">>, []),
     wf:wire(#jquery{target = "footer_popup", method = ["addClass"], args = ["\"hidden\""]}),
     wf:wire(#jquery{target = "footer_popup", method = ["slideUp"], args = ["200"]}).

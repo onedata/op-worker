@@ -54,13 +54,13 @@ event(login) ->
     Hostname = gui_utils:get_requested_hostname(),
     case Hostname of
         undefined ->
-            gui_utils:update("error_message", <<"Cannot establish requested hostname. Please contact the site administrator.">>),
+            gui_jq:update(<<"error_message">>, <<"Cannot establish requested hostname. Please contact the site administrator.">>),
             wf:wire(#jquery{target = "error_message", method = ["fadeIn"], args = [300]});
         Host ->
             % Get redirect URL and redirect to OpenID login
             case openid_utils:get_login_url(Host, RedirectParam) of
                 {error, _} ->
-                    gui_utils:update("error_message", <<"Unable to reach OpenID Provider. Please try again later.">>),
+                    gui_jq:update(<<"error_message">>, <<"Unable to reach OpenID Provider. Please try again later.">>),
                     wf:wire(#jquery{target = "error_message", method = ["fadeIn"], args = [300]});
                 URL ->
                     wf:redirect(URL)

@@ -27,8 +27,6 @@
 -export([comet/1, init_comet/2, comet_supervisor/2, is_comet_process/0, flush/0]).
 % Useful functions for binding custom events
 -export([register_escape_event/1, script_for_enter_submission/2, script_to_bind_element_click/2]).
-% jQuery wrappers for page updates
--export([update/2, replace/2, insert_top/2, insert_bottom/2, insert_before/2, insert_after/2, remove/1]).
 % Convinience function to set headers in cowboy response
 -export([cowboy_ensure_header/3]).
 % Functions used to perform secure server-server http requests
@@ -470,77 +468,6 @@ script_for_enter_submission(InputID, ButtonToClickID) ->
 %% ====================================================================
 script_to_bind_element_click(ElementID, Javascript) ->
     wf:f("$('#~s').bind('click', function anonymous(event) { ~s });", [ElementID, Javascript]).
-
-
-% Set of update functions from n2o, slightly changed
-
-
-%% update/2
-%% ====================================================================
-%% @doc Updates contents of a DOM element.
-%% @end
--spec update(term(), term()) -> ok.
-%% ====================================================================
-update(Target, Elements) -> wf:wire(#jquery{target = Target, method = ["html"], args = [Elements], format = "'~s'"}).
-
-
-%% replace/2
-%% ====================================================================
-%% @doc Replaces a DOM element with another.
-%% @end
--spec replace(term(), term()) -> ok.
-%% ====================================================================
-replace(Target, Elements) ->
-    wf:wire(#jquery{target = Target, method = ["replaceWith"], args = [Elements], format = "'~s'"}).
-
-
-%% insert_top/2
-%% ====================================================================
-%% @doc Prepends an element to a DOM element.
-%% @end
--spec insert_top(term(), term()) -> ok.
-%% ====================================================================
-insert_top(Target, Elements) ->
-    wf:wire(#jquery{target = Target, method = ["prepend"], args = [Elements], format = "'~s'"}).
-
-
-%% insert_bottom/2
-%% ====================================================================
-%% @doc Appends an element to a DOM element.
-%% @end
--spec insert_bottom(term(), term()) -> ok.
-%% ====================================================================
-insert_bottom(Target, Elements) ->
-    wf:wire(#jquery{target = Target, method = ["append"], args = [Elements], format = "'~s'"}).
-
-
-%% insert_before/2
-%% ====================================================================
-%% @doc Inserts an element before a DOM element.
-%% @end
--spec insert_before(term(), term()) -> ok.
-%% ====================================================================
-insert_before(Target, Elements) ->
-    wf:wire(#jquery{target = Target, method = ["before"], args = [Elements], format = "'~s'"}).
-
-
-%% insert_after/2
-%% ====================================================================
-%% @doc Inserts an element after a DOM element.
-%% @end
--spec insert_after(term(), term()) -> ok.
-%% ====================================================================
-insert_after(Target, Elements) ->
-    wf:wire(#jquery{target = Target, method = ["after"], args = [Elements], format = "'~s'"}).
-
-
-%% remove/1
-%% ====================================================================
-%% @doc Updates an element from DOM.
-%% @end
--spec remove(term()) -> ok.
-%% ====================================================================
-remove(Target) -> wf:wire(#jquery{target = Target, method = ["remove"]}).
 
 
 %% cowboy_ensure_header/3

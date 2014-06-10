@@ -210,7 +210,7 @@ comet_loop(Counter, PageState = #page_state{first_log = FirstLog, auto_scroll = 
                 comet_loop(Counter, set_filter(PageState, FilterName, Filter));
             display_error ->
                 catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}}),
-                gui_utils:insert_bottom("main_table", comet_error()),
+                gui_jq:insert_bottom(<<"main_table">>, comet_error()),
                 gui_utils:flush();
             {'EXIT', _, _Reason} ->
                 catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}});
@@ -221,7 +221,7 @@ comet_loop(Counter, PageState = #page_state{first_log = FirstLog, auto_scroll = 
     catch _Type:_Msg ->
         ?error_stacktrace("Error in page_logs comet_loop - ~p: ~p", [_Type, _Msg]),
         catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}}),
-        gui_utils:insert_bottom("main_table", comet_error()),
+        gui_jq:insert_bottom(<<"main_table">>, comet_error()),
         gui_utils:flush()
     end.
 
@@ -249,7 +249,7 @@ process_log(Counter, {Message, Timestamp, Severity, Metadata},
                                        false ->
                                            {Counter, PageState};
                                        true ->
-                                           gui_utils:insert_bottom("main_table", render_row(Counter, {Message, Timestamp, Severity, Metadata})),
+                                           gui_jq:insert_bottom(<<"main_table">>, render_row(Counter, {Message, Timestamp, Severity, Metadata})),
                                            wf:wire(#jquery{target = ?EXPANDED_LOG_ROW_ID_PREFIX ++ integer_to_list(Counter), method = ["hide"]}),
                                            NewFirstLog = remove_old_logs(Counter, FirstLog, MaxLogs),
                                            case AutoScroll of
@@ -270,8 +270,8 @@ remove_old_logs(Counter, FirstLog, MaxLogs) ->
             gui_utils:flush(),
             FirstLog;
         true ->
-            gui_utils:remove(?COLLAPSED_LOG_ROW_ID_PREFIX ++ integer_to_list(FirstLog)),
-            gui_utils:remove(?EXPANDED_LOG_ROW_ID_PREFIX ++ integer_to_list(FirstLog)),
+            gui_jq:remove(<<?COLLAPSED_LOG_ROW_ID_PREFIX, (integer_to_binary(FirstLog))/binary>>),
+            gui_jq:remove(<<?EXPANDED_LOG_ROW_ID_PREFIX , (integer_to_binary(FirstLog))/binary>>),
             remove_old_logs(Counter, FirstLog + 1, MaxLogs)
     end.
 
@@ -445,7 +445,7 @@ event({toggle_log, Id, ShowAll}) ->
 % Show filters edition panel
 event(show_filters_popup) ->
     wf:wire(#jquery{target = "footer_popup", method = ["addClass"], args = ["\"hidden\""]}),
-    gui_utils:update("footer_popup", filters_panel()),
+    gui_jq:update(<<"footer_popup">>, filters_panel()),
     lists:foreach(
         fun(FilterType) ->
             wf:wire(gui_utils:script_for_enter_submission(get_filter_textbox(FilterType), get_filter_submit_button(FilterType))),
@@ -461,15 +461,15 @@ event(hide_filters_popup) ->
 
 % Change loglevel
 event({set_loglevel, Loglevel}) ->
-    gui_utils:update("loglevel_label", <<"Loglevel: <b>", (atom_to_binary(Loglevel, latin1))/binary, "</b>">>),
-    gui_utils:update("loglevel_dropdown", loglevel_dropdown_body(Loglevel)),
+    gui_jq:update(<<"loglevel_label">>, <<"Loglevel: <b>", (atom_to_binary(Loglevel, latin1))/binary, "</b>">>),
+    gui_jq:update(<<"loglevel_dropdown">>, loglevel_dropdown_body(Loglevel)),
     get(comet_pid) ! {set_loglevel, Loglevel};
 
 
 % Change displayed log limit
 event({set_max_logs, Number}) ->
-    gui_utils:update("max_logs_label", <<"Max logs: <b>", (integer_to_binary(Number))/binary, "</b>">>),
-    gui_utils:update("max_logs_dropdown", max_logs_dropdown_body(Number)),
+    gui_jq:update(<<"max_logs_label">>, <<"Max logs: <b>", (integer_to_binary(Number))/binary, "</b>">>),
+    gui_jq:update(<<"max_logs_dropdown">>, max_logs_dropdown_body(Number)),
     get(comet_pid) ! {set_max_logs, Number};
 
 
