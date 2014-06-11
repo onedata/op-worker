@@ -28,6 +28,8 @@
 namespace veil {
 namespace helpers {
 
+    std::string srvArg(const int argno);
+
     struct BufferLimits
     {
         BufferLimits(const size_t wgl = 0, const size_t rgl = 0, const size_t wfl = 0,

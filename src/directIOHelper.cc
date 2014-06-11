@@ -24,10 +24,11 @@
 #include <sys/xattr.h>
 #endif
 
-#include <limits.h>
-
 #include "directIOHelper.h"
 
+#include "helpers/storageHelperFactory.h"
+
+#include <climits>
 #include <iostream>
 
 
@@ -39,8 +40,9 @@ namespace helpers {
 namespace
 {
 inline boost::filesystem::path extractPath(const IStorageHelper::ArgsMap &args) {
-    return args.count("srv_arg0")
-            ? boost::any_cast<std::string>(args.at("srv_arg0")).substr(0, PATH_MAX)
+    const auto arg = srvArg(0);
+    return args.count(arg)
+            ? boost::any_cast<std::string>(args.at(arg)).substr(0, PATH_MAX)
             : boost::filesystem::path{};
 }
 }

@@ -8,8 +8,10 @@
 #include "helpers/storageHelperFactory.h"
 #include "directIOHelper.h"
 #include "clusterProxyHelper.h"
-#include <boost/algorithm/string.hpp>
 #include "communicationHandler.h"
+
+#include <boost/algorithm/string.hpp>
+#include <boost/lexical_cast.hpp>
 
 using namespace boost;
 using namespace std;
@@ -57,6 +59,11 @@ boost::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(const s
     {
         return boost::shared_ptr<IStorageHelper>();
     }
+}
+
+string srvArg(const int argno)
+{
+    return "srv_arg" + boost::lexical_cast<std::string>(argno);
 }
 
 } // namespace helpers
