@@ -127,14 +127,6 @@
 -define(EXPIRED_FUSE_SESSIONS_VIEW, #view_info{name = "expired_fuse_sessions", design = ?FUSE_SESSIONS_DESIGN_NAME, db_name = ?SYSTEM_DB_NAME}).
 -define(FUSE_SESSIONS_BY_USER_ID_VIEW, #view_info{name = "fuse_sessions_by_user_id", design = ?FUSE_SESSIONS_DESIGN_NAME, db_name = ?SYSTEM_DB_NAME}).
 
-%% Others
--define(RECORD_INSTANCES_DOC_PREFIX, "record_instances_").
--define(RECORD_FIELD_BINARY_PREFIX, "__bin__: ").
--define(RECORD_FIELD_ATOM_PREFIX, "__atom__: ").
--define(RECORD_FIELD_PID_PREFIX, "__pid__: ").
--define(RECORD_TUPLE_FIELD_NAME_PREFIX, "tuple_field_").
--define(RECORD_META_FIELD_NAME, "record__").
-
 %% List of all used databases :: [string()]
 -define(DB_LIST, [?SYSTEM_DB_NAME, ?FILES_DB_NAME, ?DESCRIPTORS_DB_NAME, ?USERS_DB_NAME]).
 %% List of all used views :: [#view_info]
