@@ -51,7 +51,7 @@ event(login) ->
                         Val -> <<"?x=", Val/binary>>
                     end,
     % Resolve hostname, which was requested by a client
-    Hostname = gui_utils:get_requested_hostname(),
+    Hostname = gui_ctx:get_requested_hostname(),
     case Hostname of
         undefined ->
             gui_jq:update(<<"error_message">>, <<"Cannot establish requested hostname. Please contact the site administrator.">>),

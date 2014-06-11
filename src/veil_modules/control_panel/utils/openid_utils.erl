@@ -121,7 +121,7 @@ validate_openid_login({EndpointURL, ValidationRequestBody}) ->
         case Response of
             <<?valid_auth_info>> -> ok;
             _ ->
-                ?alert("Security breach attempt spotted. Invalid redirect URL contained:~n~p", [gui_utils:get_request_params()]),
+                ?alert("Security breach attempt spotted. Invalid redirect URL contained:~n~p", [gui_ctx:get_request_params()]),
                 {error, auth_invalid}
         end
 
@@ -179,7 +179,7 @@ retrieve_user_info() ->
         ]}
     catch Type:Message ->
         ?error_stacktrace("Failed to retrieve user info - ~p: ~p~nOpenID redirect args were:~n~p",
-            [Type, Message, gui_utils:get_request_params()]),
+            [Type, Message, gui_ctx:get_request_params()]),
         {error, invalid_request}
     end.
 

@@ -115,7 +115,7 @@ redirect(URL) ->
 -spec redirect_to_login(SaveSourcePage :: boolean()) -> ok.
 %% ====================================================================
 redirect_to_login(SaveSourcePage) ->
-    PageName = gui_utils:get_requested_page(),
+    PageName = gui_ctx:get_requested_page(),
     case SaveSourcePage of
         false -> wf:redirect(<<"/login">>);
         true -> wf:redirect(<<"/login?x=", PageName/binary>>)

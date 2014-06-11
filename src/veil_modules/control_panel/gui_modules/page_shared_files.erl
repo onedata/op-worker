@@ -46,7 +46,7 @@ main_panel() ->
             case logical_files_manager:get_file_user_dependent_name_by_uuid(FileID) of
                 {ok, FilePath} ->
                     Filename = filename:basename(FilePath),
-                    AddressPrefix = <<"https://", (gui_utils:get_requested_hostname())/binary, ?shared_files_download_path>>,
+                    AddressPrefix = <<"https://", (gui_ctx:get_requested_hostname())/binary, ?shared_files_download_path>>,
                     Acc ++ [{<<"~/", (list_to_binary(FilePath))/binary>>, list_to_binary(Filename), AddressPrefix, list_to_binary(UUID)}];
                 _ ->
                     Acc
@@ -123,7 +123,7 @@ event({action, Fun, Args}) ->
 
 % Display link to file in popup panel
 show_link(ShareID) ->
-    AddressPrefix = <<"https://", (gui_utils:get_requested_hostname())/binary, ?shared_files_download_path>>,
+    AddressPrefix = <<"https://", (gui_ctx:get_requested_hostname())/binary, ?shared_files_download_path>>,
     Body = [
         #link{postback = {action, hide_popup}, title = <<"Hide">>, class = <<"glyph-link">>,
             style = <<"position: absolute; top: 8px; right: 8px; z-index: 3;">>,
