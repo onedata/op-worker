@@ -203,7 +203,7 @@ update_email(User, AddOrRemove) ->
     OldEmailList = user_logic:get_email_list(User),
     {ok, NewUser} = case AddOrRemove of
                         {add, submitted} ->
-                            NewEmail = gui_convert:to_list(wf:q("new_email_textbox")),
+                            NewEmail = gui_str:to_list(wf:q("new_email_textbox")),
                             case user_logic:get_user({email, NewEmail}) of
                                 {ok, _} ->
                                     wf:wire(#alert{text = <<"This e-mail address is in use.">>}),

@@ -456,10 +456,10 @@ cowboy_ensure_header(Name, Value, Req) when is_binary(Name) and is_binary(Value)
     {ok, binary()} | {error, unknown_cert} | {error, term()}.
 %% ====================================================================
 https_get(URLBin, ReqHeadersBin) ->
-    URL = gui_convert:to_list(URLBin),
+    URL = gui_str:to_list(URLBin),
     ReqHeaders = lists:map(
         fun({Key, Value}) ->
-            {gui_convert:to_list(Key), gui_convert:to_list(Value)}
+            {gui_str:to_list(Key), gui_str:to_list(Value)}
         end, ReqHeadersBin),
     perform_request(URL, ReqHeaders, get, "", ?max_redirects).
 
@@ -474,13 +474,13 @@ https_get(URLBin, ReqHeadersBin) ->
     {ok, binary()} | {error, unknown_cert} | {error, term()}.
 %% ====================================================================
 https_post(URLBin, ReqHeadersBin, Body) ->
-    URL = gui_convert:to_list(URLBin),
+    URL = gui_str:to_list(URLBin),
     ReqHeaders = lists:map(
         fun({Key, Value}) ->
-            {gui_convert:to_list(Key), gui_convert:to_list(Value)}
+            {gui_str:to_list(Key), gui_str:to_list(Value)}
         end, ReqHeadersBin),
     %% 0 max redirects, according to RFC post requests should not be redirected
-    perform_request(URL, ReqHeaders, post, gui_convert:to_list(Body), 0).
+    perform_request(URL, ReqHeaders, post, gui_str:to_list(Body), 0).
 
 %% ====================================================================
 %% Internal functions
@@ -556,7 +556,7 @@ do_curl(URL, ReqHeaders, Method, Body) ->
     case Res of
         "" -> {error, curl_failed};
         "\n" -> {error, curl_failed};
-        RespBody -> {ok, "200", [], gui_convert:to_binary(RespBody)}
+        RespBody -> {ok, "200", [], gui_str:to_binary(RespBody)}
     end.
 
 

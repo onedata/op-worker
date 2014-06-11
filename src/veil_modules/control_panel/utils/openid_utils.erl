@@ -86,15 +86,15 @@ prepare_validation_parameters() ->
         RequestParameters = lists:foldl(
             fun(Key, Acc) ->
                 Value = case wf:q(Key) of
-                            undefined -> throw("Value for " ++ gui_convert:to_list(Key) ++ " not found");
+                            undefined -> throw("Value for " ++ gui_str:to_list(Key) ++ " not found");
                             Val -> Val
                         end,
                 % Safely URL-decode params
-                Param = gui_convert:to_binary(wf:url_encode(gui_convert:to_list(Value))),
+                Param = gui_str:to_binary(wf:url_encode(gui_str:to_list(Value))),
                 <<Acc/binary, "&", Key/binary, "=", Param/binary>>
             end, <<"">>, SignedArgs),
         ValidationRequestBody = <<?openid_check_authentication_mode, RequestParameters/binary>>,
-        {gui_convert:to_list(EndpointURL), gui_convert:to_list(ValidationRequestBody)}
+        {gui_str:to_list(EndpointURL), gui_str:to_list(ValidationRequestBody)}
 
     catch Type:Message ->
         ?error_stacktrace("Failed to process login validation request - ~p: ~p", [Type, Message]),
@@ -197,7 +197,7 @@ retrieve_user_info() ->
 %% ====================================================================
 get_signed_param(ParamName, SignedParams) ->
     case lists:member(ParamName, SignedParams) of
-        true -> gui_convert:to_list(wf:q(ParamName));
+        true -> gui_str:to_list(wf:q(ParamName));
         false -> []
     end.
 

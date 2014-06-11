@@ -85,7 +85,7 @@ logs_submenu() ->
                         data_fields = [{<<"data-toggle">>, <<"dropdown">>}], body = #span{class = <<"caret">>}},
                     #list{id = <<"loglevel_dropdown">>, class = <<"dropdown-menu dropdown-inverse">>, body = loglevel_dropdown_body(debug)}
                 ]},
-                #panel{class = <<"btn-group">>, style = "margin: 12px 15px;", body = [
+                #panel{class = <<"btn-group">>, style = <<"margin: 12px 15px;">>, body = [
                     <<"<i class=\"dropdown-arrow dropdown-arrow-inverse\"></i>">>,
                     #button{id = <<"max_logs_label">>, title = <<"Maximum number of logs to be displayed - oldest logs will be discarded">>,
                         class = <<"btn btn-inverse btn-small">>, style = <<"width: 120px;">>, body = <<"Max logs: <b>200</b>">>},
@@ -101,8 +101,8 @@ logs_submenu() ->
                 ]},
 
                 % Uncomment for development
-                %#link{title = "Generate logs", style = "padding: 18px 14px;",
-                %    body = "GENERUJ LOGI", postback = generate_logs},
+                %#link{title = <<"Generate logs">>, style = <<"padding: 18px 14px;">>,
+                %    body = <<"GENERUJ LOGI">>, postback = generate_logs},
 
                 #list{class = <<"nav pull-right">>, body = [
                     #li{id = <<"generate_logs">>, body = #link{title = <<"Clear all logs">>, style = <<"padding: 18px 14px;">>,
@@ -115,7 +115,7 @@ logs_submenu() ->
                             #span{class = <<"icons">>},
                             #checkbox{id = <<"auto_scroll_checkbox">>, data_fields = [{<<"data-toggle">>, <<"checkbox">>}],
                                 value = <<"">>, checked = true},
-                            "Auto scroll"
+                            <<"Auto scroll">>
                         ]}
                 ]}
             ]}
@@ -168,7 +168,7 @@ filters_panel() ->
 filter_form(FilterType) ->
     #span{style = <<"display: inline-block; position: relative; height: 42px; margin-bottom: 15px; width: 410px; text-align: left;">>, body = [
         #label{id = get_filter_label(FilterType), style = <<"display: inline; margin: 9px 14px;">>,
-            actions = #event{type = "click", postback = {toggle_filter, FilterType}, target = gui_convert:to_list(get_filter_label(FilterType))},
+            actions = #event{type = "click", postback = {toggle_filter, FilterType}, target = gui_str:to_list(get_filter_label(FilterType))},
             class = <<"label label-large label-inverse">>, body = get_filter_name(FilterType)},
         #p{id = get_filter_none(FilterType), style = <<"display: inline;">>, body = <<"off">>},
         #panel{id = get_filter_panel(FilterType), class = <<"input-append">>, style = <<"margin-bottom: 0px; display: inline;">>, body = [
@@ -177,7 +177,7 @@ filter_form(FilterType) ->
             #panel{class = <<"btn-group">>, body = [
                 #button{id = get_filter_submit_button(FilterType), class = <<"btn">>, type = <<"button">>, title = <<"Save">>,
                     body = #span{class = <<"fui-check">>}, postback = {update_filter, FilterType},
-                    source = [gui_convert:to_list(get_filter_textbox(FilterType))]}
+                    source = [gui_str:to_list(get_filter_textbox(FilterType))]}
             ]}
         ]}
     ]}.
@@ -286,7 +286,7 @@ render_row(Counter, {Message, Timestamp, Severity, Metadata}) ->
         actions = #event{type = "click", postback = {toggle_log, Counter, true}, target = CollapsedId}, cells = [
             #td{body = format_severity(Severity), style = <<?SEVERITY_COLUMN_WIDTH>>},
             #td{body = format_time(Timestamp), style = <<?TIME_COLUMN_WIDTH>>},
-            #td{body = gui_convert:to_binary(Message), style = <<"text-wrap:normal; word-wrap:break-word; white-space: nowrap; overflow: hidden;">>},
+            #td{body = gui_str:to_binary(Message), style = <<"text-wrap:normal; word-wrap:break-word; white-space: nowrap; overflow: hidden;">>},
             #td{body = CollapsedMetadata, style = <<?METADATA_COLUMN_WIDTH, "white-space: nowrap; overflow: hidden;">>}
         ]},
 
@@ -294,7 +294,7 @@ render_row(Counter, {Message, Timestamp, Severity, Metadata}) ->
         actions = #event{type = "click", postback = {toggle_log, Counter, false}, target = ExpandedId}, cells = [
             #td{body = format_severity(Severity), style = <<?SEVERITY_COLUMN_WIDTH>>},
             #td{body = format_time(Timestamp), style = <<?TIME_COLUMN_WIDTH>>},
-            #td{body = gui_convert:to_binary(Message), style = <<"text-wrap:normal; word-wrap:break-word;">>},
+            #td{body = gui_str:to_binary(Message), style = <<"text-wrap:normal; word-wrap:break-word;">>},
             #td{body = ExpandedMetadata, style = <<?METADATA_COLUMN_WIDTH>>}
         ]},
 
@@ -310,7 +310,7 @@ loglevel_dropdown_body(Active) ->
                         _ -> <<"">>
                     end,
             ID = <<"loglevel_li_", (atom_to_binary(Loglevel, latin1))/binary>>,
-            #li{id = ID, actions = #event{type = "click", postback = {set_loglevel, Loglevel}, target = gui_convert:to_list(ID)},
+            #li{id = ID, actions = #event{type = "click", postback = {set_loglevel, Loglevel}, target = gui_str:to_list(ID)},
                 class = Class, body = #link{body = atom_to_binary(Loglevel, latin1)}}
         end, ?LOGLEVEL_LIST).
 
@@ -324,7 +324,7 @@ max_logs_dropdown_body(Active) ->
                         _ -> <<"">>
                     end,
             ID = <<"maxlogs_li_", (integer_to_binary(Number))/binary>>,
-            #li{id = ID, actions = #event{type = "click", postback = {set_max_logs, Number}, target = gui_convert:to_list(ID)},
+            #li{id = ID, actions = #event{type = "click", postback = {set_max_logs, Number}, target = gui_str:to_list(ID)},
                 class = Class, body = #link{body = integer_to_binary(Number)}}
         end, ?MAX_LOGS_OPTIONS).
 
@@ -372,13 +372,13 @@ format_time(Timestamp) ->
 format_metadata(Tags) ->
     Collapsed = case lists:keyfind(node, 1, Tags) of
                     {Key, Value} ->
-                        <<"<b>", (gui_convert:to_binary(Key))/binary, ":</b> ", (gui_convert:to_binary(Value))/binary, " ...">>;
+                        <<"<b>", (gui_str:to_binary(Key))/binary, ":</b> ", (gui_str:to_binary(Value))/binary, " ...">>;
                     _ ->
                         <<"<b>unknown node</b> ...">>
                 end,
     Expanded = lists:foldl(
         fun({Key, Value}, Acc) ->
-            <<Acc/binary, "<b>", (gui_convert:to_binary(Key))/binary, ":</b> ", (gui_convert:to_binary(Value))/binary, "<br />">>
+            <<Acc/binary, "<b>", (gui_str:to_binary(Key))/binary, ":</b> ", (gui_str:to_binary(Value))/binary, "<br />">>
         end, <<"">>, Tags),
     {Collapsed, Expanded}.
 
@@ -393,7 +393,7 @@ filter_contains(String, Filter) ->
     case Filter of
         undefined -> true;
         ValidFilter ->
-            binary:match(gui_convert:to_binary(String), ValidFilter) /= nomatch
+            binary:match(gui_str:to_binary(String), ValidFilter) /= nomatch
     end.
 
 
@@ -506,7 +506,7 @@ event({toggle_filter, FilterName}) ->
 
 % Update patricular filter
 event({update_filter, FilterName}) ->
-    Filter = gui_convert:to_binary(wf:q(gui_convert:to_list(get_filter_textbox(FilterName)))),
+    Filter = gui_str:to_binary(wf:q(gui_str:to_list(get_filter_textbox(FilterName)))),
     case Filter of
         <<"">> ->
             put(filters, set_filter(get(filters), FilterName, undefined)),

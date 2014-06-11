@@ -20,6 +20,9 @@
 % General javascript wiring
 -export([wire/1, wire/2, wire/4]).
 
+% Parameters querying
+-export([value/1]).
+
 % Useful functions for binding custom events
 -export([register_escape_event/1, bind_enter_to_submit_button/2, bind_element_click/2]).
 
@@ -58,7 +61,7 @@ wire(Action) ->
 -spec wire(Script :: string() | binary(), Eager :: boolean()) -> ok.
 %% ====================================================================
 wire(Script, Eager) when is_binary(Script) ->
-    wire(gui_convert:to_list(Script), Eager);
+    wire(gui_str:to_list(Script), Eager);
 
 wire(Action, Eager) ->
     Actions = case get(actions) of undefined -> []; E -> E end,
@@ -85,6 +88,20 @@ wire(Target, Method, Args, Eager) ->
                    end,
     Script = <<"$('#", Target/binary, "').", Method/binary, "(", RenderedArgs/binary, ");">>,
     wire(Script, Eager).
+
+
+%% value/1
+%% ====================================================================
+%% @doc Retrieves a parameter value for a given key. This can be both
+%% URL parameter or POST parameter passed during form submission.
+%% For form parameters, source field in event record must be provided
+%% to be accessible by this function.
+%% like this: #event{source = ["field_name"], ...}.
+%% @end
+-spec value(Param :: string() | binary()) -> ok.
+%% ====================================================================
+value(Param) ->
+    wf:q(gui_str:to_list(Param)).
 
 
 %% register_escape_event/1
@@ -133,7 +150,7 @@ bind_element_click(InputID, Javascript) ->
 -spec update(Target :: binary(), Content :: term()) -> ok.
 %% ====================================================================
 update(Target, Elements) ->
-    RenderedElements = gui_convert:js_escape(wf:render(Elements)),
+    RenderedElements = gui_str:js_escape(wf:render(Elements)),
     wire(Target, <<"html">>, RenderedElements, true).
 
 
@@ -144,7 +161,7 @@ update(Target, Elements) ->
 -spec replace(Target :: binary(), Content :: term()) -> ok.
 %% ====================================================================
 replace(Target, Elements) ->
-    RenderedElements = gui_convert:js_escape(wf:render(Elements)),
+    RenderedElements = gui_str:js_escape(wf:render(Elements)),
     wire(Target, <<"replaceWith">>, RenderedElements, true).
 
 
@@ -155,7 +172,7 @@ replace(Target, Elements) ->
 -spec insert_top(Target :: binary(), Content :: term()) -> ok.
 %% ====================================================================
 insert_top(Target, Elements) ->
-    RenderedElements = gui_convert:js_escape(wf:render(Elements)),
+    RenderedElements = gui_str:js_escape(wf:render(Elements)),
     wire(Target, <<"prepend">>, RenderedElements, true).
 
 
@@ -166,7 +183,7 @@ insert_top(Target, Elements) ->
 -spec insert_bottom(Target :: binary(), Content :: term()) -> ok.
 %% ====================================================================
 insert_bottom(Target, Elements) ->
-    RenderedElements = gui_convert:js_escape(wf:render(Elements)),
+    RenderedElements = gui_str:js_escape(wf:render(Elements)),
     wire(Target, <<"append">>, RenderedElements, true).
 
 
@@ -177,7 +194,7 @@ insert_bottom(Target, Elements) ->
 -spec insert_before(Target :: binary(), Content :: term()) -> ok.
 %% ====================================================================
 insert_before(Target, Elements) ->
-    RenderedElements = gui_convert:js_escape(wf:render(Elements)),
+    RenderedElements = gui_str:js_escape(wf:render(Elements)),
     wire(Target, <<"before">>, RenderedElements, true).
 
 
@@ -188,7 +205,7 @@ insert_before(Target, Elements) ->
 -spec insert_after(Target :: binary(), Content :: term()) -> ok.
 %% ====================================================================
 insert_after(Target, Elements) ->
-    RenderedElements = gui_convert:js_escape(wf:render(Elements)),
+    RenderedElements = gui_str:js_escape(wf:render(Elements)),
     wire(Target, <<"after">>, RenderedElements, true).
 
 

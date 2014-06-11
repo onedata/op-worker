@@ -72,7 +72,7 @@ manager_submenu() ->
                         #textbox{id = wire_enter(<<"search_textbox">>, <<"search_button">>), class = <<"span2">>,
                             style = <<"width: 220px;">>, placeholder = <<"Search">>},
                         #panel{class = <<"btn-group">>, body = [
-                            #button{id = wire_click(<<"search_button">>, ["search_textbox"], {action, search, [{q, "search_textbox"}]}),
+                            #button{id = wire_click(<<"search_button">>, ["search_textbox"], {action, search, [{query_value, <<"search_textbox">>}]}),
                                 class = <<"btn">>, type = <<"button">>, body = #span{class = <<"fui-search">>}}
                         ]}
                     ]}
@@ -173,12 +173,12 @@ tool_button_and_dummy(ID, Title, Style, Icon, Postback) ->
 %% Wiring postbacks. Thanks to this wrapper every time a postback is initiated,
 %% there will be spinner showing up in 150ms. It gets hidden when reply is received.
 wire_click(ID, Tag) ->
-    gui_jq:wire(#event{type = click, target = gui_convert:to_list(ID), postback = Tag}),
+    gui_jq:wire(#event{type = click, target = gui_str:to_list(ID), postback = Tag}),
     gui_jq:bind_element_click(ID, <<"function(e) { $('#spinner').delay(150).show(); }">>),
     ID.
 
 wire_click(ID, Source, Tag) ->
-    gui_jq:wire(#event{type = click, target = gui_convert:to_list(ID), source = Source, postback = Tag}),
+    gui_jq:wire(#event{type = click, target = gui_str:to_list(ID), source = Source, postback = Tag}),
     gui_jq:bind_element_click(ID, <<"function(e) { $('#spinner').delay(150).show(); }">>),
     ID.
 
@@ -217,10 +217,10 @@ event({action, Fun, Args}) ->
     NewArgs = lists:map(
         fun(Arg) ->
             case Arg of
-                {q, FieldName} ->
+                {query_value, FieldName} ->
                     % This tuple means, that element with id=FieldName has to be queried
                     % and the result be put in function args
-                    gui_convert:to_list(wf:q(FieldName));
+                    gui_str:to_list(gui_jq:value(FieldName));
                 Other ->
                     Other
             end
@@ -259,7 +259,7 @@ comet_loop(IsUploadInProgress) ->
             {action, Fun, Args} ->
                 case IsUploadInProgress of
                     true ->
-                        wf:wire(#alert{text = <<"Please wait for the upload to finish.">>}), gui_utils:flush();
+                        gui_jq:wire(#alert{text = <<"Please wait for the upload to finish.">>}), gui_utils:flush();
                     false ->
                         erlang:apply(?MODULE, Fun, Args)
                 end,
@@ -523,7 +523,7 @@ rename_item(OldPath, NewName) ->
                     clear_manager(),
                     select_item(NewPath);
                 _ ->
-                    wf:wire(#alert{text = <<(gui_convert:to_binary(NewName))/binary, " already exists.">>})
+                    gui_jq:wire(#alert{text = <<(gui_str:to_binary(NewName))/binary, " already exists.">>})
             end
     end.
 
@@ -541,9 +541,9 @@ create_directory(Name) ->
                 _ ->
                     case item_find(FullPath) of
                         undefined ->
-                            wf:wire(#alert{text = <<"Cannot create directory - disallowed name.">>});
+                            gui_jq:wire(#alert{text = <<"Cannot create directory - disallowed name.">>});
                         _ ->
-                            wf:wire(#alert{text = <<"Cannot create directory - file exists.">>})
+                            gui_jq:wire(#alert{text = <<"Cannot create directory - file exists.">>})
                     end,
                     hide_popup()
             end
@@ -587,7 +587,7 @@ show_popup(Type) ->
                         #textbox{id = wire_enter(<<"create_dir_textbox">>, <<"create_dir_submit">>), class = <<"flat">>,
                             style = <<"width: 350px;">>, placeholder = <<"New directory name">>},
                         #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>,
-                            id = wire_click(<<"create_dir_submit">>, ["create_dir_textbox"], {action, create_directory, [{q, "create_dir_textbox"}]})}
+                            id = wire_click(<<"create_dir_submit">>, ["create_dir_textbox"], {action, create_directory, [{query_value, <<"create_dir_textbox">>}]})}
                     ]}
                 ],
                 {Body, <<"$('#create_dir_textbox').focus();">>, {action, hide_popup}};
@@ -600,14 +600,13 @@ show_popup(Type) ->
                                   end,
                 OldLocation = lists:nth(1, get_selected_items()),
                 Body = [
-                    #p{body = <<"Rename <b>", (gui_convert:to_binary(Filename))/binary, "</b>">>},
+                    #p{body = <<"Rename <b>", (gui_str:to_binary(Filename))/binary, "</b>">>},
                     #form{class = <<"control-group">>, body = [
                         #textbox{id = wire_enter(<<"new_name_textbox">>, <<"new_name_submit">>), class = <<"flat">>,
-                            style = <<"width: 350px;">>, placeholder = <<"New name">>, value = gui_convert:to_binary(Filename)},%,
-%%                             data_fields = [{<<"onfocus">>, <<"this.select(); this.selAll=1;">>}]},
+                            style = <<"width: 350px;">>, placeholder = <<"New name">>, value = gui_str:to_binary(Filename)},
 
                         #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>,
-                            id = wire_click(<<"new_name_submit">>, ["new_name_textbox"], {action, rename_item, [OldLocation, {q, "new_name_textbox"}]})}
+                            id = wire_click(<<"new_name_submit">>, ["new_name_textbox"], {action, rename_item, [OldLocation, {query_value, <<"new_name_textbox">>}]})}
                     ]}
                 ],
 
@@ -633,10 +632,10 @@ show_popup(Type) ->
                 Filename = filename:basename(lists:nth(1, get_selected_items())),
                 {Status, ShareID} = case fs_get_share_by_filepath(Path) of
                                         {ok, #veil_document{uuid = UUID}} ->
-                                            {exists, gui_convert:to_binary(UUID)};
+                                            {exists, gui_str:to_binary(UUID)};
                                         _ ->
                                             {ok, ID} = fs_create_share(Path),
-                                            {new, gui_convert:to_binary(ID)}
+                                            {new, gui_str:to_binary(ID)}
                                     end,
                 clear_workspace(),
                 select_item(Path),
@@ -644,10 +643,10 @@ show_popup(Type) ->
                 Body = [
                     case Status of
                         exists ->
-                            #p{body = <<"<b>", (gui_convert:to_binary(Filename))/binary,
+                            #p{body = <<"<b>", (gui_str:to_binary(Filename))/binary,
                             "</b> is already shared. Visit <b>Shared files</b> tab for more.">>};
                         new ->
-                            #p{body = <<"<b>", (gui_convert:to_binary(Filename))/binary,
+                            #p{body = <<"<b>", (gui_str:to_binary(Filename))/binary,
                             "</b> successfully shared. Visit <b>Shared files</b> tab for more.">>}
                     end,
                     #form{class = <<"control-group">>, body = [
@@ -739,7 +738,7 @@ hide_popup() ->
 % Render path navigator
 path_navigator_body(WorkingDirectory) ->
     case WorkingDirectory of
-        "/" -> wf:f("~~", []);
+        "/" -> gui_str:format("~~", []);
         _ ->
             FirstLink = #link{id = wire_click(<<"nav_top">>, {action, navigate, ["/"]}), body = <<"~">>},
             PathElements = string:tokens(WorkingDirectory, "/"),
@@ -747,7 +746,7 @@ path_navigator_body(WorkingDirectory) ->
                 fun(Element, {CurrentPath, Counter}) ->
                     PathToElement = CurrentPath ++ "/" ++ Element,
                     Link = #link{id = wire_click(<<"nav_", (integer_to_binary(Counter))/binary>>, {action, navigate, [PathToElement]}),
-                        body = gui_convert:to_binary(Element)},
+                        body = gui_str:to_binary(Element)},
                     {Link, {PathToElement, Counter + 1}}
                 end, {"/", 1}, lists:sublist(PathElements, length(PathElements) - 1)),
             [FirstLink | LinkList] ++ [lists:last(PathElements)]
@@ -759,7 +758,7 @@ grid_view_body() ->
     {Tiles, _} = lists:mapfoldl(
         fun(Item, Counter) ->
             FullPath = item_path(Item),
-            Filename = gui_convert:to_binary(item_basename(Item)),
+            Filename = gui_str:to_binary(item_basename(Item)),
             ImageStyle = case get_clipboard_type() of
                              cut ->
                                  case lists:member(FullPath, get_clipboard_items()) of
@@ -811,7 +810,7 @@ grid_view_body() ->
                                    ]},
                                    #panel{style = <<"margin: 5px auto 0; text-align: center; word-wrap: break-word;">>, body = [
                                        #link{title = Filename, id = LinkID, body = Filename, target = <<"_blank">>,
-                                           url = <<?user_content_download_path, "/", (gui_convert:to_binary(wf:url_encode(FullPath)))/binary>>}
+                                           url = <<?user_content_download_path, "/", (gui_str:to_binary(gui_str:url_encode(FullPath)))/binary>>}
                                    ]}
                                ]
                        end
@@ -872,7 +871,7 @@ list_view_body() ->
     {TableRows, _} = lists:mapfoldl(
         fun(Item, Counter) ->
             FullPath = item_path(Item),
-            Filename = gui_convert:to_binary(item_basename(Item)),
+            Filename = gui_str:to_binary(item_basename(Item)),
             ImageStyle = case get_clipboard_type() of
                              cut ->
                                  case lists:member(FullPath, get_clipboard_items()) of
@@ -922,14 +921,14 @@ list_view_body() ->
                             #td{body = #span{class = <<"table-cell">>, body = [
                                 #panel{style = <<"display: inline-block; vertical-align: middle; position: relative;">>, body = [
                                     #link{id = ImageID, target = <<"_blank">>,
-                                        url = <<?user_content_download_path, "/", (gui_convert:to_binary(wf:url_encode(FullPath)))/binary>>, body = [
+                                        url = <<?user_content_download_path, "/", (gui_str:to_binary(gui_str:url_encode(FullPath)))/binary>>, body = [
                                             ShareIcon,
                                             #image{class = <<"list-icon">>, style = ImageStyle, image = ImageUrl}
                                         ]}
                                 ]},
                                 #panel{class = <<"filename_row">>, style = <<"word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
                                     #link{id = LinkID, body = Filename, target = <<"_blank">>,
-                                        url = <<?user_content_download_path, "/", (gui_convert:to_binary(wf:url_encode(FullPath)))/binary>>}
+                                        url = <<?user_content_download_path, "/", (gui_str:to_binary(gui_str:url_encode(FullPath)))/binary>>}
                                 ]}
                             ]}}
                     end
@@ -1006,16 +1005,16 @@ item_attr(size, #item{attr = #fileattributes{size = Value}}) -> Value;
 item_attr(uname, #item{attr = #fileattributes{uname = Value}}) -> Value;
 item_attr(gname, #item{attr = #fileattributes{gname = Value}}) -> Value.
 
-item_attr_value(name, Item) -> gui_convert:to_binary(item_basename(Item));
-item_attr_value(mode, Item) -> gui_convert:to_binary(lists:flatten(io_lib:format("~.8B", [item_attr(mode, Item)])));
-item_attr_value(uname, Item) -> gui_convert:to_binary(item_attr(uname, Item));
-item_attr_value(atime, Item) -> gui_convert:to_binary(time_to_string(item_attr(atime, Item)));
-item_attr_value(mtime, Item) -> gui_convert:to_binary(time_to_string(item_attr(mtime, Item)));
-item_attr_value(ctime, Item) -> gui_convert:to_binary(time_to_string(item_attr(ctime, Item)));
+item_attr_value(name, Item) -> gui_str:to_binary(item_basename(Item));
+item_attr_value(mode, Item) -> gui_str:to_binary(lists:flatten(io_lib:format("~.8B", [item_attr(mode, Item)])));
+item_attr_value(uname, Item) -> gui_str:to_binary(item_attr(uname, Item));
+item_attr_value(atime, Item) -> gui_str:to_binary(time_to_string(item_attr(atime, Item)));
+item_attr_value(mtime, Item) -> gui_str:to_binary(time_to_string(item_attr(mtime, Item)));
+item_attr_value(ctime, Item) -> gui_str:to_binary(time_to_string(item_attr(ctime, Item)));
 item_attr_value(size, Item) ->
     case item_is_dir(Item) of
         true -> <<"">>;
-        false -> gui_convert:to_binary(size_to_printable(item_attr(size, Item)))
+        false -> gui_str:to_binary(size_to_printable(item_attr(size, Item)))
     end.
 
 attr_to_name(name) -> <<"Name">>;
@@ -1130,8 +1129,8 @@ fs_mv(Path, TargetDir, TargetName) ->
         _ ->
             case logical_files_manager:mv(Path, TargetPath) of
                 ok -> ok;
-                _ -> wf:wire(#alert{text = "Unable to move " ++ TargetName ++
-                    ". File exists."})
+                _ ->
+                    gui_jq:wire(#alert{text = <<"Unable to move ", (gui_str:to_binary(TargetName))/binary, ". File exists.">>})
             end
     end.
 
