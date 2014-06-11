@@ -790,8 +790,8 @@ start_worker(Node, Module, WorkerArgs, State) ->
     lager:info([{mod, ?MODULE}], "Worker: ~s started at node: ~s", [Module, Node]),
     {ok, State#cm_state{workers = [{Node, Module, ChildPid} | Workers]}}
   catch
-    _:_ ->
-      lager:error([{mod, ?MODULE}], "Error during start of worker: ~s started at node: ~s", [Module, Node]),
+    _Type:Error ->
+      lager:error([{mod, ?MODULE}], "Error during start of worker ~s at node ~s: ~p", [Module, Node, Error]),
       {error, State}
   end.
 
