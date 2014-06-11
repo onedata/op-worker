@@ -117,12 +117,12 @@ bind_enter_to_submit_button(InputID, ButtonToClickID) ->
 %% bind_element_click/2
 %% ====================================================================
 %% @doc Binds click actions on a selected InputID to evaluation of given
-%% javascript code.
+%% javascript code. The code must be wrapped in function(event){}.
 %% @end
 -spec bind_element_click(InputID :: binary(), Javascript :: binary()) -> string().
 %% ====================================================================
 bind_element_click(InputID, Javascript) ->
-    Script = <<"$('#", InputID/binary, "').bind('click', function anonymous(event) { ", Javascript/binary, " });">>,
+    Script = <<"$('#", InputID/binary, "').bind('click', ", Javascript/binary, ");">>,
     wire(Script, false).
 
 

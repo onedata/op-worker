@@ -44,17 +44,15 @@ title() -> <<"File manager">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    reset_wire_accumulator(),
     gui_jq:register_escape_event("escape_pressed"),
     Body = [
-        #panel{id = <<"spinner">>, class = <<"spinner">>, style = <<"position: absolute; top: 15px; left: 17px; z-index: 1234;">>, body = [
+        #panel{id = <<"spinner2">>, style = <<"position: absolute; top: 15px; left: 17px; z-index: 1234;">>, body = [
             #image{image = <<"/images/spinner.gif">>}
         ]},
         gui_utils:top_menu(file_manager_tab, manager_submenu()),
         manager_workspace(),
         footer_popup()
     ],
-    do_wiring(),
     Body.
 
 
@@ -176,47 +174,18 @@ tool_button_and_dummy(ID, Title, Style, Icon, Postback) ->
 %% there will be spinner showing up in 150ms. It gets hidden when reply is received.
 wire_click(ID, Tag) ->
     gui_jq:wire(#event{type = click, target = gui_convert:to_list(ID), postback = Tag}),
-    gui_jq:bind_element_click(ID, <<"$('#spinner').show(150);">>),
-%%     put(to_wire, get(to_wire) ++ [{#event{type = click, target = gui_convert:to_list(ID), postback = Tag}, true}]),
+    gui_jq:bind_element_click(ID, <<"function(e) { $('#spinner').show(150); }">>),
     ID.
 
 wire_click(ID, Source, Tag) ->
     gui_jq:wire(#event{type = click, target = gui_convert:to_list(ID), source = Source, postback = Tag}),
-    gui_jq:bind_element_click(ID, <<"$('#spinner').show(150);">>),
-%%     put(to_wire, get(to_wire) ++ [{#event{type = click, target = gui_convert:to_list(ID), source = Source, postback = Tag}, true}]),
+    gui_jq:bind_element_click(ID, <<"function(e) { $('#spinner').show(150); }">>),
     ID.
 
 wire_enter(ID, ButtonToClickID) ->
     % No need to show the spinner, as this only performs a click on a submit button
     gui_jq:bind_enter_to_submit_button(ID, ButtonToClickID),
-%%     put(to_wire, get(to_wire) ++ [gui_jq:bind_enter_to_submit_button(ID, ButtonToClickID)]),
     ID.
-
-%% wire_script(Script) ->
-%%     gui_jq:wire(Script, false).
-%% %%     put(to_wire, get(to_wire) ++ [Script]).
-
-
-% Wiring should be done after emiting elements that are getting wired.
-% wire_xxx() will accumulate wiring clauses, and do_wiring will flush it.
-do_wiring() ->
-    lists:foreach(
-        fun({#event{target = TriggerID} = Event, ShowSpinner}) ->
-            case ShowSpinner of
-                false ->
-                    skip;
-                true ->
-                    wf:wire(gui_jq:bind_element_click(TriggerID, "$('#spinner').show(150);"))
-            end,
-            wf:wire(Event);
-            (Script) ->
-                wf:wire(Script)
-        end, get(to_wire)),
-    reset_wire_accumulator().
-
-% This should be called to init accumulation of wire clauses
-reset_wire_accumulator() ->
-    put(to_wire, []).
 
 
 %% Handling events
@@ -276,9 +245,7 @@ comet_loop_init(UserId, RequestedHostname) ->
     set_item_list_rev(item_list_md5(get_item_list())),
     set_clipboard_items([]),
     set_clipboard_type(none),
-    reset_wire_accumulator(),
     refresh_workspace(),
-    do_wiring(),
     gui_jq:hide(<<"spinner">>),
     gui_utils:flush(),
 
@@ -294,9 +261,7 @@ comet_loop(IsUploadInProgress) ->
                     true ->
                         wf:wire(#alert{text = "Please wait for the upload to finish."}), gui_utils:flush();
                     false ->
-                        reset_wire_accumulator(),
-                        erlang:apply(?MODULE, Fun, Args),
-                        do_wiring()
+                        erlang:apply(?MODULE, Fun, Args)
                 end,
                 gui_jq:hide(<<"spinner">>),
                 gui_utils:flush(),
@@ -317,11 +282,9 @@ comet_loop(IsUploadInProgress) ->
                 CurrentMD5 ->
                     skip;
                 _ ->
-                    reset_wire_accumulator(),
                     set_item_list(CurrentItemList),
                     set_item_list_rev(CurrentMD5),
                     refresh_workspace(),
-                    do_wiring(),
                     gui_utils:flush()
             end,
             comet_loop(IsUploadInProgress)
@@ -815,7 +778,7 @@ grid_view_body() ->
 
             LinkID = <<"grid_item_", (integer_to_binary(Counter))/binary>>,
             % Item won't hightlight if the link is clicked.
-            gui_jq:bind_element_click(LinkID, <<"e.stopPropagation();">>),
+            gui_jq:bind_element_click(LinkID, <<"function(e) { e.stopPropagation(); }">>),
             Tile = #panel{
                 id = wire_click(item_id(Item), {action, select_item, [FullPath]}),
                 style = <<"width: 100px; height: 116px; overflow:hidden; position: relative; margin: 0; padding: 5px 10px; display: inline-block;">>,
@@ -927,10 +890,10 @@ list_view_body() ->
 
             LinkID = <<"list_item_", (integer_to_binary(Counter))/binary>>,
             % Item won't hightlight if the link is clicked.
-            gui_jq:bind_element_click(LinkID, <<"e.stopPropagation();">>),
+            gui_jq:bind_element_click(LinkID, <<"function(e) { e.stopPropagation(); }">>),
             ImageID = <<"image_", (integer_to_binary(Counter))/binary>>,
             % Image won't hightlight if the image is clicked.
-            gui_jq:bind_element_click(ImageID, <<"e.stopPropagation();">>),
+            gui_jq:bind_element_click(ImageID, <<"function(e) { e.stopPropagation(); }">>),
             TableRow = #tr{
                 id = wire_click(item_id(Item), {action, select_item, [FullPath]}),
                 cells = [
