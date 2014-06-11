@@ -180,7 +180,7 @@ maybe_redirect(NeedLogin, NeedDN, NeedStorage, SaveSourcePage) ->
 %% @doc Checks if the client has right to do the operation (is logged in and possibly 
 %% has a certificate DN defined). If so, it executes the code.
 %% @end
--spec apply_or_redirect(Module :: atom, Fun :: atom, boolean()) -> boolean().
+-spec apply_or_redirect(Module :: atom, Fun :: atom, NeedDN :: boolean()) -> boolean().
 %% ====================================================================
 apply_or_redirect(Module, Fun, NeedDN) ->
     apply_or_redirect(Module, Fun, [], NeedDN).
@@ -190,7 +190,7 @@ apply_or_redirect(Module, Fun, NeedDN) ->
 %% @doc Checks if the client has right to do the operation (is logged in and possibly 
 %% has a certificate DN defined). If so, it executes the code.
 %% @end
--spec apply_or_redirect(Module :: atom, Fun :: atom, Args :: list(), boolean()) -> boolean() | no_return.
+-spec apply_or_redirect(Module :: atom, Fun :: atom, Args :: list(), NeedDN :: boolean()) -> boolean() | no_return.
 %% ====================================================================
 apply_or_redirect(Module, Fun, Args, NeedDN) ->
     try
@@ -341,7 +341,7 @@ empty_page() ->
 %% Every instance of comet will get a supervisor to make sure it won't go rogue
 %% after the calling process has finished.
 %% @end
--spec comet(function()) -> {ok, pid()} | no_return().
+-spec comet(CometFun :: function()) -> {ok, pid()} | no_return().
 %% ====================================================================
 comet(CometFun) ->
     % Prevent comet and supervisor from killing the calling process on crash
@@ -357,7 +357,7 @@ comet(CometFun) ->
 %% ====================================================================
 %% @doc Internal function used to initialize an asynchronous "comet" process.
 %% @end
--spec init_comet(pid(), fun()) -> no_return().
+-spec init_comet(OwnerPid :: pid(), fun()) -> no_return().
 %% ====================================================================
 init_comet(OwnerPid, Fun) ->
     timer:sleep(100), % defer the comet process so that n2o websocket process can initialize
@@ -371,7 +371,7 @@ init_comet(OwnerPid, Fun) ->
 %% @doc Internal function evaluated by comet supervisor. The supervisor will
 %% kill the comet process whenever comet creator process finishes.
 %% @end
--spec comet_supervisor(pid(), pid()) -> no_return().
+-spec comet_supervisor(CallingPid :: pid(), CometPid :: pid()) -> no_return().
 %% ====================================================================
 comet_supervisor(CallingPid, CometPid) ->
     MonitorRef = erlang:monitor(process, CallingPid),
@@ -415,7 +415,7 @@ flush() ->
 %% @doc Sets a response header, but prevents duplicate entries. Header must
 %% be normalized to lowercase (e. g. content-type and not Content-Type)
 %% @end
--spec cowboy_ensure_header(binary(), binary(), req()) -> req().
+-spec cowboy_ensure_header(Name :: binary(), Value :: binary(), Req :: req()) -> req().
 %% ====================================================================
 cowboy_ensure_header(Name, Value, Req) when is_binary(Name) and is_binary(Value) ->
     Req2 = cowboy_req:delete_resp_header(Name, Req),
@@ -428,7 +428,7 @@ cowboy_ensure_header(Name, Value, Req) when is_binary(Name) and is_binary(Value)
 %% (path is provided in environment variable). Only if connection is secure,
 %% the request is performed.
 %% @end
--spec https_get(binary() | string(), [{binary() | string(), binary() | string()}]) ->
+-spec https_get(URLBin :: binary() | string(), ReqHeadersBin :: [{binary() | string(), binary() | string()}]) ->
     {ok, binary()} | {error, unknown_cert} | {error, term()}.
 %% ====================================================================
 https_get(URLBin, ReqHeadersBin) ->
@@ -446,7 +446,7 @@ https_get(URLBin, ReqHeadersBin) ->
 %% (path is provided in environment variable). Only if connection is secure,
 %% the request is performed.
 %% @end
--spec https_post(binary() | string(), [{binary() | string(), binary() | string()}], binary() | string()) ->
+-spec https_post(URLBin :: binary() | string(), ReqHeadersBin :: [{binary() | string(), binary() | string()}], Body :: binary() | string()) ->
     {ok, binary()} | {error, unknown_cert} | {error, term()}.
 %% ====================================================================
 https_post(URLBin, ReqHeadersBin, Body) ->
@@ -466,7 +466,7 @@ https_post(URLBin, ReqHeadersBin, Body) ->
 %% ====================================================================
 %% @doc Performs a HTTPS request with given args.
 %% @end
--spec perform_request(string(), [{string(), string()}], atom(), binary(), integer()) ->
+-spec perform_request(URL :: string(), ReqHeaders :: [{string(), string()}], Method :: atom(), Body :: binary(), Redirects :: integer()) ->
     {ok, binary()} | {error, unknown_cert} | {error, term()}.
 %% ====================================================================
 perform_request(URL, ReqHeaders, Method, Body, Redirects) ->
@@ -512,7 +512,7 @@ perform_request(URL, ReqHeaders, Method, Body, Redirects) ->
 %% @doc
 %% Temporary alternative for erlang ssl (which does not work in 17.0)
 %% @end
--spec do_curl(string(), string(), string(), string()) -> term().
+-spec do_curl(URL :: string(), ReqHeaders :: string(), Method :: string(), Body :: string()) -> term().
 %% ====================================================================
 do_curl(URL, ReqHeaders, Method, Body) ->
     MethodString = case Method of
@@ -541,7 +541,7 @@ do_curl(URL, ReqHeaders, Method, Body) ->
 %% @doc
 %% Retrieves redirect URL from a HTTP response.
 %% @end
--spec get_redirect_url(string(), list()) -> string().
+-spec get_redirect_url(OldURL :: string(), Headers :: list()) -> string().
 %% ====================================================================
 get_redirect_url(OldURL, Headers) ->
     Location = proplists:get_value("location", Headers, proplists:get_value("Location", Headers)),
@@ -564,7 +564,7 @@ get_redirect_url(OldURL, Headers) ->
 %% ====================================================================
 %% @doc Returns list of ssl opts for secure connection.
 %% @end
--spec ssl_opts(string()) -> [tuple()].
+-spec ssl_opts(ReqHostname :: string()) -> [tuple()].
 %% ====================================================================
 ssl_opts(ReqHostname) ->
     VerifyFun =

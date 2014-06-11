@@ -23,7 +23,7 @@ title() -> <<"Login page">>.
 %% This will be placed in the template instead of {{body}} tag
 body() ->
     case gui_utils:user_logged_in() of
-        true -> wf:redirect(<<"/">>);
+        true -> gui_jq:redirect(<<"/">>);
         false ->
             ErrorPanelStyle = case gui_jq:value(<<"x">>) of
                                   undefined -> <<"display: none;">>;
@@ -46,7 +46,7 @@ event(init) -> ok;
 % Login event handling
 event(login) ->
     % Collect redirect param if present
-    RedirectParam = case wf:q(<<"x">>) of
+    RedirectParam = case gui_jq:value(<<"x">>) of
                         undefined -> <<"">>;
                         Val -> <<"?x=", Val/binary>>
                     end,
@@ -63,6 +63,6 @@ event(login) ->
                     gui_jq:update(<<"error_message">>, <<"Unable to reach OpenID Provider. Please try again later.">>),
                     gui_jq:fade_in(<<"error_message">>, 300);
                 URL ->
-                    wf:redirect(URL)
+                    gui_jq:redirect(URL)
             end
     end.

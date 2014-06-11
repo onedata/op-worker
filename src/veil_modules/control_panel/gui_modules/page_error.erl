@@ -36,16 +36,9 @@ event(init) -> ok;
 event(to_login) -> gui_jq:redirect_to_login(false).
 
 
-% This function causes a HTTP rediurect to error page, which displays an error message.
-
-%% redirect_with_error(Reason, Details) ->
-%%     wf:redirect(wf:to_binary(wf:f("/error?reason=~s&details=~s",
-%%         [wf:url_encode(Reason), wf:url_encode(Details)]))).
-
-
-% This function causes a HTTP rediurect to error page, which displays an error message.
+% This function causes a HTTP redirect to error page, which displays an error message.
 redirect_with_error(ErrorID) ->
-    wf:redirect(<<"/error?id=", (gui_str:to_binary(ErrorID))/binary>>).
+    gui_jq:redirect(<<"/error?id=", (gui_str:to_binary(ErrorID))/binary>>).
 
 
 % This functions is intended to be called from n2o handlers
@@ -57,7 +50,7 @@ generate_redirect_request(Req, ErrorID) ->
 
 
 get_reason_and_description() ->
-    IDBinary = gui_str:to_binary(wf:q(<<"id">>)),
+    IDBinary = gui_str:to_binary(gui_jq:value(<<"id">>)),
     id_to_reason_and_message(binary_to_atom(IDBinary, latin1)).
 
 
