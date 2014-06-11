@@ -46,7 +46,7 @@ title() -> <<"File manager">>.
 body() ->
     gui_jq:register_escape_event("escape_pressed"),
     Body = [
-        #panel{id = <<"spinner2">>, style = <<"position: absolute; top: 15px; left: 17px; z-index: 1234;">>, body = [
+        #panel{id = <<"spinner">>, style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>, body = [
             #image{image = <<"/images/spinner.gif">>}
         ]},
         gui_utils:top_menu(file_manager_tab, manager_submenu()),
@@ -99,8 +99,8 @@ manager_submenu() ->
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
                 tool_button_and_dummy(<<"tb_cut">>, <<"Cut">>, <<"padding: 18px 14px;">>,
                     <<"fui-window">>, {action, put_to_clipboard, [cut]}) ++
-                %tool_button_and_dummy(<<"tb_copy">>, "Copy", "padding: 18px 14px;",
-                %    "fui-windows", {action, put_to_clipboard, [copy]}) ++
+                %tool_button_and_dummy(<<"tb_copy">>, <<"Copy">>, <<"padding: 18px 14px;">>,
+                %    <<"fui-windows">>, {action, put_to_clipboard, [copy]}) ++
 
                 [#li{id = wire_click(<<"tb_paste">>, {action, paste_from_clipboard}), body = #link{title = <<"Paste">>, style = <<"padding: 18px 14px;">>,
                     body = #span{class = <<"fui-upload">>, body = #span{id = <<"clipboard_size_label">>, class = <<"iconbar-unread">>,
@@ -119,19 +119,19 @@ manager_submenu() ->
                 #panel{class = <<"btn-toolbar pull-right no-margin">>, style = <<"padding: 12px 15px; overflow: hidden;">>, body = [
                     #panel{class = <<"btn-group no-margin">>, body = [
                         #link{id = wire_click(<<"list_view_button">>, {action, toggle_view, [list]}),
-                            title = "List view", class = <<"btn btn-small btn-inverse">>,
+                            title = <<"List view">>, class = <<"btn btn-small btn-inverse">>,
                             body = #span{class = <<"fui-list-columned">>}},
                         #link{id = wire_click(<<"grid_view_button">>, {action, toggle_view, [grid]}),
-                            title = "Grid view", class = <<"btn btn-small btn-inverse">>,
+                            title = <<"Grid view">>, class = <<"btn btn-small btn-inverse">>,
                             body = #span{class = <<"fui-list-small-thumbnails">>}}
                     ]}
                 ]},
 
                 #panel{class = <<"btn-group pull-right">>, style = <<"margin: 12px 15px">>, body = [
-                    "<i class=\"dropdown-arrow dropdown-arrow-inverse\"></i>",
-                    #button{id = wire_click(<<"button_sort_reverse">>, {action, sort_reverse}), title = "Reverse sorting",
-                        class = <<"btn btn-inverse btn-small">>, body = "Sort"},
-                    #button{title = "Sort by", class = <<"btn btn-inverse btn-small dropdown-toggle">>,
+                    <<"<i class=\"dropdown-arrow dropdown-arrow-inverse\"></i>">>,
+                    #button{id = wire_click(<<"button_sort_reverse">>, {action, sort_reverse}), title = <<"Reverse sorting">>,
+                        class = <<"btn btn-inverse btn-small">>, body = <<"Sort">>},
+                    #button{title = <<"Sort by">>, class = <<"btn btn-inverse btn-small dropdown-toggle">>,
                         data_fields = [{<<"data-toggle">>, <<"dropdown">>}], body = #span{class = <<"caret">>}},
                     #list{id = <<"sort_dropdown">>, class = <<"dropdown-menu dropdown-inverse">>, body = []}
                 ]}
@@ -174,12 +174,12 @@ tool_button_and_dummy(ID, Title, Style, Icon, Postback) ->
 %% there will be spinner showing up in 150ms. It gets hidden when reply is received.
 wire_click(ID, Tag) ->
     gui_jq:wire(#event{type = click, target = gui_convert:to_list(ID), postback = Tag}),
-    gui_jq:bind_element_click(ID, <<"function(e) { $('#spinner').show(150); }">>),
+    gui_jq:bind_element_click(ID, <<"function(e) { $('#spinner').delay(150).show(); }">>),
     ID.
 
 wire_click(ID, Source, Tag) ->
     gui_jq:wire(#event{type = click, target = gui_convert:to_list(ID), source = Source, postback = Tag}),
-    gui_jq:bind_element_click(ID, <<"function(e) { $('#spinner').show(150); }">>),
+    gui_jq:bind_element_click(ID, <<"function(e) { $('#spinner').delay(150).show(); }">>),
     ID.
 
 wire_enter(ID, ButtonToClickID) ->
@@ -259,7 +259,7 @@ comet_loop(IsUploadInProgress) ->
             {action, Fun, Args} ->
                 case IsUploadInProgress of
                     true ->
-                        wf:wire(#alert{text = "Please wait for the upload to finish."}), gui_utils:flush();
+                        wf:wire(#alert{text = <<"Please wait for the upload to finish.">>}), gui_utils:flush();
                     false ->
                         erlang:apply(?MODULE, Fun, Args)
                 end,
@@ -523,7 +523,7 @@ rename_item(OldPath, NewName) ->
                     clear_manager(),
                     select_item(NewPath);
                 _ ->
-                    wf:wire(#alert{text = NewName ++ " already exists."})
+                    wf:wire(#alert{text = <<(gui_convert:to_binary(NewName))/binary, " already exists.">>})
             end
     end.
 
@@ -541,9 +541,9 @@ create_directory(Name) ->
                 _ ->
                     case item_find(FullPath) of
                         undefined ->
-                            wf:wire(#alert{text = "Cannot create directory - disallowed name."});
+                            wf:wire(#alert{text = <<"Cannot create directory - disallowed name.">>});
                         _ ->
-                            wf:wire(#alert{text = "Cannot create directory - file exists."})
+                            wf:wire(#alert{text = <<"Cannot create directory - file exists.">>})
                     end,
                     hide_popup()
             end
@@ -590,7 +590,7 @@ show_popup(Type) ->
                             id = wire_click(<<"create_dir_submit">>, ["create_dir_textbox"], {action, create_directory, [{q, "create_dir_textbox"}]})}
                     ]}
                 ],
-                {Body, "$('#create_dir_textbox').focus();", {action, hide_popup}};
+                {Body, <<"$('#create_dir_textbox').focus();">>, {action, hide_popup}};
 
             rename_item ->
                 Filename = filename:basename(lists:nth(1, get_selected_items())),
@@ -603,28 +603,29 @@ show_popup(Type) ->
                     #p{body = <<"Rename <b>", (gui_convert:to_binary(Filename))/binary, "</b>">>},
                     #form{class = <<"control-group">>, body = [
                         #textbox{id = wire_enter(<<"new_name_textbox">>, <<"new_name_submit">>), class = <<"flat">>,
-                            style = <<"width: 350px;">>, placeholder = <<"New name">>, value = gui_convert:to_binary(Filename),
-                            data_fields = [{<<"onfocus">>, <<"this.select(); this.selAll=1;">>}]},
+                            style = <<"width: 350px;">>, placeholder = <<"New name">>, value = gui_convert:to_binary(Filename)},%,
+%%                             data_fields = [{<<"onfocus">>, <<"this.select(); this.selAll=1;">>}]},
+
                         #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>,
                             id = wire_click(<<"new_name_submit">>, ["new_name_textbox"], {action, rename_item, [OldLocation, {q, "new_name_textbox"}]})}
                     ]}
                 ],
-                FocusScript = wf:f("$('#new_name_textbox').focus();
-                if (typeof $('#new_name_textbox').selectionStart != \"undefined\")
-                {
-                    $('#new_name_textbox').selectionStart = ~B;
-                    $('#new_name_textbox').selectionEnd = ~B;
-                }
-                else if (document.selection && document.selection.createRange)
-                {
-                    // IE branch
-                    $('#new_name_textbox').select();
-                    var range = document.selection.createRange();
-                    range.collapse(true);
-                    range.moveEnd(\"character\", ~B);
-                    range.moveStart(\"character\", ~B);
-                    range.select();
-                }", [0, SelectionLength, 0, SelectionLength]),
+
+                FocusScript = <<"setTimeout(function() { ",
+                "document.getElementById('new_name_textbox').focus(); ",
+                "if( $('#new_name_textbox').createTextRange ) { ",
+                "var selRange = $('#new_name_textbox').createTextRange(); ",
+                "selRange.collapse(true); ",
+                "selRange.moveStart('character', 0); ",
+                "selRange.moveEnd('character', ", (integer_to_binary(SelectionLength))/binary, "); ",
+                "selRange.select(); ",
+                "} else if( document.getElementById('new_name_textbox').setSelectionRange ) { ",
+                "document.getElementById('new_name_textbox').setSelectionRange(0, ", (integer_to_binary(SelectionLength))/binary, "); ",
+                "} else if( $('#new_name_textbox').selectionStart ) { ",
+                "$('#new_name_textbox').selectionStart = 0; ",
+                "$('#new_name_textbox').selectionEnd = ", (integer_to_binary(SelectionLength))/binary, "; ",
+                "} }, 1); ">>,
+
                 {Body, FocusScript, {action, hide_popup}};
 
             share_file ->
@@ -656,7 +657,7 @@ show_popup(Type) ->
                             class = <<"btn btn-success btn-wide">>, body = <<"Ok">>}
                     ]}
                 ],
-                {Body, "$('#shared_link_textbox').focus(); $('#shared_link_textbox').select();", {action, hide_popup}};
+                {Body, <<"$('#shared_link_textbox').focus(); $('#shared_link_textbox').select();">>, {action, hide_popup}};
 
             file_upload ->
                 Body = [
@@ -704,7 +705,7 @@ show_popup(Type) ->
                                         class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>}
                                 ]}
                             ],
-                            {Body, "$('#ok_button').focus();", {action, hide_popup}}
+                            {Body, <<"$('#ok_button').focus();">>, {action, hide_popup}}
                     end;
 
             _ ->
@@ -721,8 +722,10 @@ show_popup(Type) ->
             gui_jq:slide_down(<<"footer_popup">>, 200)
     end,
     case Script of
-        undefined -> skip;
-        Script -> wf:wire(Script)
+        undefined ->
+            ok;
+        _ ->
+            gui_jq:wire(Script, false)
     end.
 
 
@@ -941,7 +944,7 @@ list_view_body() ->
     % Set filename containers width
     ContentWithoutFilename = 100 + (51 + round(90 * (2 + NumAttr) / NumAttr)) * NumAttr, % 51 is padding + border
     gui_jq:wire(<<"window.onresize = function(e) { $('.filename_row').css('max-width', ",
-            "'' +($(window).width() - ", (integer_to_binary(ContentWithoutFilename))/binary, ") + 'px'); }; $(window).resize();">>),
+    "'' +($(window).width() - ", (integer_to_binary(ContentWithoutFilename))/binary, ") + 'px'); }; $(window).resize();">>),
     [
         HeaderTable,
         #table{id = <<"main_table">>, class = <<"table table-bordered">>,
