@@ -15,11 +15,8 @@
 -include("veil_modules/control_panel/common.hrl").
 -include("logging.hrl").
 
-% Functions connected with page / session context
--export([get_requested_hostname/0, get_requested_page/0, get_user_dn/0, get_request_params/0]).
-
 % Functions connected with user's session
--export([user_logged_in/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0]).
+-export([get_user_dn/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0]).
 
 % Functions to check for user's session
 -export([apply_or_redirect/3, apply_or_redirect/4, maybe_redirect/4]).
@@ -46,30 +43,6 @@
 %% API functions
 %% ====================================================================
 
-%% get_requested_hostname/0
-%% ====================================================================
-%% @doc Returns the hostname requested by the client.
-%% @end
--spec get_requested_hostname() -> binary().
-%% ====================================================================
-get_requested_hostname() ->
-    {Headers, _} = wf:headers(?REQ),
-    proplists:get_value(<<"host">>, Headers, undefined).
-
-
-%% get_requested_page/0
-%% ====================================================================
-%% @doc Returns the page requested by the client.
-%% @end
--spec get_requested_page() -> binary().
-%% ====================================================================
-get_requested_page() ->
-    Path = wf:path(?REQ),
-    case Path of
-        <<"/ws", Page/binary>> -> Page;
-        <<Page/binary>> -> Page
-    end.
-
 %% get_user_dn/0
 %% ====================================================================
 %% @doc Returns user's DN retrieved from his session state.
@@ -84,29 +57,6 @@ get_user_dn() ->
     catch _:_ ->
         undefined
     end.
-
-
-%% get_request_params/0
-%% ====================================================================
-%% @doc Returns current http request params.
-%% @end
--spec get_request_params() -> [tuple()].
-%% ====================================================================
-get_request_params() ->
-    try
-        ?CTX#context.params
-    catch _:_ ->
-        []
-    end.
-
-%% user_logged_in/0
-%% ====================================================================
-%% @doc Checks if the client has a valid login session.
-%% @end
--spec user_logged_in() -> boolean().
-%% ====================================================================
-user_logged_in() ->
-    (gui_ctx:get_user_id() /= undefined).
 
 
 %% storage_defined/0
@@ -154,7 +104,7 @@ can_view_logs() ->
 -spec maybe_redirect(NeedLogin :: boolean(), NeedDN :: boolean(), NeedStorage :: boolean(), SaveSourcePage :: boolean()) -> ok.
 %% ====================================================================
 maybe_redirect(NeedLogin, NeedDN, NeedStorage, SaveSourcePage) ->
-    case NeedLogin and (not gui_utils:user_logged_in()) of
+    case NeedLogin and (not gui_ctx:user_logged_in()) of
         true ->
             gui_jq:redirect_to_login(SaveSourcePage),
             true;
@@ -194,7 +144,7 @@ apply_or_redirect(Module, Fun, NeedDN) ->
 %% ====================================================================
 apply_or_redirect(Module, Fun, Args, NeedDN) ->
     try
-        case user_logged_in() of
+        case gui_ctx:user_logged_in() of
             false ->
                 gui_jq:redirect_to_login(true);
             true ->

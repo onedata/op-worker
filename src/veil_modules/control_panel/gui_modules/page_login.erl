@@ -22,7 +22,7 @@ title() -> <<"Login page">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    case gui_utils:user_logged_in() of
+    case gui_ctx:user_logged_in() of
         true -> gui_jq:redirect(<<"/">>);
         false ->
             ErrorPanelStyle = case gui_jq:value(<<"x">>) of

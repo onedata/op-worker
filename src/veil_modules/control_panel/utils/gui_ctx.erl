@@ -13,9 +13,16 @@
 -include("veil_modules/control_panel/common.hrl").
 -include("logging.hrl").
 
-% Functions used to connect user to session
--export([set_user/2, get_user_id/0, get_user_record/0, clear/0]).
+% Functions used to associate user with session
+-export([set_user/2, get_user_id/0, get_user_record/0, user_logged_in/0, clear/0]).
 
+% Functions connected with page / session context
+-export([get_requested_hostname/0, get_requested_page/0, get_request_params/0]).
+
+
+%% ====================================================================
+%% API functions
+%% ====================================================================
 
 %% set_user/2
 %% ====================================================================
@@ -51,7 +58,7 @@ get_user_record() ->
 
 %% clear/0
 %% ====================================================================
-%% @doc Returns user database doc associated with current session.
+%% @doc Clears the association between suer and session.
 %% @end
 -spec clear() -> ok.
 %% ====================================================================
@@ -60,3 +67,50 @@ clear() ->
     wf:session(user_doc, undefined),
     wf:logout().
 
+
+%% get_requested_hostname/0
+%% ====================================================================
+%% @doc Returns the hostname requested by the client.
+%% @end
+-spec get_requested_hostname() -> binary().
+%% ====================================================================
+get_requested_hostname() ->
+    {Headers, _} = wf:headers(?REQ),
+    proplists:get_value(<<"host">>, Headers, undefined).
+
+
+%% get_requested_page/0
+%% ====================================================================
+%% @doc Returns the page requested by the client.
+%% @end
+-spec get_requested_page() -> binary().
+%% ====================================================================
+get_requested_page() ->
+    Path = wf:path(?REQ),
+    case Path of
+        <<"/ws", Page/binary>> -> Page;
+        <<Page/binary>> -> Page
+    end.
+
+
+%% get_request_params/0
+%% ====================================================================
+%% @doc Returns current http request params.
+%% @end
+-spec get_request_params() -> [tuple()].
+%% ====================================================================
+get_request_params() ->
+    try
+        ?CTX#context.params
+    catch _:_ ->
+        []
+    end.
+
+%% user_logged_in/0
+%% ====================================================================
+%% @doc Checks if the client has a valid login session.
+%% @end
+-spec user_logged_in() -> boolean().
+%% ====================================================================
+user_logged_in() ->
+    (gui_ctx:get_user_id() /= undefined).

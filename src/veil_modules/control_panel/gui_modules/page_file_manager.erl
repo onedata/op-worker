@@ -194,12 +194,12 @@ api_event("escape_pressed", _, _) ->
 
 
 event(init) ->
-    case gui_utils:user_logged_in() and gui_utils:dn_and_storage_defined() of
+    case gui_ctx:user_logged_in() and gui_utils:dn_and_storage_defined() of
         false ->
             skip;
         true ->
             UserID = gui_utils:get_user_dn(),
-            Hostname = gui_utils:get_requested_hostname(),
+            Hostname = gui_ctx:get_requested_hostname(),
             {ok, Pid} = gui_utils:comet(fun() -> comet_loop_init(UserID, Hostname) end),
             put(comet_pid, Pid)
     end;
