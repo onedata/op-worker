@@ -17,7 +17,7 @@
 
 %% Template points to the template file, which will be filled with content
 main() ->
-    case gui_utils:maybe_redirect(true, false, false, true) of
+    case vcn_gui_utils:maybe_redirect(true, false, false, true) of
         true ->
             #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
         false ->
@@ -30,7 +30,7 @@ title() -> <<"Manage account">>.
 %% This will be placed in the template instead of [[[page:body()]]] tag
 body() ->
     #panel{style = <<"position: relative;">>, body = [
-        gui_utils:top_menu(manage_account_tab),
+        vcn_gui_utils:top_menu(manage_account_tab),
         #panel{style = <<"margin-top: 60px; padding: 20px;">>, body = [
             #panel{id = <<"dn_error_panel">>, style = <<"display: none;">>,
                 class = <<"dialog dialog-danger">>, body = [
@@ -51,7 +51,7 @@ body() ->
             #h6{style = <<" text-align: center;">>, body = <<"Manage account">>},
             #panel{id = <<"main_table">>, body = main_table()}
         ]}
-    ] ++ gui_utils:logotype_footer(20)}.
+    ] ++ vcn_gui_utils:logotype_footer(20)}.
 
 
 % Info to register a DN
@@ -64,7 +64,7 @@ maybe_display_dn_message() ->
 
 % Info to install a storage helper
 maybe_display_helper_message() ->
-    case gui_utils:storage_defined() of
+    case vcn_gui_utils:storage_defined() of
         false -> gui_jq:show(<<"helper_error_panel">>);
         true -> gui_jq:hide(<<"helper_error_panel">>)
     end.
@@ -195,7 +195,7 @@ event({action, Fun}) ->
     event({action, Fun, []});
 
 event({action, Fun, Args}) ->
-    gui_utils:apply_or_redirect(?MODULE, Fun, Args, false).
+    vcn_gui_utils:apply_or_redirect(?MODULE, Fun, Args, false).
 
 
 % Update email list - add or remove one and save new user doc

@@ -19,6 +19,9 @@
 % Functions connected with page / session context
 -export([get_requested_hostname/0, get_requested_page/0, get_request_params/0]).
 
+% Parameters querying
+-export([param/1]).
+
 
 %% ====================================================================
 %% API functions
@@ -114,3 +117,17 @@ get_request_params() ->
 %% ====================================================================
 user_logged_in() ->
     (gui_ctx:get_user_id() /= undefined).
+
+
+%% param/1
+%% ====================================================================
+%% @doc Retrieves a parameter value for a given key. This can be both
+%% URL parameter or POST parameter passed during form submission.
+%% For form parameters, source field in event record must be provided
+%% to be accessible by this function.
+%% like this: #event{source = ["field_name"], ...}.
+%% @end
+-spec param(ParamName :: string() | binary()) -> ok.
+%% ====================================================================
+param(ParamName) ->
+    wf:q(gui_str:to_list(ParamName)).

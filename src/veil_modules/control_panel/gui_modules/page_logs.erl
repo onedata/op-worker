@@ -44,11 +44,11 @@
 
 %% Template points to the template file, which will be filled with content
 main() ->
-    case gui_utils:maybe_redirect(true, false, false, true) of
+    case vcn_gui_utils:maybe_redirect(true, false, false, true) of
         true ->
             #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
         false ->
-            case gui_utils:can_view_logs() of
+            case vcn_gui_utils:can_view_logs() of
                 false ->
                     wf:redirect(<<"/">>),
                     #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
@@ -66,7 +66,7 @@ title() -> <<"Logs">>.
 body() ->
     gui_jq:register_escape_event("escape_pressed"),
     _Body = [
-        gui_utils:top_menu(logs_tab, logs_submenu()),
+        vcn_gui_utils:top_menu(logs_tab, logs_submenu()),
         #panel{style = <<"margin-top: 122px; z-index: -1;">>, body = main_table()},
         footer_popup()
     ].
@@ -211,7 +211,7 @@ comet_loop(Counter, PageState = #page_state{first_log = FirstLog, auto_scroll = 
             display_error ->
                 catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}}),
                 gui_jq:insert_bottom(<<"main_table">>, comet_error()),
-                gui_utils:flush();
+                gui_comet:flush();
             {'EXIT', _, _Reason} ->
                 catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}});
             Other ->
@@ -222,7 +222,7 @@ comet_loop(Counter, PageState = #page_state{first_log = FirstLog, auto_scroll = 
         ?error_stacktrace("Error in page_logs comet_loop - ~p: ~p", [_Type, _Msg]),
         catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}}),
         gui_jq:insert_bottom(<<"main_table">>, comet_error()),
-        gui_utils:flush()
+        gui_comet:flush()
     end.
 
 
@@ -258,7 +258,7 @@ process_log(Counter, {Message, Timestamp, Severity, Metadata},
                                                true ->
                                                    wf:wire("$('html, body').animate({scrollTop: $(document).height()}, 50);")
                                            end,
-                                           gui_utils:flush(),
+                                           gui_comet:flush(),
                                            {Counter + 1, PageState#page_state{first_log = NewFirstLog}}
                                    end.
 
@@ -267,7 +267,7 @@ process_log(Counter, {Message, Timestamp, Severity, Metadata},
 remove_old_logs(Counter, FirstLog, MaxLogs) ->
     case FirstLog + MaxLogs =< Counter of
         false ->
-            gui_utils:flush(),
+            gui_comet:flush(),
             FirstLog;
         true ->
             gui_jq:remove(<<?COLLAPSED_LOG_ROW_ID_PREFIX, (integer_to_binary(FirstLog))/binary>>),
@@ -406,7 +406,7 @@ api_event("escape_pressed", _, _) ->
 event(init) ->
     put(filters, #page_state{}),
     % Start a comet process
-    {ok, Pid} = gui_utils:comet(fun() -> comet_loop_init() end),
+    {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init() end),
     put(comet_pid, Pid),
     % Subscribe for logs at central_logger
     case gen_server:call(?Dispatcher_Name, {central_logger, 1, {subscribe, Pid}}) of

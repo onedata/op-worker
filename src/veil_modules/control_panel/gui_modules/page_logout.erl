@@ -32,7 +32,7 @@ body() ->
             #button{postback = to_login, class = <<"btn btn-primary btn-block">>, body = <<"Login page">>}
         ]}
     ]
-    ++ gui_utils:logotype_footer(120)
+    ++ vcn_gui_utils:logotype_footer(120)
         ++ [#p{body = <<"<iframe src=\"https://openid.plgrid.pl/logout\" style=\"display:none\"></iframe>">>}]
     }.
 

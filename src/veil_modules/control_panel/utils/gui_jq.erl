@@ -6,7 +6,7 @@
 %% @end
 %% ===================================================================
 %% @doc: This file contains page manipulation and asynchronous updates
-%% functions based on jquery.
+%% functions, mostly based on jquery.
 %% IMPORTANT: n2o's wf module must not be used directly!
 %% These functions are a wrapper to that module, which gives control over
 %% such aspects as javascript escaping and event wiring sequence.
@@ -22,9 +22,6 @@
 
 % Redirections
 -export([redirect/1, redirect_to_login/1, redirect_from_login/0]).
-
-% Parameters querying
--export([value/1]).
 
 % Useful functions for binding custom events
 -export([register_escape_event/1, bind_enter_to_submit_button/2, bind_element_click/2]).
@@ -134,20 +131,6 @@ redirect_from_login() ->
         undefined -> wf:redirect(<<"/">>);
         TargetPage -> wf:redirect(TargetPage)
     end.
-
-
-%% value/1
-%% ====================================================================
-%% @doc Retrieves a parameter value for a given key. This can be both
-%% URL parameter or POST parameter passed during form submission.
-%% For form parameters, source field in event record must be provided
-%% to be accessible by this function.
-%% like this: #event{source = ["field_name"], ...}.
-%% @end
--spec value(Param :: string() | binary()) -> ok.
-%% ====================================================================
-value(Param) ->
-    wf:q(gui_str:to_list(Param)).
 
 
 %% register_escape_event/1

@@ -25,7 +25,7 @@ body() ->
     case gui_ctx:user_logged_in() of
         true -> gui_jq:redirect(<<"/">>);
         false ->
-            ErrorPanelStyle = case gui_jq:value(<<"x">>) of
+            ErrorPanelStyle = case gui_ctx:param(<<"x">>) of
                                   undefined -> <<"display: none;">>;
                                   _ -> <<"">>
                               end,
@@ -38,7 +38,7 @@ body() ->
                     "You need to have an account and possibly VeilFS service enabled.">>},
                     #button{postback = login, class = <<"btn btn-primary btn-block">>, body = <<"Log in via PL-Grid OpenID">>}
                 ]}
-            ] ++ gui_utils:logotype_footer(120)}
+            ] ++ vcn_gui_utils:logotype_footer(120)}
     end.
 
 
@@ -46,7 +46,7 @@ event(init) -> ok;
 % Login event handling
 event(login) ->
     % Collect redirect param if present
-    RedirectParam = case gui_jq:value(<<"x">>) of
+    RedirectParam = case gui_ctx:param(<<"x">>) of
                         undefined -> <<"">>;
                         Val -> <<"?x=", Val/binary>>
                     end,

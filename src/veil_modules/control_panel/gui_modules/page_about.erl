@@ -20,7 +20,7 @@
 
 %% Template points to the template file, which will be filled with content
 main() ->
-    case gui_utils:maybe_redirect(true, true, true, true) of
+    case vcn_gui_utils:maybe_redirect(true, true, true, true) of
         true ->
             #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
         false ->
@@ -33,11 +33,11 @@ title() -> <<"About">>.
 %% This will be placed in the template instead of {{body}} tag
 body() ->
     #panel{style = <<"position: relative;">>, body = [
-        gui_utils:top_menu(about_tab),
+        vcn_gui_utils:top_menu(about_tab),
         #panel{style = <<"margin-top: 60px; padding: 20px;">>, body = [
             #panel{id = <<"about_table">>, body = about_table()}
         ]}
-    ] ++ gui_utils:logotype_footer(20)}.
+    ] ++ vcn_gui_utils:logotype_footer(20)}.
 
 about_table() ->
     #table{style = <<"border-width: 0px; width: auto">>, body = [

@@ -18,7 +18,7 @@
 
 %% Template points to the template file, which will be filled with content
 main() ->
-    case gui_utils:maybe_redirect(true, true, true, true) of
+    case vcn_gui_utils:maybe_redirect(true, true, true, true) of
         true ->
             #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
         false ->
@@ -32,7 +32,7 @@ title() -> <<"Shared files">>.
 body() ->
     gui_jq:register_escape_event("escape_pressed"),
     [
-        gui_utils:top_menu(shared_files_tab),
+        vcn_gui_utils:top_menu(shared_files_tab),
         #panel{style = <<"margin-top: 59px;">>, body = main_panel()},
         footer_popup()
     ].
@@ -40,7 +40,7 @@ body() ->
 
 % Main table   
 main_panel() ->
-    fslogic_context:set_user_dn(gui_utils:get_user_dn()),
+    fslogic_context:set_user_dn(vcn_gui_utils:get_user_dn()),
     ShareEntries = lists:foldl(
         fun(#veil_document{uuid = UUID, record = #share_desc{file = FileID}}, Acc) ->
             case logical_files_manager:get_file_user_dependent_name_by_uuid(FileID) of
@@ -118,7 +118,7 @@ event({action, Fun}) ->
     event({action, Fun, []});
 
 event({action, Fun, Args}) ->
-    gui_utils:apply_or_redirect(?MODULE, Fun, Args, true).
+    vcn_gui_utils:apply_or_redirect(?MODULE, Fun, Args, true).
 
 
 % Display link to file in popup panel

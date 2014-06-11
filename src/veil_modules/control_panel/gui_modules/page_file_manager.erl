@@ -31,7 +31,7 @@
 
 %% Check if user is logged in and has dn defined.
 main() ->
-    case gui_utils:maybe_redirect(true, true, true, true) of
+    case vcn_gui_utils:maybe_redirect(true, true, true, true) of
         true ->
             #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
         false ->
@@ -49,7 +49,7 @@ body() ->
         #panel{id = <<"spinner">>, style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>, body = [
             #image{image = <<"/images/spinner.gif">>}
         ]},
-        gui_utils:top_menu(file_manager_tab, manager_submenu()),
+        vcn_gui_utils:top_menu(file_manager_tab, manager_submenu()),
         manager_workspace(),
         footer_popup()
     ],
@@ -194,13 +194,13 @@ api_event("escape_pressed", _, _) ->
 
 
 event(init) ->
-    case gui_ctx:user_logged_in() and gui_utils:dn_and_storage_defined() of
+    case gui_ctx:user_logged_in() and vcn_gui_utils:dn_and_storage_defined() of
         false ->
             skip;
         true ->
-            UserID = gui_utils:get_user_dn(),
+            UserID = vcn_gui_utils:get_user_dn(),
             Hostname = gui_ctx:get_requested_hostname(),
-            {ok, Pid} = gui_utils:comet(fun() -> comet_loop_init(UserID, Hostname) end),
+            {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init(UserID, Hostname) end),
             put(comet_pid, Pid)
     end;
 
@@ -220,12 +220,12 @@ event({action, Fun, Args}) ->
                 {query_value, FieldName} ->
                     % This tuple means, that element with id=FieldName has to be queried
                     % and the result be put in function args
-                    gui_str:to_list(gui_jq:value(FieldName));
+                    gui_str:to_list(gui_ctx:param(FieldName));
                 Other ->
                     Other
             end
         end, Args),
-    gui_utils:apply_or_redirect(erlang, send, [get(comet_pid), {action, Fun, NewArgs}], true).
+    vcn_gui_utils:apply_or_redirect(erlang, send, [get(comet_pid), {action, Fun, NewArgs}], true).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -247,7 +247,7 @@ comet_loop_init(UserId, RequestedHostname) ->
     set_clipboard_type(none),
     refresh_workspace(),
     gui_jq:hide(<<"spinner">>),
-    gui_utils:flush(),
+    gui_comet:flush(),
 
     % Enter comet loop for event processing and autorefreshing
     comet_loop(false).
@@ -259,12 +259,12 @@ comet_loop(IsUploadInProgress) ->
             {action, Fun, Args} ->
                 case IsUploadInProgress of
                     true ->
-                        gui_jq:wire(#alert{text = <<"Please wait for the upload to finish.">>}), gui_utils:flush();
+                        gui_jq:wire(#alert{text = <<"Please wait for the upload to finish.">>}), gui_comet:flush();
                     false ->
                         erlang:apply(?MODULE, Fun, Args)
                 end,
                 gui_jq:hide(<<"spinner">>),
-                gui_utils:flush(),
+                gui_comet:flush(),
                 comet_loop(IsUploadInProgress);
             upload_started ->
                 comet_loop(true);
@@ -285,7 +285,7 @@ comet_loop(IsUploadInProgress) ->
                     set_item_list(CurrentItemList),
                     set_item_list_rev(CurrentMD5),
                     refresh_workspace(),
-                    gui_utils:flush()
+                    gui_comet:flush()
             end,
             comet_loop(IsUploadInProgress)
         end
@@ -293,7 +293,7 @@ comet_loop(IsUploadInProgress) ->
     catch Type:Message ->
         ?error_stacktrace("Error in file_manager comet_loop - ~p:~p", [Type, Message]),
         page_error:redirect_with_error(?error_internal_server_error),
-        gui_utils:flush()
+        gui_comet:flush()
     end.
 
 

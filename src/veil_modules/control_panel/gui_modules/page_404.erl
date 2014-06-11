@@ -28,7 +28,7 @@ body() ->
             #p{class = <<"login-info">>, body = <<"Requested page could not be found on the server.">>},
             #button{postback = to_login, class = <<"btn btn-warning btn-block">>, body = <<"Login page">>}
         ]}
-    ] ++ gui_utils:logotype_footer(120)}.
+    ] ++ vcn_gui_utils:logotype_footer(120)}.
 
 event(init) -> ok;
 event(to_login) -> gui_jq:redirect_to_login(false).

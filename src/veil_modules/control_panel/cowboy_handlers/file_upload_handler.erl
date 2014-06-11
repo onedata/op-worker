@@ -85,9 +85,9 @@ handle_upload_request(Req) ->
             SessHandler = proplists:get_value(session, Context1#context.handlers),
             {ok, St, Context2} = SessHandler:init([], Context1),
             wf_context:context(Context2),
-            UserID = wf:session(user_doc),
-            true = (UserID /= undefined),
-            fslogic_context:set_user_dn(lists:nth(1, user_logic:get_dn_list(UserID))),
+            UserDoc = gui_ctx:get_user_record(),
+            true = (UserDoc /= undefined),
+            fslogic_context:set_user_dn(lists:nth(1, user_logic:get_dn_list(UserDoc))),
             {St, Context2, SessHandler}
         catch T1:M1 ->
             ?warning("Cannot establish session context for user content request - ~p:~p", [T1, M1]),
