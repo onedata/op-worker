@@ -203,7 +203,7 @@ update_email(User, AddOrRemove) ->
     OldEmailList = user_logic:get_email_list(User),
     {ok, NewUser} = case AddOrRemove of
                         {add, submitted} ->
-                            NewEmail = gui_str:to_list(gui_ctx:param(<<"new_email_textbox">>)),
+                            NewEmail = gui_str:to_list(gui_ctx:form_param(<<"new_email_textbox">>)),
                             case user_logic:get_user({email, NewEmail}) of
                                 {ok, _} ->
                                     gui_jq:wire(#alert{text = <<"This e-mail address is in use.">>}),
@@ -214,7 +214,7 @@ update_email(User, AddOrRemove) ->
                         {remove, Email} ->
                             user_logic:update_email_list(User, OldEmailList -- [Email])
                     end,
-    gui_ctx:set_user(gui_ctx:get_user_id(), NewUser),
+    gui_ctx:set_user_record(NewUser),
     gui_jq:update(<<"main_table">>, main_table()).
 
 
@@ -223,7 +223,7 @@ update_dn(User, AddOrRemove) ->
     OldDnList = user_logic:get_dn_list(User),
     case AddOrRemove of
         {add, submitted} ->
-            case user_logic:extract_dn_from_cert(list_to_binary(gui_ctx:param(<<"new_dn_textbox">>))) of
+            case user_logic:extract_dn_from_cert(gui_ctx:form_param(<<"new_dn_textbox">>)) of
                 {rdnSequence, RDNSequence} ->
                     {ok, DnString} = user_logic:rdn_sequence_to_dn_string(RDNSequence),
                     case user_logic:get_user({dn, DnString}) of
@@ -231,7 +231,7 @@ update_dn(User, AddOrRemove) ->
                             gui_jq:wire(#alert{text = <<"This certificate is already registered.">>});
                         _ ->
                             {ok, NewUser} = user_logic:update_dn_list(User, OldDnList ++ [DnString]),
-                            gui_ctx:set_user(gui_ctx:get_user_id(), NewUser)
+                            gui_ctx:set_user_record(NewUser)
                     end;
                 {error, proxy_ceertificate} ->
                     gui_jq:wire(#alert{text = <<"Proxy certificates are not accepted.">>});
@@ -242,7 +242,7 @@ update_dn(User, AddOrRemove) ->
             end;
         {remove, DN} ->
             {ok, NewUser} = user_logic:update_dn_list(User, OldDnList -- [DN]),
-            gui_ctx:set_user(gui_ctx:get_user_id(), NewUser)
+            gui_ctx:set_user_record(NewUser)
     end,
     gui_jq:update(<<"main_table">>, main_table()).
 

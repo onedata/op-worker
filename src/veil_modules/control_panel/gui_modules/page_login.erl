@@ -25,7 +25,7 @@ body() ->
     case gui_ctx:user_logged_in() of
         true -> gui_jq:redirect(<<"/">>);
         false ->
-            ErrorPanelStyle = case gui_ctx:param(<<"x">>) of
+            ErrorPanelStyle = case gui_ctx:url_param(<<"x">>) of
                                   undefined -> <<"display: none;">>;
                                   _ -> <<"">>
                               end,
@@ -46,7 +46,7 @@ event(init) -> ok;
 % Login event handling
 event(login) ->
     % Collect redirect param if present
-    RedirectParam = case gui_ctx:param(<<"x">>) of
+    RedirectParam = case gui_ctx:url_param(<<"x">>) of
                         undefined -> <<"">>;
                         Val -> <<"?x=", Val/binary>>
                     end,

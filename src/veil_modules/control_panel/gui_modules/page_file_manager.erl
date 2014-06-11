@@ -220,7 +220,7 @@ event({action, Fun, Args}) ->
                 {query_value, FieldName} ->
                     % This tuple means, that element with id=FieldName has to be queried
                     % and the result be put in function args
-                    gui_str:to_list(gui_ctx:param(FieldName));
+                    gui_str:to_list(gui_ctx:form_param(FieldName));
                 Other ->
                     Other
             end

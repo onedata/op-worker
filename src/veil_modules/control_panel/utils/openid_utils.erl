@@ -70,11 +70,12 @@ get_login_url(HostName, RedirectParams) ->
 prepare_validation_parameters() ->
     try
         % Make sure received endpoint is really the PLGrid endpoint
-        EndpointURL = gui_ctx:param(<<?openid_op_endpoint_key>>),
+        EndpointURL = gui_ctx:url_param(<<?openid_op_endpoint_key>>),
+        ?dump(EndpointURL),
         true = (discover_op_endpoint(?xrds_url) =:= EndpointURL),
 
         % 'openid.signed' contains parameters that must be contained in validation request
-        SignedArgsNoPrefix = binary:split(gui_ctx:param(<<?openid_signed_key>>), <<",">>, [global]),
+        SignedArgsNoPrefix = binary:split(gui_ctx:url_param(<<?openid_signed_key>>), <<",">>, [global]),
         % Add 'openid.' prefix to all parameters
         % And add 'openid.sig' and 'openid.signed' params which are required for validation
         SignedArgs = lists:map(
@@ -85,7 +86,7 @@ prepare_validation_parameters() ->
         % Create a POST request body
         RequestParameters = lists:foldl(
             fun(Key, Acc) ->
-                Value = case gui_ctx:param(Key) of
+                Value = case gui_ctx:url_param(Key) of
                             undefined -> throw("Value for " ++ gui_str:to_list(Key) ++ " not found");
                             Val -> Val
                         end,
@@ -146,7 +147,7 @@ validate_openid_login({EndpointURL, ValidationRequestBody}) ->
 retrieve_user_info() ->
     try
         % Check which params were signed by PLGrid
-        SignedParamsNoPrefix = binary:split(gui_ctx:param(<<?openid_signed_key>>), <<",">>, [global]),
+        SignedParamsNoPrefix = binary:split(gui_ctx:url_param(<<?openid_signed_key>>), <<",">>, [global]),
         % Add 'openid.' prefix to all parameters
         % And add 'openid.sig' and 'openid.signed' params which are required for validation
         SignedParams = lists:map(
@@ -197,7 +198,7 @@ retrieve_user_info() ->
 %% ====================================================================
 get_signed_param(ParamName, SignedParams) ->
     case lists:member(ParamName, SignedParams) of
-        true -> gui_str:to_list(gui_ctx:param(ParamName));
+        true -> gui_str:to_list(gui_ctx:url_param(ParamName));
         false -> []
     end.
 

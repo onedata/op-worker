@@ -46,13 +46,6 @@
 -define(error_login_dir_chown_error, login_dir_chown_error).
 
 
-
-
-
-
-
-
-
 %% Includes from cowboy
 -type cookie_option() :: {max_age, non_neg_integer()}
 	| {domain, binary()} | {path, binary()}

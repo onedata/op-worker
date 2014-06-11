@@ -506,7 +506,7 @@ event({toggle_filter, FilterName}) ->
 
 % Update patricular filter
 event({update_filter, FilterName}) ->
-    Filter = gui_str:to_binary(gui_ctx:param(gui_str:to_list(get_filter_textbox(FilterName)))),
+    Filter = gui_ctx:form_param(gui_str:to_list(get_filter_textbox(FilterName))),
     case Filter of
         <<"">> ->
             put(filters, set_filter(get(filters), FilterName, undefined)),

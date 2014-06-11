@@ -14,32 +14,31 @@
 -include("logging.hrl").
 
 % Functions used to associate user with session
--export([set_user/2, get_user_id/0, get_user_record/0, user_logged_in/0, clear_session/0]).
+-export([set_user_id/1, get_user_id/0, set_user_record/1, get_user_record/0, user_logged_in/0, clear_session/0]).
 
 % Functions connected with page / session context
 -export([get_requested_hostname/0, get_requested_page/0, get_request_params/0]).
 
 % Parameters querying
--export([param/1]).
+-export([form_param/1, url_param/1]).
 
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
 
-%% set_user/2
+%% set_user_id/1
 %% ====================================================================
 %% @doc Associates current session with a user. User ID and his
 %% database doc must be provided.
 %% @end
--spec set_user(ID :: term(), DBRecord :: term()) -> ok.
+-spec set_user_id(ID :: term()) -> ok.
 %% ====================================================================
-set_user(ID, DBRecord) ->
-    wf:user(ID),
-    wf:session(user_doc, DBRecord).
+set_user_id(ID) ->
+    wf:user(ID).
 
 
-%% set_user/0
+%% get_user_id/0
 %% ====================================================================
 %% @doc Returns user ID associated with current session.
 %% @end
@@ -47,6 +46,16 @@ set_user(ID, DBRecord) ->
 %% ====================================================================
 get_user_id() ->
     wf:user().
+
+
+%% set_user_record/1
+%% ====================================================================
+%% @doc Returns user database doc associated with current session.
+%% @end
+-spec set_user_record(UserDoc :: term()) -> term().
+%% ====================================================================
+set_user_record(UserDoc) ->
+    wf:session(user_doc, UserDoc).
 
 
 %% get_user_record/0
@@ -59,7 +68,7 @@ get_user_record() ->
     wf:session(user_doc).
 
 
-%% clear/0
+%% clear_session/0
 %% ====================================================================
 %% @doc Clears the association between suer and session.
 %% @end
@@ -119,15 +128,28 @@ user_logged_in() ->
     (gui_ctx:get_user_id() /= undefined).
 
 
-%% param/1
+%% form_param/1
 %% ====================================================================
-%% @doc Retrieves a parameter value for a given key. This can be both
-%% URL parameter or POST parameter passed during form submission.
-%% For form parameters, source field in event record must be provided
-%% to be accessible by this function.
+%% @doc Retrieves a parameter value for a given key - POST parameter
+%% passed during form submission.
+%% NOTE! source field in event record must be provided
+%% to be accessible by this function,
 %% like this: #event{source = ["field_name"], ...}.
+%% it must be a list (not binary), as n2o requires so. Returns undefined if
+%% the key is not found.
 %% @end
--spec param(ParamName :: string() | binary()) -> ok.
+-spec form_param(ParamName :: string() | binary()) -> binary() | undefined.
 %% ====================================================================
-param(ParamName) ->
-    wf:q(gui_str:to_list(ParamName)).
+form_param(ParamName) ->
+    gui_str:to_binary(wf:q(gui_str:to_list(ParamName))).
+
+
+%% url_param/1
+%% ====================================================================
+%% @doc Retrieves a URL parameter for given key. Returns undefined if
+%% the key is not found.
+%% @end
+-spec url_param(ParamName :: string() | binary()) -> binary() | undefined.
+%% ====================================================================
+url_param(ParamName) ->
+    wf:q(gui_str:to_binary(ParamName)).
