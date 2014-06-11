@@ -35,7 +35,7 @@
 %% Test API
 %% ====================================================================
 -ifdef(TEST).
--export([stop_all_sub_proc/1,register_simple_cache/5]).
+-export([stop_all_sub_proc/1]).
 -endif.
 
 %% ====================================================================
@@ -1068,7 +1068,7 @@ create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPi
     [_ | _]     -> ok
   end,
 
-  worker_host:register_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPid).
+  register_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPid).
 
 %% register_simple_cache/5
 %% ====================================================================
@@ -1245,7 +1245,7 @@ get_cache_name(SupProcName) ->
   CacheLoop :: integer() | atom().
 %% ====================================================================
 register_sub_proc_simple_cache(Name, CacheLoop, ClearFun, ClearingPid) ->
-  RegAns = worker_host:register_simple_cache({sub_proc_cache, Name}, CacheLoop, ClearFun, false, ClearingPid),
+  RegAns = register_simple_cache({sub_proc_cache, Name}, CacheLoop, ClearFun, false, ClearingPid),
   case RegAns of
     ok ->
       ok;
