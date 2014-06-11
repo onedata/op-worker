@@ -54,10 +54,10 @@ render_element(Record) ->
     wf:wire(wf:f("$('#~s').prop('disabled', true);", [?SUBMIT_BUTTON_ID])),
 
     SubmitJS = wf:f("veil_send_pending_files($('#~s').get(0), $('#~s').get(0));", [?FORM_ID, ?SELECT_BUTTON_ID]),
-    wf:wire(gui_utils:script_to_bind_element_click(?SUBMIT_BUTTON_ID, SubmitJS)),
+    gui_jq:bind_element_click(?SUBMIT_BUTTON_ID, SubmitJS),
 
     ReportUploadStartJS = wf:f("~s('~s');", [?upload_start_callback, PickledPid]),
-    wf:wire(gui_utils:script_to_bind_element_click(?SUBMIT_BUTTON_ID, ReportUploadStartJS)),
+    gui_jq:bind_element_click(?SUBMIT_BUTTON_ID, ReportUploadStartJS),
 
     UploadJS = wf:f("veil_attach_upload_handle_dragdrop($('#~s').get(0), $('#~s').get(0));", [?FORM_ID, ?SELECT_BUTTON_ID]),
     wf:wire(UploadJS),

@@ -25,8 +25,6 @@
 -export([apply_or_redirect/3, apply_or_redirect/4, top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
 % Comet API
 -export([comet/1, init_comet/2, comet_supervisor/2, is_comet_process/0, flush/0]).
-% Useful functions for binding custom events
--export([register_escape_event/1, script_for_enter_submission/2, script_to_bind_element_click/2]).
 % Convinience function to set headers in cowboy response
 -export([cowboy_ensure_header/3]).
 % Functions used to perform secure server-server http requests
@@ -434,40 +432,6 @@ flush() ->
             get(ws_process) ! {flush, Actions}
     end,
     ok.
-
-
-%% register_escape_event/1
-%% ====================================================================
-%% @doc Binds escape button so that it generates an event every time it's pressed.
-%% The event will call the function api_event(Tag, [], Context) on page module.
-%% @end
--spec register_escape_event(string()) -> ok.
-%% ====================================================================
-register_escape_event(Tag) ->
-    wf:wire(#api{name = "escape_pressed", tag = Tag}),
-    wf:wire("$(document).bind('keydown', function (e){if (e.which == 27) escape_pressed();});").
-
-
-%% script_for_enter_submission/2
-%% ====================================================================
-%% @doc Generates snippet of javascript, which can be directly used with wf:wire.
-%% It intercepts enter keypresses on given input element and performs a click() on given submit button.
-%% @end
--spec script_for_enter_submission(string(), string()) -> string().
-%% ====================================================================
-script_for_enter_submission(InputID, ButtonToClickID) ->
-    wf:f("$('#~s').bind('keydown', function (e){ if (e.which == 13) { e.preventDefault(); $('#~s').click(); } });", [InputID, ButtonToClickID]).
-
-
-%% script_to_bind_element_click/2
-%% ====================================================================
-%% @doc Generates snippet of javascript, which can be directly used with wf:wire.
-%% It intercepts enter keypresses on given input element and performs a click() on given submit button.
-%% @end
--spec script_to_bind_element_click(string(), string()) -> string().
-%% ====================================================================
-script_to_bind_element_click(ElementID, Javascript) ->
-    wf:f("$('#~s').bind('click', function anonymous(event) { ~s });", [ElementID, Javascript]).
 
 
 %% cowboy_ensure_header/3

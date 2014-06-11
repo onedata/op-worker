@@ -45,7 +45,7 @@ title() -> <<"File manager">>.
 %% This will be placed in the template instead of {{body}} tag
 body() ->
     reset_wire_accumulator(),
-    gui_utils:register_escape_event("escape_pressed"),
+    gui_jq:register_escape_event("escape_pressed"),
     Body = [
         #panel{id = <<"spinner">>, class = <<"spinner">>, style = <<"position: absolute; top: 15px; left: 17px; z-index: 1234;">>, body = [
             #image{image = <<"/images/spinner.gif">>}
@@ -64,17 +64,17 @@ manager_submenu() ->
         #panel{class = <<"navbar-inner">>, style = <<"padding-top: 10px;">>, body = [
             #panel{class = <<"container">>, style = <<"position: relative; overflow: hidden;">>, body = [
                 #list{class = <<"nav">>, body =
-                tool_button_and_dummy("tb_up_one_level", <<"Up one level">>, <<"padding: 10px 7px 10px 15px;">>,
+                tool_button_and_dummy(<<"tb_up_one_level">>, <<"Up one level">>, <<"padding: 10px 7px 10px 15px;">>,
                     <<"fui-arrow-left">>, {action, up_one_level})},
                 #panel{class = <<"breadcrumb-text breadcrumb-background">>, style = <<"overflow: hidden; margin-left: 15px;">>, body = [
                     #p{id = <<"path_navigator">>, class = <<"breadcrumb-content">>, body = <<"~/">>}%path_navigator_body("/")}
                 ]},
                 #panel{class = <<"control-group">>, style = <<"position: absolute; right: 15px; top: 0;">>, body = [
                     #panel{class = <<"input-append">>, style = <<"; margin-bottom: 0px;">>, body = [
-                        #textbox{id = wire_enter("search_textbox", "search_button"), class = <<"span2">>,
+                        #textbox{id = wire_enter(<<"search_textbox">>, <<"search_button">>), class = <<"span2">>,
                             style = <<"width: 220px;">>, placeholder = <<"Search">>},
                         #panel{class = <<"btn-group">>, body = [
-                            #button{id = wire_click("search_button", ["search_textbox"], {action, search, [{q, "search_textbox"}]}),
+                            #button{id = wire_click(<<"search_button">>, ["search_textbox"], {action, search, [{q, "search_textbox"}]}),
                                 class = <<"btn">>, type = <<"button">>, body = #span{class = <<"fui-search">>}}
                         ]}
                     ]}
@@ -84,27 +84,27 @@ manager_submenu() ->
         #panel{class = <<"navbar-inner">>, style = <<"border-bottom: 1px solid gray; padding-bottom: 5px;">>, body = [
             #panel{class = <<"container">>, body = [
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
-                tool_button("tb_create_dir", <<"Create directory">>, <<"padding: 18px 14px;">>,
+                tool_button(<<"tb_create_dir">>, <<"Create directory">>, <<"padding: 18px 14px;">>,
                     <<"fui-folder">>, {action, show_popup, [create_directory]}) ++
-                    tool_button("tb_upload_files", <<"Upload file(s)">>, <<"padding: 18px 14px;">>,
+                    tool_button(<<"tb_upload_files">>, <<"Upload file(s)">>, <<"padding: 18px 14px;">>,
                         <<"fui-plus-inverted">>, {action, show_popup, [file_upload]}) ++
-                    tool_button_and_dummy("tb_share_file", <<"Share">>, <<"padding: 18px 14px;">>,
+                    tool_button_and_dummy(<<"tb_share_file">>, <<"Share">>, <<"padding: 18px 14px;">>,
                         <<"fui-link">>, {action, show_popup, [share_file]})
 
                 },
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
-                tool_button_and_dummy("tb_rename", <<"Rename">>, <<"padding: 18px 14px;">>,
+                tool_button_and_dummy(<<"tb_rename">>, <<"Rename">>, <<"padding: 18px 14px;">>,
                     <<"fui-new">>, {action, show_popup, [rename_item]}) ++
-                tool_button_and_dummy("tb_remove", <<"Remove">>, <<"padding: 18px 14px;">>,
+                tool_button_and_dummy(<<"tb_remove">>, <<"Remove">>, <<"padding: 18px 14px;">>,
                     <<"fui-trash">>, {action, show_popup, [remove_selected]})
                 },
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
-                tool_button_and_dummy("tb_cut", <<"Cut">>, <<"padding: 18px 14px;">>,
+                tool_button_and_dummy(<<"tb_cut">>, <<"Cut">>, <<"padding: 18px 14px;">>,
                     <<"fui-window">>, {action, put_to_clipboard, [cut]}) ++
-                %tool_button_and_dummy("tb_copy", "Copy", "padding: 18px 14px;",
+                %tool_button_and_dummy(<<"tb_copy">>, "Copy", "padding: 18px 14px;",
                 %    "fui-windows", {action, put_to_clipboard, [copy]}) ++
 
-                [#li{id = wire_click("tb_paste", {action, paste_from_clipboard}), body = #link{title = <<"Paste">>, style = <<"padding: 18px 14px;">>,
+                [#li{id = wire_click(<<"tb_paste">>, {action, paste_from_clipboard}), body = #link{title = <<"Paste">>, style = <<"padding: 18px 14px;">>,
                     body = #span{class = <<"fui-upload">>, body = #span{id = <<"clipboard_size_label">>, class = <<"iconbar-unread">>,
                         style = <<"right: -12px; top: -10px; background-color: rgb(26, 188, 156);">>,
                         body = <<"0">>}}}},
@@ -112,18 +112,18 @@ manager_submenu() ->
                         body = #span{style = <<"color: rgb(200, 200, 200);">>, class = <<"fui-upload">>}}}]
                 },
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
-                tool_button_and_dummy("tb_select_all", <<"Select all">>, <<"padding: 18px 14px;">>,
+                tool_button_and_dummy(<<"tb_select_all">>, <<"Select all">>, <<"padding: 18px 14px;">>,
                     <<"fui-checkbox-checked">>, {action, select_all}) ++
-                tool_button_and_dummy("tb_deselect_all", <<"Deselect all">>, <<"padding: 18px 14px;">>,
+                tool_button_and_dummy(<<"tb_deselect_all">>, <<"Deselect all">>, <<"padding: 18px 14px;">>,
                     <<"fui-checkbox-unchecked">>, {action, deselect_all})
                 },
 
                 #panel{class = <<"btn-toolbar pull-right no-margin">>, style = <<"padding: 12px 15px; overflow: hidden;">>, body = [
                     #panel{class = <<"btn-group no-margin">>, body = [
-                        #link{id = wire_click("list_view_button", {action, toggle_view, [list]}),
+                        #link{id = wire_click(<<"list_view_button">>, {action, toggle_view, [list]}),
                             title = "List view", class = <<"btn btn-small btn-inverse">>,
                             body = #span{class = <<"fui-list-columned">>}},
-                        #link{id = wire_click("grid_view_button", {action, toggle_view, [grid]}),
+                        #link{id = wire_click(<<"grid_view_button">>, {action, toggle_view, [grid]}),
                             title = "Grid view", class = <<"btn btn-small btn-inverse">>,
                             body = #span{class = <<"fui-list-small-thumbnails">>}}
                     ]}
@@ -131,7 +131,7 @@ manager_submenu() ->
 
                 #panel{class = <<"btn-group pull-right">>, style = <<"margin: 12px 15px">>, body = [
                     "<i class=\"dropdown-arrow dropdown-arrow-inverse\"></i>",
-                    #button{id = wire_click("button_sort_reverse", {action, sort_reverse}), title = "Reverse sorting",
+                    #button{id = wire_click(<<"button_sort_reverse">>, {action, sort_reverse}), title = "Reverse sorting",
                         class = <<"btn btn-inverse btn-small">>, body = "Sort"},
                     #button{title = "Sort by", class = <<"btn btn-inverse btn-small dropdown-toggle">>,
                         data_fields = [{<<"data-toggle">>, <<"dropdown">>}], body = #span{class = <<"caret">>}},
@@ -166,7 +166,7 @@ tool_button(ID, Title, Style, Icon, Postback) ->
 tool_button_and_dummy(ID, Title, Style, Icon, Postback) ->
     tool_button(ID, Title, Style, Icon, Postback) ++
     [
-        #li{id = ID ++ "_dummy", class = <<"disabled hidden">>, body = #link{title = Title, style = Style,
+        #li{id = <<ID/binary, "_dummy">>, class = <<"disabled hidden">>, body = #link{title = Title, style = Style,
             body = #span{style = <<"color: rgb(200, 200, 200);">>, class = Icon}}}
     ].
 
@@ -175,20 +175,26 @@ tool_button_and_dummy(ID, Title, Style, Icon, Postback) ->
 %% Wiring postbacks. Thanks to this wrapper every time a postback is initiated,
 %% there will be spinner showing up in 150ms. It gets hidden when reply is received.
 wire_click(ID, Tag) ->
-    put(to_wire, get(to_wire) ++ [{#event{type = click, target = gui_convert:to_list(ID), postback = Tag}, true}]),
+    gui_jq:wire(#event{type = click, target = gui_convert:to_list(ID), postback = Tag}),
+    gui_jq:bind_element_click(ID, <<"$('#spinner').show(150);">>),
+%%     put(to_wire, get(to_wire) ++ [{#event{type = click, target = gui_convert:to_list(ID), postback = Tag}, true}]),
     ID.
 
 wire_click(ID, Source, Tag) ->
-    put(to_wire, get(to_wire) ++ [{#event{type = click, target = gui_convert:to_list(ID), source = Source, postback = Tag}, true}]),
+    gui_jq:wire(#event{type = click, target = gui_convert:to_list(ID), source = Source, postback = Tag}),
+    gui_jq:bind_element_click(ID, <<"$('#spinner').show(150);">>),
+%%     put(to_wire, get(to_wire) ++ [{#event{type = click, target = gui_convert:to_list(ID), source = Source, postback = Tag}, true}]),
     ID.
 
 wire_enter(ID, ButtonToClickID) ->
     % No need to show the spinner, as this only performs a click on a submit button
-    put(to_wire, get(to_wire) ++ [gui_utils:script_for_enter_submission(gui_convert:to_list(ID), ButtonToClickID)]),
+    gui_jq:bind_enter_to_submit_button(ID, ButtonToClickID),
+%%     put(to_wire, get(to_wire) ++ [gui_jq:bind_enter_to_submit_button(ID, ButtonToClickID)]),
     ID.
 
-wire_script(Script) ->
-    put(to_wire, get(to_wire) ++ [Script]).
+%% wire_script(Script) ->
+%%     gui_jq:wire(Script, false).
+%% %%     put(to_wire, get(to_wire) ++ [Script]).
 
 
 % Wiring should be done after emiting elements that are getting wired.
@@ -200,7 +206,7 @@ do_wiring() ->
                 false ->
                     skip;
                 true ->
-                    wf:wire(gui_utils:script_to_bind_element_click(TriggerID, "$('#spinner').show(150);"))
+                    wf:wire(gui_jq:bind_element_click(TriggerID, "$('#spinner').show(150);"))
             end,
             wf:wire(Event);
             (Script) ->
@@ -417,7 +423,7 @@ refresh_tool_buttons() ->
     % Sort dropdown
     DropdownBody = case get_display_style() of
                        grid ->
-                           #li{id = wire_click("grid_sort_by_name", {action, sort_toggle, [name]}),
+                           #li{id = wire_click(<<"grid_sort_by_name">>, {action, sort_toggle, [name]}),
                                class = <<"active">>, body = #link{body = <<"Name">>}};
                        list ->
                            lists:foldl(
@@ -426,7 +432,7 @@ refresh_tool_buttons() ->
                                                Attr -> <<"active">>;
                                                _ -> <<"">>
                                            end,
-                                   Acc ++ [#li{id = wire_click("list_sort_by_" ++ gui_convert:to_list(Attr), {action, sort_toggle, [Attr]}),
+                                   Acc ++ [#li{id = wire_click(<<"list_sort_by_", (atom_to_binary(Attr, latin1))/binary>>, {action, sort_toggle, [Attr]}),
                                        class = Class, body = #link{body = attr_to_name(Attr)}}]
                                end, [], [name | get_displayed_file_attributes()])
                    end,
@@ -615,10 +621,10 @@ show_popup(Type) ->
                 Body = [
                     #p{body = <<"Create directory">>},
                     #form{class = <<"control-group">>, body = [
-                        #textbox{id = wire_enter("create_dir_textbox", "create_dir_submit"), class = <<"flat">>,
+                        #textbox{id = wire_enter(<<"create_dir_textbox">>, <<"create_dir_submit">>), class = <<"flat">>,
                             style = <<"width: 350px;">>, placeholder = <<"New directory name">>},
                         #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>,
-                            id = wire_click("create_dir_submit", ["create_dir_textbox"], {action, create_directory, [{q, "create_dir_textbox"}]})}
+                            id = wire_click(<<"create_dir_submit">>, ["create_dir_textbox"], {action, create_directory, [{q, "create_dir_textbox"}]})}
                     ]}
                 ],
                 {Body, "$('#create_dir_textbox').focus();", {action, hide_popup}};
@@ -633,11 +639,11 @@ show_popup(Type) ->
                 Body = [
                     #p{body = <<"Rename <b>", (gui_convert:to_binary(Filename))/binary, "</b>">>},
                     #form{class = <<"control-group">>, body = [
-                        #textbox{id = wire_enter("new_name_textbox", "new_name_submit"), class = <<"flat">>,
+                        #textbox{id = wire_enter(<<"new_name_textbox">>, <<"new_name_submit">>), class = <<"flat">>,
                             style = <<"width: 350px;">>, placeholder = <<"New name">>, value = gui_convert:to_binary(Filename),
                             data_fields = [{<<"onfocus">>, <<"this.select(); this.selAll=1;">>}]},
                         #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>,
-                            id = wire_click("new_name_submit", ["new_name_textbox"], {action, rename_item, [OldLocation, {q, "new_name_textbox"}]})}
+                            id = wire_click(<<"new_name_submit">>, ["new_name_textbox"], {action, rename_item, [OldLocation, {q, "new_name_textbox"}]})}
                     ]}
                 ],
                 FocusScript = wf:f("$('#new_name_textbox').focus();
@@ -681,9 +687,9 @@ show_popup(Type) ->
                             "</b> successfully shared. Visit <b>Shared files</b> tab for more.">>}
                     end,
                     #form{class = <<"control-group">>, body = [
-                        #textbox{id = wire_enter("shared_link_textbox", "shared_link_submit"), class = "flat", style = "width: 700px;",
+                        #textbox{id = wire_enter(<<"shared_link_textbox">>, <<"shared_link_submit">>), class = "flat", style = "width: 700px;",
                             value = <<AddressPrefix/binary, ShareID/binary>>, placeholder = "Download link"},
-                        #button{id = wire_click("shared_link_submit", {action, hide_popup}),
+                        #button{id = wire_click(<<"shared_link_submit">>, {action, hide_popup}),
                             class = <<"btn btn-success btn-wide">>, body = <<"Ok">>}
                     ]}
                 ],
@@ -729,9 +735,9 @@ show_popup(Type) ->
                             Body = [
                                 #p{body = <<"Remove ", FilesString/binary, Punctuation/binary, DirsString/binary, "?">>},
                                 #form{class = <<"control-group">>, body = [
-                                    #button{id = wire_click("ok_button", {action, remove_selected}),
+                                    #button{id = wire_click(<<"ok_button">>, {action, remove_selected}),
                                         class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
-                                    #button{id = wire_click("cancel_button", {action, hide_popup}),
+                                    #button{id = wire_click(<<"cancel_button">>, {action, hide_popup}),
                                         class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>}
                                 ]}
                             ],
@@ -744,7 +750,7 @@ show_popup(Type) ->
     case FooterBody of
         [] -> skip;
         _ ->
-            CloseButton = #link{id = wire_click("close_button", CloseButtonAction), title = <<"Hide">>, class = <<"glyph-link">>,
+            CloseButton = #link{id = wire_click(<<"close_button">>, CloseButtonAction), title = <<"Hide">>, class = <<"glyph-link">>,
                 style = <<"position: absolute; top: 8px; right: 8px; z-index: 3;">>,
                 body = #span{class = <<"fui-cross">>, style = <<"font-size: 20px;">>}},
             gui_jq:update(<<"footer_popup">>, [CloseButton | FooterBody]),
@@ -769,12 +775,12 @@ path_navigator_body(WorkingDirectory) ->
     case WorkingDirectory of
         "/" -> wf:f("~~", []);
         _ ->
-            FirstLink = #link{id = wire_click("nav_top", {action, navigate, ["/"]}), body = <<"~">>},
+            FirstLink = #link{id = wire_click(<<"nav_top">>, {action, navigate, ["/"]}), body = <<"~">>},
             PathElements = string:tokens(WorkingDirectory, "/"),
             {LinkList, _} = lists:mapfoldl(
                 fun(Element, {CurrentPath, Counter}) ->
                     PathToElement = CurrentPath ++ "/" ++ Element,
-                    Link = #link{id = wire_click("nav_" ++ integer_to_list(Counter), {action, navigate, [PathToElement]}),
+                    Link = #link{id = wire_click(<<"nav_", (integer_to_binary(Counter))/binary>>, {action, navigate, [PathToElement]}),
                         body = gui_convert:to_binary(Element)},
                     {Link, {PathToElement, Counter + 1}}
                 end, {"/", 1}, lists:sublist(PathElements, length(PathElements) - 1)),
@@ -809,7 +815,7 @@ grid_view_body() ->
 
             LinkID = <<"grid_item_", (integer_to_binary(Counter))/binary>>,
             % Item won't hightlight if the link is clicked.
-            wire_script(wf:f("$('.wfid_~s').click(function(e) { e.stopPropagation();});", [LinkID])),
+            gui_jq:bind_element_click(LinkID, <<"e.stopPropagation();">>),
             Tile = #panel{
                 id = wire_click(item_id(Item), {action, select_item, [FullPath]}),
                 style = <<"width: 100px; height: 116px; overflow:hidden; position: relative; margin: 0; padding: 5px 10px; display: inline-block;">>,
@@ -882,12 +888,12 @@ list_view_body() ->
                                #td{style = <<"vertical-align: middle;">>, body = #span{style = <<"word-wrap: break-word;">>,
                                    class = <<"table-cell">>, body = [
                                        #panel{style = <<"display: inline-block; vertical-align: middle;">>, body = [
-                                           #link{id = wire_click("prev_dir_link_image", {action, navigate, [PrevDir]}), body = [
+                                           #link{id = wire_click(<<"prev_dir_link_image">>, {action, navigate, [PrevDir]}), body = [
                                                #image{class = <<"list-icon">>, image = <<"/images/folder32.png">>}
                                            ]}
                                        ]},
                                        #panel{style = <<"max-width: 230px; word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
-                                           #link{id = wire_click("prev_dir_link_text", {action, navigate, [PrevDir]}), body = <<"..&nbsp;&nbsp;&nbsp;">>}
+                                           #link{id = wire_click(<<"prev_dir_link_text">>, {action, navigate, [PrevDir]}), body = <<"..&nbsp;&nbsp;&nbsp;">>}
                                        ]}
                                    ]}}] ++
                            lists:map(
@@ -921,10 +927,10 @@ list_view_body() ->
 
             LinkID = <<"list_item_", (integer_to_binary(Counter))/binary>>,
             % Item won't hightlight if the link is clicked.
-            wire_script(wf:f("$('#~s').click(function(e) { e.stopPropagation(); });", [LinkID])),
+            gui_jq:bind_element_click(LinkID, <<"e.stopPropagation();">>),
             ImageID = <<"image_", (integer_to_binary(Counter))/binary>>,
             % Image won't hightlight if the image is clicked.
-            wire_script(wf:f("$('#~s').click(function(e) { e.stopPropagation();});", [ImageID])),
+            gui_jq:bind_element_click(ImageID, <<"e.stopPropagation();">>),
             TableRow = #tr{
                 id = wire_click(item_id(Item), {action, select_item, [FullPath]}),
                 cells = [
@@ -971,8 +977,8 @@ list_view_body() ->
         end, 1, get_item_list()),
     % Set filename containers width
     ContentWithoutFilename = 100 + (51 + round(90 * (2 + NumAttr) / NumAttr)) * NumAttr, % 51 is padding + border
-    wire_script(wf:f("window.onresize = function(e) { $('.filename_row').css('max-width', '' +
-            ($(window).width() - ~B) + 'px'); }; $(window).resize();", [ContentWithoutFilename])),
+    gui_jq:wire(<<"window.onresize = function(e) { $('.filename_row').css('max-width', ",
+            "'' +($(window).width() - ", (integer_to_binary(ContentWithoutFilename))/binary, ") + 'px'); }; $(window).resize();">>),
     [
         HeaderTable,
         #table{id = <<"main_table">>, class = <<"table table-bordered">>,

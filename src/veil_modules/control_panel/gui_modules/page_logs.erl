@@ -64,7 +64,7 @@ title() -> <<"Logs">>.
 
 % This will be placed instead of [[[body()]]] tag in template
 body() ->
-    gui_utils:register_escape_event("escape_pressed"),
+    gui_jq:register_escape_event("escape_pressed"),
     _Body = [
         gui_utils:top_menu(logs_tab, logs_submenu()),
         #panel{style = <<"margin-top: 122px; z-index: -1;">>, body = main_table()},
@@ -448,7 +448,7 @@ event(show_filters_popup) ->
     gui_jq:update(<<"footer_popup">>, filters_panel()),
     lists:foreach(
         fun(FilterType) ->
-            wf:wire(gui_utils:script_for_enter_submission(get_filter_textbox(FilterType), get_filter_submit_button(FilterType))),
+            gui_jq:bind_enter_to_submit_button(get_filter_textbox(FilterType), get_filter_submit_button(FilterType)),
             event({show_filter, FilterType})
         end, get_filter_types()),
     gui_jq:remove_class(<<"footer_popup">>, <<"hidden">>);

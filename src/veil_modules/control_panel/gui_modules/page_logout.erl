@@ -25,7 +25,7 @@ title() -> <<"Logout page">>.
 body() ->
     wf:user(undefined),
     wf:session(user_doc, undefined),
-    %wf:logout(), % Not yet implemented in n2o stable realease
+    wf:logout(),
     #panel{style = <<"position: relative;">>, body =
     [
         #panel{class = <<"alert alert-success login-page">>, body = [

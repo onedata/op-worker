@@ -30,7 +30,7 @@ title() -> <<"Shared files">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    gui_utils:register_escape_event("escape_pressed"),
+    gui_jq:register_escape_event("escape_pressed"),
     [
         gui_utils:top_menu(shared_files_tab),
         #panel{style = <<"margin-top: 59px;">>, body = main_panel()},
@@ -139,7 +139,7 @@ show_link(ShareID) ->
     gui_jq:remove_class(<<"footer_popup">>, <<"hidden">>),
     gui_jq:slide_down(<<"footer_popup">>, 200),
     gui_jq:select_text(<<"shared_link_textbox">>),
-    wf:wire(gui_utils:script_for_enter_submission("shared_link_textbox", "shared_link_submit")).
+    gui_jq:bind_enter_to_submit_button(<<"shared_link_textbox">>, <<"shared_link_submit">>).
 
 
 % Display removal prompt in popup panel

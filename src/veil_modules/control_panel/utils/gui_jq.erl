@@ -20,6 +20,9 @@
 % General javascript wiring
 -export([wire/1, wire/2, wire/4]).
 
+% Useful functions for binding custom events
+-export([register_escape_event/1, bind_enter_to_submit_button/2, bind_element_click/2]).
+
 % DOM updates
 -export([update/2, replace/2, insert_top/2, insert_bottom/2, insert_before/2, insert_after/2, remove/1]).
 
@@ -30,20 +33,22 @@
 
 %% wire/1
 %% ====================================================================
-%% @doc Sends a javascript code snippet to the client for immediate evaluation.
+%% @doc Sends a javascript code snippet or action record (which will be
+%% rendered to js) to the client for immediate evaluation.
 %% NOTE! Does not js_escape the script, the developer has to make sure 
 %% the wired javascript is safe, or use DOM manipulation functions, which 
 %% include safe escaping.
 %% @end
--spec wire(Script :: string() | binary()) -> ok.
+-spec wire(Action :: term()) -> ok.
 %% ====================================================================
-wire(Script) ->
-    wire(Script, false).
+wire(Action) ->
+    wire(Action, false).
 
 
 %% wire/2
 %% ====================================================================
-%% @doc Sends a javascript code snippet to the client for immediate evaluation.
+%% @doc Sends a javascript code snippet or action record (which will be
+%% rendered to js) to the client for immediate evaluation.
 %% NOTE! Does not js_escape the script, the developer has to make sure
 %% the wired javascript is safe, or use DOM manipulation functions, which
 %% include safe escaping.
@@ -52,13 +57,16 @@ wire(Script) ->
 %% @end
 -spec wire(Script :: string() | binary(), Eager :: boolean()) -> ok.
 %% ====================================================================
-wire(Script, Eager) ->
+wire(Script, Eager) when is_binary(Script) ->
+    wire(gui_convert:to_list(Script), Eager);
+
+wire(Action, Eager) ->
     Actions = case get(actions) of undefined -> []; E -> E end,
     case Eager of
         true ->
-            put(actions, [#wire{actions = gui_convert:to_list(Script)} | Actions]);
+            put(actions, [#wire{actions = Action} | Actions]);
         false ->
-            put(actions, Actions ++ [#wire{actions = gui_convert:to_list(Script)}])
+            put(actions, Actions ++ [#wire{actions = Action}])
     end.
 
 
@@ -77,6 +85,45 @@ wire(Target, Method, Args, Eager) ->
                    end,
     Script = <<"$('#", Target/binary, "').", Method/binary, "(", RenderedArgs/binary, ");">>,
     wire(Script, Eager).
+
+
+%% register_escape_event/1
+%% ====================================================================
+%% @doc Binds escape button so that it generates an event every time it's pressed.
+%% The event will call the function api_event(Tag, [], Context) on page module.
+%% Tag has to be a string as n2o engine requires so.
+%% @end
+-spec register_escape_event(Tag :: string()) -> ok.
+%% ====================================================================
+register_escape_event(Tag) ->
+    wire(#api{name = "escape_pressed", tag = Tag}, false),
+    wire(<<"$(document).bind('keydown', function (e){if (e.which == 27) escape_pressed();});">>, false).
+
+
+%% bind_enter_to_submit_button/2
+%% ====================================================================
+%% @doc Makes any enter keypresses on InputID (whenever it is focused)
+%% perform a click on a selected ButtonToClickID. This way, it allows
+%% easy form submission with enter key.
+%% @end
+-spec bind_enter_to_submit_button(InputID :: binary(), ButtonToClickID :: binary()) -> string().
+%% ====================================================================
+bind_enter_to_submit_button(InputID, ButtonToClickID) ->
+    Script = <<"$('#", InputID/binary, "').bind('keydown', function (e){",
+    "if (e.which == 13) { e.preventDefault(); $('#", ButtonToClickID/binary, "').click(); } });">>,
+    wire(Script, false).
+
+
+%% bind_element_click/2
+%% ====================================================================
+%% @doc Binds click actions on a selected InputID to evaluation of given
+%% javascript code.
+%% @end
+-spec bind_element_click(InputID :: binary(), Javascript :: binary()) -> string().
+%% ====================================================================
+bind_element_click(InputID, Javascript) ->
+    Script = <<"$('#", InputID/binary, "').bind('click', function anonymous(event) { ", Javascript/binary, " });">>,
+    wire(Script, false).
 
 
 %% update/2
@@ -233,7 +280,6 @@ fade_in(Target, Speed) ->
 %% ====================================================================
 focus(Target) ->
     wire(Target, <<"focus">>, <<"">>, false).
-
 
 
 %% select_text/1
