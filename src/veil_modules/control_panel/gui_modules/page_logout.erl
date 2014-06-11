@@ -23,7 +23,7 @@ title() -> <<"Logout page">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    gui_ctx:clear(),
+    gui_ctx:clear_session(),
     #panel{style = <<"position: relative;">>, body =
     [
         #panel{class = <<"alert alert-success login-page">>, body = [

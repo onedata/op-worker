@@ -50,7 +50,7 @@ main() ->
         false ->
             case vcn_gui_utils:can_view_logs() of
                 false ->
-                    wf:redirect(<<"/">>),
+                    gui_jq:redirect(<<"/">>),
                     #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
                 true ->
                     #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}
@@ -256,7 +256,7 @@ process_log(Counter, {Message, Timestamp, Severity, Metadata},
                                                false ->
                                                    skip;
                                                true ->
-                                                   wf:wire("$('html, body').animate({scrollTop: $(document).height()}, 50);")
+                                                   gui_ctx:wire(<<"$('html, body').animate({scrollTop: $(document).height()}, 50);">>)
                                            end,
                                            gui_comet:flush(),
                                            {Counter + 1, PageState#page_state{first_log = NewFirstLog}}
@@ -506,7 +506,7 @@ event({toggle_filter, FilterName}) ->
 
 % Update patricular filter
 event({update_filter, FilterName}) ->
-    Filter = gui_str:to_binary(wf:q(gui_str:to_list(get_filter_textbox(FilterName)))),
+    Filter = gui_str:to_binary(gui_ctx:param(gui_str:to_list(get_filter_textbox(FilterName)))),
     case Filter of
         <<"">> ->
             put(filters, set_filter(get(filters), FilterName, undefined)),

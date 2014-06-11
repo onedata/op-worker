@@ -14,8 +14,9 @@
 
 % Conversion
 -export([to_list/1, to_binary/1, join_to_binary/1]).
+
 % Formatting, escaping and encoding
--export([format/2, format_bin/2, js_escape/1, url_encode/1]).
+-export([format/2, format_bin/2, js_escape/1, url_encode/1, url_decode/1]).
 
 
 %% ====================================================================
@@ -113,3 +114,13 @@ js_escape(<<"">>, Acc) -> Acc.
 %% ====================================================================
 url_encode(String) ->
     to_binary(wf:url_encode(String)).
+
+
+%% url_decode/1
+%% ====================================================================
+%% @doc Performs URL-uncoded string decoding
+%% @end
+-spec url_decode(String :: binary() | string()) -> binary().
+%% ====================================================================
+url_decode(String) ->
+    to_binary(wf:url_decode(String)).

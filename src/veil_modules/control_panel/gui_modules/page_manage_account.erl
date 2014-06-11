@@ -56,7 +56,7 @@ body() ->
 
 % Info to register a DN
 maybe_display_dn_message() ->
-    case user_logic:get_dn_list(wf:session(user_doc)) of
+    case user_logic:get_dn_list(gui_ctx:get_user_record()) of
         [] -> gui_jq:show(<<"dn_error_panel">>);
         _ -> gui_jq:hide(<<"dn_error_panel">>)
     end.
@@ -74,7 +74,7 @@ maybe_display_helper_message() ->
 main_table() ->
     maybe_display_dn_message(),
     maybe_display_helper_message(),
-    User = wf:session(user_doc),
+    User = gui_ctx:get_user_record(),
     #table{style = <<"border-width: 0px; width: auto;">>, body = [
         #tr{cells = [
             #td{style = <<"border-width: 0px; padding: 10px 10px">>, body =
@@ -110,7 +110,7 @@ main_table() ->
 
 % HTML list with teams printed
 team_list_body() ->
-    User = wf:session(user_doc),
+    User = gui_ctx:get_user_record(),
     Teams = user_logic:get_teams(User),
     _Body = case lists:map(
         fun(Team) ->
@@ -124,7 +124,7 @@ team_list_body() ->
 
 % HTML list with emails printed
 email_list_body() ->
-    User = wf:session(user_doc),
+    User = gui_ctx:get_user_record(),
     {CurrentEmails, _} = lists:mapfoldl(
         fun(Email, Acc) ->
             Body = #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
@@ -157,7 +157,7 @@ email_list_body() ->
 
 % HTML list with DNs printed
 dn_list_body() ->
-    User = wf:session(user_doc),
+    User = gui_ctx:get_user_record(),
     {CurrentDNs, _} = lists:mapfoldl(
         fun(DN, Acc) ->
             Body = #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
@@ -203,10 +203,10 @@ update_email(User, AddOrRemove) ->
     OldEmailList = user_logic:get_email_list(User),
     {ok, NewUser} = case AddOrRemove of
                         {add, submitted} ->
-                            NewEmail = gui_str:to_list(wf:q("new_email_textbox")),
+                            NewEmail = gui_str:to_list(gui_ctx:param(<<"new_email_textbox">>)),
                             case user_logic:get_user({email, NewEmail}) of
                                 {ok, _} ->
-                                    wf:wire(#alert{text = <<"This e-mail address is in use.">>}),
+                                    gui_jq:wire(#alert{text = <<"This e-mail address is in use.">>}),
                                     {ok, User};
                                 _ ->
                                     user_logic:update_email_list(User, OldEmailList ++ [NewEmail])
@@ -214,7 +214,7 @@ update_email(User, AddOrRemove) ->
                         {remove, Email} ->
                             user_logic:update_email_list(User, OldEmailList -- [Email])
                     end,
-    wf:session(user_doc, NewUser),
+    gui_ctx:set_user(gui_ctx:get_user_id(), NewUser),
     gui_jq:update(<<"main_table">>, main_table()).
 
 
@@ -223,26 +223,26 @@ update_dn(User, AddOrRemove) ->
     OldDnList = user_logic:get_dn_list(User),
     case AddOrRemove of
         {add, submitted} ->
-            case user_logic:extract_dn_from_cert(list_to_binary(wf:q("new_dn_textbox"))) of
+            case user_logic:extract_dn_from_cert(list_to_binary(gui_ctx:param(<<"new_dn_textbox">>))) of
                 {rdnSequence, RDNSequence} ->
                     {ok, DnString} = user_logic:rdn_sequence_to_dn_string(RDNSequence),
                     case user_logic:get_user({dn, DnString}) of
                         {ok, _} ->
-                            wf:wire(#alert{text = <<"This certificate is already registered.">>});
+                            gui_jq:wire(#alert{text = <<"This certificate is already registered.">>});
                         _ ->
                             {ok, NewUser} = user_logic:update_dn_list(User, OldDnList ++ [DnString]),
-                            wf:session(user_doc, NewUser)
+                            gui_ctx:set_user(gui_ctx:get_user_id(), NewUser)
                     end;
                 {error, proxy_ceertificate} ->
-                    wf:wire(#alert{text = <<"Proxy certificates are not accepted.">>});
+                    gui_jq:wire(#alert{text = <<"Proxy certificates are not accepted.">>});
                 {error, self_signed} ->
-                    wf:wire(#alert{text = <<"Self signed certificates are not accepted.">>});
+                    gui_jq:wire(#alert{text = <<"Self signed certificates are not accepted.">>});
                 {error, extraction_failed} ->
-                    wf:wire(#alert{text = <<"Unable to process certificate.">>})
+                    gui_jq:wire(#alert{text = <<"Unable to process certificate.">>})
             end;
         {remove, DN} ->
             {ok, NewUser} = user_logic:update_dn_list(User, OldDnList -- [DN]),
-            wf:session(user_doc, NewUser)
+            gui_ctx:set_user(gui_ctx:get_user_id(), NewUser)
     end,
     gui_jq:update(<<"main_table">>, main_table()).
 

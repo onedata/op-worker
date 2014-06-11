@@ -90,7 +90,7 @@ prepare_validation_parameters() ->
                             Val -> Val
                         end,
                 % Safely URL-decode params
-                Param = gui_str:to_binary(wf:url_encode(gui_str:to_list(Value))),
+                Param = gui_str:to_binary(gui_str:url_encode(gui_str:to_list(Value))),
                 <<Acc/binary, "&", Key/binary, "=", Param/binary>>
             end, <<"">>, SignedArgs),
         ValidationRequestBody = <<?openid_check_authentication_mode, RequestParameters/binary>>,
