@@ -85,14 +85,14 @@ main_panel() ->
                         #table{id = <<"main_table">>, class = <<"table table-stripped">>, style = <<"border-radius: 0; margin-bottom: 0;">>,
                             body = TableRows}
                 end,
-    wf:wire(wf:f("window.onresize = function(e) { $('.filename_row').css('max-width', '' +
-        ($(window).width() - ~B) + 'px'); }; $(window).resize();", [250])), % 240 is size of button cell + paddings.
+    gui_jq:wire(<<"window.onresize = function(e) { $('.filename_row').css('max-width', '' +",
+        "($(window).width() - 250) + 'px'); }; $(window).resize();">>), % 240 is size of button cell + paddings.
     PanelBody.
 
 
 % Get list of user's shared files from database
 get_shared_files() ->
-    #veil_document{uuid = UID} = wf:session(user_doc),
+    #veil_document{uuid = UID} = gui_ctx:get_user_record(),
     _ShareList = case logical_files_manager:get_share({user, UID}) of
                      {ok, List} when is_list(List) -> List;
                      {ok, Doc} -> [Doc];

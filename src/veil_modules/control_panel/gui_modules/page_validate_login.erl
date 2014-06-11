@@ -49,8 +49,7 @@ body() ->
                                 page_error:redirect_with_error(?error_openid_login_error);
                             {ok, Proplist} ->
                                 {Login, UserDoc} = user_logic:sign_in(Proplist),
-                                wf:user(Login),
-                                wf:session(user_doc, UserDoc),
+                                gui_ctx:set_user(Login, UserDoc),
                                 gui_jq:redirect_from_login()
                         end
                     catch

@@ -49,9 +49,9 @@ render_element(Record) ->
     SubscriberPid = Record#veil_upload.subscriber_pid,
     PickledPid = wf:pickle(SubscriberPid),
 
-    wf:wire(#api{name = ?upload_start_callback, tag = ?upload_start_callback, delegate = ?MODULE}),
-    wf:wire(#api{name = ?upload_finish_callback, tag = ?upload_finish_callback, delegate = ?MODULE}),
-    wf:wire(wf:f("$('#~s').prop('disabled', true);", [?SUBMIT_BUTTON_ID])),
+    gui_jq:wire(#api{name = ?upload_start_callback, tag = ?upload_start_callback, delegate = ?MODULE}),
+    gui_jq:wire(#api{name = ?upload_finish_callback, tag = ?upload_finish_callback, delegate = ?MODULE}),
+    gui_jq:wire(<<"$('#", ?SUBMIT_BUTTON_ID, "').prop('disabled', true);">>),
 
     SubmitJS = <<"function (e){ veil_send_pending_files($('#", ?FORM_ID, "').get(0), $('#", ?SELECT_BUTTON_ID, "').get(0)); }">>,
     gui_jq:bind_element_click(<<?SUBMIT_BUTTON_ID>>, SubmitJS),
@@ -59,14 +59,14 @@ render_element(Record) ->
     ReportUploadStartJS = <<"function (e){ ", ?upload_start_callback, "('", PickledPid/binary, "'); }">>,
     gui_jq:bind_element_click(<<?SUBMIT_BUTTON_ID>>, ReportUploadStartJS),
 
-    UploadJS = wf:f("veil_attach_upload_handle_dragdrop($('#~s').get(0), $('#~s').get(0));", [?FORM_ID, ?SELECT_BUTTON_ID]),
-    wf:wire(UploadJS),
+    UploadJS = <<"veil_attach_upload_handle_dragdrop($('#", ?FORM_ID, "').get(0), $('#", ?SELECT_BUTTON_ID, "').get(0));">>,
+    gui_jq:wire(UploadJS),
 
 
-    % Set the dimensions of the file input element the same as
-    % faked file input button has.
+% Set the dimensions of the file input element the same as
+% faked file input button has.
 
-    % Render the controls and hidden iframe...
+% Render the controls and hidden iframe...
 
     UploadDropStyle = <<"padding:20px;",
     "height:50px;",
@@ -86,7 +86,7 @@ render_element(Record) ->
     "vertical-align: middle;">>,
 
     FormContent = [
-        %% IE9 does not support the droppable option, so let's just hide the drop field
+%% IE9 does not support the droppable option, so let's just hide the drop field
         "<!--[if lte IE 9]>
             <style type='text/css'> .upload_drop {display: none} </style>
         <![endif]-->",

@@ -23,9 +23,7 @@ title() -> <<"Logout page">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    wf:user(undefined),
-    wf:session(user_doc, undefined),
-    wf:logout(),
+    gui_ctx:clear(),
     #panel{style = <<"position: relative;">>, body =
     [
         #panel{class = <<"alert alert-success login-page">>, body = [

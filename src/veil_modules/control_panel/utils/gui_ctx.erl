@@ -44,6 +44,19 @@ get_user_id() ->
 %% @doc Returns user database doc associated with current session.
 %% @end
 -spec get_user_record() -> term().
+%% ====================================================================
 get_user_record() ->
     wf:session(user_doc).
+
+
+%% clear/0
+%% ====================================================================
+%% @doc Returns user database doc associated with current session.
+%% @end
+-spec clear() -> ok.
+%% ====================================================================
+clear() ->
+    wf:user(undefined),
+    wf:session(user_doc, undefined),
+    wf:logout().
 
