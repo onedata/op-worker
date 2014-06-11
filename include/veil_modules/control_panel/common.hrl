@@ -33,6 +33,25 @@
 % Include from dao, cannot include whole hrl because of collision with wf.hrl
 -record(veil_document, {uuid = "", rev_info = 0, record = none, force_update = false}).
 
+% Macros used as ids of errors that can appear on GUI pages
+-define(error_user_content_not_logged_in, uc_not_logged_in).
+-define(error_user_content_file_not_found, uc_file_not_found).
+-define(error_shared_file_not_found, sh_file_not_found).
+-define(error_internal_server_error, internal_server_error).
+-define(error_openid_invalid_request, openid_invalid_request).
+-define(error_openid_auth_invalid, openid_auth_invalid).
+-define(error_openid_no_connection, openid_no_connection).
+-define(error_openid_login_error, openid_login_error).
+-define(error_login_dir_creation_error, login_dir_creation_error).
+-define(error_login_dir_chown_error, login_dir_chown_error).
+
+
+
+
+
+
+
+
 
 %% Includes from cowboy
 -type cookie_option() :: {max_age, non_neg_integer()}

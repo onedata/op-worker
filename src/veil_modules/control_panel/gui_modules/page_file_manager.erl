@@ -292,8 +292,7 @@ comet_loop(IsUploadInProgress) ->
 
     catch Type:Message ->
         ?error_stacktrace("Error in file_manager comet_loop - ~p:~p", [Type, Message]),
-        page_error:redirect_with_error(<<"Internal server error">>,
-            <<"Server encountered an unexpected error. Please contact the site administrator if the problem persists.">>),
+        page_error:redirect_with_error(?error_internal_server_error),
         gui_utils:flush()
     end.
 

@@ -140,7 +140,7 @@ handle_user_content_request(Req, Path) ->
 
     case InitSession of
         error ->
-            {ok, _RedirectReq} = page_error:user_content_request_error(not_logged_in, Req);
+            {ok, _RedirectReq} = page_error:generate_redirect_request(Req, ?error_user_content_not_logged_in);
         {State, NewContext, SessionHandler} ->
             % Try to get file by given path
             FileInfo =
@@ -157,7 +157,7 @@ handle_user_content_request(Req, Path) ->
 
             case FileInfo of
                 error ->
-                    {ok, _RedirectReq} = page_error:user_content_request_error(file_not_found, Req);
+                    {ok, _RedirectReq} = page_error:generate_redirect_request(Req, ?error_user_content_file_not_found);
                 {Filepath, Size} ->
                     % Send the file
                     try
@@ -206,7 +206,7 @@ handle_shared_files_request(Req, ShareID) ->
     % Redirect to error page if the link was incorrect, or send the file
     case FileInfo of
         error ->
-            {ok, _RedirectReq} = page_error:shared_file_request_error(file_not_found, Req);
+            {ok, _RedirectReq} = page_error:generate_redirect_request(Req, ?error_shared_file_not_found);
         {FileID, FileName, Size} ->
             try
                 {ok, _NewReq} = send_file(Req, {uuid, FileID}, FileName, Size)

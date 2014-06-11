@@ -25,7 +25,7 @@ body() ->
     case gui_utils:user_logged_in() of
         true -> wf:redirect(<<"/">>);
         false ->
-            ErrorPanelStyle = case wf:q(<<"x">>) of
+            ErrorPanelStyle = case gui_jq:value(<<"x">>) of
                                   undefined -> <<"display: none;">>;
                                   _ -> <<"">>
                               end,

@@ -20,6 +20,9 @@
 % General javascript wiring
 -export([wire/1, wire/2, wire/4]).
 
+% Redirections
+-export([redirect/1, redirect_to_login/1, redirect_from_login/0]).
+
 % Parameters querying
 -export([value/1]).
 
@@ -88,6 +91,45 @@ wire(Target, Method, Args, Eager) ->
                    end,
     Script = <<"$('#", Target/binary, "').", Method/binary, "(", RenderedArgs/binary, ");">>,
     wire(Script, Eager).
+
+
+%% redirect/1
+%% ====================================================================
+%% @doc Redirects to given page.
+%% @end
+-spec redirect(URL :: binary()) -> ok.
+%% ====================================================================
+redirect(URL) ->
+    wf:redirect(URL).
+
+
+%% redirect_to_login/1
+%% ====================================================================
+%% @doc Redirects to login page. Can remember the source page, so that
+%% a user can be redirected back after logging in.
+%% @end
+-spec redirect_to_login(SaveSourcePage :: boolean()) -> ok.
+%% ====================================================================
+redirect_to_login(SaveSourcePage) ->
+    PageName = gui_utils:get_requested_page(),
+    case SaveSourcePage of
+        false -> wf:redirect(<<"/login">>);
+        true -> wf:redirect(<<"/login?x=", PageName/binary>>)
+    end.
+
+
+%% redirect_from_login/0
+%% ====================================================================
+%% @doc Redirects back from login page to the originally requested page.
+%% If it hasn't been stored before, redirects to index page.
+%% @end
+-spec redirect_from_login() -> ok.
+%% ====================================================================
+redirect_from_login() ->
+    case wf:q(<<"x">>) of
+        undefined -> wf:redirect(<<"/">>);
+        TargetPage -> wf:redirect(TargetPage)
+    end.
 
 
 %% value/1

@@ -39,4 +39,4 @@ body() ->
     }.
 
 event(init) -> ok;
-event(to_login) -> gui_utils:redirect_to_login(false).
+event(to_login) -> gui_jq:redirect_to_login(false).

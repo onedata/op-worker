@@ -17,16 +17,22 @@
 
 % Functions connected with page / session context
 -export([get_requested_hostname/0, get_requested_page/0, get_user_dn/0, get_request_params/0]).
+
 % Functions connected with user's session
 -export([user_logged_in/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0]).
-% Functions used for redirecting to and from login
--export([redirect_to_login/1, redirect_from_login/0, maybe_redirect/4]).
-% Functions to check for user's session and generate page elements
--export([apply_or_redirect/3, apply_or_redirect/4, top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
+
+% Functions to check for user's session
+-export([apply_or_redirect/3, apply_or_redirect/4, maybe_redirect/4]).
+
+% Functions to generate page elements
+-export([top_menu/1, top_menu/2, logotype_footer/1, empty_page/0]).
+
 % Comet API
 -export([comet/1, init_comet/2, comet_supervisor/2, is_comet_process/0, flush/0]).
+
 % Convinience function to set headers in cowboy response
 -export([cowboy_ensure_header/3]).
+
 % Functions used to perform secure server-server http requests
 -export([https_get/2, https_post/3]).
 
@@ -145,20 +151,20 @@ can_view_logs() ->
 %% Setting "SaveSourcePage" on true will allow a redirect back from login.
 %% NOTE: Should be called from page:main().
 %% @end
--spec maybe_redirect(boolean(), boolean(), boolean(), boolean()) -> ok.
+-spec maybe_redirect(NeedLogin :: boolean(), NeedDN :: boolean(), NeedStorage :: boolean(), SaveSourcePage :: boolean()) -> ok.
 %% ====================================================================
 maybe_redirect(NeedLogin, NeedDN, NeedStorage, SaveSourcePage) ->
-    case NeedLogin and (not user_logged_in()) of
+    case NeedLogin and (not gui_utils:user_logged_in()) of
         true ->
-            gui_utils:redirect_to_login(SaveSourcePage),
+            redirect_to_login(SaveSourcePage),
             true;
         false ->
-            case NeedDN and (get_user_dn() =:= undefined) of
+            case NeedDN and (gui_utils:get_user_dn() =:= undefined) of
                 true ->
                     wf:redirect(<<"/manage_account">>),
                     true;
                 false ->
-                    case NeedStorage and (not storage_defined()) of
+                    case NeedStorage and (not gui_utils:storage_defined()) of
                         true ->
                             wf:redirect(<<"/manage_account">>),
                             true;
@@ -166,35 +172,6 @@ maybe_redirect(NeedLogin, NeedDN, NeedStorage, SaveSourcePage) ->
                             false
                     end
             end
-    end.
-
-
-%% redirect_to_login/1
-%% ====================================================================
-%% @doc Redirects to login page. Can remember the source page, so that
-%% a user can be redirected back after logging in.
-%% @end
--spec redirect_to_login(boolean()) -> ok.
-%% ====================================================================
-redirect_to_login(SaveSourcePage) ->
-    PageName = get_requested_page(),
-    case SaveSourcePage of
-        false -> wf:redirect(<<"/login">>);
-        true -> wf:redirect(<<"/login?x=", PageName/binary>>)
-    end.
-
-
-%% redirect_from_login/0
-%% ====================================================================
-%% @doc Redirects back from login page to the originally requested page.
-%% If it hasn't been stored before, redirects to index page.
-%% @end
--spec redirect_from_login() -> ok.
-%% ====================================================================
-redirect_from_login() ->
-    case wf:q(<<"x">>) of
-        undefined -> wf:redirect(<<"/">>);
-        TargetPage -> wf:redirect(TargetPage)
     end.
 
 
@@ -219,17 +196,16 @@ apply_or_redirect(Module, Fun, Args, NeedDN) ->
     try
         case user_logged_in() of
             false ->
-                gui_utils:redirect_to_login(true);
+                gui_jq:redirect_to_login(true);
             true ->
                 case NeedDN and (not dn_and_storage_defined()) of
-                    true -> wf:redirect(<<"/manage_account">>);
+                    true -> gui_jq:redirect(<<"/manage_account">>);
                     false -> erlang:apply(Module, Fun, Args)
                 end
         end
     catch Type:Message ->
         ?error_stacktrace("Error in ~p - ~p:~p", [Module, Type, Message]),
-        page_error:redirect_with_error(<<"Internal server error">>,
-            <<"Server encountered an unexpected error. Please contact the site administrator if the problem persists.">>),
+        page_error:redirect_with_error(?error_internal_server_error),
         case is_comet_process() of
             true ->
                 flush();
