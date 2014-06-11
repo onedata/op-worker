@@ -70,7 +70,7 @@ static ERL_NIF_TERM verify_cert(ErlNifEnv* env, int argc, const ERL_NIF_TERM arg
         return result;
 
     // Set chain certs
-    cert_add_fun cert_add_fun[4] = {
+    cert_add_funcert_add_fun cert_add_fun[4] = {
         NULL, gpv_add_chain_cert, gpv_add_trusted_ca, gpv_add_crl_cert
     };
     for(i = 1; i <= 3; ++i) {
