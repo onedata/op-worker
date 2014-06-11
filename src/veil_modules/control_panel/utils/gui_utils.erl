@@ -77,7 +77,7 @@ get_requested_page() ->
 -spec get_user_dn() -> string().
 %% ====================================================================
 get_user_dn() ->
-    try user_logic:get_dn_list(wf:session(user_doc)) of
+    try user_logic:get_dn_list(gui_ctx:get_user_record()) of
         [] -> undefined;
         L when is_list(L) -> lists:nth(1, L);
         _ -> undefined
@@ -106,7 +106,7 @@ get_request_params() ->
 -spec user_logged_in() -> boolean().
 %% ====================================================================
 user_logged_in() ->
-    (wf:user() /= undefined).
+    (gui_ctx:get_user_id() /= undefined).
 
 
 %% storage_defined/0
@@ -140,7 +140,7 @@ dn_and_storage_defined() ->
 -spec can_view_logs() -> boolean().
 %% ====================================================================
 can_view_logs() ->
-    user_logic:get_role(wf:session(user_doc)) /= user.
+    user_logic:get_role(gui_ctx:get_user_record()) /= user.
 
 
 %% maybe_redirect/4
@@ -156,17 +156,17 @@ can_view_logs() ->
 maybe_redirect(NeedLogin, NeedDN, NeedStorage, SaveSourcePage) ->
     case NeedLogin and (not gui_utils:user_logged_in()) of
         true ->
-            redirect_to_login(SaveSourcePage),
+            gui_jq:redirect_to_login(SaveSourcePage),
             true;
         false ->
             case NeedDN and (gui_utils:get_user_dn() =:= undefined) of
                 true ->
-                    wf:redirect(<<"/manage_account">>),
+                    gui_jq:redirect(<<"/manage_account">>),
                     true;
                 false ->
                     case NeedStorage and (not gui_utils:storage_defined()) of
                         true ->
-                            wf:redirect(<<"/manage_account">>),
+                            gui_jq:redirect(<<"/manage_account">>),
                             true;
                         false ->
                             false
@@ -258,7 +258,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
     MenuIcons =
         [
             {manage_account_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Manage account">>,
-                url = <<"/manage_account">>, body = [user_logic:get_name(wf:session(user_doc)), #span{class = <<"fui-user">>,
+                url = <<"/manage_account">>, body = [user_logic:get_name(gui_ctx:get_user_record()), #span{class = <<"fui-user">>,
                     style = <<"margin-left: 10px;">>}]}}},
             %{contact_support_tab, #li { body=#link{ style="padding: 18px;", title="Contact & Support",
             %    url="/contact_support", body=#span{ class="fui-question" } } } },
