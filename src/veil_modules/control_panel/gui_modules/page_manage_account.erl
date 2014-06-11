@@ -142,16 +142,16 @@ email_list_body() ->
                 postback = {action, show_email_adding, [true]}, body =
                 #span{class = <<"fui-plus">>, style = <<"font-size: 16px; position: relative;">>}},
             #textbox{id = <<"new_email_textbox">>, class = <<"flat">>, body = <<"">>, style = <<"display: none;">>,
-                placeholder = <<"New email address">>, postback = {action, update_email, [User, {add, submitted}]},
-                source = ["new_email_textbox"]},
+                placeholder = <<"New email address">>},
             #link{id = <<"new_email_submit">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
-                postback = {action, update_email, [User, {add, submitted}]}, source = ["new_email_textbox"], body =
-                #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
+                actions = gui_jq:form_submit_action(<<"new_email_submit">>, {action, update_email, [User, {add, submitted}]}, <<"new_email_textbox">>),
+                body = #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
             #link{id = <<"new_email_cancel">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
                 postback = {action, show_email_adding, [false]}, body =
                 #span{class = <<"fui-cross-inverted">>, style = <<"font-size: 20px;">>}}
         ]}
     ],
+    gui_jq:bind_enter_to_submit_button(<<"new_email_textbox">>, <<"new_email_submit">>),
     #list{numbered = true, body = CurrentEmails ++ NewEmail}.
 
 
@@ -175,11 +175,10 @@ dn_list_body() ->
                 postback = {action, show_dn_adding, [true]}, body =
                 #span{class = <<"fui-plus">>, style = <<"font-size: 16px;">>}},
             #textarea{id = <<"new_dn_textbox">>, style = <<"display: none; font-size: 12px; width: 600px; height: 200px;",
-            "vertical-align: top; overflow-y: scroll;">>, body = <<"">>,
-                source = ["new_dn_textbox"], placeholder = <<"Paste your .pem certificate here...">>},
+            "vertical-align: top; overflow-y: scroll;">>, body = <<"">>, placeholder = <<"Paste your .pem certificate here...">>},
             #link{id = <<"new_dn_submit">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
-                postback = {action, update_dn, [User, {add, submitted}]}, source = ["new_dn_textbox"], body =
-                #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
+                actions = gui_jq:form_submit_action(<<"new_dn_submit">>, {action, update_dn, [User, {add, submitted}]}, <<"new_dn_textbox">>),
+                body = #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
             #link{id = <<"new_dn_cancel">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
                 postback = {action, show_dn_adding, [false]}, body =
                 #span{class = <<"fui-cross-inverted">>, style = <<"font-size: 20px;">>}}

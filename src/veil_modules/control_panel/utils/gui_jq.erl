@@ -20,6 +20,9 @@
 % General javascript wiring
 -export([wire/1, wire/2, wire/4]).
 
+% Wiring postbacks and form submissions
+-export([postback_action/2, form_submit_action/3]).
+
 % Redirections
 -export([redirect/1, redirect_to_login/1, redirect_from_login/0]).
 
@@ -79,7 +82,7 @@ wire(Action, Eager) ->
 
 %% wire/4
 %% ====================================================================
-%% @doc Convienience function to create javascript code.
+%% @doc Convienience function to render javascript code.
 %% Eager flag can be used.
 %% @end
 -spec wire(Target :: binary(), Method :: binary(), Args :: binary(), Eager :: boolean()) -> ok.
@@ -92,6 +95,30 @@ wire(Target, Method, Args, Eager) ->
                    end,
     Script = <<"$('#", Target/binary, "').", Method/binary, "(", RenderedArgs/binary, ");">>,
     wire(Script, Eager).
+
+
+%% postback_action/2
+%% ====================================================================
+%% @doc Returns action records that can be assigned to actions field of an element.
+%% It will cause form submission with given postback, and values of field(s)
+%% given in Sources arg will be available by gui_ctx:form_param function.
+%% @end
+-spec postback_action(TriggerID :: binary(), Postback :: term()) -> ok.
+%% ====================================================================
+postback_action(TriggerID, Postback) ->
+    #event{type = "click", postback = Postback, target = gui_str:to_list(TriggerID)}.
+
+%% form_submit_action/3
+%% ====================================================================
+%% @doc Returns action records that can be assigned to actions field of an element.
+%% It will cause form submission with given postback, and values of field(s)
+%% given in Sources arg will be available by gui_ctx:form_param function.
+%% @end
+-spec form_submit_action(TriggerID :: binary(), Postback :: term(), Sources :: binary() | [binary()] ) -> ok.
+%% ====================================================================
+form_submit_action(TriggerID, Postback, SourcesArg) ->
+    Sources = lists:map(fun(Source) -> gui_str:to_list(Source) end, lists:flatten([SourcesArg])),
+    #event{type = "click", postback = Postback, target = gui_str:to_list(TriggerID), source = Sources}.
 
 
 %% redirect/1
@@ -156,7 +183,7 @@ register_escape_event(Tag) ->
 %% ====================================================================
 bind_enter_to_submit_button(InputID, ButtonToClickID) ->
     Script = <<"$('#", InputID/binary, "').bind('keydown', function (e){",
-    "if (e.which == 13) { e.preventDefault(); $('#", ButtonToClickID/binary, "').click(); } });">>,
+    "if (e.which == 13) { e.preventDefault(); document.getElementById('", ButtonToClickID/binary, "').click(); } });">>,
     wire(Script, false).
 
 

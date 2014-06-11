@@ -111,7 +111,7 @@ logs_submenu() ->
                 #panel{class = <<"btn-group pull-right">>, style = <<"padding: 7px 14px 0px; margin-top: 7px;">>, body = [
                     #label{id = <<"auto_scroll_checkbox">>, class = <<"checkbox checked">>, for = <<"auto_scroll_checkbox">>,
                         style = <<"display: block; font-weight: bold;">>,
-                        actions = #event{type = "click", postback = toggle_auto_scroll, target = "auto_scroll_checkbox"}, body = [
+                        actions = gui_jq:postback_action(<<"auto_scroll_checkbox">>, toggle_auto_scroll), body = [
                             #span{class = <<"icons">>},
                             #checkbox{id = <<"auto_scroll_checkbox">>, data_fields = [{<<"data-toggle">>, <<"checkbox">>}],
                                 value = <<"">>, checked = true},
@@ -168,7 +168,7 @@ filters_panel() ->
 filter_form(FilterType) ->
     #span{style = <<"display: inline-block; position: relative; height: 42px; margin-bottom: 15px; width: 410px; text-align: left;">>, body = [
         #label{id = get_filter_label(FilterType), style = <<"display: inline; margin: 9px 14px;">>,
-            actions = #event{type = "click", postback = {toggle_filter, FilterType}, target = gui_str:to_list(get_filter_label(FilterType))},
+            actions = gui_jq:postback_action(get_filter_label(FilterType), {toggle_filter, FilterType}),
             class = <<"label label-large label-inverse">>, body = get_filter_name(FilterType)},
         #p{id = get_filter_none(FilterType), style = <<"display: inline;">>, body = <<"off">>},
         #panel{id = get_filter_panel(FilterType), class = <<"input-append">>, style = <<"margin-bottom: 0px; display: inline;">>, body = [
@@ -176,8 +176,9 @@ filter_form(FilterType) ->
                 placeholder = get_filter_placeholder(FilterType)},
             #panel{class = <<"btn-group">>, body = [
                 #button{id = get_filter_submit_button(FilterType), class = <<"btn">>, type = <<"button">>, title = <<"Save">>,
-                    body = #span{class = <<"fui-check">>}, postback = {update_filter, FilterType},
-                    source = [gui_str:to_list(get_filter_textbox(FilterType))]}
+                    body = #span{class = <<"fui-check">>},
+                    actions = gui_jq:form_submit_action(get_filter_submit_button(FilterType), {update_filter, FilterType}, get_filter_textbox(FilterType))
+                }
             ]}
         ]}
     ]}.
@@ -256,7 +257,7 @@ process_log(Counter, {Message, Timestamp, Severity, Metadata},
                                                false ->
                                                    skip;
                                                true ->
-                                                   gui_ctx:wire(<<"$('html, body').animate({scrollTop: $(document).height()}, 50);">>)
+                                                   gui_jq:wire(<<"$('html, body').animate({scrollTop: $(document).height()}, 50);">>)
                                            end,
                                            gui_comet:flush(),
                                            {Counter + 1, PageState#page_state{first_log = NewFirstLog}}
@@ -278,12 +279,12 @@ remove_old_logs(Counter, FirstLog, MaxLogs) ->
 
 % Render a single row of logs - one collapsed and one expanded - they will be toggled with mouse clicks
 render_row(Counter, {Message, Timestamp, Severity, Metadata}) ->
-    CollapsedId = ?COLLAPSED_LOG_ROW_ID_PREFIX ++ integer_to_list(Counter),
-    ExpandedId = ?EXPANDED_LOG_ROW_ID_PREFIX ++ integer_to_list(Counter),
+    CollapsedId = <<?COLLAPSED_LOG_ROW_ID_PREFIX, (integer_to_binary(Counter))/binary>>,
+    ExpandedId = <<?EXPANDED_LOG_ROW_ID_PREFIX, (integer_to_binary(Counter))/binary>>,
     {CollapsedMetadata, ExpandedMetadata} = format_metadata(Metadata),
 
     CollapsedRow = #tr{class = <<"log_row">>, id = CollapsedId,
-        actions = #event{type = "click", postback = {toggle_log, Counter, true}, target = CollapsedId}, cells = [
+        actions = gui_jq:postback_action(CollapsedId, {toggle_log, Counter, true}), cells = [
             #td{body = format_severity(Severity), style = <<?SEVERITY_COLUMN_WIDTH>>},
             #td{body = format_time(Timestamp), style = <<?TIME_COLUMN_WIDTH>>},
             #td{body = gui_str:to_binary(Message), style = <<"text-wrap:normal; word-wrap:break-word; white-space: nowrap; overflow: hidden;">>},
@@ -291,7 +292,7 @@ render_row(Counter, {Message, Timestamp, Severity, Metadata}) ->
         ]},
 
     ExpandedRow = #tr{class = <<"log_row">>, style = <<"background-color: rgba(26, 188, 156, 0.05);">>, id = ExpandedId,
-        actions = #event{type = "click", postback = {toggle_log, Counter, false}, target = ExpandedId}, cells = [
+        actions = gui_jq:postback_action(ExpandedId, {toggle_log, Counter, false}), cells = [
             #td{body = format_severity(Severity), style = <<?SEVERITY_COLUMN_WIDTH>>},
             #td{body = format_time(Timestamp), style = <<?TIME_COLUMN_WIDTH>>},
             #td{body = gui_str:to_binary(Message), style = <<"text-wrap:normal; word-wrap:break-word;">>},
@@ -310,7 +311,7 @@ loglevel_dropdown_body(Active) ->
                         _ -> <<"">>
                     end,
             ID = <<"loglevel_li_", (atom_to_binary(Loglevel, latin1))/binary>>,
-            #li{id = ID, actions = #event{type = "click", postback = {set_loglevel, Loglevel}, target = gui_str:to_list(ID)},
+            #li{id = ID, actions = gui_jq:postback_action(ID, {set_loglevel, Loglevel}),
                 class = Class, body = #link{body = atom_to_binary(Loglevel, latin1)}}
         end, ?LOGLEVEL_LIST).
 
@@ -324,7 +325,7 @@ max_logs_dropdown_body(Active) ->
                         _ -> <<"">>
                     end,
             ID = <<"maxlogs_li_", (integer_to_binary(Number))/binary>>,
-            #li{id = ID, actions = #event{type = "click", postback = {set_max_logs, Number}, target = gui_str:to_list(ID)},
+            #li{id = ID, actions = gui_jq:postback_action(ID, {set_max_logs, Number}),
                 class = Class, body = #link{body = integer_to_binary(Number)}}
         end, ?MAX_LOGS_OPTIONS).
 
@@ -495,6 +496,7 @@ event({toggle_filter, FilterName}) ->
             gui_jq:show(get_filter_panel(FilterName)),
             gui_jq:hide(get_filter_none(FilterName)),
             gui_jq:set_value(get_filter_textbox(FilterName), <<"''">>),
+            gui_jq:focus(get_filter_textbox(FilterName)),
             put(filters, set_filter(get(filters), FilterName, <<"">>));
         _ ->
             gui_jq:hide(get_filter_panel(FilterName)),

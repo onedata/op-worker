@@ -132,10 +132,10 @@ user_logged_in() ->
 %% ====================================================================
 %% @doc Retrieves a parameter value for a given key - POST parameter
 %% passed during form submission.
-%% NOTE! source field in event record must be provided
-%% to be accessible by this function,
-%% like this: #event{source = ["field_name"], ...}.
-%% it must be a list (not binary), as n2o requires so. Returns undefined if
+%% NOTE! The submit button must be wired in certain way
+%% for the param to be accessible by this function,
+%% like this: #button { actions = gui_jq:form_submit_action(...) }
+%% Returns undefined if
 %% the key is not found.
 %% @end
 -spec form_param(ParamName :: string() | binary()) -> binary() | undefined.

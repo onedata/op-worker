@@ -72,7 +72,7 @@ manager_submenu() ->
                         #textbox{id = wire_enter(<<"search_textbox">>, <<"search_button">>), class = <<"span2">>,
                             style = <<"width: 220px;">>, placeholder = <<"Search">>},
                         #panel{class = <<"btn-group">>, body = [
-                            #button{id = wire_click(<<"search_button">>, ["search_textbox"], {action, search, [{query_value, <<"search_textbox">>}]}),
+                            #button{id = wire_click(<<"search_button">>, {action, search, [{query_value, <<"search_textbox">>}]}, <<"search_textbox">>),
                                 class = <<"btn">>, type = <<"button">>, body = #span{class = <<"fui-search">>}}
                         ]}
                     ]}
@@ -173,12 +173,12 @@ tool_button_and_dummy(ID, Title, Style, Icon, Postback) ->
 %% Wiring postbacks. Thanks to this wrapper every time a postback is initiated,
 %% there will be spinner showing up in 150ms. It gets hidden when reply is received.
 wire_click(ID, Tag) ->
-    gui_jq:wire(#event{type = click, target = gui_str:to_list(ID), postback = Tag}),
+    gui_jq:wire(gui_jq:postback_action(ID, Tag)),
     gui_jq:bind_element_click(ID, <<"function(e) { $('#spinner').delay(150).show(); }">>),
     ID.
 
-wire_click(ID, Source, Tag) ->
-    gui_jq:wire(#event{type = click, target = gui_str:to_list(ID), source = Source, postback = Tag}),
+wire_click(ID, Tag, Source) ->
+    gui_jq:wire(gui_jq:form_submit_action(ID, Tag, Source)),
     gui_jq:bind_element_click(ID, <<"function(e) { $('#spinner').delay(150).show(); }">>),
     ID.
 
@@ -586,7 +586,9 @@ show_popup(Type) ->
                         #textbox{id = wire_enter(<<"create_dir_textbox">>, <<"create_dir_submit">>), class = <<"flat">>,
                             style = <<"width: 350px;">>, placeholder = <<"New directory name">>},
                         #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>,
-                            id = wire_click(<<"create_dir_submit">>, ["create_dir_textbox"], {action, create_directory, [{query_value, <<"create_dir_textbox">>}]})}
+                            id = wire_click(<<"create_dir_submit">>,
+                                {action, create_directory, [{query_value, <<"create_dir_textbox">>}]},
+                                <<"create_dir_textbox">>)}
                     ]}
                 ],
                 {Body, <<"$('#create_dir_textbox').focus();">>, {action, hide_popup}};
@@ -605,7 +607,9 @@ show_popup(Type) ->
                             style = <<"width: 350px;">>, placeholder = <<"New name">>, value = gui_str:to_binary(Filename)},
 
                         #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>,
-                            id = wire_click(<<"new_name_submit">>, ["new_name_textbox"], {action, rename_item, [OldLocation, {query_value, <<"new_name_textbox">>}]})}
+                            id = wire_click(<<"new_name_submit">>,
+                                {action, rename_item, [OldLocation, {query_value, <<"new_name_textbox">>}]},
+                                <<"new_name_textbox">>)}
                     ]}
                 ],
 
