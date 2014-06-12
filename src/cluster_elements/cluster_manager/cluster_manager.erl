@@ -1604,7 +1604,7 @@ create_cluster_stats_rrd() ->
   {ok, Steps} = application:get_env(?APP_Name, rrd_steps),
   {ok, RRDSize} = application:get_env(?APP_Name, rrd_size),
   Heartbeat = 2 * Period,
-  RRASize = round(2 * 60 * 60 / Period), % two hours in seconds devided by monitoring period
+  RRASize = round(RRDSize / Period),
   BinaryPeriod = integer_to_binary(Period),
   BinaryHeartbeat = integer_to_binary(Heartbeat),
   RRASizeBinary = integer_to_binary(RRASize),

@@ -68,6 +68,7 @@ start_link() ->
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 init([]) ->
+  process_flag(trap_exit, true),
   case os:find_executable("rrdtool") of
     false ->
       {stop, no_rrdtool};
@@ -262,16 +263,15 @@ receive_answer(Port) ->
 -spec receive_answer(Port :: port(), Acc :: [binary()]) -> {ok, Result :: binary()} | {error, Error :: binary()}.
 %% ====================================================================
 receive_answer(Port, Acc) ->
-  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   receive
     {Port, {data, {eol, <<"OK", _/binary>>}}} ->
       {ok, Acc};
     {Port, {data, {eol, <<"ERROR: ", Error/binary>>}}} ->
       {error, Error};
     {Port, {data, {eol, Data}}} ->
-      receive_answer(Port, [Data | Acc])
-  after Timeout ->
-    {error, <<"timeout">>}
+      receive_answer(Port, [Data | Acc]);
+    Other ->
+      {error, Other}
   end.
 
 
@@ -295,7 +295,6 @@ receive_header(Port, Columns) ->
   Columns :: all | {name, [binary()]} | {starts_with, [binary()]} | {index, [integer()]}.
 %% ====================================================================
 receive_header(Port, Columns, BinaryHeader) ->
-  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   receive
     {Port, {data, {eol, <<>>}}} ->
       Header = split(BinaryHeader),
@@ -303,9 +302,9 @@ receive_header(Port, Columns, BinaryHeader) ->
     {Port, {data, {eol, <<"ERROR: ", Error/binary>>}}} ->
       {error, Error};
     {Port, {data, {eol, Data}}} ->
-      receive_header(Port, Columns, Data)
-  after Timeout ->
-    {error, <<"timeout">>}
+      receive_header(Port, Columns, Data);
+    Other ->
+      {error, Other}
   end.
 
 
@@ -397,7 +396,6 @@ receive_body(Port, Columns) ->
   {ok, Result :: binary()} | {error, Error :: binary()}.
 %% ====================================================================
 receive_body(Port, Columns, Body) ->
-  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   receive
     {Port, {data, {eol, <<"OK", _/binary>>}}} ->
       {ok, lists:reverse(Body)};
@@ -409,9 +407,9 @@ receive_body(Port, Columns, Body) ->
           receive_body(Port, Columns, [Row | Body]);
         {error, Error} ->
           {error, Error}
-      end
-  after Timeout ->
-    {error, <<"timeout">>}
+      end;
+    Other ->
+      {error, Other}
   end.
 
 
