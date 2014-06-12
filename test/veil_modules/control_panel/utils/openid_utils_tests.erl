@@ -84,10 +84,12 @@ get_url_test_() ->
 validate_login_test_() ->
     {foreach,
         fun() ->
+            meck:new(gui_ctx),
             meck:new(gui_utils),
             meck:new(lager)
         end,
         fun(_) ->
+            meck:unload(gui_ctx),
             meck:unload(gui_utils),
             meck:unload(lager)
         end,
@@ -102,10 +104,11 @@ validate_login_test_() ->
             {"Login invalid case",
                 fun() ->
                     meck:expect(gui_utils, https_post, fun("mock", _, "me") -> {ok, <<"is_valid: false\n">>} end),
-                    meck:expect(gui_utils, get_request_params, fun() -> [] end),
+                    meck:expect(gui_ctx, get_request_params, fun() -> [] end),
                     meck:expect(lager, log, fun(alert, _, _) -> ok end),
                     ?assertEqual({error, auth_invalid}, openid_utils:validate_openid_login({"mock", "me"})),
                     ?assert(meck:validate(gui_utils)),
+                    ?assert(meck:validate(gui_ctx)),
                     ?assert(meck:validate(lager))
                 end},
 

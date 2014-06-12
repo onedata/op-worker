@@ -21,6 +21,7 @@
     enctype
 }).
 
+
 % Custom upload element
 -record(veil_upload, {?ELEMENT_BASE(veil_upload),
     subscriber_pid, % Required to get start / finish reports.
