@@ -29,7 +29,7 @@
 %% ====================================================================
 
 
-%% methods_and_versions_info/1
+%% methods_and_versions_info/2
 %% ====================================================================
 %% @doc Should return list of tuples, where each tuple consists of version of API version and
 %% list of methods available in the API version. Latest version must be at the end of list.
