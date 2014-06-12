@@ -56,9 +56,9 @@
 %% ====================================================================
 %% @doc Starts cluster manager
 -spec start_link() -> Result when
-  Result :: {ok, Pid}
+  Result ::  {ok,Pid}
   | ignore
-  | {error, Error},
+  | {error,Error},
   Pid :: pid(),
   Error :: {already_started, Pid} | term().
 %% ====================================================================
@@ -70,11 +70,11 @@ start_link() ->
 %% @doc Starts cluster manager
 -spec start_link(Mode) -> Result when
   Mode :: test | normal,
-  Result :: {ok, Pid}
+  Result ::  {ok,Pid}
   | ignore
-  | {error, Error},
+  | {error,Error},
   Pid :: pid(),
-  Error :: {already_started, Pid} | term().
+  Error :: {already_started,Pid} | term().
 %% ====================================================================
 start_link(Mode) ->
   Args = case Mode of
@@ -172,11 +172,11 @@ handle_call({addCallback, FuseId, Node, Pid}, _From, State) ->
   try
     gen_server:call({?Node_Manager_Name, Node}, {addCallback, FuseId, Pid}, 500),
     CallbacksNum = case add_callback(Node, FuseId, State#cm_state.nodes, State#cm_state.callbacks_num) of
-                     updated ->
-                       save_state(),
-                       State#cm_state.callbacks_num + 1;
-                     _ -> State#cm_state.callbacks_num
-                   end,
+      updated ->
+        save_state(),
+        State#cm_state.callbacks_num + 1;
+      _ -> State#cm_state.callbacks_num
+    end,
     {reply, ok, State#cm_state{callbacks_num = CallbacksNum}}
   catch
     _:_ ->
@@ -188,18 +188,18 @@ handle_call({delete_callback, FuseId, Node, Pid}, _From, State) ->
   try
     Ans = gen_server:call({?Node_Manager_Name, Node}, {delete_callback, FuseId, Pid}, 500),
     CallbacksNum = case Ans of
-                     fuse_deleted ->
-                       case delete_callback(Node, FuseId, State#cm_state.nodes, State#cm_state.callbacks_num, true) of
-                         updated ->
-                           save_state(),
-                           State#cm_state.callbacks_num + 1;
-                         deleted ->
-                           save_state(),
-                           State#cm_state.callbacks_num + 1;
-                         _ -> State#cm_state.callbacks_num
-                       end;
-                     _ -> State#cm_state.callbacks_num
-                   end,
+      fuse_deleted ->
+        case delete_callback(Node, FuseId, State#cm_state.nodes, State#cm_state.callbacks_num, true) of
+          updated ->
+            save_state(),
+            State#cm_state.callbacks_num + 1;
+          deleted ->
+            save_state(),
+            State#cm_state.callbacks_num + 1;
+          _ -> State#cm_state.callbacks_num
+        end;
+      _ -> State#cm_state.callbacks_num
+    end,
     {reply, ok, State#cm_state{callbacks_num = CallbacksNum}}
   catch
     _:_ ->
@@ -216,7 +216,7 @@ handle_call(check, _From, State) ->
 %% TODO: add generic mechanism that do the same thing
 handle_call({update_cluster_rengines, EventType, EventHandlerItem}, _From, State) ->
   Workers = State#cm_state.workers,
-  UpdateClusterRengine = fun({_Node, Module, Pid}) ->
+  UpdateClusterRengine = fun ({_Node, Module, Pid}) ->
     case Module of
       cluster_rengine -> gen_server:cast(Pid, {asynch, 1, {update_cluster_rengine, EventType, EventHandlerItem}});
       _ -> ok
@@ -242,13 +242,13 @@ handle_call({get_cluster_stats, StartTime, EndTime, Columns}, _From, State) ->
 %% (e.g. request dispatchers can have nodes list)
 handle_call({node_for_ack, NodeForAck}, _From, State) ->
   MsgID = case get(callback_msg_ID) of
-            ID when is_integer(ID) and (ID > ?MIN_MSG_ID) ->
-              put(callback_msg_ID, ID - 1),
-              ID - 1;
-            _ ->
-              put(callback_msg_ID, -2),
-              -2
-          end,
+    ID when is_integer(ID) and (ID > ?MIN_MSG_ID) ->
+      put(callback_msg_ID, ID - 1),
+      ID - 1;
+    _ ->
+      put(callback_msg_ID, -2),
+      -2
+  end,
 
   SendToNodes = fun(Node) ->
     gen_server:cast({?Node_Manager_Name, Node}, {node_for_ack, MsgID, NodeForAck})
@@ -457,7 +457,7 @@ handle_cast({worker_answer, cluster_state, Response}, State) ->
                {ok, SavedState} ->
                  lager:info([{mod, ?MODULE}], "State read from DB: ~p", [SavedState]),
                  merge_state(State, SavedState);
-               {error, {not_found, missing}} ->
+               {error, {not_found,missing}} ->
                  save_state(),
                  State#cm_state{state_loaded = true};
                Error ->
@@ -487,7 +487,7 @@ handle_cast({synch_cache_clearing, Cache, ReturnPid}, State) ->
 %% this handler notify all logical_files_manager that event production of EventType should be enabled/disabled
 handle_cast({notify_lfm, EventType, Enabled}, State) ->
   NotifyFn = fun(Node) ->
-    gen_server:cast({?Node_Manager_Name, Node}, {notify_lfm, EventType, Enabled})
+      gen_server:cast({?Node_Manager_Name, Node}, {notify_lfm, EventType, Enabled})
   end,
 
   lists:foreach(NotifyFn, State#cm_state.nodes),
@@ -495,7 +495,7 @@ handle_cast({notify_lfm, EventType, Enabled}, State) ->
 
 handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
   NotifyFn = fun(Node) ->
-    gen_server:cast({?Node_Manager_Name, Node}, {update_user_write_enabled, UserDn, Enabled})
+      gen_server:cast({?Node_Manager_Name, Node}, {update_user_write_enabled, UserDn, Enabled})
   end,
 
   lists:foreach(NotifyFn, State#cm_state.nodes),
@@ -503,8 +503,7 @@ handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
 
 handle_cast({start_load_logging, Path}, State) ->
   ?info("Start load logging on nodes: ~p", State#cm_state.nodes),
-  lists:map(fun(Node) ->
-    gen_server:cast({?Node_Manager_Name, Node}, {start_load_logging, Path}) end, State#cm_state.nodes),
+  lists:map(fun(Node) -> gen_server:cast({?Node_Manager_Name, Node}, {start_load_logging, Path}) end, State#cm_state.nodes),
   {noreply, State};
 
 handle_cast(stop_load_logging, State) ->
@@ -606,7 +605,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% be started (and starts them). Additionally, it sets timer that
 %% initiates checking of cluster state.
 -spec init_cluster(State :: term()) -> NewState when
-  NewState :: term().
+  NewState ::  term().
 %% ====================================================================
 init_cluster(State) ->
   Nodes = State#cm_state.nodes,
@@ -655,7 +654,7 @@ init_cluster(State) ->
 %% @doc Chooses node for workers when there are more nodes than workers.
 -spec init_cluster_nodes_dominance(State :: term(), Nodes :: list(), Jobs1 :: list(),
     Jobs2 :: list(), Args1 :: list(), Args2 :: list()) -> NewState when
-  NewState :: term().
+  NewState ::  term().
 %% ====================================================================
 init_cluster_nodes_dominance(State, [], _Jobs1, _Jobs2, _Args1, _Args2) ->
   State;
@@ -670,7 +669,7 @@ init_cluster_nodes_dominance(State, [N | Nodes], [J | Jobs1], Jobs2, [A | Args1]
 %% @doc Chooses node for workers when there are more workers than nodes.
 -spec init_cluster_jobs_dominance(State :: term(), Jobs :: list(),
     Args :: list(), Nodes1 :: list(), Nodes2 :: list()) -> NewState when
-  NewState :: term().
+  NewState ::  term().
 %% ====================================================================
 init_cluster_jobs_dominance(State, [], [], _Nodes1, _Nodes2) ->
   State;
@@ -685,7 +684,7 @@ init_cluster_jobs_dominance(State, [J | Jobs], [A | Args], [N | Nodes1], Nodes2)
 %% @doc Checks cluster state and decides if any new component should
 %% be started (currently running ones are overloaded) or stopped.
 -spec check_cluster_state(State :: term()) -> NewState when
-  NewState :: term().
+  NewState ::  term().
 %% ====================================================================
 check_cluster_state(State) ->
   CheckNum = (State#cm_state.cluster_check_num + 1) rem 15,
@@ -888,11 +887,11 @@ add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
 
       MapState = try
         ok = gen_server:call(ChildPid, dispatcher_map_unregistered, 500)
-                 catch
-                   _:_ ->
-                     lager:error([{mod, ?MODULE}], "Error during contact with worker ~p found at node ~s", [Id, Node]),
-                     error
-                 end,
+      catch
+        _:_ ->
+          lager:error([{mod, ?MODULE}], "Error during contact with worker ~p found at node ~s", [Id, Node]),
+          error
+      end,
 
       case MapState of
         ok ->
@@ -928,10 +927,10 @@ node_down(Node, State) ->
   Nodes = State#cm_state.nodes,
   NewNodes = lists:foldl(CreateNewNodesList, [], Nodes),
 
-  {CallbacksNum, WorkersFound2} = case delete_all_callbacks(Node, State#cm_state.nodes, State#cm_state.callbacks_num) of
-                                    true -> {State#cm_state.callbacks_num + 1, true};
-                                    false -> {State#cm_state.callbacks_num, WorkersFound}
-                                  end,
+  {CallbacksNum, WorkersFound2}  = case delete_all_callbacks(Node, State#cm_state.nodes, State#cm_state.callbacks_num) of
+    true -> {State#cm_state.callbacks_num + 1, true};
+    false -> {State#cm_state.callbacks_num, WorkersFound}
+  end,
 
   {State#cm_state{workers = NewWorkers, nodes = NewNodes, callbacks_num = CallbacksNum}, WorkersFound2}.
 
@@ -1005,7 +1004,7 @@ save_state() ->
 %% ====================================================================
 %% @doc This function updates cluster state on the basis of data read
 %% from DB.
--spec merge_state(State :: term(), SavedState :: term()) -> NewState when
+-spec merge_state(State :: term(), SavedState:: term()) -> NewState when
   NewState :: term().
 %% ====================================================================
 merge_state(State, SavedState) ->
@@ -1133,13 +1132,13 @@ update_dispatcher_state(Nodes, Loads, AvgLoad) ->
   AvgLoad :: number().
 %% ====================================================================
 update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
-  MergeByFirstElement = fun(List) -> lists:reverse(lists:foldl(fun({Key, Value}, []) -> [{Key, [Value]}];
+  MergeByFirstElement = fun (List) -> lists:reverse(lists:foldl(fun({Key, Value}, []) ->  [{Key, [Value]}];
     ({Key, Value}, [{Key, AccValues} | Tail]) -> [{Key, [Value | AccValues]} | Tail];
     ({Key, Value}, Acc) -> [{Key, [Value]} | Acc]
   end, [], lists:keysort(1, List)))
   end,
 
-  NodeToIPWithLogging = fun(Node) ->
+  NodeToIPWithLogging = fun (Node) ->
     case node_to_ip(Node) of
       {ok, Address} -> Address;
       {error, Error} ->
@@ -1152,7 +1151,7 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
 
   MergedByModule = MergeByFirstElement(ModuleToNode),
 
-  ModulesToNodes = lists:map(fun({Module, Nodes}) ->
+  ModulesToNodes = lists:map(fun ({Module, Nodes}) ->
     GetLoads = fun({Node, NodeLoad, ModulesLoads}, TmpAns) ->
       case lists:member(Node, Nodes) of
         true ->
@@ -1167,8 +1166,8 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
                   end,
 
           case ModuleV > 0.5 of
-            true -> case (AvgLoad > 0) and (NodeV >= 2 * AvgLoad) of
-                      true ->
+            true -> case (AvgLoad > 0) and (NodeV >= 2*AvgLoad) of
+                      true->
                         V = erlang:min(10, erlang:round(NodeV / AvgLoad)),
                         [{Node, V} | TmpAns];
                       false -> [{Node, 1} | TmpAns]
@@ -1187,7 +1186,7 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
         MinV = lists:min([V || {_Node, V} <- FilteredNodeToLoad]),
         FilteredNodeToLoad2 = case MinV of
                                 1 -> FilteredNodeToLoad;
-                                _ -> [{Node, erlang:round(V / MinV)} || {Node, V} <- FilteredNodeToLoad]
+                                _ -> [{Node, erlang:round(V/MinV) } || {Node, V} <- FilteredNodeToLoad]
                               end,
 
         IPs = [{NodeToIPWithLogging(Node), Param} || {Node, Param} <- FilteredNodeToLoad2],
@@ -1203,10 +1202,9 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
     fun({Node, NodeLoad, _}) ->
       {NodeToIPWithLogging(Node), NodeLoad}
     end, NodeToLoad),
-  UpdateDnsWorker = fun({_Node, Module, Pid}) ->
+  UpdateDnsWorker = fun ({_Node, Module, Pid}) ->
     case Module of
-      dns_worker ->
-        gen_server:cast(Pid, {asynch, 1, {update_state, FilteredModulesToNodes, [{N_IP, N_Load} || {N_IP, N_Load} <- NLoads, N_IP =/= unknownaddress], AvgLoad}});
+      dns_worker -> gen_server:cast(Pid, {asynch, 1, {update_state, FilteredModulesToNodes, [{N_IP, N_Load} || {N_IP, N_Load} <- NLoads, N_IP =/= unknownaddress], AvgLoad}});
       _ -> ok
     end
   end,
@@ -1245,8 +1243,8 @@ check_load(WorkerPlugin) ->
 %% ====================================================================
 node_to_ip(Node) ->
   StrNode = atom_to_list(Node),
-  AddressWith@ = lists:dropwhile(fun(Char) -> Char =/= $@ end, StrNode),
-  Address = lists:dropwhile(fun(Char) -> Char =:= $@ end, AddressWith@),
+  AddressWith@ = lists:dropwhile(fun (Char) -> Char =/= $@ end, StrNode),
+  Address = lists:dropwhile(fun (Char) -> Char =:= $@ end, AddressWith@),
   inet:getaddr(Address, inet).
 
 
@@ -1430,7 +1428,7 @@ calculate_worker_load(Workers) ->
   Result :: list().
 %% ====================================================================
 calculate_load(NodesLoad, WorkersLoad) ->
-  Merge = fun({Node, NLoad}) ->
+  Merge = fun ({Node, NLoad}) ->
     {Node, NLoad, proplists:get_value(Node, WorkersLoad, [])}
   end,
   lists:map(Merge, NodesLoad).
@@ -1585,9 +1583,9 @@ clear_cache(State, Cache) ->
   %% If workers were running on node that is down,
   %% upgrade state.
   State3 = case WF of
-             true -> update_dispatchers_and_dns(State2, true, true);
-             false -> State2
-           end,
+                true -> update_dispatchers_and_dns(State2, true, true);
+                false -> State2
+              end,
 
   save_state(),
   State3.
