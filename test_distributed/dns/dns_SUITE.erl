@@ -14,10 +14,8 @@
 -module(dns_SUITE).
 -include_lib("kernel/src/inet_dns.hrl").
 
--include("test_utils.hrl").
+-include("nodes_manager.hrl").
 -include("registered_names.hrl").
--include_lib("ctool/include/test/assertions.hrl").
--include_lib("ctool/include/test/test_node_starter.hrl").
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([dns_worker_env_test/1, dns_udp_handler_responds_to_dns_queries/1, dns_ranch_tcp_handler_responds_to_dns_queries/1, distributed_test/1]).
@@ -42,6 +40,7 @@ dns_worker_env_test_code() ->
 
 %% Checks if all necessary variables are declared in application
 dns_worker_env_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
   {Node, _DNS_Port} = extract_node_and_dns_port(Config),
 
   ?assertEqual(ok, rpc:call(Node, ?MODULE, dns_worker_env_test_code, [])).
@@ -94,6 +93,7 @@ dns_ranch_tcp_handler_responds_to_dns_queries(Config) ->
 
 %% This test checks if dns works well with multi-node cluster
 distributed_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
@@ -101,14 +101,14 @@ distributed_test(Config) ->
   Host = get_host(CCM),
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  test_utils:wait_for_cluster_cast(),
+  nodes_manager:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  test_utils:wait_for_cluster_init(),
+  nodes_manager:wait_for_cluster_init(),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
@@ -120,7 +120,7 @@ distributed_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
+  nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
 
   {ConAns, Socket} = gen_tcp:connect(Host, DNS_Port, [{active, false}, binary, {packet, 2}]),
   ?assertEqual(ok, ConAns),
@@ -168,44 +168,53 @@ distributed_test(Config) ->
 %% ====================================================================
 
 init_per_testcase(distributed_test, Config) ->
-  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
-  test_node_starter:start_deps_for_tester_node(),
+  ?INIT_DIST_TEST,
+  nodes_manager:start_deps_for_tester_node(),
 
-  NodesUp = test_node_starter:start_test_nodes(4),
+  NodesUp = nodes_manager:start_test_on_nodes(4),
   [CCM | _] = NodesUp,
-  DBNode = ?DB_NODE,
+  DBNode = nodes_manager:get_db_node(),
 
-  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [
-    [{node_type, ccm_test}, {dispatcher_port, 5055}, {control_panel_port, 1350}, {control_panel_redirect_port, 1354}, {rest_port, 8443}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
-    [{node_type, worker}, {dispatcher_port, 6666}, {control_panel_port, 1351}, {control_panel_redirect_port, 1355}, {rest_port, 8444}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
-    [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {control_panel_redirect_port, 1356}, {rest_port, 8445}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
-    [{node_type, worker}, {dispatcher_port, 8888}, {control_panel_port, 1353}, {control_panel_redirect_port, 1357}, {rest_port, 8446}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [
+    [{node_type, ccm_test}, {dispatcher_port, 5055}, {control_panel_port, 1350}, {control_panel_redirect_port, 1354}, {rest_port, 8443}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {control_panel_port, 1351}, {control_panel_redirect_port, 1355}, {rest_port, 8444}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1}],
+    [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {control_panel_redirect_port, 1356}, {rest_port, 8445}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1}],
+    [{node_type, worker}, {dispatcher_port, 8888}, {control_panel_port, 1353}, {control_panel_redirect_port, 1357}, {rest_port, 8446}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {heart_beat, 1}]]),
 
-  lists:append([{nodes, NodesUp}], Config);
+  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
+  lists:append([{nodes, NodesUp}, {assertions, Assertions}], Config);
 
 init_per_testcase(_, Config) ->
-  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
+  ?INIT_DIST_TEST,
 
-  NodesUp = test_node_starter:start_test_nodes(1),
+  NodesUp = nodes_manager:start_test_on_nodes(1),
   [Node | _] = NodesUp,
 
   DNS_Port = 1312,
-  Env = [{node_type, ccm_test}, {dispatcher_port, 6666}, {ccm_nodes, [Node]}, {dns_port, DNS_Port}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
+  Env = [{node_type, ccm_test}, {dispatcher_port, 6666}, {ccm_nodes, [Node]}, {dns_port, DNS_Port}, {heart_beat, 1}],
 
-  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [Env]),
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [Env]),
 
-  lists:append([{dns_port, DNS_Port}, {nodes, NodesUp}], Config).
+  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
+  lists:append([{dns_port, DNS_Port}, {nodes, NodesUp}, {assertions, Assertions}], Config).
+
 
 end_per_testcase(distributed_test, Config) ->
   Nodes = ?config(nodes, Config),
-  test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
-  test_node_starter:stop_test_nodes(Nodes),
-  test_node_starter:stop_deps_for_tester_node();
+  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
+  StopAns = nodes_manager:stop_nodes(Nodes),
+  nodes_manager:stop_deps_for_tester_node(),
+
+  ?assertEqual(false, lists:member(error, StopLog)),
+  ?assertEqual(ok, StopAns);
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
-  test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
-  test_node_starter:stop_test_nodes(Nodes).
+  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
+  StopAns = nodes_manager:stop_nodes(Nodes),
+
+  ?assertEqual(false, lists:member(error, StopLog)),
+  ?assertEqual(ok, StopAns).
 
 %% ====================================================================
 %% Helping functions
@@ -214,8 +223,9 @@ end_per_testcase(_, Config) ->
 %% Helper function setting test timeout, checking start assertions and waiting for cluster creation
 prepare_test_and_start_cluster(Config) ->
   ct:timetrap({seconds, 120}),
+  nodes_manager:check_start_assertions(Config),
   start_cluster(Config),
-  test_utils:wait_for_cluster_init().
+  nodes_manager:wait_for_cluster_init().
 
 
 %% Helper function for starting cluster
@@ -223,7 +233,7 @@ start_cluster(Config) ->
   [Node | _] = ?config(nodes, Config),
   gen_server:cast({?Node_Manager_Name, Node}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  test_utils:wait_for_cluster_cast(),
+  nodes_manager:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
   ok.
 
