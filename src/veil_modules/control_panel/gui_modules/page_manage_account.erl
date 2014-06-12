@@ -29,6 +29,7 @@ title() -> <<"Manage account">>.
 
 %% This will be placed in the template instead of [[[page:body()]]] tag
 body() ->
+    gui_jq:register_escape_event("escape_pressed"),
     #panel{style = <<"position: relative;">>, body = [
         vcn_gui_utils:top_menu(manage_account_tab),
         #panel{style = <<"margin-top: 60px; padding: 20px;">>, body = [
@@ -188,6 +189,10 @@ dn_list_body() ->
 
 
 % Postback event handling
+api_event("escape_pressed", _, _) ->
+    show_email_adding(false),
+    show_dn_adding(false).
+
 event(init) -> ok;
 
 event({action, Fun}) ->

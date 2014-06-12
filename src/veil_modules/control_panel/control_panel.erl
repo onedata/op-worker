@@ -193,7 +193,8 @@ cleanup() ->
 -spec gui_adjust_headers(Req :: req()) -> req().
 %% ====================================================================
 gui_adjust_headers(Req) ->
-    cowboy_req:set_resp_header(<<"Strict-Transport-Security">>, <<"max-age=31536000; includeSubDomains">>, Req).
+    Req2 = cowboy_req:set_resp_header(<<"Strict-Transport-Security">>, <<"max-age=31536000; includeSubDomains">>, Req),
+    _Req3 = cowboy_req:set_resp_header(<<"X-Frame-Options">>, <<"SAMEORIGIN">>, Req2).
 
 
 %% ====================================================================
