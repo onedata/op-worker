@@ -30,6 +30,7 @@ body() ->
                                   _ -> <<"">>
                               end,
             #panel{style = <<"position: relative;">>, body = [
+                <<"&ltscript>&gt&gt&gt&lt">>,
                 #panel{id = <<"error_message">>, style = ErrorPanelStyle, class = <<"dialog dialog-danger">>, body = #p{
                     body = <<"Session error or session expired. Please log in again.">>}},
                 #panel{class = <<"alert alert-success login-page">>, body = [

@@ -65,7 +65,7 @@ manager_submenu() ->
                 tool_button_and_dummy(<<"tb_up_one_level">>, <<"Up one level">>, <<"padding: 10px 7px 10px 15px;">>,
                     <<"fui-arrow-left">>, {action, up_one_level})},
                 #panel{class = <<"breadcrumb-text breadcrumb-background">>, style = <<"overflow: hidden; margin-left: 15px;">>, body = [
-                    #p{id = <<"path_navigator">>, class = <<"breadcrumb-content">>, body = <<"~/">>}%path_navigator_body("/")}
+                    #p{id = <<"path_navigator">>, class = <<"breadcrumb-content">>, body = <<"~/">>}
                 ]},
                 #panel{class = <<"control-group">>, style = <<"position: absolute; right: 15px; top: 0;">>, body = [
                     #panel{class = <<"input-append">>, style = <<"; margin-bottom: 0px;">>, body = [
@@ -601,10 +601,10 @@ show_popup(Type) ->
                                   end,
                 OldLocation = lists:nth(1, get_selected_items()),
                 Body = [
-                    #p{body = <<"Rename <b>", (gui_str:to_binary(Filename))/binary, "</b>">>},
+                    #p{body = <<"Rename <b>", (gui_str:html_encode(Filename))/binary, "</b>">>},
                     #form{class = <<"control-group">>, body = [
                         #textbox{id = wire_enter(<<"new_name_textbox">>, <<"new_name_submit">>), class = <<"flat">>,
-                            style = <<"width: 350px;">>, placeholder = <<"New name">>, value = gui_str:to_binary(Filename)},
+                            style = <<"width: 350px;">>, placeholder = <<"New name">>, value = gui_str:html_encode(Filename)},
 
                         #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>,
                             id = wire_click(<<"new_name_submit">>,
@@ -646,15 +646,15 @@ show_popup(Type) ->
                 Body = [
                     case Status of
                         exists ->
-                            #p{body = <<"<b>", (gui_str:to_binary(Filename))/binary,
+                            #p{body = <<"<b>", (gui_str:html_encode(Filename))/binary,
                             "</b> is already shared. Visit <b>Shared files</b> tab for more.">>};
                         new ->
-                            #p{body = <<"<b>", (gui_str:to_binary(Filename))/binary,
+                            #p{body = <<"<b>", (gui_str:html_encode(Filename))/binary,
                             "</b> successfully shared. Visit <b>Shared files</b> tab for more.">>}
                     end,
                     #form{class = <<"control-group">>, body = [
                         #textbox{id = wire_enter(<<"shared_link_textbox">>, <<"shared_link_submit">>), class = "flat", style = "width: 700px;",
-                            value = <<AddressPrefix/binary, ShareID/binary>>, placeholder = "Download link"},
+                            value = gui_str:html_encode(<<AddressPrefix/binary, ShareID/binary>>), placeholder = "Download link"},
                         #button{id = wire_click(<<"shared_link_submit">>, {action, hide_popup}),
                             class = <<"btn btn-success btn-wide">>, body = <<"Ok">>}
                     ]}
@@ -749,7 +749,7 @@ path_navigator_body(WorkingDirectory) ->
                 fun(Element, {CurrentPath, Counter}) ->
                     PathToElement = CurrentPath ++ "/" ++ Element,
                     Link = #link{id = wire_click(<<"nav_", (integer_to_binary(Counter))/binary>>, {action, navigate, [PathToElement]}),
-                        body = gui_str:to_binary(Element)},
+                        body = gui_str:html_encode(Element)},
                     {Link, {PathToElement, Counter + 1}}
                 end, {"/", 1}, lists:sublist(PathElements, length(PathElements) - 1)),
             [FirstLink | LinkList] ++ [lists:last(PathElements)]
@@ -794,7 +794,8 @@ grid_view_body() ->
                                        #image{style = ImageStyle, image = ImageUrl}
                                    ]},
                                    #panel{style = <<"margin: 5px auto 0; text-align: center; word-wrap: break-word;">>, body = [
-                                       #link{title = Filename, id = wire_click(LinkID, {action, navigate, [FullPath]}), body = Filename}
+                                       #link{title = gui_str:html_encode(Filename), id = wire_click(LinkID, {action, navigate, [FullPath]}),
+                                           body = gui_str:html_encode(Filename)}
                                    ]}
                                ];
                            false ->
@@ -812,7 +813,7 @@ grid_view_body() ->
                                        ]}
                                    ]},
                                    #panel{style = <<"margin: 5px auto 0; text-align: center; word-wrap: break-word;">>, body = [
-                                       #link{title = Filename, id = LinkID, body = Filename, target = <<"_blank">>,
+                                       #link{title = gui_str:html_encode(Filename), id = LinkID, body = gui_str:html_encode(Filename), target = <<"_blank">>,
                                            url = <<?user_content_download_path, "/", (gui_str:to_binary(gui_str:url_encode(FullPath)))/binary>>}
                                    ]}
                                ]
@@ -912,7 +913,7 @@ list_view_body() ->
                                     ]},
                                     #panel{class = <<"filename_row">>,
                                         style = <<"max-width: 400px; word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
-                                            #link{id = wire_click(LinkID, {action, navigate, [FullPath]}), body = Filename}
+                                            #link{id = wire_click(LinkID, {action, navigate, [FullPath]}), body = gui_str:html_encode(Filename)}
                                         ]}
                                 ]}};
                         false ->
@@ -924,13 +925,13 @@ list_view_body() ->
                             #td{body = #span{class = <<"table-cell">>, body = [
                                 #panel{style = <<"display: inline-block; vertical-align: middle; position: relative;">>, body = [
                                     #link{id = ImageID, target = <<"_blank">>,
-                                        url = <<?user_content_download_path, "/", (gui_str:to_binary(gui_str:url_encode(FullPath)))/binary>>, body = [
+                                        url = <<?user_content_download_path, "/", (gui_str:url_encode(FullPath))/binary>>, body = [
                                             ShareIcon,
                                             #image{class = <<"list-icon">>, style = ImageStyle, image = ImageUrl}
                                         ]}
                                 ]},
                                 #panel{class = <<"filename_row">>, style = <<"word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
-                                    #link{id = LinkID, body = Filename, target = <<"_blank">>,
+                                    #link{id = LinkID, body = gui_str:html_encode(Filename), target = <<"_blank">>,
                                         url = <<?user_content_download_path, "/", (gui_str:to_binary(gui_str:url_encode(FullPath)))/binary>>}
                                 ]}
                             ]}}

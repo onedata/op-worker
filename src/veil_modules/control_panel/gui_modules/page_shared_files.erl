@@ -62,7 +62,7 @@ main_panel() ->
                     ]},
                     #panel{style = <<"word-wrap: break-word; display: inline-block;vertical-align: middle;">>,
                         class = <<"filename_row">>, body = [
-                            #link{body = LinkText, target = <<"_blank">>, url = <<AddressPrefix/binary, UUID/binary>>}
+                            #link{body = gui_str:html_encode(LinkText), target = <<"_blank">>, url = <<AddressPrefix/binary, UUID/binary>>}
                         ]}
                 ]}},
                 #td{style = <<"width: 80px;">>, body = #span{class = <<"table-cell">>, body = [
@@ -150,7 +150,7 @@ remove_link_prompt(ShareID, Filename) ->
                 style = <<"position: absolute; top: 8px; right: 8px; z-index: 3;">>,
                 body = #span{class = <<"fui-cross">>, style = <<"font-size: 20px;">>}},
             #form{class = <<"control-group">>, body = [
-                #p{body = <<"Remove share for <b>", Filename/binary, "</b>?">>},
+                #p{body = <<"Remove share for <b>", (gui_str:html_encode(Filename))/binary, "</b>?">>},
                 #button{id = <<"ok_button">>, class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, postback = {action, remove_link, [ShareID]}},
                 #button{class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>, postback = {action, hide_popup}}
             ]}

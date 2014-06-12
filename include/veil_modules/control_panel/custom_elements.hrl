@@ -12,14 +12,6 @@
 -ifndef(CUSTOM_ELEMENTS_HRL).
 -define(CUSTOM_ELEMENTS_HRL, 1).
 
-% Custom jquery action
--record(jquery, {?ACTION_BASE(action_jquery),
-    property,
-    method,
-    args = [],
-    right,
-    format = "~s"}).
-
 
 % Simplest HTML form
 -record(form, {?ELEMENT_BASE(element_form),
@@ -28,7 +20,6 @@
     html_name,
     enctype
 }).
-
 
 % Custom upload element
 -record(veil_upload, {?ELEMENT_BASE(veil_upload),

@@ -16,7 +16,7 @@
 -export([to_list/1, to_binary/1, join_to_binary/1]).
 
 % Formatting, escaping and encoding
--export([format/2, format_bin/2, js_escape/1, url_encode/1, url_decode/1]).
+-export([format/2, format_bin/2, js_escape/1, html_encode/1, url_encode/1, url_decode/1]).
 
 
 %% ====================================================================
@@ -106,6 +106,16 @@ js_escape(<<C, Rest/binary>>, Acc) -> js_escape(Rest, <<Acc/binary, C>>);
 js_escape(<<"">>, Acc) -> Acc.
 
 
+%% html_encode/1
+%% ====================================================================
+%% @doc Performs safe URL encoding
+%% @end
+-spec html_encode(String :: binary() | string()) -> binary().
+%% ====================================================================
+html_encode(String) ->
+    to_binary(wf:html_encode(to_list(String))).
+
+
 %% url_encode/1
 %% ====================================================================
 %% @doc Performs safe URL encoding
@@ -113,7 +123,7 @@ js_escape(<<"">>, Acc) -> Acc.
 -spec url_encode(String :: binary() | string()) -> binary().
 %% ====================================================================
 url_encode(String) ->
-    to_binary(wf:url_encode(String)).
+    to_binary(wf:url_encode(to_list(String))).
 
 
 %% url_decode/1
@@ -123,4 +133,4 @@ url_encode(String) ->
 -spec url_decode(String :: binary() | string()) -> binary().
 %% ====================================================================
 url_decode(String) ->
-    to_binary(wf:url_decode(String)).
+    to_binary(wf:url_decode(to_list(String))).

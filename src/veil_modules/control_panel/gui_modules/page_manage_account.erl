@@ -115,7 +115,7 @@ team_list_body() ->
     _Body = case lists:map(
         fun(Team) ->
             #li{style = <<"font-size: 18px; padding: 5px 0;">>,
-                body = list_to_binary(re:replace(Team, "\\(", " (", [global, {return, list}]))}
+                body = gui_str:html_encode(re:replace(Team, "\\(", " (", [global, {return, list}]))}
         end, Teams) of
                 [] -> #p{body = <<"none">>};
                 List -> #list{numbered = true, body = List}
@@ -129,7 +129,7 @@ email_list_body() ->
         fun(Email, Acc) ->
             Body = #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
             [
-                Email,
+                gui_str:html_encode(Email),
                 #link{id = <<"remove_email_button", (integer_to_binary(Acc))/binary>>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
                     postback = {action, update_email, [User, {remove, Email}]}, body =
                     #span{class = <<"fui-cross">>, style = <<"font-size: 16px;">>}}
@@ -162,7 +162,7 @@ dn_list_body() ->
         fun(DN, Acc) ->
             Body = #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
             [
-                DN,
+                gui_str:html_encode(DN),
                 #link{id = <<"remove_dn_button", (integer_to_binary(Acc))/binary>>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
                     postback = {action, update_dn, [User, {remove, DN}]}, body =
                     #span{class = <<"fui-cross">>, style = <<"font-size: 16px;">>}}

@@ -71,7 +71,6 @@ prepare_validation_parameters() ->
     try
         % Make sure received endpoint is really the PLGrid endpoint
         EndpointURL = gui_ctx:url_param(<<?openid_op_endpoint_key>>),
-        ?dump(EndpointURL),
         true = (discover_op_endpoint(?xrds_url) =:= EndpointURL),
 
         % 'openid.signed' contains parameters that must be contained in validation request
