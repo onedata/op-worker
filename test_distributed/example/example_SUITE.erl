@@ -11,10 +11,8 @@
 %% ===================================================================
 
 -module(example_SUITE).
--include("test_utils.hrl").
+-include("nodes_manager.hrl").
 -include("registered_names.hrl").
--include_lib("ctool/include/test/assertions.hrl").
--include_lib("ctool/include/test/test_node_starter.hrl").
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
@@ -35,17 +33,18 @@ all() -> [distributed_test].
 
 %% Test function (it runs on tester node)
 distributed_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
   Nodes = ?config(nodes, Config),
 
   [Node1 | Nodes2] = Nodes,
   [Node2 | _] = Nodes2,
 
   ?assertEqual(ok, rpc:call(Node1, ?MODULE, node1_code1, [])),
-  test_utils:wait_for_cluster_cast(),
+  nodes_manager:wait_for_cluster_cast(),
   ?assertEqual(ok, rpc:call(Node2, ?MODULE, node2_code, [])),
-  test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node2}),
+  nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node2}),
   ?assertEqual(ok, rpc:call(Node1, ?MODULE, node1_code2, [])),
-  test_utils:wait_for_cluster_init(),
+  nodes_manager:wait_for_cluster_init(),
 
   NodesListFromCCM = gen_server:call({global, ?CCM}, get_nodes, 500),
   ?assertEqual(length(Nodes), length(NodesListFromCCM)),
@@ -74,11 +73,13 @@ node2_code() ->
 %% ====================================================================
 
 local_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
+
   gen_server:cast(?Node_Manager_Name, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  test_utils:wait_for_cluster_cast(),
+  nodes_manager:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  test_utils:wait_for_cluster_init(),
+  nodes_manager:wait_for_cluster_init(),
 
   NodesListFromCCM = gen_server:call({global, ?CCM}, get_nodes, 500),
   ?assertEqual(1, length(NodesListFromCCM)).
@@ -89,29 +90,35 @@ local_test(Config) ->
 %% ====================================================================
 
 init_per_testcase(distributed_test, Config) ->
-  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
+  ?INIT_DIST_TEST,
 
-  %% To see slaves output use test_node_starter:start_test_nodes with 2 arguments (second argument should be true)
-  %% e.g. test_node_starter:start_test_nodes(2, true)
-  Nodes = test_node_starter:start_test_nodes(2),
+  %% To see slaves output use nodes_manager:start_test_on_nodes with 2 arguments (second argument should be true)
+  %% e.g. nodes_manager:start_test_on_nodes(2, true)
+  Nodes = nodes_manager:start_test_on_nodes(2),
   [Node1 | _] = Nodes,
 
-  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes, [[{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [Node1]}, {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
-    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [Node1]}, {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+  StartLog = nodes_manager:start_app_on_nodes(Nodes, [[{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [Node1]}, {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {heart_beat, 1}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {ccm_nodes, [Node1]}, {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {heart_beat, 1}]]),
 
-  lists:append([{nodes, Nodes}], Config);
+  Assertions = [{false, lists:member(error, Nodes)}, {false, lists:member(error, StartLog)}],
+  lists:append([{nodes, Nodes}, {assertions, Assertions}], Config);
 
 init_per_testcase(local_test, Config) ->
-  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
-  test_node_starter:start_deps(?VEIL_DEPS),
-  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS,[node()],[[{node_type, ccm_test}, {dispatcher_port, 7777}, {ccm_nodes, [node()]}, {dns_port, 1312},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
-  Config.
+  ?INIT_DIST_TEST,
+  StartTestAns = nodes_manager:start_test_on_local_node(),
+  StartAppAns = nodes_manager:start_app_local([{node_type, ccm_test}, {dispatcher_port, 7777}, {ccm_nodes, [node()]}, {dns_port, 1312}]),
+  Assertions = [{ok, StartTestAns}, {ok, StartAppAns}],
+  lists:append([{assertions, Assertions}], Config).
 
 
 end_per_testcase(distributed_test, Config) ->
   Nodes = ?config(nodes, Config),
-  test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
-  test_node_starter:stop_test_nodes(Nodes);
+  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
+  StopAns = nodes_manager:stop_nodes(Nodes),
+  %% use assertions AFTER all code that should be executed (they will show info for user but do not disturb cleaning up)
+  ?assertEqual(false, lists:member(error, StopLog)),
+  ?assertEqual(ok, StopAns);
 
 end_per_testcase(local_test, _Config) ->
-  test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, [node()]).
+  StopAns = nodes_manager:stop_test_on_local_nod(),
+  ?assertEqual(ok, StopAns).

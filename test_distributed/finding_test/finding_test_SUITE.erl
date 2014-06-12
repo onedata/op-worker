@@ -11,7 +11,7 @@
 %% ===================================================================
 -module(finding_test_SUITE).
 
--include("test_utils.hrl").
+-include("nodes_manager.hrl").
 -include("registered_names.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
 -include_lib("files_common.hrl").
@@ -24,8 +24,6 @@
 -include("veil_modules/dao/dao_share.hrl").
 -include("logging.hrl").
 -include_lib("veil_modules/dao/couch_db.hrl").
--include_lib("ctool/include/test/assertions.hrl").
--include_lib("ctool/include/test/test_node_starter.hrl").
 
 %% API
 -export([dao_vfs_find_test/1]).
@@ -45,6 +43,7 @@ all() -> [dao_vfs_find_test].
 %% Before testing it clears documents that may affect test and after testing it clears created documents.
 %% @end
 dao_vfs_find_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
   [Node1 | _] = NodesUp,
   start_cluster(Node1),
@@ -142,23 +141,27 @@ dao_vfs_find_test(Config) ->
 %% ====================================================================
 
 init_per_testcase(_, Config) ->
-  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
-  test_node_starter:start_deps_for_tester_node(),
+  ?INIT_DIST_TEST,
+  nodes_manager:start_deps_for_tester_node(),
 
-  NodesUp = test_node_starter:start_test_nodes(1),
+  NodesUp = nodes_manager:start_test_on_nodes(1),
   [FSLogicNode | _] = NodesUp,
 
-  DB_Node = ?DB_NODE,
+  DB_Node = nodes_manager:get_db_node(),
   Port = 6666,
-  test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1}]]),
 
-  lists:append([{port, Port}, {nodes, NodesUp}], Config).
+  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
+  lists:append([{port, Port}, {nodes, NodesUp}, {assertions, Assertions}], Config).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
-  test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
-  test_node_starter:stop_test_nodes(Nodes),
-  test_node_starter:stop_deps_for_tester_node().
+  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
+  StopAns = nodes_manager:stop_nodes(Nodes),
+  nodes_manager:stop_deps_for_tester_node(),
+
+  ?assertEqual(false, lists:member(error, StopLog)),
+  ?assertEqual(ok, StopAns).
 
 %% ====================================================================
 %% Helper functions
@@ -172,9 +175,9 @@ test_find_usage(Node, FileCriteria, ExpectedUuids) ->
 start_cluster(Node) ->
   gen_server:cast({?Node_Manager_Name, Node}, do_heart_beat),
   gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-  test_utils:wait_for_cluster_cast(),
+  nodes_manager:wait_for_cluster_cast(),
   gen_server:cast({global, ?CCM}, init_cluster),
-  test_utils:wait_for_cluster_init().
+  nodes_manager:wait_for_cluster_init().
 
 create_file(Node, #path_with_times{path = FilePath, times = {ATime, MTime, CTime}}, Uid, FileType) ->
   {ParentFound, ParentInfo} = rpc:call(Node, fslogic_path, get_parent_and_name_from_path , [FilePath, ?ProtocolVersion]),

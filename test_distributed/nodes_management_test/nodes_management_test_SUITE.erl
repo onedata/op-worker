@@ -12,14 +12,12 @@
 
 -module(nodes_management_test_SUITE).
 
--include("test_utils.hrl").
+-include("nodes_manager.hrl").
 -include("registered_names.hrl").
 -include("modules_and_args.hrl").
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
--include_lib("ctool/include/test/assertions.hrl").
--include_lib("ctool/include/test/test_node_starter.hrl").
 
 -define(ProtocolVersion, 1).
 
@@ -55,19 +53,20 @@ worker_code() ->
 
 %% This test checks if acks from fuse are routed correctly
 fuse_ack_routing_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  test_utils:wait_for_cluster_cast(),
+  nodes_manager:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  test_utils:wait_for_cluster_init(),
+  nodes_manager:wait_for_cluster_init(),
 
   {Workers, _} = gen_server:call({global, ?CCM}, get_workers, 1000),
   StartAdditionalWorker = fun(Node) ->
@@ -79,7 +78,7 @@ fuse_ack_routing_test(Config) ->
     end
   end,
   lists:foreach(StartAdditionalWorker, NodesUp),
-  test_utils:wait_for_cluster_init(length(NodesUp) - 1),
+  nodes_manager:wait_for_cluster_init(length(NodesUp) - 1),
 
   [Worker1, Worker2, Worker3] = WorkerNodes,
 
@@ -154,7 +153,7 @@ fuse_ack_routing_test(Config) ->
   ?assertEqual(ok, RecvAns2),
   ?assertEqual(RegAnsBytes, SendAns2),
 
-  test_utils:wait_for_request_handling(),
+  nodes_manager:wait_for_request_handling(),
 
   Pid = self(),
   OnCompleteCallback = fun(SucessFuseIds, FailFuseIds) ->
@@ -285,19 +284,20 @@ fuse_ack_routing_test(Config) ->
 
 %% This test checks if FUSE sessions are cleared properly
 fuse_session_cleanup_test(Config) ->
+    nodes_manager:check_start_assertions(Config),
     NodesUp = ?config(nodes, Config),
     DBNode = ?config(dbnode, Config),
     [CCM | WorkerNodes] = NodesUp,
 
     ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-    test_utils:wait_for_cluster_cast(),
+    nodes_manager:wait_for_cluster_cast(),
     RunWorkerCode = fun(Node) ->
       ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-      test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
+      nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
     end,
     lists:foreach(RunWorkerCode, WorkerNodes),
     ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-    test_utils:wait_for_cluster_init(),
+    nodes_manager:wait_for_cluster_init(),
 
     %% Worker ports: 6666, 7777, 8888
     Host = "localhost",
@@ -363,7 +363,7 @@ fuse_session_cleanup_test(Config) ->
     wss:close(Socket11),
     wss:close(Socket13),
 
-    test_utils:wait_for_fuse_session_exp(),
+    nodes_manager:wait_for_fuse_session_exp(),
 
     %% Check if everithing is fine in DB
     {Status3, Ans3} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID1}], 1]),
@@ -378,7 +378,7 @@ fuse_session_cleanup_test(Config) ->
     %% Close last connection for session #1
     wss:close(Socket12),
 
-    test_utils:wait_for_fuse_session_exp(),
+    nodes_manager:wait_for_fuse_session_exp(),
 
     %% Check if everithing is fine in DB
     {Status6, Ans6} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID1}], 1]),
@@ -399,11 +399,11 @@ fuse_session_cleanup_test(Config) ->
     wss:close(Socket21),
     wss:close(Socket22),
 
-    test_utils:wait_for_request_handling(),
+    nodes_manager:wait_for_request_handling(),
     DaoStart = rpc:call(CCM, dao_lib, apply, [dao_hosts, insert, [DBNode], ?ProtocolVersion]),
     ?assertEqual(ok, DaoStart),
 
-    test_utils:wait_for_fuse_session_exp(),
+    nodes_manager:wait_for_fuse_session_exp(),
 
     %% Check if everithing is fine in DB
     {Status9, Ans9} = rpc:call(CCM, dao_lib, apply, [dao_cluster, list_connection_info, [{by_session_id, FuseID1}], 1]),
@@ -422,23 +422,24 @@ fuse_session_cleanup_test(Config) ->
     ?assertEqual(ok, rpc:call(CCM, user_logic, remove_user, [{login, "user1"}])).
 
 main_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [])),
-  test_utils:wait_for_cluster_cast(),
+  nodes_manager:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [])),
-    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [])),
-  test_utils:wait_for_cluster_init(),
+  nodes_manager:wait_for_cluster_init(),
 
   NotExistingNodes = ['n1@localhost', 'n2@localhost', 'n3@localhost'],
   lists:foreach(fun(Node) -> gen_server:cast({global, ?CCM}, {node_is_up, Node}) end, NotExistingNodes),
-  test_utils:wait_for_cluster_cast(),
+  nodes_manager:wait_for_cluster_cast(),
   Nodes = gen_server:call({global, ?CCM}, get_nodes, 500),
   ?assertEqual(length(Nodes), length(NodesUp)),
     lists:foreach(fun(Node) ->
@@ -446,7 +447,7 @@ main_test(Config) ->
     end, NodesUp),
 
   lists:foreach(fun(Node) -> gen_server:cast({global, ?CCM}, {node_is_up, Node}) end, NodesUp),
-  test_utils:wait_for_cluster_cast(),
+  nodes_manager:wait_for_cluster_cast(),
   Nodes2 = gen_server:call({global, ?CCM}, get_nodes, 500),
   ?assertEqual(length(Nodes2), length(NodesUp)),
 
@@ -492,19 +493,20 @@ main_test(Config) ->
   ?assertEqual(PongsNum2, length(Jobs) * length(Ports)).
 
 callbacks_test(Config) ->
+  nodes_manager:check_start_assertions(Config),
   NodesUp = ?config(nodes, Config),
 
   [CCM | WorkerNodes] = NodesUp,
 
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code1, [], 2000)),
-  test_utils:wait_for_cluster_cast(),
+  nodes_manager:wait_for_cluster_cast(),
   RunWorkerCode = fun(Node) ->
     ?assertEqual(ok, rpc:call(Node, ?MODULE, worker_code, [], 2000)),
-    test_utils:wait_for_cluster_cast({?Node_Manager_Name, Node})
+    nodes_manager:wait_for_cluster_cast({?Node_Manager_Name, Node})
   end,
   lists:foreach(RunWorkerCode, WorkerNodes),
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, ccm_code2, [], 2000)),
-  test_utils:wait_for_cluster_init(),
+  nodes_manager:wait_for_cluster_init(),
 
   [Worker1 | _] = WorkerNodes,
 
@@ -607,7 +609,7 @@ callbacks_test(Config) ->
   end,
 
   Callbacks = lists:foldl(RegisterCallbacks, [], Ports),
-  test_utils:wait_for_request_handling(),
+  nodes_manager:wait_for_request_handling(),
 
   CheckDispatcherAns = fun({DispatcherCorrectAnsList, DispatcherCorrectAnsNum}, {TestAnsList, TestAnsNum}) ->
     ?assertEqual(DispatcherCorrectAnsNum, TestAnsNum),
@@ -646,7 +648,7 @@ callbacks_test(Config) ->
     ?assertEqual(RegAnsBytes, SendAns)
   end,
   lists:foreach(UnregisterCallbacks, UnRegCallbacks2),
-  test_utils:wait_for_request_handling(),
+  nodes_manager:wait_for_request_handling(),
 
   [LastNode | _] = lists:reverse(NodesUp),
   DispatcherCorrectAns2 = {[{FuseId1, [LastNode, CCM]}, {FuseId2, [CCM]}], 8},
@@ -695,7 +697,7 @@ callbacks_test(Config) ->
     wss:close(Callback)
   end,
   lists:foreach(CloseCallbacks, Callbacks),
-  test_utils:wait_for_request_handling(),
+  nodes_manager:wait_for_request_handling(),
 
   DispatcherCorrectAns3 = {[], 11},
   FuseInfo3 = [{[], 0, 0}, {[], 0, 0}, {[], 0, 0}, {[], 0, 0}],
@@ -710,26 +712,30 @@ callbacks_test(Config) ->
 %% ====================================================================
 
 init_per_testcase(_, Config) ->
-  ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
-  test_node_starter:start_deps_for_tester_node(),
+  ?INIT_DIST_TEST,
+  nodes_manager:start_deps_for_tester_node(),
 
-  NodesUp = test_node_starter:start_test_nodes(4),
+  NodesUp = nodes_manager:start_test_on_nodes(4),
   [CCM | _] = NodesUp,
-  DBNode = ?DB_NODE,
+  DBNode = nodes_manager:get_db_node(),
 
-    test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [
-    [{node_type, ccm_test}, {dispatcher_port, 5055}, {control_panel_port, 1350}, {control_panel_redirect_port, 1354}, {rest_port, 8443}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
-    [{node_type, worker}, {dispatcher_port, 6666}, {control_panel_port, 1351}, {control_panel_redirect_port, 1355}, {rest_port, 8444}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
-    [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {control_panel_redirect_port, 1356}, {rest_port, 8445}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
-    [{node_type, worker}, {dispatcher_port, 8888}, {control_panel_port, 1353}, {control_panel_redirect_port, 1357}, {rest_port, 8446}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
+  StartLog = nodes_manager:start_app_on_nodes(NodesUp, [
+    [{node_type, ccm_test}, {dispatcher_port, 5055}, {control_panel_port, 1350}, {control_panel_redirect_port, 1354}, {rest_port, 8443}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}],
+    [{node_type, worker}, {dispatcher_port, 6666}, {control_panel_port, 1351}, {control_panel_redirect_port, 1355}, {rest_port, 8444}, {ccm_nodes, [CCM]}, {dns_port, 1309}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}],
+    [{node_type, worker}, {dispatcher_port, 7777}, {control_panel_port, 1352}, {control_panel_redirect_port, 1356}, {rest_port, 8445}, {ccm_nodes, [CCM]}, {dns_port, 1310}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}],
+    [{node_type, worker}, {dispatcher_port, 8888}, {control_panel_port, 1353}, {control_panel_redirect_port, 1357}, {rest_port, 8446}, {ccm_nodes, [CCM]}, {dns_port, 1311}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1}]]),
 
-  lists:append([{nodes, NodesUp}, {dbnode, DBNode}], Config).
+  Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
+  lists:append([{nodes, NodesUp}, {assertions, Assertions}, {dbnode, DBNode}], Config).
 
 end_per_testcase(_, Config) ->
   Nodes = ?config(nodes, Config),
-  test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
-  test_node_starter:stop_test_nodes(Nodes),
-  test_node_starter:stop_deps_for_tester_node().
+  StopLog = nodes_manager:stop_app_on_nodes(Nodes),
+  StopAns = nodes_manager:stop_nodes(Nodes),
+  nodes_manager:stop_deps_for_tester_node(),
+
+  ?assertEqual(false, lists:member(error, StopLog)),
+  ?assertEqual(ok, StopAns).
 
 check_answers(0) ->
   [];
