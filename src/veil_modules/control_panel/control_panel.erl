@@ -20,7 +20,7 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([init/1, handle/2, cleanup/0, gui_adjust_headers/4, rest_adjust_headers/4, redirector_adjust_headers/4]).
+-export([init/1, handle/2, cleanup/0, gui_adjust_headers/1]).
 
 % Paths in gui static directory
 -define(static_paths, ["/css/", "/fonts/", "/images/", "/js/", "/n2o/"]).
@@ -93,7 +93,7 @@ init(_Args) ->
             {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
             {max_keepalive, MaxKeepAlive},
             {timeout, Timeout},
-            {onresponse, fun control_panel:gui_adjust_headers/4}
+            {onrequest, fun control_panel:gui_adjust_headers/1}
         ]),
 
 
@@ -113,8 +113,8 @@ init(_Args) ->
         [
             {env, [{dispatch, cowboy_router:compile(RedirectDispatch)}]},
             {max_keepalive, 1},
-            {timeout, Timeout},
-            {onresponse, fun control_panel:redirector_adjust_headers/4}
+            {timeout, Timeout}%,
+            %{onrequest, fun control_panel:redirector_adjust_headers/1}
         ]),
 
 
@@ -138,8 +138,8 @@ init(_Args) ->
         [
             {env, [{dispatch, cowboy_router:compile(RestDispatch)}]},
             {max_keepalive, 1},
-            {timeout, Timeout},
-            {onresponse, fun control_panel:rest_adjust_headers/4}
+            {timeout, Timeout}%,
+            %{onrequest, fun control_panel:rest_adjust_headers/1}
         ]),
     ok.
 
@@ -186,42 +186,14 @@ cleanup() ->
     ok.
 
 
-%% remove_server_header/4
+%% gui_adjust_headers/1
 %% ====================================================================
 %% @doc Callback hook for cowboy to modify response headers for HTTPS GUI.
 %% @end
--spec gui_adjust_headers(StatusCode :: integer(), Headers :: [tuple()], Body :: binary(), Req :: req()) -> req().
+-spec gui_adjust_headers(Req :: req()) -> req().
 %% ====================================================================
-gui_adjust_headers(StatusCode, Headers, Body, Req) ->
-    Headers2 = lists:keydelete(<<"server">>, 1, Headers),
-%%     Headers3 = Headers2 ++ [{<<"Strict-Transport-Security">>, <<"max-age=31536000; includeSubDomains">>}],
-    {ok, Req2} = cowboy_req:reply(StatusCode, Headers2, Body, Req),
-    ?dump(Headers2),
-    Req2.
-
-
-%% redirector_adjust_headers/4
-%% ====================================================================
-%% @doc Callback hook for cowboy to modify response headers for HTTP redirector handler.
-%% @end
--spec redirector_adjust_headers(StatusCode :: integer(), Headers :: [tuple()], Body :: binary(), Req :: req()) -> req().
-%% ====================================================================
-redirector_adjust_headers(StatusCode, Headers, Body, Req) ->
-    Headers2 = lists:keydelete(<<"server">>, 1, Headers),
-    {ok, Req2} = cowboy_req:reply(StatusCode, Headers2, Body, Req),
-    Req2.
-
-
-%% rest_adjust_headers/4
-%% ====================================================================
-%% @doc Callback hook for cowboy to modify response headers for REST handler.
-%% @end
--spec rest_adjust_headers(StatusCode :: integer(), Headers :: [tuple()], Body :: binary(), Req :: req()) -> req().
-%% ====================================================================
-rest_adjust_headers(StatusCode, Headers, Body, Req) ->
-    Headers2 = lists:keydelete(<<"server">>, 1, Headers),
-    {ok, Req2} = cowboy_req:reply(StatusCode, Headers2, Body, Req),
-    Req2.
+gui_adjust_headers(Req) ->
+    cowboy_req:set_resp_header(<<"Strict-Transport-Security">>, <<"max-age=31536000; includeSubDomains">>, Req).
 
 
 %% ====================================================================

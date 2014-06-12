@@ -100,10 +100,9 @@ content_disposition_attachment_headers(Req, FileName) ->
     Headers = [
         {<<"content-type">>, Mimetype},
         {<<"content-disposition">>, <<"attachment;",
-        % Replace spaces with underscores
-        " filename=", (re:replace(FileName, " ", "_", [global, {return, binary}]))/binary,
-        % Offer safely-encoded UTF-8 filename for browsers supporting it
-        "; filename*=UTF-8''", (list_to_binary(http_uri:encode(FileName)))/binary>>
+        % Offer safely-encoded UTF-8 filename and filename*=UTF-8 for browsers supporting it
+        " filename=", (gui_str:url_encode(FileName))/binary,
+        "; filename*=UTF-8''", (gui_str:url_encode(FileName))/binary>>
         }
     ],
     lists:foldl(fun({Header, Value}, R) -> gui_utils:cowboy_ensure_header(Header, Value, R) end, Req, Headers).
