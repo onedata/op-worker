@@ -5,7 +5,8 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This file contains useful functions commonly used in control_panel modules.
+%% @doc: This file contains useful functions commonly used in
+%% veil_cluster_node GUI modules.
 %% @end
 %% ===================================================================
 
@@ -84,7 +85,7 @@ can_view_logs() ->
 -spec can_view_monitoring() -> boolean().
 %% ====================================================================
 can_view_monitoring() ->
-    user_logic:get_role(wf:session(user_doc)) /= user.
+    user_logic:get_role(gui_ctx:get_user_record()) /= user.
 
 
 %% maybe_redirect/4

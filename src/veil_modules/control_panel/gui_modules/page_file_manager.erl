@@ -268,14 +268,14 @@ comet_loop(IsUploadInProgress) ->
                 end,
                 gui_jq:hide(<<"spinner">>),
                 gui_comet:flush(),
-                comet_loop(IsUploadInProgress);
+                ?MODULE:comet_loop(IsUploadInProgress);
             upload_started ->
-                comet_loop(true);
+                ?MODULE:comet_loop(true);
             upload_finished ->
-                comet_loop(false);
+                ?MODULE:comet_loop(false);
             Other ->
                 ?debug("Unrecognized comet message in page_file_manager: ~p", [Other]),
-                comet_loop(IsUploadInProgress)
+                ?MODULE:comet_loop(IsUploadInProgress)
 
         after ?AUTOREFRESH_PERIOD ->
             % Refresh file list if it has changed
@@ -290,7 +290,7 @@ comet_loop(IsUploadInProgress) ->
                     refresh_workspace(),
                     gui_comet:flush()
             end,
-            comet_loop(IsUploadInProgress)
+            ?MODULE:comet_loop(IsUploadInProgress)
         end
 
     catch Type:Message ->

@@ -196,19 +196,19 @@ comet_loop(Counter, PageState = #page_state{first_log = FirstLog, auto_scroll = 
         receive
             {log, Log} ->
                 {NewCounter, NewPageState} = process_log(Counter, Log, PageState),
-                comet_loop(NewCounter, NewPageState);
+                ?MODULE:comet_loop(NewCounter, NewPageState);
             toggle_auto_scroll ->
-                comet_loop(Counter, PageState#page_state{auto_scroll = not AutoScroll});
+                ?MODULE:comet_loop(Counter, PageState#page_state{auto_scroll = not AutoScroll});
             clear_all_logs ->
                 remove_old_logs(Counter, FirstLog, 0),
-                comet_loop(Counter, PageState#page_state{first_log = Counter});
+                ?MODULE:comet_loop(Counter, PageState#page_state{first_log = Counter});
             {set_loglevel, Loglevel} ->
-                comet_loop(Counter, PageState#page_state{loglevel = Loglevel});
+                ?MODULE:comet_loop(Counter, PageState#page_state{loglevel = Loglevel});
             {set_max_logs, MaxLogs} ->
                 NewFirstLog = remove_old_logs(Counter, FirstLog, MaxLogs),
-                comet_loop(Counter, PageState#page_state{max_logs = MaxLogs, first_log = NewFirstLog});
+                ?MODULE:comet_loop(Counter, PageState#page_state{max_logs = MaxLogs, first_log = NewFirstLog});
             {set_filter, FilterName, Filter} ->
-                comet_loop(Counter, set_filter(PageState, FilterName, Filter));
+                ?MODULE:comet_loop(Counter, set_filter(PageState, FilterName, Filter));
             display_error ->
                 catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}}),
                 gui_jq:insert_bottom(<<"main_table">>, comet_error()),
@@ -217,7 +217,7 @@ comet_loop(Counter, PageState = #page_state{first_log = FirstLog, auto_scroll = 
                 catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}});
             Other ->
                 ?debug("Unrecognized comet message in page_logs: ~p", [Other]),
-                comet_loop(Counter, PageState)
+                ?MODULE:comet_loop(Counter, PageState)
         end
     catch _Type:_Msg ->
         ?error_stacktrace("Error in page_logs comet_loop - ~p: ~p", [_Type, _Msg]),
