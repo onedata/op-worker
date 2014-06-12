@@ -16,6 +16,7 @@
 -include("veil_modules/control_panel/common.hrl").
 -include("logging.hrl").
 
+
 % Convinience function to set headers in cowboy response
 -export([cowboy_ensure_header/3]).
 

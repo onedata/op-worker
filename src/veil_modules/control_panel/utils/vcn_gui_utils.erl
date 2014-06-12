@@ -14,7 +14,7 @@
 -include("logging.hrl").
 
 % Functions connected with user's session
--export([get_user_dn/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0]).
+-export([get_user_dn/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0, can_view_monitoring/0]).
 
 % Functions to check for user's session
 -export([apply_or_redirect/3, apply_or_redirect/4, maybe_redirect/4]).
@@ -75,6 +75,16 @@ dn_and_storage_defined() ->
 %% ====================================================================
 can_view_logs() ->
     user_logic:get_role(gui_ctx:get_user_record()) /= user.
+
+
+%% can_view_monitoring/0
+%% ====================================================================
+%% @doc Determines if current user is allowed to view cluster monitoring.
+%% @end
+-spec can_view_monitoring() -> boolean().
+%% ====================================================================
+can_view_monitoring() ->
+    user_logic:get_role(wf:session(user_doc)) /= user.
 
 
 %% maybe_redirect/4
@@ -169,14 +179,19 @@ top_menu(ActiveTabID) ->
 %% ====================================================================
 top_menu(ActiveTabID, SubMenuBody) ->
     % Tab, that will be displayed optionally
-    LogsPageCaptions = case can_view_logs() of
-                           false ->
-                               [];
-                           true ->
-                               [{logs_tab, #li{body = [
-                                   #link{style = <<"padding: 18px;">>, url = <<"/logs">>, body = <<"Logs">>}
-                               ]}}]
-                       end,
+    PageCaptions =
+        case can_view_logs() of
+            false -> [];
+            true -> [{logs_tab, #li{body = [
+                #link{style = <<"padding: 18px;">>, url = <<"/logs">>, body = <<"Logs">>}
+            ]}}]
+        end ++
+        case can_view_monitoring() of
+            false -> [];
+            true -> [{monitoring_tab, #li{body = [
+                #link{style = <<"padding: 18px;">>, url = <<"/monitoring">>, body = <<"Monitoring">>}
+            ]}}]
+        end,
     % Define menu items with ids, so that proper tab can be made active via function parameter
     % see old_menu_captions()
     MenuCaptions =
@@ -187,7 +202,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
             {shared_files_tab, #li{body = [
                 #link{style = <<"padding: 18px;">>, url = <<"/shared_files">>, body = <<"Shared files">>}
             ]}}
-        ] ++ LogsPageCaptions,
+        ] ++ PageCaptions,
 
     MenuIcons =
         [

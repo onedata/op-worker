@@ -46,14 +46,14 @@
 main() ->
     case vcn_gui_utils:maybe_redirect(true, false, false, true) of
         true ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
             case vcn_gui_utils:can_view_logs() of
                 false ->
                     gui_jq:redirect(<<"/">>),
-                    #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+                    #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
                 true ->
-                    #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}
+                    #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}
             end
     end.
 
