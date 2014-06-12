@@ -8,15 +8,21 @@
 #include "testCommonH.h"
 #include "helpers/storageHelperFactory.h"
 
+#include "connectionPool_mock.h"
+
+#include <boost/make_shared.hpp>
+
+#include <memory>
+
 INIT_AND_RUN_ALL_TESTS(); // TEST RUNNER !
 
 // TEST definitions below
 
 
 TEST(StorageHelperFactoryTest, ObjectBuild) {
-   StorageHelperFactory factory;
+    StorageHelperFactory factory(boost::make_shared<MockConnectionPool>(), BufferLimits{});
 
-   EXPECT_NE((IStorageHelper*)0, factory.getStorageHelper("DirectIO", vector<string>()).get());
+    EXPECT_NE((IStorageHelper*)0, factory.getStorageHelper("DirectIO", IStorageHelper::ArgsMap{}).get());
    
-   EXPECT_EQ((IStorageHelper*)0, factory.getStorageHelper("not existing", vector<string>()).get());
+    EXPECT_EQ((IStorageHelper*)0, factory.getStorageHelper("not existing", IStorageHelper::ArgsMap{}).get());
 }

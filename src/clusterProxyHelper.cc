@@ -73,7 +73,7 @@ string ClusterProxyHelper::requestAtom(string inputType, string inputData) {
 }
 
 Answer ClusterProxyHelper::sendCluserMessage(ClusterMsg &msg, uint32_t timeout) {
-    boost::shared_ptr<CommunicationHandler> connection = m_connectionPool ? m_connectionPool->selectConnection(SimpleConnectionPool::DATA_POOL) : config::getConnectionPool()->selectConnection();
+    auto connection = m_connectionPool->selectConnection(SimpleConnectionPool::DATA_POOL);
     if(!connection)
     {
         LOG(ERROR) << "Cannot select connection from connectionPool";
@@ -82,7 +82,7 @@ Answer ClusterProxyHelper::sendCluserMessage(ClusterMsg &msg, uint32_t timeout) 
 
     Answer answer = connection->communicate(msg, 2, timeout);
     if(answer.answer_status() != VEIO)
-        config::getConnectionPool()->releaseConnection(connection);
+        m_connectionPool->releaseConnection(connection);
 
     if(answer.answer_status() != VOK)
         LOG(WARNING) << "Cluster send non-ok message. status = " << answer.answer_status();
@@ -358,13 +358,19 @@ int ClusterProxyHelper::doRead(const string &path, std::string &buf, size_t size
     return 0;
 }
 
-ClusterProxyHelper::ClusterProxyHelper(std::vector<std::string> args)
+ClusterProxyHelper::ClusterProxyHelper(boost::shared_ptr<SimpleConnectionPool> connectionPool,
+                                       const BufferLimits &limits, const ArgsMap &args)
   : m_bufferAgent(
+        limits,
         boost::bind(&ClusterProxyHelper::doWrite, this, _1, _2, _3, _4, _5),
         boost::bind(&ClusterProxyHelper::doRead, this, _1, _2, _3, _4, _5))
+  , m_connectionPool{std::move(connectionPool)}
 {
-    m_clusterHostname   = config::clusterHostname;
-    m_clusterPort       = config::clusterPort;
+    m_clusterHostname = args.count("cluster_hostname") ?
+                boost::any_cast<std::string>(args.at("cluster_hostname")) : std::string{};
+
+    m_clusterPort = args.count("cluster_port") ?
+                boost::any_cast<unsigned int>(args.at("cluster_port")) : 0;
 }
 
 ClusterProxyHelper::~ClusterProxyHelper()

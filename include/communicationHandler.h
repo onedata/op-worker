@@ -108,6 +108,7 @@ class CommunicationHandler
 {
 private:
     boost::atomic<error::Error> m_lastError;
+    const bool m_checkCertificate;
 
 protected:
 
@@ -177,7 +178,7 @@ public:
         NO_ERROR            = 0
     };
 
-    CommunicationHandler(const std::string &hostname, int port, cert_info_fun);
+    CommunicationHandler(const std::string &hostname, int port, cert_info_fun, const bool checkCertificate);
     virtual ~CommunicationHandler();
 
     virtual void setCertFun(cert_info_fun certFun);                         ///< Setter for function that returns CommunicationHandler::CertificateInfo struct.

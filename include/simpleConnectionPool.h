@@ -44,7 +44,7 @@ public:
         unsigned int size;
     };
 
-    SimpleConnectionPool(const std::string &hostname, int port, cert_info_fun, int metaPoolSize = DEFAULT_POOL_SIZE, int dataPoolSize = DEFAULT_POOL_SIZE);
+    SimpleConnectionPool(const std::string &hostname, int port, cert_info_fun, const bool checkCertificate = false, int metaPoolSize = DEFAULT_POOL_SIZE, int dataPoolSize = DEFAULT_POOL_SIZE);
     virtual ~SimpleConnectionPool();
 
     virtual void setPoolSize(PoolType type, unsigned int);                  ///< Sets size of connection pool. Default for each pool is: 2
@@ -103,6 +103,7 @@ protected:
 
 private:
     boost::atomic<error::Error> m_lastError;
+    const bool m_checkCertificate;
 };
 
 } // namespace veil

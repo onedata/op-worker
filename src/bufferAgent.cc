@@ -19,10 +19,11 @@ rdbuf_size_mem_t        BufferAgent::m_rdBufferSizeMem;
 wrbuf_size_mem_t        BufferAgent::m_wrBufferSizeMem;
 
 
-BufferAgent::BufferAgent(write_fun w, read_fun r)
+BufferAgent::BufferAgent(const BufferLimits &bufferLimits, write_fun w, read_fun r)
   : m_agentActive(false),
     doWrite(w),
-    doRead(r)
+    doRead(r),
+    m_bufferLimits{bufferLimits}
 {
     agentStart(1); // Start agent with only 2 * 1 threads
 }
@@ -148,8 +149,8 @@ int BufferAgent::onWrite(const std::string &path, const std::string &buf, size_t
 
     {
         // If memory limit is exceeded, force flush
-        if(wrapper->buffer->byteSize() > config::buffers::writeBufferPerFileSizeLimit ||
-           getWriteBufferSize() > config::buffers::writeBufferGlobalSizeLimit) {
+        if(wrapper->buffer->byteSize() > m_bufferLimits.writeBufferPerFileSizeLimit ||
+           getWriteBufferSize() > m_bufferLimits.writeBufferGlobalSizeLimit) {
             DLOG(INFO) << "Write Buffer memory limit exceeded, force flush";
             if(int fRet = onFlush(path, ffi)) {
                 return fRet;
@@ -157,8 +158,8 @@ int BufferAgent::onWrite(const std::string &path, const std::string &buf, size_t
         }
 
         // If memory limit is still exceeded, send the block without using buffer
-        if(wrapper->buffer->byteSize() > config::buffers::writeBufferPerFileSizeLimit ||
-           getWriteBufferSize() > config::buffers::writeBufferGlobalSizeLimit) {
+        if(wrapper->buffer->byteSize() > m_bufferLimits.writeBufferPerFileSizeLimit ||
+           getWriteBufferSize() > m_bufferLimits.writeBufferGlobalSizeLimit) {
             return doWrite(path, buf, size, offset, ffi);
         }
 
@@ -190,7 +191,7 @@ int BufferAgent::onRead(const std::string &path, std::string &buf, size_t size, 
         unique_lock buffGuard(wrapper->mutex);
 
         wrapper->lastBlock[ffi->fh] = offset;
-        wrapper->blockSize = std::min((size_t) config::buffers::preferedBlockSize, (size_t) std::max(size, 2*wrapper->blockSize));
+        wrapper->blockSize = std::min((size_t) m_bufferLimits.preferedBlockSize, (size_t) std::max(size, 2*wrapper->blockSize));
     }
 
     wrapper->buffer->readData(offset, size, buf);
@@ -212,13 +213,13 @@ int BufferAgent::onRead(const std::string &path, std::string &buf, size_t size, 
 
         guard.lock();
             // Insert some prefetch job
-            m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, offset + buf.size() + config::buffers::preferedBlockSize, wrapper->blockSize, ffi->fh));
+            m_rdJobQueue.insert(PrefetchJob(wrapper->fileName, offset + buf.size() + m_bufferLimits.preferedBlockSize, wrapper->blockSize, ffi->fh));
         guard.unlock();
     } else {
         // All data could be fetch from cache, lets chceck if next calls would read form cache too
         string tmp;
         size_t prefSize = std::max(2*size, wrapper->blockSize);
-        off_t prefFrom = offset + size + config::buffers::preferedBlockSize;
+        off_t prefFrom = offset + size + m_bufferLimits.preferedBlockSize;
         wrapper->buffer->readData(prefFrom, prefSize, tmp);
 
         // If they wouldn't schedule prefetch job
@@ -357,7 +358,7 @@ void BufferAgent::readerLoop()
         m_rdCond.notify_one();
 
         // If this download doesn't make sense in this moment, skip this job
-        if(!wrapper || wrapper->lastBlock[job.fh] + config::buffers::preferedBlockSize >= job.offset + job.size || (wrapper->endOfFile > 0 && wrapper->endOfFile <= job.offset))
+        if(!wrapper || wrapper->lastBlock[job.fh] + m_bufferLimits.preferedBlockSize >= job.offset + job.size || (wrapper->endOfFile > 0 && wrapper->endOfFile <= job.offset))
             continue;
 
         guard.unlock();
@@ -484,7 +485,7 @@ void BufferAgent::writerLoop()
 
 boost::shared_ptr<FileCache> BufferAgent::newFileCache(bool isBuffer)
 {
-    return boost::shared_ptr<FileCache>(new FileCache(config::buffers::preferedBlockSize, isBuffer));
+    return boost::shared_ptr<FileCache>(new FileCache(m_bufferLimits.preferedBlockSize, isBuffer));
 }
 
 } // namespace helpers
