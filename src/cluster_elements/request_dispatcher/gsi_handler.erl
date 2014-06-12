@@ -18,7 +18,7 @@
 
 -deprecated([proxy_subject/1]).
 
--export([init/0, verify_callback/3, load_certs/1, update_crls/1, proxy_subject/1, call/3, is_proxy_certificate/1, find_eec_cert/3, get_ca_certs/0, strip_self_signed_ca/1]).
+-export([init/0, verify_callback/3, load_certs/1, update_crls/1, proxy_subject/1, call/3, is_proxy_certificate/1, find_eec_cert/3, get_ca_certs/0, strip_self_signed_ca/1, get_ciphers/0]).
 %% ===================================================================
 %% API
 %% ===================================================================
@@ -318,6 +318,19 @@ call(Module, Method, Args, [{node, NodeName} | OtherNodes]) ->
         Res -> Res
     end.
 
+
+%% get_ciphers/0
+%% ====================================================================
+%% @doc Get ciphers that are available on server.
+%% @end
+-spec get_ciphers() -> Ciphers :: [{KeyExchange :: atom(), Cipther :: atom(), Hash :: atom()}].
+%% ====================================================================
+get_ciphers() ->
+    lists:filter(
+        fun
+            ({_, des_cbc, _})   -> false;
+            ({_, _, _})         -> true
+        end, ssl:cipher_suites()).
 
 %% update_crl/2
 %% ====================================================================
