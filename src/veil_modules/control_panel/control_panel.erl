@@ -113,8 +113,7 @@ init(_Args) ->
         [
             {env, [{dispatch, cowboy_router:compile(RedirectDispatch)}]},
             {max_keepalive, 1},
-            {timeout, Timeout}%,
-            %{onrequest, fun control_panel:redirector_adjust_headers/1}
+            {timeout, Timeout}
         ]),
 
 
@@ -138,8 +137,7 @@ init(_Args) ->
         [
             {env, [{dispatch, cowboy_router:compile(RestDispatch)}]},
             {max_keepalive, 1},
-            {timeout, Timeout}%,
-            %{onrequest, fun control_panel:rest_adjust_headers/1}
+            {timeout, Timeout}
         ]),
     ok.
 
