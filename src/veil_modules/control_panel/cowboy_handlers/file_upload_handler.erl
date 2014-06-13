@@ -102,7 +102,6 @@ handle_upload_request(Req) ->
             try
                 % Params and _FilePath are not currently used but there are cases when they could be useful
                 {ok, _Params, [{OriginalFileName, _FilePath}]} = parse_multipart(Req, [], []),
-                ?dump({OriginalFileName, _FilePath}),
 
                 % Return a struct conforming to upload plugin requirements
                 RespBody = rest_utils:encode_to_json(
