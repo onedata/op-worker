@@ -22,7 +22,7 @@
 -define(REQUEST_HANDLING_TIME, 1000).
 
 %% Uncomment for verbosity
--define(verbose, 1).
+%% -define(verbose, 1).
 
 %% ====================================================================
 %% API
