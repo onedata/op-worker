@@ -73,51 +73,51 @@ save_record() ->
     meck:expect(dao_helper, open_doc, fun(?SYSTEM_DB_NAME, "test_id") -> {error, not_found} end),
     meck:expect(dao_helper, name, fun(Arg) -> meck:passthrough([Arg]) end),
 
-    ?assertException(throw, unsupported_record, dao:save_record({a, b, c})),
-    ?assertException(throw, unsupported_record, dao:save_record({some_record, a, c})),
+    ?assertException(throw, unsupported_record, dao_records:save_record({a, b, c})),
+    ?assertException(throw, unsupported_record, dao_records:save_record({some_record, a, c})),
     ToInsert = {some_record, a, b, c},
-    DbObj = dao:term_to_doc(ToInsert),
+    DbObj = dao_records:term_to_doc(ToInsert),
 
     meck:expect(dao_helper, insert_doc, fun(?SYSTEM_DB_NAME, #doc{id = Id, body = DbObj1}) -> DbObj1 = DbObj, {ok, Id} end),
 
-    ?assertMatch({ok, "test_id"}, dao:save_record(#veil_document{record = ToInsert, uuid = "test_id"})),
-    ?assertMatch({ok, "test_id"}, dao:save_record(#veil_document{record = ToInsert, uuid = "test_id", force_update = true})),
+    ?assertMatch({ok, "test_id"}, dao_records:save_record(#veil_document{record = ToInsert, uuid = "test_id"})),
+    ?assertMatch({ok, "test_id"}, dao_records:save_record(#veil_document{record = ToInsert, uuid = "test_id", force_update = true})),
     ?assert(meck:validate(dao_helper)),
 
     meck:expect(dao_helper, open_doc, fun(?SYSTEM_DB_NAME, "test_id") -> {ok, #doc{revs = {1, [<<"123">>]}}} end),
     meck:expect(dao_helper, insert_doc, fun(?SYSTEM_DB_NAME, #doc{id = Id, revs = {1, [<<"123">>]}, body = DbObj1}) -> DbObj1 = DbObj, {ok, Id} end),
-    ?assertMatch({ok, "test_id"}, dao:save_record(#veil_document{record = ToInsert, uuid = "test_id", force_update = true})),
+    ?assertMatch({ok, "test_id"}, dao_records:save_record(#veil_document{record = ToInsert, uuid = "test_id", force_update = true})),
     ?assert(meck:validate(dao_helper)).
 
 get_record() ->
     DbObj = {[{<<?RECORD_META_FIELD_NAME>>, <<"some_record">>}, {<<"field1">>, 1}, {<<"field3">>, true}]},
     meck:expect(dao_helper, open_doc, fun(?SYSTEM_DB_NAME, "test_id") -> {ok, #doc{body = DbObj}} end),
     meck:expect(dao_helper, name, fun(Arg) -> meck:passthrough([Arg]) end),
-    ?assertMatch({ok, #veil_document{record = #some_record{field1 = 1, field3 = true}}}, dao:get_record("test_id")),
+    ?assertMatch({ok, #veil_document{record = #some_record{field1 = 1, field3 = true}}}, dao_records:get_record("test_id")),
     ?assert(meck:validate(dao_helper)).
 
 remove_record() ->
     meck:expect(dao_helper, delete_doc, fun(?SYSTEM_DB_NAME, "test_id") -> ok end),
     meck:expect(dao_helper, name, fun(Arg) -> meck:passthrough([Arg]) end),
-    ?assertEqual(ok, dao:remove_record("test_id")),
+    ?assertEqual(ok, dao_records:remove_record("test_id")),
     ?assert(meck:validate(dao_helper)).
 
 
 is_valid_record_test() ->
-    ?assert(dao:is_valid_record(#some_record{})),
-    ?assert(dao:is_valid_record(some_record)),
-    ?assert(dao:is_valid_record("some_record")),
-    ?assertNot(dao:is_valid_record({some_record, field1})).
+    ?assert(dao_driver:is_valid_record(#some_record{})),
+    ?assert(dao_driver:is_valid_record(some_record)),
+    ?assert(dao_driver:is_valid_record("some_record")),
+    ?assertNot(dao_driver:is_valid_record({some_record, field1})).
 
 term_to_doc_test() ->
-    ?assertEqual(15, dao:term_to_doc(15)),
-    ?assertEqual(-15.43, dao:term_to_doc(-15.43)),
-    ?assert(dao:term_to_doc(true)),
-    ?assertNot(dao:term_to_doc(false)),
+    ?assertEqual(15, dao_records:term_to_doc(15)),
+    ?assertEqual(-15.43, dao_records:term_to_doc(-15.43)),
+    ?assert(dao_records:term_to_doc(true)),
+    ?assertNot(dao_records:term_to_doc(false)),
     AtomRes = list_to_binary(string:concat(?RECORD_FIELD_ATOM_PREFIX, "test_atom")),
-    ?assertMatch(AtomRes, dao:term_to_doc(test_atom)),
-    ?assertEqual(null, dao:term_to_doc(null)),
-    ?assertMatch(<<"test:test2 ]test4{test 5=+ 6">>, dao:term_to_doc("test:test2 ]test4{test 5=+ 6")),
+    ?assertMatch(AtomRes, dao_records:term_to_doc(test_atom)),
+    ?assertEqual(null, dao_records:term_to_doc(null)),
+    ?assertMatch(<<"test:test2 ]test4{test 5=+ 6">>, dao_records:term_to_doc("test:test2 ]test4{test 5=+ 6")),
     Ans = {[{<<?RECORD_META_FIELD_NAME>>, <<"some_record">>},
         {<<"field1">>,
             {[{<<"tuple_field_1">>, <<"rec1">>},
@@ -135,11 +135,11 @@ term_to_doc_test() ->
                             {[{<<"tuple_field_1">>, <<"test1">>}, {<<"tuple_field_2">>, false}]}]}]},
                 5.4, <<<<?RECORD_FIELD_BINARY_PREFIX>>/binary, <<1,2,3>>/binary>>,
                 [1, list_to_binary(?RECORD_FIELD_PID_PREFIX ++ pid_to_list(self())), <<"test">>]]}]},
-    ?assertMatch(Ans, dao:term_to_doc(#some_record{field1 = {"rec1", #some_record{field1 = test_atom, field2 = 5}},
+    ?assertMatch(Ans, dao_records:term_to_doc(#some_record{field1 = {"rec1", #some_record{field1 = test_atom, field2 = 5}},
                                                    field2 = "test string", field3 = [1, {6.53, [true, {"test1", false}]}, 5.4, <<1,2,3>>, [1, self(), "test"]]})).
 
 doc_to_term_test() ->
-    ?assertEqual(test_atom, dao:doc_to_term(list_to_binary(string:concat(?RECORD_FIELD_ATOM_PREFIX, "test_atom")))),
+    ?assertEqual(test_atom, dao_records:doc_to_term(list_to_binary(string:concat(?RECORD_FIELD_ATOM_PREFIX, "test_atom")))),
     Ans = {[{<<?RECORD_META_FIELD_NAME>>, <<"some_record">>},
         {<<"field1">>,
             {[{<<"tuple_field_1">>, <<"rec1">>},
@@ -160,12 +160,12 @@ doc_to_term_test() ->
     SPid = self(),
     Out = {some_record, {"rec1", {some_record, test_atom, 5, []}},
         "test string", [1, {6.53, [{unknown_record, 1, 5}, {"test1", false}]}, 5.4, <<1,2,3>>, [1, SPid, "test"]]},
-    ?assertMatch(Out, dao:doc_to_term(Ans)).
+    ?assertMatch(Out, dao_records:doc_to_term(Ans)).
 
 
 doc_to_term_wrong_data_test() ->
   Ans = try
-    dao:doc_to_term({some_atom})
+    dao_records:doc_to_term({some_atom})
   catch
     Ex -> Ex
   end,
@@ -176,15 +176,15 @@ term_to_doc_wrong_data_test() ->
     ok
   end,
   Ans = try
-    dao:term_to_doc(Field)
+    dao_records:term_to_doc(Field)
   catch
     Ex -> Ex
   end,
   ?assertEqual(Ans, {unsupported_field, Field}).
 
 get_set_db_test() ->
-    ?assertEqual(?DEFAULT_DB, dao:get_db()),
-    dao:set_db("db"),
-    ?assertEqual("db", dao:get_db()).
+    ?assertEqual(?DEFAULT_DB, dao_driver:get_db()),
+    dao_driver:set_db("db"),
+    ?assertEqual("db", dao_driver:get_db()).
 
 -endif.

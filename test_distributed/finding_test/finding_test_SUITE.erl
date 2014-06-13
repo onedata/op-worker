@@ -244,7 +244,7 @@ verify_files_tree(Node, Files) ->
 
 clean_files(Node) ->
   QueryArgs = #view_query_args{start_key = [null, null], end_key = [null, {}]},
-  case rpc:call(Node, dao, list_records, [?FILES_BY_UID_AND_FILENAME, QueryArgs]) of
+  case rpc:call(Node, dao_records, list_records, [?FILES_BY_UID_AND_FILENAME, QueryArgs]) of
     {ok, #view_result{rows = Rows}} ->
       Uuids = lists:map(fun(#view_row{id = Id}) -> Id end, Rows),
       delete_files_by_uuid(Node, Uuids);

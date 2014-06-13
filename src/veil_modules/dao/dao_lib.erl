@@ -25,7 +25,7 @@
 %% wrap_record/1
 %% ====================================================================
 %% @doc Wraps given erlang record with #veil_document{} wrapper. <br/>
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% @end
 -spec wrap_record(Record :: tuple()) -> #veil_document{}.
 %% ====================================================================
@@ -39,7 +39,7 @@ wrap_record(Record) when is_tuple(Record) ->
 %% Alternatively arguments can be passed as {ok, Arg} tuple. Its convenient because most DAO methods formats return value formatted that way<br/>
 %% If the argument cannot be converted (e.g. error tuple is passed), this method returns it unchanged. <br/>
 %% This method is designed for use as wrapper for "get_*"-like DAO methods. E.g. dao_lib:strip_wrappers(dao_vfs:get_file({absolute_path, "/foo/bar"}))
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% @end
 -spec strip_wrappers(VeilDocOrList :: #veil_document{} | [#veil_document{}]) -> tuple() | [tuple()].
 %% ====================================================================

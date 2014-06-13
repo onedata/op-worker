@@ -43,7 +43,7 @@
 %% @doc Saves file descriptor to DB. Argument should be either #file_descriptor{} record
 %% (if you want to save it as new document) <br/>
 %% or #veil_document{} that wraps #file_descriptor{} if you want to update descriptor in DB. <br/>
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec save_descriptor(Fd :: fd_info() | fd_doc()) -> {ok, uuid()} | {error, any()} | no_return().
@@ -51,8 +51,8 @@
 save_descriptor(#file_descriptor{} = Fd) ->
     save_descriptor(#veil_document{record = Fd});
 save_descriptor(#veil_document{record = #file_descriptor{}} = FdDoc) ->
-    dao:set_db(?DESCRIPTORS_DB_NAME),
-    dao:save_record(FdDoc).
+    dao_driver:set_db(?DESCRIPTORS_DB_NAME),
+    dao_records:save_record(FdDoc).
 
 
 %% remove_descriptor/1
@@ -65,8 +65,8 @@ save_descriptor(#veil_document{record = #file_descriptor{}} = FdDoc) ->
 remove_descriptor(ListSpec) when is_tuple(ListSpec) ->
     remove_descriptor3(ListSpec, 1000, 0);
 remove_descriptor(Fd) when is_list(Fd) ->
-    dao:set_db(?DESCRIPTORS_DB_NAME),
-    dao:remove_record(Fd).
+    dao_driver:set_db(?DESCRIPTORS_DB_NAME),
+    dao_records:remove_record(Fd).
 
 remove_descriptor3(ListSpec, BatchSize, Offset) ->
     case list_descriptors(ListSpec, BatchSize, Offset) of
@@ -85,21 +85,21 @@ remove_descriptor3(ListSpec, BatchSize, Offset) ->
 -spec exist_descriptor(Fd :: fd()) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_descriptor(Fd) ->
-    dao:set_db(?DESCRIPTORS_DB_NAME),
-    dao:exist_record(Fd).
+    dao_driver:set_db(?DESCRIPTORS_DB_NAME),
+    dao_records:exist_record(Fd).
 
 %% get_descriptor/1
 %% ====================================================================
 %% @doc Gets file descriptor from DB. Argument should be uuid() of #file_descriptor record
 %% Non-error return value is always {ok, #veil_document{record = #file_descriptor}.
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec get_descriptor(Fd :: fd()) -> {ok, fd_doc()} | {error, any()} | no_return().
 %% ====================================================================
 get_descriptor(Fd) ->
-    dao:set_db(?DESCRIPTORS_DB_NAME),
-    case dao:get_record(Fd) of
+    dao_driver:set_db(?DESCRIPTORS_DB_NAME),
+    case dao_records:get_record(Fd) of
         {ok, #veil_document{record = #file_descriptor{}} = Doc} ->
             {ok, Doc};
         {ok, #veil_document{}} ->
@@ -115,7 +115,7 @@ get_descriptor(Fd) ->
 %% Currently only {by_file, File :: file()} is supported. <br/>
 %% Second argument limits number of rows returned. 3rd argument sets offset of query (skips first Offset rows) <br/>
 %% Non-error return value is always  {ok, [#veil_document{record = #file_descriptor]}.
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec list_descriptors(MatchCriteria :: fd_select(), N :: pos_integer(), Offset :: non_neg_integer()) ->
@@ -130,7 +130,7 @@ list_descriptors({by_uuid_n_owner, {FileId, Owner}}, N, Offset) when N > 0, Offs
     StartKey = [dao_helper:name(FileId), dao_helper:name(Owner)],
     EndKey = case Owner of "" -> [dao_helper:name(uca_increment(FileId)), dao_helper:name("")]; _ -> [dao_helper:name((FileId)), dao_helper:name(uca_increment(Owner))] end,
     QueryArgs = #view_query_args{start_key = StartKey, end_key = EndKey, include_docs = true, limit = N, skip = Offset},
-    case dao:list_records(?FD_BY_FILE_VIEW, QueryArgs) of
+    case dao_records:list_records(?FD_BY_FILE_VIEW, QueryArgs) of
         {ok, #view_result{rows = Rows}} ->
             {ok, [FdDoc || #view_row{doc = #veil_document{record = #file_descriptor{file = FileId1, fuse_id = OwnerId}} = FdDoc} <- Rows,
                 FileId1 == FileId, OwnerId == Owner orelse Owner == ""]};
@@ -142,7 +142,7 @@ list_descriptors({by_expired_before, Time}, N, Offset) when N > 0, Offset >= 0 -
     StartKey = 0,
     EndKey = Time,
     QueryArgs = #view_query_args{start_key = StartKey, end_key = EndKey, include_docs = true, limit = N, skip = Offset},
-    case dao:list_records(?FD_BY_EXPIRED_BEFORE_VIEW, QueryArgs) of
+    case dao_records:list_records(?FD_BY_EXPIRED_BEFORE_VIEW, QueryArgs) of
         {ok, #view_result{rows = Rows}} ->
             {ok, [FdDoc || #view_row{doc = #veil_document{record = #file_descriptor{}} = FdDoc} <- Rows]};
         Data ->
@@ -162,7 +162,7 @@ list_descriptors({_Type, _Resource}, _N, _Offset) when _N > 0, _Offset >= 0 ->
 %% @doc Saves file_meta to DB. Argument should be either #file_meta{} record
 %% (if you want to save it as new document) <br/>
 %% or #veil_document{} that wraps #file_meta{} if you want to update file meta in DB. <br/>
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec save_file_meta(FMeta :: #file_meta{} | #veil_document{}) -> {ok, uuid()} | {error, any()} | no_return().
@@ -170,8 +170,8 @@ list_descriptors({_Type, _Resource}, _N, _Offset) when _N > 0, _Offset >= 0 ->
 save_file_meta(#file_meta{} = FMeta) ->
     save_file_meta(#veil_document{record = FMeta});
 save_file_meta(#veil_document{record = #file_meta{}} = FMetaDoc) ->
-    dao:set_db(?FILES_DB_NAME),
-    dao:save_record(FMetaDoc).
+    dao_driver:set_db(?FILES_DB_NAME),
+    dao_records:save_record(FMetaDoc).
 
 %% remove_file_meta/1
 %% ====================================================================
@@ -181,8 +181,8 @@ save_file_meta(#veil_document{record = #file_meta{}} = FMetaDoc) ->
 -spec remove_file_meta(FMeta :: uuid()) -> ok | {error, any()} | no_return().
 %% ====================================================================
 remove_file_meta(FMeta) ->
-    dao:set_db(?FILES_DB_NAME),
-    dao:remove_record(FMeta).
+    dao_driver:set_db(?FILES_DB_NAME),
+    dao_records:remove_record(FMeta).
 
 %% exist_file_meta/1
 %% ====================================================================
@@ -192,21 +192,21 @@ remove_file_meta(FMeta) ->
 -spec exist_file_meta(Fd :: fd()) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_file_meta(FMetaUUID) ->
-    dao:set_db(?FILES_DB_NAME),
-    dao:exist_record(FMetaUUID).
+    dao_driver:set_db(?FILES_DB_NAME),
+    dao_records:exist_record(FMetaUUID).
 
 %% get_file_meta/1
 %% ====================================================================
 %% @doc Gets file meta from DB. Argument should be uuid() of #file_meta record
 %% Non-error return value is always {ok, #veil_document{record = #file_meta}.
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec get_file_meta(Fd :: fd()) -> {ok, fd_doc()} | {error, any()} | no_return().
 %% ====================================================================
 get_file_meta(FMetaUUID) ->
-    dao:set_db(?FILES_DB_NAME),
-    {ok, #veil_document{record = #file_meta{}}} = dao:get_record(FMetaUUID).  
+    dao_driver:set_db(?FILES_DB_NAME),
+    {ok, #veil_document{record = #file_meta{}}} = dao_records:get_record(FMetaUUID).
 
 
 %% ===================================================================
@@ -216,7 +216,7 @@ get_file_meta(FMetaUUID) ->
 %% save_new_file/2
 %% ====================================================================
 %% @doc Saves new file to DB
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec save_new_file(FilePath :: string(), File :: file_info()) -> {ok, uuid()} | {error, any()} | no_return().
@@ -237,7 +237,7 @@ save_new_file(FilePath, #file{} = File) ->
 %% save_new_reg_file/2
 %% ====================================================================
 %% @doc Saves new regular file to DB
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec save_new_reg_file(FilePath :: string(), File :: file_info()) -> {ok, uuid()} | {error, any()} | no_return().
@@ -258,12 +258,12 @@ save_new_reg_file(FilePath, #file{type = Type} = File) when Type == ?REG_TYPE ->
                   {ok, false} ->
                     {ok, UUID};
                   {ok, true} ->
-                    dao:remove_record(UUID),
+                    dao_records:remove_record(UUID),
                     {error, file_exists}
                 end
               catch
                 _:file_duplicated ->
-                  dao:remove_record(UUID),
+                  dao_records:remove_record(UUID),
                   {error, file_exists};
                 _:Error2 ->
                   {error, Error2}
@@ -295,7 +295,7 @@ save_new_reg_file(FilePath, #file{type = Type} = File) when Type == ?REG_TYPE ->
 %% save_new_not_reg_file/2
 %% ====================================================================
 %% @doc Saves new not regular file (dir, link) to DB
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec save_new_not_reg_file(FilePath :: string(), File :: file_info()) -> {ok, uuid()} | {error, any()} | no_return().
@@ -312,7 +312,7 @@ save_new_not_reg_file(FilePath, #file{type = Type} = File) when Type > ?REG_TYPE
             {ok, UUID}
           catch
             _:file_duplicated ->
-              dao:remove_record(UUID),
+              dao_records:remove_record(UUID),
               {error, file_exists};
             _:Error2 ->
               {error, Error2}
@@ -329,7 +329,7 @@ save_new_not_reg_file(FilePath, #file{type = Type} = File) when Type > ?REG_TYPE
 %% @doc Saves file to DB. Argument should be either #file{} record
 %% (if you want to save it as new document) <br/>
 %% or #veil_document{} that wraps #file{} if you want to update file in DB. <br/>
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec save_file(File :: file_info() | file_doc()) -> {ok, uuid()} | {error, any()} | no_return().
@@ -337,8 +337,8 @@ save_new_not_reg_file(FilePath, #file{type = Type} = File) when Type > ?REG_TYPE
 save_file(#file{} = File) ->
     save_file(#veil_document{record = File});
 save_file(#veil_document{record = #file{}} = FileDoc) ->
-    dao:set_db(?FILES_DB_NAME),
-    dao:save_record(FileDoc).
+    dao_driver:set_db(?FILES_DB_NAME),
+    dao_records:save_record(FileDoc).
 
 %% remove_file/1
 %% ====================================================================
@@ -348,7 +348,7 @@ save_file(#veil_document{record = #file{}} = FileDoc) ->
 -spec remove_file(File :: file()) -> ok | {error, any()} | no_return().
 %% ====================================================================
 remove_file(File) ->
-    dao:set_db(?FILES_DB_NAME),
+    dao_driver:set_db(?FILES_DB_NAME),
     {ok, FData} = get_file(File),
 
     %% Remove file meta
@@ -380,7 +380,7 @@ remove_file(File) ->
             ?warning("Cannot remove file_descriptors ~p due to error: ~p", [{by_file, {uuid, FData#veil_document.uuid}}, Reason1])
     end,
 
-    dao:remove_record(FData#veil_document.uuid).
+    dao_records:remove_record(FData#veil_document.uuid).
 
 %% exist_file/1
 %% ====================================================================
@@ -415,7 +415,7 @@ exist_file_helper({internal_path, [Dir | Path], Root}, View) ->
     QueryArgs =
         #view_query_args{keys = [[dao_helper:name(Root), dao_helper:name(Dir)]],
         include_docs = case Path of [] -> true; _ -> false end},
-    case dao:list_records(View, QueryArgs) of
+    case dao_records:list_records(View, QueryArgs) of
         {ok, #view_result{rows = [#view_row{id = Id, doc = _Doc} | _Tail]}} ->
             case Path of
                 [] -> {ok, true};
@@ -425,8 +425,8 @@ exist_file_helper({internal_path, [Dir | Path], Root}, View) ->
         Other -> Other
     end;
 exist_file_helper({uuid, UUID}, _View) ->
-    dao:set_db(?FILES_DB_NAME),
-    dao:exist_record(UUID);
+    dao_driver:set_db(?FILES_DB_NAME),
+    dao_records:exist_record(UUID);
 exist_file_helper(Path, View) ->
   exist_file_helper(file_path_analyze(Path), View).
 
@@ -482,8 +482,8 @@ get_file_helper({internal_path, [], []}, _View) -> %% Root dir query
 get_file_helper({internal_path, [Dir | Path], Root}, View) ->
   get_file_helper({internal_path, [Dir | Path], Root}, false, View);
 get_file_helper({uuid, UUID}, _View) ->
-    dao:set_db(?FILES_DB_NAME),
-    case dao:get_record(UUID) of
+    dao_driver:set_db(?FILES_DB_NAME),
+    case dao_records:get_record(UUID) of
         {ok, #veil_document{record = #file{}} = Doc} ->
             {ok, Doc};
         {ok, #veil_document{}} ->
@@ -506,7 +506,7 @@ get_file_helper({internal_path, [Dir | Path], Root}, MultiError, View) ->
     #view_query_args{keys = [[dao_helper:name(Root), dao_helper:name(Dir)]],
     include_docs = case Path of [] -> true; _ -> false end}, %% Include doc representing leaf of our file path
   {NewRoot, FileDoc} =
-    case dao:list_records(View, QueryArgs) of
+    case dao_records:list_records(View, QueryArgs) of
       {ok, #view_result{rows = [#view_row{id = Id, doc = FDoc}]}} ->
         {Id, FDoc};
       {ok, #view_result{rows = []}} ->
@@ -580,7 +580,7 @@ list_dir(Dir, N, Offset) ->
     QueryArgs =
         #view_query_args{start_key = [dao_helper:name(Id), dao_helper:name("")], end_key = [dao_helper:name(NextId), dao_helper:name("")],
             limit = N, include_docs = true, skip = Offset, inclusive_end = false}, %% Inclusive end does not work, disable to be sure
-    case dao:list_records(?FILE_TREE_VIEW, QueryArgs) of
+    case dao_records:list_records(?FILE_TREE_VIEW, QueryArgs) of
         {ok, #view_result{rows = Rows}} -> %% We need to strip results that don't match search criteria (tail of last query possibly), because
                                            %% `end_key` seems to behave strange combined with `limit` option. TODO: get rid of it after DBMS switch
             {ok, [FileDoc || #view_row{doc = #veil_document{record = #file{parent = Parent} } = FileDoc } <- Rows, Parent == Id]};
@@ -603,7 +603,7 @@ count_subdirs({uuid, Id}) ->
         view_type = reduce,
         inclusive_end = false
     },
-    case dao:list_records(?FILE_SUBDIRS_VIEW, QueryArgs) of
+    case dao_records:list_records(?FILE_SUBDIRS_VIEW, QueryArgs) of
         {ok, #view_result{rows = [#view_row{value = Sum}]}} -> {ok, Sum};
         {ok, #view_result{rows = []}} -> {ok, 0};
         _Other ->
@@ -645,7 +645,7 @@ unlock_file(_UserID, _FileID, _Mode) ->
 %% @doc Saves storage info to DB. Argument should be either #storage_info{} record
 %% (if you want to save it as new document) <br/>
 %% or #veil_document{} that wraps #storage_info{} if you want to update storage info in DB. <br/>
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec save_storage(Storage :: #storage_info{} | #veil_document{}) -> {ok, uuid()} | {error, any()} | no_return().
@@ -660,7 +660,7 @@ save_storage(StorageDoc) ->
 %% @doc Saves storage info to DB. Argument should be either #storage_info{} record
 %% (if you want to save it as new document) <br/>
 %% or #veil_document{} that wraps #storage_info{} if you want to update storage info in DB. <br/>
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec save_storage(Storage :: #storage_info{} | #veil_document{}, ClearCache :: boolean()) -> {ok, uuid()} | {error, any()} | no_return().
@@ -673,8 +673,9 @@ save_storage(#veil_document{record = #storage_info{}} = StorageDoc, ClearCache) 
       false ->
         ok
     end,
-    dao:set_db(?SYSTEM_DB_NAME),
-    dao:save_record(StorageDoc).
+    dao_driver:set_db(?SYSTEM_DB_NAME),
+    dao_records:save_record(StorageDoc).
+
 
 
 %% remove_storage/1
@@ -691,8 +692,8 @@ remove_storage({uuid, DocUUID}) when is_list(DocUUID) ->
         Doc = SData#veil_document.record,
         clear_cache([{uuid, DocUUID}, {id, Doc#storage_info.id}]),
 
-        dao:set_db(?SYSTEM_DB_NAME),
-        dao:remove_record(DocUUID);
+        dao_driver:set_db(?SYSTEM_DB_NAME),
+        dao_records:remove_record(DocUUID);
       _ -> {Ans, SData}
     end;
 remove_storage({id, StorageID}) when is_integer(StorageID) ->
@@ -700,8 +701,8 @@ remove_storage({id, StorageID}) when is_integer(StorageID) ->
     case Ans of
       ok ->
         clear_cache([{uuid, SData#veil_document.uuid}, {id, StorageID}]),
-        dao:set_db(?SYSTEM_DB_NAME),
-        dao:remove_record(SData#veil_document.uuid);
+        dao_driver:set_db(?SYSTEM_DB_NAME),
+        dao_records:remove_record(SData#veil_document.uuid);
       _ -> {Ans, SData}
     end.
 
@@ -723,7 +724,7 @@ exist_storage(Key) ->
 %% ====================================================================
 %% @doc Gets storage info from DB. Argument should be uuid() of storage document or ID of storage. <br/>
 %% Non-error return value is always {ok, #veil_document{record = #storage_info{}}.
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec get_storage({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) -> {ok, storage_doc()} | {error, any()} | no_return().
@@ -752,11 +753,11 @@ get_storage(Key) ->
     {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_storage_in_db({uuid, DocUUID}) when is_list(DocUUID) ->
-    dao:set_db(?SYSTEM_DB_NAME),
-    dao:exist_record(DocUUID);
+    dao_driver:set_db(?SYSTEM_DB_NAME),
+    dao_records:exist_record(DocUUID);
 exist_storage_in_db({id, StorageID}) when is_integer(StorageID) ->
     QueryArgs = #view_query_args{keys = [StorageID], include_docs = true},
-    case dao:list_records(?STORAGE_BY_ID_VIEW, QueryArgs) of
+    case dao_records:list_records(?STORAGE_BY_ID_VIEW, QueryArgs) of
         {ok, #view_result{rows = [#view_row{doc = #veil_document{record = #storage_info{}} = _Doc} | _Tail]}} ->
             {ok, true};
         {ok, #view_result{rows = []}} ->
@@ -769,14 +770,14 @@ exist_storage_in_db({id, StorageID}) when is_integer(StorageID) ->
 %% ====================================================================
 %% @doc Gets storage info from DB. Argument should be uuid() of storage document or ID of storage. <br/>
 %% Non-error return value is always {ok, #veil_document{record = #storage_info{}}.
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec get_storage_from_db({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) -> {ok, storage_doc()} | {error, any()} | no_return().
 %% ====================================================================
 get_storage_from_db({uuid, DocUUID}) when is_list(DocUUID) ->
-    dao:set_db(?SYSTEM_DB_NAME),
-    case dao:get_record(DocUUID) of
+    dao_driver:set_db(?SYSTEM_DB_NAME),
+    case dao_records:get_record(DocUUID) of
         {ok, #veil_document{record = #storage_info{}} = Doc} ->
             {ok, Doc};
         {ok, #veil_document{}} ->
@@ -787,7 +788,7 @@ get_storage_from_db({uuid, DocUUID}) when is_list(DocUUID) ->
 get_storage_from_db({id, StorageID}) when is_integer(StorageID) ->
     QueryArgs =
         #view_query_args{keys = [StorageID], include_docs = true}, 
-    case dao:list_records(?STORAGE_BY_ID_VIEW, QueryArgs) of
+    case dao_records:list_records(?STORAGE_BY_ID_VIEW, QueryArgs) of
         {ok, #view_result{rows = [Row]}} ->
             #view_row{doc = #veil_document{record = #storage_info{} } = Doc } = Row,
             {ok, Doc};
@@ -812,7 +813,7 @@ get_storage_from_db({id, StorageID}) when is_integer(StorageID) ->
 list_storage() ->
     QueryArgs =
         #view_query_args{start_key = 0, end_key = 1, include_docs = true}, %% All keys are (int)0 so will get all documents
-    case dao:list_records(?ALL_STORAGE_VIEW, QueryArgs) of
+    case dao_records:list_records(?ALL_STORAGE_VIEW, QueryArgs) of
         {ok, #view_result{rows = Rows}} ->
             {ok, [Doc || #view_row{doc = #veil_document{record = #storage_info{} } = Doc } <- Rows]};
         _Other ->
@@ -911,7 +912,7 @@ get_desired_filetypes(#file_criteria{include_dirs = IncludeDirs, include_files =
 -spec fetch_rows(ViewName :: string(), QueryArgs :: #view_query_args{}) -> list(#view_row{}) | no_return().
 %% ====================================================================
 fetch_rows(ViewName, QueryArgs) ->
-  case dao:list_records(ViewName, QueryArgs) of
+  case dao_records:list_records(ViewName, QueryArgs) of
     {ok, #view_result{rows = Rows}} ->
       Rows;
     Error ->
@@ -1048,7 +1049,7 @@ get_file_meta_ids(FileCriteria) ->
 
   case QueryArgs1 of
     (QueryArgs) when is_record(QueryArgs, view_query_args) ->
-      case dao:list_records(?FILE_META_BY_TIMES, QueryArgs) of
+      case dao_records:list_records(?FILE_META_BY_TIMES, QueryArgs) of
         {ok, #view_result{rows = Rows}} ->
           lists:map(fun(#view_row{id = Id}) -> Id end, Rows);
         Error ->

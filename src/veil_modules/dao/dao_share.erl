@@ -27,7 +27,7 @@
 %% @doc Saves info about file sharing to DB. Argument should be either #share_desc{} record
 %% (if you want to save it as new document) <br/>
 %% or #veil_document{} that wraps #share_desc{} if you want to update descriptor in DB. <br/>
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec save_file_share(Share :: file_share_info() | file_share_doc()) -> {ok, file_share()} | {error, any()} | no_return().
@@ -35,8 +35,9 @@
 save_file_share(#share_desc{} = Share) ->
   save_file_share(#veil_document{record = Share});
 save_file_share(#veil_document{record = #share_desc{}} = FdDoc) ->
-  dao:set_db(?FILES_DB_NAME),
-  dao:save_record(FdDoc).
+  dao_driver:set_db(?FILES_DB_NAME),
+  dao_driver:set_db(?FILES_DB_NAME),
+  dao_records:save_record(FdDoc).
 
 %% remove_file_share/1
 %% ====================================================================
@@ -49,8 +50,8 @@ save_file_share(#veil_document{record = #share_desc{}} = FdDoc) ->
     {error, any()} | no_return().
 %% ====================================================================
 remove_file_share({uuid, UUID}) ->
-  dao:set_db(?FILES_DB_NAME),
-  dao:remove_record(UUID);
+  dao_driver:set_db(?FILES_DB_NAME),
+  dao_records:remove_record(UUID);
 
 remove_file_share(Key) ->
   {ok, Docs} = get_file_share(Key),
@@ -81,10 +82,10 @@ remove_file_share(Key) ->
 {uuid, UUID :: uuid()}) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_file_share({uuid, UUID}) ->
-    dao:set_db(?FILES_DB_NAME),
-    dao:exist_record(UUID);
+    dao_driver:set_db(?FILES_DB_NAME),
+    dao_records:exist_record(UUID);
 exist_file_share({Key, Value}) ->
-    dao:set_db(?FILES_DB_NAME),
+    dao_driver:set_db(?FILES_DB_NAME),
     {View, QueryArgs} = case Key of
                             user ->
                                 {?SHARE_BY_USER_VIEW, #view_query_args{keys =
@@ -93,7 +94,7 @@ exist_file_share({Key, Value}) ->
                                 {?SHARE_BY_FILE_VIEW, #view_query_args{keys =
                                 [dao_helper:name(Value)], include_docs = true}}
                         end,
-    case dao:list_records(View, QueryArgs) of
+    case dao_records:list_records(View, QueryArgs) of
         {ok, #view_result{rows = [#view_row{doc = _FDoc} | _Tail]}} ->
             {ok, true};
         {ok, #view_result{rows = []}} ->
@@ -105,7 +106,7 @@ exist_file_share({Key, Value}) ->
 %% ====================================================================
 %% @doc Gets info about file sharing from db by share_id, file name or user uuid.                                  l
 %% Non-error return value is always {ok, #veil_document{record = #share_desc}.
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec get_file_share(Key:: {file, File :: uuid()} |
@@ -114,11 +115,11 @@ exist_file_share({Key, Value}) ->
   {ok, file_share_doc()} | {ok, [file_share_doc()]} | {error, any()} | no_return().
 %% ====================================================================
 get_file_share({uuid, UUID}) ->
-  dao:set_db(?FILES_DB_NAME),
-  dao:get_record(UUID);
+  dao_driver:set_db(?FILES_DB_NAME),
+  dao_records:get_record(UUID);
 
 get_file_share({Key, Value}) ->
-  dao:set_db(?FILES_DB_NAME),
+  dao_driver:set_db(?FILES_DB_NAME),
 
   {View, QueryArgs} = case Key of
                         user ->
@@ -129,7 +130,7 @@ get_file_share({Key, Value}) ->
                           [dao_helper:name(Value)], include_docs = true}}
                       end,
 
-  case dao:list_records(View, QueryArgs) of
+  case dao_records:list_records(View, QueryArgs) of
     {ok, #view_result{rows = [#view_row{doc = FDoc}]}} ->
       {ok, FDoc};
     {ok, #view_result{rows = []}} ->

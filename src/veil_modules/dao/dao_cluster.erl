@@ -15,6 +15,7 @@
 -include("veil_modules/dao/dao.hrl").
 -include("veil_modules/dao/dao_types.hrl").
 -include_lib("dao/include/couch_db.hrl").
+-include_lib("dao/include/common.hrl").
 -include("logging.hrl").
 
 %% API - cluster state
@@ -61,7 +62,7 @@ save_state(Rec) when is_tuple(Rec) ->
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 save_state(Id, Rec) when is_tuple(Rec), is_atom(Id) ->
-    dao:save_record(#veil_document{record = Rec, force_update = true, uuid = Id}).
+    dao_records:save_record(#veil_document{record = Rec, force_update = true, uuid = Id}).
 
 
 %% get_state/0
@@ -83,7 +84,7 @@ get_state() ->
 -spec get_state(Id :: atom()) -> {ok, term()} | {error, any()}.
 %% ====================================================================
 get_state(Id) ->
-    case dao:get_record(Id) of
+    case dao_records:get_record(Id) of
         {ok, State} ->
             {ok, State#veil_document.record};
         Other ->
@@ -114,7 +115,7 @@ clear_state()->
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 clear_state(Id) ->
-    dao:remove_record(Id).
+    dao_records:remove_record(Id).
 
 
 %% ===================================================================
@@ -149,7 +150,7 @@ save_fuse_session(#veil_document{record = #fuse_session{valid_to = OldTime}} = D
 
     %% Save given document
     NewDoc = Doc#veil_document{record = Doc#veil_document.record#fuse_session{valid_to = NewTime}},
-    case dao:save_record(NewDoc) of %% Clear cache, just in case
+    case dao_records:save_record(NewDoc) of %% Clear cache, just in case
         {ok, UUID}  -> ets:delete(dao_fuse_cache, UUID), {ok, UUID};
         Other       -> Other
     end.
@@ -175,7 +176,7 @@ get_fuse_session(FuseId, {stale, ok}) ->
 get_fuse_session(FuseId) ->
     case ets:lookup(dao_fuse_cache, FuseId) of
         [] -> %% Cached document not found. Fetch it from DB and save in cache
-            case dao:get_record(FuseId) of
+            case dao_records:get_record(FuseId) of
                 {ok, Doc} ->
                     ets:insert(dao_fuse_cache, {FuseId, Doc}),
                     {ok, Doc};
@@ -198,7 +199,7 @@ get_fuse_session(FuseId) ->
 remove_fuse_session(FuseId) ->
     %% This fuse id will not be added later so we do not have to clear cache globally
     ets:delete(dao_fuse_cache, FuseId), %% Delete cached entry
-    dao:remove_record(FuseId).
+    dao_records:remove_record(FuseId).
 
 
 %% close_fuse_session/1
@@ -237,7 +238,7 @@ close_fuse_session(FuseId) ->
 %% ====================================================================
 list_fuse_sessions({by_valid_to, Time}) ->
     QueryArgs = #view_query_args{start_key = 0, end_key = Time, include_docs = true},
-    case dao:list_records(?EXPIRED_FUSE_SESSIONS_VIEW, QueryArgs) of
+    case dao_records:list_records(?EXPIRED_FUSE_SESSIONS_VIEW, QueryArgs) of
         {ok, #view_result{rows = Rows}} ->
             {ok, [Session || #view_row{doc = #veil_document{record = #fuse_session{}} = Session} <- Rows]};
         {error, Reason} ->
@@ -254,7 +255,7 @@ list_fuse_sessions({by_valid_to, Time}) ->
 %% ====================================================================
 get_sessions_by_user(Uuid) ->
   QueryArgs = #view_query_args{keys = [dao_helper:name(Uuid)]},
-  case dao:list_records(?FUSE_SESSIONS_BY_USER_ID_VIEW, QueryArgs) of
+  case dao_records:list_records(?FUSE_SESSIONS_BY_USER_ID_VIEW, QueryArgs) of
     {ok, #view_result{rows = Rows}} ->
       {ok, [FuseId || #view_row{id = FuseId} <- Rows]};
     {error, Reason} ->
@@ -276,7 +277,7 @@ get_sessions_by_user(Uuid) ->
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 save_connection_info(ConnInfo) ->
-    dao:save_record(ConnInfo).
+    dao_records:save_record(ConnInfo).
 
 
 %% get_connection_info/1
@@ -289,7 +290,7 @@ save_connection_info(ConnInfo) ->
     no_return(). % erlang:error(any()) | throw(any())
 %% ====================================================================
 get_connection_info(SessID) ->
-    dao:get_record(SessID).
+    dao_records:get_record(SessID).
 
 %% remove_connection_info/1
 %% ====================================================================
@@ -311,7 +312,7 @@ remove_connection_info(SessID) ->
 		{ok,_} ->
 			ok
 	end,
-	dao:remove_record(SessID).
+	dao_records:remove_record(SessID).
 
 
 %% close_connection/1
@@ -342,7 +343,7 @@ close_connection(SessID) ->
 %% ====================================================================
 list_connection_info({by_session_id, SessID}) ->
     QueryArgs = #view_query_args{keys = [dao_helper:name(SessID)], include_docs = true},
-    case dao:list_records(?FUSE_CONNECTIONS_VIEW, QueryArgs) of
+    case dao_records:list_records(?FUSE_CONNECTIONS_VIEW, QueryArgs) of
         {ok, #view_result{rows = Rows}} ->
             {ok, [ConnInfo || #view_row{doc = #veil_document{record = #connection_info{}} = ConnInfo} <- Rows]};
         {error, Reason} ->
@@ -470,7 +471,7 @@ check_session(#veil_document{record = #fuse_session{}, uuid = SessID}) ->
 %% ====================================================================
 check_connection(Connection = #veil_document{record = #connection_info{session_id = SessID, controlling_node = CNode, controlling_pid = CPid}}) ->
     SPid = self(),
-	case is_pid(CPid) of %(temporary fix) todo change our pid storing mechanisms, so we would always have proper pid here (see also dao:doc_to_term/1 todo)
+	case is_pid(CPid) of %(temporary fix) todo change our pid storing mechanisms, so we would always have proper pid here (see also dao_records:doc_to_term/1 todo)
 		true->
 			spawn(CNode, fun() -> CPid ! {SPid, get_session_id} end),   %% Send ping to connection controlling process
 		    receive

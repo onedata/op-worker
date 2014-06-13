@@ -29,13 +29,12 @@
 %% API
 %% ====================================================================
 -export([start_link/3, stop/1, start_sub_proc/5, start_sub_proc/6, generate_sub_proc_list/1, generate_sub_proc_list/5, generate_sub_proc_list/6, send_to_user/4, send_to_user_with_ack/5, send_to_fuses_with_ack/4]).
--export([create_permanent_cache/1, create_permanent_cache/2, create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_sipmle_cache/3]).
-
+-export([create_permanent_cache/1, create_permanent_cache/2, create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, register_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_sipmle_cache/3]).
 %% ====================================================================
 %% Test API
 %% ====================================================================
 -ifdef(TEST).
--export([stop_all_sub_proc/1,register_simple_cache/5]).
+-export([stop_all_sub_proc/1]).
 -endif.
 
 %% ====================================================================

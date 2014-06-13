@@ -193,7 +193,7 @@ generate_tree_name() ->
 
 %% Helper function for fetching rows from view
 fetch_rows(ViewName, QueryArgs) ->
-  case dao:list_records(ViewName, QueryArgs) of
+  case dao_records:list_records(ViewName, QueryArgs) of
     {ok, #view_result{rows = Rows}} ->
       Rows;
     Error ->
