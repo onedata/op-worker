@@ -43,29 +43,29 @@ init() ->
     meck:expect(worker_host,register_simple_cache,
         fun (_,_,_,_,_) -> ok end
     ),
-    InitAns1 = dao:init([]),
+    InitAns1 = dao_worker:init([]),
     ?assert(is_record(InitAns1, initial_host_description)),
     ?assertEqual(ok, InitAns1#initial_host_description.plug_in_state),
     worker_host:stop_all_sub_proc(InitAns1#initial_host_description.sub_procs),
 
-    InitAns2 = dao:init([]),
+    InitAns2 = dao_worker:init([]),
     ?assert(is_record(InitAns2, initial_host_description)),
     ?assertEqual(ok, InitAns2#initial_host_description.plug_in_state),
     meck:validate(worker_host),
     worker_host:stop_all_sub_proc(InitAns2#initial_host_description.sub_procs).
 
 handle() ->
-    ?assertNotEqual({error, wrong_args}, dao:handle(1, {helper, test, []})),
-    ?assertNotEqual({error, wrong_args}, dao:handle(1, {hosts, test, []})),
-    ?assertNotEqual({error, wrong_args}, dao:handle(1, {test, []})),
-    ?assertEqual({error, wrong_args}, dao:handle(1, {"wrong", test, []})),
-    ?assertEqual({error, undef}, dao:handle(1, {wrong, test, []})),
+    ?assertNotEqual({error, wrong_args}, dao_worker:handle(1, {helper, test, []})),
+    ?assertNotEqual({error, wrong_args}, dao_worker:handle(1, {hosts, test, []})),
+    ?assertNotEqual({error, wrong_args}, dao_worker:handle(1, {test, []})),
+    ?assertEqual({error, wrong_args}, dao_worker:handle(1, {"wrong", test, []})),
+    ?assertEqual({error, undef}, dao_worker:handle(1, {wrong, test, []})),
     meck:expect(dao_vfs, list_dir, fun(_, _, _) -> ok end),
-    ?assertEqual(ok, dao:handle(1, {vfs, list_dir, [test, test, test]})),
+    ?assertEqual(ok, dao_worker:handle(1, {vfs, list_dir, [test, test, test]})),
     ?assert(meck:validate(dao_vfs)).
 
 cleanup() ->
-    ?assertEqual(ok, dao:cleanup()).
+    ?assertEqual(ok, dao_worker:cleanup()).
 
 
 save_record() ->

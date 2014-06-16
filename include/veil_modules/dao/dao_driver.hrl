@@ -125,7 +125,7 @@
 %% Inside every #db_info, list of #design_info is created based on views list (?VIEW_LIST)
 %% Inside every #design_info, list of #view_info is created based on views list (?VIEW_LIST)
 %% Such structural representation of views, makes it easier to initialize views in DBMS
-%% WARNING: Do not evaluate this macro anywhere but dao:init/cleanup because it's
+%% WARNING: Do not evaluate this macro anywhere but dao_worker:init/cleanup because it's
 %% potentially slow - O(db_count * view_count^2)
 -define(DATABASE_DESIGN_STRUCTURE, [#db_info{name = DbName,
     designs = [#design_info{name = DesignName,

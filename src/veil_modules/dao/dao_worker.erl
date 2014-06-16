@@ -7,14 +7,14 @@
 %% ===================================================================
 %% @doc: This module implements {@link worker_plugin_behaviour} callbacks and contains utility API methods. <br/>
 %% DAO API functions are implemented in DAO sub-modules like: {@link dao_cluster}, {@link dao_vfs}. <br/>
-%% All DAO API functions Should not be used directly, use {@link dao:handle/2} instead.
+%% All DAO API functions Should not be used directly, use {@link dao_worker:handle/2} instead.
 %% Module :: atom() is module suffix (prefix is 'dao_'), MethodName :: atom() is the method name
 %% and ListOfArgs :: [term()] is list of argument for the method. <br/>
 %% If you want to call utility methods from this module - use Module = utils
-%% See {@link dao:handle/2} for more details.
+%% See {@link dao_worker:handle/2} for more details.
 %% @end
 %% ===================================================================
--module(dao).
+-module(dao_worker).
 -behaviour(worker_plugin_behaviour).
 
 -include_lib("veil_modules/dao/dao.hrl").
@@ -125,10 +125,10 @@ init(Args) ->
 %% @doc {@link worker_plugin_behaviour} callback handle/1. <br/>
 %% All {Module, Method, Args} requests (second argument), executes Method with Args in {@type dao_Module} module, but with one exception:
 %% If Module = utils, then dao module will be used. <br/>
-%% E.g calling dao:handle(_, {vfs, some_method, [some_arg]}) will call dao_vfs:some_method(some_arg) <br/>
-%% but calling dao:handle(_, {utils, some_method, [some_arg]}) will call dao:some_method(some_arg) <br/>
+%% E.g calling dao_worker:handle(_, {vfs, some_method, [some_arg]}) will call dao_vfs:some_method(some_arg) <br/>
+%% but calling dao_worker:handle(_, {utils, some_method, [some_arg]}) will call dao_worker:some_method(some_arg) <br/>
 %% You can omit Module atom in order to use default module which is dao_cluster. <br/>
-%% E.g calling dao:handle(_, {some_method, [some_arg]}) will call dao_cluster:some_method(some_arg) <br/>
+%% E.g calling dao_worker:handle(_, {some_method, [some_arg]}) will call dao_cluster:some_method(some_arg) <br/>
 %% Additionally all exceptions from called API method will be caught and converted into {error, Exception} tuple. <br/>
 %% E.g. calling handle(_, {save_record, [Id, Rec]}) will execute dao_cluster:save_record(Id, Rec) and normalize return value.
 %% @end

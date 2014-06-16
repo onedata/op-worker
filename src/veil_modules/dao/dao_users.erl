@@ -29,7 +29,7 @@
 %% (if you want to save it as new document) <br/>
 %% or #veil_document{} that wraps #user{} if you want to update descriptor in DB. <br/>
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
 -spec save_user(User :: user_info() | user_doc()) -> {ok, user()} | {error, any()} | no_return().
 %% ====================================================================
@@ -61,7 +61,7 @@ save_user(#veil_document{record = #user{}} = UserDoc) ->
 %% remove_user/1
 %% ====================================================================
 %% @doc Removes user from DB by login, e-mail, uuid or dn.
-%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
 -spec remove_user(Key:: {login, Login :: string()} | 
                         {email, Email :: string()} | 
@@ -78,7 +78,7 @@ remove_user(Key) ->
 %% exist_user/1
 %% ====================================================================
 %% @doc Checks whether user exists in DB. Arguments should be login, e-mail, uuid or dn.
-%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
 -spec exist_user(Key :: {login, Login :: string()} | {email, Email :: string()} |
 {uuid, UUID :: uuid()} | {dn, DN :: string()}) -> {ok, true | false} | {error, any()}.
@@ -94,7 +94,7 @@ exist_user(Key) ->
 %% @doc Gets user from DB by login, e-mail, uuid or dn.
 %% Non-error return value is always {ok, #veil_document{record = #user}.
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
 -spec get_user(Key :: user_key()) -> {ok, user_doc()} | {error, any()} | no_return().
 %% ====================================================================
@@ -124,7 +124,7 @@ get_user(Key) ->
 %% @doc Lists N users from DB, starting from Offset. <br/>
 %% Non-error return value is always {ok, [#veil_document{record = #user}]}.
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
 -spec list_users(N :: pos_integer(), Offset :: non_neg_integer()) ->
 	{ok, DocList :: list(user_doc())} |
@@ -154,7 +154,7 @@ list_users(N, Offset) ->
 %% exist_user_in_db/1
 %% ====================================================================
 %% @doc Checks whether user exists in DB. Arguments should be login, e-mail, uuid or dn.
-%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
 -spec exist_user_in_db(Key :: {login, Login :: string()} | {email, Email :: string()} |
 {uuid, UUID :: uuid()} | {dn, DN :: string()}) -> {ok, true | false} | {error, any()}.
@@ -190,7 +190,7 @@ exist_user_in_db({Key, Value}) ->
 %% @doc Gets user from DB by login, e-mail, uuid or dn.
 %% Non-error return value is always {ok, #veil_document{record = #user}.
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
 -spec get_user_from_db(Key::    {login, Login :: string()} |
                         {email, Email :: string()} | 
@@ -334,7 +334,7 @@ clear_all_data_from_cache(DocKey) ->
 %% (if you want to save it as new document) <br/>
 %% or #veil_document{} that wraps #quota{} if you want to update descriptor in DB. <br/>
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
 -spec save_quota(Quota :: quota_info() | quota_doc()) -> {ok, quota()} | {error, any()} | no_return().
 %% ====================================================================
@@ -347,7 +347,7 @@ save_quota(#veil_document{} = QuotaDoc) ->
 %% remove_quota/1
 %% ====================================================================
 %% @doc Removes users' quota from DB by uuid.
-%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
 -spec remove_quota(UUID :: uuid()) -> {error, any()} | no_return().
 %% ====================================================================
@@ -360,7 +360,7 @@ remove_quota(UUID) ->
 %% @doc Gets users' quota from DB by uuid.
 %% Non-error return value is always {ok, #veil_document{record = #quota}.
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
+%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
 -spec get_quota(UUID :: uuid()) -> {ok, quota_doc()} | {error, any()} | no_return().
 %% ====================================================================
