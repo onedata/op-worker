@@ -16,6 +16,9 @@
 -include("veil_modules/dao/dao.hrl").
 -include("files_common.hrl").
 
+-define(TEST_VFS_STORAGE_INFO, "/tmp/vfs_storage.info").
+-define(TEST_PROC_MOUNTS, "/tmp/sample_proc_mounts").
+
 get_sh_for_fuse_test() ->
   meck:new([dao_lib]),
   meck:expect(dao_lib, apply, fun
@@ -49,7 +52,8 @@ exist_storage_info_in_config_test() ->
   end, ExistingStgInfos),
   lists:foreach(fun(NonExistingStgInfo) ->
     ?assertNot(fslogic_storage:exist_storage_info_in_config({path, File}, NonExistingStgInfo))
-  end, NonExistingStgInfos).
+  end, NonExistingStgInfos),
+  file:delete(File).
 
 get_mount_points_test() ->
   SampleFile = create_sample_proc_mounts_file(),
@@ -60,7 +64,8 @@ get_mount_points_test() ->
   ActualMountPoints = fslogic_storage:get_mount_points(),
   ?assert(meck:validate(file)),
   ?assertEqual(ok, meck:unload(file)),
-  ?assertEqual(ExpectedMountPoints, ActualMountPoints).
+  ?assertEqual(ExpectedMountPoints, ActualMountPoints),
+  file:delete(?TEST_PROC_MOUNTS).
 
 get_relative_path_test() ->
   ?assertEqual({ok, "path"}, fslogic_storage:get_relative_path("/base", "/base/path")),
@@ -72,27 +77,25 @@ get_relative_path_test() ->
 %% ====================================================================
 
 create_sample_vfs_storage_info_file() ->
-  File = "/tmp/vfs_storage.info",
   ExistingStgInfos = ["{1, /mnt/vfs1}\n", "{2, /mnt/vfs2}\n", "{3, /mnt/vfs3}\n"],
   NonExistingStgInfos = ["{4, /mnt/vfs4}\n", "{5, /mnt/vfs5}\n", "{6, /mnt/vfs6}\n"],
   try
-    {ok, Fd} = file:open(File, [write]),
+    {ok, Fd} = file:open(?TEST_VFS_STORAGE_INFO, [write]),
     lists:foreach(fun(ExistingStgInfo) -> ok = file:write(Fd, ExistingStgInfo) end, ExistingStgInfos),
     ok = file:close(Fd),
-    {ok, File, ExistingStgInfos, NonExistingStgInfos}
+    {ok, ?TEST_VFS_STORAGE_INFO, ExistingStgInfos, NonExistingStgInfos}
   catch
     _:_ -> error
   end.
 
 create_sample_proc_mounts_file() ->
-  File = "/tmp/sample_proc_mounts",
   try
-    {ok, WriteFd} = file:open(File, [write]),
+    {ok, WriteFd} = file:open(?TEST_PROC_MOUNTS, [write]),
     ok = file:write(WriteFd, "/mnt/vfs1 /mnt/vfs1 ...\n"),
     ok = file:write(WriteFd, "/mnt/vfs2 /mnt/vfs2 ...\n"),
     ok = file:write(WriteFd, "/mnt/vfs3 /mnt/vfs3 ...\n"),
     ok = file:close(WriteFd),
-    {ok, ReadFd} = file:open(File, [read]),
+    {ok, ReadFd} = file:open(?TEST_PROC_MOUNTS, [read]),
     {ok, ReadFd, {ok, ["/mnt/vfs3", "/mnt/vfs2", "/mnt/vfs1"]}}
   catch
     _:_ -> error

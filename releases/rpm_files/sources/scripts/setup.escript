@@ -634,7 +634,7 @@ discover_cluster(IPOrHostname) ->
 set_db_cookie(BigcouchInstallationPath,Cookie) ->
 	os:cmd("sed -i -e \"s/^\\-setcookie .*/\\-setcookie "++Cookie++"/g\" "++BigcouchInstallationPath++"/etc/vm.args").
 
-% Set hostname and bind_address in etc/vm.args and etc/default.ini from given bigcouch installation path
+% Set hostname in etc/vm.args for given bigcouch installation path
 actualize_db_hostname(BigcouchInstallationPath,NodeName) ->
 	os:cmd("sed -i -e \"s/^\\-name .*/\\-name "++NodeName++get(hostname)++"/g\" "++BigcouchInstallationPath++"/etc/vm.args").
 

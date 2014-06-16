@@ -369,7 +369,8 @@ check_storage_on_nodes(Path) ->
         Result = lists:foldl(fun
           (Node, {ok, NewContent}) ->
             gen_server:call({?Node_Manager_Name, Node}, {check_storage, FilePath, NewContent}, ?GEN_SERVER_TIMEOUT);
-          (_, Other) -> Other
+          (_, {error, Node}) -> {error, Node};
+          (Node, _) -> {error, Node}
         end, {ok, NextContent}, Nodes),
         delete_storage_test_file(FilePath),
         case Result of
