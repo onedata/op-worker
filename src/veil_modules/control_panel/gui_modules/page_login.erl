@@ -31,7 +31,7 @@ body() ->
                               end,
             #panel{style = <<"position: relative;">>, body = [
                 #panel{id = <<"error_message">>, style = ErrorPanelStyle, class = <<"dialog dialog-danger">>, body = #p{
-                    body = <<"Session error or session expired. Please log in again.">>}},
+                    body = <<"No session or session expired. Please log in.">>}},
                 #panel{class = <<"alert alert-success login-page">>, body = [
                     #h3{body = <<"Welcome to VeilFS">>},
                     #p{class = <<"login-info">>, body = <<"Logging in is handled by <b>PL-Grid OpenID</b>.",
