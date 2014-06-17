@@ -282,9 +282,6 @@ init_per_testcase(main_test, Config) ->
   DB_Node = ?DB_NODE,
   Port = 6666,
 
-    ct:print("~p",[rpc:call(Node1,application,start,[ctool])]),
-    ct:print("~p",[rpc:call(Node1,test_node_starter,start_deps,[?VEIL_DEPS])]),
-
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [Node1]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}]]),
 
   lists:append([{port, Port}, {nodes, NodesUp}], Config);
@@ -296,9 +293,6 @@ init_per_testcase(_, Config) ->
   NodesUp = test_node_starter:start_test_nodes(4),
   [CCM | _] = NodesUp,
   DBNode = ?DB_NODE,
-
-    ct:print("~p",[rpc:call(CCM,application,start,[ctool])]),
-    ct:print("~p",[rpc:call(CCM,test_node_starter,start_deps,[?VEIL_DEPS])]),
 
   test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, NodesUp, [
     [{node_type, ccm_test}, {dispatcher_port, 5055}, {ccm_nodes, [CCM]}, {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {db_nodes, [DBNode]}, {fuse_session_expire_time, 2}, {dao_fuse_cache_loop_time, 1}, {heart_beat, 1},{nif_prefix, './'},{ca_dir, './cacerts/'}],
