@@ -38,18 +38,17 @@ new(Id) ->
     Dir = VFSRoot ++ "/stress_test_" ++ basho_bench_config:get(build_id),
     ?DEBUG("=====> Dir: ~p~n", [Dir]),
     MakeDirAns = file:make_dir(Dir),
-    ?DEBUG("=====> Make dir answer: ~p~n", [MakeDirAns]),
+    ?DEBUG("=====> Make dir answer: ~p~n=====> Hostname: ~p~n", [MakeDirAns, os:cmd("hostname -f")]),
     File = Dir ++ "/file_" ++ integer_to_list(Id),
     ?DEBUG("=====> File: ~p~n", [File]),
 
     %% Open test file (each test process gets different file name like "file_Id")
-    Device =
-        case open_helper(File, {error, first_try}, 20) of
-            {error, Reason} ->
-                ?ERROR("new/1 error: ~p", [Reason]),
-                Reason;
-            IO -> IO
-        end,
+    Device = case open_helper(File, {error, first_try}, 20) of
+                 {error, Reason} ->
+                     ?ERROR("new/1 error: ~p", [Reason]),
+                     Reason;
+                 IO -> IO
+             end,
     ?DEBUG("=====> Device: ~p~n", [Device]),
     BlockSize = basho_bench_config:get(block_size),
     ?DEBUG("=====> Block size: ~p~n", [BlockSize]),
