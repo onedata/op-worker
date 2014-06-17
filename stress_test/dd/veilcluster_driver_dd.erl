@@ -82,7 +82,7 @@ run(Action, _KeyGen, _ValueGen, State) ->
 
 %% Register test user and configure storages on cluster
 setup_storages() ->
-    ?DEBUG("=====> SETUP STORAGE~n"),
+    ?DEBUG("=====> SETUP STORAGE~n", []),
     Cert = basho_bench_config:get(cert_file),
     ?DEBUG("=====> Cert: ~p~n", [Cert]),
     [Host | Hosts] = basho_bench_config:get(cluster_hosts),
