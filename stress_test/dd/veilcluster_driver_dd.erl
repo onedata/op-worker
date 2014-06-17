@@ -82,10 +82,15 @@ run(Action, _KeyGen, _ValueGen, State) ->
 
 %% Register test user and configure storages on cluster
 setup_storages() ->
+    ?DEBUG("=====> SETUP STORAGE~n"),
     Cert = basho_bench_config:get(cert_file),
-    [Host | _] = basho_bench_config:get(cluster_hosts),
+    ?DEBUG("=====> Cert: ~p~n", [Cert]),
+    [Host | Hosts] = basho_bench_config:get(cluster_hosts),
+    ?DEBUG("=====> Hosts: ~p~n", [[Host | Hosts]]),
+    ?DEBUG("=====> DN: ~p~n", [get_dn(Cert)]),
     rpc:call(list_to_atom("worker@" ++ Host), user_logic, create_user, ["test_user", "Test Name", [], "test@test.com", [get_dn(Cert)]]),
     Groups = #fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = ["/mnt/gluster"]}},
+    ?DEBUG("=====> Groups: ~p~n", [Groups]),
     rpc:call(list_to_atom("worker@" ++ Host), fslogic_storage, insert_storage, ["ClusterProxy", [], [Groups]]),
     rpc:call(list_to_atom("worker@" ++ Host), os, cmd, ["rm -rf /mnt/gluster/*"]).
 
