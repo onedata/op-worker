@@ -6,8 +6,8 @@
 %% @end
 %% ===================================================================
 %% @doc: This module gives high level DB API which contain veil file system specific methods.
-%% All DAO API functions should not be called directly. Call dao_worker:handle(_, {vfs, MethodName, ListOfArgs) instead.
-%% See dao_worker:handle/2 for more details.
+%% All DAO API functions should not be called directly. Call dao:handle(_, {vfs, MethodName, ListOfArgs) instead.
+%% See dao:handle/2 for more details.
 %% @end
 %% ===================================================================
 -module(dao_vfs).
@@ -44,7 +44,7 @@
 %% (if you want to save it as new document) <br/>
 %% or #veil_document{} that wraps #file_descriptor{} if you want to update descriptor in DB. <br/>
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec save_descriptor(Fd :: fd_info() | fd_doc()) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
@@ -58,7 +58,7 @@ save_descriptor(#veil_document{record = #file_descriptor{}} = FdDoc) ->
 %% remove_descriptor/1
 %% ====================================================================
 %% @doc Removes file descriptor from DB. Argument should be uuid() of #file_descriptor or same as in {@link dao_vfs:list_descriptors/3} .
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec remove_descriptor(Fd :: fd() | fd_select()) -> ok | {error, any()} | no_return().
 %% ====================================================================
@@ -80,7 +80,7 @@ remove_descriptor3(ListSpec, BatchSize, Offset) ->
 %% exist_descriptor/1
 %% ====================================================================
 %% @doc Checks whether file descriptor exists in DB.
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec exist_descriptor(Fd :: fd()) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
@@ -93,7 +93,7 @@ exist_descriptor(Fd) ->
 %% @doc Gets file descriptor from DB. Argument should be uuid() of #file_descriptor record
 %% Non-error return value is always {ok, #veil_document{record = #file_descriptor}.
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec get_descriptor(Fd :: fd()) -> {ok, fd_doc()} | {error, any()} | no_return().
 %% ====================================================================
@@ -116,7 +116,7 @@ get_descriptor(Fd) ->
 %% Second argument limits number of rows returned. 3rd argument sets offset of query (skips first Offset rows) <br/>
 %% Non-error return value is always  {ok, [#veil_document{record = #file_descriptor]}.
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec list_descriptors(MatchCriteria :: fd_select(), N :: pos_integer(), Offset :: non_neg_integer()) ->
     {ok, fd_doc()} | {error, any()} | no_return().
@@ -163,7 +163,7 @@ list_descriptors({_Type, _Resource}, _N, _Offset) when _N > 0, _Offset >= 0 ->
 %% (if you want to save it as new document) <br/>
 %% or #veil_document{} that wraps #file_meta{} if you want to update file meta in DB. <br/>
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec save_file_meta(FMeta :: #file_meta{} | #veil_document{}) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
@@ -176,7 +176,7 @@ save_file_meta(#veil_document{record = #file_meta{}} = FMetaDoc) ->
 %% remove_file_meta/1
 %% ====================================================================
 %% @doc Removes file_meta from DB. Argument should be uuid() of veil_document - see dao_types.hrl for more details <br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec remove_file_meta(FMeta :: uuid()) -> ok | {error, any()} | no_return().
 %% ====================================================================
@@ -187,7 +187,7 @@ remove_file_meta(FMeta) ->
 %% exist_file_meta/1
 %% ====================================================================
 %% @doc Checks whether file meta exists in DB.
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec exist_file_meta(Fd :: fd()) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
@@ -200,7 +200,7 @@ exist_file_meta(FMetaUUID) ->
 %% @doc Gets file meta from DB. Argument should be uuid() of #file_meta record
 %% Non-error return value is always {ok, #veil_document{record = #file_meta}.
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec get_file_meta(Fd :: fd()) -> {ok, fd_doc()} | {error, any()} | no_return().
 %% ====================================================================
@@ -217,7 +217,7 @@ get_file_meta(FMetaUUID) ->
 %% ====================================================================
 %% @doc Saves new file to DB
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec save_new_file(FilePath :: string(), File :: file_info()) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
@@ -238,7 +238,7 @@ save_new_file(FilePath, #file{} = File) ->
 %% ====================================================================
 %% @doc Saves new regular file to DB
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec save_new_reg_file(FilePath :: string(), File :: file_info()) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
@@ -296,7 +296,7 @@ save_new_reg_file(FilePath, #file{type = Type} = File) when Type == ?REG_TYPE ->
 %% ====================================================================
 %% @doc Saves new not regular file (dir, link) to DB
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec save_new_not_reg_file(FilePath :: string(), File :: file_info()) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
@@ -330,7 +330,7 @@ save_new_not_reg_file(FilePath, #file{type = Type} = File) when Type > ?REG_TYPE
 %% (if you want to save it as new document) <br/>
 %% or #veil_document{} that wraps #file{} if you want to update file in DB. <br/>
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec save_file(File :: file_info() | file_doc()) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
@@ -343,7 +343,7 @@ save_file(#veil_document{record = #file{}} = FileDoc) ->
 %% remove_file/1
 %% ====================================================================
 %% @doc Removes file from DB. Argument should be file() - see dao_types.hrl for more details <br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec remove_file(File :: file()) -> ok | {error, any()} | no_return().
 %% ====================================================================
@@ -385,7 +385,7 @@ remove_file(File) ->
 %% exist_file/1
 %% ====================================================================
 %% @doc Checks whether file exists in DB. Argument should be file() - see dao_types.hrl for more details. <br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec exist_file(File :: file()) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
@@ -395,7 +395,7 @@ exist_file(Args) ->
 %% exist_waiting_file/1
 %% ====================================================================
 %% @doc Checks whether file exists in DB and waits to be created at storage. Argument should be file() - see dao_types.hrl for more details. <br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec exist_waiting_file(File :: file()) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
@@ -405,7 +405,7 @@ exist_waiting_file(Args) ->
 %% exist_file_helper/2
 %% ====================================================================
 %% @doc Checks whether file exists in DB. Argument should be file() - see dao_types.hrl for more details. <br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec exist_file_helper(File :: file(), View :: term) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
@@ -433,7 +433,7 @@ exist_file_helper(Path, View) ->
 %% get_file/1
 %% ====================================================================
 %% @doc Gets file from DB. Argument should be file() - see dao_types.hrl for more details <br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec get_file(File :: file()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
@@ -443,7 +443,7 @@ get_file(Args) ->
 %% get_file/2
 %% ====================================================================
 %% @doc Gets file from DB. Argument should be file() - see dao_types.hrl for more details <br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec get_file(File :: term(), MultiError :: boolean()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
@@ -453,7 +453,7 @@ get_file({internal_path, [Dir | Path], Root}, MultiError) ->
 %% get_waiting_file/1
 %% ====================================================================
 %% @doc Gets file record of file that waits to be created at storage from DB. Argument should be file() - see dao_types.hrl for more details <br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec get_waiting_file(File :: file()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
@@ -463,7 +463,7 @@ get_waiting_file(Args) ->
 %% get_waiting_file/2
 %% ====================================================================
 %% @doc Gets file record of file that waits to be created at storage from DB. Argument should be file() - see dao_types.hrl for more details <br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec get_waiting_file(File :: term(), MultiError :: boolean()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
@@ -473,7 +473,7 @@ get_waiting_file({internal_path, [Dir | Path], Root}, MultiError) ->
 %% get_file_helper/2
 %% ====================================================================
 %% @doc Gets file from DB. Argument should be file() - see dao_types.hrl for more details <br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec get_file_helper(File :: file(), View :: term()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
@@ -497,7 +497,7 @@ get_file_helper(Path, View) ->
 %% get_file_helper/3
 %% ====================================================================
 %% @doc Gets file from DB. Argument should be file() - see dao_types.hrl for more details <br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec get_file_helper(File :: term(), MultiError :: boolean(), View :: term()) -> {ok, file_doc()} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
@@ -532,7 +532,7 @@ get_file_helper({internal_path, [Dir | Path], Root}, MultiError, View) ->
 %% ====================================================================
 %% @doc Gets all files existing in given path from DB. Argument should be file_path() - see dao_types.hrl for more details <br/>
 %% Similar to get_file/1 but returns list containing file_doc() for every file within given path(), not only the last one<br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec get_path_info(File :: file_path()) -> {ok, [file_doc()]} | {error, any()} | no_return(). %% Throws file_not_found and invalid_data
 %% ====================================================================
@@ -550,7 +550,7 @@ get_path_info(File) ->
 %% rename_file/2
 %% ====================================================================
 %% @doc Renames specified file to NewName.
-%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
 %% @end
 -spec rename_file(File :: file(), NewName :: string()) -> {ok, NewUUID :: uuid()} | no_return().
 %% ====================================================================
@@ -563,7 +563,7 @@ rename_file(File, NewName) ->
 %% ====================================================================
 %% @doc Lists N files from specified directory starting from Offset. <br/>
 %% Non-error return value is always list of #veil_document{record = #file{}} records.<br/>
-%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
 %% @end
 -spec list_dir(Dir :: file(), N :: pos_integer(), Offset :: non_neg_integer()) -> {ok, [file_doc()]}.
 %% ====================================================================
@@ -614,7 +614,7 @@ count_subdirs({uuid, Id}) ->
 %% lock_file/3
 %% ====================================================================
 %% @doc Puts a read/write lock on specified file owned by specified user.
-%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
 %% Not yet implemented. This is placeholder/template method only!
 %% @end
 -spec lock_file(UserID :: string(), FileID :: string(), Mode :: write | read) -> not_yet_implemented.
@@ -626,7 +626,7 @@ lock_file(_UserID, _FileID, _Mode) ->
 %% unlock_file/3
 %% ====================================================================
 %% @doc Takes off a read/write lock on specified file owned by specified user.
-%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
 %% Not yet implemented. This is placeholder/template method only!
 %% @end
 -spec unlock_file(UserID :: string(), FileID :: string(), Mode :: write | read) -> not_yet_implemented.
@@ -646,7 +646,7 @@ unlock_file(_UserID, _FileID, _Mode) ->
 %% (if you want to save it as new document) <br/>
 %% or #veil_document{} that wraps #storage_info{} if you want to update storage info in DB. <br/>
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec save_storage(Storage :: #storage_info{} | #veil_document{}) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
@@ -661,7 +661,7 @@ save_storage(StorageDoc) ->
 %% (if you want to save it as new document) <br/>
 %% or #veil_document{} that wraps #storage_info{} if you want to update storage info in DB. <br/>
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec save_storage(Storage :: #storage_info{} | #veil_document{}, ClearCache :: boolean()) -> {ok, uuid()} | {error, any()} | no_return().
 %% ====================================================================
@@ -681,7 +681,7 @@ save_storage(#veil_document{record = #storage_info{}} = StorageDoc, ClearCache) 
 %% remove_storage/1
 %% ====================================================================
 %% @doc Removes storage info from DB. Argument should be uuid() of storage document or ID of storage <br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec remove_storage({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) -> ok | {error, any()} | no_return().
 %% ====================================================================
@@ -709,7 +709,7 @@ remove_storage({id, StorageID}) when is_integer(StorageID) ->
 %% exist_storage/1
 %% ====================================================================
 %% @doc Checks whether storage exists in DB. Argument should be uuid() of storage document or ID of storage. <br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec exist_storage({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) ->
     {ok, true | false} | {error, any()}.
@@ -725,7 +725,7 @@ exist_storage(Key) ->
 %% @doc Gets storage info from DB. Argument should be uuid() of storage document or ID of storage. <br/>
 %% Non-error return value is always {ok, #veil_document{record = #storage_info{}}.
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec get_storage({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) -> {ok, storage_doc()} | {error, any()} | no_return().
 %% ====================================================================
@@ -747,7 +747,7 @@ get_storage(Key) ->
 %% exist_storage_in_db/1
 %% ====================================================================
 %% @doc Checks whether storage exists in DB. Argument should be uuid() of storage document or ID of storage. <br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec exist_storage_in_db({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) ->
     {ok, true | false} | {error, any()}.
@@ -771,7 +771,7 @@ exist_storage_in_db({id, StorageID}) when is_integer(StorageID) ->
 %% @doc Gets storage info from DB. Argument should be uuid() of storage document or ID of storage. <br/>
 %% Non-error return value is always {ok, #veil_document{record = #storage_info{}}.
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec get_storage_from_db({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) -> {ok, storage_doc()} | {error, any()} | no_return().
 %% ====================================================================
@@ -806,7 +806,7 @@ get_storage_from_db({id, StorageID}) when is_integer(StorageID) ->
 %% ====================================================================
 %% @doc Lists all storage docs. <br/>
 %% Non-error return value is always list of #veil_document{record = #storage_info{}} records.<br/>
-%% Should not be used directly, use dao_worker:handle/2 instead (See dao_worker:handle/2 for more details).
+%% Should not be used directly, use dao:handle/2 instead (See dao:handle/2 for more details).
 %% @end
 -spec list_storage() -> {ok, [storage_doc()]} | no_return().
 %% ====================================================================

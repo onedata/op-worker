@@ -6,8 +6,8 @@
 %% @end
 %% ===================================================================
 %% @doc: This module gives high level DB API which contain veil cluster specific utility methods.
-%% All DAO API functions should not be called directly. Call dao_worker:handle(_, {cluster, MethodName, ListOfArgs) instead.
-%% See {@link dao_worker:handle/2} for more details.
+%% All DAO API functions should not be called directly. Call dao:handle(_, {cluster, MethodName, ListOfArgs) instead.
+%% See {@link dao:handle/2} for more details.
 %% @end
 %% ===================================================================
 -module(dao_cluster).
@@ -43,7 +43,7 @@
 %% save_state/1
 %% ====================================================================
 %% @doc Saves cluster state Rec to DB with ID = cluster_state.
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec save_state(Rec :: tuple()) ->
     {ok, Id :: string()} |
@@ -55,7 +55,7 @@ save_state(Rec) when is_tuple(Rec) ->
 %% save_state/2
 %% ====================================================================
 %% @doc Saves cluster state Rec to DB with ID = Id.
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec save_state(Id :: atom(), Rec :: tuple()) ->
     {ok, Id :: string()} |
@@ -68,7 +68,7 @@ save_state(Id, Rec) when is_tuple(Rec), is_atom(Id) ->
 %% get_state/0
 %% ====================================================================
 %% @doc Retrieves cluster state with ID = cluster_state from DB.
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec get_state() -> {ok, term()} | {error, any()}.
 %% ====================================================================
@@ -79,7 +79,7 @@ get_state() ->
 %% get_state/1
 %% ====================================================================
 %% @doc Retrieves cluster state with UUID = Id from DB.
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec get_state(Id :: atom()) -> {ok, term()} | {error, any()}.
 %% ====================================================================
@@ -95,7 +95,7 @@ get_state(Id) ->
 %% clear_state/0
 %% ====================================================================
 %% @doc Removes cluster state with Id = cluster_state
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec clear_state() ->
     ok |
@@ -108,7 +108,7 @@ clear_state()->
 %% clear_state/1
 %% ====================================================================
 %% @doc Removes cluster state with given Id
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec clear_state(Id :: atom()) ->
     ok |
@@ -127,7 +127,7 @@ clear_state(Id) ->
 %% ====================================================================
 %% @doc Saves fuse_session record to DB. If #fuse_session.valid_to field is not valid
 %%      (i.e. its value is less then current timestamp) it will be set to default value (specified in application config).
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec save_fuse_session(#fuse_session{} | #veil_document{}) ->
     {ok, Id :: string()} |
@@ -162,7 +162,7 @@ save_fuse_session(#veil_document{record = #fuse_session{valid_to = OldTime}} = D
 %%      Second argument shall be either {stale, update_before} (will update cache before getting value)
 %%      or {stale, ok} which is default - get value from cache. Default behaviour can be also achieved by ommiting
 %%      second argument.
-%%      Should not be used directly, use {@link dao_worker:handle/2} instead.
+%%      Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec get_fuse_session(FuseId :: uuid(), {stale, update_before | ok}) ->
     {ok, #veil_document{}} |
@@ -190,7 +190,7 @@ get_fuse_session(FuseId) ->
 %% remove_fuse_session/1
 %% ====================================================================
 %% @doc Removes fuse_session record with given FuseID form DB and cache.
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec remove_fuse_session(FuseId :: uuid()) ->
     ok |
@@ -206,7 +206,7 @@ remove_fuse_session(FuseId) ->
 %% ====================================================================
 %% @doc Removes fuse_session record with given FuseID form DB and cache.
 %%      Also deletes all connections that belongs to this session and tries to close them.
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec close_fuse_session(FuseId :: uuid()) ->
     ok |
@@ -231,7 +231,7 @@ close_fuse_session(FuseId) ->
 %% @doc Lists fuse_session records using given select condition.
 %%      Current implementeation supports fallowing selects:
 %%          {by_valid_to, Time} - select all records whose 'valid_to' field is <= Time
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec list_fuse_sessions({by_valid_to, Time :: non_neg_integer()}) ->
     {ok, [#veil_document{}]} | {error, any()}.
@@ -248,7 +248,7 @@ list_fuse_sessions({by_valid_to, Time}) ->
 %% get_sessions_by_user/1
 %% ====================================================================
 %% @doc Returns fuse_session ids for user of given uuid.
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec get_sessions_by_user(Uuid :: string()) ->
   {ok, [integer()]} | {error, any()}.
@@ -270,7 +270,7 @@ get_sessions_by_user(Uuid) ->
 %% save_connection_info/1
 %% ====================================================================
 %% @doc Saves connection_info record to DB.
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec save_connection_info(#connection_info{} | #veil_document{}) ->
     {ok, Id :: string()} |
@@ -283,7 +283,7 @@ save_connection_info(ConnInfo) ->
 %% get_connection_info/1
 %% ====================================================================
 %% @doc Gets connection_info record with given SessID form DB.
-%%      Should not be used directly, use {@link dao_worker:handle/2} instead.
+%%      Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec get_connection_info(SessID :: uuid()) ->
     {ok, #veil_document{}} |
@@ -296,7 +296,7 @@ get_connection_info(SessID) ->
 %% ====================================================================
 %% @doc Removes connection_info record with given SessID form DB.
 %% 		If it's last connection for session, session is deleted also.
-%%      Should not be used directly, use {@link dao_worker:handle/2} instead.
+%%      Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec remove_connection_info(SessID :: uuid()) ->
     ok |
@@ -319,7 +319,7 @@ remove_connection_info(SessID) ->
 %% ====================================================================
 %% @doc Removes connection_info record with given SessID form DB and tries to close it.
 %%      This method should not be used unless connection exists. Otherwise it will fail with exception error.
-%%      Should not be used directly, use {@link dao_worker:handle/2} instead.
+%%      Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec close_connection(SessID :: uuid()) ->
     ok |
@@ -336,7 +336,7 @@ close_connection(SessID) ->
 %% @doc Lists connection_info records using given select condition.
 %%      Current implementeation supports fallowing selects:
 %%          {by_session_id, SessID} - select all connections that belongs to session with ID - SessID
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec list_connection_info({by_session_id, SessID :: uuid()}) ->
     {ok, [#veil_document{}]} | {error, any()}.
@@ -359,7 +359,7 @@ list_connection_info({by_session_id, SessID}) ->
 %% @doc Cleanups old, unused sessions from DB. Each session which is expired is checked.
 %%      If there is at least one active connection for the session, its expire time will be extended.
 %%      Otherwise it will be deleted.
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec clear_sessions() ->
     ok | no_return().
@@ -410,7 +410,7 @@ clear_sessions(Sessions) ->
 %% ====================================================================
 %% @doc Checks FUSE session described by given veil_document{}. If session exists and at least one connection is active
 %%      'ok' is returned. {error, any()} otherwise. On critical error exception is thrown.
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec check_session(#veil_document{}) ->
     ok | {error, no_active_connections} | {error, any()} | no_return().
@@ -464,7 +464,7 @@ check_session(#veil_document{record = #fuse_session{}, uuid = SessID}) ->
 %% ====================================================================
 %% @doc Checks FUSE connection decribed by given veil_document. If connection gives response to
 %%      internal ping message within 3sec, 'ok' is returned. {error, any()} otherwise.
-%% Should not be used directly, use {@link dao_worker:handle/2} instead.
+%% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec check_connection(#veil_document{}) ->
     ok | {error, invalid_session_id} | {error, timeout}.

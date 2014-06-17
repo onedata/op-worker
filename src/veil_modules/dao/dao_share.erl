@@ -28,7 +28,7 @@
 %% (if you want to save it as new document) <br/>
 %% or #veil_document{} that wraps #share_desc{} if you want to update descriptor in DB. <br/>
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec save_file_share(Share :: file_share_info() | file_share_doc()) -> {ok, file_share()} | {error, any()} | no_return().
 %% ====================================================================
@@ -42,7 +42,7 @@ save_file_share(#veil_document{record = #share_desc{}} = FdDoc) ->
 %% remove_file_share/1
 %% ====================================================================
 %% @doc Removes info about file sharing from DB by share_id, file name or user uuid.
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec remove_file_share(Key:: {file, File :: uuid()} |
                         {user, User :: uuid()} |
@@ -76,7 +76,7 @@ remove_file_share(Key) ->
 %% exist_file_share/1
 %% ====================================================================
 %% @doc Checks whether file share exists in db. Arguments should by share_id, file name or user uuid.                                  l
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec exist_file_share(Key:: {file, File :: uuid()} | {user, User :: uuid()} |
 {uuid, UUID :: uuid()}) -> {ok, true | false} | {error, any()}.
@@ -107,7 +107,7 @@ exist_file_share({Key, Value}) ->
 %% @doc Gets info about file sharing from db by share_id, file name or user uuid.                                  l
 %% Non-error return value is always {ok, #veil_document{record = #share_desc}.
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
-%% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
+%% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
 -spec get_file_share(Key:: {file, File :: uuid()} |
 {user, User :: uuid()} |
