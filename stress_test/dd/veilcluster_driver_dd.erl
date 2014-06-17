@@ -13,52 +13,62 @@
 
 %% Runs once per each test node at begging of a test (before any new/1 is called)
 setup() ->
-    try 
+    ?DEBUG("=====> SETUP~n"),
+    try
         %% Init net kernet in order to connect to cluster
         NetKernel = net_kernel:start([list_to_atom("tester@" ++ net_adm:localhost()), longnames]),
-        ?DEBUG("net_kernel ans: ~p~n", [NetKernel]),
+        ?DEBUG("=====> Net kernel answer: ~p~n", [NetKernel]),
         erlang:set_cookie(node(), veil_cluster_node),
-        ?INFO("SETUP: ~p", [basho_bench_config:get(client_id)]),
-        InitRes = 
-            case basho_bench_config:get(client_id) of 
-                1 -> catch setup_storages(); %% If its the first test node, initialize cluster 
+        ?DEBUG("=====> Client ID: ~p~n", [basho_bench_config:get(client_id)]),
+        InitRes =
+            case basho_bench_config:get(client_id) of
+                1 -> catch setup_storages(); %% If its the first test node, initialize cluster
                 _ -> timer:sleep(2000) %% Otherwise wait for main node to finish
-                                       %% TODO: implement better, more deterministic way of synchronising test nodes (e.g. via ready-ping)
+            %% TODO: implement better, more deterministic way of synchronising test nodes (e.g. via ready-ping)
             end,
-        ?DEBUG("Setup: ~p~n", [InitRes])
+        ?DEBUG("=====> Init answer: ~p~n", [InitRes])
     catch
-      E1:E2 -> ?DEBUG("setup error: ~p:~p~n", [E1, E2])
+        E1:E2 -> ?DEBUG("Setup error: ~p:~p~n", [E1, E2])
     end.
 
-new(Id) -> 
+new(Id) ->
+    ?DEBUG("=====> NEW~n"),
     VFSRoot = basho_bench_config:get(veilfs_root),
+    ?DEBUG("=====> VFS Root: ~p~n", [VFSRoot]),
     Dir = VFSRoot ++ "/stress_test_" ++ basho_bench_config:get(build_id),
-    file:make_dir(Dir),
-    File = Dir ++ "/file_" ++ integer_to_list(Id), 
+    ?DEBUG("=====> Dir: ~p~n", [Dir]),
+    MakeDirAns = file:make_dir(Dir),
+    ?DEBUG("=====> Make dir answer: ~p~n", [MakeDirAns]),
+    File = Dir ++ "/file_" ++ integer_to_list(Id),
+    ?DEBUG("=====> File: ~p~n", [File]),
 
     %% Open test file (each test process gets different file name like "file_Id")
-    Device = 
-        case open_helper(File, {error, first_try}, 20) of 
+    Device =
+        case open_helper(File, {error, first_try}, 20) of
             {error, Reason} ->
                 ?ERROR("new/1 error: ~p", [Reason]),
                 Reason;
             IO -> IO
-    end,
-    ?DEBUG("dd file: ~p~n", [File]),
+        end,
+    ?DEBUG("=====> Device: ~p~n", [Device]),
     BlockSize = basho_bench_config:get(block_size),
-    Data = [0 || _X <- lists:seq(1, 1024*BlockSize)],
+    ?DEBUG("=====> Block size: ~p~n", [BlockSize]),
+    Data = [0 || _X <- lists:seq(1, 1024 * BlockSize)],
+    ?DEBUG("=====> Data: ~p~n", [Data]),
     {ok, {Device, 0, Data}}.
 
 
 %% Only 'write' action is implemented right now
 run(write, _KeyGen, _ValueGen, {Dev, _Offset, _Data} = State) when is_atom(Dev) ->
+    ?DEBUG("=====> Write ERROR~n"),
     timer:sleep(1000), %% Dont generate more then one error per sec when open/2 is failing
     {error, {open, Dev}, State};
 run(write, _KeyGen, _ValueGen, {Dev, Offset, Data}) ->
-    NewState = {Dev, (Offset + length(Data)) rem (basho_bench_config:get(max_filesize) * 1024*1024), Data},
-    case file:pwrite(Dev, 0, Data) of 
+    ?DEBUG("=====> Write OK~n"),
+    NewState = {Dev, (Offset + length(Data)) rem (basho_bench_config:get(max_filesize) * 1024 * 1024), Data},
+    case file:pwrite(Dev, 0, Data) of
         ok -> {ok, NewState};
-        {error, Reason} -> 
+        {error, Reason} ->
             ?DEBUG("Error (file: ~p, offset: ~p): ~p", [Dev, Offset, Reason]),
             {error, Reason, NewState}
     end;
@@ -84,7 +94,7 @@ get_dn(PEMFile) ->
     {ok, PemBin} = file:read_file(PEMFile),
     Cert = public_key:pem_decode(PemBin),
     [Leaf | Chain] = [public_key:pkix_decode_cert(DerCert, otp) || {'Certificate', DerCert, _} <- Cert],
-    {ok, EEC} = gsi_handler:find_eec_cert(Leaf, Chain, gsi_handler:is_proxy_certificate(Leaf)), 
+    {ok, EEC} = gsi_handler:find_eec_cert(Leaf, Chain, gsi_handler:is_proxy_certificate(Leaf)),
     {rdnSequence, Rdn} = gsi_handler:proxy_subject(EEC),
     {ok, DnString} = user_logic:rdn_sequence_to_dn_string(Rdn),
     DnString.
