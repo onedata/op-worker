@@ -87,11 +87,13 @@ setup_storages() ->
     [Host | Hosts] = basho_bench_config:get(cluster_hosts),
     ?DEBUG("=====> Hosts: ~p~n", [[Host | Hosts]]),
     ?DEBUG("=====> DN: ~p~n", [get_dn(Cert)]),
-    rpc:call(list_to_atom("worker@" ++ Host), user_logic, create_user, ["test_user", "Test Name", [], "test@test.com", [get_dn(Cert)]]),
+    AddUserAns = rpc:call(list_to_atom("worker@veil-d01.grid.cyf-kr.edu.pl"), user_logic, create_user, ["test_user", "Test Name", [], "test@test.com", [get_dn(Cert)]]),
+    ?DEBUG("=====> Add user answer: ~p~n", [AddUserAns]),
     Groups = #fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = ["/mnt/gluster"]}},
     ?DEBUG("=====> Groups: ~p~n", [Groups]),
-    rpc:call(list_to_atom("worker@" ++ Host), fslogic_storage, insert_storage, ["ClusterProxy", [], [Groups]]),
-    rpc:call(list_to_atom("worker@" ++ Host), os, cmd, ["rm -rf /mnt/gluster/*"]).
+    InsertStorageAns = rpc:call(list_to_atom("worker@veil-d01.grid.cyf-kr.edu.pl"), fslogic_storage, insert_storage, ["ClusterProxy", [], [Groups]]),
+    ?DEBUG("=====> Insert storage answer: ~p~n", [InsertStorageAns]),
+    rpc:call(list_to_atom("worker@veil-d01.grid.cyf-kr.edu.pl"), os, cmd, ["rm -rf /mnt/gluster/*"]).
 
 %% Gets rDN list compatibile user_logic:create_user from PEM file
 get_dn(PEMFile) ->
