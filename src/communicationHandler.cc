@@ -323,7 +323,7 @@ void CommunicationHandler::closePushChannel()
 int32_t CommunicationHandler::sendMessage(ClusterMsg& msg, int32_t msgId)
 {
     if(m_connectStatus != CONNECTED)
-        throw m_connectStatus;
+        throw static_cast<ConnectionStatus>(m_connectStatus);
 
     // If message ID is not set, generate new one
     if (!msgId)
