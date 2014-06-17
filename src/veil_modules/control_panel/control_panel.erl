@@ -87,7 +87,8 @@ init(_Args) ->
             {certfile, CertString},
             {keyfile, CertString},
             {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs())},
-            {password, ""}
+            {password, ""},
+            {ciphers, gsi_handler:get_ciphers()}
         ],
         [
             {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
@@ -132,7 +133,8 @@ init(_Args) ->
             {keyfile, CertString},
             {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs())},
             {password, ""},
-            {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}}
+            {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}},
+            {ciphers, gsi_handler:get_ciphers()}
         ],
         [
             {env, [{dispatch, cowboy_router:compile(RestDispatch)}]},
