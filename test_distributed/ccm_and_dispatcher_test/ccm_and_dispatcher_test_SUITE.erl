@@ -597,7 +597,7 @@ init_per_testcase(type2, Config) ->
   ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
   test_node_starter:start_deps_for_tester_node(),
 
-  NodesUp = test_node_starter:start_test_nodes(1),
+  NodesUp = test_node_starter:start_test_nodes(1,true),
   [CCM | _] = NodesUp,
 
   PeerCert = ?COMMON_FILE("peer.pem"),
