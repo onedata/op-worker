@@ -54,7 +54,7 @@ strip_wrappers() ->
         dao_lib:strip_wrappers({ok, [#veil_document{record = #file{}}, #veil_document{record = #file_descriptor{}}]})).
 
 apply_asynch() ->
-  Module = dao,
+  Module = dao_worker,
   {MainAns, _} = dao_lib:apply(some_module, {asynch, some_method}, args, 1),
   ?assertEqual(MainAns, error),
 
@@ -73,7 +73,7 @@ apply_asynch() ->
   request_dispatcher:stop().
 
 apply_synch() ->
-  Module = dao,
+  Module = dao_worker,
   {MainAns, _} = dao_lib:apply(some_module, some_method, args, 1),
   ?assertEqual(error, MainAns),
   {ok, _} = request_dispatcher:start_link(),
