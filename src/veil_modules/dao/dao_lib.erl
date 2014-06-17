@@ -77,7 +77,7 @@ apply(Module, Method, Args, ProtocolVersion) ->
     Args :: [term()], ProtocolVersion :: number(), Timeout :: pos_integer()) -> any() | {error, worker_not_found} | {error, timeout}.
 %% ====================================================================
 apply(Module, {asynch, Method}, Args, ProtocolVersion, _Timeout) ->
-    try gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, {Module, Method, Args}}) of
+    try gen_server:call(?Dispatcher_Name, {dao_worker, ProtocolVersion, {Module, Method, Args}}) of
         ok ->
             ok;
         worker_not_found ->
@@ -94,7 +94,7 @@ apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout) ->
         _ -> put(msgID, 0)
     end,
     MsgID = get(msgID),
-    try gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, self(), MsgID, {Module, Method, Args}}) of
+    try gen_server:call(?Dispatcher_Name, {dao_worker, ProtocolVersion, self(), MsgID, {Module, Method, Args}}) of
         ok ->
             receive
                 {worker_answer, MsgID, Resp} -> Resp

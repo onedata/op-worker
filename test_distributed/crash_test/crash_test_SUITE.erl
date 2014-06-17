@@ -368,7 +368,7 @@ init_per_testcase(_, Config) ->
   ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
   test_node_starter:start_deps_for_tester_node(),
 
-  {NodesUp, Params} = test_node_starter:start_test_nodes_with_dist_app(4, 2),
+  {NodesUp, Params} = test_node_starter:start_test_nodes_with_dist_app(4, 2,true),
   [CCM | NodesUp2] = NodesUp,
   [CCM2 | _] = NodesUp2,
   DB_Node = ?DB_NODE,

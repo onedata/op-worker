@@ -61,7 +61,7 @@ main_test(Config) ->
       try
         ?assertEqual(ok, gen_server:call({?Dispatcher_Name, CCM}, {fslogic, ?ProtocolVersion, Pid, ping}, ?MessageTimeout)),
         Pid ! test_fun_ok,
-        ?assertEqual(ok, gen_server:call({?Dispatcher_Name, CCM}, {dao, ?ProtocolVersion, Pid, ping}, ?MessageTimeout)),
+        ?assertEqual(ok, gen_server:call({?Dispatcher_Name, CCM}, {dao_worker, ?ProtocolVersion, Pid, ping}, ?MessageTimeout)),
         Pid ! test_fun_ok,
         ?assertEqual(ok, gen_server:call({?Dispatcher_Name, CCM}, {dns_worker, ?ProtocolVersion, Pid, ping}, ?MessageTimeout)),
         Pid ! test_fun_ok,
@@ -107,10 +107,10 @@ multi_node_test(Config) ->
       false ->
         ?assertEqual(ok, gen_server:call({global, ?CCM}, {start_worker, Node, fslogic, []}, 3000))
     end,
-    case lists:member({Node, dao}, Workers) of
+    case lists:member({Node, dao_worker}, Workers) of
       true -> ok;
       false ->
-        ?assertEqual(ok, gen_server:call({global, ?CCM}, {start_worker, Node, dao, []}, 3000))
+        ?assertEqual(ok, gen_server:call({global, ?CCM}, {start_worker, Node, dao_worker, []}, 3000))
     end,
     case lists:member({Node, dns_worker}, Workers) of
       true -> ok;
@@ -138,7 +138,7 @@ multi_node_test(Config) ->
         NodeTestFun = fun(Node) ->
           ?assertEqual(ok, gen_server:call({?Dispatcher_Name, Node}, {fslogic, ?ProtocolVersion, Pid, ping}, ?MessageTimeout)),
           Pid ! test_fun_ok,
-          ?assertEqual(ok, gen_server:call({?Dispatcher_Name, Node}, {dao, ?ProtocolVersion, Pid, ping}, ?MessageTimeout)),
+          ?assertEqual(ok, gen_server:call({?Dispatcher_Name, Node}, {dao_worker, ?ProtocolVersion, Pid, ping}, ?MessageTimeout)),
           Pid ! test_fun_ok,
           ?assertEqual(ok, gen_server:call({?Dispatcher_Name, Node}, {dns_worker, ?ProtocolVersion, Pid, ping}, ?MessageTimeout)),
           Pid ! test_fun_ok,
