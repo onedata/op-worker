@@ -13,7 +13,7 @@
 
 %% Runs once per each test node at begging of a test (before any new/1 is called)
 setup() ->
-    ?DEBUG("=====> SETUP~n"),
+    ?DEBUG("=====> SETUP~n", []),
     try
         %% Init net kernet in order to connect to cluster
         NetKernel = net_kernel:start([list_to_atom("tester@" ++ net_adm:localhost()), longnames]),
@@ -32,7 +32,7 @@ setup() ->
     end.
 
 new(Id) ->
-    ?DEBUG("=====> NEW~n"),
+    ?DEBUG("=====> NEW~n", []),
     VFSRoot = basho_bench_config:get(veilfs_root),
     ?DEBUG("=====> VFS Root: ~p~n", [VFSRoot]),
     Dir = VFSRoot ++ "/stress_test_" ++ basho_bench_config:get(build_id),
@@ -60,11 +60,11 @@ new(Id) ->
 
 %% Only 'write' action is implemented right now
 run(write, _KeyGen, _ValueGen, {Dev, _Offset, _Data} = State) when is_atom(Dev) ->
-    ?DEBUG("=====> Write ERROR~n"),
+    ?DEBUG("=====> Write ERROR~n", []),
     timer:sleep(1000), %% Dont generate more then one error per sec when open/2 is failing
     {error, {open, Dev}, State};
 run(write, _KeyGen, _ValueGen, {Dev, Offset, Data}) ->
-    ?DEBUG("=====> Write OK~n"),
+    ?DEBUG("=====> Write OK~n", []),
     NewState = {Dev, (Offset + length(Data)) rem (basho_bench_config:get(max_filesize) * 1024 * 1024), Data},
     case file:pwrite(Dev, 0, Data) of
         ok -> {ok, NewState};
