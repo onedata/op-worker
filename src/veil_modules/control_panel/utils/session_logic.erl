@@ -108,7 +108,8 @@ delete_session(SessionID) ->
 clear_expired_sessions() ->
     {Megaseconds, Seconds, _} = now(),
     Now = Megaseconds * 1000000 + Seconds,
-    ?dump(Now),
-    ets:select_delete(?SESSION_ETS, [{{'$1', '$2', '$3'}, [{'<', '$3', Now}], ['$_']}]).
-
-ets:fun2ms(fun(N = #food{calories=C}) when C < 600 -> N end
+    ExpiredSessions = ets:select(?SESSION_ETS, [{{'$1', '$2', '$3'}, [{'<', '$3', Now}], ['$_']}]),
+    lists:foreach(
+        fun({SessionID, _, _}) ->
+            delete_session(SessionID)
+        end, ExpiredSessions).

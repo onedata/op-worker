@@ -76,7 +76,7 @@ init(_Args) ->
     ok = application:set_env(n2o, session, gui_session_handler),
 
     % Ets tables needed by n2o
-    ets:new(cookies, [set, named_table, {keypos, 1}, public]),
+    ets:new(cookies, [named_table, public, bag, {read_concurrency, true}]),
     ets:new(actions, [set, named_table, {keypos, 1}, public]),
     ets:new(globals, [set, named_table, {keypos, 1}, public]),
     ets:new(caching, [set, named_table, {keypos, 1}, public]),
