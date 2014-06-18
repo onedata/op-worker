@@ -87,13 +87,13 @@ setup_storages() ->
     [Host | Hosts] = basho_bench_config:get(cluster_hosts),
     ?DEBUG("=====> Hosts: ~p~n", [[Host | Hosts]]),
     ?DEBUG("=====> DN: ~p~n", [get_dn(Cert)]),
-    AddUserAns = rpc:call(map_hostnames(Host), user_logic, create_user, ["veilfstestuser", "Test Name", [], "test@test.com", [get_dn(Cert)]]),
-    ?DEBUG("=====> Add user answer: ~p~n", [AddUserAns]),
     Groups = #fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = ["/mnt/gluster"]}},
     ?DEBUG("=====> Groups: ~p~n", [Groups]),
     InsertStorageAns = rpc:call(map_hostnames(Host), fslogic_storage, insert_storage, ["ClusterProxy", [], [Groups]]),
     ?DEBUG("=====> Insert storage answer: ~p~n", [InsertStorageAns]),
-    rpc:call(map_hostnames(Host), os, cmd, ["rm -rf /mnt/gluster/*"]).
+    rpc:call(map_hostnames(Host), os, cmd, ["rm -rf /mnt/gluster/*"]),
+    AddUserAns = rpc:call(map_hostnames(Host), user_logic, create_user, ["veilfstestuser", "Test Name", [], "test@test.com", [get_dn(Cert)]]),
+    ?DEBUG("=====> Add user answer: ~p~n", [AddUserAns]).
 
 %% Gets rDN list compatibile user_logic:create_user from PEM file
 get_dn(PEMFile) ->
