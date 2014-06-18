@@ -37,8 +37,7 @@ new(Id) ->
     ?DEBUG("=====> VFS Root: ~p~n", [VFSRoot]),
     Dir = VFSRoot ++ "/stress_test_" ++ basho_bench_config:get(build_id),
     ?DEBUG("=====> Dir: ~p~n", [Dir]),
-    MakeDirAns = file:make_dir(Dir),
-    ?DEBUG("=====> Make dir answer: ~p~n=====> Hostname: ~p~n", [MakeDirAns, os:cmd("hostname -f")]),
+    make_dir(filename:split(Dir)),
     File = Dir ++ "/file_" ++ integer_to_list(Id),
     ?DEBUG("=====> File: ~p~n", [File]),
 
@@ -89,10 +88,10 @@ setup_storages() ->
     ?DEBUG("=====> DN: ~p~n", [get_dn(Cert)]),
     Groups = #fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = ["/mnt/gluster"]}},
     ?DEBUG("=====> Groups: ~p~n", [Groups]),
-    rpc:call(map_hostnames(Host), os, cmd, ["rm -rf /mnt/gluster/*"]),
-    InsertStorageAns = rpc:call(map_hostnames(Host), fslogic_storage, insert_storage, ["ClusterProxy", [], [Groups]]),
+    rpc:call(map_hostname(Host), os, cmd, ["rm -rf /mnt/gluster/*"]),
+    InsertStorageAns = rpc:call(map_hostname(Host), fslogic_storage, insert_storage, ["ClusterProxy", [], [Groups]]),
     ?DEBUG("=====> Insert storage answer: ~p~n", [InsertStorageAns]),
-    AddUserAns = rpc:call(map_hostnames(Host), user_logic, create_user, ["veilfstestuser", "Test Name", [], "test@test.com", [get_dn(Cert)]]),
+    AddUserAns = rpc:call(map_hostname(Host), user_logic, create_user, ["veilfstestuser", "Test Name", [], "test@test.com", [get_dn(Cert)]]),
     ?DEBUG("=====> Add user answer: ~p~n", [AddUserAns]).
 
 %% Gets rDN list compatibile user_logic:create_user from PEM file
@@ -116,7 +115,18 @@ open_helper(File, {error, _Error}, Retry) when Retry > 0 ->
 open_helper(_, _, _) ->
     {error, open_failed}.
 
-map_hostnames("149.156.10.162") -> 'worker@veil-d01.grid.cyf-kr.edu.pl';
-map_hostnames("149.156.10.163") -> 'worker@veil-d02.grid.cyf-kr.edu.pl';
-map_hostnames("149.156.10.164") -> 'worker@veil-d03.grid.cyf-kr.edu.pl';
-map_hostnames("149.156.10.165") -> 'worker@veil-d04.grid.cyf-kr.edu.pl'.
+map_hostname("149.156.10.162") -> 'worker@veil-d01.grid.cyf-kr.edu.pl';
+map_hostname("149.156.10.163") -> 'worker@veil-d02.grid.cyf-kr.edu.pl';
+map_hostname("149.156.10.164") -> 'worker@veil-d03.grid.cyf-kr.edu.pl';
+map_hostname("149.156.10.165") -> 'worker@veil-d04.grid.cyf-kr.edu.pl'.
+
+make_dir([Root | Leafs]) ->
+    make_dir(Root, Leafs).
+
+make_dir(Root, []) ->
+    Ans = file:make_dir(Root),
+    ?DEBUG("=====> Dir: ~p, Ans: ~p~n", [Root, Ans]);
+make_dir(Root, [Leaf | Leafs]) ->
+    Ans = file:make_dir(Root),
+    ?DEBUG("=====> Dir: ~p, Ans: ~p~n", [Root, Ans]),
+    make_dir(filename:join(Root, Leaf), Leafs).
