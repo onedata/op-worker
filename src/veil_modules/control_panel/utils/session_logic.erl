@@ -16,7 +16,7 @@
 -include("veil_modules/control_panel/common.hrl").
 -include("logging.hrl").
 
-%% n2o session_handler API, with exception of create/0
+%% session_logic_behaviour API
 -export([save_session/3, lookup_session/1, delete_session/1, clear_expired_sessions/0]).
 
 % ETS name for cookies
@@ -57,6 +57,8 @@ save_session(SessionID, Props, TillArg) ->
 %% ====================================================================
 %% @doc Lookups a session by given SessionID key. On success, returns a proplist -
 %% session data, or undefined if given session does not exist.
+%% NOTE! If SessionID exists, but has expired, it should be automatically
+%% removed and undefined should be returned.
 %% @end
 -spec lookup_session(SessionID :: binary()) -> Props :: [tuple()] | undefined.
 %% ====================================================================
@@ -112,4 +114,5 @@ clear_expired_sessions() ->
     lists:foreach(
         fun({SessionID, _, _}) ->
             delete_session(SessionID)
-        end, ExpiredSessions).
+        end, ExpiredSessions),
+    ok.

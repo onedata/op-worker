@@ -25,7 +25,7 @@
 % ETS name for cookies
 -define(ets_name, cookies).
 % 1 day TTL
--define(cookie_max_age, 5).
+-define(cookie_max_age, 86400).
 
 % Key for process dictionary, holding information if there is a valid session
 -define(session_valid, session_valid).
