@@ -15,6 +15,8 @@
 -include("veil_modules/control_panel/common.hrl").
 -include("logging.hrl").
 
+-compile(export_all).
+
 %% n2o session_handler API, with exception of create/0
 -export([init/2, finish/2, get_value/2, set_value/2, create/0, clear/0]).
 
@@ -43,13 +45,11 @@
 -spec init(State :: term(), Ctx :: #context{}) -> {ok, NewState :: term(), NewCtx :: #context{}}.
 %% ====================================================================
 init(State, Ctx) ->
-%%     Req = Ctx#context.req,
     {Cookie, _} = cowboy_req:cookie(?cookie_name, Ctx#context.req),
 
-%%     {{D1, D2, D3}, {T1, T2, T3}} = calendar:now_to_datetime(now()),
-%%     Till = {{D1, D2, D3 + 1}, {T1, T2, T3}},
+    {Megaseconds, Seconds, _} = now(),
+    Till = Megaseconds * 1000000 + Seconds + ?cookie_max_age,
 
-    {Path, _} = cowboy_req:path(Ctx#context.req),
     SessionID = case lookup_session(Cookie) of
                     undefined ->
                         put(?session_valid, false),
@@ -57,13 +57,14 @@ init(State, Ctx) ->
                         % but if create/0 is not called in the scope of this request,
                         % the session is discarded.
                         NewSessionID = random_id(),
-                        save_session(NewSessionID, []),
+                        save_session(NewSessionID, [], Till),
                         NewSessionID;
-                    _ValidSession ->
+                    Props ->
                         put(?session_valid, true),
+                        % Refreshes the expiration time of current session
+                        save_session(Cookie, Props, Till),
                         Cookie
                 end,
-    ?dump({init, Cookie, SessionID, Path}),
     {ok, State, Ctx#context{session = SessionID}}.
 
 
@@ -71,13 +72,12 @@ init(State, Ctx) ->
 %% ====================================================================
 %% @doc n2o session_handler callback, called after every request. Checks if
 %% there is a valid session in current context. Discards the session if not,
-%% or set's a cookie to session id if the session is to persist.
+%% or sets a session cookie if the session is to persist.
 %% @end
 -spec finish(State :: term(), Ctx :: #context{}) -> {ok, NewState :: term(), NewCtx :: #context{}}.
 %% ====================================================================
 finish(_State, Ctx) ->
     SessionID = Ctx#context.session,
-    ?dump({finish, SessionID}),
     NewReq = case get(?session_valid) of
                  true ->
                      % Session is valid, set session_id cookie
@@ -114,7 +114,7 @@ finish(_State, Ctx) ->
 set_value(Key, Value) ->
     SessionID = ?CTX#context.session,
     Props = lookup_session(SessionID),
-    save_session(SessionID, [{Key, Value} | proplists:delete(Key, Props)]),
+    save_session(SessionID, [{Key, Value} | proplists:delete(Key, Props)], undefined),
     Value.
 
 
@@ -145,7 +145,6 @@ get_value(Key, DefaultValue) ->
 -spec create() -> ok.
 %% ====================================================================
 create() ->
-    ?dump(create),
     put(?session_valid, true),
     ok.
 
@@ -158,7 +157,6 @@ create() ->
 -spec clear() -> ok.
 %% ====================================================================
 clear() ->
-    ?dump(clear),
     put(?session_valid, false),
     delete_session(?CTX#context.session),
     ok.
@@ -167,16 +165,30 @@ clear() ->
 %% Internal functions
 %% ====================================================================
 
-%% save_session/2
+%% save_session/3
 %% ====================================================================
-%% @doc Saves session data under SessionID key.
+%% @doc Saves session data under SessionID key (Props), the entry is valid up to given moment (Till).
+%% If Till arg is undefined, the one currently associated with SessionID will be used.
+%% If there is no record of session with id SessionID and Till is unspecified, exception will be thrown.
+%% Till is expressed in number of seconds since epoch.
 %% @end
--spec save_session(SessionID :: binary(), Props :: [tuple()]) -> ok.
+-spec save_session(SessionID :: binary(), Props :: [tuple()] | undefined, ValidTill :: integer() | undefined) -> ok | no_return().
 %% ====================================================================
-save_session(SessionID, Props) ->
-    ?dump({save_session, SessionID}),
+save_session(SessionID, Props, TillArg) ->
+    Till = case TillArg of
+               undefined ->
+                   case ets:lookup(?ets_name, SessionID) of
+                       [{SessionID, _, CurrentTill}] ->
+                           CurrentTill;
+                       _ ->
+                           throw("session expiration not specified")
+                   end;
+               _ ->
+                   TillArg
+           end,
+
     delete_session(SessionID),
-    ets:insert(?ets_name, {SessionID, Props}),
+    ets:insert(?ets_name, {SessionID, Props, Till}),
     ok.
 
 
@@ -196,8 +208,17 @@ lookup_session(SessionID) ->
             undefined;
         _ ->
             case ets:lookup(?ets_name, SessionID) of
-                [{SessionID, Props}] ->
-                    Props;
+                [{SessionID, Props, Till}] ->
+                    % Check if the session isn't outdated
+                    {Megaseconds, Seconds, _} = now(),
+                    Now = Megaseconds * 1000000 + Seconds,
+                    case Till > Now of
+                        true ->
+                            Props;
+                        false ->
+                            delete_session(SessionID),
+                            undefined
+                    end;
                 _ ->
                     undefined
             end
@@ -217,7 +238,6 @@ delete_session(SessionID) ->
         undefined ->
             ok;
         _ ->
-            ?dump({delete_session, SessionID}),
             ets:delete(?ets_name, SessionID),
             ok
     end.
@@ -225,7 +245,7 @@ delete_session(SessionID) ->
 
 %% random_id/0
 %% ====================================================================
-%% @doc Generates a 44 chars long, base64 encoded session id.
+%% @doc Generates a random, 44 chars long, base64 encoded session id.
 %% @end
 -spec random_id() -> binary().
 %% ====================================================================

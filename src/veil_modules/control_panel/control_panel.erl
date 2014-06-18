@@ -73,7 +73,7 @@ init(_Args) ->
     % Custom route handler
     ok = application:set_env(n2o, route, gui_routes),
     % Custom session handler
-    ok = application:set_env(n2o, session, gui_session),
+    ok = application:set_env(n2o, session, gui_session_handler),
 
     % Ets tables needed by n2o
     ets:new(cookies, [set, named_table, {keypos, 1}, public]),
