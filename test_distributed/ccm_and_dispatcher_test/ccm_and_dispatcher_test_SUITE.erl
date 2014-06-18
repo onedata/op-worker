@@ -487,8 +487,10 @@ validation_test(Config) ->
   {ConAns4, _} = wss:connect('localhost', Port, [{certfile, ?TEST_FILE("certs/proxy_unknown_ca.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
   ?assertEqual(error, ConAns4),
   {ConAns5, Socket1} = wss:connect('localhost', Port, [{certfile, ?TEST_FILE("certs/proxy_valid.pem")}, {cacertfile, ?TEST_FILE("certs/proxy_valid.pem")}]),
-  wss:close(Socket1),
-  ?assertEqual(ok, ConAns5).
+
+  ct:print("nie lubie websoketow: ~p~n", [{ConAns5, Socket1}]),
+  ?assertEqual(ok, ConAns5),
+  wss:close(Socket1).
 
 %% This test checks if client outside the cluster can ping all modules via dispatcher.
 ping_test(Config) ->
