@@ -37,7 +37,6 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% Additional exports
--export([load_view_def/2]).
 -export([init_storage/0]).
 
 %% ===================================================================
@@ -58,7 +57,7 @@ init({_Args, {init_status, table_initialized}}) -> %% Final stage of initializat
     case application:get_env(veil_cluster_node, db_nodes) of
         {ok, Nodes} when is_list(Nodes) ->
             [dao_hosts:insert(Node) || Node <- Nodes, is_atom(Node)],
-            catch setup_views(?DATABASE_DESIGN_STRUCTURE);
+            catch dao_setup:setup_views(?DATABASE_DESIGN_STRUCTURE);
         _ ->
             lager:warning("There are no DB hosts given in application env variable.")
     end,
@@ -199,75 +198,6 @@ cleanup() ->
 %% ===================================================================
 %% Internal functions
 %% ===================================================================
-
-
-%% setup_views/1
-%% ====================================================================
-%% @doc Creates or updates design documents
-%% @end
--spec setup_views(DesignStruct :: list()) -> ok.
-%% ====================================================================
-setup_views(DesignStruct) ->
-    DesignFun = fun(#design_info{name = Name, views = ViewList}, DbName) ->  %% Foreach design document
-            LastCTX = %% Calculate MD5 sum of current views (read from files)
-                lists:foldl(fun(#view_info{name = ViewName}, CTX) ->
-                            crypto:hash_update(CTX, load_view_def(ViewName, map) ++ load_view_def(ViewName, reduce))
-                        end, crypto:hash_init(md5), ViewList),
-
-            LocalVersion = dao_helper:name(integer_to_list(binary:decode_unsigned(crypto:hash_final(LastCTX)), 16)),
-            NewViewList =
-                case dao_helper:open_design_doc(DbName, Name) of
-                    {ok, #doc{body = Body}} -> %% Design document exists, so lets calculate MD5 sum of its views
-                        ViewsField = dao_json:get_field(Body, "views"),
-                        DbViews = [ dao_json:get_field(ViewsField, ViewName) || #view_info{name = ViewName} <- ViewList ],
-                        EmptyString = fun(Str) when is_binary(Str) -> binary_to_list(Str); %% Helper function converting non-string value to empty string
-                                         (_) -> "" end,
-                        VStrings = [ EmptyString(dao_json:get_field(V, "map")) ++ EmptyString(dao_json:get_field(V, "reduce")) || {L}=V <- DbViews, is_list(L)],
-                        LastCTX1 = lists:foldl(fun(VStr, CTX) -> crypto:hash_update(CTX, VStr) end, crypto:hash_init(md5), VStrings),
-                        DbVersion = dao_helper:name(integer_to_list(binary:decode_unsigned(crypto:hash_final(LastCTX1)), 16)),
-                        case DbVersion of %% Compare DbVersion with LocalVersion
-                            LocalVersion ->
-                                lager:info("DB version of design ~p is ~p and matches local version. Design is up to date", [Name, LocalVersion]),
-                                [];
-                            _Other ->
-                                lager:info("DB version of design ~p is ~p and does not match ~p. Rebuilding design document", [Name, _Other, LocalVersion]),
-                                ViewList
-                        end;
-                    _ ->
-                        lager:info("Design document ~p in DB ~p not exists. Creating...", [Name, DbName]),
-                        ViewList
-                end,
-
-            lists:map(fun(#view_info{name = ViewName}) -> %% Foreach view
-                case dao_helper:create_view(DbName, Name, ViewName, load_view_def(ViewName, map), load_view_def(ViewName, reduce), LocalVersion) of
-                    ok ->
-                        lager:info("View ~p in design ~p, DB ~p has been created.", [ViewName, Name, DbName]);
-                    _Err ->
-                        lager:error("View ~p in design ~p, DB ~p creation failed. Error: ~p", [ViewName, Name, DbName, _Err])
-                end
-            end, NewViewList),
-            DbName
-        end,
-
-    DbFun = fun(#db_info{name = Name, designs = Designs}) -> %% Foreach database
-            dao_helper:create_db(Name, []),
-            lists:foldl(DesignFun, Name, Designs)
-        end,
-
-    lists:map(DbFun, DesignStruct),
-    ok.
-
-%% load_view_def/2
-%% ====================================================================
-%% @doc Loads view definition from file.
-%% @end
--spec load_view_def(Name :: string(), Type :: map | reduce) -> string().
-%% ====================================================================
-load_view_def(Name, Type) ->
-    case file:read_file(?VIEW_DEF_LOCATION ++ Name ++ (case Type of map -> ?MAP_DEF_SUFFIX; reduce -> ?REDUCE_DEF_SUFFIX end)) of
-        {ok, Data} -> binary_to_list(Data);
-        _ -> ""
-    end.
 
 %% cache_guard/1
 %% ====================================================================
