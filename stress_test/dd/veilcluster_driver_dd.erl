@@ -89,9 +89,9 @@ setup_storages() ->
     ?DEBUG("=====> DN: ~p~n", [get_dn(Cert)]),
     Groups = #fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = ["/mnt/gluster"]}},
     ?DEBUG("=====> Groups: ~p~n", [Groups]),
+    rpc:call(map_hostnames(Host), os, cmd, ["rm -rf /mnt/gluster/*"]),
     InsertStorageAns = rpc:call(map_hostnames(Host), fslogic_storage, insert_storage, ["ClusterProxy", [], [Groups]]),
     ?DEBUG("=====> Insert storage answer: ~p~n", [InsertStorageAns]),
-    rpc:call(map_hostnames(Host), os, cmd, ["rm -rf /mnt/gluster/*"]),
     AddUserAns = rpc:call(map_hostnames(Host), user_logic, create_user, ["veilfstestuser", "Test Name", [], "test@test.com", [get_dn(Cert)]]),
     ?DEBUG("=====> Add user answer: ~p~n", [AddUserAns]).
 
