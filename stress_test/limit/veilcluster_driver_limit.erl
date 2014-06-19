@@ -51,9 +51,9 @@ new(Id) ->
     Result :: {ok, NewState :: term()} | {error, Reason :: term(), NewState :: term()}.
 %% ====================================================================
 run(_Operation, KeyGen, _ValueGen, Hosts) ->
+    NewState = Hosts,
     try
         Host = lists:nth((KeyGen() rem length(Hosts)) + 1, Hosts),
-        NewState = Hosts,
 
         case net_adm:ping(Host) of
             pong -> {ok, NewState};

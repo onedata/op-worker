@@ -56,9 +56,9 @@ new(Id) ->
     Result :: {ok, NewState :: term()} | {error, Reason :: term(), NewState :: term()}.
 %% ====================================================================
 run(Operation, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes, Messages_per_connect}) ->
+    NewState = {Hosts, CertFile, PongAnsBytes, Messages_per_connect},
     try
         Host = lists:nth((KeyGen() rem length(Hosts)) + 1, Hosts),
-        NewState = {Hosts, CertFile, PongAnsBytes, Messages_per_connect},
 
         case wss:connect(Host, 5555, [{certfile, CertFile}, {cacertfile, CertFile}, auto_handshake]) of
             {ok, Socket} ->
