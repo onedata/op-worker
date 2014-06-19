@@ -117,7 +117,7 @@ finish(_State, Ctx) ->
 %% set_value/2
 %% ====================================================================
 %% @doc n2o session_handler callback, called when data is stored in session
-%% memory, e. g. via wf:sesion or wf:user. Associates a Key, Value pair with the
+%% memory, e. g. via wf:session or wf:user. Associates a Key, Value pair with the
 %% session.
 %% @end
 -spec set_value(Key :: term(), Value :: term()) -> Result :: term().
@@ -133,7 +133,7 @@ set_value(Key, Value) ->
 %% get_value/2
 %% ====================================================================
 %% @doc n2o session_handler callback, called when data retrieved from session
-%% memory, e. g. via wf:sesion or wf:user. Returns a Value, associated
+%% memory, e. g. via wf:session or wf:user. Returns a Value, associated
 %% with given Key in session memory, or default.
 %% @end
 -spec get_value(Key :: term(), DefaultValue :: term()) -> Result :: term().
