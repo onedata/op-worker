@@ -99,7 +99,7 @@ open_helper(File, {error, _Error}, Retry) when Retry > 0 ->
 open_helper(_, _, _) ->
     {error, open_failed}.
 
-%% Maps ip address to node name
+%% Maps hostname to node name
 map_hostname("149.156.10.162") -> 'worker@veil-d01.grid.cyf-kr.edu.pl';
 map_hostname("149.156.10.163") -> 'worker@veil-d02.grid.cyf-kr.edu.pl';
 map_hostname("149.156.10.164") -> 'worker@veil-d03.grid.cyf-kr.edu.pl';
