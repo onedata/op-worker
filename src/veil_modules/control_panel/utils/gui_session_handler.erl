@@ -18,7 +18,7 @@
 %% n2o session_handler API
 -export([init/2, finish/2, get_value/2, set_value/2, clear/0]).
 %% Other functions
--export([create/0, get_session_logic_module/0]).
+-export([create/0, get_session_logic_module/0, get_cookie_ttl/0]).
 
 % Session cookie id
 -define(cookie_name, <<"session_id">>).
@@ -26,8 +26,6 @@
 -define(no_session_cookie, <<"no_session">>).
 % ETS name for cookies
 -define(ets_name, cookies).
-% 1 day TTL
--define(cookie_max_age, 86400).
 
 % Key for process dictionary, holding information if there is a valid session
 -define(session_valid, session_valid).
@@ -49,7 +47,7 @@ init(State, Ctx) ->
     {Path, _} = cowboy_req:path(Ctx#context.req),
 
     {Megaseconds, Seconds, _} = now(),
-    Till = Megaseconds * 1000000 + Seconds + ?cookie_max_age,
+    Till = Megaseconds * 1000000 + Seconds + get_cookie_ttl(),
 
     Module = get_session_logic_module(),
 
@@ -94,7 +92,7 @@ finish(_State, Ctx) ->
                      % Session is valid, set session_id cookie
                      Options = [
                          {path, <<"/">>},
-                         {max_age, ?cookie_max_age},
+                         {max_age, get_cookie_ttl()},
                          {secure, true},
                          {http_only, true}
                      ],
@@ -187,8 +185,25 @@ get_session_logic_module() ->
         {ok, Module} ->
             Module;
         _ ->
-            throw("No session logic module in env")
+            throw("No session logic module specified in env")
     end.
+
+
+%% get_cookie_ttl/0
+%% ====================================================================
+%% @doc Retrieves cookies' time to live from env.
+%% @end
+-spec get_cookie_ttl() -> integer() | no_return().
+%% ====================================================================
+get_cookie_ttl() ->
+    case application:get_env(veil_cluster_node, control_panel_sessions_cookie_ttl) of
+        {ok, Val} when is_integer(Val)->
+            Val;
+        _ ->
+            throw("No cookie TTL specified in env")
+    end.
+
+
 
 
 %% ====================================================================

@@ -142,4 +142,4 @@ clear_expired_sessions() ->
         fun({SessionID, _, _}) ->
             delete_session(SessionID)
         end, ExpiredSessions),
-    ok.
+    length(ExpiredSessions).

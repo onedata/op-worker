@@ -85,8 +85,9 @@ behaviour_info(_Other) ->
 
 %% clear_expired_sessions/0
 %% ====================================================================
-%% Function: clear_expired_sessions() -> ok.
+%% Function: clear_expired_sessions() -> integer().
 %% Desription: Deletes all sessions that have expired. Every session is saved
 %% with a ValidTill arg, that marks a point in time when it expires (in secs since epoch).
 %% The clearing should be performed based on this.
+%% Should return number of deleted session tokens.
 %% ====================================================================

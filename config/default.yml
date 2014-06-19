@@ -300,6 +300,15 @@ veil_cluster_node_env:
         "\'/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem\'"
       erlang_term: "'/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem'"
 
+  - parameter:
+      name: control_panel_sessions_clearing_period
+      description: Period between automatic deletion of expired session tokens, in seconds.
+      value: 10
+
+  - parameter:
+      name: control_panel_sessions_cookie_ttl
+      description: Cookies time to live - expiration date will be set this many seconds from time of creation.
+      value: 5 # 2592000 # 30 days in seconds
 
 
   # Files management
