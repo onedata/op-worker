@@ -61,7 +61,6 @@ cleanup() ->
 -spec save_session(SessionID :: binary(), Props :: [tuple()], ValidTill :: integer() | undefined) -> ok | no_return().
 %% ====================================================================
 save_session(SessionID, Props, TillArg) ->
-    ?dump({save_session, SessionID}),
     Till = case TillArg of
                undefined ->
                    case ets:lookup(?SESSION_ETS, SessionID) of
@@ -118,7 +117,6 @@ lookup_session(SessionID) ->
 -spec delete_session(SessionID :: binary()) -> ok.
 %% ====================================================================
 delete_session(SessionID) ->
-    ?dump({deleten, SessionID}),
     case SessionID of
         undefined ->
             ok;

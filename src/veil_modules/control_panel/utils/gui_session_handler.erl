@@ -15,8 +15,10 @@
 -include("veil_modules/control_panel/common.hrl").
 -include("logging.hrl").
 
-%% n2o session_handler API, with exception of create/0
--export([init/2, finish/2, get_value/2, set_value/2, create/0, clear/0]).
+%% n2o session_handler API
+-export([init/2, finish/2, get_value/2, set_value/2, clear/0]).
+%% Other functions
+-export([create/0, get_session_logic_module/0]).
 
 % Session cookie id
 -define(cookie_name, <<"session_id">>).
@@ -174,20 +176,6 @@ clear() ->
     ok.
 
 
-%% ====================================================================
-%% Internal functions
-%% ====================================================================
-
-%% random_id/0
-%% ====================================================================
-%% @doc Generates a random, 44 chars long, base64 encoded session id.
-%% @end
--spec random_id() -> binary().
-%% ====================================================================
-random_id() ->
-    base64:encode(<<(erlang:md5(term_to_binary(now())))/binary, (erlang:md5(term_to_binary(make_ref())))/binary>>).
-
-
 %% get_session_logic_module/0
 %% ====================================================================
 %% @doc Retrieves session_logic module from env.
@@ -201,3 +189,17 @@ get_session_logic_module() ->
         _ ->
             throw("No session logic module in env")
     end.
+
+
+%% ====================================================================
+%% Internal functions
+%% ====================================================================
+
+%% random_id/0
+%% ====================================================================
+%% @doc Generates a random, 44 chars long, base64 encoded session id.
+%% @end
+-spec random_id() -> binary().
+%% ====================================================================
+random_id() ->
+    base64:encode(<<(erlang:md5(term_to_binary(now())))/binary, (erlang:md5(term_to_binary(make_ref())))/binary>>).
