@@ -95,14 +95,14 @@ cowboy_file_stream_fun(FilePathOrUUID, Size) ->
 -spec content_disposition_attachment_headers(req(), string()) -> req().
 %% ====================================================================
 content_disposition_attachment_headers(Req, FileName) ->
-    [Mimetype] = mimetypes:path_to_mimes(FileName),
+    {Type, Subtype, _} = cow_mimetypes:all(gui_str:to_binary(FileName)),
+    Mimetype = <<Type/binary, "/", Subtype/binary>>,
     Headers = [
         {<<"content-type">>, Mimetype},
         {<<"content-disposition">>, <<"attachment;",
-        % Replace spaces with underscores
-        " filename=", (re:replace(FileName, " ", "_", [global, {return, binary}]))/binary,
-        % Offer safely-encoded UTF-8 filename for browsers supporting it
-        "; filename*=UTF-8''", (list_to_binary(http_uri:encode(FileName)))/binary>>
+        % Offer safely-encoded UTF-8 filename and filename*=UTF-8 for browsers supporting it
+        " filename=", (gui_str:url_encode(FileName))/binary,
+        "; filename*=UTF-8''", (gui_str:url_encode(FileName))/binary>>
         }
     ],
     lists:foldl(fun({Header, Value}, R) -> gui_utils:cowboy_ensure_header(Header, Value, R) end, Req, Headers).
@@ -128,9 +128,9 @@ handle_user_content_request(Req, Path) ->
             SessHandler = proplists:get_value(session, Context1#context.handlers),
             {ok, St, Context2} = SessHandler:init([], Context1),
             wf_context:context(Context2),
-            UserID = wf:session(user_doc),
-            true = (UserID /= undefined),
-            fslogic_context:set_user_dn(lists:nth(1, user_logic:get_dn_list(UserID))),
+            UserDoc = gui_ctx:get_user_record(),
+            true = (UserDoc /= undefined),
+            fslogic_context:set_user_dn(lists:nth(1, user_logic:get_dn_list(UserDoc))),
             {St, Context2, SessHandler}
         catch T1:M1 ->
             ?warning("Cannot establish session context for user content request - ~p:~p", [T1, M1]),
@@ -139,7 +139,7 @@ handle_user_content_request(Req, Path) ->
 
     case InitSession of
         error ->
-            {ok, _RedirectReq} = page_error:user_content_request_error(not_logged_in, Req);
+            {ok, _RedirectReq} = page_error:generate_redirect_request(Req, ?error_user_content_not_logged_in);
         {State, NewContext, SessionHandler} ->
             % Try to get file by given path
             FileInfo =
@@ -156,7 +156,7 @@ handle_user_content_request(Req, Path) ->
 
             case FileInfo of
                 error ->
-                    {ok, _RedirectReq} = page_error:user_content_request_error(file_not_found, Req);
+                    {ok, _RedirectReq} = page_error:generate_redirect_request(Req, ?error_user_content_file_not_found);
                 {Filepath, Size} ->
                     % Send the file
                     try
@@ -167,7 +167,7 @@ handle_user_content_request(Req, Path) ->
                         {ok, _NewReq} = send_file(Req2, Filepath, filename:basename(Filepath), Size)
                     catch Type:Message ->
                         ?error_stacktrace("Error while sending file ~p to user ~p - ~p:~p",
-                            [Filepath, user_logic:get_login(fslogic_context:get_user_dn()), Type, Message]),
+                            [Filepath, user_logic:get_login(gui_ctx:get_user_record()), Type, Message]),
                         {ok, _FinReq} = cowboy_req:reply(500, Req#http_req{connection = close})
                     end
             end
@@ -205,7 +205,7 @@ handle_shared_files_request(Req, ShareID) ->
     % Redirect to error page if the link was incorrect, or send the file
     case FileInfo of
         error ->
-            {ok, _RedirectReq} = page_error:shared_file_request_error(file_not_found, Req);
+            {ok, _RedirectReq} = page_error:generate_redirect_request(Req, ?error_shared_file_not_found);
         {FileID, FileName, Size} ->
             try
                 {ok, _NewReq} = send_file(Req, {uuid, FileID}, FileName, Size)

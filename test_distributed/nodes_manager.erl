@@ -280,8 +280,8 @@ start_deps() ->
 
   ssl:start(),
   application:start(ranch),
+  application:start(cowlib),
   application:start(cowboy),
-  application:start(mimetypes),
   application:start(ibrowse),
   application:start(rrderlang),
   application:load(?APP_Name).
@@ -298,9 +298,9 @@ stop_deps() ->
   application:stop(crypto),
   application:stop(public_key),
   application:stop(cowboy),
+  application:stop(cowlib),
   application:stop(lager),
   application:stop(sasl),
-  application:stop(mimetypes),
   application:stop(ibrowse),
   application:stop(rrderlang),
   application:unload(?APP_Name).
