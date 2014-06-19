@@ -37,7 +37,7 @@ run(_Action, KeyGen, _ValueGen, Hosts) ->
     ?DEBUG("limitlog: run func started for host ~p~n", [Host]),
     NewState = Hosts,
     Ans = try
-      case net_adm:ping(map_hostname(Host)) of
+      case net_adm:ping(Host) of
         pong -> {ok, NewState};
         pang -> {error, pang, NewState}
       end
@@ -46,9 +46,3 @@ run(_Action, KeyGen, _ValueGen, Hosts) ->
     end,
     ?DEBUG("limitlog: ping ans: ~p~n", [Ans]),
     Ans.
-
-%% Maps hostname to node name
-map_hostname("149.156.10.162") -> 'worker@veil-d01.grid.cyf-kr.edu.pl';
-map_hostname("149.156.10.163") -> 'worker@veil-d02.grid.cyf-kr.edu.pl';
-map_hostname("149.156.10.164") -> 'worker@veil-d03.grid.cyf-kr.edu.pl';
-map_hostname("149.156.10.165") -> 'worker@veil-d04.grid.cyf-kr.edu.pl'.
