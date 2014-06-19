@@ -36,8 +36,23 @@ behaviour_info(callbacks) ->
 behaviour_info(_Other) ->
     undefined.
 
+
 %% ====================================================================
 %% Callbacks descriptions
+%% ====================================================================
+
+%% init/0
+%% ====================================================================
+%% Function: init() -> ok.
+%% Desription: Initializes the session_logic module. Any setup such as ets creation
+%% should be performed in this function.
+%% ====================================================================
+
+
+%% cleanup/0
+%% ====================================================================
+%% Function: cleanup() -> ok.
+%% Desription: Performs any cleanup, such as deleting the previously created ets tables.
 %% ====================================================================
 
 
@@ -71,5 +86,7 @@ behaviour_info(_Other) ->
 %% clear_expired_sessions/0
 %% ====================================================================
 %% Function: clear_expired_sessions() -> ok.
-%% Desription: Deletes all sessions that have expired.
+%% Desription: Deletes all sessions that have expired. Every session is saved
+%% with a ValidTill arg, that marks a point in time when it expires (in secs since epoch).
+%% The clearing should be performed based on this.
 %% ====================================================================

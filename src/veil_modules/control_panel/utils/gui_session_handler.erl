@@ -44,6 +44,7 @@
 %% ====================================================================
 init(State, Ctx) ->
     {Cookie, _} = cowboy_req:cookie(?cookie_name, Ctx#context.req),
+    {Path, _} = cowboy_req:path(Ctx#context.req),
 
     {Megaseconds, Seconds, _} = now(),
     Till = Megaseconds * 1000000 + Seconds + ?cookie_max_age,
@@ -53,12 +54,19 @@ init(State, Ctx) ->
     SessionID = case Module:lookup_session(Cookie) of
                     undefined ->
                         put(?session_valid, false),
-                        % Creates a new session and allows storing data,
-                        % but if create/0 is not called in the scope of this request,
-                        % the session is discarded.
-                        NewSessionID = random_id(),
-                        Module:save_session(NewSessionID, [], Till),
-                        NewSessionID;
+                        case Path of
+                            <<"/ws/", _/binary>> ->
+                                % This is a websocket connection, and no valid session cookie
+                                % was sent; don't generate a new session
+                                ?no_session_cookie;
+                            _ ->
+                                % Creates a new session and allows storing data,
+                                % but if create/0 is not called in the scope of this request,
+                                % the session is discarded.
+                                NewSessionID = random_id(),
+                                Module:save_session(NewSessionID, [], Till),
+                                NewSessionID
+                        end;
                     Props ->
                         put(?session_valid, true),
                         % Refreshes the expiration time of current session

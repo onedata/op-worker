@@ -17,6 +17,7 @@
 -include("logging.hrl").
 
 %% session_logic_behaviour API
+-export([init/0, cleanup/0]).
 -export([save_session/3, lookup_session/1, delete_session/1, clear_expired_sessions/0]).
 
 % ETS name for cookies
@@ -25,6 +26,30 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
+
+%% init/0
+%% ====================================================================
+%% @doc Initializes the session_logic module. Any setup such as ets creation
+%% should be performed in this function.
+%% @end
+-spec init() -> ok.
+%% ====================================================================
+init() ->
+    % Ets table needed for session storing.
+    ets:new(?SESSION_ETS, [named_table, public, bag, {read_concurrency, true}]),
+    ok.
+
+
+%% cleanup/0
+%% ====================================================================
+%% @doc Performs any cleanup, such as deleting the previously created ets tables.
+%% @end
+-spec cleanup() -> ok.
+%% ====================================================================
+cleanup() ->
+    ets:delete(?SESSION_ETS),
+    ok.
+
 
 %% save_session/3
 %% ====================================================================
@@ -36,6 +61,7 @@
 -spec save_session(SessionID :: binary(), Props :: [tuple()], ValidTill :: integer() | undefined) -> ok | no_return().
 %% ====================================================================
 save_session(SessionID, Props, TillArg) ->
+    ?dump({save_session, SessionID}),
     Till = case TillArg of
                undefined ->
                    case ets:lookup(?SESSION_ETS, SessionID) of
@@ -92,6 +118,7 @@ lookup_session(SessionID) ->
 -spec delete_session(SessionID :: binary()) -> ok.
 %% ====================================================================
 delete_session(SessionID) ->
+    ?dump({deleten, SessionID}),
     case SessionID of
         undefined ->
             ok;
@@ -103,7 +130,9 @@ delete_session(SessionID) ->
 
 %% clear_expired_sessions/0
 %% ====================================================================
-%% @doc Deletes all sessions that have expired.
+%% @doc Deletes all sessions that have expired. Every session is saved
+%% with a ValidTill arg, that marks a point in time when it expires (in secs since epoch).
+%% The clearing should be performed based on this.
 %% @end
 -spec clear_expired_sessions() -> ok.
 %% ====================================================================

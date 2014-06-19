@@ -20,10 +20,16 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([init/1, handle/2, cleanup/0, gui_adjust_headers/1]).
+-export([init/1, handle/2, cleanup/0]).
 
 % Paths in gui static directory
 -define(static_paths, ["/css/", "/fonts/", "/images/", "/js/", "/n2o/"]).
+
+% Session logic module
+-define(session_logic_module, session_logic).
+
+% GUI routing module
+-define(gui_routing_module, gui_routes).
 
 % Cowboy listener reference
 -define(https_listener, https).
@@ -67,20 +73,8 @@ init(_Args) ->
         ]}
     ],
 
-    % Set envs needed by n2o
-    % Transition port - the same as gui port
-    ok = application:set_env(n2o, transition_port, GuiPort),
-    % Custom route handler
-    ok = application:set_env(n2o, route, gui_routes),
-    % Custom session handler
-    ok = application:set_env(n2o, session, gui_session_handler),
-
-    % Ets tables needed by n2o
-    ets:new(cookies, [named_table, public, bag, {read_concurrency, true}]),
-    ets:new(actions, [set, named_table, {keypos, 1}, public]),
-    ets:new(globals, [set, named_table, {keypos, 1}, public]),
-    ets:new(caching, [set, named_table, {keypos, 1}, public]),
-    ets:insert(globals, {onlineusers, 0}),
+    % Create ets tables and set envs needed by n2o
+    gui_utils:init_n2o_ets_and_envs(GuiPort, ?gui_routing_module, ?session_logic_module),
 
     % Start the listener for web gui and nagios handler
     {ok, _} = cowboy:start_https(?https_listener, GuiNbAcceptors,
@@ -96,7 +90,8 @@ init(_Args) ->
             {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
             {max_keepalive, MaxKeepAlive},
             {timeout, Timeout},
-            {onrequest, fun control_panel:gui_adjust_headers/1}
+            % On every request, add headers that improve security to the response
+            {onrequest, fun gui_utils:onrequest_adjust_headers/1}
         ]),
 
 
@@ -168,6 +163,7 @@ handle(_ProtocolVersion, get_version) ->
 handle(_ProtocolVersion, _Msg) ->
     ok.
 
+
 %% cleanup/0
 %% ====================================================================
 %% @doc {@link worker_plugin_behaviour} callback cleanup/0 <br />
@@ -178,25 +174,15 @@ handle(_ProtocolVersion, _Msg) ->
     Error :: timeout | term().
 %% ====================================================================
 cleanup() ->
-    cowboy:stop_listener(?https_listener),
-    cowboy:stop_listener(?rest_listener),
+    % Stop all listeners
     cowboy:stop_listener(?http_redirector_listener),
-    ets:delete(cookies),
-    ets:delete(actions),
-    ets:delete(globals),
-    ets:delete(caching),
+    cowboy:stop_listener(?rest_listener),
+    cowboy:stop_listener(?https_listener),
+
+    % Clean up after n2o.
+    gui_utils:cleanup_n2o(?session_logic_module),
+
     ok.
-
-
-%% gui_adjust_headers/1
-%% ====================================================================
-%% @doc Callback hook for cowboy to modify response headers for HTTPS GUI.
-%% @end
--spec gui_adjust_headers(Req :: req()) -> req().
-%% ====================================================================
-gui_adjust_headers(Req) ->
-    Req2 = cowboy_req:set_resp_header(<<"Strict-Transport-Security">>, <<"max-age=31536000; includeSubDomains">>, Req),
-    _Req3 = cowboy_req:set_resp_header(<<"X-Frame-Options">>, <<"SAMEORIGIN">>, Req2).
 
 
 %% ====================================================================
