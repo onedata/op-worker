@@ -123,17 +123,17 @@ setup_storages() ->
 
     case rpc:call(Worker, os, cmd, ["rm -rf /mnt/gluster/*"]) of
         "" -> ok;
-        Other -> throw(io_lib:fwrite("Can not remove files from storage: ~p", [Other]))
+        RmError -> throw(io_lib:fwrite("Can not remove files from storage: ~p", [RmError]))
     end,
 
     case rpc:call(Worker, fslogic_storage, insert_storage, ["ClusterProxy", [], [Groups]]) of
         {ok, _} -> ok;
-        Other -> throw(io_lib:fwrite("Can not insert storage: ~p", [Other]))
+        InsertError -> throw(io_lib:fwrite("Can not insert storage: ~p", [InsertError]))
     end,
 
     case rpc:call(Worker, user_logic, create_user, ["veilfstestuser", "Test Name", [], "test@test.com", [DN]]) of
         {ok, _} -> ok;
-        Other -> throw(io_lib:fwrite("Can not add test user: ~p", [Other]))
+        CreateError -> throw(io_lib:fwrite("Can not add test user: ~p", [CreateError]))
     end.
 
 
