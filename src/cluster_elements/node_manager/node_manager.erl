@@ -287,12 +287,18 @@ handle_cast({start_load_logging, Path}, State) ->
   StartTime = MegaSecs * 1000000 + Secs + MicroSecs / 1000000,
   case file:open(Path ++ "/load_log.csv", [write]) of
     {ok, Fd} ->
-      NodeStats = get_node_stats(0, default),
-      Header = string:join(["elapsed", "window" | lists:map(fun({Name, _}) ->
-        binary_to_list(Name) end, NodeStats)], ", ") ++ "\n",
-      io:fwrite(Fd, Header, []),
-      erlang:send_after(Interval * 1000, self(), {timer, {log_load, StartTime, StartTime}}),
-      {noreply, State#node_state{load_logging_fd = Fd}};
+      case get_node_stats(medium) of
+        {error, Reason} ->
+          ?error("Can not get node stats: ~p", [Reason]),
+          {noreply, State};
+        NodeStats ->
+          Header = string:join(["elapsed", "window" | lists:map(fun({Name, _}) ->
+            atom_to_list(Name)
+          end, NodeStats)], ", ") ++ "\n",
+          io:fwrite(Fd, Header, []),
+          erlang:send_after(Interval * 1000, self(), {timer, {log_load, StartTime, StartTime}}),
+          {noreply, State#node_state{load_logging_fd = Fd}}
+      end;
     _ -> {noreply, State}
   end;
 
@@ -534,9 +540,8 @@ log_load(Fd, StartTime, PrevTime, CurrTime) ->
   case Fd of
     undefined -> ok;
     _ ->
-      NodeStats = get_node_stats(short, default),
-      Values = [CurrTime - StartTime, CurrTime - PrevTime | lists:map(fun({_, Value}) ->
-        Value end, NodeStats)],
+      NodeStats = get_node_stats(medium),
+      Values = [CurrTime - StartTime, CurrTime - PrevTime | lists:map(fun({_, Value}) -> Value end, NodeStats)],
       Format = string:join(lists:duplicate(length(Values), "~.6f"), ", ") ++ "\n",
       io:fwrite(Fd, Format, Values),
       ok
@@ -586,7 +591,7 @@ create_node_stats_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkS
 %% @doc Get statistics about node load
 %% TimeWindow - time in seconds since now, that defines interval for which statistics will be fetched
 -spec get_node_stats(TimeWindow :: short | medium | long | integer()) -> Result when
-  Result :: [{Name :: atom(), Value :: float()}] | {error, term()}.
+  Result :: [{Name :: binary(), Value :: float()}] | {error, term()}.
 %% ====================================================================
 get_node_stats(TimeWindow) ->
   {ok, Interval} = case TimeWindow of
@@ -606,7 +611,7 @@ get_node_stats(TimeWindow) ->
 %% StartTime, EndTime - time in seconds since epoch (1970-01-01), that defines interval
 %% for which statistics will be fetched
 -spec get_node_stats(StartTime :: integer(), EndTime :: integer()) -> Result when
-  Result :: [{Name :: string(), Value :: float()}] | {error, term()}.
+  Result :: [{Name :: binary(), Value :: float()}] | {error, term()}.
 %% ====================================================================
 get_node_stats(StartTime, EndTime) ->
   {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
