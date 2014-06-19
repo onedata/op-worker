@@ -103,7 +103,7 @@ ping(Module, Socket, PongAnsBytes, MessagesPerConnect) ->
 %% multiple_ping/4
 %% ====================================================================
 %% @doc Same as ping/4, but ping module multiple times
--spec ping(Counter :: integer(), Socket :: port(), Msg :: binary(), PongAnsBytes :: binary()) -> Result when
+-spec multiple_ping(Counter :: integer(), Socket :: port(), Msg :: binary(), PongAnsBytes :: binary()) -> Result when
     Result :: ok | no_return().
 %% ====================================================================
 multiple_ping(0, _, _, _) ->
