@@ -293,7 +293,7 @@ handle_cast({start_load_logging, Path}, State) ->
           {noreply, State};
         NodeStats ->
           Header = string:join(["elapsed", "window" | lists:map(fun({Name, _}) ->
-            atom_to_list(Name)
+            Name
           end, NodeStats)], ", ") ++ "\n",
           io:fwrite(Fd, Header, []),
           erlang:send_after(Interval * 1000, self(), {timer, {log_load, StartTime, StartTime}}),
@@ -591,7 +591,7 @@ create_node_stats_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkS
 %% @doc Get statistics about node load
 %% TimeWindow - time in seconds since now, that defines interval for which statistics will be fetched
 -spec get_node_stats(TimeWindow :: short | medium | long | integer()) -> Result when
-  Result :: [{Name :: binary(), Value :: float()}] | {error, term()}.
+  Result :: [{Name :: string(), Value :: float()}] | {error, term()}.
 %% ====================================================================
 get_node_stats(TimeWindow) ->
   {ok, Interval} = case TimeWindow of
@@ -611,7 +611,7 @@ get_node_stats(TimeWindow) ->
 %% StartTime, EndTime - time in seconds since epoch (1970-01-01), that defines interval
 %% for which statistics will be fetched
 -spec get_node_stats(StartTime :: integer(), EndTime :: integer()) -> Result when
-  Result :: [{Name :: binary(), Value :: float()}] | {error, term()}.
+  Result :: [{Name :: string(), Value :: float()}] | {error, term()}.
 %% ====================================================================
 get_node_stats(StartTime, EndTime) ->
   {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
