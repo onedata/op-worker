@@ -19,7 +19,7 @@
 % Initialization of n2o settings and cleanup
 -export([init_n2o_ets_and_envs/3, cleanup_n2o/1]).
 
-% Convinience functions to manipulate response headers
+% Convenience functions to manipulate response headers
 -export([cowboy_ensure_header/3, onrequest_adjust_headers/1]).
 
 % Functions used to perform secure server-server http requests
