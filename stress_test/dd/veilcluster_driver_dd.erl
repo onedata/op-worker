@@ -115,33 +115,31 @@ run(Operation, _KeyGen, _ValueGen, State) ->
 setup_storages() ->
     ?INFO("Storage setup~n", []),
     CertFile = basho_bench_config:get(cert_file),
-    ?INFO("CertFile: ~p~n", [CertFile]),
     [Host | _] = basho_bench_config:get(cluster_hosts),
-    ?INFO("Host: ~p~n", [Host]),
     Groups = #fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = ["/mnt/gluster"]}},
     Worker = map_hostname(Host),
-    ?INFO("Worker: ~p~n", [Worker]),
     {ok, DN} = get_dn(CertFile),
-    ?INFO("DN: ~p~n", [DN]),
 
     %% Init net kernet in order to connect to cluster
-    Net = net_kernel:start([list_to_atom("tester@" ++ net_adm:localhost()), longnames]),
-    ?INFO("Net: ~p~n", [Net]),
-    Cookie = erlang:set_cookie(node(), veil_cluster_node),
-    ?INFO("Cookie: ~p~n", [Cookie]),
+    case net_kernel:start([list_to_atom("tester@" ++ net_adm:localhost()), longnames]) of
+        {ok, _} -> ok;
+        NetError -> throw(io_lib:fwrite("Can not start net_kernel: ~p", [NetError]))
+    end,
+
+    erlang:set_cookie(node(), veil_cluster_node),
 
     case rpc:call(Worker, os, cmd, ["rm -rf /mnt/gluster/*"]) of
-        "" -> ?INFO("RM OK~n", []);
+        "" -> ok;
         RmError -> throw(io_lib:fwrite("Can not remove files from storage: ~p", [RmError]))
     end,
 
     case rpc:call(Worker, fslogic_storage, insert_storage, ["ClusterProxy", [], [Groups]]) of
-        {ok, _} -> ?INFO("INSERT OK~n", []);
+        {ok, _} -> ok;
         InsertError -> throw(io_lib:fwrite("Can not insert storage: ~p", [InsertError]))
     end,
 
     case rpc:call(Worker, user_logic, create_user, ["veilfstestuser", "Test Name", [], "test@test.com", [DN]]) of
-        {ok, _} -> ?INFO("CREATE OK~n", []);
+        {ok, _} -> ok;
         CreateError -> throw(io_lib:fwrite("Can not add test user: ~p", [CreateError]))
     end.
 
