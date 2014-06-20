@@ -281,7 +281,7 @@ handle_cast({register_simple_cache, Cache, ReturnPid}, State) ->
   ReturnPid ! simple_cache_registered,
   {noreply, State#node_state{simple_caches = NewCaches}};
 
-handle_cast({start_load_logging, Path}, State) ->
+handle_cast({start_load_logging, Path}, #node_state{load_logging_fd = undefined} = State) ->
   ?info("Start load logging on node: ~p", [node()]),
   {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
   {MegaSecs, Secs, MicroSecs} = erlang:now(),
@@ -302,9 +302,12 @@ handle_cast({start_load_logging, Path}, State) ->
       end;
     _ -> {noreply, State}
   end;
+handle_cast({start_load_logging, _}, State) ->
+  ?warning("Load logging already started on node: ~p", [node()]),
+  {noreply, State};
 
 handle_cast({log_load, _, _}, #node_state{load_logging_fd = undefined} = State) ->
-  ?error("Can not log load: file descriptor is undefined."),
+  ?warning("Can not log load: file descriptor is undefined."),
   {noreply, State};
 handle_cast({log_load, StartTime, PrevTime}, #node_state{load_logging_fd = Fd} = State) ->
   {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
@@ -314,12 +317,12 @@ handle_cast({log_load, StartTime, PrevTime}, #node_state{load_logging_fd = Fd} =
   erlang:send_after(Interval * 1000, self(), {timer, {log_load, StartTime, CurrTime}}),
   {noreply, State};
 
-handle_cast(stop_load_logging, State) ->
+handle_cast(stop_load_logging, #node_state{load_logging_fd = undefined} = State) ->
+  ?warning("Load logging already stopped on node: ~p", [node()]),
+  {noreply, State};
+handle_cast(stop_load_logging, #node_state{load_logging_fd = Fd} = State) ->
   ?info("Stop load logging on node: ~p", [node()]),
-  case State#node_state.load_logging_fd of
-    undefined -> ok;
-    Fd -> file:close(Fd)
-  end,
+  file:close(Fd),
   {noreply, State#node_state{load_logging_fd = undefined}};
 
 handle_cast({notify_lfm, EventType, Enabled}, State) ->
