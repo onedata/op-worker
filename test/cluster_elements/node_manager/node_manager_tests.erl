@@ -210,6 +210,25 @@ get_memory_stats_test() ->
   ?assertEqual(ok, meck:unload(file)),
   ?assertEqual(ExpectedMemoryStats, ActualMemoryStats).
 
+is_valid_name_test() ->
+  ?assert(node_manager:is_valid_name("azAZ09_", 12)),
+  ?assertNot(node_manager:is_valid_name("azAZ09_", 13)),
+  ?assertNot(node_manager:is_valid_name("", 20)),
+  ?assertNot(node_manager:is_valid_name("", 10)),
+  ?assertNot(node_manager:is_valid_name("az.AZ", 1)).
+
+is_valid_character_test() ->
+  ?assert(node_manager:is_valid_character($a)),
+  ?assert(node_manager:is_valid_character($z)),
+  ?assert(node_manager:is_valid_character($A)),
+  ?assert(node_manager:is_valid_character($Z)),
+  ?assert(node_manager:is_valid_character($0)),
+  ?assert(node_manager:is_valid_character($9)),
+  ?assert(node_manager:is_valid_character($_)),
+  ?assertNot(node_manager:is_valid_character($.)),
+  ?assertNot(node_manager:is_valid_character($/)).
+
+
 %% ====================================================================
 %% Helper functions
 %% ====================================================================

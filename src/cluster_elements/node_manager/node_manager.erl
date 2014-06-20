@@ -40,7 +40,8 @@
 %% jako stan (jak teraz) czy jako ets i ewentualnie przejść na ets
 -ifdef(TEST).
 -export([get_callback/2, addCallback/3, delete_callback/3]).
--export([calculate_network_stats/3, get_interface_stats/2, get_cpu_stats/1, calculate_ports_transfer/4, get_memory_stats/0]).
+-export([calculate_network_stats/3, get_interface_stats/2, get_cpu_stats/1, calculate_ports_transfer/4,
+  get_memory_stats/0, is_valid_name/1, is_valid_name/2, is_valid_character/1]).
 -endif.
 
 %% ====================================================================
@@ -691,6 +692,9 @@ get_network_stats(NetworkStats) ->
   Dir = "/sys/class/net/",
   case file:list_dir(Dir) of
     {ok, Interfaces} ->
+      ValidInterfaces = lists:filter(fun(Interface) ->
+        is_valid_name(Interface, 11)
+      end, Interfaces),
       CurrentNetworkStats = lists:foldl(
         fun(Interface, Stats) -> [
           {<<"net_rx_b_", (list_to_binary(Interface))/binary>>, get_interface_stats(Interface, "rx_bytes")},
@@ -698,7 +702,7 @@ get_network_stats(NetworkStats) ->
           {<<"net_rx_pps_", (list_to_binary(Interface))/binary>>, get_interface_stats(Interface, "rx_packets") / Period},
           {<<"net_tx_pps_", (list_to_binary(Interface))/binary>>, get_interface_stats(Interface, "tx_packets") / Period} |
           Stats
-        ] end, [], Interfaces),
+        ] end, [], ValidInterfaces),
       gen_server:cast(?Node_Manager_Name, {update_network_stats, CurrentNetworkStats}),
       calculate_network_stats(CurrentNetworkStats, NetworkStats, []);
     _ -> []
@@ -767,10 +771,16 @@ read_cpu_stats(Fd, Stats) ->
                "" -> <<"cpu">>;
                _ -> <<"core", (list_to_binary(ID))/binary>>
              end,
-      [User, Nice, System | Rest] = lists:map(fun(Value) -> list_to_integer(Value) end, Values),
-      WorkJiffies = User + Nice + System,
-      TotalJiffies = WorkJiffies + lists:foldl(fun(Value, Sum) -> Value + Sum end, 0, Rest),
-      read_cpu_stats(Fd, [{Name, WorkJiffies, TotalJiffies} | Stats]);
+      case is_valid_name(Name, 0) of
+        true ->
+          [User, Nice, System | Rest] = lists:map(fun(Value) -> list_to_integer(Value) end, Values),
+          WorkJiffies = User + Nice + System,
+          TotalJiffies = WorkJiffies + lists:foldl(fun(Value, Sum) -> Value + Sum end, 0, Rest),
+          read_cpu_stats(Fd, [{Name, WorkJiffies, TotalJiffies} | Stats]);
+        _ -> read_cpu_stats(Fd, Stats)
+      end;
+    {ok, _} ->
+      read_cpu_stats(Fd, Stats);
     _ ->
       file:close(Fd),
       Stats
@@ -850,6 +860,56 @@ read_memory_stats(Fd, MemFree, MemTotal, Counter) ->
     {error, _} -> [];
     _ -> read_memory_stats(Fd, MemFree, MemTotal, Counter)
   end.
+
+%% is_valid_name/2
+%% ====================================================================
+%% @doc Checks whether string contains only following characters a-zA-Z0-9_
+%% and with some prefix is not longer than 19 characters. This is a requirement
+%% for a valid column name in Round Robin Database.
+-spec is_valid_name(Name :: string() | binary(), PrefixLength :: integer()) -> Result when
+  Result :: true | false.
+%% ====================================================================
+is_valid_name(Name, PrefixLength) when is_list(Name) ->
+  case length(Name) =< 19 - PrefixLength of
+    true -> is_valid_name(Name);
+    _ -> false
+  end;
+is_valid_name(Name, PrefixLength) when is_binary(Name) ->
+  is_valid_name(binary_to_list(Name), PrefixLength);
+is_valid_name(_, _) ->
+  false.
+
+%% is_valid_name/1
+%% ====================================================================
+%% @doc Checks whether string contains only following characters a-zA-Z0-9_
+-spec is_valid_name(Name :: string() | binary()) -> Result when
+  Result :: true | false.
+%% ====================================================================
+is_valid_name([]) ->
+  false;
+is_valid_name([Character]) ->
+  is_valid_character(Character);
+is_valid_name([Character | Characters]) ->
+  case is_valid_character(Character) of
+    true -> is_valid_name(Characters);
+    _ -> false
+  end;
+is_valid_name(Name) when is_binary(Name) ->
+  is_valid_name(binary_to_list(Name));
+is_valid_name(_) ->
+  false.
+
+%% is_valid_character/1
+%% ====================================================================
+%% @doc Checks whether character belongs to a-zA-Z0-9_ range
+-spec is_valid_character(Character :: char()) -> Result when
+  Result :: true | false.
+%% ====================================================================
+is_valid_character($_) -> true;
+is_valid_character(Character) when Character >= $0 andalso Character =< $9 -> true;
+is_valid_character(Character) when Character >= $A andalso Character =< $Z -> true;
+is_valid_character(Character) when Character >= $a andalso Character =< $z -> true;
+is_valid_character(_) -> false.
 
 %% get_callback/2
 %% ====================================================================
