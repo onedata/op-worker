@@ -32,7 +32,11 @@ new(Id) ->
 
         H1 = os:cmd("hostname -f"),
         H2 = string:substr(H1, 1, length(H1) - 1),
-        {ok, _} = net_kernel:start([list_to_atom("tester@" ++ H2), longnames]),
+        case net_kernel:start([list_to_atom("tester@" ++ H2), longnames]) of
+            {ok, _} -> ok;
+            {error, {already_started, _}} -> ok;
+            Other -> throw(Other)
+        end,
         true = erlang:set_cookie(node(), veil_cluster_node),
 
         ?INFO("Worker with id: ~p initialized successfully with arguments: ~p", [Id, Hosts]),
