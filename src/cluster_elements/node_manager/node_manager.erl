@@ -281,42 +281,48 @@ handle_cast({register_simple_cache, Cache, ReturnPid}, State) ->
   ReturnPid ! simple_cache_registered,
   {noreply, State#node_state{simple_caches = NewCaches}};
 
-handle_cast({start_load_logging, Path}, State) ->
+handle_cast({start_load_logging, Path}, #node_state{load_logging_fd = undefined} = State) ->
   ?info("Start load logging on node: ~p", [node()]),
   {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
   {MegaSecs, Secs, MicroSecs} = erlang:now(),
   StartTime = MegaSecs * 1000000 + Secs + MicroSecs / 1000000,
-  case file:open(Path ++ "/load_log.csv", [write]) of
+  case file:open(Path, [write]) of
     {ok, Fd} ->
       case get_node_stats(medium) of
-        {error, Reason} ->
-          ?error("Can not get node stats: ~p", [Reason]),
-          {noreply, State};
-        NodeStats ->
+        NodeStats when is_list(NodeStats) ->
           Header = string:join(["elapsed", "window" | lists:map(fun({Name, _}) ->
             Name
           end, NodeStats)], ", ") ++ "\n",
           io:fwrite(Fd, Header, []),
           erlang:send_after(Interval * 1000, self(), {timer, {log_load, StartTime, StartTime}}),
-          {noreply, State#node_state{load_logging_fd = Fd}}
+          {noreply, State#node_state{load_logging_fd = Fd}};
+        Other ->
+          ?error("Can not get node stats: ~p", [Other]),
+          {noreply, State}
       end;
     _ -> {noreply, State}
   end;
+handle_cast({start_load_logging, _}, State) ->
+  ?warning("Load logging already started on node: ~p", [node()]),
+  {noreply, State};
 
-handle_cast({log_load, StartTime, PrevTime}, State) ->
+handle_cast({log_load, _, _}, #node_state{load_logging_fd = undefined} = State) ->
+  ?warning("Can not log load: file descriptor is undefined."),
+  {noreply, State};
+handle_cast({log_load, StartTime, PrevTime}, #node_state{load_logging_fd = Fd} = State) ->
   {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
   {MegaSecs, Secs, MicroSecs} = erlang:now(),
   CurrTime = MegaSecs * 1000000 + Secs + MicroSecs / 1000000,
-  spawn(fun() -> log_load(State#node_state.load_logging_fd, StartTime, PrevTime, CurrTime) end),
+  spawn(fun() -> log_load(Fd, StartTime, PrevTime, CurrTime) end),
   erlang:send_after(Interval * 1000, self(), {timer, {log_load, StartTime, CurrTime}}),
   {noreply, State};
 
-handle_cast(stop_load_logging, State) ->
+handle_cast(stop_load_logging, #node_state{load_logging_fd = undefined} = State) ->
+  ?warning("Load logging already stopped on node: ~p", [node()]),
+  {noreply, State};
+handle_cast(stop_load_logging, #node_state{load_logging_fd = Fd} = State) ->
   ?info("Stop load logging on node: ~p", [node()]),
-  case State#node_state.load_logging_fd of
-    undefined -> ok;
-    Fd -> file:close(Fd)
-  end,
+  file:close(Fd),
   {noreply, State#node_state{load_logging_fd = undefined}};
 
 handle_cast({notify_lfm, EventType, Enabled}, State) ->
@@ -538,14 +544,14 @@ check_vsn([{Application, _Description, Vsn} | Apps]) ->
   Result :: ok.
 %% ====================================================================
 log_load(Fd, StartTime, PrevTime, CurrTime) ->
-  case Fd of
-    undefined -> ok;
-    _ ->
-      NodeStats = get_node_stats(medium),
+  case get_node_stats(medium) of
+    NodeStats when is_list(NodeStats) ->
       Values = [CurrTime - StartTime, CurrTime - PrevTime | lists:map(fun({_, Value}) -> Value end, NodeStats)],
       Format = string:join(lists:duplicate(length(Values), "~.6f"), ", ") ++ "\n",
       io:fwrite(Fd, Format, Values),
-      ok
+      ok;
+    Other ->
+      ?error("Can not get node stats: ~p", [Other])
   end.
 
 %% create_node_stats_rrd/1
