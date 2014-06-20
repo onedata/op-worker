@@ -32,7 +32,7 @@
 -spec map(record(), [atom()]) -> [tuple()].
 %% ====================================================================
 map(RecordToMap, Fields) ->
-    Y = [try N = lists:nth(1, B), if is_number(N) -> wf:to_binary(B); true -> B end catch _:_ -> B end
+    Y = [try N = lists:nth(1, B), if is_number(N) -> gui_str:to_binary(B); true -> B end catch _:_ -> B end
         || B <- tl(tuple_to_list(RecordToMap))],
     lists:zip(Fields, Y).
 
@@ -53,11 +53,11 @@ unmap([], RecordTuple, _) ->
     RecordTuple;
 
 unmap([{KeyBin, Val} | Proplist], RecordTuple, Fields) ->
-    Key = wf:to_atom(KeyBin),
+    Key = binary_to_atom(KeyBin, latin1),
     Value = case Val of
                 I when is_integer(I) -> Val;
                 A when is_atom(A) -> Val;
-                _ -> gui_utils:to_list(Val)
+                _ -> gui_str:to_list(Val)
             end,
     Index = string:str(Fields, [Key]) + 1,
     true = (Index > 1),

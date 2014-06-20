@@ -22,51 +22,75 @@ title() -> <<"Error">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
+    {Reason, Description} = get_reason_and_description(),
     #panel{style = <<"position: relative;">>, body = [
         #panel{class = <<"alert alert-danger login-page">>, body = [
             #h3{body = <<"Error">>},
-            #p{class = <<"login-info">>, style = <<"font-weight: bold;">>, body = wf:q(<<"reason">>)},
-            #p{class = <<"login-info">>, body = wf:q(<<"details">>)},
+            #p{class = <<"login-info">>, style = <<"font-weight: bold;">>, body = Reason},
+            #p{class = <<"login-info">>, body = Description},
             #button{postback = to_login, class = <<"btn btn-warning btn-block">>, body = <<"Login page">>}
         ]}
-    ] ++ gui_utils:logotype_footer(120)}.
+    ] ++ vcn_gui_utils:logotype_footer(120)}.
 
 event(init) -> ok;
-event(to_login) -> gui_utils:redirect_to_login(false).
+event(to_login) -> gui_jq:redirect_to_login(false).
 
 
-% This function causes a HTTP rediurect to error page, which displays an error message.
-
-redirect_with_error(Reason, Details) ->
-    wf:redirect(wf:to_binary(wf:f("/error?reason=~s&details=~s",
-        [wf:url_encode(Reason), wf:url_encode(Details)]))).
+% This function causes a HTTP redirect to error page, which displays an error message.
+redirect_with_error(ErrorID) ->
+    gui_jq:redirect(<<"/error?id=", (gui_str:to_binary(ErrorID))/binary>>).
 
 
-% These functions allow easy edition of error messages. They are called from n2o handlers
-% to obtain redirect url with proper args enclosed in cowboy request.
-% wf_core:run is called so proper page can be displayed by n2o engine.
-generate_redirect_request(Req, Reason, Details) ->
-    Qs = list_to_binary(wf:f("reason=~s&details=~s",
-        [wf:url_encode(Reason), wf:url_encode(Details)])),
-    {ok, NewReq} = wf_core:run(cowboy_req:set([{path, <<"/error">>}, {qs, Qs}], Req)),
+% This functions is intended to be called from n2o handlers
+% to make n2o render error page instead of requested page.
+% wf_core:run is called so the rror page is displayed by n2o engine.
+generate_redirect_request(Req, ErrorID) ->
+    {ok, NewReq} = wf_core:run(cowboy_req:set([{path, <<"/error">>}, {qs, <<"id=", (gui_str:to_binary(ErrorID))/binary>>}], Req)),
     {ok, NewReq}.
 
 
-user_content_request_error(Message, Req) ->
-    {Reason, Details} = case Message of
-                            not_logged_in -> {"No active session", "You need to log in to download your files."};
-                            file_not_found -> {"Invalid URL", "This URL doesn't point to any file. "};
-                            sending_failed -> {"Internal server error", "Failed during serving the file. " ++
-                                "Please try again or contact the site administrator if the problem persists."}
-                        end,
-    generate_redirect_request(Req, Reason, Details).
+get_reason_and_description() ->
+    IDBinary = gui_str:to_binary(gui_ctx:url_param(<<"id">>)),
+    id_to_reason_and_message(binary_to_atom(IDBinary, latin1)).
 
 
-shared_file_request_error(Message, Req) ->
-    {Reason, Details} = case Message of
-                            file_not_found -> {"Invalid link", "This link doesn't point to any shared file. " ++
-                                "This is because the file is no longer shared or the share has never existed."};
-                            sending_failed -> {"Internal server error", "Failed during serving the file. " ++
-                                "Please try again or contact the site administrator if the problem persists."}
-                        end,
-    generate_redirect_request(Req, Reason, Details).
+id_to_reason_and_message(?error_user_content_not_logged_in) ->
+    {<<"No active session">>, <<"You need to log in to download your files.">>};
+
+id_to_reason_and_message(?error_user_content_file_not_found) ->
+    {<<"Invalid URL">>, <<"This URL doesn't point to any file.">>};
+
+id_to_reason_and_message(?error_shared_file_not_found) ->
+    {<<"Invalid link">>,
+        <<"Invalid link", "This link doesn't point to any shared file. This is because the file is no longer shared or the share has never existed.">>};
+
+
+id_to_reason_and_message(?error_internal_server_error) ->
+    {<<"Internal server error">>,
+        <<"Server encountered an unexpected error. Please contact the site administrator if the problem persists.">>};
+
+id_to_reason_and_message(?error_openid_invalid_request) ->
+    {<<"Invalid request">>,
+        <<"Error occured while processing this authentication request.">>};
+
+id_to_reason_and_message(?error_openid_auth_invalid) ->
+    {<<"Invalid request">>,
+        <<"OpenID Provider denied the authenticity of this login request.">>};
+
+id_to_reason_and_message(?error_openid_no_connection) ->
+    {<<"Connection problem">>,
+        <<"Unable to reach OpenID Provider.">>};
+
+id_to_reason_and_message(?error_openid_login_error) ->
+    {<<"Login error">>,
+        <<"Could not process OpenID response. Please contact the site administrator if the problem persists.">>};
+
+id_to_reason_and_message(?error_login_dir_creation_error) ->
+    {<<"User creation error">>,
+        <<"Server could not create user directories. Please contact the site administrator if the problem persists.">>};
+
+id_to_reason_and_message(?error_login_dir_chown_error) -> {<<"User creation error">>,
+    <<"Server could not change owner of user directories. Please contact the site administrator if the problem persists.">>};
+
+id_to_reason_and_message(_) ->
+    {<<"Unknown">>, <<"No description">>}.

@@ -22,10 +22,10 @@ title() -> <<"Login page">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    case gui_utils:user_logged_in() of
-        true -> wf:redirect(<<"/">>);
+    case gui_ctx:user_logged_in() of
+        true -> gui_jq:redirect(<<"/">>);
         false ->
-            ErrorPanelStyle = case wf:q(<<"x">>) of
+            ErrorPanelStyle = case gui_ctx:url_param(<<"x">>) of
                                   undefined -> <<"display: none;">>;
                                   _ -> <<"">>
                               end,
@@ -38,7 +38,7 @@ body() ->
                     "You need to have an account and possibly VeilFS service enabled.">>},
                     #button{postback = login, class = <<"btn btn-primary btn-block">>, body = <<"Log in via PL-Grid OpenID">>}
                 ]}
-            ] ++ gui_utils:logotype_footer(120)}
+            ] ++ vcn_gui_utils:logotype_footer(120)}
     end.
 
 
@@ -46,23 +46,23 @@ event(init) -> ok;
 % Login event handling
 event(login) ->
     % Collect redirect param if present
-    RedirectParam = case wf:q(<<"x">>) of
+    RedirectParam = case gui_ctx:url_param(<<"x">>) of
                         undefined -> <<"">>;
                         Val -> <<"?x=", Val/binary>>
                     end,
     % Resolve hostname, which was requested by a client
-    Hostname = gui_utils:get_requested_hostname(),
+    Hostname = gui_ctx:get_requested_hostname(),
     case Hostname of
         undefined ->
-            gui_utils:update("error_message", <<"Cannot establish requested hostname. Please contact the site administrator.">>),
-            wf:wire(#jquery{target = "error_message", method = ["fadeIn"], args = [300]});
+            gui_jq:update(<<"error_message">>, <<"Cannot establish requested hostname. Please contact the site administrator.">>),
+            gui_jq:fade_in(<<"error_message">>, 300);
         Host ->
             % Get redirect URL and redirect to OpenID login
             case openid_utils:get_login_url(Host, RedirectParam) of
                 {error, _} ->
-                    gui_utils:update("error_message", <<"Unable to reach OpenID Provider. Please try again later.">>),
-                    wf:wire(#jquery{target = "error_message", method = ["fadeIn"], args = [300]});
+                    gui_jq:update(<<"error_message">>, <<"Unable to reach OpenID Provider. Please try again later.">>),
+                    gui_jq:fade_in(<<"error_message">>, 300);
                 URL ->
-                    wf:redirect(URL)
+                    gui_jq:redirect(URL)
             end
     end.

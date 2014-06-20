@@ -66,10 +66,7 @@ else
 fi
 erl -make
 
-IFCONFIG_LINE=`ifconfig | grep "inet addr:.*Bcast:"`
-COLON_INDEX=`awk -v a="$IFCONFIG_LINE" -v b=":" 'BEGIN{print index(a, b)}'`
-BCAST_INDEX=`awk -v a="$IFCONFIG_LINE" -v b="Bcast" 'BEGIN{print index(a, b)}'`
-COOKIE=${IFCONFIG_LINE:COLON_INDEX:((BCAST_INDEX - COLON_INDEX - 3))}
+COOKIE=`hostname -f`
 
 for TEST in $TESTS
 do

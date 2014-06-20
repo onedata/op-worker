@@ -230,7 +230,7 @@ close_fuse_session(FuseId) ->
 %% ====================================================================
 %% @doc Lists fuse_session records using given select condition.
 %%      Current implementeation supports fallowing selects:
-%%          {by_valid_to, Time} - select all records whose 'valid_to' field is <= Time
+%%          {by_valid_to, Time} - select all records whose 'valid_to' field is less or equal Time
 %% Should not be used directly, use {@link dao_worker:handle/2} instead.
 %% @end
 -spec list_fuse_sessions({by_valid_to, Time :: non_neg_integer()}) ->
