@@ -20,7 +20,7 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([init/1, handle/2, cleanup/0]).
+-export([init/1, handle/2, cleanup/0, gui_adjust_headers/1]).
 
 % Paths in gui static directory
 -define(static_paths, ["/css/", "/fonts/", "/images/", "/js/", "/n2o/"]).
@@ -74,11 +74,11 @@ init(_Args) ->
     ok = application:set_env(n2o, route, gui_routes),
 
     % Ets tables needed by n2o
-    ets:new(cookies,[set,named_table,{keypos,1},public]),
-    ets:new(actions,[set,named_table,{keypos,1},public]),
-    ets:new(globals,[set,named_table,{keypos,1},public]),
-    ets:new(caching,[set,named_table,{keypos,1},public]),
-    ets:insert(globals,{onlineusers,0}),
+    ets:new(cookies, [set, named_table, {keypos, 1}, public]),
+    ets:new(actions, [set, named_table, {keypos, 1}, public]),
+    ets:new(globals, [set, named_table, {keypos, 1}, public]),
+    ets:new(caching, [set, named_table, {keypos, 1}, public]),
+    ets:insert(globals, {onlineusers, 0}),
 
     % Start the listener for web gui and nagios handler
     {ok, _} = cowboy:start_https(?https_listener, GuiNbAcceptors,
@@ -93,7 +93,8 @@ init(_Args) ->
         [
             {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
             {max_keepalive, MaxKeepAlive},
-            {timeout, Timeout}
+            {timeout, Timeout},
+            {onrequest, fun control_panel:gui_adjust_headers/1}
         ]),
 
 
@@ -185,15 +186,23 @@ cleanup() ->
     ok.
 
 
+%% gui_adjust_headers/1
+%% ====================================================================
+%% @doc Callback hook for cowboy to modify response headers for HTTPS GUI.
+%% @end
+-spec gui_adjust_headers(Req :: req()) -> req().
+%% ====================================================================
+gui_adjust_headers(Req) ->
+    Req2 = cowboy_req:set_resp_header(<<"Strict-Transport-Security">>, <<"max-age=31536000; includeSubDomains">>, Req),
+    _Req3 = cowboy_req:set_resp_header(<<"X-Frame-Options">>, <<"SAMEORIGIN">>, Req2).
+
+
 %% ====================================================================
 %% Auxiliary functions
 %% ====================================================================
+
 %% Generates static file routing for cowboy.
 static_dispatches(DocRoot, StaticPaths) ->
     _StaticDispatches = lists:map(fun(Dir) ->
-        Opts = [
-            {mimetypes, {fun mimetypes:path_to_mimes/2, default}},
-            {directory, DocRoot ++ Dir}
-        ],
-        {Dir ++ "[...]", cowboy_static, Opts}
+        {Dir ++ "[...]", cowboy_static, {dir, DocRoot ++ Dir}}
     end, StaticPaths).

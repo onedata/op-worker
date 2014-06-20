@@ -70,11 +70,11 @@ get_login_url(HostName, RedirectParams) ->
 prepare_validation_parameters() ->
     try
         % Make sure received endpoint is really the PLGrid endpoint
-        EndpointURL = wf:q(<<?openid_op_endpoint_key>>),
+        EndpointURL = gui_ctx:url_param(<<?openid_op_endpoint_key>>),
         true = (discover_op_endpoint(?xrds_url) =:= EndpointURL),
 
         % 'openid.signed' contains parameters that must be contained in validation request
-        SignedArgsNoPrefix = binary:split(wf:q(<<?openid_signed_key>>), <<",">>, [global]),
+        SignedArgsNoPrefix = binary:split(gui_ctx:url_param(<<?openid_signed_key>>), <<",">>, [global]),
         % Add 'openid.' prefix to all parameters
         % And add 'openid.sig' and 'openid.signed' params which are required for validation
         SignedArgs = lists:map(
@@ -85,16 +85,16 @@ prepare_validation_parameters() ->
         % Create a POST request body
         RequestParameters = lists:foldl(
             fun(Key, Acc) ->
-                Value = case wf:q(Key) of
-                            undefined -> throw("Value for " ++ gui_utils:to_list(Key) ++ " not found");
+                Value = case gui_ctx:url_param(Key) of
+                            undefined -> throw("Value for " ++ gui_str:to_list(Key) ++ " not found");
                             Val -> Val
                         end,
                 % Safely URL-decode params
-                Param = gui_utils:to_binary(wf:url_encode(gui_utils:to_list(Value))),
+                Param = gui_str:to_binary(gui_str:url_encode(gui_str:to_list(Value))),
                 <<Acc/binary, "&", Key/binary, "=", Param/binary>>
             end, <<"">>, SignedArgs),
         ValidationRequestBody = <<?openid_check_authentication_mode, RequestParameters/binary>>,
-        {gui_utils:to_list(EndpointURL), gui_utils:to_list(ValidationRequestBody)}
+        {gui_str:to_list(EndpointURL), gui_str:to_list(ValidationRequestBody)}
 
     catch Type:Message ->
         ?error_stacktrace("Failed to process login validation request - ~p: ~p", [Type, Message]),
@@ -121,7 +121,7 @@ validate_openid_login({EndpointURL, ValidationRequestBody}) ->
         case Response of
             <<?valid_auth_info>> -> ok;
             _ ->
-                ?alert("Security breach attempt spotted. Invalid redirect URL contained:~n~p", [gui_utils:get_request_params()]),
+                ?alert("Security breach attempt spotted. Invalid redirect URL contained:~n~p", [gui_ctx:get_request_params()]),
                 {error, auth_invalid}
         end
 
@@ -146,7 +146,7 @@ validate_openid_login({EndpointURL, ValidationRequestBody}) ->
 retrieve_user_info() ->
     try
         % Check which params were signed by PLGrid
-        SignedParamsNoPrefix = binary:split(wf:q(<<?openid_signed_key>>), <<",">>, [global]),
+        SignedParamsNoPrefix = binary:split(gui_ctx:url_param(<<?openid_signed_key>>), <<",">>, [global]),
         % Add 'openid.' prefix to all parameters
         % And add 'openid.sig' and 'openid.signed' params which are required for validation
         SignedParams = lists:map(
@@ -179,7 +179,7 @@ retrieve_user_info() ->
         ]}
     catch Type:Message ->
         ?error_stacktrace("Failed to retrieve user info - ~p: ~p~nOpenID redirect args were:~n~p",
-            [Type, Message, gui_utils:get_request_params()]),
+            [Type, Message, gui_ctx:get_request_params()]),
         {error, invalid_request}
     end.
 
@@ -197,7 +197,7 @@ retrieve_user_info() ->
 %% ====================================================================
 get_signed_param(ParamName, SignedParams) ->
     case lists:member(ParamName, SignedParams) of
-        true -> gui_utils:to_list(wf:q(ParamName));
+        true -> gui_str:to_list(gui_ctx:url_param(ParamName));
         false -> []
     end.
 
