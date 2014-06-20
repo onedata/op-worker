@@ -221,71 +221,77 @@ cache_guard() ->
 -spec init_storage() -> ok | {error, Error :: term()}.
 %% ====================================================================
 init_storage() ->
-	try
-		%get storage config file path
-		GetEnvResult = application:get_env(veil_cluster_node,storage_config_path),
-		case GetEnvResult of
-			{ok,_} -> ok;
-			undefined ->
-				lager:error("Could not get 'storage_config_path' environment variable"),
-				throw(get_env_error)
-		end,
-		{ok,StorageFilePath} = GetEnvResult,
+    try
+        %get storage config file path
+        GetEnvResult = application:get_env(veil_cluster_node, storage_config_path),
+        case GetEnvResult of
+            {ok, _} -> ok;
+            undefined ->
+                lager:error("Could not get 'storage_config_path' environment variable"),
+                throw(get_env_error)
+        end,
+        {ok, StorageFilePath} = GetEnvResult,
 
-		%get storage list from db
-		{Status1,ListStorageValue} = dao_lib:apply(dao_vfs, list_storage, [],1),
-		case Status1 of
-			ok -> ok;
-			error ->
-				lager:error("Could not list existing storages"),
-				throw(ListStorageValue)
-		end,
-		ActualDbStorages = [X#veil_document.record || X <- ListStorageValue],
+        %get storage list from db
+        {Status1, ListStorageValue} = dao_lib:apply(dao_vfs, list_storage, [], 1),
+        case Status1 of
+            ok -> ok;
+            error ->
+                lager:error("Could not list existing storages"),
+                throw(ListStorageValue)
+        end,
+        ActualDbStorages = [X#veil_document.record || X <- ListStorageValue],
 
-		case ActualDbStorages of
-			[] -> %db empty, insert storage
-				%read from file
-				{Status2,FileConsultValue} = file:consult(StorageFilePath),
-				case Status2 of
-					ok -> ok;
-					error ->
-						lager:error("Could not read storage config file"),
-						throw(FileConsultValue)
-				end,
-				[StoragePreferences] = FileConsultValue,
+        case ActualDbStorages of
+            [] -> %db empty, insert storage
+                %read from file
+                {Status2, FileConsultValue} = file:consult(StorageFilePath),
+                case Status2 of
+                    ok -> ok;
+                    error ->
+                        lager:error("Could not read storage config file"),
+                        throw(FileConsultValue)
+                end,
 
-				%parse storage preferences
-				UserPreferenceToGroupInfo = fun (GroupPreference) ->
-					case GroupPreference of
-						[{name,cluster_fuse_id},{root,Root}] ->
-							#fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}};
-						[{name,Name},{root,Root}] ->
-							#fuse_group_info{name = Name, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}}
-					end
-				end,
-				FuseGroups=try
-					lists:map(UserPreferenceToGroupInfo,StoragePreferences)
-				catch
-					_Type:Err ->
-						lager:error("Wrong format of storage config file"),
-						throw(Err)
-				end,
+                %parse storage preferences
+                UserPreferenceToGroupInfo = fun(GroupPreference) ->
+                    case GroupPreference of
+                        [{name, cluster_fuse_id}, {root, Root}] ->
+                            #fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}};
+                        [{name, Name}, {root, Root}] ->
+                            #fuse_group_info{name = Name, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}}
+                    end
+                end,
 
-				%create storage
-				{Status3, Value} = apply(fslogic_storage, insert_storage, ["ClusterProxy", [], FuseGroups]),
-				case Status3 of
-					ok ->
-						ok;
-					error ->
-						lager:error("Error during inserting storage to db"),
-						throw(Value)
-				end;
+                InsertStorageAnswers = lists:map(fun(StoragePreferences) ->
+                    FuseGroups = try
+                        lists:map(UserPreferenceToGroupInfo, StoragePreferences)
+                                 catch
+                                     _Type:Err ->
+                                         lager:error("Wrong format of storage config file"),
+                                         Err
+                                 end,
 
-			_NotEmptyList -> %db not empty
-				ok
-		end
-	catch
-		Type:Error ->
-			lager:error("Error during storage init: ~p:~p",[Type,Error]),
-			{error,Error}
-	end.
+                    %create storage
+                    {Status3, Value} = apply(fslogic_storage, insert_storage, ["ClusterProxy", [], FuseGroups]),
+                    case Status3 of
+                        ok ->
+                            ok;
+                        error ->
+                            lager:error("Error during inserting storage to db"),
+                            Value
+                    end
+                end, FileConsultValue),
+                case lists:all(fun(InsertStorageAnswer) -> InsertStorageAnswer =:= ok end, InsertStorageAnswers) of
+                    true -> ok;
+                    _ -> {error, InsertStorageAnswers}
+                end;
+
+            _NotEmptyList -> %db not empty
+                ok
+        end
+    catch
+        Type:Error ->
+            lager:error("Error during storage init: ~p:~p", [Type, Error]),
+            {error, Error}
+    end.
