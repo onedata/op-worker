@@ -211,8 +211,11 @@ get_memory_stats_test() ->
   ?assertEqual(ExpectedMemoryStats, ActualMemoryStats).
 
 is_valid_name_test() ->
-  ?assert(node_manager:is_valid_name("azAZ09_")),
-  ?assertNot(node_manager:is_valid_name("az.AZ")).
+  ?assert(node_manager:is_valid_name("azAZ09_", 12)),
+  ?assertNot(node_manager:is_valid_name("azAZ09_", 13)),
+  ?assertNot(node_manager:is_valid_name("", 20)),
+  ?assertNot(node_manager:is_valid_name("", 10)),
+  ?assertNot(node_manager:is_valid_name("az.AZ", 1)).
 
 is_valid_character_test() ->
   ?assert(node_manager:is_valid_character($a)),
