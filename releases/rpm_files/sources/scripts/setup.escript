@@ -13,7 +13,7 @@
 -define(ports_to_check,[53,80,443,5555,8443]).
 
 % Curl options
--define(curl_opts,"--connect-timeout 5 -s").
+-define(curl_opts,"-u admin:password --connect-timeout 5 -s").
 
 % Installation directory of veil RPM
 -define(prefix, "/opt/veil/").
@@ -634,11 +634,9 @@ discover_cluster(IPOrHostname) ->
 set_db_cookie(BigcouchInstallationPath,Cookie) ->
 	os:cmd("sed -i -e \"s/^\\-setcookie .*/\\-setcookie "++Cookie++"/g\" "++BigcouchInstallationPath++"/etc/vm.args").
 
-% Set hostname and bind_address in etc/vm.args and etc/default.ini from given bigcouch installation path
+% Set hostname in etc/vm.args for given bigcouch installation path
 actualize_db_hostname(BigcouchInstallationPath,NodeName) ->
-	[_At | Hostname] = get(hostname),
-	os:cmd("sed -i -e \"s/^\\-name .*/\\-name "++NodeName++get(hostname)++"/g\" "++BigcouchInstallationPath++"/etc/vm.args"),
-	os:cmd("sed -i -e \"s/bind_address = [0-9\.]*/bind_address = "++Hostname++"/\" "++BigcouchInstallationPath++"/etc/default.ini").
+	os:cmd("sed -i -e \"s/^\\-name .*/\\-name "++NodeName++get(hostname)++"/g\" "++BigcouchInstallationPath++"/etc/vm.args").
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Function used to process config file used by veil_cluster script
