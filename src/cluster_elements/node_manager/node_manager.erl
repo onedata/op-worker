@@ -288,7 +288,7 @@ handle_cast({start_load_logging, Path}, #node_state{load_logging_fd = undefined}
   StartTime = MegaSecs * 1000000 + Secs + MicroSecs / 1000000,
   case file:open(Path, [write]) of
     {ok, Fd} ->
-      case get_node_stats(medium) of
+      case get_node_stats(short) of
         NodeStats when is_list(NodeStats) ->
           Header = string:join(["elapsed", "window" | lists:map(fun({Name, _}) ->
             Name
@@ -541,17 +541,18 @@ check_vsn([{Application, _Description, Vsn} | Apps]) ->
 %% ====================================================================
 %% @doc Writes node load to file
 -spec log_load(Fd :: pid(), StartTime :: integer(), PrevTime :: integer(), CurrTime :: integer()) -> Result when
-  Result :: ok.
+  Result :: ok | {error, Reason :: term()}.
 %% ====================================================================
 log_load(Fd, StartTime, PrevTime, CurrTime) ->
-  case get_node_stats(medium) of
+  case get_node_stats(short) of
     NodeStats when is_list(NodeStats) ->
       Values = [CurrTime - StartTime, CurrTime - PrevTime | lists:map(fun({_, Value}) -> Value end, NodeStats)],
       Format = string:join(lists:duplicate(length(Values), "~.6f"), ", ") ++ "\n",
       io:fwrite(Fd, Format, Values),
       ok;
     Other ->
-      ?error("Can not get node stats: ~p", [Other])
+      ?error("Can not get node stats: ~p", [Other]),
+      {error, Other}
   end.
 
 %% create_node_stats_rrd/1
