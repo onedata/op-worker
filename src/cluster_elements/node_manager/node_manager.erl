@@ -40,8 +40,8 @@
 %% jako stan (jak teraz) czy jako ets i ewentualnie przejść na ets
 -ifdef(TEST).
 -export([get_callback/2, addCallback/3, delete_callback/3]).
--export([calculate_network_stats/3, get_interface_stats/2, get_cpu_stats/1,
-  calculate_ports_transfer/4, get_memory_stats/0, is_valid_name/1, is_valid_character/1]).
+-export([calculate_network_stats/3, get_interface_stats/2, get_cpu_stats/1, calculate_ports_transfer/4,
+  get_memory_stats/0, is_valid_name/1, is_valid_name/2, is_valid_character/1]).
 -endif.
 
 %% ====================================================================
@@ -693,7 +693,7 @@ get_network_stats(NetworkStats) ->
   case file:list_dir(Dir) of
     {ok, Interfaces} ->
       ValidInterfaces = lists:filter(fun(Interface) ->
-        is_valid_name(Interface)
+        is_valid_name(Interface, 11)
       end, Interfaces),
       CurrentNetworkStats = lists:foldl(
         fun(Interface, Stats) -> [
@@ -771,7 +771,7 @@ read_cpu_stats(Fd, Stats) ->
                "" -> <<"cpu">>;
                _ -> <<"core", (list_to_binary(ID))/binary>>
              end,
-      case is_valid_name(Name) of
+      case is_valid_name(Name, 0) of
         true ->
           [User, Nice, System | Rest] = lists:map(fun(Value) -> list_to_integer(Value) end, Values),
           WorkJiffies = User + Nice + System,
@@ -860,6 +860,24 @@ read_memory_stats(Fd, MemFree, MemTotal, Counter) ->
     {error, _} -> [];
     _ -> read_memory_stats(Fd, MemFree, MemTotal, Counter)
   end.
+
+%% is_valid_name/2
+%% ====================================================================
+%% @doc Checks whether string contains only following characters a-zA-Z0-9_
+%% and with some prefix is not longer than 19 characters. This is a requirement
+%% for a valid column name in Round Robin Database.
+-spec is_valid_name(Name :: string() | binary(), PrefixLength :: integer()) -> Result when
+  Result :: true | false.
+%% ====================================================================
+is_valid_name(Name, PrefixLength) when is_list(Name) ->
+  case length(Name) =< 19 - PrefixLength of
+    true -> is_valid_name(Name);
+    _ -> false
+  end;
+is_valid_name(Name, PrefixLength) when is_binary(Name) ->
+  is_valid_name(binary_to_list(Name), PrefixLength);
+is_valid_name(_, _) ->
+  false.
 
 %% is_valid_name/1
 %% ====================================================================
