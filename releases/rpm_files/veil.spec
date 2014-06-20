@@ -6,7 +6,6 @@
 %define _topdir     /tmp/veil_rpmbuild
 %define _tmppath    %{_topdir}/tmp
 %define _prefix     /opt/veil
-%define _db_prefix  /opt/bigcouch
 
 %define name        veil
 %define summary     Veil service
@@ -54,8 +53,8 @@ Veil service - allows installation of veil cluster nodes.
 
 %post
 chkconfig --add veil
-ln -s %{_prefix}/setup /usr/bin/veil_setup
-ln -s %{_prefix}/addusers /usr/bin/veil_addusers
+ln -sf %{_prefix}/setup /usr/bin/veil_setup
+ln -sf %{_prefix}/addusers /usr/bin/veil_addusers
 
 %preun
 service veil stop
@@ -63,7 +62,6 @@ chkconfig --del veil
 rm -f /usr/bin/veil_setup
 rm -f /usr/bin/veil_addusers
 rm -rf %{_prefix}
-rm -rf %{_db_prefix}
 
 %clean
 rm -rf $RPM_BUILD_ROOT
