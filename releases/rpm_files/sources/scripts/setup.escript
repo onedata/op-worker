@@ -13,7 +13,7 @@
 -define(ports_to_check,[53,80,443,5555,8443]).
 
 % Curl options
--define(curl_opts,"--connect-timeout 5 -s").
+-define(curl_opts,"-u admin:password --connect-timeout 5 -s").
 
 % Installation directory of veil RPM
 -define(prefix, "/opt/veil/").
