@@ -211,6 +211,9 @@ handle_call({clear_cache, Cache}, _From, State) ->
 handle_call(check, _From, State) ->
   {reply, ok, State};
 
+handle_call({check_storage, FilePath, Content}, _From, State) ->
+  {reply, fslogic_storage:check_storage_on_node(FilePath, Content), State};
+
 handle_call(_Request, _From, State) ->
   {reply, wrong_request, State}.
 

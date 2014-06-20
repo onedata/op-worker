@@ -157,6 +157,13 @@ veil_cluster_node_env:
       erlang_term: |
           [control_panel_port,control_panel_redirect_port,dns_port,dispatcher_port,rest_port]
 
+  - parameter:
+      name: storage_config_name
+      description: Name of storage configuration file used by client during automatic storage detection
+      value: |
+          "\'vfs_storage.info\'"
+      erlang_term: "'vfs_storage.info'"
+
   # RRDERLANG
   - parameter:
       name: rrd_timeout
