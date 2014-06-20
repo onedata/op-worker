@@ -123,6 +123,7 @@ setup_storages() ->
     %% Init net kernet in order to connect to cluster
     case net_kernel:start([list_to_atom("tester@" ++ net_adm:localhost()), longnames]) of
         {ok, _} -> ok;
+        {error, {already_started, _}} -> ok;
         NetError -> throw(io_lib:fwrite("Can not start net_kernel: ~p", [NetError]))
     end,
 
