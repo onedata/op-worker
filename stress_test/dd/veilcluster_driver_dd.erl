@@ -35,7 +35,7 @@ setup() ->
         net_kernel:start([list_to_atom("tester@" ++ net_adm:localhost()), longnames]),
         erlang:set_cookie(node(), veil_cluster_node),
         case basho_bench_config:get(client_id) of
-            1 -> catch setup_storages(); %% If its the first test node, initialize cluster
+            1 -> setup_storages(); %% If its the first test node, initialize cluster
             _ -> timer:sleep(2000) %% Otherwise wait for main node to finish
         %% TODO: implement better, more deterministic way of synchronising test nodes (e.g. via ready-ping)
         end
