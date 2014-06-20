@@ -31,9 +31,7 @@
 setup() ->
     try
         ?INFO("Test setup~n", []),
-        %% Init net kernet in order to connect to cluster
-        net_kernel:start([list_to_atom("tester@" ++ net_adm:localhost()), longnames]),
-        erlang:set_cookie(node(), veil_cluster_node),
+
         case basho_bench_config:get(client_id) of
             1 -> setup_storages(); %% If its the first test node, initialize cluster
             _ -> timer:sleep(2000) %% Otherwise wait for main node to finish
@@ -115,24 +113,33 @@ run(Operation, _KeyGen, _ValueGen, State) ->
 -spec setup_storages() -> no_return().
 %% ====================================================================
 setup_storages() ->
-    Cert = basho_bench_config:get(cert_file),
+    ?INFO("Storage setup~n", []),
+    CertFile = basho_bench_config:get(cert_file),
+    ?INFO("CertFile: ~p", [CertFile]),
     [Host | _] = basho_bench_config:get(cluster_hosts),
+    ?INFO("Host: ~p", [Host]),
     Groups = #fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = ["/mnt/gluster"]}},
     Worker = map_hostname(Host),
-    {ok, DN} = get_dn(Cert),
+    ?INFO("Worker: ~p", [Worker]),
+    {ok, DN} = get_dn(CertFile),
+    ?INFO("DN: ~p", [DN]),
+
+    %% Init net kernet in order to connect to cluster
+    net_kernel:start([list_to_atom("tester@" ++ net_adm:localhost()), longnames]),
+    erlang:set_cookie(node(), veil_cluster_node),
 
     case rpc:call(Worker, os, cmd, ["rm -rf /mnt/gluster/*"]) of
-        "" -> ok;
+        "" -> ?INFO("RM OK");
         RmError -> throw(io_lib:fwrite("Can not remove files from storage: ~p", [RmError]))
     end,
 
     case rpc:call(Worker, fslogic_storage, insert_storage, ["ClusterProxy", [], [Groups]]) of
-        {ok, _} -> ok;
+        {ok, _} -> ?INFO("INSERT OK");
         InsertError -> throw(io_lib:fwrite("Can not insert storage: ~p", [InsertError]))
     end,
 
     case rpc:call(Worker, user_logic, create_user, ["veilfstestuser", "Test Name", [], "test@test.com", [DN]]) of
-        {ok, _} -> ok;
+        {ok, _} -> ?INFO("CREATE OK");
         CreateError -> throw(io_lib:fwrite("Can not add test user: ~p", [CreateError]))
     end.
 
