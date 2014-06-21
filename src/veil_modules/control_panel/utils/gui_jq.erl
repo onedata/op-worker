@@ -140,7 +140,7 @@ redirect(URL) ->
 %% ====================================================================
 redirect_to_login(SaveSourcePage) ->
     PageName = gui_ctx:get_requested_page(),
-    case SaveSourcePage of
+    case SaveSourcePage andalso PageName /= <<"/">> of
         false -> wf:redirect(<<"/login">>);
         true -> wf:redirect(<<"/login?x=", PageName/binary>>)
     end.
