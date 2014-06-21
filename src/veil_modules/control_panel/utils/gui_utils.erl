@@ -98,7 +98,7 @@ cowboy_ensure_header(Name, Value, Req) when is_binary(Name) and is_binary(Value)
 %% ====================================================================
 onrequest_adjust_headers(Req) ->
     Req2 = cowboy_req:set_resp_header(<<"Strict-Transport-Security">>, <<"max-age=31536000; includeSubDomains">>, Req),
-    _Req3 = cowboy_req:set_resp_header(<<"X-Frame-Options">>, <<"SAMEORIGIN">>, Req2).
+    cowboy_req:set_resp_header(<<"X-Frame-Options">>, <<"SAMEORIGIN">>, Req2).
 
 
 %% https_get/2
