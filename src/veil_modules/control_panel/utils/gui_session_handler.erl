@@ -132,7 +132,7 @@ set_value(Key, Value) ->
 
 %% get_value/2
 %% ====================================================================
-%% @doc n2o session_handler callback, called when data retrieved from session
+%% @doc n2o session_handler callback, called when data is retrieved from session
 %% memory, e. g. via wf:session or wf:user. Returns a Value, associated
 %% with given Key in session memory, or default.
 %% @end
@@ -193,7 +193,7 @@ get_session_logic_module() ->
 
 %% get_cookie_ttl/0
 %% ====================================================================
-%% @doc Retrieves cookies' time to live from env.
+%% @doc Retrieves default cookies' time to live from env.
 %% @end
 -spec get_cookie_ttl() -> integer() | no_return().
 %% ====================================================================
