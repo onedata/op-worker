@@ -14,7 +14,7 @@
 -include("logging.hrl").
 
 % Functions used to associate user with session
--export([set_user_id/1, get_user_id/0, set_user_record/1, get_user_record/0, user_logged_in/0, clear_session/0]).
+-export([create_session/0, set_user_id/1, get_user_id/0, set_user_record/1, get_user_record/0, user_logged_in/0, clear_session/0]).
 
 % Functions connected with page / session context
 -export([get_requested_hostname/0, get_requested_page/0, get_request_params/0]).
@@ -26,6 +26,19 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
+
+%% create_session/0
+%% ====================================================================
+%% @doc Creates a session. This means that current context will be associated
+%% with a session id, that will be send back to client in the cookie.
+%% Any operations on context (such us setting user id, storing any
+%% data) will persist as long as the session persists.
+%% @end
+-spec create_session() -> ok.
+%% ====================================================================
+create_session() ->
+    gui_session_handler:create().
+
 
 %% set_user_id/1
 %% ====================================================================
@@ -77,7 +90,7 @@ get_user_record() ->
 clear_session() ->
     wf:user(undefined),
     wf:session(user_doc, undefined),
-    wf:logout().
+    wf:logout(). % This ends up calling gui_session:clear()
 
 
 %% get_requested_hostname/0
