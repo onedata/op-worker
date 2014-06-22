@@ -48,7 +48,7 @@ start_trace(_Node, _) ->
 stop_trace(Node, NodeType, Mode) ->
     {ok, Dir} = file:get_cwd(),
     FilePrefix = Dir ++ "/" ++ NodeType ++ "__",
-    FileSuffix = ".trace",
+    FileSuffix = ".analysis",
     stop_trace(Node, Mode, FilePrefix, FileSuffix).
 
 stop_trace(Node, "mode_full", FilePrefix, FileSuffix) ->  
@@ -86,6 +86,6 @@ call(Node, Module, Method, Args) ->
     receive 
         {Pid, Ans} ->
             Ans
-    after 100000 ->
+    after 600000 ->
         {error, timeout}
     end.
