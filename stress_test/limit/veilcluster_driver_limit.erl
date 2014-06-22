@@ -11,13 +11,38 @@
 %% ===================================================================
 
 -module(veilcluster_driver_limit).
--export([new/1, run/4]).
+-export([setup/0, new/1, run/4]).
 
 -include("basho_bench.hrl").
 
 %% ====================================================================
 %% Test driver callbacks
 %% ====================================================================
+
+%% setup/0
+%% ====================================================================
+%% @doc Runs once per each test node at begging of a test (before any new/1 is called)
+-spec setup() -> Result when
+    Result :: ok | {error, Reason :: term()}.
+%% ====================================================================
+setup() ->
+    try
+        ?INFO("Test setup~n", []),
+
+        H1 = os:cmd("hostname -f"),
+        H2 = string:substr(H1, 1, length(H1) - 1),
+        case net_kernel:start([list_to_atom("tester@" ++ H2), longnames]) of
+            {ok, _} -> ok;
+            {error, {already_started, _}} -> ok;
+            Other -> throw(Other)
+        end,
+        true = erlang:set_cookie(node(), veil_cluster_node),
+        ok
+    catch
+        E1:E2 ->
+            ?ERROR("Setup error: ~p~n", [{E1, E2}]),
+            {error, {E1, E2}}
+    end.
 
 %% new/1
 %% ====================================================================
@@ -29,15 +54,6 @@ new(Id) ->
     try
         ?INFO("Initializing worker with id: ~p~n", [Id]),
         Hosts = basho_bench_config:get(cluster_erlang_nodes),
-
-        H1 = os:cmd("hostname -f"),
-        H2 = string:substr(H1, 1, length(H1) - 1),
-        case net_kernel:start([list_to_atom("tester@" ++ H2), longnames]) of
-            {ok, _} -> ok;
-            {error, {already_started, _}} -> ok;
-            Other -> throw(Other)
-        end,
-        true = erlang:set_cookie(node(), veil_cluster_node),
 
         ?INFO("Worker with id: ~p initialized successfully with arguments: ~p", [Id, Hosts]),
         {ok, Hosts}

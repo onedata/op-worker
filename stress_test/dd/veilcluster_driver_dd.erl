@@ -26,7 +26,8 @@
 %% setup/0
 %% ====================================================================
 %% @doc Runs once per each test node at begging of a test (before any new/1 is called)
--spec setup() -> no_return().
+-spec setup() -> Result when
+    Result :: ok | {error, Reason :: term()}.
 %% ====================================================================
 setup() ->
     try
@@ -36,9 +37,12 @@ setup() ->
             1 -> setup_storages(); %% If its the first test node, initialize cluster
             _ -> timer:sleep(2000) %% Otherwise wait for main node to finish
         %% TODO: implement better, more deterministic way of synchronising test nodes (e.g. via ready-ping)
-        end
+        end,
+        ok
     catch
-        E1:E2 -> ?ERROR("Setup error: ~p:~p~n", [E1, E2])
+        E1:E2 ->
+            ?ERROR("Setup error: ~p~n", [{E1, E2}]),
+            {error, {E1, E2}}
     end.
 
 
@@ -110,7 +114,8 @@ run(Operation, _KeyGen, _ValueGen, State) ->
 %% setup_storages/0
 %% ====================================================================
 %% @doc Register test user and configure storages on cluster
--spec setup_storages() -> no_return().
+-spec setup_storages() -> Result when
+    Result :: ok | no_return().
 %% ====================================================================
 setup_storages() ->
     ?INFO("Storage setup~n", []),
@@ -142,7 +147,9 @@ setup_storages() ->
     case rpc:call(Worker, user_logic, create_user, ["veilfstestuser", "Test Name", [], "test@test.com", [DN]]) of
         {ok, _} -> ok;
         CreateError -> throw(io_lib:fwrite("Can not add test user: ~p", [CreateError]))
-    end.
+    end,
+
+    ok.
 
 
 %% get_dn/1
@@ -197,7 +204,8 @@ map_hostname(Other) -> throw(io_lib:fwrite("Unknown hostname: ~p", [Other])).
 %% make_dir/1
 %% ====================================================================
 %% @doc Creates directory with parent directories
--spec make_dir(Dir :: string()) -> ok | {error, Reason :: term()}.
+-spec make_dir(Dir :: string()) -> Result when
+    Result :: ok | {error, Reason :: term()}.
 %% ====================================================================
 make_dir(Dir) ->
     [Root | Leafs] = filename:split(Dir),
@@ -212,7 +220,8 @@ make_dir(Dir) ->
 %% ====================================================================
 %% @doc Creates directory with parent directories.
 %% Should not be used directly, use make_dir/1 instead.
--spec make_dir(Root :: string(), Leafs :: [string()]) -> ok | {error, Reason :: term()}.
+-spec make_dir(Root :: string(), Leafs :: [string()]) -> Result when
+    Result :: ok | {error, Reason :: term()}.
 %% ====================================================================
 make_dir(Root, []) ->
     file:make_dir(Root);
