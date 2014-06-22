@@ -60,9 +60,6 @@ run(Operation, KeyGen, _ValueGen, {Hosts, CertFile, PongAnsBytes, Messages_per_c
     try
         Host = lists:nth((KeyGen() rem length(Hosts)) + 1, Hosts),
 
-        ?INFO("=====> Host: ~p~n", [Host]),
-        ?INFO("=====> CertFile: ~p~n", [CertFile]),
-
         case wss:connect(Host, 5555, [{certfile, CertFile}, {cacertfile, CertFile}, auto_handshake]) of
             {ok, Socket} ->
                 Res = try ping(Operation, Socket, PongAnsBytes, Messages_per_connect) of
