@@ -36,7 +36,9 @@ main([Command | Args]) ->
     end.    
 
 start_trace(Node, "mode_totals_only") ->
-    start_trace(Node, "mode_full");    
+    start_trace(Node, "mode_full");
+start_trace(Node, "mode_trace_only") ->
+    start_trace(Node, "mode_full");
 start_trace(Node, "mode_full") ->
     ProcsToTrace = lists:foldl(fun(Elem, AccIn) -> AccIn ++ get_pid(Elem, Node) end, [], ?trace_procs), 
     io:format("Starting trace of procs: ~p~n", [ProcsToTrace]),
@@ -50,6 +52,11 @@ stop_trace(Node, NodeType, Mode) ->
     FilePrefix = Dir ++ "/" ++ NodeType ++ "__",
     FileSuffix = ".analysis",
     stop_trace(Node, Mode, FilePrefix, FileSuffix).
+
+stop_trace(Node, "mode_trace_only", FilePrefix, FileSuffix) ->
+    io:format("Stopping trace on node ~p~n", [Node]),
+    ok = call(Node, fprof, trace, [[stop]]),
+    ok;
 
 stop_trace(Node, "mode_full", FilePrefix, FileSuffix) ->  
     io:format("Stopping full trace on node ~p~n", [Node]), 
@@ -86,6 +93,6 @@ call(Node, Module, Method, Args) ->
     receive 
         {Pid, Ans} ->
             Ans
-    after 600000 ->
+    after 3600000 ->
         {error, timeout}
     end.
