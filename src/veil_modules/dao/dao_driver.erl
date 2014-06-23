@@ -15,7 +15,7 @@
 -include_lib("veil_modules/dao/dao_driver.hrl").
 
 %% API
--export([set_db/1, get_db/0, record_info/1, is_valid_record/1]).
+-export([set_db/1, get_db/0, record_info/1, is_valid_record/1, sequential_synch_call/3]).
 
 %% set_db/1
 %% ====================================================================
@@ -70,3 +70,18 @@ is_valid_record(Record) ->
 %% ====================================================================
 record_info(Record) ->
     ?dao_record_info(Record).
+
+%% sequential_synch_call/3
+%% ====================================================================
+%% @doc Synchronizes sequentially multiple calls to given dao function
+-spec sequential_synch_call(Module :: atom(), Function ::atom(), Args :: list()) -> Result :: term().
+%% ====================================================================
+sequential_synch_call(Module,Function,Args) ->
+    PPid = self(),
+    Pid = spawn(fun() -> receive Resp -> PPid ! {self(), Resp} after 1000 -> exited end end),
+    gen_server:cast(dao_worker, {sequential_synch, get(protocol_version), {Module, Function, [sequential, Args]}, {proc, Pid}}),
+    receive
+        {Pid, Response} -> Response
+    after 1000 ->
+        {error, timeout}
+    end.
