@@ -25,9 +25,9 @@ main([Command | Args]) ->
     HostName = "@" ++ os:cmd("hostname -f") -- "\n",
     set_up_net_kernel(),
     NodeType = lists:nth(1, Args),
-    Filename = case length(Args) of
-                   2 -> lists:nth(2, Args);
-                   _ -> undefined
+    Filename = case length(Args) >= 2 of
+                   true -> lists:nth(2, Args);
+                   _ -> "node_load.csv" % Default filename
                end,
     TargetNode = list_to_atom(NodeType ++ HostName),
     case Command of
