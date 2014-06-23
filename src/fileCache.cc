@@ -30,7 +30,7 @@ bool FileCache::readData(off_t offset, size_t size, std::string &buff)
     discardExpired();
     buff.resize(0);
 
-    multiset<block_ptr>::const_iterator it = m_fileBlocks.upper_bound(block_ptr(new FileBlock(offset)));
+    auto it = m_fileBlocks.upper_bound(std::make_shared<FileBlock>(offset));
 
     if(it == m_fileBlocks.begin())
         return false;
@@ -103,7 +103,7 @@ bool FileCache::insertBlock(const FileBlock &block)
     // repeat while the is still data to save
     do
     {
-        multiset<block_ptr>::iterator it = m_fileBlocks.upper_bound(block_ptr(new FileBlock(offset)));
+        auto it = m_fileBlocks.upper_bound(std::make_shared<FileBlock>(offset));
         multiset<block_ptr>::iterator next;
         if(it != m_fileBlocks.begin())
             --it;
@@ -118,7 +118,7 @@ bool FileCache::insertBlock(const FileBlock &block)
             if( ((*it)->offset + (*it)->size() <= static_cast<size_t>(offset)) || ((*it)->offset > offset) )
             {
                 size_t tmpSize = next == m_fileBlocks.end() ? cBuff.size() : min((size_t)((*next)->offset - offset ), cBuff.size());
-                block_ptr tmp = block_ptr(new FileBlock(offset, cBuff.substr(0, tmpSize)));
+                block_ptr tmp = std::make_shared<FileBlock>(offset, cBuff.substr(0, tmpSize));
 
                 cBuff = cBuff.substr(tmpSize);
                 offset += tmpSize;
@@ -143,7 +143,7 @@ bool FileCache::insertBlock(const FileBlock &block)
         // Whole current data block does not overlap with older ones
         if(it == m_fileBlocks.end())
         {
-            block_ptr tmp = block_ptr(new FileBlock(offset, cBuff));
+            block_ptr tmp = std::make_shared<FileBlock>(offset, cBuff);
             forceInsertBlock(tmp, it);
 
             cBuff = "";

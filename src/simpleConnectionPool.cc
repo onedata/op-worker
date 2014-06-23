@@ -80,7 +80,7 @@ std::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(PoolTy
 
         lock.unlock();
 
-        conn.reset(new CommunicationHandler(connectTo, m_port, m_getCertInfo, m_checkCertificate));
+        conn = std::make_shared<CommunicationHandler>(connectTo, m_port, m_getCertInfo, m_checkCertificate);
         conn->setFuseID(m_fuseId);  // Set FuseID that shall be used by this connection as session ID
         if(m_pushCallback)                          // Set callback that shall be used for PUSH messages and error messages
             conn->setPushCallback(m_pushCallback);  // Note that this doesnt enable/register PUSH channel !

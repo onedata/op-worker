@@ -124,7 +124,7 @@ int CommunicationHandler::openConnection()
 
     // (re)Initialize endpoint (io_service)
     m_endpointConnection.reset();
-    m_endpoint.reset(new ws_client());
+    m_endpoint = std::make_shared<ws_client>();
     m_endpoint->clear_access_channels(websocketpp::log::alevel::all);
     m_endpoint->clear_error_channels(websocketpp::log::elevel::all);
     m_endpoint->init_asio(ec);
@@ -492,7 +492,7 @@ context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
     CertificateInfo certInfo = m_getCertInfo();
 
     try {
-        context_ptr ctx(new boost::asio::ssl::context(boost::asio::ssl::context::sslv3));
+        context_ptr ctx = std::make_shared<boost::asio::ssl::context>(boost::asio::ssl::context::sslv3);
 
         ctx->set_options(boost::asio::ssl::context::default_workarounds |
                          boost::asio::ssl::context::no_sslv2 |

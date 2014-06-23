@@ -101,7 +101,7 @@ int BufferAgent::onOpen(const std::string &path, ffi_type ffi)
         unique_lock guard(m_wrMutex);
         m_wrCacheMap.erase(ffi->fh);
 
-        write_buffer_ptr lCache(new WriteCache());
+        write_buffer_ptr lCache = std::make_shared<WriteCache>();
         lCache->fileName = path;
         lCache->buffer = newFileCache(true);
         lCache->ffi = *ffi;
@@ -115,7 +115,7 @@ int BufferAgent::onOpen(const std::string &path, ffi_type ffi)
         if(( it = m_rdCacheMap.find(path) ) != m_rdCacheMap.end()) {
             it->second->openCount++;
         } else {
-            read_buffer_ptr lCache(new ReadCache());
+            read_buffer_ptr lCache = std::make_shared<ReadCache>();
             lCache->fileName = path;
             lCache->openCount = 1;
             lCache->ffi = *ffi;
