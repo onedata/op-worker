@@ -51,6 +51,13 @@ stop_trace(Node, NodeType, Mode) ->
     {ok, Dir} = file:get_cwd(),
     FilePrefix = Dir ++ "/" ++ NodeType ++ "__",
     FileSuffix = ".analysis",
+    Procs0 = call(Node, erlang, registered, []),
+    Procs1 =
+        lists:map(fun
+            (Elem) ->
+                {Elem, call(Node, erlang, whereis, [Elem])}
+            end, Procs0),
+    file:write_file("pid.list", io_lib:format("~p.\n", [Procs1])),
     stop_trace(Node, Mode, FilePrefix, FileSuffix).
 
 stop_trace(Node, "mode_trace_only", FilePrefix, FileSuffix) ->
