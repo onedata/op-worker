@@ -93,6 +93,6 @@ call(Node, Module, Method, Args) ->
     receive 
         {Pid, Ans} ->
             Ans
-    after 3600000 ->
+    after 7200000 -> %% 2h
         {error, timeout}
     end.
