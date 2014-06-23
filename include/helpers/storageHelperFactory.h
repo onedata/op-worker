@@ -13,7 +13,6 @@
 #include "simpleConnectionPool.h"
 
 #include <boost/any.hpp>
-#include <boost/date_time/posix_time/posix_time.hpp>
 
 #include <atomic>
 #include <memory>
