@@ -16,14 +16,14 @@ using namespace veil;
 class MockConnectionPool
     : public SimpleConnectionPool {
 public:
-    MockConnectionPool() : SimpleConnectionPool("host", 5555, boost::bind(&MockConnectionPool::getCertInfo, this)) {};
+    MockConnectionPool() : SimpleConnectionPool("host", 5555, std::bind(&MockConnectionPool::getCertInfo, this)) {};
     ~MockConnectionPool() {};
 
     MOCK_METHOD2(setPoolSize, void(PoolType, unsigned int));
     MOCK_METHOD2(setPushCallback, void(const std::string&, push_callback));
 
-    MOCK_METHOD1(selectConnection, boost::shared_ptr<CommunicationHandler>(SimpleConnectionPool::PoolType));
-    MOCK_METHOD1(releaseConnection, void(boost::shared_ptr<CommunicationHandler>));
+    MOCK_METHOD1(selectConnection, std::shared_ptr<CommunicationHandler>(SimpleConnectionPool::PoolType));
+    MOCK_METHOD1(releaseConnection, void(std::shared_ptr<CommunicationHandler>));
 
     CertificateInfo getCertInfo() {
         return CertificateInfo("certFile", "certFile");

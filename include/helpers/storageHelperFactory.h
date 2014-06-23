@@ -13,10 +13,9 @@
 #include "simpleConnectionPool.h"
 
 #include <boost/any.hpp>
-#include <boost/atomic.hpp>
-#include <boost/shared_ptr.hpp>
-#include <boost/thread/thread_time.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
 
+#include <atomic>
 #include <memory>
 #include <vector>
 #include <string>
@@ -48,24 +47,6 @@ namespace utils {
 
     std::string tolower(std::string input);
 
-    template<typename T>
-    T fromString(const std::string &in) {
-        T out;
-        std::istringstream iss(in);
-        iss >> out;
-        return out;
-    }
-
-    template<typename T>
-    T mtime()
-    {
-        boost::posix_time::ptime time_t_epoch(boost::gregorian::date(1970,1,1));
-        boost::posix_time::ptime now = boost::posix_time::microsec_clock::local_time();
-        boost::posix_time::time_duration diff = now - time_t_epoch;
-
-        return diff.total_milliseconds();
-    }
-
 } // namespace utils
 
 /**
@@ -73,7 +54,7 @@ namespace utils {
  */
 class StorageHelperFactory {
 public:
-    StorageHelperFactory(boost::shared_ptr<SimpleConnectionPool> connectionPool,
+    StorageHelperFactory(std::shared_ptr<SimpleConnectionPool> connectionPool,
                          const BufferLimits &limits);
     virtual ~StorageHelperFactory();
 
@@ -83,11 +64,11 @@ public:
      * @param args Arguments vector passed as argument to storge helper's constructor.
      * @return Pointer to storage helper object along with its ownership.
      */
-    virtual boost::shared_ptr<IStorageHelper> getStorageHelper(const std::string &sh,
+    virtual std::shared_ptr<IStorageHelper> getStorageHelper(const std::string &sh,
                                                                const IStorageHelper::ArgsMap &args);
 
 private:
-    const boost::shared_ptr<SimpleConnectionPool> m_connectionPool;
+    const std::shared_ptr<SimpleConnectionPool> m_connectionPool;
     const BufferLimits m_limits;
 };
 

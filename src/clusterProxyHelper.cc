@@ -15,10 +15,11 @@
 #include <google/protobuf/descriptor.h>
 #include "veilErrors.h"
 
+#include <functional>
 #include <iostream>
 
 using namespace std;
-using namespace boost::algorithm;
+using namespace std::placeholders;
 using namespace veil::protocol::remote_file_management;
 using namespace veil::protocol::communication_protocol;
 
@@ -358,12 +359,12 @@ int ClusterProxyHelper::doRead(const string &path, std::string &buf, size_t size
     return 0;
 }
 
-ClusterProxyHelper::ClusterProxyHelper(boost::shared_ptr<SimpleConnectionPool> connectionPool,
+ClusterProxyHelper::ClusterProxyHelper(std::shared_ptr<SimpleConnectionPool> connectionPool,
                                        const BufferLimits &limits, const ArgsMap &args)
   : m_bufferAgent(
         limits,
-        boost::bind(&ClusterProxyHelper::doWrite, this, _1, _2, _3, _4, _5),
-        boost::bind(&ClusterProxyHelper::doRead, this, _1, _2, _3, _4, _5))
+        std::bind(&ClusterProxyHelper::doWrite, this, _1, _2, _3, _4, _5),
+        std::bind(&ClusterProxyHelper::doRead, this, _1, _2, _3, _4, _5))
   , m_connectionPool{std::move(connectionPool)}
 {
     m_clusterHostname = args.count("cluster_hostname") ?

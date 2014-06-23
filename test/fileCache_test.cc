@@ -8,8 +8,6 @@
 #include "testCommonH.h"
 #include "fileCache.h"
 
-using namespace boost;
-
 INIT_AND_RUN_ALL_TESTS(); // TEST RUNNER !
 
 // TEST definitions below

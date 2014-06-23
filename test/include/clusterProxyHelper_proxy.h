@@ -24,7 +24,7 @@ using namespace veil::protocol::communication_protocol;
 class ProxyClusterProxyHelper
     : public ClusterProxyHelper {
 public:
-    ProxyClusterProxyHelper(boost::shared_ptr<SimpleConnectionPool> pool, const ArgsMap &args)
+    ProxyClusterProxyHelper(std::shared_ptr<SimpleConnectionPool> pool, const ArgsMap &args)
         : ClusterProxyHelper(pool, BufferLimits{}, args)
     {
     }
@@ -39,7 +39,7 @@ public:
 
     std::string requestMessage(std::string inputType, std::string answerType, std::string inputData) {
         return ClusterProxyHelper::requestMessage(inputType, answerType, inputData);
-    } 
+    }
 
     std::string requestAtom(std::string inputType, std::string inputData) {
         return ClusterProxyHelper::requestAtom(inputType, inputData);

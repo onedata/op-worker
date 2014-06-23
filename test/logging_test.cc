@@ -13,12 +13,11 @@
 #include "testCommonH.h"
 #include "helpers/storageHelperFactory.h"
 
-#include <boost/atomic.hpp>
-#include <boost/shared_ptr.hpp>
-
 #include <unistd.h>
 
+#include <atomic>
 #include <ctime>
+#include <memory>
 
 struct RemoteLogSinkFixture: public ::testing::Test
 {
@@ -28,7 +27,7 @@ struct RemoteLogSinkFixture: public ::testing::Test
     {
     }
 
-    boost::shared_ptr<NiceMock<MockRemoteLogWriter> > mockLogWriter;
+    std::shared_ptr<NiceMock<MockRemoteLogWriter> > mockLogWriter;
     veil::logging::RemoteLogSink logSink;
 };
 
@@ -67,7 +66,7 @@ struct RemoteLogWriterFixture: public ::testing::Test
     {
         using namespace ::testing;
 
-        boost::atomic<bool> messageSent(false);
+        std::atomic<bool> messageSent(false);
         veil::protocol::communication_protocol::ClusterMsg sentClsMessage;
 
         EXPECT_CALL(*mockCommunicationHandler, sendMessage(_, _))
@@ -82,8 +81,8 @@ struct RemoteLogWriterFixture: public ::testing::Test
         return sentMessage;
     }
 
-    boost::shared_ptr<NiceMock<MockConnectionPool> > mockConnectionPool;
-    boost::shared_ptr<NiceMock<MockCommunicationHandler> > mockCommunicationHandler;
+    std::shared_ptr<NiceMock<MockConnectionPool> > mockConnectionPool;
+    std::shared_ptr<NiceMock<MockCommunicationHandler> > mockCommunicationHandler;
     RemoteLogWriter logWriter;
 };
 
@@ -173,7 +172,7 @@ TEST_F(RemoteLogWriterFixture, ShouldSendAMessageWithIGNORE_ANSWER_MSG_ID)
 {
     using namespace ::testing;
 
-    boost::atomic<bool> messageSent(false);
+    std::atomic<bool> messageSent(false);
 
     EXPECT_CALL(*mockCommunicationHandler, sendMessage(_, IGNORE_ANSWER_MSG_ID))
             .WillOnce(DoAll(Assign(&messageSent, true), Return(0)));
@@ -195,7 +194,7 @@ TEST_F(RemoteLogWriterFixture, ShouldDropMessagesAfterExceedingMaxBufferSize)
 
     // We expect the writer to send 6 messages total, the last one being a
     // warning about dropped messages.
-    boost::atomic<bool> messageSent(false);
+    std::atomic<bool> messageSent(false);
     veil::protocol::communication_protocol::ClusterMsg sentClsMessage;
 
     // Note: gmock satisfies expectations in reverse order
