@@ -16,9 +16,11 @@
 -include("veil_modules/control_panel/common.hrl").
 -include("logging.hrl").
 
+% Initialization of n2o settings and cleanup
+-export([init_n2o_ets_and_envs/3, cleanup_n2o/1]).
 
-% Convinience function to set headers in cowboy response
--export([cowboy_ensure_header/3]).
+% Convenience functions to manipulate response headers
+-export([cowboy_ensure_header/3, onrequest_adjust_headers/1]).
 
 % Functions used to perform secure server-server http requests
 -export([https_get/2, https_post/3]).
@@ -33,6 +35,48 @@
 %% API functions
 %% ====================================================================
 
+%% init_n2o_ets_and_envs/3
+%% @doc Initializes all environment settings required by n2o and creates
+%% required ets tables. Should be called before starting a cowboy listener for
+%% n2o GUI.
+%% @end
+-spec init_n2o_ets_and_envs(GuiPort :: integer(), RoutingModule :: atom(), SessionLogicModule :: atom()) -> ok.
+%% ====================================================================
+init_n2o_ets_and_envs(GuiPort, RoutingModule, SessionLogicModule) ->
+    % Transition port - the same as gui port
+    ok = application:set_env(n2o, transition_port, GuiPort),
+    % Custom route handler
+    ok = application:set_env(n2o, route, RoutingModule),
+    % Custom session handler for n2o
+    ok = application:set_env(n2o, session, gui_session_handler),
+    % Custom session logic handler for gui_session_handler
+    ok = application:set_env(veil_cluster_node, session_logic_module, SessionLogicModule),
+
+    SessionLogicModule:init(),
+
+    % Ets tables needed by n2o
+    ets:new(actions, [set, named_table, {keypos, 1}, public]),
+    ets:new(globals, [set, named_table, {keypos, 1}, public]),
+    ets:new(caching, [set, named_table, {keypos, 1}, public]),
+    ets:insert(globals, {onlineusers, 0}),
+    ok.
+
+
+%% cleanup_n2o/1
+%% @doc Cleans up n2o setup, such as ets tables.
+%% Should be called after stopping a cowboy listener for
+%% n2o GUI.
+%% @end
+-spec cleanup_n2o(SessionLogicModule :: atom()) -> ok.
+%% ====================================================================
+cleanup_n2o(SessionLogicModule) ->
+    SessionLogicModule:cleanup(),
+    ets:delete(actions),
+    ets:delete(globals),
+    ets:delete(caching),
+    ok.
+
+
 %% cowboy_ensure_header/3
 %% ====================================================================
 %% @doc Sets a response header, but prevents duplicate entries. Header must
@@ -43,6 +87,18 @@
 cowboy_ensure_header(Name, Value, Req) when is_binary(Name) and is_binary(Value) ->
     Req2 = cowboy_req:delete_resp_header(Name, Req),
     cowboy_req:set_resp_header(Name, Value, Req2).
+
+
+%% onrequest_adjust_headers/1
+%% ====================================================================
+%% @doc Callback hook for cowboy to modify response headers for HTTPS GUI.
+%% Those headers improve security of https connection.
+%% @end
+-spec onrequest_adjust_headers(Req :: req()) -> req().
+%% ====================================================================
+onrequest_adjust_headers(Req) ->
+    Req2 = cowboy_req:set_resp_header(<<"Strict-Transport-Security">>, <<"max-age=31536000; includeSubDomains">>, Req),
+    cowboy_req:set_resp_header(<<"X-Frame-Options">>, <<"SAMEORIGIN">>, Req2).
 
 
 %% https_get/2

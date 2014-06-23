@@ -454,7 +454,7 @@ get_nodes() ->
 %% get_hostname/1
 %% ====================================================================
 %% @doc Returns node's hostname.
-%% In case of 'summary' atom, <<"summary">> binary is returned.
+%% In case of 'summary' atom, "summary" binary is returned.
 -spec get_hostname(Node :: node() | summary) -> Hostname :: binary().
 %% ====================================================================
 get_hostname(summary) ->
