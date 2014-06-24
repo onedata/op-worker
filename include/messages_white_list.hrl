@@ -9,6 +9,9 @@
 %% @end
 %% ===================================================================
 
+-ifndef(MESSAGES_WHITE_LIST_HRL).
+-define(MESSAGES_WHITE_LIST_HRL, 1).
+
 %% white lists defined as lists of pairs {user_type, white_list_for_user_type}
 -define(MessagesWhiteList, [
   {standard_user, [fusemessage, remotefilemangement, channelregistration, channelclose, atom, handshakerequest, handshakeack, eventmessage]},
@@ -23,3 +26,5 @@
 %% List of messages that needs FuseId to be present in connection state prior to process them.
 %% If FuseId is not set and one of those messages arrive, cluster will immediately send error.
 -define(SessionDependentMessages, [fusemessage, channelregistration, channelclose]).
+
+-endif.

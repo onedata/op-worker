@@ -36,7 +36,6 @@ save_file_share(#share_desc{} = Share) ->
   save_file_share(#veil_document{record = Share});
 save_file_share(#veil_document{record = #share_desc{}} = FdDoc) ->
   dao_external:set_db(?FILES_DB_NAME),
-  dao_external:set_db(?FILES_DB_NAME),
   dao_records:save_record(FdDoc).
 
 %% remove_file_share/1
