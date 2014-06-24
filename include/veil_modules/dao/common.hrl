@@ -62,7 +62,7 @@
 %% These records allows representing databases, design documents and their views.
 %% Used in DAO initial configuration in order to easily setup/update views in database.
 -record(db_info, {name = "", designs = []}).
--record(design_info, {name = "", version = 0, views = []}).
--record(view_info, {name = "", design = "", db_name = "", version = 0}).
+-record(design_info, {name = "", views = []}).
+-record(view_info, {name = "", db_name = "", version = 0}).
 
 -endif.

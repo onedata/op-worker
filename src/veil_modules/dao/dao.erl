@@ -329,7 +329,7 @@ remove_record(Id) when is_list(Id) ->
 -spec list_records(ViewInfo :: #view_info{}, QueryArgs :: #view_query_args{}) ->
     {ok, QueryResult :: #view_result{}} | {error, term()}.
 %% ====================================================================
-list_records(#view_info{name = ViewName, design = DesignName, db_name = DbName, version = ViewVersion}, QueryArgs) ->
+list_records(#view_info{name = ViewName, db_name = DbName, version = ViewVersion}, QueryArgs) ->
     FormatKey =  %% Recursive lambda:
     fun(F, K) when is_list(K) -> [F(F, X) || X <- K];
       (_F, K) when is_binary(K) -> binary_to_list(K);
@@ -340,8 +340,7 @@ list_records(#view_info{name = ViewName, design = DesignName, db_name = DbName, 
       #veil_document{record = doc_to_term({D}), uuid = binary_to_list(Id), rev_info = dao_helper:revision(RevInfo)};
       (_) -> none
     end,
-
-        case dao_helper:query_view(DbName, DesignName, dao_utils:get_versioned_view_name(ViewName, ViewVersion), QueryArgs) of
+        case dao_helper:query_view(DbName, dao_utils:get_versioned_view_name(ViewName, ViewVersion), dao_utils:get_versioned_view_name(ViewName, ViewVersion), QueryArgs) of
             {ok, [{total_and_offset, Total, Offset} | Rows]} ->
               FormattedRows =
                 [#view_row{id = binary_to_list(Id), key = FormatKey(FormatKey, Key), value = Value, doc = FormatDoc(Doc)}

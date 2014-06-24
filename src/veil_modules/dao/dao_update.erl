@@ -45,25 +45,14 @@ pre_reload_modules(_Version) ->
 
 remove_outdated_views() ->
     lists:foreach(
-        fun(#view_info{db_name = DB, design = Design, version = Vsn, name = ViewName}) ->
-            case dao_helper:open_design_doc(DB, Design) of
-                {ok, #doc{body = Body} = Doc} ->
-                    ViewsField = dao_json:get_field(Body, "views"),
-
-                    ToDel = [dao_utils:get_versioned_view_name(ViewName, OldVsn) || OldVsn <- lists:seq(0, Vsn - 1)],
-                    NewViews = dao_json:rm_fields(ViewsField, ToDel),
-                    NewBody1 = dao_json:mk_field(Body, "views", NewViews),
-                    dao_helper:insert_doc(DB, Doc#doc{body = NewBody1}, [?ADMIN_USER_CTX]),
-                    ok;
-                _ ->
-                    ok
-            end
+        fun(#view_info{db_name = DB, version = Vsn, name = ViewName}) ->
+            [dao_helper:delete_doc(DB, ?DESIGN_DOC_PREFIX ++ dao_utils:get_versioned_view_name(ViewName, OldVsn)) || OldVsn <- lists:seq(0, Vsn - 1)]
         end, get_all_views()),
     ok.
 
 
 remove_broken_views() ->
-    Designs = [{DbName, Design} || #view_info{design = Design, db_name = DbName} <- get_all_views()],
+    Designs = [{DbName, dao_utils:get_versioned_view_name(VName, Vsn)} || #view_info{db_name = DbName, name = VName, version = Vsn} <- get_all_views()],
     Designs1 = lists:usort(Designs),
     lists:foreach(
         fun({DB, Design}) ->
