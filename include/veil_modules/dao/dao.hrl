@@ -42,8 +42,8 @@
 %% potentially slow - O(db_count * view_count^2)
 -define(DATABASE_DESIGN_STRUCTURE, [#db_info{name = DbName,
                                         designs = [#design_info{name = dao_utils:get_versioned_view_name(ViewName, Vsn),
-                                                views = [ViewInfo || #view_info{name = ViewName, db_name = DbName2} = ViewInfo <- ?VIEW_LIST,
-                                                    DbName2 == DbName]
+                                                views = [ViewInfo || #view_info{name = ViewName1, db_name = DbName2} = ViewInfo <- ?VIEW_LIST,
+                                                    DbName2 == DbName, ViewName1 == ViewName]
                                             } || #view_info{db_name = DbName1, name = ViewName, version = Vsn} <- ?VIEW_LIST, DbName1 == DbName]
                                         } || DbName <- ?DB_LIST]).
 -endif.
