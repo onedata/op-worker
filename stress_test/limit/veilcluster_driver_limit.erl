@@ -53,10 +53,11 @@ setup() ->
 new(Id) ->
     try
         ?INFO("Initializing worker with id: ~p~n", [Id]),
-        Hosts = basho_bench_config:get(cluster_erlang_nodes),
+        Hosts = basho_bench_config:get(cluster_hosts),
+        Nodes = lists:map(fun(Host) -> st_utils:host_to_node(Host) end, Hosts),
 
-        ?INFO("Worker with id: ~p initialized successfully with arguments: ~p", [Id, Hosts]),
-        {ok, Hosts}
+        ?INFO("Worker with id: ~p initialized successfully with arguments: ~p", [Id, Nodes]),
+        {ok, Nodes}
     catch
         E1:E2 ->
             ?ERROR("Initialization error for worker with id: ~p: ~p", [Id, {E1, E2}]),
@@ -70,12 +71,12 @@ new(Id) ->
 -spec run(Operation :: atom(), KeyGen :: fun(), ValueGen :: fun(), State :: term()) -> Result when
     Result :: {ok, NewState :: term()} | {error, Reason :: term(), NewState :: term()}.
 %% ====================================================================
-run(_Operation, KeyGen, _ValueGen, Hosts) ->
-    NewState = Hosts,
+run(_Operation, KeyGen, _ValueGen, Nodes) ->
+    NewState = Nodes,
     try
-        Host = lists:nth((KeyGen() rem length(Hosts)) + 1, Hosts),
+        Node = lists:nth((KeyGen() rem length(Nodes)) + 1, Nodes),
 
-        case net_adm:ping(Host) of
+        case net_adm:ping(Node) of
             pong -> {ok, NewState};
             pang -> {error, pang, NewState}
         end
