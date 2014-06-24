@@ -11,7 +11,7 @@
 -module(st_utils).
 
 %% API
--export([host_to_node/1, make_dir/1]).
+-export([host_to_node/1, make_dir/1, get_dn/1]).
 
 %% ====================================================================
 %% API functions
