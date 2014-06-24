@@ -135,7 +135,7 @@ create_user(Login, Name, Teams, Email, DnList) ->
 			                end,
 			                GetUserAns;
 			            {error,file_exists} ->
-				            lager:warning("Root dir for user ~s already exists!",[Login]),
+				            ?warning("Root dir for user ~s already exists!",[Login]),
 				            case create_dirs_at_storage(Login, get_team_names(User)) of
 					            ok -> ok;
 					            DirsError2 -> throw(DirsError2)
@@ -152,7 +152,7 @@ create_user(Login, Name, Teams, Email, DnList) ->
 	    end
     catch
     _Type:Error  ->
-	    lager:error("Creating user failed with error: ~p",[Error]),
+	    ?error("Creating user failed with error: ~p",[Error]),
 	    case QuotaAns of
 			ok ->
 				dao_lib:apply(dao_users, remove_quota, [QuotaUUID],1);
@@ -486,7 +486,7 @@ rdn_sequence_to_dn_string(RDNSequence) ->
         [_Comma | ProperString] = lists:reverse(DNString),
         {ok, lists:reverse(ProperString)}
     catch Type:Message ->
-        lager:error("Failed to convert rdnSequence to DN string.~n~p: ~p~n~p", [Type, Message, erlang:get_stacktrace()]),
+        ?error("Failed to convert rdnSequence to DN string.~n~p: ~p~n~p", [Type, Message, erlang:get_stacktrace()]),
         {error, conversion_failed}
     end.
 
@@ -671,12 +671,12 @@ create_dirs_at_storage(Root, Teams, Storage) ->
 					{ok, ok} ->
 						TmpAns;
 					Error1 ->
-						lager:error("Can not change owner of dir ~p using storage helper ~p due to ~p. Make sure group '~s' is defined in the system.",
+						?error("Can not change owner of dir ~p using storage helper ~p due to ~p. Make sure group '~s' is defined in the system.",
 							[Dir, SHI#storage_helper_info.name, Error1, Dir]),
 						{error, dir_chown_error}
 				end;
 			_ ->
-				lager:error("Can not create dir ~p using storage helper ~p. Make sure group '~s' is defined in the system.",
+				?error("Can not create dir ~p using storage helper ~p. Make sure group '~s' is defined in the system.",
 					[Dir, SHI#storage_helper_info.name, Dir]),
 				{error, create_dir_error}
 		end
@@ -698,24 +698,24 @@ create_dirs_at_storage(Root, Teams, Storage) ->
 							{ok,ok} ->
 								{ok,true};
                             Error2 ->
-								lager:error("Can not change owner of dir ~p using storage helper ~p due to ~p. Make sure user '~s' is defined in the system.",
+								?error("Can not change owner of dir ~p using storage helper ~p due to ~p. Make sure user '~s' is defined in the system.",
 									[Root, SHI#storage_helper_info.name, Error2, Root]),
 	                            {{error,dir_chown_error},true}
 						end;
 					{error, dir_or_file_exists} ->
-						lager:warning("User root dir ~p already exists",[RootDirName]),
+						?warning("User root dir ~p already exists",[RootDirName]),
 						Ans3 = storage_files_manager:chown(SHI, RootDirName, Root, ""),
 						Ans4 = storage_files_manager:chmod(SHI, RootDirName, 8#300),
 						case {Ans3,Ans4} of
 							{ok,ok} ->
 								{ok,false};
 							_ ->
-								lager:error("Can not change owner of dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
+								?error("Can not change owner of dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
 									[Root, SHI#storage_helper_info.name, Root]),
 								{{error,dir_chown_error},false}
 						end;
 					_ ->
-						lager:error("Can not create dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
+						?error("Can not create dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
 							[Root, SHI#storage_helper_info.name, Root]),
 						{{error,create_dir_error},false}
 				end

@@ -74,7 +74,7 @@ get_env(Name) ->
 		{ok,Value} ->
 			{ok,Value};
 		undefined ->
-			lager:error("Could not get '~p' environment variable.",[Name]),
+			?error("Could not get '~p' environment variable.",[Name]),
 			io:format(standard_error, "Could not get '~p' environment variable.~n",[Name]),
 			{error,undefined}
 	end.
@@ -135,7 +135,7 @@ ports_are_free(Port)->
 			gen_tcp:close(Socket),
 			true;
 		error ->
-			lager:error("Port ~w is in use, error: ~p. Starting aborted. ~n", [Port,Socket]),
+			?error("Port ~w is in use, error: ~p. Starting aborted. ~n", [Port,Socket]),
 			io:format(standard_error, "Port ~w is in use. Starting aborted.~n", [Port]),
 			false
 	end.

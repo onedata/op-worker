@@ -311,7 +311,7 @@ encode_and_send({ResponsePid, Message, MessageDecoder, MsgID}, MessageIdForClien
     end
   catch
     Type:Error ->
-      lager:error("Ranch handler callback error for message ~p, error: ~p:~p", [Message, Type, Error]),
+      ?error("Ranch handler callback error for message ~p, error: ~p:~p", [Message, Type, Error]),
       ResponsePid ! {self(), MsgID, handler_error},
       {ok, Req, State}
   end.
@@ -402,7 +402,7 @@ encode_answer_record(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker
                           end
                         catch
                           Type:Error ->
-                            lager:error("Ranch handler error during encoding worker answer: ~p:~p, answer type: ~s, decoder ~s, worker answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Worker_Answer]),
+                            ?error("Ranch handler error during encoding worker answer: ~p:~p, answer type: ~s, decoder ~s, worker answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Worker_Answer]),
                             #answer{answer_status = "worker_answer_encoding_error", message_id = MsgId}
                         end
                     end;
@@ -411,7 +411,7 @@ encode_answer_record(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker
                   #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId}
                 catch
                   Type:Error ->
-                    lager:error("Ranch handler error during encoding main answer: ~p:~p, main answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Main_Answer2]),
+                    ?error("Ranch handler error during encoding main answer: ~p:~p, main answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Main_Answer2]),
                     #answer{answer_status = "main_answer_encoding_error", message_id = MsgId}
                 end
   end.
@@ -439,7 +439,7 @@ checkMessage(Msg, DN) when is_tuple(Msg) ->
   lists:member(Record_Type, proplists:get_value(map_dn_to_client_type(DN), ?MessagesWhiteList, []));
 
 checkMessage(Msg, DN) ->
-  lager:warning("Wrong type of message ~p for user ~p", [Msg, DN]),
+  ?warning("Wrong type of message ~p for user ~p", [Msg, DN]),
   false.
 
 

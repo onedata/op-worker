@@ -264,7 +264,7 @@ handle_cast({delete_callback_by_pid, Pid}, State) ->
           gen_server:call({global, ?CCM}, {delete_callback, Fuse, node(), Pid}, 2000)
         catch
           _:_ ->
-            lager:error("delete_callback - error during contact with CCM"),
+            ?error("delete_callback - error during contact with CCM"),
             error
         end
       end)
@@ -365,7 +365,7 @@ handle_info({delete_node_for_ack, MsgID}, State) ->
   {noreply, State};
 
 handle_info({nodedown, _Node}, State) ->
-  lager:error("Connection to CCM lost"),
+  ?error("Connection to CCM lost"),
   {noreply, State#node_state{ccm_con_status = not_connected}};
 
 handle_info(_Info, State) ->
@@ -434,7 +434,7 @@ heart_beat(Conn_status, State) ->
     _ -> erlang:send_after(500, self(), {timer, do_heart_beat})
   end,
 
-  lager:info([{mod, ?MODULE}], "Heart beat on node: ~p: sent; connection: ~p, old conn_status: ~p,  state_num: ~b, callback_num: ~b,  disp dispatcher_state: ~b, callbacks_state: ~b",
+  ?info("Heart beat on node: ~p: sent; connection: ~p, old conn_status: ~p,  state_num: ~b, callback_num: ~b,  disp dispatcher_state: ~b, callbacks_state: ~b",
     [node(), New_conn_status, Conn_status, State#node_state.state_num, State#node_state.callbacks_num, State#node_state.dispatcher_state, State#node_state.callbacks_state]),
   State#node_state{ccm_con_status = New_conn_status}.
 
@@ -445,7 +445,7 @@ heart_beat(Conn_status, State) ->
   NewStatus :: term().
 %% ====================================================================
 heart_beat_response(New_state_num, CallbacksNum, State) ->
-  lager:info([{mod, ?MODULE}], "Heart beat on node: ~p: answered, new state_num: ~b, new callback_num: ~b", [node(), New_state_num, CallbacksNum]),
+  ?info("Heart beat on node: ~p: answered, new state_num: ~b, new callback_num: ~b", [node(), New_state_num, CallbacksNum]),
 
   case (New_state_num == State#node_state.state_num) of
     true -> ok;

@@ -70,7 +70,7 @@ handle_max_udp_response_size(Header, QuestionList, AnswerList) ->
 	LeftSize = ?MAX_UDP_PACKET - ?BASE_DNS_HEADER_SIZE - QueriesSize,
 	DNS_Responses_Size = length(AnswerList) * ?DNS_ANSWER_SIZE,
 	if
-		DNS_Responses_Size > LeftSize -> lager:info("Truncating dns response"),
+		DNS_Responses_Size > LeftSize -> ?info("Truncating dns response"),
 									     FilteredAnswerList = lists:sublist(AnswerList, 1, erlang:max(LeftSize, 0) div ?DNS_ANSWER_SIZE),
 										 {inet_dns:make_header(Header, tc, 1), FilteredAnswerList};
 		true -> {Header, AnswerList}
@@ -196,12 +196,12 @@ get_workers(Module, Dispatcher, DispatcherTimeout) ->
 						{ok, ListOfIPs} -> {ok, ListOfIPs};
             {error, Error} -> {error, Error}
 				  after
-						DispatcherTimeout -> lager:error("Unexpected dispatcher timeout"), {error, timeout}
+						DispatcherTimeout -> ?error("Unexpected dispatcher timeout"), {error, timeout}
 				  end;
-			worker_not_found -> lager:error("Dispatcher error - worker not found"), {error, worker_not_found}
+			worker_not_found -> ?error("Dispatcher error - worker not found"), {error, worker_not_found}
 		end
 	catch
-		_:Error2 -> lager:error("Dispatcher not responding ~p", [Error2]), {error, dispatcher_not_responding}
+		_:Error2 -> ?error("Dispatcher not responding ~p", [Error2]), {error, dispatcher_not_responding}
 	end.
 
 %% get_nodes/2
@@ -223,12 +223,12 @@ get_nodes(Dispatcher, DispatcherTimeout) ->
               {ok, ListOfIPs} -> {ok, ListOfIPs};
               {error, Error} -> {error, Error}
             after
-              DispatcherTimeout -> lager:error("Unexpected dispatcher timeout"), {error, timeout}
+              DispatcherTimeout -> ?error("Unexpected dispatcher timeout"), {error, timeout}
             end;
-      worker_not_found -> lager:error("Dispatcher error - worker not found"), {error, worker_not_found}
+      worker_not_found -> ?error("Dispatcher error - worker not found"), {error, worker_not_found}
     end
   catch
-    _:Error2 -> lager:error("Dispatcher not responding ~p", [Error2]), {error, dispatcher_not_responding}
+    _:Error2 -> ?error("Dispatcher not responding ~p", [Error2]), {error, dispatcher_not_responding}
   end.
 
 %% translate_dispatcher_response_to_params/5

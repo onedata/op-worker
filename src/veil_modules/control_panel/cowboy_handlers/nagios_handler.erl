@@ -99,7 +99,7 @@ get_data_from_ccm(Timeout) ->
 		{Nodes,Workers,StateNum,CStateNum,none}
 	catch
 		Type:Error  ->
-			lager:error("Ccm connection error: ~p:~p",[Type,Error]),
+			?error("Ccm connection error: ~p:~p",[Type,Error]),
 			{[],[],none,none,Error}
 	end.
 
@@ -127,15 +127,15 @@ node_status(Node,CcmStateNum,CcmCStateNum,Timeout) ->
 			{veil_cluster_node,[{name,atom_to_list(Node)},{status,"ok"}],[]};
 		false ->
 			%log
-			lager:warning("Healthcheck on node ~p, callbacks/state number of ccm doesn't match values from node_manager",[Node]),
-			lager:warning("ccm_state_num: ~p, ccm_callback_num: ~p,disp_state_num: ~p, disp_callback_num: ~p,manager_state_num: ~p, manager_callback_num: ~p",
+			?warning("Healthcheck on node ~p, callbacks/state number of ccm doesn't match values from node_manager",[Node]),
+			?warning("ccm_state_num: ~p, ccm_callback_num: ~p,disp_state_num: ~p, disp_callback_num: ~p,manager_state_num: ~p, manager_callback_num: ~p",
 				[CcmStateNum,CcmCStateNum,DispStateNum,DispCStateNum,ManagerStateNum,ManagerCStateNum]),
 			%return
 			{veil_cluster_node,[{name,atom_to_list(Node)},{status,"out_of_sync"}],[]}
 		end
 	catch
 	    Type:Error ->
-				lager:error("Node ~p connection error: ~p:~p",[Node,Type,Error]),
+				?error("Node ~p connection error: ~p:~p",[Node,Type,Error]),
 				ErrorString2 = io_lib:format("~p", [{error,Error}]),
 				{veil_cluster_node,[{name,atom_to_list(Node)},{status,ErrorString2}],[]}
 	end.
@@ -169,13 +169,13 @@ worker_status(Worker,Timeout) ->
 			ok ->
 				{worker,[{name,NameString},{node,NodeString},{status,"ok"}],[]};
 			ErrorAns ->
-				lager:error("Healthcheck on worker ~p failed with error: ~p",[Worker,ErrorAns]),
+				?error("Healthcheck on worker ~p failed with error: ~p",[Worker,ErrorAns]),
 				ErrorAnsString = io_lib:format("~p", [ErrorAns]),
 				{worker,[{name,NameString},{node,NodeString},{status,ErrorAnsString}],[]}
 		end
 	catch
 	    Type:Error ->
-				lager:error("Worker ~p connection error: ~p:~p",[Worker,Type,Error]),
+				?error("Worker ~p connection error: ~p:~p",[Worker,Type,Error]),
 				ErrorString = io_lib:format("~p", [{error,Error}]),
 				{worker,[{name,NameString},{node,NodeString},{status,ErrorString}],[]}
 	end.

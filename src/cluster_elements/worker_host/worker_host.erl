@@ -303,7 +303,7 @@ handle_cast({sequential, job_check}, State) ->
             Pid = spawn(fun() -> Job(), gen_server:cast(State#host_state.plug_in, {sequential, job_end}) end),
             {noreply, State#host_state{current_seq_job = Pid, seq_queue = Queue}};
         {Value, Queue}->  %% Unknown state
-            lager:error([{mod, ?MODULE}], "Unknown worker sequential run queue state: current job: ~p, run queue: ~p", [Value, Queue]),
+            ?error("Unknown worker sequential run queue state: current job: ~p, run queue: ~p", [Value, Queue]),
             {noreply, State}
     end;
 
@@ -470,7 +470,7 @@ proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
     PlugIn:handle(ProtocolVersion, Request)
 	catch
     Type:Error ->
-      lager:error("Worker plug-in ~p error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
+      ?error("Worker plug-in ~p error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
       worker_plug_in_error
 	end,
   send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo).
@@ -516,7 +516,7 @@ proc_standard_request(RequestMap, SubProcs, PlugIn, ProtocolVersion, Msg, MsgId,
         Type:Error ->
           spawn(fun() ->
             BeforeProcessingRequest = os:timestamp(),
-            lager:error("Worker plug-in ~p sub proc error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
+            ?error("Worker plug-in ~p sub proc error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
             send_response(PlugIn, BeforeProcessingRequest, sub_proc_error, MsgId, ReplyTo)
           end),
           SubProcs
@@ -557,7 +557,7 @@ send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo) ->
         non -> Pid ! Response;
         Id -> Pid ! {worker_answer, Id, Response}
       end;
-    Other -> lagger:error("Wrong reply type: ~s", [Other])
+    Other -> ?error("Wrong reply type: ~s", [Other])
   end,
 
   AfterProcessingRequest = os:timestamp(),
@@ -719,7 +719,7 @@ sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, 
           ets:delete(Name, ChildPid),
           ets:delete(Name, ChildNum);
         _ ->
-          lager:error([{mod, ?MODULE}], "Exit of unknown sub proc"),
+          ?error("Exit of unknown sub proc"),
           error
       end,
       sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
@@ -805,12 +805,12 @@ map_to_sub_proc(Name, CacheName, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapF
       [{RequestValue, RequestProcPid}] ->
         {RequestValue, RequestProcPid};
       _ ->
-        lager:error([{mod, ?MODULE}], "Sub proc error for request ~p", [Request]),
+        ?error("Sub proc error for request ~p", [Request]),
         {error, error}
     end
   catch
     _:_ ->
-      lager:error([{mod, ?MODULE}], "Sub proc error for request ~p", [Request]),
+      ?error("Sub proc error for request ~p", [Request]),
       {error, error}
   end.
 
@@ -867,7 +867,7 @@ generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun, CacheType} |
           ProcFun(ProtocolVersion, Request)
                     catch
                       Type:Error ->
-                        lager:error("Worker plug-in ~p error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
+                        ?error("Worker plug-in ~p error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
                         worker_plug_in_error
                     end,
         send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo)
@@ -881,7 +881,7 @@ generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun, CacheType} |
           ProcFun(ProtocolVersion, Request, CacheName)
                     catch
                       Type:Error ->
-                        lager:error("Worker plug-in ~p error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
+                        ?error("Worker plug-in ~p error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
                         worker_plug_in_error
                     end,
         send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo)
@@ -1250,7 +1250,7 @@ register_sub_proc_simple_cache(Name, CacheLoop, ClearFun, ClearingPid) ->
     ok ->
       ok;
     _ ->
-      lager:error([{mod, ?MODULE}], "Error of register_sub_proc_simple_cache, error: ~p, args: ~p", [RegAns, {Name, CacheLoop, ClearFun, ClearingPid}]),
+      ?error("Error of register_sub_proc_simple_cache, error: ~p, args: ~p", [RegAns, {Name, CacheLoop, ClearFun, ClearingPid}]),
       error
   end.
 

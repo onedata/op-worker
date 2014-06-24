@@ -83,5 +83,5 @@ loop(Socket, ResponseTTL, DispatcherTimeout) ->
 handle_request(Socket, Address, Port, Packet, DispatcherTimeout, ResponseTTL) ->
 	case dns_utils:generate_answer(Packet, ?Dispatcher_Name, DispatcherTimeout, ResponseTTL, udp) of
 		{ok, Response} -> gen_udp:send(Socket, Address, Port, Response);
-		{error, Reason} -> lager:error("Error processing dns request ~p", [Reason]), ok
+		{error, Reason} -> ?error("Error processing dns request ~p", [Reason]), ok
 	end.

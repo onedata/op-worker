@@ -60,7 +60,7 @@ create_dir(FullFileName, Mode) ->
         {error, file_exists} ->
             #atom{value = ?VEEXIST};
         _BadStatus ->
-            lager:error([{mod, ?MODULE}], "Error: can not create dir: ~s, error: ~p", [FullFileName, _BadStatus]),
+            ?error("Error: can not create dir: ~s, error: ~p", [FullFileName, _BadStatus]),
             #atom{value = ?VEREMOTEIO}
     end.
 
@@ -136,10 +136,10 @@ create_link(FullFileName, LinkValue) ->
             fslogic_meta:update_parent_ctime(UserFilePath, CTime),
             #atom{value = ?VOK};
         {error, file_exists} ->
-            lager:error("Cannot create link - file already exists: ~p", [FullFileName]),
+            ?error("Cannot create link - file already exists: ~p", [FullFileName]),
             #atom{value = ?VEEXIST};
         {error, Reason} ->
-            lager:error("Cannot save link file (from ~p to ~p) due to error: ~p", [FullFileName, LinkValue, Reason]),
+            ?error("Cannot save link file (from ~p to ~p) due to error: ~p", [FullFileName, LinkValue, Reason]),
             #atom{value = ?VEREMOTEIO}
     end.
 

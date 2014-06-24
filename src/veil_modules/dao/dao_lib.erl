@@ -83,7 +83,7 @@ apply(Module, {asynch, Method}, Args, ProtocolVersion, _Timeout) ->
             {error, worker_not_found}
     catch
         Type:Error ->
-            lager:error("Cannot make a call to request_dispatcher on node ~p Reason: ~p", [dao, node(), {Type, Error}]),
+            ?error("Cannot make a call to request_dispatcher on node ~p Reason: ~p", [dao, node(), {Type, Error}]),
             {error, {Type, Error}}
     end;
 apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout) ->
@@ -104,7 +104,7 @@ apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout) ->
             {error, worker_not_found}
     catch
         Type:Error ->
-            lager:error("Cannot make a call to request_dispatcher on node ~p Reason: ~p", [dao, node(), {Type, Error}]),
+            ?error("Cannot make a call to request_dispatcher on node ~p Reason: ~p", [dao, node(), {Type, Error}]),
             {error, {Type, Error}}
     end;
 apply(Module, Method, Args, ProtocolVersion, Timeout) ->

@@ -533,7 +533,7 @@ event(generate_logs) ->
     lists:foreach(
         fun(Severity) ->
             Message = lists:flatten(lists:duplicate(10, io_lib:format("~.36B", [random:uniform(98 * 567 * 456 * 235 * 232 * 3465 * 23552 * 3495 * 43534 * 345436 * 45)]))),
-            lager:log(Severity, Metadata, Message)
+            ?do_log(Severity, Metadata, Message)
         end, ?LOGLEVEL_LIST).
 
 

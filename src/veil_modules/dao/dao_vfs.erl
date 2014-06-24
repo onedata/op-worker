@@ -135,7 +135,7 @@ list_descriptors({by_uuid_n_owner, {FileId, Owner}}, N, Offset) when N > 0, Offs
             {ok, [FdDoc || #view_row{doc = #veil_document{record = #file_descriptor{file = FileId1, fuse_id = OwnerId}} = FdDoc} <- Rows,
                 FileId1 == FileId, OwnerId == Owner orelse Owner == ""]};
         Data ->
-            lager:error("Invalid file descriptor view response: ~p", [Data]),
+            ?error("Invalid file descriptor view response: ~p", [Data]),
             throw({inavlid_data, Data})
     end;
 list_descriptors({by_expired_before, Time}, N, Offset) when N > 0, Offset >= 0 ->
@@ -146,7 +146,7 @@ list_descriptors({by_expired_before, Time}, N, Offset) when N > 0, Offset >= 0 -
         {ok, #view_result{rows = Rows}} ->
             {ok, [FdDoc || #view_row{doc = #veil_document{record = #file_descriptor{}} = FdDoc} <- Rows]};
         Data ->
-            lager:error("Invalid file descriptor view response: ~p", [Data]),
+            ?error("Invalid file descriptor view response: ~p", [Data]),
             throw({inavlid_data, Data})
     end;
 list_descriptors({_Type, _Resource}, _N, _Offset) when _N > 0, _Offset >= 0 ->
@@ -510,17 +510,17 @@ get_file_helper({internal_path, [Dir | Path], Root}, MultiError, View) ->
       {ok, #view_result{rows = [#view_row{id = Id, doc = FDoc}]}} ->
         {Id, FDoc};
       {ok, #view_result{rows = []}} ->
-        lager:error("File ~p not found (root = ~p)", [Dir, Root]),
+        ?error("File ~p not found (root = ~p)", [Dir, Root]),
         throw(file_not_found);
       {ok, #view_result{rows = [#view_row{id = Id, doc = FDoc} | _Tail]}} ->
         case MultiError of
           true -> throw(file_duplicated);
           false ->
-            lager:warning("File ~p (root = ~p) is duplicated. Returning first copy. Others: ~p", [Dir, Root, _Tail]),
+            ?warning("File ~p (root = ~p) is duplicated. Returning first copy. Others: ~p", [Dir, Root, _Tail]),
             {Id, FDoc}
         end;
       _Other ->
-        lager:error("Invalid view response: ~p", [_Other]),
+        ?error("Invalid view response: ~p", [_Other]),
         throw(invalid_data)
     end,
   case Path of
@@ -573,7 +573,7 @@ list_dir(Dir, N, Offset) ->
             {ok, #veil_document{record = #file{type = ?DIR_TYPE}, uuid = UUID}} ->
                 UUID;
             R ->
-                lager:error("Directory ~p not found. Error: ~p", [Dir, R]),
+                ?error("Directory ~p not found. Error: ~p", [Dir, R]),
                 throw({dir_not_found, R})
         end,
     NextId =  uca_increment(Id), %% Dirty hack needed because `inclusive_end` option does not work in BigCouch for some reason
@@ -585,7 +585,7 @@ list_dir(Dir, N, Offset) ->
                                            %% `end_key` seems to behave strange combined with `limit` option. TODO: get rid of it after DBMS switch
             {ok, [FileDoc || #view_row{doc = #veil_document{record = #file{parent = Parent} } = FileDoc } <- Rows, Parent == Id]};
         _Other ->
-            lager:error("Invalid view response: ~p", [_Other]),
+            ?error("Invalid view response: ~p", [_Other]),
             throw(inavlid_data)
     end.
 
@@ -607,7 +607,7 @@ count_subdirs({uuid, Id}) ->
         {ok, #view_result{rows = [#view_row{value = Sum}]}} -> {ok, Sum};
         {ok, #view_result{rows = []}} -> {ok, 0};
         _Other ->
-            lager:error("Invalid view response: ~p", [_Other]),
+            ?error("Invalid view response: ~p", [_Other]),
             throw(invalid_data)
     end.
 
@@ -793,10 +793,10 @@ get_storage_from_db({id, StorageID}) when is_integer(StorageID) ->
             {ok, Doc};
         {ok, #view_result{rows = Rows}} ->
             [#view_row{doc = #veil_document{record = #storage_info{} } = Doc } | _Tail] = Rows,
-            lager:warning("Storage with ID ~p is duplicated. Returning first copy. All: ~p", [StorageID, Rows]),
+            ?warning("Storage with ID ~p is duplicated. Returning first copy. All: ~p", [StorageID, Rows]),
             {ok, Doc};
         _Other ->
-            lager:error("Invalid view response: ~p", [_Other]),
+            ?error("Invalid view response: ~p", [_Other]),
             throw(inavlid_data)
     end. 
 
@@ -816,7 +816,7 @@ list_storage() ->
         {ok, #view_result{rows = Rows}} ->
             {ok, [Doc || #view_row{doc = #veil_document{record = #storage_info{} } = Doc } <- Rows]};
         _Other ->
-            lager:error("Invalid view response: ~p", [_Other]),
+            ?error("Invalid view response: ~p", [_Other]),
             throw(inavlid_data)
     end.
 

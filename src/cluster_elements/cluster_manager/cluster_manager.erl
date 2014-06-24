@@ -180,7 +180,7 @@ handle_call({addCallback, FuseId, Node, Pid}, _From, State) ->
     {reply, ok, State#cm_state{callbacks_num = CallbacksNum}}
   catch
     _:_ ->
-      lager:error([{mod, ?MODULE}], "Can not add callback of node: ~p, pid ~p, fuseId ~p", [Node, Pid, FuseId]),
+      ?error("Can not add callback of node: ~p, pid ~p, fuseId ~p", [Node, Pid, FuseId]),
       {reply, error, State}
   end;
 
@@ -203,7 +203,7 @@ handle_call({delete_callback, FuseId, Node, Pid}, _From, State) ->
     {reply, ok, State#cm_state{callbacks_num = CallbacksNum}}
   catch
     _:_ ->
-      lager:error([{mod, ?MODULE}], "Can not delete callback of node: ~p, pid ~p, fuseId ~p", [Node, Pid, FuseId]),
+      ?error("Can not delete callback of node: ~p, pid ~p, fuseId ~p", [Node, Pid, FuseId]),
       {reply, error, State}
   end;
 
@@ -361,7 +361,7 @@ handle_cast({register_dispatcher_map, Module, Map, AnsPid}, State) ->
       AnsPid ! dispatcher_map_registered,
       {noreply, State};
     false ->
-      lager:info([{mod, ?MODULE}], "Registration of disp map for module ~p", [Module]),
+      ?info("Registration of disp map for module ~p", [Module]),
       NewMapsList = register_dispatcher_map(Module, Map, Maps),
       NewState = State#cm_state{dispatcher_maps = NewMapsList},
       NewState2 = update_dispatchers_and_dns(NewState, false, true),
@@ -405,12 +405,12 @@ handle_cast(save_state, State) ->
       try
         Ans = gen_server:call(?Dispatcher_Name, {dao, 1, {save_state, [State#cm_state{dispatcher_maps = []}]}}, 500),
         case Ans of
-          ok -> lager:info([{mod, ?MODULE}], "Save state message sent");
-          _ -> lager:error([{mod, ?MODULE}], "Save state error: ~p", [Ans])
+          ok -> ?info("Save state message sent");
+          _ -> ?error("Save state error: ~p", [Ans])
         end
       catch
         E1:E2 ->
-          lager:error([{mod, ?MODULE}], "Save state error: ~p:~p", [E1, E2])
+          ?error("Save state error: ~p:~p", [E1, E2])
       end;
     false ->
       ok
@@ -422,7 +422,7 @@ handle_cast(check_cluster_state, State) ->
   {noreply, NewState};
 
 handle_cast({node_down, Node}, State) ->
-  lager:error("Node down: ~p", [Node]),
+  ?error("Node down: ~p", [Node]),
   {NewState, WorkersFound} = node_down(Node, State),
 
   %% If workers were running on node that is down,
@@ -455,13 +455,13 @@ handle_cast({set_monitoring, Flag}, State) ->
 handle_cast({worker_answer, cluster_state, Response}, State) ->
   NewState = case Response of
                {ok, SavedState} ->
-                 lager:info([{mod, ?MODULE}], "State read from DB: ~p", [SavedState]),
+                 ?info("State read from DB: ~p", [SavedState]),
                  merge_state(State, SavedState);
                {error, {not_found,missing}} ->
                  save_state(),
                  State#cm_state{state_loaded = true};
                Error ->
-                 lager:info([{mod, ?MODULE}], "State cannot be read from DB: ~p", [Error]), %% info logging level because state may not be present in db and it's not an error
+                 ?info("State cannot be read from DB: ~p", [Error]), %% info logging level because state may not be present in db and it's not an error
                  State
              end,
   {noreply, NewState};
@@ -720,7 +720,7 @@ check_cluster_state(State) ->
                                    true ->
                                      State;
                                    _ ->
-                                     lager:info([{mod, ?MODULE}], "Worker: ~s will be started at node: ~s", [MaxModule, MinNode]),
+                                     ?info("Worker: ~s will be started at node: ~s", [MaxModule, MinNode]),
                                      {WorkerRuns, TmpState} = start_worker(MinNode, MaxModule, proplists:get_value(MaxModule, ?Modules_With_Args, []), State),
                                      case WorkerRuns of
                                        ok ->
@@ -730,7 +730,7 @@ check_cluster_state(State) ->
                                      end
                                  end;
                                false ->
-                                 lager:info([{mod, ?MODULE}], "Worker: ~s will be stopped at node", [MaxModule, MaxNode]),
+                                 ?info("Worker: ~s will be stopped at node", [MaxModule, MaxNode]),
                                  {WorkerStopped, TmpState2} = stop_worker(MaxNode, MaxModule, State),
                                  case WorkerStopped of
                                    ok ->
@@ -752,7 +752,7 @@ check_cluster_state(State) ->
                  end
              end,
 
-  lager:info([{mod, ?MODULE}], "Cluster state ok"),
+  ?info("Cluster state ok"),
   NewState2 = init_cluster(NewState), %% if any worker is down and some worker type has no running instances, new worker should be started anywhere
   NewState2#cm_state{cluster_check_num = CheckNum}.
 
@@ -783,11 +783,11 @@ start_worker(Node, Module, WorkerArgs, State) ->
     {ok, LoadMemorySize} = application:get_env(?APP_Name, worker_load_memory_size),
     {ok, ChildPid} = supervisor:start_child({?Supervisor_Name, Node}, ?Sup_Child(Module, worker_host, transient, [Module, WorkerArgs, LoadMemorySize])),
     Workers = State#cm_state.workers,
-    lager:info([{mod, ?MODULE}], "Worker: ~s started at node: ~s", [Module, Node]),
+    ?info("Worker: ~s started at node: ~s", [Module, Node]),
     {ok, State#cm_state{workers = [{Node, Module, ChildPid} | Workers]}}
   catch
     _:_ ->
-      lager:error([{mod, ?MODULE}], "Error during start of worker: ~s started at node: ~s", [Module, Node]),
+      ?error("Error during start of worker: ~s started at node: ~s", [Module, Node]),
       {error, State}
   end.
 
@@ -858,7 +858,7 @@ check_node(Node, State) ->
               {ok, State#cm_state{workers = NewWorkers, callbacks_num = CallbacksNum}, WorkersFound2}
             catch
               _:_ ->
-                lager:error([{mod, ?MODULE}], "Can not get fuses of node: ~s", [Node]),
+                ?error("Can not get fuses of node: ~s", [Node]),
                 {error, State, false}
             end;
           _ -> {error, State, false}
@@ -883,13 +883,13 @@ add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
   case lists:member(Id, Jobs) of
     false -> add_children(Node, Children, Workers);
     true ->
-      lager:info([{mod, ?MODULE}], "Worker ~p found at node ~s", [Id, Node]),
+      ?info("Worker ~p found at node ~s", [Id, Node]),
 
       MapState = try
         ok = gen_server:call(ChildPid, dispatcher_map_unregistered, 500)
       catch
         _:_ ->
-          lager:error([{mod, ?MODULE}], "Error during contact with worker ~p found at node ~s", [Id, Node]),
+          ?error("Error during contact with worker ~p found at node ~s", [Id, Node]),
           error
       end,
 
@@ -1142,7 +1142,7 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
     case node_to_ip(Node) of
       {ok, Address} -> Address;
       {error, Error} ->
-        lager:error("Cannot resolve ip address for node ~p, error: ~p", [Node, Error]),
+        ?error("Cannot resolve ip address for node ~p, error: ~p", [Node, Error]),
         unknownaddress
     end
   end,
@@ -1227,7 +1227,7 @@ check_load(WorkerPlugin) ->
     Load / TimeDiff
   catch
     _:_ ->
-      lager:error([{mod, ?MODULE}], "Can not get status of worker plugin"),
+      ?error("Can not get status of worker plugin"),
       error
   end.
 
@@ -1296,7 +1296,7 @@ get_workers_versions([{Node, Module} | Workers], Versions) ->
     get_workers_versions(Workers, [{Node, Module, V} | Versions])
   catch
     E1:E2 ->
-      lager:error([{mod, ?MODULE}], "get_workers_versions error: ~p:~p", [E1, E2]),
+      ?error("get_workers_versions error: ~p:~p", [E1, E2]),
       get_workers_versions(Workers, [{Node, Module, can_not_connect_with_worker} | Versions])
   end.
 
@@ -1572,7 +1572,7 @@ clear_cache(State, Cache) ->
       {TmpState, TmpWorkersFound}
     catch
       E1:E2 ->
-        lager:error([{mod, ?MODULE}], "Can not clear cache ~p of node: ~p, error: ~p:~p", [Cache, Node, E1, E2]),
+        ?error("Can not clear cache ~p of node: ~p, error: ~p:~p", [Cache, Node, E1, E2]),
         {NewState, WorkersFound} = node_down(Node, State),
         {NewState, TmpWorkersFound or WorkersFound}
     end

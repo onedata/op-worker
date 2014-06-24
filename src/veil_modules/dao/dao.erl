@@ -59,7 +59,7 @@ init({_Args, {init_status, table_initialized}}) -> %% Final stage of initializat
             [dao_hosts:insert(Node) || Node <- Nodes, is_atom(Node)],
             catch setup_views(?DATABASE_DESIGN_STRUCTURE);
         _ ->
-            lager:warning("There are no DB hosts given in application env variable.")
+            ?warning("There are no DB hosts given in application env variable.")
     end,
 
     ProcFun = fun(ProtocolVersion, {Target, Method, Args}) ->
@@ -149,7 +149,7 @@ handle(ProtocolVersion, healthcheck) ->
 		ok ->
 			ok;
 		_ ->
-			lager:error("Healthchecking database filed with error: ~p",Msg),
+			?error("Healthchecking database filed with error: ~p",Msg),
 			{error,db_healthcheck_failed}
 	end;
 
@@ -166,23 +166,23 @@ handle(ProtocolVersion, {Target, Method, Args}) when is_atom(Target), is_atom(Me
         end,
     try apply(Module, Method, Args) of
         {error, Err} ->
-            lager:error("Handling ~p:~p with args ~p returned error: ~p", [Module, Method, Args, Err]),
+            ?error("Handling ~p:~p with args ~p returned error: ~p", [Module, Method, Args, Err]),
             {error, Err};
         {ok, Response} -> {ok, Response};
         ok -> ok;
         Other ->
-            lager:error("Handling ~p:~p with args ~p returned unknown response: ~p", [Module, Method, Args, Other]),
+            ?error("Handling ~p:~p with args ~p returned unknown response: ~p", [Module, Method, Args, Other]),
             {error, Other}
     catch
         error:{badmatch, {error, Err}} -> {error, Err};
         _Type:Error ->
-%%             lager:error("Handling ~p:~p with args ~p interrupted by exception: ~p:~p ~n ~p", [Module, Method, Args, Type, Error, erlang:get_stacktrace()]),
+%%             ?error("Handling ~p:~p with args ~p interrupted by exception: ~p:~p ~n ~p", [Module, Method, Args, Type, Error, erlang:get_stacktrace()]),
             {error, Error}
     end;
 handle(ProtocolVersion, {Method, Args}) when is_atom(Method), is_list(Args) ->
     handle(ProtocolVersion, {cluster, Method, Args});
 handle(_ProtocolVersion, _Request) ->
-    lager:error("Unknown request ~p (protocol ver.: ~p)", [_Request, _ProtocolVersion]),
+    ?error("Unknown request ~p (protocol ver.: ~p)", [_Request, _ProtocolVersion]),
     {error, wrong_args}.
 
 %% cleanup/0
@@ -222,7 +222,7 @@ save_record(#veil_document{uuid = Id, rev_info = RevInfo, record = Rec, force_up
     if
         Valid -> ok;
         true ->
-            lager:error("Cannot save record: ~p because it's not supported", [Rec]),
+            ?error("Cannot save record: ~p because it's not supported", [Rec]),
             throw(unsupported_record)
     end,
     Revs =
@@ -348,7 +348,7 @@ list_records(#view_info{name = ViewName, design = DesignName, db_name = DbName},
               {ok, #view_result{total = length(Rows2), offset = 0, rows = FormattedRows2}};
           {error, _} = E -> throw(E);
             Other ->
-                lager:error("dao_helper:query_view has returned unknown query result: ~p", [Other]),
+                ?error("dao_helper:query_view has returned unknown query result: ~p", [Other]),
                 throw({unknown_query_result, Other})
         end.
 
@@ -406,23 +406,23 @@ setup_views(DesignStruct) ->
                         DbVersion = dao_helper:name(integer_to_list(binary:decode_unsigned(crypto:hash_final(LastCTX1)), 16)),
                         case DbVersion of %% Compare DbVersion with LocalVersion
                             LocalVersion ->
-                                lager:info("DB version of design ~p is ~p and matches local version. Design is up to date", [Name, LocalVersion]),
+                                ?info("DB version of design ~p is ~p and matches local version. Design is up to date", [Name, LocalVersion]),
                                 [];
                             _Other ->
-                                lager:info("DB version of design ~p is ~p and does not match ~p. Rebuilding design document", [Name, _Other, LocalVersion]),
+                                ?info("DB version of design ~p is ~p and does not match ~p. Rebuilding design document", [Name, _Other, LocalVersion]),
                                 ViewList
                         end;
                     _ ->
-                        lager:info("Design document ~p in DB ~p not exists. Creating...", [Name, DbName]),
+                        ?info("Design document ~p in DB ~p not exists. Creating...", [Name, DbName]),
                         ViewList
                 end,
 
             lists:map(fun(#view_info{name = ViewName}) -> %% Foreach view
                 case dao_helper:create_view(DbName, Name, ViewName, load_view_def(ViewName, map), load_view_def(ViewName, reduce), LocalVersion) of
                     ok ->
-                        lager:info("View ~p in design ~p, DB ~p has been created.", [ViewName, Name, DbName]);
+                        ?info("View ~p in design ~p, DB ~p has been created.", [ViewName, Name, DbName]);
                     _Err ->
-                        lager:error("View ~p in design ~p, DB ~p creation failed. Error: ~p", [ViewName, Name, DbName, _Err])
+                        ?error("View ~p in design ~p, DB ~p creation failed. Error: ~p", [ViewName, Name, DbName, _Err])
                 end
             end, NewViewList),
             DbName
@@ -520,7 +520,7 @@ term_to_doc(Field) when is_tuple(Field) ->
     {_, {Ret}} = lists:foldl(FoldFun, {1, InitObj}, LField),
     {lists:reverse(Ret)};
 term_to_doc(Field) ->
-    lager:error("Cannot convert term to document because field: ~p is not supported", [Field]),
+    ?error("Cannot convert term to document because field: ~p is not supported", [Field]),
     throw({unsupported_field, Field}).
 
 
@@ -617,7 +617,7 @@ init_storage() ->
     case GetEnvResult of
       {ok, _} -> ok;
       undefined ->
-        lager:error("Could not get 'storage_config_path' environment variable"),
+        ?error("Could not get 'storage_config_path' environment variable"),
         throw(get_env_error)
     end,
     {ok, StorageFilePath} = GetEnvResult,
@@ -627,7 +627,7 @@ init_storage() ->
     case Status1 of
       ok -> ok;
       error ->
-        lager:error("Could not list existing storages"),
+        ?error("Could not list existing storages"),
         throw(ListStorageValue)
     end,
     ActualDbStorages = [X#veil_document.record || X <- ListStorageValue],
@@ -639,7 +639,7 @@ init_storage() ->
         case Status2 of
           ok -> ok;
           error ->
-            lager:error("Could not read storage config file"),
+            ?error("Could not read storage config file"),
             throw(FileConsultValue)
         end,
 
@@ -658,7 +658,7 @@ init_storage() ->
             lists:map(UserPreferenceToGroupInfo, StoragePreferences)
                        catch
                          _Type:Err ->
-                           lager:error("Wrong format of storage config file"),
+                           ?error("Wrong format of storage config file"),
                            Err
                        end,
 
@@ -668,7 +668,7 @@ init_storage() ->
             ok ->
               ok;
             error ->
-              lager:error("Error during inserting storage to db"),
+              ?error("Error during inserting storage to db"),
               Value
           end
         end, FileConsultValue),
@@ -682,6 +682,6 @@ init_storage() ->
     end
   catch
     Type:Error ->
-      lager:error("Error during storage init: ~p:~p", [Type, Error]),
+      ?error("Error during storage init: ~p:~p", [Type, Error]),
       {error, Error}
   end.

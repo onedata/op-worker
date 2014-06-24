@@ -98,7 +98,7 @@ mkdir(Storage_helper_info, Dir) ->
               end;
             {error, 'NIF_not_loaded'} -> ErrorCode2;
             _ ->
-              lager:error("Can not create dir %p, code: %p, helper info: %p, mode: %p%n", [Dir, ErrorCode2, Storage_helper_info, NewDirStorageMode]),
+              ?error("Can not create dir %p, code: %p, helper info: %p, mode: %p%n", [Dir, ErrorCode2, Storage_helper_info, NewDirStorageMode]),
               {wrong_mkdir_return_code, ErrorCode2}
           end
       end;
@@ -122,7 +122,7 @@ mv(Storage_helper_info, From, To) ->
     0 -> ok;
     {error, 'NIF_not_loaded'} -> ErrorCode;
     _ ->
-      lager:error("Can not move file from ~p to ~p, code: ~p, helper info: ~p", [From, To, ErrorCode, Storage_helper_info]),
+      ?error("Can not move file from ~p to ~p, code: ~p, helper info: ~p", [From, To, ErrorCode, Storage_helper_info]),
       {wrong_rename_return_code, ErrorCode}
   end.
 
@@ -530,7 +530,7 @@ write_bytes(Storage_helper_info, File, Offset, Buf, FFI) ->
       end;
     {error, 'NIF_not_loaded'} -> ErrorCode;
     _ ->
-      lager:error("Write bytes error - wrong code: ~p", [ErrorCode]),
+      ?error("Write bytes error - wrong code: ~p", [ErrorCode]),
       {error, {wrong_write_return_code, ErrorCode}}
   end.
 

@@ -628,7 +628,7 @@ contact_fslogic(Message, Value) ->
     end
   catch
     E1:E2 ->
-      lager:error("Logical files manager: error during contact with fslogic: ~p:~p", [E1, E2]),
+      ?error("Logical files manager: error during contact with fslogic: ~p:~p", [E1, E2]),
       {error, dispatcher_error}
   end.
 
