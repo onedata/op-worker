@@ -59,7 +59,7 @@ new(Id) ->
         Dir = VFSRoot ++ "/stress_test_" ++ basho_bench_config:get(build_id),
         File = Dir ++ "/file_" ++ integer_to_list(Id),
 
-        case make_dir(Dir) of
+        case st_utils:make_dir(Dir) of
             ok ->
                 %% Open test file (each test process gets different file name like "file_Id")
                 Device = case open_helper(File, {error, first_try}, 20) of
@@ -122,8 +122,8 @@ setup_storages() ->
     CertFile = basho_bench_config:get(cert_file),
     [Host | _] = basho_bench_config:get(cluster_hosts),
     Groups = #fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = ["/mnt/gluster"]}},
-    Worker = map_hostname(Host),
-    {ok, DN} = get_dn(CertFile),
+    Node = st_utils:host_to_node(Host),
+    {ok, DN} = st_utils:get_dn(CertFile),
 
     %% Init net kernet in order to connect to cluster
     case net_kernel:start([list_to_atom("tester@" ++ net_adm:localhost()), longnames]) of
@@ -134,41 +134,22 @@ setup_storages() ->
 
     erlang:set_cookie(node(), veil_cluster_node),
 
-    case rpc:call(Worker, os, cmd, ["rm -rf /mnt/gluster/*"]) of
+    case rpc:call(Node, os, cmd, ["rm -rf /mnt/gluster/*"]) of
         "" -> ok;
         RmError -> throw(io_lib:fwrite("Can not remove files from storage: ~p", [RmError]))
     end,
 
-    case rpc:call(Worker, fslogic_storage, insert_storage, ["ClusterProxy", [], [Groups]]) of
+    case rpc:call(Node, fslogic_storage, insert_storage, ["ClusterProxy", [], [Groups]]) of
         {ok, _} -> ok;
         InsertError -> throw(io_lib:fwrite("Can not insert storage: ~p", [InsertError]))
     end,
 
-    case rpc:call(Worker, user_logic, create_user, ["veilfstestuser", "Test Name", [], "test@test.com", [DN]]) of
+    case rpc:call(Node, user_logic, create_user, ["veilfstestuser", "Test Name", [], "test@test.com", [DN]]) of
         {ok, _} -> ok;
         CreateError -> throw(io_lib:fwrite("Can not add test user: ~p", [CreateError]))
     end,
 
     ok.
-
-
-%% get_dn/1
-%% ====================================================================
-%% @doc Gets rDN list compatibile user_logic:create_user from PEM file
--spec get_dn(PEMFile :: string()) -> Result when
-    Result :: {ok, DN :: string()}.
-%% ====================================================================
-get_dn(PEMFile) ->
-    try
-        {ok, PemBin} = file:read_file(PEMFile),
-        Cert = public_key:pem_decode(PemBin),
-        [Leaf | Chain] = [public_key:pkix_decode_cert(DerCert, otp) || {'Certificate', DerCert, _} <- Cert],
-        {ok, EEC} = gsi_handler:find_eec_cert(Leaf, Chain, gsi_handler:is_proxy_certificate(Leaf)),
-        {rdnSequence, Rdn} = gsi_handler:proxy_subject(EEC),
-        user_logic:rdn_sequence_to_dn_string(Rdn)
-    catch
-        _:Error -> throw(io_lib:format("Can not get dn: ~p", [Error]))
-    end.
 
 
 %% open_helper/3
@@ -186,45 +167,3 @@ open_helper(File, {error, _Error}, Retry) when Retry > 0 ->
     open_helper(File, file:open(File, [write, raw]), Retry - 1);
 open_helper(_, _, _) ->
     {error, open_failed}.
-
-
-%% map_hostname/1
-%% ====================================================================
-%% @doc Maps machine hostname to worker name
--spec map_hostname(Hostname :: string()) -> Result when
-    Result :: atom() | no_return().
-%% ====================================================================
-map_hostname("149.156.10.162") -> 'worker@veil-d01.grid.cyf-kr.edu.pl';
-map_hostname("149.156.10.163") -> 'worker@veil-d02.grid.cyf-kr.edu.pl';
-map_hostname("149.156.10.164") -> 'worker@veil-d03.grid.cyf-kr.edu.pl';
-map_hostname("149.156.10.165") -> 'worker@veil-d04.grid.cyf-kr.edu.pl';
-map_hostname(Other) -> throw(io_lib:fwrite("Unknown hostname: ~p", [Other])).
-
-
-%% make_dir/1
-%% ====================================================================
-%% @doc Creates directory with parent directories
--spec make_dir(Dir :: string()) -> Result when
-    Result :: ok | {error, Reason :: term()}.
-%% ====================================================================
-make_dir(Dir) ->
-    [Root | Leafs] = filename:split(Dir),
-    case make_dir(Root, Leafs) of
-        ok -> ok;
-        {error, eexist} -> ok;
-        Other -> Other
-    end.
-
-
-%% make_dir/1
-%% ====================================================================
-%% @doc Creates directory with parent directories.
-%% Should not be used directly, use make_dir/1 instead.
--spec make_dir(Root :: string(), Leafs :: [string()]) -> Result when
-    Result :: ok | {error, Reason :: term()}.
-%% ====================================================================
-make_dir(Root, []) ->
-    file:make_dir(Root);
-make_dir(Root, [Leaf | Leafs]) ->
-    file:make_dir(Root),
-    make_dir(filename:join(Root, Leaf), Leafs).
