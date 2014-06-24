@@ -897,10 +897,7 @@ is_valid_name([]) ->
 is_valid_name([Character]) ->
   is_valid_character(Character);
 is_valid_name([Character | Characters]) ->
-  case is_valid_character(Character) of
-    true -> is_valid_name(Characters);
-    _ -> false
-  end;
+  is_valid_character(Character) andalso is_valid_name(Characters);
 is_valid_name(Name) when is_binary(Name) ->
   is_valid_name(binary_to_list(Name));
 is_valid_name(_) ->
