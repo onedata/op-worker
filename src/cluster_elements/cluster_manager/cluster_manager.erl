@@ -227,19 +227,15 @@ handle_call({update_cluster_rengines, EventType, EventHandlerItem}, _From, State
   {reply, ok, State};
 
 handle_call({get_cluster_stats, TimeWindow}, _From, State) ->
-  Reply = get_cluster_stats(TimeWindow, default),
-  {reply, Reply, State};
-
-handle_call({get_cluster_stats_json, TimeWindow}, _From, State) ->
-  Reply = get_cluster_stats(TimeWindow, json),
+  Reply = get_cluster_stats(TimeWindow),
   {reply, Reply, State};
 
 handle_call({get_cluster_stats, StartTime, EndTime}, _From, State) ->
   Reply = get_cluster_stats(StartTime, EndTime),
   {reply, Reply, State};
 
-handle_call({get_cluster_stats_json, StartTime, EndTime}, _From, State) ->
-  Reply = get_cluster_stats(StartTime, EndTime, json),
+handle_call({get_cluster_stats, StartTime, EndTime, Columns}, _From, State) ->
+  Reply = get_cluster_stats(StartTime, EndTime, Columns),
   {reply, Reply, State};
 
 %% TODO if callbacks with ack will be used intensively, information should be forwarded to nodes without ccm usage
@@ -1601,10 +1597,12 @@ clear_cache(State, Cache) ->
   Result :: ok | {error, Error :: term()}.
 %% ====================================================================
 create_cluster_stats_rrd() ->
+  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   {ok, Period} = application:get_env(?APP_Name, cluster_monitoring_period),
   {ok, Steps} = application:get_env(?APP_Name, rrd_steps),
+  {ok, RRDSize} = application:get_env(?APP_Name, rrd_size),
   Heartbeat = 2 * Period,
-  RRASize = round(60 * 60 / Period), % one day in seconds devided by monitoring period
+  RRASize = round(RRDSize / Period),
   BinaryPeriod = integer_to_binary(Period),
   BinaryHeartbeat = integer_to_binary(Heartbeat),
   RRASizeBinary = integer_to_binary(RRASize),
@@ -1625,7 +1623,7 @@ create_cluster_stats_rrd() ->
   RRAs = lists:map(fun(Step) -> BinaryStep = integer_to_binary(Step),
     <<"RRA:AVERAGE:0.5:", BinaryStep/binary, ":", RRASizeBinary/binary>> end, Steps),
 
-  case rrderlang:create(?Cluster_Stats_RRD_Name, Options, DSs, RRAs) of
+  case gen_server:call(?RrdErlang_Name, {create, ?Cluster_Stats_RRD_Name, Options, DSs, RRAs}, Timeout) of
     {error, Error} ->
       ?error("Can not create cluster stats RRD: ~p", [Error]),
       {error, Error};
@@ -1641,10 +1639,11 @@ create_cluster_stats_rrd() ->
   Result :: ok | {error, Error :: term()}.
 %% ====================================================================
 save_cluster_stats_to_rrd(NodesStats, #cm_state{storage_stats = StorageStats}) ->
+  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   {MegaSecs, Secs, _} = erlang:now(),
-  Timestamp = MegaSecs * 1000000 + Secs,
+  Timestamp = integer_to_binary(MegaSecs * 1000000 + Secs),
   Values = merge_nodes_stats(NodesStats) ++ get_storage_stats(StorageStats),
-  case rrderlang:update(?Cluster_Stats_RRD_Name, <<>>, Values, Timestamp) of
+  case gen_server:call(?RrdErlang_Name, {update, ?Cluster_Stats_RRD_Name, <<>>, Values, Timestamp}, Timeout) of
     {error, Error} ->
       ?error("Can not save node stats to RRD: ~p", [Error]),
       {error, Error};
@@ -1721,10 +1720,10 @@ get_storage_stats(#storage_stats{read_bytes = RB, write_bytes = WB}) ->
 %% get_cluster_stats/1
 %% ====================================================================
 %% @doc Get statistics about cluster load
--spec get_cluster_stats(TimeWindow :: short | medium | long | integer(), Format :: default | json) -> Result when
+-spec get_cluster_stats(TimeWindow :: short | medium | long | integer()) -> Result when
   Result :: [{Name :: atom(), Value :: float()}] | {error, term()}.
 %% ====================================================================
-get_cluster_stats(TimeWindow, Format) ->
+get_cluster_stats(TimeWindow) ->
   {ok, Interval} = case TimeWindow of
                      short -> application:get_env(?APP_Name, short_monitoring_time_window);
                      medium -> application:get_env(?APP_Name, medium_monitoring_time_window);
@@ -1734,23 +1733,20 @@ get_cluster_stats(TimeWindow, Format) ->
   {MegaSecs, Secs, _} = erlang:now(),
   EndTime = MegaSecs * 1000000 + Secs,
   StartTime = EndTime - Interval,
-  get_cluster_stats(StartTime, EndTime, Format).
+  get_cluster_stats(StartTime, EndTime).
 
 %% get_cluster_stats/2
 %% ====================================================================
 %% @doc Get statistics about cluster load
--spec get_cluster_stats(StartTime :: integer(), EndTime :: integer(), Format :: default | json) -> Result when
+-spec get_cluster_stats(StartTime :: integer(), EndTime :: integer()) -> Result when
   Result :: [{Name :: string(), Value :: float()}] | {error, term()}.
 %% ====================================================================
-get_cluster_stats(StartTime, EndTime, Format) ->
+get_cluster_stats(StartTime, EndTime) ->
+  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   BinaryEndTime = integer_to_binary(EndTime),
   BinaryStartTime = integer_to_binary(StartTime),
   Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
-  FetchFunction = case Format of
-                    json -> fun rrderlang:fetch_json/3;
-                    _ -> fun rrderlang:fetch/3
-                  end,
-  case FetchFunction(?Cluster_Stats_RRD_Name, Options, <<"AVERAGE">>) of
+  case gen_server:call(?RrdErlang_Name, {fetch, ?Cluster_Stats_RRD_Name, Options, <<"AVERAGE">>}, Timeout) of
     {ok, {Header, Data}} ->
       HeaderList = lists:map(fun(Elem) -> binary_to_list(Elem) end, Header),
       HeaderLen = length(Header),
@@ -1770,3 +1766,22 @@ get_cluster_stats(StartTime, EndTime, Format) ->
     Other ->
       Other
   end.
+
+%% get_cluster_stats/3
+%% ====================================================================
+%% @doc Fetch specified columns from cluster statistics Round Robin Database.
+-spec get_cluster_stats(StartTime :: integer(), EndTime :: integer(), Columns) -> Result when
+  Columns :: all | {name, [binary()]} | {starts_with, [binary()]} | {index, [integer()]},
+  Result :: {ok, {Header, Body}} | {error, Error :: term()},
+  Header :: [ColumnNames :: binary()],
+  Body :: [Row],
+  Row :: [{Timestamp, Values}],
+  Timestamp :: integer(),
+  Values :: [integer() | float()].
+%% ====================================================================
+get_cluster_stats(StartTime, EndTime, Columns) ->
+  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
+  BinaryStartTime = integer_to_binary(StartTime),
+  BinaryEndTime = integer_to_binary(EndTime),
+  Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
+  gen_server:call(?RrdErlang_Name, {fetch, ?Cluster_Stats_RRD_Name, Options, <<"AVERAGE">>, Columns}, Timeout).

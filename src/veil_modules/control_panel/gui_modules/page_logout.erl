@@ -16,16 +16,14 @@
 -include("logging.hrl").
 
 %% Template points to the template file, which will be filled with content
-main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}.
+main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
 
 %% Page title
 title() -> <<"Logout page">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    wf:user(undefined),
-    wf:session(user_doc, undefined),
-    %wf:logout(), % Not yet implemented in n2o stable realease
+    gui_ctx:clear_session(),
     #panel{style = <<"position: relative;">>, body =
     [
         #panel{class = <<"alert alert-success login-page">>, body = [
@@ -34,9 +32,9 @@ body() ->
             #button{postback = to_login, class = <<"btn btn-primary btn-block">>, body = <<"Login page">>}
         ]}
     ]
-    ++ gui_utils:logotype_footer(120)
+    ++ vcn_gui_utils:logotype_footer(120)
         ++ [#p{body = <<"<iframe src=\"https://openid.plgrid.pl/logout\" style=\"display:none\"></iframe>">>}]
     }.
 
 event(init) -> ok;
-event(to_login) -> gui_utils:redirect_to_login(false).
+event(to_login) -> gui_jq:redirect_to_login(false).

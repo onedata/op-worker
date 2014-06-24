@@ -17,11 +17,11 @@
 
 %% Template points to the template file, which will be filled with content
 main() ->
-    case gui_utils:maybe_redirect(true, false, false, true) of
+    case vcn_gui_utils:maybe_redirect(true, false, false, true) of
         true ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}
     end.
 
 %% Page title
@@ -29,8 +29,9 @@ title() -> <<"Manage account">>.
 
 %% This will be placed in the template instead of [[[page:body()]]] tag
 body() ->
+    gui_jq:register_escape_event("escape_pressed"),
     #panel{style = <<"position: relative;">>, body = [
-        gui_utils:top_menu(manage_account_tab),
+        vcn_gui_utils:top_menu(manage_account_tab),
         #panel{style = <<"margin-top: 60px; padding: 20px;">>, body = [
             #panel{id = <<"dn_error_panel">>, style = <<"display: none;">>,
                 class = <<"dialog dialog-danger">>, body = [
@@ -51,22 +52,22 @@ body() ->
             #h6{style = <<" text-align: center;">>, body = <<"Manage account">>},
             #panel{id = <<"main_table">>, body = main_table()}
         ]}
-    ] ++ gui_utils:logotype_footer(20)}.
+    ] ++ vcn_gui_utils:logotype_footer(20)}.
 
 
 % Info to register a DN
 maybe_display_dn_message() ->
-    case user_logic:get_dn_list(wf:session(user_doc)) of
-        [] -> wf:wire(#jquery{target = "dn_error_panel", method = ["show"]});
-        _ -> wf:wire(#jquery{target = "dn_error_panel", method = ["hide"]})
+    case user_logic:get_dn_list(gui_ctx:get_user_record()) of
+        [] -> gui_jq:show(<<"dn_error_panel">>);
+        _ -> gui_jq:hide(<<"dn_error_panel">>)
     end.
 
 
 % Info to install a storage helper
 maybe_display_helper_message() ->
-    case gui_utils:storage_defined() of
-        false -> wf:wire(#jquery{target = "helper_error_panel", method = ["show"]});
-        true -> wf:wire(#jquery{target = "helper_error_panel", method = ["hide"]})
+    case vcn_gui_utils:storage_defined() of
+        false -> gui_jq:show(<<"helper_error_panel">>);
+        true -> gui_jq:hide(<<"helper_error_panel">>)
     end.
 
 
@@ -74,7 +75,7 @@ maybe_display_helper_message() ->
 main_table() ->
     maybe_display_dn_message(),
     maybe_display_helper_message(),
-    User = wf:session(user_doc),
+    User = gui_ctx:get_user_record(),
     #table{style = <<"border-width: 0px; width: auto;">>, body = [
         #tr{cells = [
             #td{style = <<"border-width: 0px; padding: 10px 10px">>, body =
@@ -110,12 +111,12 @@ main_table() ->
 
 % HTML list with teams printed
 team_list_body() ->
-    User = wf:session(user_doc),
+    User = gui_ctx:get_user_record(),
     Teams = user_logic:get_teams(User),
     _Body = case lists:map(
         fun(Team) ->
             #li{style = <<"font-size: 18px; padding: 5px 0;">>,
-                body = list_to_binary(re:replace(Team, "\\(", " (", [global, {return, list}]))}
+                body = gui_str:html_encode(re:replace(Team, "\\(", " (", [global, {return, list}]))}
         end, Teams) of
                 [] -> #p{body = <<"none">>};
                 List -> #list{numbered = true, body = List}
@@ -124,12 +125,12 @@ team_list_body() ->
 
 % HTML list with emails printed
 email_list_body() ->
-    User = wf:session(user_doc),
+    User = gui_ctx:get_user_record(),
     {CurrentEmails, _} = lists:mapfoldl(
         fun(Email, Acc) ->
             Body = #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
             [
-                Email,
+                gui_str:html_encode(Email),
                 #link{id = <<"remove_email_button", (integer_to_binary(Acc))/binary>>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
                     postback = {action, update_email, [User, {remove, Email}]}, body =
                     #span{class = <<"fui-cross">>, style = <<"font-size: 16px;">>}}
@@ -142,27 +143,27 @@ email_list_body() ->
                 postback = {action, show_email_adding, [true]}, body =
                 #span{class = <<"fui-plus">>, style = <<"font-size: 16px; position: relative;">>}},
             #textbox{id = <<"new_email_textbox">>, class = <<"flat">>, body = <<"">>, style = <<"display: none;">>,
-                placeholder = <<"New email address">>, postback = {action, update_email, [User, {add, submitted}]},
-                source = ["new_email_textbox"]},
+                placeholder = <<"New email address">>},
             #link{id = <<"new_email_submit">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
-                postback = {action, update_email, [User, {add, submitted}]}, source = ["new_email_textbox"], body =
-                #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
+                actions = gui_jq:form_submit_action(<<"new_email_submit">>, {action, update_email, [User, {add, submitted}]}, <<"new_email_textbox">>),
+                body = #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
             #link{id = <<"new_email_cancel">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
                 postback = {action, show_email_adding, [false]}, body =
                 #span{class = <<"fui-cross-inverted">>, style = <<"font-size: 20px;">>}}
         ]}
     ],
+    gui_jq:bind_enter_to_submit_button(<<"new_email_textbox">>, <<"new_email_submit">>),
     #list{numbered = true, body = CurrentEmails ++ NewEmail}.
 
 
 % HTML list with DNs printed
 dn_list_body() ->
-    User = wf:session(user_doc),
+    User = gui_ctx:get_user_record(),
     {CurrentDNs, _} = lists:mapfoldl(
         fun(DN, Acc) ->
             Body = #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
             [
-                DN,
+                gui_str:html_encode(DN),
                 #link{id = <<"remove_dn_button", (integer_to_binary(Acc))/binary>>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
                     postback = {action, update_dn, [User, {remove, DN}]}, body =
                     #span{class = <<"fui-cross">>, style = <<"font-size: 16px;">>}}
@@ -175,11 +176,10 @@ dn_list_body() ->
                 postback = {action, show_dn_adding, [true]}, body =
                 #span{class = <<"fui-plus">>, style = <<"font-size: 16px;">>}},
             #textarea{id = <<"new_dn_textbox">>, style = <<"display: none; font-size: 12px; width: 600px; height: 200px;",
-            "vertical-align: top; overflow-y: scroll;">>, body = <<"">>,
-                source = ["new_dn_textbox"], placeholder = <<"Paste your .pem certificate here...">>},
+            "vertical-align: top; overflow-y: scroll;">>, body = <<"">>, placeholder = <<"Paste your .pem certificate here...">>},
             #link{id = <<"new_dn_submit">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
-                postback = {action, update_dn, [User, {add, submitted}]}, source = ["new_dn_textbox"], body =
-                #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
+                actions = gui_jq:form_submit_action(<<"new_dn_submit">>, {action, update_dn, [User, {add, submitted}]}, <<"new_dn_textbox">>),
+                body = #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
             #link{id = <<"new_dn_cancel">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
                 postback = {action, show_dn_adding, [false]}, body =
                 #span{class = <<"fui-cross-inverted">>, style = <<"font-size: 20px;">>}}
@@ -189,13 +189,17 @@ dn_list_body() ->
 
 
 % Postback event handling
+api_event("escape_pressed", _, _) ->
+    show_email_adding(false),
+    show_dn_adding(false).
+
 event(init) -> ok;
 
 event({action, Fun}) ->
     event({action, Fun, []});
 
 event({action, Fun, Args}) ->
-    gui_utils:apply_or_redirect(?MODULE, Fun, Args, false).
+    vcn_gui_utils:apply_or_redirect(?MODULE, Fun, Args, false).
 
 
 % Update email list - add or remove one and save new user doc
@@ -203,10 +207,10 @@ update_email(User, AddOrRemove) ->
     OldEmailList = user_logic:get_email_list(User),
     {ok, NewUser} = case AddOrRemove of
                         {add, submitted} ->
-                            NewEmail = gui_utils:to_list(wf:q("new_email_textbox")),
+                            NewEmail = gui_str:to_list(gui_ctx:form_param(<<"new_email_textbox">>)),
                             case user_logic:get_user({email, NewEmail}) of
                                 {ok, _} ->
-                                    wf:wire(#alert{text = <<"This e-mail address is in use.">>}),
+                                    gui_jq:wire(#alert{text = <<"This e-mail address is in use.">>}),
                                     {ok, User};
                                 _ ->
                                     user_logic:update_email_list(User, OldEmailList ++ [NewEmail])
@@ -214,8 +218,8 @@ update_email(User, AddOrRemove) ->
                         {remove, Email} ->
                             user_logic:update_email_list(User, OldEmailList -- [Email])
                     end,
-    wf:session(user_doc, NewUser),
-    gui_utils:update("main_table", main_table()).
+    gui_ctx:set_user_record(NewUser),
+    gui_jq:update(<<"main_table">>, main_table()).
 
 
 % Update DN list - add or remove one and save new user doc
@@ -223,44 +227,44 @@ update_dn(User, AddOrRemove) ->
     OldDnList = user_logic:get_dn_list(User),
     case AddOrRemove of
         {add, submitted} ->
-            case user_logic:extract_dn_from_cert(list_to_binary(wf:q("new_dn_textbox"))) of
+            case user_logic:extract_dn_from_cert(gui_ctx:form_param(<<"new_dn_textbox">>)) of
                 {rdnSequence, RDNSequence} ->
                     {ok, DnString} = user_logic:rdn_sequence_to_dn_string(RDNSequence),
                     case user_logic:get_user({dn, DnString}) of
                         {ok, _} ->
-                            wf:wire(#alert{text = <<"This certificate is already registered.">>});
+                            gui_jq:wire(#alert{text = <<"This certificate is already registered.">>});
                         _ ->
                             {ok, NewUser} = user_logic:update_dn_list(User, OldDnList ++ [DnString]),
-                            wf:session(user_doc, NewUser)
+                            gui_ctx:set_user_record(NewUser)
                     end;
                 {error, proxy_ceertificate} ->
-                    wf:wire(#alert{text = <<"Proxy certificates are not accepted.">>});
+                    gui_jq:wire(#alert{text = <<"Proxy certificates are not accepted.">>});
                 {error, self_signed} ->
-                    wf:wire(#alert{text = <<"Self signed certificates are not accepted.">>});
+                    gui_jq:wire(#alert{text = <<"Self signed certificates are not accepted.">>});
                 {error, extraction_failed} ->
-                    wf:wire(#alert{text = <<"Unable to process certificate.">>})
+                    gui_jq:wire(#alert{text = <<"Unable to process certificate.">>})
             end;
         {remove, DN} ->
             {ok, NewUser} = user_logic:update_dn_list(User, OldDnList -- [DN]),
-            wf:session(user_doc, NewUser)
+            gui_ctx:set_user_record(NewUser)
     end,
-    gui_utils:update("main_table", main_table()).
+    gui_jq:update(<<"main_table">>, main_table()).
 
 
 % Show email adding form
 show_email_adding(Flag) ->
     case Flag of
         true ->
-            wf:wire(#jquery{target = "add_email_button", method = ["hide"]}),
-            wf:wire(#jquery{target = "new_email_textbox", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jquery{target = "new_email_cancel", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jquery{target = "new_email_submit", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jquery{target = "new_email_textbox", method = ["focus"]});
+            gui_jq:hide(<<"add_email_button">>),
+            gui_jq:fade_in(<<"new_email_textbox">>, 300),
+            gui_jq:fade_in(<<"new_email_cancel">>, 300),
+            gui_jq:fade_in(<<"new_email_submit">>, 300),
+            gui_jq:focus(<<"new_email_textbox">>);
         false ->
-            wf:wire(#jquery{target = "add_email_button", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jquery{target = "new_email_textbox", method = ["hide"]}),
-            wf:wire(#jquery{target = "new_email_cancel", method = ["hide"]}),
-            wf:wire(#jquery{target = "new_email_submit", method = ["hide"]})
+            gui_jq:fade_in(<<"add_email_button">>, 300),
+            gui_jq:hide(<<"new_email_textbox">>),
+            gui_jq:hide(<<"new_email_cancel">>),
+            gui_jq:hide(<<"new_email_submit">>)
     end.
 
 
@@ -268,14 +272,14 @@ show_email_adding(Flag) ->
 show_dn_adding(Flag) ->
     case Flag of
         true ->
-            wf:wire(#jquery{target = "add_dn_button", method = ["hide"]}),
-            wf:wire(#jquery{target = "new_dn_textbox", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jquery{target = "new_dn_submit", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jquery{target = "new_dn_cancel", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jquery{target = "new_dn_textbox", method = ["focus"]});
+            gui_jq:hide(<<"add_dn_button">>),
+            gui_jq:fade_in(<<"new_dn_textbox">>, 300),
+            gui_jq:fade_in(<<"new_dn_cancel">>, 300),
+            gui_jq:fade_in(<<"new_dn_submit">>, 300),
+            gui_jq:focus(<<"new_dn_textbox">>);
         false ->
-            wf:wire(#jquery{target = "add_dn_button", method = ["fadeIn"], args = [300]}),
-            wf:wire(#jquery{target = "new_dn_textbox", method = ["hide"]}),
-            wf:wire(#jquery{target = "new_dn_cancel", method = ["hide"]}),
-            wf:wire(#jquery{target = "new_dn_submit", method = ["hide"]})
+            gui_jq:fade_in(<<"add_dn_button">>, 300),
+            gui_jq:hide(<<"new_dn_textbox">>),
+            gui_jq:hide(<<"new_dn_cancel">>),
+            gui_jq:hide(<<"new_dn_submit">>)
     end.

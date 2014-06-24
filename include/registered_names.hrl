@@ -31,6 +31,10 @@
 %% works as a dispatcher.
 -define(Dispatcher_Name, request_dispatcher).
 
+%% Local name (name and node is used to identify it) of gen_server that
+%% coordinates access to Round Robin Database.
+-define(RrdErlang_Name, rrderlang).
+
 %% Name of Round Robin Database that collects, unifies and stores nodes statistical data
 -define(Cluster_Stats_RRD_Name, <<"cluster_stats.rrd">>).
 

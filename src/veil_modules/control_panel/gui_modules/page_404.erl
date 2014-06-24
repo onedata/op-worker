@@ -15,7 +15,7 @@
 -include("veil_modules/control_panel/common.hrl").
 
 %% Template points to the template file, which will be filled with content
-main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}.
+main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
 
 %% Page title
 title() -> <<"Error 404">>.
@@ -28,7 +28,7 @@ body() ->
             #p{class = <<"login-info">>, body = <<"Requested page could not be found on the server.">>},
             #button{postback = to_login, class = <<"btn btn-warning btn-block">>, body = <<"Login page">>}
         ]}
-    ] ++ gui_utils:logotype_footer(120)}.
+    ] ++ vcn_gui_utils:logotype_footer(120)}.
 
 event(init) -> ok;
-event(to_login) -> gui_utils:redirect_to_login(false).
+event(to_login) -> gui_jq:redirect_to_login(false).

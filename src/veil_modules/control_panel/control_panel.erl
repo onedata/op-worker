@@ -25,6 +25,12 @@
 % Paths in gui static directory
 -define(static_paths, ["/css/", "/fonts/", "/images/", "/js/", "/n2o/"]).
 
+% Session logic module
+-define(session_logic_module, session_logic).
+
+% GUI routing module
+-define(gui_routing_module, gui_routes).
+
 % Cowboy listener reference
 -define(https_listener, https).
 -define(http_redirector_listener, http).
@@ -67,18 +73,8 @@ init(_Args) ->
         ]}
     ],
 
-    % Set envs needed by n2o
-    % Transition port - the same as gui port
-    ok = application:set_env(n2o, transition_port, GuiPort),
-    % Custom route handler
-    ok = application:set_env(n2o, route, gui_routes),
-
-    % Ets tables needed by n2o
-    ets:new(cookies,[set,named_table,{keypos,1},public]),
-    ets:new(actions,[set,named_table,{keypos,1},public]),
-    ets:new(globals,[set,named_table,{keypos,1},public]),
-    ets:new(caching,[set,named_table,{keypos,1},public]),
-    ets:insert(globals,{onlineusers,0}),
+    % Create ets tables and set envs needed by n2o
+    gui_utils:init_n2o_ets_and_envs(GuiPort, ?gui_routing_module, ?session_logic_module),
 
     % Start the listener for web gui and nagios handler
     {ok, _} = cowboy:start_https(?https_listener, GuiNbAcceptors,
@@ -87,12 +83,15 @@ init(_Args) ->
             {certfile, CertString},
             {keyfile, CertString},
             {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs())},
-            {password, ""}
+            {password, ""},
+            {ciphers, gsi_handler:get_ciphers()}
         ],
         [
             {env, [{dispatch, cowboy_router:compile(GUIDispatch)}]},
             {max_keepalive, MaxKeepAlive},
-            {timeout, Timeout}
+            {timeout, Timeout},
+            % On every request, add headers that improve security to the response
+            {onrequest, fun gui_utils:onrequest_adjust_headers/1}
         ]),
 
 
@@ -131,13 +130,20 @@ init(_Args) ->
             {keyfile, CertString},
             {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs())},
             {password, ""},
-            {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}}
+            {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}},
+            {ciphers, gsi_handler:get_ciphers()}
         ],
         [
             {env, [{dispatch, cowboy_router:compile(RestDispatch)}]},
             {max_keepalive, 1},
             {timeout, Timeout}
         ]),
+
+    % Schedule the clearing of expired sessions - a periodical job
+    Pid = self(),
+    {ok, ClearingInterval} = application:get_env(veil_cluster_node, control_panel_sessions_clearing_period),
+    erlang:send_after(ClearingInterval * 1000, Pid, {timer, {asynch, 1, {clear_expired_sessions, Pid}}}),
+
     ok.
 
 
@@ -160,8 +166,17 @@ handle(_ProtocolVersion, healthcheck) ->
 handle(_ProtocolVersion, get_version) ->
     node_manager:check_vsn();
 
+handle(ProtocolVersion, {clear_expired_sessions, Pid}) ->
+    SessionLogicModule = gui_session_handler:get_session_logic_module(),
+    NumSessionsCleared = SessionLogicModule:clear_expired_sessions(),
+    ?info("Expired GUI sessions cleared (~p tokens removed)", [NumSessionsCleared]),
+    {ok, ClearingInterval} = application:get_env(veil_cluster_node, control_panel_sessions_clearing_period),
+    erlang:send_after(ClearingInterval * 1000, Pid, {timer, {asynch, ProtocolVersion, {clear_expired_sessions, Pid}}}),
+    ok;
+
 handle(_ProtocolVersion, _Msg) ->
     ok.
+
 
 %% cleanup/0
 %% ====================================================================
@@ -173,25 +188,23 @@ handle(_ProtocolVersion, _Msg) ->
     Error :: timeout | term().
 %% ====================================================================
 cleanup() ->
-    cowboy:stop_listener(?https_listener),
-    cowboy:stop_listener(?rest_listener),
+    % Stop all listeners
     cowboy:stop_listener(?http_redirector_listener),
-    ets:delete(cookies),
-    ets:delete(actions),
-    ets:delete(globals),
-    ets:delete(caching),
+    cowboy:stop_listener(?rest_listener),
+    cowboy:stop_listener(?https_listener),
+
+    % Clean up after n2o.
+    gui_utils:cleanup_n2o(?session_logic_module),
+
     ok.
 
 
 %% ====================================================================
 %% Auxiliary functions
 %% ====================================================================
+
 %% Generates static file routing for cowboy.
 static_dispatches(DocRoot, StaticPaths) ->
     _StaticDispatches = lists:map(fun(Dir) ->
-        Opts = [
-            {mimetypes, {fun mimetypes:path_to_mimes/2, default}},
-            {directory, DocRoot ++ Dir}
-        ],
-        {Dir ++ "[...]", cowboy_static, Opts}
+        {Dir ++ "[...]", cowboy_static, {dir, DocRoot ++ Dir}}
     end, StaticPaths).

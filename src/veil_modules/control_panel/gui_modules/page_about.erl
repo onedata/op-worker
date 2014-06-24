@@ -20,11 +20,11 @@
 
 %% Template points to the template file, which will be filled with content
 main() ->
-    case gui_utils:maybe_redirect(true, true, true, true) of
+    case vcn_gui_utils:maybe_redirect(true, true, true, true) of
         true ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}
     end.
 
 %% Page title
@@ -33,11 +33,11 @@ title() -> <<"About">>.
 %% This will be placed in the template instead of {{body}} tag
 body() ->
     #panel{style = <<"position: relative;">>, body = [
-        gui_utils:top_menu(about_tab),
+        vcn_gui_utils:top_menu(about_tab),
         #panel{style = <<"margin-top: 60px; padding: 20px;">>, body = [
             #panel{id = <<"about_table">>, body = about_table()}
         ]}
-    ] ++ gui_utils:logotype_footer(20)}.
+    ] ++ vcn_gui_utils:logotype_footer(20)}.
 
 about_table() ->
     #table{style = <<"border-width: 0px; width: auto">>, body = [
@@ -84,9 +84,9 @@ get_license() ->
 
 % HTML list with team members
 get_team() ->
-    Members = [<<"Łukasz Dutka">>, <<"Jacek Kitowski">>, <<"Dariusz Król">>, <<"Tomasz Lichoń">>, <<"Darin Nikolow">>,
-        <<"Łukasz Opioła">>, <<"Tomasz Pałys">>, <<"Bartosz Polnik">>, <<"Paweł Salata">>, <<"Michał Sitko">>,
-        <<"Rafał Słota">>, <<"Renata Słota">>, <<"Beata Skiba">>, <<"Krzysztof Trzepla">>, <<"Michał Wrzeszcz">>],
+    Members = [<<"Łukasz Dutka"/utf8>>, <<"Jacek Kitowski"/utf8>>, <<"Dariusz Król"/utf8>>, <<"Tomasz Lichoń"/utf8>>, <<"Darin Nikolow"/utf8>>,
+        <<"Łukasz Opioła"/utf8>>, <<"Tomasz Pałys"/utf8>>, <<"Bartosz Polnik"/utf8>>, <<"Paweł Salata"/utf8>>, <<"Michał Sitko"/utf8>>,
+        <<"Rafał Słota"/utf8>>, <<"Renata Słota"/utf8>>, <<"Beata Skiba"/utf8>>, <<"Krzysztof Trzepla"/utf8>>, <<"Michał Wrzeszcz"/utf8>>],
     #list{numbered = false, body =
     lists:map(
         fun(Member) ->

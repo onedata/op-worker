@@ -64,7 +64,11 @@ handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
 handle(ProtocolVersion, Record) when is_record(Record, remotefilemangement) ->
-  handle_message(ProtocolVersion, Record#remotefilemangement.input);
+    RequestBody = Record#remotefilemangement.input,
+    RequestType = element(1, RequestBody),
+
+    fslogic_context:set_protocol_version(ProtocolVersion),
+    fslogic:fslogic_runner(fun handle_message/1, RequestType, RequestBody, remote_files_manager_errors);
 
 handle(_ProtocolVersion, _Msg) ->
   ok.
@@ -81,43 +85,33 @@ cleanup() ->
 %% Internal functions
 %% ====================================================================
 
-%% handle_message/2
+%% handle_message/1
 %% ====================================================================
 %% @doc Processes requests from Cluster Proxy.
 %% @end
--spec handle_message(ProtocolVersion :: term(), Record :: tuple()) -> Result when
+-spec handle_message(Record :: tuple()) -> Result when
   Result :: term().
 %% ====================================================================
-handle_message(ProtocolVersion, Record) when is_record(Record, createfile) ->
-  FileId = Record#createfile.file_id,
-  SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
-  case SH_And_ID of
+handle_message(Record) when is_record(Record, createfile) ->
+    FileId = Record#createfile.file_id,
+    SH_And_ID = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),
+    case SH_And_ID of
     {Storage_helper_info, File} ->
-      {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info, read),
-      case PermsStatus of
-        ok ->
-          case Perms of
-            true ->
-              TmpAns = storage_files_manager:create(Storage_helper_info, File),
-              case TmpAns of
+        TmpAns = storage_files_manager:create(Storage_helper_info, File),
+            case TmpAns of
                 ok -> #atom{value = ?VOK};
+                {_, ErrorCode} when is_integer(ErrorCode) ->
+                    throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
-                  lager:warning("storage_files_manager:create error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
-                  #atom{value = ?VEREMOTEIO}
-              end;
-            false ->
-              #atom{value = ?VEPERM}
-          end;
-        _ ->
-          lager:warning("createfile error: can not check permissions, shi: ~p, file: ~p, error: ~p", [Storage_helper_info, File, {PermsStatus, Perms}]),
-          #atom{value = ?VEREMOTEIO}
-      end;
-    _ -> #atom{value = ?VEREMOTEIO}
-  end;
+                    lager:warning("storage_files_manager:create error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
+                    #atom{value = ?VEREMOTEIO}
+            end;
+        _ -> #atom{value = ?VEREMOTEIO}
+    end;
 
-handle_message(ProtocolVersion, Record) when is_record(Record, deletefileatstorage) ->
+handle_message(Record) when is_record(Record, deletefileatstorage) ->
   FileId = Record#deletefileatstorage.file_id,
-  SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
+  SH_And_ID = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),
   case SH_And_ID of
     {Storage_helper_info, File} ->
       {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info, perms),
@@ -128,6 +122,8 @@ handle_message(ProtocolVersion, Record) when is_record(Record, deletefileatstora
               TmpAns = storage_files_manager:delete(Storage_helper_info, File),
               case TmpAns of
                 ok -> #atom{value = ?VOK};
+                  {_, ErrorCode} when is_integer(ErrorCode) ->
+                      throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
                   lager:warning("storage_files_manager:delete error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
                   #atom{value = ?VEREMOTEIO}
@@ -142,10 +138,10 @@ handle_message(ProtocolVersion, Record) when is_record(Record, deletefileatstora
     _ -> #atom{value = ?VEREMOTEIO}
   end;
 
-handle_message(ProtocolVersion, Record) when is_record(Record, truncatefile) ->
+handle_message(Record) when is_record(Record, truncatefile) ->
   FileId = Record#truncatefile.file_id,
   Length = Record#truncatefile.length,
-  SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
+  SH_And_ID = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),
   case SH_And_ID of
     {Storage_helper_info, File} ->
       {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info),
@@ -156,6 +152,8 @@ handle_message(ProtocolVersion, Record) when is_record(Record, truncatefile) ->
               TmpAns = storage_files_manager:truncate(Storage_helper_info, File, Length),
               case TmpAns of
                 ok -> #atom{value = ?VOK};
+                  {_, ErrorCode} when is_integer(ErrorCode) ->
+                      throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
                   lager:warning("storage_files_manager:truncate error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
                   #atom{value = ?VEREMOTEIO}
@@ -170,11 +168,11 @@ handle_message(ProtocolVersion, Record) when is_record(Record, truncatefile) ->
     _ -> #atom{value = ?VEREMOTEIO}
   end;
 
-handle_message(ProtocolVersion, Record) when is_record(Record, readfile) ->
+handle_message(Record) when is_record(Record, readfile) ->
   FileId = Record#readfile.file_id,
   Size = Record#readfile.size,
   Offset = Record#readfile.offset,
-  SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
+  SH_And_ID = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),
   case SH_And_ID of
     {Storage_helper_info, File} ->
       {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info, read),
@@ -185,6 +183,8 @@ handle_message(ProtocolVersion, Record) when is_record(Record, readfile) ->
               TmpAns = storage_files_manager:read(Storage_helper_info, File, Offset, Size),
               case TmpAns of
                 {ok, Bytes} -> #filedata{answer_status = ?VOK, data = Bytes};
+                  {_, ErrorCode} when is_integer(ErrorCode) ->
+                      throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
                   lager:warning("storage_files_manager:read error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
                   #filedata{answer_status = ?VEREMOTEIO}
@@ -199,11 +199,11 @@ handle_message(ProtocolVersion, Record) when is_record(Record, readfile) ->
     _ -> #filedata{answer_status = ?VEREMOTEIO}
   end;
 
-handle_message(ProtocolVersion, Record) when is_record(Record, writefile) ->
+handle_message(Record) when is_record(Record, writefile) ->
   FileId = Record#writefile.file_id,
   Bytes = Record#writefile.data,
   Offset = Record#writefile.offset,
-  SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
+  SH_And_ID = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),
   case SH_And_ID of
     {Storage_helper_info, File} ->
       {PermsStatus, Perms} = storage_files_manager:check_perms(File, Storage_helper_info),
@@ -214,6 +214,8 @@ handle_message(ProtocolVersion, Record) when is_record(Record, writefile) ->
               TmpAns = storage_files_manager:write(Storage_helper_info, File, Offset, Bytes),
               case TmpAns of
                 BytesNum when is_integer(BytesNum) -> #writeinfo{answer_status = ?VOK, bytes_written = BytesNum};
+                  {_, ErrorCode} when is_integer(ErrorCode) ->
+                      throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
                   lager:warning("storage_files_manager:write error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
                   #writeinfo{answer_status = ?VEREMOTEIO}
@@ -228,10 +230,10 @@ handle_message(ProtocolVersion, Record) when is_record(Record, writefile) ->
     _ -> #writeinfo{answer_status = ?VEREMOTEIO}
   end;
 
-handle_message(ProtocolVersion, Record) when is_record(Record, changepermsatstorage) ->
+handle_message(Record) when is_record(Record, changepermsatstorage) ->
   FileId = Record#changepermsatstorage.file_id,
   Perms = Record#changepermsatstorage.perms,
-  SH_And_ID = get_helper_and_id(FileId, ProtocolVersion),
+  SH_And_ID = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),
   case SH_And_ID of
     {Storage_helper_info, File} ->
       {PermsStatus, PermsCheck} = storage_files_manager:check_perms(File, Storage_helper_info, perms),
@@ -242,6 +244,8 @@ handle_message(ProtocolVersion, Record) when is_record(Record, changepermsatstor
               TmpAns = storage_files_manager:chmod(Storage_helper_info, File, Perms),
               case TmpAns of
                 ok -> #atom{value = ?VOK};
+                  {_, ErrorCode} when is_integer(ErrorCode) ->
+                      throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
                   lager:warning("storage_files_manager:chmod error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
                   #atom{value = ?VEREMOTEIO}

@@ -18,11 +18,11 @@
 
 %% Template points to the template file, which will be filled with content
 main() ->
-    case gui_utils:maybe_redirect(true, true, true, true) of
+    case vcn_gui_utils:maybe_redirect(true, true, true, true) of
         true ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}
     end.
 
 %% Page title
@@ -30,9 +30,9 @@ title() -> <<"Shared files">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    gui_utils:register_escape_event("escape_pressed"),
+    gui_jq:register_escape_event("escape_pressed"),
     [
-        gui_utils:top_menu(shared_files_tab),
+        vcn_gui_utils:top_menu(shared_files_tab),
         #panel{style = <<"margin-top: 59px;">>, body = main_panel()},
         footer_popup()
     ].
@@ -40,13 +40,13 @@ body() ->
 
 % Main table   
 main_panel() ->
-    fslogic_context:set_user_dn(gui_utils:get_user_dn()),
+    fslogic_context:set_user_dn(vcn_gui_utils:get_user_dn()),
     ShareEntries = lists:foldl(
         fun(#veil_document{uuid = UUID, record = #share_desc{file = FileID}}, Acc) ->
             case logical_files_manager:get_file_user_dependent_name_by_uuid(FileID) of
                 {ok, FilePath} ->
                     Filename = filename:basename(FilePath),
-                    AddressPrefix = <<"https://", (gui_utils:get_requested_hostname())/binary, ?shared_files_download_path>>,
+                    AddressPrefix = <<"https://", (gui_ctx:get_requested_hostname())/binary, ?shared_files_download_path>>,
                     Acc ++ [{<<"~/", (list_to_binary(FilePath))/binary>>, list_to_binary(Filename), AddressPrefix, list_to_binary(UUID)}];
                 _ ->
                     Acc
@@ -62,7 +62,7 @@ main_panel() ->
                     ]},
                     #panel{style = <<"word-wrap: break-word; display: inline-block;vertical-align: middle;">>,
                         class = <<"filename_row">>, body = [
-                            #link{body = LinkText, target = <<"_blank">>, url = <<AddressPrefix/binary, UUID/binary>>}
+                            #link{body = gui_str:html_encode(LinkText), target = <<"_blank">>, url = <<AddressPrefix/binary, UUID/binary>>}
                         ]}
                 ]}},
                 #td{style = <<"width: 80px;">>, body = #span{class = <<"table-cell">>, body = [
@@ -85,14 +85,14 @@ main_panel() ->
                         #table{id = <<"main_table">>, class = <<"table table-stripped">>, style = <<"border-radius: 0; margin-bottom: 0;">>,
                             body = TableRows}
                 end,
-    wf:wire(wf:f("window.onresize = function(e) { $('.filename_row').css('max-width', '' +
-        ($(window).width() - ~B) + 'px'); }; $(window).resize();", [250])), % 240 is size of button cell + paddings.
+    gui_jq:wire(<<"window.onresize = function(e) { $('.filename_row').css('max-width', '' +",
+        "($(window).width() - 250) + 'px'); }; $(window).resize();">>), % 240 is size of button cell + paddings.
     PanelBody.
 
 
 % Get list of user's shared files from database
 get_shared_files() ->
-    #veil_document{uuid = UID} = wf:session(user_doc),
+    #veil_document{uuid = UID} = gui_ctx:get_user_record(),
     _ShareList = case logical_files_manager:get_share({user, UID}) of
                      {ok, List} when is_list(List) -> List;
                      {ok, Doc} -> [Doc];
@@ -118,12 +118,12 @@ event({action, Fun}) ->
     event({action, Fun, []});
 
 event({action, Fun, Args}) ->
-    gui_utils:apply_or_redirect(?MODULE, Fun, Args, true).
+    vcn_gui_utils:apply_or_redirect(?MODULE, Fun, Args, true).
 
 
 % Display link to file in popup panel
 show_link(ShareID) ->
-    AddressPrefix = <<"https://", (gui_utils:get_requested_hostname())/binary, ?shared_files_download_path>>,
+    AddressPrefix = <<"https://", (gui_ctx:get_requested_hostname())/binary, ?shared_files_download_path>>,
     Body = [
         #link{postback = {action, hide_popup}, title = <<"Hide">>, class = <<"glyph-link">>,
             style = <<"position: absolute; top: 8px; right: 8px; z-index: 3;">>,
@@ -135,11 +135,11 @@ show_link(ShareID) ->
                 class = <<"btn btn-success btn-wide">>, body = <<"Ok">>}
         ]}
     ],
-    wf:update(footer_popup, Body),
-    wf:wire(#jquery{target = "footer_popup", method = ["removeClass"], args = ["\"hidden\""]}),
-    wf:wire(#jquery{target = "footer_popup", method = ["slideDown"], args = ["200"]}),
-    wf:wire(#jquery{target = "shared_link_textbox", method = ["focus", "select"]}),
-    wf:wire(gui_utils:script_for_enter_submission("shared_link_textbox", "shared_link_submit")).
+    gui_jq:update(<<"footer_popup">>, Body),
+    gui_jq:remove_class(<<"footer_popup">>, <<"hidden">>),
+    gui_jq:slide_down(<<"footer_popup">>, 200),
+    gui_jq:select_text(<<"shared_link_textbox">>),
+    gui_jq:bind_enter_to_submit_button(<<"shared_link_textbox">>, <<"shared_link_submit">>).
 
 
 % Display removal prompt in popup panel
@@ -150,26 +150,26 @@ remove_link_prompt(ShareID, Filename) ->
                 style = <<"position: absolute; top: 8px; right: 8px; z-index: 3;">>,
                 body = #span{class = <<"fui-cross">>, style = <<"font-size: 20px;">>}},
             #form{class = <<"control-group">>, body = [
-                #p{body = <<"Remove share for <b>", Filename/binary, "</b>?">>},
+                #p{body = <<"Remove share for <b>", (gui_str:html_encode(Filename))/binary, "</b>?">>},
                 #button{id = <<"ok_button">>, class = <<"btn btn-success btn-wide">>, body = <<"Ok">>, postback = {action, remove_link, [ShareID]}},
                 #button{class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>, postback = {action, hide_popup}}
             ]}
         ],
-    wf:update(footer_popup, Body),
-    wf:wire(#jquery{target = "footer_popup", method = ["removeClass"], args = ["\"hidden\""]}),
-    wf:wire(#jquery{target = "footer_popup", method = ["slideDown"], args = ["200"]}),
-    wf:wire(#jquery{target = "ok_button", method = ["focus"]}).
+    gui_jq:update(<<"footer_popup">>, Body),
+    gui_jq:remove_class(<<"footer_popup">>, <<"hidden">>),
+    gui_jq:slide_down(<<"footer_popup">>, 200),
+    gui_jq:focus(<<"ok_button">>).
 
 
 % Actually remove a link
 remove_link(ShareID) ->
     ok = logical_files_manager:remove_share({uuid, binary_to_list(ShareID)}),
-    gui_utils:replace(main_table, main_panel()),
+    gui_jq:replace(<<"main_table">>, main_panel()),
     hide_popup().
 
 
 % Hide popup panel 
 hide_popup() ->
-    gui_utils:update(footer_popup, []),
-    wf:wire(#jquery{target = "footer_popup", method = ["addClass"], args = ["\"hidden\""]}),
-    wf:wire(#jquery{target = "footer_popup", method = ["slideUp"], args = ["200"]}).
+    gui_jq:update(<<"footer_popup">>, []),
+    gui_jq:add_class(<<"footer_popup">>, <<"hidden">>),
+    gui_jq:slide_up(<<"footer_popup">>, 200).
