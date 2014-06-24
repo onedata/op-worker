@@ -35,8 +35,8 @@
 save_file_share(#share_desc{} = Share) ->
   save_file_share(#veil_document{record = Share});
 save_file_share(#veil_document{record = #share_desc{}} = FdDoc) ->
-  dao_driver:set_db(?FILES_DB_NAME),
-  dao_driver:set_db(?FILES_DB_NAME),
+  dao_external:set_db(?FILES_DB_NAME),
+  dao_external:set_db(?FILES_DB_NAME),
   dao_records:save_record(FdDoc).
 
 %% remove_file_share/1
@@ -50,7 +50,7 @@ save_file_share(#veil_document{record = #share_desc{}} = FdDoc) ->
     {error, any()} | no_return().
 %% ====================================================================
 remove_file_share({uuid, UUID}) ->
-  dao_driver:set_db(?FILES_DB_NAME),
+  dao_external:set_db(?FILES_DB_NAME),
   dao_records:remove_record(UUID);
 
 remove_file_share(Key) ->
@@ -82,10 +82,10 @@ remove_file_share(Key) ->
 {uuid, UUID :: uuid()}) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_file_share({uuid, UUID}) ->
-    dao_driver:set_db(?FILES_DB_NAME),
+    dao_external:set_db(?FILES_DB_NAME),
     dao_records:exist_record(UUID);
 exist_file_share({Key, Value}) ->
-    dao_driver:set_db(?FILES_DB_NAME),
+    dao_external:set_db(?FILES_DB_NAME),
     {View, QueryArgs} = case Key of
                             user ->
                                 {?SHARE_BY_USER_VIEW, #view_query_args{keys =
@@ -115,11 +115,11 @@ exist_file_share({Key, Value}) ->
   {ok, file_share_doc()} | {ok, [file_share_doc()]} | {error, any()} | no_return().
 %% ====================================================================
 get_file_share({uuid, UUID}) ->
-  dao_driver:set_db(?FILES_DB_NAME),
+  dao_external:set_db(?FILES_DB_NAME),
   dao_records:get_record(UUID);
 
 get_file_share({Key, Value}) ->
-  dao_driver:set_db(?FILES_DB_NAME),
+  dao_external:set_db(?FILES_DB_NAME),
 
   {View, QueryArgs} = case Key of
                         user ->

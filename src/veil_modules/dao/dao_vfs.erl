@@ -51,7 +51,7 @@
 save_descriptor(#file_descriptor{} = Fd) ->
     save_descriptor(#veil_document{record = Fd});
 save_descriptor(#veil_document{record = #file_descriptor{}} = FdDoc) ->
-    dao_driver:set_db(?DESCRIPTORS_DB_NAME),
+    dao_external:set_db(?DESCRIPTORS_DB_NAME),
     dao_records:save_record(FdDoc).
 
 
@@ -65,7 +65,7 @@ save_descriptor(#veil_document{record = #file_descriptor{}} = FdDoc) ->
 remove_descriptor(ListSpec) when is_tuple(ListSpec) ->
     remove_descriptor3(ListSpec, 1000, 0);
 remove_descriptor(Fd) when is_list(Fd) ->
-    dao_driver:set_db(?DESCRIPTORS_DB_NAME),
+    dao_external:set_db(?DESCRIPTORS_DB_NAME),
     dao_records:remove_record(Fd).
 
 remove_descriptor3(ListSpec, BatchSize, Offset) ->
@@ -85,7 +85,7 @@ remove_descriptor3(ListSpec, BatchSize, Offset) ->
 -spec exist_descriptor(Fd :: fd()) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_descriptor(Fd) ->
-    dao_driver:set_db(?DESCRIPTORS_DB_NAME),
+    dao_external:set_db(?DESCRIPTORS_DB_NAME),
     dao_records:exist_record(Fd).
 
 %% get_descriptor/1
@@ -98,7 +98,7 @@ exist_descriptor(Fd) ->
 -spec get_descriptor(Fd :: fd()) -> {ok, fd_doc()} | {error, any()} | no_return().
 %% ====================================================================
 get_descriptor(Fd) ->
-    dao_driver:set_db(?DESCRIPTORS_DB_NAME),
+    dao_external:set_db(?DESCRIPTORS_DB_NAME),
     case dao_records:get_record(Fd) of
         {ok, #veil_document{record = #file_descriptor{}} = Doc} ->
             {ok, Doc};
@@ -170,7 +170,7 @@ list_descriptors({_Type, _Resource}, _N, _Offset) when _N > 0, _Offset >= 0 ->
 save_file_meta(#file_meta{} = FMeta) ->
     save_file_meta(#veil_document{record = FMeta});
 save_file_meta(#veil_document{record = #file_meta{}} = FMetaDoc) ->
-    dao_driver:set_db(?FILES_DB_NAME),
+    dao_external:set_db(?FILES_DB_NAME),
     dao_records:save_record(FMetaDoc).
 
 %% remove_file_meta/1
@@ -181,7 +181,7 @@ save_file_meta(#veil_document{record = #file_meta{}} = FMetaDoc) ->
 -spec remove_file_meta(FMeta :: uuid()) -> ok | {error, any()} | no_return().
 %% ====================================================================
 remove_file_meta(FMeta) ->
-    dao_driver:set_db(?FILES_DB_NAME),
+    dao_external:set_db(?FILES_DB_NAME),
     dao_records:remove_record(FMeta).
 
 %% exist_file_meta/1
@@ -192,7 +192,7 @@ remove_file_meta(FMeta) ->
 -spec exist_file_meta(Fd :: fd()) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_file_meta(FMetaUUID) ->
-    dao_driver:set_db(?FILES_DB_NAME),
+    dao_external:set_db(?FILES_DB_NAME),
     dao_records:exist_record(FMetaUUID).
 
 %% get_file_meta/1
@@ -205,7 +205,7 @@ exist_file_meta(FMetaUUID) ->
 -spec get_file_meta(Fd :: fd()) -> {ok, fd_doc()} | {error, any()} | no_return().
 %% ====================================================================
 get_file_meta(FMetaUUID) ->
-    dao_driver:set_db(?FILES_DB_NAME),
+    dao_external:set_db(?FILES_DB_NAME),
     {ok, #veil_document{record = #file_meta{}}} = dao_records:get_record(FMetaUUID).
 
 
@@ -337,7 +337,7 @@ save_new_not_reg_file(FilePath, #file{type = Type} = File) when Type > ?REG_TYPE
 save_file(#file{} = File) ->
     save_file(#veil_document{record = File});
 save_file(#veil_document{record = #file{}} = FileDoc) ->
-    dao_driver:set_db(?FILES_DB_NAME),
+    dao_external:set_db(?FILES_DB_NAME),
     dao_records:save_record(FileDoc).
 
 %% remove_file/1
@@ -348,7 +348,7 @@ save_file(#veil_document{record = #file{}} = FileDoc) ->
 -spec remove_file(File :: file()) -> ok | {error, any()} | no_return().
 %% ====================================================================
 remove_file(File) ->
-    dao_driver:set_db(?FILES_DB_NAME),
+    dao_external:set_db(?FILES_DB_NAME),
     {ok, FData} = get_file(File),
 
     %% Remove file meta
@@ -425,7 +425,7 @@ exist_file_helper({internal_path, [Dir | Path], Root}, View) ->
         Other -> Other
     end;
 exist_file_helper({uuid, UUID}, _View) ->
-    dao_driver:set_db(?FILES_DB_NAME),
+    dao_external:set_db(?FILES_DB_NAME),
     dao_records:exist_record(UUID);
 exist_file_helper(Path, View) ->
   exist_file_helper(file_path_analyze(Path), View).
@@ -482,7 +482,7 @@ get_file_helper({internal_path, [], []}, _View) -> %% Root dir query
 get_file_helper({internal_path, [Dir | Path], Root}, View) ->
   get_file_helper({internal_path, [Dir | Path], Root}, false, View);
 get_file_helper({uuid, UUID}, _View) ->
-    dao_driver:set_db(?FILES_DB_NAME),
+    dao_external:set_db(?FILES_DB_NAME),
     case dao_records:get_record(UUID) of
         {ok, #veil_document{record = #file{}} = Doc} ->
             {ok, Doc};
@@ -673,7 +673,7 @@ save_storage(#veil_document{record = #storage_info{}} = StorageDoc, ClearCache) 
       false ->
         ok
     end,
-    dao_driver:set_db(?SYSTEM_DB_NAME),
+    dao_external:set_db(?SYSTEM_DB_NAME),
     dao_records:save_record(StorageDoc).
 
 
@@ -692,7 +692,7 @@ remove_storage({uuid, DocUUID}) when is_list(DocUUID) ->
         Doc = SData#veil_document.record,
         clear_cache([{uuid, DocUUID}, {id, Doc#storage_info.id}]),
 
-        dao_driver:set_db(?SYSTEM_DB_NAME),
+        dao_external:set_db(?SYSTEM_DB_NAME),
         dao_records:remove_record(DocUUID);
       _ -> {Ans, SData}
     end;
@@ -701,7 +701,7 @@ remove_storage({id, StorageID}) when is_integer(StorageID) ->
     case Ans of
       ok ->
         clear_cache([{uuid, SData#veil_document.uuid}, {id, StorageID}]),
-        dao_driver:set_db(?SYSTEM_DB_NAME),
+        dao_external:set_db(?SYSTEM_DB_NAME),
         dao_records:remove_record(SData#veil_document.uuid);
       _ -> {Ans, SData}
     end.
@@ -753,7 +753,7 @@ get_storage(Key) ->
     {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_storage_in_db({uuid, DocUUID}) when is_list(DocUUID) ->
-    dao_driver:set_db(?SYSTEM_DB_NAME),
+    dao_external:set_db(?SYSTEM_DB_NAME),
     dao_records:exist_record(DocUUID);
 exist_storage_in_db({id, StorageID}) when is_integer(StorageID) ->
     QueryArgs = #view_query_args{keys = [StorageID], include_docs = true},
@@ -776,7 +776,7 @@ exist_storage_in_db({id, StorageID}) when is_integer(StorageID) ->
 -spec get_storage_from_db({uuid, DocUUID :: uuid()} | {id, StorageID :: integer()}) -> {ok, storage_doc()} | {error, any()} | no_return().
 %% ====================================================================
 get_storage_from_db({uuid, DocUUID}) when is_list(DocUUID) ->
-    dao_driver:set_db(?SYSTEM_DB_NAME),
+    dao_external:set_db(?SYSTEM_DB_NAME),
     case dao_records:get_record(DocUUID) of
         {ok, #veil_document{record = #storage_info{}} = Doc} ->
             {ok, Doc};

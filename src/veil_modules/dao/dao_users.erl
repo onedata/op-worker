@@ -38,7 +38,7 @@ save_user(#user{} = User) ->
 save_user(#veil_document{record = #user{}, uuid = UUID} = UserDoc) when is_list(UUID), UUID =/= "" ->
     clear_all_data_from_cache(UUID),
 
-    dao_driver:set_db(?USERS_DB_NAME),
+    dao_external:set_db(?USERS_DB_NAME),
     dao_records:save_record(UserDoc);
 save_user(#veil_document{record = #user{}} = UserDoc) ->
     QueryArgs = #view_query_args{start_key = integer_to_binary(?HIGHEST_USER_ID), end_key = integer_to_binary(0), 
@@ -54,7 +54,7 @@ save_user(#veil_document{record = #user{}} = UserDoc) ->
                 throw(invalid_data)   
         end,
 
-    dao_driver:set_db(?USERS_DB_NAME),
+    dao_external:set_db(?USERS_DB_NAME),
     dao_records:save_record(UserDoc#veil_document{uuid = NewUUID}).
 
 
@@ -72,7 +72,7 @@ save_user(#veil_document{record = #user{}} = UserDoc) ->
 remove_user(Key) ->
     {ok, FDoc} = get_user(Key),
     clear_all_data_from_cache(FDoc#veil_document.uuid),
-    dao_driver:set_db(?USERS_DB_NAME),
+    dao_external:set_db(?USERS_DB_NAME),
     dao_records:remove_record(FDoc#veil_document.uuid).
 
 %% exist_user/1
@@ -131,7 +131,7 @@ get_user(Key) ->
 	no_return().
 %% ====================================================================
 list_users(N, Offset) ->
-	dao_driver:set_db(?USERS_DB_NAME),
+	dao_external:set_db(?USERS_DB_NAME),
 
 	QueryArgs = #view_query_args{include_docs = true,  limit = N, skip = Offset, inclusive_end = false},
 
@@ -162,10 +162,10 @@ list_users(N, Offset) ->
 exist_user_in_db({uuid, "0"}) ->
     {ok, true};
 exist_user_in_db({uuid, UUID}) ->
-    dao_driver:set_db(?USERS_DB_NAME),
+    dao_external:set_db(?USERS_DB_NAME),
     dao_records:exist_record(UUID);
 exist_user_in_db({Key, Value}) ->
-    dao_driver:set_db(?USERS_DB_NAME),
+    dao_external:set_db(?USERS_DB_NAME),
     {View, QueryArgs} = case Key of
                             login ->
                                 {?USER_BY_LOGIN_VIEW, #view_query_args{keys =
@@ -201,11 +201,11 @@ exist_user_in_db({Key, Value}) ->
 get_user_from_db({uuid, "0"}) ->
     {ok, #veil_document{uuid = "0", record = #user{login = "root", name = "root"}}}; %% Return virtual "root" user
 get_user_from_db({uuid, UUID}) ->
-    dao_driver:set_db(?USERS_DB_NAME),
+    dao_external:set_db(?USERS_DB_NAME),
     dao_records:get_record(UUID);
 
 get_user_from_db({Key, Value}) ->
-    dao_driver:set_db(?USERS_DB_NAME),
+    dao_external:set_db(?USERS_DB_NAME),
 
     {View, QueryArgs} = case Key of
         login -> 
@@ -245,7 +245,7 @@ Result :: {ok, Sum} | {error, any()} | no_return(),
 Sum :: integer().
 %% ====================================================================
 get_files_number(Type, UUID) ->
-  dao_driver:set_db(?FILES_DB_NAME),
+  dao_external:set_db(?FILES_DB_NAME),
   View = case Type of user -> ?USER_FILES_NUMBER_VIEW; group -> ?GROUP_FILES_NUMBER_VIEW end,
   QueryArgs = #view_query_args{keys = [dao_helper:name(UUID)], include_docs = false, group_level = 1, view_type = reduce, stale = update_after},
 
@@ -273,7 +273,7 @@ get_files_number(Type, UUID) ->
 -spec get_files_size(UUID :: uuid()) -> {ok, non_neg_integer()} | {error, any()} | no_return().
 %% ====================================================================
 get_files_size(UUID) ->
-  dao_driver:set_db(?FILES_DB_NAME),
+  dao_external:set_db(?FILES_DB_NAME),
   QueryArgs = #view_query_args{keys = [dao_helper:name(UUID)], include_docs = false, group_level = 1, view_type = reduce, stale = update_after},
 
   case dao_records:list_records(?USER_FILES_SIZE_VIEW, QueryArgs) of
@@ -300,7 +300,7 @@ get_files_size(UUID) ->
 -spec update_files_size() -> ok | {error, any()}.
 %% ====================================================================
 update_files_size() ->
-  dao_driver:set_db(?FILES_DB_NAME),
+  dao_external:set_db(?FILES_DB_NAME),
   QueryArgs = #view_query_args{keys = [undefined], include_docs = false, group_level = 1, view_type = reduce},
 
   case dao_records:list_records(?USER_FILES_SIZE_VIEW, QueryArgs) of
@@ -341,7 +341,7 @@ clear_all_data_from_cache(DocKey) ->
 save_quota(#quota{} = Quota) ->
   save_quota(#veil_document{record = Quota});
 save_quota(#veil_document{} = QuotaDoc) ->
-  dao_driver:set_db(?USERS_DB_NAME),
+  dao_external:set_db(?USERS_DB_NAME),
   dao_records:save_record(QuotaDoc).
 
 %% remove_quota/1
@@ -352,7 +352,7 @@ save_quota(#veil_document{} = QuotaDoc) ->
 -spec remove_quota(UUID :: uuid()) -> {error, any()} | no_return().
 %% ====================================================================
 remove_quota(UUID) ->
-  dao_driver:set_db(?USERS_DB_NAME),
+  dao_external:set_db(?USERS_DB_NAME),
   dao_records:remove_record(UUID).
 
 %% get_quota/1
@@ -365,7 +365,7 @@ remove_quota(UUID) ->
 -spec get_quota(UUID :: uuid()) -> {ok, quota_doc()} | {error, any()} | no_return().
 %% ====================================================================
 get_quota(UUID) ->
-  dao_driver:set_db(?USERS_DB_NAME),
+  dao_external:set_db(?USERS_DB_NAME),
   {ok, DefaultQuotaSize} = application:get_env(?APP_Name, default_quota),
 
   %% we want to be able to have special value in db for default quota in order to control default quota size via config in default.yml

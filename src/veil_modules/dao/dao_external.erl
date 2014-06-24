@@ -9,10 +9,10 @@
 %% library to work with database
 %% @end
 %% ===================================================================
--module(dao_driver).
+-module(dao_external).
 -author("Tomasz Lichon").
 
--include_lib("veil_modules/dao/dao_driver.hrl").
+-include_lib("veil_modules/dao/dao_external.hrl").
 
 %% API
 -export([set_db/1, get_db/0, record_info/1, is_valid_record/1, sequential_synch_call/3]).

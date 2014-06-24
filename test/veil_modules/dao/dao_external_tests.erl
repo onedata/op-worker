@@ -5,11 +5,11 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This module tests the functionality of dao_driver module.
+%% @doc: This module tests the functionality of dao_external module.
 %% It contains unit tests that base on eunit.
 %% @end
 %% ===================================================================
--module(dao_driver_tests).
+-module(dao_external_tests).
 
 
 -ifdef(TEST).
@@ -17,14 +17,14 @@
 -include_lib("veil_modules/dao/dao.hrl").
 
 is_valid_record_test() ->
-    ?assert(dao_driver:is_valid_record(#some_record{})),
-    ?assert(dao_driver:is_valid_record(some_record)),
-    ?assert(dao_driver:is_valid_record("some_record")),
-    ?assertNot(dao_driver:is_valid_record({some_record, field1})).
+    ?assert(dao_external:is_valid_record(#some_record{})),
+    ?assert(dao_external:is_valid_record(some_record)),
+    ?assert(dao_external:is_valid_record("some_record")),
+    ?assertNot(dao_external:is_valid_record({some_record, field1})).
 
 get_set_db_test() ->
-    ?assertEqual(?DEFAULT_DB, dao_driver:get_db()),
-    dao_driver:set_db("db"),
-    ?assertEqual("db", dao_driver:get_db()).
+    ?assertEqual(?DEFAULT_DB, dao_external:get_db()),
+    dao_external:set_db("db"),
+    ?assertEqual("db", dao_external:get_db()).
 
 -endif.
