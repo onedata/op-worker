@@ -12,7 +12,6 @@
 -module(veilhelpers_nif).
 
 -include("veil_modules/fslogic/fslogic.hrl").
--include("logging.hrl").
 
 -export([start/1, getattr/5, access/6, mknod/7, unlink/5, rename/6, chmod/6, chown/7, chown_name/7, truncate/6,
          open/6, read/8, write/8, read/7, write/7, statfs/5, release/6, fsync/7, mkdir/6, rmdir/5]).
