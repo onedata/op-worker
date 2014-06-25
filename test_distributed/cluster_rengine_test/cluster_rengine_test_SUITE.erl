@@ -15,7 +15,7 @@
 -include("test_utils.hrl").
 -include("veil_modules/dao/dao.hrl").
 -include("veil_modules/dao/dao_vfs.hrl").
--include_lib("veil_modules/dao/dao_helper.hrl").
+-include_lib("dao/include/dao_helper.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
 
 -include("logging.hrl").

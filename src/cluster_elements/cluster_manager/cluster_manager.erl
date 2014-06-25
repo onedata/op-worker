@@ -403,7 +403,7 @@ handle_cast(save_state, State) ->
   case State#cm_state.state_loaded of
     true ->
       try
-        Ans = gen_server:call(?Dispatcher_Name, {dao, 1, {save_state, [State#cm_state{dispatcher_maps = []}]}}, 500),
+        Ans = gen_server:call(?Dispatcher_Name, {dao_worker, 1, {save_state, [State#cm_state{dispatcher_maps = []}]}}, 500),
         case Ans of
           ok -> lager:info([{mod, ?MODULE}], "Save state message sent");
           _ -> lager:error([{mod, ?MODULE}], "Save state error: ~p", [Ans])
@@ -787,8 +787,8 @@ start_worker(Node, Module, WorkerArgs, State) ->
     lager:info([{mod, ?MODULE}], "Worker: ~s started at node: ~s", [Module, Node]),
     {ok, State#cm_state{workers = [{Node, Module, ChildPid} | Workers]}}
   catch
-    _:_ ->
-      lager:error([{mod, ?MODULE}], "Error during start of worker: ~s started at node: ~s", [Module, Node]),
+    _Type:Error ->
+      lager:error([{mod, ?MODULE}], "Error during start of worker ~s at node ~s: ~p", [Module, Node, Error]),
       {error, State}
   end.
 
@@ -970,23 +970,23 @@ get_state_from_db(State) ->
   end,
   Workers = State#cm_state.workers,
   RunningWorkers = lists:foldl(CreateRunningWorkersList, [], Workers),
-  case lists:member(dao, RunningWorkers) of
+  case lists:member(dao_worker, RunningWorkers) of
     true ->
       FindDAO = fun({N, M, _Child}, TmpAns) ->
         case M of
-          dao -> N;
+          dao_worker -> N;
           _ -> TmpAns
         end
       end,
       DaoNode = lists:foldl(FindDAO, [], Workers),
-      gen_server:cast({dao, DaoNode}, {synch, 1, {get_state, []}, cluster_state, {gen_serv, {global, ?CCM}}}),
+      gen_server:cast({dao_worker, DaoNode}, {synch, 1, {get_state, []}, cluster_state, {gen_serv, {global, ?CCM}}}),
       State;
     false ->
       [DaoNode | _] = State#cm_state.nodes,
-      {Ans, NewState} = start_worker(DaoNode, dao, [], State),
+      {Ans, NewState} = start_worker(DaoNode, dao_worker, [], State),
       case Ans of
         ok ->
-          gen_server:cast({dao, DaoNode}, {synch, 1, {get_state, []}, cluster_state, {gen_serv, {global, ?CCM}}}),
+          gen_server:cast({dao_worker, DaoNode}, {synch, 1, {get_state, []}, cluster_state, {gen_serv, {global, ?CCM}}}),
           update_dispatchers_and_dns(NewState, true, true);
         error -> NewState
       end

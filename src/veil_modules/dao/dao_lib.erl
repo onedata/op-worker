@@ -13,6 +13,7 @@
 
 -include("veil_modules/dao/dao.hrl").
 -include("registered_names.hrl").
+-include_lib("dao/include/common.hrl").
 
 %% API
 -export([wrap_record/1, strip_wrappers/1, apply/4, apply/5]).
@@ -24,7 +25,7 @@
 %% wrap_record/1
 %% ====================================================================
 %% @doc Wraps given erlang record with #veil_document{} wrapper. <br/>
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% @end
 -spec wrap_record(Record :: tuple()) -> #veil_document{}.
 %% ====================================================================
@@ -38,7 +39,7 @@ wrap_record(Record) when is_tuple(Record) ->
 %% Alternatively arguments can be passed as {ok, Arg} tuple. Its convenient because most DAO methods formats return value formatted that way<br/>
 %% If the argument cannot be converted (e.g. error tuple is passed), this method returns it unchanged. <br/>
 %% This method is designed for use as wrapper for "get_*"-like DAO methods. E.g. dao_lib:strip_wrappers(dao_vfs:get_file({absolute_path, "/foo/bar"}))
-%% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
+%% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% @end
 -spec strip_wrappers(VeilDocOrList :: #veil_document{} | [#veil_document{}]) -> tuple() | [tuple()].
 %% ====================================================================
@@ -76,7 +77,7 @@ apply(Module, Method, Args, ProtocolVersion) ->
     Args :: [term()], ProtocolVersion :: number(), Timeout :: pos_integer()) -> any() | {error, worker_not_found} | {error, timeout}.
 %% ====================================================================
 apply(Module, {asynch, Method}, Args, ProtocolVersion, _Timeout) ->
-    try gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, {Module, Method, Args}}) of
+    try gen_server:call(?Dispatcher_Name, {dao_worker, ProtocolVersion, {Module, Method, Args}}) of
         ok ->
             ok;
         worker_not_found ->
@@ -93,7 +94,7 @@ apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout) ->
         _ -> put(msgID, 0)
     end,
     MsgID = get(msgID),
-    try gen_server:call(?Dispatcher_Name, {dao, ProtocolVersion, self(), MsgID, {Module, Method, Args}}) of
+    try gen_server:call(?Dispatcher_Name, {dao_worker, ProtocolVersion, self(), MsgID, {Module, Method, Args}}) of
         ok ->
             receive
                 {worker_answer, MsgID, Resp} -> Resp
