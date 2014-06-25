@@ -11,9 +11,10 @@
 %% ===================================================================
 
 -module(veil_cluster_node_app).
-
 -behaviour(application).
+
 -include("registered_names.hrl").
+-include("logging.hrl").
 
 %% Application callbacks
 -export([start/2, stop/1]).

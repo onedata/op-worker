@@ -12,9 +12,11 @@
 
 -module(dns_worker).
 -behaviour(worker_plugin_behaviour).
+
 -include("veil_modules/dns/dns_worker.hrl").
 -include("registered_names.hrl").
 -include("supervision_macros.hrl").
+-include("logging.hrl").
 
 %% ====================================================================
 %% API functions

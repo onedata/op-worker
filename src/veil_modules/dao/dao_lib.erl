@@ -13,6 +13,7 @@
 
 -include("veil_modules/dao/dao.hrl").
 -include("registered_names.hrl").
+-include("logging.hrl").
 
 %% API
 -export([wrap_record/1, strip_wrappers/1, apply/4, apply/5]).

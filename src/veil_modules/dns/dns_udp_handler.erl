@@ -11,6 +11,7 @@
 
 -module(dns_udp_handler).
 -include("registered_names.hrl").
+-include("logging.hrl").
 
 %% ====================================================================
 %% API

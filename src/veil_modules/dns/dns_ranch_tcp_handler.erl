@@ -10,8 +10,10 @@
 %% ===================================================================
 
 -module(dns_ranch_tcp_handler).
--include("registered_names.hrl").
 -behaviour(ranch_protocol).
+
+-include("registered_names.hrl").
+-include("logging.hrl").
 
 %% ====================================================================
 %% API

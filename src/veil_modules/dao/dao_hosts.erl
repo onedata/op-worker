@@ -12,6 +12,7 @@
 
 -include_lib("veil_modules/dao/common.hrl").
 -include_lib("veil_modules/dao/dao_hosts.hrl").
+-include("logging.hrl").
 
 -ifdef(TEST).
 -compile([export_all]).

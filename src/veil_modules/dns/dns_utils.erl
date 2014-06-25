@@ -11,8 +11,11 @@
 %% ===================================================================
 
 -module(dns_utils).
+
 -include_lib("kernel/src/inet_dns.hrl").
 -include("veil_modules/dns/dns_utils.hrl").
+-include("logging.hrl").
+
 -define(BASE_DNS_HEADER_SIZE, 12).  %% header size according to RFC1035#section-4.1.1
 -define(BASE_DNS_QUESTION_SIZE, 4). %% query size according to RFC1035#section-4.1.2
 -define(DNS_ANSWER_SIZE, 16).       %% making assumption that answer has matching query(label compression)
