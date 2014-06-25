@@ -13,6 +13,7 @@
 
 -module(records_translator).
 -include("communication_protocol_pb.hrl").
+-include("logging.hrl").
 
 %% ====================================================================
 %% API
