@@ -23,7 +23,6 @@
             crypto,
             ssl,
             ibrowse,
-            ranch,
             cowboy
         ]},
         {mod, {veil_cluster_node_app, []}},
