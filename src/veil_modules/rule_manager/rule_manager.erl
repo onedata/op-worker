@@ -13,7 +13,7 @@
 
 -module(rule_manager).
 -behaviour(worker_plugin_behaviour).
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include("registered_names.hrl").
 -include_lib("dao/include/dao_helper.hrl").
 -include("veil_modules/dao/dao.hrl").

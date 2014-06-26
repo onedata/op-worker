@@ -12,7 +12,7 @@
 
 -module(page_404).
 -compile(export_all).
--include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/control_panel/vcn_common.hrl").
 
 %% Template points to the template file, which will be filled with content
 main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.

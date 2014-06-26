@@ -12,7 +12,7 @@
 
 -module(rest_test_SUITE).
 -include("test_utils.hrl").
--include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/control_panel/vcn_common.hrl").
 -include("veil_modules/control_panel/rest_messages.hrl").
 -include("err.hrl").
 -include("registered_names.hrl").

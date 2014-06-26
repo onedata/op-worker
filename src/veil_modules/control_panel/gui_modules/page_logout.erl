@@ -12,8 +12,8 @@
 
 -module(page_logout).
 -compile(export_all).
--include("veil_modules/control_panel/common.hrl").
--include("logging.hrl").
+-include("veil_modules/control_panel/vcn_common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% Template points to the template file, which will be filled with content
 main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.

@@ -10,8 +10,8 @@
 %% ===================================================================
 
 -module(gui_ctx).
--include("veil_modules/control_panel/common.hrl").
--include("logging.hrl").
+-include("veil_modules/control_panel/vcn_common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 % Functions used to associate user with session
 -export([create_session/0, set_user_id/1, get_user_id/0, set_user_record/1, get_user_record/0, user_logged_in/0, clear_session/0]).

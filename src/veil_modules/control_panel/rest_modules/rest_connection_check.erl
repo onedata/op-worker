@@ -12,7 +12,7 @@
 -module(rest_connection_check).
 -behaviour(rest_module_behaviour).
 
--include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/control_panel/vcn_common.hrl").
 -include("veil_modules/control_panel/rest_messages.hrl").
 -include("err.hrl").
 -include("veil_modules/control_panel/connection_check_values.hrl").

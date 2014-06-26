@@ -13,7 +13,7 @@
 -module(rest_handler).
 
 -include_lib("public_key/include/public_key.hrl").
--include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/control_panel/vcn_common.hrl").
 -include("err.hrl").
 -include("veil_modules/control_panel/connection_check_values.hrl").
 

@@ -12,7 +12,7 @@
 -behaviour(cowboy_http_handler).
 -include("registered_names.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -export([init/3, handle/2, terminate/3]).
 

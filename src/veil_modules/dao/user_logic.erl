@@ -12,7 +12,7 @@
 -module(user_logic).
 
 -include("veil_modules/fslogic/fslogic.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include("registered_names.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").

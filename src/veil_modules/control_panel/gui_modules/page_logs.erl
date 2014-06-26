@@ -12,9 +12,9 @@
 
 -module(page_logs).
 -compile(export_all).
--include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/control_panel/vcn_common.hrl").
 -include("registered_names.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 % Record used to store user preferences. One instance is kept in comet process, another one
 % is remembered in page state for filter options to be persistent

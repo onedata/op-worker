@@ -14,8 +14,8 @@
 %% ===================================================================
 
 -module(gui_session_handler).
--include("veil_modules/control_panel/common.hrl").
--include("logging.hrl").
+-include("veil_modules/control_panel/vcn_common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% n2o session_handler API
 -export([init/2, finish/2, get_value/2, set_value/2, clear/0]).

@@ -11,8 +11,8 @@
 %% ===================================================================
 
 -module(gui_comet).
--include("veil_modules/control_panel/common.hrl").
--include("logging.hrl").
+-include("veil_modules/control_panel/vcn_common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 % Comet API
 -export([spawn/1, init_comet/2, comet_supervisor/2, is_comet_process/0, flush/0]).

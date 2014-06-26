@@ -12,7 +12,7 @@
 
 -module(page_about).
 -compile(export_all).
--include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/control_panel/vcn_common.hrl").
 -include("registered_names.hrl").
 
 -define(LICENSE_FILE, "LICENSE.txt").

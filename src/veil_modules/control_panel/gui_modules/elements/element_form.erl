@@ -10,7 +10,7 @@
 %% ===================================================================
 
 -module(element_form).
--include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/control_panel/vcn_common.hrl").
 -export([render_element/1]).
 
 render_element(Record) ->

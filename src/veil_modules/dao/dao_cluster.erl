@@ -16,7 +16,7 @@
 -include("veil_modules/dao/dao_types.hrl").
 -include_lib("dao/include/couch_db.hrl").
 -include_lib("dao/include/common.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API - cluster state
 -export([save_state/2, save_state/1, get_state/1, get_state/0, clear_state/1, clear_state/0]).

@@ -13,8 +13,8 @@
 -module(gui_utils).
 -include_lib("ibrowse/include/ibrowse.hrl").
 -include_lib("public_key/include/public_key.hrl").
--include("veil_modules/control_panel/common.hrl").
--include("logging.hrl").
+-include("veil_modules/control_panel/vcn_common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 % Initialization of n2o settings and cleanup
 -export([init_n2o_ets_and_envs/3, cleanup_n2o/1]).

@@ -14,7 +14,7 @@
 -include_lib("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("registered_names.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -deprecated([proxy_subject/1]).
 

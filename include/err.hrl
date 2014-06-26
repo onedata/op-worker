@@ -14,7 +14,7 @@
 %% ===================================================================
 
 % Note, logging.hrl is automaticaly included wherever err.hrl is.
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -type status() :: warning | error | alert.
 

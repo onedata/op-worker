@@ -13,8 +13,8 @@
 -module(session_logic).
 -behaviour(session_logic_behaviour).
 -include_lib("stdlib/include/ms_transform.hrl").
--include("veil_modules/control_panel/common.hrl").
--include("logging.hrl").
+-include("veil_modules/control_panel/vcn_common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% session_logic_behaviour API
 -export([init/0, cleanup/0]).

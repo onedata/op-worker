@@ -14,7 +14,7 @@
 -module(rest_files).
 -behaviour(rest_module_behaviour).
 
--include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/control_panel/vcn_common.hrl").
 -include("veil_modules/control_panel/rest_messages.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("err.hrl").

@@ -14,7 +14,7 @@
 -include("registered_names.hrl").
 -include("records.hrl").
 -include("modules_and_args.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -define(CALLBACKS_TABLE, dispatcher_callbacks_table).
 

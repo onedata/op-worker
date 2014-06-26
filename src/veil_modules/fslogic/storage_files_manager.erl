@@ -20,7 +20,7 @@
 -include("veil_modules/dao/dao_share.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -define(S_IFREG, 8#100000).
 

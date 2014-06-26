@@ -15,7 +15,7 @@
 -include_lib("xmerl/include/xmerl.hrl").
 -include_lib("n2o/include/wf.hrl").
 -include("veil_modules/control_panel/openid_utils.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% ====================================================================

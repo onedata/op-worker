@@ -18,7 +18,7 @@
 -behaviour(gen_server).
 -include("registered_names.hrl").
 -include("records.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include("supervision_macros.hrl").
 
 %% Dispatcher cowboy listener ID

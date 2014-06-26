@@ -14,8 +14,8 @@
 -module(control_panel).
 -behaviour(worker_plugin_behaviour).
 
--include("veil_modules/control_panel/common.hrl").
--include("logging.hrl").
+-include("veil_modules/control_panel/vcn_common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% ====================================================================
 %% API functions
