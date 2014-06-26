@@ -19,11 +19,8 @@
             stdlib,
             sasl,
             public_key,
-%%             lager,
             crypto,
-            ssl%,
-%%             ibrowse,
-%%             cowboy
+            ssl
         ]},
         {mod, {veil_cluster_node_app, []}},
         {env, [
