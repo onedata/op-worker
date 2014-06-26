@@ -5,39 +5,36 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#include <errno.h>
 #include "veilErrors.h"
 
-namespace veil {
+#include <errno.h>
 
-    int translateError(const std::string &verr)
-    {
-        if(verr == VOK)
-            return 0;
-        else if(verr == VENOENT)
-            return -ENOENT;
-        else if(verr == VEACCES)
-            return -EACCES;
-        else if(verr == VEEXIST)
-            return -EEXIST;
-        else if(verr == VEIO)
-            return -EIO;
-        else if(verr == VENOTSUP)
-            return -ENOTSUP;
-        else if(verr == VENOTEMPTY)
-            return -ENOTEMPTY;
-        else if(verr == VEREMOTEIO)
+#include <unordered_map>
+
+namespace veil
+{
+
+int translateError(const std::string &verr)
+{
+    static const std::unordered_map<std::string, int> errorMap{
+        {VOK,           0},
+        {VENOENT,       -ENOENT},
+        {VEACCES,       -EACCES},
+        {VEEXIST,       -EEXIST},
+        {VEIO,          -EIO},
+        {VENOTSUP,      -ENOTSUP},
+        {VENOTEMPTY,    -ENOTEMPTY},
+        {VEPERM,        -EPERM},
+        {VEINVAL,       -EINVAL},
 #ifdef __gnu_linux__
-        return -EREMOTEIO;
+        {VEREMOTEIO,    -EREMOTEIO},
 #else
-        return -EIO;
+        {VEREMOTEIO,    -EIO},
 #endif
-        else if(verr == VEPERM)
-            return -EPERM;
-        else if(verr == VEINVAL)
-            return -EINVAL;
-        else
-            return -EIO;
-    }
+    };
+
+    const auto it = errorMap.find(verr);
+    return it == errorMap.end() ? -EIO : it->second;
+}
 
 }

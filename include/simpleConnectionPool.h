@@ -9,23 +9,24 @@
 #ifndef SIMPLE_CONNECTION_POOL_H
 #define SIMPLE_CONNECTION_POOL_H
 
-#include <boost/thread.hpp>
-#include <list>
-#include <ctime>
-#include <boost/shared_ptr.hpp>
-#include <boost/enable_shared_from_this.hpp>
-#include <boost/atomic.hpp>
 #include "communicationHandler.h"
 #include "veilErrors.h"
+
+#include <atomic>
+#include <ctime>
+#include <list>
+#include <memory>
+#include <mutex>
+#include <thread>
 
 #define DEFAULT_POOL_SIZE 2
 #define MAX_CONNECTION_ERROR_COUNT 5
 
 namespace veil {
 
-typedef std::list<std::pair<boost::shared_ptr<CommunicationHandler>, time_t> > connection_pool_t;
+using connection_pool_t = std::list<std::pair<std::shared_ptr<CommunicationHandler>, time_t>>;
 
-class SimpleConnectionPool : public boost::enable_shared_from_this<SimpleConnectionPool>
+class SimpleConnectionPool : public std::enable_shared_from_this<SimpleConnectionPool>
 {
 public:
 
@@ -58,10 +59,10 @@ public:
      * This method uses simple round-robin selection for all connections in pool.
      * It also creates new instances of CommunicationHandler if needed.
      */
-    virtual boost::shared_ptr<CommunicationHandler> selectConnection(PoolType = META_POOL);
-    virtual void releaseConnection(boost::shared_ptr<CommunicationHandler> conn);       ///< Returns CommunicationHandler's pointer ownership back to connection pool.
-                                                                                        ///< @deprecated Since selectConnection does not pass connection ownership, this
-                                                                                        ///< method is useless, so it does nothing.
+    virtual std::shared_ptr<CommunicationHandler> selectConnection(PoolType = META_POOL);
+    virtual void releaseConnection(std::shared_ptr<CommunicationHandler> conn);       ///< Returns CommunicationHandler's pointer ownership back to connection pool.
+                                                                                      ///< @deprecated Since selectConnection does not pass connection ownership, this
+                                                                                      ///< method is useless, so it does nothing.
 
     /**
      * @returns Last error encountered while creating or managing connections.
@@ -76,12 +77,12 @@ protected:
 
     push_callback        m_pushCallback;
 
-    boost::recursive_mutex      m_access;
-    boost::condition_variable   m_accessCond;
+    std::recursive_mutex      m_access;
+    std::condition_variable   m_accessCond;
     std::map<PoolType, ConnectionPoolInfo>  m_connectionPools;                      ///< Connection pool. @see SimpleConnectionPool::selectConnection
     std::list<std::string> m_hostnamePool;
 
-    virtual boost::shared_ptr<CommunicationHandler> newConnection(PoolType type);   ///< Creates new active connection and adds it to connection pool. Convenience method for testing (makes connection mocking easier)
+    virtual std::shared_ptr<CommunicationHandler> newConnection(PoolType type);     ///< Creates new active connection and adds it to connection pool. Convenience method for testing (makes connection mocking easier)
     virtual std::list<std::string> dnsQuery(const std::string &hostname);           ///< Fetch IP list from DNS for given hostname.
 
     /// Increments givent int while constructing and deincrement while destructing.
@@ -102,7 +103,7 @@ protected:
     };
 
 private:
-    boost::atomic<error::Error> m_lastError;
+    std::atomic<error::Error> m_lastError;
     const bool m_checkCertificate;
 };
 

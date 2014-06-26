@@ -20,22 +20,20 @@ public:
 
     ~ProxySimpleConnectionPool() {}
 
-    // Override
-    boost::shared_ptr<CommunicationHandler> newConnection(SimpleConnectionPool::PoolType type)
+    std::shared_ptr<CommunicationHandler> newConnection(SimpleConnectionPool::PoolType type) override
     {
-        boost::shared_ptr<CommunicationHandler> conn = boost::shared_ptr<CommunicationHandler>(new MockCommunicationHandler());
+        std::shared_ptr<CommunicationHandler> conn = std::shared_ptr<CommunicationHandler>(new MockCommunicationHandler());
         m_connectionPools[type].connections.push_front(make_pair(conn, time(NULL) + 20000));
 
         return conn;
     }
 
-    void addConnection(SimpleConnectionPool::PoolType type, boost::shared_ptr<CommunicationHandler> conn)
+    void addConnection(SimpleConnectionPool::PoolType type, std::shared_ptr<CommunicationHandler> conn)
     {
-        m_connectionPools[type].connections.push_back(pair<boost::shared_ptr<CommunicationHandler>, time_t>(conn, time(NULL) + 20000));
+        m_connectionPools[type].connections.push_back(pair<std::shared_ptr<CommunicationHandler>, time_t>(conn, time(NULL) + 20000));
     }
 
-    // Override
-    std::list<std::string> dnsQuery(const std::string &hostname)
+    std::list<std::string> dnsQuery(const std::string &hostname) override
     {
         std::list<std::string> ret;
         ret.push_back(hostname);

@@ -18,6 +18,8 @@
 #include <openssl/evp.h>
 #include <openssl/err.h>
 
+#include <chrono>
+
 using std::string;
 using namespace veil::protocol::communication_protocol;
 using namespace veil::protocol::fuse_messages;
@@ -27,7 +29,7 @@ using websocketpp::lib::bind;
 
 namespace veil {
 
-boost::recursive_mutex CommunicationHandler::m_instanceMutex;
+std::recursive_mutex CommunicationHandler::m_instanceMutex;
 SSL_SESSION* CommunicationHandler::m_session = 0;
 
 CommunicationHandler::CommunicationHandler(const string &p_hostname, int p_port, cert_info_fun p_getCertInfo, const bool checkCertificate)
@@ -38,8 +40,7 @@ CommunicationHandler::CommunicationHandler(const string &p_hostname, int p_port,
       m_connectStatus(CLOSED),
       m_currentMsgId(1),
       m_errorCount(0),
-      m_isPushChannel(false),
-      m_lastConnectTime(0)
+      m_isPushChannel(false)
 {
 }
 
@@ -60,14 +61,11 @@ CommunicationHandler::~CommunicationHandler()
         m_endpoint.reset();
     }
 
-    // Force exit worker threads
-    if(m_worker1.joinable() && !m_worker1.timed_join(boost::posix_time::milliseconds(200)) && m_worker1.native_handle()) {
-        pthread_cancel(m_worker1.native_handle());
-    }
+    if(m_worker1.joinable())
+        m_worker1.join();
 
-    if(m_worker2.joinable() && !m_worker2.timed_join(boost::posix_time::milliseconds(200)) && m_worker2.native_handle()) {
-        pthread_cancel(m_worker2.native_handle());
-    }
+    if(m_worker2.joinable())
+        m_worker2.join();
 
     DLOG(INFO) << "Connection: " << this << " deleted";
 }
@@ -126,7 +124,7 @@ int CommunicationHandler::openConnection()
 
     // (re)Initialize endpoint (io_service)
     m_endpointConnection.reset();
-    m_endpoint.reset(new ws_client());
+    m_endpoint = std::make_shared<ws_client>();
     m_endpoint->clear_access_channels(websocketpp::log::alevel::all);
     m_endpoint->clear_error_channels(websocketpp::log::elevel::all);
     m_endpoint->init_asio(ec);
@@ -175,11 +173,11 @@ int CommunicationHandler::openConnection()
 
     // Start worker thread(s)
     // Second worker should not be started if WebSocket client lib cannot handle full-duplex connections
-    m_worker1 = boost::thread(&ws_client::run, m_endpoint);
+    m_worker1 = std::thread(&ws_client::run, m_endpoint);
     //m_worker2 = boost::thread(&ws_client::run, m_endpoint);
 
     // Wait for WebSocket handshake
-    m_connectCond.timed_wait(lock, boost::posix_time::milliseconds(CONNECT_TIMEOUT));
+    m_connectCond.wait_for(lock, CONNECT_TIMEOUT);
 
     LOG(INFO) << "Connection to " << URL << " status: " << m_connectStatus;
 
@@ -196,7 +194,7 @@ int CommunicationHandler::openConnection()
     }
 
     if(m_connectStatus == CONNECTED) {
-        m_lastConnectTime = helpers::utils::mtime<uint64_t>();
+        m_lastConnectTime = std::chrono::system_clock::now();
         unique_lock lock(m_instanceMutex);
         socket_type &socket = m_endpointConnection->get_socket();
         SSL *ssl = socket.native_handle();
@@ -222,7 +220,7 @@ void CommunicationHandler::closeConnection()
         websocketpp::lib::error_code ec;
         m_endpoint->close(m_endpointConnection, websocketpp::close::status::normal, string("reset_by_peer"), ec); // Initialize WebSocket cloase operation
         if(ec.value() == 0)
-            m_connectCond.timed_wait(lock, boost::posix_time::milliseconds(CONNECT_TIMEOUT)); // Wait for connection to close
+            m_connectCond.wait_for(lock, CONNECT_TIMEOUT); // Wait for connection to close
 
         m_endpoint->stop(); // If connection failed to close, make sure that io_service refuses to send/receive any further messages at this point
 
@@ -239,8 +237,10 @@ void CommunicationHandler::closeConnection()
     }
 
     // Stop workers
-    m_worker1.timed_join(boost::posix_time::milliseconds(200));
-    m_worker2.timed_join(boost::posix_time::milliseconds(200));
+    if(m_worker1.joinable())
+        m_worker1.join();
+    if(m_worker2.joinable())
+        m_worker2.join();
 
     m_connectStatus = CLOSED;
 }
@@ -371,18 +371,20 @@ int CommunicationHandler::receiveMessage(Answer& answer, int32_t msgId, uint32_t
 {
     unique_lock lock(m_receiveMutex);
 
-    uint64_t timeoutTime = helpers::utils::mtime<uint64_t>() + timeout;
+    const auto timeoutTime = std::chrono::steady_clock::now() +
+            std::chrono::milliseconds{timeout};
 
     // Incoming message should be in inbox. Wait for it
     while(m_incomingMessages.find(msgId) == m_incomingMessages.end()) {
-        uint64_t currTime = helpers::utils::mtime<uint64_t>();
+        const auto currTime = std::chrono::steady_clock::now();
 
         if(m_connectStatus != CONNECTED) {
             ++m_errorCount;
             return -2;
         }
 
-        if(currTime >= timeoutTime || !m_receiveCond.timed_wait(lock, boost::posix_time::milliseconds(timeoutTime - currTime))) {
+        if(currTime >= timeoutTime ||
+           m_receiveCond.wait_for(lock, timeoutTime - currTime) == std::cv_status::timeout) {
             ++m_errorCount;
             return -1;
         }
@@ -417,7 +419,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
         {
             if(retry > 0)
             {
-                uint64_t lastConnectTime = m_lastConnectTime;
+                auto lastConnectTime = m_lastConnectTime;
 
                 LOG(WARNING) << "Sening message to cluster failed, trying to reconnect and retry";
                 unique_lock guard(m_reconnectMutex);
@@ -443,7 +445,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
         {
             if(retry > 0)
             {
-                uint64_t lastConnectTime = m_lastConnectTime;
+                auto lastConnectTime = m_lastConnectTime;
 
                 LOG(WARNING) << "Receiving response from cluster failed, trying to reconnect and retry";
                 unique_lock guard(m_reconnectMutex);
@@ -490,7 +492,7 @@ context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
     CertificateInfo certInfo = m_getCertInfo();
 
     try {
-        context_ptr ctx(new boost::asio::ssl::context(boost::asio::ssl::context::sslv3));
+        context_ptr ctx = std::make_shared<boost::asio::ssl::context>(boost::asio::ssl::context::sslv3);
 
         ctx->set_options(boost::asio::ssl::context::default_workarounds |
                          boost::asio::ssl::context::no_sslv2 |

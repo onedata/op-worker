@@ -10,11 +10,9 @@
 
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
-#include "boost/bind.hpp" 
 #include "logging.h"
 
 using namespace testing;
-using namespace boost;
 using namespace std;
 
 namespace veil {
@@ -23,8 +21,8 @@ namespace helpers {
 }
 }
 
-using namespace veil; 
-using namespace veil::helpers; 
+using namespace veil;
+using namespace veil::helpers;
 
 #define INIT_AND_RUN_ALL_TESTS() \
     int main(int argc, char **argv) { \
