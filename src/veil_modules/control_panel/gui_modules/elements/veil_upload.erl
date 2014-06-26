@@ -14,7 +14,7 @@
 %% ===================================================================
 
 -module(veil_upload).
--include("veil_modules/control_panel/vcn_common.hrl").
+-include("veil_modules/control_panel/common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 -export([render_element/1, api_event/3]).

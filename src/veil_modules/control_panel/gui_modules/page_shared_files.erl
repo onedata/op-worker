@@ -12,7 +12,7 @@
 
 -module(page_shared_files).
 -compile(export_all).
--include("veil_modules/control_panel/vcn_common.hrl").
+-include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/dao/dao_share.hrl").
 -include_lib("ctool/include/logging.hrl").
 

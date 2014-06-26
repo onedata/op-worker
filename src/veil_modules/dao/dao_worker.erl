@@ -22,7 +22,7 @@
 -include_lib("veil_modules/dao/dao_types.hrl").
 -include_lib("veil_modules/dao/dao_vfs.hrl").
 -include_lib("veil_modules/fslogic/fslogic.hrl").
--include_lib("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include_lib("dao/include/common.hrl").
 
 -import(dao_helper, [name/1]).

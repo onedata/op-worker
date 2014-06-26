@@ -11,7 +11,7 @@
 %% ===================================================================
 
 -module(vcn_gui_utils).
--include("veil_modules/control_panel/vcn_common.hrl").
+-include("veil_modules/control_panel/common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 % Functions connected with user's session

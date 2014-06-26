@@ -12,7 +12,7 @@
 
 -module(page_file_manager).
 -compile(export_all).
--include("veil_modules/control_panel/vcn_common.hrl").
+-include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include_lib("ctool/include/logging.hrl").
 
