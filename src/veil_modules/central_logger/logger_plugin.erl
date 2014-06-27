@@ -27,5 +27,5 @@ gather_metadata() ->
     % Add user's dn to metadata if in context
     case fslogic_context:get_user_dn() of
         undefined -> [];
-        _ -> [{dn, fslogic_context:get_user_dn()}]
+        DN -> [{dn, DN}]
     end.
