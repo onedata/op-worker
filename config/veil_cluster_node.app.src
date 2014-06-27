@@ -25,8 +25,7 @@
             % for awareness of them being used in the project.
             lager,
             ibrowse,
-            cowboy,
-            ctool
+            cowboy
         ]},
         {mod, {veil_cluster_node_app, []}},
         {env, [
