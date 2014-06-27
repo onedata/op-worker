@@ -20,7 +20,14 @@
             sasl,
             public_key,
             crypto,
-            ssl
+            ssl,
+            % ctool already requires those apps below, but they are here
+            % so that everyone is aware of them being used in the project.
+            lager,
+            ibrowse,
+            cowboy,
+            erlydtl,
+            ctool
         ]},
         {mod, {veil_cluster_node_app, []}},
         {env, [
