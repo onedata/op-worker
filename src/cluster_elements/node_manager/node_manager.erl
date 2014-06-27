@@ -40,7 +40,8 @@
 %% jako stan (jak teraz) czy jako ets i ewentualnie przejść na ets
 -ifdef(TEST).
 -export([get_callback/2, addCallback/3, delete_callback/3]).
--export([calculate_network_stats/3, get_interface_stats/2, get_cpu_stats/1, calculate_ports_transfer/4, get_memory_stats/0]).
+-export([calculate_network_stats/3, get_interface_stats/2, get_cpu_stats/1, calculate_ports_transfer/4,
+  get_memory_stats/0, is_valid_name/1, is_valid_name/2, is_valid_character/1]).
 -endif.
 
 %% ====================================================================
@@ -280,36 +281,48 @@ handle_cast({register_simple_cache, Cache, ReturnPid}, State) ->
   ReturnPid ! simple_cache_registered,
   {noreply, State#node_state{simple_caches = NewCaches}};
 
-handle_cast({start_load_logging, Path}, State) ->
+handle_cast({start_load_logging, Path}, #node_state{load_logging_fd = undefined} = State) ->
   ?info("Start load logging on node: ~p", [node()]),
   {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
   {MegaSecs, Secs, MicroSecs} = erlang:now(),
   StartTime = MegaSecs * 1000000 + Secs + MicroSecs / 1000000,
-  case file:open(Path ++ "/load_log.csv", [write]) of
+  case file:open(Path, [write]) of
     {ok, Fd} ->
-      NodeStats = get_node_stats(0, default),
-      Header = string:join(["elapsed", "window" | lists:map(fun({Name, _}) ->
-        binary_to_list(Name) end, NodeStats)], ", ") ++ "\n",
-      io:fwrite(Fd, Header, []),
-      erlang:send_after(Interval * 1000, self(), {timer, {log_load, StartTime, StartTime}}),
-      {noreply, State#node_state{load_logging_fd = Fd}};
+      case get_node_stats(short) of
+        NodeStats when is_list(NodeStats) ->
+          Header = string:join(["elapsed", "window" | lists:map(fun({Name, _}) ->
+            Name
+          end, NodeStats)], ", ") ++ "\n",
+          io:fwrite(Fd, Header, []),
+          erlang:send_after(Interval * 1000, self(), {timer, {log_load, StartTime, StartTime}}),
+          {noreply, State#node_state{load_logging_fd = Fd}};
+        Other ->
+          ?error("Can not get node stats: ~p", [Other]),
+          {noreply, State}
+      end;
     _ -> {noreply, State}
   end;
+handle_cast({start_load_logging, _}, State) ->
+  ?warning("Load logging already started on node: ~p", [node()]),
+  {noreply, State};
 
-handle_cast({log_load, StartTime, PrevTime}, State) ->
+handle_cast({log_load, _, _}, #node_state{load_logging_fd = undefined} = State) ->
+  ?warning("Can not log load: file descriptor is undefined."),
+  {noreply, State};
+handle_cast({log_load, StartTime, PrevTime}, #node_state{load_logging_fd = Fd} = State) ->
   {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
   {MegaSecs, Secs, MicroSecs} = erlang:now(),
   CurrTime = MegaSecs * 1000000 + Secs + MicroSecs / 1000000,
-  spawn(fun() -> log_load(State#node_state.load_logging_fd, StartTime, PrevTime, CurrTime) end),
+  spawn(fun() -> log_load(Fd, StartTime, PrevTime, CurrTime) end),
   erlang:send_after(Interval * 1000, self(), {timer, {log_load, StartTime, CurrTime}}),
   {noreply, State};
 
-handle_cast(stop_load_logging, State) ->
+handle_cast(stop_load_logging, #node_state{load_logging_fd = undefined} = State) ->
+  ?warning("Load logging already stopped on node: ~p", [node()]),
+  {noreply, State};
+handle_cast(stop_load_logging, #node_state{load_logging_fd = Fd} = State) ->
   ?info("Stop load logging on node: ~p", [node()]),
-  case State#node_state.load_logging_fd of
-    undefined -> ok;
-    Fd -> file:close(Fd)
-  end,
+  file:close(Fd),
   {noreply, State#node_state{load_logging_fd = undefined}};
 
 handle_cast({notify_lfm, EventType, Enabled}, State) ->
@@ -528,18 +541,18 @@ check_vsn([{Application, _Description, Vsn} | Apps]) ->
 %% ====================================================================
 %% @doc Writes node load to file
 -spec log_load(Fd :: pid(), StartTime :: integer(), PrevTime :: integer(), CurrTime :: integer()) -> Result when
-  Result :: ok.
+  Result :: ok | {error, Reason :: term()}.
 %% ====================================================================
 log_load(Fd, StartTime, PrevTime, CurrTime) ->
-  case Fd of
-    undefined -> ok;
-    _ ->
-      NodeStats = get_node_stats(short, default),
-      Values = [CurrTime - StartTime, CurrTime - PrevTime | lists:map(fun({_, Value}) ->
-        Value end, NodeStats)],
+  case get_node_stats(short) of
+    NodeStats when is_list(NodeStats) ->
+      Values = [CurrTime - StartTime, CurrTime - PrevTime | lists:map(fun({_, Value}) -> Value end, NodeStats)],
       Format = string:join(lists:duplicate(length(Values), "~.6f"), ", ") ++ "\n",
       io:fwrite(Fd, Format, Values),
-      ok
+      ok;
+    Other ->
+      ?error("Can not get node stats: ~p", [Other]),
+      {error, Other}
   end.
 
 %% create_node_stats_rrd/1
@@ -586,7 +599,7 @@ create_node_stats_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkS
 %% @doc Get statistics about node load
 %% TimeWindow - time in seconds since now, that defines interval for which statistics will be fetched
 -spec get_node_stats(TimeWindow :: short | medium | long | integer()) -> Result when
-  Result :: [{Name :: atom(), Value :: float()}] | {error, term()}.
+  Result :: [{Name :: string(), Value :: float()}] | {error, term()}.
 %% ====================================================================
 get_node_stats(TimeWindow) ->
   {ok, Interval} = case TimeWindow of
@@ -686,6 +699,9 @@ get_network_stats(NetworkStats) ->
   Dir = "/sys/class/net/",
   case file:list_dir(Dir) of
     {ok, Interfaces} ->
+      ValidInterfaces = lists:filter(fun(Interface) ->
+        is_valid_name(Interface, 11)
+      end, Interfaces),
       CurrentNetworkStats = lists:foldl(
         fun(Interface, Stats) -> [
           {<<"net_rx_b_", (list_to_binary(Interface))/binary>>, get_interface_stats(Interface, "rx_bytes")},
@@ -693,7 +709,7 @@ get_network_stats(NetworkStats) ->
           {<<"net_rx_pps_", (list_to_binary(Interface))/binary>>, get_interface_stats(Interface, "rx_packets") / Period},
           {<<"net_tx_pps_", (list_to_binary(Interface))/binary>>, get_interface_stats(Interface, "tx_packets") / Period} |
           Stats
-        ] end, [], Interfaces),
+        ] end, [], ValidInterfaces),
       gen_server:cast(?Node_Manager_Name, {update_network_stats, CurrentNetworkStats}),
       calculate_network_stats(CurrentNetworkStats, NetworkStats, []);
     _ -> []
@@ -762,10 +778,16 @@ read_cpu_stats(Fd, Stats) ->
                "" -> <<"cpu">>;
                _ -> <<"core", (list_to_binary(ID))/binary>>
              end,
-      [User, Nice, System | Rest] = lists:map(fun(Value) -> list_to_integer(Value) end, Values),
-      WorkJiffies = User + Nice + System,
-      TotalJiffies = WorkJiffies + lists:foldl(fun(Value, Sum) -> Value + Sum end, 0, Rest),
-      read_cpu_stats(Fd, [{Name, WorkJiffies, TotalJiffies} | Stats]);
+      case is_valid_name(Name, 0) of
+        true ->
+          [User, Nice, System | Rest] = lists:map(fun(Value) -> list_to_integer(Value) end, Values),
+          WorkJiffies = User + Nice + System,
+          TotalJiffies = WorkJiffies + lists:foldl(fun(Value, Sum) -> Value + Sum end, 0, Rest),
+          read_cpu_stats(Fd, [{Name, WorkJiffies, TotalJiffies} | Stats]);
+        _ -> read_cpu_stats(Fd, Stats)
+      end;
+    {ok, _} ->
+      read_cpu_stats(Fd, Stats);
     _ ->
       file:close(Fd),
       Stats
@@ -845,6 +867,53 @@ read_memory_stats(Fd, MemFree, MemTotal, Counter) ->
     {error, _} -> [];
     _ -> read_memory_stats(Fd, MemFree, MemTotal, Counter)
   end.
+
+%% is_valid_name/2
+%% ====================================================================
+%% @doc Checks whether string contains only following characters a-zA-Z0-9_
+%% and with some prefix is not longer than 19 characters. This is a requirement
+%% for a valid column name in Round Robin Database.
+-spec is_valid_name(Name :: string() | binary(), PrefixLength :: integer()) -> Result when
+  Result :: true | false.
+%% ====================================================================
+is_valid_name(Name, PrefixLength) when is_list(Name) ->
+  case length(Name) =< 19 - PrefixLength of
+    true -> is_valid_name(Name);
+    _ -> false
+  end;
+is_valid_name(Name, PrefixLength) when is_binary(Name) ->
+  is_valid_name(binary_to_list(Name), PrefixLength);
+is_valid_name(_, _) ->
+  false.
+
+%% is_valid_name/1
+%% ====================================================================
+%% @doc Checks whether string contains only following characters a-zA-Z0-9_
+-spec is_valid_name(Name :: string() | binary()) -> Result when
+  Result :: true | false.
+%% ====================================================================
+is_valid_name([]) ->
+  false;
+is_valid_name([Character]) ->
+  is_valid_character(Character);
+is_valid_name([Character | Characters]) ->
+  is_valid_character(Character) andalso is_valid_name(Characters);
+is_valid_name(Name) when is_binary(Name) ->
+  is_valid_name(binary_to_list(Name));
+is_valid_name(_) ->
+  false.
+
+%% is_valid_character/1
+%% ====================================================================
+%% @doc Checks whether character belongs to a-zA-Z0-9_ range
+-spec is_valid_character(Character :: char()) -> Result when
+  Result :: true | false.
+%% ====================================================================
+is_valid_character($_) -> true;
+is_valid_character(Character) when Character >= $0 andalso Character =< $9 -> true;
+is_valid_character(Character) when Character >= $A andalso Character =< $Z -> true;
+is_valid_character(Character) when Character >= $a andalso Character =< $z -> true;
+is_valid_character(_) -> false.
 
 %% get_callback/2
 %% ====================================================================
