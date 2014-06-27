@@ -54,7 +54,9 @@ new(Id) ->
     try
         ?INFO("Initializing worker with id: ~p~n", [Id]),
         Hosts = basho_bench_config:get(cluster_hosts),
-        Nodes = lists:map(fun(Host) -> st_utils:host_to_node(Host) end, Hosts),
+        Nodes = lists:map(fun(Host) ->
+            st_utils:host_to_node(Host)
+        end, Hosts),
 
         ?INFO("Worker with id: ~p initialized successfully with arguments: ~p", [Id, Nodes]),
         {ok, Nodes}
