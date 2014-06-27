@@ -26,7 +26,6 @@
             lager,
             ibrowse,
             cowboy,
-            erlydtl,
             ctool
         ]},
         {mod, {veil_cluster_node_app, []}},
