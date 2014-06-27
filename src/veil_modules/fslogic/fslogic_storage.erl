@@ -14,6 +14,7 @@
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("logging.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
+-include_lib("dao/include/common.hrl").
 -include_lib("files_common.hrl").
 
 %% API

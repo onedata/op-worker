@@ -13,23 +13,48 @@
 
 %% TODO przetestować metodę apply
 
+-ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
 -include("registered_names.hrl").
 -include("modules_and_args.hrl").
+-endif.
 
-wrap_record_test() ->
+-ifdef(TEST).
+
+main_test_() ->
+    {setup,
+        fun setup/0,
+        fun teardown/1,
+        [
+            {"record wrapping", fun wrap_record/0},
+            {"stripping wrappers", fun strip_wrappers/0},
+            {"apply asynchronous", fun apply_asynch/0},
+            {"apply synchronous", fun apply_synch/0}
+        ]
+    }.
+
+setup() ->
+    meck:new([worker_host],[unstick, passthrough]),
+    meck:expect(worker_host,register_simple_cache,
+        fun (_,_,_,_,_) -> ok end
+    ).
+
+teardown(_) ->
+    meck:unload(worker_host).
+
+wrap_record() ->
     ?assertMatch(#veil_document{record = #file{}}, dao_lib:wrap_record(#file{})).
 
 
-strip_wrappers_test() ->
+strip_wrappers() ->
     ?assertMatch(#file{}, dao_lib:strip_wrappers(#veil_document{record = #file{}})),
     ?assertMatch({ok, #file{}}, dao_lib:strip_wrappers({ok, #veil_document{record = #file{}}})),
     ?assertMatch({ok, [#file{}, #file_descriptor{}]},
         dao_lib:strip_wrappers({ok, [#veil_document{record = #file{}}, #veil_document{record = #file_descriptor{}}]})).
 
-apply_asynch_test() ->
-  Module = dao,
+apply_asynch() ->
+  Module = dao_worker,
   {MainAns, _} = dao_lib:apply(some_module, {asynch, some_method}, args, 1),
   ?assertEqual(MainAns, error),
 
@@ -47,8 +72,8 @@ apply_asynch_test() ->
   worker_host:stop(Module),
   request_dispatcher:stop().
 
-apply_synch_test() ->
-  Module = dao,
+apply_synch() ->
+  Module = dao_worker,
   {MainAns, _} = dao_lib:apply(some_module, some_method, args, 1),
   ?assertEqual(error, MainAns),
   {ok, _} = request_dispatcher:start_link(),
@@ -64,3 +89,10 @@ apply_synch_test() ->
 
   worker_host:stop(Module),
   request_dispatcher:stop().
+-endif.
+
+
+
+
+
+

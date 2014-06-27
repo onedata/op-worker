@@ -5,9 +5,12 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: dao_cluster header
+%% @doc dao_cluster header
 %% @end
 %% ===================================================================
+
+-ifndef(DAO_CLUSTER).
+-define(DAO_CLUSTER, 1).
 
 %% This record contains environmental variables send by FUSE client
 %% Variables are stored in 'env_vars' list. Entry format: {Name :: atom(), Value :: string()}
@@ -15,3 +18,5 @@
 
 %% This record represents single FUSE connection and its location.
 -record(connection_info, {session_id, controlling_node, controlling_pid}).
+
+-endif.
