@@ -22,7 +22,7 @@
             crypto,
             ssl,
             % ctool already requires those apps below, but they are here
-            % so that everyone is aware of them being used in the project.
+            % for awareness of them being used in the project.
             lager,
             ibrowse,
             cowboy,
