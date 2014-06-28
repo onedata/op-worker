@@ -25,11 +25,16 @@ main([Command | Args]) ->
     HostName = "@" ++ os:cmd("hostname -f") -- "\n",
     set_up_net_kernel(),
     NodeType = lists:nth(1, Args),
+    Filename = case length(Args) >= 2 of
+                   true -> lists:nth(2, Args);
+                   _ -> "node_load.csv" % Default filename
+               end,
     TargetNode = list_to_atom(NodeType ++ HostName),
     case Command of
         "start" ->
             info(TargetNode, "Starting load logging ...~n", []),
-            {ok, Dir} = file:get_cwd(),
+            {ok, Cwd} = file:get_cwd(),
+            Dir = filename:join(Cwd, Filename),
             info(TargetNode, "Logs output directory: ~p.~n", [Dir]),
             start_load_logging(NodeType, TargetNode, Dir);
         "stop" ->

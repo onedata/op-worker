@@ -467,7 +467,7 @@ get_files_size(UUID, ProtocolVersion) ->
 %% ====================================================================
 %% @doc Converts rdnSequence to DN string so that it can be compared to another DN.
 %% @end
--spec rdn_sequence_to_dn_string([#'AttributeTypeAndValue'{}]) -> string() | no_return().
+-spec rdn_sequence_to_dn_string([#'AttributeTypeAndValue'{}]) -> {ok, string()} | {error, conversion_failed}.
 %% ====================================================================
 rdn_sequence_to_dn_string(RDNSequence) ->
     try
