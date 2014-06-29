@@ -39,14 +39,16 @@
                 | term().
 %% ====================================================================
 start(_StartType, _StartArgs) ->
-	case its_ccm() orelse ports_ok() of
+	Ans = case its_ccm() orelse ports_ok() of
 		true ->
 			{ok, NodeType} = application:get_env(?APP_Name, node_type),
 			fprof:start(), %% Start fprof server. It doesnt do enything unless it's used.
 			veil_cluster_node_sup:start_link(NodeType);
 		false ->
 			{error, "Not all ports are free"}
-	end.
+	end,
+  ?info("Application start at node: ~p. Start result: ~p.", [node(), Ans]),
+  Ans.
 
 
 %% stop/1
