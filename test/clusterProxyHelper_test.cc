@@ -5,29 +5,36 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#include "testCommonH.h"
-#include "connectionPool_mock.h"
-#include "communicationHandler_mock.h"
-#include "helpers/storageHelperFactory.h"
 #include "clusterProxyHelper_proxy.h"
-#include <google/protobuf/descriptor.h>
-#include <errno.h>
-#include <boost/algorithm/string.hpp>
-#include <cstring>
+#include "communicationHandler_mock.h"
+#include "connectionPool_mock.h"
+#include "helpers/storageHelperFactory.h"
 #include "veilErrors.h"
 
+#include <boost/algorithm/string.hpp>
+#include <google/protobuf/descriptor.h>
+#include <gtest/gtest.h>
+
+#include <errno.h>
+
+#include <cstring>
+
+using namespace ::testing;
+using namespace veil;
+using namespace veil::helpers;
 using namespace veil::protocol::remote_file_management;
 using namespace veil::protocol::communication_protocol;
 using namespace std::placeholders;
 using veil::helpers::utils::tolower;
 
-INIT_AND_RUN_ALL_TESTS(); // TEST RUNNER !
+template<typename T>
+bool identityEqual(const T &lhs, const T &rhs)
+{
+    return &lhs == &rhs;
+}
 
-// TEST definitions below
-
-class ClusterProxyHelperTest
-    : public ::testing::Test {
-
+class ClusterProxyHelperTest: public ::testing::Test
+{
 protected:
     std::shared_ptr<MockConnectionPool> mockPool;
     std::shared_ptr<MockCommunicationHandler> mockConnection;
@@ -36,10 +43,11 @@ protected:
     struct fuse_file_info ffi;
     char buf[1024];
 
-    virtual void SetUp() {
-        mockPool.reset(new MockConnectionPool());
-        mockConnection.reset(new MockCommunicationHandler());
-        proxy.reset(new ProxyClusterProxyHelper(mockPool, IStorageHelper::ArgsMap{}));
+    void SetUp() override
+    {
+        mockPool = std::make_shared<MockConnectionPool>();
+        mockConnection = std::make_shared<MockCommunicationHandler>();
+        proxy = std::make_shared<ProxyClusterProxyHelper>(mockPool, IStorageHelper::ArgsMap{});
 
         EXPECT_CALL(*mockPool, selectConnection(_)).WillRepeatedly(Return(mockConnection));
         EXPECT_CALL(*mockPool, releaseConnection(_)).WillRepeatedly(Return());
@@ -49,7 +57,8 @@ protected:
 
 TEST_F(ClusterProxyHelperTest, commonClusterMsgSetup)
 {
-    ClusterMsg msg = proxy->commonClusterMsgSetup("inputType", "inputData");
+    std::string inputData = "inputData";
+    ClusterMsg msg = proxy->commonClusterMsgSetup("inputType", inputData);
 
     EXPECT_EQ(PROTOCOL_VERSION, msg.protocol_version());
     EXPECT_EQ(true, msg.synch());
@@ -61,10 +70,10 @@ TEST_F(ClusterProxyHelperTest, commonClusterMsgSetup)
     rfm.ParseFromString(msg.input());
 
     EXPECT_EQ("inputtype", rfm.message_type());
-    EXPECT_EQ("inputData", rfm.input());
+    EXPECT_EQ(inputData, rfm.input());
 }
 
-TEST_F(ClusterProxyHelperTest, sendCluserMessage)
+TEST_F(ClusterProxyHelperTest, sendClusterMessage)
 {
     ClusterMsg clm;
     Answer answer;
@@ -72,7 +81,7 @@ TEST_F(ClusterProxyHelperTest, sendCluserMessage)
     answer.set_answer_status("ok");
     EXPECT_CALL(*mockConnection, communicate(Truly(bind(identityEqual<ClusterMsg>, std::cref(clm), _1)), _, _)).WillOnce(Return(answer));
 
-    Answer real = proxy->sendCluserMessage(clm);
+    Answer real = proxy->sendClusterMessage(clm);
     EXPECT_EQ("ok", real.answer_status());
 }
 
@@ -84,7 +93,8 @@ TEST_F(ClusterProxyHelperTest, requestMessage)
     answer.set_worker_answer("worker");
     EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(Return(answer));
 
-    EXPECT_EQ("worker", proxy->requestMessage("inputType", "answerType", "inputData"));
+    std::string inputData = "inputData";
+    EXPECT_EQ("worker", proxy->requestMessage("inputType", "answerType", inputData));
 }
 
 TEST_F(ClusterProxyHelperTest, requestAtom)
@@ -119,7 +129,7 @@ TEST_F(ClusterProxyHelperTest, read)
 
     resp.set_answer_status(VOK);
     char str[] = {0, 1, 45, 34, 0, 0, 0, 34, 56};
-    string strRaw(str, 9);
+    std::string strRaw(str, 9);
     resp.set_data(strRaw);
     answer.set_worker_answer(resp.SerializeAsString());
     EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));
@@ -162,8 +172,8 @@ TEST_F(ClusterProxyHelperTest, write)
     Answer answer;
     ClusterMsg msg;
     char str[] = {0, 1, 45, 34, 0, 0, 0, 34, 56, 2};
-    string strRaw(str, 10);
-    string sbuf;
+    std::string strRaw(str, 10);
+    std::string sbuf;
     sbuf = strRaw;
 
     EXPECT_CALL(*mockConnection, communicate(_, _, _)).WillOnce(DoAll(SaveArg<0>(&msg), Return(answer)));

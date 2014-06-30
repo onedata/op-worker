@@ -5,9 +5,9 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-
 #ifndef SIMPLE_CONNECTION_POOL_H
 #define SIMPLE_CONNECTION_POOL_H
+
 
 #include "communicationHandler.h"
 #include "veilErrors.h"
@@ -109,5 +109,5 @@ private:
 
 } // namespace veil
 
-#endif // SIMPLE_CONNECTION_POOL_H
 
+#endif // SIMPLE_CONNECTION_POOL_H
