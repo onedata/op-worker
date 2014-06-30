@@ -14,7 +14,7 @@
 -module(cluster_rengine).
 -behaviour(worker_plugin_behaviour).
 
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include_lib("veil_modules/cluster_rengine/cluster_rengine.hrl").
 -include("registered_names.hrl").
 -include("records.hrl").

@@ -13,7 +13,7 @@
 -include("veil_modules/dao/dao.hrl").
 -include("veil_modules/dao/dao_types.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([create_children_list/1, create_children_list/2, get_user_id_from_system/1]).

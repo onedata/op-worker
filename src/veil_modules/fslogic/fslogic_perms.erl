@@ -13,7 +13,7 @@
 
 -include("veil_modules/dao/dao.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([check_file_perms/3, check_file_perms/4]).

@@ -183,26 +183,6 @@ veil_cluster_node_env:
       erlang_term: |
           [1,24,168,720,8760]
 
-  # LOGGING
-  - parameter:
-      name: current_loglevel
-      description: |
-        Current loglevel in the cluster. Logs with lower importance will be completely discarded
-        Available loglevels are 0-7, respectively: debug, info, notice, warning, error, critical, alert, emergency
-      value: 1
-
-  - parameter:
-      name: default_loglevel
-      description: |
-        Used to reset loglevel to default.
-        Available loglevels are 0-7, respectively: debug, info, notice, warning, error, critical, alert, emergency
-      value: 1
-
-  - parameter:
-      name: include_stacktrace
-      description: Determines whether the stacktrace should be included in logs (those that could contain it)
-      value: true
-
 
   # DISPATCHER
   - parameter:
@@ -299,13 +279,6 @@ veil_cluster_node_env:
       name: control_panel_upload_buffer
       description: Buffer size used to stream file from a client
       value: 1048576
-
-  - parameter:
-      name: root_cacert_file
-      description: Path to .pem or .crt file containing CA certs installed on the system.
-      value: |
-        "\'/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem\'"
-      erlang_term: "'/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem'"
 
   - parameter:
       name: control_panel_sessions_clearing_period

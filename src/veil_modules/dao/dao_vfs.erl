@@ -16,7 +16,7 @@
 -include_lib("dao/include/dao_helper.hrl").
 -include_lib("veil_modules/dao/dao_types.hrl").
 -include_lib("files_common.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API - File system management
 -export([list_dir/3, count_subdirs/1, rename_file/2, lock_file/3, unlock_file/3, find_files/1]). %% High level API functions

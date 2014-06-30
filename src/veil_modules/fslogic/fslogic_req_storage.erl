@@ -16,7 +16,7 @@
 -include("fuse_messages_pb.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("registered_names.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([create_storage_test_file/1, storage_test_file_modified/3, client_storage_info/1]).

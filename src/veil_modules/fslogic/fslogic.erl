@@ -19,7 +19,7 @@
 -include("fuse_messages_pb.hrl").
 -include("communication_protocol_pb.hrl").
 -include("registered_names.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% ====================================================================
 %% API

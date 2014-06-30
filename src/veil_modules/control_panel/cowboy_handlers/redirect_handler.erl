@@ -10,7 +10,7 @@
 %% ===================================================================
 -module(redirect_handler).
 
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -export([init/3, handle/2, terminate/3]).
 

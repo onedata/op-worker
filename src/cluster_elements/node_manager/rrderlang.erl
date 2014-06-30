@@ -13,7 +13,7 @@
 -behaviour(gen_server).
 
 -include("registered_names.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% TEST
 -ifdef(TEST).

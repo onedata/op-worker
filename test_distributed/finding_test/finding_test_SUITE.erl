@@ -22,7 +22,7 @@
 -include("veil_modules/dao/dao_vfs.hrl").
 -include("veil_modules/dao/dao.hrl").
 -include("veil_modules/dao/dao_share.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include_lib("dao/include/couch_db.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_node_starter.hrl").

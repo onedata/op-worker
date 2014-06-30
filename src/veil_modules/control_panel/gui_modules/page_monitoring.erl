@@ -12,7 +12,7 @@
 -module(page_monitoring).
 -include("veil_modules/control_panel/common.hrl").
 -include("registered_names.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -define(TIME_RANGES, [<<"last 5 minutes">>, <<"last 15 minutes">>, <<"last hour">>, <<"last 24 hours">>, <<"last 7 days">>, <<"last 30 days">>, <<"last 365 days">>]).
 -define(SUMMARY_CHART_TYPES, [<<"CPU utilization">>, <<"memory usage">>, <<"network throughput">>, <<"network transfer">>, <<"Erlang ports transfer">>, <<"storage IO transfer">>]).

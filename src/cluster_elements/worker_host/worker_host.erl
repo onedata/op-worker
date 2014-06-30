@@ -17,7 +17,7 @@
 -include("records.hrl").
 -include("registered_names.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include("veil_modules/dao/dao_types.hrl").
 
 -define(BORTER_CHILD_WAIT_TIME, 10000).

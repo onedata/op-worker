@@ -15,7 +15,7 @@
 -include("records.hrl").
 -include("supervision_macros.hrl").
 -include("modules_and_args.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -define(STATS_WEIGHTS, [{"cpu", 100}, {"mem", 100}]).
 -define(CALLBACKS_TABLE, callbacks_table).

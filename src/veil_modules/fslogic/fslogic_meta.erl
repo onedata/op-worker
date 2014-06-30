@@ -19,7 +19,7 @@
 -include("fuse_messages_pb.hrl").
 -include("veil_modules/dao/dao_types.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([update_parent_ctime/2, update_meta_attr/3, update_user_files_size_view/1]).
