@@ -281,13 +281,6 @@ veil_cluster_node_env:
       value: 1048576
 
   - parameter:
-      name: root_cacert_file
-      description: Path to .pem or .crt file containing CA certs installed on the system.
-      value: |
-        "\'/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem\'"
-      erlang_term: "'/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem'"
-
-  - parameter:
       name: control_panel_sessions_clearing_period
       description: Period between automatic deletion of expired session tokens, in seconds.
       value: 86400 # one day in seconds

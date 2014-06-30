@@ -18,6 +18,7 @@
 %% session_logic_behaviour API
 -export([init/0, cleanup/0]).
 -export([save_session/3, lookup_session/1, delete_session/1, clear_expired_sessions/0]).
+-export([get_cookie_ttl/0]).
 
 % ETS name for cookies
 -define(SESSION_ETS, cookies).
@@ -142,3 +143,18 @@ clear_expired_sessions() ->
             delete_session(SessionID)
         end, ExpiredSessions),
     length(ExpiredSessions).
+
+
+%% get_cookie_ttl/0
+%% ====================================================================
+%% @doc Returns cookies time to live in seconds.
+%% @end
+-spec get_cookie_ttl() -> integer() | no_return().
+%% ====================================================================
+get_cookie_ttl() ->
+    case application:get_env(veil_cluster_node, control_panel_sessions_cookie_ttl) of
+        {ok, Val} when is_integer(Val)->
+            Val;
+        _ ->
+            throw("No cookie TTL specified in env")
+    end.
