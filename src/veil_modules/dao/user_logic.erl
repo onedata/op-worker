@@ -23,7 +23,8 @@
 %% ====================================================================
 -export([sign_in/1, create_user/5, get_user/1, remove_user/1, list_all_users/0]).
 -export([get_login/1, get_name/1, get_teams/1, update_teams/2]).
--export([get_email_list/1, update_email_list/2, get_dn_list/1, update_dn_list/2, get_role/1, update_role/2]).
+-export([get_email_list/1, update_email_list/2, get_role/1, update_role/2]).
+-export([get_dn_list/1, update_dn_list/2, get_unverified_dn_list/1, update_unverified_dn_list/2]).
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
 -export([get_team_names/1]).
@@ -363,6 +364,38 @@ update_dn_list(#veil_document{record = UserInfo} = UserDoc, NewDnList) ->
         {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
         {error, Reason} -> {error, Reason}
     end.
+
+
+%% get_unverified_dn_list/1
+%% ====================================================================
+%% @doc
+%% Convinience function to get unverified DN list from #veil_document encapsulating #user record.
+%% @end
+-spec get_unverified_dn_list(User) -> Result when
+    User :: user_doc(),
+    Result :: string().
+%% ====================================================================
+get_unverified_dn_list(User) ->
+    User#veil_document.record#user.unverified_dn_list.
+
+
+%% update_unverified_dn_list/2
+%% ====================================================================
+%% @doc
+%% Update #veil_document encapsulating #user record with new unverified DN list and save it to DB.
+%% @end
+-spec update_unverified_dn_list(User, NewDnList) -> Result when
+    User :: user_doc(),
+    NewDnList :: [string()],
+    Result :: {ok, user_doc()} | {error, any()}.
+%% ====================================================================
+update_unverified_dn_list(#veil_document{record = UserInfo} = UserDoc, NewDnList) ->
+    NewDoc = UserDoc#veil_document{record = UserInfo#user{unverified_dn_list = NewDnList}},
+    case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
+        {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
+        {error, Reason} -> {error, Reason}
+    end.
+
 
 %% get_role/1
 %% ====================================================================
