@@ -150,6 +150,13 @@ message HandshakeRequest {
     }
 
     repeated EnvVariable variable = 2;
+
+    message CertVerification {
+        required string login = 1;
+        required bool result = 2;
+    }
+
+    optional CertVerification cert_verification = 3;
 }
 
 message HandshakeResponse {
