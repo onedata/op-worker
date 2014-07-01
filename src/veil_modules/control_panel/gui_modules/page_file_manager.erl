@@ -519,7 +519,7 @@ paste_from_clipboard() ->
                         {logical_file_system_error, "eexist"} ->
                             <<Acc/binary, "Unable to move ", (gui_str:to_binary(filename:basename(Path)))/binary, " - file exists.\r\n">>;
                         _ ->
-                            <<Acc/binary, "Unable to move ", (gui_str:to_binary(filename:basename(Path)))/binary, " - unknown error.\r\n">>
+                            <<Acc/binary, "Unable to move ", (gui_str:to_binary(filename:basename(Path)))/binary, " - error occured.\r\n">>
                     end;
                 copy ->
                     % Not yet implemented
@@ -555,7 +555,7 @@ rename_item(OldPath, NewName) ->
                 {logical_file_system_error, "eexist"} ->
                     gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - file exists.">>});
                 _ ->
-                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - unknown error.">>})
+                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - error occured.">>})
             end
     end.
 
