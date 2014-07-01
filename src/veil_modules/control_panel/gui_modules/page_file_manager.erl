@@ -507,13 +507,32 @@ put_to_clipboard(Type) ->
 
 
 paste_from_clipboard() ->
-    lists:foreach(
-        fun(Path) ->
+    ErrorMessage = lists:foldl(
+        fun(Path, Acc) ->
             case get_clipboard_type() of
-                cut -> fs_mv(Path, get_working_directory());
-                copy -> fs_copy(Path, get_working_directory())
+                cut ->
+                    case fs_mv(Path, get_working_directory()) of
+                        ok ->
+                            Acc;
+                        {logical_file_system_error, "eperm"} ->
+                            <<Acc/binary, "Unable to move ", (gui_str:to_binary(filename:basename(Path)))/binary, " - insufficient permissions.\r\n">>;
+                        {logical_file_system_error, "eexist"} ->
+                            <<Acc/binary, "Unable to move ", (gui_str:to_binary(filename:basename(Path)))/binary, " - file exists.\r\n">>;
+                        _ ->
+                            <<Acc/binary, "Unable to move ", (gui_str:to_binary(filename:basename(Path)))/binary, " - unknown error.\r\n">>
+                    end;
+                copy ->
+                    % Not yet implemented
+                    fs_copy(Path, get_working_directory()),
+                    Acc
             end
-        end, get_clipboard_items()),
+        end, <<"">>, get_clipboard_items()),
+    case ErrorMessage of
+        <<"">> ->
+            ok;
+        _ ->
+            gui_jq:wire(#alert{text = ErrorMessage})
+    end,
     clear_clipboard(),
     clear_workspace().
 
@@ -526,14 +545,17 @@ rename_item(OldPath, NewName) ->
         OldName -> hide_popup();
         _ ->
             NewPath = filename:absname(NewName, get_working_directory()),
-            case item_find(NewPath) of
-                undefined ->
-                    fs_mv(OldPath, get_working_directory(), NewName),
+            case fs_mv(OldPath, get_working_directory(), NewName) of
+                ok ->
                     clear_clipboard(),
                     clear_manager(),
                     select_item(NewPath);
+                {logical_file_system_error, "eperm"} ->
+                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - insufficient permissions.">>});
+                {logical_file_system_error, "eexist"} ->
+                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - file exists.">>});
                 _ ->
-                    gui_jq:wire(#alert{text = <<(gui_str:to_binary(NewName))/binary, " already exists.">>})
+                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - unknown error.">>})
             end
     end.
 
@@ -1137,13 +1159,10 @@ fs_mv(Path, TargetDir) ->
 fs_mv(Path, TargetDir, TargetName) ->
     TargetPath = filename:absname(TargetName, TargetDir),
     case Path of
-        TargetPath -> ok;
+        TargetPath ->
+            ok;
         _ ->
-            case logical_files_manager:mv(Path, TargetPath) of
-                ok -> ok;
-                _ ->
-                    gui_jq:wire(#alert{text = <<"Unable to move ", (gui_str:to_binary(TargetName))/binary, ". File exists.">>})
-            end
+            logical_files_manager:mv(Path, TargetPath)
     end.
 
 
