@@ -38,7 +38,7 @@
 -export([websocket_terminate/3]).
 
 -ifdef(TEST).
--export([decode_protocol_buffer/2, encode_answer/2, encode_answer/3, encode_answer/6, checkMessage/2]).
+-export([decode_protocol_buffer/2, encode_answer/2, encode_answer/3, encode_answer/5, encode_answer/6, checkMessage/2]).
 -endif.
 
 %% ====================================================================
