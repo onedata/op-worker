@@ -38,7 +38,7 @@
 -export([websocket_terminate/3]).
 
 -ifdef(TEST).
--export([decode_protocol_buffer/2, encode_answer/2, encode_answer/5, checkMessage/2]).
+-export([decode_protocol_buffer/2, encode_answer/2, encode_answer/3, encode_answer/6, checkMessage/2]).
 -endif.
 
 %% ====================================================================
@@ -109,12 +109,13 @@ websocket_handle({binary, Data}, Req, #hander_state{peer_dn = DnString} = State)
     try
         handle(Req, decode_protocol_buffer(Data, DnString), State) %% Decode ClusterMsg and handle it
     catch
-        wrong_message_format                        -> {reply, {binary, encode_answer(wrong_message_format)}, Req, State};
-        {wrong_internal_message_type, MsgId2}       -> {reply, {binary, encode_answer(wrong_internal_message_type, MsgId2)}, Req, State};
-        {message_not_supported, MsgId2}             -> {reply, {binary, encode_answer(message_not_supported, MsgId2)}, Req, State};
-        {handshake_error, _HError, MsgId2}          -> {reply, {binary, encode_answer(handshake_error, MsgId2)}, Req, State};
-        {no_user_found_error, _HError, MsgId2}      -> {reply, {binary, encode_answer(no_user_found_error, MsgId2)}, Req, State};
-        {AtomError, MsgId2} when is_atom(AtomError) -> {reply, {binary, encode_answer(AtomError, MsgId2)}, Req, State};
+        wrong_message_format                          -> {reply, {binary, encode_answer(wrong_message_format)}, Req, State};
+        {wrong_internal_message_type, MsgId2}         -> {reply, {binary, encode_answer(wrong_internal_message_type, MsgId2)}, Req, State};
+        {message_not_supported, MsgId2}               -> {reply, {binary, encode_answer(message_not_supported, MsgId2)}, Req, State};
+        {handshake_error, _HError, MsgId2}            -> {reply, {binary, encode_answer(handshake_error, MsgId2)}, Req, State};
+        {no_user_found_error, _HError, MsgId2}        -> {reply, {binary, encode_answer(no_user_found_error, MsgId2)}, Req, State};
+        {cert_verification_needed, UserLogin, MsgId2} -> {reply, {binary, encode_answer(cert_verification_needed, MsgId2, UserLogin)}, Req, State};
+        {AtomError, MsgId2} when is_atom(AtomError)   -> {reply, {binary, encode_answer(AtomError, MsgId2)}, Req, State};
         _:_ -> {reply, {binary, encode_answer(ws_handler_error)}, Req, State}
     end;
 websocket_handle({Type, Data}, Req, State) ->
@@ -131,8 +132,13 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion, #handshakerequest{hostn
             {ok, #veil_document{uuid = UID1}} ->
                 UID1;
             {error, Error} ->
-                ?error("VeilClient handshake failed. User ~p data is not available due to DAO error: ~p", [DnString, Error]),
-                throw({no_user_found_error, Error, MsgId})
+                case dao_lib:apply(dao_users, get_user, [{unverified_dn, DnString}], ProtocolVersion) of
+                    {ok, #veil_document{record = #user{login = Login}}} ->
+                        throw({cert_verification_needed, Login, MsgId});
+                    {error, _} ->
+                        ?error("VeilClient handshake failed. User ~p data is not available due to DAO error: ~p", [DnString, Error]),
+                        throw({no_user_found_error, Error, MsgId})
+                end
         end,
 
     %% Env Vars list. Entry format: {Name :: atom(), value :: string()}
@@ -363,34 +369,52 @@ encode_answer(Main_Answer) ->
 %% ====================================================================
 %% @doc Encodes answer using protocol buffers records_translator.
 -spec encode_answer(Main_Answer :: atom(), MsgId :: integer()) -> Result when
-  Result ::  binary().
+    Result ::  binary().
 %% ====================================================================
 encode_answer(Main_Answer, MsgId) ->
-  encode_answer(Main_Answer, MsgId, non, "non", []).
+    encode_answer(Main_Answer, MsgId, non, "non", [], []).
+
+%% encode_answer/3
+%% ====================================================================
+%% @doc Encodes answer using protocol buffers records_translator.
+-spec encode_answer(Main_Answer :: atom(), MsgId :: integer(), ErrorDescription :: term()) -> Result when
+    Result ::  binary().
+%% ====================================================================
+encode_answer(Main_Answer, MsgId, ErrorDescription) ->
+    encode_answer(Main_Answer, MsgId, non, "non", [], ErrorDescription).
 
 %% encode_answer/5
 %% ====================================================================
 %% @doc Encodes answer using protocol buffers records_translator.
 -spec encode_answer(Main_Answer :: atom(), MsgId :: integer(), AnswerType :: string(), Answer_decoder_name :: string(), Worker_Answer :: term()) -> Result when
-  Result ::  binary().
+    Result ::  binary().
 %% ====================================================================
 encode_answer(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer) ->
-    Message = encode_answer_record(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer),
-    erlang:iolist_to_binary(communication_protocol_pb:encode_answer(Message)).
+    encode_answer(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer, []).
 
-%% encode_answer_record/5
+%% encode_answer/6
 %% ====================================================================
-%% @doc Creates answer record
--spec encode_answer_record(Main_Answer :: atom(), MsgId :: integer(), AnswerType :: string(), Answer_decoder_name :: string(), Worker_Answer :: term()) -> Result when
+%% @doc Encodes answer using protocol buffers records_translator.
+-spec encode_answer(Main_Answer :: atom(), MsgId :: integer(), AnswerType :: string(), Answer_decoder_name :: string(), Worker_Answer :: term(), ErrorDescription :: term()) -> Result when
   Result ::  binary().
 %% ====================================================================
-encode_answer_record(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer) ->
+encode_answer(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer, ErrorDescription) ->
+    Message = encode_answer_record(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer, ErrorDescription),
+    erlang:iolist_to_binary(communication_protocol_pb:encode_answer(Message)).
+
+%% encode_answer_record/6
+%% ====================================================================
+%% @doc Creates answer record
+-spec encode_answer_record(Main_Answer :: atom(), MsgId :: integer(), AnswerType :: string(), Answer_decoder_name :: string(), Worker_Answer :: term(), ErrorDescription :: term()) -> Result when
+  Result ::  binary().
+%% ====================================================================
+encode_answer_record(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer, ErrorDescription) ->
   Check = ((Main_Answer =:= ok) and is_atom(Worker_Answer) and (Worker_Answer =:= worker_plug_in_error)),
   Main_Answer2 = case Check of
                    true -> Worker_Answer;
                    false -> Main_Answer
                  end,
-  case (Main_Answer2 =:= ok) or (Main_Answer2 =:= push) of
+  AnswerRecord = case (Main_Answer2 =:= ok) or (Main_Answer2 =:= push) of
               true -> case AnswerType of
                       non -> #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId};
                       _Type ->
@@ -414,6 +438,10 @@ encode_answer_record(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker
                     lager:error("Ranch handler error during encoding main answer: ~p:~p, main answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Main_Answer2]),
                     #answer{answer_status = "main_answer_encoding_error", message_id = MsgId}
                 end
+  end,
+  case ErrorDescription of
+      [] -> AnswerRecord;
+      _ -> AnswerRecord#answer{error_desription = ErrorDescription}
   end.
 
 %% map_dn_to_client_type/1
