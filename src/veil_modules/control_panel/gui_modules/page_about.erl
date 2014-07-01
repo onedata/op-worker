@@ -14,6 +14,7 @@
 -include("veil_modules/control_panel/common.hrl").
 -include("registered_names.hrl").
 
+% n2o API
 -export([main/0, event/1]).
 
 -define(LICENSE_FILE, "LICENSE.txt").

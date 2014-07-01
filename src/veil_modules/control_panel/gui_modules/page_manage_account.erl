@@ -13,7 +13,10 @@
 -module(page_manage_account).
 -include("veil_modules/control_panel/common.hrl").
 
+% n2o API
 -export([main/0, event/1]).
+% Postback functions
+-export([api_event/3, update_email/2, update_dn/2, show_email_adding/1, show_dn_adding/1]).
 
 %% Template points to the template file, which will be filled with content
 main() ->

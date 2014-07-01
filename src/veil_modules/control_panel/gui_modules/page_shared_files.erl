@@ -13,9 +13,11 @@
 -module(page_shared_files).
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/dao/dao_share.hrl").
--include("logging.hrl").
 
--export([main/0, event/1]).
+% n2o API
+-export([main/0, event/1, api_event/3]).
+% Postback functions
+-export([show_link/1, remove_link_prompt/2, remove_link/1, hide_popup/0]).
 
 %% Template points to the template file, which will be filled with content
 main() ->

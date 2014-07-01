@@ -15,7 +15,14 @@
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("logging.hrl").
 
--export([main/0, event/1, comet_loop/1]).
+% n2o API
+-export([main/0, event/1, api_event/3]).
+% Postback functions and other
+-export([get_requested_hostname/0, comet_loop/1]).
+-export([clear_manager/0, clear_workspace/0, sort_toggle/1, sort_reverse/0, navigate/1, up_one_level/0]).
+-export([toggle_view/1, select_item/1, select_all/0, deselect_all/0, clear_clipboard/0, put_to_clipboard/1, paste_from_clipboard/0]).
+-export([rename_item/2, create_directory/1, remove_selected/0, search/1, show_popup/1, hide_popup/0, path_navigator_body/1]).
+-export([fs_mkdir/1, fs_remove/1, fs_remove_dir/1, fs_mv/2, fs_mv/3, fs_copy/2,  fs_unique_filename/2, fs_create_share/1]).
 
 
 % How often should comet process check for changes in current dir
@@ -997,9 +1004,6 @@ item_path(#item{path = Path}) ->
 
 item_basename(#item{path = Path}) ->
     filename:basename(Path).
-
-item_dirname(#item{path = Path}) ->
-    filename:dirname(Path).
 
 item_attr(name, Item) -> item_basename(Item);
 item_attr(mode, #item{attr = #fileattributes{mode = Value}}) -> Value;

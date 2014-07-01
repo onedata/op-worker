@@ -13,6 +13,7 @@
 -module(page_logout).
 -include("veil_modules/control_panel/common.hrl").
 
+% n2o API
 -export([main/0, event/1]).
 
 %% Template points to the template file, which will be filled with content
