@@ -140,13 +140,14 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
                     case CertConfirmation of
                         #handshakerequest_certconfirmation{login = Login, result = Result} ->
                             % Remove the DN from unverified DNs as it has been confirmed or declined
-                            user_logic:update_unverified_dn_list(UserDoc, user_logic:get_unverified_dn_list(UserDoc) -- [DnString]),
+                            {ok, UserDoc2} = user_logic:update_unverified_dn_list(UserDoc, user_logic:get_unverified_dn_list(UserDoc) -- [DnString]),
                             case Result of
                                 false ->
                                     ?alert("User ~p denied having added a certificate with DN: ~p", [Login, DnString]),
                                     throw({cert_denied_by_user, MsgId});
                                 true ->
-                                    user_logic:update_dn_list(UserDoc, user_logic:get_dn_list(UserDoc) ++ [DnString]),
+                                    {ok, _} = user_logic:update_dn_list(UserDoc2, user_logic:get_dn_list(UserDoc2) ++ [DnString]),
+                                    ?debug("User ~p confirmed a certificate with DN: ~p", [Login, DnString]),
                                     UID1
                             end;
                         _ ->
