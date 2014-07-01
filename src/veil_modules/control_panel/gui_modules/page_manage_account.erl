@@ -45,6 +45,11 @@ body() ->
                         ]}
                     ]}
                 ]},
+            #panel{id = <<"unverified_dns_panel">>, style = <<"display: none;">>,
+                class = <<"dialog dialog-danger">>, body = [
+                    #p{body = <<"Some of certificates you added are not verified. To verify them, connect to the system using VeilClient ",
+                    "with a matching private key.">>}
+                ]},
             #panel{id = <<"helper_error_panel">>, style = <<"display: none;">>,
                 class = <<"dialog dialog-danger">>, body = [
                     #p{body = <<"To be able to use any functionalities, there must be at least one storage helper defined.">>}
@@ -63,6 +68,14 @@ maybe_display_dn_message() ->
     end.
 
 
+% Info to verify a DN
+maybe_display_verify_dn_message() ->
+    case user_logic:get_unverified_dn_list(gui_ctx:get_user_record()) of
+        [] -> gui_jq:hide(<<"unverified_dns_panel">>);
+        _ -> gui_jq:show(<<"unverified_dns_panel">>)
+    end.
+
+
 % Info to install a storage helper
 maybe_display_helper_message() ->
     case vcn_gui_utils:storage_defined() of
@@ -74,6 +87,7 @@ maybe_display_helper_message() ->
 % Snippet generating account managment table
 main_table() ->
     maybe_display_dn_message(),
+    maybe_display_verify_dn_message(),
     maybe_display_helper_message(),
     User = gui_ctx:get_user_record(),
     #table{style = <<"border-width: 0px; width: auto;">>, body = [
@@ -159,7 +173,7 @@ email_list_body() ->
 % HTML list with DNs printed
 dn_list_body() ->
     User = gui_ctx:get_user_record(),
-    {CurrentDNs, _} = lists:mapfoldl(
+    {CurrentDNs, Counter} = lists:mapfoldl(
         fun(DN, Acc) ->
             Body = #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
             [
@@ -170,13 +184,25 @@ dn_list_body() ->
             ]}},
             {Body, Acc + 1}
         end, 1, user_logic:get_dn_list(User)),
+    {UnverifiedDNs, _} = lists:mapfoldl(
+        fun(DN, Acc) ->
+            Body = #li{style = <<"font-size: 18px; padding: 5px 0; color: #90A5C0;">>, body = #span{body =
+            [
+                gui_str:html_encode(DN),
+                <<"<i style=\"color: #ff6363\">&nbsp;&nbsp;(unverified)</i>">>,
+                #link{id = <<"remove_unverified_dn_button", (integer_to_binary(Acc))/binary>>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
+                    postback = {action, update_dn, [User, {remove_unverified, DN}]}, body =
+                    #span{class = <<"fui-cross">>, style = <<"font-size: 16px;">>}}
+            ]}},
+            {Body, Acc + 1}
+        end, Counter, user_logic:get_unverified_dn_list(User)),
     NewDN = [
         #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
             #link{id = <<"add_dn_button">>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
                 postback = {action, show_dn_adding, [true]}, body =
                 #span{class = <<"fui-plus">>, style = <<"font-size: 16px;">>}},
             #textarea{id = <<"new_dn_textbox">>, style = <<"display: none; font-size: 12px; width: 600px; height: 200px;",
-            "vertical-align: top; overflow-y: scroll;">>, body = <<"">>, placeholder = <<"Paste your .pem certificate here...">>},
+            "vertical-align: top; overflow-y: scroll;">>, body = <<"">>, placeholder = <<"Paste your .pem public certificate here...">>},
             #link{id = <<"new_dn_submit">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
                 actions = gui_jq:form_submit_action(<<"new_dn_submit">>, {action, update_dn, [User, {add, submitted}]}, <<"new_dn_textbox">>),
                 body = #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
@@ -185,7 +211,7 @@ dn_list_body() ->
                 #span{class = <<"fui-cross-inverted">>, style = <<"font-size: 20px;">>}}
         ]}
     ],
-    #list{numbered = true, body = CurrentDNs ++ NewDN}.
+    #list{numbered = true, body = CurrentDNs ++ UnverifiedDNs ++ NewDN}.
 
 
 % Postback event handling
@@ -199,7 +225,9 @@ event({action, Fun}) ->
     event({action, Fun, []});
 
 event({action, Fun, Args}) ->
-    vcn_gui_utils:apply_or_redirect(?MODULE, Fun, Args, false).
+    vcn_gui_utils:apply_or_redirect(?MODULE, Fun, Args, false);
+
+event(terminate) -> ok.
 
 
 % Update email list - add or remove one and save new user doc
@@ -224,7 +252,7 @@ update_email(User, AddOrRemove) ->
 
 % Update DN list - add or remove one and save new user doc
 update_dn(User, AddOrRemove) ->
-    OldDnList = user_logic:get_dn_list(User),
+    OldUnvDnList = user_logic:get_unverified_dn_list(User),
     case AddOrRemove of
         {add, submitted} ->
             case user_logic:extract_dn_from_cert(gui_ctx:form_param(<<"new_dn_textbox">>)) of
@@ -234,8 +262,13 @@ update_dn(User, AddOrRemove) ->
                         {ok, _} ->
                             gui_jq:wire(#alert{text = <<"This certificate is already registered.">>});
                         _ ->
-                            {ok, NewUser} = user_logic:update_dn_list(User, OldDnList ++ [DnString]),
-                            gui_ctx:set_user_record(NewUser)
+                            case user_logic:get_user({unverified_dn, DnString}) of
+                                {ok, _} ->
+                                    gui_jq:wire(#alert{text = <<"This certificate is already registered.">>});
+                                _ ->
+                                    {ok, NewUser} = user_logic:update_unverified_dn_list(User, OldUnvDnList ++ [DnString]),
+                                    gui_ctx:set_user_record(NewUser)
+                            end
                     end;
                 {error, proxy_ceertificate} ->
                     gui_jq:wire(#alert{text = <<"Proxy certificates are not accepted.">>});
@@ -245,7 +278,11 @@ update_dn(User, AddOrRemove) ->
                     gui_jq:wire(#alert{text = <<"Unable to process certificate.">>})
             end;
         {remove, DN} ->
+            OldDnList = user_logic:get_dn_list(User),
             {ok, NewUser} = user_logic:update_dn_list(User, OldDnList -- [DN]),
+            gui_ctx:set_user_record(NewUser);
+        {remove_unverified, DN} ->
+            {ok, NewUser} = user_logic:update_unverified_dn_list(User, OldUnvDnList -- [DN]),
             gui_ctx:set_user_record(NewUser)
     end,
     gui_jq:update(<<"main_table">>, main_table()).

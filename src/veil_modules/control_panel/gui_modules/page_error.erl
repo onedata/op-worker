@@ -33,7 +33,8 @@ body() ->
     ] ++ vcn_gui_utils:logotype_footer(120)}.
 
 event(init) -> ok;
-event(to_login) -> gui_jq:redirect_to_login(false).
+event(to_login) -> gui_jq:redirect_to_login(false);
+event(terminate) -> ok.
 
 
 % This function causes a HTTP redirect to error page, which displays an error message.

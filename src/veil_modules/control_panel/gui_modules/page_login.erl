@@ -67,4 +67,6 @@ event(login) ->
                 URL ->
                     gui_jq:redirect(URL)
             end
-    end.
+    end;
+
+event(terminate) -> ok.

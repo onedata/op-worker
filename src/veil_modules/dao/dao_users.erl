@@ -63,12 +63,7 @@ save_user(#veil_document{record = #user{}} = UserDoc) ->
 %% @doc Removes user from DB by login, e-mail, uuid or dn.
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec remove_user(Key :: {login, Login :: string()} |
-{email, Email :: string()} |
-{uuid, UUID :: uuid()} |
-{dn, DN :: string()} |
-{unverified_dn, DN :: string()}) ->
-    {error, any()} | no_return().
+-spec remove_user(Key :: user_key()) -> {error, any()} | no_return().
 %% ====================================================================
 remove_user(Key) ->
     {ok, FDoc} = get_user(Key),
@@ -81,8 +76,7 @@ remove_user(Key) ->
 %% @doc Checks whether user exists in DB. Arguments should be login, e-mail, uuid or dn.
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec exist_user(Key :: {login, Login :: string()} | {email, Email :: string()} |
-{uuid, UUID :: uuid()} | {dn, DN :: string()} | {unverified_dn, DN :: string()}) -> {ok, true | false} | {error, any()}.
+-spec exist_user(Key :: user_key()) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_user(Key) ->
     case ets:lookup(users_cache, Key) of
@@ -157,8 +151,7 @@ list_users(N, Offset) ->
 %% @doc Checks whether user exists in DB. Arguments should be login, e-mail, uuid or dn.
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec exist_user_in_db(Key :: {login, Login :: string()} | {email, Email :: string()} |
-{uuid, UUID :: uuid()} | {dn, DN :: string()} | {unverified_dn, DN :: string()}) -> {ok, true | false} | {error, any()}.
+-spec exist_user_in_db(Key :: user_key()) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_user_in_db({uuid, "0"}) ->
     {ok, true};
@@ -196,12 +189,7 @@ exist_user_in_db({Key, Value}) ->
 %% See {@link dao:save_record/1} and {@link dao:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao:handle/2} instead (See {@link dao:handle/2} for more details).
 %% @end
--spec get_user_from_db(Key :: {login, Login :: string()} |
-{email, Email :: string()} |
-{uuid, UUID :: uuid()} |
-{dn, DN :: string()} |
-{unverified_dn, DN :: string()}) ->
-    {ok, user_doc()} | {error, any()} | no_return().
+-spec get_user_from_db(Key :: user_key()) -> {ok, user_doc()} | {error, any()} | no_return().
 %% ====================================================================
 get_user_from_db({uuid, "0"}) ->
     {ok, #veil_document{uuid = "0", record = #user{login = "root", name = "root"}}}; %% Return virtual "root" user

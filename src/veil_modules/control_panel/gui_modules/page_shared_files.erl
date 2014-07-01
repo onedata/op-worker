@@ -118,7 +118,10 @@ event({action, Fun}) ->
     event({action, Fun, []});
 
 event({action, Fun, Args}) ->
-    vcn_gui_utils:apply_or_redirect(?MODULE, Fun, Args, true).
+    vcn_gui_utils:apply_or_redirect(?MODULE, Fun, Args, true);
+
+event(terminate) ->
+    ok.
 
 
 % Display link to file in popup panel

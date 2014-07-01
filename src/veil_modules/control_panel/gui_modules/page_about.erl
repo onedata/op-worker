@@ -94,5 +94,5 @@ get_team() ->
         end, Members)
     }.
 
-event(init) ->
-    ok.
+event(init) -> ok;
+event(terminate) -> ok.

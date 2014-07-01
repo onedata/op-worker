@@ -68,4 +68,5 @@ body() ->
             end
     end.
 
-event(init) -> ok.
+event(init) -> ok;
+event(terminate) -> ok.
