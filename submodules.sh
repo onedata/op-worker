@@ -1,6 +1,6 @@
 #!/bin/bash
 
-git submodule update
+#git submodule update
 #cd veilprotocol
 #git fetch
 #git checkout master
