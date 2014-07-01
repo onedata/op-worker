@@ -15,6 +15,7 @@ message FuseMessage {
 
 message GetFileLocation {
     required string file_logic_name = 1;
+    optional string open_mode = 2 [default = "none"];
 }
 
 message GetNewFileLocation {
