@@ -16,7 +16,7 @@
 -include("basho_bench.hrl").
 -include("registered_names.hrl").
 -include("communication_protocol_pb.hrl").
--include("veil_modules/dao/dao.hrl").
+-include("veil_modules/dao/dao_vfs.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 
 %% ====================================================================
