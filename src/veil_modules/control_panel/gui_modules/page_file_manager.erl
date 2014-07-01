@@ -11,10 +11,11 @@
 %% ===================================================================
 
 -module(page_file_manager).
--compile(export_all).
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("logging.hrl").
+
+-export([main/0, event/1, comet_loop/1]).
 
 
 % How often should comet process check for changes in current dir

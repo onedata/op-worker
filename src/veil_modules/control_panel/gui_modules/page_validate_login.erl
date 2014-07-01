@@ -11,9 +11,10 @@
 %% ===================================================================
 
 -module(page_validate_login).
--compile(export_all).
 -include("veil_modules/control_panel/common.hrl").
 -include("logging.hrl").
+
+-export([main/0, event/1]).
 
 %% Template points to the template file, which will be filled with content
 main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
