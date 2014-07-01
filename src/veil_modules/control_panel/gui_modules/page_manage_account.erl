@@ -18,6 +18,9 @@
 % Postback functions
 -export([api_event/3, update_email/2, update_dn/2, show_email_adding/1, show_dn_adding/1]).
 
+-define(mail_validation_regexp,
+    "^[a-z0-9!#$%&'*+\\/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+\\/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$").
+
 %% Template points to the template file, which will be filled with content
 main() ->
     case vcn_gui_utils:maybe_redirect(true, false, false, true) of
@@ -38,7 +41,8 @@ body() ->
         #panel{style = <<"margin-top: 60px; padding: 20px;">>, body = [
             #panel{id = <<"dn_error_panel">>, style = <<"display: none;">>,
                 class = <<"dialog dialog-danger">>, body = [
-                    #p{body = <<"To be able to use any functionalities, please do one of the following: ">>},
+                    #p{body = <<"You have no registered certificates. You can use the web application, but you ",
+                    "will not be able to use VeilClient. To register a certificate, do one of the following">>},
                     #panel{style = <<"margin-left: auto; margin-right: auto; text-align: left; display: inline-block;">>, body = [
                         #list{body = [
                             #li{style = <<"padding: 10px 0 0;">>,
@@ -50,8 +54,8 @@ body() ->
                 ]},
             #panel{id = <<"unverified_dns_panel">>, style = <<"display: none;">>,
                 class = <<"dialog dialog-danger">>, body = [
-                    #p{body = <<"Some of certificates you added are not verified. To verify them, connect to the system using VeilClient ",
-                    "with a matching private key.">>}
+                    #p{body = <<"Some of certificates you added are not verified. To verify them, connect to the system with VeilClient ",
+                    "using matching globus credentials.">>}
                 ]},
             #panel{id = <<"helper_error_panel">>, style = <<"display: none;">>,
                 class = <<"dialog dialog-danger">>, body = [
@@ -65,8 +69,9 @@ body() ->
 
 % Info to register a DN
 maybe_display_dn_message() ->
-    case user_logic:get_dn_list(gui_ctx:get_user_record()) of
-        [] -> gui_jq:show(<<"dn_error_panel">>);
+    User = gui_ctx:get_user_record(),
+    case user_logic:get_dn_list(User) ++ user_logic:get_unverified_dn_list(User) of
+        List when length(List) =:= 1 -> gui_jq:show(<<"dn_error_panel">>);
         _ -> gui_jq:hide(<<"dn_error_panel">>)
     end.
 
@@ -176,16 +181,22 @@ email_list_body() ->
 % HTML list with DNs printed
 dn_list_body() ->
     User = gui_ctx:get_user_record(),
+    Login = user_logic:get_login(User),
     {CurrentDNs, Counter} = lists:mapfoldl(
         fun(DN, Acc) ->
-            Body = #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
-            [
-                gui_str:html_encode(DN),
-                #link{id = <<"remove_dn_button", (integer_to_binary(Acc))/binary>>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
-                    postback = {action, update_dn, [User, {remove, DN}]}, body =
-                    #span{class = <<"fui-cross">>, style = <<"font-size: 16px;">>}}
-            ]}},
-            {Body, Acc + 1}
+            case DN of
+                Login ->
+                    {<<"">>, Acc};
+                _ ->
+                    Body = #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
+                    [
+                        gui_str:html_encode(DN),
+                        #link{id = <<"remove_dn_button", (integer_to_binary(Acc))/binary>>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
+                            postback = {action, update_dn, [User, {remove, DN}]}, body =
+                            #span{class = <<"fui-cross">>, style = <<"font-size: 16px;">>}}
+                    ]}},
+                    {Body, Acc + 1}
+            end
         end, 1, user_logic:get_dn_list(User)),
     {UnverifiedDNs, _} = lists:mapfoldl(
         fun(DN, Acc) ->
@@ -205,7 +216,7 @@ dn_list_body() ->
                 postback = {action, show_dn_adding, [true]}, body =
                 #span{class = <<"fui-plus">>, style = <<"font-size: 16px;">>}},
             #textarea{id = <<"new_dn_textbox">>, style = <<"display: none; font-size: 12px; width: 600px; height: 200px;",
-            "vertical-align: top; overflow-y: scroll;">>, body = <<"">>, placeholder = <<"Paste your .pem public certificate here...">>},
+            "vertical-align: top; overflow-y: scroll;">>, body = <<"">>, placeholder = <<"Paste your globus usercert here - in .pem format">>},
             #link{id = <<"new_dn_submit">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
                 actions = gui_jq:form_submit_action(<<"new_dn_submit">>, {action, update_dn, [User, {add, submitted}]}, <<"new_dn_textbox">>),
                 body = #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
@@ -239,18 +250,26 @@ update_email(User, AddOrRemove) ->
     {ok, NewUser} = case AddOrRemove of
                         {add, submitted} ->
                             NewEmail = gui_str:to_list(gui_ctx:form_param(<<"new_email_textbox">>)),
-                            case user_logic:get_user({email, NewEmail}) of
-                                {ok, _} ->
-                                    gui_jq:wire(#alert{text = <<"This e-mail address is in use.">>}),
-                                    {ok, User};
+                            case re:run(NewEmail, ?mail_validation_regexp) of
+                                {match, _} ->
+                                    case user_logic:get_user({email, NewEmail}) of
+                                        {ok, _} ->
+                                            gui_jq:wire(#alert{text = <<"This e-mail address is in use.">>}),
+                                            {ok, User};
+                                        _ ->
+                                            user_logic:update_email_list(User, OldEmailList ++ [NewEmail])
+                                    end;
                                 _ ->
-                                    user_logic:update_email_list(User, OldEmailList ++ [NewEmail])
+                                    gui_jq:wire(#alert{text = <<"Please enter a valid email address.">>}),
+                                    {ok, User}
                             end;
                         {remove, Email} ->
                             user_logic:update_email_list(User, OldEmailList -- [Email])
                     end,
     gui_ctx:set_user_record(NewUser),
     gui_jq:update(<<"main_table">>, main_table()).
+
+
 
 
 % Update DN list - add or remove one and save new user doc
