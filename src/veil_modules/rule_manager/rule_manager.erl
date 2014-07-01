@@ -69,6 +69,7 @@ handle(_ProtocolVersion, healthcheck) ->
 
 %% handler called by veilclient on intitialization - returns config for veilclient
 handle(_ProtocolVersion, event_producer_config_request) ->
+  ?debug("event_producer_config_request"),
   Configs = case ets:lookup(?PRODUCERS_RULES_ETS, producer_configs) of
               [{_Key, ProducerConfigs}] -> ProducerConfigs;
               _ -> []
@@ -108,6 +109,7 @@ handle(_ProtocolVersion, {add_event_handler, {EventType, EventHandlerItem, Produ
   ok;
 
 handle(_ProtocolVersion, {register_producer_config, ProducerConfig}) ->
+  ?info("Registering producer config.", [ProducerConfig]),
   register_producer_config(ProducerConfig),
   notify_fuses(ProducerConfig);
 
@@ -122,9 +124,11 @@ handle(_ProtocolVersion, {get_event_handlers, EventType}) ->
 handle(_ProtocolVersion, register_default_rules) ->
   {ok, QuotaCheckFreq} = application:get_env(?APP_Name, quota_check_freq),
   {ok, IOBytesThreshold} = application:get_env(?APP_Name, io_bytes_threshold),
+  ?info("Registering default rules."),
   register_default_rules(QuotaCheckFreq, IOBytesThreshold);
 
 handle(_ProtocolVersion, _Msg) ->
+  ?warning("Wrong request: ~p", [_Msg]),
   ok.
 
 cleanup() ->

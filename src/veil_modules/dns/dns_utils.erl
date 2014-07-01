@@ -73,7 +73,7 @@ handle_max_udp_response_size(Header, QuestionList, AnswerList) ->
 	LeftSize = ?MAX_UDP_PACKET - ?BASE_DNS_HEADER_SIZE - QueriesSize,
 	DNS_Responses_Size = length(AnswerList) * ?DNS_ANSWER_SIZE,
 	if
-		DNS_Responses_Size > LeftSize -> ?info("Truncating dns response"),
+		DNS_Responses_Size > LeftSize -> ?debug("Truncating dns response"),
 									     FilteredAnswerList = lists:sublist(AnswerList, 1, erlang:max(LeftSize, 0) div ?DNS_ANSWER_SIZE),
 										 {inet_dns:make_header(Header, tc, 1), FilteredAnswerList};
 		true -> {Header, AnswerList}
@@ -173,6 +173,7 @@ create_workers_response_params(#dns_query{domain = Domain,type = Type, class = C
               DispatcherResponse4 = get_nodes(Dispatcher, DispatcherTimeout),
               translate_dispatcher_response_to_params(DispatcherResponse4, Domain, Type, Class, ResponseTTL);
             _ ->
+              ?debug("Wrong domain ~p", [LoweredDomain]),
               [{rc, ?NXDOMAIN}]
           end
       end
@@ -197,7 +198,9 @@ get_workers(Module, Dispatcher, DispatcherTimeout) ->
 		case DispatcherAns of
 			ok -> receive
 						{ok, ListOfIPs} -> {ok, ListOfIPs};
-            {error, Error} -> {error, Error}
+            {error, Error} ->
+              ?error("Unexpected dispatcher error ~p", [Error]),
+              {error, Error}
 				  after
 						DispatcherTimeout -> ?error("Unexpected dispatcher timeout"), {error, timeout}
 				  end;
@@ -224,7 +227,9 @@ get_nodes(Dispatcher, DispatcherTimeout) ->
     case DispatcherAns of
       ok -> receive
               {ok, ListOfIPs} -> {ok, ListOfIPs};
-              {error, Error} -> {error, Error}
+              {error, Error} ->
+                ?error("Unexpected dispatcher error ~p", [Error]),
+                {error, Error}
             after
               DispatcherTimeout -> ?error("Unexpected dispatcher timeout"), {error, timeout}
             end;

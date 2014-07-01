@@ -118,7 +118,7 @@ strip_self_signed_ca(DERList) when is_list(DERList) ->
 %% ====================================================================
 verify_callback(OtpCert, valid_peer, Certs) ->
     Serial = save_cert_chain([OtpCert | Certs]),
-    ?info("Peer ~p connected", [Serial]),
+    ?debug("Peer ~p connected", [Serial]),
     {valid, []};
 verify_callback(OtpCert, {bad_cert, unknown_ca}, Certs) ->
     save_cert_chain([OtpCert | Certs]),

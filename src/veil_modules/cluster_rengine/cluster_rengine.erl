@@ -77,14 +77,15 @@ handle(ProtocolVersion, configure_event_handlers) ->
   gen_server:call(?Dispatcher_Name, {rule_manager, ProtocolVersion, self(), get_event_handlers}),
   receive
     {ok, EventHandlers} ->
+      ?debug("New event handlers: ~p", [EventHandlers]),
       lists:foreach(fun({EventType, EventHandlerItems}) ->
         lists:foreach(fun(EventHandlerItem) ->
           update_event_handler(1, EventType, EventHandlerItem)
         end, EventHandlerItems)
       end, EventHandlers),
       ok;
-    _ ->
-      ?warning("rule_manager get_event_handlers handler sent back unexpected structure"),
+    Other ->
+      ?warning("rule_manager get_event_handlers handler sent back unexpected structure ~p", [Other]),
       error
   after 1000 ->
     ?info("rule_manager get_event_handlers handler did not replied"),
@@ -92,7 +93,7 @@ handle(ProtocolVersion, configure_event_handlers) ->
   end;
 
 handle(_ProtocolVersion, {final_stage_tree, _TreeId, _Event}) ->
-  ?info("cluster_rengine final_stage_tree handler should be always called in subprocess tree process");
+  ?warning("cluster_rengine final_stage_tree handler should be always called in subprocess tree process");
 
 handle(ProtocolVersion, {update_cluster_rengine, EventType, EventHandlerItem}) ->
   ?info("--- cluster_rengines update_cluster_rengine"),
@@ -120,6 +121,7 @@ handle(ProtocolVersion, {event_arrived, Event}) ->
 
 %% Handle requests that have wrong structure.
 handle(_ProtocolVersion, _Msg) ->
+  ?warning("Wrong request: ~p", [_Msg]),
   wrong_request.
 
 cleanup() ->
@@ -155,6 +157,7 @@ save_to_caches(EventType, #event_handler_item{processing_method = ProcessingMeth
   end.
 
 create_process_tree_for_handler(ProtocolVersion, #event_handler_item{tree_id = TreeId, map_fun = MapFun, handler_fun = HandlerFun, config = #event_stream_config{config = ActualConfig} = Config}) ->
+  ?info("Creation of process tree: ~p with config ~p", [TreeId, Config]),
   ProcFun = case ActualConfig of
               undefined ->
                 fun(_ProtocolVersion, {final_stage_tree, _TreeId2, Event}) ->

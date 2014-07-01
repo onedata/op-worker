@@ -85,6 +85,7 @@ handle(_ProtocolVersion, get_version) ->
 	node_manager:check_vsn();
 
 handle(_ProtocolVersion, {update_state, ModulesToNodes, NLoads, AvgLoad}) ->
+  ?info("DNS state update: ~p", [{ModulesToNodes, NLoads, AvgLoad}]),
   try
     ModulesToNodes2 = lists:map(fun ({Module, Nodes}) ->
       GetLoads = fun({Node, V}) ->
@@ -196,6 +197,7 @@ handle(_ProtocolVersion, get_nodes) ->
   end;
 
 handle(ProtocolVersion, Msg) ->
+  ?warning("Wrong request: ~p", [Msg]),
 	throw({unsupported_request, ProtocolVersion, Msg}).
 
 %% cleanup/0
@@ -234,14 +236,14 @@ start_listening() ->
 
     try
       supervisor:delete_child(?Supervisor_Name, ?DNS_UDP),
-      ?warning("DNS UDP child has existed")
+      ?debug("DNS UDP child has existed")
     catch
       _:_ -> ok
     end,
 
     try
       ranch:stop_listener(dns_tcp_listener),
-      ?warning("dns_tcp_listener has existed")
+      ?debug("dns_tcp_listener has existed")
     catch
       _:_ -> ok
     end,
@@ -275,6 +277,7 @@ start_tcp_listener(AcceptorPool, Port, TransportOpts, Pid) ->
 	catch
 		_:RanchError -> ok = supervisor:terminate_child(?Supervisor_Name, Pid),
 			supervisor:delete_child(?Supervisor_Name, Pid),
+      ?error("Start DNS TCP listener error, ~p", [RanchError]),
 			throw(RanchError)
 	end,
 	ok.

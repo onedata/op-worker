@@ -291,6 +291,7 @@ handle_call({node_chosen_for_ack, {Task, ProtocolVersion, Request, MsgId, FuseId
   end;
 
 handle_call({set_asnych_mode, AsnychMode}, _From, State) ->
+  ?info("Asynch mode new value ~p", [AsnychMode]),
   {reply, ok, State#dispatcher_state{asnych_mode = AsnychMode}};
 
 handle_call({get_callback, Fuse}, _From, State) ->
@@ -315,7 +316,7 @@ handle_call({check_worker_node, Module}, _From, State) ->
   handle_test_call({check_worker_node, Module}, _From, State);
 
 handle_call(_Request, _From, State) ->
-  ?error("Error: wrong call: ~p", [_Request]),
+  ?warning("Wrong call: ~p", [_Request]),
   {reply, wrong_request, State}.
 
 %% handle_test_call/3
@@ -436,14 +437,16 @@ handle_cast(stop, State) ->
 
 handle_cast({addCallback, FuseId, Node, CallbacksNum}, State) ->
   add_callback(Node, FuseId),
+  ?debug("Callback added to dispatcher: ~p", [{FuseId, Node, CallbacksNum}]),
   {noreply, State#dispatcher_state{callbacks_num = CallbacksNum}};
 
 handle_cast({delete_callback, FuseId, Node, CallbacksNum}, State) ->
   delete_callback(Node, FuseId),
+  ?debug("Callback deleted from dispatcher: ~p", [{FuseId, Node, CallbacksNum}]),
   {noreply, State#dispatcher_state{callbacks_num = CallbacksNum}};
 
 handle_cast(_Msg, State) ->
-  ?error("Error: wrong cast: ~p", [_Msg]),
+  ?warning("Wrong cast: ~p", [_Msg]),
   {noreply, State}.
 
 %% handle_info/2
@@ -458,7 +461,7 @@ handle_cast(_Msg, State) ->
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 handle_info(_Info, State) ->
-  ?error("Error: wrong info: ~p", [_Info]),
+  ?warning("Wrong info: ~p", [_Info]),
   {noreply, State}.
 
 
@@ -581,12 +584,12 @@ check_worker_node(Module, Request, State) ->
               case Check2 of
                 true -> {ThisNode, State};
                 false ->
-%%               ?warning("Load of node too high", [Module]),
+%%                ?debug("Load of node too high", [Module]),
                   {N, NewLists} = choose_worker(L1, L2),
                   {N, update_nodes(Module, NewLists, State)}
               end;
             false ->
-%%           ?warning("Module ~p does not work at this node", [Module]),
+%%            ?debug("Module ~p does not work at this node", [Module]),
               {N, NewLists} = choose_worker(L1, L2),
               {N, update_nodes(Module, NewLists, State)}
           end;
@@ -711,13 +714,17 @@ add_callback(Node, Fuse) ->
   case OldCallbacks of
     [{Fuse, OldCallbacksList}] ->
       case lists:member(Node, OldCallbacksList) of
-        true -> ok;
+        true ->
+          ?debug("Adding callback ~p to dispatcher: already exists", [{Node, Fuse}]),
+          ok;
         false ->
           ets:insert(?CALLBACKS_TABLE, {Fuse, [Node | OldCallbacksList]}),
+          ?debug("Adding callback ~p to dispatcher: updated", [{Node, Fuse}]),
           updated
       end;
     _ ->
       ets:insert(?CALLBACKS_TABLE, {Fuse, [Node]}),
+      ?debug("Adding callback ~p to dispatcher: updated", [{Node, Fuse}]),
       updated
   end.
 
@@ -736,14 +743,20 @@ delete_callback(Node, Fuse) ->
           case length(OldCallbacksList) of
             1 ->
               ets:delete(?CALLBACKS_TABLE, Fuse),
+              ?debug("Deleting callback ~p from dispatcher: updated", [{Node, Fuse}]),
               updated;
             _ ->
               ets:insert(?CALLBACKS_TABLE, {Fuse, lists:delete(Node, OldCallbacksList)}),
+              ?debug("Deleting callback ~p from dispatcher: updated", [{Node, Fuse}]),
               updated
           end;
-        false -> not_exists
+        false ->
+          ?debug("Deleting callback ~p from dispatcher: not_exists", [{Node, Fuse}]),
+          not_exists
       end;
-    _ -> not_exists
+    _ ->
+      ?debug("Deleting callback ~p from dispatcher: not_exists", [{Node, Fuse}]),
+      not_exists
   end.
 
 %% get_callback/1
@@ -820,17 +833,21 @@ send_to_fuse(FuseId, Message, MessageDecoder, SendNum) ->
     Node = gen_server:call(?Dispatcher_Name, {get_callback, FuseId}, 500),
     case Node of
       not_found ->
+        ?warning("Sending message ~p to fuse ~p: callback_node_not_found", [Message, FuseId]),
         callback_node_not_found;
       _ ->
         try
           Callback = gen_server:call({?Node_Manager_Name, Node}, {get_callback, FuseId}, 1000),
           case Callback of
-            non -> channel_not_found;
+            non ->
+              ?warning("Sending message ~p to fuse ~p: channel_not_found", [Message, FuseId]),
+              channel_not_found;
             _ ->
               Callback ! {self(), Message, MessageDecoder, -1},
               receive
                 {Callback, -1, Response} -> Response
               after 500 ->
+                ?error("Sending message ~p to fuse ~p: socket_error", [Message, FuseId]),
                 socket_error
               end
           end
@@ -876,17 +893,21 @@ send_to_fuse_ack(FuseId, Message, MessageDecoder, MessageId, SendNum) ->
     Node = gen_server:call(?Dispatcher_Name, {get_callback, FuseId}, 500),
     case Node of
       not_found ->
+        ?warning("Sending message ~p to fuse ~p: callback_node_not_found", [Message, FuseId]),
         callback_node_not_found;
       _ ->
         try
           Callback = gen_server:call({?Node_Manager_Name, Node}, {get_callback, FuseId}, 1000),
           case Callback of
-            non -> channel_not_found;
+            non ->
+              ?warning("Sending message ~p to fuse ~p: channel_not_found", [Message, FuseId]),
+              channel_not_found;
             _ ->
               Callback ! {with_ack, self(), Message, MessageDecoder, MessageId},
               receive
                 {Callback, MessageId, Response} -> Response
               after 500 ->
+                ?error("Sending message ~p to fuse ~p: socket_error", [Message, FuseId]),
                 socket_error
               end
           end

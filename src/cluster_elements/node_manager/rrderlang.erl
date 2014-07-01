@@ -237,9 +237,11 @@ execute_command(Port, Command, Columns) ->
         {ok, Body} ->
           {ok, {Header, Body}};
         {error, Error} ->
+          ?error("RRD execute_command error: ~p", [Error]),
           {error, Error}
       end;
     {error, Error} ->
+      ?error("RRD execute_command error: ~p", [Error]),
       {error, Error}
   end.
 
@@ -271,6 +273,7 @@ receive_answer(Port, Acc) ->
     {Port, {data, {eol, Data}}} ->
       receive_answer(Port, [Data | Acc])
   after Timeout ->
+    ?error("RRD receive_answer timeout"),
     {error, <<"timeout">>}
   end.
 
@@ -305,6 +308,7 @@ receive_header(Port, Columns, BinaryHeader) ->
     {Port, {data, {eol, Data}}} ->
       receive_header(Port, Columns, Data)
   after Timeout ->
+    ?error("RRD receive_header timeout"),
     {error, <<"timeout">>}
   end.
 
@@ -320,7 +324,9 @@ select_header(Header, Columns) ->
   try
     select_header(Header, Columns, 1, [], [])
   catch
-    _:_ -> {error, <<"Header selection error.">>}
+    E1:E2 ->
+      ?error("RRD select_header error ~p:~p", [E1, E2]),
+      {error, <<"Header selection error.">>}
   end.
 
 
@@ -402,15 +408,18 @@ receive_body(Port, Columns, Body) ->
     {Port, {data, {eol, <<"OK", _/binary>>}}} ->
       {ok, lists:reverse(Body)};
     {Port, {data, {eol, <<"ERROR: ", Error/binary>>}}} ->
+      ?error("RRD receive_body error ~p", [Error]),
       {error, Error};
     {Port, {data, {eol, Data}}} ->
       case select_row(Data, Columns) of
         {ok, Row} ->
           receive_body(Port, Columns, [Row | Body]);
         {error, Error} ->
+          ?error("RRD receive_body error ~p", [Error]),
           {error, Error}
       end
   after Timeout ->
+    ?error("RRD receive_body timeout"),
     {error, <<"timeout">>}
   end.
 
@@ -426,10 +435,14 @@ select_row(Data, Columns) ->
     [TimeStamp, Values | _] = binary:split(Data, <<":">>, [global]),
     case select_row(split(Values), Columns, 1, []) of
       {ok, Row} -> {ok, {binary_to_integer(TimeStamp), lists:reverse(Row)}};
-      _ -> {error, <<"Body selection error.">>}
+      Error ->
+        ?error("RRD select_row error ~p", [Error]),
+        {error, <<"Body selection error.">>}
     end
   catch
-    _:_ -> {error, <<"Body selection error.">>}
+    E1:E2 ->
+      ?error("RRD select_row error ~p:~p", [E1,E2]),
+      {error, <<"Body selection error.">>}
   end.
 
 
