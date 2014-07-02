@@ -98,7 +98,7 @@ mkdir(Storage_helper_info, Dir) ->
               end;
             {error, 'NIF_not_loaded'} -> ErrorCode2;
             _ ->
-              ?error("Can not create dir %p, code: %p, helper info: %p, mode: %p%n", [Dir, ErrorCode2, Storage_helper_info, NewDirStorageMode]),
+%%               ?error("Can not create dir %p, code: %p, helper info: %p, mode: %p%n", [Dir, ErrorCode2, Storage_helper_info, NewDirStorageMode]),
               {wrong_mkdir_return_code, ErrorCode2}
           end
       end;
@@ -122,7 +122,7 @@ mv(Storage_helper_info, From, To) ->
     0 -> ok;
     {error, 'NIF_not_loaded'} -> ErrorCode;
     _ ->
-      ?error("Can not move file from ~p to ~p, code: ~p, helper info: ~p", [From, To, ErrorCode, Storage_helper_info]),
+%%       ?error("Can not move file from ~p to ~p, code: ~p, helper info: ~p", [From, To, ErrorCode, Storage_helper_info]),
       {wrong_rename_return_code, ErrorCode}
   end.
 
@@ -350,8 +350,7 @@ write(Storage_helper_info, File, Buf) ->
   ErrorDetail :: term().
 %% ====================================================================
 create(Storage_helper_info, File) ->
-    ok = setup_ctx(File),
-    ?debug("[storage] Create ~p as user: ~p ~p", [File, fslogic_context:get_fs_user_ctx(), fslogic_context:get_fs_group_ctx()]),
+  ok = setup_ctx(File),
   {ModeStatus, NewFileStorageMode} = get_mode(File),
   case ModeStatus of
     ok ->
@@ -393,7 +392,7 @@ create(Storage_helper_info, File) ->
               end;
             {error, 'NIF_not_loaded'} -> ErrorCode2;
             _ ->
-              ?error("Can not create file ~p, code: ~p, helper info: ~p, mode: ~p", [File, ErrorCode2, Storage_helper_info, NewFileStorageMode bor ?S_IFREG]),
+%%               ?error("Can not create file ~p, code: ~p, helper info: ~p, mode: ~p", [File, ErrorCode2, Storage_helper_info, NewFileStorageMode bor ?S_IFREG]),
               {wrong_mknod_return_code, ErrorCode2}
           end
       end;
@@ -411,8 +410,7 @@ create(Storage_helper_info, File) ->
   ErrorDetail :: term().
 %% ====================================================================
 truncate(Storage_helper_info, File, Size) ->
-    ok = setup_ctx(File),
-    ?debug("[storage] Truncate ~p for user: ~p ~p", [File, fslogic_context:get_fs_user_ctx(), fslogic_context:get_fs_group_ctx()]),
+  ok = setup_ctx(File),
   {ErrorCode, Stat} = get_cached_value(File, is_reg, Storage_helper_info),
   case ErrorCode of
     ok ->
@@ -423,7 +421,6 @@ truncate(Storage_helper_info, File, Size) ->
             0 -> ok;
             {error, 'NIF_not_loaded'} -> ErrorCode2;
             _ ->
-                ?info("Truncateq: ~p ~p", [File, ErrorCode2]),
                 {wrong_truncate_return_code, ErrorCode2}
           end;
         false -> {error, not_regular_file}
@@ -530,7 +527,6 @@ write_bytes(Storage_helper_info, File, Offset, Buf, FFI) ->
       end;
     {error, 'NIF_not_loaded'} -> ErrorCode;
     _ ->
-      ?error("Write bytes error - wrong code: ~p", [ErrorCode]),
       {error, {wrong_write_return_code, ErrorCode}}
   end.
 

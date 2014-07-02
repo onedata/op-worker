@@ -71,6 +71,7 @@ handle(ProtocolVersion, Record) when is_record(Record, remotefilemangement) ->
     fslogic:fslogic_runner(fun handle_message/1, RequestType, RequestBody, remote_files_manager_errors);
 
 handle(_ProtocolVersion, _Msg) ->
+  ?warning("Wrong request: ~p", [_Msg]),
   ok.
 
 %% cleanup/0

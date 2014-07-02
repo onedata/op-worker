@@ -622,9 +622,12 @@ contact_fslogic(Message, Value) ->
         receive
           {worker_answer, MsgId, Resp} -> {ok, Resp}
         after 7000 ->
+          ?error("Logical files manager: error during contact with fslogic, timeout"),
           {error, timeout}
         end;
-      _ -> {error, CallAns}
+      _ ->
+        ?error("Logical files manager: error during contact with fslogic, call ans: ~p", [CallAns]),
+        {error, CallAns}
     end
   catch
     E1:E2 ->
@@ -901,6 +904,7 @@ getfilelocation(File) ->
     end
   catch
     _:_ ->
+      ?debug("Creating ets ~p for logical files manager cache", [EtsName]),
       ets:new(EtsName, [named_table, set]),
       []
   end,
@@ -924,7 +928,9 @@ getfilelocation(File) ->
           end;
         _ -> {Status, TmpAns}
       end;
-    _ -> {ok, CachedLocation}
+    _ ->
+      ?debug("Reading file location from cache: ~p", [CachedLocation]),
+      {ok, CachedLocation}
   end.
 
 %% cache_size/2
@@ -940,11 +946,13 @@ cache_size(File, BuffSize) ->
     LookupAns = ets:lookup(EtsName, {File, size}),
     case LookupAns of
       [{{File, size}, Size}] ->
+        ?debug("Reading file size from cache, size: ~p", [Size]),
         Size;
       _ -> 0
     end
   catch
     _:_ ->
+      ?debug("Creating ets ~p for logical files manager cache", [EtsName]),
       ets:new(EtsName, [named_table, set]),
       0
   end,

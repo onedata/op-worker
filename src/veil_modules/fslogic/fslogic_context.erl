@@ -102,7 +102,9 @@ get_user_id() ->
         DN ->
             case fslogic_objects:get_user({dn, DN}) of
                 {ok, #veil_document{uuid = UID}} -> {ok, UID};
-                Error -> Error
+                Error ->
+                  ?error("Cannot get user id, error: ~p", [Error]),
+                  Error
             end
     end.
 
