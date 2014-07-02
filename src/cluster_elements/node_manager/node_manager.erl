@@ -612,7 +612,7 @@ get_node_stats(TimeWindow) ->
                      medium -> application:get_env(?APP_Name, medium_monitoring_time_window);
                      long -> application:get_env(?APP_Name, long_monitoring_time_window);
                      _ ->
-                       ?warning("Wrong statistics interval ~p", [Interval]),
+                       ?warning("Wrong statistics time window: ~p", [TimeWindow]),
                        {ok, TimeWindow}
                    end,
   {MegaSecs, Secs, _} = erlang:now(),
