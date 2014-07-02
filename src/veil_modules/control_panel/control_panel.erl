@@ -63,6 +63,7 @@ init(_Args) ->
 
     % Setup GUI dispatch opts for cowboy
     GUIDispatch = [
+        {"www.*", [{'_', redirect_handler, []}]},
         {'_', static_dispatches(atom_to_list(DocRoot), ?static_paths) ++ [
             {"/nagios/[...]", nagios_handler, []},
             {?user_content_download_path ++ "/:path", file_download_handler, [{type, ?user_content_request_type}]},

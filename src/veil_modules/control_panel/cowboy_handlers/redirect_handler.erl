@@ -32,6 +32,7 @@ init(_Type, Req, _Opts) ->
 %% ====================================================================
 handle(Req, State) ->
 	{Hostname, _} = cowboy_req:header(<<"host">>, Req),
+    ?dump(Hostname),
 	{Path, _} = cowboy_req:path(Req),
 	{ok, Req2} = cowboy_req:reply(301, 
 		[
