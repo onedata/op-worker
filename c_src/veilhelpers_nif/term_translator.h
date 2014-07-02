@@ -22,14 +22,14 @@
 #define STATVFS_RECORD_NAME     "st_statvfs"
 #define STAT_RECORD_NAME        "st_stat"
 
-using namespace std;
+namespace veil
+{
+namespace cluster
+{
 
-namespace veil {
-namespace cluster {
-
-string get_string(ErlNifEnv* env, ERL_NIF_TERM term);                           // Term to string
-string get_atom(ErlNifEnv* env, ERL_NIF_TERM term);                             // Term to atom (as string)
-vector<string> get_str_vector(ErlNifEnv* env, ERL_NIF_TERM term);               // Term to vector<string>
+std::string get_string(ErlNifEnv* env, ERL_NIF_TERM term);                      // Term to string
+std::string get_atom(ErlNifEnv* env, ERL_NIF_TERM term);                        // Term to atom (as string)
+std::vector<std::string> get_str_vector(ErlNifEnv* env, ERL_NIF_TERM term);     // Term to vector<string>
 bool is_int(ErlNifEnv* env, ERL_NIF_TERM term);                                 // Checks if term is an int
 ErlNifSInt64 get_int(ErlNifEnv* env, ERL_NIF_TERM term);                        // Term to int64
 ErlNifUInt64 get_uint(ErlNifEnv* env, ERL_NIF_TERM term);                       // Term to uint64
