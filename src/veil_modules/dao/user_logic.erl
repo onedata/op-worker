@@ -70,6 +70,7 @@ sign_in(Proplist) ->
 						{ok, NewUser} ->
 							NewUser;
 	                    {error,Error} ->
+                        ?error("Sign in error: ~p", [Error]),
 							throw(Error)
 	               end;
     %% Code below is only for development purposes (connection to DB is not required)
@@ -93,6 +94,7 @@ sign_in(Proplist) ->
     Result :: {ok, user_doc()} | {error, any()}.
 %% ====================================================================
 create_user(Login, Name, Teams, Email, DnList) ->
+  ?debug("Creating user: ~p", [{Login, Name, Teams, Email, DnList}]),
 	Quota = #quota{},
     {QuotaAns, QuotaUUID} = dao_lib:apply(dao_users, save_quota, [Quota], 1),
     User = #user
@@ -201,6 +203,7 @@ remove_user({rdnSequence, RDNSequence}) ->
     remove_user({dn, rdn_sequence_to_dn_string(RDNSequence)});
 
 remove_user(Key) ->
+    ?debug("Removing user: ~p", [Key]),
     GetUserAns = get_user(Key),
     {GetUserFirstAns, UserRec} = GetUserAns,
     case GetUserFirstAns of
@@ -300,7 +303,9 @@ update_teams(#veil_document{record = UserInfo} = UserDoc, NewTeams) ->
         {ok, UUID} ->
             create_dirs_at_storage(non, get_team_names(NewDoc)),
             dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
-        {error, Reason} -> {error, Reason}
+        {error, Reason} ->
+          ?error("Cannot update user ~p teams: ~p", [UserInfo, Reason]),
+          {error, Reason}
     end.
 
 %% get_email_list/1
@@ -330,7 +335,9 @@ update_email_list(#veil_document{record = UserInfo} = UserDoc, NewEmailList) ->
     NewDoc = UserDoc#veil_document{record = UserInfo#user{email_list = NewEmailList}},
     case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
         {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
-        {error, Reason} -> {error, Reason}
+        {error, Reason} ->
+          ?error("Cannot update user ~p emails: ~p", [UserInfo, Reason]),
+          {error, Reason}
     end.
 
 
@@ -361,7 +368,9 @@ update_dn_list(#veil_document{record = UserInfo} = UserDoc, NewDnList) ->
     NewDoc = UserDoc#veil_document{record = UserInfo#user{dn_list = NewDnList}},
     case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
         {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
-        {error, Reason} -> {error, Reason}
+        {error, Reason} ->
+          ?error("Cannot update user ~p dn_list: ~p", [UserInfo, Reason]),
+          {error, Reason}
     end.
 
 %% get_role/1
@@ -397,7 +406,9 @@ update_role(#veil_document{record = UserInfo} = UserDoc, NewRole) ->
     NewDoc = UserDoc#veil_document{record = UserInfo#user{role = NewRole}},
     case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
         {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
-        {error, Reason} -> {error, Reason}
+        {error, Reason} ->
+          ?error("Cannot update user ~p role: ~p", [UserInfo, Reason]),
+          {error, Reason}
     end;
 
 update_role(Key, NewRole) ->
@@ -407,7 +418,9 @@ update_role(Key, NewRole) ->
             NewDoc = UserDoc#veil_document{record = UserInfo#user{role = NewRole}},
             case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
                 {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
-                {error, Reason} -> {error, Reason}
+                {error, Reason} ->
+                  ?error("Cannot update user ~p role: ~p", [Key, Reason]),
+                  {error, Reason}
             end;
         Other -> Other
     end.
@@ -443,7 +456,9 @@ update_quota(User, NewQuota) ->
     {ok, QuotaDoc} ->
       NewQuotaDoc = QuotaDoc#veil_document{record = NewQuota},
       dao_lib:apply(dao_users, save_quota, [NewQuotaDoc], 1);
-    {error, Error} -> {error, {get_quota_error, Error}};
+    {error, Error} ->
+      ?error("Cannot update user ~p quota: ~p", [User, {get_quota_error, Error}]),
+      {error, {get_quota_error, Error}};
     Other ->
       Other
   end.
@@ -625,7 +640,9 @@ create_root(Dir, Uid) ->
             CTime = vcn_utils:time(),
             FileDoc = fslogic_meta:update_meta_attr(File, times, {CTime, CTime, CTime}),
             dao_lib:apply(dao_vfs, save_new_file, [Dir, FileDoc], 1);
-        _ParentError -> {error,parent_error}
+        _ParentError ->
+          ?error("Cannot create root dir ~p for uid, error: ~p", [Dir, Uid, {parent_error, _ParentError}]),
+          {error,parent_error}
     end.
 
 %% create_dirs_at_storage/2
@@ -643,11 +660,15 @@ create_dirs_at_storage(Root, Teams) ->
 					CreateDirs = fun(StorageRecord,TmpAns) ->
 						case create_dirs_at_storage(Root,Teams,StorageRecord) of
 							ok -> TmpAns;
-							Error -> Error
+							Error ->
+                ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, Teams}, Error]),
+                Error
 						end
 					end,
 					lists:foldl(CreateDirs,ok , StorageRecords);
-        _ -> {error,storage_listing_error}
+        Error2 ->
+          ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, Teams}, {storage_listing_error, Error2}]),
+          {error,storage_listing_error}
     end.
 
 %% create_dirs_at_storage/3

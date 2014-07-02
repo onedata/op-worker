@@ -52,7 +52,8 @@ body() ->
                                 gui_ctx:create_session(),
                                 gui_ctx:set_user_id(Login),
                                 gui_ctx:set_user_record(UserDoc),
-                                gui_jq:redirect_from_login()
+                                gui_jq:redirect_from_login(),
+                                ?debug("User ~p logged in", [Login])
                         end
                     catch
                         throw:dir_creation_error ->

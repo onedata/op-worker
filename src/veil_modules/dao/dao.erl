@@ -112,11 +112,17 @@ init(Args) ->
             case Cache3 of
               ok ->
                 init({Args, {init_status, ets:info(db_host_store)}});
-              _ -> throw({error, {users_cache_error, Cache3}})
+              _ ->
+                ?error("Dao initialization error: ~p", [{users_cache_error, Cache3}]),
+                throw({error, {users_cache_error, Cache3}})
             end;
-          _ -> throw({error, {storage_cache_error, Cache2}})
+          _ ->
+            ?error("Dao initialization error: ~p", [{users_cache_error, Cache2}]),
+            throw({error, {storage_cache_error, Cache2}})
         end;
-      _ -> throw({error, {dao_fuse_cache_error, Cache1}})
+      _ ->
+        ?error("Dao initialization error: ~p", [{users_cache_error, Cache1}]),
+        throw({error, {dao_fuse_cache_error, Cache1}})
     end.
 
 %% handle/2
@@ -149,7 +155,7 @@ handle(ProtocolVersion, healthcheck) ->
 		ok ->
 			ok;
 		_ ->
-			?error("Healthchecking database filed with error: ~p",Msg),
+			?error("Healthchecking database filed with error: ~p", [Msg]),
 			{error,db_healthcheck_failed}
 	end;
 
@@ -157,6 +163,7 @@ handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
 handle(ProtocolVersion, {Target, Method, Args}) when is_atom(Target), is_atom(Method), is_list(Args) ->
+    ?debug("Dao action: ~p", [{Target, Method, Args}]),
     put(protocol_version, ProtocolVersion), %% Some sub-modules may need it to communicate with DAO' gen_server
     Module =
         case atom_to_list(Target) of
@@ -182,7 +189,7 @@ handle(ProtocolVersion, {Target, Method, Args}) when is_atom(Target), is_atom(Me
 handle(ProtocolVersion, {Method, Args}) when is_atom(Method), is_list(Args) ->
     handle(ProtocolVersion, {cluster, Method, Args});
 handle(_ProtocolVersion, _Request) ->
-    ?error("Unknown request ~p (protocol ver.: ~p)", [_Request, _ProtocolVersion]),
+    ?warning("Unknown request ~p (protocol ver.: ~p)", [_Request, _ProtocolVersion]),
     {error, wrong_args}.
 
 %% cleanup/0

@@ -99,6 +99,7 @@ apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout) ->
             receive
                 {worker_answer, MsgID, Resp} -> Resp
             after Timeout ->
+                ?warning("Cannot receive answer - timeout"),
                 {error, timeout}
             end;
         worker_not_found ->

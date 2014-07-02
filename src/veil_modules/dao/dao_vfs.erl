@@ -510,7 +510,7 @@ get_file_helper({internal_path, [Dir | Path], Root}, MultiError, View) ->
       {ok, #view_result{rows = [#view_row{id = Id, doc = FDoc}]}} ->
         {Id, FDoc};
       {ok, #view_result{rows = []}} ->
-        ?error("File ~p not found (root = ~p)", [Dir, Root]),
+%%         ?error("File ~p not found (root = ~p)", [Dir, Root]),
         throw(file_not_found);
       {ok, #view_result{rows = [#view_row{id = Id, doc = FDoc} | _Tail]}} ->
         case MultiError of
@@ -573,7 +573,7 @@ list_dir(Dir, N, Offset) ->
             {ok, #veil_document{record = #file{type = ?DIR_TYPE}, uuid = UUID}} ->
                 UUID;
             R ->
-                ?error("Directory ~p not found. Error: ~p", [Dir, R]),
+%%                 ?error("Directory ~p not found. Error: ~p", [Dir, R]),
                 throw({dir_not_found, R})
         end,
     NextId =  uca_increment(Id), %% Dirty hack needed because `inclusive_end` option does not work in BigCouch for some reason
