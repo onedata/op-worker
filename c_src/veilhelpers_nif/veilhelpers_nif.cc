@@ -19,23 +19,20 @@
 #include <pwd.h>
 #include <grp.h>
 
-#include <boost/shared_ptr.hpp>
-
 #include <cstring>
+#include <memory>
 #include <vector>
 
 #define BADARG enif_make_badarg(env)
 #define INIT    if(!check_common_args(env, argc, argv)) \
                     return BADARG; \
-                boost::shared_ptr<IStorageHelper> sh = SHFactory.getStorageHelper(get_string(env, argv[2]), get_str_vector(env, argv[3])); \
+                auto sh = SHFactory.getStorageHelper(get_string(env, argv[2]), get_args(env, argv[3])); \
                 if(!sh) \
                     return enif_make_tuple2(env, enif_make_atom(env, "error"), enif_make_atom(env, "unknown_storage_helper")); \
                 UserCTX holder(get_string(env, argv[0]), get_string(env, argv[1])); \
                 if(holder.uid() == (uid_t)-1 || holder.gid() == (gid_t)-1) \
                     return enif_make_int(env, -EINVAL);
 
-using namespace std;
-using namespace boost;
 using namespace veil::cluster;
 using namespace veil::helpers;
 
