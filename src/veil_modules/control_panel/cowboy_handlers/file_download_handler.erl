@@ -129,7 +129,6 @@ handle_user_content_request(Req, Path) ->
             {ok, St, Context2} = SessHandler:init([], Context1),
             wf_context:context(Context2),
             {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
-            true = (UserDoc /= undefined),
             fslogic_context:set_user_dn(lists:nth(1, user_logic:get_dn_list(UserDoc))),
             {St, Context2, SessHandler}
         catch T1:M1 ->
@@ -166,9 +165,9 @@ handle_user_content_request(Req, Path) ->
                             FinalCtx#context.req),
                         {ok, _NewReq} = send_file(Req2, Filepath, filename:basename(Filepath), Size)
                     catch Type:Message ->
-                        {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
+                        {ok, User} = user_logic:get_user({login, gui_ctx:get_user_id()}),
                         ?error_stacktrace("Error while sending file ~p to user ~p - ~p:~p",
-                            [Filepath, user_logic:get_login(UserDoc), Type, Message]),
+                            [Filepath, user_logic:get_login(User), Type, Message]),
                         {ok, _FinReq} = cowboy_req:reply(500, Req#http_req{connection = close})
                     end
             end

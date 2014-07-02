@@ -86,7 +86,6 @@ handle_upload_request(Req) ->
             {ok, St, Context2} = SessHandler:init([], Context1),
             wf_context:context(Context2),
             {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
-            true = (UserDoc /= undefined),
             fslogic_context:set_user_dn(lists:nth(1, user_logic:get_dn_list(UserDoc))),
             {St, Context2, SessHandler}
         catch T1:M1 ->
