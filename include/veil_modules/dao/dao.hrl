@@ -115,7 +115,7 @@
 -define(USER_BY_EMAIL_VIEW, #view_info{name = "user_by_email", design = ?USER_BY_EMAIL_DESIGN_NAME, db_name = ?USERS_DB_NAME}).
 -define(USER_BY_LOGIN_VIEW, #view_info{name = "user_by_login", design = ?USER_BY_LOGIN_DESIGN_NAME, db_name = ?USERS_DB_NAME}).
 -define(USER_BY_DN_VIEW, #view_info{name = "user_by_dn", design = ?USER_BY_DN_DESIGN_NAME, db_name = ?USERS_DB_NAME}).
--define(USER_BY_UNVERIFIED_DN_VIEW, #view_info{name = "user_by_dn", design = ?USER_BY_UNVERIFIED_DN_DESIGN_NAME, db_name = ?USERS_DB_NAME}).
+-define(USER_BY_UNVERIFIED_DN_VIEW, #view_info{name = "user_by_unverified_dn", design = ?USER_BY_UNVERIFIED_DN_DESIGN_NAME, db_name = ?USERS_DB_NAME}).
 -define(USER_BY_UID_VIEW, #view_info{name = "user_by_uid", design = ?USER_BY_UID_DESIGN_NAME, db_name = ?USERS_DB_NAME}).
 
 -define(SHARE_BY_FILE_VIEW, #view_info{name = "share_by_file", design = ?SHARE_BY_FILE_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
