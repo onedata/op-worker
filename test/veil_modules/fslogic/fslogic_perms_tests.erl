@@ -18,24 +18,27 @@
 -include("veil_modules/fslogic/fslogic.hrl").
 
 check_file_perms_test() ->
-    ok.
-%%     UserDoc = #veil_document{record = #user{}, uuid = "321"},
-%%     OwnerUserDoc = #veil_document{record = #user{}, uuid = "123"},
-%%     RootUserDoc = #veil_document{record = #user{}, uuid = ?CLUSTER_USER_ID},
-%%     FileDoc = #veil_document{record = #file{uid = "123", perms = ?WR_ALL_PERM}},
-%%     NonWriteableFileDoc = #veil_document{record = #file{uid = "123", perms = ?WR_USR_PERM}},
-%%
-%%     %% Non group access
-%%     ?assertMatch(ok, fslogic_perms:check_file_perms("/dir", UserDoc, FileDoc, owner)),
-%%     ?assertMatch(ok, fslogic_perms:check_file_perms("/", UserDoc, FileDoc, owner)),
-%%     ?assertMatch(ok, fslogic_perms:check_file_perms("/dir/file", UserDoc, FileDoc, owner)),
-%%
-%%     GroupPath = "/" ++ ?GROUPS_BASE_DIR_NAME ++ "/some/path",
-%%     ?assertMatch(ok, fslogic_perms:check_file_perms(GroupPath, OwnerUserDoc, FileDoc,owner)),
-%%     ?assertMatch({error, {permission_denied, _}}, fslogic_perms:check_file_perms(GroupPath, UserDoc, FileDoc, owner)),
-%%     ?assertMatch(ok, fslogic_perms:check_file_perms(GroupPath, UserDoc, FileDoc, write)),
-%%     ?assertMatch({error, {permission_denied, _}}, fslogic_perms:check_file_perms(GroupPath, UserDoc, NonWriteableFileDoc, write)),
-%%     ?assertMatch(ok, fslogic_perms:check_file_perms(GroupPath, OwnerUserDoc, NonWriteableFileDoc, write)),
-%%     ?assertMatch(ok, fslogic_perms:check_file_perms(GroupPath, RootUserDoc, NonWriteableFileDoc, write)).
+    meck:new([storage_files_manager,fslogic_context]),
+    UserDoc = #veil_document{record = #user{}, uuid = "321"},
+    OwnerUserDoc = #veil_document{record = #user{}, uuid = "123"},
+    RootUserDoc = #veil_document{record = #user{}, uuid = ?CLUSTER_USER_ID},
+    FileDoc = #veil_document{record = #file{uid = "123", perms = ?WR_ALL_PERM}},
+    NonWriteableFileDoc = #veil_document{record = #file{uid = "123", perms = ?WR_USR_PERM}},
+    meck:expect(storage_files_manager,setup_ctx,fun (_) -> ok end),
+    meck:expect(fslogic_context,get_fs_group_ctx,fun () -> ["some_group"] end),
+
+    %% Non group access
+    ?assertMatch(ok, fslogic_perms:check_file_perms("/dir", OwnerUserDoc, FileDoc, owner)),
+    ?assertMatch(ok, fslogic_perms:check_file_perms("/", OwnerUserDoc, FileDoc, owner)),
+    ?assertMatch(ok, fslogic_perms:check_file_perms("/dir/file", OwnerUserDoc, FileDoc, owner)),
+
+    GroupPath = "/" ++ ?GROUPS_BASE_DIR_NAME ++ "/some/path",
+    ?assertMatch(ok, fslogic_perms:check_file_perms(GroupPath, OwnerUserDoc, FileDoc,owner)),
+    ?assertMatch({error, {permission_denied, _}}, fslogic_perms:check_file_perms(GroupPath, UserDoc, FileDoc, owner)),
+    ?assertMatch(ok, fslogic_perms:check_file_perms(GroupPath, UserDoc, FileDoc, write)),
+    ?assertMatch({error, {permission_denied, _}}, fslogic_perms:check_file_perms(GroupPath, UserDoc, NonWriteableFileDoc, write)),
+    ?assertMatch(ok, fslogic_perms:check_file_perms(GroupPath, OwnerUserDoc, NonWriteableFileDoc, write)),
+    ?assertMatch(ok, fslogic_perms:check_file_perms(GroupPath, RootUserDoc, NonWriteableFileDoc, write)),
+    meck:unload([storage_files_manager,fslogic_context]).
 
 -endif.
