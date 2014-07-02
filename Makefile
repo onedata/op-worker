@@ -14,7 +14,7 @@ compile:
 
 deps:
 	./rebar get-deps
-	./rebar update-deps
+#	./rebar update-deps
 	git submodule init
 	git submodule update
 
