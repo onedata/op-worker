@@ -31,19 +31,6 @@
 -define(USERS_DB_NAME, "users").
 -endif.
 
-%% Design Names
-%% -define(VFS_BASE_DESIGN_NAME, "vfs_base").
-%% -define(WAITING_FILES_DESIGN_NAME, "waiting_files_tree").
-%% -define(USER_BY_LOGIN_DESIGN_NAME, "user_by_login").
-%% -define(USER_BY_EMAIL_DESIGN_NAME, "user_by_email").
-%% -define(USER_BY_DN_DESIGN_NAME, "user_by_dn").
-%% -define(USER_BY_UID_DESIGN_NAME, "user_by_uid").
-%% -define(SHARE_BY_FILE_DESIGN_NAME, "share_by_file").
-%% -define(SHARE_BY_USER_DESIGN_NAME, "share_by_user").
-%% -define(FILES_NUMBER_DESIGN_NAME, "files_number").
-%% -define(FILES_SIZE_DESIGN_NAME, "files_size").
-%% -define(FUSE_SESSIONS_DESIGN_NAME, "fuse_sessions").
-
 %% Views
 -define(FILE_TREE_VIEW, #view_info{name = "file_tree", db_name = ?FILES_DB_NAME, version = 1}).
 -define(WAITING_FILES_TREE_VIEW, #view_info{name = "waiting_files_tree", db_name = ?FILES_DB_NAME, version = 1}).
