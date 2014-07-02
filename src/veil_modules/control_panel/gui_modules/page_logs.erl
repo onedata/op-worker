@@ -542,7 +542,19 @@ event(generate_logs) ->
         fun(Severity) ->
             Message = lists:flatten(lists:duplicate(10, io_lib:format("~.36B", [random:uniform(98 * 567 * 456 * 235 * 232 * 3465 * 23552 * 3495 * 43534 * 345436 * 45)]))),
             lager:log(Severity, Metadata, Message)
-        end, ?LOGLEVEL_LIST).
+        end, ?LOGLEVEL_LIST),
+    Metadata2 = [
+        {dn, "dummy_dn, dummy_dn, dummy_dn, dummy_dn, dummy_dn, dummy_dn, dummy_dn"},
+        {fuse_group, "dummy_group"},
+        {function, "dummy_client_function"}
+    ],
+    lists:foreach(
+    fun(Severity) ->
+        Message = lists:flatten(lists:duplicate(10, io_lib:format("~.36B", [random:uniform(98 * 567 * 456 * 235 * 232 * 3465 * 23552 * 3495 * 43534 * 345436 * 45)]))),
+
+        gen_server:call(?Dispatcher_Name, {central_logger, 1, {dispatch_log, Message, Timestamp, Severity, Metadata2}})
+gen_server(Severity, Metadata2, Message)
+    end, ?LOGLEVEL_LIST).
 
 
 % =====================
