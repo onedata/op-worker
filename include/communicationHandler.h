@@ -9,16 +9,25 @@
 #ifndef COMMUNICATION_HANDLER_H
 #define COMMUNICATION_HANDLER_H
 
+#include "communication_protocol.pb.h"
+#include "veilErrors.h"
+
+#include <websocketpp/client.hpp>
+#include <websocketpp/config/asio_client.hpp>
+
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
 #include <numeric>
 #include <string>
 #include <boost/atomic.hpp>
 #include <boost/thread.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/unordered_map.hpp>
-#include <websocketpp/config/asio_client.hpp>
-#include <websocketpp/client.hpp>
-#include "communication_protocol.pb.h"
-#include "veilErrors.h"
+
+
 
 // PB decoder name
 #define FUSE_MESSAGES "fuse_messages"
