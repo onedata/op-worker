@@ -18,6 +18,11 @@
 %% API functions
 %% ====================================================================
 
+%% get_versioned_view_name/2
+%% ====================================================================
+%% @doc Generates view name based on given canonical name and its version number.
+-spec get_versioned_view_name(Name :: string(), Version :: integer()) -> string().
+%% ====================================================================
 get_versioned_view_name(Name, Version) ->
     Name ++ "_v" ++ integer_to_list(Version).
 

@@ -200,10 +200,20 @@ cleanup() ->
 %% API functions
 %% ===================================================================
 
-
+%% get_db_structure/0
+%% ====================================================================
+%% @doc Getter for currently used database structure.
+-spec get_db_structure() -> [DBs :: #db_info{}].
+%% ====================================================================
 get_db_structure() ->
     ?DATABASE_DESIGN_STRUCTURE.
 
+
+%% get_db_structure/0
+%% ====================================================================
+%% @doc Getter for currently used view declarations.
+-spec get_db_structure() -> [Views :: #view_info{}].
+%% ====================================================================
 get_all_views() ->
     ?VIEW_LIST.
 

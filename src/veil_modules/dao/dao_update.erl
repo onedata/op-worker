@@ -6,6 +6,9 @@
 %% @end
 %% ===================================================================
 %% @doc: This (static only) module setups/updates database structure.
+%%       This module is preloaded always prior to VeilCluster update,
+%%       therefore getters from this module provide most recent -
+%%       most likely not yet synced with DB - declarations.
 %% @end
 %% ===================================================================
 -module(dao_update).
@@ -21,14 +24,31 @@
 %% API functions
 %% ====================================================================
 
+
+%% get_db_structure/0
+%% ====================================================================
+%% @doc Getter for newest database structure.
+-spec get_db_structure() -> [DBs :: #db_info{}].
+%% ====================================================================
 get_db_structure() ->
     ?DATABASE_DESIGN_STRUCTURE.
 
+
+%% get_db_structure/0
+%% ====================================================================
+%% @doc Getter for newest view declarations.
+-spec get_db_structure() -> [Views :: #view_info{}].
+%% ====================================================================
 get_all_views() ->
     ?VIEW_LIST.
 
 
-update_view(#view_info{name = ViewName, version = ViewVersion, db_name = DbName} = View) ->
+%% update_view/1
+%% ====================================================================
+%% @doc Refreshes view's index. May take very long time!
+-spec update_view(View :: #view_info{}) -> [Views :: #view_info{}].
+%% ====================================================================
+update_view(#view_info{name = ViewName, version = ViewVersion, db_name = DbName} = _View) ->
     case dao_helper:query_view(DbName, dao_utils:get_versioned_view_name(ViewName, ViewVersion), dao_utils:get_versioned_view_name(ViewName, ViewVersion), #view_query_args{view_type = reduce}) of
         {ok, _} -> ok;
         {error, _} ->
@@ -40,15 +60,33 @@ update_view(#view_info{name = ViewName, version = ViewVersion, db_name = DbName}
     end.
 
 
+%% pre_update/1
+%% ====================================================================
+%% @doc Custom per-node DAO update step implementation. This function will be called just before DAO upgrade.
+%%      Non-OK return will abort whole upgrade procedure.
+-spec pre_update(Version :: {version, Major :: integer(), Minor :: integer(), Patch :: integer()}) -> ok | {ok, Data} | {error, Reason}.
+%% ====================================================================
 pre_update(_Version) ->
     ok.
 
+
+%% pre_reload_modules/1
+%% ====================================================================
+%% @doc This function shall return list of modules that have to be reloaded prior to DAO upgrade.
+%%      Note that DAO upgrade takes place before node-wide code reload, so listed modules have to be compatible with not-listed
+%%      modules from old release.
+-spec pre_reload_modules(Version :: {version, Major :: integer(), Minor :: integer(), Patch :: integer()}) -> [atom()].
+%% ====================================================================
 pre_reload_modules(_Version) ->
-    [dao_utils, dao].
+    [dao_utils].
 
 
+%% remove_outdated_views/0
+%% ====================================================================
+%% @doc Removes old views from DB.
+-spec remove_outdated_views() -> ok.
+%% ====================================================================
 remove_outdated_views() ->
-    lager:info("All views1: ~p", [get_all_views()]),
     lists:foreach(
         fun(#view_info{db_name = DB, version = Vsn, name = ViewName}) ->
             [dao_helper:delete_doc(DB, ?DESIGN_DOC_PREFIX ++ dao_utils:get_versioned_view_name(ViewName, OldVsn)) || OldVsn <- lists:seq(0, Vsn - 1)]
@@ -56,24 +94,26 @@ remove_outdated_views() ->
     ok.
 
 
+%% remove_broken_views/0
+%% ====================================================================
+%% @doc Removes broken (without map function) views from DB.
+-spec remove_broken_views() -> ok.
+%% ====================================================================
 remove_broken_views() ->
     Designs = [{DbName, dao_utils:get_versioned_view_name(VName, Vsn)} || #view_info{db_name = DbName, name = VName, version = Vsn} <- get_all_views()],
     Designs1 = lists:usort(Designs),
     lists:foreach(
         fun({DB, Design}) ->
-            lager:info("DB ~p, Design ~p", [DB, Design]),
             case dao_helper:open_design_doc(DB, Design) of
                 {ok, #doc{body = Body} = Doc} ->
                     ViewsField = dao_json:get_field(Body, "views"),
                     Views = dao_json:get_fields(ViewsField),
-                    lager:info("Views: ~p", [Views]),
                     EmptyString = fun(Str) when is_binary(Str) -> binary_to_list(Str); %% Helper function converting non-string value to empty string
                         (_) -> "" end,
                     ToDel =
                         lists:map(
                             fun({ViewName, View}) ->
                                 MapFun = EmptyString(dao_json:get_field(View, "map")),
-                                lager:info("View ~p Map: ~p", [ViewName, MapFun]),
                                 case MapFun of
                                     "" ->
                                         ViewName;
@@ -90,6 +130,7 @@ remove_broken_views() ->
             end
         end, Designs1),
     ok.
+
 
 %% setup_views/1
 %% ====================================================================
