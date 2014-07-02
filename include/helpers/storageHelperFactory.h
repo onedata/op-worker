@@ -53,9 +53,10 @@ namespace utils {
  */
 class StorageHelperFactory {
 public:
+    StorageHelperFactory() = default;
     StorageHelperFactory(std::shared_ptr<SimpleConnectionPool> connectionPool,
                          const BufferLimits &limits);
-    virtual ~StorageHelperFactory();
+    virtual ~StorageHelperFactory() = default;
 
     /**
      * Produces storage helper object.
@@ -64,7 +65,7 @@ public:
      * @return Pointer to storage helper object along with its ownership.
      */
     virtual std::shared_ptr<IStorageHelper> getStorageHelper(const std::string &sh,
-                                                               const IStorageHelper::ArgsMap &args);
+                                                             const IStorageHelper::ArgsMap &args);
 
 private:
     const std::shared_ptr<SimpleConnectionPool> m_connectionPool;

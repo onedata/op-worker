@@ -41,10 +41,6 @@ StorageHelperFactory::StorageHelperFactory(std::shared_ptr<SimpleConnectionPool>
 {
 }
 
-StorageHelperFactory::~StorageHelperFactory()
-{
-}
-
 std::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(const std::string &sh_name,
                                                                        const IStorageHelper::ArgsMap &args) {
     if(sh_name == "DirectIO")
