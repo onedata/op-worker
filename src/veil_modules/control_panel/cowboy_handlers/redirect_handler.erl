@@ -31,8 +31,12 @@ init(_Type, Req, _Opts) ->
 -spec handle(term(), term()) -> {ok, term(), term()}.
 %% ====================================================================
 handle(Req, State) ->
-	{Hostname, _} = cowboy_req:header(<<"host">>, Req),
-    ?dump(Hostname),
+	{FullHostname, _} = cowboy_req:header(<<"host">>, Req),
+    % Remove the leading '.www' if present
+    Hostname = case FullHostname of
+                   <<"www.", Rest/binary>> -> Rest;
+                   _ -> FullHostname
+               end,
 	{Path, _} = cowboy_req:path(Req),
 	{ok, Req2} = cowboy_req:reply(301, 
 		[

@@ -63,7 +63,12 @@ init(_Args) ->
 
     % Setup GUI dispatch opts for cowboy
     GUIDispatch = [
-        {"www.*", [{'_', redirect_handler, []}]},
+        % Matching requests will be redirected to the same address without leading 'www.'
+        % Cowboy does not have a mechanism to match every hostname starting with 'www.'
+        % This will match hostnames with up to 6 segments
+        % e. g. www.seg2.seg3.seg4.seg5.com
+        {"www.:_[.:_[.:_[.:_[.:_]]]]", [{'_', redirect_handler, []}]},
+        % Proper requests are routed to handler modules
         {'_', static_dispatches(atom_to_list(DocRoot), ?static_paths) ++ [
             {"/nagios/[...]", nagios_handler, []},
             {?user_content_download_path ++ "/:path", file_download_handler, [{type, ?user_content_request_type}]},
