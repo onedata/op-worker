@@ -42,7 +42,7 @@ body() ->
             #panel{id = <<"dn_error_panel">>, style = <<"display: none;">>,
                 class = <<"dialog dialog-danger">>, body = [
                     #p{body = <<"You have no registered certificates. You can use the web application, but you ",
-                    "will not be able to use VeilClient. To register a certificate, do one of the following">>},
+                    "will not be able to use VeilClient. To register a certificate, do one of the following:">>},
                     #panel{style = <<"margin-left: auto; margin-right: auto; text-align: left; display: inline-block;">>, body = [
                         #list{body = [
                             #li{style = <<"padding: 10px 0 0;">>,
@@ -91,7 +91,7 @@ maybe_display_helper_message() ->
     end.
 
 
-% Snippet generating account managment table
+% Snippet generating account management table
 main_table() ->
     {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
     maybe_display_dn_message(UserDoc),
