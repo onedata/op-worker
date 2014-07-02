@@ -38,11 +38,13 @@
 -spec get_user_dn() -> string().
 %% ====================================================================
 get_user_dn() ->
-    {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
-    try user_logic:get_dn_list(UserDoc) of
-        [] -> undefined;
-        L when is_list(L) -> lists:nth(1, L);
-        _ -> undefined
+    try
+        {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
+        case user_logic:get_dn_list(UserDoc) of
+            [] -> undefined;
+            L when is_list(L) -> lists:nth(1, L);
+            _ -> undefined
+        end
     catch _:_ ->
         undefined
     end.
