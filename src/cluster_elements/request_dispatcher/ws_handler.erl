@@ -143,7 +143,7 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
                             {ok, UserDoc2} = user_logic:update_unverified_dn_list(UserDoc, user_logic:get_unverified_dn_list(UserDoc) -- [DnString]),
                             case Result of
                                 false ->
-                                    ?alert("User ~p denied having added a certificate with DN: ~p", [Login, DnString]),
+                                    ?alert("Private key owner denied having added a certificate with DN: ~p (added by ~p)", [DnString, Login]),
                                     throw({cert_denied_by_user, MsgId});
                                 true ->
                                     {ok, _} = user_logic:update_dn_list(UserDoc2, user_logic:get_dn_list(UserDoc2) ++ [DnString]),
