@@ -13,7 +13,6 @@
 -module(gui_and_nagios_test_SUITE).
 -include("nodes_manager.hrl").
 -include("registered_names.hrl").
--include("veil_modules/control_panel/connection_check_values.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 
 %% export for ct
@@ -42,7 +41,6 @@ main_test(Config) ->
 
 	%tests
 	connection_test(),
-    connection_check_test(),
 	nagios_test(),
 
 	%cleanup
