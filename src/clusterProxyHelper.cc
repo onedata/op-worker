@@ -51,7 +51,7 @@ string ClusterProxyHelper::requestMessage(string inputType, string answerType, s
     clm.set_answer_type(utils::tolower(answerType));
     clm.set_answer_decoder_name(RFM_DECODER);
 
-    Answer answer = sendCluserMessage(clm, timeout);
+    Answer answer = sendClusterMessage(clm, timeout);
 
     return answer.worker_answer();
 }
@@ -62,7 +62,7 @@ string ClusterProxyHelper::requestAtom(string inputType, string inputData) {
     clm.set_answer_type(utils::tolower(Atom::descriptor()->name()));
     clm.set_answer_decoder_name(COMMUNICATION_PROTOCOL_DECODER);
 
-    Answer answer = sendCluserMessage(clm);
+    Answer answer = sendClusterMessage(clm);
 
     Atom atom;
     if(answer.has_worker_answer()) {
@@ -73,7 +73,7 @@ string ClusterProxyHelper::requestAtom(string inputType, string inputData) {
     return "";
 }
 
-Answer ClusterProxyHelper::sendCluserMessage(ClusterMsg &msg, uint32_t timeout) {
+Answer ClusterProxyHelper::sendClusterMessage(ClusterMsg &msg, uint32_t timeout) {
     auto connection = m_connectionPool->selectConnection(SimpleConnectionPool::DATA_POOL);
     if(!connection)
     {

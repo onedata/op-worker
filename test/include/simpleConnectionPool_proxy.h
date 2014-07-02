@@ -5,32 +5,33 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
+#ifndef SIMPLE_CONNECTION_POOL_PROXY_H
+#define SIMPLE_CONNECTION_POOL_PROXY_H
+
+
 #include "simpleConnectionPool.h"
 
-using namespace veil;
+#include "communicationHandler_mock.h"
 
-class ProxySimpleConnectionPool :
-    public SimpleConnectionPool
+class ProxySimpleConnectionPool: public veil::SimpleConnectionPool
 {
 public:
-    ProxySimpleConnectionPool(std::string hostname, int port, cert_info_fun getCertInfo) :
-        SimpleConnectionPool(hostname, port, getCertInfo)
+    ProxySimpleConnectionPool(std::string hostname, int port, veil::cert_info_fun getCertInfo) :
+        SimpleConnectionPool{hostname, port, getCertInfo}
     {
     }
 
-    ~ProxySimpleConnectionPool() {}
-
-    std::shared_ptr<CommunicationHandler> newConnection(SimpleConnectionPool::PoolType type) override
+    std::shared_ptr<veil::CommunicationHandler> newConnection(SimpleConnectionPool::PoolType type) override
     {
-        std::shared_ptr<CommunicationHandler> conn = std::shared_ptr<CommunicationHandler>(new MockCommunicationHandler());
-        m_connectionPools[type].connections.push_front(make_pair(conn, time(NULL) + 20000));
+        auto conn = std::make_shared<MockCommunicationHandler>();
+        m_connectionPools[type].connections.emplace_front(conn, time(NULL) + 20000);
 
         return conn;
     }
 
-    void addConnection(SimpleConnectionPool::PoolType type, std::shared_ptr<CommunicationHandler> conn)
+    void addConnection(SimpleConnectionPool::PoolType type, std::shared_ptr<veil::CommunicationHandler> conn)
     {
-        m_connectionPools[type].connections.push_back(pair<std::shared_ptr<CommunicationHandler>, time_t>(conn, time(NULL) + 20000));
+        m_connectionPools[type].connections.emplace_back(conn, time(NULL) + 20000);
     }
 
     std::list<std::string> dnsQuery(const std::string &hostname) override
@@ -40,3 +41,6 @@ public:
         return ret;
     }
 };
+
+
+#endif // SIMPLE_CONNECTION_POOL_PROXY_H

@@ -5,33 +5,30 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#include "testCommonH.h"
-#include "connectionPool_mock.h"
 #include "communicationHandler_mock.h"
+#include "connectionPool_mock.h"
 #include "simpleConnectionPool_proxy.h"
 
-INIT_AND_RUN_ALL_TESTS(); // TEST RUNNER !
+#include <gtest/gtest.h>
 
-// TEST definitions below
+using namespace ::testing;
+using namespace veil;
 
-class SimpleConnectionPoolTest
-    : public ::testing::Test {
-
+class SimpleConnectionPoolTest: public ::testing::Test
+{
 protected:
     MockConnectionPool mockPool;
     std::shared_ptr<ProxySimpleConnectionPool> proxy;
 
-    virtual void SetUp() {
-        proxy.reset(new ProxySimpleConnectionPool("host", 5555, std::bind(&SimpleConnectionPoolTest::getCertInfo, this)));
+    void SetUp() override
+    {
+        proxy = std::make_shared<ProxySimpleConnectionPool>("host", 5555, std::bind(&SimpleConnectionPoolTest::getCertInfo, this));
     }
 
-    virtual void TearDown() {
+    CertificateInfo getCertInfo()
+    {
+        return {"certFile", "certFile"};
     }
-
-    CertificateInfo getCertInfo() {
-        return CertificateInfo("certFile", "certFile");
-    }
-
 };
 
 // Test selectConnection method

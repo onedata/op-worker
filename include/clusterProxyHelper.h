@@ -94,13 +94,13 @@ class ClusterProxyHelper : public IStorageHelper {
         std::string       m_clusterHostname;
         BufferAgent       m_bufferAgent;
 
-        protocol::communication_protocol::Answer sendCluserMessage(protocol::communication_protocol::ClusterMsg &msg, uint32_t timeout = 0);      ///< Sends ClusterMsg to cluster and receives Answer. This function handles connection selection and its releasing.
-        protocol::communication_protocol::ClusterMsg commonClusterMsgSetup(std::string inputType, std::string& inputData);   ///< Setups commonly used fields in ClusterMsg for RemoteFileManagement.
-        std::string requestMessage(std::string inputType, std::string answerType, std::string& inputData, uint32_t timeout = 0);                   ///< Creates & sends ClusterMsg with given types and input. Response is an serialized message od type "answerType".
-        std::string requestAtom(std::string inputType, std::string inputData);                                              ///< Same as requestMessage except it always receives Atom. Return value is an strign value of Atom.
+        virtual protocol::communication_protocol::Answer sendClusterMessage(protocol::communication_protocol::ClusterMsg &msg, uint32_t timeout = 0);      ///< Sends ClusterMsg to cluster and receives Answer. This function handles connection selection and its releasing.
+        virtual protocol::communication_protocol::ClusterMsg commonClusterMsgSetup(std::string inputType, std::string& inputData);   ///< Setups commonly used fields in ClusterMsg for RemoteFileManagement.
+        virtual std::string requestMessage(std::string inputType, std::string answerType, std::string& inputData, uint32_t timeout = 0);                   ///< Creates & sends ClusterMsg with given types and input. Response is an serialized message od type "answerType".
+        virtual std::string requestAtom(std::string inputType, std::string inputData);                                              ///< Same as requestMessage except it always receives Atom. Return value is an strign value of Atom.
 
-        int doWrite(const std::string &path, const std::string &buf, size_t, off_t, ffi_type);             ///< Real implementation of write operation.
-        int doRead(const std::string &path, std::string &buf, size_t, off_t, ffi_type);                    ///< Real implementation of read operation.
+        virtual int doWrite(const std::string &path, const std::string &buf, size_t, off_t, ffi_type);             ///< Real implementation of write operation.
+        virtual int doRead(const std::string &path, std::string &buf, size_t, off_t, ffi_type);                    ///< Real implementation of read operation.
 
     private:
         const std::shared_ptr<SimpleConnectionPool> m_connectionPool;

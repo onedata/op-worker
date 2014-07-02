@@ -8,31 +8,38 @@
 #ifndef COMMUNICAION_HANDLER_MOCK_H
 #define COMMUNICAION_HANDLER_MOCK_H
 
+
 #include "communicationHandler.h"
-#include "gmock/gmock.h"
 
-using namespace veil;
-using namespace veil::protocol::communication_protocol;
+#include <gmock/gmock.h>
 
-class MockCommunicationHandler
-    : public CommunicationHandler {
+#include <functional>
+
+class MockCommunicationHandler: public veil::CommunicationHandler
+{
 public:
-    MockCommunicationHandler() : CommunicationHandler("host", 5555, std::bind(&MockCommunicationHandler::getCertInfo, this), false) {};
-    ~MockCommunicationHandler() {};
+    MockCommunicationHandler()
+        : CommunicationHandler{"host", 5555, std::bind(&MockCommunicationHandler::getCertInfo, this), false}
+    {
+    };
 
-    int openConnection() {
+    int openConnection() override
+    {
         return 0;
     }
 
-    // Override
-    void closeConnection() {}
+    void closeConnection() override
+    {
+    }
 
-    MOCK_METHOD3(communicate, Answer(ClusterMsg&, uint8_t, uint32_t));
-    MOCK_METHOD2(sendMessage, int(ClusterMsg&, int32_t));
+    MOCK_METHOD3(communicate, veil::protocol::communication_protocol::Answer(veil::protocol::communication_protocol::ClusterMsg&, uint8_t, uint32_t));
+    MOCK_METHOD2(sendMessage, int(veil::protocol::communication_protocol::ClusterMsg&, int32_t));
 
-    CertificateInfo getCertInfo() {
-        return CertificateInfo("certFile", "certFile");
+    veil::CertificateInfo getCertInfo()
+    {
+        return {"certFile", "certFile"};
     }
 };
+
 
 #endif // COMMUNICAION_HANDLER_MOCK_H
