@@ -273,11 +273,13 @@ update_dn(User, AddOrRemove) ->
                     {ok, DnString} = user_logic:rdn_sequence_to_dn_string(RDNSequence),
                     case user_logic:get_user({dn, DnString}) of
                         {ok, _} ->
-                            gui_jq:wire(#alert{text = <<"This certificate is already registered.">>});
+                            gui_jq:wire(#alert{text = <<"This certificate is already registered. If you did not add it, ",
+                            "please contact the site administrator.">>});
                         _ ->
                             case user_logic:get_user({unverified_dn, DnString}) of
                                 {ok, _} ->
-                                    gui_jq:wire(#alert{text = <<"This certificate is already registered.">>});
+                                    gui_jq:wire(#alert{text = <<"This certificate is already registered. If you did not add it, ",
+                                    "please contact the site administrator.">>});
                                 _ ->
                                     user_logic:update_unverified_dn_list(User, OldUnvDnList ++ [DnString])
                             end
