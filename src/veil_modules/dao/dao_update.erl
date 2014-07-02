@@ -28,11 +28,15 @@ get_all_views() ->
     ?VIEW_LIST.
 
 
-update_view(#view_info{} = View) ->
-    QueryArgs = #view_query_args{limit = 1},
-    case dao:list_records(View, QueryArgs) of
+update_view(#view_info{name = ViewName, version = ViewVersion, db_name = DbName} = View) ->
+    case dao_helper:query_view(DbName, dao_utils:get_versioned_view_name(ViewName, ViewVersion), dao_utils:get_versioned_view_name(ViewName, ViewVersion), #view_query_args{view_type = reduce}) of
         {ok, _} -> ok;
-        {error, Reason} -> {error, Reason}
+        {error, _} ->
+            case dao_helper:query_view(DbName, dao_utils:get_versioned_view_name(ViewName, ViewVersion), dao_utils:get_versioned_view_name(ViewName, ViewVersion), #view_query_args{view_type = map, limit = 1}) of
+                {ok, _} -> ok;
+                {error, Reason} ->
+                    {error, Reason}
+            end
     end.
 
 
@@ -44,6 +48,7 @@ pre_reload_modules(_Version) ->
 
 
 remove_outdated_views() ->
+    lager:info("All views1: ~p", [get_all_views()]),
     lists:foreach(
         fun(#view_info{db_name = DB, version = Vsn, name = ViewName}) ->
             [dao_helper:delete_doc(DB, ?DESIGN_DOC_PREFIX ++ dao_utils:get_versioned_view_name(ViewName, OldVsn)) || OldVsn <- lists:seq(0, Vsn - 1)]

@@ -47,7 +47,7 @@
 %% Views
 -define(FILE_TREE_VIEW, #view_info{name = "file_tree", db_name = ?FILES_DB_NAME, version = 1}).
 -define(WAITING_FILES_TREE_VIEW, #view_info{name = "waiting_files_tree", db_name = ?FILES_DB_NAME, version = 1}).
--define(FILE_SUBDIRS_VIEW, #view_info{name = "file_subdirs", db_name = ?FILES_DB_NAME, version = 1}).
+-define(FILE_SUBDIRS_VIEW, #view_info{name = "file_subdirs", db_name = ?FILES_DB_NAME, version = 5}).
 -define(FD_BY_FILE_VIEW, #view_info{name = "fd_by_name", db_name = ?DESCRIPTORS_DB_NAME, version = 1}).
 -define(FD_BY_EXPIRED_BEFORE_VIEW, #view_info{name = "fd_by_expired_before", db_name = ?DESCRIPTORS_DB_NAME, version = 1}).
 -define(ALL_STORAGE_VIEW, #view_info{name = "all_storage", db_name = ?SYSTEM_DB_NAME, version = 1}).
