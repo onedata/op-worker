@@ -13,6 +13,7 @@
 #include "veilErrors.h"
 
 #include <atomic>
+#include <condition_variable>
 #include <ctime>
 #include <list>
 #include <memory>
