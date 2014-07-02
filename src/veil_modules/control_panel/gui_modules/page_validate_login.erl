@@ -53,7 +53,8 @@ body() ->
                                 {Login, UserDoc} = user_logic:sign_in(Proplist),
                                 gui_ctx:create_session(),
                                 gui_ctx:set_user_id(Login),
-                                gui_ctx:set_user_record(UserDoc),
+                                vcn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),
+                                vcn_gui_utils:set_user_role(user_logic:get_role(UserDoc)),
                                 gui_jq:redirect_from_login()
                         end
                     catch

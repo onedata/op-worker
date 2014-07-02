@@ -151,6 +151,7 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
                                     UID1
                             end;
                         _ ->
+                            ?debug("Handshake request is missing confirmation of certificate with DN: ~p. Denying connection.", [DnString]),
                             throw({cert_confirmation_required, Login, MsgId})
                     end;
                 {error, _} ->

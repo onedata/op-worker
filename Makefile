@@ -14,9 +14,9 @@ compile:
 
 deps:
 	./rebar get-deps
-#	./rebar update-deps
-#	git submodule init
-#	git submodule update
+	./rebar update-deps
+	git submodule init
+	git submodule update
 
 clean:
 	make -C docs clean

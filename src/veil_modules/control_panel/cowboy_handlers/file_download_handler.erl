@@ -128,7 +128,7 @@ handle_user_content_request(Req, Path) ->
             SessHandler = proplists:get_value(session, Context1#context.handlers),
             {ok, St, Context2} = SessHandler:init([], Context1),
             wf_context:context(Context2),
-            UserDoc = gui_ctx:get_user_record(),
+            {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
             true = (UserDoc /= undefined),
             fslogic_context:set_user_dn(lists:nth(1, user_logic:get_dn_list(UserDoc))),
             {St, Context2, SessHandler}
@@ -166,8 +166,9 @@ handle_user_content_request(Req, Path) ->
                             FinalCtx#context.req),
                         {ok, _NewReq} = send_file(Req2, Filepath, filename:basename(Filepath), Size)
                     catch Type:Message ->
+                        {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
                         ?error_stacktrace("Error while sending file ~p to user ~p - ~p:~p",
-                            [Filepath, user_logic:get_login(gui_ctx:get_user_record()), Type, Message]),
+                            [Filepath, user_logic:get_login(UserDoc), Type, Message]),
                         {ok, _FinReq} = cowboy_req:reply(500, Req#http_req{connection = close})
                     end
             end

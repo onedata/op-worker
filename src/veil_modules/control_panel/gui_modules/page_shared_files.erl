@@ -95,7 +95,7 @@ main_panel() ->
 
 % Get list of user's shared files from database
 get_shared_files() ->
-    #veil_document{uuid = UID} = gui_ctx:get_user_record(),
+    {ok, #veil_document{uuid = UID}} = user_logic:get_user({login, gui_ctx:get_user_id()}),
     _ShareList = case logical_files_manager:get_share({user, UID}) of
                      {ok, List} when is_list(List) -> List;
                      {ok, Doc} -> [Doc];
