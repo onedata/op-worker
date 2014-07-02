@@ -206,7 +206,7 @@ delete_file(FullFileName) ->
     {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
     {ok, UserDoc} = fslogic_objects:get_user(),
 
-    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, owner),
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, owner), % todo what we should check here
 
     FileDesc = FileDoc#veil_document.record,
     {ok, ChildrenTmpAns} =
@@ -240,7 +240,7 @@ rename_file(FullFileName, FullNewFileName) ->
     {ok, UserDoc} = fslogic_objects:get_user(),
     {ok, #veil_document{record = #file{} = OldFile} = OldDoc} = fslogic_objects:get_file(FullFileName),
 
-    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, OldDoc, owner),
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, OldDoc, owner), % todo what we should check here
 
     %% Check if destination file exists
     case fslogic_objects:get_file(FullNewFileName) of
@@ -265,7 +265,7 @@ rename_file(FullFileName, FullNewFileName) ->
     OldDir = fslogic_path:strip_path_leaf(FullFileName),
     {ok, OldParentDoc} = fslogic_objects:get_file(OldDir),
 
-    ok = fslogic_perms:check_file_perms(NewDir, UserDoc, NewParentDoc, write),
+    ok = fslogic_perms:check_file_perms(NewDir, UserDoc, NewParentDoc, write), % todo what we should check here
     ok = fslogic_perms:check_file_perms(OldDir, UserDoc, OldParentDoc, write),
 
     MoveOnStorage =
