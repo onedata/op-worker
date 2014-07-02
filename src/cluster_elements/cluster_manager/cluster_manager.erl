@@ -219,7 +219,7 @@ handle_call({update_cluster_rengines, EventType, EventHandlerItem}, _From, State
   UpdateClusterRengine = fun ({Node, Module, Pid}) ->
     case Module of
       cluster_rengine ->
-        ?debug("Update of rengine at node %p initialized by CCM. Params: %p", [Node, {update_cluster_rengine, EventType, EventHandlerItem}]),
+        ?debug("Update of rengine at node ~p initialized by CCM. Params: ~p", [Node, {update_cluster_rengine, EventType, EventHandlerItem}]),
         gen_server:cast(Pid, {asynch, 1, {update_cluster_rengine, EventType, EventHandlerItem}});
       _ -> ok
     end
@@ -304,7 +304,7 @@ handle_test_call(_Request, _From, State) ->
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 handle_cast({node_is_up, Node}, State) ->
-  ?debug("Heartbeat from node: %p", [Node]),
+  ?debug("Heartbeat from node: ~p", [Node]),
   case Node =:= node() of
     true ->
       gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, State#cm_state.state_num, State#cm_state.callbacks_num}),
@@ -316,7 +316,7 @@ handle_cast({node_is_up, Node}, State) ->
           gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, State#cm_state.state_num, State#cm_state.callbacks_num}),
           {noreply, State};
         false ->
-          ?info("New node: %p", [Node]),
+          ?info("New node: ~p", [Node]),
           {Ans, NewState, WorkersFound} = check_node(Node, State),
 
           %% This case checks if node state was analysed correctly.
@@ -644,7 +644,7 @@ init_cluster(State) ->
 
       NewState3 = case length(Jobs) > 0 of
                     true ->
-                      ?info("Initialization of jobs ~p using nodes", [Jobs, Nodes]),
+                      ?info("Initialization of jobs ~p using nodes ~p", [Jobs, Nodes]),
                       NewState = case erlang:length(Nodes) >= erlang:length(Jobs) of
                                    true -> init_cluster_nodes_dominance(State, Nodes, Jobs, [], Args, []);
                                    false -> init_cluster_jobs_dominance(State, Jobs, Args, Nodes, [])
@@ -722,7 +722,7 @@ check_cluster_state(State) ->
                               NonEmptyMaxList -> lists:max(NonEmptyMaxList)
                             end,
 
-                     ?debug("Load %p", [Load]),
+                     ?debug("Load ~p", [Load]),
                      case (MinV > 0) and (((MaxV >= 2 * MinV) and (MaxV >= 1.5 * AvgLoad)) or (MaxV >= 5 * MinV)) of
                        true ->
                          [{MaxNode, MaxNodeModulesLoads} | _] = [{Node, ModulesLoads} || {Node, NodeLoad, ModulesLoads} <- Load, NodeLoad == MaxV],

@@ -292,7 +292,7 @@ get_request_map_fun() ->
       non
   end.
 
-get_disp_map_fun(ProtocolVersion) ->
+get_disp_map_fun(_ProtocolVersion) ->
   fun({final_stage_tree, TreeId, Event}) ->
     EventHandlerFromEts = ets:lookup(?EVENT_HANDLERS_CACHE, TreeId),
     case EventHandlerFromEts of

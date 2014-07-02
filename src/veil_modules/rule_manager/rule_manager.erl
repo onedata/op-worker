@@ -225,7 +225,7 @@ register_default_rules(WriteBytesThreshold, IOBytesThreshold) ->
 %% Test functions
 %% ====================================================================
 
-on_complete(Message, SuccessFuseIds, FailFuseIds) ->
+on_complete(_Message, SuccessFuseIds, FailFuseIds) ->
   ?info("oncomplete called"),
   case FailFuseIds of
     [] -> ?info("------- ack success --------");
