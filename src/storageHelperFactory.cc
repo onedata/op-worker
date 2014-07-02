@@ -45,12 +45,17 @@ StorageHelperFactory::StorageHelperFactory(boost::shared_ptr<SimpleConnectionPoo
 {
 }
 
+<<<<<<< HEAD
 StorageHelperFactory::~StorageHelperFactory()
 {
 }
 
 boost::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(const string &sh_name,
                                                                          const IStorageHelper::ArgsMap &args) {
+=======
+std::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(const std::string &sh_name,
+                                                                       const IStorageHelper::ArgsMap &args) {
+>>>>>>> e38819b... VFS-711 Add default constructor for StorageHelperFactory.
     if(sh_name == "DirectIO")
         return boost::shared_ptr<IStorageHelper>(new DirectIOHelper(args));
     else if(sh_name == "ClusterProxy")

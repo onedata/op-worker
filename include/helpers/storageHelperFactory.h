@@ -73,9 +73,10 @@ namespace utils {
  */
 class StorageHelperFactory {
 public:
+    StorageHelperFactory() = default;
     StorageHelperFactory(boost::shared_ptr<SimpleConnectionPool> connectionPool,
                          const BufferLimits &limits);
-    virtual ~StorageHelperFactory();
+    virtual ~StorageHelperFactory() = default;
 
     /**
      * Produces storage helper object.
