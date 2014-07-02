@@ -95,6 +95,7 @@ handle(_ProtocolVersion, {dispatch_log, Message, Timestamp, Severity, Metadata})
     dispatch_log(Message, Timestamp, Severity, Metadata);
 
 handle(_ProtocolVersion, _Request) ->
+    ?dump(_Request),
     wrong_request.
 
 %% cleanup/0

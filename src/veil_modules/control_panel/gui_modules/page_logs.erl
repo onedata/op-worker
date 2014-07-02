@@ -22,14 +22,19 @@
 % Record used to store user preferences. One instance is kept in comet process, another one
 % is remembered in page state for filter options to be persistent
 -record(page_state, {
+    source = cluster,
     loglevel = debug,
     auto_scroll = true,
     first_log = 1,
     max_logs = 200,
-    message_filter = undefined,
-    node_filter = undefined,
-    module_filter = undefined,
-    function_filter = undefined
+    cluster_message_filter = undefined,
+    cluster_node_filter = undefined,
+    cluster_module_filter = undefined,
+    cluster_function_filter = undefined,
+    client_message_filter = undefined,
+    client_dn_filter = undefined,
+    client_fuse_group_filter = undefined,
+    client_function_filter = undefined
 }).
 
 % Widths of columns
@@ -542,50 +547,69 @@ event(generate_logs) ->
 
 % =====================
 % Define types of filters and elements connected to them
-get_filter_types() -> [message_filter, node_filter, module_filter, function_filter].
+get_filter_types() -> [cluster_message_filter, cluster_node_filter, cluster_module_filter, cluster_function_filter,
+    client_message_filter, client_dn_filter, client_fuse_group_filter, client_function_filter].
 
-set_filter(PageState, message_filter, Filter) -> PageState#page_state{message_filter = Filter};
-set_filter(PageState, node_filter, Filter) -> PageState#page_state{node_filter = Filter};
-set_filter(PageState, module_filter, Filter) -> PageState#page_state{module_filter = Filter};
-set_filter(PageState, function_filter, Filter) -> PageState#page_state{function_filter = Filter}.
+set_filter(PageState, cluster_message_filter, Filter) -> PageState#page_state{cluster_message_filter = Filter};
+set_filter(PageState, cluster_node_filter, Filter) -> PageState#page_state{cluster_node_filter = Filter};
+set_filter(PageState, cluster_module_filter, Filter) -> PageState#page_state{cluster_module_filter = Filter};
+set_filter(PageState, cluster_function_filter, Filter) -> PageState#page_state{cluster_function_filter = Filter};
+set_filter(PageState, client_message_filter, Filter) -> PageState#page_state{client_message_filter = Filter};
+set_filter(PageState, client_dn_filter, Filter) -> PageState#page_state{client_dn_filter = Filter};
+set_filter(PageState, client_fuse_group_filter, Filter) -> PageState#page_state{client_fuse_group_filter = Filter};
+set_filter(PageState, client_function_filter, Filter) -> PageState#page_state{client_function_filter = Filter}.
 
-get_filter(#page_state{message_filter = Filter}, message_filter) -> Filter;
-get_filter(#page_state{node_filter = Filter}, node_filter) -> Filter;
-get_filter(#page_state{module_filter = Filter}, module_filter) -> Filter;
-get_filter(#page_state{function_filter = Filter}, function_filter) -> Filter.
+get_filter(#page_state{cluster_message_filter = Filter}, cluster_message_filter) -> Filter;
+get_filter(#page_state{cluster_node_filter = Filter}, cluster_node_filter) -> Filter;
+get_filter(#page_state{cluster_module_filter = Filter}, cluster_module_filter) -> Filter;
+get_filter(#page_state{cluster_function_filter = Filter}, cluster_function_filter) -> Filter;
+get_filter(#page_state{client_message_filter = Filter}, client_message_filter) -> Filter;
+get_filter(#page_state{client_dn_filter = Filter}, client_dn_filter) -> Filter;
+get_filter(#page_state{client_fuse_group_filter = Filter}, client_fuse_group_filter) -> Filter;
+get_filter(#page_state{client_function_filter = Filter}, client_function_filter) -> Filter.
 
-get_filter_name(message_filter) -> <<"Toggle message filter">>;
-get_filter_name(node_filter) -> <<"Toggle node filter">>;
-get_filter_name(module_filter) -> <<"Toggle module filter">>;
-get_filter_name(function_filter) -> <<"Toggle function filter">>.
+get_filter_name(cluster_message_filter) -> <<"Toggle message filter">>;
+get_filter_name(cluster_node_filter) -> <<"Toggle node filter">>;
+get_filter_name(cluster_module_filter) -> <<"Toggle module filter">>;
+get_filter_name(cluster_function_filter) -> <<"Toggle function filter">>;
+get_filter_name(client_message_filter) -> <<"Toggle message filter">>;
+get_filter_name(client_dn_filter) -> <<"Toggle DN filter">>;
+get_filter_name(client_fuse_group_filter) -> <<"Toggle fuse group filter">>;
+get_filter_name(client_function_filter) -> <<"Toggle function filter">>;
 
-get_filter_placeholder(message_filter) -> <<"Message contains">>;
-get_filter_placeholder(node_filter) -> <<"Node contains">>;
-get_filter_placeholder(module_filter) -> <<"Module contains">>;
-get_filter_placeholder(function_filter) -> <<"Function contains">>.
+get_filter_placeholder(cluster_message_filter) -> <<"Message contains">>;
+get_filter_placeholder(cluster_node_filter) -> <<"Node contains">>;
+get_filter_placeholder(cluster_module_filter) -> <<"Module contains">>;
+get_filter_placeholder(cluster_function_filter) -> <<"Function contains">>;
+get_filter_placeholder(client_message_filter) -> <<"Message contains">>;
+get_filter_placeholder(client_dn_filter) -> <<"DN contains">>;
+get_filter_placeholder(client_fuse_group_filter) -> <<"Fuse group contains">>;
+get_filter_placeholder(client_function_filter) -> <<"Function contains">>;
 
-get_filter_label(message_filter) -> <<"message_filter_label">>;
-get_filter_label(node_filter) -> <<"node_filter_label">>;
-get_filter_label(module_filter) -> <<"module_filter_label">>;
-get_filter_label(function_filter) -> <<"function_filter_label">>.
+get_filter_none(cluster_message_filter) -> <<"cluster_message_filter_none">>;
+get_filter_none(cluster_node_filter) -> <<"cluster_node_filter_none">>;
+get_filter_none(cluster_module_filter) -> <<"cluster_module_filter_none">>;
+get_filter_none(cluster_function_filter) -> <<"cluster_function_filter_none">>;
+get_filter_none(client_message_filter) -> <<"client_message_filter_none">>;
+get_filter_none(client_dn_filter) -> <<"client_dn_filter_none">>;
+get_filter_none(client_fuse_group_filter) -> <<"client_fuse_group_filter_none">>;
+get_filter_none(client_function_filter) -> <<"client_function_filter_none">>;
 
-get_filter_none(message_filter) -> <<"message_filter_none">>;
-get_filter_none(node_filter) -> <<"node_filter_none">>;
-get_filter_none(module_filter) -> <<"module_filter_none">>;
-get_filter_none(function_filter) -> <<"function_filter_none">>.
+get_filter_panel(cluster_message_filter) -> <<"cluster_message_filter_panel">>;
+get_filter_panel(cluster_node_filter) -> <<"cluster_node_filter_panel">>;
+get_filter_panel(cluster_module_filter) -> <<"cluster_module_filter_panel">>;
+get_filter_panel(cluster_function_filter) -> <<"cluster_function_filter_panel">>;
+get_filter_panel(client_message_filter) -> <<"client_message_filter_panel">>;
+get_filter_panel(client_dn_filter) -> <<"client_dn_filter_panel">>;
+get_filter_panel(client_fuse_group_filter) -> <<"client_fuse_group_filter_panel">>;
+get_filter_panel(client_function_filter) -> <<"client_function_filter_panel">>;
 
-get_filter_panel(message_filter) -> <<"message_filter_panel">>;
-get_filter_panel(node_filter) -> <<"node_filter_panel">>;
-get_filter_panel(module_filter) -> <<"module_filter_panel">>;
-get_filter_panel(function_filter) -> <<"function_filter_panel">>.
-
-get_filter_textbox(message_filter) -> <<"message_filter_textbox">>;
-get_filter_textbox(node_filter) -> <<"node_filter_textbox">>;
-get_filter_textbox(module_filter) -> <<"module_filter_textbox">>;
-get_filter_textbox(function_filter) -> <<"function_filter_textbox">>.
-
-get_filter_submit_button(message_filter) -> <<"message_filter_button">>;
-get_filter_submit_button(node_filter) -> <<"node_filter_button">>;
-get_filter_submit_button(module_filter) -> <<"module_filter_button">>;
-get_filter_submit_button(function_filter) -> <<"function_filter_button">>.
+get_filter_textbox(cluster_message_filter) -> <<"cluster_message_filter_textbox">>;
+get_filter_textbox(cluster_node_filter) -> <<"cluster_node_filter_textbox">>;
+get_filter_textbox(cluster_module_filter) -> <<"cluster_module_filter_textbox">>;
+get_filter_textbox(cluster_function_filter) -> <<"cluster_function_filter_textbox">>;
+get_filter_textbox(client_message_filter) -> <<"client_message_filter_textbox">>;
+get_filter_textbox(client_dn_filter) -> <<"client_dn_filter_textbox">>;
+get_filter_textbox(client_fuse_group_filter) -> <<"client_fuse_group_filter_textbox">>;
+get_filter_textbox(client_function_filter) -> <<"client_function_filter_textbox">>;
 
