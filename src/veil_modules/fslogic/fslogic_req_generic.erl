@@ -122,12 +122,17 @@ change_file_perms(FullFileName, Perms) ->
     {ok, UserDoc} = fslogic_objects:get_user(),
     {ok, #veil_document{record = #file{} = File} = FileDoc} = fslogic_objects:get_file(FullFileName),
 
-    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc),
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, owner),
 
     NewFile = fslogic_meta:update_meta_attr(File, ctime, vcn_utils:time()),
     NewFile1 = FileDoc#veil_document{record = NewFile#file{perms = Perms}},
 
     {ok, _} = fslogic_objects:save_file(NewFile1),
+
+    {ok, #veil_document{record = #file{location = #file_location{storage_id = StorageId, file_id = FileId}}}} = fslogic_objects:get_file(FullFileName),
+    {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, StorageId}),
+    {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileId),
+    storage_files_manager:chmod(SH, File_id, Perms),
 
     #atom{value = ?VOK}.
 
@@ -201,7 +206,7 @@ delete_file(FullFileName) ->
     {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
     {ok, UserDoc} = fslogic_objects:get_user(),
 
-    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc),
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, owner),
 
     FileDesc = FileDoc#veil_document.record,
     {ok, ChildrenTmpAns} =
@@ -235,7 +240,7 @@ rename_file(FullFileName, FullNewFileName) ->
     {ok, UserDoc} = fslogic_objects:get_user(),
     {ok, #veil_document{record = #file{} = OldFile} = OldDoc} = fslogic_objects:get_file(FullFileName),
 
-    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, OldDoc),
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, OldDoc, owner),
 
     %% Check if destination file exists
     case fslogic_objects:get_file(FullNewFileName) of

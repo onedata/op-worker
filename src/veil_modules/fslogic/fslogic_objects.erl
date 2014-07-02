@@ -197,7 +197,11 @@ save_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
                             save_new_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity);
                         1 ->
                             [VeilDoc | _] = TmpAns,
-                            save_file_descriptor(ProtocolVersion, VeilDoc, Validity);
+                            case save_file_descriptor(ProtocolVersion, VeilDoc, Validity) of
+                                {ok,Uid} -> {ok,Uid};
+                                {error, {save_file_descriptor, {conflict,Doc}}} -> {ok,Doc};
+                                Other -> Other
+                            end;
                         _Many ->
                             lager:error([{mod, ?MODULE}], "Error: to many file descriptors for file uuid: ~p", [Uuid]),
                             {error, "Error: too many file descriptors"}

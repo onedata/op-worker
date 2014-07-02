@@ -85,6 +85,11 @@
 -define(DIR_TYPE_PROT, "DIR").
 -define(LNK_TYPE_PROT, "LNK").
 
+% File open modes (open flags)
+-define(UNSPECIFIED_MODE,"none").
+-define(READ_MODE,"read").
+-define(WRITE_MODE,"write").
+-define(RDWR_MODE,"rdwr").
 
 %% Storage test file prefix for testing client;s storage availability
 -define(STORAGE_TEST_FILE_PREFIX, "storage_test_").
