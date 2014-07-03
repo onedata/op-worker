@@ -124,7 +124,7 @@ signing_in_test_() ->
                         name = "New User",
                         teams = ["New team(team desc)", "Another team(another desc)"],
                         email_list = ["new@email.com"],
-                        dn_list = ["O=new-dn"],
+                        dn_list = ["new_user", "O=new-dn"],
                         quota_doc = "quota_uuid"
                     },
                     % #veil_document encapsulating user record
@@ -170,7 +170,7 @@ signing_in_test_() ->
                         name = "Existing User",
                         teams = ["Existing team"],
                         email_list = ["existing@email.com"],
-                        dn_list = ["O=existing-dn"]
+                        dn_list = ["existing_user", "O=existing-dn"]
                     }},
                     % Possible info gathered from OpenID provider
                     ExistingUserInfoProplist =
@@ -187,7 +187,7 @@ signing_in_test_() ->
                         name = "Existing User",
                         teams = ["Updated team"],
                         email_list = ["existing@email.com"],
-                        dn_list = ["O=existing-dn"]
+                        dn_list = ["existing_user", "O=existing-dn"]
                     }},
                     % User record after updating emails
                     UserWithUpdatedEmailList = #veil_document{record = #user{
@@ -195,7 +195,7 @@ signing_in_test_() ->
                         name = "Existing User",
                         teams = ["Updated team"],
                         email_list = ["existing@email.com", "some.other@email.com"],
-                        dn_list = ["O=existing-dn"]
+                        dn_list = ["existing_user", "O=existing-dn"]
                     }},
                     % How should user end up after synchronization
                     SynchronizedUser = #veil_document{record = #user{
@@ -203,7 +203,7 @@ signing_in_test_() ->
                         name = "Existing User",
                         teams = ["Updated team"],
                         email_list = ["existing@email.com", "some.other@email.com"],
-                        dn_list = ["O=existing-dn", "O=new-dn"]
+                        dn_list = ["existing_user", "O=existing-dn", "O=new-dn"]
                     }},
 
                     % These uuids should be the same, but this way we can simulate DB updates of the record

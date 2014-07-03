@@ -17,6 +17,9 @@
 % Functions connected with user's session
 -export([get_user_dn/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0, can_view_monitoring/0]).
 
+% Saving and retrieving information that does not change during one session
+-export([set_user_fullname/1, get_user_fullname/0, set_user_role/1, get_user_role/0]).
+
 % Functions to check for user's session
 -export([apply_or_redirect/3, apply_or_redirect/4, maybe_redirect/4]).
 
@@ -35,13 +38,56 @@
 -spec get_user_dn() -> string().
 %% ====================================================================
 get_user_dn() ->
-    try user_logic:get_dn_list(gui_ctx:get_user_record()) of
-        [] -> undefined;
-        L when is_list(L) -> lists:nth(1, L);
-        _ -> undefined
+    try
+        {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
+        case user_logic:get_dn_list(UserDoc) of
+            [] -> undefined;
+            L when is_list(L) -> lists:nth(1, L);
+            _ -> undefined
+        end
     catch _:_ ->
         undefined
     end.
+
+
+%% set_user_fullname/1
+%% ====================================================================
+%% @doc Returns user's full name retrieved from his session state.
+%% @end
+-spec set_user_fullname(Fullname :: string()) -> string().
+%% ====================================================================
+set_user_fullname(Fullname) ->
+    wf:session(fullname, Fullname).
+
+
+%% get_user_fullname/0
+%% ====================================================================
+%% @doc Returns user's full name retrieved from his session state.
+%% @end
+-spec get_user_fullname() -> string().
+%% ====================================================================
+get_user_fullname() ->
+    wf:session(fullname).
+
+
+%% set_user_role/1
+%% ====================================================================
+%% @doc Returns user's role retrieved from his session state.
+%% @end
+-spec set_user_role(Role :: atom()) -> atom().
+%% ====================================================================
+set_user_role(Role) ->
+    wf:session(role, Role).
+
+
+%% get_user_role/0
+%% ====================================================================
+%% @doc Returns user's role retrieved from his session state.
+%% @end
+-spec get_user_role() -> atom().
+%% ====================================================================
+get_user_role() ->
+    wf:session(role).
 
 
 %% storage_defined/0
@@ -75,7 +121,7 @@ dn_and_storage_defined() ->
 -spec can_view_logs() -> boolean().
 %% ====================================================================
 can_view_logs() ->
-    user_logic:get_role(gui_ctx:get_user_record()) /= user.
+    get_user_role() /= user.
 
 
 %% can_view_monitoring/0
@@ -85,7 +131,7 @@ can_view_logs() ->
 -spec can_view_monitoring() -> boolean().
 %% ====================================================================
 can_view_monitoring() ->
-    user_logic:get_role(gui_ctx:get_user_record()) /= user.
+    get_user_role() /= user.
 
 
 %% maybe_redirect/4
@@ -208,7 +254,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
     MenuIcons =
         [
             {manage_account_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Manage account">>,
-                url = <<"/manage_account">>, body = [user_logic:get_name(gui_ctx:get_user_record()), #span{class = <<"fui-user">>,
+                url = <<"/manage_account">>, body = [gui_str:to_binary(get_user_fullname()), #span{class = <<"fui-user">>,
                     style = <<"margin-left: 10px;">>}]}}},
             %{contact_support_tab, #li { body=#link{ style="padding: 18px;", title="Contact & Support",
             %    url="/contact_support", body=#span{ class="fui-question" } } } },

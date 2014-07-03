@@ -25,4 +25,3 @@
 -include_lib("dao/include/couch_db.hrl").
 
 -endif.
-
