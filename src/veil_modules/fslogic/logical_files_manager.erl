@@ -659,7 +659,7 @@ get_file_user_dependent_name_by_uuid(UUID) ->
   case get_file_full_name_by_uuid(UUID) of
     {ok, FullPath} ->
       case fslogic_context:get_user_dn() of
-        undefined -> 
+        undefined ->
           {ok, FullPath};
         UserDN ->
           case dao_lib:apply(dao_users, get_user, [{dn, UserDN}], 1) of
@@ -673,7 +673,7 @@ get_file_user_dependent_name_by_uuid(UUID) ->
     {ErrorGeneral, ErrorDetail} ->
       {ErrorGeneral, ErrorDetail}
   end.
-  
+
 %% get_file_name_by_uuid/1
 %% ====================================================================
 %% @doc Gets file name on the basis of uuid.
@@ -1074,14 +1074,9 @@ get_mode(FileName) ->
 %% @end
 -spec check_utf(FileName :: string()) -> string().
 %% ====================================================================
-% TODO delete format change when GUI will use N20
+% TODO delete format change when GUI accepts unicode (VFS-714)
 check_utf(FileName) when is_list(FileName) ->
-%%   case io_lib:printable_unicode_list(FileName) of
-%%     true ->
-%%       FileName;
-%%     false ->
-      unicode:characters_to_list(list_to_binary(FileName)).
-%%   end;
+  unicode:characters_to_list(list_to_binary(FileName));
 
 check_utf(FileName) ->
   FileName.
