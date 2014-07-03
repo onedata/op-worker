@@ -700,8 +700,8 @@ create_dirs_at_storage(Root, Teams) ->
 						case create_dirs_at_storage(Root,Teams,StorageRecord) of
 							ok -> TmpAns;
 							Error ->
-                ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, Teams}, Error]),
-                Error
+							  ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, Teams}, Error]),
+							  Error
 						end
 					end,
 					lists:foldl(CreateDirs,ok , StorageRecords);
