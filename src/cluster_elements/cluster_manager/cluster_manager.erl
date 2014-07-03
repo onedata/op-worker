@@ -180,7 +180,7 @@ handle_call({addCallback, FuseId, Node, Pid}, _From, State) ->
     {reply, ok, State#cm_state{callbacks_num = CallbacksNum}}
   catch
     _:_ ->
-      lager:error([{mod, ?MODULE}], "Can not add callback of node: ~p, pid ~p, fuseId ~p", [Node, Pid, FuseId]),
+      ?error("Can not add callback of node: ~p, pid ~p, fuseId ~p", [Node, Pid, FuseId]),
       {reply, error, State}
   end;
 
@@ -203,7 +203,7 @@ handle_call({delete_callback, FuseId, Node, Pid}, _From, State) ->
     {reply, ok, State#cm_state{callbacks_num = CallbacksNum}}
   catch
     _:_ ->
-      lager:error([{mod, ?MODULE}], "Can not delete callback of node: ~p, pid ~p, fuseId ~p", [Node, Pid, FuseId]),
+      ?error("Can not delete callback of node: ~p, pid ~p, fuseId ~p", [Node, Pid, FuseId]),
       {reply, error, State}
   end;
 
@@ -216,9 +216,11 @@ handle_call(check, _From, State) ->
 %% TODO: add generic mechanism that do the same thing
 handle_call({update_cluster_rengines, EventType, EventHandlerItem}, _From, State) ->
   Workers = State#cm_state.workers,
-  UpdateClusterRengine = fun ({_Node, Module, Pid}) ->
+  UpdateClusterRengine = fun ({Node, Module, Pid}) ->
     case Module of
-      cluster_rengine -> gen_server:cast(Pid, {asynch, 1, {update_cluster_rengine, EventType, EventHandlerItem}});
+      cluster_rengine ->
+        ?debug("Update of rengine at node ~p initialized by CCM. Params: ~p", [Node, {update_cluster_rengine, EventType, EventHandlerItem}]),
+        gen_server:cast(Pid, {asynch, 1, {update_cluster_rengine, EventType, EventHandlerItem}});
       _ -> ok
     end
   end,
@@ -266,6 +268,7 @@ handle_call(check_state_loaded, _From, State) ->
   handle_test_call(check_state_loaded, _From, State);
 
 handle_call(_Request, _From, State) ->
+  ?warning("Wrong call: ~p", [_Request]),
   {reply, wrong_request, State}.
 
 %% handle_test_call/3
@@ -301,6 +304,7 @@ handle_test_call(_Request, _From, State) ->
   Timeout :: non_neg_integer() | infinity.
 %% ====================================================================
 handle_cast({node_is_up, Node}, State) ->
+  ?debug("Heartbeat from node: ~p", [Node]),
   case Node =:= node() of
     true ->
       gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, State#cm_state.state_num, State#cm_state.callbacks_num}),
@@ -312,6 +316,7 @@ handle_cast({node_is_up, Node}, State) ->
           gen_server:cast({?Node_Manager_Name, Node}, {heart_beat_ok, State#cm_state.state_num, State#cm_state.callbacks_num}),
           {noreply, State};
         false ->
+          ?info("New node: ~p", [Node]),
           {Ans, NewState, WorkersFound} = check_node(Node, State),
 
           %% This case checks if node state was analysed correctly.
@@ -358,10 +363,12 @@ handle_cast({register_dispatcher_map, Module, Map, AnsPid}, State) ->
   Maps = State#cm_state.dispatcher_maps,
   case proplists:get_value(Module, Maps, not_found) =:= Map of
     true ->
+      % debug, because it is ok when more than one instance of worker exists
+      ?debug("Registration of existing disp map for module ~p", [Module]),
       AnsPid ! dispatcher_map_registered,
       {noreply, State};
     false ->
-      lager:info([{mod, ?MODULE}], "Registration of disp map for module ~p", [Module]),
+      ?info("Registration of disp map for module ~p", [Module]),
       NewMapsList = register_dispatcher_map(Module, Map, Maps),
       NewState = State#cm_state{dispatcher_maps = NewMapsList},
       NewState2 = update_dispatchers_and_dns(NewState, false, true),
@@ -405,12 +412,12 @@ handle_cast(save_state, State) ->
       try
         Ans = gen_server:call(?Dispatcher_Name, {dao, 1, {save_state, [State#cm_state{dispatcher_maps = []}]}}, 500),
         case Ans of
-          ok -> lager:info([{mod, ?MODULE}], "Save state message sent");
-          _ -> lager:error([{mod, ?MODULE}], "Save state error: ~p", [Ans])
+          ok -> ?debug("Save state message sent");
+          _ -> ?error("Save state error: ~p", [Ans])
         end
       catch
         E1:E2 ->
-          lager:error([{mod, ?MODULE}], "Save state error: ~p:~p", [E1, E2])
+          ?error("Save state error: ~p:~p", [E1, E2])
       end;
     false ->
       ok
@@ -422,7 +429,7 @@ handle_cast(check_cluster_state, State) ->
   {noreply, NewState};
 
 handle_cast({node_down, Node}, State) ->
-  lager:error("Node down: ~p", [Node]),
+  ?error("Node down: ~p", [Node]),
   {NewState, WorkersFound} = node_down(Node, State),
 
   %% If workers were running on node that is down,
@@ -436,6 +443,7 @@ handle_cast({node_down, Node}, State) ->
   {noreply, NewState2};
 
 handle_cast({set_monitoring, Flag}, State) ->
+  ?info("Change of monitoring settings, new flag ~p", [Flag]),
   case Flag of
     on ->
       case State#cm_state.state_monitoring of
@@ -455,13 +463,13 @@ handle_cast({set_monitoring, Flag}, State) ->
 handle_cast({worker_answer, cluster_state, Response}, State) ->
   NewState = case Response of
                {ok, SavedState} ->
-                 lager:info([{mod, ?MODULE}], "State read from DB: ~p", [SavedState]),
+                 ?debug("State read from DB: ~p", [SavedState]),
                  merge_state(State, SavedState);
                {error, {not_found,missing}} ->
                  save_state(),
                  State#cm_state{state_loaded = true};
                Error ->
-                 lager:info([{mod, ?MODULE}], "State cannot be read from DB: ~p", [Error]), %% info logging level because state may not be present in db and it's not an error
+                 ?debug("State cannot be read from DB: ~p", [Error]), %% info logging level because state may not be present in db and it's not an error
                  State
              end,
   {noreply, NewState};
@@ -475,17 +483,20 @@ handle_cast(stop, State) ->
 
 %% TODO if cashes will be cleared more frequently, it should be done without ccm usage
 handle_cast({clear_cache, Cache, ReturnPid}, State) ->
+  ?debug("Cache clearing ~p", [{clear_cache, Cache, ReturnPid}]),
   ReturnPid ! {cache_cleared, Cache},
   New_State = clear_cache(State, Cache),
   {noreply, New_State};
 
 handle_cast({synch_cache_clearing, Cache, ReturnPid}, State) ->
+  ?debug("Cache clearing ~p", [{synch_cache_clearing, Cache, ReturnPid}]),
   New_State = clear_cache(State, Cache),
   ReturnPid ! {cache_cleared, Cache},
   {noreply, New_State};
 
 %% this handler notify all logical_files_manager that event production of EventType should be enabled/disabled
 handle_cast({notify_lfm, EventType, Enabled}, State) ->
+  ?debug("Sending notification to all logical files managers ~p", [{notify_lfm, EventType, Enabled}]),
   NotifyFn = fun(Node) ->
       gen_server:cast({?Node_Manager_Name, Node}, {notify_lfm, EventType, Enabled})
   end,
@@ -494,6 +505,7 @@ handle_cast({notify_lfm, EventType, Enabled}, State) ->
   {noreply, State};
 
 handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
+  ?debug("Sending notification to update user's write permitions ~p", [{update_user_write_enabled, UserDn, Enabled}]),
   NotifyFn = fun(Node) ->
       gen_server:cast({?Node_Manager_Name, Node}, {update_user_write_enabled, UserDn, Enabled})
   end,
@@ -512,6 +524,7 @@ handle_cast(stop_load_logging, State) ->
   {noreply, State};
 
 handle_cast(start_cluster_monitoring, State) ->
+  ?debug("start_cluster_monitoring"),
   spawn(fun() -> create_cluster_stats_rrd() end),
   {noreply, State};
 
@@ -539,6 +552,7 @@ handle_cast({update_storage_read_b, Bytes}, #cm_state{storage_stats = #storage_s
   {noreply, State#cm_state{storage_stats = Stats#storage_stats{read_bytes = RB + Bytes}}};
 
 handle_cast(_Msg, State) ->
+  ?warning("Wrong cast: ~p", [_Msg]),
   {noreply, State}.
 
 
@@ -566,7 +580,7 @@ handle_info({nodedown, Node}, State) ->
   {noreply, State};
 
 handle_info(_Info, State) ->
-  ?error("Error: wrong info: ~p", [_Info]),
+  ?warning("Wrong info: ~p", [_Info]),
   {noreply, State}.
 
 
@@ -608,6 +622,7 @@ code_change(_OldVsn, State, _Extra) ->
   NewState ::  term().
 %% ====================================================================
 init_cluster(State) ->
+  ?debug("Checking if initialization is needed ~p", [State]),
   Nodes = State#cm_state.nodes,
   case length(Nodes) > 0 of
     true ->
@@ -629,6 +644,7 @@ init_cluster(State) ->
 
       NewState3 = case length(Jobs) > 0 of
                     true ->
+                      ?info("Initialization of jobs ~p using nodes ~p", [Jobs, Nodes]),
                       NewState = case erlang:length(Nodes) >= erlang:length(Jobs) of
                                    true -> init_cluster_nodes_dominance(State, Nodes, Jobs, [], Args, []);
                                    false -> init_cluster_jobs_dominance(State, Jobs, Args, Nodes, [])
@@ -705,6 +721,8 @@ check_cluster_state(State) ->
                               [] -> 0;
                               NonEmptyMaxList -> lists:max(NonEmptyMaxList)
                             end,
+
+                     ?debug("Load ~p", [Load]),
                      case (MinV > 0) and (((MaxV >= 2 * MinV) and (MaxV >= 1.5 * AvgLoad)) or (MaxV >= 5 * MinV)) of
                        true ->
                          [{MaxNode, MaxNodeModulesLoads} | _] = [{Node, ModulesLoads} || {Node, NodeLoad, ModulesLoads} <- Load, NodeLoad == MaxV],
@@ -720,7 +738,7 @@ check_cluster_state(State) ->
                                    true ->
                                      State;
                                    _ ->
-                                     lager:info([{mod, ?MODULE}], "Worker: ~s will be started at node: ~s", [MaxModule, MinNode]),
+                                     ?info("Worker: ~s will be started at node: ~s", [MaxModule, MinNode]),
                                      {WorkerRuns, TmpState} = start_worker(MinNode, MaxModule, proplists:get_value(MaxModule, ?Modules_With_Args, []), State),
                                      case WorkerRuns of
                                        ok ->
@@ -730,7 +748,7 @@ check_cluster_state(State) ->
                                      end
                                  end;
                                false ->
-                                 lager:info([{mod, ?MODULE}], "Worker: ~s will be stopped at node", [MaxModule, MaxNode]),
+                                 ?info("Worker: ~s will be stopped at node", [MaxModule, MaxNode]),
                                  {WorkerStopped, TmpState2} = stop_worker(MaxNode, MaxModule, State),
                                  case WorkerStopped of
                                    ok ->
@@ -752,7 +770,7 @@ check_cluster_state(State) ->
                  end
              end,
 
-  lager:info([{mod, ?MODULE}], "Cluster state ok"),
+  ?debug("Cluster state ok"),
   NewState2 = init_cluster(NewState), %% if any worker is down and some worker type has no running instances, new worker should be started anywhere
   NewState2#cm_state{cluster_check_num = CheckNum}.
 
@@ -783,11 +801,11 @@ start_worker(Node, Module, WorkerArgs, State) ->
     {ok, LoadMemorySize} = application:get_env(?APP_Name, worker_load_memory_size),
     {ok, ChildPid} = supervisor:start_child({?Supervisor_Name, Node}, ?Sup_Child(Module, worker_host, transient, [Module, WorkerArgs, LoadMemorySize])),
     Workers = State#cm_state.workers,
-    lager:info([{mod, ?MODULE}], "Worker: ~s started at node: ~s", [Module, Node]),
+    ?info("Worker: ~s started at node: ~s", [Module, Node]),
     {ok, State#cm_state{workers = [{Node, Module, ChildPid} | Workers]}}
   catch
     _:_ ->
-      lager:error([{mod, ?MODULE}], "Error during start of worker: ~s started at node: ~s", [Module, Node]),
+      ?error("Error during start of worker: ~s at node: ~s", [Module, Node]),
       {error, State}
   end.
 
@@ -816,10 +834,16 @@ stop_worker(Node, Module, State) ->
             case Ans2 of
               ok -> Ans3 = supervisor:delete_child({?Supervisor_Name, ChildNode}, Module),
                 case Ans3 of
-                  ok -> ok;
-                  {error, _Error} -> delete_error
+                  ok ->
+                    ?info("Worker: ~s stopped at node: ~s", [Module, Node]),
+                    ok;
+                  {error, Error1} ->
+                    ?error("Worker: ~s not stopped at node: ~s, error ~p", [Module, Node, {delete_error, Error1}]),
+                    delete_error
                 end;
-              {error, _Error} -> termination_error
+              {error, Error2} ->
+                ?error("Worker: ~s not stopped at node: ~s, error ~p", [Module, Node, {termination_error, Error2}]),
+                termination_error
             end
         end,
   {Ans, State#cm_state{workers = NewWorkers}}.
@@ -858,15 +882,19 @@ check_node(Node, State) ->
               {ok, State#cm_state{workers = NewWorkers, callbacks_num = CallbacksNum}, WorkersFound2}
             catch
               _:_ ->
-                lager:error([{mod, ?MODULE}], "Can not get fuses of node: ~s", [Node]),
+                ?error("Cannot get fuses of node: ~s", [Node]),
                 {error, State, false}
             end;
           _ -> {error, State, false}
         end;
-      pang -> {error, State, false}
+      pang ->
+        ?error("Pang during check of node: ~s", [Node]),
+        {error, State, false}
     end
   catch
-    _:_ -> {error, State, false}
+    E1:E2 ->
+      ?error("Error: ~p:~p during check of node: ~s", [E1, E2, Node]),
+      {error, State, false}
   end.
 
 %% add_children/3
@@ -883,13 +911,13 @@ add_children(Node, [{Id, ChildPid, _Type, _Modules} | Children], Workers) ->
   case lists:member(Id, Jobs) of
     false -> add_children(Node, Children, Workers);
     true ->
-      lager:info([{mod, ?MODULE}], "Worker ~p found at node ~s", [Id, Node]),
+      ?info("Worker ~p found at node ~s", [Id, Node]),
 
       MapState = try
         ok = gen_server:call(ChildPid, dispatcher_map_unregistered, 500)
       catch
         _:_ ->
-          lager:error([{mod, ?MODULE}], "Error during contact with worker ~p found at node ~s", [Id, Node]),
+          ?error("Error during contact with worker ~p found at node ~s", [Id, Node]),
           error
       end,
 
@@ -1008,6 +1036,7 @@ save_state() ->
   NewState :: term().
 %% ====================================================================
 merge_state(State, SavedState) ->
+  ?debug("Merging state, current: ~p, saved: ~p", [State, SavedState]),
   StateNum = erlang:max(State#cm_state.state_num, SavedState#cm_state.state_num) + 1,
   CallbacksNum = erlang:max(State#cm_state.callbacks_num, SavedState#cm_state.callbacks_num) + 1,
   State1 = State#cm_state{state_num = StateNum, callbacks_num = CallbacksNum, state_loaded = true},
@@ -1066,11 +1095,13 @@ get_workers_list(State) ->
   NewState :: term().
 %% ====================================================================
 update_dispatchers_and_dns(State, UpdateDNS, IncreaseStateNum) ->
+  ?debug("update_dispatchers_and_dns, state: ~p, dns: ~p, increase state num: ~p", [State, UpdateDNS, IncreaseStateNum]),
   case UpdateDNS of
     true ->
       {NodesLoad, AvgLoad} = calculate_node_load(State#cm_state.nodes, medium),
       WorkersLoad = calculate_worker_load(State#cm_state.workers),
       Load = calculate_load(NodesLoad, WorkersLoad),
+      ?debug("updating dns, load info: ~p", [Load]),
       update_dns_state(State#cm_state.workers, Load, AvgLoad);
     false -> ok
   end,
@@ -1084,6 +1115,7 @@ update_dispatchers_and_dns(State, UpdateDNS, IncreaseStateNum) ->
       State#cm_state{state_num = NewStateNum};
     false ->
       {NodesLoad2, AvgLoad2} = calculate_node_load(State#cm_state.nodes, short),
+      ?debug("updating dispatcher, load info: ~p", [{NodesLoad2, AvgLoad2}]),
       update_dispatcher_state(State#cm_state.nodes, NodesLoad2, AvgLoad2),
       State
   end.
@@ -1142,7 +1174,7 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
     case node_to_ip(Node) of
       {ok, Address} -> Address;
       {error, Error} ->
-        lager:error("Cannot resolve ip address for node ~p, error: ~p", [Node, Error]),
+        ?error("Cannot resolve ip address for node ~p, error: ~p", [Node, Error]),
         unknownaddress
     end
   end,
@@ -1202,9 +1234,11 @@ update_dns_state(WorkersList, NodeToLoad, AvgLoad) ->
     fun({Node, NodeLoad, _}) ->
       {NodeToIPWithLogging(Node), NodeLoad}
     end, NodeToLoad),
+  UpdateInfo = {update_state, FilteredModulesToNodes, [{N_IP, N_Load} || {N_IP, N_Load} <- NLoads, N_IP =/= unknownaddress], AvgLoad},
+  ?debug("updating dns, update message: ~p", [UpdateInfo]),
   UpdateDnsWorker = fun ({_Node, Module, Pid}) ->
     case Module of
-      dns_worker -> gen_server:cast(Pid, {asynch, 1, {update_state, FilteredModulesToNodes, [{N_IP, N_Load} || {N_IP, N_Load} <- NLoads, N_IP =/= unknownaddress], AvgLoad}});
+      dns_worker -> gen_server:cast(Pid, {asynch, 1, UpdateInfo});
       _ -> ok
     end
   end,
@@ -1227,7 +1261,7 @@ check_load(WorkerPlugin) ->
     Load / TimeDiff
   catch
     _:_ ->
-      lager:error([{mod, ?MODULE}], "Can not get status of worker plugin"),
+      ?error("Can not get status of worker plugin"),
       error
   end.
 
@@ -1296,7 +1330,7 @@ get_workers_versions([{Node, Module} | Workers], Versions) ->
     get_workers_versions(Workers, [{Node, Module, V} | Versions])
   catch
     E1:E2 ->
-      lager:error([{mod, ?MODULE}], "get_workers_versions error: ~p:~p", [E1, E2]),
+      ?error("get_workers_versions error: ~p:~p", [E1, E2]),
       get_workers_versions(Workers, [{Node, Module, can_not_connect_with_worker} | Versions])
   end.
 
@@ -1475,15 +1509,21 @@ delete_callback(Node, Fuse, Nodes, CallbacksNum, ClearETS) ->
                 _ -> ok
               end,
               update_dispatcher_callback(delete_callback, Nodes, Fuse, Node, CallbacksNum + 1),
+              ?debug("delete_callback with params: ~p, ans: deleted", [{Node, Fuse, Nodes, CallbacksNum, ClearETS}]),
               deleted;
             _ ->
               ets:insert(?CALLBACKS_TABLE, {Fuse, lists:delete(Node, OldCallbacksList)}),
               update_dispatcher_callback(delete_callback, Nodes, Fuse, Node, CallbacksNum + 1),
+              ?debug("delete_callback with params: ~p, ans: updated", [{Node, Fuse, Nodes, CallbacksNum, ClearETS}]),
               updated
           end;
-        false -> not_exists
+        false ->
+          ?debug("delete_callback with params: ~p, ans: not_exists", [{Node, Fuse, Nodes, CallbacksNum, ClearETS}]),
+          not_exists
       end;
-    _ -> not_exists
+    _ ->
+      ?debug("delete_callback with params: ~p, ans: not_exists", [{Node, Fuse, Nodes, CallbacksNum, ClearETS}]),
+      not_exists
   end.
 
 %% delete_all_callbacks/3
@@ -1557,6 +1597,7 @@ get_callbacks(Fuse) ->
   Result :: list().
 %% ====================================================================
 register_dispatcher_map(Module, Map, MapsList) ->
+  ?debug("dispatcher map saved: ~p", [{Module, Map, MapsList}]),
   [{Module, Map} | proplists:delete(Module, MapsList)].
 
 %% clear_cache/2
@@ -1572,7 +1613,7 @@ clear_cache(State, Cache) ->
       {TmpState, TmpWorkersFound}
     catch
       E1:E2 ->
-        lager:error([{mod, ?MODULE}], "Can not clear cache ~p of node: ~p, error: ~p:~p", [Cache, Node, E1, E2]),
+        ?error("Can not clear cache ~p of node: ~p, error: ~p:~p", [Cache, Node, E1, E2]),
         {NewState, WorkersFound} = node_down(Node, State),
         {NewState, TmpWorkersFound or WorkersFound}
     end
@@ -1582,6 +1623,7 @@ clear_cache(State, Cache) ->
 
   %% If workers were running on node that is down,
   %% upgrade state.
+  ?debug("caches cleared witch workers found param: ~p", [WF]),
   State3 = case WF of
                 true -> update_dispatchers_and_dns(State2, true, true);
                 false -> State2
@@ -1629,6 +1671,7 @@ create_cluster_stats_rrd() ->
       {error, Error};
     _ ->
       gen_server:cast({global, ?CCM}, monitor_cluster),
+      ?debug("Cluster RRD created"),
       ok
   end.
 

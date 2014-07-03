@@ -54,6 +54,7 @@ setup() ->
     {ok, _} = worker_host:start_link(dao, [], 10).
 
 teardown({ok, Pid}) ->
+    node_manager:stop(),
     Unload = meck:unload([rpc, net_adm]),
     exit(Pid, shutdown),
     Shutdown = receive {'EXIT', Pid,shutdown} -> ok after 100 -> teardown_timeout end,
@@ -61,6 +62,7 @@ teardown({ok, Pid}) ->
 teardown({error, {already_started, Pid}}) ->
     teardown({ok, Pid});
 teardown(_) ->
+    node_manager:stop(),
     ok = meck:unload([rpc, net_adm]).
 
 

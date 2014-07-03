@@ -21,7 +21,8 @@ main_test_() ->
 			application:set_env(veil_cluster_node, default_loglevel, 0) 
 		end,
 		fun(_) ->
-			ok
+      application:unset_env(veil_cluster_node, current_loglevel),
+      application:unset_env(veil_cluster_node, default_loglevel)
 		end,
 		[
 			{"should_log, set/get_loglevel, set/get_default_loglevel",
@@ -75,6 +76,7 @@ lager_interfacing_test_() ->
 			meck:new(lager)
 		end,
 		fun(_) ->
+      application:unset_env(veil_cluster_node, current_loglevel),
 			ok = meck:unload(lager)
 		end,
 		[

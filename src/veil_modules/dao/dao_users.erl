@@ -50,8 +50,8 @@ save_user(#veil_document{record = #user{}} = UserDoc) ->
             {ok, #view_result{rows = []}} ->
                 integer_to_list(?LOWEST_USER_ID);
             Other ->
-                lager:error("Invalid view response: ~p", [Other]),
-                throw(invalid_data)
+                ?error("Invalid view response: ~p", [Other]),
+                throw(invalid_data)   
         end,
 
     dao:set_db(?USERS_DB_NAME),
@@ -134,7 +134,7 @@ list_users(N, Offset) ->
         fun(#view_row{doc = UserDoc}) ->
             UserDoc;
             (Other) ->
-                lager:error("Invalid row in view response: ~p", [Other]),
+                ?error("Invalid row in view response: ~p", [Other]),
                 throw(invalid_data)
         end,
 
@@ -142,7 +142,7 @@ list_users(N, Offset) ->
         {ok, #view_result{rows = FDoc}} ->
             {ok, lists:map(GetUser, FDoc)};
         Other ->
-            lager:error("Invalid view response: ~p", [Other]),
+            ?error("Invalid view response: ~p", [Other]),
             throw(invalid_data)
     end.
 
@@ -219,17 +219,17 @@ get_user_from_db({Key, Value}) ->
         {ok, #view_result{rows = [#view_row{doc = FDoc}]}} ->
             {ok, FDoc};
         {ok, #view_result{rows = []}} ->
-            lager:warning("User by ~p: ~p not found", [Key, Value]),
+            ?warning("User by ~p: ~p not found", [Key, Value]),
             throw(user_not_found);
         {ok, #view_result{rows = [#view_row{doc = FDoc} | Tail] = AllRows}} ->
             case length(lists:usort(AllRows)) of
                 Count when Count > 1 ->
-                    lager:warning("User ~p is duplicated. Returning first copy. Others: ~p", [FDoc#veil_document.record#user.login, Tail]);
+                    ?warning("User ~p is duplicated. Returning first copy. Others: ~p", [FDoc#veil_document.record#user.login, Tail]);
                 _ -> ok
             end,
             {ok, FDoc};
         Other ->
-            lager:error("Invalid view response: ~p", [Other]),
+            ?error("Invalid view response: ~p", [Other]),
             throw(invalid_data)
     end.
 
@@ -250,17 +250,17 @@ get_files_number(Type, UUID) ->
         {ok, #view_result{rows = [#view_row{value = Sum}]}} ->
             {ok, Sum};
         {ok, #view_result{rows = []}} ->
-            lager:error("Number of files of ~p ~p not found", [Type, UUID]),
+            ?error("Number of files of ~p ~p not found", [Type, UUID]),
             throw(files_number_not_found);
         {ok, #view_result{rows = [#view_row{value = Sum} | Tail] = AllRows}} ->
             case length(lists:usort(AllRows)) of
                 Count when Count > 1 ->
-                    lager:warning("To many rows in response during files number finding for ~p ~p. Others: ~p", [Type, UUID, Tail]);
+                    ?warning("To many rows in response during files number finding for ~p ~p. Others: ~p", [Type, UUID, Tail]);
                 _ -> ok
             end,
             {ok, Sum};
         Other ->
-            lager:error("Invalid view response: ~p", [Other]),
+            ?error("Invalid view response: ~p", [Other]),
             throw(invalid_data)
     end.
 
@@ -278,17 +278,17 @@ get_files_size(UUID) ->
         {ok, #view_result{rows = [#view_row{value = Sum}]}} ->
             {ok, Sum};
         {ok, #view_result{rows = []}} ->
-            lager:error("Size of files of ~p not found", [UUID]),
+            ?error("Size of files of ~p not found", [UUID]),
             throw(files_size_not_found);
         {ok, #view_result{rows = [#view_row{value = Sum} | Tail] = AllRows}} ->
             case length(lists:usort(AllRows)) of
                 Count when Count > 1 ->
-                    lager:warning("To many rows in response during files size finding for ~p. Others: ~p", [UUID, Tail]);
+                    ?warning("To many rows in response during files size finding for ~p. Others: ~p", [UUID, Tail]);
                 _ -> ok
             end,
             {ok, Sum};
         Other ->
-            lager:error("Invalid view response: ~p", [Other]),
+            ?error("Invalid view response: ~p", [Other]),
             throw(invalid_data)
     end.
 
@@ -302,12 +302,12 @@ update_files_size() ->
     dao:set_db(?FILES_DB_NAME),
     QueryArgs = #view_query_args{keys = [undefined], include_docs = false, group_level = 1, view_type = reduce},
 
-    case dao:list_records(?USER_FILES_SIZE_VIEW, QueryArgs) of
-        {ok, _} -> ok;
-        Other ->
-            lager:error("Invalid view response: ~p", [Other]),
-            throw(invalid_data)
-    end.
+  case dao:list_records(?USER_FILES_SIZE_VIEW, QueryArgs) of
+    {ok, _} -> ok;
+    Other ->
+      ?error("Invalid view response: ~p", [Other]),
+      throw(invalid_data)
+  end.
 
 %% clear_all_data_from_cache/1
 %% ====================================================================

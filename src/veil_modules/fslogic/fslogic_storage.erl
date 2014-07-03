@@ -110,7 +110,7 @@ get_sh_for_fuse(FuseID, Storage) ->
         [] -> Storage#storage_info.default_storage_helper;
         [Group] -> Group;
         [Group | _] ->
-          lager:warning("Thare are more then one group-specific configurations in storage ~p for group ~p", [Storage#storage_info.name, FuseGroup]),
+          ?warning("Thare are more then one group-specific configurations in storage ~p for group ~p", [Storage#storage_info.name, FuseGroup]),
           Group
       end
   end.
@@ -171,11 +171,11 @@ insert_storage(HelperName, HelperArgs, Fuse_groups) ->
                    ok ->
                      ok;
                    _ ->
-                     lager:error("Can not change owner of users dir using storage helper ~p", [SHI#storage_helper_info.name]),
+                     ?error("Can not change owner of users dir using storage helper ~p", [SHI#storage_helper_info.name]),
                      Ans2
                  end;
                _ ->
-                 lager:error("Can not create users dir using storage helper ~p", [SHI#storage_helper_info.name]),
+                 ?error("Can not create users dir using storage helper ~p", [SHI#storage_helper_info.name]),
                  Ans
              end,
 
@@ -187,11 +187,11 @@ insert_storage(HelperName, HelperArgs, Fuse_groups) ->
                    ok ->
                      ok;
                    _ ->
-                     lager:error("Can not change owner of groups dir using storage helper ~p", [SHI#storage_helper_info.name]),
+                     ?error("Can not change owner of groups dir using storage helper ~p", [SHI#storage_helper_info.name]),
                      Ans5
                  end;
                _ ->
-                 lager:error("Can not create groups dir using storage helper ~p", [SHI#storage_helper_info.name]),
+                 ?error("Can not create groups dir using storage helper ~p", [SHI#storage_helper_info.name]),
                  Ans4
              end,
 
@@ -200,11 +200,11 @@ insert_storage(HelperName, HelperArgs, Fuse_groups) ->
           case add_dirs_for_existing_users(Storage) of
             ok -> DAO_Ans;
             Error ->
-              lager:error("Can not create dirs for existing users and theirs teams, error: ~p", [Error]),
+              ?error("Can not create dirs for existing users and theirs teams, error: ~p", [Error]),
               {error, users_dirs_creation_error}
           end;
         _ ->
-          lager:error("Dirs creation error: {users_dir_status, groups_dir_status} = ~p", [{Ans3, Ans6}]),
+          ?error("Dirs creation error: {users_dir_status, groups_dir_status} = ~p", [{Ans3, Ans6}]),
           {error, dirs_creation_error}
       end;
     _ -> DAO_Ans
@@ -233,7 +233,7 @@ get_fuse_group(FuseID) ->
           Record = DAOAns#veil_document.record,
           proplists:get_value(group_id, Record#fuse_session.env_vars, default);
         _ ->
-          lager:error("Cannot get storage helper for fuse: ~p, reason: ~p", [FuseID, {DAOStatus, DAOAns}]),
+          ?error("Cannot get storage helper for fuse: ~p, reason: ~p", [FuseID, {DAOStatus, DAOAns}]),
           default
       end
   end.
@@ -254,13 +254,13 @@ add_dirs_for_existing_users(Storage) ->
             ok ->
               TmpAns;
             Error ->
-              lager:error("Can not create dirs for user ~s, error: ~p", [Login, Error]),
+              ?error("Can not create dirs for user ~s, error: ~p", [Login, Error]),
               Error
           end
         end,
       lists:foldl(CreateDirs, ok, LoginsAndTeams);
     {error, Error} ->
-      lager:error("Can not list all users, error: ~p", [Error]),
+      ?error("Can not list all users, error: ~p", [Error]),
       {error, Error}
   end.
 
