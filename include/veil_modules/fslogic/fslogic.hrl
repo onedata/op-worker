@@ -86,7 +86,7 @@
 -define(LNK_TYPE_PROT, "LNK").
 
 % File open modes (open flags)
--define(UNSPECIFIED_MODE,"none").
+-define(UNSPECIFIED_MODE,"").
 -define(READ_MODE,"read").
 -define(WRITE_MODE,"write").
 -define(RDWR_MODE,"rdwr").
