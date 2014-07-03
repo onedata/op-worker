@@ -191,7 +191,7 @@ filters_panel(Source) ->
             filter_form(client_dn_filter),
             filter_form(client_fuse_group_filter),
             filter_form(client_function_filter)
-        ]},
+        ]}
     ]},
 
     FilterPanels = case Source of
