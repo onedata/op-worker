@@ -20,13 +20,14 @@
 #include <string>
 #include <memory>
 
+
+namespace veil
+{
+
 static constexpr const char
     *RFM_MODULE_NAME                = "remote_files_manager",
     *RFM_DECODER                    = "remote_file_management",
     *COMMUNICATION_PROTOCOL_DECODER = "communication_protocol";
-
-namespace veil
-{
 
 class SimpleConnectionPool;
 

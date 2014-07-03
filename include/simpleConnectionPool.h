@@ -17,13 +17,13 @@
 #include <memory>
 #include <mutex>
 
-constexpr int DEFAULT_POOL_SIZE = 2;
-constexpr int MAX_CONNECTION_ERROR_COUNT = 5;
-
 namespace veil
 {
 
 class CommunicationHandler;
+
+constexpr int DEFAULT_POOL_SIZE = 2;
+constexpr int MAX_CONNECTION_ERROR_COUNT = 5;
 
 using connection_pool_t = std::list<std::pair<std::shared_ptr<CommunicationHandler>, time_t>>;
 

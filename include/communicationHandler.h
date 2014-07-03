@@ -25,6 +25,9 @@
 #include <thread>
 #include <unordered_map>
 
+namespace veil
+{
+
 static constexpr int PROTOCOL_VERSION = 1;
 
 // PB decoder name
@@ -55,9 +58,6 @@ using context_ptr   = websocketpp::lib::shared_ptr<boost::asio::ssl::context>;
 
 using push_callback = std::function<void(const veil::protocol::communication_protocol::Answer)>;
 using unique_lock   = std::unique_lock<std::recursive_mutex>;
-
-namespace veil
-{
 
 /// CertificateInfo provides information about certificate configuration
 /// including: certificate type, certificate paths and / or certificate
