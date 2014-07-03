@@ -27,9 +27,11 @@ constexpr const char
 
 /// Cluster's answer status
 constexpr const char
-    *INVALID_FUSE_ID                = "invalid_fuse_id",
-    *NO_USER_FOUND_ERROR            = "no_user_found_error",
-    *NO_CONNECTION_FOR_HANDSHAKE    = "no_connection_for_handshake";
+    *INVALID_FUSE_ID                    = "invalid_fuse_id",
+    *NO_USER_FOUND_ERROR                = "no_user_found_error",
+    *NO_CONNECTION_FOR_HANDSHAKE        = "no_connection_for_handshake",
+    *CERT_CONFIRMATION_REQUIRED_ERROR   = "cert_confirmation_required";
+
 
 namespace veil
 {
