@@ -16,6 +16,7 @@
 
 -include("veil_modules/dao/dao.hrl").
 -include("veil_modules/dao/dao_helper.hrl").
+-include("logging.hrl").
 
 %% API
 -export([get_db_structure/0, setup_views/1, get_all_views/0, update_view/1, pre_update/1, pre_reload_modules/1, remove_broken_views/0, remove_outdated_views/0]).
