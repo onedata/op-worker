@@ -47,8 +47,8 @@ start(_StartType, _StartArgs) ->
 		false ->
 			{error, "Not all ports are free"}
 	end,
-  ?info("Application start at node: ~p. Start result: ~p.", [node(), Ans]),
-  Ans.
+	?info("Application start at node: ~p. Start result: ~p.", [node(), Ans]),
+	Ans.
 
 
 %% stop/1

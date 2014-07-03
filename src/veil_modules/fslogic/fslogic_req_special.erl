@@ -60,7 +60,7 @@ create_dir(FullFileName, Mode) ->
         {error, file_exists} ->
             #atom{value = ?VEEXIST};
         _BadStatus ->
-            ?error("Error: can not create dir: ~s, error: ~p", [FullFileName, _BadStatus]),
+            ?error("Can not create dir: ~s, error: ~p", [FullFileName, _BadStatus]),
             #atom{value = ?VEREMOTEIO}
     end.
 

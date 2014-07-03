@@ -104,7 +104,7 @@ handle_message(Record) when is_record(Record, createfile) ->
                 {_, ErrorCode} when is_integer(ErrorCode) ->
                     throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
-                    ?warning("storage_files_manager:create error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
+                    ?warning("create error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
                     #atom{value = ?VEREMOTEIO}
             end;
         _ -> #atom{value = ?VEREMOTEIO}
