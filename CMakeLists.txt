@@ -12,13 +12,6 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 set(DEPS_DIR "deps")
 link_directories(${PROJECT_BINARY_DIR})
 
-string( TOLOWER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_L )
-if(CMAKE_BUILD_TYPE_L MATCHES "debug")
-    set(VeilHelpers_DEBUG 1)
-else()
-    set(VeilHelpers_DEBUG 0)
-endif()
-
 configure_file (
     "${PROJECT_SOURCE_DIR}/include/veilConfig.h.in"
     "${PROJECT_BINARY_DIR}/veilConfig.h"
@@ -157,8 +150,6 @@ else()
 endif()
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SECTION_FRAGMENTATION_FLAGS} -Wall -fPIC -std=c++11")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
 add_definitions(${FUSE_DEFINITIONS} -DFUSE_USE_VERSION=29 -D_WEBSOCKETPP_CPP11_STL_ -DBOOST_BIND_NO_PLACEHOLDERS)
 
 set(CMAKE_SKIP_RPATH TRUE) # Something is wrong with CMake RPATH config, we need to use old-fashion way

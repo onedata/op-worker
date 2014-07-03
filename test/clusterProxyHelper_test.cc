@@ -15,6 +15,8 @@
 #include <google/protobuf/descriptor.h>
 #include <gtest/gtest.h>
 
+#include "remote_file_management.pb.h"
+
 #include <errno.h>
 
 #include <cstring>

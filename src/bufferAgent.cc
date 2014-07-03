@@ -1,14 +1,23 @@
+/**
+ * @file bufferAgent.cc
+ * @author Rafal Slota
+ * @copyright (C) 2013 ACK CYFRONET AGH
+ * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
+ */
+
 #include "bufferAgent.h"
+
+#include "fileCache.h"
 #include "helpers/storageHelperFactory.h"
 #include "logging.h"
 
 #include <functional>
 #include <thread>
 
-using std::string;
-
-namespace veil {
-namespace helpers {
+namespace veil
+{
+namespace helpers
+{
 
 // Static declarations
 std::recursive_mutex    BufferAgent::m_bufferSizeMutex;
@@ -200,7 +209,7 @@ int BufferAgent::onRead(const std::string &path, std::string &buf, size_t size, 
     if(buf.size() < size) {
 
         // Do read missing data from filesystem
-        string buf2;
+        std::string buf2;
         int ret = doRead(path, buf2, size - buf.size(), offset + buf.size(), &wrapper->ffi);
         if(ret < 0)
             return ret;
@@ -216,7 +225,7 @@ int BufferAgent::onRead(const std::string &path, std::string &buf, size_t size, 
         guard.unlock();
     } else {
         // All data could be fetch from cache, lets chceck if next calls would read form cache too
-        string tmp;
+        std::string tmp;
         size_t prefSize = std::max(2*size, wrapper->blockSize);
         off_t prefFrom = offset + size + m_bufferLimits.preferedBlockSize;
         wrapper->buffer->readData(prefFrom, prefSize, tmp);
@@ -366,11 +375,11 @@ void BufferAgent::readerLoop()
 
             // Check how many bytes do we have available in cache
             // Download only those that aren't available
-            string buff;
+            std::string buff;
             wrapper->buffer->readData(job.offset, job.size, buff);
             if(buff.size() < job.size)
             {
-                string tmp;
+                std::string tmp;
                 off_t effectiveOffset = job.offset + buff.size();
                 int ret = doRead(wrapper->fileName, tmp, job.size, effectiveOffset, &wrapper->ffi);
 

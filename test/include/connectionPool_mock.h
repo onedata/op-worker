@@ -24,7 +24,7 @@ public:
     };
 
     MOCK_METHOD2(setPoolSize, void(PoolType, unsigned int));
-    MOCK_METHOD2(setPushCallback, void(const std::string&, push_callback));
+    MOCK_METHOD2(setPushCallback, void(const std::string&, veil::push_callback));
 
     MOCK_METHOD1(selectConnection, std::shared_ptr<veil::CommunicationHandler>(veil::SimpleConnectionPool::PoolType));
     MOCK_METHOD1(releaseConnection, void(std::shared_ptr<veil::CommunicationHandler>));

@@ -8,6 +8,7 @@
 #ifndef VEILHELPERS_LOGGING_H
 #define VEILHELPERS_LOGGING_H
 
+
 #include "communication_protocol.pb.h"
 #include "logging.pb.h"
 
@@ -171,5 +172,6 @@ private:
 
 }
 }
+
 
 #endif // VEILHELPERS_LOGGING_H

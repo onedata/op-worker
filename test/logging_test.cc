@@ -177,7 +177,7 @@ TEST_F(RemoteLogWriterFixture, ShouldSendAMessageWithIGNORE_ANSWER_MSG_ID)
 
     std::atomic<bool> messageSent(false);
 
-    EXPECT_CALL(*mockCommunicationHandler, sendMessage(_, IGNORE_ANSWER_MSG_ID))
+    EXPECT_CALL(*mockCommunicationHandler, sendMessage(_, veil::IGNORE_ANSWER_MSG_ID))
             .WillOnce(DoAll(Assign(&messageSent, true), Return(0)));
 
     logWriter.buffer(veil::protocol::logging::INFO, "", 0, 0, "");

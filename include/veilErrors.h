@@ -5,14 +5,14 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
+#ifndef VEILHELPERS_VEIL_ERRORS_H
+#define VEILHELPERS_VEIL_ERRORS_H
 
-#ifndef VEIL_ERRORS_H
-#define VEIL_ERRORS_H
 
 #include <string>
 
 /// VeilClient error codes
-constexpr const char
+static constexpr const char
     *VOK        = "ok",            // Everything is just great
     *VPUSH      = "push",          // Everything is even better - PUSH message from cluster. This error code is used as Answer::answer_status for PUSH messages.
     *VENOENT    = "enoent",        // File not found
@@ -26,16 +26,14 @@ constexpr const char
     *VEINVAL    = "einval";        // Invalid argument
 
 /// Cluster's answer status
-constexpr const char
+static constexpr const char
     *INVALID_FUSE_ID                    = "invalid_fuse_id",
     *NO_USER_FOUND_ERROR                = "no_user_found_error",
     *NO_CONNECTION_FOR_HANDSHAKE        = "no_connection_for_handshake",
     *CERT_CONFIRMATION_REQUIRED_ERROR   = "cert_confirmation_required";
 
-
 namespace veil
 {
-
 namespace error
 {
 
@@ -58,4 +56,5 @@ int translateError(const std::string &verr);
 
 } // namespace veil
 
-#endif // VEIL_ERRORS_H
+
+#endif // VEILHELPERS_VEIL_ERRORS_H
