@@ -6,14 +6,13 @@
  */
 
 #include "simpleConnectionPool.h"
+
 #include "communicationHandler.h"
 #include "logging.h"
-#include <netinet/in.h>
-#include <sys/types.h>
+
 #include <sys/socket.h>
-#include <arpa/inet.h>
 #include <netdb.h>
-#include <iterator>
+
 #include <algorithm>
 
 using namespace std;

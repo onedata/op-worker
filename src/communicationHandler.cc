@@ -6,22 +6,14 @@
  */
 
 #include "communicationHandler.h"
+
 #include "fuse_messages.pb.h"
-#include "logging.h"
 #include "helpers/storageHelperFactory.h"
+#include "logging.h"
 #include "simpleConnectionPool.h"
 
-
-#include <google/protobuf/descriptor.h>
-#include <iostream>
-#include <string>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <openssl/evp.h>
-#include <openssl/err.h>
-
 #include <chrono>
+#include <string>
 
 using std::string;
 using namespace veil::protocol::communication_protocol;
@@ -30,7 +22,8 @@ using websocketpp::lib::placeholders::_1;
 using websocketpp::lib::placeholders::_2;
 using websocketpp::lib::bind;
 
-namespace veil {
+namespace veil
+{
 
 std::recursive_mutex CommunicationHandler::m_instanceMutex;
 SSL_SESSION* CommunicationHandler::m_session = 0;

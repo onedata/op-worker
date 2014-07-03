@@ -1,5 +1,5 @@
 /**
- * @file ClusterProxyHelper.cc
+ * @file clusterProxyHelper.cc
  * @author Rafal Slota
  * @copyright (C) 2013 ACK CYFRONET AGH
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
@@ -7,20 +7,13 @@
 
 #include "clusterProxyHelper.h"
 
-#include "veilConfig.h"
-#include <limits.h>
-
-#include <boost/algorithm/string.hpp>
 #include "logging.h"
-#include "helpers/storageHelperFactory.h"
 #include "remote_file_management.pb.h"
-#include <google/protobuf/descriptor.h>
-#include "veilErrors.h"
-#include "communicationHandler.h"
 #include "simpleConnectionPool.h"
 
+#include <boost/any.hpp>
+
 #include <functional>
-#include <iostream>
 
 using namespace std;
 using namespace std::placeholders;
@@ -31,7 +24,8 @@ namespace veil {
 namespace helpers {
 
 
-ClusterMsg ClusterProxyHelper::commonClusterMsgSetup(string inputType, string &inputData) {
+ClusterMsg ClusterProxyHelper::commonClusterMsgSetup(string inputType, string &inputData)
+{
 
     RemoteFileMangement rfm;
     rfm.set_message_type(utils::tolower(inputType));
@@ -49,7 +43,8 @@ ClusterMsg ClusterProxyHelper::commonClusterMsgSetup(string inputType, string &i
     return clm;
 }
 
-string ClusterProxyHelper::requestMessage(string inputType, string answerType, string &inputData, uint32_t timeout) {
+string ClusterProxyHelper::requestMessage(string inputType, string answerType, string &inputData, uint32_t timeout)
+{
     ClusterMsg clm = commonClusterMsgSetup(inputType, inputData);
 
     clm.set_answer_type(utils::tolower(answerType));
@@ -60,7 +55,8 @@ string ClusterProxyHelper::requestMessage(string inputType, string answerType, s
     return answer.worker_answer();
 }
 
-string ClusterProxyHelper::requestAtom(string inputType, string inputData) {
+string ClusterProxyHelper::requestAtom(string inputType, string inputData)
+{
     ClusterMsg clm = commonClusterMsgSetup(inputType, inputData);
 
     clm.set_answer_type(utils::tolower(Atom::descriptor()->name()));
@@ -77,7 +73,8 @@ string ClusterProxyHelper::requestAtom(string inputType, string inputData) {
     return "";
 }
 
-Answer ClusterProxyHelper::sendClusterMessage(ClusterMsg &msg, uint32_t timeout) {
+Answer ClusterProxyHelper::sendClusterMessage(ClusterMsg &msg, uint32_t timeout)
+{
     auto connection = m_connectionPool->selectConnection(SimpleConnectionPool::DATA_POOL);
     if(!connection)
     {

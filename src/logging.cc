@@ -16,8 +16,6 @@
 
 #include <google/protobuf/descriptor.h>
 
-#include <unistd.h>
-
 #include <ctime>
 #include <chrono>
 #include <numeric>

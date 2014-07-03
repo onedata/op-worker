@@ -5,15 +5,17 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#include "clusterProxyHelper.h"
-#include "communicationHandler.h"
-#include "directIOHelper.h"
 #include "helpers/storageHelperFactory.h"
 
-#include <boost/algorithm/string.hpp>
+#include "clusterProxyHelper.h"
+#include "directIOHelper.h"
 
-namespace veil {
-namespace helpers {
+#include <boost/algorithm/string/case_conv.hpp>
+
+namespace veil
+{
+namespace helpers
+{
 
 BufferLimits::BufferLimits(const size_t wgl, const size_t rgl, const size_t wfl,
                            const size_t rfl, const size_t pbs)

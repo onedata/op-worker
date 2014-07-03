@@ -1,14 +1,23 @@
+/**
+ * @file fileCache.cc
+ * @author Rafal Slota
+ * @copyright (C) 2013 ACK CYFRONET AGH
+ * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
+ */
+
 #include "fileCache.h"
+
 #include "logging.h"
-#include "helpers/storageHelperFactory.h"
 
 #include <chrono>
 #include <iostream>
 
-#define MAX_BLOCK_SIZE 10
+constexpr int MAX_BLOCK_SIZE = 10;
 
-namespace veil {
-namespace helpers {
+namespace veil
+{
+namespace helpers
+{
 
 using namespace std;
 
