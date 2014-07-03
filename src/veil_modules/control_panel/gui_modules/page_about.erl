@@ -11,9 +11,11 @@
 %% ===================================================================
 
 -module(page_about).
--compile(export_all).
 -include("veil_modules/control_panel/common.hrl").
 -include("registered_names.hrl").
+
+% n2o API
+-export([main/0, event/1]).
 
 -define(LICENSE_FILE, "LICENSE.txt").
 -define(CONTACT_EMAIL, "support@onedata.org").
@@ -94,5 +96,5 @@ get_team() ->
         end, Members)
     }.
 
-event(init) ->
-    ok.
+event(init) -> ok;
+event(terminate) -> ok.
