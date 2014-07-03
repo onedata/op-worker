@@ -1025,7 +1025,7 @@ choose_callback([Callback | L1], L2) ->
 %% ====================================================================
 delete_callback(State, FuseId, Pid) ->
   {NewCallbacks, DeleteAns} = delete_pid_from_list(FuseId, Pid, State#node_state.callbacks, []),
-  ?debug("Deleting calbacl, ans ~p", [DeleteAns]),
+  ?debug("Deleting callback, ans ~p", [DeleteAns]),
   {State#node_state{callbacks = NewCallbacks}, DeleteAns}.
 
 %% delete_pid_from_list/4

@@ -501,7 +501,7 @@ rdn_sequence_to_dn_string(RDNSequence) ->
         [_Comma | ProperString] = lists:reverse(DNString),
         {ok, lists:reverse(ProperString)}
     catch Type:Message ->
-        ?error("Failed to convert rdnSequence to DN string.~n~p: ~p~n~p", [Type, Message, erlang:get_stacktrace()]),
+        ?error_stacktrace("Failed to convert rdnSequence to DN string.~n~p: ~p", [Type, Message]),
         {error, conversion_failed}
     end.
 

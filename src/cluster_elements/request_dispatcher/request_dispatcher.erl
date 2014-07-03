@@ -101,7 +101,7 @@ init(Modules) ->
     {error, Error} -> ?error("GSI Handler init failed. Error: ~p", [Error])
   catch
     throw:ccm_node -> ?info("GSI Handler init interrupted due to wrong node type (CCM)");
-    _:Except -> ?error("GSI Handler init failed. Exception: ~p ~n ~p", [Except, erlang:get_stacktrace()])
+    _:Except -> ?error_stacktrace("GSI Handler init failed. Exception: ~p", [Except])
   end,
   NewState = initState(Modules),
   ModulesConstList = lists:map(fun({M, {L1, L2}}) ->
@@ -662,7 +662,7 @@ pull_state(CurrentStateNum) ->
     gen_server:call({global, ?CCM}, get_workers, 1000)
   catch
     _:_ ->
-      ?error("Dispatcher on node: ~s: can not pull workers list", [node()]),
+      ?error("Dispatcher on node: ~p: can not pull workers list", [node()]),
       {error, CurrentStateNum}
   end.
 
@@ -788,7 +788,7 @@ pull_callbacks(OldCallbacksNum) ->
     gen_server:call({global, ?CCM}, get_callbacks, 1000)
   catch
     _:_ ->
-      ?error("Dispatcher on node: ~s: can not pull callbacks list", [node()]),
+      ?error("Dispatcher on node: ~p: can not pull callbacks list", [node()]),
       {error, OldCallbacksNum}
   end.
 
@@ -1037,7 +1037,7 @@ forward_request(NodeChosen, Task, Request, Message, State) ->
                   end
                 catch
                   Type:Error ->
-                    ?error("Dispatcher (request map) error for module ~p and request ~p: ~p:~p ~n ~p", [Task, Message, Type, Error, erlang:get_stacktrace()]),
+                    ?error_stacktrace("Dispatcher (request map) error for module ~p and request ~p: ~p:~p", [Task, Message, Type, Error]),
                     random:seed(now()),
                     Node5 = lists:nth(random:uniform(ModulesListLength), ModulesList),
                     gen_server:cast({Task, Node5}, Message)

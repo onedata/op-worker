@@ -138,7 +138,7 @@ ports_are_free(Port)->
 			gen_tcp:close(Socket),
 			true;
 		error ->
-			?error("Port ~w is in use, error: ~p. Starting aborted. ~n", [Port,Socket]),
+			?error("Port ~p is in use, error: ~p. Starting aborted. ~n", [Port,Socket]),
 			io:format(standard_error, "Port ~w is in use. Starting aborted.~n", [Port]),
 			false
 	end.

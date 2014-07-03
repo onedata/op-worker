@@ -484,7 +484,7 @@ proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
     PlugIn:handle(ProtocolVersion, Request)
 	catch
     Type:Error ->
-      ?error("Worker plug-in ~p error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
+      ?error_stacktrace("Worker plug-in ~p error: ~p:~p", [PlugIn, Type, Error]),
       worker_plug_in_error
 	end,
   send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo).
@@ -530,7 +530,7 @@ proc_standard_request(RequestMap, SubProcs, PlugIn, ProtocolVersion, Msg, MsgId,
         Type:Error ->
           spawn(fun() ->
             BeforeProcessingRequest = os:timestamp(),
-            ?error("Worker plug-in ~p sub proc error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
+            ?error_stacktrace("Worker plug-in ~p sub proc error: ~p:~p", [PlugIn, Type, Error]),
             send_response(PlugIn, BeforeProcessingRequest, sub_proc_error, MsgId, ReplyTo)
           end),
           SubProcs
@@ -571,7 +571,7 @@ send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo) ->
         non -> Pid ! Response;
         Id -> Pid ! {worker_answer, Id, Response}
       end;
-    Other -> ?error("Wrong reply type: ~s", [Other])
+    Other -> ?error("Wrong reply type: ~p", [Other])
   end,
 
   AfterProcessingRequest = os:timestamp(),
@@ -888,7 +888,7 @@ generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun, CacheType} |
           ProcFun(ProtocolVersion, Request)
                     catch
                       Type:Error ->
-                        ?error("Worker plug-in ~p error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
+                        ?error_stacktrace("Worker plug-in ~p error: ~p:~p", [PlugIn, Type, Error]),
                         worker_plug_in_error
                     end,
         send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo)
@@ -902,7 +902,7 @@ generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun, CacheType} |
           ProcFun(ProtocolVersion, Request, CacheName)
                     catch
                       Type:Error ->
-                        ?error("Worker plug-in ~p error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
+                        ?error_stacktrace("Worker plug-in ~p error: ~p:~p", [PlugIn, Type, Error]),
                         worker_plug_in_error
                     end,
         send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo)
