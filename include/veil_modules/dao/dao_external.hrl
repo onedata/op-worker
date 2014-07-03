@@ -29,7 +29,7 @@
 %% where 'record_name' is the name of the record. 'some_record' is an example.
 -define(dao_record_info(R),
     case R of
-        some_record         -> ?record_info_gen(some_record);
+        some_record         -> ?record_info_gen(some_record);   %example record from dao common.hrl
         cm_state            -> ?record_info_gen(cm_state);
         host_state          -> ?record_info_gen(host_state);
         node_state          -> ?record_info_gen(node_state);
@@ -48,25 +48,6 @@
         _ -> {error, unsupported_record}
     end).
 
-
-%% Record-wrapper for regular records that needs to be saved in DB. Adds UUID and Revision info to each record.
-%% `uuid` is document UUID, `rev_info` is documents' current revision number
-%% `record` is an record representing this document (its data), `force_update` is a flag
-%% that forces dao:save_record/1 to update this document even if rev_info isn't valid or up to date.
--record(veil_document, {uuid = "", rev_info = 0, record = none, force_update = false}).
-
-%% Those records represent view result Each #view_resault contains list of #view_row.
-%% If the view has been queried with `include_docs` option, #view_row.doc will contain #veil_document, therefore
-%% #view_row.id == #view_row.doc#veil_document.uuid. Unfortunately wrapping demanded record in #veil_document is
-%% necessary because we may need revision info for that document.
--record(view_row, {id = "", key = "", value = 0, doc = none}).
--record(view_result, {total = 0, offset = 0, rows = []}).
-
-%% These records allows representing databases, design documents and their views.
-%% Used in DAO initial configuration in order to easily setup/update views in database.
--record(db_info, {name = "", designs = []}).
--record(design_info, {name = "", version = 0, views = []}).
--record(view_info, {name = "", design = "", db_name = ""}).
 
 %% ====================================================================
 %% DB definitions
