@@ -24,6 +24,7 @@ title() -> <<"Logout page">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
+    ?debug("User ~p logged out", [gui_ctx:get_user_id()]),
     gui_ctx:clear_session(),
     #panel{style = <<"position: relative;">>, body =
     [

@@ -394,7 +394,7 @@ clear_sessions(Sessions) ->
                     save_fuse_session(NewDoc), %% Save updated document
                     ok;
                 {Pid, {error, Reason1}} -> %% Connection is broken, remove it
-                    ?info("FUSE Session ~p is broken (~p). Invalidating...", [SessID, Reason1]),
+                    ?warning("FUSE Session ~p is broken (~p). Invalidating...", [SessID, Reason1]),
                     close_fuse_session(SessID),
                     session_closed
             after 60000 ->

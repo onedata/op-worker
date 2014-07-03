@@ -238,61 +238,61 @@ get_redirect_url(OldURL, Headers) ->
         _ -> undefined
     end.
 
-
-%% ssl_opts/1
-%% ====================================================================
-%% @doc Returns list of ssl opts for secure connection.
-%% @end
--spec ssl_opts(ReqHostname :: string()) -> [tuple()].
-%% ====================================================================
-ssl_opts(ReqHostname) ->
-    VerifyFun =
-        fun(_, {bad_cert, _}, RequestedHostname) ->
-            {unknown, RequestedHostname};
-
-            (_, {extension, _}, RequestedHostname) ->
-                {unknown, RequestedHostname};
-
-            (_, valid, RequestedHostname) ->
-                {valid, RequestedHostname};
-
-            (Cert, valid_peer, RequestedHostname) ->
-                % If peer is valid, make sure one of domain names contained in cert matches our requested adress
-                #'OTPCertificate'{tbsCertificate = #'OTPTBSCertificate'{extensions = Extensions}} = Cert,
-                AllowedHostnames = lists:foldl(
-                    fun(#'Extension'{extnID = ExtID, extnValue = ExtVal}, Acc) ->
-                        case ExtID of
-                            ?'id-ce-subjectAltName' ->
-                                Acc ++ lists:map(
-                                    fun({dNSName, DNSName}) ->
-                                        % Create regexps from allowed domain names, to later match them against requested address
-                                        ReplacedDots = re:replace(DNSName, "\\.", "\\\\.", [global, {return, list}]),
-                                        _ReplacedWildcards = re:replace(ReplacedDots, "\\*", ".*", [global, {return, list}])
-                                    end, ExtVal);
-                            _ ->
-                                Acc
-                        end
-                    end, [], Extensions),
-
-                Valid = lists:foldl(
-                    fun(RegExp, Acc) ->
-                        case re:run(RequestedHostname, RegExp) of
-                        % At least one domain name matched, the peer is indeed valid
-                            {match, _} -> valid;
-                            _ -> Acc
-                        end
-                    end, unknown, AllowedHostnames),
-                {Valid, RequestedHostname}
-        end,
-
-    CaCertFileAtom = case application:get_env(veil_cluster_node, root_cacert_file) of
-                         {ok, Val} -> Val;
-                         _ -> throw("root_cacert_file env missing")
-                     end,
-    % Return ssl opts for a secure connection
-    [
-        {verify, verify_peer},
-        {cacertfile, atom_to_list(CaCertFileAtom)},
-        {verify_fun, {VerifyFun, ReqHostname}},
-        {depth, ?ca_cert_max_depth}
-    ].
+%% Unused function
+%% %% ssl_opts/1
+%% %% ====================================================================
+%% %% @doc Returns list of ssl opts for secure connection.
+%% %% @end
+%% -spec ssl_opts(ReqHostname :: string()) -> [tuple()].
+%% %% ====================================================================
+%% ssl_opts(ReqHostname) ->
+%%     VerifyFun =
+%%         fun(_, {bad_cert, _}, RequestedHostname) ->
+%%             {unknown, RequestedHostname};
+%%
+%%             (_, {extension, _}, RequestedHostname) ->
+%%                 {unknown, RequestedHostname};
+%%
+%%             (_, valid, RequestedHostname) ->
+%%                 {valid, RequestedHostname};
+%%
+%%             (Cert, valid_peer, RequestedHostname) ->
+%%                 % If peer is valid, make sure one of domain names contained in cert matches our requested adress
+%%                 #'OTPCertificate'{tbsCertificate = #'OTPTBSCertificate'{extensions = Extensions}} = Cert,
+%%                 AllowedHostnames = lists:foldl(
+%%                     fun(#'Extension'{extnID = ExtID, extnValue = ExtVal}, Acc) ->
+%%                         case ExtID of
+%%                             ?'id-ce-subjectAltName' ->
+%%                                 Acc ++ lists:map(
+%%                                     fun({dNSName, DNSName}) ->
+%%                                         % Create regexps from allowed domain names, to later match them against requested address
+%%                                         ReplacedDots = re:replace(DNSName, "\\.", "\\\\.", [global, {return, list}]),
+%%                                         _ReplacedWildcards = re:replace(ReplacedDots, "\\*", ".*", [global, {return, list}])
+%%                                     end, ExtVal);
+%%                             _ ->
+%%                                 Acc
+%%                         end
+%%                     end, [], Extensions),
+%%
+%%                 Valid = lists:foldl(
+%%                     fun(RegExp, Acc) ->
+%%                         case re:run(RequestedHostname, RegExp) of
+%%                         % At least one domain name matched, the peer is indeed valid
+%%                             {match, _} -> valid;
+%%                             _ -> Acc
+%%                         end
+%%                     end, unknown, AllowedHostnames),
+%%                 {Valid, RequestedHostname}
+%%         end,
+%%
+%%     CaCertFileAtom = case application:get_env(veil_cluster_node, root_cacert_file) of
+%%                          {ok, Val} -> Val;
+%%                          _ -> throw("root_cacert_file env missing")
+%%                      end,
+%%     % Return ssl opts for a secure connection
+%%     [
+%%         {verify, verify_peer},
+%%         {cacertfile, atom_to_list(CaCertFileAtom)},
+%%         {verify_fun, {VerifyFun, ReqHostname}},
+%%         {depth, ?ca_cert_max_depth}
+%%     ].

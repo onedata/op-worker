@@ -10,8 +10,10 @@
 %% ===================================================================
 
 -module(dns_ranch_tcp_handler).
--include("registered_names.hrl").
 -behaviour(ranch_protocol).
+
+-include("registered_names.hrl").
+-include("logging.hrl").
 
 %% ====================================================================
 %% API
@@ -74,7 +76,7 @@ loop(Socket, Transport, ResponseTTL, TCPIdleTime, DispatcherTimeout) ->
 		{ok, Packet} -> handle_request(Socket, Transport, Packet, ResponseTTL, DispatcherTimeout),
 						?MODULE:loop(Socket, Transport, ResponseTTL, TCPIdleTime, DispatcherTimeout);
 		{error, closed} -> ok;
-		{error, Reason} -> lager:warning("Error receiving packet, reason ~p", [Reason]),
+		{error, Reason} -> ?warning("Error receiving packet, reason ~p", [Reason]),
 						   Transport:close(Socket)
 	end.
 
@@ -95,6 +97,6 @@ loop(Socket, Transport, ResponseTTL, TCPIdleTime, DispatcherTimeout) ->
 handle_request(Socket, Transport, Packet, ResponseTTL, DispatcherTimeout) ->
 	case dns_utils:generate_answer(Packet, ?Dispatcher_Name, DispatcherTimeout, ResponseTTL, tcp) of
 		{ok, Response} -> Transport:send(Socket, Response);
-		{error, Reason} -> lager:error("Error processing dns request ~p", [Reason]),
+		{error, Reason} -> ?error("Error processing dns request ~p", [Reason]),
 						   Transport:close(Socket)
 	end.
