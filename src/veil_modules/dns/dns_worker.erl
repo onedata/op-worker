@@ -277,7 +277,7 @@ start_tcp_listener(AcceptorPool, Port, TransportOpts, Pid) ->
 	catch
 		_:RanchError -> ok = supervisor:terminate_child(?Supervisor_Name, Pid),
 			supervisor:delete_child(?Supervisor_Name, Pid),
-      ?error("Start DNS TCP listener error, ~p", [RanchError]),
+			?error("Start DNS TCP listener error, ~p", [RanchError]),
 			throw(RanchError)
 	end,
 	ok.
