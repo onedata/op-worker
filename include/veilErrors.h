@@ -5,9 +5,9 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
+#ifndef VEILHELPERS_VEIL_ERRORS_H
+#define VEILHELPERS_VEIL_ERRORS_H
 
-#ifndef VEIL_ERRORS_H
-#define VEIL_ERRORS_H
 
 #include <string>
 
@@ -33,7 +33,6 @@ constexpr const char
 
 namespace veil
 {
-
 namespace error
 {
 
@@ -56,4 +55,5 @@ int translateError(const std::string &verr);
 
 } // namespace veil
 
-#endif // VEIL_ERRORS_H
+
+#endif // VEILHELPERS_VEIL_ERRORS_H

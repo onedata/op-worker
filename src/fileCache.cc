@@ -3,6 +3,7 @@
 #include "helpers/storageHelperFactory.h"
 
 #include <chrono>
+#include <iostream>
 
 #define MAX_BLOCK_SIZE 10
 
@@ -16,10 +17,6 @@ FileCache::FileCache(uint32_t blockSize, bool isBuffer)
     m_curBlockNo(1),
     m_blockSize(blockSize),
     m_byteSize(0)
-{
-}
-
-FileCache::~FileCache()
 {
 }
 

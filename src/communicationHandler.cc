@@ -9,6 +9,9 @@
 #include "fuse_messages.pb.h"
 #include "logging.h"
 #include "helpers/storageHelperFactory.h"
+#include "simpleConnectionPool.h"
+
+
 #include <google/protobuf/descriptor.h>
 #include <iostream>
 #include <string>
@@ -147,7 +150,7 @@ int CommunicationHandler::openConnection()
     m_endpoint->set_pong_timeout_handler(bind(&CommunicationHandler::onPongTimeout, this, ::_1, ::_2));
     m_endpoint->set_interrupt_handler(bind(&CommunicationHandler::onInterrupt, this, ::_1));
 
-    string URL = string("wss://") + m_hostname + ":" + toString(m_port) + string(CLUSTER_URI_PATH);
+    string URL = string("wss://") + m_hostname + ":" + std::to_string(m_port) + string(CLUSTER_URI_PATH);
     ws_client::connection_ptr con = m_endpoint->get_connection(URL, ec); // Initialize WebSocket handshake
     if(ec.value() != 0) {
         LOG(ERROR) << "Cannot connect to " << URL << " due to: " << ec.message();
@@ -509,13 +512,13 @@ context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
         SSL_CTX_set_session_cache_mode(ssl_ctx, mode);
 
         boost::asio::ssl::context_base::file_format file_format; // Certificate format
-        if(certInfo.cert_type == CertificateInfo::ASN1) {
+        if(certInfo.cert_type == CertificateInfo::CertificateType::ASN1) {
             file_format = boost::asio::ssl::context::asn1;
         } else {
             file_format = boost::asio::ssl::context::pem;
         }
 
-        if(certInfo.cert_type == CertificateInfo::P12) {
+        if(certInfo.cert_type == CertificateInfo::CertificateType::P12) {
             LOG(ERROR) << "Unsupported certificate format: P12";
             return context_ptr();
         }

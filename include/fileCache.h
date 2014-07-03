@@ -1,17 +1,25 @@
-#include <fcntl.h>
-#include <fuse.h>
-#include <unistd.h>
+/**
+ * @file fileCache.h
+ * @author Rafal Slota
+ * @copyright (C) 2013 ACK CYFRONET AGH
+ * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
+ */
 
-#include <list>
-#include <map>
+#ifndef VEILHELPERS_FILE_CACHE_H
+#define VEILHELPERS_FILE_CACHE_H
+
+
+#include <sys/types.h>
+
 #include <memory>
-#include <set>
 #include <mutex>
-#include <queue>
+#include <set>
 #include <string>
 
-namespace veil {
-namespace helpers {
+namespace veil
+{
+namespace helpers
+{
 
 /**
  * FileBlock represents single file block of data.
@@ -19,33 +27,26 @@ namespace helpers {
  */
 struct FileBlock
 {
-    off_t               offset;
-    size_t              _size;
+    off_t               offset = 0;
+    size_t              _size = 0;
     std::string         data;
 
-    uint64_t            valid_to;
+    uint64_t            valid_to = 0;
 
     /// Construct empty FileBlock.
-    FileBlock()
-      : offset(0),
-        _size(0),
-        valid_to(0)
-    {
-    }
+    FileBlock() = default;
 
     FileBlock(off_t off)
-      : offset(off),
-        _size(0),
-        valid_to(0)
+        : offset(off)
     {
     }
 
     /// Construct FileBlock using given offet and data.
     FileBlock(off_t off, const std::string &buff, uint64_t valid = 0)
-      : offset(off),
-        _size(buff.size()),
-        data(buff),
-        valid_to(valid)
+        : offset(off)
+        , _size(buff.size())
+        , data(buff)
+        , valid_to(valid)
     {
     }
 
@@ -55,9 +56,14 @@ struct FileBlock
         return data.size();
     }
 
-    /// Blocks compare equal if and only if they have same offset and size. Data itself is not relevant.
-    bool operator== ( FileBlock const &q) const { return offset == q.offset && size() == q.size(); }
-
+    /**
+     * Blocks compare equal if and only if they have same offset and size.
+     * Data itself is not relevant.
+     */
+    bool operator== ( FileBlock const &q) const
+    {
+        return offset == q.offset && size() == q.size();
+    }
 };
 
 // Convinience typedef to FileBlock struct
@@ -112,7 +118,7 @@ public:
      * @param isBuffer defines is this FileCache will be used as write buffer, which means that expire data is not used.
      */
     FileCache(uint32_t blockSize, bool isBuffer = true);
-    virtual ~FileCache();
+    virtual ~FileCache() = default;
 
     virtual bool        readData(off_t, size_t, std::string &buff); ///< Reads data from buffer
                                                                     ///< @return true if at least 1 byte could be read
@@ -146,3 +152,5 @@ private:
 } // namespace helpers
 } // namespace veil
 
+
+#endif // VEILHELPERS_FILE_CACHE_H

@@ -5,25 +5,25 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef SIMPLE_CONNECTION_POOL_H
-#define SIMPLE_CONNECTION_POOL_H
+#ifndef VEILHELPERS_SIMPLE_CONNECTION_POOL_H
+#define VEILHELPERS_SIMPLE_CONNECTION_POOL_H
 
 
 #include "communicationHandler.h"
-#include "veilErrors.h"
 
 #include <atomic>
 #include <condition_variable>
-#include <ctime>
 #include <list>
 #include <memory>
 #include <mutex>
-#include <thread>
 
-#define DEFAULT_POOL_SIZE 2
-#define MAX_CONNECTION_ERROR_COUNT 5
+constexpr int DEFAULT_POOL_SIZE = 2;
+constexpr int MAX_CONNECTION_ERROR_COUNT = 5;
 
-namespace veil {
+namespace veil
+{
+
+class CommunicationHandler;
 
 using connection_pool_t = std::list<std::pair<std::shared_ptr<CommunicationHandler>, time_t>>;
 
@@ -31,7 +31,8 @@ class SimpleConnectionPool : public std::enable_shared_from_this<SimpleConnectio
 {
 public:
 
-    enum PoolType {
+    enum PoolType
+    {
         META_POOL = 0,  ///< Connection for meta data
         DATA_POOL       ///< Connection for file data
     };
@@ -91,7 +92,7 @@ protected:
         int &c;
 
         CounterRAII(int &c)
-          : c(c)
+            : c(c)
         {
             ++c;
         }
@@ -111,4 +112,4 @@ private:
 } // namespace veil
 
 
-#endif // SIMPLE_CONNECTION_POOL_H
+#endif // VEILHELPERS_SIMPLE_CONNECTION_POOL_H

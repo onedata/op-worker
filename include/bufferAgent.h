@@ -1,20 +1,38 @@
-#include "fileCache.h"
+/**
+ * @file bufferAgent.h
+ * @author Rafal Slota
+ * @copyright (C) 2013 ACK CYFRONET AGH
+ * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
+ */
+
+#ifndef VEILHELPERS_BUFFER_AGENT_H
+#define VEILHELPERS_BUFFER_AGENT_H
+
+
 #include "helpers/storageHelperFactory.h"
 
-#include <fcntl.h>
 #include <fuse.h>
-#include <unistd.h>
+#include <sys/types.h>
 
 #include <condition_variable>
 #include <functional>
+#include <list>
+#include <map>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <vector>
 
-namespace veil {
-namespace helpers {
+namespace veil
+{
+namespace helpers
+{
+
+struct BufferLimits;
+class FileCache;
 
 // Convinience typedef
 using ffi_type = struct fuse_file_info*;
@@ -41,7 +59,8 @@ class BufferAgent
 public:
 
     /// State holder for write operations for the file
-    struct WriteCache {
+    struct WriteCache
+    {
         std::shared_ptr<FileCache>    buffer;     ///< Actual buffer object.
         std::recursive_mutex          mutex;
         std::recursive_mutex          sendMutex;
@@ -52,14 +71,15 @@ public:
         int                           lastError;  ///< Last write error
 
         WriteCache()
-          : opPending(false),
-            lastError(0)
+            : opPending(false)
+            , lastError(0)
         {
         }
     };
 
     /// State holder for read operations for the file
-    struct ReadCache {
+    struct ReadCache
+    {
         std::shared_ptr<FileCache>    buffer;         ///< Actual buffer object.
         std::recursive_mutex          mutex;
         std::condition_variable_any   cond;
@@ -71,9 +91,9 @@ public:
         off_t                         endOfFile;      ///< Last detected end of file (its offset)
 
         ReadCache()
-          : blockSize(4096),
-            openCount(0),
-            endOfFile(0)
+            : blockSize(4096)
+            , openCount(0)
+            , endOfFile(0)
         {
         }
     };
@@ -81,17 +101,18 @@ public:
     /// Internal type of Prefetching workers' job
     /// Every time that BufferAgent thinks data prefetch is needed, the PrefetchJob
     /// object end up in worker threads' job queue
-    struct PrefetchJob {
+    struct PrefetchJob
+    {
         std::string     fileName;
         off_t           offset;
         size_t          size;
         fd_type         fh;
 
         PrefetchJob(const std::string &fileName, off_t offset, size_t size, fd_type fh)
-          : fileName(fileName),
-            offset(offset),
-            size(size),
-            fh(fh)
+            : fileName(fileName)
+            , offset(offset)
+            , size(size)
+            , fh(fh)
         {
         }
 
@@ -200,7 +221,8 @@ private:
     const BufferLimits m_bufferLimits;
 };
 
-
 } // namespace helpers
 } // namespace veil
 
+
+#endif // VEILHELPERS_BUFFER_AGENT_H

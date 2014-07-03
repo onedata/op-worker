@@ -5,10 +5,10 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#include "helpers/storageHelperFactory.h"
-#include "directIOHelper.h"
 #include "clusterProxyHelper.h"
 #include "communicationHandler.h"
+#include "directIOHelper.h"
+#include "helpers/storageHelperFactory.h"
 
 #include <boost/algorithm/string.hpp>
 

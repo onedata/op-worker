@@ -9,6 +9,7 @@
 
 #include "communicationHandler.h"
 #include "helpers/storageHelperFactory.h"
+#include "simpleConnectionPool.h"
 
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/algorithm/string/predicate.hpp>

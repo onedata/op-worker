@@ -1,4 +1,6 @@
 #include "bufferAgent.h"
+
+#include "fileCache.h"
 #include "helpers/storageHelperFactory.h"
 #include "logging.h"
 

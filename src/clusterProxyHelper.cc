@@ -5,15 +5,19 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
+#include "clusterProxyHelper.h"
+
 #include "veilConfig.h"
 #include <limits.h>
 
 #include <boost/algorithm/string.hpp>
 #include "logging.h"
-#include "clusterProxyHelper.h"
 #include "helpers/storageHelperFactory.h"
+#include "remote_file_management.pb.h"
 #include <google/protobuf/descriptor.h>
 #include "veilErrors.h"
+#include "communicationHandler.h"
+#include "simpleConnectionPool.h"
 
 #include <functional>
 #include <iostream>
@@ -372,10 +376,6 @@ ClusterProxyHelper::ClusterProxyHelper(std::shared_ptr<SimpleConnectionPool> con
 
     m_clusterPort = args.count("cluster_port") ?
                 boost::any_cast<unsigned int>(args.at("cluster_port")) : 0;
-}
-
-ClusterProxyHelper::~ClusterProxyHelper()
-{
 }
 
 } // namespace helpers
