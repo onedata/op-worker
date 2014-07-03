@@ -36,27 +36,27 @@ main_test_() ->
             {"save user doc",
                 fun() ->
                     LowestUUID = integer_to_list(?LOWEST_USER_ID),
-                    meck:expect(dao, save_record, 
-                        fun(Arg) -> 
-                            case Arg of 
+                    meck:expect(dao, save_record,
+                        fun(Arg) ->
+                            case Arg of
                                 #veil_document{record = #user{}, uuid = ""} -> {ok, "new_uuid"};
                                 #veil_document{record = #user{}, uuid = UUID} -> {ok, UUID}
                             end
                         end),
-                    meck:expect(dao, list_records, 
+                    meck:expect(dao, list_records,
                         fun(?USER_BY_UID_VIEW, #view_query_args{include_docs = false, limit = 1, direction = rev}) ->
                             {ok, #view_result{rows = [#view_row{id = "32345"}]}}
-                        end), 
+                        end),
                     meck:expect(dao, set_db, fun(?USERS_DB_NAME) -> ok end),
                     ?assertEqual({ok, "32346"}, dao_users:save_user(#user{})),
-                    meck:expect(dao, list_records, 
+                    meck:expect(dao, list_records,
                         fun(?USER_BY_UID_VIEW, #view_query_args{include_docs = false, limit = 1, direction = rev}) ->
                             {ok, #view_result{rows = []}}
-                        end), 
+                        end),
                     ?assertEqual({ok, LowestUUID}, dao_users:save_user(#user{})),
 
                     meck:expect(worker_host, clear_cache, fun
-                      ({users_cache, _}) -> ok
+                        ({users_cache, _}) -> ok
                     end),
                     ?assertEqual({ok, "existing_uuid"}, dao_users:save_user(#veil_document{record = #user{}, uuid = "existing_uuid"})),
                     ?assert(meck:validate(dao)),
@@ -66,12 +66,13 @@ main_test_() ->
             {"remove & get user doc by uuid",
                 fun() ->
                     meck:expect(dao, set_db, fun(?USERS_DB_NAME) -> ok end),
-                    meck:expect(dao, get_record, fun(_UUID) -> {ok, #veil_document{ record = #user{}, uuid = "existing_uuid" }} end),
+                    meck:expect(dao, get_record, fun(_UUID) ->
+                        {ok, #veil_document{record = #user{}, uuid = "existing_uuid"}} end),
                     meck:expect(dao, remove_record, fun(_UUID) -> ok end),
-                    ?assertEqual({ok, #veil_document{ record = #user{}, uuid = "existing_uuid" }}, dao_users:get_user({uuid, "existing_uuid"})),
+                    ?assertEqual({ok, #veil_document{record = #user{}, uuid = "existing_uuid"}}, dao_users:get_user({uuid, "existing_uuid"})),
 
                     meck:expect(worker_host, clear_cache, fun
-                      ({users_cache, _}) -> ok
+                        ({users_cache, _}) -> ok
                     end),
                     ?assertEqual(ok, dao_users:remove_user({uuid, "existing_uuid"})),
                     ?assert(meck:validate(dao)),
@@ -82,32 +83,41 @@ main_test_() ->
                 fun() ->
                     meck:expect(dao, set_db, fun(?USERS_DB_NAME) -> ok end),
                     meck:expect(dao, remove_record, fun(_UUID) -> ok end),
-                    UserByLogin = #veil_document{ record = #user{ login = "login" } },
-                    UserByEmail = #veil_document{ record = #user{ email_list = ["email"] } },
-                    UserByDn = #veil_document{ record = #user{ dn_list = ["dn"] } },
+                    UserByLogin = #veil_document{record = #user{login = "login"}},
+                    UserByEmail = #veil_document{record = #user{email_list = ["email"]}},
+                    UserByDn = #veil_document{record = #user{dn_list = ["dn"]}},
+                    UserByUnverifiedDn = #veil_document{record = #user{unverified_dn_list = ["unv_dn"]}},
                     LoginQueryArgs = #view_query_args{keys = [dao_helper:name("login")], include_docs = true},
                     EmailQueryArgs = #view_query_args{keys = [dao_helper:name("email")], include_docs = true},
                     DnQueryArgs = #view_query_args{keys = [dao_helper:name("dn")], include_docs = true},
-                    meck:expect(dao, list_records, 
+                    UnverifiedDnQueryArgs = #view_query_args{keys = [dao_helper:name("unv_dn")], include_docs = true},
+                    meck:expect(dao, list_records,
                         fun(View, QueryArgs) ->
                             case {View, QueryArgs} of
-                                {?USER_BY_LOGIN_VIEW, LoginQueryArgs} -> {ok,  #view_result{rows = [#view_row{doc = UserByLogin}]}};
-                                {?USER_BY_EMAIL_VIEW, EmailQueryArgs} -> {ok,  #view_result{rows = [#view_row{doc = UserByEmail}]}};
-                                {?USER_BY_DN_VIEW, DnQueryArgs} -> {ok,  #view_result{rows = [#view_row{doc = UserByDn}]}}
-                            end                                        
+                                {?USER_BY_LOGIN_VIEW, LoginQueryArgs} ->
+                                    {ok, #view_result{rows = [#view_row{doc = UserByLogin}]}};
+                                {?USER_BY_EMAIL_VIEW, EmailQueryArgs} ->
+                                    {ok, #view_result{rows = [#view_row{doc = UserByEmail}]}};
+                                {?USER_BY_DN_VIEW, DnQueryArgs} ->
+                                    {ok, #view_result{rows = [#view_row{doc = UserByDn}]}};
+                                {?USER_BY_UNVERIFIED_DN_VIEW, UnverifiedDnQueryArgs} ->
+                                    {ok, #view_result{rows = [#view_row{doc = UserByUnverifiedDn}]}}
+                            end
                         end),
 
                     ?assertEqual({ok, UserByLogin}, dao_users:get_user({login, "login"})),
                     ?assertEqual({ok, UserByEmail}, dao_users:get_user({email, "email"})),
                     ?assertEqual({ok, UserByDn}, dao_users:get_user({dn, "dn"})),
+                    ?assertEqual({ok, UserByUnverifiedDn}, dao_users:get_user({unverified_dn, "unv_dn"})),
 
                     meck:expect(worker_host, clear_cache, fun
-                      ({users_cache, _}) -> ok
+                        ({users_cache, _}) -> ok
                     end),
 
                     ?assertEqual(ok, dao_users:remove_user({login, "login"})),
                     ?assertEqual(ok, dao_users:remove_user({email, "email"})),
                     ?assertEqual(ok, dao_users:remove_user({dn, "dn"})),
+                    ?assertEqual(ok, dao_users:remove_user({unverified_dn, "unv_dn"})),
                     ?assert(meck:validate(dao)),
                     ?assert(meck:validate(worker_host))
                 end},
@@ -117,17 +127,18 @@ main_test_() ->
                     meck:expect(dao, set_db, fun(?USERS_DB_NAME) -> ok end),
                     meck:expect(lager, log, fun(error, _, _, _) -> ok end),
                     meck:expect(lager, log, fun(warning, _, _, _) -> ok end),
-                    UserDoc = #veil_document{ record = #user{ } },
+                    UserDoc = #veil_document{record = #user{}},
                     QueryArgsEmptyResponse = #view_query_args{keys = [dao_helper:name("login")], include_docs = true},
                     QueryArgsDuplicatedResponse = #view_query_args{keys = [dao_helper:name("email")], include_docs = true},
                     QueryArgsInvalidResponse = #view_query_args{keys = [dao_helper:name("dn")], include_docs = true},
-                    meck:expect(dao, list_records, 
+                    meck:expect(dao, list_records,
                         fun(View, QueryArgs) ->
                             case {View, QueryArgs} of
-                                {?USER_BY_LOGIN_VIEW, QueryArgsEmptyResponse} -> {ok,  #view_result{rows = []}};
-                                {?USER_BY_EMAIL_VIEW, QueryArgsDuplicatedResponse} -> {ok,  #view_result{rows = [#view_row{doc = UserDoc}, #view_row{doc = UserDoc}]}};
+                                {?USER_BY_LOGIN_VIEW, QueryArgsEmptyResponse} -> {ok, #view_result{rows = []}};
+                                {?USER_BY_EMAIL_VIEW, QueryArgsDuplicatedResponse} ->
+                                    {ok, #view_result{rows = [#view_row{doc = UserDoc}, #view_row{doc = UserDoc}]}};
                                 {?USER_BY_DN_VIEW, QueryArgsInvalidResponse} -> {ok, ubelibubelimuk}
-                            end                                        
+                            end
                         end),
 
                     ?assertEqual(user_not_found, catch dao_users:get_user({login, "login"})),
@@ -136,6 +147,6 @@ main_test_() ->
                     ?assert(meck:validate(dao)),
                     ?assert(meck:validate(lager))
                 end}
-    ]}.
+        ]}.
 
 -endif.

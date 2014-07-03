@@ -11,9 +11,11 @@
 %% ===================================================================
 
 -module(page_validate_login).
--compile(export_all).
 -include("veil_modules/control_panel/common.hrl").
 -include("logging.hrl").
+
+% n2o API
+-export([main/0, event/1]).
 
 %% Template points to the template file, which will be filled with content
 main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
@@ -51,9 +53,9 @@ body() ->
                                 {Login, UserDoc} = user_logic:sign_in(Proplist),
                                 gui_ctx:create_session(),
                                 gui_ctx:set_user_id(Login),
-                                gui_ctx:set_user_record(UserDoc),
-                                gui_jq:redirect_from_login(),
-                                ?debug("User ~p logged in", [Login])
+                                vcn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),
+                                vcn_gui_utils:set_user_role(user_logic:get_role(UserDoc)),
+                                gui_jq:redirect_from_login()
                         end
                     catch
                         throw:dir_creation_error ->
@@ -69,4 +71,5 @@ body() ->
             end
     end.
 
-event(init) -> ok.
+event(init) -> ok;
+event(terminate) -> ok.
