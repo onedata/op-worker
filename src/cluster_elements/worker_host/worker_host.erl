@@ -404,7 +404,7 @@ handle_cast(stop, State) ->
 
 handle_cast(_Msg, State) ->
   ?warning("Wrong cast: ~p", [_Msg]),
-	{noreply, State}.
+  {noreply, State}.
 
 
 %% handle_info/2
