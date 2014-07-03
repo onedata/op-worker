@@ -123,7 +123,7 @@ remove_broken_views() ->
                     NewViews = dao_json:rm_fields(ViewsField, ToDel),
                     NewBody1 = dao_json:mk_field(Body, "views", NewViews),
                     DbRes = dao_helper:insert_doc(DB, Doc#doc{body = NewBody1}, [?ADMIN_USER_CTX]),
-                    lager:info("DBRes: ~p", [DbRes]),
+                    ?info("DBRes: ~p", [DbRes]),
                     ok;
                 _ ->
                     ok
@@ -158,23 +158,23 @@ setup_views(DesignStruct) ->
                     DbVersion = dao_helper:name(integer_to_list(binary:decode_unsigned(crypto:hash_final(LastCTX1)), 16)),
                     case DbVersion of %% Compare DbVersion with LocalVersion
                         LocalVersion ->
-                            lager:info("DB version of design ~p is ~p and matches local version. Design is up to date", [Name, LocalVersion]),
+                            ?info("DB version of design ~p is ~p and matches local version. Design is up to date", [Name, LocalVersion]),
                             [];
                         _Other ->
-                            lager:info("DB version of design ~p is ~p and does not match ~p. Rebuilding design document", [Name, _Other, LocalVersion]),
+                            ?info("DB version of design ~p is ~p and does not match ~p. Rebuilding design document", [Name, _Other, LocalVersion]),
                             ViewList
                     end;
                 _ ->
-                    lager:info("Design document ~p in DB ~p not exists. Creating...", [Name, DbName]),
+                    ?info("Design document ~p in DB ~p not exists. Creating...", [Name, DbName]),
                     ViewList
             end,
 
         lists:map(fun(#view_info{name = ViewName, version = ViewVersion}) -> %% For each view
             case dao_helper:create_view(DbName, Name, dao_utils:get_versioned_view_name(ViewName, ViewVersion), load_view_def(ViewName, ViewVersion, map), load_view_def(ViewName, ViewVersion, reduce), LocalVersion) of
                 ok ->
-                    lager:info("View ~p in design ~p, DB ~p has been created.", [ViewName, Name, DbName]);
+                    ?info("View ~p in design ~p, DB ~p has been created.", [ViewName, Name, DbName]);
                 _Err ->
-                    lager:error("View ~p in design ~p, DB ~p creation failed. Error: ~p", [ViewName, Name, DbName, _Err])
+                    ?error("View ~p in design ~p, DB ~p creation failed. Error: ~p", [ViewName, Name, DbName, _Err])
             end
         end, NewViewList),
         DbName
