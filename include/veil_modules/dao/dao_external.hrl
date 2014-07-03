@@ -132,4 +132,5 @@
             Design == DesignName, DbName2 == DbName]
     } || #view_info{db_name = DbName1, design = DesignName} <- ?VIEW_LIST, DbName1 == DbName]
 } || DbName <- ?DB_LIST]).
+
 -endif.
