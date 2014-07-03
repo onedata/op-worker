@@ -10,7 +10,6 @@
 %% @end
 %% ===================================================================
 
-% n2o API
 -module(page_logs).
 -include("veil_modules/control_panel/common.hrl").
 -include("registered_names.hrl").
