@@ -227,17 +227,22 @@ top_menu(ActiveTabID) ->
 top_menu(ActiveTabID, SubMenuBody) ->
     % Tab, that will be displayed optionally
     PageCaptions =
-        case can_view_logs() of
-            false -> [];
-            true -> [{logs_tab, #li{body = [
-                #link{style = <<"padding: 18px;">>, url = <<"/logs">>, body = <<"Logs">>}
-            ]}}]
-        end ++
         case can_view_monitoring() of
             false -> [];
             true -> [{monitoring_tab, #li{body = [
                 #link{style = <<"padding: 18px;">>, url = <<"/monitoring">>, body = <<"Monitoring">>}
             ]}}]
+        end ++
+        case can_view_logs() of
+            false -> [];
+            true -> [
+                {cluster_logs_tab, #li{body = [
+                    #link{style = <<"padding: 18px;">>, url = <<"/cluster_logs">>, body = <<"Cluster logs">>}
+                ]}},
+                {client_logs_tab, #li{body = [
+                    #link{style = <<"padding: 18px;">>, url = <<"/client_logs">>, body = <<"Client logs">>}
+                ]}}
+            ]
         end,
     % Define menu items with ids, so that proper tab can be made active via function parameter
     % see old_menu_captions()
