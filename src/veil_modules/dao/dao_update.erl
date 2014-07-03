@@ -34,10 +34,10 @@ get_db_structure() ->
     ?DATABASE_DESIGN_STRUCTURE.
 
 
-%% get_db_structure/0
+%% get_all_views/0
 %% ====================================================================
 %% @doc Getter for newest view declarations.
--spec get_db_structure() -> [Views :: #view_info{}].
+-spec get_all_views() -> [Views :: #view_info{}].
 %% ====================================================================
 get_all_views() ->
     ?VIEW_LIST.
@@ -64,7 +64,7 @@ update_view(#view_info{name = ViewName, version = ViewVersion, db_name = DbName}
 %% ====================================================================
 %% @doc Custom per-node DAO update step implementation. This function will be called just before DAO upgrade.
 %%      Non-OK return will abort whole upgrade procedure.
--spec pre_update(Version :: {version, Major :: integer(), Minor :: integer(), Patch :: integer()}) -> ok | {ok, Data} | {error, Reason}.
+-spec pre_update(Version :: {version, Major :: integer(), Minor :: integer(), Patch :: integer()}) -> ok | {ok, Data :: any()} | {error, Reason :: term()}.
 %% ====================================================================
 pre_update(_Version) ->
     ok.

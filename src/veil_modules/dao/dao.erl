@@ -209,10 +209,10 @@ get_db_structure() ->
     ?DATABASE_DESIGN_STRUCTURE.
 
 
-%% get_db_structure/0
+%% get_all_views/0
 %% ====================================================================
 %% @doc Getter for currently used view declarations.
--spec get_db_structure() -> [Views :: #view_info{}].
+-spec get_all_views() -> [Views :: #view_info{}].
 %% ====================================================================
 get_all_views() ->
     ?VIEW_LIST.
