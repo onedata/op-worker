@@ -12,7 +12,7 @@
 #include <string>
 
 /// VeilClient error codes
-constexpr const char
+static constexpr const char
     *VOK        = "ok",            // Everything is just great
     *VPUSH      = "push",          // Everything is even better - PUSH message from cluster. This error code is used as Answer::answer_status for PUSH messages.
     *VENOENT    = "enoent",        // File not found
@@ -26,7 +26,7 @@ constexpr const char
     *VEINVAL    = "einval";        // Invalid argument
 
 /// Cluster's answer status
-constexpr const char
+static constexpr const char
     *INVALID_FUSE_ID                = "invalid_fuse_id",
     *NO_USER_FOUND_ERROR            = "no_user_found_error",
     *NO_CONNECTION_FOR_HANDSHAKE    = "no_connection_for_handshake";
