@@ -36,7 +36,7 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% API
--export([save_record/1, exist_record/1, get_record/1, remove_record/1, list_records/2, load_view_def/2, set_db/1]).
+-export([save_record/1, exist_record/1, get_record/1, remove_record/1, list_records/2, set_db/1]).
 -export([doc_to_term/1,init_storage/0]).
 
 %% ===================================================================
