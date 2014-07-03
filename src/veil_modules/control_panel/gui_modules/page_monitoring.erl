@@ -14,6 +14,9 @@
 -include("registered_names.hrl").
 -include("logging.hrl").
 
+% n2o API and comet
+-export([main/0, event/1, comet_loop/2]).
+
 -define(TIME_RANGES, [<<"last 5 minutes">>, <<"last 15 minutes">>, <<"last hour">>, <<"last 24 hours">>, <<"last 7 days">>, <<"last 30 days">>, <<"last 365 days">>]).
 -define(SUMMARY_CHART_TYPES, [<<"CPU utilization">>, <<"memory usage">>, <<"network throughput">>, <<"network transfer">>, <<"Erlang ports transfer">>, <<"storage IO transfer">>]).
 -define(HOST_CHART_TYPES, [<<"CPU utilization">>, <<"memory usage">>, <<"network throughput">>, <<"network transfer">>, <<"Erlang ports transfer">>]).
@@ -21,8 +24,6 @@
 
 -record(page_state, {nodes, node, time_range, chart_type, charts = []}).
 -record(chart, {id, node, time_range, type, update_period}).
-
--export([main/0, event/1, comet_loop/2]).
 
 %% main/0
 %% ====================================================================

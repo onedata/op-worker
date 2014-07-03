@@ -11,10 +11,18 @@
 %% ===================================================================
 
 -module(page_file_manager).
--compile(export_all).
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("logging.hrl").
+
+% n2o API
+-export([main/0, event/1, api_event/3]).
+% Postback functions and other
+-export([get_requested_hostname/0, comet_loop/1]).
+-export([clear_manager/0, clear_workspace/0, sort_toggle/1, sort_reverse/0, navigate/1, up_one_level/0]).
+-export([toggle_view/1, select_item/1, select_all/0, deselect_all/0, clear_clipboard/0, put_to_clipboard/1, paste_from_clipboard/0]).
+-export([rename_item/2, create_directory/1, remove_selected/0, search/1, show_popup/1, hide_popup/0, path_navigator_body/1]).
+-export([fs_mkdir/1, fs_remove/1, fs_remove_dir/1, fs_mv/2, fs_mv/3, fs_copy/2, fs_unique_filename/2, fs_create_share/1]).
 
 
 % How often should comet process check for changes in current dir
@@ -57,7 +65,7 @@ body() ->
 
 %% This will be placed in the template instead of {{custom}} tag
 custom() ->
-  <<"<script src='/js/veil_upload.js' type='text/javascript' charset='utf-8'></script>">>.
+    <<"<script src='/js/veil_upload.js' type='text/javascript' charset='utf-8'></script>">>.
 
 % Submenu that will be glued below the top menu
 manager_submenu() ->
@@ -499,13 +507,32 @@ put_to_clipboard(Type) ->
 
 
 paste_from_clipboard() ->
-    lists:foreach(
-        fun(Path) ->
+    ErrorMessage = lists:foldl(
+        fun(Path, Acc) ->
             case get_clipboard_type() of
-                cut -> fs_mv(Path, get_working_directory());
-                copy -> fs_copy(Path, get_working_directory())
+                cut ->
+                    case fs_mv(Path, get_working_directory()) of
+                        ok ->
+                            Acc;
+                        {logical_file_system_error, "eperm"} ->
+                            <<Acc/binary, "Unable to move ", (gui_str:to_binary(filename:basename(Path)))/binary, " - insufficient permissions.\r\n">>;
+                        {logical_file_system_error, "eexist"} ->
+                            <<Acc/binary, "Unable to move ", (gui_str:to_binary(filename:basename(Path)))/binary, " - file exists.\r\n">>;
+                        _ ->
+                            <<Acc/binary, "Unable to move ", (gui_str:to_binary(filename:basename(Path)))/binary, " - error occured.\r\n">>
+                    end;
+                copy ->
+                    % Not yet implemented
+                    fs_copy(Path, get_working_directory()),
+                    Acc
             end
-        end, get_clipboard_items()),
+        end, <<"">>, get_clipboard_items()),
+    case ErrorMessage of
+        <<"">> ->
+            ok;
+        _ ->
+            gui_jq:wire(#alert{text = ErrorMessage})
+    end,
     clear_clipboard(),
     clear_workspace().
 
@@ -518,14 +545,17 @@ rename_item(OldPath, NewName) ->
         OldName -> hide_popup();
         _ ->
             NewPath = filename:absname(NewName, get_working_directory()),
-            case item_find(NewPath) of
-                undefined ->
-                    fs_mv(OldPath, get_working_directory(), NewName),
+            case fs_mv(OldPath, get_working_directory(), NewName) of
+                ok ->
                     clear_clipboard(),
                     clear_manager(),
                     select_item(NewPath);
+                {logical_file_system_error, "eperm"} ->
+                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - insufficient permissions.">>});
+                {logical_file_system_error, "eexist"} ->
+                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - file exists.">>});
                 _ ->
-                    gui_jq:wire(#alert{text = <<(gui_str:to_binary(NewName))/binary, " already exists.">>})
+                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - error occured.">>})
             end
     end.
 
@@ -997,9 +1027,6 @@ item_path(#item{path = Path}) ->
 item_basename(#item{path = Path}) ->
     filename:basename(Path).
 
-item_dirname(#item{path = Path}) ->
-    filename:dirname(Path).
-
 item_attr(name, Item) -> item_basename(Item);
 item_attr(mode, #item{attr = #fileattributes{mode = Value}}) -> Value;
 item_attr(uid, #item{attr = #fileattributes{uid = Value}}) -> Value;
@@ -1132,13 +1159,10 @@ fs_mv(Path, TargetDir) ->
 fs_mv(Path, TargetDir, TargetName) ->
     TargetPath = filename:absname(TargetName, TargetDir),
     case Path of
-        TargetPath -> ok;
+        TargetPath ->
+            ok;
         _ ->
-            case logical_files_manager:mv(Path, TargetPath) of
-                ok -> ok;
-                _ ->
-                    gui_jq:wire(#alert{text = <<"Unable to move ", (gui_str:to_binary(TargetName))/binary, ". File exists.">>})
-            end
+            logical_files_manager:mv(Path, TargetPath)
     end.
 
 

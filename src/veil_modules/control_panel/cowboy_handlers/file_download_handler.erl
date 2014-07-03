@@ -128,10 +128,10 @@ handle_user_content_request(Req, Path) ->
             SessHandler = proplists:get_value(session, Context1#context.handlers),
             {ok, St, Context2} = SessHandler:init([], Context1),
             wf_context:context(Context2),
-            UserDoc = gui_ctx:get_user_record(),
-            true = (UserDoc /= undefined),
+            {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
+            Login = user_logic:get_login(UserDoc),
             fslogic_context:set_user_dn(lists:nth(1, user_logic:get_dn_list(UserDoc))),
-            {St, Context2, SessHandler}
+            {St, Context2, SessHandler, Login}
         catch T1:M1 ->
             ?warning("Cannot establish session context for user content request - ~p:~p", [T1, M1]),
             error
@@ -140,7 +140,7 @@ handle_user_content_request(Req, Path) ->
     case InitSession of
         error ->
             {ok, _RedirectReq} = page_error:generate_redirect_request(Req, ?error_user_content_not_logged_in);
-        {State, NewContext, SessionHandler} ->
+        {State, NewContext, SessionHandler, UserLogin} ->
             % Try to get file by given path
             FileInfo =
                 try
@@ -167,7 +167,7 @@ handle_user_content_request(Req, Path) ->
                         {ok, _NewReq} = send_file(Req2, Filepath, filename:basename(Filepath), Size)
                     catch Type:Message ->
                         ?error_stacktrace("Error while sending file ~p to user ~p - ~p:~p",
-                            [Filepath, user_logic:get_login(gui_ctx:get_user_record()), Type, Message]),
+                            [Filepath, UserLogin, Type, Message]),
                         {ok, _FinReq} = cowboy_req:reply(500, Req#http_req{connection = close})
                     end
             end
