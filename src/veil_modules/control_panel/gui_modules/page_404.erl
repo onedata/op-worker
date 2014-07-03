@@ -11,8 +11,10 @@
 %% ===================================================================
 
 -module(page_404).
--compile(export_all).
 -include("veil_modules/control_panel/common.hrl").
+
+% n2o API
+-export([main/0, event/1]).
 
 %% Template points to the template file, which will be filled with content
 main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
@@ -31,4 +33,5 @@ body() ->
     ] ++ vcn_gui_utils:logotype_footer(120)}.
 
 event(init) -> ok;
-event(to_login) -> gui_jq:redirect_to_login(false).
+event(to_login) -> gui_jq:redirect_to_login(false);
+event(terminate) -> ok.

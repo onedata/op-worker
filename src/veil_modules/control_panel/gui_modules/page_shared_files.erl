@@ -11,10 +11,13 @@
 %% ===================================================================
 
 -module(page_shared_files).
--compile(export_all).
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/dao/dao_share.hrl").
--include_lib("ctool/include/logging.hrl").
+
+% n2o API
+-export([main/0, event/1, api_event/3]).
+% Postback functions
+-export([show_link/1, remove_link_prompt/2, remove_link/1, hide_popup/0]).
 
 %% Template points to the template file, which will be filled with content
 main() ->
@@ -92,7 +95,7 @@ main_panel() ->
 
 % Get list of user's shared files from database
 get_shared_files() ->
-    #veil_document{uuid = UID} = gui_ctx:get_user_record(),
+    {ok, #veil_document{uuid = UID}} = user_logic:get_user({login, gui_ctx:get_user_id()}),
     _ShareList = case logical_files_manager:get_share({user, UID}) of
                      {ok, List} when is_list(List) -> List;
                      {ok, Doc} -> [Doc];
@@ -118,7 +121,10 @@ event({action, Fun}) ->
     event({action, Fun, []});
 
 event({action, Fun, Args}) ->
-    vcn_gui_utils:apply_or_redirect(?MODULE, Fun, Args, true).
+    vcn_gui_utils:apply_or_redirect(?MODULE, Fun, Args, true);
+
+event(terminate) ->
+    ok.
 
 
 % Display link to file in popup panel

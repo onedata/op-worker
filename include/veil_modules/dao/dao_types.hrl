@@ -39,7 +39,8 @@
 -type user_key() :: {login, Login :: string()} |
                     {email, Email :: string()} |
                     {uuid, UUID :: uuid()} |
-                    {dn, DN :: string()}.
+                    {dn, DN :: string()} |
+                    {unverified_dn, DN :: string()}.
 
 -type quota() :: uuid().
 -type quota_info() :: #quota{}.

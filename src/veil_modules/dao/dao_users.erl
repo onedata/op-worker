@@ -20,7 +20,7 @@
 %% API functions
 %% ===================================================================
 -export([save_user/1, remove_user/1, exist_user/1, get_user/1, list_users/2,
-  get_files_number/2, get_files_size/1, update_files_size/0, save_quota/1, remove_quota/1, get_quota/1]).
+    get_files_number/2, get_files_size/1, update_files_size/0, save_quota/1, remove_quota/1, get_quota/1]).
 
 
 %% save_user/1
@@ -41,17 +41,17 @@ save_user(#veil_document{record = #user{}, uuid = UUID} = UserDoc) when is_list(
     dao_external:set_db(?USERS_DB_NAME),
     dao_records:save_record(UserDoc);
 save_user(#veil_document{record = #user{}} = UserDoc) ->
-    QueryArgs = #view_query_args{start_key = integer_to_binary(?HIGHEST_USER_ID), end_key = integer_to_binary(0), 
-                                 include_docs = false, limit = 1, direction = rev},
+    QueryArgs = #view_query_args{start_key = integer_to_binary(?HIGHEST_USER_ID), end_key = integer_to_binary(0),
+        include_docs = false, limit = 1, direction = rev},
     NewUUID =
         case dao_records:list_records(?USER_BY_UID_VIEW, QueryArgs) of
             {ok, #view_result{rows = [#view_row{id = MaxUID} | _]}} ->
                 integer_to_list(max(list_to_integer(MaxUID) + 1, ?LOWEST_USER_ID));
             {ok, #view_result{rows = []}} ->
-                integer_to_list(?LOWEST_USER_ID); 
+                integer_to_list(?LOWEST_USER_ID);
             Other ->
                 lager:error("Invalid view response: ~p", [Other]),
-                throw(invalid_data)   
+                throw(invalid_data)
         end,
 
     dao_external:set_db(?USERS_DB_NAME),
@@ -63,11 +63,7 @@ save_user(#veil_document{record = #user{}} = UserDoc) ->
 %% @doc Removes user from DB by login, e-mail, uuid or dn.
 %% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
--spec remove_user(Key:: {login, Login :: string()} | 
-                        {email, Email :: string()} | 
-                        {uuid, UUID :: uuid()} | 
-                        {dn, DN :: string()}) -> 
-    {error, any()} | no_return().
+-spec remove_user(Key :: user_key()) -> {error, any()} | no_return().
 %% ====================================================================
 remove_user(Key) ->
     {ok, FDoc} = get_user(Key),
@@ -80,8 +76,7 @@ remove_user(Key) ->
 %% @doc Checks whether user exists in DB. Arguments should be login, e-mail, uuid or dn.
 %% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
--spec exist_user(Key :: {login, Login :: string()} | {email, Email :: string()} |
-{uuid, UUID :: uuid()} | {dn, DN :: string()}) -> {ok, true | false} | {error, any()}.
+-spec exist_user(Key :: user_key()) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_user(Key) ->
     case ets:lookup(users_cache, Key) of
@@ -99,25 +94,25 @@ exist_user(Key) ->
 -spec get_user(Key :: user_key()) -> {ok, user_doc()} | {error, any()} | no_return().
 %% ====================================================================
 get_user(Key) ->
-  case ets:lookup(users_cache, Key) of
-    [] -> %% Cached document not found. Fetch it from DB and save in cache
-      DBAns = get_user_from_db(Key),
-      case DBAns of
-        {ok, Doc} ->
-          ets:insert(users_cache, {Key, Doc}),
-          DocKey = Doc#veil_document.uuid,
-          case ets:lookup(users_cache, {key_info, DocKey}) of
-            [] ->
-              ets:insert(users_cache, {{key_info, DocKey}, [Key]});
-            [{_, TmpInfo}] ->
-              ets:insert(users_cache, {{key_info, DocKey}, [Key | TmpInfo]})
-          end,
-          {ok, Doc};
-        Other -> Other
-      end;
-    [{_, Ans}] -> %% Return document from cache
-      {ok, Ans}
-  end.
+    case ets:lookup(users_cache, Key) of
+        [] -> %% Cached document not found. Fetch it from DB and save in cache
+            DBAns = get_user_from_db(Key),
+            case DBAns of
+                {ok, Doc} ->
+                    ets:insert(users_cache, {Key, Doc}),
+                    DocKey = Doc#veil_document.uuid,
+                    case ets:lookup(users_cache, {key_info, DocKey}) of
+                        [] ->
+                            ets:insert(users_cache, {{key_info, DocKey}, [Key]});
+                        [{_, TmpInfo}] ->
+                            ets:insert(users_cache, {{key_info, DocKey}, [Key | TmpInfo]})
+                    end,
+                    {ok, Doc};
+                Other -> Other
+            end;
+        [{_, Ans}] -> %% Return document from cache
+            {ok, Ans}
+    end.
 
 %% list_users/2
 %% ====================================================================
@@ -127,21 +122,21 @@ get_user(Key) ->
 %% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
 -spec list_users(N :: pos_integer(), Offset :: non_neg_integer()) ->
-	{ok, DocList :: list(user_doc())} |
-	no_return().
+    {ok, DocList :: list(user_doc())} |
+    no_return().
 %% ====================================================================
 list_users(N, Offset) ->
 	dao_external:set_db(?USERS_DB_NAME),
 
-	QueryArgs = #view_query_args{include_docs = true,  limit = N, skip = Offset, inclusive_end = false},
+    QueryArgs = #view_query_args{include_docs = true, limit = N, skip = Offset, inclusive_end = false},
 
-	GetUser =
-		fun (#view_row{doc = UserDoc}) ->
-			UserDoc;
-		(Other) ->
-				lager:error("Invalid row in view response: ~p", [Other]),
-				throw(invalid_data)
-		end,
+    GetUser =
+        fun(#view_row{doc = UserDoc}) ->
+            UserDoc;
+            (Other) ->
+                lager:error("Invalid row in view response: ~p", [Other]),
+                throw(invalid_data)
+        end,
 
 	case dao_records:list_records(?USER_BY_LOGIN_VIEW, QueryArgs) of
 		{ok, #view_result{rows = FDoc}} ->
@@ -156,8 +151,7 @@ list_users(N, Offset) ->
 %% @doc Checks whether user exists in DB. Arguments should be login, e-mail, uuid or dn.
 %% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
--spec exist_user_in_db(Key :: {login, Login :: string()} | {email, Email :: string()} |
-{uuid, UUID :: uuid()} | {dn, DN :: string()}) -> {ok, true | false} | {error, any()}.
+-spec exist_user_in_db(Key :: user_key()) -> {ok, true | false} | {error, any()}.
 %% ====================================================================
 exist_user_in_db({uuid, "0"}) ->
     {ok, true};
@@ -175,6 +169,9 @@ exist_user_in_db({Key, Value}) ->
                                 [dao_helper:name(Value)], include_docs = true}};
                             dn ->
                                 {?USER_BY_DN_VIEW, #view_query_args{keys =
+                                [dao_helper:name(Value)], include_docs = true}};
+                            unverified_dn ->
+                                {?USER_BY_UNVERIFIED_DN_VIEW, #view_query_args{keys =
                                 [dao_helper:name(Value)], include_docs = true}}
                         end,
     case dao_records:list_records(View, QueryArgs) of
@@ -192,11 +189,7 @@ exist_user_in_db({Key, Value}) ->
 %% See {@link dao_records:save_record/1} and {@link dao_records:get_record/1} for more details about #veil_document{} wrapper.<br/>
 %% Should not be used directly, use {@link dao_worker:handle/2} instead (See {@link dao_worker:handle/2} for more details).
 %% @end
--spec get_user_from_db(Key::    {login, Login :: string()} |
-                        {email, Email :: string()} | 
-                        {uuid, UUID :: uuid()} | 
-                        {dn, DN :: string()}) -> 
-    {ok, user_doc()} | {error, any()} | no_return().
+-spec get_user_from_db(Key :: user_key()) -> {ok, user_doc()} | {error, any()} | no_return().
 %% ====================================================================
 get_user_from_db({uuid, "0"}) ->
     {ok, #veil_document{uuid = "0", record = #user{login = "root", name = "root"}}}; %% Return virtual "root" user
@@ -208,16 +201,19 @@ get_user_from_db({Key, Value}) ->
     dao_external:set_db(?USERS_DB_NAME),
 
     {View, QueryArgs} = case Key of
-        login -> 
-            {?USER_BY_LOGIN_VIEW, #view_query_args{keys = 
-                [dao_helper:name(Value)], include_docs = true}};
-        email -> 
-            {?USER_BY_EMAIL_VIEW, #view_query_args{keys = 
-                [dao_helper:name(Value)], include_docs = true}};
-        dn -> 
-            {?USER_BY_DN_VIEW, #view_query_args{keys = 
-                [dao_helper:name(Value)], include_docs = true}}
-    end,
+                            login ->
+                                {?USER_BY_LOGIN_VIEW, #view_query_args{keys =
+                                [dao_helper:name(Value)], include_docs = true}};
+                            email ->
+                                {?USER_BY_EMAIL_VIEW, #view_query_args{keys =
+                                [dao_helper:name(Value)], include_docs = true}};
+                            dn ->
+                                {?USER_BY_DN_VIEW, #view_query_args{keys =
+                                [dao_helper:name(Value)], include_docs = true}};
+                            unverified_dn ->
+                                {?USER_BY_UNVERIFIED_DN_VIEW, #view_query_args{keys =
+                                [dao_helper:name(Value)], include_docs = true}}
+                        end,
 
     case dao_records:list_records(View, QueryArgs) of
         {ok, #view_result{rows = [#view_row{doc = FDoc}]}} ->
@@ -226,8 +222,9 @@ get_user_from_db({Key, Value}) ->
             lager:warning("User by ~p: ~p not found", [Key, Value]),
             throw(user_not_found);
         {ok, #view_result{rows = [#view_row{doc = FDoc} | Tail] = AllRows}} ->
-            case length(lists:usort(AllRows)) of 
-                Count when Count > 1 -> lager:warning("User ~p is duplicated. Returning first copy. Others: ~p", [FDoc#veil_document.record#user.login, Tail]);
+            case length(lists:usort(AllRows)) of
+                Count when Count > 1 ->
+                    lager:warning("User ~p is duplicated. Returning first copy. Others: ~p", [FDoc#veil_document.record#user.login, Tail]);
                 _ -> ok
             end,
             {ok, FDoc};
@@ -240,9 +237,9 @@ get_user_from_db({Key, Value}) ->
 %% ====================================================================
 %% @doc Returns number of user's / group's files
 %% @end
-    -spec get_files_number(user | group, UUID :: uuid()) -> Result when
-Result :: {ok, Sum} | {error, any()} | no_return(),
-Sum :: integer().
+-spec get_files_number(user | group, UUID :: uuid()) -> Result when
+    Result :: {ok, Sum} | {error, any()} | no_return(),
+    Sum :: integer().
 %% ====================================================================
 get_files_number(Type, UUID) ->
   dao_external:set_db(?FILES_DB_NAME),
@@ -316,17 +313,17 @@ update_files_size() ->
 -spec clear_all_data_from_cache(DocKey :: string()) -> ok.
 %% ====================================================================
 clear_all_data_from_cache(DocKey) ->
-  case ets:lookup(users_cache, {key_info, DocKey}) of
-    [] ->
-      ok;
-    [{_, KeysList}] ->
-      lists:foreach(fun(Key) -> ets:delete(users_cache, Key) end, KeysList),
-      ets:delete(users_cache, {key_info, DocKey}),
-      case worker_host:clear_cache({users_cache, [{key_info, DocKey} | KeysList]}) of
-        ok -> ok;
-        Error -> throw({error_during_global_cache_clearing, Error})
-      end
-  end.
+    case ets:lookup(users_cache, {key_info, DocKey}) of
+        [] ->
+            ok;
+        [{_, KeysList}] ->
+            lists:foreach(fun(Key) -> ets:delete(users_cache, Key) end, KeysList),
+            ets:delete(users_cache, {key_info, DocKey}),
+            case worker_host:clear_cache({users_cache, [{key_info, DocKey} | KeysList]}) of
+                ok -> ok;
+                Error -> throw({error_during_global_cache_clearing, Error})
+            end
+    end.
 
 %% save_quota/1
 %% ====================================================================
@@ -339,7 +336,7 @@ clear_all_data_from_cache(DocKey) ->
 -spec save_quota(Quota :: quota_info() | quota_doc()) -> {ok, quota()} | {error, any()} | no_return().
 %% ====================================================================
 save_quota(#quota{} = Quota) ->
-  save_quota(#veil_document{record = Quota});
+    save_quota(#veil_document{record = Quota});
 save_quota(#veil_document{} = QuotaDoc) ->
   dao_external:set_db(?USERS_DB_NAME),
   dao_records:save_record(QuotaDoc).

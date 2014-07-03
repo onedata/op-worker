@@ -70,6 +70,7 @@
 -define(USER_BY_LOGIN_DESIGN_NAME, "user_by_login").
 -define(USER_BY_EMAIL_DESIGN_NAME, "user_by_email").
 -define(USER_BY_DN_DESIGN_NAME, "user_by_dn").
+-define(USER_BY_UNVERIFIED_DN_DESIGN_NAME, "user_by_unverified_dn").
 -define(USER_BY_UID_DESIGN_NAME, "user_by_uid").
 -define(SHARE_BY_FILE_DESIGN_NAME, "share_by_file").
 -define(SHARE_BY_USER_DESIGN_NAME, "share_by_user").
@@ -92,6 +93,7 @@
 -define(USER_BY_EMAIL_VIEW, #view_info{name = "user_by_email", design = ?USER_BY_EMAIL_DESIGN_NAME, db_name = ?USERS_DB_NAME}).
 -define(USER_BY_LOGIN_VIEW, #view_info{name = "user_by_login", design = ?USER_BY_LOGIN_DESIGN_NAME, db_name = ?USERS_DB_NAME}).
 -define(USER_BY_DN_VIEW, #view_info{name = "user_by_dn", design = ?USER_BY_DN_DESIGN_NAME, db_name = ?USERS_DB_NAME}).
+-define(USER_BY_UNVERIFIED_DN_VIEW, #view_info{name = "user_by_unverified_dn", design = ?USER_BY_UNVERIFIED_DN_DESIGN_NAME, db_name = ?USERS_DB_NAME}).
 -define(USER_BY_UID_VIEW, #view_info{name = "user_by_uid", design = ?USER_BY_UID_DESIGN_NAME, db_name = ?USERS_DB_NAME}).
 
 -define(SHARE_BY_FILE_VIEW, #view_info{name = "share_by_file", design = ?SHARE_BY_FILE_DESIGN_NAME, db_name = ?FILES_DB_NAME}).
@@ -111,7 +113,7 @@
 %% List of all used views :: [#view_info]
 -define(VIEW_LIST, [?FILE_TREE_VIEW, ?WAITING_FILES_TREE_VIEW, ?FILE_SUBDIRS_VIEW, ?FD_BY_FILE_VIEW, ?FD_BY_EXPIRED_BEFORE_VIEW, ?ALL_STORAGE_VIEW,
     ?FILES_BY_UID_AND_FILENAME, ?FILE_META_BY_TIMES, ?FILES_BY_META_DOC,
-    ?USER_BY_EMAIL_VIEW, ?USER_BY_LOGIN_VIEW, ?USER_BY_DN_VIEW, ?USER_BY_UID_VIEW, ?STORAGE_BY_ID_VIEW,
+    ?USER_BY_EMAIL_VIEW, ?USER_BY_LOGIN_VIEW, ?USER_BY_DN_VIEW, ?USER_BY_UNVERIFIED_DN_VIEW, ?USER_BY_UID_VIEW, ?STORAGE_BY_ID_VIEW,
     ?SHARE_BY_FILE_VIEW, ?SHARE_BY_USER_VIEW, ?USER_FILES_NUMBER_VIEW, ?USER_FILES_SIZE_VIEW, ?GROUP_FILES_NUMBER_VIEW,
     ?FUSE_CONNECTIONS_VIEW, ?EXPIRED_FUSE_SESSIONS_VIEW, ?FUSE_SESSIONS_BY_USER_ID_VIEW]).
 %% Default database name
