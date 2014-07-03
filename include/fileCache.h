@@ -1,22 +1,20 @@
-#include <boost/function.hpp>
-#include <boost/thread.hpp>
-#include <boost/shared_ptr.hpp>
-#include <boost/weak_ptr.hpp>
-#include <map>
-#include <queue>
-#include <string>
-#include <list>
-
+#include <fcntl.h>
 #include <fuse.h>
 #include <unistd.h>
-#include <fcntl.h>
- 
+
+#include <list>
+#include <map>
+#include <memory>
+#include <set>
+#include <mutex>
+#include <queue>
+#include <string>
 
 namespace veil {
 namespace helpers {
 
 /**
- * FileBlock represents single file block of data. 
+ * FileBlock represents single file block of data.
  * Holds offset, size, expiration time and data itself.
  */
 struct FileBlock
@@ -28,14 +26,14 @@ struct FileBlock
     uint64_t            valid_to;
 
     /// Construct empty FileBlock.
-    FileBlock() 
+    FileBlock()
       : offset(0),
         _size(0),
         valid_to(0)
     {
     }
 
-    FileBlock(off_t off) 
+    FileBlock(off_t off)
       : offset(off),
         _size(0),
         valid_to(0)
@@ -43,14 +41,14 @@ struct FileBlock
     }
 
     /// Construct FileBlock using given offet and data.
-    FileBlock(off_t off, const std::string &buff, uint64_t valid = 0) 
+    FileBlock(off_t off, const std::string &buff, uint64_t valid = 0)
       : offset(off),
         _size(buff.size()),
         data(buff),
         valid_to(valid)
     {
     }
- 
+
     /// Get size of the block.
     size_t size() const
     {
@@ -59,22 +57,22 @@ struct FileBlock
 
     /// Blocks compare equal if and only if they have same offset and size. Data itself is not relevant.
     bool operator== ( FileBlock const &q) const { return offset == q.offset && size() == q.size(); }
-    
+
 };
 
 // Convinience typedef to FileBlock struct
-typedef boost::shared_ptr<FileBlock>    block_ptr;
-typedef boost::weak_ptr<FileBlock>      block_weak_ptr;
+using block_ptr = std::shared_ptr<FileBlock>;
+using block_weak_ptr = std::weak_ptr<FileBlock>;
 
 /// Comparator for pointers to FileBlock which orders them by expiration date
 struct _OrderByValidTo
 {
-    bool operator() (block_ptr const &a, block_ptr const &b) 
-    { 
+    bool operator() (block_ptr const &a, block_ptr const &b)
+    {
         if(!a->valid_to)
             return false;
         if(!b->valid_to)
-            return true; 
+            return true;
 
         return a->valid_to < b->valid_to;
     }
@@ -83,18 +81,18 @@ struct _OrderByValidTo
 /// Comparator for pointers to FileBlock which orders them by data offset
 struct _OrderByOffset
 {
-    bool operator() (block_ptr const &a, block_ptr const &b) 
+    bool operator() (block_ptr const &a, block_ptr const &b)
     {
         return a->offset < b->offset;
     }
 
-    bool operator() (off_t a, block_ptr const &b) 
-    { 
+    bool operator() (off_t a, block_ptr const &b)
+    {
         return a < b->offset;
     }
 
-    bool operator() (block_ptr const &b, off_t a) 
-    { 
+    bool operator() (block_ptr const &b, off_t a)
+    {
         return a < b->offset;
     }
 };
@@ -113,7 +111,7 @@ public:
      * @param blockSize defines maximum block size that result from blocks' merge.
      * @param isBuffer defines is this FileCache will be used as write buffer, which means that expire data is not used.
      */
-    FileCache(uint32_t blockSize, bool isBuffer = true); 
+    FileCache(uint32_t blockSize, bool isBuffer = true);
     virtual ~FileCache();
 
     virtual bool        readData(off_t, size_t, std::string &buff); ///< Reads data from buffer
@@ -124,27 +122,27 @@ public:
                                                                     ///< Also tries to merge it with previously added ones.
 
     virtual size_t      byteSize();                                 ///< Returns how many bytes are currently cached.
-    virtual size_t      blockCount();                               ///< Returns block count that are currenty cached. 
+    virtual size_t      blockCount();                               ///< Returns block count that are currenty cached.
 
-    virtual void        debugPrint();                               ///< Prints all FileBlocks to stdout. 
+    virtual void        debugPrint();                               ///< Prints all FileBlocks to stdout.
                                                                     ///< Usefull for debugging. Prints current block's positions and sizes.
 
 
 private:
-    bool                                            m_isBuffer;
+    const bool                                      m_isBuffer;
     uint64_t                                        m_curBlockNo;
     uint32_t                                        m_blockSize;
-    boost::recursive_mutex                          m_fileBlocksMutex;
+    std::recursive_mutex                            m_fileBlocksMutex;
     std::multiset<block_ptr, _OrderByOffset>        m_fileBlocks;
     size_t                                          m_byteSize;
 
     std::multiset<block_ptr, _OrderByValidTo> m_blockExpire;
 
-    virtual void discardExpired();  ///< Remove expired blocks from teh Cache 
+    virtual void discardExpired();  ///< Remove expired blocks from teh Cache
     virtual void forceInsertBlock(block_ptr block, std::multiset<block_ptr>::iterator whereTo); ///< Instert given block into the cache.
                                                                                                 ///< @param whereTo shall point where exactly the block belong to.
 };
 
-} // namespace helpers 
+} // namespace helpers
 } // namespace veil
 

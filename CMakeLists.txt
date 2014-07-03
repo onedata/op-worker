@@ -159,7 +159,7 @@ endif()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SECTION_FRAGMENTATION_FLAGS} -Wall -fPIC -std=c++11")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
-add_definitions(${FUSE_DEFINITIONS} -DFUSE_USE_VERSION=29 -D_WEBSOCKETPP_CPP11_STL_)
+add_definitions(${FUSE_DEFINITIONS} -DFUSE_USE_VERSION=29 -D_WEBSOCKETPP_CPP11_STL_ -DBOOST_BIND_NO_PLACEHOLDERS)
 
 set(CMAKE_SKIP_RPATH TRUE) # Something is wrong with CMake RPATH config, we need to use old-fashion way
 
@@ -219,6 +219,11 @@ enable_testing()
 include_directories(${GTEST_INCLUDE_DIR})
 include_directories(${GMOCK_INCLUDE_DIR})
 
+set(TEST_SOURCES_DIR "test")
+include_directories(${TEST_SOURCES_DIR}/include)
+
+add_library(testRunner STATIC ${TEST_SOURCES_DIR}/testRunner.cc)
+
 add_custom_target(cunit)
 macro(run_test test_target)
   string(REGEX REPLACE "_test" "" test_name "${test_target}")
@@ -229,15 +234,13 @@ macro(run_test test_target)
   add_dependencies(cunit ${test_target}_runtest)
 endmacro()
 
-set(TEST_SOURCES_DIR "test")
-include_directories(${TEST_SOURCES_DIR}/include)
-
 file(GLOB files ${TEST_SOURCES_DIR}/*_test.cc)
 foreach(file ${files})
     get_filename_component(TEST_NAME ${file} NAME_WE)
     add_executable(${TEST_NAME} ${file})
     add_dependencies(${TEST_NAME} gtest gmock veilFuse veilhelpers veilclient veilprotocol)
     target_link_libraries(${TEST_NAME}
+        testRunner
         ${GTEST_LIBRARIES}
         ${Boost_LIBRARIES_SHARED}
         ${GMOCK_LIBRARIES}

@@ -5,41 +5,36 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#include "testCommonH.h"
-#include "connectionPool_mock.h"
 #include "communicationHandler_mock.h"
+#include "connectionPool_mock.h"
 #include "simpleConnectionPool_proxy.h"
 
-using namespace boost;
+#include <gtest/gtest.h>
 
-INIT_AND_RUN_ALL_TESTS(); // TEST RUNNER !
+using namespace ::testing;
+using namespace veil;
 
-// TEST definitions below
-
-class SimpleConnectionPoolTest
-    : public ::testing::Test {
-
+class SimpleConnectionPoolTest: public ::testing::Test
+{
 protected:
     MockConnectionPool mockPool;
-    boost::shared_ptr<ProxySimpleConnectionPool> proxy;
+    std::shared_ptr<ProxySimpleConnectionPool> proxy;
 
-    virtual void SetUp() {
-        proxy.reset(new ProxySimpleConnectionPool("host", 5555, boost::bind(&SimpleConnectionPoolTest::getCertInfo, this)));
+    void SetUp() override
+    {
+        proxy = std::make_shared<ProxySimpleConnectionPool>("host", 5555, std::bind(&SimpleConnectionPoolTest::getCertInfo, this));
     }
 
-    virtual void TearDown() {
+    CertificateInfo getCertInfo()
+    {
+        return {"certFile", "certFile"};
     }
-
-    CertificateInfo getCertInfo() {
-        return CertificateInfo("certFile", "certFile");
-    }
-
 };
 
 // Test selectConnection method
 TEST_F(SimpleConnectionPoolTest, poolHasFixedSize_RoundRobinWorks)
 {
-    boost::shared_ptr<CommunicationHandler> connM[6], connD[4];
+    std::shared_ptr<CommunicationHandler> connM[6], connD[4];
 
     // Set pool sizes
     proxy->setPoolSize(SimpleConnectionPool::META_POOL, 3);
@@ -48,18 +43,18 @@ TEST_F(SimpleConnectionPoolTest, poolHasFixedSize_RoundRobinWorks)
 
     for(int i = 0; i < 4; ++i)
         connM[i] = proxy->selectConnection(SimpleConnectionPool::META_POOL);
-    
+
     for(int i = 0; i < 4; ++i)
         connD[i] = proxy->selectConnection(SimpleConnectionPool::DATA_POOL);
 
     for(int i = 4; i < 6; ++i)
         connM[i] = proxy->selectConnection(SimpleConnectionPool::META_POOL);
-    
+
     // RoundRobin on meta connections
     EXPECT_EQ(connM[0], connM[3]);
     EXPECT_EQ(connM[1], connM[4]);
     EXPECT_EQ(connM[2], connM[5]);
-    
+
     // RoundRobin on data connections
     EXPECT_EQ(connD[0], connD[2]);
     EXPECT_EQ(connD[1], connD[3]);

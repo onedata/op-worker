@@ -8,17 +8,14 @@
 #ifndef GENERIC_HELPER_MOCK_H
 #define GENERIC_HELPER_MOCK_H
 
+
 #include "helpers/IStorageHelper.h"
 
-using namespace veil;
-using namespace veil::helpers;
+#include <gmock/gmock.h>
 
-class MockGenericHelper
-    : public IStorageHelper {
+class MockGenericHelper: public veil::helpers::IStorageHelper
+{
 public:
-        MockGenericHelper() {};
-        virtual ~MockGenericHelper() {};
-
         MOCK_METHOD2(sh_getattr, int(const char *path, struct stat *stbuf));
         MOCK_METHOD2(sh_access, int(const char *path, int mask));
         MOCK_METHOD3(sh_readlink, int(const char *path, char *buf, size_t size));
@@ -42,5 +39,6 @@ public:
         MOCK_METHOD2(sh_release, int(const char *path, struct fuse_file_info *fi));
         MOCK_METHOD3(sh_fsync, int(const char *path, int isdatasync, struct fuse_file_info *fi));
 };
+
 
 #endif // GENERIC_HELPER_MOCK_H

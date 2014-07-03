@@ -15,10 +15,11 @@
 #include <google/protobuf/descriptor.h>
 #include "veilErrors.h"
 
+#include <functional>
 #include <iostream>
 
 using namespace std;
-using namespace boost::algorithm;
+using namespace std::placeholders;
 using namespace veil::protocol::remote_file_management;
 using namespace veil::protocol::communication_protocol;
 
@@ -50,7 +51,7 @@ string ClusterProxyHelper::requestMessage(string inputType, string answerType, s
     clm.set_answer_type(utils::tolower(answerType));
     clm.set_answer_decoder_name(RFM_DECODER);
 
-    Answer answer = sendCluserMessage(clm, timeout);
+    Answer answer = sendClusterMessage(clm, timeout);
 
     return answer.worker_answer();
 }
@@ -61,7 +62,7 @@ string ClusterProxyHelper::requestAtom(string inputType, string inputData) {
     clm.set_answer_type(utils::tolower(Atom::descriptor()->name()));
     clm.set_answer_decoder_name(COMMUNICATION_PROTOCOL_DECODER);
 
-    Answer answer = sendCluserMessage(clm);
+    Answer answer = sendClusterMessage(clm);
 
     Atom atom;
     if(answer.has_worker_answer()) {
@@ -72,8 +73,8 @@ string ClusterProxyHelper::requestAtom(string inputType, string inputData) {
     return "";
 }
 
-Answer ClusterProxyHelper::sendCluserMessage(ClusterMsg &msg, uint32_t timeout) {
-    boost::shared_ptr<CommunicationHandler> connection = m_connectionPool ? m_connectionPool->selectConnection(SimpleConnectionPool::DATA_POOL) : config::getConnectionPool()->selectConnection();
+Answer ClusterProxyHelper::sendClusterMessage(ClusterMsg &msg, uint32_t timeout) {
+    auto connection = m_connectionPool->selectConnection(SimpleConnectionPool::DATA_POOL);
     if(!connection)
     {
         LOG(ERROR) << "Cannot select connection from connectionPool";
@@ -82,7 +83,7 @@ Answer ClusterProxyHelper::sendCluserMessage(ClusterMsg &msg, uint32_t timeout) 
 
     Answer answer = connection->communicate(msg, 2, timeout);
     if(answer.answer_status() != VEIO)
-        config::getConnectionPool()->releaseConnection(connection);
+        m_connectionPool->releaseConnection(connection);
 
     if(answer.answer_status() != VOK)
         LOG(WARNING) << "Cluster send non-ok message. status = " << answer.answer_status();
@@ -358,13 +359,19 @@ int ClusterProxyHelper::doRead(const string &path, std::string &buf, size_t size
     return 0;
 }
 
-ClusterProxyHelper::ClusterProxyHelper(std::vector<std::string> args)
+ClusterProxyHelper::ClusterProxyHelper(std::shared_ptr<SimpleConnectionPool> connectionPool,
+                                       const BufferLimits &limits, const ArgsMap &args)
   : m_bufferAgent(
-        boost::bind(&ClusterProxyHelper::doWrite, this, _1, _2, _3, _4, _5),
-        boost::bind(&ClusterProxyHelper::doRead, this, _1, _2, _3, _4, _5))
+        limits,
+        std::bind(&ClusterProxyHelper::doWrite, this, _1, _2, _3, _4, _5),
+        std::bind(&ClusterProxyHelper::doRead, this, _1, _2, _3, _4, _5))
+  , m_connectionPool{std::move(connectionPool)}
 {
-    m_clusterHostname   = config::clusterHostname;
-    m_clusterPort       = config::clusterPort;
+    m_clusterHostname = args.count("cluster_hostname") ?
+                boost::any_cast<std::string>(args.at("cluster_hostname")) : std::string{};
+
+    m_clusterPort = args.count("cluster_port") ?
+                boost::any_cast<unsigned int>(args.at("cluster_port")) : 0;
 }
 
 ClusterProxyHelper::~ClusterProxyHelper()

@@ -1,30 +1,31 @@
-#include <boost/function.hpp>
-#include <boost/thread.hpp>
-#include <boost/shared_ptr.hpp>
-#include <boost/weak_ptr.hpp>
-#include <boost/unordered_map.hpp>
-#include <string>
+#include "fileCache.h"
+#include "helpers/storageHelperFactory.h"
+
+#include <fcntl.h>
 #include <fuse.h>
 #include <unistd.h>
-#include <fcntl.h>
 
-#include "fileCache.h"
-
+#include <condition_variable>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <unordered_map>
 
 namespace veil {
 namespace helpers {
 
 // Convinience typedef
-typedef struct fuse_file_info*  ffi_type;
-typedef uint64_t                fd_type;
-typedef boost::unique_lock<boost::recursive_mutex> unique_lock;
-typedef boost::unordered_map<fd_type, size_t>       wrbuf_size_mem_t;
-typedef boost::unordered_map<std::string, size_t>   rdbuf_size_mem_t;
-
+using ffi_type = struct fuse_file_info*;
+using fd_type = uint64_t;
+using unique_lock = std::unique_lock<std::recursive_mutex>;
+using wrbuf_size_mem_t = std::unordered_map<fd_type, size_t>;
+using rdbuf_size_mem_t = std::unordered_map<std::string, size_t>;
 
 // Typedef for original read / write functions
-typedef boost::function<int(std::string path, const std::string &buf, size_t, off_t, ffi_type)>    write_fun;
-typedef boost::function<int(std::string path, std::string &buf, size_t, off_t, ffi_type)>          read_fun;
+using write_fun = std::function<int(std::string path, const std::string &buf, size_t, off_t, ffi_type)>;
+using read_fun = std::function<int(std::string path, std::string &buf, size_t, off_t, ffi_type)>;
 
 /**
  * BufferAgent gives replacement methods for read and write operations that acts as proxy for real ones.
@@ -41,14 +42,14 @@ public:
 
     /// State holder for write operations for the file
     struct WriteCache {
-        boost::shared_ptr<FileCache>    buffer;     ///< Actual buffer object.
-        boost::recursive_mutex          mutex;
-        boost::recursive_mutex          sendMutex;
-        boost::condition_variable_any   cond;
-        std::string                     fileName;
-        struct fuse_file_info           ffi;         ///< Saved fuse_file_info struct that we need to pass for each storage helpers' call.
-        bool                            opPending;
-        int                             lastError;  ///< Last write error
+        std::shared_ptr<FileCache>    buffer;     ///< Actual buffer object.
+        std::recursive_mutex          mutex;
+        std::recursive_mutex          sendMutex;
+        std::condition_variable_any   cond;
+        std::string                   fileName;
+        struct fuse_file_info         ffi;         ///< Saved fuse_file_info struct that we need to pass for each storage helpers' call.
+        bool                          opPending;
+        int                           lastError;  ///< Last write error
 
         WriteCache()
           : opPending(false),
@@ -59,15 +60,15 @@ public:
 
     /// State holder for read operations for the file
     struct ReadCache {
-        boost::shared_ptr<FileCache>    buffer;         ///< Actual buffer object.
-        boost::recursive_mutex          mutex;
-        boost::condition_variable_any   cond;
-        std::string                     fileName;
-        struct fuse_file_info           ffi;            ///< Saved fuse_file_info struct that we need to pass for each storage helpers' call.
-        size_t                          blockSize;      ///< Current prefered block size
-        int                             openCount;      ///< How many file descriptors is opened to the file atm
-        boost::unordered_map <fd_type, off_t> lastBlock;///< Last requested block (per file descriptor)
-        off_t                           endOfFile;      ///< Last detected end of file (its offset)
+        std::shared_ptr<FileCache>    buffer;         ///< Actual buffer object.
+        std::recursive_mutex          mutex;
+        std::condition_variable_any   cond;
+        std::string                   fileName;
+        struct fuse_file_info         ffi;            ///< Saved fuse_file_info struct that we need to pass for each storage helpers' call.
+        size_t                        blockSize;      ///< Current prefered block size
+        int                           openCount;      ///< How many file descriptors is opened to the file atm
+        std::unordered_map <fd_type, off_t> lastBlock;///< Last requested block (per file descriptor)
+        off_t                         endOfFile;      ///< Last detected end of file (its offset)
 
         ReadCache()
           : blockSize(4096),
@@ -110,18 +111,19 @@ public:
         }
     };
 
-    typedef boost::shared_ptr<WriteCache> write_buffer_ptr;
-    typedef boost::shared_ptr<ReadCache> read_buffer_ptr;
+    using write_buffer_ptr = std::shared_ptr<WriteCache>;
+    using read_buffer_ptr = std::shared_ptr<ReadCache>;
 
-    typedef std::map<uint64_t, write_buffer_ptr> write_cache_map_t;
-    typedef std::map<std::string, read_buffer_ptr> read_cache_map_t;
+    using write_cache_map_t = std::map<uint64_t, write_buffer_ptr>;
+    using read_cache_map_t = std::map<std::string, read_buffer_ptr>;
 
     /**
      * BufferAgent constructor.
+     * @param bufferLimits Settings limiting buffer sizes.
      * @param write_fun Write function that writes data to filesystem. This shall be storage helpers' write callback. See write_fun type for signature.
      * @param read_fun Read function that provides filesystems' data. This shall be storage helpers' read callback. See read_fun type for signature.
      */
-    BufferAgent(write_fun, read_fun);
+    BufferAgent(const BufferLimits &bufferLimits, write_fun, read_fun);
     virtual ~BufferAgent();
 
     /// onWrite shall be called on each write operation that filesystem user requests - accumulates data while sending it asynchronously.
@@ -151,17 +153,17 @@ public:
 private:
 
     volatile bool                                   m_agentActive; ///< Status of worker threads. Setting this to false exits workers' main loop.
-    std::vector<boost::shared_ptr<boost::thread> >  m_workers;     ///< Worker threads list
+    std::vector<std::shared_ptr<std::thread>>       m_workers;     ///< Worker threads list
 
     // State holders and job queues for write operations
-    boost::recursive_mutex                  m_wrMutex;
-    boost::condition_variable_any           m_wrCond;
+    std::recursive_mutex                    m_wrMutex;
+    std::condition_variable_any             m_wrCond;
     write_cache_map_t                       m_wrCacheMap;
     std::list<fd_type>                      m_wrJobQueue;
 
     // State holders and job queues for read operations
-    boost::recursive_mutex                  m_rdMutex;
-    boost::condition_variable_any           m_rdCond;
+    std::recursive_mutex                    m_rdMutex;
+    std::condition_variable_any             m_rdCond;
     read_cache_map_t                        m_rdCacheMap;
     std::multiset<PrefetchJob, PrefetchJobCompare> m_rdJobQueue;
 
@@ -176,11 +178,11 @@ private:
 
     /// Instantiate FileCache class. Useful in tests for mocking
     /// @param isBuffer Set this argument to false if data in buffer shall be automatically cleared after same short time.
-    virtual boost::shared_ptr<FileCache> newFileCache(bool isBuffer = true);
+    virtual std::shared_ptr<FileCache> newFileCache(bool isBuffer = true);
 
 
     // Memory management. Memory current state update/check.
-    static boost::recursive_mutex           m_bufferSizeMutex;
+    static std::recursive_mutex           m_bufferSizeMutex;
 
     volatile static size_t              m_rdBufferTotalSize;    ///< Current total size of prefetched data.
     volatile static size_t              m_wrBufferTotalSize;    ///< Current total size of buffored data.
@@ -194,6 +196,8 @@ private:
 
     static size_t getWriteBufferSize();                         ///< Returns current total size of buffored data.
     static size_t getReadBufferSize();                          ///< Returns current total size of prefetched data.
+
+    const BufferLimits m_bufferLimits;
 };
 
 

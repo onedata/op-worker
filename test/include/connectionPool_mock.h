@@ -8,27 +8,32 @@
 #ifndef CONNECTION_POOL_MOCK_H
 #define CONNECTION_POOL_MOCK_H
 
+
 #include "simpleConnectionPool.h"
-#include "gmock/gmock.h"
 
-using namespace veil;
+#include <gmock/gmock.h>
 
-class MockConnectionPool
-    : public SimpleConnectionPool {
+#include <memory>
+
+class MockConnectionPool: public veil::SimpleConnectionPool
+{
 public:
-    MockConnectionPool() : SimpleConnectionPool("host", 5555, boost::bind(&MockConnectionPool::getCertInfo, this)) {};
-    ~MockConnectionPool() {};
+    MockConnectionPool()
+        : SimpleConnectionPool{"host", 5555, std::bind(&MockConnectionPool::getCertInfo, this)}
+    {
+    };
 
     MOCK_METHOD2(setPoolSize, void(PoolType, unsigned int));
     MOCK_METHOD2(setPushCallback, void(const std::string&, push_callback));
 
-    MOCK_METHOD1(selectConnection, boost::shared_ptr<CommunicationHandler>(SimpleConnectionPool::PoolType));
-    MOCK_METHOD1(releaseConnection, void(boost::shared_ptr<CommunicationHandler>));
+    MOCK_METHOD1(selectConnection, std::shared_ptr<veil::CommunicationHandler>(veil::SimpleConnectionPool::PoolType));
+    MOCK_METHOD1(releaseConnection, void(std::shared_ptr<veil::CommunicationHandler>));
 
-    CertificateInfo getCertInfo() {
-        return CertificateInfo("certFile", "certFile");
+    veil::CertificateInfo getCertInfo()
+    {
+        return {"certFile", "certFile"};
     }
-
 };
+
 
 #endif // CONNECTION_POOL_MOCK_H

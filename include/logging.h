@@ -11,22 +11,20 @@
 #include "communication_protocol.pb.h"
 #include "logging.pb.h"
 
-#include <boost/atomic.hpp>
-#include <boost/shared_ptr.hpp>
-#include <boost/thread.hpp>
-#include <boost/thread/scoped_thread.hpp>
-
 #include <glog/logging.h>
 
 #include <atomic>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <queue>
 #include <string>
+#include <thread>
 
 
 #ifndef NDEBUG
 #   undef DLOG
-#   define DLOG(severity) LOG_TO_SINK(veil::logging::_debugLogSink, severity)
+#   define DLOG(severity) LOG_TO_SINK(veil::logging::_debugLogSink.lock().get(), severity)
 #   define DLOG_TO_SINK(sink, severity) LOG_TO_SINK(sink, severity)
 #else
 #   define DLOG_TO_SINK(sink, severity) \
@@ -34,10 +32,13 @@
 #endif
 
 #undef LOG
-#define LOG(severity) LOG_TO_SINK(veil::logging::_logSink, severity)
+#define LOG(severity) LOG_TO_SINK(veil::logging::_logSink.lock().get(), severity)
 
 namespace veil
 {
+
+class SimpleConnectionPool;
+
 namespace logging
 {
 
@@ -50,8 +51,8 @@ typedef protocol::logging::LogLevel RemoteLogLevel;
 class RemoteLogWriter;
 class RemoteLogSink;
 
-extern std::atomic<RemoteLogSink*> _logSink;
-extern std::atomic<RemoteLogSink*> _debugLogSink;
+extern std::weak_ptr<RemoteLogSink> _logSink;
+extern std::weak_ptr<RemoteLogSink> _debugLogSink;
 
 /**
  * Sets RemoteLogSink objects used for logging normal and debug messages.
@@ -59,7 +60,7 @@ extern std::atomic<RemoteLogSink*> _debugLogSink;
  * @param logSink The new log sink.
  * @param debugLogSink The new debug log sink.
  */
-extern void setLogSinks(RemoteLogSink *logSink, RemoteLogSink *debugLogSink);
+extern void setLogSinks(const std::shared_ptr<RemoteLogSink> &logSink, const std::shared_ptr<RemoteLogSink> &debugLogSink);
 
 /**
  * The RemoteLogWriter class is responsible for sending log messages to a
@@ -67,10 +68,9 @@ extern void setLogSinks(RemoteLogSink *logSink, RemoteLogSink *debugLogSink);
  */
 class RemoteLogWriter
 {
-    typedef boost::scoped_thread<boost::interrupt_and_join_if_joinable> Thread;
-    typedef std::queue<protocol::logging::LogMessage>::size_type BufferSize;
-    static const BufferSize DEFAULT_MAX_MESSAGE_BUFFER_SIZE = 1024;
-    static const BufferSize DEFAULT_MESSAGE_BUFFER_TRIM_SIZE = 850;
+    using BufferSize = std::queue<protocol::logging::LogMessage>::size_type;
+    static constexpr BufferSize DEFAULT_MAX_MESSAGE_BUFFER_SIZE = 1024;
+    static constexpr BufferSize DEFAULT_MESSAGE_BUFFER_TRIM_SIZE = 850;
 
 public:
     /**
@@ -89,8 +89,10 @@ public:
 
     /**
      * Runs the message write loop in a separate thread.
+     * Sets the connection pool used by the writer to send logs to a cluster.
+     * @param connectionPool The pool to be used by the writer.
      */
-    virtual void run();
+    virtual void run(std::shared_ptr<SimpleConnectionPool> connectionPool);
 
     /**
      * Destructor.
@@ -124,13 +126,15 @@ private:
     void writeLoop();
     void dropExcessMessages();
 
+    std::shared_ptr<SimpleConnectionPool> m_connectionPool;
     const pid_t m_pid;
     const BufferSize m_maxBufferSize;
     const BufferSize m_bufferTrimSize;
-    boost::condition_variable m_bufferChanged;
-    boost::mutex m_bufferMutex;
-    Thread m_thread;
-    boost::atomic<RemoteLogLevel> m_thresholdLevel;
+    std::condition_variable m_bufferChanged;
+    std::mutex m_bufferMutex;
+    std::thread m_thread;
+    std::atomic<RemoteLogLevel> m_thresholdLevel;
+    std::atomic<bool> m_stopWriteLoop;
     std::queue<protocol::logging::LogMessage> m_buffer;
 };
 
@@ -148,7 +152,7 @@ public:
      * If set to protocol::logging::NONE, the messages are reported with their
      * original severity level.
      */
-    RemoteLogSink(const boost::shared_ptr<RemoteLogWriter> &writer,
+    RemoteLogSink(std::shared_ptr<RemoteLogWriter> writer,
                   const RemoteLogLevel forcedLevel = protocol::logging::NONE);
 
     /**
@@ -162,7 +166,7 @@ public:
 
 private:
     const RemoteLogLevel m_forcedLevel;
-    boost::shared_ptr<RemoteLogWriter> m_writer;
+    std::shared_ptr<RemoteLogWriter> m_writer;
 };
 
 }
