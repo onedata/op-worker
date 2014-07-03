@@ -1076,12 +1076,12 @@ get_mode(FileName) ->
 %% ====================================================================
 % TODO delete format change when GUI will use N20
 check_utf(FileName) when is_list(FileName) ->
-  case io_lib:printable_unicode_list(FileName) of
-    true ->
-      FileName;
-    false ->
-      unicode:characters_to_list(list_to_binary(FileName))
-  end;
+%%   case io_lib:printable_unicode_list(FileName) of
+%%     true ->
+%%       FileName;
+%%     false ->
+      unicode:characters_to_list(list_to_binary(FileName)).
+%%   end;
 
 check_utf(FileName) ->
   FileName.
