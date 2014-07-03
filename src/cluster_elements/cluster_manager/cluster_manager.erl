@@ -535,8 +535,8 @@ handle_cast(monitor_cluster, State) ->
       Stats when is_list(Stats) -> {Node, Stats};
       _ -> {Node, undefined}
     catch
-      _:_ ->
-        ?error("Can not get statistics of node: ~s", [Node]),
+      _:Reason ->
+        ?error("Can not get statistics of node ~s: ~p", [Node, Reason]),
         {Node, undefined}
     end
   end,
@@ -1346,8 +1346,8 @@ calculate_node_load(Nodes, Period) ->
       Stats when is_list(Stats) -> {Node, Stats};
       _ -> {Node, undefined}
     catch
-      _:_ ->
-        ?error("Can not get statistics of node: ~s", [Node]),
+      _:Reason ->
+        ?error("Can not get statistics of node ~s: ~p", [Node, Reason]),
         {Node, undefined}
     end
   end,
