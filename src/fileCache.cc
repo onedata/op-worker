@@ -12,7 +12,7 @@
 #include <chrono>
 #include <iostream>
 
-constexpr int MAX_BLOCK_SIZE = 10;
+static constexpr int MAX_BLOCK_SIZE = 10;
 
 namespace veil
 {
