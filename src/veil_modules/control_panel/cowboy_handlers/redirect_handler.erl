@@ -32,7 +32,7 @@ init(_Type, Req, _Opts) ->
 %% ====================================================================
 handle(Req, State) ->
 	{FullHostname, _} = cowboy_req:header(<<"host">>, Req),
-    % Remove the leading '.www' if present
+    % Remove the leading 'www.' if present
     Hostname = case FullHostname of
                    <<"www.", Rest/binary>> -> Rest;
                    _ -> FullHostname
