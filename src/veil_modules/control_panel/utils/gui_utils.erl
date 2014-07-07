@@ -133,8 +133,8 @@ cookie_policy_popup_body() ->
 
 %% is_cookie_policy_accepted/1
 %% ====================================================================
-%% @doc Returns a set of elements that renders to a floating popup asking for acceptance
-%% of cookie policy.
+%% @doc Returns true if the client browser has sent a proper cookie
+%% implying that the privacy policy has been accepted.
 %% @end
 -spec is_cookie_policy_accepted(Req :: req()) -> term().
 %% ====================================================================

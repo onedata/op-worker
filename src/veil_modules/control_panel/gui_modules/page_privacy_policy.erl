@@ -22,12 +22,7 @@
 
 %% Template points to the template file, which will be filled with content
 main() ->
-    case vcn_gui_utils:maybe_redirect(true, true, true, true) of
-        true ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
-        false ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}
-    end.
+    #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
 
 %% Page title
 title() -> <<"Privacy policy">>.
@@ -35,8 +30,9 @@ title() -> <<"Privacy policy">>.
 %% This will be placed in the template instead of {{body}} tag
 body() ->
     #panel{style = <<"padding: 20px 50px;">>, body = [
-        #h3{style = <<"margin-bottom: 30px;">>, body = <<"Privacy policy">>},
-        #panel{body = read_privacy_policy_file()}
+        #h3{style = <<"margin-bottom: 30px;">>, body = <<"Privacy policy - onedata.org">>},
+        #panel{body = read_privacy_policy_file()},
+        #link{class = <<"btn btn-success btn-wide">>, style = <<"float: right; margin: 30px 0 15px;">>, url = <<"/">>, body = <<"Main page">>}
     ]}.
 
 

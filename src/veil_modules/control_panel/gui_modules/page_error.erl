@@ -26,14 +26,19 @@ title() -> <<"Error">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
+    CookiePolicyPopup = case gui_utils:is_cookie_policy_accepted(?REQ) of
+                            true -> [];
+                            false -> [gui_utils:cookie_policy_popup_body()]
+                        end,
     {Reason, Description} = get_reason_and_description(),
     #panel{style = <<"position: relative;">>, body = [
         #panel{class = <<"alert alert-danger login-page">>, body = [
             #h3{body = <<"Error">>},
             #p{class = <<"login-info">>, style = <<"font-weight: bold;">>, body = Reason},
             #p{class = <<"login-info">>, body = Description},
-            #button{postback = to_login, class = <<"btn btn-warning btn-block">>, body = <<"Login page">>}
-        ]}
+            #button{postback = to_login, class = <<"btn btn-warning btn-block">>, body = <<"Main page">>}
+        ]},
+        CookiePolicyPopup
     ] ++ vcn_gui_utils:logotype_footer(120)}.
 
 event(init) -> ok;
