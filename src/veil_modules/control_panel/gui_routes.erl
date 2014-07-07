@@ -33,6 +33,7 @@ route(<<"/cluster_logs">>) -> page_cluster_logs;
 route(<<"/client_logs">>) -> page_client_logs;
 route(<<"/manage_account">>) -> page_manage_account;
 route(<<"/about">>) -> page_about;
+route(<<"/privacy_policy">>) -> page_privacy_policy;
 route(<<"/error">>) -> page_error;
 route(<<"/monitoring">>) -> page_monitoring;
 route(_) -> page_404.

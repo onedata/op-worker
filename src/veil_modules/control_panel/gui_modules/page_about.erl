@@ -44,44 +44,52 @@ body() ->
 about_table() ->
     #table{style = <<"border-width: 0px; width: auto">>, body = [
         #tr{cells = [
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body =
-            #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Version">>}},
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body = #p{body = node_manager:check_vsn()}}
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Version">>}},
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #p{style = <<"margin: -3px 0 0;">>, body = node_manager:check_vsn()}}
         ]},
 
         #tr{cells = [
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body =
-            #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Contact">>}},
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body =
-            #link{style = <<"font-size: 18px; padding: 5px 0;">>, body = <<?CONTACT_EMAIL>>, url = <<"mailto:", ?CONTACT_EMAIL>>}}
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Contact">>}},
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #link{style = <<"font-size: 18px;">>, body = <<?CONTACT_EMAIL>>, url = <<"mailto:", ?CONTACT_EMAIL>>}}
         ]},
 
         #tr{cells = [
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body =
-            #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Acknowledgements">>}},
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body =
-            #p{body = <<"This research was supported in part by PL-Grid Infrastructure.">>}}
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Privacy policy">>}},
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #link{style = <<"font-size: 18px; padding: 5px 0;">>, body = <<"Learn about privacy policy">>, url = <<"/privacy_policy">>}}
         ]},
 
         #tr{cells = [
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body =
-            #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"License">>}},
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>,
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Acknowledgements">>}},
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #p{style = <<"margin: -3px 0 0;">>, body = <<"This research was supported in part by PL-Grid Infrastructure.">>}}
+        ]},
+
+        #tr{cells = [
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"License">>}},
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
                 body = #p{style = <<"white-space: pre; font-size: 100%; line-height: normal">>, body = get_license()}}
         ]},
 
         #tr{cells = [
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body =
-            #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Team">>}},
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body = get_team()}
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Team">>}},
+            #td{style = <<"padding: 15px; vertical-align: top;">>, body = get_team()}
         ]}
     ]}.
 
 % content of LICENSE.txt file
 get_license() ->
     case file:read_file(?LICENSE_FILE) of
-        {ok, File} -> binary:bin_to_list(File);
-        {error, Error} -> Error
+        {ok, File} -> File;
+        {error, _Error} -> <<"">>
     end.
 
 % HTML list with team members

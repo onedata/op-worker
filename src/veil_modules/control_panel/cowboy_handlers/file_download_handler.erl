@@ -84,7 +84,7 @@ cowboy_file_stream_fun(FilePathOrUUID, Size) ->
         try
             stream_file(Socket, Transport, FilePathOrUUID, Size, get_download_buffer_size())
         catch Type:Message ->
-            % Any exceptions that occur during file streaming must be caught for cowboy to close the connection cleanly
+            % Any exceptions that occur during file streaming must be caught here for cowboy to close the connection cleanly
             ?error_stacktrace("Error while streaming file '~p' - ~p:~p", [FilePathOrUUID, Type, Message])
         end
     end.

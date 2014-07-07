@@ -285,14 +285,21 @@ top_menu(ActiveTabID, SubMenuBody) ->
             end
         end, MenuIcons),
 
-    #panel{class = <<"navbar navbar-fixed-top">>, body = [
-        #panel{class = <<"navbar-inner">>, style = <<"border-bottom: 2px solid gray;">>, body = [
-            #panel{class = <<"container">>, body = [
-                #list{class = <<"nav pull-left">>, body = MenuCaptionsProcessed},
-                #list{class = <<"nav pull-right">>, body = MenuIconsProcessed}
+    CookiePolicyPopup = case gui_utils:is_cookie_policy_accepted(?REQ) of
+                            true -> [];
+                            _ -> [gui_utils:cookie_policy_popup_body()]
+                        end,
+
+    [
+        #panel{class = <<"navbar navbar-fixed-top">>, body = [
+            #panel{class = <<"navbar-inner">>, style = <<"border-bottom: 2px solid gray;">>, body = [
+                #panel{class = <<"container">>, body = [
+                    #list{class = <<"nav pull-left">>, body = MenuCaptionsProcessed},
+                    #list{class = <<"nav pull-right">>, body = MenuIconsProcessed}
+                ]}
             ]}
-        ]}
-    ] ++ SubMenuBody}.
+        ] ++ SubMenuBody}
+    ] ++ CookiePolicyPopup.
 
 
 %% logotype_footer/1

@@ -22,9 +22,14 @@
 % Convenience functions to manipulate response headers
 -export([cowboy_ensure_header/3, onrequest_adjust_headers/1]).
 
+% Cookies policy handling
+-export([cookie_policy_popup_body/0, is_cookie_policy_accepted/1]).
+
 % Functions used to perform secure server-server http requests
 -export([https_get/2, https_post/3]).
 
+%% Name of cookie remembering if cookie policy is accepted (value is T/F)
+-define(cookie_policy_cookie_name, "cookie_policy_accepted").
 %% Maximum redirects to follow when doing http request
 -define(max_redirects, 5).
 %% Maximum depth of CA cert analize
@@ -99,6 +104,46 @@ cowboy_ensure_header(Name, Value, Req) when is_binary(Name) and is_binary(Value)
 onrequest_adjust_headers(Req) ->
     Req2 = cowboy_req:set_resp_header(<<"Strict-Transport-Security">>, <<"max-age=31536000; includeSubDomains">>, Req),
     cowboy_req:set_resp_header(<<"X-Frame-Options">>, <<"SAMEORIGIN">>, Req2).
+
+
+%% cookie_policy_popup_body/0
+%% ====================================================================
+%% @doc Returns a set of elements that renders to a floating popup asking for acceptance
+%% of cookie policy.
+%% @end
+-spec cookie_policy_popup_body() -> term().
+%% ====================================================================
+cookie_policy_popup_body() ->
+    #panel{id = <<"cookie_policy_popup">>, class = <<"dialog dialog-info wide">>,
+        style = <<"position: fixed; bottom: 0; height: 60px; z-index: 2000;",
+        "line-height: 60px; text-align: center; margin: 0; padding: 0;">>,
+        body = [
+            #p{style = <<"margin: 0 10px; display: inline;">>,
+                body = <<"This website uses cookies. By continuing to browse the site, you are agreeing to our use of cookies.">>},
+            #form{style = "display: inline;", class = <<"control-group">>, body = [
+                #link{class = <<"btn btn-mini btn-info">>, target = <<"_blank">>, url = "/privacy_policy",
+                    style = <<"margin: 14px 10px; width: 65px;">>, body = <<"Learn more">>},
+                #link{class = <<"btn btn-mini btn-success">>, id = <<"accept_cookie_policy">>, body = <<"OK">>,
+                    style = <<"margin: 14px 10px; width: 65px;">>, actions = gui_jq:bind_element_click(<<"accept_cookie_policy">>,
+                        <<"function (e){ document.cookie = '", ?cookie_policy_cookie_name, "=true;expires=Fri, 01 Jan 2100 00:00:00 GMT';",
+                        "$('#cookie_policy_popup').hide(); }">>)}
+            ]}
+        ]}.
+
+
+%% is_cookie_policy_accepted/1
+%% ====================================================================
+%% @doc Returns a set of elements that renders to a floating popup asking for acceptance
+%% of cookie policy.
+%% @end
+-spec is_cookie_policy_accepted(Req :: req()) -> term().
+%% ====================================================================
+is_cookie_policy_accepted(Req) ->
+    {Cookie, _} = cowboy_req:cookie(<<?cookie_policy_cookie_name>>, Req),
+    case Cookie of
+        <<"true">> -> true;
+        _ -> false
+    end.
 
 
 %% https_get/2
