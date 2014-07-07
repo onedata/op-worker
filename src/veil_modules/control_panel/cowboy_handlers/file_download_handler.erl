@@ -75,13 +75,18 @@ terminate(_Reason, _Req, _State) ->
 %% cowboy_file_stream_fun/2
 %% ====================================================================
 %% @doc Returns a cowboy-compliant streaming function, that will be evealuated
-%% by cowboy to send data (file content) to receiveing socket.
+%% by cowboy to send data (file content) to receiving socket.
 %% @end
 -spec cowboy_file_stream_fun(string() | {uuid, string()}, integer()) -> function().
 %% ====================================================================
 cowboy_file_stream_fun(FilePathOrUUID, Size) ->
     fun(Socket, Transport) ->
-        stream_file(Socket, Transport, FilePathOrUUID, Size, get_download_buffer_size())
+        try
+            stream_file(Socket, Transport, FilePathOrUUID, Size, get_download_buffer_size())
+        catch Type:Message ->
+            % Any exceptions that occur during file streaming must be caught for cowboy to close the connection cleanly
+            ?error_stacktrace("Error while streaming file '~p' - ~p:~p", [FilePathOrUUID, Type, Message])
+        end
     end.
 
 
@@ -160,13 +165,13 @@ handle_user_content_request(Req, Path) ->
                 {Filepath, Size} ->
                     % Send the file
                     try
-                        % Finalize session handler, set new cookie
+                        % Finalize session handler
                         {ok, [], FinalCtx} = SessionHandler:finish(State, NewContext),
                         Req2 = cowboy_req:set_resp_header(<<"content-type">>, <<"application/json">>,
                             FinalCtx#context.req),
                         {ok, _NewReq} = send_file(Req2, Filepath, filename:basename(Filepath), Size)
                     catch Type:Message ->
-                        ?error_stacktrace("Error while sending file ~p to user ~p - ~p:~p",
+                        ?error_stacktrace("Error while preparing to send file ~p to user ~p - ~p:~p",
                             [Filepath, UserLogin, Type, Message]),
                         {ok, _FinReq} = cowboy_req:reply(500, Req#http_req{connection = close})
                     end
@@ -210,7 +215,7 @@ handle_shared_files_request(Req, ShareID) ->
             try
                 {ok, _NewReq} = send_file(Req, {uuid, FileID}, FileName, Size)
             catch Type:Message ->
-                ?error_stacktrace("Error while sending shared file ~p - ~p:~p",
+                ?error_stacktrace("Error while preparing to send shared file ~p - ~p:~p",
                     [FileID, Type, Message]),
                 {ok, _FinReq} = cowboy_req:reply(500, Req#http_req{connection = close})
             end
@@ -229,7 +234,7 @@ send_file(Req, FilePathOrUUID, FileName, Size) ->
     StreamFun = cowboy_file_stream_fun(FilePathOrUUID, Size),
     Req2 = content_disposition_attachment_headers(Req, FileName),
     Req3 = cowboy_req:set_resp_body_fun(Size, StreamFun, Req2),
-    {ok, _FinReq} = cowboy_req:reply(200, Req3).
+    {ok, _FinReq} = cowboy_req:reply(200, Req3#http_req{connection=close}).
 
 
 %% stream_file/5
