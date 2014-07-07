@@ -8,6 +8,7 @@ set(VeilHelpers_VERSION_PATCH 0)
 set(VeilHelpers_VERSION $(VeilHelpers_VERSION_MAJOR).$(VeilHelpers_VERSION_MINOR).$(VeilHelpers_VERSION_PATCH))
 
 # CMake config
+cmake_policy(SET CMP0042 NEW) # Explicitly enable MACOSX_RPATH
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 set(DEPS_DIR "deps")
 link_directories(${PROJECT_BINARY_DIR})
@@ -16,17 +17,6 @@ configure_file (
     "${PROJECT_SOURCE_DIR}/include/veilConfig.h.in"
     "${PROJECT_BINARY_DIR}/veilConfig.h"
 )
-
-# Deps
-add_subdirectory(${DEPS_DIR}/gmock)
-add_subdirectory(${DEPS_DIR}/glog)
-add_subdirectory(${DEPS_DIR}/websocketpp)
-
-# Include paths
-include_directories(${PROJECT_SOURCE_DIR}/include)
-include_directories(${PROJECT_BINARY_DIR})
-include_directories(${GLOG_INCLUDE_DIR})
-include_directories(${WSPP_INCLUDE_DIR})
 
 # Setup git
 message(STATUS "Checking for Git...")
@@ -76,26 +66,14 @@ include_directories(${FUSE_INCLUDE_DIRS})
 
 
 # Setup Boost
-set(Boost_USE_STATIC_LIBS       OFF)
+if(${PREFER_STATIC_LINK})
+    set(Boost_USE_STATIC_LIBS       ON)
+else()
+    set(Boost_USE_STATIC_LIBS       OFF)
+endif()
 set(Boost_USE_MULTITHREADED      ON)
 set(Boost_USE_STATIC_RUNTIME    OFF)
 find_package(Boost COMPONENTS thread filesystem system random REQUIRED)
-
-if(${PREFER_STATIC_LINK})
-
-    set(BOOST_LIBS boost_thread boost_filesystem boost_system boost_random)
-
-    foreach(LIB ${BOOST_LIBS})
-        find_library(BOOST_${LIB}_LIBRARY NAMES lib${LIB}-mt.a lib${LIB}.a ${LIB}-mt ${LIB})
-        if(${BOOST_${LIB}_LIBRARY} MATCHES .*_LIBRARY-NOTFOUND)
-            message( FATAL_ERROR "ERROR: ${LIB} NOT FOUND!")
-        endif()
-        set(BOOST_DEPS ${BOOST_DEPS};${BOOST_${LIB}_LIBRARY})
-    endforeach()
-    set(Boost_LIBRARIES ${BOOST_DEPS})
-
-endif()
-
 
 link_directories(${Boost_LIBRARY_DIRS})
 include_directories(${Boost_INCLUDE_DIRS})
@@ -154,8 +132,18 @@ add_definitions(${FUSE_DEFINITIONS} -DFUSE_USE_VERSION=29 -D_WEBSOCKETPP_CPP11_S
 
 set(CMAKE_SKIP_RPATH TRUE) # Something is wrong with CMake RPATH config, we need to use old-fashion way
 
-# Define targets
+# Deps
+add_subdirectory(${DEPS_DIR}/gmock)
+add_subdirectory(${DEPS_DIR}/glog)
+add_subdirectory(${DEPS_DIR}/websocketpp)
 
+# Include paths
+include_directories(${PROJECT_SOURCE_DIR}/include)
+include_directories(${PROJECT_BINARY_DIR})
+include_directories(${GLOG_INCLUDE_DIR})
+include_directories(${WSPP_INCLUDE_DIR})
+
+# Define targets
 add_library(veilprotocol ${PROTO_SRCS})
 
 add_library(veilhelpers_obj OBJECT ${HELPER_SOURCES})
@@ -213,7 +201,8 @@ include_directories(${GMOCK_INCLUDE_DIR})
 set(TEST_SOURCES_DIR "test")
 include_directories(${TEST_SOURCES_DIR}/include)
 
-add_library(testRunner STATIC ${TEST_SOURCES_DIR}/testRunner.cc)
+add_library(testRunner OBJECT ${TEST_SOURCES_DIR}/testRunner.cc)
+add_dependencies(testRunner glog gmock gtest)
 
 add_custom_target(cunit)
 macro(run_test test_target)
@@ -228,10 +217,9 @@ endmacro()
 file(GLOB files ${TEST_SOURCES_DIR}/*_test.cc)
 foreach(file ${files})
     get_filename_component(TEST_NAME ${file} NAME_WE)
-    add_executable(${TEST_NAME} ${file})
-    add_dependencies(${TEST_NAME} gtest gmock veilFuse veilhelpers veilclient veilprotocol)
+    add_executable(${TEST_NAME} ${file} $<TARGET_OBJECTS:testRunner>)
+    add_dependencies(${TEST_NAME} gmock gtest veilhelpers veilprotocol)
     target_link_libraries(${TEST_NAME}
-        testRunner
         ${GTEST_LIBRARIES}
         ${Boost_LIBRARIES_SHARED}
         ${GMOCK_LIBRARIES}
