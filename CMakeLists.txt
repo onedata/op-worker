@@ -18,6 +18,17 @@ configure_file (
     "${PROJECT_BINARY_DIR}/veilConfig.h"
 )
 
+# Deps
+add_subdirectory(${DEPS_DIR}/gmock)
+add_subdirectory(${DEPS_DIR}/glog)
+add_subdirectory(${DEPS_DIR}/websocketpp)
+
+# Include paths
+include_directories(${PROJECT_SOURCE_DIR}/include)
+include_directories(${PROJECT_BINARY_DIR})
+include_directories(${GLOG_INCLUDE_DIR})
+include_directories(${WSPP_INCLUDE_DIR})
+
 # Setup git
 message(STATUS "Checking for Git...")
 find_package(Git REQUIRED)
@@ -132,16 +143,6 @@ add_definitions(${FUSE_DEFINITIONS} -DFUSE_USE_VERSION=29 -D_WEBSOCKETPP_CPP11_S
 
 set(CMAKE_SKIP_RPATH TRUE) # Something is wrong with CMake RPATH config, we need to use old-fashion way
 
-# Deps
-add_subdirectory(${DEPS_DIR}/gmock)
-add_subdirectory(${DEPS_DIR}/glog)
-add_subdirectory(${DEPS_DIR}/websocketpp)
-
-# Include paths
-include_directories(${PROJECT_SOURCE_DIR}/include)
-include_directories(${PROJECT_BINARY_DIR})
-include_directories(${GLOG_INCLUDE_DIR})
-include_directories(${WSPP_INCLUDE_DIR})
 
 # Define targets
 add_library(veilprotocol ${PROTO_SRCS})
