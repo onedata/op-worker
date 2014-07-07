@@ -109,7 +109,7 @@ onrequest_adjust_headers(Req) ->
 %% cookie_policy_popup_body/0
 %% ====================================================================
 %% @doc Returns a set of elements that renders to a floating popup asking for acceptance
-%% of cookie policy.
+%% of privacy policy.
 %% @end
 -spec cookie_policy_popup_body() -> term().
 %% ====================================================================

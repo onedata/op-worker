@@ -22,7 +22,7 @@
 -export([clear_manager/0, clear_workspace/0, sort_toggle/1, sort_reverse/0, navigate/1, up_one_level/0]).
 -export([toggle_view/1, select_item/1, select_all/0, deselect_all/0, clear_clipboard/0, put_to_clipboard/1, paste_from_clipboard/0]).
 -export([rename_item/2, create_directory/1, remove_selected/0, search/1, show_popup/1, hide_popup/0, path_navigator_body/1]).
--export([fs_mkdir/1, fs_remove/1, fs_remove_dir/1, fs_mv/2, fs_mv/3, fs_copy/2, fs_unique_filename/2, fs_create_share/1]).
+-export([fs_mkdir/1, fs_remove/1, fs_remove_dir/1, fs_mv/2, fs_mv/3, fs_copy/2, fs_create_share/1]).
 
 
 % How often should comet process check for changes in current dir
@@ -32,7 +32,8 @@
 % Item is either a file or a dir represented in manager
 -record(item, {
     id = <<"">>,
-    path = "/",
+    path = <<"/">>,
+    basename = <<"">>,
     is_shared = false,
     attr = #fileattributes{}}).
 
@@ -231,7 +232,7 @@ event({action, Fun, Args}) ->
                 {query_value, FieldName} ->
                     % This tuple means, that element with id=FieldName has to be queried
                     % and the result be put in function args
-                    gui_str:to_list(gui_ctx:form_param(FieldName));
+                    gui_ctx:form_param(FieldName);
                 Other ->
                     Other
             end
@@ -245,7 +246,7 @@ comet_loop_init(UserId, RequestedHostname) ->
     % Initialize page state
     fslogic_context:set_user_dn(UserId),
     set_requested_hostname(RequestedHostname),
-    set_working_directory("/"),
+    set_working_directory(<<"/">>),
     set_selected_items([]),
     set_display_style(list),
     set_displayed_file_attributes([size, atime, mtime]),
@@ -335,9 +336,9 @@ refresh_workspace() ->
 
 sort_item_list() ->
     AllItems = get_item_list(),
-    {ItemList, GroupsDir} = lists:partition(
+    {ItemList, GroupsDirList} = lists:partition(
         fun(I) ->
-            item_path(I) /= "/groups"
+            item_path(I) /= <<"/groups">>
         end, AllItems),
     Attr = get_sort_by(),
     SortAscending = get_sort_ascending(),
@@ -366,7 +367,7 @@ sort_item_list() ->
                           Dirs ++ Files;
                       _ -> Result
                   end,
-    set_item_list(GroupsDir ++ FinalResult).
+    set_item_list(GroupsDirList ++ FinalResult).
 
 
 sort_toggle(Type) ->
@@ -413,8 +414,8 @@ refresh_tool_buttons() ->
 
     Count = length(get_selected_items()),
     NFiles = length(get_item_list()),
-    IsDir = try item_is_dir(item_find(lists:nth(1, get_selected_items()))) catch _:_ -> false end,
-    enable_tool_button(<<"tb_up_one_level">>, get_working_directory() /= "/"),
+    IsDir = try item_is_dir(item_find(element(1, lists:nth(1, get_selected_items())))) catch _:_ -> false end,
+    enable_tool_button(<<"tb_up_one_level">>, get_working_directory() /= <<"/">>),
     enable_tool_button(<<"tb_share_file">>, (Count =:= 1) andalso (not IsDir)),
     enable_tool_button(<<"tb_rename">>, Count =:= 1),
     enable_tool_button(<<"tb_remove">>, Count > 0),
@@ -463,12 +464,13 @@ select_item(Path) ->
             skip;
         Item ->
             SelectedItems = get_selected_items(),
-            case lists:member(Path, SelectedItems) of
+            Basename = item_basename(Item),
+            case lists:member({Path, Basename}, SelectedItems) of
                 false ->
-                    set_selected_items(SelectedItems ++ [Path]),
+                    set_selected_items(SelectedItems ++ [{Path, Basename}]),
                     gui_jq:add_class(item_id(Item), <<"selected-item">>);
                 true ->
-                    set_selected_items(SelectedItems -- [Path]),
+                    set_selected_items(SelectedItems -- [{Path, Basename}]),
                     gui_jq:remove_class(item_id(Item), <<"selected-item">>)
             end
     end,
@@ -479,7 +481,7 @@ select_all() ->
     set_selected_items([]),
     lists:foreach(
         fun(Item) ->
-            set_selected_items(get_selected_items() ++ [item_path(Item)]),
+            set_selected_items(get_selected_items() ++ [{item_path(Item), item_basename(Item)}]),
             gui_jq:add_class(item_id(Item), <<"selected-item">>)
         end, get_item_list()),
     refresh_tool_buttons().
@@ -508,18 +510,18 @@ put_to_clipboard(Type) ->
 
 paste_from_clipboard() ->
     ErrorMessage = lists:foldl(
-        fun(Path, Acc) ->
+        fun({Path, Basename}, Acc) ->
             case get_clipboard_type() of
                 cut ->
                     case fs_mv(Path, get_working_directory()) of
                         ok ->
                             Acc;
                         {logical_file_system_error, "eperm"} ->
-                            <<Acc/binary, "Unable to move ", (gui_str:to_binary(filename:basename(Path)))/binary, " - insufficient permissions.\r\n">>;
+                            <<Acc/binary, "Unable to move ", Basename/binary, " - insufficient permissions.\r\n">>;
                         {logical_file_system_error, "eexist"} ->
-                            <<Acc/binary, "Unable to move ", (gui_str:to_binary(filename:basename(Path)))/binary, " - file exists.\r\n">>;
+                            <<Acc/binary, "Unable to move ", Basename/binary, " - file exists.\r\n">>;
                         _ ->
-                            <<Acc/binary, "Unable to move ", (gui_str:to_binary(filename:basename(Path)))/binary, " - error occured.\r\n">>
+                            <<Acc/binary, "Unable to move ", Basename/binary, " - error occured.\r\n">>
                     end;
                 copy ->
                     % Not yet implemented
@@ -585,7 +587,7 @@ create_directory(Name) ->
 remove_selected() ->
     SelectedItems = get_selected_items(),
     lists:foreach(
-        fun(Path) ->
+        fun({Path, _}) ->
             fs_remove(Path)
         end, SelectedItems),
     clear_clipboard(),
@@ -594,14 +596,14 @@ remove_selected() ->
 
 search(SearchString) ->
     case SearchString of
-        [] -> skip;
-        undefined -> skip;
+        <<"">> ->
+            deselect_all();
         _ ->
             deselect_all(),
             lists:foreach(
                 fun(Item) ->
-                    case string:str(item_basename(Item), SearchString) of
-                        0 -> skip;
+                    case binary:match(item_basename(Item), SearchString) of
+                        nomatch -> skip;
                         _ -> select_item(item_path(Item))
                     end
                 end, get_item_list())
@@ -627,12 +629,8 @@ show_popup(Type) ->
                 {Body, <<"$('#create_dir_textbox').focus();">>, {action, hide_popup}};
 
             rename_item ->
-                Filename = filename:basename(lists:nth(1, get_selected_items())),
-                SelectionLength = case string:rchr(Filename, $.) - 1 of
-                                      -1 -> length(Filename);
-                                      Val -> Val
-                                  end,
-                OldLocation = lists:nth(1, get_selected_items()),
+                {OldLocation, Filename} = lists:nth(1, get_selected_items()),
+                SelectionLength = byte_size(filename:rootname(Filename)),
                 Body = [
                     #p{body = <<"Rename <b>", (gui_str:html_encode(Filename))/binary, "</b>">>},
                     #form{class = <<"control-group">>, body = [
@@ -664,14 +662,10 @@ show_popup(Type) ->
                 {Body, FocusScript, {action, hide_popup}};
 
             share_file ->
-                Path = lists:nth(1, get_selected_items()),
-                Filename = filename:basename(lists:nth(1, get_selected_items())),
-                {Status, ShareID} = case fs_get_share_by_filepath(Path) of
-                                        {ok, #veil_document{uuid = UUID}} ->
-                                            {exists, gui_str:to_binary(UUID)};
-                                        _ ->
-                                            {ok, ID} = fs_create_share(Path),
-                                            {new, gui_str:to_binary(ID)}
+                {Path, Filename} = lists:nth(1, get_selected_items()),
+                {Status, ShareID} = case fs_get_share_uuid_by_filepath(Path) of
+                                        undefined -> {new, fs_create_share(Path)};
+                                        UUID -> UUID
                                     end,
                 clear_workspace(),
                 select_item(Path),
@@ -686,8 +680,8 @@ show_popup(Type) ->
                             "</b> successfully shared. Visit <b>Shared files</b> tab for more.">>}
                     end,
                     #form{class = <<"control-group">>, body = [
-                        #textbox{id = wire_enter(<<"shared_link_textbox">>, <<"shared_link_submit">>), class = "flat", style = "width: 700px;",
-                            value = gui_str:html_encode(<<AddressPrefix/binary, ShareID/binary>>), placeholder = "Download link"},
+                        #textbox{id = wire_enter(<<"shared_link_textbox">>, <<"shared_link_submit">>), class = <<"flat">>, style = <<"width: 700px;">>,
+                            value = gui_str:html_encode(<<AddressPrefix/binary, ShareID/binary>>), placeholder = <<"Download link">>},
                         #button{id = wire_click(<<"shared_link_submit">>, {action, hide_popup}),
                             class = <<"btn btn-success btn-wide">>, body = <<"Ok">>}
                     ]}
@@ -706,7 +700,7 @@ show_popup(Type) ->
                         [] -> {[], undefined, undefined};
                         Paths ->
                             {NumFiles, NumDirs} = lists:foldl(
-                                fun(Path, {NFiles, NDirs}) ->
+                                fun({Path, _}, {NFiles, NDirs}) ->
                                     case item_is_dir(item_find(Path)) of
                                         true -> {NFiles, NDirs + 1};
                                         false -> {NFiles + 1, NDirs}
@@ -774,17 +768,17 @@ hide_popup() ->
 % Render path navigator
 path_navigator_body(WorkingDirectory) ->
     case WorkingDirectory of
-        "/" -> gui_str:format("~~", []);
+        <<"/">> -> gui_str:format("~~", []);
         _ ->
-            FirstLink = #link{id = wire_click(<<"nav_top">>, {action, navigate, ["/"]}), body = <<"~">>},
-            PathElements = string:tokens(WorkingDirectory, "/"),
+            FirstLink = #link{id = wire_click(<<"nav_top">>, {action, navigate, [<<"/">>]}), body = <<"~">>},
+            [<<"">> | PathElements] = binary:split(WorkingDirectory, <<"/">>, [global]),
             {LinkList, _} = lists:mapfoldl(
                 fun(Element, {CurrentPath, Counter}) ->
-                    PathToElement = CurrentPath ++ "/" ++ Element,
+                    PathToElement = <<CurrentPath/binary, "/", Element/binary>>,
                     Link = #link{id = wire_click(<<"nav_", (integer_to_binary(Counter))/binary>>, {action, navigate, [PathToElement]}),
                         body = gui_str:html_encode(Element)},
                     {Link, {PathToElement, Counter + 1}}
-                end, {"/", 1}, lists:sublist(PathElements, length(PathElements) - 1)),
+                end, {<<"">>, 1}, lists:sublist(PathElements, length(PathElements) - 1)),
             [FirstLink | LinkList] ++ [lists:last(PathElements)]
     end.
 
@@ -794,10 +788,10 @@ grid_view_body() ->
     {Tiles, _} = lists:mapfoldl(
         fun(Item, Counter) ->
             FullPath = item_path(Item),
-            Filename = gui_str:to_binary(item_basename(Item)),
+            Basename = item_basename(Item),
             ImageStyle = case get_clipboard_type() of
                              cut ->
-                                 case lists:member(FullPath, get_clipboard_items()) of
+                                 case lists:member({FullPath, Basename}, get_clipboard_items()) of
                                      true -> <<"opacity:0.3; filter:alpha(opacity=30);">>;
                                      _ -> <<"">>
                                  end;
@@ -827,8 +821,8 @@ grid_view_body() ->
                                        #image{style = ImageStyle, image = ImageUrl}
                                    ]},
                                    #panel{style = <<"margin: 5px auto 0; text-align: center; word-wrap: break-word;">>, body = [
-                                       #link{title = gui_str:html_encode(Filename), id = wire_click(LinkID, {action, navigate, [FullPath]}),
-                                           body = gui_str:html_encode(Filename)}
+                                       #link{title = gui_str:html_encode(Basename), id = wire_click(LinkID, {action, navigate, [FullPath]}),
+                                           body = gui_str:html_encode(Basename)}
                                    ]}
                                ];
                            false ->
@@ -846,8 +840,8 @@ grid_view_body() ->
                                        ]}
                                    ]},
                                    #panel{style = <<"margin: 5px auto 0; text-align: center; word-wrap: break-word;">>, body = [
-                                       #link{title = gui_str:html_encode(Filename), id = LinkID, body = gui_str:html_encode(Filename), target = <<"_blank">>,
-                                           url = <<?user_content_download_path, "/", (gui_str:to_binary(gui_str:url_encode(FullPath)))/binary>>}
+                                       #link{title = gui_str:html_encode(Basename), id = LinkID, body = gui_str:html_encode(Basename), target = <<"_blank">>,
+                                           url = <<?user_content_download_path, "/", (gui_str:url_encode(FullPath))/binary>>}
                                    ]}
                                ]
                        end
@@ -881,7 +875,7 @@ list_view_body() ->
         ]}
     ],
     DirUpRow = case get_working_directory() of
-                   "/" -> [];
+                   <<"/">> -> [];
                    Path ->
                        PrevDir = filename:dirname(filename:absname(Path)),
                        Item = item_new(PrevDir),
@@ -908,10 +902,10 @@ list_view_body() ->
     {TableRows, _} = lists:mapfoldl(
         fun(Item, Counter) ->
             FullPath = item_path(Item),
-            Filename = gui_str:to_binary(item_basename(Item)),
+            Basename = item_basename(Item),
             ImageStyle = case get_clipboard_type() of
                              cut ->
-                                 case lists:member(FullPath, get_clipboard_items()) of
+                                 case lists:member({FullPath, Basename}, get_clipboard_items()) of
                                      true -> <<"opacity:0.3; filter:alpha(opacity=30);">>;
                                      _ -> <<"">>
                                  end;
@@ -946,7 +940,7 @@ list_view_body() ->
                                     ]},
                                     #panel{class = <<"filename_row">>,
                                         style = <<"max-width: 400px; word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
-                                            #link{id = wire_click(LinkID, {action, navigate, [FullPath]}), body = gui_str:html_encode(Filename)}
+                                            #link{id = wire_click(LinkID, {action, navigate, [FullPath]}), body = gui_str:html_encode(Basename)}
                                         ]}
                                 ]}};
                         false ->
@@ -964,7 +958,7 @@ list_view_body() ->
                                         ]}
                                 ]},
                                 #panel{class = <<"filename_row">>, style = <<"word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
-                                    #link{id = LinkID, body = gui_str:html_encode(Filename), target = <<"_blank">>,
+                                    #link{id = LinkID, body = gui_str:html_encode(Basename), target = <<"_blank">>,
                                         url = <<?user_content_download_path, "/", (gui_str:to_binary(gui_str:url_encode(FullPath)))/binary>>}
                                 ]}
                             ]}}
@@ -1000,11 +994,16 @@ item_new(FullPath) ->
                    "DIR" -> FA#fileattributes{size = -1};
                    _ -> FA
                end,
-    IsShared = case fs_get_share_by_filepath(FullPath) of
-                   {ok, _} -> true;
-                   _ -> false
+    IsShared = case fs_get_share_uuid_by_filepath(FullPath) of
+                   undefined -> false;
+                   _ -> true
                end,
-    #item{id = <<"item_", (get_item_counter())/binary>>, path = FullPath, is_shared = IsShared, attr = FileAttr}.
+    #item{id = <<"item_", (get_item_counter())/binary>>,
+        path = gui_str:unicode_list_to_binary(FullPath),
+        basename = gui_str:unicode_list_to_binary(filename:basename(FullPath)),
+        is_shared = IsShared,
+        attr = FileAttr
+    }.
 
 item_find(Path) ->
     case lists:keyfind(Path, 3, get_item_list()) of
@@ -1024,10 +1023,10 @@ item_id(#item{id = ID}) ->
 item_path(#item{path = Path}) ->
     Path.
 
-item_basename(#item{path = Path}) ->
-    filename:basename(Path).
+item_basename(#item{basename = Basename}) ->
+    Basename.
 
-item_attr(name, Item) -> item_basename(Item);
+item_attr(name, Item) -> gui_str:binary_to_unicode_list(item_basename(Item));
 item_attr(mode, #item{attr = #fileattributes{mode = Value}}) -> Value;
 item_attr(uid, #item{attr = #fileattributes{uid = Value}}) -> Value;
 item_attr(gid, #item{attr = #fileattributes{gid = Value}}) -> Value;
@@ -1048,7 +1047,7 @@ item_attr_value(ctime, Item) -> gui_str:to_binary(time_to_string(item_attr(ctime
 item_attr_value(size, Item) ->
     case item_is_dir(Item) of
         true -> <<"">>;
-        false -> gui_str:to_binary(size_to_printable(item_attr(size, Item)))
+        false -> size_to_printable(item_attr(size, Item))
     end.
 
 attr_to_name(name) -> <<"Name">>;
@@ -1066,7 +1065,7 @@ time_to_string(Time) ->
         [YY, MM, DD, Hour, Min, Sec]).
 
 size_to_printable(Size) ->
-    size_to_printable(Size, ["B", "KB", "MB", "GB", "TB"]).
+    gui_str:to_binary(size_to_printable(Size, ["B", "KB", "MB", "GB", "TB"])).
 
 size_to_printable(Size, [Current | Bigger]) ->
     case Size > 1024 of
@@ -1088,11 +1087,11 @@ item_list_md5(ItemList) ->
 
 is_group_dir(Path) ->
     case Path of
-        "/groups" -> true;
-        "/groups" ++ Rest -> case string:rstr(Rest, "/") of
-                                 1 -> true;
-                                 _ -> false
-                             end;
+        <<"/groups">> -> true;
+        <<"/groups", Rest>> -> case length(binary:split(Rest, <<"/">>, [global])) of
+                                   2 -> true;
+                                   _ -> false
+                               end;
         _ -> false
     end.
 
@@ -1100,15 +1099,16 @@ is_group_dir(Path) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% logical_files_manager interfacing
 fs_get_attributes(Path) ->
-    {ok, FileAttr} = logical_files_manager:getfileattr(Path),
+    {ok, FileAttr} = logical_files_manager:getfileattr(gui_str:binary_to_unicode_list(Path)),
     FileAttr.
 
 
 fs_mkdir(Path) ->
-    logical_files_manager:mkdir(Path).
+    logical_files_manager:mkdir(gui_str:binary_to_unicode_list(Path)).
 
 
-fs_remove(Path) ->
+fs_remove(BinPath) ->
+    Path = gui_str:binary_to_unicode_list(BinPath),
     Item = item_new(Path),
     case item_is_dir(Item) of
         true -> fs_remove_dir(Path);
@@ -1116,7 +1116,8 @@ fs_remove(Path) ->
     end.
 
 
-fs_remove_dir(DirPath) ->
+fs_remove_dir(BinDirPath) ->
+    DirPath = gui_str:binary_to_unicode_list(BinDirPath),
     case is_group_dir(DirPath) of
         true ->
             skip;
@@ -1130,7 +1131,8 @@ fs_remove_dir(DirPath) ->
     end.
 
 
-fs_list_dir(Dir) ->
+fs_list_dir(BinDir) ->
+    Dir = gui_str:binary_to_unicode_list(BinDir),
     DirContent = fs_list_dir(Dir, 0, 10, []),
     _ItemList = lists:foldl(
         fun(File, Acc) ->
@@ -1142,7 +1144,8 @@ fs_list_dir(Dir) ->
         end, [], DirContent).
 
 
-fs_list_dir(Path, Offset, Count, Result) ->
+fs_list_dir(BinPath, Offset, Count, Result) ->
+    Path = gui_str:binary_to_unicode_list(BinPath),
     case logical_files_manager:ls(Path, Count, Offset) of
         {ok, FileList} ->
             case length(FileList) of
@@ -1153,10 +1156,15 @@ fs_list_dir(Path, Offset, Count, Result) ->
             {error, not_a_dir}
     end.
 
-fs_mv(Path, TargetDir) ->
+fs_mv(BinPath, TargetDirBin) ->
+    Path = gui_str:binary_to_unicode_list(BinPath),
+    TargetDir = gui_str:binary_to_unicode_list(TargetDirBin),
     fs_mv(Path, TargetDir, filename:basename(Path)).
 
-fs_mv(Path, TargetDir, TargetName) ->
+fs_mv(BinPath, TargetDirBin, TargetNameBin) ->
+    Path = gui_str:binary_to_unicode_list(BinPath),
+    TargetDir = gui_str:binary_to_unicode_list(TargetDirBin),
+    TargetName = gui_str:binary_to_unicode_list(TargetNameBin),
     TargetPath = filename:absname(TargetName, TargetDir),
     case Path of
         TargetPath ->
@@ -1169,26 +1177,17 @@ fs_mv(Path, TargetDir, TargetName) ->
 fs_copy(_Path, _TargetPath) ->
     throw(not_yet_implemented).
 
-fs_unique_filename(RequestedPath, 0) ->
-    case item_find(RequestedPath) of
-        undefined -> RequestedPath;
-        _ -> fs_unique_filename(RequestedPath, 1)
-    end;
-
-fs_unique_filename(RequestedPath, Counter) ->
-    Ext = filename:extension(RequestedPath),
-    Rootname = filename:rootname(RequestedPath),
-    NewName = lists:flatten(io_lib:format("~s(~B)~s", [Rootname, Counter, Ext])),
-    case item_find(NewName) of
-        undefined -> NewName;
-        _ -> fs_unique_filename(RequestedPath, Counter + 1)
-    end.
-
 fs_create_share(Filepath) ->
-    logical_files_manager:create_standard_share(Filepath).
+    {ok, ID} = logical_files_manager:create_standard_share(gui_str:binary_to_unicode_list(Filepath)),
+    gui_str:to_binary(ID).
 
-fs_get_share_by_filepath(Filepath) ->
-    logical_files_manager:get_share({file, Filepath}).
+fs_get_share_uuid_by_filepath(Filepath) ->
+    case logical_files_manager:get_share({file, gui_str:binary_to_unicode_list(Filepath)}) of
+        {ok, #veil_document{uuid = UUID}} ->
+            gui_str:to_binary(UUID);
+        _ ->
+            undefined
+    end.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1199,6 +1198,7 @@ get_requested_hostname() -> get(rh).
 set_working_directory(Dir) -> put(wd, Dir).
 get_working_directory() -> get(wd).
 
+% Holds a list o tuples {FilePath, FileName}
 set_selected_items(List) -> put(sel_items, List).
 get_selected_items() -> get(sel_items).
 
@@ -1220,6 +1220,7 @@ get_item_list() -> get(item_list).
 set_item_list_rev(MD5) -> put(item_list_rev, MD5).
 get_item_list_rev() -> get(item_list_rev).
 
+% Holds a list o tuples {FilePath, FileName}
 set_clipboard_items(List) -> put(clipboard_items, List).
 get_clipboard_items() -> get(clipboard_items).
 

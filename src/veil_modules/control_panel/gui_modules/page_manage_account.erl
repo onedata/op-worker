@@ -55,7 +55,7 @@ body() ->
             #panel{id = <<"unverified_dns_panel">>, style = <<"display: none;">>,
                 class = <<"dialog dialog-danger">>, body = [
                     #p{body = <<"Some of certificates you added are not verified. To verify them, connect to the system with VeilClient ",
-                    "using matching globus credentials.">>}
+                    "using matching credentials.">>}
                 ]},
             #panel{id = <<"helper_error_panel">>, style = <<"display: none;">>,
                 class = <<"dialog dialog-danger">>, body = [
@@ -70,7 +70,7 @@ body() ->
 % Info to register a DN
 maybe_display_dn_message(UserDoc) ->
     case user_logic:get_dn_list(UserDoc) ++ user_logic:get_unverified_dn_list(UserDoc) of
-        List when length(List) =:= 1 -> gui_jq:show(<<"dn_error_panel">>);
+        [_] -> gui_jq:show(<<"dn_error_panel">>);
         _ -> gui_jq:hide(<<"dn_error_panel">>)
     end.
 
@@ -101,13 +101,13 @@ main_table() ->
         #tr{cells = [
             #td{style = <<"border-width: 0px; padding: 10px 10px">>, body =
             #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Login">>}},
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body = #p{body = user_logic:get_login(UserDoc)}}
+            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body = #p{body = gui_str:unicode_list_to_binary(user_logic:get_login(UserDoc))}}
         ]},
 
         #tr{cells = [
             #td{style = <<"border-width: 0px; padding: 10px 10px">>, body =
             #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Name">>}},
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body = #p{body = user_logic:get_name(UserDoc)}}
+            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body = #p{body = gui_str:unicode_list_to_binary(user_logic:get_name(UserDoc))}}
         ]},
 
         #tr{cells = [
@@ -136,7 +136,7 @@ team_list_body(Userdoc) ->
     _Body = case lists:map(
         fun(Team) ->
             #li{style = <<"font-size: 18px; padding: 5px 0;">>,
-                body = gui_str:html_encode(re:replace(Team, "\\(", " (", [global, {return, list}]))}
+                body = gui_str:html_encode(gui_str:unicode_list_to_binary(re:replace(Team, "\\(", " (", [global, {return, list}])))}
         end, Teams) of
                 [] -> #p{body = <<"none">>};
                 List -> #list{numbered = true, body = List}
@@ -149,7 +149,7 @@ email_list_body(UserDoc) ->
         fun(Email, Acc) ->
             Body = #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
             [
-                gui_str:html_encode(Email),
+                gui_str:html_encode(gui_str:unicode_list_to_binary(Email)),
                 #link{id = <<"remove_email_button", (integer_to_binary(Acc))/binary>>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
                     postback = {action, update_email, [UserDoc, {remove, Email}]}, body =
                     #span{class = <<"fui-cross">>, style = <<"font-size: 16px;">>}}
@@ -186,7 +186,7 @@ dn_list_body(UserDoc) ->
                 _ ->
                     Body = #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
                     [
-                        gui_str:html_encode(DN),
+                        gui_str:html_encode(gui_str:unicode_list_to_binary(DN)),
                         #link{id = <<"remove_dn_button", (integer_to_binary(Acc))/binary>>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
                             postback = {action, update_dn, [UserDoc, {remove, DN}]}, body =
                             #span{class = <<"fui-cross">>, style = <<"font-size: 16px;">>}}
@@ -198,7 +198,7 @@ dn_list_body(UserDoc) ->
         fun(DN, Acc) ->
             Body = #li{style = <<"font-size: 18px; padding: 5px 0; color: #90A5C0;">>, body = #span{body =
             [
-                gui_str:html_encode(DN),
+                gui_str:html_encode(gui_str:unicode_list_to_binary(DN)),
                 <<"<i style=\"color: #ff6363\">&nbsp;&nbsp;(unverified)</i>">>,
                 #link{id = <<"remove_unverified_dn_button", (integer_to_binary(Acc))/binary>>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
                     postback = {action, update_dn, [UserDoc, {remove_unverified, DN}]}, body =
@@ -212,7 +212,7 @@ dn_list_body(UserDoc) ->
                 postback = {action, show_dn_adding, [true]}, body =
                 #span{class = <<"fui-plus">>, style = <<"font-size: 16px;">>}},
             #textarea{id = <<"new_dn_textbox">>, style = <<"display: none; font-size: 12px; width: 600px; height: 200px;",
-            "vertical-align: top; overflow-y: scroll;">>, body = <<"">>, placeholder = <<"Paste your globus usercert here - in .pem format">>},
+            "vertical-align: top; overflow-y: scroll;">>, body = <<"">>, placeholder = <<"Paste your public certificate here - in .pem format">>},
             #link{id = <<"new_dn_submit">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
                 actions = gui_jq:form_submit_action(<<"new_dn_submit">>, {action, update_dn, [UserDoc, {add, submitted}]}, <<"new_dn_textbox">>),
                 body = #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
@@ -245,7 +245,7 @@ update_email(User, AddOrRemove) ->
     OldEmailList = user_logic:get_email_list(User),
     case AddOrRemove of
         {add, submitted} ->
-            NewEmail = gui_str:to_list(gui_ctx:form_param(<<"new_email_textbox">>)),
+            NewEmail = gui_str:binary_to_unicode_list(gui_ctx:form_param(<<"new_email_textbox">>)),
             case re:run(NewEmail, ?mail_validation_regexp) of
                 {match, _} ->
                     case user_logic:get_user({email, NewEmail}) of

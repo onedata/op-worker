@@ -36,7 +36,7 @@ body() ->
     ]}.
 
 
-% content of LICENSE.txt file
+% content of PRIVACY_POLICY.html file
 read_privacy_policy_file() ->
     case file:read_file(?PRIVACY_POLICY_FILE) of
         {ok, File} -> File;

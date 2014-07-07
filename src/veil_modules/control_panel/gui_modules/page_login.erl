@@ -40,7 +40,7 @@ body() ->
                     body = <<"No session or session expired. Please log in.">>}},
                 #panel{class = <<"alert alert-success login-page">>, body = [
                     #h3{body = <<"Welcome to VeilFS">>},
-                    #p{class = <<"login-info">>, body = <<"Logging in is handled by <b>PL-Grid OpenID</b>.",
+                    #p{class = <<"login-info">>, body = <<"Logging in is handled by <b>PL-Grid OpenID</b>. ",
                     "You need to have an account and possibly VeilFS service enabled.">>},
                     #button{postback = login, class = <<"btn btn-primary btn-block">>, body = <<"Log in via PL-Grid OpenID">>}
                 ]},

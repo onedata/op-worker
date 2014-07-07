@@ -50,7 +50,12 @@ main_panel() ->
                 {ok, FilePath} ->
                     Filename = filename:basename(FilePath),
                     AddressPrefix = <<"https://", (gui_ctx:get_requested_hostname())/binary, ?shared_files_download_path>>,
-                    Acc ++ [{<<"~/", (list_to_binary(FilePath))/binary>>, list_to_binary(Filename), AddressPrefix, list_to_binary(UUID)}];
+                    Acc ++ [{
+                        <<"~/", (gui_str:unicode_list_to_binary(FilePath))/binary>>,
+                        gui_str:unicode_list_to_binary(Filename),
+                        AddressPrefix,
+                        gui_str:unicode_list_to_binary(UUID)
+                    }];
                 _ ->
                     Acc
             end
@@ -89,14 +94,14 @@ main_panel() ->
                             body = TableRows}
                 end,
     gui_jq:wire(<<"window.onresize = function(e) { $('.filename_row').css('max-width', '' +",
-        "($(window).width() - 250) + 'px'); }; $(window).resize();">>), % 240 is size of button cell + paddings.
+    "($(window).width() - 250) + 'px'); }; $(window).resize();">>), % 240 is size of button cell + paddings.
     PanelBody.
 
 
 % Get list of user's shared files from database
 get_shared_files() ->
-    {ok, #veil_document{uuid = UID}} = user_logic:get_user({login, gui_ctx:get_user_id()}),
-    _ShareList = case logical_files_manager:get_share({user, UID}) of
+    {ok, #veil_document{uuid = UUID}} = user_logic:get_user({login, gui_ctx:get_user_id()}),
+    _ShareList = case logical_files_manager:get_share({user, UUID}) of
                      {ok, List} when is_list(List) -> List;
                      {ok, Doc} -> [Doc];
                      _ -> []
@@ -169,7 +174,7 @@ remove_link_prompt(ShareID, Filename) ->
 
 % Actually remove a link
 remove_link(ShareID) ->
-    ok = logical_files_manager:remove_share({uuid, binary_to_list(ShareID)}),
+    ok = logical_files_manager:remove_share({uuid, gui_str:binary_to_unicode_list(ShareID)}),
     gui_jq:replace(<<"main_table">>, main_panel()),
     hide_popup().
 
