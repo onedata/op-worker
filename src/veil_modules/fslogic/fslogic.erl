@@ -331,5 +331,5 @@ handle_custom_request({getfileattr, UUID}) ->
 
 handle_custom_request({getfilelocation, UUID}) ->
     {ok, FileDoc} = dao_lib:apply(dao_vfs, get_file, [{uuid, UUID}], fslogic_context:get_protocol_version()),
-    fslogic_req_regular:get_file_location(FileDoc).
+    fslogic_req_regular:get_file_location(FileDoc,?UNSPECIFIED_MODE).
 
