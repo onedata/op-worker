@@ -8,7 +8,6 @@ set(VeilHelpers_VERSION_PATCH 0)
 set(VeilHelpers_VERSION $(VeilHelpers_VERSION_MAJOR).$(VeilHelpers_VERSION_MINOR).$(VeilHelpers_VERSION_PATCH))
 
 # CMake config
-cmake_policy(SET CMP0042 NEW) # Explicitly enable MACOSX_RPATH
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
 set(DEPS_DIR "deps")
 link_directories(${PROJECT_BINARY_DIR})
