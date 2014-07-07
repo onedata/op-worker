@@ -35,7 +35,7 @@ init() ->
         {ok, ccm} -> throw(ccm_node);                     %% ccm node doesn't have socket interface, so GSI would be useless
         _ -> ok
     end,
-    lager:info("GSI Handler module is starting"),
+    ?info("GSI Handler module is starting"),
     ets:new(gsi_state, [{read_concurrency, true}, public, ordered_set, named_table]),
 
     {ok, CADir1} = application:get_env(?APP_Name, ca_dir),
@@ -52,25 +52,25 @@ init() ->
                     {ok, CRLUpdateInterval} = application:get_env(?APP_Name, crl_update_interval),
                     case timer:apply_interval(CRLUpdateInterval, ?MODULE, update_crls, [CADir]) of
                         {ok, _} -> ok;
-                        {error, Reason} -> lager:error("GSI Handler: Setting CLR auto-update failed (reason: ~p)", [Reason])
+                        {error, Reason} -> ?error("GSI Handler: Setting CLR auto-update failed (reason: ~p)", [Reason])
                     end;
 
                 {error, Reason} ->
-                    lager:error("GSI Handler: Cannot update CRLs because inets didn't start (reason: ~p)", [Reason])
+                    ?error("GSI Handler: Cannot update CRLs because inets didn't start (reason: ~p)", [Reason])
             end;
 
         false ->
-            lager:error("GSI Handler: Cannot find GSI CA certs dir (~p)", [CADir])
+            ?error("GSI Handler: Cannot find GSI CA certs dir (~p)", [CADir])
     end,
 
     receive
-        {'DOWN', _, process, SSPid, normal} -> lager:info("GSI Handler module successfully loaded");
+        {'DOWN', _, process, SSPid, normal} -> ?info("GSI Handler module successfully loaded");
         {'DOWN', _, process, SSPid, Reason1} ->
-            lager:warning("GSI Handler: slave node loader unknown exit reason: ~p", [Reason1]),
-            lager:info("GSI Handler module partially loaded")
+            ?warning("GSI Handler: slave node loader unknown exit reason: ~p", [Reason1]),
+            ?info("GSI Handler module partially loaded")
     after 5000 ->
-        lager:error("GSI Handler: slave node loader execution timeout, state unknown"),
-        lager:info("GSI Handler module partially loaded")
+        ?error("GSI Handler: slave node loader execution timeout, state unknown"),
+        ?info("GSI Handler module partially loaded")
     end,
 
     ok.
@@ -89,7 +89,7 @@ get_ca_certs() ->
     %% Get only files with .pem extension
     CA1 = [{strip_filename_ext(Name), file:read_file(filename:join(CADir, Name))} || Name <- Files, lists:suffix(".pem", Name)],
     CA2 = [ lists:map(fun(Y) -> {Name, Y} end, public_key:pem_decode(X)) || {Name, {ok, X}} <- CA1],
-    _CA2 = [ X || {Name, {'Certificate', X, not_encrypted}} <- lists:flatten(CA2)].
+    _CA2 = [ X || {_Name, {'Certificate', X, not_encrypted}} <- lists:flatten(CA2)].
 
 %% strip_self_signed_ca/1
 %% ====================================================================
@@ -118,7 +118,7 @@ strip_self_signed_ca(DERList) when is_list(DERList) ->
 %% ====================================================================
 verify_callback(OtpCert, valid_peer, Certs) ->
     Serial = save_cert_chain([OtpCert | Certs]),
-    ?info("Peer ~p connected", [Serial]),
+    ?debug("Peer ~p connected", [Serial]),
     {valid, []};
 verify_callback(OtpCert, {bad_cert, unknown_ca}, Certs) ->
     save_cert_chain([OtpCert | Certs]),
@@ -138,7 +138,7 @@ verify_callback(OtpCert, _IgnoredError, Certs) ->
 -spec load_certs(CADir :: string()) -> ok | no_return().
 %% ====================================================================
 load_certs(CADir) ->
-    lager:info("GSI Handler: Loading CA certs from dir ~p", [CADir]),
+    ?info("GSI Handler: Loading CA certs from dir ~p", [CADir]),
     {ok, Files} = file:list_dir(CADir),
     CA1 = [{strip_filename_ext(Name), file:read_file(filename:join(CADir, Name))} || Name <- Files, lists:suffix(".pem", Name)],
     CRL1 = [{strip_filename_ext(Name), file:read_file(filename:join(CADir, strip_filename_ext(Name) ++ ".crl"))} || Name <- Files, lists:suffix(".pem", Name)],
@@ -164,7 +164,7 @@ load_certs(CADir) ->
                     _ -> {CAs, CRLs}
                 end
             end, {0, 0}, lists:flatten(CA2 ++ CRL2)),
-    lager:info("GSI Handler: ~p CA and ~p CRL certs successfully loaded", [Len1, Len2]),
+    ?info("GSI Handler: ~p CA and ~p CRL certs successfully loaded", [Len1, Len2]),
     ok.
 
 
@@ -175,7 +175,7 @@ load_certs(CADir) ->
 -spec update_crls(CADir :: string()) -> ok | no_return().
 %% ====================================================================
 update_crls(CADir) ->
-    lager:info("GSI Handler: Updating CLRs from distribution points"),
+    ?info("GSI Handler: Updating CLRs from distribution points"),
     CAs = [{public_key:pkix_decode_cert(X, otp), Name} || [X, Name] <- ets:match(gsi_state, {{ca, '_'}, '$1', '$2'})],
     CAsAndDPs = [{OtpCert, get_dp_url(OtpCert), Name} || {OtpCert, Name} <- CAs],
     vcn_utils:pforeach(fun(X) -> update_crl(CADir, X) end, CAsAndDPs),
@@ -248,17 +248,17 @@ start_slaves(Count) when Count >= 0 ->
 -spec initialize_node(NodeName :: atom()) -> any().
 %% ====================================================================
 initialize_node(NodeName) when is_atom(NodeName) ->
-    lager:info("Trying to start GSI slave node: ~p @ ~p", [NodeName, get_host()]),
+    ?info("Trying to start GSI slave node: ~p @ ~p", [NodeName, get_host()]),
     NodeRes1 =
         case slave:start(get_host(), NodeName, make_code_path() ++ " -setcookie \"" ++ atom_to_list(erlang:get_cookie()) ++ "\"", no_link, erl) of
             {error, {already_running, Node}} ->
-                lager:info("GSI slave node ~p is already running", [Node]),
+                ?info("GSI slave node ~p is already running", [Node]),
                 Node;
             {ok, Node} ->
-                lager:info("GSI slave node ~p started", [Node]),
+                ?info("GSI slave node ~p started", [Node]),
                 Node;
             {error, Reason} ->
-                lager:error("Could not start GSI slave node ~p @ ~p due to error: ~p", [NodeName, get_host(), Reason]),
+                ?error("Could not start GSI slave node ~p @ ~p due to error: ~p", [NodeName, get_host(), Reason]),
                 'nonode@nohost'
         end,
     case NodeRes1 of
@@ -267,16 +267,16 @@ initialize_node(NodeName) when is_atom(NodeName) ->
             {ok, Prefix} = application:get_env(?APP_Name, nif_prefix),
             case rpc:call(NodeRes, gsi_nif, start, [atom_to_list(Prefix)]) of
                 ok ->
-                    lager:info("NIF lib on node ~p was successfully loaded", [NodeRes]),
+                    ?info("NIF lib on node ~p was successfully loaded", [NodeRes]),
                     ets:insert(gsi_state, {node, NodeName});
                 {error,{reload, _}} ->
-                    lager:info("NIF lib on node ~p is already loaded", [NodeRes]),
+                    ?info("NIF lib on node ~p is already loaded", [NodeRes]),
                     ets:insert(gsi_state, {node, NodeName});
                 {error, Reason1} ->
-                    lager:error("Could not load NIF lib on node ~p due to: ~p. Killing node", [NodeRes, Reason1]),
+                    ?error("Could not load NIF lib on node ~p due to: ~p. Killing node", [NodeRes, Reason1]),
                     slave:stop(NodeRes);
                 {badrpc, Reason2} ->
-                    lager:error("Could not load NIF lib on node ~p due to: ~p. Ignoring", [NodeRes, Reason2])
+                    ?error("Could not load NIF lib on node ~p due to: ~p. Ignoring", [NodeRes, Reason2])
             end
     end.
 
@@ -306,14 +306,14 @@ call(Module, Method, Args) ->
 %% ====================================================================
 call(_Module, _Method, _Args, []) ->
     spawn(fun() -> start_slaves(?GSI_SLAVE_COUNT) end),
-    lager:error("No GSI slave nodes. Trying to reinitialize module"),
+    ?error("No GSI slave nodes. Trying to reinitialize module"),
     {error, verification_nodes_down};
 call(Module, Method, Args, [{node, NodeName} | OtherNodes]) ->
     case rpc:call(get_node(NodeName), Module, Method, Args) of
         {badrpc, {'EXIT', Exit}} -> {'EXIT', Exit};
         {badrpc, Reason} ->
             spawn(fun() -> initialize_node(NodeName) end),
-            lager:error("GSI slave node ~p is down (reason ~p). Trying to reinitialize node", [get_node(NodeName), Reason]),
+            ?error("GSI slave node ~p is down (reason ~p). Trying to reinitialize node", [get_node(NodeName), Reason]),
             call(Module, Method, Args, OtherNodes);
         Res -> Res
     end.
@@ -354,7 +354,7 @@ update_crl(CADir, {OtpCert, [URL | URLs], Name}) ->
 
                     case public_key:verify(Der, DigestType, Signature, PubKey) of
                         true ->
-                            lager:info("GSI Handler: Saving new CLR of ~p", [Name]),
+                            ?info("GSI Handler: Saving new CLR of ~p", [Name]),
                             PemEntry = public_key:pem_entry_encode('CertificateList', CertList),
                             Data = public_key:pem_encode([PemEntry]),
                             Filename = filename:join(CADir, Name ++ ".crl"),
@@ -363,26 +363,26 @@ update_crl(CADir, {OtpCert, [URL | URLs], Name}) ->
                                     file:change_mode(Filename, 8#644);
 
                                 {error, Reason} ->
-                                    lager:error("GSI Handler: Failed to save CLR of ~p (path: ~p, reason: ~p)", [Name, Filename, Reason])
+                                    ?error("GSI Handler: Failed to save CLR of ~p (path: ~p, reason: ~p)", [Name, Filename, Reason])
                             end,
                             ok;
 
                         false ->
-                            lager:warning("GSI Handler: CLR of ~p retrieved from ~p couldn't be verified", [Name, URL]),
+                            ?warning("GSI Handler: CLR of ~p retrieved from ~p couldn't be verified", [Name, URL]),
                             update_crl(CADir, {OtpCert, URLs, Name})
                     end;
 
                 false ->
-                    lager:warning("GSI Handler: CLR of ~p retrieved from ~p couldn't be decoded", [Name, URL]),
+                    ?warning("GSI Handler: CLR of ~p retrieved from ~p couldn't be decoded", [Name, URL]),
                     update_crl(CADir, {OtpCert, URLs, Name})
             end;
 
         {ok, {Status, _}} ->
-            lager:warning("GSI Handler: Updating CLR of ~p from URL ~p failed (status: ~p)", [Name, URL, Status]),
+            ?warning("GSI Handler: Updating CLR of ~p from URL ~p failed (status: ~p)", [Name, URL, Status]),
             update_crl(CADir, {OtpCert, URLs, Name});
 
         {error, Reason} ->
-            lager:warning("GSI Handler: Updating CLR of ~p from URL ~p failed (reason: ~p)", [Name, URL, Reason]),
+            ?warning("GSI Handler: Updating CLR of ~p from URL ~p failed (reason: ~p)", [Name, URL, Reason]),
             update_crl(CADir, {OtpCert, URLs, Name})
     end.
 

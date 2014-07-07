@@ -39,7 +39,7 @@ get_file_owner(#file{} = File) ->
         {ok, #veil_document{record = #user{}} = UserDoc} ->
             {user_logic:get_login(UserDoc), list_to_integer(UserDoc#veil_document.uuid)};
         {error, UError} ->
-            lager:error("Owner of file ~p not found due to error: ~p", [File, UError]),
+            ?error("Owner of file ~p not found due to error: ~p", [File, UError]),
             {"", -1}
     end;
 get_file_owner(FilePath) ->
@@ -76,7 +76,7 @@ get_real_file_size(#file{type = ?REG_TYPE} = File) ->
         {0, #st_stat{st_size = ST_Size} = _Stat} ->
             ST_Size;
         {Errno, _} ->
-            lager:error("Cannot fetch attributes for file: ~p, errno: ~p", [File, Errno]),
+            ?error("Cannot fetch attributes for file: ~p, errno: ~p", [File, Errno]),
             0
     end;
 get_real_file_size(#file{}) ->
