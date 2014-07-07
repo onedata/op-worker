@@ -130,9 +130,13 @@ change_file_perms(FullFileName, Perms) ->
     {ok, _} = fslogic_objects:save_file(NewFile1),
 
     {ok, #veil_document{record = #file{location = #file_location{storage_id = StorageId, file_id = FileId}}}} = fslogic_objects:get_file(FullFileName),
-    {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, StorageId}),
-    {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileId),
-    storage_files_manager:chmod(SH, File_id, Perms),
+    case StorageId of
+        [] -> ok; %skip if no storage defined (i. e. in dir file)
+        _ ->
+            {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, StorageId}),
+            {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileId),
+            storage_files_manager:chmod(SH, File_id, Perms)
+    end,
 
     #atom{value = ?VOK}.
 
