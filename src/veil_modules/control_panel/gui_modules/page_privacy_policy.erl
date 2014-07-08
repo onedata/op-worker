@@ -40,7 +40,7 @@ body() ->
 read_privacy_policy_file() ->
     case file:read_file(?PRIVACY_POLICY_FILE) of
         {ok, File} -> File;
-        {error, _Error} -> ?dump(_Error), <<"">>
+        {error, _Error} -> <<"">>
     end.
 
 

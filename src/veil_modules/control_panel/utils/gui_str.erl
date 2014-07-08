@@ -154,7 +154,7 @@ html_encode(<<H, Rest/binary>>) -> <<H, (html_encode(Rest))/binary>>.
 -spec url_encode(String :: binary() | string()) -> binary().
 %% ====================================================================
 url_encode(String) ->
-    to_binary(wf:url_encode(to_list(String))).
+    to_binary(ibrowse_lib:url_encode(to_list(String))).
 
 
 %% url_decode/1

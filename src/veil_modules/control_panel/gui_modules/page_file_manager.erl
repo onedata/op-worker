@@ -768,7 +768,7 @@ hide_popup() ->
 % Render path navigator
 path_navigator_body(WorkingDirectory) ->
     case WorkingDirectory of
-        <<"/">> -> gui_str:format("~~", []);
+        <<"/">> -> gui_str:format_bin("~~", []);
         _ ->
             FirstLink = #link{id = wire_click(<<"nav_top">>, {action, navigate, [<<"/">>]}), body = <<"~">>},
             [<<"">> | PathElements] = binary:split(WorkingDirectory, <<"/">>, [global]),
@@ -944,6 +944,7 @@ list_view_body() ->
                                         ]}
                                 ]}};
                         false ->
+                            ?dump(gui_str:url_encode(FullPath)),
                             ShareIcon = case item_is_shared(Item) of
                                             true -> #span{class = <<"fui-link">>,
                                                 style = <<"font-size: 18px; position: absolute; top: 0px; left: 0; z-index: 1; color: rgb(82, 100, 118);">>};
@@ -959,7 +960,7 @@ list_view_body() ->
                                 ]},
                                 #panel{class = <<"filename_row">>, style = <<"word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
                                     #link{id = LinkID, body = gui_str:html_encode(Basename), target = <<"_blank">>,
-                                        url = <<?user_content_download_path, "/", (gui_str:to_binary(gui_str:url_encode(FullPath)))/binary>>}
+                                        url = <<?user_content_download_path, "/", (gui_str:url_encode(FullPath))/binary>>}
                                 ]}
                             ]}}
                     end
