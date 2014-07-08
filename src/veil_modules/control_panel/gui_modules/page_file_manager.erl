@@ -944,7 +944,6 @@ list_view_body() ->
                                         ]}
                                 ]}};
                         false ->
-                            ?dump(gui_str:url_encode(FullPath)),
                             ShareIcon = case item_is_shared(Item) of
                                             true -> #span{class = <<"fui-link">>,
                                                 style = <<"font-size: 18px; position: absolute; top: 0px; left: 0; z-index: 1; color: rgb(82, 100, 118);">>};

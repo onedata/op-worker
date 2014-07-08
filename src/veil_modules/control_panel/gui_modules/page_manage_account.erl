@@ -19,7 +19,7 @@
 -export([api_event/3, update_email/2, update_dn/2, show_email_adding/1, show_dn_adding/1]).
 
 -define(mail_validation_regexp,
-    "^[a-z0-9!#$%&'*+\\/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+\\/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$").
+    <<"^[a-z0-9!#$%&'*+\\/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+\\/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$">>).
 
 %% Template points to the template file, which will be filled with content
 main() ->
@@ -99,33 +99,38 @@ main_table() ->
     maybe_display_helper_message(),
     #table{style = <<"border-width: 0px; width: auto;">>, body = [
         #tr{cells = [
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body =
-            #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Login">>}},
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body = #p{body = gui_str:unicode_list_to_binary(user_logic:get_login(UserDoc))}}
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Login">>}},
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #p{style = <<"margin: -3px 0 0;">>, body = gui_str:unicode_list_to_binary(user_logic:get_login(UserDoc))}}
         ]},
 
         #tr{cells = [
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body =
-            #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Name">>}},
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body = #p{body = gui_str:unicode_list_to_binary(user_logic:get_name(UserDoc))}}
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Name">>}},
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #p{style = <<"margin: -3px 0 0;">>, body = gui_str:unicode_list_to_binary(user_logic:get_name(UserDoc))}}
         ]},
 
         #tr{cells = [
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body =
-            #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Teams">>}},
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body = team_list_body(UserDoc)}
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Teams">>}},
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = team_list_body(UserDoc)}
         ]},
 
         #tr{cells = [
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body =
-            #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"E-mails">>}},
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body = email_list_body(UserDoc)}
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"E-mails">>}},
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = email_list_body(UserDoc)}
         ]},
 
         #tr{cells = [
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body =
-            #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Certificates&#8217 DNs">>}},
-            #td{style = <<"border-width: 0px; padding: 10px 10px">>, body = dn_list_body(UserDoc)}
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Certificates&#8217 DNs">>}},
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = dn_list_body(UserDoc)}
         ]}
     ]}.
 
@@ -139,7 +144,7 @@ team_list_body(Userdoc) ->
                 body = gui_str:html_encode(gui_str:unicode_list_to_binary(re:replace(Team, "\\(", " (", [global, {return, list}])))}
         end, Teams) of
                 [] -> #p{body = <<"none">>};
-                List -> #list{numbered = true, body = List}
+                List -> #list{style= <<"margin-top: -3px;">>,numbered = true, body = List}
             end.
 
 
@@ -172,7 +177,7 @@ email_list_body(UserDoc) ->
         ]}
     ],
     gui_jq:bind_enter_to_submit_button(<<"new_email_textbox">>, <<"new_email_submit">>),
-    #list{numbered = true, body = CurrentEmails ++ NewEmail}.
+    #list{style= <<"margin-top: -3px;">>,numbered = true, body = CurrentEmails ++ NewEmail}.
 
 
 % HTML list with DNs printed
@@ -221,7 +226,7 @@ dn_list_body(UserDoc) ->
                 #span{class = <<"fui-cross-inverted">>, style = <<"font-size: 20px;">>}}
         ]}
     ],
-    #list{numbered = true, body = CurrentDNs ++ UnverifiedDNs ++ NewDN}.
+    #list{style= <<"margin-top: -3px;">>,numbered = true, body = CurrentDNs ++ UnverifiedDNs ++ NewDN}.
 
 
 % Postback event handling
@@ -245,14 +250,15 @@ update_email(User, AddOrRemove) ->
     OldEmailList = user_logic:get_email_list(User),
     case AddOrRemove of
         {add, submitted} ->
-            NewEmail = gui_str:binary_to_unicode_list(gui_ctx:form_param(<<"new_email_textbox">>)),
+            NewEmail = gui_ctx:form_param(<<"new_email_textbox">>),
             case re:run(NewEmail, ?mail_validation_regexp) of
                 {match, _} ->
-                    case user_logic:get_user({email, NewEmail}) of
+                    NewEmailUnicode = gui_str:binary_to_unicode_list(NewEmail),
+                    case user_logic:get_user({email, NewEmailUnicode}) of
                         {ok, _} ->
                             gui_jq:wire(#alert{text = <<"This e-mail address is in use.">>});
                         _ ->
-                            user_logic:update_email_list(User, OldEmailList ++ [NewEmail])
+                            user_logic:update_email_list(User, OldEmailList ++ [NewEmailUnicode])
                     end;
                 _ ->
                     gui_jq:wire(#alert{text = <<"Please enter a valid email address.">>})

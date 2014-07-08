@@ -259,7 +259,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
     MenuIcons =
         [
             {manage_account_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Manage account">>,
-                url = <<"/manage_account">>, body = [gui_str:to_binary(get_user_fullname()), #span{class = <<"fui-user">>,
+                url = <<"/manage_account">>, body = [gui_str:unicode_list_to_binary(get_user_fullname()), #span{class = <<"fui-user">>,
                     style = <<"margin-left: 10px;">>}]}}},
             %{contact_support_tab, #li { body=#link{ style="padding: 18px;", title="Contact & Support",
             %    url="/contact_support", body=#span{ class="fui-question" } } } },
