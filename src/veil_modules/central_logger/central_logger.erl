@@ -18,6 +18,7 @@
 %% API functions
 %% ====================================================================
 -export([init/1, handle/2, cleanup/0]).
+-export([pierog/0]).
 
 
 %% ===================================================================
@@ -284,3 +285,10 @@ custom_log_format() ->
                 " ", message, "\n"]
         }
     ].
+
+-include("fuse_messages_pb.hrl").
+-include("logging_pb.hrl").
+-include("communication_protocol_pb.hrl").
+
+pierog() ->
+    worker_host:send_to_user({login, "plglopiola"}, #changeremoteloglevel{level = logging_pb:int_to_enum(loglevel, 0)}, "logging", 1).

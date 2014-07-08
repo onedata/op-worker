@@ -29,7 +29,7 @@
 %% API
 %% ====================================================================
 -export([start_link/3, stop/1, start_sub_proc/5, start_sub_proc/6, generate_sub_proc_list/1, generate_sub_proc_list/5, generate_sub_proc_list/6, send_to_user/4, send_to_user_with_ack/5, send_to_fuses_with_ack/4]).
--export([create_permanent_cache/1, create_permanent_cache/2, create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_sipmle_cache/3]).
+-export([create_permanent_cache/1, create_permanent_cache/2, create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_simple_cache/3]).
 
 %% ====================================================================
 %% Test API
@@ -423,12 +423,12 @@ handle_info({timer, Msg}, State) ->
   gen_server:cast(PlugIn, Msg),
   {noreply, State};
 
-handle_info({clear_sipmle_cache, LoopTime, Fun, StrongCacheConnection}, State) ->
-  clear_sipmle_cache(LoopTime, Fun, StrongCacheConnection),
+handle_info({clear_simple_cache, LoopTime, Fun, StrongCacheConnection}, State) ->
+  clear_simple_cache(LoopTime, Fun, StrongCacheConnection),
   {noreply, State};
 
-handle_info({clear_sub_proc_sipmle_cache, Name, LoopTime, Fun}, State) ->
-  clear_sub_proc_sipmle_cache(Name, LoopTime, Fun, State#host_state.sub_procs),
+handle_info({clear_sub_proc_simple_cache, Name, LoopTime, Fun}, State) ->
+  clear_sub_proc_simple_cache(Name, LoopTime, Fun, State#host_state.sub_procs),
   {noreply, State};
 
 handle_info(dispatcher_map_registered, State) ->
@@ -1125,9 +1125,9 @@ register_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Clearing
         Time when is_integer(Time) ->
           case Name of
             {sub_proc_cache, {_PlugIn, SubProcName}} ->
-              erlang:send_after(1000 * Time, ClearingPid, {clear_sub_proc_sipmle_cache, SubProcName, 1000 * Time, ClearFun});
+              erlang:send_after(1000 * Time, ClearingPid, {clear_sub_proc_simple_cache, SubProcName, 1000 * Time, ClearFun});
             _ ->
-              erlang:send_after(1000 * Time, ClearingPid, {clear_sipmle_cache, 1000 * Time, ClearFun, StrongCacheConnection})
+              erlang:send_after(1000 * Time, ClearingPid, {clear_simple_cache, 1000 * Time, ClearFun, StrongCacheConnection})
           end,
           ok;
         non -> ok;
@@ -1314,14 +1314,14 @@ clear_sub_procs_cache({PlugIn, Cache}) ->
   end.
 
 
-%% clear_sipmle_cache/3
+%% clear_simple_cache/3
 %% ====================================================================
 %% @doc Clears simple cache. Returns clearing process pid.
--spec clear_sipmle_cache(LoopTime :: integer(), Fun :: term(), StrongCacheConnection :: boolean()) -> pid().
+-spec clear_simple_cache(LoopTime :: integer(), Fun :: term(), StrongCacheConnection :: boolean()) -> pid().
 %% ====================================================================
-clear_sipmle_cache(LoopTime, Fun, StrongCacheConnection) ->
+clear_simple_cache(LoopTime, Fun, StrongCacheConnection) ->
   Pid = self(),
-  erlang:send_after(LoopTime, Pid, {clear_sipmle_cache, LoopTime, Fun, StrongCacheConnection}),
+  erlang:send_after(LoopTime, Pid, {clear_simple_cache, LoopTime, Fun, StrongCacheConnection}),
   case StrongCacheConnection of
     true ->
       spawn_link(fun() -> Fun() end);
@@ -1329,14 +1329,14 @@ clear_sipmle_cache(LoopTime, Fun, StrongCacheConnection) ->
       spawn(fun() -> Fun() end)
   end.
 
-%% clear_sub_proc_sipmle_cache/4
+%% clear_sub_proc_simple_cache/4
 %% ====================================================================
 %% @doc Clears sub proc simple cache.
--spec clear_sub_proc_sipmle_cache(Name :: atom(), LoopTime :: integer(), Fun :: term(), SubProcs :: atom()) -> boolean().
+-spec clear_sub_proc_simple_cache(Name :: atom(), LoopTime :: integer(), Fun :: term(), SubProcs :: atom()) -> boolean().
 %% ====================================================================
-clear_sub_proc_sipmle_cache(Name, LoopTime, Fun, SubProcs) ->
+clear_sub_proc_simple_cache(Name, LoopTime, Fun, SubProcs) ->
   Pid = self(),
-  erlang:send_after(LoopTime, Pid, {clear_sub_proc_sipmle_cache, Name, LoopTime, Fun}),
+  erlang:send_after(LoopTime, Pid, {clear_sub_proc_simple_cache, Name, LoopTime, Fun}),
   {_SubProcArgs, _SubProcCache, SubProcPid} = proplists:get_value(Name, SubProcs, {not_found, not_found, not_found}),
   case SubProcPid of
     not_found ->
