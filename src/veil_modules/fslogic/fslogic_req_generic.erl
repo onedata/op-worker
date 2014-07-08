@@ -208,9 +208,11 @@ get_file_attr(FullFileName) ->
 delete_file(FullFileName) ->
     ?debug("delete_file(FullFileName: ~p)", [FullFileName]),
     {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
+    {ok, {_,ParentFileDoc}} = fslogic_path:get_parent_and_name_from_path(FullFileName,fslogic_context:get_protocol_version()),
+    FullParentFileName = fslogic_path:strip_path_leaf(FullFileName),
     {ok, UserDoc} = fslogic_objects:get_user(),
 
-    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, owner), % todo what we should check here
+    ok = fslogic_perms:check_file_perms(FullParentFileName, UserDoc, ParentFileDoc, write), % todo what we should check here
 
     FileDesc = FileDoc#veil_document.record,
     {ok, ChildrenTmpAns} =
