@@ -25,10 +25,6 @@ title() -> <<"Logout page">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    CookiePolicyPopup = case gui_utils:is_cookie_policy_accepted(?REQ) of
-                            true -> [];
-                            false -> [gui_utils:cookie_policy_popup_body()]
-                        end,
     ?debug("User ~p logged out", [gui_ctx:get_user_id()]),
     gui_ctx:clear_session(),
     #panel{style = <<"position: relative;">>, body =
@@ -38,7 +34,7 @@ body() ->
             #p{class = <<"login-info">>, body = <<"Come back soon.">>},
             #button{postback = to_login, class = <<"btn btn-primary btn-block">>, body = <<"Login page">>}
         ]},
-        CookiePolicyPopup
+        gui_utils:cookie_policy_popup_body()
     ]
     ++ vcn_gui_utils:logotype_footer(120)
         ++ [#p{body = <<"<iframe src=\"https://openid.plgrid.pl/logout\" style=\"display:none\"></iframe>">>}]

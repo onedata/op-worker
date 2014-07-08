@@ -109,26 +109,31 @@ onrequest_adjust_headers(Req) ->
 %% cookie_policy_popup_body/0
 %% ====================================================================
 %% @doc Returns a set of elements that renders to a floating popup asking for acceptance
-%% of privacy policy.
+%% of privacy policy, or an empty list if the privacy policy has already been accepted.
 %% @end
--spec cookie_policy_popup_body() -> term().
+-spec cookie_policy_popup_body() -> [] | term().
 %% ====================================================================
 cookie_policy_popup_body() ->
-    #panel{id = <<"cookie_policy_popup">>, class = <<"dialog dialog-info wide">>,
-        style = <<"position: fixed; bottom: 0; height: 60px; z-index: 2000;",
-        "line-height: 60px; text-align: center; margin: 0; padding: 0;">>,
-        body = [
-            #p{style = <<"margin: 0 10px; display: inline;">>,
-                body = <<"This website uses cookies. By continuing to browse the site, you are agreeing to our use of cookies.">>},
-            #form{style = "display: inline;", class = <<"control-group">>, body = [
-                #link{class = <<"btn btn-mini btn-info">>, target = <<"_blank">>, url = "/privacy_policy",
-                    style = <<"margin: 14px 10px; width: 65px;">>, body = <<"Learn more">>},
-                #link{class = <<"btn btn-mini btn-success">>, id = <<"accept_cookie_policy">>, body = <<"OK">>,
-                    style = <<"margin: 14px 10px; width: 65px;">>, actions = gui_jq:bind_element_click(<<"accept_cookie_policy">>,
-                        <<"function (e){ document.cookie = '", ?cookie_policy_cookie_name, "=true;expires=Fri, 01 Jan 2100 00:00:00 GMT';",
-                        "$('#cookie_policy_popup').hide(); }">>)}
-            ]}
-        ]}.
+    case is_cookie_policy_accepted(?REQ) of
+        true ->
+            [];
+        false ->
+            #panel{id = <<"cookie_policy_popup">>, class = <<"dialog dialog-info wide">>,
+                style = <<"position: fixed; bottom: 0; height: 60px; z-index: 2000;",
+                "line-height: 60px; text-align: center; margin: 0; padding: 0;">>,
+                body = [
+                    #p{style = <<"margin: 0 10px; display: inline;">>,
+                        body = <<"This website uses cookies. By continuing to browse the site, you are agreeing to our use of cookies.">>},
+                    #form{style = "display: inline;", class = <<"control-group">>, body = [
+                        #link{class = <<"btn btn-mini btn-info">>, target = <<"_blank">>, url = "/privacy_policy",
+                            style = <<"margin: 14px 10px; width: 65px;">>, body = <<"Learn more">>},
+                        #link{class = <<"btn btn-mini btn-success">>, id = <<"accept_cookie_policy">>, body = <<"OK">>,
+                            style = <<"margin: 14px 10px; width: 65px;">>, actions = gui_jq:bind_element_click(<<"accept_cookie_policy">>,
+                                <<"function (e){ document.cookie = '", ?cookie_policy_cookie_name, "=true;expires=Fri, 01 Jan 2100 00:00:00 GMT';",
+                                "$('#cookie_policy_popup').hide(); }">>)}
+                    ]}
+                ]}
+    end.
 
 
 %% is_cookie_policy_accepted/1

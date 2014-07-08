@@ -285,11 +285,6 @@ top_menu(ActiveTabID, SubMenuBody) ->
             end
         end, MenuIcons),
 
-    CookiePolicyPopup = case gui_utils:is_cookie_policy_accepted(?REQ) of
-                            true -> [];
-                            _ -> [gui_utils:cookie_policy_popup_body()]
-                        end,
-
     [
         #panel{class = <<"navbar navbar-fixed-top">>, body = [
             #panel{class = <<"navbar-inner">>, style = <<"border-bottom: 2px solid gray;">>, body = [
@@ -299,7 +294,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
                 ]}
             ]}
         ] ++ SubMenuBody}
-    ] ++ CookiePolicyPopup.
+    ] ++ gui_utils:cookie_policy_popup_body().
 
 
 %% logotype_footer/1
