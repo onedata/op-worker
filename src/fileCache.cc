@@ -12,8 +12,6 @@
 #include <chrono>
 #include <iostream>
 
-static constexpr int MAX_BLOCK_SIZE = 10;
-
 namespace veil
 {
 namespace helpers
