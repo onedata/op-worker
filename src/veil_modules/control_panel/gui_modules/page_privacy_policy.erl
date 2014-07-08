@@ -6,14 +6,13 @@
 %% @end
 %% ===================================================================
 %% @doc: This file contains n2o website code.
-%% The page contains information about the project, licence and contact for support.
+%% The page contains the privacy policy.
 %% @end
 %% ===================================================================
 
 -module(page_privacy_policy).
 -include("veil_modules/control_panel/common.hrl").
 -include("registered_names.hrl").
--include("logging.hrl").
 
 % n2o API
 -export([main/0, event/1]).

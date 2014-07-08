@@ -197,7 +197,7 @@ retrieve_user_info() ->
 %% ====================================================================
 get_signed_param(ParamName, SignedParams) ->
     case lists:member(ParamName, SignedParams) of
-        true -> gui_str:binary_to_unicode_list(gui_ctx:url_param(ParamName));
+        true -> gui_str:binary_to_unicode_list(gui_str:to_binary(gui_ctx:url_param(ParamName)));
         false -> []
     end.
 

@@ -99,7 +99,7 @@ get_team() ->
         <<"Łukasz Opioła"/utf8>>, <<"Tomasz Pałys"/utf8>>, <<"Bartosz Polnik"/utf8>>, <<"Paweł Salata"/utf8>>, <<"Michał Sitko"/utf8>>,
         <<"Rafał Słota"/utf8>>, <<"Renata Słota"/utf8>>, <<"Beata Skiba"/utf8>>, <<"Krzysztof Trzepla"/utf8>>, <<"Michał Wrzeszcz"/utf8>>,
         <<"Konrad Zemek"/utf8>>],
-    #list{numbered = false, body =
+    #list{style = <<"margin-top: -3px;">>, numbered = false, body =
     lists:map(
         fun(Member) ->
             #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = Member}

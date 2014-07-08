@@ -13,7 +13,6 @@
 -module(page_shared_files).
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/dao/dao_share.hrl").
--include("logging.hrl").
 
 % n2o API
 -export([main/0, event/1, api_event/3]).
