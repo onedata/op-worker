@@ -31,8 +31,7 @@
 -export([application_start_test_code1/0, application_start_test_code2/0]).
 
 all() ->
-  [application_start_test1, application_start_test2, modules_start_and_ping_test, workers_list_actualization_test,
-    validation_test, ping_test, dispatcher_connection_test, callbacks_list_actualization_test, veil_handshake_test, monitoring_test].
+  [].
 
 %% ====================================================================
 %% Code of nodes used during the test

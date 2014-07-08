@@ -21,7 +21,7 @@
 %% export nodes' codes
 -export([node1_code1/0, node1_code2/0, node2_code/0]).
 
-all() -> [distributed_test].
+all() -> [].
 
 %% ====================================================================
 %% Test functions

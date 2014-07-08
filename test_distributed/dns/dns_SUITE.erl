@@ -23,7 +23,7 @@
 %% export nodes' codes
 -export([dns_worker_env_test_code/0, ccm_code1/0, ccm_code2/0, worker_code/0]).
 
-all() -> [dns_worker_env_test, dns_ranch_tcp_handler_responds_to_dns_queries, dns_udp_handler_responds_to_dns_queries, distributed_test].
+all() -> [].
 
 
 %% ====================================================================

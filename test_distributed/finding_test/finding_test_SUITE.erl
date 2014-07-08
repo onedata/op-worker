@@ -29,7 +29,7 @@
 -export([dao_vfs_find_test/1]).
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 
-all() -> [dao_vfs_find_test].
+all() -> [].
 
 -define(ProtocolVersion, 1).
 -define(USER1, "dao_vfs_find_user1").

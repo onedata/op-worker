@@ -31,7 +31,7 @@
 -define(REST_SHARE_SUBPATH, "shares/").
 
 
-all() -> [main_test].
+all() -> [].
 
 %% ====================================================================
 %% Test functions
