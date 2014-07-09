@@ -120,19 +120,18 @@ change_file_group(_FullFileName, _GID, _GName) ->
 change_file_perms(FullFileName, Perms) ->
     ?debug("change_file_perms(FullFileName: ~p, Perms: ~p)", [FullFileName, Perms]),
     {ok, UserDoc} = fslogic_objects:get_user(),
-    {ok, #veil_document{record = #file{} = File} = FileDoc} = fslogic_objects:get_file(FullFileName),
+    {ok, #veil_document{record = #file{perms = ActualPerms, location = #file_location{storage_id = StorageId, file_id = FileId}} = File} = FileDoc} =
+        fslogic_objects:get_file(FullFileName),
 
     ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, owner),
 
     NewFile = fslogic_meta:update_meta_attr(File, ctime, vcn_utils:time()),
     NewFile1 = FileDoc#veil_document{record = NewFile#file{perms = Perms}},
-
     {ok, _} = fslogic_objects:save_file(NewFile1),
 
-    {ok, #veil_document{record = #file{location = #file_location{storage_id = StorageId, file_id = FileId}}}} = fslogic_objects:get_file(FullFileName),
-    case StorageId of
-        [] -> ok; %skip if no storage defined (i. e. in dir file)
-        _ ->
+    case ActualPerms == Perms or StorageId==[] of
+        true -> ok;
+        false ->
             {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, StorageId}),
             {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileId),
             storage_files_manager:chmod(SH, File_id, Perms)
