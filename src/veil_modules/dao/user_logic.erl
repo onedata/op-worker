@@ -797,7 +797,7 @@ create_team_dir(TeamName) ->
 		{ok,true} ->
 			{error, dir_exists};
 		{ok,false}->
-			TFile = #file{type = ?DIR_TYPE, name = TeamName, uid = "0", gids = [TeamName], parent = GroupsBase, perms = 8#770},
+			TFile = #file{type = ?DIR_TYPE, name = TeamName, uid = "0", gids = [TeamName], parent = GroupsBase, perms = 8#1770},
 			TFileDoc = fslogic_meta:update_meta_attr(TFile, times, {CTime, CTime, CTime}),
 			dao_lib:apply(dao_vfs, save_new_file, ["/" ++ ?GROUPS_BASE_DIR_NAME ++ "/" ++ TeamName, TFileDoc], 1);
 		Error ->

@@ -29,7 +29,7 @@
 %% ====================================================================
 %% @doc Checks if the user has permission to modify file (e,g. change owner).
 %% @end
--spec check_file_perms(FileName :: string(), UserDoc :: term(), FileDoc :: term(), CheckType :: root | owner | read | write | execute) -> Result when
+-spec check_file_perms(FileName :: string(), UserDoc :: term(), FileDoc :: term(), CheckType :: root | owner | delete | read | write | execute) -> Result when
     Result :: {ok, boolean()} | {error, ErrorDetail},
     ErrorDetail :: term().
 %% ====================================================================
@@ -41,6 +41,13 @@ check_file_perms(_FileName, #veil_document{uuid = UserUid}, #veil_document{recor
     ok;
 check_file_perms(FileName, UserDoc, _FileDoc, owner = CheckType) ->
     ?permission_denied_error(UserDoc,FileName,CheckType);
+check_file_perms(FileName, UserDoc, FileDoc, delete) ->
+    {ok, {_,ParentFileDoc}} = fslogic_path:get_parent_and_name_from_path(FileName,fslogic_context:get_protocol_version()),
+    ParentFileName = fslogic_path:strip_path_leaf(FileName),
+    case ParentFileDoc#veil_document.record#file.perms band ?STICKY_BIT of
+        0 -> check_file_perms(ParentFileName,UserDoc,ParentFileDoc,write);
+        _ -> check_file_perms(FileName,UserDoc,FileDoc,owner)
+    end;
 check_file_perms(FileName, UserDoc, #veil_document{record = #file{uid = FileOwnerUid, perms = FilePerms}}, CheckType) -> %check read/write/execute perms
     UserUid = UserDoc#veil_document.uuid,
     FileGroup = get_group(FileName),
