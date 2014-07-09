@@ -13,7 +13,7 @@
 
 -module(records_translator).
 -include("communication_protocol_pb.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% ====================================================================
 %% API

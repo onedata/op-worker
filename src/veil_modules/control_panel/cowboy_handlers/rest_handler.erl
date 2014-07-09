@@ -15,7 +15,7 @@
 -include_lib("public_key/include/public_key.hrl").
 -include("veil_modules/control_panel/common.hrl").
 -include("err.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -record(state, {
     version = <<"latest">> :: binary(),

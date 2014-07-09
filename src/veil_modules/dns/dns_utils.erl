@@ -14,7 +14,7 @@
 
 -include_lib("kernel/src/inet_dns.hrl").
 -include("veil_modules/dns/dns_utils.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -define(BASE_DNS_HEADER_SIZE, 12).  %% header size according to RFC1035#section-4.1.1
 -define(BASE_DNS_QUESTION_SIZE, 4). %% query size according to RFC1035#section-4.1.2

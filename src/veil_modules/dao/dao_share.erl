@@ -14,7 +14,7 @@
 -include_lib("veil_modules/dao/dao_types.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("dao/include/dao_helper.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% ===================================================================

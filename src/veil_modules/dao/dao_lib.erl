@@ -14,7 +14,7 @@
 -include("veil_modules/dao/dao.hrl").
 -include("registered_names.hrl").
 -include_lib("dao/include/common.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([wrap_record/1, strip_wrappers/1, apply/4, apply/5]).

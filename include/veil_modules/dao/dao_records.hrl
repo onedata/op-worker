@@ -14,7 +14,7 @@
 -ifndef(DAO_RECORDS_HRL).
 -define(DAO_RECORDS_HRL, 1).
 
--include("veil_modules/dao/common.hrl").
+-include_lib("dao/include/common.hrl").
 
 %% Every record that will be saved to DB have to be "registered" with this define.
 %% Each registered record should be listed in defined below 'case' block as fallow:

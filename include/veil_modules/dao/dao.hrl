@@ -17,7 +17,6 @@
 -include("veil_modules/dao/dao_users.hrl").
 -include("veil_modules/dao/dao_share.hrl").
 -include("veil_modules/dao/dao_cluster.hrl").
--include("veil_modules/dao/dao_external.hrl").
 -include("veil_modules/dao/dao_db_structure.hrl").
 -include("veil_modules/dao/dao_records.hrl").
 -include_lib("dao/include/common.hrl").
