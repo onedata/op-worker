@@ -629,64 +629,74 @@ show_popup(Type) ->
                 {Body, <<"$('#create_dir_textbox').focus();">>, {action, hide_popup}};
 
             rename_item ->
-                {OldLocation, Filename} = lists:nth(1, get_selected_items()),
-                SelectionLength = byte_size(filename:rootname(Filename)),
-                Body = [
-                    #p{body = <<"Rename <b>", (gui_str:html_encode(Filename))/binary, "</b>">>},
-                    #form{class = <<"control-group">>, body = [
-                        #textbox{id = wire_enter(<<"new_name_textbox">>, <<"new_name_submit">>), class = <<"flat">>,
-                            style = <<"width: 350px;">>, placeholder = <<"New name">>, value = gui_str:html_encode(Filename)},
+                case length(get_selected_items()) of
+                    1 ->
+                        [{OldLocation, Filename}] = get_selected_items(),
+                        SelectionLength = byte_size(filename:rootname(Filename)),
+                        Body = [
+                            #p{body = <<"Rename <b>", (gui_str:html_encode(Filename))/binary, "</b>">>},
+                            #form{class = <<"control-group">>, body = [
+                                #textbox{id = wire_enter(<<"new_name_textbox">>, <<"new_name_submit">>), class = <<"flat">>,
+                                    style = <<"width: 350px;">>, placeholder = <<"New name">>, value = gui_str:html_encode(Filename)},
 
-                        #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>,
-                            id = wire_click(<<"new_name_submit">>,
-                                {action, rename_item, [OldLocation, {query_value, <<"new_name_textbox">>}]},
-                                <<"new_name_textbox">>)}
-                    ]}
-                ],
+                                #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>,
+                                    id = wire_click(<<"new_name_submit">>,
+                                        {action, rename_item, [OldLocation, {query_value, <<"new_name_textbox">>}]},
+                                        <<"new_name_textbox">>)}
+                            ]}
+                        ],
 
-                FocusScript = <<"setTimeout(function() { ",
-                "document.getElementById('new_name_textbox').focus(); ",
-                "if( $('#new_name_textbox').createTextRange ) { ",
-                "var selRange = $('#new_name_textbox').createTextRange(); ",
-                "selRange.collapse(true); ",
-                "selRange.moveStart('character', 0); ",
-                "selRange.moveEnd('character', ", (integer_to_binary(SelectionLength))/binary, "); ",
-                "selRange.select(); ",
-                "} else if( document.getElementById('new_name_textbox').setSelectionRange ) { ",
-                "document.getElementById('new_name_textbox').setSelectionRange(0, ", (integer_to_binary(SelectionLength))/binary, "); ",
-                "} else if( $('#new_name_textbox').selectionStart ) { ",
-                "$('#new_name_textbox').selectionStart = 0; ",
-                "$('#new_name_textbox').selectionEnd = ", (integer_to_binary(SelectionLength))/binary, "; ",
-                "} }, 1); ">>,
+                        FocusScript = <<"setTimeout(function() { ",
+                        "document.getElementById('new_name_textbox').focus(); ",
+                        "if( $('#new_name_textbox').createTextRange ) { ",
+                        "var selRange = $('#new_name_textbox').createTextRange(); ",
+                        "selRange.collapse(true); ",
+                        "selRange.moveStart('character', 0); ",
+                        "selRange.moveEnd('character', ", (integer_to_binary(SelectionLength))/binary, "); ",
+                        "selRange.select(); ",
+                        "} else if( document.getElementById('new_name_textbox').setSelectionRange ) { ",
+                        "document.getElementById('new_name_textbox').setSelectionRange(0, ", (integer_to_binary(SelectionLength))/binary, "); ",
+                        "} else if( $('#new_name_textbox').selectionStart ) { ",
+                        "$('#new_name_textbox').selectionStart = 0; ",
+                        "$('#new_name_textbox').selectionEnd = ", (integer_to_binary(SelectionLength))/binary, "; ",
+                        "} }, 1); ">>,
 
-                {Body, FocusScript, {action, hide_popup}};
+                        {Body, FocusScript, {action, hide_popup}};
+                    _ ->
+                        {[], undefined, undefined}
+                end;
 
             share_file ->
-                {Path, Filename} = lists:nth(1, get_selected_items()),
-                {Status, ShareID} = case fs_get_share_uuid_by_filepath(Path) of
-                                        undefined -> {new, fs_create_share(Path)};
-                                        UUID -> UUID
-                                    end,
-                clear_workspace(),
-                select_item(Path),
-                AddressPrefix = <<"https://", (get_requested_hostname())/binary, ?shared_files_download_path>>,
-                Body = [
-                    case Status of
-                        exists ->
-                            #p{body = <<"<b>", (gui_str:html_encode(Filename))/binary,
-                            "</b> is already shared. Visit <b>Shared files</b> tab for more.">>};
-                        new ->
-                            #p{body = <<"<b>", (gui_str:html_encode(Filename))/binary,
-                            "</b> successfully shared. Visit <b>Shared files</b> tab for more.">>}
-                    end,
-                    #form{class = <<"control-group">>, body = [
-                        #textbox{id = wire_enter(<<"shared_link_textbox">>, <<"shared_link_submit">>), class = <<"flat">>, style = <<"width: 700px;">>,
-                            value = gui_str:html_encode(<<AddressPrefix/binary, ShareID/binary>>), placeholder = <<"Download link">>},
-                        #button{id = wire_click(<<"shared_link_submit">>, {action, hide_popup}),
-                            class = <<"btn btn-success btn-wide">>, body = <<"Ok">>}
-                    ]}
-                ],
-                {Body, <<"$('#shared_link_textbox').focus(); $('#shared_link_textbox').select();">>, {action, hide_popup}};
+                case length(get_selected_items()) of
+                    1 ->
+                        [{Path, Filename}] = get_selected_items(),
+                        {Status, ShareID} = case fs_get_share_uuid_by_filepath(Path) of
+                                                undefined -> {new, fs_create_share(Path)};
+                                                UUID -> UUID
+                                            end,
+                        clear_workspace(),
+                        select_item(Path),
+                        AddressPrefix = <<"https://", (get_requested_hostname())/binary, ?shared_files_download_path>>,
+                        Body = [
+                            case Status of
+                                exists ->
+                                    #p{body = <<"<b>", (gui_str:html_encode(Filename))/binary,
+                                    "</b> is already shared. Visit <b>Shared files</b> tab for more.">>};
+                                new ->
+                                    #p{body = <<"<b>", (gui_str:html_encode(Filename))/binary,
+                                    "</b> successfully shared. Visit <b>Shared files</b> tab for more.">>}
+                            end,
+                            #form{class = <<"control-group">>, body = [
+                                #textbox{id = wire_enter(<<"shared_link_textbox">>, <<"shared_link_submit">>), class = <<"flat">>, style = <<"width: 700px;">>,
+                                    value = gui_str:html_encode(<<AddressPrefix/binary, ShareID/binary>>), placeholder = <<"Download link">>},
+                                #button{id = wire_click(<<"shared_link_submit">>, {action, hide_popup}),
+                                    class = <<"btn btn-success btn-wide">>, body = <<"Ok">>}
+                            ]}
+                        ],
+                        {Body, <<"$('#shared_link_textbox').focus(); $('#shared_link_textbox').select();">>, {action, hide_popup}};
+                    _ ->
+                        {[], undefined, undefined}
+                end;
 
             file_upload ->
                 Body = [
