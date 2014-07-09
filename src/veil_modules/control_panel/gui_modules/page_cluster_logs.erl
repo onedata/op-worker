@@ -316,7 +316,7 @@ loglevel_dropdown_body(Active) ->
             ID = <<"loglevel_li_", (atom_to_binary(Loglevel, latin1))/binary>>,
             #li{id = ID, actions = gui_jq:postback_action(ID, {set_loglevel, Loglevel}),
                 class = Class, body = #link{body = atom_to_binary(Loglevel, latin1)}}
-        end, ?LOGLEVEL_LIST).
+        end, ?CLUSTER_LOGLEVELS).
 
 
 % Render the body of max logs dropdown, so it highlights the current choice
@@ -537,7 +537,7 @@ event(generate_logs) ->
         fun(Severity) ->
             Message = lists:flatten(lists:duplicate(10, io_lib:format("~.36B", [random:uniform(98 * 567 * 456 * 235 * 232 * 3465 * 23552 * 3495 * 43534 * 345436 * 45)]))),
             lager:log(Severity, Metadata, Message)
-        end, ?LOGLEVEL_LIST).
+        end, ?CLUSTER_LOGLEVELS).
 
 
 % =====================

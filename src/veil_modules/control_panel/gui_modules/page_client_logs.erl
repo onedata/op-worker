@@ -44,11 +44,6 @@
 % Available options of max log count
 -define(MAX_LOGS_OPTIONS, [20, 50, 200, 500, 1000, 2000]).
 
-% Available loglevels in clients
--define(CLIENT_LOGLEVELS, [debug, info, warning, error, fatal]).
-% Client loglevel to discard all logs
--define(CLIENT_LOGLEVEL_NONE, none).
-
 %% Template points to the template file, which will be filled with content
 main() ->
     case vcn_gui_utils:maybe_redirect(true, false, false, true) of
@@ -232,7 +227,7 @@ comet_loop(Counter, PageState = #page_state{first_log = FirstLog, auto_scroll = 
 
 
 % Check if log should be displayed, do if so and remove old logs if needed
-process_log(Counter, {Message, Timestamp, Severity, Metadata},
+process_log(Counter, {Message, Timestamp, Severity, Metadata, User},
     PageState = #page_state{
         loglevel = Loglevel,
         auto_scroll = AutoScroll,
@@ -241,12 +236,9 @@ process_log(Counter, {Message, Timestamp, Severity, Metadata},
         message_filter = MessageFilter,
         file_filter = FileFilter}) ->
 
-    % TODO USER
-    User = "tentego",
-    File = "plik.cc",
+    Filename = proplists:get_value(file_name, Metadata, ""),
 
-
-    ShouldLog = filter_loglevel(Severity, Loglevel) and filter_contains(Message, MessageFilter) and filter_contains(File, FileFilter),
+    ShouldLog = filter_loglevel(Severity, Loglevel) and filter_contains(Message, MessageFilter) and filter_contains(Filename, FileFilter),
 
     {_NewCounter, _NewPageState} = case ShouldLog of
                                        false ->
@@ -317,7 +309,7 @@ loglevel_dropdown_body(Active) ->
             ID = <<"loglevel_li_", (atom_to_binary(Loglevel, latin1))/binary>>,
             #li{id = ID, actions = gui_jq:postback_action(ID, {set_loglevel, Loglevel}),
                 class = Class, body = #link{body = atom_to_binary(Loglevel, latin1)}}
-        end, ?LOGLEVEL_LIST).
+        end, ?CLUSTER_LOGLEVELS).
 
 
 % Render the body of max logs dropdown, so it highlights the current choice
@@ -355,7 +347,7 @@ format_severity(warning) ->
     #label{class = <<"label label-warning">>, body = <<"warning">>, style = <<"display: block; font-weight: bold;">>};
 format_severity(error) ->
     #label{class = <<"label label-important">>, body = <<"error">>, style = <<"display: block; font-weight: bold;">>};
-format_severity(_) -> % TODO zmienic na fatal
+format_severity(fatal) ->
     #label{class = <<"label label-important">>, body = <<"fatal">>, style = <<"display: block; font-weight: bold;">>}.
 
 
@@ -390,7 +382,7 @@ format_metadata(Tags) ->
 
 % Return true if log should be displayed based on its severity and loglevel
 filter_loglevel(LogSeverity, Loglevel) ->
-    logger:loglevel_atom_to_int(LogSeverity) >= logger:loglevel_atom_to_int(Loglevel).
+    central_logger:client_loglevel_atom_to_int(LogSeverity) >= central_logger:client_loglevel_atom_to_int(Loglevel).
 
 
 % Return true if given string satisfies given filter
