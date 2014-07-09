@@ -129,7 +129,7 @@ change_file_perms(FullFileName, Perms) ->
     NewFile1 = FileDoc#veil_document{record = NewFile#file{perms = Perms}},
     {ok, _} = fslogic_objects:save_file(NewFile1),
 
-    case ActualPerms == Perms or StorageId==[] of
+    case ActualPerms == Perms orelse StorageId==[] of
         true -> ok;
         false ->
             {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, StorageId}),
