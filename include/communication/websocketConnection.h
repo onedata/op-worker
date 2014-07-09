@@ -11,7 +11,14 @@
 
 #include "connection.h"
 
+#include <websocketpp/client.hpp>
+#include <websocketpp/config/asio_client.hpp>
+#include <websocketpp/connection.hpp>
+
 #include <memory>
+#include <string>
+
+extern template class websocketpp::client<websocketpp::config::asio_tls_client>;
 
 namespace veil
 {
@@ -22,9 +29,33 @@ class Mailbox;
 
 class WebsocketConnection: public Connection
 {
+    using config_type = websocketpp::config::asio_tls_client;
+    using endpoint_type = websocketpp::client<config_type>;
+    using connection_ptr = endpoint_type::connection_ptr;
+    using context_ptr = websocketpp::transport::asio::tls_socket::connection::context_ptr;
+    using message_ptr = config_type::message_type::ptr;
+    using socket_type = websocketpp::transport::asio::tls_socket::connection::socket_type;
+
 public:
-    WebsocketConnection(std::shared_ptr<Mailbox> mailbox);
+    WebsocketConnection(std::shared_ptr<Mailbox> mailbox,
+                        endpoint_type &endpoint,
+                        const std::string &uri);
+
     void send() override;
+
+private:
+    context_ptr onTLSInit();                 ///< On TLS init callback
+    void onSocketInit(socket_type &socket);///< On socket init callback
+    void onMessage(message_ptr msg);       ///< Incoming WebSocket message callback
+    void onOpen();                           ///< WebSocket connection opened
+    void onClose();                          ///< WebSocket connection closed
+    void onFail();                           ///< WebSocket connection failed callback. This can proc only before CommunicationHandler::onOpen
+    bool onPing(std::string);              ///< Ping received callback
+    void onPong(std::string);              ///< Pong received callback
+    void onPongTimeout(std::string);       ///< Cluaster failed to respond on ping message
+    void onInterrupt();                      ///< WebSocket connection was interuped
+
+    connection_ptr m_connection;
 };
 
 } // namespace communication

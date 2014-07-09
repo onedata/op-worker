@@ -17,17 +17,23 @@ namespace communication
 {
 
 class Connection;
+class Mailbox;
 
 class ConnectionPool
 {
 public:
-    ConnectionPool(const unsigned int connectionsNumber);
+    ConnectionPool(const unsigned int connectionsNumber,
+                   std::shared_ptr<Mailbox> mailbox,
+                   const std::string &uri);
+
     virtual ~ConnectionPool() = default;
 
     virtual std::shared_ptr<Connection> select() = 0;
 
 protected:
     const unsigned int m_connectionsNumber;
+    const std::shared_ptr<Mailbox> m_mailbox;
+    const std::string m_uri;
 };
 
 

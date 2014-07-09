@@ -12,8 +12,12 @@ namespace veil
 namespace communication
 {
 
-ConnectionPool::ConnectionPool(const unsigned int connectionsNumber)
-    : m_connectionsNumber(connectionsNumber)
+ConnectionPool::ConnectionPool(const unsigned int connectionsNumber,
+                               std::shared_ptr<Mailbox> mailbox,
+                               const std::string &uri)
+    : m_connectionsNumber{connectionsNumber}
+    , m_mailbox{std::move(mailbox)}
+    , m_uri{uri}
 {
 }
 

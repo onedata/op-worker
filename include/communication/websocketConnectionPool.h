@@ -14,6 +14,11 @@
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_client.hpp>
 
+#include <list>
+#include <unordered_set>
+
+extern template class websocketpp::client<websocketpp::config::asio_tls_client>;
+
 namespace veil
 {
 namespace communication
@@ -26,11 +31,18 @@ class WebsocketConnectionPool: public ConnectionPool
     using endpoint_type = websocketpp::client<websocketpp::config::asio_tls_client>;
 
 public:
-    WebsocketConnectionPool(const unsigned int connectionsNumber);
+    WebsocketConnectionPool(const unsigned int connectionsNumber,
+                            std::shared_ptr<Mailbox> mailbox,
+                            const std::string &uri);
+
     std::shared_ptr<Connection> select() override;
 
 private:
+    void addConnection();
+
     endpoint_type m_endpoint;
+    std::unordered_set<std::shared_ptr<WebsocketConnection>> m_futureConnections;
+    std::list<std::shared_ptr<WebsocketConnection>> m_connections;
 };
 
 
