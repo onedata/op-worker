@@ -28,7 +28,7 @@
 %% export nodes' codes
 -export([ccm_code1/0, ccm_code2/0, worker_code/0]).
 
-all() -> [].
+all() -> [fuse_session_cleanup_test, main_test, callbacks_test, fuse_ack_routing_test].
 
 %% ====================================================================
 %% Code of nodes used during the test

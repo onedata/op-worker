@@ -29,7 +29,7 @@
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([integration_test/1]).
 
-all() -> [].
+all() -> [integration_test].
 
 %% ====================================================================
 %% Test functions

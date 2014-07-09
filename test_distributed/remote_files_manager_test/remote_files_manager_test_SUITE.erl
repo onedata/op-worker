@@ -23,7 +23,7 @@
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([storage_helpers_management_test/1, helper_requests_test/1, permissions_test/1]).
 
-all() -> [].
+all() -> [storage_helpers_management_test, helper_requests_test, permissions_test].
 
 -define(ProtocolVersion, 1).
 

@@ -21,7 +21,7 @@
 %% export nodes' codes
 -export([ccm_code1/0, ccm_code2/0, worker_code/0]).
 
-all() -> [].
+all() -> [main_test, sub_proc_load_test, multi_node_test].
 
 -define(ProtocolVersion, 1).
 -define(MessageTimeout, 5000).

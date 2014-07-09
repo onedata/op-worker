@@ -20,7 +20,7 @@
 %% export nodes' codes
 -export([perform_10_logs/1, get_lager_traces/0, check_console_loglevel_functionalities/0]).
 
-all() -> [].
+all() -> [logging_test, init_and_cleanup_test].
 
 %% ====================================================================
 %% Code of nodes used during the test

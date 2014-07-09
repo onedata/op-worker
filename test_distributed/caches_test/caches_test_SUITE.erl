@@ -29,7 +29,8 @@
 %% export nodes' codes
 -export([ccm_code1/0, ccm_code2/0, worker_code/0, cache_loop/0]).
 
-all() -> [].
+all() -> [sub_proc_test, node_cache_test, permanent_node_cache_test, sub_proc_cache_test, automatic_nodes_cache_clearing_test,
+  sub_procs_automatic_cache_clearing_test, error_nodes_cache_clearing_test, error_permanent_nodes_cache_test, sub_procs_error_cache_clearing_test].
 
 %% ====================================================================
 %% Code of nodes used during the test

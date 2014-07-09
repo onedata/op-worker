@@ -28,7 +28,7 @@
 -export([ccm_code1/0, ccm_code2/0, worker_code/0]).
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
-all() -> [].
+all() -> [test_event_subscription, test_multiple_trees, test_event_aggregation, test_dispatching, test_io_events_for_stats].
 
 -define(assert_received(ResponsePattern), receive
                                             ResponsePattern -> ok

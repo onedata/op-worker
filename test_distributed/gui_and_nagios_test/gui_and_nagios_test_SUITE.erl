@@ -19,7 +19,7 @@
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([main_test/1]).
 
-all() -> [].
+all() -> [main_test].
 
 %% ====================================================================
 %% Test functions
