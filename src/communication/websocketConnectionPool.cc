@@ -9,6 +9,10 @@
 
 #include "communication/websocketConnection.h"
 
+#include <chrono>
+#include <functional>
+#include <future>
+
 template class websocketpp::client<websocketpp::config::asio_tls_client>;
 
 namespace veil
@@ -21,22 +25,31 @@ WebsocketConnectionPool::WebsocketConnectionPool(const unsigned int connectionsN
                                                  const std::string &uri)
     : ConnectionPool{connectionsNumber, std::move(mailbox), uri}
 {
+#ifndef NDEBUG
+    m_endpoint.clear_access_channels(websocketpp::log::alevel::all);
+    m_endpoint.clear_error_channels(websocketpp::log::elevel::all);
+#endif
+
+    m_endpoint->init_asio();
+    m_endpoint->start_perpetual();
+
+    m_ioThread = std::thread{&endpoint_type::run, m_endpoint};
 }
 
-std::shared_ptr<Connection> WebsocketConnectionPool::select()
+WebsocketConnectionPool::~WebsocketConnectionPool()
 {
-    // TODO: wait for connections
-    const auto it = m_connections.begin();
-    m_connections.splice(m_connections.end(), m_connections, m_connections.begin());
-    return *it;
+    m_endpoint->stop_perpetual();
+    m_ioThread.join();
 }
 
-void WebsocketConnectionPool::addConnection() // TODO: async
+std::shared_ptr<Connection> WebsocketConnectionPool::createConnection()
 {
-    const auto connection = std::make_shared<WebsocketConnection>(m_mailbox,
-                                                                  m_endpoint,
-                                                                  m_uri);
-    m_futureConnections.emplace(connection);
+    return std::make_shared<WebsocketConnection>(
+                m_mailbox,
+                std::bind(&ConnectionPool::onFail, this, std::placeholders::_1),
+                std::bind(&ConnectionPool::onOpen, this, std::placeholders::_1),
+                std::bind(&ConnectionPool::onError, this, std::placeholders::_1),
+                m_endpoint, m_uri);
 }
 
 } // namespace communication

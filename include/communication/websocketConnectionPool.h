@@ -14,7 +14,7 @@
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_client.hpp>
 
-#include <list>
+#include <thread>
 #include <unordered_set>
 
 extern template class websocketpp::client<websocketpp::config::asio_tls_client>;
@@ -35,16 +35,15 @@ public:
                             std::shared_ptr<Mailbox> mailbox,
                             const std::string &uri);
 
-    std::shared_ptr<Connection> select() override;
+    ~WebsocketConnectionPool();
+
+protected:
+    std::shared_ptr<Connection> createConnection() override;
 
 private:
-    void addConnection();
-
-    endpoint_type m_endpoint;
-    std::unordered_set<std::shared_ptr<WebsocketConnection>> m_futureConnections;
-    std::list<std::shared_ptr<WebsocketConnection>> m_connections;
+    std::thread m_ioThread;
+    std::shared_ptr<endpoint_type> m_endpoint = std::make_shared<endpoint_type>();
 };
-
 
 } // namespace communication
 } // namespace veil

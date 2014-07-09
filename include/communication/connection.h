@@ -9,6 +9,7 @@
 #define VEILHELPERS_CONNECTION_H
 
 
+#include <functional>
 #include <memory>
 
 namespace veil
@@ -18,16 +19,24 @@ namespace communication
 
 class Mailbox;
 
-class Connection
+class Connection: public std::enable_shared_from_this<Connection> // TODO: knowing when the connection is closed and when it's open
 {
 public:
-    Connection(std::shared_ptr<Mailbox> mailbox);
+    Connection(std::shared_ptr<Mailbox> mailbox,
+               std::function<void(std::shared_ptr<Connection>)> onFailCallback,
+               std::function<void(std::shared_ptr<Connection>)> onOpenCallback,
+               std::function<void(std::shared_ptr<Connection>)> onErrorCallback);
+
     virtual ~Connection() = default;
 
     virtual void send() = 0;
+    virtual void close();
 
 protected:
     const std::shared_ptr<Mailbox> m_mailbox;
+    std::function<void()> m_onFailCallback;
+    std::function<void()> m_onOpenCallback;
+    std::function<void()> m_onErrorCallback;
 };
 
 } // namespace communication

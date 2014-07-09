@@ -38,24 +38,29 @@ class WebsocketConnection: public Connection
 
 public:
     WebsocketConnection(std::shared_ptr<Mailbox> mailbox,
-                        endpoint_type &endpoint,
+                        std::function<void(std::shared_ptr<Connection>)> onFailCallback,
+                        std::function<void(std::shared_ptr<Connection>)> onOpenCallback,
+                        std::function<void(std::shared_ptr<Connection>)> onErrorCallback,
+                        std::shared_ptr<endpoint_type> endpoint,
                         const std::string &uri);
 
     void send() override;
+    void close() override;
 
 private:
     context_ptr onTLSInit();                 ///< On TLS init callback
-    void onSocketInit(socket_type &socket);///< On socket init callback
-    void onMessage(message_ptr msg);       ///< Incoming WebSocket message callback
+    void onSocketInit(socket_type &socket);  ///< On socket init callback
+    void onMessage(message_ptr msg);         ///< Incoming WebSocket message callback
     void onOpen();                           ///< WebSocket connection opened
     void onClose();                          ///< WebSocket connection closed
     void onFail();                           ///< WebSocket connection failed callback. This can proc only before CommunicationHandler::onOpen
-    bool onPing(std::string);              ///< Ping received callback
-    void onPong(std::string);              ///< Pong received callback
-    void onPongTimeout(std::string);       ///< Cluaster failed to respond on ping message
+    bool onPing(std::string);                ///< Ping received callback
+    void onPong(std::string);                ///< Pong received callback
+    void onPongTimeout(std::string);         ///< Cluaster failed to respond on ping message
     void onInterrupt();                      ///< WebSocket connection was interuped
 
-    connection_ptr m_connection;
+    websocketpp::connection_hdl m_connection;
+    std::weak_ptr<endpoint_type> m_endpoint;
 };
 
 } // namespace communication
