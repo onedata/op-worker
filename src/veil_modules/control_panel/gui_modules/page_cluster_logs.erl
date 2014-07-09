@@ -6,7 +6,7 @@
 %% @end
 %% ===================================================================
 %% @doc: This file contains n2o website code.
-%% The page (available for admins only) allows live viewing of logs in the system.
+%% The page (available for admins only) allows live viewing of cluster logs in the system.
 %% @end
 %% ===================================================================
 
@@ -33,9 +33,10 @@
 }).
 
 % Widths of columns
--define(SEVERITY_COLUMN_WIDTH, "width: 90px;").
--define(TIME_COLUMN_WIDTH, "width: 180px;").
--define(METADATA_COLUMN_WIDTH, "width: 300px;").
+-define(SEVERITY_COLUMN_STYLE, "width: 90px; padding: 6px 12px;").
+-define(TIME_COLUMN_STYLE, "width: 180px; padding: 6px 12px;").
+-define(MESSAGE_COLUMN_STYLE, "padding: 6px 12px;").
+-define(METADATA_COLUMN_STYLE, "width: 300px; padding: 6px 12px;").
 
 % Prefixes used to generate IDs for logs
 -define(COLLAPSED_LOG_ROW_ID_PREFIX, "clr").
@@ -62,7 +63,7 @@ main() ->
 
 
 %% Page title
-title() -> <<"Logs">>.
+title() -> <<"Cluster logs">>.
 
 
 % This will be placed instead of [[[body()]]] tag in template
@@ -132,10 +133,10 @@ main_table() ->
         style = <<"border-radius: 0; margin-bottom: 0; table-layout: fixed; width: 100%;">>,
         body = [
             #tr{cells = [
-                #th{body = <<"Severity">>, style = <<?SEVERITY_COLUMN_WIDTH>>},
-                #th{body = <<"Time">>, style = <<?TIME_COLUMN_WIDTH>>},
-                #th{body = <<"Message">>},
-                #th{body = <<"Metadata">>, style = <<?METADATA_COLUMN_WIDTH>>}
+                #th{body = <<"Severity">>, style = <<?SEVERITY_COLUMN_STYLE>>},
+                #th{body = <<"Time">>, style = <<?TIME_COLUMN_STYLE>>},
+                #th{body = <<"Message">>, style = <<?MESSAGE_COLUMN_STYLE>>},
+                #th{body = <<"Metadata">>, style = <<?METADATA_COLUMN_STYLE>>}
             ]}
         ]}.
 
@@ -213,18 +214,18 @@ comet_loop(Counter, PageState = #page_state{first_log = FirstLog, auto_scroll = 
             {set_filter, FilterName, Filter} ->
                 ?MODULE:comet_loop(Counter, set_filter(PageState, FilterName, Filter));
             display_error ->
-                catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}}),
+                catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, cluster, self()}}),
                 gui_jq:insert_bottom(<<"main_table">>, comet_error()),
                 gui_comet:flush();
             {'EXIT', _, _Reason} ->
-                catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}});
+                catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, cluster, self()}});
             Other ->
                 ?debug("Unrecognized comet message in page_logs: ~p", [Other]),
                 ?MODULE:comet_loop(Counter, PageState)
         end
     catch _Type:_Msg ->
         ?error_stacktrace("Error in page_logs comet_loop - ~p: ~p", [_Type, _Msg]),
-        catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}}),
+        catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, cluster, self()}}),
         gui_jq:insert_bottom(<<"main_table">>, comet_error()),
         gui_comet:flush()
     end.
@@ -288,22 +289,21 @@ render_row(Counter, {Message, Timestamp, Severity, Metadata}) ->
 
     CollapsedRow = #tr{class = <<"log_row">>, id = CollapsedId,
         actions = gui_jq:postback_action(CollapsedId, {toggle_log, Counter, true}), cells = [
-            #td{body = format_severity(Severity), style = <<?SEVERITY_COLUMN_WIDTH>>},
-            #td{body = format_time(Timestamp), style = <<?TIME_COLUMN_WIDTH>>},
-            #td{body = gui_str:to_binary(Message), style = <<"text-wrap:normal; word-wrap:break-word; white-space: nowrap; overflow: hidden;">>},
-            #td{body = CollapsedMetadata, style = <<?METADATA_COLUMN_WIDTH, "white-space: nowrap; overflow: hidden;">>}
+            #td{body = format_severity(Severity), style = <<?SEVERITY_COLUMN_STYLE>>},
+            #td{body = format_time(Timestamp), style = <<?TIME_COLUMN_STYLE>>},
+            #td{body = gui_str:to_binary(Message), style = <<?MESSAGE_COLUMN_STYLE, " text-wrap:normal; word-wrap:break-word; white-space: nowrap; overflow: hidden;">>},
+            #td{body = CollapsedMetadata, style = <<?METADATA_COLUMN_STYLE, "white-space: nowrap; overflow: hidden;">>}
         ]},
 
     ExpandedRow = #tr{class = <<"log_row">>, style = <<"background-color: rgba(26, 188, 156, 0.05);">>, id = ExpandedId,
         actions = gui_jq:postback_action(ExpandedId, {toggle_log, Counter, false}), cells = [
-            #td{body = format_severity(Severity), style = <<?SEVERITY_COLUMN_WIDTH>>},
-            #td{body = format_time(Timestamp), style = <<?TIME_COLUMN_WIDTH>>},
-            #td{body = gui_str:to_binary(Message), style = <<"text-wrap:normal; word-wrap:break-word;">>},
-            #td{body = ExpandedMetadata, style = <<?METADATA_COLUMN_WIDTH>>}
+            #td{body = format_severity(Severity), style = <<?SEVERITY_COLUMN_STYLE>>},
+            #td{body = format_time(Timestamp), style = <<?TIME_COLUMN_STYLE>>},
+            #td{body = gui_str:to_binary(Message), style = <<?MESSAGE_COLUMN_STYLE, " text-wrap:normal; word-wrap:break-word;">>},
+            #td{body = ExpandedMetadata, style = <<?METADATA_COLUMN_STYLE>>}
         ]},
 
     [CollapsedRow, ExpandedRow].
-
 
 % Render the body of loglevel dropdown, so it highlights the current choice
 loglevel_dropdown_body(Active) ->
@@ -336,11 +336,11 @@ max_logs_dropdown_body(Active) ->
 % Render a row in table informing about error in comet loop
 comet_error() ->
     _TableRow = #tr{cells = [
-        #td{body = <<"Error">>, style = <<?SEVERITY_COLUMN_WIDTH, "color: red;">>},
-        #td{body = format_time(now()), style = <<?TIME_COLUMN_WIDTH, "color: red;">>},
+        #td{body = <<"Error">>, style = <<?SEVERITY_COLUMN_STYLE, "color: red;">>},
+        #td{body = format_time(now()), style = <<?TIME_COLUMN_STYLE, "color: red;">>},
         #td{body = <<"There has been an error in comet process. Please refresh the page.">>,
-            style = <<"body-wrap:normal; word-wrap:break-word; white-space: nowrap; overflow: hidden; color: red;">>},
-        #td{body = <<"">>, style = <<?METADATA_COLUMN_WIDTH, "color: red;">>}
+            style = <<?MESSAGE_COLUMN_STYLE, " body-wrap:normal; word-wrap:break-word; white-space: nowrap; overflow: hidden; color: red;">>},
+        #td{body = <<"">>, style = <<?METADATA_COLUMN_STYLE, "color: red;">>}
     ]}.
 
 
@@ -413,7 +413,7 @@ event(init) ->
     {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init() end),
     put(comet_pid, Pid),
     % Subscribe for logs at central_logger
-    case gen_server:call(?Dispatcher_Name, {central_logger, 1, {subscribe, Pid}}) of
+    case gen_server:call(?Dispatcher_Name, {central_logger, 1, {subscribe, cluster, Pid}}) of
         ok -> ok;
         Other ->
             ?error("central_logger is unreachable. RPC call returned: ~p", [Other]),
