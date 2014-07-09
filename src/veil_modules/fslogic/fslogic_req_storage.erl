@@ -85,7 +85,7 @@ client_storage_info(SInfo) ->
         {StorageId, #storage_helper_info{name = "DirectIO", init_args = [Root]}} end, SInfo),
     NewFuseSessionDoc = FuseSessionDoc#veil_document{record = FuseSession#fuse_session{client_storage_info = ClientStorageInfo}},
     {ok, _} = dao_lib:apply(dao_cluster, save_fuse_session, [NewFuseSessionDoc], fslogic_context:get_protocol_version()),
-    lager:info("Client storage info saved in session."),
+    ?info("Client storage info saved in session."),
     #atom{value = ?VOK}.
 
 %% ====================================================================

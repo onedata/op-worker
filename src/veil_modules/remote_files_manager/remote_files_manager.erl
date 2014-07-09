@@ -71,6 +71,7 @@ handle(ProtocolVersion, Record) when is_record(Record, remotefilemangement) ->
     fslogic:fslogic_runner(fun handle_message/1, RequestType, RequestBody, remote_files_manager_errors);
 
 handle(_ProtocolVersion, _Msg) ->
+  ?warning("Wrong request: ~p", [_Msg]),
   ok.
 
 %% cleanup/0
@@ -103,7 +104,7 @@ handle_message(Record) when is_record(Record, createfile) ->
                 {_, ErrorCode} when is_integer(ErrorCode) ->
                     throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
-                    lager:warning("storage_files_manager:create error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
+                    ?warning("create error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
                     #atom{value = ?VEREMOTEIO}
             end;
         _ -> #atom{value = ?VEREMOTEIO}
@@ -125,14 +126,14 @@ handle_message(Record) when is_record(Record, deletefileatstorage) ->
                   {_, ErrorCode} when is_integer(ErrorCode) ->
                       throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
-                  lager:warning("storage_files_manager:delete error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
+                  ?warning("storage_files_manager:delete error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
                   #atom{value = ?VEREMOTEIO}
               end;
             false ->
               #atom{value = ?VEPERM}
           end;
         _ ->
-          lager:warning("delete error: can not check permissions, shi: ~p, file: ~p", [Storage_helper_info, File]),
+          ?warning("delete error: can not check permissions, shi: ~p, file: ~p", [Storage_helper_info, File]),
           #atom{value = ?VEREMOTEIO}
       end;
     _ -> #atom{value = ?VEREMOTEIO}
@@ -155,14 +156,14 @@ handle_message(Record) when is_record(Record, truncatefile) ->
                   {_, ErrorCode} when is_integer(ErrorCode) ->
                       throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
-                  lager:warning("storage_files_manager:truncate error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
+                  ?warning("storage_files_manager:truncate error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
                   #atom{value = ?VEREMOTEIO}
               end;
             false ->
               #atom{value = ?VEPERM}
           end;
         _ ->
-          lager:warning("truncatefile error: can not check permissions, shi: ~p, file: ~p", [Storage_helper_info, File]),
+          ?warning("truncatefile error: can not check permissions, shi: ~p, file: ~p", [Storage_helper_info, File]),
           #atom{value = ?VEREMOTEIO}
       end;
     _ -> #atom{value = ?VEREMOTEIO}
@@ -186,14 +187,14 @@ handle_message(Record) when is_record(Record, readfile) ->
                   {_, ErrorCode} when is_integer(ErrorCode) ->
                       throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
-                  lager:warning("storage_files_manager:read error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
+                  ?warning("storage_files_manager:read error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
                   #filedata{answer_status = ?VEREMOTEIO}
               end;
             false ->
               #filedata{answer_status = ?VEPERM}
           end;
         _ ->
-          lager:warning("readfile error: can not check permissions, shi: ~p, file: ~p", [Storage_helper_info, File]),
+          ?warning("readfile error: can not check permissions, shi: ~p, file: ~p", [Storage_helper_info, File]),
           #filedata{answer_status = ?VEREMOTEIO}
       end;
     _ -> #filedata{answer_status = ?VEREMOTEIO}
@@ -217,14 +218,14 @@ handle_message(Record) when is_record(Record, writefile) ->
                   {_, ErrorCode} when is_integer(ErrorCode) ->
                       throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
-                  lager:warning("storage_files_manager:write error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
+                  ?warning("storage_files_manager:write error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
                   #writeinfo{answer_status = ?VEREMOTEIO}
               end;
             false ->
               #writeinfo{answer_status = ?VEPERM}
           end;
         _ ->
-          lager:warning("writefile error: can not check permissions, shi: ~p, file: ~p", [Storage_helper_info, File]),
+          ?warning("writefile error: can not check permissions, shi: ~p, file: ~p", [Storage_helper_info, File]),
           #writeinfo{answer_status = ?VEREMOTEIO}
       end;
     _ -> #writeinfo{answer_status = ?VEREMOTEIO}
@@ -247,14 +248,14 @@ handle_message(Record) when is_record(Record, changepermsatstorage) ->
                   {_, ErrorCode} when is_integer(ErrorCode) ->
                       throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
-                  lager:warning("storage_files_manager:chmod error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
+                  ?warning("storage_files_manager:chmod error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
                   #atom{value = ?VEREMOTEIO}
               end;
             false ->
               #atom{value = ?VEPERM}
           end;
         _ ->
-          lager:warning("changepermsatstorage error: can not check permissions, shi: ~p, file: ~p", [Storage_helper_info, File]),
+          ?warning("changepermsatstorage error: can not check permissions, shi: ~p, file: ~p", [Storage_helper_info, File]),
           #atom{value = ?VEREMOTEIO}
       end;
     _ -> #atom{value = ?VEREMOTEIO}
@@ -290,7 +291,7 @@ get_helper_and_id(Combined, ProtocolVersion) ->
   Storage_And_ID = get_storage_and_id(Combined),
   case Storage_And_ID of
     error ->
-      lager:warning("Can not get storage and id from file_id: ~p", [Combined]),
+      ?warning("Can not get storage and id from file_id: ~p", [Combined]),
       error;
     _ ->
       {Storage, File} = Storage_And_ID,
@@ -300,7 +301,7 @@ get_helper_and_id(Combined, ProtocolVersion) ->
           ?debug("SHI and info for remote operation: ~p", [{SHI, File}]),
           {SHI, File};
         Other ->
-          lager:warning("Can not get storage from id: ~p", [Other]),
+          ?warning("Can not get storage from id: ~p", [Other]),
           error
       end
   end.

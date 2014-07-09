@@ -175,7 +175,7 @@ get_parent_and_name_from_path(Path, ProtocolVersion) ->
             case Status of
                 ok -> {ok, {File, TmpAns}};
                 _BadStatus ->
-                    lager:error([{mod, ?MODULE}], "Error: cannot find parent for path: ~s", [Path]),
+                    ?error("Cannot find parent for path: ~s", [Path]),
                     {error, "Error: cannot find parent: " ++ TmpAns}
             end
     end.

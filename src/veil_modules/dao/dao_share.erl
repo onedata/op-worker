@@ -14,6 +14,7 @@
 -include_lib("veil_modules/dao/dao_types.hrl").
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("dao/include/dao_helper.hrl").
+-include("logging.hrl").
 
 
 %% ===================================================================
@@ -133,7 +134,7 @@ get_file_share({Key, Value}) ->
     {ok, #view_result{rows = [#view_row{doc = FDoc}]}} ->
       {ok, FDoc};
     {ok, #view_result{rows = []}} ->
-%%       lager:error("Share by ~p: ~p not found", [Key, Value]),
+%%       ?error("Share by ~p: ~p not found", [Key, Value]),
       throw(share_not_found);
     {ok, #view_result{rows = Rows}} ->
       TranslateResponse = fun(#view_row{doc = FDoc}) ->
@@ -141,7 +142,7 @@ get_file_share({Key, Value}) ->
       end,
       {ok, lists:map(TranslateResponse, Rows)};
     Other ->
-      lager:error("Invalid view response: ~p", [Other]),
+      ?error("Invalid view response: ~p", [Other]),
       throw(invalid_data)
   end.
 

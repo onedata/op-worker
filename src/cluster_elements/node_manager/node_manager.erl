@@ -216,6 +216,7 @@ handle_call({check_storage, FilePath, Content}, _From, State) ->
   {reply, fslogic_storage:check_storage_on_node(FilePath, Content), State};
 
 handle_call(_Request, _From, State) ->
+  ?warning("Wrong call: ~p", [_Request]),
   {reply, wrong_request, State}.
 
 %% handle_cast/2
@@ -265,7 +266,7 @@ handle_cast({delete_callback_by_pid, Pid}, State) ->
           gen_server:call({global, ?CCM}, {delete_callback, Fuse, node(), Pid}, 2000)
         catch
           _:_ ->
-            lager:error("delete_callback - error during contact with CCM"),
+            ?error("delete_callback - error during contact with CCM"),
             error
         end
       end)
@@ -278,6 +279,7 @@ handle_cast({register_simple_cache, Cache, ReturnPid}, State) ->
                 true -> Caches;
                 false -> [Cache | Caches]
               end,
+  ?info("simple_cache_registered: ~p", [Cache]),
   ReturnPid ! simple_cache_registered,
   {noreply, State#node_state{simple_caches = NewCaches}};
 
@@ -326,6 +328,7 @@ handle_cast(stop_load_logging, #node_state{load_logging_fd = Fd} = State) ->
   {noreply, State#node_state{load_logging_fd = undefined}};
 
 handle_cast({notify_lfm, EventType, Enabled}, State) ->
+  ?debug("notify_lfm message: ~p", [{EventType, Enabled}]),
   case Enabled of
     true -> ets:insert(?LFM_EVENT_PRODUCTION_ENABLED_ETS, {EventType, true});
     _ -> ets:delete(?LFM_EVENT_PRODUCTION_ENABLED_ETS, EventType)
@@ -333,6 +336,7 @@ handle_cast({notify_lfm, EventType, Enabled}, State) ->
   {noreply, State};
 
 handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
+  ?debug("update_user_write_enabled message: ~p", [{UserDn, Enabled}]),
   case Enabled of
     false -> ets:insert(?WRITE_DISABLED_USERS, {UserDn, true});
     _ -> ets:delete(?WRITE_DISABLED_USERS, UserDn)
@@ -340,6 +344,7 @@ handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
   {noreply, State};
 
 handle_cast({node_for_ack, MsgID, Node}, State) ->
+  ?debug("Node for ack chosen: ~p", [{MsgID, Node}]),
   ets:insert(?ACK_HANDLERS, {{chosen_node, MsgID}, Node}),
   {ok, Interval} = application:get_env(veil_cluster_node, callback_ack_time),
   Pid = self(),
@@ -356,6 +361,7 @@ handle_cast({update_ports_stats, PortsStats}, State) ->
   {noreply, State#node_state{ports_stats = PortsStats}};
 
 handle_cast(_Msg, State) ->
+  ?warning("Wrong cast: ~p", [_Msg]),
   {noreply, State}.
 
 %% handle_info/2
@@ -374,15 +380,16 @@ handle_info({timer, Msg}, State) ->
   {noreply, State};
 
 handle_info({delete_node_for_ack, MsgID}, State) ->
+  ?debug("Node for ack deleted: ~p", [MsgID]),
   ets:delete(?ACK_HANDLERS, {chosen_node, MsgID}),
   {noreply, State};
 
 handle_info({nodedown, _Node}, State) ->
-  lager:error("Connection to CCM lost"),
+  ?error("Connection to CCM lost"),
   {noreply, State#node_state{ccm_con_status = not_connected}};
 
 handle_info(_Info, State) ->
-  ?error("Error: wrong info: ~p", [_Info]),
+  ?warning("Wrong info: ~p", [_Info]),
   {noreply, State}.
 
 
@@ -447,7 +454,7 @@ heart_beat(Conn_status, State) ->
     _ -> erlang:send_after(500, self(), {timer, do_heart_beat})
   end,
 
-  lager:info([{mod, ?MODULE}], "Heart beat on node: ~p: sent; connection: ~p, old conn_status: ~p,  state_num: ~b, callback_num: ~b,  disp dispatcher_state: ~b, callbacks_state: ~b",
+  ?debug("Heart beat on node: ~p: sent; connection: ~p, old conn_status: ~p,  state_num: ~b, callback_num: ~b,  disp dispatcher_state: ~b, callbacks_state: ~b",
     [node(), New_conn_status, Conn_status, State#node_state.state_num, State#node_state.callbacks_num, State#node_state.dispatcher_state, State#node_state.callbacks_state]),
   State#node_state{ccm_con_status = New_conn_status}.
 
@@ -458,7 +465,7 @@ heart_beat(Conn_status, State) ->
   NewStatus :: term().
 %% ====================================================================
 heart_beat_response(New_state_num, CallbacksNum, State) ->
-  lager:info([{mod, ?MODULE}], "Heart beat on node: ~p: answered, new state_num: ~b, new callback_num: ~b", [node(), New_state_num, CallbacksNum]),
+  ?debug("Heart beat on node: ~p: answered, new state_num: ~b, new callback_num: ~b", [node(), New_state_num, CallbacksNum]),
 
   case (New_state_num == State#node_state.state_num) of
     true -> ok;
@@ -466,6 +473,7 @@ heart_beat_response(New_state_num, CallbacksNum, State) ->
       %% TODO find a method which do not force clearing of all simple caches at all nodes when only one worker/node is added/deleted
       %% Now all caches are canceled because we do not know if state number change is connected with network problems (so cache of node may be not valid)
       %% TODO during refactoring integrate simple and permanent cache (cache clearing can be triggered as CacheCheckFun)
+      ?debug("Simple caches cleared"),
       clear_simple_caches(State#node_state.simple_caches)
   end,
 
@@ -486,7 +494,9 @@ heart_beat_response(New_state_num, CallbacksNum, State) ->
 update_dispatcher(New_state_num, CallbacksNum, Type) ->
   case Type =:= ccm of
     true -> ok;
-    false -> gen_server:cast(?Dispatcher_Name, {update_state, New_state_num, CallbacksNum})
+    false ->
+      ?debug("Message sent to update dispatcher, state and callbacks num: ~p", [{New_state_num, CallbacksNum}]),
+      gen_server:cast(?Dispatcher_Name, {update_state, New_state_num, CallbacksNum})
   end.
 
 %% init_net_connection/1
@@ -506,11 +516,16 @@ init_net_connection([Node | Nodes]) ->
       pong ->
         erlang:monitor_node(Node, true),
         global:sync(),
+        ?debug("Connection to nodes ~p initialized", [Nodes]),
         ok;
-      pang -> init_net_connection(Nodes)
+      pang ->
+        ?error("Cannot connect to node ~p", [Node]),
+        init_net_connection(Nodes)
     end
   catch
-    _:_ -> error
+    E1:E2 ->
+      ?error("Error ~p:~p during initialization of cennection to nodes: ~p", [E1, E2, Nodes]),
+      error
   end.
 
 %% check_vsn/0
@@ -591,6 +606,7 @@ create_node_stats_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkS
       {error, Error};
     _ ->
       gen_server:cast(?Node_Manager_Name, monitor_node),
+      ?debug("Node RRD created"),
       ok
   end.
 
@@ -606,7 +622,9 @@ get_node_stats(TimeWindow) ->
                      short -> application:get_env(?APP_Name, short_monitoring_time_window);
                      medium -> application:get_env(?APP_Name, medium_monitoring_time_window);
                      long -> application:get_env(?APP_Name, long_monitoring_time_window);
-                     _ -> {ok, TimeWindow}
+                     _ ->
+                       ?warning("Wrong statistics time window: ~p", [TimeWindow]),
+                       {ok, TimeWindow}
                    end,
   {MegaSecs, Secs, _} = erlang:now(),
   EndTime = 1000000 * MegaSecs + Secs,
@@ -962,6 +980,7 @@ get_all_callbacks(Fuse, State) ->
 %% ====================================================================
 addCallback(State, FuseId, Pid) ->
   NewCallbacks = update_pid_list(FuseId, Pid, State#node_state.callbacks, []),
+  ?debug("Callback added: ~p", [{FuseId, Pid}]),
   State#node_state{callbacks = NewCallbacks}.
 
 %% update_pid_list/4
@@ -1006,6 +1025,7 @@ choose_callback([Callback | L1], L2) ->
 %% ====================================================================
 delete_callback(State, FuseId, Pid) ->
   {NewCallbacks, DeleteAns} = delete_pid_from_list(FuseId, Pid, State#node_state.callbacks, []),
+  ?debug("Deleting callback, ans ~p", [DeleteAns]),
   {State#node_state{callbacks = NewCallbacks}, DeleteAns}.
 
 %% delete_pid_from_list/4
@@ -1071,6 +1091,7 @@ get_fuse_by_callback_pid_helper(Pid, [{F, {CList1, CList2}} | T]) ->
 -spec clear_simple_caches(Caches :: list()) -> ok.
 %% ====================================================================
 clear_simple_caches(Caches) ->
+  ?debug("Clearing caches: ~p", [Caches]),
   lists:foreach(fun
     ({sub_proc_cache, Cache}) ->
       worker_host:clear_sub_procs_cache(Cache);

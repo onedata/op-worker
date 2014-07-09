@@ -622,13 +622,16 @@ contact_fslogic(Message, Value) ->
         receive
           {worker_answer, MsgId, Resp} -> {ok, Resp}
         after 7000 ->
+          ?error("Logical files manager: error during contact with fslogic, timeout"),
           {error, timeout}
         end;
-      _ -> {error, CallAns}
+      _ ->
+        ?error("Logical files manager: error during contact with fslogic, call ans: ~p", [CallAns]),
+        {error, CallAns}
     end
   catch
     E1:E2 ->
-      lager:error("Logical files manager: error during contact with fslogic: ~p:~p", [E1, E2]),
+      ?error("Logical files manager: error during contact with fslogic: ~p:~p", [E1, E2]),
       {error, dispatcher_error}
   end.
 
@@ -659,7 +662,7 @@ get_file_user_dependent_name_by_uuid(UUID) ->
   case get_file_full_name_by_uuid(UUID) of
     {ok, FullPath} ->
       case fslogic_context:get_user_dn() of
-        undefined -> 
+        undefined ->
           {ok, FullPath};
         UserDN ->
           case dao_lib:apply(dao_users, get_user, [{dn, UserDN}], 1) of
@@ -673,7 +676,7 @@ get_file_user_dependent_name_by_uuid(UUID) ->
     {ErrorGeneral, ErrorDetail} ->
       {ErrorGeneral, ErrorDetail}
   end.
-  
+
 %% get_file_name_by_uuid/1
 %% ====================================================================
 %% @doc Gets file name on the basis of uuid.
@@ -901,6 +904,7 @@ getfilelocation(File) ->
     end
   catch
     _:_ ->
+      ?debug("Creating ets ~p for logical files manager cache", [EtsName]),
       ets:new(EtsName, [named_table, set]),
       []
   end,
@@ -924,7 +928,9 @@ getfilelocation(File) ->
           end;
         _ -> {Status, TmpAns}
       end;
-    _ -> {ok, CachedLocation}
+    _ ->
+      ?debug("Reading file location from cache: ~p", [CachedLocation]),
+      {ok, CachedLocation}
   end.
 
 %% cache_size/2
@@ -940,11 +946,13 @@ cache_size(File, BuffSize) ->
     LookupAns = ets:lookup(EtsName, {File, size}),
     case LookupAns of
       [{{File, size}, Size}] ->
+        ?debug("Reading file size from cache, size: ~p", [Size]),
         Size;
       _ -> 0
     end
   catch
     _:_ ->
+      ?debug("Creating ets ~p for logical files manager cache", [EtsName]),
       ets:new(EtsName, [named_table, set]),
       0
   end,
@@ -1074,14 +1082,9 @@ get_mode(FileName) ->
 %% @end
 -spec check_utf(FileName :: string()) -> string().
 %% ====================================================================
-% TODO delete format change when GUI will use N20
+% TODO delete format change when GUI accepts unicode (VFS-714)
 check_utf(FileName) when is_list(FileName) ->
-  case io_lib:printable_unicode_list(FileName) of
-    true ->
-      FileName;
-    false ->
-      unicode:characters_to_list(list_to_binary(FileName))
-  end;
+  unicode:characters_to_list(list_to_binary(FileName));
 
 check_utf(FileName) ->
   FileName.

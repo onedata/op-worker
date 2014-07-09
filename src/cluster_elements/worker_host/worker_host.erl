@@ -87,6 +87,7 @@ stop(PlugIn) ->
 init([PlugIn, PlugInArgs, LoadMemorySize]) ->
   process_flag(trap_exit, true),
   InitAns = PlugIn:init(PlugInArgs),
+  ?debug("Plugin ~p initialized with args ~p and result ~p", [PlugIn, PlugInArgs, InitAns]),
   case InitAns of
     IDesc when is_record(IDesc, initial_host_description) ->
       Pid = self(),
@@ -150,6 +151,7 @@ handle_call({test_call, ProtocolVersion, Msg}, _From, State) ->
   {reply, Reply, State};
 
 handle_call(dispatcher_map_unregistered, _From, State) ->
+  ?info("dispatcher_map_unregistered for plugin ~p", [State#host_state.plug_in]),
   Pid = self(),
   DMapState = case State#host_state.request_map of
                 non -> true;
@@ -165,8 +167,10 @@ handle_call({register_new_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, R
     false ->
       SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache) ++ State#host_state.sub_procs,
       NewState = upgrade_sub_proc_list(SubProcList, RM, DM, Cache, State),
+      ?info("register_new_sub_proc: ~p, ok", [{Name, Cache}]),
       {reply, ok, NewState};
     _ ->
+      ?warning("register_new_sub_proc: ~p, exists", [{Name, Cache}]),
       {reply, exists, State}
   end;
 
@@ -178,11 +182,13 @@ handle_call({register_new_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, R
 handle_call({update_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, Cache}, _From, State) ->
   case lists:keyfind(Name, 1, State#host_state.sub_procs) of
     false ->
+      ?warning("update_sub_proc: ~p, not_exists", [{Name, Cache}]),
       {reply, not_exists, State};
     OldSubProcTuple ->
       WithoutOldSubProc = lists:delete(OldSubProcTuple, State#host_state.sub_procs),
       SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache) ++ WithoutOldSubProc,
       NewState = upgrade_sub_proc_list(SubProcList, RM, DM, Cache, State),
+      ?info("update_sub_proc: ~p, ok", [{Name, Cache}]),
       {reply, ok, NewState}
   end;
 
@@ -198,6 +204,7 @@ handle_call({register_or_update_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, Map
       worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache) ++ WithoutOldSubProc
   end,
   NewState = upgrade_sub_proc_list(SubProcList, RM, DM, Cache, State),
+  ?info("register_or_update_sub_proc: ~p, ok", [{Name, Cache}]),
   {reply, ok, NewState};
 
 handle_call({register_or_update_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM}, _From, State) ->
@@ -211,7 +218,8 @@ handle_call(check, _From, State) ->
   {reply, ok, State};
 
 handle_call(_Request, _From, State) ->
-    {reply, wrong_request, State}.
+  ?warning("Wrong call: ~p", [_Request]),
+  {reply, wrong_request, State}.
 
 %% handle_test_call/3
 %% ====================================================================
@@ -302,7 +310,7 @@ handle_cast({sequential, job_check}, State) ->
             Pid = spawn(fun() -> Job(), gen_server:cast(State#host_state.plug_in, {sequential, job_end}) end),
             {noreply, State#host_state{current_seq_job = Pid, seq_queue = Queue}};
         {Value, Queue}->  %% Unknown state
-            lager:error([{mod, ?MODULE}], "Unknown worker sequential run queue state: current job: ~p, run queue: ~p", [Value, Queue]),
+            ?error("Unknown worker sequential run queue state: current job: ~p, run queue: ~p", [Value, Queue]),
             {noreply, State}
     end;
 
@@ -348,6 +356,7 @@ handle_cast(register_sub_proc_caches, State) ->
       end,
       RegAns = lists:foldl(RegCache, ok, State#host_state.sub_procs),
 
+      ?debug("register_sub_proc_caches ans: ~p", [RegAns]),
       case RegAns of
         ok -> {noreply, State#host_state{sub_proc_caches_ok = true}};
         _ ->
@@ -378,8 +387,11 @@ handle_cast({clear_sub_procs_cache, AnsPid, Cache}, State) ->
           SubProcPid ! {sub_proc_management, self(), {clear_cache, Keys}}
       end,
       receive
-        {sub_proc_cache_cleared, ClearAns} -> ClearAns
+        {sub_proc_cache_cleared, ClearAns} ->
+          ?debug("clear_sub_procs_cache ~p ans: ~p", [Cache, ClearAns]),
+          ClearAns
       after ?SUB_PROC_CACHE_CLEAR_TIME ->
+        ?warning("clear_sub_procs_cache ~p timeout", [Cache]),
         false
       end
   end,
@@ -390,7 +402,8 @@ handle_cast(stop, State) ->
   {stop, normal, State};
 
 handle_cast(_Msg, State) ->
-	{noreply, State}.
+  ?warning("Wrong cast: ~p", [_Msg]),
+  {noreply, State}.
 
 
 %% handle_info/2
@@ -418,10 +431,11 @@ handle_info({clear_sub_proc_sipmle_cache, Name, LoopTime, Fun}, State) ->
   {noreply, State};
 
 handle_info(dispatcher_map_registered, State) ->
+  ?debug("dispatcher_map_registered"),
   {noreply, State#host_state{dispatcher_request_map_ok = true}};
 
 handle_info(_Info, State) ->
-  ?error("Error: wrong info: ~p", [_Info]),
+  ?warning("Wrong info: ~p", [_Info]),
   {noreply, State}.
 
 
@@ -469,7 +483,7 @@ proc_request(PlugIn, ProtocolVersion, Msg, MsgId, ReplyTo) ->
     PlugIn:handle(ProtocolVersion, Request)
 	catch
     Type:Error ->
-      lager:error("Worker plug-in ~p error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
+      ?error_stacktrace("Worker plug-in ~p error: ~p:~p", [PlugIn, Type, Error]),
       worker_plug_in_error
 	end,
   send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo).
@@ -515,7 +529,7 @@ proc_standard_request(RequestMap, SubProcs, PlugIn, ProtocolVersion, Msg, MsgId,
         Type:Error ->
           spawn(fun() ->
             BeforeProcessingRequest = os:timestamp(),
-            lager:error("Worker plug-in ~p sub proc error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
+            ?error_stacktrace("Worker plug-in ~p sub proc error: ~p:~p", [PlugIn, Type, Error]),
             send_response(PlugIn, BeforeProcessingRequest, sub_proc_error, MsgId, ReplyTo)
           end),
           SubProcs
@@ -556,7 +570,7 @@ send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo) ->
         non -> Pid ! Response;
         Id -> Pid ! {worker_answer, Id, Response}
       end;
-    Other -> lagger:error("Wrong reply type: ~s", [Other])
+    Other -> ?error("Wrong reply type: ~p", [Other])
   end,
 
   AfterProcessingRequest = os:timestamp(),
@@ -667,6 +681,7 @@ start_sub_proc(Name, CacheType, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFu
       CName
   end,
 
+  ?debug("Starting sub proc ~p with cache type: ~p", [Name, CacheType]),
   sub_proc(Name, CacheName, proc, SubProcDepth, MaxDepth, MaxWidth, os:timestamp(), ?MAX_CALCULATION_WAIT_TIME, ProcFun, MapFun).
 
 %% sub_proc/9
@@ -679,6 +694,7 @@ start_sub_proc(Name, CacheType, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapFu
 sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun) ->
   receive
     {sub_proc_management, stop} ->
+      ?debug("Stoping sub proc ~p", [Name]),
       del_sub_procs(ets:first(Name), Name);
 
     {sub_proc_management, ReturnPid, clear_cache} ->
@@ -686,6 +702,7 @@ sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, 
           non ->
             ReturnPid ! {sub_proc_cache_cleared, false};
         _ ->
+          ?debug("Clearing cache of sub proc ~p", [Name]),
           ets:delete_all_objects(CacheName),
           ReturnPid ! {sub_proc_cache_cleared, clear_sub_procs_caches(Name, clear_cache)}
       end,
@@ -696,6 +713,7 @@ sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, 
           non ->
             ReturnPid ! {sub_proc_cache_cleared, false};
         _ ->
+          ?debug("Clearing cache of sub proc ~p with key ~p", [Name, Keys]),
           case Keys of
             KList when is_list(KList) ->
               lists:foreach(fun(K) -> ets:delete(CacheName, K) end, KList);
@@ -707,6 +725,7 @@ sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, 
       sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
 
     {sub_proc_management, sub_proc_automatic_cache_clearing, ClearFun} ->
+      ?debug("Automatic cache clearing of sub proc ~p", [Name]),
       ClearFun(CacheName),
       clear_sub_procs_caches_by_fun(Name, ClearFun),
       sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
@@ -715,10 +734,11 @@ sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, 
       ChildDesc = ets:lookup(Name, ChildPid),
       case ChildDesc of
         [{ChildPid, ChildNum}] ->
+          ?debug("Exit of child num ~p of sub proc ~p", [ChildNum, Name]),
           ets:delete(Name, ChildPid),
           ets:delete(Name, ChildNum);
         _ ->
-          lager:error([{mod, ?MODULE}], "Exit of unknown sub proc"),
+          ?error("Exit of unknown sub proc"),
           error
       end,
       sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, AvgWaitTime, ProcFun, MapFun);
@@ -774,6 +794,7 @@ sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, 
 
       sub_proc(Name, CacheName, NewProcType, SubProcDepth, MaxDepth, MaxWidth, Now, NewAvgWaitTime, ProcFun, MapFun)
   after ?MAX_CHILD_WAIT_TIME ->
+    ?debug("End of sub proc ~p (max waiting time)", [Name]),
     end_sub_proc
   end.
 
@@ -804,12 +825,12 @@ map_to_sub_proc(Name, CacheName, SubProcDepth, MaxDepth, MaxWidth, ProcFun, MapF
       [{RequestValue, RequestProcPid}] ->
         {RequestValue, RequestProcPid};
       _ ->
-        lager:error([{mod, ?MODULE}], "Sub proc error for request ~p", [Request]),
+        ?error("Sub proc error for request ~p", [Request]),
         {error, error}
     end
   catch
     _:_ ->
-      lager:error([{mod, ?MODULE}], "Sub proc error for request ~p", [Request]),
+      ?error("Sub proc error for request ~p", [Request]),
       {error, error}
   end.
 
@@ -866,7 +887,7 @@ generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun, CacheType} |
           ProcFun(ProtocolVersion, Request)
                     catch
                       Type:Error ->
-                        lager:error("Worker plug-in ~p error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
+                        ?error_stacktrace("Worker plug-in ~p error: ~p:~p", [PlugIn, Type, Error]),
                         worker_plug_in_error
                     end,
         send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo)
@@ -880,7 +901,7 @@ generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun, CacheType} |
           ProcFun(ProtocolVersion, Request, CacheName)
                     catch
                       Type:Error ->
-                        lager:error("Worker plug-in ~p error: ~p:~p ~n ~p", [PlugIn, Type, Error, erlang:get_stacktrace()]),
+                        ?error_stacktrace("Worker plug-in ~p error: ~p:~p", [PlugIn, Type, Error]),
                         worker_plug_in_error
                     end,
         send_response(PlugIn, BeforeProcessingRequest, Response, MsgId, ReplyTo)
@@ -906,6 +927,7 @@ generate_sub_proc_list([{Name, MaxDepth, MaxWidth, ProcFun, MapFun, CacheType} |
 -spec stop_all_sub_proc(SubProcs :: list()) -> ok.
 %% ====================================================================
 stop_all_sub_proc(SubProcs) ->
+  ?debug("Stoping all sub procs ~p", [SubProcs]),
   Keys = proplists:get_keys(SubProcs),
   lists:foreach(fun(K) ->
     {_, _, SubProcPid} = proplists:get_value(K, SubProcs),
@@ -922,7 +944,9 @@ del_sub_procs('$end_of_table', _Name) ->
 del_sub_procs(Key, Name) ->
   V = ets:lookup(Name, Key),
   case V of
-    [{Int, EndPid}] when is_integer(Int) -> EndPid ! {sub_proc_management, stop};
+    [{Int, EndPid}] when is_integer(Int) ->
+      ?debug("Stoping sub proc ~p", [Key]),
+      EndPid ! {sub_proc_management, stop};
     _ -> ok
   end,
   del_sub_procs(ets:next(Name, Key), Name).
@@ -1080,6 +1104,8 @@ create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPi
   CacheLoop :: integer() | atom().
 %% ====================================================================
 register_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPid) ->
+  ?debug("register_simple_cache: ~p with loop ~p and strong connection ~p", [Name, CacheLoop, ClearFun]),
+
   Pid = self(),
   gen_server:cast(?Node_Manager_Name, {register_simple_cache, Name, Pid}),
   receive
@@ -1104,9 +1130,12 @@ register_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, Clearing
           end,
           ok;
         non -> ok;
-        _ -> loop_time_not_a_number_error
+        _ ->
+          ?error("register_simple_cache: ~p: loop_time_not_a_number_error"),
+          loop_time_not_a_number_error
       end
   after 500 ->
+    ?error("register_simple_cache: ~p: timeout"),
     error_during_cache_registration
   end.
 
@@ -1156,7 +1185,7 @@ synch_cache_clearing(Cache) ->
     error_during_contact_witch_ccm
   end.
 
-%% clear_sub_procs_caches/2
+%% lclear_sub_procs_caches/2
 %% ====================================================================
 %% @doc Clears caches of all sub processes (used during cache clearing for request)
 -spec clear_sub_procs_caches(EtsName :: atom(), Message :: term()) -> integer().
@@ -1249,7 +1278,7 @@ register_sub_proc_simple_cache(Name, CacheLoop, ClearFun, ClearingPid) ->
     ok ->
       ok;
     _ ->
-      lager:error([{mod, ?MODULE}], "Error of register_sub_proc_simple_cache, error: ~p, args: ~p", [RegAns, {Name, CacheLoop, ClearFun, ClearingPid}]),
+      ?error("Error of register_sub_proc_simple_cache, error: ~p, args: ~p", [RegAns, {Name, CacheLoop, ClearFun, ClearingPid}]),
       error
   end.
 
