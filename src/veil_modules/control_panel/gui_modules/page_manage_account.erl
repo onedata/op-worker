@@ -250,7 +250,7 @@ update_email(User, AddOrRemove) ->
     OldEmailList = user_logic:get_email_list(User),
     case AddOrRemove of
         {add, submitted} ->
-            NewEmail = gui_ctx:form_param(<<"new_email_textbox">>),
+            NewEmail = gui_ctx:postback_param(<<"new_email_textbox">>),
             case re:run(NewEmail, ?mail_validation_regexp) of
                 {match, _} ->
                     NewEmailUnicode = gui_str:binary_to_unicode_list(NewEmail),
@@ -274,7 +274,7 @@ update_dn(User, AddOrRemove) ->
     OldUnvDnList = user_logic:get_unverified_dn_list(User),
     case AddOrRemove of
         {add, submitted} ->
-            case user_logic:extract_dn_from_cert(gui_ctx:form_param(<<"new_dn_textbox">>)) of
+            case user_logic:extract_dn_from_cert(gui_ctx:postback_param(<<"new_dn_textbox">>)) of
                 {rdnSequence, RDNSequence} ->
                     {ok, DnString} = user_logic:rdn_sequence_to_dn_string(RDNSequence),
                     case user_logic:get_user({dn, DnString}) of
