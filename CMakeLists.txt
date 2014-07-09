@@ -136,7 +136,7 @@ PROTOBUF_GENERATE_CPP(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 # Setup sources
-file(GLOB HELPER_SOURCES "src/[a-zA-Z]*.cc")
+file(GLOB_RECURSE HELPER_SOURCES src/*.cc include/*.h)
 
 # Setup compile flags
 if(${PREFER_STATIC_LINK}) # Try to link libstdc++.a
