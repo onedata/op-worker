@@ -9,14 +9,25 @@
 #define VEILHELPERS_CONNECTION_POOL_H
 
 
+#include <memory>
+
 namespace veil
 {
 namespace communication
 {
 
+class Connection;
+
 class ConnectionPool
 {
+public:
+    ConnectionPool(const unsigned int connectionsNumber);
+    virtual ~ConnectionPool() = default;
 
+    virtual std::shared_ptr<Connection> select() = 0;
+
+protected:
+    const unsigned int m_connectionsNumber;
 };
 
 
