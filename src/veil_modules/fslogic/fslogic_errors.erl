@@ -35,7 +35,7 @@ gen_error_code({error, Reason}) ->
 gen_error_code(file_not_found) ->
     {?VENOENT, no_details};
 gen_error_code({permission_denied, Details}) ->
-    {?VEPERM, {permission_denied, Details}};
+    {?VEACCES, {permission_denied, Details}};
 gen_error_code(user_not_found) ->
     {?VEPERM, user_not_found};
 gen_error_code(user_doc_not_found) ->
