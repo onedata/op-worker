@@ -148,6 +148,7 @@ veil_alert_unfinished_files = function (form) {
     var files = $(PENDING_FILES_LIST_ID).find("span.tag[status='error']");
     if (files.length > 0) {
         var filenames = $(files).get().map(function (f) {
+            $(f).attr("status", "error_reported");
             return $(f).text()
         }).join("\r\n");
         alert("There was an error uploading the following file(s):\r\n" + filenames + "\r\n\r\nPlease try again.");

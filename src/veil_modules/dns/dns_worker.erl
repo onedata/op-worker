@@ -12,9 +12,11 @@
 
 -module(dns_worker).
 -behaviour(worker_plugin_behaviour).
+
 -include("veil_modules/dns/dns_worker.hrl").
 -include("registered_names.hrl").
 -include("supervision_macros.hrl").
+-include("logging.hrl").
 
 %% ====================================================================
 %% API functions
@@ -83,6 +85,7 @@ handle(_ProtocolVersion, get_version) ->
 	node_manager:check_vsn();
 
 handle(_ProtocolVersion, {update_state, ModulesToNodes, NLoads, AvgLoad}) ->
+  ?info("DNS state update: ~p", [{ModulesToNodes, NLoads, AvgLoad}]),
   try
     ModulesToNodes2 = lists:map(fun ({Module, Nodes}) ->
       GetLoads = fun({Node, V}) ->
@@ -95,12 +98,12 @@ handle(_ProtocolVersion, {update_state, ModulesToNodes, NLoads, AvgLoad}) ->
       ok ->
         ok;
       UpdateError ->
-        lager:error("DNS update error: ~p", [UpdateError]),
+        ?error("DNS update error: ~p", [UpdateError]),
         udpate_error
     end
   catch
     E1:E2 ->
-      lager:error("DNS update error: ~p:~p", [E1, E2]),
+      ?error("DNS update error: ~p:~p", [E1, E2]),
       udpate_error
   end;
 
@@ -145,12 +148,12 @@ handle(_ProtocolVersion, {get_worker, Module}) ->
             create_ans(Result3, NodesList)
         end;
       UpdateError ->
-        lager:error("DNS get_worker error: ~p", [UpdateError]),
+        ?error("DNS get_worker error: ~p", [UpdateError]),
         {error, dns_update_state_error}
     end
   catch
     E1:E2 ->
-      lager:error("DNS get_worker error: ~p:~p", [E1, E2]),
+      ?error("DNS get_worker error: ~p:~p", [E1, E2]),
       {error, dns_get_worker_error}
   end;
 
@@ -189,11 +192,12 @@ handle(_ProtocolVersion, get_nodes) ->
     end
   catch
     E1:E2 ->
-      lager:error("DNS get_nodes error: ~p:~p", [E1, E2]),
+      ?error("DNS get_nodes error: ~p:~p", [E1, E2]),
       {error, get_nodes}
   end;
 
 handle(ProtocolVersion, Msg) ->
+  ?warning("Wrong request: ~p", [Msg]),
 	throw({unsupported_request, ProtocolVersion, Msg}).
 
 %% cleanup/0
@@ -232,14 +236,14 @@ start_listening() ->
 
     try
       supervisor:delete_child(?Supervisor_Name, ?DNS_UDP),
-      lager:warning("DNS UDP child has existed")
+      ?debug("DNS UDP child has existed")
     catch
       _:_ -> ok
     end,
 
     try
       ranch:stop_listener(dns_tcp_listener),
-      lager:warning("dns_tcp_listener has existed")
+      ?debug("dns_tcp_listener has existed")
     catch
       _:_ -> ok
     end,
@@ -247,9 +251,9 @@ start_listening() ->
 		{ok, Pid} = supervisor:start_child(?Supervisor_Name, UDP_Child),
 		start_tcp_listener(TcpAcceptorPool, DNSPort, DNS_TCP_Transport_Options, Pid)
 	catch
-		_:Reason -> lager:error("DNS Error during starting listeners, ~p", [Reason]),
+		_:Reason -> ?error("DNS Error during starting listeners, ~p", [Reason]),
 			gen_server:cast({global, ?CCM}, {stop_worker, node(), ?MODULE}),
-			lager:info("Terminating ~p", [?MODULE])
+			?info("Terminating ~p", [?MODULE])
 	end,
 	ok.
 
@@ -273,6 +277,7 @@ start_tcp_listener(AcceptorPool, Port, TransportOpts, Pid) ->
 	catch
 		_:RanchError -> ok = supervisor:terminate_child(?Supervisor_Name, Pid),
 			supervisor:delete_child(?Supervisor_Name, Pid),
+			?error("Start DNS TCP listener error, ~p", [RanchError]),
 			throw(RanchError)
 	end,
 	ok.
@@ -289,7 +294,7 @@ clear_children_and_listeners() ->
     try
       Invoke()
     catch
-      _:Error -> lager:error(Log, [Error])
+      _:Error -> ?error(Log, [Error])
     end
   end,
 

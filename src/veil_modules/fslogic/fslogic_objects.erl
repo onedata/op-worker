@@ -201,7 +201,7 @@ save_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
                                 Other -> Other
                             end;
                         _Many ->
-                            lager:error([{mod, ?MODULE}], "Error: to many file descriptors for file uuid: ~p", [Uuid]),
+                            ?error("Error: to many file descriptors for file uuid: ~p", [Uuid]),
                             {error, "Error: too many file descriptors"}
                     end;
                 _Other -> _Other
@@ -247,10 +247,10 @@ delete_old_descriptors(ProtocolVersion, Time) ->
     Status = dao_lib:apply(dao_vfs, remove_descriptor, [{by_expired_before, Time}], ProtocolVersion),
     case Status of
         ok ->
-            lager:info([{mod, ?MODULE}], "Old descriptors cleared"),
+            ?info("Old descriptors cleared"),
             ok;
         Other ->
-            lager:error([{mod, ?MODULE}], "Error during clearing old descriptors: ~p", [Other]),
+            ?error("Error during clearing old descriptors: ~p", [Other]),
             Other
     end.
 

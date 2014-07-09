@@ -38,7 +38,7 @@ update_times(FullFileName, ATime, MTime, CTime) ->
     ?debug("update_times(FullFileName: ~p, ATime: ~p, MTime: ~p, CTime: ~p)", [FullFileName, ATime, MTime, CTime]),
     case FullFileName of
         [?PATH_SEPARATOR] ->
-            lager:warning("Trying to update times for root directory. FuseID: ~p. Aborting.", [fslogic_context:get_fuse_id()]),
+            ?warning("Trying to update times for root directory. FuseID: ~p. Aborting.", [fslogic_context:get_fuse_id()]),
             throw(invalid_updatetimes_request);
         _ -> ok
     end,
@@ -75,19 +75,19 @@ change_file_owner(FullFileName, NewUID, NewUName) ->
             {ok, #veil_document{record = #user{}, uuid = UID}} ->
                 File#file{uid = UID};
             {error, user_not_found} ->
-                lager:warning("chown: cannot find user with name ~p. lTrying UID (~p) lookup...", [NewUName, NewUID]),
+                ?warning("chown: cannot find user with name ~p. lTrying UID (~p) lookup...", [NewUName, NewUID]),
                 case dao_lib:apply(dao_users, get_user, [{uuid, integer_to_list(NewUID)}], fslogic_context:get_protocol_version()) of
                     {ok, #veil_document{record = #user{}, uuid = UID1}} ->
                         File#file{uid = UID1};
                     {error, {not_found, missing}} ->
-                        lager:warning("chown: cannot find user with uid ~p", [NewUID]),
+                        ?warning("chown: cannot find user with uid ~p", [NewUID]),
                         throw(?VEINVAL);
                     {error, Reason1} ->
-                        lager:error("chown: cannot find user with uid ~p due to error: ~p", [NewUID, Reason1]),
+                        ?error("chown: cannot find user with uid ~p due to error: ~p", [NewUID, Reason1]),
                         throw(?VEREMOTEIO)
                 end;
             {error, Reason1} ->
-                lager:error("chown: cannot find user with uid ~p due to error: ~p", [NewUID, Reason1]),
+                ?error("chown: cannot find user with uid ~p due to error: ~p", [NewUID, Reason1]),
                 throw(?VEREMOTEIO)
         end,
     NewFile1 = fslogic_meta:update_meta_attr(NewFile, ctime, vcn_utils:time()),
@@ -169,7 +169,7 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
             {ok, #veil_document{record = FMeta}} ->
                 {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size};
             {error, Error} ->
-                lager:warning("Cannot fetch file_meta for file (uuid ~p) due to error: ~p", [FileUUID, Error]),
+                ?warning("Cannot fetch file_meta for file (uuid ~p) due to error: ~p", [FileUUID, Error]),
                 {0, 0, 0, 0}
         end,
 
@@ -178,7 +178,7 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
                 "DIR" -> case dao_lib:apply(dao_vfs, count_subdirs, [{uuid, FileUUID}], fslogic_context:get_protocol_version()) of
                              {ok, Sum} -> Sum + 2;
                              _Other ->
-                                 lager:error([{mod, ?MODULE}], "Error: can not get number of links for file: ~s", [File]),
+                                 ?error("Error: can not get number of links for file: ~s", [File]),
                                  -1
                          end;
                 "REG" -> 1;
@@ -226,7 +226,7 @@ delete_file(FullFileName) ->
             fslogic_meta:update_parent_ctime(fslogic_path:get_user_file_name(FullFileName), vcn_utils:time()),
             #atom{value = ?VOK};
         _Other ->
-            lager:error([{mod, ?MODULE}], "Error: can not remove directory (it's not empty): ~s", [FullFileName]),
+            ?error("Error: can not remove directory (it's not empty): ~s", [FullFileName]),
             #atom{value = ?VENOTEMPTY}
     end.
 
@@ -248,7 +248,7 @@ rename_file(FullFileName, FullNewFileName) ->
     %% Check if destination file exists
     case fslogic_objects:get_file(FullNewFileName) of
         {ok, #veil_document{}} ->
-            lager:warning("Destination file already exists: ~p", [FullFileName]),
+            ?warning("Destination file already exists: ~p", [FullFileName]),
             throw(?VEEXIST);
         {error, file_not_found} ->
             ok
@@ -258,7 +258,7 @@ rename_file(FullFileName, FullNewFileName) ->
 
     case (OldFile#file.type =:= ?DIR_TYPE) and (string:str(NewDir, FullFileName) == 1) of
         true ->
-            lager:warning("Moving dir ~p to its child: ~p", [FullFileName, NewDir]),
+            ?warning("Moving dir ~p to its child: ~p", [FullFileName, NewDir]),
             throw(?VEREMOTEIO);
         false -> ok
     end,

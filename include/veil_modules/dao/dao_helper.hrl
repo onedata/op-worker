@@ -14,4 +14,6 @@
 
 -include_lib("veil_modules/dao/couch_db.hrl").
 
+-define(ADMIN_USER_CTX, {user_ctx, #user_ctx{roles = [<<"_admin">>]}}).
+
 -endif.

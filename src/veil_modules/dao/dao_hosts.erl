@@ -12,6 +12,7 @@
 
 -include_lib("veil_modules/dao/common.hrl").
 -include_lib("veil_modules/dao/dao_hosts.hrl").
+-include("logging.hrl").
 
 -ifdef(TEST).
 -compile([export_all]).
@@ -60,7 +61,7 @@ ban(Host, BanTime) ->
     put(db_host, undefined),
     case [X || {banned_host, X} <- ets:lookup(db_host_store, banned_host), X =:= Host] of
         [] ->
-            lager:warning("Host: ~p is being banned. Reason of that is probably it wasn't answering or it was answering to slow. It'll be reactivated after: ~ps", [Host, BanTime/1000]),
+            ?warning("Host: ~p is being banned. Reason of that is probably it wasn't answering or it was answering to slow. It'll be reactivated after: ~ps", [Host, BanTime/1000]),
             Res = store_exec({ban_host, Host}),
             {ok, _} = timer:apply_after(BanTime, ?MODULE, reactivate, [Host]),
             Res;
@@ -135,7 +136,7 @@ store_exec(sequential, {reactivate_host, Host}) ->
             ok
     end;
 store_exec(sequential, _Unknown) ->
-    lager:error("Unknown host store command: ~p", [_Unknown]),
+    ?error("Unknown host store command: ~p", [_Unknown]),
     {error, unknown_command}.
 
 
@@ -246,7 +247,7 @@ call(Module, Method, Args, Attempt) when Attempt < ?RPC_MAX_RETRIES ->
             end
     end;
 call(_Module, _Method, _Args, _Attempt) ->
-    lager:error("DBMS call filed after: ~p attempts. Current host store state: ~p", [_Attempt, ets:lookup(db_host_store, host) ++ ets:lookup(db_host_store, banned_host)]),
+    ?error("DBMS call filed after: ~p attempts. Current host store state: ~p", [_Attempt, ets:lookup(db_host_store, host) ++ ets:lookup(db_host_store, banned_host)]),
     {error, rpc_retry_limit_exceeded}.
 
 

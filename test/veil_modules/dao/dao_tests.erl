@@ -38,12 +38,12 @@ teardown(_) ->
     ok = meck:unload([dao_helper, dao_vfs]).
 
 init() ->
-    InitAns1 = dao:init([]),
+    InitAns1 = dao:init({[], {init_status, ets:info(db_host_store)}}),
     ?assert(is_record(InitAns1, initial_host_description)),
     ?assertEqual(ok, InitAns1#initial_host_description.plug_in_state),
     worker_host:stop_all_sub_proc(InitAns1#initial_host_description.sub_procs),
 
-    InitAns2 = dao:init([]),
+    InitAns2 = dao:init({[], {init_status, ets:info(db_host_store)}}),
     ?assert(is_record(InitAns2, initial_host_description)),
     ?assertEqual(ok, InitAns2#initial_host_description.plug_in_state),
     worker_host:stop_all_sub_proc(InitAns2#initial_host_description.sub_procs).

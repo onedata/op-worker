@@ -11,9 +11,11 @@
 %% ===================================================================
 
 -module(page_logout).
--compile(export_all).
 -include("veil_modules/control_panel/common.hrl").
 -include("logging.hrl").
+
+% n2o API
+-export([main/0, event/1]).
 
 %% Template points to the template file, which will be filled with content
 main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
@@ -23,6 +25,7 @@ title() -> <<"Logout page">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
+    ?debug("User ~p logged out", [gui_ctx:get_user_id()]),
     gui_ctx:clear_session(),
     #panel{style = <<"position: relative;">>, body =
     [
@@ -37,4 +40,5 @@ body() ->
     }.
 
 event(init) -> ok;
-event(to_login) -> gui_jq:redirect_to_login(false).
+event(to_login) -> gui_jq:redirect_to_login(false);
+event(terminate) -> ok.
