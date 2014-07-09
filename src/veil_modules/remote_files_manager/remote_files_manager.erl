@@ -129,7 +129,7 @@ handle_message(Record) when is_record(Record, deletefileatstorage) ->
                   #atom{value = ?VEREMOTEIO}
               end;
             false ->
-              #atom{value = ?VEPERM}
+              #atom{value = ?VEACCES}
           end;
         _ ->
           lager:warning("delete error: can not check permissions, shi: ~p, file: ~p", [Storage_helper_info, File]),
@@ -159,7 +159,7 @@ handle_message(Record) when is_record(Record, truncatefile) ->
                   #atom{value = ?VEREMOTEIO}
               end;
             false ->
-              #atom{value = ?VEPERM}
+              #atom{value = ?VEACCES}
           end;
         _ ->
           lager:warning("truncatefile error: can not check permissions, shi: ~p, file: ~p", [Storage_helper_info, File]),
@@ -190,7 +190,7 @@ handle_message(Record) when is_record(Record, readfile) ->
                   #filedata{answer_status = ?VEREMOTEIO}
               end;
             false ->
-              #filedata{answer_status = ?VEPERM}
+              #filedata{answer_status = ?VEACCES}
           end;
         _ ->
           lager:warning("readfile error: can not check permissions, shi: ~p, file: ~p", [Storage_helper_info, File]),
@@ -221,7 +221,7 @@ handle_message(Record) when is_record(Record, writefile) ->
                   #writeinfo{answer_status = ?VEREMOTEIO}
               end;
             false ->
-              #writeinfo{answer_status = ?VEPERM}
+              #writeinfo{answer_status = ?VEACCES}
           end;
         _ ->
           lager:warning("writefile error: can not check permissions, shi: ~p, file: ~p", [Storage_helper_info, File]),
@@ -245,13 +245,14 @@ handle_message(Record) when is_record(Record, changepermsatstorage) ->
               case TmpAns of
                 ok -> #atom{value = ?VOK};
                   {_, ErrorCode} when is_integer(ErrorCode) ->
+                      ct:print("error_code: ~p",[ErrorCode]),
                       throw(fslogic_errors:posix_to_veilerror(ErrorCode));
                 Other ->
                   lager:warning("storage_files_manager:chmod error: ~p, shi: ~p, file: ~p", [Other, Storage_helper_info, File]),
                   #atom{value = ?VEREMOTEIO}
               end;
             false ->
-              #atom{value = ?VEPERM}
+              #atom{value = ?VEACCES}
           end;
         _ ->
           lager:warning("changepermsatstorage error: can not check permissions, shi: ~p, file: ~p", [Storage_helper_info, File]),

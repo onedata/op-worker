@@ -34,7 +34,7 @@
 -export([read/4, write/4, write/3, create/2, truncate/3, delete/2, ls/0]).
 
 %% Helper functions
--export([check_perms/2, check_perms/3,setup_ctx/1]).
+-export([check_perms/2, check_perms/3]).
 
 %% ====================================================================
 %% Test API

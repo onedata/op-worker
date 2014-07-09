@@ -41,7 +41,7 @@ gen_error_code(user_not_found) ->
 gen_error_code(user_doc_not_found) ->
     {?VEPERM, user_doc_not_found};
 gen_error_code(invalid_group_access) ->
-    {?VEPERM, invalid_group_access};
+    {?VEACCES, invalid_group_access};
 gen_error_code(file_exists) ->
     {?VEEXIST, file_already_exists};
 
