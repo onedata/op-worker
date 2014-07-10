@@ -55,7 +55,8 @@ body() ->
                                 gui_ctx:set_user_id(Login),
                                 vcn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),
                                 vcn_gui_utils:set_user_role(user_logic:get_role(UserDoc)),
-                                gui_jq:redirect_from_login()
+                                gui_jq:redirect_from_login(),
+                                ?debug("User ~p logged in", [Login])
                         end
                     catch
                         throw:dir_creation_error ->

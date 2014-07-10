@@ -13,6 +13,7 @@
 
 -module(records_translator).
 -include("communication_protocol_pb.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% ====================================================================
 %% API
@@ -43,7 +44,7 @@ translate(Record, DecoderName) when is_tuple(Record) ->
         [DecodedEnd | [list_to_atom(Type) | Rest2]]
       catch
         _:_ ->
-          lager:warning("Can not translate record: ~p, using decoder: ~p", [Record, DecoderName]),
+          ?warning("Can not translate record: ~p, using decoder: ~p", [Record, DecoderName]),
           RecordList
       end;
     false -> RecordList

@@ -13,6 +13,8 @@
 -module(gateway).
 -behaviour(worker_plugin_behaviour).
 
+-include_lib("ctool/include/logging.hrl").
+
 %% ====================================================================
 %% API functions
 %% ====================================================================
@@ -31,6 +33,7 @@ handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
 handle(_ProtocolVersion, _Msg) ->
+  ?warning("Wrong request: ~p", [_Msg]),
 	ok.
 
 cleanup() ->

@@ -67,12 +67,13 @@ sign_in(Proplist) ->
                {ok, ExistingUser} ->
                    synchronize_user_info(ExistingUser, Teams, Email, DnList);
                {error, user_not_found} ->
-                   case create_user(Login, Name, Teams, Email, DnList) of
-                       {ok, NewUser} ->
-                           NewUser;
-                       {error, Error} ->
-                           throw(Error)
-                   end;
+                    case create_user(Login, Name, Teams, Email, DnList) of
+						{ok, NewUser} ->
+							NewUser;
+	                    {error,Error} ->
+                        ?error("Sign in error: ~p", [Error]),
+							throw(Error)
+	               end;
     %% Code below is only for development purposes (connection to DB is not required)
                Error ->
                    throw(Error)
@@ -94,7 +95,8 @@ sign_in(Proplist) ->
     Result :: {ok, user_doc()} | {error, any()}.
 %% ====================================================================
 create_user(Login, Name, Teams, Email, DnList) ->
-    Quota = #quota{},
+  ?debug("Creating user: ~p", [{Login, Name, Teams, Email, DnList}]),
+	Quota = #quota{},
     {QuotaAns, QuotaUUID} = dao_lib:apply(dao_users, save_quota, [Quota], 1),
     User = #user
     {
@@ -139,7 +141,7 @@ create_user(Login, Name, Teams, Email, DnList) ->
                                 end,
                                 GetUserAns;
                             {error, file_exists} ->
-                                lager:warning("Root dir for user ~s already exists!", [Login]),
+                                ?warning("Root dir for user ~p already exists!", [Login]),
                                 case create_dirs_at_storage(Login, get_team_names(User)) of
                                     ok -> ok;
                                     DirsError2 -> throw(DirsError2)
@@ -156,7 +158,7 @@ create_user(Login, Name, Teams, Email, DnList) ->
         end
     catch
         _Type:Error ->
-            lager:error("Creating user failed with error: ~p", [Error]),
+            ?error("Creating user failed with error: ~p", [Error]),
             case QuotaAns of
                 ok ->
                     dao_lib:apply(dao_users, remove_quota, [QuotaUUID], 1);
@@ -205,6 +207,7 @@ remove_user({rdnSequence, RDNSequence}) ->
     remove_user({dn, rdn_sequence_to_dn_string(RDNSequence)});
 
 remove_user(Key) ->
+    ?debug("Removing user: ~p", [Key]),
     GetUserAns = get_user(Key),
     {GetUserFirstAns, UserRec} = GetUserAns,
     case GetUserFirstAns of
@@ -304,7 +307,9 @@ update_teams(#veil_document{record = UserInfo} = UserDoc, NewTeams) ->
         {ok, UUID} ->
             create_dirs_at_storage(non, get_team_names(NewDoc)),
             dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
-        {error, Reason} -> {error, Reason}
+        {error, Reason} ->
+          ?error("Cannot update user ~p teams: ~p", [UserInfo, Reason]),
+          {error, Reason}
     end.
 
 %% get_email_list/1
@@ -334,7 +339,9 @@ update_email_list(#veil_document{record = UserInfo} = UserDoc, NewEmailList) ->
     NewDoc = UserDoc#veil_document{record = UserInfo#user{email_list = NewEmailList}},
     case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
         {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
-        {error, Reason} -> {error, Reason}
+        {error, Reason} ->
+          ?error("Cannot update user ~p emails: ~p", [UserInfo, Reason]),
+          {error, Reason}
     end.
 
 
@@ -365,7 +372,9 @@ update_dn_list(#veil_document{record = UserInfo} = UserDoc, NewDnList) ->
     NewDoc = UserDoc#veil_document{record = UserInfo#user{dn_list = NewDnList}},
     case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
         {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
-        {error, Reason} -> {error, Reason}
+        {error, Reason} ->
+          ?error("Cannot update user ~p dn_list: ~p", [UserInfo, Reason]),
+          {error, Reason}
     end.
 
 
@@ -433,7 +442,9 @@ update_role(#veil_document{record = UserInfo} = UserDoc, NewRole) ->
     NewDoc = UserDoc#veil_document{record = UserInfo#user{role = NewRole}},
     case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
         {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
-        {error, Reason} -> {error, Reason}
+        {error, Reason} ->
+          ?error("Cannot update user ~p role: ~p", [UserInfo, Reason]),
+          {error, Reason}
     end;
 
 update_role(Key, NewRole) ->
@@ -443,7 +454,9 @@ update_role(Key, NewRole) ->
             NewDoc = UserDoc#veil_document{record = UserInfo#user{role = NewRole}},
             case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
                 {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
-                {error, Reason} -> {error, Reason}
+                {error, Reason} ->
+                  ?error("Cannot update user ~p role: ~p", [Key, Reason]),
+                  {error, Reason}
             end;
         Other -> Other
     end.
@@ -474,15 +487,17 @@ get_quota(User) ->
     Result :: {ok, quota()} | {error, any()}.
 %% ====================================================================
 update_quota(User, NewQuota) ->
-    Quota = dao_lib:apply(dao_users, get_quota, [User#veil_document.record#user.quota_doc], 1),
-    case Quota of
-        {ok, QuotaDoc} ->
-            NewQuotaDoc = QuotaDoc#veil_document{record = NewQuota},
-            dao_lib:apply(dao_users, save_quota, [NewQuotaDoc], 1);
-        {error, Error} -> {error, {get_quota_error, Error}};
-        Other ->
-            Other
-    end.
+  Quota = dao_lib:apply(dao_users, get_quota, [User#veil_document.record#user.quota_doc], 1),
+  case Quota of
+    {ok, QuotaDoc} ->
+      NewQuotaDoc = QuotaDoc#veil_document{record = NewQuota},
+      dao_lib:apply(dao_users, save_quota, [NewQuotaDoc], 1);
+    {error, Error} ->
+      ?error("Cannot update user ~p quota: ~p", [User, {get_quota_error, Error}]),
+      {error, {get_quota_error, Error}};
+    Other ->
+      Other
+  end.
 
 %% get_files_size/2
 %% ====================================================================
@@ -522,7 +537,7 @@ rdn_sequence_to_dn_string(RDNSequence) ->
         [_Comma | ProperString] = lists:reverse(DNString),
         {ok, lists:reverse(ProperString)}
     catch Type:Message ->
-        lager:error("Failed to convert rdnSequence to DN string.~n~p: ~p~n~p", [Type, Message, erlang:get_stacktrace()]),
+        ?error_stacktrace("Failed to convert rdnSequence to DN string.~n~p: ~p", [Type, Message]),
         {error, conversion_failed}
     end.
 
@@ -664,7 +679,9 @@ create_root(Dir, Uid) ->
             CTime = vcn_utils:time(),
             FileDoc = fslogic_meta:update_meta_attr(File, times, {CTime, CTime, CTime}),
             dao_lib:apply(dao_vfs, save_new_file, [Dir, FileDoc], 1);
-        _ParentError -> {error, parent_error}
+        _ParentError ->
+          ?error("Cannot create root dir ~p for uid, error: ~p", [Dir, Uid, {parent_error, _ParentError}]),
+          {error,parent_error}
     end.
 
 %% create_dirs_at_storage/2
@@ -678,15 +695,19 @@ create_dirs_at_storage(Root, Teams) ->
     {ListStatus, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], 1),
     case ListStatus of
         ok ->
-            StorageRecords = lists:map(fun(VeilDoc) -> VeilDoc#veil_document.record end, StorageList),
-            CreateDirs = fun(StorageRecord, TmpAns) ->
-                case create_dirs_at_storage(Root, Teams, StorageRecord) of
-                    ok -> TmpAns;
-                    Error -> Error
-                end
-            end,
-            lists:foldl(CreateDirs, ok, StorageRecords);
-        _ -> {error, storage_listing_error}
+					StorageRecords = lists:map(fun(VeilDoc) -> VeilDoc#veil_document.record end, StorageList),
+					CreateDirs = fun(StorageRecord,TmpAns) ->
+						case create_dirs_at_storage(Root,Teams,StorageRecord) of
+							ok -> TmpAns;
+							Error ->
+							  ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, Teams}, Error]),
+							  Error
+						end
+					end,
+					lists:foldl(CreateDirs,ok , StorageRecords);
+        Error2 ->
+          ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, Teams}, {storage_listing_error, Error2}]),
+          {error,storage_listing_error}
     end.
 
 %% create_dirs_at_storage/3
@@ -710,12 +731,12 @@ create_dirs_at_storage(Root, Teams, Storage) ->
                     {ok, ok} ->
                         TmpAns;
                     Error1 ->
-                        lager:error("Can not change owner of dir ~p using storage helper ~p due to ~p. Make sure group '~s' is defined in the system.",
+                        ?error("Can not change owner of dir ~p using storage helper ~p due to ~p. Make sure group '~s' is defined in the system.",
                             [Dir, SHI#storage_helper_info.name, Error1, Dir]),
                         {error, dir_chown_error}
                 end;
             _ ->
-                lager:error("Can not create dir ~p using storage helper ~p. Make sure group '~s' is defined in the system.",
+                ?error("Can not create dir ~p using storage helper ~p. Make sure group '~s' is defined in the system.",
                     [Dir, SHI#storage_helper_info.name, Dir]),
                 {error, create_dir_error}
         end
@@ -737,24 +758,24 @@ create_dirs_at_storage(Root, Teams, Storage) ->
                                                        {ok, ok} ->
                                                            {ok, true};
                                                        Error2 ->
-                                                           lager:error("Can not change owner of dir ~p using storage helper ~p due to ~p. Make sure user '~s' is defined in the system.",
+                                                           ?error("Can not change owner of dir ~p using storage helper ~p due to ~p. Make sure user '~s' is defined in the system.",
                                                                [Root, SHI#storage_helper_info.name, Error2, Root]),
                                                            {{error, dir_chown_error}, true}
                                                    end;
                                                {error, dir_or_file_exists} ->
-                                                   lager:warning("User root dir ~p already exists", [RootDirName]),
+                                                   ?warning("User root dir ~p already exists", [RootDirName]),
                                                    Ans3 = storage_files_manager:chown(SHI, RootDirName, Root, ""),
                                                    Ans4 = storage_files_manager:chmod(SHI, RootDirName, 8#300),
                                                    case {Ans3, Ans4} of
                                                        {ok, ok} ->
                                                            {ok, false};
                                                        _ ->
-                                                           lager:error("Can not change owner of dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
+                                                           ?error("Can not change owner of dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
                                                                [Root, SHI#storage_helper_info.name, Root]),
                                                            {{error, dir_chown_error}, false}
                                                    end;
                                                _ ->
-                                                   lager:error("Can not create dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
+                                                   ?error("Can not create dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
                                                        [Root, SHI#storage_helper_info.name, Root]),
                                                    {{error, create_dir_error}, false}
                                            end

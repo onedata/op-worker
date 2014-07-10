@@ -11,6 +11,7 @@
 
 -module(dns_udp_handler).
 -include("registered_names.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% ====================================================================
 %% API
@@ -83,5 +84,5 @@ loop(Socket, ResponseTTL, DispatcherTimeout) ->
 handle_request(Socket, Address, Port, Packet, DispatcherTimeout, ResponseTTL) ->
 	case dns_utils:generate_answer(Packet, ?Dispatcher_Name, DispatcherTimeout, ResponseTTL, udp) of
 		{ok, Response} -> gen_udp:send(Socket, Address, Port, Response);
-		{error, Reason} -> lager:error("Error processing dns request ~p", [Reason]), ok
+		{error, Reason} -> ?error("Error processing dns request ~p", [Reason]), ok
 	end.

@@ -14,6 +14,7 @@
 
 -include("veil_modules/dao/dao_vfs.hrl").
 -include_lib("registered_names.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -export([exec/2, exec/3, exec/4, exec/5]).
 %% ===================================================================
@@ -69,7 +70,7 @@ exec(UserName, GroupName, Method, SHInfo = #storage_helper_info{}, Args) ->
     {error, Reason :: term()} | Response when Response :: term().
 %% ====================================================================
 exec(UserName, GroupName, Method, Args) when is_atom(Method), is_list(Args) ->
-%%     lager:info("veilhelpers:exec with args: ~p ~p", [Method, Args]),
+%%     ?info("veilhelpers:exec with args: ~p ~p", [Method, Args]),
     Args1 = [UserName, GroupName] ++ Args,
     case gsi_handler:call(veilhelpers_nif, Method, Args1) of
         {error, 'NIF_not_loaded'} ->
@@ -91,6 +92,6 @@ load_veilhelpers() ->
         ok -> ok;
         {error,{reload, _}} -> ok;
         {error, Reason} -> 
-            lager:error("Could not load veilhelpers NIF lib due to error: ~p", [Reason]),
+            ?error("Could not load veilhelpers NIF lib due to error: ~p", [Reason]),
             {error, Reason}
     end.

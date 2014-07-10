@@ -95,6 +95,7 @@ handle(ProtocolVersion, {delete_old_descriptors_test, Time}) ->
   handle_test(ProtocolVersion, {delete_old_descriptors_test, Time});
 
 handle(ProtocolVersion, {update_user_files_size_view, Pid}) ->
+  ?debug("Updating user file sizes for pid: ~p", [Pid]),
   fslogic_meta:update_user_files_size_view(ProtocolVersion),
   {ok, Interval} = application:get_env(veil_cluster_node, user_files_size_view_update_period),
   erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size_view, Pid}}}),
@@ -137,19 +138,22 @@ handle(ProtocolVersion, {internal_call, Record}) ->
     handle(ProtocolVersion, #fusemessage{input = Record, message_type = atom_to_list(vcn_utils:record_type(Record))});
 
 handle(_ProtocolVersion, Record) when is_record(Record, callback) ->
+  ?debug("Callback request handled: ~p", [Record]),
   Answer = case Record#callback.action of
     channelregistration ->
       try
         gen_server:call({global, ?CCM}, {addCallback, Record#callback.fuse, Record#callback.node, Record#callback.pid}, 1000)
       catch
-        _:_ ->
+        E1:E2 ->
+          ?error("Callback request ~p error: ~p", [Record, {E1, E2}]),
           error
       end;
     channelclose ->
       try
         gen_server:call({global, ?CCM}, {delete_callback, Record#callback.fuse, Record#callback.node, Record#callback.pid}, 1000)
       catch
-        _:_ ->
+        E3:E4 ->
+          ?error("Callback request ~p error: ~p", [Record, {E3, E4}]),
           error
       end
   end,
@@ -157,6 +161,7 @@ handle(_ProtocolVersion, Record) when is_record(Record, callback) ->
 
 %% Handle requests that have wrong structure.
 handle(_ProtocolVersion, _Msg) ->
+  ?warning("Wrong request: ~p", [_Msg]),
   wrong_request.
 
 
