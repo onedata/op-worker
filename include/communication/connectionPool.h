@@ -53,7 +53,6 @@ protected:
     std::list<std::shared_ptr<Connection>> m_openConnections;
 };
 
-
 } // namespace communication
 } // namespace veil
 

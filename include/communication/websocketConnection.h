@@ -25,6 +25,7 @@ namespace veil
 namespace communication
 {
 
+class CertificateData;
 class Mailbox;
 
 class WebsocketConnection: public Connection
@@ -32,7 +33,8 @@ class WebsocketConnection: public Connection
     using config_type = websocketpp::config::asio_tls_client;
     using endpoint_type = websocketpp::client<config_type>;
     using connection_ptr = endpoint_type::connection_ptr;
-    using context_ptr = websocketpp::transport::asio::tls_socket::connection::context_ptr;
+    using context_type = boost::asio::ssl::context;
+    using context_ptr = std::shared_ptr<context_type>;
     using message_ptr = config_type::message_type::ptr;
     using socket_type = websocketpp::transport::asio::tls_socket::connection::socket_type;
 
@@ -42,7 +44,9 @@ public:
                         std::function<void(std::shared_ptr<Connection>)> onOpenCallback,
                         std::function<void(std::shared_ptr<Connection>)> onErrorCallback,
                         std::shared_ptr<endpoint_type> endpoint,
-                        const std::string &uri);
+                        const std::string &uri,
+                        std::shared_ptr<CertificateData> certificateData,
+                        const bool verifyServerCertificate);
 
     void send() override;
     void close() override;
@@ -61,6 +65,8 @@ private:
 
     websocketpp::connection_hdl m_connection;
     std::weak_ptr<endpoint_type> m_endpoint;
+    std::shared_ptr<CertificateData> m_certificateData;
+    const bool m_verifyServerCertificate;
 };
 
 } // namespace communication

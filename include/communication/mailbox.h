@@ -19,7 +19,6 @@ class Mailbox
 
 };
 
-
 } // namespace communication
 } // namespace veil
 
