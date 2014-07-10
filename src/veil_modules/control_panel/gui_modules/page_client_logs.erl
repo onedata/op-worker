@@ -1,17 +1,17 @@
 %% ===================================================================
 %% @author Lukasz Opiola
-%% @copyright (C): 2013 ACK CYFRONET AGH
+%% @copyright (C): 2014 ACK CYFRONET AGH
 %% This software is released under the MIT license 
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
 %% @doc: This file contains n2o website code.
-%% The page (available for admins only) allows live viewing of logs in the system.
+%% The page (available for admins only) allows live viewing of logs sent from clients.
 %% @end
 %% ===================================================================
 
 % n2o API
--module(page_logs).
+-module(page_client_logs).
 -include("veil_modules/control_panel/common.hrl").
 -include("registered_names.hrl").
 -include("logging.hrl").
@@ -27,15 +27,14 @@
     first_log = 1,
     max_logs = 200,
     message_filter = undefined,
-    node_filter = undefined,
-    module_filter = undefined,
-    function_filter = undefined
+    file_filter = undefined
 }).
 
 % Widths of columns
--define(SEVERITY_COLUMN_WIDTH, "width: 90px;").
--define(TIME_COLUMN_WIDTH, "width: 180px;").
--define(METADATA_COLUMN_WIDTH, "width: 300px;").
+-define(SEVERITY_COLUMN_STYLE, "width: 90px; padding: 6px 12px;").
+-define(TIME_COLUMN_STYLE, "width: 180px; padding: 6px 12px;").
+-define(MESSAGE_COLUMN_STYLE, "padding: 6px 12px;").
+-define(METADATA_COLUMN_STYLE, "width: 300px; padding: 6px 12px;").
 
 % Prefixes used to generate IDs for logs
 -define(COLLAPSED_LOG_ROW_ID_PREFIX, "clr").
@@ -43,7 +42,6 @@
 
 % Available options of max log count
 -define(MAX_LOGS_OPTIONS, [20, 50, 200, 500, 1000, 2000]).
-
 
 %% Template points to the template file, which will be filled with content
 main() ->
@@ -62,14 +60,14 @@ main() ->
 
 
 %% Page title
-title() -> <<"Logs">>.
+title() -> <<"Client logs">>.
 
 
 % This will be placed instead of [[[body()]]] tag in template
 body() ->
     gui_jq:register_escape_event("escape_pressed"),
     _Body = [
-        vcn_gui_utils:top_menu(logs_tab, logs_submenu()),
+        vcn_gui_utils:top_menu(client_logs_tab, logs_submenu()),
         #panel{style = <<"margin-top: 122px; z-index: -1;">>, body = main_table()},
         footer_popup()
     ].
@@ -104,8 +102,8 @@ logs_submenu() ->
                 ]},
 
                 % Uncomment for development
-                %#link{title = <<"Generate logs">>, style = <<"padding: 18px 14px;">>,
-                %    body = <<"GENERUJ LOGI">>, postback = generate_logs},
+                #link{title = <<"Generate logs">>, style = <<"padding: 18px 14px;">>,
+                    body = <<"GENERUJ LOGI">>, postback = generate_logs},
 
                 #list{class = <<"nav pull-right">>, body = [
                     #li{id = <<"generate_logs">>, body = #link{title = <<"Clear all logs">>, style = <<"padding: 18px 14px;">>,
@@ -132,10 +130,10 @@ main_table() ->
         style = <<"border-radius: 0; margin-bottom: 0; table-layout: fixed; width: 100%;">>,
         body = [
             #tr{cells = [
-                #th{body = <<"Severity">>, style = <<?SEVERITY_COLUMN_WIDTH>>},
-                #th{body = <<"Time">>, style = <<?TIME_COLUMN_WIDTH>>},
-                #th{body = <<"Message">>},
-                #th{body = <<"Metadata">>, style = <<?METADATA_COLUMN_WIDTH>>}
+                #th{body = <<"Severity">>, style = <<?SEVERITY_COLUMN_STYLE>>},
+                #th{body = <<"Time">>, style = <<?TIME_COLUMN_STYLE>>},
+                #th{body = <<"Message">>, style = <<?MESSAGE_COLUMN_STYLE>>},
+                #th{body = <<"Metadata">>, style = <<?METADATA_COLUMN_STYLE>>}
             ]}
         ]}.
 
@@ -157,11 +155,7 @@ filters_panel() ->
         #panel{style = <<"margin: 0 40px; overflow:hidden; position: relative;">>, body = [
             #panel{style = <<"float: left; position: relative;">>, body = [
                 filter_form(message_filter),
-                filter_form(node_filter)
-            ]},
-            #panel{style = <<"float: left; position: relative; clear: both;">>, body = [
-                filter_form(module_filter),
-                filter_form(function_filter)
+                filter_form(file_filter)
             ]}
         ]}
     ].
@@ -213,18 +207,18 @@ comet_loop(Counter, PageState = #page_state{first_log = FirstLog, auto_scroll = 
             {set_filter, FilterName, Filter} ->
                 ?MODULE:comet_loop(Counter, set_filter(PageState, FilterName, Filter));
             display_error ->
-                catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}}),
+                catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, client, self()}}),
                 gui_jq:insert_bottom(<<"main_table">>, comet_error()),
                 gui_comet:flush();
             {'EXIT', _, _Reason} ->
-                catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}});
+                catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, client, self()}});
             Other ->
                 ?debug("Unrecognized comet message in page_logs: ~p", [Other]),
                 ?MODULE:comet_loop(Counter, PageState)
         end
     catch _Type:_Msg ->
         ?error_stacktrace("Error in page_logs comet_loop - ~p: ~p", [_Type, _Msg]),
-        catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}}),
+        catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, client, self()}}),
         gui_jq:insert_bottom(<<"main_table">>, comet_error()),
         gui_comet:flush()
     end.
@@ -238,16 +232,11 @@ process_log(Counter, {Message, Timestamp, Severity, Metadata},
         first_log = FirstLog,
         max_logs = MaxLogs,
         message_filter = MessageFilter,
-        node_filter = NodeFilter,
-        module_filter = ModuleFilter,
-        function_filter = FunctionFilter}) ->
+        file_filter = FileFilter}) ->
 
-    Node = proplists:get_value(node, Metadata, ""),
-    Module = proplists:get_value(module, Metadata, ""),
-    Function = proplists:get_value(function, Metadata, ""),
+    Filename = proplists:get_value(file, Metadata, ""),
 
-    ShouldLog = filter_loglevel(Severity, Loglevel) and filter_contains(Message, MessageFilter) and filter_contains(Node, NodeFilter)
-        and filter_contains(Module, ModuleFilter) and filter_contains(Function, FunctionFilter),
+    ShouldLog = filter_loglevel(Severity, Loglevel) and filter_contains(Message, MessageFilter) and filter_contains(Filename, FileFilter),
 
     {_NewCounter, _NewPageState} = case ShouldLog of
                                        false ->
@@ -288,18 +277,18 @@ render_row(Counter, {Message, Timestamp, Severity, Metadata}) ->
 
     CollapsedRow = #tr{class = <<"log_row">>, id = CollapsedId,
         actions = gui_jq:postback_action(CollapsedId, {toggle_log, Counter, true}), cells = [
-            #td{body = format_severity(Severity), style = <<?SEVERITY_COLUMN_WIDTH>>},
-            #td{body = format_time(Timestamp), style = <<?TIME_COLUMN_WIDTH>>},
-            #td{body = gui_str:to_binary(Message), style = <<"text-wrap:normal; word-wrap:break-word; white-space: nowrap; overflow: hidden;">>},
-            #td{body = CollapsedMetadata, style = <<?METADATA_COLUMN_WIDTH, "white-space: nowrap; overflow: hidden;">>}
+            #td{body = format_severity(Severity), style = <<?SEVERITY_COLUMN_STYLE>>},
+            #td{body = format_time(Timestamp), style = <<?TIME_COLUMN_STYLE>>},
+            #td{body = gui_str:to_binary(Message), style = <<?MESSAGE_COLUMN_STYLE, " text-wrap:normal; word-wrap:break-word; white-space: nowrap; overflow: hidden;">>},
+            #td{body = CollapsedMetadata, style = <<?METADATA_COLUMN_STYLE, " white-space: nowrap; overflow: hidden;">>}
         ]},
 
     ExpandedRow = #tr{class = <<"log_row">>, style = <<"background-color: rgba(26, 188, 156, 0.05);">>, id = ExpandedId,
         actions = gui_jq:postback_action(ExpandedId, {toggle_log, Counter, false}), cells = [
-            #td{body = format_severity(Severity), style = <<?SEVERITY_COLUMN_WIDTH>>},
-            #td{body = format_time(Timestamp), style = <<?TIME_COLUMN_WIDTH>>},
-            #td{body = gui_str:to_binary(Message), style = <<"text-wrap:normal; word-wrap:break-word;">>},
-            #td{body = ExpandedMetadata, style = <<?METADATA_COLUMN_WIDTH>>}
+            #td{body = format_severity(Severity), style = <<?SEVERITY_COLUMN_STYLE>>},
+            #td{body = format_time(Timestamp), style = <<?TIME_COLUMN_STYLE>>},
+            #td{body = gui_str:to_binary(Message), style = <<?MESSAGE_COLUMN_STYLE, " text-wrap:normal; word-wrap:break-word;">>},
+            #td{body = ExpandedMetadata, style = <<?METADATA_COLUMN_STYLE>>}
         ]},
 
     [CollapsedRow, ExpandedRow].
@@ -316,7 +305,7 @@ loglevel_dropdown_body(Active) ->
             ID = <<"loglevel_li_", (atom_to_binary(Loglevel, latin1))/binary>>,
             #li{id = ID, actions = gui_jq:postback_action(ID, {set_loglevel, Loglevel}),
                 class = Class, body = #link{body = atom_to_binary(Loglevel, latin1)}}
-        end, ?LOGLEVEL_LIST).
+        end, ?CLUSTER_LOGLEVELS).
 
 
 % Render the body of max logs dropdown, so it highlights the current choice
@@ -336,11 +325,11 @@ max_logs_dropdown_body(Active) ->
 % Render a row in table informing about error in comet loop
 comet_error() ->
     _TableRow = #tr{cells = [
-        #td{body = <<"Error">>, style = <<?SEVERITY_COLUMN_WIDTH, "color: red;">>},
-        #td{body = format_time(now()), style = <<?TIME_COLUMN_WIDTH, "color: red;">>},
+        #td{body = <<"Error">>, style = <<?SEVERITY_COLUMN_STYLE, " color: red;">>},
+        #td{body = format_time(now()), style = <<?TIME_COLUMN_STYLE, "color: red;">>},
         #td{body = <<"There has been an error in comet process. Please refresh the page.">>,
-            style = <<"body-wrap:normal; word-wrap:break-word; white-space: nowrap; overflow: hidden; color: red;">>},
-        #td{body = <<"">>, style = <<?METADATA_COLUMN_WIDTH, "color: red;">>}
+            style = <<?MESSAGE_COLUMN_STYLE, " body-wrap:normal; word-wrap:break-word; white-space: nowrap; overflow: hidden; color: red;">>},
+        #td{body = <<"">>, style = <<?METADATA_COLUMN_STYLE, "color: red;">>}
     ]}.
 
 
@@ -349,18 +338,12 @@ format_severity(debug) ->
     #label{class = <<"label">>, body = <<"debug">>, style = <<"display: block; font-weight: bold;">>};
 format_severity(info) ->
     #label{class = <<"label label-success">>, body = <<"info">>, style = <<"display: block; font-weight: bold;">>};
-format_severity(notice) ->
-    #label{class = <<"label label-warning">>, body = <<"notice">>, style = <<"display: block; font-weight: bold;">>};
 format_severity(warning) ->
     #label{class = <<"label label-warning">>, body = <<"warning">>, style = <<"display: block; font-weight: bold;">>};
 format_severity(error) ->
     #label{class = <<"label label-important">>, body = <<"error">>, style = <<"display: block; font-weight: bold;">>};
-format_severity(critical) ->
-    #label{class = <<"label label-important">>, body = <<"critical">>, style = <<"display: block; font-weight: bold;">>};
-format_severity(alert) ->
-    #label{class = <<"label label-important">>, body = <<"alert">>, style = <<"display: block; font-weight: bold;">>};
-format_severity(emergency) ->
-    #label{class = <<"label label-important">>, body = <<"emergency">>, style = <<"display: block; font-weight: bold;">>}.
+format_severity(fatal) ->
+    #label{class = <<"label label-important">>, body = <<"fatal">>, style = <<"display: block; font-weight: bold;">>}.
 
 
 % Format time in logs
@@ -374,11 +357,11 @@ format_time(Timestamp) ->
 
 % Format metadata in logs, for collapsed and expanded logs
 format_metadata(Tags) ->
-    Collapsed = case lists:keyfind(node, 1, Tags) of
-                    {Key, Value} ->
-                        <<"<b>", (gui_str:to_binary(Key))/binary, ":</b> ", (gui_str:to_binary(Value))/binary, " ...">>;
+    Collapsed = case lists:keyfind(user, 1, Tags) of
+                    {user, Value} ->
+                        <<"<b>user:</b> ", (gui_str:to_binary(Value))/binary, " ...">>;
                     _ ->
-                        <<"<b>unknown node</b> ...">>
+                        <<"<b>unknown user</b> ...">>
                 end,
     Expanded = lists:foldl(
         fun({Key, Value}, Acc) ->
@@ -389,7 +372,7 @@ format_metadata(Tags) ->
 
 % Return true if log should be displayed based on its severity and loglevel
 filter_loglevel(LogSeverity, Loglevel) ->
-    logger:loglevel_atom_to_int(LogSeverity) >= logger:loglevel_atom_to_int(Loglevel).
+    central_logger:client_loglevel_atom_to_int(LogSeverity) >= central_logger:client_loglevel_atom_to_int(Loglevel).
 
 
 % Return true if given string satisfies given filter
@@ -413,7 +396,7 @@ event(init) ->
     {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init() end),
     put(comet_pid, Pid),
     % Subscribe for logs at central_logger
-    case gen_server:call(?Dispatcher_Name, {central_logger, 1, {subscribe, Pid}}) of
+    case gen_server:call(?Dispatcher_Name, {central_logger, 1, {subscribe, client, Pid}}) of
         ok -> ok;
         Other ->
             ?error("central_logger is unreachable. RPC call returned: ~p", [Other]),
@@ -525,67 +508,37 @@ event({update_filter, FilterName}) ->
 
 % Development helper function - generates logs
 event(generate_logs) ->
-    random:seed(now()),
-    Metadata = [
-        {node, "ccm1@127.0.0.1"},
-        {module, "dummy_mod"},
-        {function, "dummy_fun"},
-        {line, "456"},
-        {pid, "<0.0.0>"}
-    ],
-    lists:foreach(
-        fun(Severity) ->
-            Message = lists:flatten(lists:duplicate(10, io_lib:format("~.36B", [random:uniform(98 * 567 * 456 * 235 * 232 * 3465 * 23552 * 3495 * 43534 * 345436 * 45)]))),
-            lager:log(Severity, Metadata, Message)
-        end, ?LOGLEVEL_LIST).
+    central_logger:generate_logs().
 
 
 % =====================
 % Define types of filters and elements connected to them
-get_filter_types() -> [message_filter, node_filter, module_filter, function_filter].
+get_filter_types() -> [message_filter, file_filter].
 
 set_filter(PageState, message_filter, Filter) -> PageState#page_state{message_filter = Filter};
-set_filter(PageState, node_filter, Filter) -> PageState#page_state{node_filter = Filter};
-set_filter(PageState, module_filter, Filter) -> PageState#page_state{module_filter = Filter};
-set_filter(PageState, function_filter, Filter) -> PageState#page_state{function_filter = Filter}.
+set_filter(PageState, file_filter, Filter) -> PageState#page_state{file_filter = Filter}.
 
 get_filter(#page_state{message_filter = Filter}, message_filter) -> Filter;
-get_filter(#page_state{node_filter = Filter}, node_filter) -> Filter;
-get_filter(#page_state{module_filter = Filter}, module_filter) -> Filter;
-get_filter(#page_state{function_filter = Filter}, function_filter) -> Filter.
+get_filter(#page_state{file_filter = Filter}, file_filter) -> Filter.
 
 get_filter_name(message_filter) -> <<"Toggle message filter">>;
-get_filter_name(node_filter) -> <<"Toggle node filter">>;
-get_filter_name(module_filter) -> <<"Toggle module filter">>;
-get_filter_name(function_filter) -> <<"Toggle function filter">>.
+get_filter_name(file_filter) -> <<"Toggle file filter">>.
 
 get_filter_placeholder(message_filter) -> <<"Message contains">>;
-get_filter_placeholder(node_filter) -> <<"Node contains">>;
-get_filter_placeholder(module_filter) -> <<"Module contains">>;
-get_filter_placeholder(function_filter) -> <<"Function contains">>.
+get_filter_placeholder(file_filter) -> <<"File name contains">>.
 
 get_filter_label(message_filter) -> <<"message_filter_label">>;
-get_filter_label(node_filter) -> <<"node_filter_label">>;
-get_filter_label(module_filter) -> <<"module_filter_label">>;
-get_filter_label(function_filter) -> <<"function_filter_label">>.
+get_filter_label(file_filter) -> <<"file_filter_label">>.
 
 get_filter_none(message_filter) -> <<"message_filter_none">>;
-get_filter_none(node_filter) -> <<"node_filter_none">>;
-get_filter_none(module_filter) -> <<"module_filter_none">>;
-get_filter_none(function_filter) -> <<"function_filter_none">>.
+get_filter_none(file_filter) -> <<"file_filter_none">>.
 
 get_filter_panel(message_filter) -> <<"message_filter_panel">>;
-get_filter_panel(node_filter) -> <<"node_filter_panel">>;
-get_filter_panel(module_filter) -> <<"module_filter_panel">>;
-get_filter_panel(function_filter) -> <<"function_filter_panel">>.
+get_filter_panel(file_filter) -> <<"file_filter_panel">>.
 
 get_filter_textbox(message_filter) -> <<"message_filter_textbox">>;
-get_filter_textbox(node_filter) -> <<"node_filter_textbox">>;
-get_filter_textbox(module_filter) -> <<"module_filter_textbox">>;
-get_filter_textbox(function_filter) -> <<"function_filter_textbox">>.
+get_filter_textbox(file_filter) -> <<"file_filter_textbox">>.
 
 get_filter_submit_button(message_filter) -> <<"message_filter_button">>;
-get_filter_submit_button(node_filter) -> <<"node_filter_button">>;
-get_filter_submit_button(module_filter) -> <<"module_filter_button">>;
-get_filter_submit_button(function_filter) -> <<"function_filter_button">>.
+get_filter_submit_button(file_filter) -> <<"file_filter_button">>.
 
