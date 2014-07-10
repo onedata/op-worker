@@ -235,14 +235,9 @@ top_menu(ActiveTabID, SubMenuBody) ->
         end ++
         case can_view_logs() of
             false -> [];
-            true -> [
-                {cluster_logs_tab, #li{body = [
-                    #link{style = <<"padding: 18px;">>, url = <<"/cluster_logs">>, body = <<"Cluster logs">>}
-                ]}},
-                {client_logs_tab, #li{body = [
-                    #link{style = <<"padding: 18px;">>, url = <<"/client_logs">>, body = <<"Client logs">>}
-                ]}}
-            ]
+            true -> [{logs_tab, #li{body = [
+                #link{style = <<"padding: 18px;">>, url = <<"/logs">>, body = <<"Logs">>}
+            ]}}]
         end,
     % Define menu items with ids, so that proper tab can be made active via function parameter
     % see old_menu_captions()
