@@ -20,6 +20,8 @@
 -define(LNK_TYPE, 2).
 
 %% File permissions defines
+%% Sticky bit
+-define(STICKY_BIT, 8#1000).
 %% User
 -define(RD_USR_PERM, 8#400).
 -define(WR_USR_PERM, 8#200).
