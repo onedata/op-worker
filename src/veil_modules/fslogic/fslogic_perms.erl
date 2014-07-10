@@ -30,7 +30,7 @@
 %% @doc Checks if the user has permission to modify file (e,g. change owner).
 %% @end
 -spec check_file_perms(FileName :: string(), UserDoc :: term(), FileDoc :: term(), CheckType :: root | owner | delete | read | write | execute) -> Result when
-    Result :: {ok, boolean()} | {error, ErrorDetail},
+    Result :: ok | {error, ErrorDetail},
     ErrorDetail :: term().
 %% ====================================================================
 check_file_perms(_FileName, #veil_document{uuid = ?CLUSTER_USER_ID}, _FileDoc, _CheckType) -> %root, always return ok
