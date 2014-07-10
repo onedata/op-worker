@@ -523,22 +523,22 @@ groups_test(Config) ->
 
     %% Test not allowed operations
     {"ok", A2} = mkdir(Socket1, "/groups/test"),
-    ?assertEqual(eperm, A2),
+    ?assertEqual(eacces, A2),
 
     {"ok", A3} = delete_file(Socket1, "/groups"),
-    ?assertEqual(eperm, A3),
+    ?assertEqual(eacces, A3),
 
     {"ok", A10} = delete_file(Socket1, "/groups/" ++ ?TEST_GROUP),
-    ?assertEqual(eperm, A10),
+    ?assertEqual(eacces, A10),
 
     {"ok", A11} = delete_file(Socket1, "/groups/" ++ ?TEST_GROUP2),
-    ?assertEqual(eperm, A11),
+    ?assertEqual(eacces, A11),
 
     {"ok", A4} = rename_file(Socket1, "/groups/" ++ ?TEST_GROUP2, "/test"),
-    ?assertEqual(eperm, A4),
+    ?assertEqual(eacces, A4),
 
     {"ok", A5} = rename_file(Socket1, "/groups", "/test"),
-    ?assertEqual(eperm, A5),
+    ?assertEqual(eacces, A5),
 
     {"ok", ok} = mkdir(Socket1, "/test"), %% Test dir
     {"ok", _, _, _, "ok"} = create_file(Socket1, "/file"), %% Test file
@@ -547,31 +547,31 @@ groups_test(Config) ->
     ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt),
 
     {"ok", A6} = rename_file(Socket1, "/test", "/groups/test"),
-    ?assertEqual(eperm, A6),
+    ?assertEqual(eacces, A6),
 
     {"ok", A14} = rename_file(Socket1, "/file", "/groups/test"),
-    ?assertEqual(eperm, A14),
+    ?assertEqual(eacces, A14),
 
     {"ok", A7} = change_file_perms(Socket1, "/groups", 8#555),
-    ?assertEqual(eperm, A7),
+    ?assertEqual(eacces, A7),
 
     {"ok", A8} = change_file_perms(Socket1, "/groups/" ++ ?TEST_GROUP, 8#555),
-    ?assertEqual(eperm, A8),
+    ?assertEqual(eacces, A8),
 
     {"ok", A9} = change_file_perms(Socket1, "/groups/" ++ ?TEST_GROUP2, 8#555),
-    ?assertEqual(eperm, A9),
+    ?assertEqual(eacces, A9),
 
     {"ok", A12} = chown(Socket1, "/groups/" ++ ?TEST_GROUP2, 500, ?TEST_USER),
-    ?assertEqual(eperm, A12),
+    ?assertEqual(eacces, A12),
 
     {"ok", A13} = chown(Socket1, "/groups", 500, ?TEST_USER),
-    ?assertEqual(eperm, A13),
+    ?assertEqual(eacces, A13),
 
     {"ok",  _, _, _, A15} = create_file(Socket1, "/groups/file"),
-    ?assertEqual(eperm, list_to_atom(A15)),
+    ?assertEqual(eacces, list_to_atom(A15)),
 
     {"ok", A16} = create_link(Socket1, "/groups/file", "link"),
-    ?assertEqual(eperm, A16),
+    ?assertEqual(eacces, A16),
 
 
     %% Test groups visibility
