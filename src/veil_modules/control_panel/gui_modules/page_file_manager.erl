@@ -520,6 +520,8 @@ paste_from_clipboard() ->
                             <<Acc/binary, "Unable to move ", Basename/binary, " - insufficient permissions.\r\n">>;
                         {logical_file_system_error, "eexist"} ->
                             <<Acc/binary, "Unable to move ", Basename/binary, " - file exists.\r\n">>;
+                        {logical_file_system_error, "eacces"} ->
+                            <<Acc/binary, "Unable to move ", Basename/binary, " - insufficient permissions.\r\n">>;
                         _ ->
                             <<Acc/binary, "Unable to move ", Basename/binary, " - error occured.\r\n">>
                     end;
@@ -556,6 +558,8 @@ rename_item(OldPath, NewName) ->
                     gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - insufficient permissions.">>});
                 {logical_file_system_error, "eexist"} ->
                     gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - file exists.">>});
+                {logical_file_system_error, "eacces"} ->
+                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - insufficient permissions.">>});
                 _ ->
                     gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - error occured.">>})
             end
@@ -629,41 +633,47 @@ show_popup(Type) ->
                 {Body, <<"$('#create_dir_textbox').focus();">>, {action, hide_popup}};
 
             rename_item ->
-                case length(get_selected_items()) of
-                    1 ->
-                        [{OldLocation, Filename}] = get_selected_items(),
-                        SelectionLength = byte_size(filename:rootname(Filename)),
-                        Body = [
-                            #p{body = <<"Rename <b>", (gui_str:html_encode(Filename))/binary, "</b>">>},
-                            #form{class = <<"control-group">>, body = [
-                                #textbox{id = wire_enter(<<"new_name_textbox">>, <<"new_name_submit">>), class = <<"flat">>,
-                                    style = <<"width: 350px;">>, placeholder = <<"New name">>, value = gui_str:html_encode(Filename)},
+                case fs_has_perms(get_working_directory(), write) of
+                    false ->
+                        gui_jq:wire(#alert{text = <<"You need write permissions in this directory to rename files.">>}),
+                        {[], undefined, undefined};
+                    true ->
+                        case length(get_selected_items()) =:= 1 of
+                            false ->
+                                {[], undefined, undefined};
+                            _ ->
+                                [{OldLocation, Filename}] = get_selected_items(),
+                                SelectionLength = byte_size(filename:rootname(Filename)),
+                                Body = [
+                                    #p{body = <<"Rename <b>", (gui_str:html_encode(Filename))/binary, "</b>">>},
+                                    #form{class = <<"control-group">>, body = [
+                                        #textbox{id = wire_enter(<<"new_name_textbox">>, <<"new_name_submit">>), class = <<"flat">>,
+                                            style = <<"width: 350px;">>, placeholder = <<"New name">>, value = gui_str:html_encode(Filename)},
 
-                                #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>,
-                                    id = wire_click(<<"new_name_submit">>,
-                                        {action, rename_item, [OldLocation, {query_value, <<"new_name_textbox">>}]},
-                                        <<"new_name_textbox">>)}
-                            ]}
-                        ],
+                                        #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>,
+                                            id = wire_click(<<"new_name_submit">>,
+                                                {action, rename_item, [OldLocation, {query_value, <<"new_name_textbox">>}]},
+                                                <<"new_name_textbox">>)}
+                                    ]}
+                                ],
 
-                        FocusScript = <<"setTimeout(function() { ",
-                        "document.getElementById('new_name_textbox').focus(); ",
-                        "if( $('#new_name_textbox').createTextRange ) { ",
-                        "var selRange = $('#new_name_textbox').createTextRange(); ",
-                        "selRange.collapse(true); ",
-                        "selRange.moveStart('character', 0); ",
-                        "selRange.moveEnd('character', ", (integer_to_binary(SelectionLength))/binary, "); ",
-                        "selRange.select(); ",
-                        "} else if( document.getElementById('new_name_textbox').setSelectionRange ) { ",
-                        "document.getElementById('new_name_textbox').setSelectionRange(0, ", (integer_to_binary(SelectionLength))/binary, "); ",
-                        "} else if( $('#new_name_textbox').selectionStart ) { ",
-                        "$('#new_name_textbox').selectionStart = 0; ",
-                        "$('#new_name_textbox').selectionEnd = ", (integer_to_binary(SelectionLength))/binary, "; ",
-                        "} }, 1); ">>,
+                                FocusScript = <<"setTimeout(function() { ",
+                                "document.getElementById('new_name_textbox').focus(); ",
+                                "if( $('#new_name_textbox').createTextRange ) { ",
+                                "var selRange = $('#new_name_textbox').createTextRange(); ",
+                                "selRange.collapse(true); ",
+                                "selRange.moveStart('character', 0); ",
+                                "selRange.moveEnd('character', ", (integer_to_binary(SelectionLength))/binary, "); ",
+                                "selRange.select(); ",
+                                "} else if( document.getElementById('new_name_textbox').setSelectionRange ) { ",
+                                "document.getElementById('new_name_textbox').setSelectionRange(0, ", (integer_to_binary(SelectionLength))/binary, "); ",
+                                "} else if( $('#new_name_textbox').selectionStart ) { ",
+                                "$('#new_name_textbox').selectionStart = 0; ",
+                                "$('#new_name_textbox').selectionEnd = ", (integer_to_binary(SelectionLength))/binary, "; ",
+                                "} }, 1); ">>,
 
-                        {Body, FocusScript, {action, hide_popup}};
-                    _ ->
-                        {[], undefined, undefined}
+                                {Body, FocusScript, {action, hide_popup}}
+                        end
                 end;
 
             share_file ->
@@ -699,62 +709,65 @@ show_popup(Type) ->
                 end;
 
             file_upload ->
-                UploadDir = gui_str:binary_to_unicode_list(get_working_directory()),
-                {ok, FullFilePath} = fslogic_path:get_full_file_name(UploadDir),
-                {ok, FileDoc} = fslogic_objects:get_file(FullFilePath),
-                {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
-                case fslogic_perms:check_file_perms(FullFilePath, UserDoc, FileDoc, write) of
-                    ok ->
+                case fs_has_perms(get_working_directory(), write) of
+                    true ->
                         Body = [
                             #veil_upload{subscriber_pid = self(), target_dir = get_working_directory()}
                         ],
                         {Body, undefined, {action, clear_manager}};
-                    _ ->
+                    false ->
                         gui_jq:wire(#alert{text = <<"You need write permissions in this directory to upload files.">>}),
                         {[], undefined, undefined}
                 end;
 
             remove_selected ->
                 {_FB, _S, _A} =
-                    case get_selected_items() of
-                        [] -> {[], undefined, undefined};
-                        Paths ->
-                            {NumFiles, NumDirs} = lists:foldl(
-                                fun({Path, _}, {NFiles, NDirs}) ->
-                                    case item_is_dir(item_find(Path)) of
-                                        true -> {NFiles, NDirs + 1};
-                                        false -> {NFiles + 1, NDirs}
-                                    end
-                                end, {0, 0}, Paths),
-                            FilesString = if
-                                              (NumFiles =:= 1) ->
-                                                  <<"<b>", (integer_to_binary(NumFiles))/binary, " file</b>">>;
-                                              (NumFiles > 1) ->
-                                                  <<"<b>", (integer_to_binary(NumFiles))/binary, " files</b>">>;
-                                              true -> <<"">>
-                                          end,
-                            DirsString = if
-                                             (NumDirs =:= 1) ->
-                                                 <<"<b>", (integer_to_binary(NumDirs))/binary, " directory</b> and all its content">>;
-                                             (NumDirs > 1) ->
-                                                 <<"<b>", (integer_to_binary(NumDirs))/binary, " directories</b> and all their content">>;
-                                             true -> <<"">>
-                                         end,
-                            Punctuation = if
-                                              (FilesString /= <<"">>) and (DirsString /= <<"">>) ->
-                                                  <<", ">>;
-                                              true -> <<"">>
-                                          end,
-                            Body = [
-                                #p{body = <<"Remove ", FilesString/binary, Punctuation/binary, DirsString/binary, "?">>},
-                                #form{class = <<"control-group">>, body = [
-                                    #button{id = wire_click(<<"ok_button">>, {action, remove_selected}),
-                                        class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
-                                    #button{id = wire_click(<<"cancel_button">>, {action, hide_popup}),
-                                        class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>}
-                                ]}
-                            ],
-                            {Body, <<"$('#ok_button').focus();">>, {action, hide_popup}}
+                    case fs_has_perms(get_working_directory(), write) of
+                        false ->
+                            gui_jq:wire(#alert{text = <<"You need write permissions in this directory to delete files.">>}),
+                            {[], undefined, undefined};
+                        true ->
+                            case get_selected_items() of
+                                [] ->
+                                    {[], undefined, undefined};
+                                Paths ->
+                                    {NumFiles, NumDirs} = lists:foldl(
+                                        fun({Path, _}, {NFiles, NDirs}) ->
+                                            case item_is_dir(item_find(Path)) of
+                                                true -> {NFiles, NDirs + 1};
+                                                false -> {NFiles + 1, NDirs}
+                                            end
+                                        end, {0, 0}, Paths),
+                                    FilesString = if
+                                                      (NumFiles =:= 1) ->
+                                                          <<"<b>", (integer_to_binary(NumFiles))/binary, " file</b>">>;
+                                                      (NumFiles > 1) ->
+                                                          <<"<b>", (integer_to_binary(NumFiles))/binary, " files</b>">>;
+                                                      true -> <<"">>
+                                                  end,
+                                    DirsString = if
+                                                     (NumDirs =:= 1) ->
+                                                         <<"<b>", (integer_to_binary(NumDirs))/binary, " directory</b> and all its content">>;
+                                                     (NumDirs > 1) ->
+                                                         <<"<b>", (integer_to_binary(NumDirs))/binary, " directories</b> and all their content">>;
+                                                     true -> <<"">>
+                                                 end,
+                                    Punctuation = if
+                                                      (FilesString /= <<"">>) and (DirsString /= <<"">>) ->
+                                                          <<", ">>;
+                                                      true -> <<"">>
+                                                  end,
+                                    Body = [
+                                        #p{body = <<"Remove ", FilesString/binary, Punctuation/binary, DirsString/binary, "?">>},
+                                        #form{class = <<"control-group">>, body = [
+                                            #button{id = wire_click(<<"ok_button">>, {action, remove_selected}),
+                                                class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
+                                            #button{id = wire_click(<<"cancel_button">>, {action, hide_popup}),
+                                                class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>}
+                                        ]}
+                                    ],
+                                    {Body, <<"$('#ok_button').focus();">>, {action, hide_popup}}
+                            end
                     end;
 
             _ ->
@@ -1207,6 +1220,15 @@ fs_get_share_uuid_by_filepath(Filepath) ->
             gui_str:to_binary(UUID);
         _ ->
             undefined
+    end.
+
+fs_has_perms(Path, CheckType) ->
+    {ok, FullFilePath} = fslogic_path:get_full_file_name(gui_str:binary_to_unicode_list(Path)),
+    {ok, FileDoc} = fslogic_objects:get_file(FullFilePath),
+    {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
+    case fslogic_perms:check_file_perms(FullFilePath, UserDoc, FileDoc, CheckType) of
+        ok -> true;
+        _ -> false
     end.
 
 
