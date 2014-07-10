@@ -672,7 +672,7 @@ show_popup(Type) ->
                         [{Path, Filename}] = get_selected_items(),
                         {Status, ShareID} = case fs_get_share_uuid_by_filepath(Path) of
                                                 undefined -> {new, fs_create_share(Path)};
-                                                UUID -> UUID
+                                                UUID -> {exists, UUID}
                                             end,
                         clear_workspace(),
                         select_item(Path),
