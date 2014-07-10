@@ -203,12 +203,7 @@ https_post(URLBin, ReqHeadersBin, Body) ->
 perform_request(URL, ReqHeaders, Method, Body, Redirects) ->
     try
         {ok, {_, _, Domain, _, _, _}} = http_uri:parse(URL),
-%%         There is a bug in Erlang 17.0, that has been fixed in 17.1 (which is not yet released).
-%%         The bug makes the ssl gen_server crash on tls handshake, so for now https connections are off the table
-%%         http://erlang.org/pipermail/erlang-questions/2014-April/078654.html
-%%         curl will be used until 17.1 is released
         case ibrowse:send_req(URL, ReqHeaders, Method, Body, [{response_format, binary}, {ssl_options, ssl_opts(Domain)}]) of
-%%         case do_curl(URL, ReqHeaders, Method, Body) of
             {ok, Rcode, RespHeaders, ResponseBody}
                 when (Rcode =:= "301" orelse Rcode =:= "302" orelse Rcode =:= "303" orelse Rcode =:= "307") andalso Redirects > 0 ->
                 % Code in {301, 302, 303, 307} - we are being redirected
@@ -235,35 +230,6 @@ perform_request(URL, ReqHeaders, Method, Body, Redirects) ->
     catch
         _:M ->
             {error, M}
-    end.
-
-
-%% do_curl/4
-%% ====================================================================
-%% @doc
-%% Temporary alternative for erlang ssl (which does not work in 17.0)
-%% @end
--spec do_curl(URL :: string(), ReqHeaders :: string(), Method :: string(), Body :: string()) -> term().
-%% ====================================================================
-do_curl(URL, ReqHeaders, Method, Body) ->
-    MethodString = case Method of
-                       get -> " -X GET ";
-                       post -> " -X POST "
-                   end,
-    BodyString = case Body of
-                     [] -> "";
-                     _ -> " -d \"" ++ Body ++ "\" "
-                 end,
-    HeadersString = lists:foldl(
-        fun({Key, Value}, Acc) ->
-            Acc ++ " -H \"" ++ Key ++ ": " ++ Value ++ "\""
-        end, " ", ReqHeaders),
-    CurlCommand = "curl -sL" ++ MethodString ++ URL ++ BodyString ++ HeadersString,
-    Res = os:cmd(CurlCommand),
-    case Res of
-        "" -> {error, curl_failed};
-        "\n" -> {error, curl_failed};
-        RespBody -> {ok, "200", [], gui_str:to_binary(RespBody)}
     end.
 
 
