@@ -29,7 +29,7 @@
 %% ====================================================================
 %% @doc Checks if the user has permission to modify file (e,g. change owner).
 %% @end
--spec check_file_perms(FileName :: string(), UserDoc :: term(), FileDoc :: term(), CheckType :: root | owner | delete | read | write | execute) -> Result when
+-spec check_file_perms(FileName :: string(), UserDoc :: term(), FileDoc :: term(), CheckType :: root | owner | delete | read | write | execute | rdwr | '') -> Result when
     Result :: ok | {error, ErrorDetail},
     ErrorDetail :: term().
 %% ====================================================================
