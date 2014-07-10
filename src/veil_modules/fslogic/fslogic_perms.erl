@@ -33,6 +33,8 @@
     Result :: ok | {error, ErrorDetail},
     ErrorDetail :: term().
 %% ====================================================================
+check_file_perms(_FileName, _UserDoc, _FileDoc, '') -> %root, always return ok
+    ok;
 check_file_perms(_FileName, #veil_document{uuid = ?CLUSTER_USER_ID}, _FileDoc, _CheckType) -> %root, always return ok
     ok;
 check_file_perms(FileName, UserDoc, _FileDoc, root = CheckType) -> % check if root
