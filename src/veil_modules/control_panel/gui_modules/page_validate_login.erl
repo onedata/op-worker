@@ -69,7 +69,8 @@ body() ->
                             ?error_stacktrace("Error in validate_login - ~p:~p", [Type, Message]),
                             page_error:redirect_with_error(?error_internal_server_error)
                     end
-            end
+            end,
+            <<"">>
     end.
 
 event(init) -> ok;

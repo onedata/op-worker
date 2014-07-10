@@ -699,10 +699,20 @@ show_popup(Type) ->
                 end;
 
             file_upload ->
-                Body = [
-                    #veil_upload{subscriber_pid = self(), target_dir = get_working_directory()}
-                ],
-                {Body, undefined, {action, clear_manager}};
+                UploadDir = gui_str:binary_to_unicode_list(get_working_directory()),
+                {ok, FullFilePath} = fslogic_path:get_full_file_name(UploadDir),
+                {ok, FileDoc} = fslogic_objects:get_file(FullFilePath),
+                {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
+                case fslogic_perms:check_file_perms(FullFilePath, UserDoc, FileDoc, write) of
+                    ok ->
+                        Body = [
+                            #veil_upload{subscriber_pid = self(), target_dir = get_working_directory()}
+                        ],
+                        {Body, undefined, {action, clear_manager}};
+                    _ ->
+                        gui_jq:wire(#alert{text = <<"You need write permissions in this directory to upload files.">>}),
+                        {[], undefined, undefined}
+                end;
 
             remove_selected ->
                 {_FB, _S, _A} =

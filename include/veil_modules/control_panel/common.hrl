@@ -37,6 +37,7 @@
 % Macros used as ids of errors that can appear on GUI pages
 -define(error_user_content_not_logged_in, uc_not_logged_in).
 -define(error_user_content_file_not_found, uc_file_not_found).
+-define(error_user_permission_denied, uc_permission_denied).
 -define(error_shared_file_not_found, sh_file_not_found).
 -define(error_internal_server_error, internal_server_error).
 -define(error_openid_invalid_request, openid_invalid_request).

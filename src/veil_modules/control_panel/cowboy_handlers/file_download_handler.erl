@@ -136,10 +136,9 @@ handle_user_content_request(Req, Path) ->
             SessHandler = proplists:get_value(session, Context1#context.handlers),
             {ok, St, Context2} = SessHandler:init([], Context1),
             wf_context:context(Context2),
-            {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
-            Login = user_logic:get_login(UserDoc),
-            fslogic_context:set_user_dn(lists:nth(1, user_logic:get_dn_list(UserDoc))),
-            {St, Context2, SessHandler, Login}
+            {ok, UserDocument} = user_logic:get_user({login, gui_ctx:get_user_id()}),
+            fslogic_context:set_user_dn(lists:nth(1, user_logic:get_dn_list(UserDocument))),
+            {St, Context2, SessHandler, UserDocument}
         catch T1:M1 ->
             ?warning("Cannot establish session context for user content request - ~p:~p", [T1, M1]),
             error
@@ -148,15 +147,23 @@ handle_user_content_request(Req, Path) ->
     case InitSession of
         error ->
             {ok, _RedirectReq} = page_error:generate_redirect_request(Req, ?error_user_content_not_logged_in);
-        {State, NewContext, SessionHandler, UserLogin} ->
+        {State, NewContext, SessionHandler, UserDoc} ->
+            UserLogin = user_logic:get_login(UserDoc),
             % Try to get file by given path
             FileInfo =
                 try
-                    TryFilepath = gui_str:binary_to_unicode_list(Path),
-                    {ok, Fileattr} = logical_files_manager:getfileattr(TryFilepath),
-                    "REG" = Fileattr#fileattributes.type,
-                    TrySize = Fileattr#fileattributes.size,
-                    {TryFilepath, TrySize}
+                    UserFilePath = gui_str:binary_to_unicode_list(Path),
+                    {ok, FullFilePath} = fslogic_path:get_full_file_name(UserFilePath),
+                    {ok, FileDoc} = fslogic_objects:get_file(FullFilePath),
+                    case fslogic_perms:check_file_perms(FullFilePath, UserDoc, FileDoc, read) of
+                        ok ->
+                            {ok, Fileattr} = logical_files_manager:getfileattr(UserFilePath),
+                            "REG" = Fileattr#fileattributes.type,
+                            TrySize = Fileattr#fileattributes.size,
+                            {UserFilePath, TrySize};
+                        _ ->
+                            error_perms
+                    end
                 catch T2:M2 ->
                     ?warning("Cannot resolve fileattributes for user content request - ~p:~p", [T2, M2]),
                     error
@@ -165,6 +172,8 @@ handle_user_content_request(Req, Path) ->
             case FileInfo of
                 error ->
                     {ok, _RedirectReq} = page_error:generate_redirect_request(Req, ?error_user_content_file_not_found);
+                error_perms ->
+                    {ok, _RedirectReq} = page_error:generate_redirect_request(Req, ?error_user_permission_denied);
                 {Filepath, Size} ->
                     % Send the file
                     try
