@@ -48,6 +48,11 @@ check_file_perms(FileName, UserDoc, FileDoc, delete) ->
         0 -> check_file_perms(ParentFileName,UserDoc,ParentFileDoc,write);
         _ -> check_file_perms(FileName,UserDoc,FileDoc,owner)
     end;
+check_file_perms(FileName, UserDoc, FileDoc, rdwr) ->
+    case check_file_perms(FileName, UserDoc, FileDoc, read) of
+        ok -> check_file_perms(FileName, UserDoc, FileDoc, write);
+        Error -> Error
+    end;
 check_file_perms(FileName, UserDoc, #veil_document{record = #file{uid = FileOwnerUid, perms = FilePerms}}, CheckType) -> %check read/write/execute perms
     UserUid = UserDoc#veil_document.uuid,
     FileGroup = get_group(FileName),

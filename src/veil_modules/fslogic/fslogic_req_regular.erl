@@ -56,14 +56,8 @@ get_file_location(FileDoc,FullFileName,OpenMode) ->
     end,
 
     {ok, UserDoc} = fslogic_objects:get_user(),
-    case OpenMode of
-        ?UNSPECIFIED_MODE -> ok;
-        ?READ_MODE -> ok = fslogic_perms:check_file_perms(FullFileName,UserDoc,FileDoc,read);
-        ?WRITE_MODE -> ok = fslogic_perms:check_file_perms(FullFileName,UserDoc,FileDoc,write);
-        ?RDWR_MODE ->
-            ok = fslogic_perms:check_file_perms(FullFileName,UserDoc,FileDoc,read),
-            ok = fslogic_perms:check_file_perms(FullFileName,UserDoc,FileDoc,write)
-    end,
+    ok = fslogic_perms:check_file_perms(FullFileName,UserDoc,FileDoc,list_to_atom(OpenMode)),
+
     {ok,_} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileDoc#veil_document.uuid, fslogic_context:get_fuse_id(), Validity),
 
     FileDesc = FileDoc#veil_document.record,

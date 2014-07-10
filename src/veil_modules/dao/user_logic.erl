@@ -727,7 +727,7 @@ create_dirs_at_storage(Root, Teams, Storage) ->
         case Ans of
             SuccessAns when SuccessAns == ok orelse SuccessAns == {error, dir_or_file_exists} ->
                 Ans2 = storage_files_manager:chown(SHI, DirName, "", Dir),
-                Ans3 = storage_files_manager:chmod(SHI, DirName, ?TeamDirPerm),
+                Ans3 = storage_files_manager:chmod(SHI, DirName, 8#1730),
                 case {Ans2, Ans3} of
                     {ok, ok} ->
                         TmpAns;
@@ -858,7 +858,7 @@ create_team_dir(TeamName) ->
         {ok, true} ->
             {error, dir_exists};
         {ok, false} ->
-            TFile = #file{type = ?DIR_TYPE, name = TeamName, uid = "0", gids = [TeamName], parent = GroupsBase, perms = 8#1770},
+            TFile = #file{type = ?DIR_TYPE, name = TeamName, uid = "0", gids = [TeamName], parent = GroupsBase, perms = ?TeamDirPerm},
             TFileDoc = fslogic_meta:update_meta_attr(TFile, times, {CTime, CTime, CTime}),
             dao_lib:apply(dao_vfs, save_new_file, ["/" ++ ?GROUPS_BASE_DIR_NAME ++ "/" ++ TeamName, TFileDoc], 1);
         Error ->
