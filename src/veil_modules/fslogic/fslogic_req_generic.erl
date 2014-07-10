@@ -120,14 +120,22 @@ change_file_group(_FullFileName, _GID, _GName) ->
 change_file_perms(FullFileName, Perms) ->
     ?debug("change_file_perms(FullFileName: ~p, Perms: ~p)", [FullFileName, Perms]),
     {ok, UserDoc} = fslogic_objects:get_user(),
-    {ok, #veil_document{record = #file{} = File} = FileDoc} = fslogic_objects:get_file(FullFileName),
+    {ok, #veil_document{record = #file{perms = ActualPerms, location = #file_location{storage_id = StorageId, file_id = FileId}} = File} = FileDoc} =
+        fslogic_objects:get_file(FullFileName),
 
-    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc),
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, owner),
 
     NewFile = fslogic_meta:update_meta_attr(File, ctime, vcn_utils:time()),
     NewFile1 = FileDoc#veil_document{record = NewFile#file{perms = Perms}},
-
     {ok, _} = fslogic_objects:save_file(NewFile1),
+
+    case (ActualPerms == Perms orelse StorageId == []) of
+        true -> ok;
+        false ->
+            {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, StorageId}),
+            {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileId),
+            storage_files_manager:chmod(SH, File_id, Perms)
+    end,
 
     #atom{value = ?VOK}.
 
@@ -201,7 +209,7 @@ delete_file(FullFileName) ->
     {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
     {ok, UserDoc} = fslogic_objects:get_user(),
 
-    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc),
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, delete),
 
     FileDesc = FileDoc#veil_document.record,
     {ok, ChildrenTmpAns} =
@@ -235,7 +243,7 @@ rename_file(FullFileName, FullNewFileName) ->
     {ok, UserDoc} = fslogic_objects:get_user(),
     {ok, #veil_document{record = #file{} = OldFile} = OldDoc} = fslogic_objects:get_file(FullFileName),
 
-    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, OldDoc),
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, OldDoc, write), % todo what we should check here
 
     %% Check if destination file exists
     case fslogic_objects:get_file(FullNewFileName) of
@@ -260,7 +268,7 @@ rename_file(FullFileName, FullNewFileName) ->
     OldDir = fslogic_path:strip_path_leaf(FullFileName),
     {ok, OldParentDoc} = fslogic_objects:get_file(OldDir),
 
-    ok = fslogic_perms:check_file_perms(NewDir, UserDoc, NewParentDoc, write),
+    ok = fslogic_perms:check_file_perms(NewDir, UserDoc, NewParentDoc, write), % todo what we should check here
     ok = fslogic_perms:check_file_perms(OldDir, UserDoc, OldParentDoc, write),
 
     MoveOnStorage =
@@ -307,10 +315,10 @@ rename_file(FullFileName, FullNewFileName) ->
         case {string:tokens(fslogic_path:get_user_file_name(FullFileName), "/"), string:tokens(fslogic_path:get_user_file_name(FullNewFileName), "/")} of
             {_, [?GROUPS_BASE_DIR_NAME, _InvalidTarget]} -> %% Moving into ?GROUPS_BASE_DIR_NAME dir is not allowed
                 ?info("Attempt to move file to base group directory. Query: ~p", [stub]),
-                throw(?VEPERM);
+                throw(?VEACCES);
             {[?GROUPS_BASE_DIR_NAME, _InvalidSource], _} -> %% Moving from ?GROUPS_BASE_DIR_NAME dir is not allowed
                 ?info("Attemt to move base group directory. Query: ~p", [stub]),
-                throw(?VEPERM);
+                throw(?VEACCES);
 
             {[?GROUPS_BASE_DIR_NAME, X | _FromF0], [?GROUPS_BASE_DIR_NAME, X | _ToF0]} -> %% Local (group dir) move, no storage actions are required
                 OldFile;
