@@ -66,8 +66,7 @@
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-mkdir(DirNameStr) ->
-  DirName = check_utf(DirNameStr),
+mkdir(DirName) ->
   {ModeStatus, NewFileLogicMode} = get_mode(DirName),
   case ModeStatus of
     ok ->
@@ -95,8 +94,7 @@ mkdir(DirNameStr) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-rmdir(DirNameStr) ->
-  DirName = check_utf(DirNameStr),
+rmdir(DirName) ->
   Record = #deletefile{file_logic_name = DirName},
   {Status, TmpAns} = contact_fslogic(Record),
   case Status of
@@ -118,9 +116,7 @@ rmdir(DirNameStr) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-mv(FromStr, ToStr) ->
-  From = check_utf(FromStr),
-  To = check_utf(ToStr),
+mv(From, To) ->
   Record = #renamefile{from_file_logic_name = From, to_file_logic_name  = To},
   {Status, TmpAns} = contact_fslogic(Record),
   case Status of
@@ -142,8 +138,7 @@ mv(FromStr, ToStr) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-chown(FileNameStr, Uname, Uid) ->
-  FileName = check_utf(FileNameStr),
+chown(FileName, Uname, Uid) ->
   Record = #changefileowner{file_logic_name = FileName, uname = Uname, uid = Uid},
   {Status, TmpAns} = contact_fslogic(Record),
   case Status of
@@ -166,16 +161,14 @@ chown(FileNameStr, Uname, Uid) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-ls(DirNameStr, ChildrenNum, Offset) ->
-  DirName = check_utf(DirNameStr),
+ls(DirName, ChildrenNum, Offset) ->
   Record = #getfilechildren{dir_logic_name = DirName, children_num = ChildrenNum, offset = Offset},
   {Status, TmpAns} = contact_fslogic(Record),
   case Status of
     ok ->
       Response = TmpAns#filechildren.answer,
       case Response of
-        % TODO delete map when GUI will use N20
-        ?VOK -> {ok, lists:map(fun(Child) -> binary_to_list(unicode:characters_to_binary(Child)) end, TmpAns#filechildren.child_logic_name)};
+        ?VOK -> {ok, TmpAns#filechildren.child_logic_name};
         _ -> {logical_file_system_error, Response}
       end;
     _ -> {Status, TmpAns}
@@ -194,8 +187,7 @@ ls(DirNameStr, ChildrenNum, Offset) ->
 getfileattr({uuid, UUID}) ->
   getfileattr(getfileattr, UUID);
 
-getfileattr(FileNameStr) ->
-  FileName = check_utf(FileNameStr),
+getfileattr(FileName) ->
   Record = #getfileattr{file_logic_name = FileName},
   getfileattr(internal_call, Record).
 
@@ -250,8 +242,7 @@ getfileattr(Message, Value) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-read(FileStr, Offset, Size) ->
-  File = check_utf(FileStr),
+read(File, Offset, Size) ->
   {Response, Response2} = getfilelocation(File),
       case Response of
         ok ->
@@ -286,10 +277,9 @@ read(FileStr, Offset, Size) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-write(FileStr, Buf) ->
+write(File, Buf) ->
   case write_enabled(fslogic_context:get_user_dn()) of
     true ->
-      File = check_utf(FileStr),
       {Response, Response2} = getfilelocation(File),
       case Response of
         ok ->
@@ -323,10 +313,9 @@ write(FileStr, Buf) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-write(FileStr, Offset, Buf) ->
+write(File, Offset, Buf) ->
   case write_enabled(fslogic_context:get_user_dn()) of
     true ->
-      File = check_utf(FileStr),
       {Response, Response2} = getfilelocation(File),
       case Response of
         ok ->
@@ -362,10 +351,9 @@ write(FileStr, Offset, Buf) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-write_from_stream(FileStr, Buf) ->
+write_from_stream(File, Buf) ->
   case write_enabled(fslogic_context:get_user_dn()) of
     true ->
-      File = check_utf(FileStr),
       {Response, Response2} = getfilelocation(File),
       case Response of
         ok ->
@@ -399,8 +387,7 @@ write_from_stream(FileStr, Buf) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-create(FileStr) ->
-  File = check_utf(FileStr),
+create(File) ->
   {ModeStatus, NewFileLogicMode} = get_mode(File),
   case ModeStatus of
     ok ->
@@ -449,8 +436,7 @@ create(FileStr) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-truncate(FileStr, Size) ->
-  File = check_utf(FileStr),
+truncate(File, Size) ->
   {Response, Response2} = getfilelocation(File),
       case Response of
         ok ->
@@ -458,7 +444,7 @@ truncate(FileStr, Size) ->
           Res = storage_files_manager:truncate(Storage_helper_info, FileId, Size),
           case {Res, event_production_enabled("truncate_event")} of
             {ok, true} ->
-              TruncateEvent = [{"type", "truncate_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", FileStr}],
+              TruncateEvent = [{"type", "truncate_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", File}],
               gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEvent}});
             _ ->
               ok
@@ -479,8 +465,7 @@ truncate(FileStr, Size) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-delete(FileStr) ->
-  File = check_utf(FileStr),
+delete(File) ->
   {Response, Response2} = getfilelocation(File),
       case Response of
         ok ->
@@ -527,8 +512,7 @@ delete(FileStr) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-change_file_perm(FileNameStr, NewPerms) ->
-  FileName = check_utf(FileNameStr),
+change_file_perm(FileName, NewPerms) ->
   Record = #changefileperms{file_logic_name = FileName, perms = NewPerms},
   {Status, TmpAns} = contact_fslogic(Record),
   case Status of
@@ -557,8 +541,7 @@ change_file_perm(FileNameStr, NewPerms) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-exists(FileNameStr) ->
-  FileName = check_utf(FileNameStr),
+exists(FileName) ->
   {FileNameFindingAns, File} = fslogic_path:get_full_file_name(FileName),
   case FileNameFindingAns of
     ok ->
@@ -667,8 +650,10 @@ get_file_user_dependent_name_by_uuid(UUID) ->
         UserDN ->
           case dao_lib:apply(dao_users, get_user, [{dn, UserDN}], 1) of
             {ok, #veil_document { record=#user { login=Login } } } ->
-              % TODO delete format change when GUI will use N20
-              {ok, binary_to_list(unicode:characters_to_binary(string:sub_string(FullPath, length(Login ++ "/") + 1)))};
+              case string:str(FullPath, Login ++ "/") of
+                1 -> {ok, string:sub_string(FullPath, length(Login ++ "/") + 1)};
+                _ -> {ok, FullPath}
+              end;
             {ErrorGeneral, ErrorDetail} ->
               {ErrorGeneral, ErrorDetail}
           end
@@ -689,8 +674,7 @@ get_file_user_dependent_name_by_uuid(UUID) ->
 %% ====================================================================
 get_file_name_by_uuid(UUID) ->
   case get_file_by_uuid(UUID) of
-    % TODO delete format change when GUI will use N20
-    {ok, #veil_document{record = FileRec}} -> {ok, binary_to_list(unicode:characters_to_binary(FileRec#file.name))};
+    {ok, #veil_document{record = FileRec}} -> {ok, FileRec#file.name};
     _ -> {error, {get_file_by_uuid, UUID}}
   end.
 
@@ -754,8 +738,7 @@ create_standard_share(File) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-create_share(FileStr, Share_With) ->
-  File = check_utf(FileStr),
+create_share(File, Share_With) ->
   {Status, FullName} = fslogic_path:get_full_file_name(File),
   {Status2, UID} = fslogic_context:get_user_id(),
   case {Status, Status2} of
@@ -826,8 +809,7 @@ add_share(Share_info) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-get_share({file, FileStr}) ->
-  File = check_utf(FileStr),
+get_share({file, File}) ->
   {Status, FullName} = fslogic_path:get_full_file_name(File),
   case Status of
     ok ->
@@ -859,8 +841,7 @@ get_share(Key) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-remove_share({file, FileStr}) ->
-  File = check_utf(FileStr),
+remove_share({file, File}) ->
   {Status, FullName} = fslogic_path:get_full_file_name(File),
   case Status of
     ok ->
@@ -1075,19 +1056,6 @@ get_mode(FileName) ->
     undefined -> {error, undefined};
     _ -> TmpAns
   end.
-
-%% check_utf/1
-%% ====================================================================
-%% @doc Checks if string is in proper format and converts it if needed.
-%% @end
--spec check_utf(FileName :: string()) -> string().
-%% ====================================================================
-% TODO delete format change when GUI accepts unicode (VFS-714)
-check_utf(FileName) when is_list(FileName) ->
-  unicode:characters_to_list(list_to_binary(FileName));
-
-check_utf(FileName) ->
-  FileName.
 
 %% event_production_enabled/1
 %% ====================================================================

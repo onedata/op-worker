@@ -161,13 +161,14 @@ parameter_processing_test_() ->
                     end),
 
                 meck:expect(wf, url_encode, fun(Key) -> Key end),
-                CorrectRequest = ?openid_check_authentication_mode ++
-                    lists:foldl(
-                        fun({Key, Value}, Acc) ->
-                            Acc ++ "&" ++ binary_to_list(Key) ++ "=" ++ binary_to_list(Value)
-                        end, "", FullKeyValueList),
+                CorrectRequest = lists:foldl(
+                    fun({Key, Value}, Acc) ->
+                        Param = gui_str:url_encode(gui_str:to_list(Value)),
+                        <<Acc/binary, "&", Key/binary, "=", Param/binary>>
+                    end, <<"">>, FullKeyValueList),
+                FullCorrectRequest = <<?openid_check_authentication_mode, CorrectRequest/binary>>,
                 Server = binary_to_list(proplists:get_value(<<"openid.op_endpoint">>, FullKeyValueList)),
-                ?assertEqual({Server, CorrectRequest}, openid_utils:prepare_validation_parameters()),
+                ?assertEqual({Server, gui_str:to_list(FullCorrectRequest)}, openid_utils:prepare_validation_parameters()),
                 ?assert(meck:validate(gui_utils)),
                 ?assert(meck:validate(wf))
             end},

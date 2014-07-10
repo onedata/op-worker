@@ -27,10 +27,13 @@
 %% ====================================================================
 behaviour_info(callbacks) ->
     [
+        {init, 0},
+        {cleanup, 0},
         {save_session, 3},
         {lookup_session, 1},
         {delete_session, 1},
-        {clear_expired_sessions, 0}
+        {clear_expired_sessions, 0},
+        {get_cookie_ttl, 0}
     ];
 
 behaviour_info(_Other) ->
@@ -90,4 +93,12 @@ behaviour_info(_Other) ->
 %% with a ValidTill arg, that marks a point in time when it expires (in secs since epoch).
 %% The clearing should be performed based on this.
 %% Should return number of deleted session tokens.
+%% ====================================================================
+
+
+%% get_cookie_ttl/0
+%% ====================================================================
+%% Function: get_cookie_ttl() -> integer() | no_return().
+%% Desription: Returns cookies time to live in seconds. This is a callback so
+%% every project using ctool can have its own configuration.
 %% ====================================================================

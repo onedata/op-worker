@@ -173,8 +173,7 @@ handle(_ProtocolVersion, get_version) ->
     node_manager:check_vsn();
 
 handle(ProtocolVersion, {clear_expired_sessions, Pid}) ->
-    SessionLogicModule = gui_session_handler:get_session_logic_module(),
-    NumSessionsCleared = SessionLogicModule:clear_expired_sessions(),
+    NumSessionsCleared = gui_session_handler:clear_expired_sessions(),
     ?info("Expired GUI sessions cleared (~p tokens removed)", [NumSessionsCleared]),
     {ok, ClearingInterval} = application:get_env(veil_cluster_node, control_panel_sessions_clearing_period),
     erlang:send_after(ClearingInterval * 1000, Pid, {timer, {asynch, ProtocolVersion, {clear_expired_sessions, Pid}}}),

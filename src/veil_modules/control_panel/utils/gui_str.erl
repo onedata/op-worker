@@ -15,6 +15,9 @@
 % Conversion
 -export([to_list/1, to_binary/1, join_to_binary/1]).
 
+% Conversion between unicode and binaries
+-export([unicode_list_to_binary/1, binary_to_unicode_list/1]).
+
 % Formatting, escaping and encoding
 -export([format/2, format_bin/2, js_escape/1, html_encode/1, url_encode/1, url_decode/1]).
 
@@ -66,6 +69,26 @@ join_to_binary([H | T], Acc) ->
     join_to_binary(T, <<Acc/binary, (to_binary(H))/binary>>).
 
 
+%% unicode_list_to_binary/1
+%% ====================================================================
+%% @doc Converts a unicode list to utf8 binary.
+%% @end
+-spec unicode_list_to_binary(String :: string()) -> binary().
+%% ====================================================================
+unicode_list_to_binary(String) ->
+    unicode:characters_to_binary(String).
+
+
+%% binary_to_unicode_list/1
+%% ====================================================================
+%% @doc Converts a utf8 binary to unicode list.
+%% @end
+-spec binary_to_unicode_list(Binary :: binary()) -> string().
+%% ====================================================================
+binary_to_unicode_list(Binary) ->
+    unicode:characters_to_list(Binary).
+
+
 %% format/2
 %% ====================================================================
 %% @doc Escapes all javascript - sensitive characters.
@@ -108,12 +131,20 @@ js_escape(<<"">>, Acc) -> Acc.
 
 %% html_encode/1
 %% ====================================================================
-%% @doc Performs safe URL encoding
+%% @doc Performs safe URL encoding.
 %% @end
 -spec html_encode(String :: binary() | string()) -> binary().
 %% ====================================================================
-html_encode(String) ->
-    to_binary(wf:html_encode(to_list(String))).
+html_encode(List) when is_list(List) ->
+    html_encode(to_binary(List));
+
+html_encode(<<"">>)              -> <<"">>;
+html_encode(<<$<, Rest/binary>>) -> <<"&lt;", (html_encode(Rest))/binary>>;
+html_encode(<<$>, Rest/binary>>) -> <<"&gt;", (html_encode(Rest))/binary>>;
+html_encode(<<$", Rest/binary>>) -> <<"&quot;", (html_encode(Rest))/binary>>;
+html_encode(<<$', Rest/binary>>) -> <<"&#39;", (html_encode(Rest))/binary>>;
+html_encode(<<$&, Rest/binary>>) -> <<"&amp;", (html_encode(Rest))/binary>>;
+html_encode(<<H, Rest/binary>>) -> <<H, (html_encode(Rest))/binary>>.
 
 
 %% url_encode/1
@@ -123,7 +154,7 @@ html_encode(String) ->
 -spec url_encode(String :: binary() | string()) -> binary().
 %% ====================================================================
 url_encode(String) ->
-    to_binary(wf:url_encode(to_list(String))).
+    to_binary(ibrowse_lib:url_encode(to_list(String))).
 
 
 %% url_decode/1
