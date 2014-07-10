@@ -34,7 +34,7 @@
 %% init/3
 %% ====================================================================
 %% @doc Cowboy handler callback.
--spec init(any(), term(), any()) -> {ok, term(), atom()}.
+-spec init(Type :: any(), Req :: req(), Opts :: any()) -> {ok, term(), atom()}.
 %% ====================================================================
 init(_Type, Req, Opts) ->
     RequestType = proplists:get_value(type, Opts),
@@ -45,7 +45,7 @@ init(_Type, Req, Opts) ->
 %% ====================================================================
 %% @doc Handles a request. Supports user content and shared files downloads.
 %% @end
--spec handle(term(), term()) -> {ok, term(), term()}.
+-spec handle(Req :: req(), State :: term()) -> {ok, term(), term()}.
 %% ====================================================================
 handle(Req, State = ?user_content_request_type) ->
     {Path, _} = cowboy_req:binding(path, Req),
@@ -62,7 +62,7 @@ handle(Req, State = ?shared_files_request_type) ->
 %% terminate/3
 %% ====================================================================
 %% @doc Cowboy handler callback, no cleanup needed
--spec terminate(term(), term(), term()) -> ok.
+-spec terminate(Reason :: term(), Req :: term(), State :: term()) -> ok.
 %% ====================================================================
 terminate(_Reason, _Req, _State) ->
     ok.
@@ -75,13 +75,19 @@ terminate(_Reason, _Req, _State) ->
 %% cowboy_file_stream_fun/2
 %% ====================================================================
 %% @doc Returns a cowboy-compliant streaming function, that will be evealuated
-%% by cowboy to send data (file content) to receiveing socket.
+%% by cowboy to send data (file content) to receiving socket.
+%% NOTE! FilePathOrUUID must be a unicode string (not utf8)
 %% @end
--spec cowboy_file_stream_fun(string() | {uuid, string()}, integer()) -> function().
+-spec cowboy_file_stream_fun(FilePathOrUUID :: string() | {uuid, string()}, Size :: integer()) -> function().
 %% ====================================================================
 cowboy_file_stream_fun(FilePathOrUUID, Size) ->
     fun(Socket, Transport) ->
-        stream_file(Socket, Transport, FilePathOrUUID, Size, get_download_buffer_size())
+        try
+            stream_file(Socket, Transport, FilePathOrUUID, Size, get_download_buffer_size())
+        catch Type:Message ->
+            % Any exceptions that occur during file streaming must be caught here for cowboy to close the connection cleanly
+            ?error_stacktrace("Error while streaming file '~p' - ~p:~p", [FilePathOrUUID, Type, Message])
+        end
     end.
 
 
@@ -91,18 +97,20 @@ cowboy_file_stream_fun(FilePathOrUUID, Size) ->
 %% is interpreted as attachment (browsers will save it to disk).
 %% Proper filename is set, both in utf8 encoding and legacy for older browsers,
 %% based on given filepath or filename.
+%% NOTE! Filename must be a unicode string (not utf8)
 %% @end
--spec content_disposition_attachment_headers(req(), string()) -> req().
+-spec content_disposition_attachment_headers(Req :: req(), FileName :: string()) -> req().
 %% ====================================================================
 content_disposition_attachment_headers(Req, FileName) ->
-    {Type, Subtype, _} = cow_mimetypes:all(gui_str:to_binary(FileName)),
+    FileNameUtf8 = gui_str:unicode_list_to_binary(FileName),
+    {Type, Subtype, _} = cow_mimetypes:all(FileNameUtf8),
     Mimetype = <<Type/binary, "/", Subtype/binary>>,
     Headers = [
         {<<"content-type">>, Mimetype},
         {<<"content-disposition">>, <<"attachment;",
         % Offer safely-encoded UTF-8 filename and filename*=UTF-8 for browsers supporting it
-        " filename=", (gui_str:url_encode(FileName))/binary,
-        "; filename*=UTF-8''", (gui_str:url_encode(FileName))/binary>>
+        " filename=", (gui_str:url_encode(FileNameUtf8))/binary,
+        "; filename*=UTF-8''", (gui_str:url_encode(FileNameUtf8))/binary>>
         }
     ],
     lists:foldl(fun({Header, Value}, R) -> gui_utils:cowboy_ensure_header(Header, Value, R) end, Req, Headers).
@@ -118,7 +126,7 @@ content_disposition_attachment_headers(Req, FileName) ->
 %% from session cookie. Redirects to error page if there is no valid session or
 %% if sending has failed, otherwise streams the file via ssl socket.
 %% @end
--spec handle_user_content_request(req(), string()) -> {ok, req()}.
+-spec handle_user_content_request(Req :: req(), Path :: string()) -> {ok, req()}.
 %% ====================================================================
 handle_user_content_request(Req, Path) ->
     % Try to initialize session handler and retrieve user's session
@@ -144,7 +152,7 @@ handle_user_content_request(Req, Path) ->
             % Try to get file by given path
             FileInfo =
                 try
-                    TryFilepath = binary_to_list(Path),
+                    TryFilepath = gui_str:binary_to_unicode_list(Path),
                     {ok, Fileattr} = logical_files_manager:getfileattr(TryFilepath),
                     "REG" = Fileattr#fileattributes.type,
                     TrySize = Fileattr#fileattributes.size,
@@ -160,13 +168,13 @@ handle_user_content_request(Req, Path) ->
                 {Filepath, Size} ->
                     % Send the file
                     try
-                        % Finalize session handler, set new cookie
+                        % Finalize session handler
                         {ok, [], FinalCtx} = SessionHandler:finish(State, NewContext),
                         Req2 = cowboy_req:set_resp_header(<<"content-type">>, <<"application/json">>,
                             FinalCtx#context.req),
                         {ok, _NewReq} = send_file(Req2, Filepath, filename:basename(Filepath), Size)
                     catch Type:Message ->
-                        ?error_stacktrace("Error while sending file ~p to user ~p - ~p:~p",
+                        ?error_stacktrace("Error while preparing to send file ~p to user ~p - ~p:~p",
                             [Filepath, UserLogin, Type, Message]),
                         {ok, _FinReq} = cowboy_req:reply(500, Req#http_req{connection = close})
                     end
@@ -181,7 +189,7 @@ handle_user_content_request(Req, Path) ->
 %% if the uuid doesn't point to any file or if sending has failed, otherwise
 %% it streams file via ssl socket.
 %% @end
--spec handle_shared_files_request(string(), req()) -> {ok, req()}.
+-spec handle_shared_files_request(Req :: req(), ShareID :: string()) -> {ok, req()}.
 %% ====================================================================
 handle_shared_files_request(Req, ShareID) ->
 % Try to get file by share uuid
@@ -191,7 +199,7 @@ handle_shared_files_request(Req, ShareID) ->
             true = (ShareID /= <<"">>),
 
             {ok, #veil_document{record = #share_desc{file = TFileID}}} =
-                logical_files_manager:get_share({uuid, binary_to_list(ShareID)}),
+                logical_files_manager:get_share({uuid, gui_str:binary_to_unicode_list(ShareID)}),
             {ok, TFileName} = logical_files_manager:get_file_name_by_uuid(TFileID),
             {ok, Fileattr} = logical_files_manager:getfileattr({uuid, TFileID}),
             "REG" = Fileattr#fileattributes.type,
@@ -210,7 +218,7 @@ handle_shared_files_request(Req, ShareID) ->
             try
                 {ok, _NewReq} = send_file(Req, {uuid, FileID}, FileName, Size)
             catch Type:Message ->
-                ?error_stacktrace("Error while sending shared file ~p - ~p:~p",
+                ?error_stacktrace("Error while preparing to send shared file ~p - ~p:~p",
                     [FileID, Type, Message]),
                 {ok, _FinReq} = cowboy_req:reply(500, Req#http_req{connection = close})
             end
@@ -222,32 +230,42 @@ handle_shared_files_request(Req, ShareID) ->
 %% @doc Sends file as a http response, file is given by uuid or filepath (FilePathOrUUID).
 %% Note that to send a file by filepath, user_id must be stored in process dictionary:
 %% fslogic_context:set_user_dn(UsersDnString)
+%% NOTE! FilePathOrUUID and FileName must be a unicode string (not utf8)
 %% @end
--spec send_file(req(), string() | {uuid, string()}, string(), integer()) -> {ok, req()}.
+-spec send_file(Req :: req(), FilePathOrUUID :: string() | {uuid, string()}, FileName :: string(), Size :: integer()) -> {ok, req()}.
 %% ====================================================================
 send_file(Req, FilePathOrUUID, FileName, Size) ->
     StreamFun = cowboy_file_stream_fun(FilePathOrUUID, Size),
     Req2 = content_disposition_attachment_headers(Req, FileName),
     Req3 = cowboy_req:set_resp_body_fun(Size, StreamFun, Req2),
-    {ok, _FinReq} = cowboy_req:reply(200, Req3).
+    {ok, _FinReq} = cowboy_req:reply(200, Req3#http_req{connection = close}).
 
 
 %% stream_file/5
 %% ====================================================================
 %% @doc Function that will be evaluated by cowboy to stream a file to client.
+%% NOTE! Filename must be a unicode string (not utf8)
 %% @end
--spec stream_file(term(), atom(), string() | {uuid, string()}, integer(), integer()) -> ok.
+-spec stream_file(Socket :: term(), Transport :: atom(), Filename :: string() | {uuid, string()}, Size :: integer(), BufferSize :: integer()) -> ok.
 %% ====================================================================
-stream_file(Socket, Transport, File, Size, BufferSize) ->
-    stream_file(Socket, Transport, File, Size, 0, BufferSize).
+stream_file(Socket, Transport, Filename, Size, BufferSize) ->
+    stream_file(Socket, Transport, Filename, Size, 0, BufferSize).
 
-stream_file(Socket, Transport, File, Size, Sent, BufferSize) ->
-    {ok, BytesRead} = logical_files_manager:read(File, Sent, BufferSize),
+
+%% stream_file/6
+%% ====================================================================
+%% @doc Function that will be evaluated by cowboy to stream a file to client.
+%% NOTE! Filename must be a unicode string (not utf8)
+%% @end
+-spec stream_file(Socket :: term(), Transport :: atom(), Filename :: string() | {uuid, string()}, Size :: integer(), Sent :: integer(), BufferSize :: integer()) -> ok.
+%% ====================================================================
+stream_file(Socket, Transport, Filename, Size, BytesSent, BufferSize) ->
+    {ok, BytesRead} = logical_files_manager:read(Filename, BytesSent, BufferSize),
     ok = Transport:send(Socket, BytesRead),
-    NewSent = Sent + size(BytesRead),
+    NewSent = BytesSent + size(BytesRead),
     if
         NewSent =:= Size -> ok;
-        true -> stream_file(Socket, Transport, File, Size, NewSent, BufferSize)
+        true -> stream_file(Socket, Transport, Filename, Size, NewSent, BufferSize)
     end.
 
 

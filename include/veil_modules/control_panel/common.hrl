@@ -14,6 +14,7 @@
 
 %% Include common gui hrl from ctool
 -include_lib("ctool/include/gui/common.hrl").
+-include_lib("dao/include/common.hrl").
 
 % Relative suffix of GUI address, leading to shared files
 -define(shared_files_download_path, "/share/").
@@ -30,8 +31,8 @@
 % Relative suffix of GUI address, leading to file upload service
 -define(file_upload_path, "/upload").
 
-% Include from dao, cannot include whole hrl because of collision with wf.hrl
--record(veil_document, {uuid = "", rev_info = 0, record = none, force_update = false}).
+% Relative suffix of GUI address, leading to privacy policy page
+-define(privacy_policy_url, <<"/privacy_policy">>).
 
 % Macros used as ids of errors that can appear on GUI pages
 -define(error_user_content_not_logged_in, uc_not_logged_in).
