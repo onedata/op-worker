@@ -30,11 +30,23 @@
 %% ====================================================================
 %% @doc Gets file location (implicit file open operation).
 %% @end
--spec get_file_location(FullFileName :: string(), OpenMode :: string()) ->
+-spec get_file_location(File :: string() | file_doc(), OpenMode :: string()) ->
     #filelocation{} | no_return().
 %% ====================================================================
-get_file_location(FullFileName,OpenMode) ->
+get_file_location(FileDoc = #veil_document{record = #file{}},?UNSPECIFIED_MODE) ->
+    get_file_location(FileDoc,none,?UNSPECIFIED_MODE);
+get_file_location(FullFileName,OpenMode) when is_list(FullFileName) ->
     {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
+    get_file_location(FileDoc,FullFileName,OpenMode).
+
+%% get_file_location/3
+%% ====================================================================
+%% @doc Gets file location (implicit file open operation).
+%% @end
+-spec get_file_location(FileDoc :: file_doc(), FullFileName :: string(), OpenMode :: string()) ->
+    #filelocation{} | no_return().
+%% ====================================================================
+get_file_location(FileDoc,FullFileName,OpenMode) ->
     Validity = ?LOCATION_VALIDITY,
     case FileDoc#veil_document.record#file.type of
         ?REG_TYPE -> ok;

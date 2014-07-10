@@ -32,6 +32,7 @@
 -export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/2]).
 
 -define(UserRootPerms, 8#600).
+-define(TeamDirPerm, 8#1770).
 
 %% ====================================================================
 %% Test API
@@ -726,7 +727,7 @@ create_dirs_at_storage(Root, Teams, Storage) ->
         case Ans of
             SuccessAns when SuccessAns == ok orelse SuccessAns == {error, dir_or_file_exists} ->
                 Ans2 = storage_files_manager:chown(SHI, DirName, "", Dir),
-                Ans3 = storage_files_manager:chmod(SHI, DirName, 8#1730),
+                Ans3 = storage_files_manager:chmod(SHI, DirName, ?TeamDirPerm),
                 case {Ans2, Ans3} of
                     {ok, ok} ->
                         TmpAns;
