@@ -294,7 +294,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
                 ]}
             ]}
         ] ++ SubMenuBody}
-    ] ++ gui_utils:cookie_policy_popup_body().
+    ] ++ gui_utils:cookie_policy_popup_body(?privacy_policy_url).
 
 
 %% logotype_footer/1

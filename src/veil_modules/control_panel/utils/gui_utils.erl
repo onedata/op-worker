@@ -23,7 +23,7 @@
 -export([cowboy_ensure_header/3, onrequest_adjust_headers/1]).
 
 % Cookies policy handling
--export([cookie_policy_popup_body/0, is_cookie_policy_accepted/1]).
+-export([cookie_policy_popup_body/1, is_cookie_policy_accepted/1]).
 
 % Functions used to perform secure server-server http requests
 -export([https_get/2, https_post/3]).
@@ -106,14 +106,14 @@ onrequest_adjust_headers(Req) ->
     cowboy_req:set_resp_header(<<"X-Frame-Options">>, <<"SAMEORIGIN">>, Req2).
 
 
-%% cookie_policy_popup_body/0
+%% cookie_policy_popup_body/1
 %% ====================================================================
 %% @doc Returns a set of elements that renders to a floating popup asking for acceptance
 %% of privacy policy, or an empty list if the privacy policy has already been accepted.
 %% @end
--spec cookie_policy_popup_body() -> [] | term().
+-spec cookie_policy_popup_body(PrivacyPolicyURL :: binary()) -> [] | term().
 %% ====================================================================
-cookie_policy_popup_body() ->
+cookie_policy_popup_body(PrivacyPolicyURL) ->
     case is_cookie_policy_accepted(?REQ) of
         true ->
             [];
@@ -126,7 +126,7 @@ cookie_policy_popup_body() ->
                         #p{style = <<"margin: 0 10px; display: inline;">>,
                             body = <<"This website uses cookies. By continuing to browse the site, you are agreeing to our use of cookies.">>},
                         #form{style = "display: inline;", class = <<"control-group">>, body = [
-                            #link{class = <<"btn btn-mini btn-info">>, target = <<"_blank">>, url = "/privacy_policy",
+                            #link{class = <<"btn btn-mini btn-info">>, target = <<"_blank">>, url = PrivacyPolicyURL,
                                 style = <<"margin: 14px 10px; width: 65px;">>, body = <<"Learn more">>},
                             #link{class = <<"btn btn-mini btn-success">>, id = <<"accept_cookie_policy">>, body = <<"OK">>,
                                 style = <<"margin: 14px 10px; width: 65px;">>, actions = gui_jq:bind_element_click(<<"accept_cookie_policy">>,

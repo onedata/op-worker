@@ -40,7 +40,7 @@ body() ->
                     "You need to have an account and possibly VeilFS service enabled.">>},
                     #button{postback = login, class = <<"btn btn-primary btn-block">>, body = <<"Log in via PL-Grid OpenID">>}
                 ]},
-                gui_utils:cookie_policy_popup_body()
+                gui_utils:cookie_policy_popup_body(?privacy_policy_url)
             ] ++ vcn_gui_utils:logotype_footer(120)
                 % Logout from PLGrid if there is no active session - the user might still have a session there
                 ++ [#p{body = <<"<iframe src=\"https://openid.plgrid.pl/logout\" style=\"display:none\"></iframe>">>}]}
