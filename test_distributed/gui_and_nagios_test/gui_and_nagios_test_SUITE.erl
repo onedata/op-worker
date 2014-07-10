@@ -13,6 +13,7 @@
 -module(gui_and_nagios_test_SUITE).
 -include("test_utils.hrl").
 -include("registered_names.hrl").
+-include("veil_modules/control_panel/connection_check_values.hrl").
 -include_lib("xmerl/include/xmerl.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_node_starter.hrl").
@@ -42,6 +43,7 @@ main_test(Config) ->
 
 	%tests
 	connection_test(),
+    connection_check_test(),
 	nagios_test(),
 
 	%cleanup
@@ -53,6 +55,14 @@ connection_test() ->
     {_, Code, _, _} = ibrowse:send_req("https://localhost:" ++ integer_to_list(Port) , [], get),
 
     ?assertEqual("200", Code).
+
+%% Checks if test callback returns "gui"
+connection_check_test() ->
+    {ok, Port} = rpc:call(get(ccm), application, get_env, [veil_cluster_node, control_panel_port]),
+    {_, Code, _, Value} = ibrowse:send_req("https://localhost:" ++ integer_to_list(Port) ++ "/" ++binary_to_list(?connection_check_path), [], get),
+
+    ?assertEqual("200",Code),
+    ?assertEqual(binary_to_list(?gui_connection_check_value),Value).
 
 %% Sends nagios request and check if health status is ok, and if health report contains information about all workers
 nagios_test() ->
