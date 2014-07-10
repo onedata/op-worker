@@ -183,7 +183,7 @@ clear() ->
 -spec get_session_logic_module() -> atom() | no_return().
 %% ====================================================================
 get_session_logic_module() ->
-    case application:get_env(ctool, session_logic_module) of
+    case application:get_env(veil_cluster_node, session_logic_module) of
         {ok, Module} ->
             Module;
         _ ->
