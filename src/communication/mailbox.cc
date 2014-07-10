@@ -12,5 +12,10 @@ namespace veil
 namespace communication
 {
 
+void Mailbox::onMessage(std::string payload)
+{
+
+}
+
 } // namespace communication
 } // namespace veil

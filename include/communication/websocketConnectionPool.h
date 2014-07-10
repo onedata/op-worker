@@ -11,6 +11,8 @@
 
 #include "connectionPool.h"
 
+#include "certificateData.h"
+
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_client.hpp>
 
@@ -33,7 +35,9 @@ class WebsocketConnectionPool: public ConnectionPool
 public:
     WebsocketConnectionPool(const unsigned int connectionsNumber,
                             std::shared_ptr<Mailbox> mailbox,
-                            const std::string &uri);
+                            const std::string &uri,
+                            std::shared_ptr<CertificateData> certificateData,
+                            const bool verifyServerCertificate);
 
     ~WebsocketConnectionPool();
 
@@ -42,7 +46,9 @@ protected:
 
 private:
     std::thread m_ioThread;
-    std::shared_ptr<endpoint_type> m_endpoint = std::make_shared<endpoint_type>();
+    const std::shared_ptr<endpoint_type> m_endpoint = std::make_shared<endpoint_type>();
+    const std::shared_ptr<CertificateData> m_certificateData;
+    const bool m_verifyServerCertificate;
 };
 
 } // namespace communication

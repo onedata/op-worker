@@ -9,6 +9,8 @@
 #define VEILHELPERS_MAILBOX_H
 
 
+#include <string>
+
 namespace veil
 {
 namespace communication
@@ -16,7 +18,8 @@ namespace communication
 
 class Mailbox
 {
-
+public:
+    void onMessage(std::string payload);
 };
 
 } // namespace communication

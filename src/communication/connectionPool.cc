@@ -49,7 +49,7 @@ std::function<void(const std::string&)> ConnectionPool::select()
     m_openConnections.splice(m_openConnections.end(), m_openConnections,
                              m_openConnections.begin());
 
-    return std::bind(&Connection::send, *it);
+    return std::bind(&Connection::send, *it, std::placeholders::_1);
 }
 
 void ConnectionPool::addConnection()

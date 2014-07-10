@@ -7,7 +7,9 @@
 
 #include "communication/websocketConnection.h"
 
+#include "logging.h"
 #include "communication/certificateData.h"
+#include "communication/mailbox.h"
 
 namespace veil
 {
@@ -51,8 +53,21 @@ WebsocketConnection::WebsocketConnection(std::shared_ptr<Mailbox> mailbox,
     endpoint->connect(connection);
 }
 
-void WebsocketConnection::send()
+void WebsocketConnection::send(const std::string &payload)
 {
+    const auto endpoint = m_endpoint.lock();
+    if(endpoint) // TODO
+    {
+        const auto connection = endpoint->get_con_from_hdl(m_connection);
+        if(connection) // TODO
+        {
+            websocketpp::lib::error_code ec;
+            endpoint->send(connection, payload,
+                           websocketpp::frame::opcode::binary, ec);
+
+            if(ec); // TODO: throw UNDERLYING_LIB_ERROR;
+        }
+    }
 }
 
 void WebsocketConnection::close()
@@ -90,24 +105,22 @@ WebsocketConnection::context_ptr WebsocketConnection::onTLSInit()
         return m_certificateData->initContext(ctx);
 
     }
-    catch (boost::system::system_error& e) // TODO
+    catch(boost::system::system_error &e)
     {
-//        LOG(ERROR) << "Cannot initialize TLS socket due to: " << e.what()
-//                   << " with cert file: " << certInfo.user_cert_path << " and key file: "
-//                   << certInfo.user_key_path;
+        LOG(ERROR) << "Cannot initialize TLS socket due to: " << e.what();
     }
 
     return {};
 }
 
-void WebsocketConnection::onSocketInit(WebsocketConnection::socket_type &socket)
+void WebsocketConnection::onSocketInit(socket_type &socket)
 {
-
+    socket.lowest_layer().set_option(boost::asio::ip::tcp::no_delay(true));
 }
 
-void WebsocketConnection::onMessage(WebsocketConnection::message_ptr msg)
+void WebsocketConnection::onMessage(message_ptr msg)
 {
-
+    m_mailbox->onMessage(msg->get_payload());
 }
 
 void WebsocketConnection::onOpen()

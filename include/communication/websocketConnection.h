@@ -48,7 +48,7 @@ public:
                         std::shared_ptr<CertificateData> certificateData,
                         const bool verifyServerCertificate);
 
-    void send() override;
+    void send(const std::string &payload) override;
     void close() override;
 
 private:
@@ -65,7 +65,7 @@ private:
 
     websocketpp::connection_hdl m_connection;
     std::weak_ptr<endpoint_type> m_endpoint;
-    std::shared_ptr<CertificateData> m_certificateData;
+    const std::shared_ptr<CertificateData> m_certificateData;
     const bool m_verifyServerCertificate;
 };
 

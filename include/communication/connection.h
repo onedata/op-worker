@@ -29,7 +29,7 @@ public:
 
     virtual ~Connection() = default;
 
-    virtual void send() = 0;
+    virtual void send(const std::string &payload) = 0;
     virtual void close();
 
 protected:
