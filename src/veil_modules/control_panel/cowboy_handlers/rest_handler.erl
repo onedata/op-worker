@@ -15,7 +15,7 @@
 -include_lib("public_key/include/public_key.hrl").
 -include("veil_modules/control_panel/common.hrl").
 -include("err.hrl").
--include_lib("ctool/include/logging.hrl").
+-include("veil_modules/control_panel/connection_check_values.hrl").
 
 -record(state, {
     version = <<"latest">> :: binary(),
@@ -51,6 +51,9 @@ init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 %% @end
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
 %% ====================================================================
+rest_init(Req, _Opts) when Req#http_req.path_info =:= [?connection_check_path] ->
+    % when checking connection, continue without cert verification
+    do_init(Req);
 rest_init(Req, _Opts) ->
     {OtpCert, Certs} = try
         {ok, PeerCert} = ssl:peercert(cowboy_req:get(socket, Req)),
@@ -309,6 +312,24 @@ handle_data(Req, Mod, Version, Id, Data) ->
     process_callback_answer(Answer, Req2).
 
 
+%% do_init/1
+%% ====================================================================
+%% Initializes request context, without peer validation
+%% @end
+-spec do_init(req()) -> {ok, req(), #state{} | {error, term()}}.
+%% ====================================================================
+do_init(Req) ->
+    Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, <<"application/json">>, Req),
+    {PathInfo, _} = cowboy_req:path_info(Req2),
+    case rest_routes:route(PathInfo) of
+        undefined ->
+            {ok, Req2, {error, path_invalid}};
+        {Module, Id} ->
+            {Method, _} = cowboy_req:method(Req2),
+            {Version, _} = cowboy_req:binding(version, Req2), % :version in cowboy router
+            Req3 = cowboy_req:set_resp_header(<<"Access-Control-Allow-Origin">>, <<"*">>, Req2),
+            {ok, Req3, #state{version = Version, handler_module = Module, method = Method, resource_id = Id}}
+    end.
 %% do_init/2
 %% ====================================================================
 %% Initializes request context after the peer has been validated. Checks if user
@@ -322,16 +343,7 @@ do_init(Req, DnString) ->
         {ok, _} ->
             fslogic_context:set_user_dn(DnString),
             ?info("[REST] Peer connected using certificate with subject: ~p ~n", [DnString]),
-            {PathInfo, _} = cowboy_req:path_info(Req2),
-            case rest_routes:route(PathInfo) of
-                undefined ->
-                    {ok, Req2, {error, path_invalid}};
-                {Module, Id} ->
-                    {Method, _} = cowboy_req:method(Req2),
-                    {Version, _} = cowboy_req:binding(version, Req2), % :version in cowboy router
-                    Req3 = cowboy_req:set_resp_header(<<"Access-Control-Allow-Origin">>, <<"*">>, Req2),
-                    {ok, Req3, #state{version = Version, handler_module = Module, method = Method, resource_id = Id}}
-            end;
+            do_init(Req2);
         _ ->
             {ok, Req2, {error, {user_unknown, DnString}}}
     end.
