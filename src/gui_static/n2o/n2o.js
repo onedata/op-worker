@@ -47,7 +47,7 @@ function WebSocketsInit(){
                 if (msg.eval) { // Eval
 //                    addStatus("Evaluate: " + msg.eval);
 //                  Uncomment for debug:
-//                    console.log(msg.eval);
+                    console.log(msg.eval);
                     try{eval(msg.eval);}catch(e){console.log(e); console.log(msg.eval);};
                 }
 

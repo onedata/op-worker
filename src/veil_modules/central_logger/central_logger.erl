@@ -127,6 +127,7 @@ handle(_ProtocolVersion, LogMessage) when is_record(LogMessage, logmessage) ->
     ok;
 
 handle(_ProtocolVersion, _Request) ->
+    ?dump(_Request),
     wrong_request.
 
 %% cleanup/0
@@ -369,7 +370,7 @@ client_loglevel_atom_to_int(none) -> 5.
 -include("communication_protocol_pb.hrl").
 
 pierog() ->
-    worker_host:send_to_user({login, "plglopiola"}, #changeremoteloglevel{level = logging_pb:int_to_enum(loglevel, 0)}, "logging", 1).
+    worker_host:send_to_user({login, "plglopiola"}, #changeremoteloglevel{level = logging_pb:int_to_enum(loglevel, 1)}, "logging", 1).
 
 generate_logs() ->
     random:seed(now()),

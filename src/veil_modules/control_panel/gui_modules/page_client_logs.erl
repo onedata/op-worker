@@ -70,7 +70,9 @@ body() ->
         vcn_gui_utils:top_menu(client_logs_tab, logs_submenu()),
         #panel{style = <<"margin-top: 122px; z-index: -1;">>, body = main_table()},
         footer_popup()
-    ].
+    ],
+    event(show_manage_clients_popup),
+    _Body.
 
 
 % Submenu that will end up concatenated to top menu
@@ -94,6 +96,11 @@ logs_submenu() ->
                         class = <<"btn btn-inverse btn-small dropdown-toggle">>, data_fields = [{<<"data-toggle">>, <<"dropdown">>}],
                         body = #span{class = <<"caret">>}},
                     #list{id = <<"max_logs_dropdown">>, class = <<"dropdown-menu dropdown-inverse">>, body = max_logs_dropdown_body(200)}
+                ]},
+                #panel{class = <<"btn-group">>, style = <<"margin: 12px 15px;">>, body = [
+                    #button{postback = show_manage_clients_popup, class = <<"btn btn-inverse">>,
+                        style = <<"width: 140px; height: 34px; padding: 6px 13px 8px;">>, id = <<"manage_clients_button">>,
+                        body = <<"Manage clients">>}
                 ]},
                 #panel{class = <<"btn-group">>, style = <<"margin: 12px 15px;">>, body = [
                     #button{postback = show_filters_popup, class = <<"btn btn-inverse">>,
@@ -126,9 +133,9 @@ logs_submenu() ->
 
 % Main table displaying logs
 main_table() ->
-    #table{id = <<"main_table">>, class = <<"table table-stripped">>,
+    #table{id = <<"main_table">>, class = <<"table">>,
         style = <<"border-radius: 0; margin-bottom: 0; table-layout: fixed; width: 100%;">>,
-        body = [
+        header = [
             #tr{cells = [
                 #th{body = <<"Severity">>, style = <<?SEVERITY_COLUMN_STYLE>>},
                 #th{body = <<"Time">>, style = <<?TIME_COLUMN_STYLE>>},
@@ -161,6 +168,75 @@ filters_panel() ->
     ].
 
 
+% This will be placed in footer_popup after user selects to edit logs
+manage_clients_panel() ->
+    CloseButton = #link{postback = hide_filters_popup, title = <<"Hide">>, class = <<"glyph-link">>,
+        style = <<"position: absolute; top: 8px; right: 8px; z-index: 3;">>,
+        body = #span{class = <<"fui-cross">>, style = <<"font-size: 20px;">>}},
+    {ClientList, {_, Identifiers}} = lists:mapfoldl(
+        fun({UserName, FuseID}, {Counter, Idents}) ->
+            {Row, Identifier} = client_row(<<"client_row_", (integer_to_binary(Counter))/binary>>, false, UserName, FuseID),
+            {Row, {Counter + 1, Idents ++ Identifier}}
+        end, {1, []}, get_connected_clients()),
+    gui_jq:bind_enter_to_submit_button(<<"search_textbox">>, <<"search_button">>),
+    [
+        CloseButton,
+        #panel{style = <<"margin: 0 40px;">>, body = [
+            #panel{style = <<"text-align: left; position: relative;">>, body = [
+                #p{style = <<"margin-top: -5px; display: inline-block; margin-right: 170px;">>, body = <<"Change loglevels for chosen clients:">>},
+                #panel{class = <<"input-append">>, style = <<"margin-bottom: 10px;">>, body = [
+                    #textbox{id = <<"search_textbox">>, class = <<"span2">>,
+                        style = <<"width: 150px;">>, placeholder = <<"Search">>},
+                    #panel{class = <<"btn-group">>, body = [
+                        #button{id = <<"search_button">>, class = <<"btn">>, type = <<"button">>,
+                            actions = gui_jq:form_submit_action(<<"search_button">>, {search_clients, Identifiers}, <<"search_textbox">>),
+                            body = #span{class = <<"fui-search">>}}
+                    ]}
+                ]}
+            ]},
+            #panel{id = <<"client_table_viewport">>, style = <<"width: 650px; min-height: 80px; max-height: 200px; overflow-y: scroll;",
+            "background-color: white; border-radius: 4px; border: 2px solid rgb(82, 100, 118); ">>, body = [
+                #table{id = <<"client_table">>, class = <<"table table-stripped">>, style = <<"margin-bottom: 0;">>,
+                    header = [
+                        #tr{cells = [
+                            #th{style = <<"border-color: rgb(82, 100, 118); position: relative;">>, body = [
+                                #link{postback = {toggle_clients, true, Identifiers}, title = <<"Hide">>, class = <<"glyph-link-gray">>,
+                                    style = <<"position: absolute; top: 10px; left: 11px;">>,
+                                    body = #span{class = <<"fui-checkbox-checked">>, style = <<"font-size: 20px;">>}
+                                },
+                                #link{postback = {toggle_clients, false, Identifiers}, title = <<"Hide">>, class = <<"glyph-link-gray">>,
+                                    style = <<"position: absolute; top: 10px; left: 38px;">>,
+                                    body = #span{class = <<"fui-checkbox-unchecked">>, style = <<"font-size: 20px;">>}
+                                }
+                            ]},
+                            #th{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"User">>},
+                            #th{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"Fuse ID">>}
+                        ]}
+                    ],
+                    body = #tbody{body = ClientList}
+                }
+            ]}
+        ]}
+    ].
+
+client_row(ID, Selected, UserName, FuseID) ->
+    {RowClass, LinkClass, GlyphClass} =
+        case Selected of
+            true -> {<<"selected-item">>, <<"glyph-link-active">>, <<"fui-checkbox-checked">>};
+            false -> {<<"">>, <<"glyph-link-gray">>, <<"fui-checkbox-unchecked">>}
+        end,
+    Identifier = [{ID, UserName, FuseID}],
+    Row = #tr{class = RowClass, id = ID, cells = [
+        #td{style = <<"border-color: rgb(82, 100, 118); position: relative;">>, body = [
+            #link{id = <<"link_", ID/binary>>, postback = {toggle_clients, not Selected, Identifier}, title = <<"Toggle this client">>,
+                class = LinkClass, style = <<"position: absolute; top: 7px;">>,
+                body = #span{class = GlyphClass, style = <<"font-size: 20px;">>}
+            }]},
+        #td{style = <<"border-color: rgb(82, 100, 118);">>, body = UserName},
+        #td{style = <<"border-color: rgb(82, 100, 118);">>, body = FuseID}
+    ]},
+    {Row, Identifier}.
+
 % Creates a set of elements used to edit filter preferences of a single filter
 filter_form(FilterType) ->
     #span{style = <<"display: inline-block; position: relative; height: 42px; margin-bottom: 15px; width: 410px; text-align: left;">>, body = [
@@ -181,6 +257,45 @@ filter_form(FilterType) ->
     ]}.
 
 
+% Listing available clients
+get_connected_clients() ->
+    [
+        {<<"plglopiola">>, <<"dsfasdfweterert">>},
+        {<<"plglopiola">>, <<"hsgsgfhdasfgcvzb">>},
+        {<<"plglopiola">>, <<"fdgshjsgfhdfhsdfg">>},
+        {<<"plglopiola">>, <<"zcvbzcvbsdfgh">>},
+        {<<"plglopiola">>, <<"dsfasdfweterert">>},
+        {<<"plglopiola">>, <<"hsgsgfhdasfgcvzb">>},
+        {<<"plglopiola">>, <<"fdgshjsgfhdfhsdfg">>},
+        {<<"plglopiola">>, <<"zcvbzcvbsdfgh">>},
+        {<<"plgwrzeszcz">>, <<"sghsgfhshsghsftgh">>},
+        {<<"plgwrzeszcz">>, <<"dvgfzxcvxzcvxzcv">>},
+        {<<"plgwrzeszcz">>, <<"sghsgfhshsghsftgh">>},
+        {<<"plgwrzeszcz">>, <<"dvgfzxcvxzcvxzcv">>},
+        {<<"plgroxeon">>, <<"dgfshasdfhaeth">>},
+        {<<"plgroxeon">>, <<"jsrtyhdgfvdzfgcdxcd">>},
+        {<<"plgroxeon">>, <<"dgfshasdfhaeth">>},
+        {<<"plgroxeon">>, <<"jsrtyhdgfvdzfgcdxcd">>},
+        {<<"plgroxeon">>, <<"dgfshasdfhaeth">>},
+        {<<"plgroxeon">>, <<"jsrtyhdgfvdzfgcdxcd">>},
+        {<<"plgroxeon">>, <<"dgfshasdfhaeth">>},
+        {<<"plgroxeon">>, <<"jsrtyhdgfvdzfgcdxcd">>},
+        {<<"plgroxeon">>, <<"dgfshasdfhaeth">>},
+        {<<"plgroxeon">>, <<"jsrtyhdgfvdzfgcdxcd">>}
+    ].
+
+
+% Remebering which clients are selected on the list
+set_selected_clients(List) ->
+    put(selected_clients, List).
+
+get_selected_clients() ->
+    case get(selected_clients) of
+        undefined -> [];
+        List -> List
+    end.
+
+
 % Initialization of comet loop - trap_exit=true so we can control when a session terminates and
 % the process should be removed from central_logger subscribers
 comet_loop_init() ->
@@ -189,38 +304,46 @@ comet_loop_init() ->
 
 % Comet loop - waits for new logs, updates the page and repeats. Handles messages that change logging preferences.
 comet_loop(Counter, PageState = #page_state{first_log = FirstLog, auto_scroll = AutoScroll}) ->
-    try
-        receive
-            {log, Log} ->
-                {NewCounter, NewPageState} = process_log(Counter, Log, PageState),
-                ?MODULE:comet_loop(NewCounter, NewPageState);
-            toggle_auto_scroll ->
-                ?MODULE:comet_loop(Counter, PageState#page_state{auto_scroll = not AutoScroll});
-            clear_all_logs ->
-                remove_old_logs(Counter, FirstLog, 0),
-                ?MODULE:comet_loop(Counter, PageState#page_state{first_log = Counter});
-            {set_loglevel, Loglevel} ->
-                ?MODULE:comet_loop(Counter, PageState#page_state{loglevel = Loglevel});
-            {set_max_logs, MaxLogs} ->
-                NewFirstLog = remove_old_logs(Counter, FirstLog, MaxLogs),
-                ?MODULE:comet_loop(Counter, PageState#page_state{max_logs = MaxLogs, first_log = NewFirstLog});
-            {set_filter, FilterName, Filter} ->
-                ?MODULE:comet_loop(Counter, set_filter(PageState, FilterName, Filter));
-            display_error ->
-                catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, client, self()}}),
-                gui_jq:insert_bottom(<<"main_table">>, comet_error()),
-                gui_comet:flush();
-            {'EXIT', _, _Reason} ->
-                catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, client, self()}});
-            Other ->
-                ?debug("Unrecognized comet message in page_logs: ~p", [Other]),
-                ?MODULE:comet_loop(Counter, PageState)
-        end
-    catch _Type:_Msg ->
-        ?error_stacktrace("Error in page_logs comet_loop - ~p: ~p", [_Type, _Msg]),
-        catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, client, self()}}),
-        gui_jq:insert_bottom(<<"main_table">>, comet_error()),
-        gui_comet:flush()
+    Result =
+        try
+            receive
+                {log, Log} ->
+                    {NCounter, NPageState} = process_log(Counter, Log, PageState),
+                    {NCounter, NPageState};
+                toggle_auto_scroll ->
+                    {Counter, PageState#page_state{auto_scroll = not AutoScroll}};
+                clear_all_logs ->
+                    remove_old_logs(Counter, FirstLog, 0),
+                    {Counter, PageState#page_state{first_log = Counter}};
+                {set_loglevel, Loglevel} ->
+                    {Counter, PageState#page_state{loglevel = Loglevel}};
+                {set_max_logs, MaxLogs} ->
+                    NewFirstLog = remove_old_logs(Counter, FirstLog, MaxLogs),
+                    {Counter, PageState#page_state{max_logs = MaxLogs, first_log = NewFirstLog}};
+                {set_filter, FilterName, Filter} ->
+                    {Counter, set_filter(PageState, FilterName, Filter)};
+                display_error ->
+                    catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, client, self()}}),
+                    gui_jq:insert_bottom(<<"main_table">>, comet_error()),
+                    gui_comet:flush(),
+                    error;
+                {'EXIT', _, _Reason} ->
+                    catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, client, self()}}),
+                    error;
+                Other ->
+                    ?debug("Unrecognized comet message in page_logs: ~p", [Other]),
+                    {Counter, PageState}
+            end
+        catch _Type:_Msg ->
+            ?error_stacktrace("Error in page_logs comet_loop - ~p: ~p", [_Type, _Msg]),
+            catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, client, self()}}),
+            gui_jq:insert_bottom(<<"main_table">>, comet_error()),
+            gui_comet:flush(),
+            error
+        end,
+    case Result of
+        error -> ok; % Comet process terminates
+        {NewCounter, NewState} -> ?MODULE:comet_loop(NewCounter, NewState)
     end.
 
 
@@ -409,6 +532,34 @@ event(terminate) ->
     ok;
 
 
+event({toggle_clients, Selected, ClientList}) ->
+    lists:foreach(
+        fun({ID, UserName, FuseID}) ->
+            SelectedClients = get_selected_clients() -- [FuseID],
+            case Selected of
+                true -> set_selected_clients([FuseID | SelectedClients]);
+                false -> set_selected_clients(SelectedClients)
+            end,
+            {NewRow, _} = client_row(ID, Selected, UserName, FuseID),
+            gui_jq:replace(ID, NewRow)
+        end, ClientList);
+
+
+event({search_clients, ClientList}) ->
+    % Deselect all
+    Query = gui_ctx:postback_param(<<"search_textbox">>),
+    {Select, Deselect} = lists:partition(
+        fun({_, UserName, _}) ->
+            binary:match(UserName, Query) =/= nomatch
+        end, ClientList),
+    ?dump(Select),
+    event({toggle_clients, true, Select}),
+    event({toggle_clients, false, Deselect}),
+    [{FirstRow, _, _} | _] = Select,
+    gui_jq:wire(<<"$('#client_table_viewport').animate({scrollTop: $('#", FirstRow/binary, "').offset().top - ",
+    "$('#client_table_viewport').offset().top + $('#client_table_viewport').scrollTop()}, 50);">>);
+
+
 event(toggle_auto_scroll) ->
     get(comet_pid) ! toggle_auto_scroll;
 
@@ -438,6 +589,13 @@ event(show_filters_popup) ->
             gui_jq:bind_enter_to_submit_button(get_filter_textbox(FilterType), get_filter_submit_button(FilterType)),
             event({show_filter, FilterType})
         end, get_filter_types()),
+    gui_jq:remove_class(<<"footer_popup">>, <<"hidden">>);
+
+
+% Show client management panel
+event(show_manage_clients_popup) ->
+    gui_jq:add_class(<<"footer_popup">>, <<"hidden">>),
+    gui_jq:update(<<"footer_popup">>, manage_clients_panel()),
     gui_jq:remove_class(<<"footer_popup">>, <<"hidden">>);
 
 

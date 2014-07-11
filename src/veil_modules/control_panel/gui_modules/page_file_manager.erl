@@ -266,46 +266,52 @@ comet_loop_init(UserId, RequestedHostname) ->
 
 
 comet_loop(IsUploadInProgress) ->
-    try
-        receive
-            {action, Fun, Args} ->
-                case IsUploadInProgress of
-                    true ->
-                        gui_jq:wire(#alert{text = <<"Please wait for the upload to finish.">>}), gui_comet:flush();
-                    false ->
-                        erlang:apply(?MODULE, Fun, Args)
+    NewIsUploadInProgress =
+        try
+            receive
+                {action, Fun, Args} ->
+                    case IsUploadInProgress of
+                        true ->
+                            gui_jq:wire(#alert{text = <<"Please wait for the upload to finish.">>}), gui_comet:flush();
+                        false ->
+                            erlang:apply(?MODULE, Fun, Args)
+                    end,
+                    gui_jq:hide(<<"spinner">>),
+                    gui_comet:flush(),
+                    IsUploadInProgress;
+                upload_started ->
+                    true;
+                upload_finished ->
+                    false;
+                Other ->
+                    ?debug("Unrecognized comet message in page_file_manager: ~p", [Other]),
+                    IsUploadInProgress
+
+            after ?AUTOREFRESH_PERIOD ->
+                % Refresh file list if it has changed
+                CurrentItemList = fs_list_dir(get_working_directory()),
+                CurrentMD5 = item_list_md5(CurrentItemList),
+                case get_item_list_rev() of
+                    CurrentMD5 ->
+                        skip;
+                    _ ->
+                        set_item_list(CurrentItemList),
+                        set_item_list_rev(CurrentMD5),
+                        refresh_workspace(),
+                        gui_comet:flush()
                 end,
-                gui_jq:hide(<<"spinner">>),
-                gui_comet:flush(),
-                ?MODULE:comet_loop(IsUploadInProgress);
-            upload_started ->
-                ?MODULE:comet_loop(true);
-            upload_finished ->
-                ?MODULE:comet_loop(false);
-            Other ->
-                ?debug("Unrecognized comet message in page_file_manager: ~p", [Other]),
-                ?MODULE:comet_loop(IsUploadInProgress)
+                IsUploadInProgress
+            end
 
-        after ?AUTOREFRESH_PERIOD ->
-            % Refresh file list if it has changed
-            CurrentItemList = fs_list_dir(get_working_directory()),
-            CurrentMD5 = item_list_md5(CurrentItemList),
-            case get_item_list_rev() of
-                CurrentMD5 ->
-                    skip;
-                _ ->
-                    set_item_list(CurrentItemList),
-                    set_item_list_rev(CurrentMD5),
-                    refresh_workspace(),
-                    gui_comet:flush()
-            end,
-            ?MODULE:comet_loop(IsUploadInProgress)
-        end
-
-    catch Type:Message ->
-        ?error_stacktrace("Error in file_manager comet_loop - ~p:~p", [Type, Message]),
-        page_error:redirect_with_error(?error_internal_server_error),
-        gui_comet:flush()
+        catch Type:Message ->
+            ?error_stacktrace("Error in file_manager comet_loop - ~p:~p", [Type, Message]),
+            page_error:redirect_with_error(?error_internal_server_error),
+            gui_comet:flush(),
+            error
+        end,
+    case NewIsUploadInProgress of
+        error -> ok; % Come tprocess will terminate
+        _ -> ?MODULE:comet_loop(NewIsUploadInProgress)
     end.
 
 
@@ -894,10 +900,10 @@ list_view_body() ->
     CellWidth = <<"width: ", (integer_to_binary(round(90 * (2 + NumAttr) / NumAttr)))/binary, "px;">>,
     HeaderTable = [
         #table{class = <<"no-margin table">>, style = <<"position: fixed; top: 173px; z-index: 10;",
-        "background: white; border: 2px solid #bbbdc0; border-collapse: collapse;">>, body = [
+        "background: white; border: 2px solid #bbbdc0; border-collapse: collapse;">>, header = [
             #tr{cells =
             [
-                #th{style = <<"border: 2px solid #aaacae;color: rgb(64, 89, 116);">>, body = <<"Name">>}
+                #th{style = <<"border: 2px solid #aaacae; color: rgb(64, 89, 116);">>, body = <<"Name">>}
             ] ++
             lists:map(
                 fun(Attr) ->
