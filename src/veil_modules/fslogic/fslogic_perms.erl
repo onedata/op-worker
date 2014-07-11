@@ -29,10 +29,12 @@
 %% ====================================================================
 %% @doc Checks if the user has permission to modify file (e,g. change owner).
 %% @end
--spec check_file_perms(FileName :: string(), UserDoc :: term(), FileDoc :: term(), CheckType :: root | owner | delete | read | write | execute) -> Result when
+-spec check_file_perms(FileName :: string(), UserDoc :: term(), FileDoc :: term(), CheckType :: root | owner | delete | read | write | execute | rdwr | '') -> Result when
     Result :: ok | {error, ErrorDetail},
     ErrorDetail :: term().
 %% ====================================================================
+check_file_perms(_FileName, _UserDoc, _FileDoc, '') -> %root, always return ok
+    ok;
 check_file_perms(_FileName, #veil_document{uuid = ?CLUSTER_USER_ID}, _FileDoc, _CheckType) -> %root, always return ok
     ok;
 check_file_perms(FileName, UserDoc, _FileDoc, root = CheckType) -> % check if root
@@ -47,6 +49,11 @@ check_file_perms(FileName, UserDoc, FileDoc, delete) ->
     case ParentFileDoc#veil_document.record#file.perms band ?STICKY_BIT of
         0 -> check_file_perms(ParentFileName,UserDoc,ParentFileDoc,write);
         _ -> check_file_perms(FileName,UserDoc,FileDoc,owner)
+    end;
+check_file_perms(FileName, UserDoc, FileDoc, rdwr) ->
+    case check_file_perms(FileName, UserDoc, FileDoc, read) of
+        ok -> check_file_perms(FileName, UserDoc, FileDoc, write);
+        Error -> Error
     end;
 check_file_perms(FileName, UserDoc, #veil_document{record = #file{uid = FileOwnerUid, perms = FilePerms}}, CheckType) -> %check read/write/execute perms
     UserUid = UserDoc#veil_document.uuid,
