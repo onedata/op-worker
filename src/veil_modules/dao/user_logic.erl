@@ -32,7 +32,7 @@
 -export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/2]).
 
 -define(UserRootPerms, 8#600).
--define(TeamDirPerm, 8#1770).
+-define(TeamDirPerm, 8#770).
 
 %% ====================================================================
 %% Test API
