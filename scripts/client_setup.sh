@@ -1,3 +1,13 @@
+#####################################################################
+#  @author Rafal Slota
+#  @copyright (C): 2014 ACK CYFRONET AGH
+#  This software is released under the MIT license
+#  cited in 'LICENSE.txt'.
+#####################################################################
+#  This script is used by Bamboo agent to set up VeilClient nodes
+#  during deployment.
+#####################################################################
+
 ## Check configuration and set defaults...
 if [[ -z "$CONFIG_PATH" ]]; then
     export CONFIG_PATH="/etc/onedata_platform.conf"

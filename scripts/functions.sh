@@ -1,3 +1,13 @@
+#####################################################################
+#  @author Rafal Slota
+#  @copyright (C): 2014 ACK CYFRONET AGH
+#  This software is released under the MIT license
+#  cited in 'LICENSE.txt'.
+#####################################################################
+#  This script contains utility function used by Bamboo agents to
+#  build and deploy VeilFS project's components. 
+#####################################################################
+
 ## Check configuration and set defaults...
 if [[ -z "$CONFIG_PATH" ]]; then
     export CONFIG_PATH="/etc/onedata_platform.conf"

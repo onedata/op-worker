@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 
+#####################################################################
+#  @author Rafal Slota
+#  @copyright (C): 2014 ACK CYFRONET AGH
+#  This software is released under the MIT license
+#  cited in 'LICENSE.txt'.
+#####################################################################
+#  This script allows to restart Bamboo agents.
+#####################################################################
+
 ssh 172.16.67.229 "killall -KILL java ; service bamboo-agent restart" &
 ssh 172.16.67.230 "killall -KILL java ; service bamboo-agent restart" &
 ssh 172.16.67.231 "killall -KILL java ; service bamboo-agent restart" &

@@ -1,5 +1,17 @@
 #!/usr/bin/env escript
 
+%% ===================================================================
+%% @author Rafal Slota
+%% @copyright (C): 2014 ACK CYFRONET AGH
+%% This software is released under the MIT license
+%% cited in 'LICENSE.txt'.
+%% @end
+%% ===================================================================
+%% @doc: This script allows to connect to VeilCluster node and create
+%% user.
+%% @end
+%% ===================================================================
+
 -module(reg_user).
 
 -define(default_cookie, veil_cluster_node).
