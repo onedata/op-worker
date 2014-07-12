@@ -205,6 +205,11 @@ permissions_test(Config) ->
 %%   ?assertEqual("ok", DeleteStatus3),
 %%   ?assertEqual(list_to_atom(?VEACCES), DeleteAnswer3),
 
+%% Share file with other user (with 'Cert')
+  {PermStatus3, PermAnswer3} = change_perm_on_storage(Host, Cert2, Port, Id1, 8#660),
+  ?assertEqual("ok", PermStatus3),
+  ?assertEqual(list_to_atom(?VOK), PermAnswer3),
+
   {WriteStatus3, WriteAnswer3, BytesWritten3} = write(Host, Cert, Port, Id1, 0, list_to_binary("xyz")),
   ?assertEqual("ok", WriteStatus3),
   ?assertEqual(?VOK, WriteAnswer3),
@@ -219,17 +224,17 @@ permissions_test(Config) ->
   ?assertEqual(?VOK, ReadAnswer3),
   ?assertEqual("zd", binary_to_list(ReadData3)),
 
-  {PermStatus3, PermAnswer3} = change_perm_on_storage(Host, Cert, Port, Id1, 8#521),
-  ?assertEqual("ok", PermStatus3),
-  ?assertEqual(list_to_atom(?VEPERM), PermAnswer3),
+  {PermStatus4, PermAnswer4} = change_perm_on_storage(Host, Cert, Port, Id1, 8#521),
+  ?assertEqual("ok", PermStatus4),
+  ?assertEqual(list_to_atom(?VEPERM), PermAnswer4),
 
 
 
 
 
-  {PermStatus3_2, PermAnswer3_2} = change_perm_on_storage(Host, Cert2, Port, Id1, 8#640),
-  ?assertEqual("ok", PermStatus3_2),
-  ?assertEqual(list_to_atom(?VOK), PermAnswer3_2),
+  {PermStatus4_2, PermAnswer4_2} = change_perm_on_storage(Host, Cert2, Port, Id1, 8#640),
+  ?assertEqual("ok", PermStatus4_2),
+  ?assertEqual(list_to_atom(?VOK), PermAnswer4_2),
 
 
 
@@ -251,9 +256,9 @@ permissions_test(Config) ->
   ?assertEqual(?VOK, ReadAnswer4),
   ?assertEqual("zd", binary_to_list(ReadData4)),
 
-  {PermStatus4, PermAnswer4} = change_perm_on_storage(Host, Cert, Port, Id1, 8#521),
-  ?assertEqual("ok", PermStatus4),
-  ?assertEqual(list_to_atom(?VEPERM), PermAnswer4),
+  {PermStatus5, PermAnswer5} = change_perm_on_storage(Host, Cert, Port, Id1, 8#521),
+  ?assertEqual("ok", PermStatus5),
+  ?assertEqual(list_to_atom(?VEPERM), PermAnswer5),
 
 
 
