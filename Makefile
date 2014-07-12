@@ -58,6 +58,7 @@ upgrade:
 	./rebar generate-upgrade previous_release=${PREV}
 
 rpm: deps generate
+    make -C onepanel rel
 	./releases/rpm_files/create_rpm
 
 

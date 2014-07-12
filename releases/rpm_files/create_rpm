@@ -6,6 +6,9 @@ RPM_BUILD_DIRECTORY=/tmp/veil_rpmbuild
 # Bigcouch release submodule
 BIGCOUCH_RELEASE_DIRECTORY=`git rev-parse --show-toplevel`/bigcouchdb
 
+# Onepanel release submodule
+ONEPANEL_RELEASE_DIRECTORY=`git rev-parse --show-toplevel`/onepanel/rel
+
 ##############################
 # Exit on any failure
 set -e
@@ -35,6 +38,10 @@ cp -R $RUNNER_SCRIPT_DIR/../veil_cluster_node/* $RPM_BUILD_DIRECTORY/SOURCES/vei
 
 # Attach bigcouch release
 cp -R $BIGCOUCH_RELEASE_DIRECTORY/*  $RPM_BUILD_DIRECTORY/SOURCES/veil/files
+
+# Attach onepanel release
+mkdir -p $RPM_BUILD_DIRECTORY/SOURCES/veil/files/onepanel
+cp -R $ONEPANEL_RELEASE_DIRECTORY/*  $RPM_BUILD_DIRECTORY/SOURCES/veil/files/onepanel
 
 cd $RPM_BUILD_DIRECTORY/SOURCES
 tar zcf veil.tar.gz veil
