@@ -40,7 +40,8 @@ cp -R $RUNNER_SCRIPT_DIR/../veil_cluster_node/* $RPM_BUILD_DIRECTORY/SOURCES/vei
 cp -R $BIGCOUCH_RELEASE_DIRECTORY/*  $RPM_BUILD_DIRECTORY/SOURCES/veil/files
 
 # Attach onepanel release
-cp -R $ONEPANEL_RELEASE_DIRECTORY  $RPM_BUILD_DIRECTORY/SOURCES/veil/files
+mkdir -p $RPM_BUILD_DIRECTORY/SOURCES/veil/files/onepanel_node
+cp -R $ONEPANEL_RELEASE_DIRECTORY/*  $RPM_BUILD_DIRECTORY/SOURCES/veil/files/onepanel_node
 
 cd $RPM_BUILD_DIRECTORY/SOURCES
 tar zcf veil.tar.gz veil
