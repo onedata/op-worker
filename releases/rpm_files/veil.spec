@@ -57,7 +57,7 @@ chkconfig --add onepanel
 service onepanel start
 ln -sf %{_prefix}/setup /usr/bin/veil_setup
 ln -sf %{_prefix}/addusers /usr/bin/veil_addusers
-ln -sf %{_prefix}/files/onepanel/scripts/onepanel_setup.sh /usr/bin/onepanel_setup
+ln -sf %{_prefix}/onepanel_setup /usr/bin/onepanel_setup
 
 %preun
 service veil stop
