@@ -341,8 +341,8 @@ veil_cluster_node_env:
 
   - parameter:
       name: new_dir_storage_mode
-      description: Default mode for new directory at storage system (8#330)
-      value: 216
+      description: Default mode for new directory at storage system (8#1330)
+      value: 728
 
 
   # DNS
