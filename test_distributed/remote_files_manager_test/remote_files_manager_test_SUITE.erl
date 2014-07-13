@@ -544,6 +544,9 @@ init_per_testcase(_, Config) ->
   StartLog = nodes_manager:start_app_on_nodes(NodesUp, [[{node_type, ccm_test}, {dispatcher_port, Port}, {ccm_nodes, [FSLogicNode]}, {dns_port, 1317}, {db_nodes, [DB_Node]}, {heart_beat, 1}]]),
 
   Assertions = [{false, lists:member(error, NodesUp)}, {false, lists:member(error, StartLog)}],
+
+  discover_default_file_mode(FSLogicNode),
+
   lists:append([{port, Port}, {nodes, NodesUp}, {assertions, Assertions}], Config).
 
 end_per_testcase(_, Config) ->
@@ -678,7 +681,7 @@ delete_file(Host, Cert, Port, FileName, FuseID) ->
 
 %% Each of following functions simulate one request from Cluster Proxy.
 create_file_on_storage(Host, Cert, Port, FileID) ->
-  OperationMessage = #createfile{file_id  = FileID},
+  OperationMessage = #createfile{file_id  = FileID,mode = get(new_file_storage_mode)},
   OperationMessageBytes = erlang:iolist_to_binary(remote_file_management_pb:encode_createfile(OperationMessage)),
 
   RemoteMangementMessage = #remotefilemangement{message_type = "createfile", input = OperationMessageBytes},
@@ -820,3 +823,9 @@ write(Host, Cert, Port, FileID, Offset, WriteData) ->
   WriteInfo = remote_file_management_pb:decode_writeinfo(Bytes),
   WriteInfo2 = records_translator:translate(WriteInfo, "remote_file_management"),
   {Status, WriteInfo2#writeinfo.answer_status, WriteInfo2#writeinfo.bytes_written}.
+
+discover_default_file_mode(Node) ->
+    Ans = rpc:call(Node,application,get_env,[?APP_Name, new_file_storage_mode]),
+    ?assertMatch({ok,_},Ans),
+    {ok,DefaultMode} = Ans,
+    put(new_file_storage_mode,DefaultMode).
