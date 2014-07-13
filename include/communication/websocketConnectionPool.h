@@ -40,13 +40,17 @@ public:
                             const bool verifyServerCertificate);
 
     ~WebsocketConnectionPool();
+    WebsocketConnectionPool(WebsocketConnectionPool&&) = default;
+    WebsocketConnectionPool &operator=(WebsocketConnectionPool&&) & = default;
+    WebsocketConnectionPool(const WebsocketConnectionPool&) = delete;
+    WebsocketConnectionPool &operator=(const WebsocketConnectionPool&) = delete;
 
 protected:
-    std::shared_ptr<Connection> createConnection() override;
+    std::unique_ptr<Connection> createConnection() override;
 
 private:
     std::thread m_ioThread;
-    const std::shared_ptr<endpoint_type> m_endpoint = std::make_shared<endpoint_type>();
+    endpoint_type m_endpoint;
     const std::shared_ptr<CertificateData> m_certificateData;
     const bool m_verifyServerCertificate;
 };

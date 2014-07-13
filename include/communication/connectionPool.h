@@ -14,7 +14,6 @@
 #include <list>
 #include <memory>
 #include <mutex>
-#include <unordered_set>
 
 namespace veil
 {
@@ -32,16 +31,21 @@ public:
                    const std::string &uri);
 
     virtual ~ConnectionPool();
+    ConnectionPool(ConnectionPool&&) = default;
+    ConnectionPool &operator=(ConnectionPool&&) & = default;
+    ConnectionPool(const ConnectionPool&) = delete;
+    ConnectionPool &operator=(const ConnectionPool&) = delete;
 
-    std::function<void(const std::string&)> select();
+    void send(const std::string &payload);
 
-    void addConnection();
-    void onFail(std::shared_ptr<Connection> connection);
-    void onOpen(std::shared_ptr<Connection> connection);
-    void onError(std::shared_ptr<Connection> connection);
 
 protected:
-    virtual std::shared_ptr<Connection> createConnection() = 0;
+    void addConnection();
+    void onFail(Connection &connection);
+    void onOpen(Connection &connection);
+    void onError(Connection &connection);
+
+    virtual std::unique_ptr<Connection> createConnection() = 0;
 
     const unsigned int m_connectionsNumber;
     const std::shared_ptr<Mailbox> m_mailbox;
@@ -49,8 +53,8 @@ protected:
     std::mutex m_connectionsMutex;
     std::condition_variable m_connectionOpened;
     std::atomic<unsigned int> m_activeConnections{0};
-    std::unordered_set<std::shared_ptr<Connection>> m_futureConnections;
-    std::list<std::shared_ptr<Connection>> m_openConnections;
+    std::list<std::unique_ptr<Connection>> m_futureConnections;
+    std::list<std::unique_ptr<Connection>> m_openConnections;
 };
 
 } // namespace communication

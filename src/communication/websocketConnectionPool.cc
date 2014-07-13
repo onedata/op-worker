@@ -8,6 +8,7 @@
 #include "communication/websocketConnectionPool.h"
 
 #include "communication/websocketConnection.h"
+#include "make_unique.h"
 
 #include <chrono>
 #include <functional>
@@ -36,25 +37,25 @@ WebsocketConnectionPool::WebsocketConnectionPool(const unsigned int connectionsN
     m_endpoint.clear_error_channels(websocketpp::log::elevel::all);
 #endif
 
-    m_endpoint->init_asio();
-    m_endpoint->start_perpetual();
+    m_endpoint.init_asio();
+    m_endpoint.start_perpetual();
 
-    m_ioThread = std::thread{&endpoint_type::run, m_endpoint};
+    m_ioThread = std::thread{&endpoint_type::run, &m_endpoint};
 }
 
 WebsocketConnectionPool::~WebsocketConnectionPool()
 {
-    m_endpoint->stop_perpetual();
+    m_endpoint.stop_perpetual();
     m_ioThread.join();
 }
 
-std::shared_ptr<Connection> WebsocketConnectionPool::createConnection()
+std::unique_ptr<Connection> WebsocketConnectionPool::createConnection()
 {
-    return std::make_shared<WebsocketConnection>(
+    return std::make_unique<WebsocketConnection>(
                 m_mailbox,
-                std::bind(&ConnectionPool::onFail, this, std::placeholders::_1),
-                std::bind(&ConnectionPool::onOpen, this, std::placeholders::_1),
-                std::bind(&ConnectionPool::onError, this, std::placeholders::_1),
+                std::bind(&WebsocketConnectionPool::onFail, this, std::placeholders::_1),
+                std::bind(&WebsocketConnectionPool::onOpen, this, std::placeholders::_1),
+                std::bind(&WebsocketConnectionPool::onError, this, std::placeholders::_1),
                 m_endpoint, m_uri, m_certificateData, m_verifyServerCertificate);
 }
 

@@ -17,14 +17,15 @@ namespace communication
 {
 
 WebsocketConnection::WebsocketConnection(std::shared_ptr<Mailbox> mailbox,
-                                         std::function<void(std::shared_ptr<Connection>)> onFailCallback,
-                                         std::function<void(std::shared_ptr<Connection>)> onOpenCallback,
-                                         std::function<void(std::shared_ptr<Connection>)> onErrorCallback,
-                                         std::shared_ptr<endpoint_type> endpoint,
+                                         std::function<void(Connection&)> onFailCallback,
+                                         std::function<void(Connection&)> onOpenCallback,
+                                         std::function<void(Connection&)> onErrorCallback,
+                                         endpoint_type &endpoint,
                                          const std::string &uri,
-                                         std::shared_ptr<CertificateData> certificateData,
+                                         std::shared_ptr<const CertificateData> certificateData,
                                          const bool verifyServerCertificate)
     : Connection{std::move(mailbox), onFailCallback, onOpenCallback, onErrorCallback}
+    , m_endpoint{endpoint}
     , m_certificateData{std::move(certificateData)}
     , m_verifyServerCertificate{verifyServerCertificate}
 {
@@ -32,7 +33,7 @@ WebsocketConnection::WebsocketConnection(std::shared_ptr<Mailbox> mailbox,
     namespace p = websocketpp::lib::placeholders;
 
     websocketpp::lib::error_code ec;
-    auto connection = endpoint->get_connection(uri, ec);
+    auto connection = endpoint.get_connection(uri, ec);
     if(ec)
         return; // TODO
 
@@ -48,38 +49,28 @@ WebsocketConnection::WebsocketConnection(std::shared_ptr<Mailbox> mailbox,
     connection->set_interrupt_handler   (bind(&WebsocketConnection::onInterrupt, this));
 
     m_connection = connection;
-    m_endpoint = endpoint;
 
-    endpoint->connect(connection);
+    endpoint.connect(connection);
 }
 
 void WebsocketConnection::send(const std::string &payload)
 {
-    const auto endpoint = m_endpoint.lock();
-    if(endpoint) // TODO
+    const auto connection = m_endpoint.get_con_from_hdl(m_connection);
+    if(connection) // TODO
     {
-        const auto connection = endpoint->get_con_from_hdl(m_connection);
-        if(connection) // TODO
-        {
-            websocketpp::lib::error_code ec;
-            endpoint->send(connection, payload,
-                           websocketpp::frame::opcode::binary, ec);
+        websocketpp::lib::error_code ec;
+        m_endpoint.send(connection, payload,
+                       websocketpp::frame::opcode::binary, ec);
 
-            if(ec); // TODO: throw UNDERLYING_LIB_ERROR;
-        }
+        if(ec); // TODO: throw UNDERLYING_LIB_ERROR;
     }
 }
 
 void WebsocketConnection::close()
 {
     Connection::close();
-
-    auto endpoint = m_endpoint.lock();
-    if(endpoint)
-    {
-        websocketpp::lib::error_code ec;
-        endpoint->close(m_connection, websocketpp::close::status::going_away, "");
-    }
+    websocketpp::lib::error_code ec;
+    m_endpoint.close(m_connection, websocketpp::close::status::going_away, "");
 }
 
 WebsocketConnection::context_ptr WebsocketConnection::onTLSInit()

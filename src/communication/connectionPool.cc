@@ -9,9 +9,20 @@
 
 #include "communication/connection.h"
 
+#include <algorithm>
+#include <cassert>
 #include <future>
 
 static constexpr std::chrono::seconds WAIT_FOR_CONNECTION{5}; // TODO: check this in current trunk
+
+namespace
+{
+bool eq(const std::unique_ptr<veil::communication::Connection> &u,
+        const veil::communication::Connection &r)
+{
+    return u.get() == &r;
+}
+}
 
 namespace veil
 {
@@ -31,11 +42,11 @@ ConnectionPool::ConnectionPool(const unsigned int connectionsNumber,
 
 ConnectionPool::~ConnectionPool()
 {
-    for(auto connection: m_openConnections)
+    for(auto &connection: m_openConnections)
         connection->close();
 }
 
-std::function<void(const std::string&)> ConnectionPool::select()
+void ConnectionPool::send(const std::string &payload)
 {
     std::unique_lock<std::mutex> lock{m_connectionsMutex};
     for(unsigned int i = m_activeConnections; i < m_connectionsNumber; ++i)
@@ -43,40 +54,48 @@ std::function<void(const std::string&)> ConnectionPool::select()
 
     if(!m_connectionOpened.wait_for(lock, WAIT_FOR_CONNECTION,
                                     [&]{ return !m_openConnections.empty(); }))
-        return {}; // TODO: exception?
+        return; // TODO: exception?
 
-    const auto it = m_openConnections.begin();
+    m_openConnections.front()->send(payload);
+
     m_openConnections.splice(m_openConnections.end(), m_openConnections,
                              m_openConnections.begin());
-
-    return std::bind(&Connection::send, *it, std::placeholders::_1);
 }
 
 void ConnectionPool::addConnection()
 {
-    m_futureConnections.emplace(createConnection());
+    m_futureConnections.emplace_back(createConnection());
     ++m_activeConnections;
 }
 
-void ConnectionPool::onFail(std::shared_ptr<Connection> connection)
+void ConnectionPool::onFail(Connection &connection)
 {
+    namespace p = std::placeholders;
     std::lock_guard<std::mutex> guard{m_connectionsMutex};
-    m_futureConnections.erase(connection);
+    m_futureConnections.remove_if(std::bind(eq, p::_1, std::cref(connection)));
     --m_activeConnections;
 }
 
-void ConnectionPool::onOpen(std::shared_ptr<Connection> connection)
+void ConnectionPool::onOpen(Connection &connection)
 {
+    namespace p = std::placeholders;
     std::lock_guard<std::mutex> guard{m_connectionsMutex};
-    m_futureConnections.erase(connection);
-    m_openConnections.emplace_front(connection);
+
+    const auto it = std::find_if(m_futureConnections.begin(),
+                                 m_futureConnections.end(),
+                                 std::bind(eq, p::_1, std::cref(connection)));
+
+    assert(it != m_futureConnections.cend());
+
+    m_openConnections.splice(m_openConnections.cbegin(), m_futureConnections, it);
     m_connectionOpened.notify_all();
 }
 
-void ConnectionPool::onError(std::shared_ptr<Connection> connection)
+void ConnectionPool::onError(Connection &connection)
 {
+    namespace p = std::placeholders;
     std::lock_guard<std::mutex> guard{m_connectionsMutex};
-    m_openConnections.remove(connection);
+    m_openConnections.remove_if(std::bind(eq, p::_1, std::cref(connection)));
     --m_activeConnections;
 }
 

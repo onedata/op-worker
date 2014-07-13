@@ -20,6 +20,9 @@ class Mailbox
 {
 public:
     void onMessage(std::string payload);
+
+    Mailbox(const Mailbox&) = delete;
+    Mailbox &operator=(const Mailbox&) = delete;
 };
 
 } // namespace communication

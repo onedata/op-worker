@@ -40,13 +40,16 @@ class WebsocketConnection: public Connection
 
 public:
     WebsocketConnection(std::shared_ptr<Mailbox> mailbox,
-                        std::function<void(std::shared_ptr<Connection>)> onFailCallback,
-                        std::function<void(std::shared_ptr<Connection>)> onOpenCallback,
-                        std::function<void(std::shared_ptr<Connection>)> onErrorCallback,
-                        std::shared_ptr<endpoint_type> endpoint,
+                        std::function<void(Connection&)> onFailCallback,
+                        std::function<void(Connection&)> onOpenCallback,
+                        std::function<void(Connection&)> onErrorCallback,
+                        endpoint_type &endpoint,
                         const std::string &uri,
-                        std::shared_ptr<CertificateData> certificateData,
+                        std::shared_ptr<const CertificateData> certificateData,
                         const bool verifyServerCertificate);
+
+    WebsocketConnection(const WebsocketConnection&) = delete;
+    WebsocketConnection &operator=(const WebsocketConnection&) = delete;
 
     void send(const std::string &payload) override;
     void close() override;
@@ -63,10 +66,10 @@ private:
     void onPongTimeout(std::string);         ///< Cluaster failed to respond on ping message
     void onInterrupt();                      ///< WebSocket connection was interuped
 
-    websocketpp::connection_hdl m_connection;
-    std::weak_ptr<endpoint_type> m_endpoint;
-    const std::shared_ptr<CertificateData> m_certificateData;
+    endpoint_type &m_endpoint;
+    const std::shared_ptr<const CertificateData> m_certificateData;
     const bool m_verifyServerCertificate;
+    websocketpp::connection_hdl m_connection;
 };
 
 } // namespace communication

@@ -19,15 +19,17 @@ namespace communication
 
 class Mailbox;
 
-class Connection: public std::enable_shared_from_this<Connection> // TODO: knowing when the connection is closed and when it's open
+class Connection // TODO: knowing when the connection is closed and when it's open
 {
 public:
     Connection(std::shared_ptr<Mailbox> mailbox,
-               std::function<void(std::shared_ptr<Connection>)> onFailCallback,
-               std::function<void(std::shared_ptr<Connection>)> onOpenCallback,
-               std::function<void(std::shared_ptr<Connection>)> onErrorCallback);
+               std::function<void(Connection&)> onFailCallback,
+               std::function<void(Connection&)> onOpenCallback,
+               std::function<void(Connection&)> onErrorCallback);
 
     virtual ~Connection() = default;
+    Connection(const Connection&) = delete;
+    Connection &operator=(const Connection&) = delete;
 
     virtual void send(const std::string &payload) = 0;
     virtual void close();
