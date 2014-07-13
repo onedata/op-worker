@@ -9,7 +9,6 @@
 #define VEILHELPERS_CONNECTION_POOL_H
 
 
-#include <atomic>
 #include <condition_variable>
 #include <list>
 #include <memory>
@@ -52,7 +51,6 @@ protected:
     const std::string m_uri;
     std::mutex m_connectionsMutex;
     std::condition_variable m_connectionOpened;
-    std::atomic<unsigned int> m_activeConnections{0};
     std::list<std::unique_ptr<Connection>> m_futureConnections;
     std::list<std::unique_ptr<Connection>> m_openConnections;
 };

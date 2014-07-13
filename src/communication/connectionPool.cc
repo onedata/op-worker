@@ -36,7 +36,7 @@ ConnectionPool::ConnectionPool(const unsigned int connectionsNumber,
     , m_mailbox{std::move(mailbox)}
     , m_uri{uri}
 {
-    while(m_activeConnections < m_connectionsNumber)
+    for(auto i = 0u; i < m_connectionsNumber; ++i)
         addConnection();
 }
 
@@ -49,8 +49,11 @@ ConnectionPool::~ConnectionPool()
 void ConnectionPool::send(const std::string &payload)
 {
     std::unique_lock<std::mutex> lock{m_connectionsMutex};
-    for(unsigned int i = m_activeConnections; i < m_connectionsNumber; ++i)
+    for(auto i = m_futureConnections.size() + m_openConnections.size();
+        i < m_connectionsNumber; ++i)
+    {
         addConnection();
+    }
 
     if(!m_connectionOpened.wait_for(lock, WAIT_FOR_CONNECTION,
                                     [&]{ return !m_openConnections.empty(); }))
@@ -65,7 +68,6 @@ void ConnectionPool::send(const std::string &payload)
 void ConnectionPool::addConnection()
 {
     m_futureConnections.emplace_back(createConnection());
-    ++m_activeConnections;
 }
 
 void ConnectionPool::onFail(Connection &connection)
@@ -73,7 +75,6 @@ void ConnectionPool::onFail(Connection &connection)
     namespace p = std::placeholders;
     std::lock_guard<std::mutex> guard{m_connectionsMutex};
     m_futureConnections.remove_if(std::bind(eq, p::_1, std::cref(connection)));
-    --m_activeConnections;
 }
 
 void ConnectionPool::onOpen(Connection &connection)
@@ -96,7 +97,6 @@ void ConnectionPool::onError(Connection &connection)
     namespace p = std::placeholders;
     std::lock_guard<std::mutex> guard{m_connectionsMutex};
     m_openConnections.remove_if(std::bind(eq, p::_1, std::cref(connection)));
-    --m_activeConnections;
 }
 
 } // namespace communication
