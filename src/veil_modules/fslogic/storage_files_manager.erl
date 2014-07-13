@@ -342,62 +342,75 @@ write(Storage_helper_info, File, Buf) ->
 
 %% create/2
 %% ====================================================================
-%% @doc Creates file (operates only on storage). First it checks if file
+%% @doc Creates file with default mode (operates only on storage). First it checks if file
 %% exists. If not, it creates file.
 %% @end
 -spec create(Storage_helper_info :: record(), File :: string()) -> Result when
+    Result :: ok | {ErrorGeneral, ErrorDetail},
+    ErrorGeneral :: atom(),
+    ErrorDetail :: term().
+%% ====================================================================
+create(Storage_helper_info,File) ->
+    ok = setup_ctx(File),
+    {ModeStatus, NewFileStorageMode} = get_mode(File),
+    case ModeStatus of
+        ok -> create(Storage_helper_info,File,NewFileStorageMode);
+        _ -> {error, cannot_get_file_mode}
+    end.
+
+%% create/3
+%% ====================================================================
+%% @doc Creates file with given mode (operates only on storage). First it checks if file
+%% exists. If not, it creates file.
+%% @end
+-spec create(Storage_helper_info :: record(), File :: string(), Mode :: integer()) -> Result when
   Result :: ok | {ErrorGeneral, ErrorDetail},
   ErrorGeneral :: atom(),
   ErrorDetail :: term().
 %% ====================================================================
-create(Storage_helper_info, File) ->
+create(Storage_helper_info, File, Mode) ->
   ok = setup_ctx(File),
-  {ModeStatus, NewFileStorageMode} = get_mode(File),
-  case ModeStatus of
-    ok ->
-      {ErrorCode, Stat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
-      case ErrorCode of
-        0 -> {error, file_exists};
-        error -> {ErrorCode, Stat};
-        _ ->
-          ErrorCode2 = veilhelpers:exec(mknod, Storage_helper_info, [File, NewFileStorageMode bor ?S_IFREG, 0]),
-          case ErrorCode2 of
+  {ErrorCode, Stat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
+  case ErrorCode of
+    0 -> {error, file_exists};
+    error -> {ErrorCode, Stat};
+    _ ->
+      ErrorCode2 = veilhelpers:exec(mknod, Storage_helper_info, [File, Mode bor ?S_IFREG, 0]),
+      case ErrorCode2 of
+        0 ->
+          ErrorCode3 = veilhelpers:exec(truncate, Storage_helper_info, [File, 0]),
+          case ErrorCode3 of
             0 ->
-              ErrorCode3 = veilhelpers:exec(truncate, Storage_helper_info, [File, 0]),
-              case ErrorCode3 of
-                0 ->
-                  derive_gid_from_parent(Storage_helper_info, File),
+              derive_gid_from_parent(Storage_helper_info, File),
 
-                  UserID = fslogic_context:get_user_dn(),
+              UserID = fslogic_context:get_user_dn(),
 
-                  case UserID of
-                    undefined -> ok;
-                    _ ->
-                      {GetUserAns, User} = user_logic:get_user({dn, UserID}),
-                      case GetUserAns of
+              case UserID of
+                undefined -> ok;
+                _ ->
+                  {GetUserAns, User} = user_logic:get_user({dn, UserID}),
+                  case GetUserAns of
+                    ok ->
+                      UserRecord = User#veil_document.record,
+                      Login = UserRecord#user.login,
+                      ChownAns = chown(Storage_helper_info, File, Login, ""),
+                      case ChownAns of
                         ok ->
-                          UserRecord = User#veil_document.record,
-                          Login = UserRecord#user.login,
-                          ChownAns = chown(Storage_helper_info, File, Login, ""),
-                          case ChownAns of
-                            ok ->
-                              ok;
-                            _ ->
-                              {cannot_change_file_owner, ChownAns}
-                          end;
-                        _ -> {cannot_change_file_owner, get_user_error}
-                      end
-                  end;
-                {error, 'NIF_not_loaded'} -> ErrorCode3;
-                _ -> {wrong_truncate_return_code, ErrorCode3}
+                          ok;
+                        _ ->
+                          {cannot_change_file_owner, ChownAns}
+                      end;
+                    _ -> {cannot_change_file_owner, get_user_error}
+                  end
               end;
-            {error, 'NIF_not_loaded'} -> ErrorCode2;
-            _ ->
-%%               ?error("Can not create file ~p, code: ~p, helper info: ~p, mode: ~p", [File, ErrorCode2, Storage_helper_info, NewFileStorageMode bor ?S_IFREG]),
-              {wrong_mknod_return_code, ErrorCode2}
-          end
-      end;
-    _ -> {error, cannot_get_file_mode}
+            {error, 'NIF_not_loaded'} -> ErrorCode3;
+            _ -> {wrong_truncate_return_code, ErrorCode3}
+          end;
+        {error, 'NIF_not_loaded'} -> ErrorCode2;
+        _ ->
+%%               ?error("Can not create file ~p, code: ~p, helper info: ~p, mode: ~p", [File, ErrorCode2, Storage_helper_info, Mode bor ?S_IFREG]),
+          {wrong_mknod_return_code, ErrorCode2}
+      end
   end.
 
 %% truncate/3
