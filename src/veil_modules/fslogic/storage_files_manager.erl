@@ -32,7 +32,7 @@
 -export([mkdir/2, mv/3, delete_dir/2, chmod/3, chown/4]).
 
 %% Physical files access (used to create temporary copies for remote files)
--export([read/4, write/4, write/3, create/2, truncate/3, delete/2, ls/0]).
+-export([read/4, write/4, write/3, create/2, create/3, truncate/3, delete/2, ls/0]).
 
 %% Helper functions
 -export([check_perms/2, check_perms/3]).
