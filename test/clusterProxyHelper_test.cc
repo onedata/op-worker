@@ -293,7 +293,7 @@ TEST_F(ClusterProxyHelperTest, mknod)
 
     CreateFile subMsg;
     subMsg.set_file_id("file_id");
-    subMsg.set_mode(0);
+    subMsg.set_mode(0755);
     
     rfm.set_input(subMsg.SerializeAsString());
     rfm.set_message_type(tolower(subMsg.GetDescriptor()->name()));
