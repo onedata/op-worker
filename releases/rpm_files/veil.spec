@@ -52,6 +52,9 @@ Veil service - allows installation of veil cluster nodes.
 ./install_rpm $RPM_BUILD_ROOT %{_prefix}
 
 %post
+mkdir -p /opt/veil/nodes
+cp -r /opt/veil/files/onepanel_node /opt/veil/nodes/onepanel
+@sed -i s/"-name .*"/"-name onepanel@"`hostname`/g /opt/veil/nodes/onepanel/releases/1/vm.args
 chkconfig --add veil
 chkconfig --add onepanel
 service onepanel start
