@@ -9,20 +9,19 @@
 
 #include "communicationHandler.h"
 #include "helpers/storageHelperFactory.h"
+#include "simpleConnectionPool.h"
 
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/algorithm/string/predicate.hpp>
-#include <boost/chrono/duration.hpp>
 
 #include <google/protobuf/descriptor.h>
 
-#include <unistd.h>
-
 #include <ctime>
+#include <chrono>
 #include <numeric>
 #include <sstream>
 
-static const boost::posix_time::seconds MAX_FLUSH_DELAY(10);
+static constexpr std::chrono::seconds MAX_FLUSH_DELAY{10};
 static const std::string CENTRAL_LOG_MODULE_NAME("central_logger");
 static const std::string LOGGING_DECODER("logging");
 
@@ -46,24 +45,32 @@ static RemoteLogLevel glogToLevel(google::LogSeverity glevel)
 RemoteLogWriter::RemoteLogWriter(const RemoteLogLevel initialThreshold,
                                  const BufferSize maxBufferSize,
                                  const BufferSize bufferTrimSize)
-    : m_pid(getpid())
-    , m_maxBufferSize(maxBufferSize)
-    , m_bufferTrimSize(bufferTrimSize)
-    , m_thresholdLevel(initialThreshold)
+    : m_pid{getpid()}
+    , m_maxBufferSize{maxBufferSize}
+    , m_bufferTrimSize{bufferTrimSize}
+    , m_thresholdLevel{initialThreshold}
+    , m_stopWriteLoop{false}
 {
 }
 
-void RemoteLogWriter::run()
+void RemoteLogWriter::run(std::shared_ptr<SimpleConnectionPool> connectionPool)
 {
-    if(m_thread.get_id() == Thread().get_id()) // Not-a-Thread
+    if(m_thread.joinable())
     {
-        Thread thread(boost::thread(&RemoteLogWriter::writeLoop, this));
-        m_thread.swap(thread);
+        LOG(WARNING) << "run called while a thread is already running";
+        return;
     }
+
+    m_connectionPool = std::move(connectionPool);
+    m_thread = std::thread(&RemoteLogWriter::writeLoop, this);
 }
 
 RemoteLogWriter::~RemoteLogWriter()
 {
+    m_stopWriteLoop = true;
+    m_bufferChanged.notify_all();
+    if(m_thread.joinable())
+        m_thread.join();
 }
 
 void RemoteLogWriter::buffer(const RemoteLogLevel level,
@@ -101,7 +108,7 @@ bool RemoteLogWriter::handleThresholdChange(const protocol::communication_protoc
 
 void RemoteLogWriter::pushMessage(const protocol::logging::LogMessage &msg)
 {
-    boost::lock_guard<boost::mutex> guard(m_bufferMutex);
+    std::lock_guard<std::mutex> guard(m_bufferMutex);
 
     m_buffer.push(msg);
 
@@ -113,9 +120,12 @@ void RemoteLogWriter::pushMessage(const protocol::logging::LogMessage &msg)
 
 protocol::logging::LogMessage RemoteLogWriter::popMessage()
 {
-    boost::unique_lock<boost::mutex> lock(m_bufferMutex);
-    while(m_buffer.empty())
-        m_bufferChanged.timed_wait(lock, MAX_FLUSH_DELAY);
+    std::unique_lock<std::mutex> lock(m_bufferMutex);
+    while(m_buffer.empty() && !m_stopWriteLoop)
+        m_bufferChanged.wait_for(lock, MAX_FLUSH_DELAY);
+
+    if(m_stopWriteLoop)
+        return protocol::logging::LogMessage{};
 
     const protocol::logging::LogMessage msg = m_buffer.front();
     m_buffer.pop();
@@ -124,15 +134,17 @@ protocol::logging::LogMessage RemoteLogWriter::popMessage()
 
 void RemoteLogWriter::writeLoop()
 {
-    while(true)
+    while(!m_stopWriteLoop)
     {
         const protocol::logging::LogMessage msg = popMessage();
+        if(m_stopWriteLoop)
+            return;
 
-        boost::shared_ptr<SimpleConnectionPool> connectionPool = helpers::config::getConnectionPool();
+        auto connectionPool = m_connectionPool;
         if(!connectionPool)
             continue;
 
-        boost::shared_ptr<CommunicationHandler> connection = connectionPool->selectConnection();
+        auto connection = connectionPool->selectConnection();
         if(!connection)
             continue;
 
@@ -170,16 +182,16 @@ void RemoteLogWriter::dropExcessMessages()
     log.set_pid(m_pid);
     log.set_file_name("logging.cc");
     log.set_line(__LINE__),
-    log.set_timestamp(std::time(0));
+    log.set_timestamp(std::time(nullptr));
     log.set_message(message.str());
 
     m_buffer.push(log);
 }
 
-RemoteLogSink::RemoteLogSink(const boost::shared_ptr<RemoteLogWriter> &writer,
+RemoteLogSink::RemoteLogSink(std::shared_ptr<RemoteLogWriter> writer,
                              const RemoteLogLevel forcedLevel)
-    : m_forcedLevel(forcedLevel)
-    , m_writer(writer)
+    : m_forcedLevel{forcedLevel}
+    , m_writer{std::move(writer)}
 {
 }
 
@@ -196,22 +208,14 @@ void RemoteLogSink::send(google::LogSeverity severity,
                      std::string(message, message_len));
 }
 
-std::atomic<RemoteLogSink*> _logSink{nullptr};
-std::atomic<RemoteLogSink*> _debugLogSink{nullptr};
+std::weak_ptr<RemoteLogSink> _logSink;
+std::weak_ptr<RemoteLogSink> _debugLogSink;
 
-void setLogSinks(RemoteLogSink *logSink, RemoteLogSink *debugLogSink)
+void setLogSinks(const std::shared_ptr<RemoteLogSink> &logSink,
+                 const std::shared_ptr<RemoteLogSink> &debugLogSink)
 {
-    static auto del = [](RemoteLogSink *p){ _logSink = nullptr; delete p; };
-    static auto debugDel = [](RemoteLogSink *p){ _debugLogSink = nullptr; delete p; };
-
-    static std::unique_ptr<RemoteLogSink, decltype(del)> s_logSink{nullptr, del};
-    static std::unique_ptr<RemoteLogSink, decltype(debugDel)> s_debugLogSink{nullptr, debugDel};
-
-    s_logSink.reset(logSink);
-    s_debugLogSink.reset(debugLogSink);
-
-    _logSink = s_logSink.get();
-    _debugLogSink = s_debugLogSink.get();
+    _logSink = logSink;
+    _debugLogSink = debugLogSink;
 }
 
 } // namespace logging

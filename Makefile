@@ -16,13 +16,13 @@ build: release
 
 release: 
 	mkdir -p ${RELEASE_DIR}
-	cd ${RELEASE_DIR} && ${CMAKE} -DCMAKE_BUILD_TYPE=release `if [[ "$$PREFER_STATIC_LINK" != ""  ]]; then echo "-DPREFER_STATIC_LINK=1"; fi` ..
+	cd ${RELEASE_DIR} && ${CMAKE} -DCMAKE_BUILD_TYPE=Release `if [[ "$$PREFER_STATIC_LINK" != ""  ]]; then echo "-DPREFER_STATIC_LINK=1"; fi` ..
 	(cd ${RELEASE_DIR} && make -j`nproc`)
 	ln -sfn release build
 
 debug: 
 	@mkdir -p ${DEBUG_DIR}
-	@cd ${DEBUG_DIR} && ${CMAKE} -DCMAKE_BUILD_TYPE=debug `if [[ "$$PREFER_STATIC_LINK" != ""  ]]; then echo "-DPREFER_STATIC_LINK=1"; fi` ..
+	@cd ${DEBUG_DIR} && ${CMAKE} -DCMAKE_BUILD_TYPE=Debug `if [[ "$$PREFER_STATIC_LINK" != ""  ]]; then echo "-DPREFER_STATIC_LINK=1"; fi` ..
 	@(cd ${DEBUG_DIR} && make -j`nproc`)
 	ln -sfn debug build
 

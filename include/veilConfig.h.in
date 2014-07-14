@@ -1,17 +1,17 @@
-#ifndef VEILCONFIG_H
-#define VEILCONFIG_H
+/**
+ * @file simpleConnectionPool.h
+ * @author Rafal Slota
+ * @copyright (C) 2013 ACK CYFRONET AGH
+ * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
+ */
+
+#ifndef VEILHELPERS_VEILCONFIG_H
+#define VEILHELPERS_VEILCONFIG_H
+
 
 #define VeilHelpers_VERSION_MAJOR    @VeilHelpers_VERSION_MAJOR@
 #define VeilHelpers_VERSION_MINOR    @VeilHelpers_VERSION_MINOR@
 #define VeilHelpers_VERSION_PATCH    @VeilHelpers_VERSION_PATCH@
 
-#define VeilHelpers_DEBUG   @VeilHelpers_DEBUG@
-#if VeilHelpers_DEBUG == 1
-    #define DEBUG
-#else
-#ifndef NDEBUG
-    #define NDEBUG
-#endif
-#endif
 
-#endif // VEILCONFIG_H
+#endif // VEILHELPERS_VEILCONFIG_H

@@ -8,87 +8,61 @@
 #ifdef linux
 /* For pread()/pwrite()/utimensat() */
 #define _XOPEN_SOURCE 700
-#endif /* linux */
+#endif // linux
 
-#include <fuse.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/stat.h>
+#include "directIOHelper.h"
+
+#include "helpers/storageHelperFactory.h"
+
+#include <boost/any.hpp>
+
 #include <dirent.h>
 #include <errno.h>
-#include <sys/time.h>
+#include <fuse.h>
+#include <sys/stat.h>
 #ifdef HAVE_SETXATTR
 #include <sys/xattr.h>
 #endif
 
-#include <limits.h>
-
-#include "directIOHelper.h"
-
-#include <iostream>
-
+#include <string>
 
 using namespace std;
 
-namespace veil {
-namespace helpers {
-
-static char root_path[PATH_MAX];
-static int root_path_len;
-
-
-static void free_path(const char *path)
+namespace veil
 {
-    free((void*) path);
+namespace helpers
+{
+
+namespace
+{
+inline boost::filesystem::path extractPath(const IStorageHelper::ArgsMap &args)
+{
+    const auto arg = srvArg(0);
+    return args.count(arg)
+            ? boost::any_cast<std::string>(args.at(arg)).substr(0, PATH_MAX)
+            : boost::filesystem::path{};
+}
 }
 
-const char * get_full_path(const char *path)
+inline boost::filesystem::path DirectIOHelper::root(const boost::filesystem::path &path)
 {
-    int path_len = root_path_len + strlen(path) + 2;
-
-    char * new_path = (char *)calloc(path_len, sizeof(char));
-
-    memcpy(new_path, root_path, root_path_len);
-    new_path[root_path_len] = '/';
-    strcat(new_path, path);
-
-    return new_path;
+    return m_rootPath / path;
 }
 
 int DirectIOHelper::sh_getattr(const char *path, struct stat *stbuf)
 {
-    int res;
-    path = get_full_path(path);
-    res = lstat(path, stbuf);
-    free_path(path);
-    if (res == -1)
-        return -errno;
-    return 0;
+    return lstat(root(path).c_str(), stbuf) == -1 ? -errno : 0;
 }
 
 int DirectIOHelper::sh_access(const char *path, int mask)
 {
-    int res;
-    path = get_full_path(path);
-
-    res = access(path, mask);
-    free_path(path);
-    if (res == -1)
-        return -errno;
-
-    return 0;
+    return access(root(path).c_str(), mask) == -1 ? -errno : 0;
 }
 
 int DirectIOHelper::sh_readlink(const char *path, char *buf, size_t size)
 {
-    int res;
-    path = get_full_path(path);
+    const int res = readlink(root(path).c_str(), buf, size - 1);
 
-    res = readlink(path, buf, size - 1);
-    free_path(path);
     if (res == -1)
         return -errno;
 
@@ -98,21 +72,15 @@ int DirectIOHelper::sh_readlink(const char *path, char *buf, size_t size)
 
 
 int DirectIOHelper::sh_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
-               off_t offset, struct fuse_file_info *fi)
+               off_t /*offset*/, struct fuse_file_info */*fi*/)
 {
-    DIR *dp;
-    struct dirent *de;
-
-    (void) offset;
-    (void) fi;
-    path = get_full_path(path);
-
-    dp = opendir(path);
-    free_path(path);
+    DIR *dp = opendir(root(path).c_str());
     if (dp == NULL)
         return -errno;
 
-    while ((de = readdir(dp)) != NULL) {
+
+    for(struct dirent *de; (de = readdir(dp)) != NULL;)
+    {
         struct stat st;
         memset(&st, 0, sizeof(st));
         st.st_ino = de->d_ino;
@@ -128,20 +96,19 @@ int DirectIOHelper::sh_readdir(const char *path, void *buf, fuse_fill_dir_t fill
 int DirectIOHelper::sh_mknod(const char *path, mode_t mode, dev_t rdev)
 {
     int res;
-    path = get_full_path(path);
+    const auto fullPath = root(path);
 
     /* On Linux this could just be 'mknod(path, mode, rdev)' but this
        is more portable */
     if (S_ISREG(mode)) {
-        res = open(path, O_CREAT | O_EXCL | O_WRONLY, mode);
+        res = open(fullPath.c_str(), O_CREAT | O_EXCL | O_WRONLY, mode);
         if (res >= 0)
             res = close(res);
     } else if (S_ISFIFO(mode))
-        res = mkfifo(path, mode);
+        res = mkfifo(fullPath.c_str(), mode);
     else
-        res = mknod(path, mode, rdev);
+        res = mknod(fullPath.c_str(), mode, rdev);
 
-    free_path(path);
     if (res == -1)
         return -errno;
 
@@ -150,157 +117,64 @@ int DirectIOHelper::sh_mknod(const char *path, mode_t mode, dev_t rdev)
 
 int DirectIOHelper::sh_mkdir(const char *path, mode_t mode)
 {
-    int res;
-    path = get_full_path(path);
-
-    res = mkdir(path, mode);
-    free_path(path);
-    if (res == -1)
-        return -errno;
-
-    return 0;
+    return mkdir(root(path).c_str(), mode) == -1 ? -errno : 0;
 }
 
 int DirectIOHelper::sh_unlink(const char *path)
 {
-    int res;
-    path = get_full_path(path);
-
-    res = unlink(path);
-    free_path(path);
-    if (res == -1)
-        return -errno;
-
-    return 0;
+    return unlink(root(path).c_str()) == -1 ? -errno : 0;
 }
 
 int DirectIOHelper::sh_rmdir(const char *path)
 {
-    int res;
-    path = get_full_path(path);
-
-    res = rmdir(path);
-    free_path(path);
-    if (res == -1)
-        return -errno;
-
-    return 0;
+    return rmdir(root(path).c_str()) == -1 ? -errno : 0;
 }
 
 int DirectIOHelper::sh_symlink(const char *from, const char *to)
 {
-    int res;
-    from = get_full_path(from);
-    to = get_full_path(to);
-
-    res = symlink(from, to);
-    free_path(from);
-    free_path(to);
-    if (res == -1)
-        return -errno;
-
-    return 0;
+    return symlink(root(from).c_str(), root(to).c_str()) == -1 ? -errno : 0;
 }
 
 int DirectIOHelper::sh_rename(const char *from, const char *to)
 {
-    int res;
-    from = get_full_path(from);
-    to = get_full_path(to);
-
-    res = rename(from, to);
-    free_path(from);
-    free_path(to);
-    if (res == -1)
-        return -errno;
-
-    return 0;
+    return rename(root(from).c_str(), root(to).c_str()) == -1 ? -errno : 0;
 }
 
 int DirectIOHelper::sh_link(const char *from, const char *to)
 {
-    int res;
-    from = get_full_path(from);
-    to = get_full_path(to);
-
-    res = link(from, to);
-    free_path(from);
-    free_path(to);
-    if (res == -1)
-        return -errno;
-
-    return 0;
+    return link(root(from).c_str(), root(to).c_str()) == -1 ? -errno : 0;
 }
 
 int DirectIOHelper::sh_chmod(const char *path, mode_t mode)
 {
-    int res;
-    path = get_full_path(path);
-
-    res = chmod(path, mode);
-    free_path(path);
-    if (res == -1)
-        return -errno;
-
-    return 0;
+    return chmod(root(path).c_str(), mode) == -1 ? -errno : 0;
 }
 
 int DirectIOHelper::sh_chown(const char *path, uid_t uid, gid_t gid)
 {
-    int res;
-    path = get_full_path(path);
-
-    res = lchown(path, uid, gid);
-    free_path(path);
-    if (res == -1)
-        return -errno;
-
-    return 0;
+    return lchown(root(path).c_str(), uid, gid) == -1 ? -errno : 0;
 }
 
 int DirectIOHelper::sh_truncate(const char *path, off_t size)
 {
-    int res;
-    path = get_full_path(path);
-
-    res = truncate(path, size);
-    free_path(path);
-    if (res == -1)
-        return -errno;
-
-    return 0;
+    return truncate(root(path).c_str(), size) == -1 ? -errno : 0;
 }
 
 #ifdef HAVE_UTIMENSAT
 int DirectIOHelper::sh_utimens(const char *path, const struct timespec ts[2])
 {
-    int res;
-    path = get_full_path(path);
-
     /* don't use utime/utimes since they follow symlinks */
-    res = utimensat(0, path, ts, AT_SYMLINK_NOFOLLOW);
-
-    free_path(path);
-    if (res == -1)
-        return -errno;
-
-    return 0;
+    return utimensat(0, root(path).c_str(), ts, AT_SYMLINK_NOFOLLOW) == -1 ? -errno : 0;
 }
 #endif /* HAVE_UTIMENSAT */
 
 int DirectIOHelper::sh_open(const char *path, struct fuse_file_info *fi)
 {
-    int res;
-    path = get_full_path(path);
-
-    res = open(path, fi->flags);
-
-    free_path(path);
+    const int res = open(root(path).c_str(), fi->flags);
     if (res == -1)
         return -errno;
 
     fi->fh = res;
-
     return 0;
 }
 
@@ -309,14 +183,11 @@ int DirectIOHelper::sh_read(const char *path, char *buf, size_t size, off_t offs
 {
     int fd;
     int res;
-    path = get_full_path(path);
-
     if(fi->fh > 0)
         fd = fi->fh;
     else
-        fd = open(path, O_RDONLY);
+        fd = open(root(path).c_str(), O_RDONLY);
 
-    free_path(path);
     if (fd == -1)
         return -errno;
 
@@ -335,14 +206,11 @@ int DirectIOHelper::sh_write(const char *path, const char *buf, size_t size,
 {
     int fd;
     int res;
-    path = get_full_path(path);
-
     if(fi->fh > 0)
         fd = fi->fh;
     else
-       fd = open(path, O_WRONLY);
+       fd = open(root(path).c_str(), O_WRONLY);
 
-    free_path(path);
     if (fd == -1)
         return -errno;
 
@@ -358,41 +226,24 @@ int DirectIOHelper::sh_write(const char *path, const char *buf, size_t size,
 
 int DirectIOHelper::sh_statfs(const char *path, struct statvfs *stbuf)
 {
-    int res;
-    path = get_full_path(path);
-
-    res = statvfs(path, stbuf);
-
-    free_path(path);
-    if (res == -1)
-        return -errno;
-
-    return 0;
+    return statvfs(root(path).c_str(), stbuf) == -1 ? -errno : 0;
 }
 
-int DirectIOHelper::sh_release(const char *path, struct fuse_file_info *fi)
+int DirectIOHelper::sh_release(const char */*path*/, struct fuse_file_info *fi)
 {
-    (void) path;
-
-    if(fi->fh > 0)
-       return close(fi->fh);
-    else
-       return 0;
+    return fi->fh > 0 ? close(fi->fh) : 0;
 }
 
-int DirectIOHelper::sh_fsync(const char *path, int isdatasync,
-             struct fuse_file_info *fi)
+int DirectIOHelper::sh_fsync(const char */*path*/, int /*isdatasync*/,
+             struct fuse_file_info */*fi*/)
 {
     /* Just a stub.     This method is optional and can safely be left
        unimplemented */
 
-    (void) path;
-    (void) isdatasync;
-    (void) fi;
     return 0;
 }
 
-int DirectIOHelper::sh_flush(const char *path, struct fuse_file_info *fi)
+int DirectIOHelper::sh_flush(const char */*path*/, struct fuse_file_info */*fi*/)
 {
     return 0;
 }
@@ -403,16 +254,14 @@ int DirectIOHelper::sh_fallocate(const char *path, int mode,
 {
     int fd;
     int res;
-    path = get_full_path(path);
 
     (void) fi;
 
     if (mode)
         return -EOPNOTSUPP;
 
-    fd = open(path, O_WRONLY);
+    fd = open(root(path).c_str(), O_WRONLY);
 
-    free_path(path);
     if (fd == -1)
         return -errno;
 
@@ -425,62 +274,33 @@ int DirectIOHelper::sh_fallocate(const char *path, int mode,
 
 #ifdef HAVE_SETXATTR
 /* xattr operations are optional and can safely be left unimplemented */
-int DirectIOHelper::sh_setxattr(const char *path, const char *name, const char *value,
-            size_t size, int flags)
+int DirectIOHelper::sh_setxattr(const char *path, const char *name,
+                                const char *value, size_t size, int flags)
 {
-    path = get_full_path(path);
-
-    int res = lsetxattr(path, name, value, size, flags);
-
-    free_path(path);
-    if (res == -1)
-        return -errno;
-    return 0;
+    return lsetxattr(root(path).c_str(), name, value, size, flags) == -1 ? -errno : 0;
 }
 
 int DirectIOHelper::sh_getxattr(const char *path, const char *name, char *value,
             size_t size)
 {
-    path = get_full_path(path);
-
-    int res = lgetxattr(path, name, value, size);
-
-    free_path(path);
-    if (res == -1)
-        return -errno;
-    return res;
+    return lgetxattr(root(path).c_str(), name, value, size) == -1 ? -errno : 0;
 }
 
 int DirectIOHelper::sh_listxattr(const char *path, char *list, size_t size)
 {
-    path = get_full_path(path);
-
-    int res = llistxattr(path, list, size);
-
-    free_path(path);
-    if (res == -1)
-        return -errno;
-    return res;
+    return llistxattr(root(path).c_str(), list, size)  == -1 ? -errno : 0;
 }
 
 int DirectIOHelper::sh_removexattr(const char *path, const char *name)
 {
-    path = get_full_path(path);
-
-    int res = lremovexattr(path, name);
-
-    free_path(path);
-    if (res == -1)
-        return -errno;
-    return 0;
+    return lremovexattr(root(path).c_str(), name) == -1 ? -errno : 0;
 }
 
 #endif /* HAVE_SETXATTR */
 
-DirectIOHelper::DirectIOHelper(std::vector<std::string> args) {
-    if(args.size())
-        strncpy(root_path, args[0].c_str(), PATH_MAX);
-    root_path_len = strlen(root_path);
+DirectIOHelper::DirectIOHelper(const ArgsMap &args)
+    : m_rootPath{extractPath(args)}
+{
 }
 
 

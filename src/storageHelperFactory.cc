@@ -6,86 +6,57 @@
  */
 
 #include "helpers/storageHelperFactory.h"
-#include "directIOHelper.h"
+
 #include "clusterProxyHelper.h"
-#include <boost/algorithm/string.hpp>
-#include "communicationHandler.h"
+#include "directIOHelper.h"
 
-using namespace boost;
-using namespace std;
+#include <boost/algorithm/string/case_conv.hpp>
 
-namespace veil {
-namespace helpers {
+namespace veil
+{
+namespace helpers
+{
 
-namespace config {
-
-    // Variables below are used as default values when ConnectionPool object is wasnt set
-    // but storage helper tries to use TCP/IP connection. It should not happen.
-    unsigned int    clusterPort = 0;
-    cert_info_fun   getCertInfo;
-    string          clusterHostname;
-
-    boost::atomic<bool> checkCertificate(true);
-
-
-    namespace {
-        boost::shared_ptr<SimpleConnectionPool> connectionPool;
-    }
-
-    void setConnectionPool(boost::shared_ptr<SimpleConnectionPool> pool)
-    {
-        connectionPool = pool;
-    }
-
-    boost::shared_ptr<SimpleConnectionPool> getConnectionPool()
-    {
-        if(!connectionPool && getCertInfo && !clusterHostname.empty())
-            connectionPool.reset(new SimpleConnectionPool(clusterHostname, clusterPort, getCertInfo));
-
-        return connectionPool;
-    }
-
-namespace buffers {
-
-    size_t writeBufferGlobalSizeLimit       = 0;
-    size_t readBufferGlobalSizeLimit        = 0;
-
-    size_t writeBufferPerFileSizeLimit      = 0;
-    size_t readBufferPerFileSizeLimit       = 0;
-
-    size_t preferedBlockSize                = 4 * 1024;
-
-} // namespace buffers
-
-} // namespace config
-
+BufferLimits::BufferLimits(const size_t wgl, const size_t rgl, const size_t wfl,
+                           const size_t rfl, const size_t pbs)
+    : writeBufferGlobalSizeLimit{wgl}
+    , readBufferGlobalSizeLimit{rgl}
+    , writeBufferPerFileSizeLimit{wfl}
+    , readBufferPerFileSizeLimit{rfl}
+    , preferedBlockSize{pbs}
+{
+}
 
 namespace utils {
 
-    string tolower(string input) {
+    std::string tolower(std::string input) {
         boost::algorithm::to_lower(input);
-        return input;
+        return std::move(input);
     }
 
 } // namespace utils
 
-StorageHelperFactory::StorageHelperFactory()
+StorageHelperFactory::StorageHelperFactory(std::shared_ptr<SimpleConnectionPool> connectionPool,
+                                           const BufferLimits &limits)
+    : m_connectionPool{std::move(connectionPool)}
+    , m_limits{limits}
 {
 }
 
-StorageHelperFactory::~StorageHelperFactory()
-{
-}
-
-boost::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(const string &sh_name, const std::vector<string> &args) {
+std::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(const std::string &sh_name,
+                                                                       const IStorageHelper::ArgsMap &args) {
     if(sh_name == "DirectIO")
-        return boost::shared_ptr<IStorageHelper>(new DirectIOHelper(args));
-    else if(sh_name == "ClusterProxy")
-        return boost::shared_ptr<IStorageHelper>(new ClusterProxyHelper(args));
-    else
-    {
-        return boost::shared_ptr<IStorageHelper>();
-    }
+        return std::make_shared<DirectIOHelper>(args);
+
+    if(sh_name == "ClusterProxy")
+        return std::make_shared<ClusterProxyHelper>(m_connectionPool, m_limits, args);
+
+    return {};
+}
+
+std::string srvArg(const int argno)
+{
+    return "srv_arg" + std::to_string(argno);
 }
 
 } // namespace helpers

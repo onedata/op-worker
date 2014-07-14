@@ -6,26 +6,27 @@
  */
 
 #include "simpleConnectionPool.h"
+
 #include "communicationHandler.h"
 #include "logging.h"
-#include <netinet/in.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <iterator>
-#include <algorithm>
-#include <boost/thread/thread_time.hpp>
 
-using namespace boost;
+#include <sys/socket.h>
+#include <netdb.h>
+
+#include <algorithm>
+
 using namespace std;
 
 namespace veil {
 
-SimpleConnectionPool::SimpleConnectionPool(const string &hostname, int port, cert_info_fun certInfoFun, int metaPoolSize, int dataPoolSize) :
-    m_hostname(hostname),
-    m_port(port),
-    m_getCertInfo(certInfoFun)
+SimpleConnectionPool::SimpleConnectionPool(const string &hostname, int port,
+                                           cert_info_fun certInfoFun,
+                                           const bool checkCertificate,
+                                           int metaPoolSize, int dataPoolSize)
+    : m_hostname(hostname)
+    , m_port(port)
+    , m_getCertInfo(certInfoFun)
+    , m_checkCertificate{checkCertificate}
 {
     m_connectionPools[META_POOL] = ConnectionPoolInfo(metaPoolSize);
     m_connectionPools[DATA_POOL] = ConnectionPoolInfo(dataPoolSize);
@@ -39,12 +40,12 @@ void SimpleConnectionPool::resetAllConnections(PoolType type)
     setPoolSize(type, m_connectionPools[type].size); // Force connection reinitialization
 }
 
-boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(PoolType type)
+std::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(PoolType type)
 {
-    boost::unique_lock< boost::recursive_mutex > lock(m_access);
+    std::unique_lock<std::recursive_mutex> lock(m_access);
 
     ConnectionPoolInfo &poolInfo = m_connectionPools[type];
-    boost::shared_ptr<CommunicationHandler> conn;
+    std::shared_ptr<CommunicationHandler> conn;
 
     CounterRAII sc(poolInfo.currWorkers);
 
@@ -78,7 +79,7 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(Pool
 
         lock.unlock();
 
-        conn.reset(new CommunicationHandler(connectTo, m_port, m_getCertInfo));
+        conn = std::make_shared<CommunicationHandler>(connectTo, m_port, m_getCertInfo, m_checkCertificate);
         conn->setFuseID(m_fuseId);  // Set FuseID that shall be used by this connection as session ID
         if(m_pushCallback)                          // Set callback that shall be used for PUSH messages and error messages
             conn->setPushCallback(m_pushCallback);  // Note that this doesnt enable/register PUSH channel !
@@ -106,10 +107,10 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(Pool
     return conn;
 }
 
-boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(PoolType type)
+std::shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(PoolType type)
 {
-    boost::unique_lock< boost::recursive_mutex > lock(m_access);
-    boost::shared_ptr<CommunicationHandler> conn;
+    std::unique_lock<std::recursive_mutex> lock(m_access);
+    std::shared_ptr<CommunicationHandler> conn;
 
     ConnectionPoolInfo &poolInfo = m_connectionPools[type];
 
@@ -135,7 +136,7 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(P
         LOG(INFO) << "Connection pool (" << type << " is to small (" << poolInfo.connections.size() << " connections - expected: " << poolInfo.size << "). Opening new connection...";
 
         if(poolInfo.connections.size() > 0) {
-            boost::thread t = boost::thread(boost::bind(&SimpleConnectionPool::newConnection, shared_from_this(), type));
+            auto t = std::thread(&SimpleConnectionPool::newConnection, shared_from_this(), type);
             t.detach();
         }
         else
@@ -154,7 +155,7 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(P
     return conn;
 }
 
-void SimpleConnectionPool::releaseConnection(boost::shared_ptr<CommunicationHandler> conn)
+void SimpleConnectionPool::releaseConnection(std::shared_ptr<CommunicationHandler> conn)
 {
     return;
 }
@@ -166,13 +167,13 @@ error::Error SimpleConnectionPool::getLastError() const
 
 void SimpleConnectionPool::setPoolSize(PoolType type, unsigned int s)
 {
-    boost::unique_lock< boost::recursive_mutex > lock(m_access);
+    std::unique_lock< std::recursive_mutex > lock(m_access);
     m_connectionPools[type].size = s;
 
     // Insert new connections to pool if needed (async)
     long toStart = m_connectionPools[type].size - m_connectionPools[type].connections.size();
     while(toStart-- > 0) {
-        boost::thread t = boost::thread(boost::bind(&SimpleConnectionPool::newConnection, shared_from_this(), type));
+        auto t = std::thread(&SimpleConnectionPool::newConnection, shared_from_this(), type);
         t.detach();
     }
 }
@@ -185,7 +186,7 @@ void SimpleConnectionPool::setPushCallback(const string &fuseId, push_callback h
 
 list<string> SimpleConnectionPool::dnsQuery(const string &hostname)
 {
-    boost::unique_lock< boost::recursive_mutex > lock(m_access);
+    std::unique_lock< std::recursive_mutex > lock(m_access);
 
     list<string> lst;
     struct addrinfo *result;

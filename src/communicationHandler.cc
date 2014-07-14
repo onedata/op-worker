@@ -6,17 +6,14 @@
  */
 
 #include "communicationHandler.h"
+
 #include "fuse_messages.pb.h"
-#include "logging.h"
 #include "helpers/storageHelperFactory.h"
-#include <google/protobuf/descriptor.h>
-#include <iostream>
+#include "logging.h"
+#include "simpleConnectionPool.h"
+
+#include <chrono>
 #include <string>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <openssl/evp.h>
-#include <openssl/err.h>
 
 using std::string;
 using namespace veil::protocol::communication_protocol;
@@ -25,20 +22,21 @@ using websocketpp::lib::placeholders::_1;
 using websocketpp::lib::placeholders::_2;
 using websocketpp::lib::bind;
 
-namespace veil {
+namespace veil
+{
 
-boost::recursive_mutex CommunicationHandler::m_instanceMutex;
+std::recursive_mutex CommunicationHandler::m_instanceMutex;
 SSL_SESSION* CommunicationHandler::m_session = 0;
 
-CommunicationHandler::CommunicationHandler(const string &p_hostname, int p_port, cert_info_fun p_getCertInfo)
-    : m_hostname(p_hostname),
+CommunicationHandler::CommunicationHandler(const string &p_hostname, int p_port, cert_info_fun p_getCertInfo, const bool checkCertificate)
+    : m_checkCertificate(checkCertificate),
+      m_hostname(p_hostname),
       m_port(p_port),
       m_getCertInfo(p_getCertInfo),
       m_connectStatus(CLOSED),
       m_currentMsgId(1),
       m_errorCount(0),
-      m_isPushChannel(false),
-      m_lastConnectTime(0)
+      m_isPushChannel(false)
 {
 }
 
@@ -59,14 +57,11 @@ CommunicationHandler::~CommunicationHandler()
         m_endpoint.reset();
     }
 
-    // Force exit worker threads
-    if(m_worker1.joinable() && !m_worker1.timed_join(boost::posix_time::milliseconds(200)) && m_worker1.native_handle()) {
-        pthread_cancel(m_worker1.native_handle());
-    }
+    if(m_worker1.joinable())
+        m_worker1.join();
 
-    if(m_worker2.joinable() && !m_worker2.timed_join(boost::posix_time::milliseconds(200)) && m_worker2.native_handle()) {
-        pthread_cancel(m_worker2.native_handle());
-    }
+    if(m_worker2.joinable())
+        m_worker2.join();
 
     DLOG(INFO) << "Connection: " << this << " deleted";
 }
@@ -125,7 +120,7 @@ int CommunicationHandler::openConnection()
 
     // (re)Initialize endpoint (io_service)
     m_endpointConnection.reset();
-    m_endpoint.reset(new ws_client());
+    m_endpoint = std::make_shared<ws_client>();
     m_endpoint->clear_access_channels(websocketpp::log::alevel::all);
     m_endpoint->clear_error_channels(websocketpp::log::elevel::all);
     m_endpoint->init_asio(ec);
@@ -148,7 +143,7 @@ int CommunicationHandler::openConnection()
     m_endpoint->set_pong_timeout_handler(bind(&CommunicationHandler::onPongTimeout, this, ::_1, ::_2));
     m_endpoint->set_interrupt_handler(bind(&CommunicationHandler::onInterrupt, this, ::_1));
 
-    string URL = string("wss://") + m_hostname + ":" + toString(m_port) + string(CLUSTER_URI_PATH);
+    string URL = string("wss://") + m_hostname + ":" + std::to_string(m_port) + string(CLUSTER_URI_PATH);
     ws_client::connection_ptr con = m_endpoint->get_connection(URL, ec); // Initialize WebSocket handshake
     if(ec.value() != 0) {
         LOG(ERROR) << "Cannot connect to " << URL << " due to: " << ec.message();
@@ -174,11 +169,11 @@ int CommunicationHandler::openConnection()
 
     // Start worker thread(s)
     // Second worker should not be started if WebSocket client lib cannot handle full-duplex connections
-    m_worker1 = boost::thread(&ws_client::run, m_endpoint);
+    m_worker1 = std::thread(&ws_client::run, m_endpoint);
     //m_worker2 = boost::thread(&ws_client::run, m_endpoint);
 
     // Wait for WebSocket handshake
-    m_connectCond.timed_wait(lock, boost::posix_time::milliseconds(CONNECT_TIMEOUT));
+    m_connectCond.wait_for(lock, CONNECT_TIMEOUT);
 
     LOG(INFO) << "Connection to " << URL << " status: " << m_connectStatus;
 
@@ -195,7 +190,7 @@ int CommunicationHandler::openConnection()
     }
 
     if(m_connectStatus == CONNECTED) {
-        m_lastConnectTime = helpers::utils::mtime<uint64_t>();
+        m_lastConnectTime = std::chrono::system_clock::now();
         unique_lock lock(m_instanceMutex);
         socket_type &socket = m_endpointConnection->get_socket();
         SSL *ssl = socket.native_handle();
@@ -221,7 +216,7 @@ void CommunicationHandler::closeConnection()
         websocketpp::lib::error_code ec;
         m_endpoint->close(m_endpointConnection, websocketpp::close::status::normal, string("reset_by_peer"), ec); // Initialize WebSocket cloase operation
         if(ec.value() == 0)
-            m_connectCond.timed_wait(lock, boost::posix_time::milliseconds(CONNECT_TIMEOUT)); // Wait for connection to close
+            m_connectCond.wait_for(lock, CONNECT_TIMEOUT); // Wait for connection to close
 
         m_endpoint->stop(); // If connection failed to close, make sure that io_service refuses to send/receive any further messages at this point
 
@@ -238,8 +233,10 @@ void CommunicationHandler::closeConnection()
     }
 
     // Stop workers
-    m_worker1.timed_join(boost::posix_time::milliseconds(200));
-    m_worker2.timed_join(boost::posix_time::milliseconds(200));
+    if(m_worker1.joinable())
+        m_worker1.join();
+    if(m_worker2.joinable())
+        m_worker2.join();
 
     m_connectStatus = CLOSED;
 }
@@ -370,18 +367,20 @@ int CommunicationHandler::receiveMessage(Answer& answer, int32_t msgId, uint32_t
 {
     unique_lock lock(m_receiveMutex);
 
-    uint64_t timeoutTime = helpers::utils::mtime<uint64_t>() + timeout;
+    const auto timeoutTime = std::chrono::steady_clock::now() +
+            std::chrono::milliseconds{timeout};
 
     // Incoming message should be in inbox. Wait for it
     while(m_incomingMessages.find(msgId) == m_incomingMessages.end()) {
-        uint64_t currTime = helpers::utils::mtime<uint64_t>();
+        const auto currTime = std::chrono::steady_clock::now();
 
         if(m_connectStatus != CONNECTED) {
             ++m_errorCount;
             return -2;
         }
 
-        if(currTime >= timeoutTime || !m_receiveCond.timed_wait(lock, boost::posix_time::milliseconds(timeoutTime - currTime))) {
+        if(currTime >= timeoutTime ||
+           m_receiveCond.wait_for(lock, timeoutTime - currTime) == std::cv_status::timeout) {
             ++m_errorCount;
             return -1;
         }
@@ -416,7 +415,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
         {
             if(retry > 0)
             {
-                uint64_t lastConnectTime = m_lastConnectTime;
+                auto lastConnectTime = m_lastConnectTime;
 
                 LOG(WARNING) << "Sening message to cluster failed, trying to reconnect and retry";
                 unique_lock guard(m_reconnectMutex);
@@ -442,7 +441,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
         {
             if(retry > 0)
             {
-                uint64_t lastConnectTime = m_lastConnectTime;
+                auto lastConnectTime = m_lastConnectTime;
 
                 LOG(WARNING) << "Receiving response from cluster failed, trying to reconnect and retry";
                 unique_lock guard(m_reconnectMutex);
@@ -489,14 +488,14 @@ context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
     CertificateInfo certInfo = m_getCertInfo();
 
     try {
-        context_ptr ctx(new boost::asio::ssl::context(boost::asio::ssl::context::sslv3));
+        context_ptr ctx = std::make_shared<boost::asio::ssl::context>(boost::asio::ssl::context::sslv3);
 
         ctx->set_options(boost::asio::ssl::context::default_workarounds |
                          boost::asio::ssl::context::no_sslv2 |
                          boost::asio::ssl::context::single_dh_use);
 
         ctx->set_default_verify_paths();
-        ctx->set_verify_mode(helpers::config::checkCertificate.load()
+        ctx->set_verify_mode(m_checkCertificate
                              ? boost::asio::ssl::verify_peer
                              : boost::asio::ssl::verify_none);
 
@@ -506,13 +505,13 @@ context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
         SSL_CTX_set_session_cache_mode(ssl_ctx, mode);
 
         boost::asio::ssl::context_base::file_format file_format; // Certificate format
-        if(certInfo.cert_type == CertificateInfo::ASN1) {
+        if(certInfo.cert_type == CertificateInfo::CertificateType::ASN1) {
             file_format = boost::asio::ssl::context::asn1;
         } else {
             file_format = boost::asio::ssl::context::pem;
         }
 
-        if(certInfo.cert_type == CertificateInfo::P12) {
+        if(certInfo.cert_type == CertificateInfo::CertificateType::P12) {
             LOG(ERROR) << "Unsupported certificate format: P12";
             return context_ptr();
         }
