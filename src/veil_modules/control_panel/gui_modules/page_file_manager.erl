@@ -310,7 +310,7 @@ comet_loop(IsUploadInProgress) ->
             error
         end,
     case NewIsUploadInProgress of
-        error -> ok; % Come tprocess will terminate
+        error -> ok; % Comet process will terminate
         _ -> ?MODULE:comet_loop(NewIsUploadInProgress)
     end.
 

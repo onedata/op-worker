@@ -14,7 +14,6 @@
 
 -include("logging.hrl").
 -include("logging_pb.hrl").
--include("registered_names.hrl").
 
 %% ====================================================================
 %% API functions
@@ -77,6 +76,7 @@ init(_) ->
     Request :: ping | healthcheck | get_version | {subscribe, Source, Subscriber} |
     {unsubscribe, Source, Subscriber} | {dispatch_log, Message, Timestamp, Severity, Metadata},
     Result :: ok | {ok, Response} | {error, Error} | pong | Version,
+    Source :: cluster | client,
     Subscriber :: pid(),
     Message :: string(),
     Timestamp :: term(),
