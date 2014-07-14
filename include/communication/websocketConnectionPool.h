@@ -34,8 +34,7 @@ class WebsocketConnectionPool: public ConnectionPool
 
 public:
     WebsocketConnectionPool(const unsigned int connectionsNumber,
-                            std::shared_ptr<Mailbox> mailbox,
-                            const std::string &uri,
+                            std::string uri,
                             std::shared_ptr<CertificateData> certificateData,
                             const bool verifyServerCertificate);
 

@@ -24,11 +24,10 @@ namespace communication
 class CertificateData;
 
 WebsocketConnectionPool::WebsocketConnectionPool(const unsigned int connectionsNumber,
-                                                 std::shared_ptr<Mailbox> mailbox,
-                                                 const std::string &uri,
+                                                 std::string uri,
                                                  std::shared_ptr<CertificateData> certificateData,
                                                  const bool verifyServerCertificate)
-    : ConnectionPool{connectionsNumber, std::move(mailbox), uri}
+    : ConnectionPool{connectionsNumber, std::move(uri)}
     , m_certificateData{std::move(certificateData)}
     , m_verifyServerCertificate{verifyServerCertificate}
 {
@@ -52,7 +51,7 @@ WebsocketConnectionPool::~WebsocketConnectionPool()
 std::unique_ptr<Connection> WebsocketConnectionPool::createConnection()
 {
     return std::make_unique<WebsocketConnection>(
-                m_mailbox,
+                m_onMessageCallback,
                 std::bind(&WebsocketConnectionPool::onFail, this, std::placeholders::_1),
                 std::bind(&WebsocketConnectionPool::onOpen, this, std::placeholders::_1),
                 std::bind(&WebsocketConnectionPool::onError, this, std::placeholders::_1),

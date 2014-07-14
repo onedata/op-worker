@@ -12,11 +12,11 @@ namespace veil
 namespace communication
 {
 
-Connection::Connection(std::shared_ptr<Mailbox> mailbox,
+Connection::Connection(std::function<void(const std::string&)> onMessageCallback,
                        std::function<void(Connection&)> onFailCallback,
                        std::function<void(Connection&)> onOpenCallback,
                        std::function<void(Connection&)> onErrorCallback)
-    : m_mailbox{std::move(mailbox)}
+    : m_onMessageCallback{std::move(onMessageCallback)}
 {
     m_onFailCallback = [=]{ onFailCallback(*this); };
     m_onOpenCallback = [=]{ onOpenCallback(*this); };
@@ -30,6 +30,7 @@ Connection::~Connection()
 
 void Connection::close()
 {
+    m_onMessageCallback = [](const std::string&){};
     m_onFailCallback = m_onOpenCallback = m_onErrorCallback = []{};
 }
 

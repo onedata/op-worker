@@ -11,9 +11,13 @@
 
 #include "communication_protocol.pb.h"
 
+#include <atomic>
+#include <cstdint>
 #include <functional>
 #include <future>
+#include <list>
 #include <memory>
+#include <unordered_map>
 
 namespace veil
 {
@@ -24,29 +28,46 @@ class ConnectionPool;
 
 class CommunicationHandler
 {
+    using MsgId = int32_t;
     using Answer = protocol::communication_protocol::Answer;
     using Message = protocol::communication_protocol::ClusterMsg;
 
 public:
+    struct SubscriptionData
+    {
+        SubscriptionData(std::function<bool(const Answer&)> predicate,
+                         std::function<bool(const Answer&)> callback);
+
+        const std::function<bool(const Answer&)> predicate;
+        const std::function<bool(const Answer&)> callback;
+    };
+
+    enum class Pool
+    {
+        META,
+        DATA
+    };
+
     CommunicationHandler(std::unique_ptr<ConnectionPool> dataPool,
                          std::unique_ptr<ConnectionPool> metaPool);
 
     CommunicationHandler(const CommunicationHandler&) = delete;
     CommunicationHandler &operator=(const CommunicationHandler&) = delete;
 
-    std::future<Answer> send();
+    void send(Message &message, const Pool poolType);
+    std::future<std::unique_ptr<Answer>> communicate(Message &message, const Pool poolType);
 
-    void subscribe(std::function<bool(const Answer&)> predicate,
-                   std::function<void(const Answer&)> callback);
-
-    void setFuseId(std::string fuseId);
-
-    void registerPushChannels();
+    void subscribe(SubscriptionData data);
 
 private:
+    MsgId nextId();
+    void onMessage(const std::string &payload);
+
     const std::unique_ptr<ConnectionPool> m_dataPool;
     const std::unique_ptr<ConnectionPool> m_metaPool;
-    std::string m_fuseId;
+    std::atomic<MsgId> m_nextMsgId{0};
+    std::unordered_map<MsgId, std::promise<std::unique_ptr<Answer>>> m_promises;
+    std::list<SubscriptionData> m_subscriptions;
 };
 
 } // namespace communication

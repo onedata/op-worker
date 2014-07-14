@@ -17,18 +17,18 @@ namespace veil
 namespace communication
 {
 
-class Mailbox;
-
-class Connection // TODO: knowing when the connection is closed and when it's open
+class Connection
 {
 public:
-    Connection(std::shared_ptr<Mailbox> mailbox,
+    Connection(std::function<void(const std::string&)> onMessageCallback,
                std::function<void(Connection&)> onFailCallback,
                std::function<void(Connection&)> onOpenCallback,
                std::function<void(Connection&)> onErrorCallback);
 
     virtual ~Connection();
+    Connection(Connection&&) = default;
     Connection(const Connection&) = delete;
+    Connection &operator=(Connection&&) & = default;
     Connection &operator=(const Connection&) = delete;
 
     virtual void send(const std::string &payload) = 0;
@@ -36,7 +36,7 @@ public:
 protected:
     virtual void close();
 
-    const std::shared_ptr<Mailbox> m_mailbox;
+    std::function<void(const std::string&)> m_onMessageCallback;
     std::function<void()> m_onFailCallback;
     std::function<void()> m_onOpenCallback;
     std::function<void()> m_onErrorCallback;

@@ -7,16 +7,15 @@
 
 #include "communication/websocketConnection.h"
 
-#include "logging.h"
 #include "communication/certificateData.h"
-#include "communication/mailbox.h"
+#include "logging.h"
 
 namespace veil
 {
 namespace communication
 {
 
-WebsocketConnection::WebsocketConnection(std::shared_ptr<Mailbox> mailbox,
+WebsocketConnection::WebsocketConnection(std::function<void(const std::string&)> onMessageCallback,
                                          std::function<void(Connection&)> onFailCallback,
                                          std::function<void(Connection&)> onOpenCallback,
                                          std::function<void(Connection&)> onErrorCallback,
@@ -24,7 +23,7 @@ WebsocketConnection::WebsocketConnection(std::shared_ptr<Mailbox> mailbox,
                                          const std::string &uri,
                                          std::shared_ptr<const CertificateData> certificateData,
                                          const bool verifyServerCertificate)
-    : Connection{std::move(mailbox), onFailCallback, onOpenCallback, onErrorCallback}
+    : Connection{std::move(onMessageCallback), std::move(onFailCallback), std::move(onOpenCallback), std::move(onErrorCallback)}
     , m_endpoint(endpoint)
     , m_certificateData{std::move(certificateData)}
     , m_verifyServerCertificate{verifyServerCertificate}
@@ -111,7 +110,7 @@ void WebsocketConnection::onSocketInit(socket_type &socket)
 
 void WebsocketConnection::onMessage(message_ptr msg)
 {
-    m_mailbox->onMessage(msg->get_payload());
+    m_onMessageCallback(msg->get_payload());
 }
 
 void WebsocketConnection::onOpen()

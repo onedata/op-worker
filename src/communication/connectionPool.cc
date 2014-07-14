@@ -30,11 +30,9 @@ namespace communication
 {
 
 ConnectionPool::ConnectionPool(const unsigned int connectionsNumber,
-                               std::shared_ptr<Mailbox> mailbox,
-                               const std::string &uri)
+                               std::string uri)
     : m_connectionsNumber{connectionsNumber}
-    , m_mailbox{std::move(mailbox)}
-    , m_uri{uri}
+    , m_uri{std::move(uri)}
 {
     for(auto i = 0u; i < m_connectionsNumber; ++i)
         addConnection();
@@ -57,6 +55,11 @@ void ConnectionPool::send(const std::string &payload)
 
     m_openConnections.splice(m_openConnections.end(), m_openConnections,
                              m_openConnections.begin());
+}
+
+void ConnectionPool::setOnMessageCallback(std::function<void(const std::string&)> onMessageCallback)
+{
+    m_onMessageCallback = std::move(onMessageCallback);
 }
 
 void ConnectionPool::addConnection()

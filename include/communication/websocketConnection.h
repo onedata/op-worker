@@ -26,7 +26,6 @@ namespace communication
 {
 
 class CertificateData;
-class Mailbox;
 
 class WebsocketConnection: public Connection
 {
@@ -39,7 +38,7 @@ class WebsocketConnection: public Connection
     using socket_type = websocketpp::transport::asio::tls_socket::connection::socket_type;
 
 public:
-    WebsocketConnection(std::shared_ptr<Mailbox> mailbox,
+    WebsocketConnection(std::function<void(const std::string&)> onMessageCallback,
                         std::function<void(Connection&)> onFailCallback,
                         std::function<void(Connection&)> onOpenCallback,
                         std::function<void(Connection&)> onErrorCallback,
