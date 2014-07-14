@@ -13,7 +13,9 @@
 % n2o API
 -module(page_client_logs).
 -include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/dao/dao_cluster.hrl").
 -include("registered_names.hrl").
+-include("logging_pb.hrl").
 -include("logging.hrl").
 
 % n2o API and comet
@@ -32,9 +34,9 @@
 
 % Widths of columns
 -define(SEVERITY_COLUMN_STYLE, "width: 90px; padding: 6px 12px;").
--define(TIME_COLUMN_STYLE, "width: 180px; padding: 6px 12px;").
+-define(TIME_COLUMN_STYLE, "width: 150px; padding: 6px 12px;").
 -define(MESSAGE_COLUMN_STYLE, "padding: 6px 12px;").
--define(METADATA_COLUMN_STYLE, "width: 300px; padding: 6px 12px;").
+-define(METADATA_COLUMN_STYLE, "width: 340px; padding: 6px 12px;").
 
 % Prefixes used to generate IDs for logs
 -define(COLLAPSED_LOG_ROW_ID_PREFIX, "clr").
@@ -42,6 +44,8 @@
 
 % Available options of max log count
 -define(MAX_LOGS_OPTIONS, [20, 50, 200, 500, 1000, 2000]).
+
+-define(INFINITY, 10000000000000000000).
 
 %% Template points to the template file, which will be filled with content
 main() ->
@@ -71,7 +75,6 @@ body() ->
         #panel{style = <<"margin-top: 122px; z-index: -1;">>, body = main_table()},
         footer_popup()
     ],
-    event(show_manage_clients_popup),
     _Body.
 
 
@@ -178,6 +181,16 @@ manage_clients_panel() ->
             {Row, Identifier} = client_row(<<"client_row_", (integer_to_binary(Counter))/binary>>, false, UserName, FuseID),
             {Row, {Counter + 1, Idents ++ Identifier}}
         end, {1, []}, get_connected_clients()),
+    ClientListBody = case ClientList of
+                         [] ->
+                             #tr{cells = [
+                                 #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"--">>},
+                                 #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"No clients are connected">>},
+                                 #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"">>}
+                             ]};
+                         _ ->
+                             ClientList
+                     end,
     gui_jq:bind_enter_to_submit_button(<<"search_textbox">>, <<"search_button">>),
     [
         CloseButton,
@@ -194,7 +207,7 @@ manage_clients_panel() ->
                     ]}
                 ]}
             ]},
-            #panel{id = <<"client_table_viewport">>, style = <<"width: 650px; min-height: 80px; max-height: 200px; overflow-y: scroll;",
+            #panel{id = <<"client_table_viewport">>, style = <<"width: 650px; min-height: 200px; max-height: 200px; overflow-y: scroll;",
             "background-color: white; border-radius: 4px; border: 2px solid rgb(82, 100, 118); float: left;">>, body = [
                 #table{id = <<"client_table">>, class = <<"table table-stripped">>, style = <<"margin-bottom: 0;">>,
                     header = [
@@ -213,7 +226,7 @@ manage_clients_panel() ->
                             #th{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"Fuse ID">>}
                         ]}
                     ],
-                    body = #tbody{body = ClientList}
+                    body = #tbody{body = ClientListBody}
                 }
             ]},
             #panel{id = <<"loglevel_buttons_panel">>, style = <<"float: left; margin-left: 25px; ">>, body = loglevel_buttons_panel_body(Identifiers)}
@@ -251,8 +264,8 @@ client_row(ID, Selected, UserName, FuseID) ->
                 class = LinkClass, style = <<"position: absolute; top: 7px;">>,
                 body = #span{class = GlyphClass, style = <<"font-size: 20px;">>}
             }]},
-        #td{style = <<"border-color: rgb(82, 100, 118);">>, body = UserName},
-        #td{style = <<"border-color: rgb(82, 100, 118);">>, body = FuseID}
+        #td{style = <<"border-color: rgb(82, 100, 118);">>, body = gui_str:unicode_list_to_binary(UserName)},
+        #td{style = <<"border-color: rgb(82, 100, 118);">>, body = gui_str:unicode_list_to_binary(FuseID)}
     ]},
     {Row, Identifier}.
 
@@ -279,30 +292,17 @@ filter_form(FilterType) ->
 
 % Listing available clients
 get_connected_clients() ->
-    [
-        {<<"plglopiola">>, <<"dsfasdfweterert">>},
-        {<<"plglopiola">>, <<"hsgsgfhdasfgcvzb">>},
-        {<<"plglopiola">>, <<"fdgshjsgfhdfhsdfg">>},
-        {<<"plglopiola">>, <<"zcvbzcvbsdfgh">>},
-        {<<"plglopiola">>, <<"dsfasdfweterert">>},
-        {<<"plglopiola">>, <<"hsgsgfhdasfgcvzb">>},
-        {<<"plglopiola">>, <<"fdgshjsgfhdfhsdfg">>},
-        {<<"plglopiola">>, <<"zcvbzcvbsdfgh">>},
-        {<<"plgwrzeszcz">>, <<"sghsgfhshsghsftgh">>},
-        {<<"plgwrzeszcz">>, <<"dvgfzxcvxzcvxzcv">>},
-        {<<"plgwrzeszcz">>, <<"sghsgfhshsghsftgh">>},
-        {<<"plgwrzeszcz">>, <<"dvgfzxcvxzcvxzcv">>},
-        {<<"plgroxeon">>, <<"dgfshasdfhaeth">>},
-        {<<"plgroxeon">>, <<"jsrtyhdgfvdzfgcdxcd">>},
-        {<<"plgroxeon">>, <<"dgfshasdfhaeth">>},
-        {<<"plgroxeon">>, <<"jsrtyhdgfvdzfgcdxcd">>},
-        {<<"plgroxeon">>, <<"dgfshasdfhaeth">>},
-        {<<"plgroxeon">>, <<"jsrtyhdgfvdzfgcdxcd">>},
-        {<<"plgroxeon">>, <<"dgfshasdfhaeth">>},
-        {<<"plgroxeon">>, <<"jsrtyhdgfvdzfgcdxcd">>},
-        {<<"plgroxeon">>, <<"dgfshasdfhaeth">>},
-        {<<"plgroxeon">>, <<"jsrtyhdgfvdzfgcdxcd">>}
-    ].
+    {ok, List} = dao_lib:apply(dao_cluster, list_fuse_sessions, [{by_valid_to, ?INFINITY}], 1),
+    lists:foldl(
+        fun(#veil_document{uuid = UUID, record = #fuse_session{uid = UserID}} = SessionDoc, Acc) ->
+            case dao_cluster:check_session(SessionDoc) of
+                ok ->
+                    {ok, UserDoc} = user_logic:get_user({uuid, UserID}),
+                    Acc ++ [{user_logic:get_login(UserDoc), UUID}];
+                _ ->
+                    Acc
+            end
+        end, [], List).
 
 
 % Remebering which clients are selected on the list
@@ -494,10 +494,9 @@ format_severity(fatal) ->
 
 % Format time in logs
 format_time(Timestamp) ->
-    {_, _, Micros} = Timestamp,
     {{YY, MM, DD}, {Hour, Min, Sec}} = calendar:now_to_local_time(Timestamp),
-    TimeString = io_lib:format("~2..0w-~2..0w-~2..0w | ~2..0w:~2..0w:~2..0w.~3..0w",
-        [YY rem 100, MM, DD, Hour, Min, Sec, Micros div 1000]),
+    TimeString = io_lib:format("~2..0w-~2..0w-~2..0w | ~2..0w:~2..0w:~2..0w",
+        [YY rem 100, MM, DD, Hour, Min, Sec]),
     list_to_binary(TimeString).
 
 
@@ -505,13 +504,17 @@ format_time(Timestamp) ->
 format_metadata(Tags) ->
     Collapsed = case lists:keyfind(user, 1, Tags) of
                     {user, Value} ->
-                        <<"<b>user:</b> ", (gui_str:to_binary(Value))/binary, " ...">>;
+                        <<"<b>user:</b> ", (gui_str:unicode_list_to_binary(Value))/binary, " ...">>;
                     _ ->
                         <<"<b>unknown user</b> ...">>
                 end,
     Expanded = lists:foldl(
         fun({Key, Value}, Acc) ->
-            <<Acc/binary, "<b>", (gui_str:to_binary(Key))/binary, ":</b> ", (gui_str:to_binary(Value))/binary, "<br />">>
+            ValBinary = case is_integer(Value) of
+                true -> integer_to_binary(Value);
+                false -> gui_str:unicode_list_to_binary(Value)
+            end,
+            <<Acc/binary, "<b>", (gui_str:to_binary(Key))/binary, ":</b> ", ValBinary/binary, "<br />">>
         end, <<"">>, Tags),
     {Collapsed, Expanded}.
 
@@ -712,11 +715,24 @@ event(generate_logs) ->
 
 
 set_clients_loglevel(ClientList, Level, ButtonID) ->
-    timer:sleep(1000),
-    gui_jq:update(ButtonID, <<"success!">>),
-    gui_comet:flush(),
-    gui_jq:update(ButtonID, gui_str:to_binary(Level)),
-    timer:sleep(1000),
+    LoglevelInt = central_logger:client_loglevel_atom_to_int(Level),
+    Result =
+        try
+            lists:foldl(
+                fun(FuseID, Acc) ->
+                    case request_dispatcher:send_to_fuse(FuseID, #changeremoteloglevel{level = logging_pb:int_to_enum(loglevel, LoglevelInt)}, "logging") of
+                        ok -> Acc;
+                        _ -> error
+                    end
+                end, ok, ClientList)
+        catch _:_ ->
+            error
+        end,
+    case Result of
+        ok -> gui_jq:update(ButtonID, <<"success!">>);
+        error -> gui_jq:update(ButtonID, <<"failed!">>)
+    end,
+    gui_jq:wire(<<"$('#", ButtonID/binary, "').delay(1000).queue(function(n){$(this).html('", (gui_str:to_binary(Level))/binary, "')});">>),
     gui_comet:flush().
 
 

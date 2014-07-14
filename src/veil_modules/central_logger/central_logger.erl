@@ -106,28 +106,33 @@ handle(_ProtocolVersion, {dispatch_log, Message, Timestamp, Severity, Metadata})
     ok;
 
 handle(_ProtocolVersion, LogMessage) when is_record(LogMessage, logmessage) ->
-    ?dump(LogMessage),
     User = case fslogic_context:get_user_dn() of
                undefined ->
                    "unknown";
                UserDN ->
                    {ok, UserDoc} = user_logic:get_user({dn, UserDN}),
-                   user_logic:get_name(UserDoc)
+                   user_logic:get_login(UserDoc)
            end,
+    FuseID = case fslogic_context:get_fuse_id() of
+                 undefined ->
+                     "unknown";
+                 FID ->
+                     FID
+             end,
     #logmessage{level = Severity, file_name = Finename, line = Line, pid = Pid, timestamp = UnixTimestamp, message = Message} = LogMessage,
     Metadata = [
         {user, User},
+        {fuse_id, FuseID},
         {file, Finename},
         {line, Line},
         {pid, Pid}
     ],
-    Timestamp = {UnixTimestamp div 1000000000, (UnixTimestamp div 1000) rem 1000000, (UnixTimestamp rem 1000) * 1000},
+    Timestamp = {UnixTimestamp div 1000000, UnixTimestamp rem 1000000, 0},
     SeverityAsInt = logging_pb:enum_to_int(loglevel, Severity),
     dispatch_client_log(Message, Timestamp, client_loglevel_int_to_atom(SeverityAsInt), Metadata),
     ok;
 
 handle(_ProtocolVersion, _Request) ->
-    ?dump(_Request),
     wrong_request.
 
 %% cleanup/0
@@ -363,20 +368,3 @@ client_loglevel_atom_to_int(warning) -> 2;
 client_loglevel_atom_to_int(error) -> 3;
 client_loglevel_atom_to_int(fatal) -> 4;
 client_loglevel_atom_to_int(none) -> 5.
-
-
--include("fuse_messages_pb.hrl").
--include("logging_pb.hrl").
--include("communication_protocol_pb.hrl").
-
-pierog() ->
-    worker_host:send_to_user({login, "plglopiola"}, #changeremoteloglevel{level = logging_pb:int_to_enum(loglevel, 1)}, "logging", 1).
-
-generate_logs() ->
-    random:seed(now()),
-    lists:foreach(
-        fun(Severity) ->
-            Message = lists:flatten(lists:duplicate(10, io_lib:format("~.36B", [random:uniform(98 * 567 * 456 * 235 * 232 * 3465 * 23552 * 3495 * 43534 * 345436 * 45)]))),
-            LogMessage = #logmessage{level = Severity, file_name = "plik.cc", line = 123, pid = 34211, timestamp = 1404800000000 + random:uniform(99999999), message = Message},
-            gen_server:call(?Dispatcher_Name, {central_logger, 1, LogMessage})
-        end, ['LDEBUG', 'INFO', 'WARNING', 'ERROR', 'FATAL']).

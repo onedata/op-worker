@@ -5,14 +5,18 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This file contains list of communiques that can be processed.
+%% @doc: This file contains list of communicates that can be processed.
 %% @end
 %% ===================================================================
 
 %% white lists defined as lists of pairs {user_type, white_list_for_user_type}
 -define(MessagesWhiteList, [
-  {standard_user, [fusemessage, remotefilemangement, channelregistration, channelclose, atom, handshakerequest, handshakeack, eventmessage]},
-  {developer, [fusemessage, remotefilemangement, channelregistration, channelclose, atom, handshakerequest, handshakeack, eventmessage]}
+  {standard_user, [
+      fusemessage, remotefilemangement, channelregistration, channelclose, atom,
+      handshakerequest, handshakeack, eventmessage, changeremoteloglevel, logmessage]},
+  {developer, [
+      fusemessage, remotefilemangement, channelregistration, channelclose, atom,
+      handshakerequest, handshakeack, eventmessage, changeremoteloglevel, logmessage]}
 ]).
 -define(AtomsWhiteList, [
   {standard_user, [ping, event_producer_config_request, is_write_enabled, ack]},
