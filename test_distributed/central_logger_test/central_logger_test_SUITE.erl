@@ -151,7 +151,7 @@ logging_test(Config) ->
 
   % Subscribe for log stream
   Pid = self(),
-  ?assertEqual(ok, gen_server:call({?Dispatcher_Name, W3}, {central_logger, 1, {subscribe, Pid}}, 1000)),
+  ?assertEqual(ok, gen_server:call({?Dispatcher_Name, W3}, {central_logger, 1, {subscribe, cluster, Pid}}, 1000)),
 
   % Every call will produce [10 * Arg1] of logs
   ?assertEqual(ok, rpc:call(CCM, ?MODULE, perform_10_logs, [5])),
@@ -164,7 +164,7 @@ logging_test(Config) ->
   check_logs(250),
 
   % Unsubscribe from log stream
-  ?assertEqual(ok, gen_server:call({?Dispatcher_Name, W3}, {central_logger, 1, {unsubscribe, Pid}}, 1000)),
+  ?assertEqual(ok, gen_server:call({?Dispatcher_Name, W3}, {central_logger, 1, {unsubscribe, cluster, Pid}}, 1000)),
   % Ask for subscribers list
   ?assertEqual(ok, gen_server:call({?Dispatcher_Name, W3}, {central_logger, 1, self(), message_id, get_subscribers}, 1000)),
   % To confirm, that this pid is no longer subscribed

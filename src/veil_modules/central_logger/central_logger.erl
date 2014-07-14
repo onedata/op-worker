@@ -103,6 +103,9 @@ handle(_ProtocolVersion, {unsubscribe, Source, Subscriber}) when Source =:= clie
     remove_subscriber(Source, Subscriber),
     ok;
 
+handle(_ProtocolVersion, {get_subscribers, Source}) when Source =:= client orelse Source =:= cluster ->
+    get_subscribers(Source);
+
 handle(_ProtocolVersion, {dispatch_log, Message, Timestamp, Severity, Metadata}) ->
     dispatch_cluster_log(Message, Timestamp, Severity, Metadata),
     ok;

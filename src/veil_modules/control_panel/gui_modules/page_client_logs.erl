@@ -110,11 +110,6 @@ logs_submenu() ->
                         style = <<"width: 110px; height: 34px; padding: 6px 13px 8px;">>, id = <<"show_filters_button">>,
                         body = <<"Edit filters">>}
                 ]},
-
-                % Uncomment for development
-                #link{title = <<"Generate logs">>, style = <<"padding: 18px 14px;">>,
-                    body = <<"GENERUJ LOGI">>, postback = generate_logs},
-
                 #list{class = <<"nav pull-right">>, body = [
                     #li{id = <<"generate_logs">>, body = #link{title = <<"Clear all logs">>, style = <<"padding: 18px 14px;">>,
                         body = #span{class = <<"fui-trash">>}, postback = clear_all_logs}}
@@ -511,9 +506,9 @@ format_metadata(Tags) ->
     Expanded = lists:foldl(
         fun({Key, Value}, Acc) ->
             ValBinary = case is_integer(Value) of
-                true -> integer_to_binary(Value);
-                false -> gui_str:unicode_list_to_binary(Value)
-            end,
+                            true -> integer_to_binary(Value);
+                            false -> gui_str:unicode_list_to_binary(Value)
+                        end,
             <<Acc/binary, "<b>", (gui_str:to_binary(Key))/binary, ":</b> ", ValBinary/binary, "<br />">>
         end, <<"">>, Tags),
     {Collapsed, Expanded}.
@@ -706,12 +701,7 @@ event({update_filter, FilterName}) ->
             put(filters, set_filter(get(filters), FilterName, Filter)),
             get(comet_pid) ! {set_filter, FilterName, Filter};
         _ -> invalid
-    end;
-
-
-% Development helper function - generates logs
-event(generate_logs) ->
-    central_logger:generate_logs().
+    end.
 
 
 set_clients_loglevel(ClientList, Level, ButtonID) ->
@@ -732,7 +722,7 @@ set_clients_loglevel(ClientList, Level, ButtonID) ->
         ok -> gui_jq:update(ButtonID, <<"success!">>);
         error -> gui_jq:update(ButtonID, <<"failed!">>)
     end,
-    gui_jq:wire(<<"$('#", ButtonID/binary, "').delay(1000).queue(function(n){$(this).html('", (gui_str:to_binary(Level))/binary, "')});">>),
+    gui_jq:wire(<<"setTimeout(function f() {$('#", ButtonID/binary, "').html('", (gui_str:to_binary(Level))/binary, "')}, 1000);">>),
     gui_comet:flush().
 
 
