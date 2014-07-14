@@ -54,7 +54,7 @@ Veil service - allows installation of veil cluster nodes.
 %post
 mkdir -p /opt/veil/nodes
 cp -r /opt/veil/files/onepanel_node /opt/veil/nodes/onepanel
-sed -i s/"-name .*"/"-name onepanel@"`hostname`/g /opt/veil/nodes/onepanel/releases/1/vm.args
+sed -i s/"-name .*"/"-name onepanel@"`hostname -f`/g `find /opt/veil/nodes/onepanel/releases -name vm.args`
 chkconfig --add veil
 chkconfig --add onepanel
 service onepanel start
