@@ -222,6 +222,8 @@ function remove_db {
 function start_db {
     info "Starting DB..."
 
+    ssh $1 -tt "sed -i -e \"s/bind_address = [0-9\.]*/bind_address = 0.0.0.0/\" /opt/veil/files/database_node/etc/default.ini" || error "Cannot change db bind address on $1."
+
     ssh $1 "echo \"
         {what_to_do, manage_db}.
     \" > $SETUP_DIR/start_db.batch" 
