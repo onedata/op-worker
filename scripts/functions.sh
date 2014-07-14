@@ -305,11 +305,14 @@ function start_client {
 
     mount_cmd="PEER_CERTIFICATE_FILE=\"$S_DIR/peer.pem\" PATH=\$HOME:\$PATH veilFuse $2"
     if [[ "$group_id" != "" ]]; then
-      mount_cmd="FUSE_OPT_GROUP_ID=\"$group_id\" $mount_cmd"
+        echo "Group ID: $group_id"
+        mount_cmd="FUSE_OPT_GROUP_ID=\"$group_id\" $mount_cmd"
     fi
     if [[ "$cl_host" == "" ]]; then
+        echo "Mount cmd 1: $mount_cmd"
         ssh $1 "$mount_cmd" || error "Cannot mount VeilFS on $1"
     else
+        echo "Mount cmd 2: CLUSTER_HOSTNAME=\"$cl_host\" $mount_cmd"
         ssh $1 "CLUSTER_HOSTNAME=\"$cl_host\" $mount_cmd" || error "Cannot mount VeilFS on $1 (using cluster_hostname: $cl_host, mount_cmd: 'CLUSTER_HOSTNAME=\"$cl_host\" $mount_cmd')"
     fi
 }
