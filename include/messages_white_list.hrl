@@ -13,10 +13,10 @@
 -define(MessagesWhiteList, [
   {standard_user, [
       fusemessage, remotefilemangement, channelregistration, channelclose, atom,
-      handshakerequest, handshakeack, eventmessage, changeremoteloglevel, logmessage]},
+      handshakerequest, handshakeack, eventmessage, logmessage]},
   {developer, [
       fusemessage, remotefilemangement, channelregistration, channelclose, atom,
-      handshakerequest, handshakeack, eventmessage, changeremoteloglevel, logmessage]}
+      handshakerequest, handshakeack, eventmessage, logmessage]}
 ]).
 -define(AtomsWhiteList, [
   {standard_user, [ping, event_producer_config_request, is_write_enabled, ack]},
