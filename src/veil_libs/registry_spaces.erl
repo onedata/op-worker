@@ -38,14 +38,14 @@ get_space_info(SpaceId) ->
 %% ====================================================================
 
 request(Method, URI) ->
-    request(Method, URI, "").
+    request(Method, URI, <<"">>).
 request(Method, URI, Body) ->
-    URL = "https://globalregistry.org/" ++ URI,
-    case httpc:request(Method, {URL, [], "application/json", Body},
-            [{ssl, [{verify_peer, none}, {certfile, get_provider_cert_path()}, {keyfile, get_provider_key_path()}]}], []) of
-        {ok, {{_, 200, _}, _, Response}} -> {ok, Response};
-        {ok, {{_, 404, _}, _, _}} -> {error, not_found};
-        {ok, Other} -> {error, {invalid_status, Other}};
+    URL = "https://globalregistry.org:8443/" ++ URI,
+    case ibrowse:send_req(URL, [{"Content-Type", "application/json"}], Method, Body,
+            [{ssl_options, [{verify, verify_none}, {certfile, get_provider_cert_path()}, {keyfile, get_provider_key_path()}]}]) of
+        {ok, 200, _, Response} -> {ok, Response};
+        {ok, 404, _, _} -> {error, not_found};
+        {ok, Status, _, _} -> {error, {invalid_status, Status}};
         {error, Reason} -> {error, Reason}
     end.
 
