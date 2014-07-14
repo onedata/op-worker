@@ -119,6 +119,7 @@ TEST_F(ClusterProxyHelperTest, open)
 
 TEST_F(ClusterProxyHelperTest, read)
 {
+    ::google::protobuf::LogSilencer silencer; //silence protobuf error logs for this testcase, to test malformatted msg processing
     FileData resp;
     Answer answer;
     ClusterMsg msg;
@@ -170,6 +171,7 @@ TEST_F(ClusterProxyHelperTest, read)
 
 TEST_F(ClusterProxyHelperTest, write)
 {
+    ::google::protobuf::LogSilencer silencer; //silence protobuf error logs for this testcase, to test malformatted msg processing
     WriteInfo resp;
     Answer answer;
     ClusterMsg msg;
