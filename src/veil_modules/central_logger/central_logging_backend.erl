@@ -143,9 +143,9 @@ code_change(_OldVsn, State, _Extra) ->
 dispatch_log(Message, Timestamp, Severity, OldMetadata) ->
     Metadata = case OldMetadata of
                    [{pid, Pid}] ->
-                       [{node, node()}, {source, error_logger}, {pid, Pid}];
+                       [{node, node()}, {pid, Pid}];
                    OldMetadata2 ->
-                       [{node, node()}, {source, lager} | OldMetadata2]
+                       [{node, node()} | OldMetadata2]
                end,
     try
         gen_server:call(?Dispatcher_Name, {central_logger, 1, {dispatch_log, Message, Timestamp, Severity, Metadata}})

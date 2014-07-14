@@ -25,9 +25,6 @@
 % Utilities for client loglevel conversion
 -export([client_loglevel_int_to_atom/1, client_loglevel_atom_to_int/1]).
 
-% TODO BLEBLEBLELBEBLE
--export([pierog/0, generate_logs/0]).
-
 % Subscribers ETS name
 -define(SUBSCRIBERS_ETS, subscribers_ets).
 
@@ -57,13 +54,18 @@ init(_) ->
     gen_event:delete_handler(lager_event, {lager_file_backend, "log/error.log"}, []),
 
     %  install proper file traces for a central_logger
-    install_trace_file("log/debug.log", debug, 10485760, "$D0", 10, [{destination, local}], false),
-    install_trace_file("log/info.log", info, 104857600, "$W5D23", 100, [{destination, local}], false),
-    install_trace_file("log/error.log", error, 1048576000, "$M1D1", 1000, [{destination, local}], false),
+    install_trace_file("log/debug.log", debug, 10485760, "$D0", 10, [{source, cluster}, {destination, local}], false),
+    install_trace_file("log/info.log", info, 104857600, "$W5D23", 100, [{source, cluster}, {destination, local}], false),
+    install_trace_file("log/error.log", error, 1048576000, "$M1D1", 1000, [{source, cluster}, {destination, local}], false),
 
-    install_trace_file("log/global_debug.log", debug, 10485760, "$D0", 10, [{destination, '*'}], true),
-    install_trace_file("log/global_info.log", info, 104857600, "$W5D23", 100, [{destination, '*'}], true),
-    install_trace_file("log/global_error.log", error, 1048576000, "$M1D1", 1000, [{destination, '*'}], true),
+    install_trace_file("log/global_debug.log", debug, 10485760, "$D0", 10, [{source, cluster}, {destination, '*'}], true),
+    install_trace_file("log/global_info.log", info, 104857600, "$W5D23", 100, [{source, cluster}, {destination, '*'}], true),
+    install_trace_file("log/global_error.log", error, 1048576000, "$M1D1", 1000, [{source, cluster}, {destination, '*'}], true),
+
+    % trace files for clients
+    install_trace_file("log/client_debug.log", debug, 10485760, "$D0", 10, [{source, client}], false),
+    install_trace_file("log/client_info.log", info, 104857600, "$W5D23", 100, [{source, client}], false),
+    install_trace_file("log/client_error.log", error, 1048576000, "$M1D1", 1000, [{source, client}], false),
 
     ok.
 
@@ -180,9 +182,9 @@ dispatch_cluster_log(Message, Timestamp, Severity, OldMetadata) ->
         {node, LogNode} = lists:keyfind(node, 1, OldMetadata),
         Metadata = case LogNode of
         % Local log
-                       ThisNode -> [{destination, local} | OldMetadata];
+                       ThisNode -> [{source, cluster}, {destination, local} | OldMetadata];
         % Log from remote node
-                       _ -> [{destination, global} | OldMetadata]
+                       _ -> [{source, cluster}, {destination, global} | OldMetadata]
                    end,
         do_log(Message, Timestamp, Severity, Metadata)
     catch
@@ -204,7 +206,9 @@ dispatch_client_log(Message, Timestamp, Severity, Metadata) ->
         lists:foreach(
             fun(Sub) ->
                 Sub ! {log, {Message, Timestamp, Severity, Metadata}}
-            end, get_subscribers(client))
+            end, get_subscribers(client)),
+        NewMetadata = [{source, client}, {destination, global}] ++ Metadata,
+        do_log(Message, Timestamp, Severity, NewMetadata)
     catch
         Type:Msg ->
             lager:log(warning, ?gather_metadata ++ [{destination, global}], "Error dispatching log: ~p:~p~nStacktrace: ~p", [Type, Msg, erlang:get_stacktrace()])
