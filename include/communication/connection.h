@@ -27,14 +27,15 @@ public:
                std::function<void(Connection&)> onOpenCallback,
                std::function<void(Connection&)> onErrorCallback);
 
-    virtual ~Connection() = default;
+    virtual ~Connection();
     Connection(const Connection&) = delete;
     Connection &operator=(const Connection&) = delete;
 
     virtual void send(const std::string &payload) = 0;
-    virtual void close();
 
 protected:
+    virtual void close();
+
     const std::shared_ptr<Mailbox> m_mailbox;
     std::function<void()> m_onFailCallback;
     std::function<void()> m_onOpenCallback;

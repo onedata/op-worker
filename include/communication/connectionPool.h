@@ -29,9 +29,7 @@ public:
                    std::shared_ptr<Mailbox> mailbox,
                    const std::string &uri);
 
-    virtual ~ConnectionPool();
-    ConnectionPool(ConnectionPool&&) = default;
-    ConnectionPool &operator=(ConnectionPool&&) & = default;
+    virtual ~ConnectionPool() = default;
     ConnectionPool(const ConnectionPool&) = delete;
     ConnectionPool &operator=(const ConnectionPool&) = delete;
 

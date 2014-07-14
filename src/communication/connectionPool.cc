@@ -40,12 +40,6 @@ ConnectionPool::ConnectionPool(const unsigned int connectionsNumber,
         addConnection();
 }
 
-ConnectionPool::~ConnectionPool()
-{
-    for(auto &connection: m_openConnections)
-        connection->close();
-}
-
 void ConnectionPool::send(const std::string &payload)
 {
     std::unique_lock<std::mutex> lock{m_connectionsMutex};
@@ -88,7 +82,7 @@ void ConnectionPool::onOpen(Connection &connection)
 
     assert(it != m_futureConnections.cend());
 
-    m_openConnections.splice(m_openConnections.cbegin(), m_futureConnections, it);
+    m_openConnections.splice(m_openConnections.begin(), m_futureConnections, it);
     m_connectionOpened.notify_all();
 }
 

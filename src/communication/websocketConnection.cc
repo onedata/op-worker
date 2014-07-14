@@ -25,7 +25,7 @@ WebsocketConnection::WebsocketConnection(std::shared_ptr<Mailbox> mailbox,
                                          std::shared_ptr<const CertificateData> certificateData,
                                          const bool verifyServerCertificate)
     : Connection{std::move(mailbox), onFailCallback, onOpenCallback, onErrorCallback}
-    , m_endpoint{endpoint}
+    , m_endpoint(endpoint)
     , m_certificateData{std::move(certificateData)}
     , m_verifyServerCertificate{verifyServerCertificate}
 {

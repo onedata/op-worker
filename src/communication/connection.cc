@@ -23,6 +23,11 @@ Connection::Connection(std::shared_ptr<Mailbox> mailbox,
     m_onErrorCallback = [=]{ onErrorCallback(*this); };
 }
 
+Connection::~Connection()
+{
+    close();
+}
+
 void Connection::close()
 {
     m_onFailCallback = m_onOpenCallback = m_onErrorCallback = []{};
