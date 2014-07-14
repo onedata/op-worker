@@ -181,7 +181,7 @@ manage_clients_panel() ->
     gui_jq:bind_enter_to_submit_button(<<"search_textbox">>, <<"search_button">>),
     [
         CloseButton,
-        #panel{style = <<"margin: 0 40px;">>, body = [
+        #panel{style = <<"margin: 0 40px; position: relative;">>, body = [
             #panel{style = <<"text-align: left; position: relative;">>, body = [
                 #p{style = <<"margin-top: -5px; display: inline-block; margin-right: 170px;">>, body = <<"Change loglevels for chosen clients:">>},
                 #panel{class = <<"input-append">>, style = <<"margin-bottom: 10px;">>, body = [
@@ -195,7 +195,7 @@ manage_clients_panel() ->
                 ]}
             ]},
             #panel{id = <<"client_table_viewport">>, style = <<"width: 650px; min-height: 80px; max-height: 200px; overflow-y: scroll;",
-            "background-color: white; border-radius: 4px; border: 2px solid rgb(82, 100, 118); ">>, body = [
+            "background-color: white; border-radius: 4px; border: 2px solid rgb(82, 100, 118); float: left;">>, body = [
                 #table{id = <<"client_table">>, class = <<"table table-stripped">>, style = <<"margin-bottom: 0;">>,
                     header = [
                         #tr{cells = [
@@ -215,9 +215,28 @@ manage_clients_panel() ->
                     ],
                     body = #tbody{body = ClientList}
                 }
-            ]}
+            ]},
+            #panel{id = <<"loglevel_buttons_panel">>, style = <<"float: left; margin-left: 25px; ">>, body = loglevel_buttons_panel_body(Identifiers)}
         ]}
     ].
+
+
+loglevel_buttons_panel_body(ClientIdentifiers) ->
+    [
+        #button{class = <<"btn btn-block btn-small btn-danger">>, style = <<"padding: 4px 13px 5px; width: 90px; font-weight: bold;">>,
+            id = <<"lb_fatal">>, postback = {set_clients_loglevel, fatal, <<"lb_fatal">>, ClientIdentifiers}, body = <<"fatal">>},
+        #button{class = <<"btn btn-block btn-small btn-danger">>, style = <<"padding: 4px 13px 5px; width: 90px; font-weight: bold;">>,
+            id = <<"lb_error">>, postback = {set_clients_loglevel, error, <<"lb_error">>, ClientIdentifiers}, body = <<"error">>},
+        #button{class = <<"btn btn-block btn-small btn-warning">>, style = <<"padding: 4px 13px 5px; width: 90px; font-weight: bold;">>,
+            id = <<"lb_warning">>, postback = {set_clients_loglevel, warning, <<"lb_warning">>, ClientIdentifiers}, body = <<"warning">>},
+        #button{class = <<"btn btn-block btn-small btn-success">>, style = <<"padding: 4px 13px 5px; width: 90px; font-weight: bold;">>,
+            id = <<"lb_info">>, postback = {set_clients_loglevel, info, <<"lb_info">>, ClientIdentifiers}, body = <<"info">>},
+        #button{class = <<"btn btn-block btn-small">>, style = <<"padding: 4px 13px 5px; width: 90px; font-weight: bold;">>,
+            id = <<"lb_debug">>, postback = {set_clients_loglevel, debug, <<"lb_debug">>, ClientIdentifiers}, body = <<"debug">>},
+        #button{class = <<"btn btn-block btn-small btn-inverse">>, style = <<"padding: 4px 13px 5px; width: 90px; font-weight: bold;">>,
+            id = <<"lb_none">>, postback = {set_clients_loglevel, ?CLIENT_LOGLEVEL_NONE, <<"lb_none">>, ClientIdentifiers}, body = <<"none">>}
+    ].
+
 
 client_row(ID, Selected, UserName, FuseID) ->
     {RowClass, LinkClass, GlyphClass} =
@@ -236,6 +255,7 @@ client_row(ID, Selected, UserName, FuseID) ->
         #td{style = <<"border-color: rgb(82, 100, 118);">>, body = FuseID}
     ]},
     {Row, Identifier}.
+
 
 % Creates a set of elements used to edit filter preferences of a single filter
 filter_form(FilterType) ->
@@ -322,6 +342,9 @@ comet_loop(Counter, PageState = #page_state{first_log = FirstLog, auto_scroll = 
                     {Counter, PageState#page_state{max_logs = MaxLogs, first_log = NewFirstLog}};
                 {set_filter, FilterName, Filter} ->
                     {Counter, set_filter(PageState, FilterName, Filter)};
+                {set_clients_loglevel, ClientList, Level, ButtonID} ->
+                    set_clients_loglevel(ClientList, Level, ButtonID),
+                    {Counter, PageState};
                 display_error ->
                     catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, client, self()}}),
                     gui_jq:insert_bottom(<<"main_table">>, comet_error()),
@@ -428,7 +451,7 @@ loglevel_dropdown_body(Active) ->
             ID = <<"loglevel_li_", (atom_to_binary(Loglevel, latin1))/binary>>,
             #li{id = ID, actions = gui_jq:postback_action(ID, {set_loglevel, Loglevel}),
                 class = Class, body = #link{body = atom_to_binary(Loglevel, latin1)}}
-        end, ?CLUSTER_LOGLEVELS).
+        end, ?CLIENT_LOGLEVELS).
 
 
 % Render the body of max logs dropdown, so it highlights the current choice
@@ -544,20 +567,39 @@ event({toggle_clients, Selected, ClientList}) ->
             gui_jq:replace(ID, NewRow)
         end, ClientList);
 
+event({set_clients_loglevel, Level, ButtonID, ClientIdentifiers}) ->
+    case get_selected_clients() of
+        [] ->
+            ok;
+        Clients ->
+            set_selected_clients([]),
+            event({toggle_clients, false, ClientIdentifiers}),
+            gui_jq:update(ButtonID, #image{image = <<"/images/spinner.gif">>, style = <<"width: 16px;">>}),
+            get(comet_pid) ! {set_clients_loglevel, Clients, Level, ButtonID}
+    end;
+
 
 event({search_clients, ClientList}) ->
     % Deselect all
-    Query = gui_ctx:postback_param(<<"search_textbox">>),
-    {Select, Deselect} = lists:partition(
-        fun({_, UserName, _}) ->
-            binary:match(UserName, Query) =/= nomatch
-        end, ClientList),
-    ?dump(Select),
-    event({toggle_clients, true, Select}),
-    event({toggle_clients, false, Deselect}),
-    [{FirstRow, _, _} | _] = Select,
-    gui_jq:wire(<<"$('#client_table_viewport').animate({scrollTop: $('#", FirstRow/binary, "').offset().top - ",
-    "$('#client_table_viewport').offset().top + $('#client_table_viewport').scrollTop()}, 50);">>);
+    case gui_ctx:postback_param(<<"search_textbox">>) of
+        <<"">> ->
+            ok;
+        Query ->
+            {Select, Deselect} = lists:partition(
+                fun({_, UserName, _}) ->
+                    binary:match(UserName, Query) =/= nomatch
+                end, ClientList),
+            event({toggle_clients, true, Select}),
+            event({toggle_clients, false, Deselect}),
+            case Select of
+                [] ->
+                    ok;
+                [{FirstRow, _, _} | _] ->
+                    gui_jq:wire(<<"$('#client_table_viewport').animate({scrollTop: $('#", FirstRow/binary, "').offset().top - ",
+                    "$('#client_table_viewport').offset().top + $('#client_table_viewport').scrollTop()}, 50);">>)
+            end
+    end;
+
 
 
 event(toggle_auto_scroll) ->
@@ -667,6 +709,15 @@ event({update_filter, FilterName}) ->
 % Development helper function - generates logs
 event(generate_logs) ->
     central_logger:generate_logs().
+
+
+set_clients_loglevel(ClientList, Level, ButtonID) ->
+    timer:sleep(1000),
+    gui_jq:update(ButtonID, <<"success!">>),
+    gui_comet:flush(),
+    gui_jq:update(ButtonID, gui_str:to_binary(Level)),
+    timer:sleep(1000),
+    gui_comet:flush().
 
 
 % =====================
