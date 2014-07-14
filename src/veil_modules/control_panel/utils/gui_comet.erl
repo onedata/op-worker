@@ -15,7 +15,7 @@
 -include("logging.hrl").
 
 % Comet API
--export([spawn/1, init_comet/2, comet_supervisor/2, is_comet_process/0, flush/0]).
+-export([spawn/1, init_comet/3, comet_supervisor/2, is_comet_process/0, flush/0]).
 
 
 %% ====================================================================
@@ -34,10 +34,12 @@
 -spec spawn(CometFun :: function()) -> {ok, pid()} | no_return().
 %% ====================================================================
 spawn(CometFun) ->
+    % Get session ID so comet process can write/read from session memory
+    #context{session = Session} = ?CTX,
     % Prevent comet and supervisor from killing the calling process on crash
     process_flag(trap_exit, true),
     % Spawn comet process, _link so it will die if the calling process craches
-    CometPid = spawn_link(?MODULE, init_comet, [self(), CometFun]),
+    CometPid = spawn_link(?MODULE, init_comet, [self(), CometFun, Session]),
     % Spawn comet supervisor, _link so it will die if the calling process craches
     spawn_link(?MODULE, comet_supervisor, [self(), CometPid]),
     {ok, CometPid}.
@@ -47,11 +49,12 @@ spawn(CometFun) ->
 %% ====================================================================
 %% @doc Internal function used to initialize an asynchronous "comet" process.
 %% @end
--spec init_comet(OwnerPid :: pid(), fun()) -> no_return().
+-spec init_comet(OwnerPid :: pid(), Fun :: fun(), SessionID :: term()) -> no_return().
 %% ====================================================================
-init_comet(OwnerPid, Fun) ->
+init_comet(OwnerPid, Fun, SessionID) ->
     put(ws_process, OwnerPid),
-    wf_context:init_context([]),
+    Context = wf_context:init_context([]),
+    wf_context:context(Context#context{session = SessionID}),
     Fun().
 
 

@@ -22,9 +22,14 @@
 % Convenience functions to manipulate response headers
 -export([cowboy_ensure_header/3, onrequest_adjust_headers/1]).
 
+% Cookies policy handling
+-export([cookie_policy_popup_body/1, is_cookie_policy_accepted/1]).
+
 % Functions used to perform secure server-server http requests
 -export([https_get/2, https_post/3]).
 
+%% Name of cookie remembering if cookie policy is accepted (value is T/F)
+-define(cookie_policy_cookie_name, "cookie_policy_accepted").
 %% Maximum redirects to follow when doing http request
 -define(max_redirects, 5).
 %% Maximum depth of CA cert analize
@@ -101,6 +106,53 @@ onrequest_adjust_headers(Req) ->
     cowboy_req:set_resp_header(<<"X-Frame-Options">>, <<"SAMEORIGIN">>, Req2).
 
 
+%% cookie_policy_popup_body/1
+%% ====================================================================
+%% @doc Returns a set of elements that renders to a floating popup asking for acceptance
+%% of privacy policy, or an empty list if the privacy policy has already been accepted.
+%% @end
+-spec cookie_policy_popup_body(PrivacyPolicyURL :: binary()) -> [] | term().
+%% ====================================================================
+cookie_policy_popup_body(PrivacyPolicyURL) ->
+    case is_cookie_policy_accepted(?REQ) of
+        true ->
+            [];
+        false ->
+            [
+                #panel{id = <<"cookie_policy_popup">>, class = <<"dialog dialog-info wide">>,
+                    style = <<"position: fixed; bottom: 0; height: 60px; z-index: 2000;",
+                    "line-height: 60px; text-align: center; margin: 0; padding: 0;">>,
+                    body = [
+                        #p{style = <<"margin: 0 10px; display: inline;">>,
+                            body = <<"This website uses cookies. By continuing to browse the site, you are agreeing to our use of cookies.">>},
+                        #form{style = "display: inline;", class = <<"control-group">>, body = [
+                            #link{class = <<"btn btn-mini btn-info">>, target = <<"_blank">>, url = PrivacyPolicyURL,
+                                style = <<"margin: 14px 10px; width: 65px;">>, body = <<"Learn more">>},
+                            #link{class = <<"btn btn-mini btn-success">>, id = <<"accept_cookie_policy">>, body = <<"OK">>,
+                                style = <<"margin: 14px 10px; width: 65px;">>, actions = gui_jq:bind_element_click(<<"accept_cookie_policy">>,
+                                    <<"function (e){ document.cookie = '", ?cookie_policy_cookie_name, "=true;expires=Fri, 01 Jan 2100 00:00:00 GMT';",
+                                    "$('#cookie_policy_popup').hide(); }">>)}
+                        ]}
+                    ]}
+            ]
+    end.
+
+
+%% is_cookie_policy_accepted/1
+%% ====================================================================
+%% @doc Returns true if the client browser has sent a proper cookie
+%% implying that the privacy policy has been accepted.
+%% @end
+-spec is_cookie_policy_accepted(Req :: req()) -> term().
+%% ====================================================================
+is_cookie_policy_accepted(Req) ->
+    {Cookie, _} = cowboy_req:cookie(<<?cookie_policy_cookie_name>>, Req),
+    case Cookie of
+        <<"true">> -> true;
+        _ -> false
+    end.
+
+
 %% https_get/2
 %% ====================================================================
 %% @doc Performs a HTTPS GET. Host is verified according to locally installed CA certs
@@ -150,13 +202,8 @@ https_post(URLBin, ReqHeadersBin, Body) ->
 %% ====================================================================
 perform_request(URL, ReqHeaders, Method, Body, Redirects) ->
     try
-%%         {ok, {_, _, Domain, _, _, _}} = http_uri:parse(URL),
-%%         There is a bug in Erlang 17.0, that has been fixed in 17.1 (which is not yet released).
-%%         The bug makes the ssl gen_server crash on tls handshake, so for now https connections are off the table
-%%         http://erlang.org/pipermail/erlang-questions/2014-April/078654.html
-%%         curl will be used until 17.1 is released
-%%         case ibrowse:send_req(URL, ReqHeaders, Method, Body, [{response_format, binary}, {ssl_options, ssl_opts(Domain)}]) of
-        case do_curl(URL, ReqHeaders, Method, Body) of
+        {ok, {_, _, Domain, _, _, _}} = http_uri:parse(URL),
+        case ibrowse:send_req(URL, ReqHeaders, Method, Body, [{response_format, binary}, {ssl_options, ssl_opts(Domain)}]) of
             {ok, Rcode, RespHeaders, ResponseBody}
                 when (Rcode =:= "301" orelse Rcode =:= "302" orelse Rcode =:= "303" orelse Rcode =:= "307") andalso Redirects > 0 ->
                 % Code in {301, 302, 303, 307} - we are being redirected
@@ -186,35 +233,6 @@ perform_request(URL, ReqHeaders, Method, Body, Redirects) ->
     end.
 
 
-%% do_curl/4
-%% ====================================================================
-%% @doc
-%% Temporary alternative for erlang ssl (which does not work in 17.0)
-%% @end
--spec do_curl(URL :: string(), ReqHeaders :: string(), Method :: string(), Body :: string()) -> term().
-%% ====================================================================
-do_curl(URL, ReqHeaders, Method, Body) ->
-    MethodString = case Method of
-                       get -> " -X GET ";
-                       post -> " -X POST "
-                   end,
-    BodyString = case Body of
-                     [] -> "";
-                     _ -> " -d \"" ++ Body ++ "\" "
-                 end,
-    HeadersString = lists:foldl(
-        fun({Key, Value}, Acc) ->
-            Acc ++ " -H \"" ++ Key ++ ": " ++ Value ++ "\""
-        end, " ", ReqHeaders),
-    CurlCommand = "curl -sL" ++ MethodString ++ URL ++ BodyString ++ HeadersString,
-    Res = os:cmd(CurlCommand),
-    case Res of
-        "" -> {error, curl_failed};
-        "\n" -> {error, curl_failed};
-        RespBody -> {ok, "200", [], gui_str:to_binary(RespBody)}
-    end.
-
-
 %% get_redirect_url/1
 %% ====================================================================
 %% @doc
@@ -238,61 +256,61 @@ get_redirect_url(OldURL, Headers) ->
         _ -> undefined
     end.
 
-%% Unused function
-%% %% ssl_opts/1
-%% %% ====================================================================
-%% %% @doc Returns list of ssl opts for secure connection.
-%% %% @end
-%% -spec ssl_opts(ReqHostname :: string()) -> [tuple()].
-%% %% ====================================================================
-%% ssl_opts(ReqHostname) ->
-%%     VerifyFun =
-%%         fun(_, {bad_cert, _}, RequestedHostname) ->
-%%             {unknown, RequestedHostname};
-%%
-%%             (_, {extension, _}, RequestedHostname) ->
-%%                 {unknown, RequestedHostname};
-%%
-%%             (_, valid, RequestedHostname) ->
-%%                 {valid, RequestedHostname};
-%%
-%%             (Cert, valid_peer, RequestedHostname) ->
-%%                 % If peer is valid, make sure one of domain names contained in cert matches our requested adress
-%%                 #'OTPCertificate'{tbsCertificate = #'OTPTBSCertificate'{extensions = Extensions}} = Cert,
-%%                 AllowedHostnames = lists:foldl(
-%%                     fun(#'Extension'{extnID = ExtID, extnValue = ExtVal}, Acc) ->
-%%                         case ExtID of
-%%                             ?'id-ce-subjectAltName' ->
-%%                                 Acc ++ lists:map(
-%%                                     fun({dNSName, DNSName}) ->
-%%                                         % Create regexps from allowed domain names, to later match them against requested address
-%%                                         ReplacedDots = re:replace(DNSName, "\\.", "\\\\.", [global, {return, list}]),
-%%                                         _ReplacedWildcards = re:replace(ReplacedDots, "\\*", ".*", [global, {return, list}])
-%%                                     end, ExtVal);
-%%                             _ ->
-%%                                 Acc
-%%                         end
-%%                     end, [], Extensions),
-%%
-%%                 Valid = lists:foldl(
-%%                     fun(RegExp, Acc) ->
-%%                         case re:run(RequestedHostname, RegExp) of
-%%                         % At least one domain name matched, the peer is indeed valid
-%%                             {match, _} -> valid;
-%%                             _ -> Acc
-%%                         end
-%%                     end, unknown, AllowedHostnames),
-%%                 {Valid, RequestedHostname}
-%%         end,
-%%
-%%     CaCertFileAtom = case application:get_env(veil_cluster_node, root_cacert_file) of
-%%                          {ok, Val} -> Val;
-%%                          _ -> throw("root_cacert_file env missing")
-%%                      end,
-%%     % Return ssl opts for a secure connection
-%%     [
-%%         {verify, verify_peer},
-%%         {cacertfile, atom_to_list(CaCertFileAtom)},
-%%         {verify_fun, {VerifyFun, ReqHostname}},
-%%         {depth, ?ca_cert_max_depth}
-%%     ].
+
+%% ssl_opts/1
+%% ====================================================================
+%% @doc Returns list of ssl opts for secure connection.
+%% @end
+-spec ssl_opts(ReqHostname :: string()) -> [tuple()].
+%% ====================================================================
+ssl_opts(ReqHostname) ->
+    VerifyFun =
+        fun(_, {bad_cert, _}, RequestedHostname) ->
+            {unknown, RequestedHostname};
+
+            (_, {extension, _}, RequestedHostname) ->
+                {unknown, RequestedHostname};
+
+            (_, valid, RequestedHostname) ->
+                {valid, RequestedHostname};
+
+            (Cert, valid_peer, RequestedHostname) ->
+                % If peer is valid, make sure one of domain names contained in cert matches our requested adress
+                #'OTPCertificate'{tbsCertificate = #'OTPTBSCertificate'{extensions = Extensions}} = Cert,
+                AllowedHostnames = lists:foldl(
+                    fun(#'Extension'{extnID = ExtID, extnValue = ExtVal}, Acc) ->
+                        case ExtID of
+                            ?'id-ce-subjectAltName' ->
+                                Acc ++ lists:map(
+                                    fun({dNSName, DNSName}) ->
+                                        % Create regexps from allowed domain names, to later match them against requested address
+                                        ReplacedDots = re:replace(DNSName, "\\.", "\\\\.", [global, {return, list}]),
+                                        _ReplacedWildcards = re:replace(ReplacedDots, "\\*", ".*", [global, {return, list}])
+                                    end, ExtVal);
+                            _ ->
+                                Acc
+                        end
+                    end, [], Extensions),
+
+                Valid = lists:foldl(
+                    fun(RegExp, Acc) ->
+                        case re:run(RequestedHostname, RegExp) of
+                        % At least one domain name matched, the peer is indeed valid
+                            {match, _} -> valid;
+                            _ -> Acc
+                        end
+                    end, unknown, AllowedHostnames),
+                {Valid, RequestedHostname}
+        end,
+
+    CaCertFileAtom = case application:get_env(veil_cluster_node, root_cacert_file) of
+                         {ok, Val} -> Val;
+                         _ -> throw("root_cacert_file env missing")
+                     end,
+    % Return ssl opts for a secure connection
+    [
+        {verify, verify_peer},
+        {cacertfile, atom_to_list(CaCertFileAtom)},
+        {verify_fun, {VerifyFun, ReqHostname}},
+        {depth, ?ca_cert_max_depth}
+    ].

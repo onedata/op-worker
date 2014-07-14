@@ -90,7 +90,7 @@ prepare_validation_parameters() ->
                             Val -> Val
                         end,
                 % Safely URL-decode params
-                Param = gui_str:to_binary(gui_str:url_encode(gui_str:to_list(Value))),
+                Param = gui_str:url_encode(gui_str:to_list(Value)),
                 <<Acc/binary, "&", Key/binary, "=", Param/binary>>
             end, <<"">>, SignedArgs),
         ValidationRequestBody = <<?openid_check_authentication_mode, RequestParameters/binary>>,
@@ -197,7 +197,7 @@ retrieve_user_info() ->
 %% ====================================================================
 get_signed_param(ParamName, SignedParams) ->
     case lists:member(ParamName, SignedParams) of
-        true -> gui_str:to_list(gui_ctx:url_param(ParamName));
+        true -> gui_str:binary_to_unicode_list(gui_str:to_binary(gui_ctx:url_param(ParamName)));
         false -> []
     end.
 

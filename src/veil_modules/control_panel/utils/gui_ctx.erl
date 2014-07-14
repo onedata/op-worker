@@ -14,13 +14,13 @@
 -include("logging.hrl").
 
 % Functions used to associate user with session
--export([create_session/0, set_user_id/1, get_user_id/0, set_user_record/1, get_user_record/0, user_logged_in/0, clear_session/0]).
+-export([create_session/0, put/2, get/1, set_user_id/1, get_user_id/0, user_logged_in/0, clear_session/0]).
 
 % Functions connected with page / session context
 -export([get_requested_hostname/0, get_requested_page/0, get_request_params/0]).
 
 % Parameters querying
--export([form_param/1, url_param/1]).
+-export([postback_param/1, url_param/1, form_params/0]).
 
 
 %% ====================================================================
@@ -38,6 +38,26 @@
 %% ====================================================================
 create_session() ->
     gui_session_handler:create().
+
+
+%% put/2
+%% ====================================================================
+%% @doc Stores value under given key in user session.
+%% @end
+-spec put(Key :: term(), Value :: term()) -> ok.
+%% ====================================================================
+put(Key, Value) ->
+    wf:session(Key, Value).
+
+
+%% get/1
+%% ====================================================================
+%% @doc Returns value stored in user session.
+%% @end
+-spec get(Key :: term()) -> Value :: term().
+%% ====================================================================
+get(Key) ->
+    wf:session(Key).
 
 
 %% set_user_id/1
@@ -59,26 +79,6 @@ set_user_id(ID) ->
 %% ====================================================================
 get_user_id() ->
     wf:user().
-
-
-%% set_user_record/1
-%% ====================================================================
-%% @doc Returns user database doc associated with current session.
-%% @end
--spec set_user_record(UserDoc :: term()) -> term().
-%% ====================================================================
-set_user_record(UserDoc) ->
-    wf:session(user_doc, UserDoc).
-
-
-%% get_user_record/0
-%% ====================================================================
-%% @doc Returns user database doc associated with current session.
-%% @end
--spec get_user_record() -> term().
-%% ====================================================================
-get_user_record() ->
-    wf:session(user_doc).
 
 
 %% clear_session/0
@@ -143,17 +143,17 @@ user_logged_in() ->
 
 %% form_param/1
 %% ====================================================================
-%% @doc Retrieves a parameter value for a given key - POST parameter
-%% passed during form submission.
+%% @doc Retrieves a parameter value for a given key - POSTBACK parameter
+%% passed during form submission via websocket.
 %% NOTE! The submit button must be wired in certain way
 %% for the param to be accessible by this function,
 %% like this: #button { actions = gui_jq:form_submit_action(...) }
 %% Returns undefined if
 %% the key is not found.
 %% @end
--spec form_param(ParamName :: string() | binary()) -> binary() | undefined.
+-spec postback_param(ParamName :: string() | binary()) -> binary() | undefined.
 %% ====================================================================
-form_param(ParamName) ->
+postback_param(ParamName) ->
     gui_str:to_binary(wf:q(gui_str:to_list(ParamName))).
 
 
@@ -166,3 +166,16 @@ form_param(ParamName) ->
 %% ====================================================================
 url_param(ParamName) ->
     wf:q(gui_str:to_binary(ParamName)).
+
+
+%% form_params/0
+%% ====================================================================
+%% @doc Retrieves a form parameter sent by POST for given key.
+%% Returns undefined if the key is not found.
+%% @end
+-spec form_params() -> {ok, Params :: list()}.
+%% ====================================================================
+form_params() ->
+    {ok, Params, _Req} = cowboy_req:body_qs(?REQ),
+    {ok, Params}.
+
