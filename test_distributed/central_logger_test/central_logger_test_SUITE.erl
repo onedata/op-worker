@@ -15,6 +15,9 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_node_starter.hrl").
 
+% TSubscribing process will wait up to this time for logs
+-define(LOGS_COUNTING_TIME, 10000).
+
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([init_and_cleanup_test/1, logging_test/1]).
@@ -191,7 +194,7 @@ check_logs(ExpectedLogNumber) ->
 
 count_logs(ErrorLoggerLogs, LagerLogs, Expected, StartTime) ->
     {CurrentTime, _} = statistics(wall_clock),
-    case CurrentTime - StartTime < 5000 of
+    case CurrentTime - StartTime < ?LOGS_COUNTING_TIME of
         false ->
             {ErrorLoggerLogs, LagerLogs};
         true ->
