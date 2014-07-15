@@ -10,6 +10,7 @@
 
 
 #include "communication_protocol.pb.h"
+#include "communication/connectionPool.h"
 
 #include <atomic>
 #include <cstdint>

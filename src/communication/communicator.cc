@@ -15,34 +15,21 @@
 #include "veilErrors.h"
 #include "remote_file_management.pb.h"
 
-#include <boost/algorithm/string/case_conv.hpp>
+#include <boost/algorithm/string.hpp>
+#include <google/protobuf/descriptor.h>
 
+#include <cassert>
 #include <unordered_set>
-
-namespace
-{
-std::string lower(std::string what)
-{
-    boost::algorithm::to_lower(what);
-    return std::move(what);
-}
-}
 
 namespace veil
 {
 namespace communication
 {
 
-Communicator::Communicator(const unsigned int dataConnectionsNumber,
-                           const unsigned int metaConnectionsNumber,
-                           std::shared_ptr<const CertificateData> certificateData,
-                           const bool verifyServerCertificate)
-    : m_uri{"wss://whatever"}
-    , m_communicationHandler{
-        std::make_unique<WebsocketConnectionPool>(
-              dataConnectionsNumber, m_uri, certificateData, verifyServerCertificate),
-        std::make_unique<WebsocketConnectionPool>(
-              metaConnectionsNumber, m_uri, certificateData, verifyServerCertificate)}
+Communicator::Communicator(std::unique_ptr<CommunicationHandler> communicationHandler,
+                           std::string uri)
+    : m_uri{std::move(uri)}
+    , m_communicationHandler{std::move(communicationHandler)}
 {
 }
 
@@ -54,7 +41,7 @@ void Communicator::enablePushChannel(std::function<void(const Answer&)> callback
 
     const auto pred = [](const Answer &ans){ return ans.message_id() < 0; };
     const auto call = [=](const Answer &ans){ callback(ans); return true; };
-    m_communicationHandler.subscribe({std::move(pred), std::move(call)});
+    m_communicationHandler->subscribe({std::move(pred), std::move(call)});
 
     // Prepare PUSH channel registration request message
     protocol::fuse_messages::ChannelRegistration reg;
@@ -62,23 +49,15 @@ void Communicator::enablePushChannel(std::function<void(const Answer&)> callback
     reg.set_fuse_id(m_fuseId);
     close.set_fuse_id(m_fuseId);
 
-    ClusterMsg genericMsg;
-    genericMsg.set_module_name(FSLOGIC_MODULE_NAME);
-    genericMsg.set_protocol_version(PROTOCOL_VERSION);
-    genericMsg.set_message_decoder_name(FUSE_MESSAGES_DECODER);
-    genericMsg.set_answer_type(lower(protocol::communication_protocol::Atom::descriptor()->name()));
-    genericMsg.set_answer_decoder_name(COMMUNICATION_PROTOCOL_DECODER);
-    genericMsg.set_synch(true);
+    const auto handshakeMsg = createMessage(FSLOGIC_MODULE_NAME, true,
+                                            protocol::communication_protocol::Atom::default_instance(),
+                                            reg);
 
-    ClusterMsg handshakeMsg = genericMsg;
-    handshakeMsg.set_message_type(lower(reg.GetDescriptor()->name()));
-    reg.SerializeToString(handshakeMsg.mutable_input());
+    const auto goodbyeMsg = createMessage(FSLOGIC_MODULE_NAME, true,
+                                          protocol::communication_protocol::Atom::default_instance(),
+                                          reg);
 
-    ClusterMsg goodbyeMsg = genericMsg;
-    goodbyeMsg.set_message_type(lower(close.GetDescriptor()->name()));
-    close.SerializeToString(handshakeMsg.mutable_input());
-
-    m_communicationHandler.addHandshake(handshakeMsg, goodbyeMsg,
+    m_communicationHandler->addHandshake(*handshakeMsg, *goodbyeMsg,
                                         CommunicationHandler::Pool::META);
 }
 
@@ -92,18 +71,10 @@ bool Communicator::sendHandshakeACK()
     protocol::fuse_messages::HandshakeAck ack;
     ack.set_fuse_id(m_fuseId);
 
-    ClusterMsg msg;
-    msg.set_module_name("");
-    msg.set_protocol_version(PROTOCOL_VERSION);
-    msg.set_message_type(lower(ack.GetDescriptor()->name()));
-    msg.set_message_decoder_name(FUSE_MESSAGES_DECODER);
-    msg.set_answer_type(lower(protocol::communication_protocol::Atom::descriptor()->name()));
-    msg.set_answer_decoder_name(COMMUNICATION_PROTOCOL_DECODER);
-    msg.set_synch(true);
-    ack.SerializeToString(msg.mutable_input());
+    const auto ans = communicate<protocol::communication_protocol::Atom>("", ack);
 
     // Send HandshakeAck to cluster
-    return communicate(msg)->answer_status() == VOK;
+    return ans->answer_status() == VOK;
 }
 
 void Communicator::setFuseId(std::string fuseId)
@@ -111,33 +82,79 @@ void Communicator::setFuseId(std::string fuseId)
     m_fuseId = std::move(fuseId);
 }
 
-std::future<std::unique_ptr<Communicator::Answer>>
-Communicator::communicateAsync(ClusterMsg &msg)
+void Communicator::send(const std::string &module,
+                        const google::protobuf::Message &msg)
 {
-    return m_communicationHandler.communicate(msg, poolType(msg));
+    auto cmsg = createMessage(module, false, Answer::default_instance(), msg);
+    m_communicationHandler->send(*cmsg, poolType(msg));
+}
+
+std::future<std::unique_ptr<Communicator::Answer>>
+Communicator::communicateAsync(const std::string &module,
+                               const google::protobuf::Message &msg,
+                               const google::protobuf::Message &ans)
+{
+    auto cmsg = createMessage(module, false, ans, msg);
+    return m_communicationHandler->communicate(*cmsg, poolType(msg));
 }
 
 std::unique_ptr<Communicator::Answer>
-Communicator::communicate(ClusterMsg &msg,
+Communicator::communicate(const std::string &module,
+                          const google::protobuf::Message &msg,
+                          const google::protobuf::Message &ans,
                           const std::chrono::milliseconds timeout)
 {
-    auto future = communicateAsync(msg);
+    auto cmsg = createMessage(module, true, ans, msg);
+    auto future = m_communicationHandler->communicate(*cmsg, poolType(msg));
     return future.wait_for(timeout) == std::future_status::ready
             ? future.get() : std::make_unique<Answer>();
 }
 
-void Communicator::send(Communicator::ClusterMsg &msg)
+std::pair<std::string, std::string>
+Communicator::describe(const google::protobuf::Descriptor &desc) const
 {
-    m_communicationHandler.communicate(msg, poolType(msg));
+    std::vector<std::string> pieces;
+    boost::algorithm::split(pieces, desc.full_name(), boost::algorithm::is_any_of("."));
+    assert(pieces.size() >= 2);
+
+    const auto nameIt = pieces.rbegin();
+    const auto decoderIt = pieces.rbegin() + 1;
+
+    boost::algorithm::to_lower(*nameIt);
+    boost::algorithm::to_lower(*decoderIt);
+
+    return {std::move(*nameIt), std::move(*decoderIt)};
 }
 
-CommunicationHandler::Pool Communicator::poolType(const ClusterMsg &msg) const
+std::unique_ptr<Communicator::ClusterMsg>
+Communicator::createMessage(const std::string &module,
+                            const bool synchronous,
+                            const google::protobuf::Message &ans,
+                            const google::protobuf::Message &msg) const
+{
+    const auto msgInfo = describe(*msg.GetDescriptor());
+    const auto ansInfo = describe(*ans.GetDescriptor());
+
+    auto cmsg = std::make_unique<ClusterMsg>();
+    cmsg->set_protocol_version(PROTOCOL_VERSION);
+    cmsg->set_module_name(module);
+    cmsg->set_message_type(msgInfo.first);
+    cmsg->set_message_decoder_name(msgInfo.second);
+    cmsg->set_answer_type(ansInfo.first);
+    cmsg->set_answer_decoder_name(ansInfo.second);
+    cmsg->set_synch(synchronous);
+    msg.SerializeToString(cmsg->mutable_input());
+
+    return std::move(cmsg);
+}
+
+CommunicationHandler::Pool Communicator::poolType(const google::protobuf::Message &msg) const
 {
     static const std::unordered_set<std::string> dataPoolMessages{
-        lower(veil::protocol::remote_file_management::RemoteFileMangement::descriptor()->name())
+        protocol::remote_file_management::RemoteFileMangement::descriptor()->full_name()
     };
 
-    return dataPoolMessages.count(msg.message_type())
+    return dataPoolMessages.count(msg.GetDescriptor()->full_name())
             ? CommunicationHandler::Pool::DATA
             : CommunicationHandler::Pool::META;
 }

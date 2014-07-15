@@ -140,15 +140,7 @@ void RemoteLogWriter::writeLoop()
         if(!m_communicator)
             continue;
 
-        protocol::communication_protocol::ClusterMsg clm;
-        clm.set_protocol_version(communication::PROTOCOL_VERSION);
-        clm.set_synch(false);
-        clm.set_module_name(communication::CENTRAL_LOGGER_MODULE_NAME);
-        clm.set_message_decoder_name(communication::LOGGING_DECODER);
-        clm.set_message_type(boost::algorithm::to_lower_copy(msg.GetDescriptor()->name()));
-        msg.SerializeToString(clm.mutable_input());
-
-        m_communicator->send(clm);
+        m_communicator->send(communication::CENTRAL_LOGGER_MODULE_NAME, msg);
     }
 }
 

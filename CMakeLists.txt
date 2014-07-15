@@ -201,6 +201,7 @@ include_directories(${GMOCK_INCLUDE_DIR})
 set(TEST_SOURCES_DIR "test")
 include_directories(${TEST_SOURCES_DIR}/include)
 
+file(GLOB_RECURSE HELPER_TEST_HEADERS ${TEST_SOURCES_DIR}/include/*.h)
 add_library(testRunner OBJECT ${TEST_SOURCES_DIR}/testRunner.cc)
 add_dependencies(testRunner glog gmock gtest)
 
@@ -217,7 +218,7 @@ endmacro()
 file(GLOB files ${TEST_SOURCES_DIR}/*_test.cc)
 foreach(file ${files})
     get_filename_component(TEST_NAME ${file} NAME_WE)
-    add_executable(${TEST_NAME} ${file} $<TARGET_OBJECTS:testRunner>)
+    add_executable(${TEST_NAME} ${file} ${HELPER_TEST_HEADERS} $<TARGET_OBJECTS:testRunner>)
     add_dependencies(${TEST_NAME} gmock gtest veilhelpers veilprotocol)
     target_link_libraries(${TEST_NAME}
         ${GTEST_LIBRARIES}

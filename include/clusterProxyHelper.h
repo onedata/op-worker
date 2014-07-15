@@ -14,6 +14,8 @@
 #include "bufferAgent.h"
 #include "communication_protocol.pb.h"
 
+#include <google/protobuf/message.h>
+
 #include <fuse.h>
 #include <sys/types.h>
 
@@ -96,10 +98,12 @@ protected:
     std::string       m_clusterHostname;
     BufferAgent       m_bufferAgent;
 
-    virtual protocol::communication_protocol::Answer sendClusterMessage(protocol::communication_protocol::ClusterMsg &msg, uint32_t timeout = 0);      ///< Sends ClusterMsg to cluster and receives Answer. This function handles connection selection and its releasing.
-    virtual protocol::communication_protocol::ClusterMsg commonClusterMsgSetup(std::string inputType, std::string& inputData);   ///< Setups commonly used fields in ClusterMsg for RemoteFileManagement.
-    virtual std::string requestMessage(std::string inputType, std::string answerType, std::string& inputData, uint32_t timeout = 0);                   ///< Creates & sends ClusterMsg with given types and input. Response is an serialized message od type "answerType".
-    virtual std::string requestAtom(std::string inputType, std::string inputData);                                              ///< Same as requestMessage except it always receives Atom. Return value is an strign value of Atom.
+    template<typename AnswerType>
+    std::string requestMessage(const google::protobuf::Message &msg,
+                               std::chrono::milliseconds timeout);                   ///< Creates & sends ClusterMsg with given types and input. Response is an serialized message od type "answerType".
+    template<typename AnswerType>
+    std::string requestMessage(const google::protobuf::Message &msg); ///< Creates & sends ClusterMsg with given types and input. Response is an serialized message od type "answerType".
+    virtual std::string requestAtom(const google::protobuf::Message &msg);                                              ///< Same as requestMessage except it always receives Atom. Return value is an strign value of Atom.
 
     virtual int doWrite(const std::string &path, const std::string &buf, size_t, off_t, ffi_type);             ///< Real implementation of write operation.
     virtual int doRead(const std::string &path, std::string &buf, size_t, off_t, ffi_type);                    ///< Real implementation of read operation.

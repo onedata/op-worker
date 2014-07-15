@@ -13,6 +13,8 @@
 #include "make_unique.h"
 #include "veilErrors.h"
 
+#include <google/protobuf/message.h>
+
 #include <chrono>
 #include <memory>
 #include <string>
@@ -25,17 +27,11 @@ namespace communication
 static constexpr int PROTOCOL_VERSION = 1;
 
 static constexpr const char
-    *FUSE_MESSAGES_DECODER          = "fuse_messages",
-    *COMMUNICATION_PROTOCOL_DECODER = "communication_protocol",
-    *LOGGING_DECODER                = "logging",
-    *REMOTE_FILE_MANAGEMENT_DECODER = "remote_file_management";
-
-static constexpr const char
     *FSLOGIC_MODULE_NAME                = "fslogic",
     *CENTRAL_LOGGER_MODULE_NAME         = "central_logger",
     *REMOTE_FILE_MANAGEMENT_MODULE_NAME = "remote_files_manager";
 
-static constexpr std::chrono::seconds RECV_TIMEOUT{2000};
+static constexpr std::chrono::seconds RECV_TIMEOUT{2};
 
 class CertificateData;
 
@@ -45,10 +41,8 @@ class Communicator
     using ClusterMsg = protocol::communication_protocol::ClusterMsg;
 
 public:
-    Communicator(const unsigned int dataConnectionsNumber,
-                 const unsigned int metaConnectionsNumber,
-                 std::shared_ptr<const CertificateData> certificateData,
-                 const bool verifyServerCertificate);
+    Communicator(std::unique_ptr<CommunicationHandler> communicationHandler,
+                 std::string uri);
 
     void enablePushChannel(std::function<void(const Answer&)> callback);
 
@@ -56,16 +50,46 @@ public:
 
     void setFuseId(std::string fuseId);
 
-    void send(ClusterMsg &msg);
-    std::future<std::unique_ptr<Answer>> communicateAsync(ClusterMsg &msg);
-    std::unique_ptr<Answer> communicate(ClusterMsg &msg,
-                                        const std::chrono::milliseconds timeout = RECV_TIMEOUT);
+    virtual void send(const std::string &module,
+                      const google::protobuf::Message &msg);
+
+    template<typename AnswerType> std::future<std::unique_ptr<Answer>>
+    communicateAsync(const std::string &module,
+                     const google::protobuf::Message &msg)
+    {
+        return communicateAsync(module, msg, AnswerType::default_instance());
+    }
+
+    template<typename AnswerType> std::unique_ptr<Answer>
+    communicate(const std::string &module,
+                const google::protobuf::Message &msg,
+                const std::chrono::milliseconds timeout = RECV_TIMEOUT)
+    {
+        return communicate(module, msg, AnswerType::default_instance(), timeout);
+    }
+
+protected:
+    virtual std::future<std::unique_ptr<Answer>>
+    communicateAsync(const std::string &module,
+                     const google::protobuf::Message &msg,
+                     const google::protobuf::Message &ans);
+
+    virtual std::unique_ptr<Answer>
+    communicate(const std::string &module,
+                const google::protobuf::Message &msg,
+                const google::protobuf::Message &ans,
+                const std::chrono::milliseconds timeout);
 
 private:
-    CommunicationHandler::Pool poolType(const ClusterMsg &msg) const;
+    std::pair<std::string, std::string> describe(const google::protobuf::Descriptor &desc) const;
+    std::unique_ptr<ClusterMsg> createMessage(const std::string &module,
+                                              const bool synchronous,
+                                              const google::protobuf::Message &ans,
+                                              const google::protobuf::Message &msg) const;
+    CommunicationHandler::Pool poolType(const google::protobuf::Message &msg) const;
 
     const std::string m_uri;
-    CommunicationHandler m_communicationHandler;
+    std::unique_ptr<CommunicationHandler> m_communicationHandler;
     std::string m_fuseId;
 };
 

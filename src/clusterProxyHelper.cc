@@ -10,7 +10,6 @@
 #include "communication/communicator.h"
 #include "logging.h"
 #include "remote_file_management.pb.h"
-#include "simpleConnectionPool.h"
 
 #include <boost/any.hpp>
 
@@ -24,65 +23,39 @@ using namespace veil::protocol::communication_protocol;
 namespace veil {
 namespace helpers {
 
-
-ClusterMsg ClusterProxyHelper::commonClusterMsgSetup(string inputType, string &inputData)
+template<typename AnswerType>
+string ClusterProxyHelper::requestMessage(const google::protobuf::Message &msg,
+                                          const std::chrono::milliseconds timeout)
 {
+    const auto answer = m_communicator->communicate<AnswerType>(
+                communication::REMOTE_FILE_MANAGEMENT_MODULE_NAME, msg, timeout);
 
-    RemoteFileMangement rfm;
-    rfm.set_message_type(utils::tolower(inputType));
-    rfm.set_input(inputData);
-
-    ClusterMsg clm;
-    clm.set_protocol_version(communication::PROTOCOL_VERSION);
-    clm.set_synch(true);
-    clm.set_module_name(communication::REMOTE_FILE_MANAGEMENT_MODULE_NAME);
-    clm.set_message_decoder_name(communication::REMOTE_FILE_MANAGEMENT_DECODER);
-    clm.set_message_type(utils::tolower(rfm.GetDescriptor()->name()));
-    rfm.SerializeToString(clm.mutable_input());
-
-    return clm;
+    return answer->worker_answer();
 }
 
-string ClusterProxyHelper::requestMessage(string inputType, string answerType, string &inputData, uint32_t timeout)
+template<typename AnswerType>
+string ClusterProxyHelper::requestMessage(const google::protobuf::Message &msg)
 {
-    ClusterMsg clm = commonClusterMsgSetup(inputType, inputData);
+    const auto answer = m_communicator->communicate<AnswerType>(
+                communication::REMOTE_FILE_MANAGEMENT_MODULE_NAME, msg);
 
-    clm.set_answer_type(utils::tolower(answerType));
-    clm.set_answer_decoder_name(communication::REMOTE_FILE_MANAGEMENT_DECODER);
-
-    Answer answer = sendClusterMessage(clm, timeout);
-
-    return answer.worker_answer();
+    return answer->worker_answer();
 }
 
-string ClusterProxyHelper::requestAtom(string inputType, string inputData)
+string ClusterProxyHelper::requestAtom(const google::protobuf::Message &msg)
 {
-    ClusterMsg clm = commonClusterMsgSetup(inputType, inputData);
-
-    clm.set_answer_type(utils::tolower(Atom::descriptor()->name()));
-    clm.set_answer_decoder_name(communication::COMMUNICATION_PROTOCOL_DECODER);
-
-    Answer answer = sendClusterMessage(clm);
+    const auto answer = m_communicator->communicate<Atom>(
+                communication::REMOTE_FILE_MANAGEMENT_MODULE_NAME, msg);
 
     Atom atom;
-    if(answer.has_worker_answer()) {
-        atom.ParseFromString(answer.worker_answer());
+    if(answer->has_worker_answer())
+    {
+        atom.ParseFromString(answer->worker_answer());
         return atom.value();
     }
 
-    return "";
+    return {};
 }
-
-Answer ClusterProxyHelper::sendClusterMessage(ClusterMsg &msg, uint32_t timeout)
-{
-    Answer answer = *m_communicator->communicate(msg, std::chrono::milliseconds{timeout});
-
-    if(answer.answer_status() != VOK)
-        LOG(WARNING) << "Cluster send non-ok message. status = " << answer.answer_status();
-
-    return answer;
-}
-
 
 //////////////////////
 // Helper callbacks //
@@ -107,7 +80,7 @@ int ClusterProxyHelper::sh_mknod(const char *path, mode_t mode, dev_t rdev)
     CreateFile msg;
     msg.set_file_id(string(path));
 
-    return translateError(requestAtom(msg.GetDescriptor()->name(), msg.SerializeAsString()));
+    return translateError(requestAtom(msg));
 }
 
 int ClusterProxyHelper::sh_unlink(const char *path)
@@ -117,7 +90,7 @@ int ClusterProxyHelper::sh_unlink(const char *path)
     DeleteFileAtStorage msg;
     msg.set_file_id(string(path));
 
-    return translateError(requestAtom(msg.GetDescriptor()->name(), msg.SerializeAsString()));
+    return translateError(requestAtom(msg));
 }
 
 int ClusterProxyHelper::sh_chmod(const char *path, mode_t mode)
@@ -138,7 +111,7 @@ int ClusterProxyHelper::sh_truncate(const char *path, off_t size)
     msg.set_file_id(string(path));
     msg.set_length(size);
 
-    return translateError(requestAtom(msg.GetDescriptor()->name(), msg.SerializeAsString()));
+    return translateError(requestAtom(msg));
 }
 
 int ClusterProxyHelper::sh_open(const char *path, struct fuse_file_info *fi)
@@ -296,8 +269,7 @@ int ClusterProxyHelper::doWrite(const string &path, const std::string &buf, size
     WriteInfo answer;
     string inputData = msg.SerializeAsString();
 
-    if(!answer.ParseFromString(
-        requestMessage(msg.GetDescriptor()->name(), answer.GetDescriptor()->name(), inputData)))
+    if(!answer.ParseFromString(requestMessage<WriteInfo>(msg)))
     {
         LOG(WARNING) << "Cannot parse answer for file: " << string(path);
         return translateError(VEIO);
@@ -321,10 +293,9 @@ int ClusterProxyHelper::doRead(const string &path, std::string &buf, size_t size
     FileData answer;
     string inputData = msg.SerializeAsString();
 
-    uint64_t timeout = size * 2; // 2ms for each byte (minimum of 500B/s);
+    std::chrono::milliseconds timeout{size * 2}; // 2ms for each byte (minimum of 500B/s);
 
-    if(!answer.ParseFromString(
-        requestMessage(msg.GetDescriptor()->name(), answer.GetDescriptor()->name(), inputData, timeout)))
+    if(!answer.ParseFromString(requestMessage<FileData>(msg, timeout)))
     {
         LOG(WARNING) << "Cannot parse answer for file: " << string(path);
         return translateError(VEIO);
