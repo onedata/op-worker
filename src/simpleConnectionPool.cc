@@ -16,6 +16,8 @@
 #include <iterator>
 #include <algorithm>
 #include <boost/thread/thread_time.hpp>
+#include <exception>
+#include "helpers/storageHelperFactory.h"
 
 using namespace boost;
 using namespace std;
@@ -27,23 +29,21 @@ SimpleConnectionPool::SimpleConnectionPool(const string &hostname, int port, cer
     m_port(port),
     m_getCertInfo(certInfoFun)
 {
-    m_connectionPools[META_POOL] = ConnectionPoolInfo(metaPoolSize);
-    m_connectionPools[DATA_POOL] = ConnectionPoolInfo(dataPoolSize);
+    m_connectionPools.emplace(META_POOL, std::unique_ptr<ConnectionPoolInfo>(new ConnectionPoolInfo(certInfoFun, metaPoolSize)));
+    m_connectionPools.emplace(DATA_POOL, std::unique_ptr<ConnectionPoolInfo>(new ConnectionPoolInfo(certInfoFun, dataPoolSize)));
 }
-
-SimpleConnectionPool::~SimpleConnectionPool() {}
 
 void SimpleConnectionPool::resetAllConnections(PoolType type)
 {
-    m_connectionPools[type].connections.clear();
-    setPoolSize(type, m_connectionPools[type].size); // Force connection reinitialization
+    m_connectionPools.at(type)->connections.clear();
+    setPoolSize(type, m_connectionPools.at(type)->size); // Force connection reinitialization
 }
 
 boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(PoolType type)
 {
     boost::unique_lock< boost::recursive_mutex > lock(m_access);
 
-    ConnectionPoolInfo &poolInfo = m_connectionPools[type];
+    ConnectionPoolInfo &poolInfo = *m_connectionPools.at(type);
     boost::shared_ptr<CommunicationHandler> conn;
 
     CounterRAII sc(poolInfo.currWorkers);
@@ -78,7 +78,7 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(Pool
 
         lock.unlock();
 
-        conn.reset(new CommunicationHandler(connectTo, m_port, m_getCertInfo));
+        conn.reset(new CommunicationHandler(connectTo, m_port, m_getCertInfo, poolInfo.endpoint));
         conn->setFuseID(m_fuseId);  // Set FuseID that shall be used by this connection as session ID
         if(m_pushCallback)                          // Set callback that shall be used for PUSH messages and error messages
             conn->setPushCallback(m_pushCallback);  // Note that this doesnt enable/register PUSH channel !
@@ -111,7 +111,7 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(P
     boost::unique_lock< boost::recursive_mutex > lock(m_access);
     boost::shared_ptr<CommunicationHandler> conn;
 
-    ConnectionPoolInfo &poolInfo = m_connectionPools[type];
+    ConnectionPoolInfo &poolInfo = *m_connectionPools.at(type);
 
     // Delete first connection in pool if its error counter is way to big
     if(poolInfo.connections.size() > 0 && poolInfo.connections.front().first->getErrorCount() > MAX_CONNECTION_ERROR_COUNT) {
@@ -167,10 +167,10 @@ error::Error SimpleConnectionPool::getLastError() const
 void SimpleConnectionPool::setPoolSize(PoolType type, unsigned int s)
 {
     boost::unique_lock< boost::recursive_mutex > lock(m_access);
-    m_connectionPools[type].size = s;
+    m_connectionPools.at(type)->size = s;
 
     // Insert new connections to pool if needed (async)
-    long toStart = m_connectionPools[type].size - m_connectionPools[type].connections.size();
+    long toStart = m_connectionPools.at(type)->size - m_connectionPools.at(type)->connections.size();
     while(toStart-- > 0) {
         boost::thread t = boost::thread(boost::bind(&SimpleConnectionPool::newConnection, shared_from_this(), type));
         t.detach();
@@ -214,6 +214,100 @@ list<string> SimpleConnectionPool::dnsQuery(const string &hostname)
     }
 
     return lst;
+}
+
+SimpleConnectionPool::ConnectionPoolInfo::ConnectionPoolInfo(cert_info_fun getCertInfo, unsigned int s)
+    : size(s)
+    , m_getCertInfo{std::move(getCertInfo)}
+{
+    LOG(INFO) << "Initializing a WebSocket endpoint";
+    websocketpp::lib::error_code ec;
+    endpoint->clear_access_channels(websocketpp::log::alevel::all);
+    endpoint->clear_error_channels(websocketpp::log::elevel::all);
+    endpoint->init_asio(ec);
+    endpoint->start_perpetual();
+
+    if(ec)
+    {
+        LOG(ERROR) << "Cannot initlize WebSocket endpoint; terminating.";
+        std::terminate();
+    }
+
+    // Start worker thread
+    m_ioWorker = boost::thread(&ws_client::run, endpoint);
+
+    endpoint->set_tls_init_handler(bind(&ConnectionPoolInfo::onTLSInit, this, ::_1));
+    endpoint->set_socket_init_handler(bind(&ConnectionPoolInfo::onSocketInit, this, ::_1, ::_2));
+}
+
+SimpleConnectionPool::ConnectionPoolInfo::~ConnectionPoolInfo()
+{
+    LOG(INFO) << "Stopping the WebSocket endpoint";
+    endpoint->stop_perpetual();
+
+    for(auto &con: connections)
+        con.first->closeConnection();
+
+    LOG(INFO) << "Stopping WebSocket endpoint worker thread";
+    m_ioWorker.join();
+}
+
+context_ptr SimpleConnectionPool::ConnectionPoolInfo::onTLSInit(websocketpp::connection_hdl hdl)
+{
+    if (!m_getCertInfo) {
+        LOG(ERROR) << "Cannot get CertificateInfo due to null getter";
+        return context_ptr();
+    }
+
+    CertificateInfo certInfo = m_getCertInfo();
+
+    try {
+        context_ptr ctx(new boost::asio::ssl::context(boost::asio::ssl::context::sslv3));
+
+        ctx->set_options(boost::asio::ssl::context::default_workarounds |
+                         boost::asio::ssl::context::no_sslv2 |
+                         boost::asio::ssl::context::single_dh_use);
+
+        ctx->set_default_verify_paths();
+        ctx->set_verify_mode(helpers::config::checkCertificate.load()
+                             ? boost::asio::ssl::verify_peer
+                             : boost::asio::ssl::verify_none);
+
+        boost::asio::ssl::context_base::file_format file_format; // Certificate format
+        if(certInfo.cert_type == CertificateInfo::ASN1) {
+            file_format = boost::asio::ssl::context::asn1;
+        } else {
+            file_format = boost::asio::ssl::context::pem;
+        }
+
+        if(certInfo.cert_type == CertificateInfo::P12) {
+            LOG(ERROR) << "Unsupported certificate format: P12";
+            return context_ptr();
+        }
+
+        if(boost::asio::buffer_size(certInfo.chain_data) && boost::asio::buffer_size(certInfo.chain_data)) {
+            ctx->use_certificate_chain(certInfo.chain_data);
+            ctx->use_private_key(certInfo.key_data, file_format);
+        } else {
+            ctx->use_certificate_chain_file(certInfo.user_cert_path);
+            ctx->use_private_key_file(certInfo.user_key_path, file_format);
+        }
+
+        return ctx;
+
+    } catch (boost::system::system_error& e) {
+        LOG(ERROR) << "Cannot initialize TLS socket due to: " << e.what()
+                   << " with cert file: " << certInfo.user_cert_path << " and key file: "
+                   << certInfo.user_key_path;
+    }
+
+    return context_ptr();
+}
+
+void SimpleConnectionPool::ConnectionPoolInfo::onSocketInit(websocketpp::connection_hdl hdl, socket_type &socket)
+{
+    // Disable socket delay
+    socket.lowest_layer().set_option(boost::asio::ip::tcp::no_delay(true));
 }
 
 } // namespace veil
