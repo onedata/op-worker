@@ -19,6 +19,7 @@ if [[ -z "$SETUP_DIR" ]]; then
 fi
 
 if [[ -z "$BAMBOO_CREATE_USER_IN_DB" ]]; then
+    info "Exporting undefined variable BAMBOO_CREATE_USER_IN_DB"
     export BAMBOO_CREATE_USER_IN_DB="true"
 fi
 
