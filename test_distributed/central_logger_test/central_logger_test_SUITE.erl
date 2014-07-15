@@ -125,7 +125,7 @@ init_and_cleanup_test(Config) ->
 
     % Terminate central_logger worker
     gen_server:cast({global, ?CCM}, {stop_worker, W, central_logger}),
-    nodes_manager:wait_for_cluster_cast(),
+    test_utils:wait_for_cluster_cast(),
 
     % Check if traces were reset to default
     TracesAfterCleanup = rpc:call(W, ?MODULE, get_lager_traces, []),
