@@ -25,7 +25,7 @@ class CertificateData;
 
 WebsocketConnectionPool::WebsocketConnectionPool(const unsigned int connectionsNumber,
                                                  std::string uri,
-                                                 std::shared_ptr<CertificateData> certificateData,
+                                                 std::shared_ptr<const CertificateData> certificateData,
                                                  const bool verifyServerCertificate)
     : ConnectionPool{connectionsNumber, std::move(uri)}
     , m_certificateData{std::move(certificateData)}

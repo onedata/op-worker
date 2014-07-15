@@ -14,6 +14,7 @@
 #include <list>
 #include <memory>
 #include <mutex>
+#include <vector>
 
 namespace veil
 {
@@ -34,6 +35,7 @@ public:
 
     void send(const std::string &payload);
     void setOnMessageCallback(std::function<void(const std::string&)> onMessageCallback);
+    void addHandshake(std::function<std::string()> handshake);
 
 protected:
     void addConnection();
@@ -50,6 +52,7 @@ protected:
     std::condition_variable m_connectionOpened;
     std::list<std::unique_ptr<Connection>> m_futureConnections;
     std::list<std::unique_ptr<Connection>> m_openConnections;
+    std::vector<std::function<std::string()>> m_handshakes;
 };
 
 } // namespace communication

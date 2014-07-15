@@ -85,6 +85,9 @@ void ConnectionPool::onOpen(Connection &connection)
 
     assert(it != m_futureConnections.cend());
 
+    for(const auto &handshake: m_handshakes)
+        (*it)->send(handshake());
+
     m_openConnections.splice(m_openConnections.begin(), m_futureConnections, it);
     m_connectionOpened.notify_all();
 }
@@ -94,6 +97,11 @@ void ConnectionPool::onError(Connection &connection)
     namespace p = std::placeholders;
     std::lock_guard<std::mutex> guard{m_connectionsMutex};
     m_openConnections.remove_if(std::bind(eq, p::_1, std::cref(connection)));
+}
+
+void ConnectionPool::addHandshake(std::function<std::string()> handshake)
+{
+    m_handshakes.emplace_back(std::move(handshake));
 }
 
 } // namespace communication

@@ -55,9 +55,11 @@ public:
     CommunicationHandler &operator=(const CommunicationHandler&) = delete;
 
     void send(Message &message, const Pool poolType);
-    std::future<std::unique_ptr<Answer>> communicate(Message &message, const Pool poolType);
+    std::future<std::unique_ptr<Answer>> communicate(Message &message,
+                                                     const Pool poolType);
 
     void subscribe(SubscriptionData data);
+    void addHandshake(const Message &handshake, const Pool poolType);
 
 private:
     MsgId nextId();

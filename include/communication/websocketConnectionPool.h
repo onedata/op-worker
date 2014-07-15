@@ -35,7 +35,7 @@ class WebsocketConnectionPool: public ConnectionPool
 public:
     WebsocketConnectionPool(const unsigned int connectionsNumber,
                             std::string uri,
-                            std::shared_ptr<CertificateData> certificateData,
+                            std::shared_ptr<const CertificateData> certificateData,
                             const bool verifyServerCertificate);
 
     ~WebsocketConnectionPool();
@@ -50,7 +50,7 @@ protected:
 private:
     std::thread m_ioThread;
     endpoint_type m_endpoint;
-    const std::shared_ptr<CertificateData> m_certificateData;
+    const std::shared_ptr<const CertificateData> m_certificateData;
     const bool m_verifyServerCertificate;
 };
 
