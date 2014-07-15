@@ -813,8 +813,8 @@ create_dirs_at_storage(Root, Teams, Storage) ->
 %% ====================================================================
 get_team_names(#veil_document{record = #user{} = User}) ->
     get_team_names(User);
-get_team_names(#user{} = User) ->
-    [string:strip(lists:nth(1, string:tokens(X, "("))) || X <- User#user.teams];
+get_team_names(#user{spaces = Spaces}) ->
+    [SpaceName || {ok, #space_info{name = SpaceName}} <- lists:map(fun(SpaceId) -> fslogic_objects:get_space(SpaceId) end, Spaces)];
 get_team_names(UserQuery) ->
     {ok, UserDoc} = user_logic:get_user(UserQuery),
     get_team_names(UserDoc).
