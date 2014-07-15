@@ -145,10 +145,10 @@ signing_in_test_() ->
                             (dao_users, save_quota, _, _) -> {ok, "quota_uuid"};
                             (dao_vfs, save_new_file, _, _) -> {ok, "file_uuid"};
                             (dao_vfs, list_storage, [], _) -> {ok, []};
-	                        (dao_vfs, exist_file,["/" ++ ?GROUPS_BASE_DIR_NAME],_) -> {ok,true};
-	                        (dao_vfs, exist_file,["/" ++ ?GROUPS_BASE_DIR_NAME ++ "/New team"],_) -> {ok,true};
-	                        (dao_vfs, exist_file,["/" ++ ?GROUPS_BASE_DIR_NAME ++ "/Another team"],_) -> {ok,true};
-	                        (dao_vfs, get_file,["/" ++ ?GROUPS_BASE_DIR_NAME],_) -> {ok,#veil_document{uuid="group_dir_uuid"}}
+	                        (dao_vfs, exist_file,["/" ++ ?SPACES_BASE_DIR_NAME],_) -> {ok,true};
+	                        (dao_vfs, exist_file,["/" ++ ?SPACES_BASE_DIR_NAME ++ "/New team"],_) -> {ok,true};
+	                        (dao_vfs, exist_file,["/" ++ ?SPACES_BASE_DIR_NAME ++ "/Another team"],_) -> {ok,true};
+	                        (dao_vfs, get_file,["/" ++ ?SPACES_BASE_DIR_NAME],_) -> {ok,#veil_document{uuid="group_dir_uuid"}}
                         end),
 
                     meck:expect(fslogic_path, get_parent_and_name_from_path,
@@ -224,9 +224,9 @@ signing_in_test_() ->
                                 end;
                             (dao_vfs, save_new_file, _, _) -> {ok, "file_uuid"};
                             (dao_vfs, list_storage, [], _) -> {ok, []};
-	                        (dao_vfs, exist_file,["/" ++ ?GROUPS_BASE_DIR_NAME],_) -> {ok,true};
-	                        (dao_vfs, exist_file,["/" ++ ?GROUPS_BASE_DIR_NAME ++ "/Updated team"],_) -> {ok,true};
-	                        (dao_vfs, get_file,["/" ++ ?GROUPS_BASE_DIR_NAME],_) -> {ok,#veil_document{uuid="group_dir_uuid"}}
+	                        (dao_vfs, exist_file,["/" ++ ?SPACES_BASE_DIR_NAME],_) -> {ok,true};
+	                        (dao_vfs, exist_file,["/" ++ ?SPACES_BASE_DIR_NAME ++ "/Updated team"],_) -> {ok,true};
+	                        (dao_vfs, get_file,["/" ++ ?SPACES_BASE_DIR_NAME],_) -> {ok,#veil_document{uuid="group_dir_uuid"}}
                         end),
 
                     Tim = 12345677,

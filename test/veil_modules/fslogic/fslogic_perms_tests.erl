@@ -29,7 +29,7 @@ check_file_perms_test() ->
     ?assertMatch(ok, fslogic_perms:check_file_perms("/", UserDoc, FileDoc)),
     ?assertMatch(ok, fslogic_perms:check_file_perms("/dir/file", UserDoc, FileDoc)),
 
-    GroupPath = "/" ++ ?GROUPS_BASE_DIR_NAME ++ "/some/path",
+    GroupPath = "/" ++ ?SPACES_BASE_DIR_NAME ++ "/some/path",
     ?assertMatch(ok, fslogic_perms:check_file_perms(GroupPath, OwnerUserDoc, FileDoc)),
     ?assertMatch({error, {permission_denied, _}}, fslogic_perms:check_file_perms(GroupPath, UserDoc, FileDoc)),
     ?assertMatch(ok, fslogic_perms:check_file_perms(GroupPath, UserDoc, FileDoc, write)),

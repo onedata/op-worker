@@ -101,17 +101,17 @@ get_full_file_name(FileName, Request) ->
 
 get_full_file_name(FileName, Request, UserDocStatus, UserDoc) ->
     {ok, Tokens} = verify_file_name(FileName),
-    VerifiedFileName = string:join(Tokens, "/"),
+    VerifiedFileName = filename:join(Tokens),
     case UserDocStatus of
         ok ->
             case fslogic_perms:assert_group_access(UserDoc, Request, VerifiedFileName) of
                 ok ->
                     case Tokens of %% Map all /groups/* requests to root of the file system (i.e. dont add any prefix)
-                        [?GROUPS_BASE_DIR_NAME | _] ->
-                            {ok, VerifiedFileName};
+                        [?SPACES_BASE_DIR_NAME | SpaceTokens] ->
+                            {ok, filename:join(SpaceTokens)};
                         _ ->
                             Root = get_user_root(UserDoc),
-                            {ok, Root ++ "/" ++ VerifiedFileName}
+                            {ok, filename:join([Root | Tokens])}
                     end;
                 _ -> {error, invalid_group_access}
             end;
@@ -194,8 +194,11 @@ get_user_root(#veil_document{uuid = ?CLUSTER_USER_ID}) ->
     "";
 get_user_root(#veil_document{record = UserRec}) ->
     get_user_root(UserRec);
-get_user_root(#user{login = Login}) ->
-    "/" ++ Login.
+get_user_root(#user{spaces = []}) ->
+    throw(no_spaces);
+get_user_root(#user{spaces = [PrimarySpaceId | _]}) ->
+    {ok, #space_info{name = SpaceName}} = fslogic_object:get_space(PrimarySpaceId),
+    SpaceName.
 
 
 %% get_user_root/2

@@ -16,13 +16,13 @@
 -include_lib("eunit/include/eunit.hrl").
 
 get_group_owner_test() ->
-    [GroupName0] = fslogic_utils:get_group_owner("/" ++ ?GROUPS_BASE_DIR_NAME ++ "/name0/file"),
+    [GroupName0] = fslogic_utils:get_group_owner("/" ++ ?SPACES_BASE_DIR_NAME ++ "/name0/file"),
     ?assertMatch("name0", GroupName0),
 
-    [GroupName1] = fslogic_utils:get_group_owner("/" ++ ?GROUPS_BASE_DIR_NAME ++ "/name1/"),
+    [GroupName1] = fslogic_utils:get_group_owner("/" ++ ?SPACES_BASE_DIR_NAME ++ "/name1/"),
     ?assertMatch("name1", GroupName1),
 
-    [GroupName2] = fslogic_utils:get_group_owner("/" ++ ?GROUPS_BASE_DIR_NAME ++ "/name2"),
+    [GroupName2] = fslogic_utils:get_group_owner("/" ++ ?SPACES_BASE_DIR_NAME ++ "/name2"),
     ?assertMatch("name2", GroupName2),
 
     ?assertMatch([], fslogic_utils:get_group_owner("/dir")),

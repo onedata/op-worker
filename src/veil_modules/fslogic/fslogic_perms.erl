@@ -48,7 +48,7 @@ check_file_perms(FileName, UserDoc, _FileDoc, root = CheckType) ->
     {error, {permission_denied, {{user, UserDoc}, {file, FileName}, {check, CheckType}}}};
 check_file_perms(FileName, UserDoc, FileDoc, CheckType) ->
     case string:tokens(FileName, "/") of
-        [?GROUPS_BASE_DIR_NAME | _] ->
+        [?SPACES_BASE_DIR_NAME | _] ->
             FileRecord = FileDoc#veil_document.record,
             CheckOwn =
                 case CheckType of
@@ -91,12 +91,12 @@ assert_group_access(UserDoc, Request, LogicalPath) ->
 %% @end
 -spec assert_grp_access(UserDoc :: tuple(), Request :: atom(), Path :: list()) -> ok | error.
 %% ====================================================================
-assert_grp_access(_UserDoc, Request, [?GROUPS_BASE_DIR_NAME]) ->
+assert_grp_access(_UserDoc, Request, [?SPACES_BASE_DIR_NAME]) ->
     case lists:member(Request, ?GROUPS_BASE_ALLOWED_ACTIONS) of
         false   -> error;
         true    -> ok
     end;
-assert_grp_access(UserDoc, Request, [?GROUPS_BASE_DIR_NAME | Tail]) ->
+assert_grp_access(UserDoc, Request, [?SPACES_BASE_DIR_NAME | Tail]) ->
     TailCheck = case Tail of
                     [_GroupName] ->
                         case lists:member(Request, ?GROUPS_ALLOWED_ACTIONS) of

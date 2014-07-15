@@ -23,10 +23,30 @@
 -export([save_file_descriptor/3, save_file_descriptor/4, save_new_file_descriptor/4, update_file_descriptor/2, delete_old_descriptors/2]).
 -export([get_user/0, get_user/1]).
 -export([save_file/1, get_storage/1]).
+-export([get_space/1]).
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
+
+get_space(#veil_document{record = Record}) ->
+    get_space(Record);
+get_space(#file{extensions = Ext}) ->
+    {_, #space_info{} = SpaceInfo} = lists:keyfind(?file_space_info_extestion, 1, Ext),
+    get_space(SpaceInfo);
+get_space(#space_info{} = SpaceInfo) ->
+    {ok, SpaceInfo};
+get_space(SpaceId) ->
+    case dao_lib:apply(vfs, get_space_file, [{uuid, SpaceId}], 1) of
+        {ok, #veil_document{record = #file{} = File}} ->
+            get_space(File);
+        {error, file_not_found} ->
+            fslogic_spaces:initialize(SpaceId);
+        {error, Reason} ->
+            {error, {unknown_space_error, Reason}}
+    end.
+
+
 
 
 %% save_file/1
@@ -145,7 +165,7 @@ get_file_helper(File, Fun) ->
 get_file_helper(ProtocolVersion, File, FuseID, Fun) ->
     ?debug("get_file(File: ~p, FuseID: ~p)", [File, FuseID]),
     case string:tokens(File, "/") of
-        [?GROUPS_BASE_DIR_NAME, GroupName | _] -> %% Check if group that user is tring to access is avaliable to him
+        [?SPACES_BASE_DIR_NAME, GroupName | _] -> %% Check if group that user is tring to access is avaliable to him
             case fslogic_context:get_user_dn() of %% Internal call, allow all group access
                 undefined   -> dao_lib:apply(dao_vfs, Fun, [File], ProtocolVersion);
                 UserDN      -> %% Check if user has access to this group

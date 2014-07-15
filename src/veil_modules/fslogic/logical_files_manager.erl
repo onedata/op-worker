@@ -1066,7 +1066,7 @@ get_ets_name() ->
 %% ====================================================================
 get_mode(FileName) ->
   TmpAns = case string:tokens(FileName, "/") of
-    [?GROUPS_BASE_DIR_NAME | _] ->
+    [?SPACES_BASE_DIR_NAME | _] ->
       application:get_env(?APP_Name, new_group_file_logic_mode);
     _ ->
       application:get_env(?APP_Name, new_file_logic_mode)

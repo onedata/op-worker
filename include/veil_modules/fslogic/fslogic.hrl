@@ -63,7 +63,7 @@
 -define(CLUSTER_FUSE_ID, "cluster_fid").
 
 %% Name of direcotry that contains all group dirs
--define(GROUPS_BASE_DIR_NAME, "groups").
+-define(SPACES_BASE_DIR_NAME, "spaces").
 
 %% burst size for listing
 -define(DAO_LIST_BURST_SIZE,100).

@@ -41,8 +41,8 @@
 get_new_file_id(File, UserDoc, SHInfo, ProtocolVersion) ->
   {Root1, {CountStatus, FilesCount}} =
     case {string:tokens(File, "/"), UserDoc} of
-      {[?GROUPS_BASE_DIR_NAME, GroupName | _], _} -> %% Group dir context
-        {"/" ++ ?GROUPS_BASE_DIR_NAME ++ "/" ++ GroupName, fslogic_utils:get_files_number(group, GroupName, ProtocolVersion)};
+      {[?SPACES_BASE_DIR_NAME, GroupName | _], _} -> %% Group dir context
+        {"/" ++ ?SPACES_BASE_DIR_NAME ++ "/" ++ GroupName, fslogic_utils:get_files_number(group, GroupName, ProtocolVersion)};
       {_, #veil_document{uuid = ?CLUSTER_USER_ID}} ->
         {"/", fslogic_utils:get_files_number(user, UserDoc#veil_document.uuid, ProtocolVersion)};
       _ ->

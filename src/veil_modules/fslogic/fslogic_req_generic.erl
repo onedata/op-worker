@@ -305,22 +305,22 @@ rename_file(FullFileName, FullNewFileName) ->
     %% Check if we need to move file on storage and do it when we do need it
     NewFile =
         case {string:tokens(fslogic_path:get_user_file_name(FullFileName), "/"), string:tokens(fslogic_path:get_user_file_name(FullNewFileName), "/")} of
-            {_, [?GROUPS_BASE_DIR_NAME, _InvalidTarget]} -> %% Moving into ?GROUPS_BASE_DIR_NAME dir is not allowed
+            {_, [?SPACES_BASE_DIR_NAME, _InvalidTarget]} -> %% Moving into ?GROUPS_BASE_DIR_NAME dir is not allowed
                 ?info("Attempt to move file to base group directory. Query: ~p", [stub]),
                 throw(?VEPERM);
-            {[?GROUPS_BASE_DIR_NAME, _InvalidSource], _} -> %% Moving from ?GROUPS_BASE_DIR_NAME dir is not allowed
+            {[?SPACES_BASE_DIR_NAME, _InvalidSource], _} -> %% Moving from ?GROUPS_BASE_DIR_NAME dir is not allowed
                 ?info("Attemt to move base group directory. Query: ~p", [stub]),
                 throw(?VEPERM);
 
-            {[?GROUPS_BASE_DIR_NAME, X | _FromF0], [?GROUPS_BASE_DIR_NAME, X | _ToF0]} -> %% Local (group dir) move, no storage actions are required
+            {[?SPACES_BASE_DIR_NAME, X | _FromF0], [?SPACES_BASE_DIR_NAME, X | _ToF0]} -> %% Local (group dir) move, no storage actions are required
                 OldFile;
 
-            {[?GROUPS_BASE_DIR_NAME, _FromGrp0 | _FromF0], [?GROUPS_BASE_DIR_NAME, _ToGrp0 | _ToF0]} -> %% From group X to Y
+            {[?SPACES_BASE_DIR_NAME, _FromGrp0 | _FromF0], [?SPACES_BASE_DIR_NAME, _ToGrp0 | _ToF0]} -> %% From group X to Y
                 MoveOnStorage(OldFile);
-            {[?GROUPS_BASE_DIR_NAME, _FromGrp1 | _FromF1], _} ->
+            {[?SPACES_BASE_DIR_NAME, _FromGrp1 | _FromF1], _} ->
                 %% From group X user dir
                 MoveOnStorage(OldFile);
-            {_, [?GROUPS_BASE_DIR_NAME, _ToGrp2 | _ToF2]} ->
+            {_, [?SPACES_BASE_DIR_NAME, _ToGrp2 | _ToF2]} ->
                 %% From user dir to group X
                 MoveOnStorage(OldFile);
 

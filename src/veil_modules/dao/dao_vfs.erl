@@ -24,6 +24,7 @@
 -export([save_new_file/2, save_file/1, remove_file/1, exist_file/1, get_file/1, get_waiting_file/1, get_path_info/1]). %% Base file management API function
 -export([save_storage/1, remove_storage/1, exist_storage/1, get_storage/1, list_storage/0]). %% Base storage info management API function
 -export([save_file_meta/1, remove_file_meta/1, exist_file_meta/1, get_file_meta/1]).
+-export([get_space_file/1]).
 
 
 -ifdef(TEST).
@@ -33,6 +34,15 @@
 %% ===================================================================
 %% API functions
 %% ===================================================================
+
+%% ===================================================================
+%% Space File Management
+%% ===================================================================
+
+get_space_file({uuid, UUID}) ->
+    get_file({uuid, UUID});
+get_space_file(SpaceName) ->
+    get_file(filename:join(["", SpaceName])).
 
 %% ===================================================================
 %% File Descriptors Management

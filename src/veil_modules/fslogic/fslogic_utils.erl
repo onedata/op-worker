@@ -93,7 +93,7 @@ random_ascii_lowercase_sequence(Length) ->
 %% ====================================================================
 get_group_owner(FileBasePath) ->
     case string:tokens(FileBasePath, "/") of
-        [?GROUPS_BASE_DIR_NAME, GroupName | _] -> [GroupName];
+        [?SPACES_BASE_DIR_NAME, GroupName | _] -> [GroupName];
         _ -> []
     end.
 
