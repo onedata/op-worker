@@ -170,7 +170,7 @@ logging_test(Config) ->
     % Unsubscribe from log stream
     ?assertEqual(ok, gen_server:call({?Dispatcher_Name, W3}, {central_logger, 1, {unsubscribe, cluster, Pid}}, 1000)),
     % Ask for subscribers list
-    ?assertEqual(ok, gen_server:call({?Dispatcher_Name, W3}, {central_logger, 1, self(), message_id, get_subscribers}, 1000)),
+    ?assertEqual(ok, gen_server:call({?Dispatcher_Name, W3}, {central_logger, 1, self(), message_id, {get_subscribers, cluster}}, 1000)),
     % To confirm, that this pid is no longer subscribed
     ?assertEqual([], receive {worker_answer, message_id, Response} -> Response after 1000 -> timeout end).
 
