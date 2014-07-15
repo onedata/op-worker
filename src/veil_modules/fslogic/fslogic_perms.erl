@@ -46,9 +46,9 @@ check_file_perms(FileName, UserDoc, _FileDoc, owner = CheckType) ->
 check_file_perms(FileName, UserDoc, FileDoc, delete) ->
     {ok, {_,ParentFileDoc}} = fslogic_path:get_parent_and_name_from_path(FileName,fslogic_context:get_protocol_version()),
     ParentFileName = fslogic_path:strip_path_leaf(FileName),
-    case ParentFileDoc#veil_document.record#file.perms band ?STICKY_BIT of
-        0 -> check_file_perms(ParentFileName,UserDoc,ParentFileDoc,write);
-        _ -> check_file_perms(FileName,UserDoc,FileDoc,owner)
+    case check_file_perms(ParentFileName,UserDoc,ParentFileDoc,write) of
+        ok -> check_file_perms(FileName,UserDoc,FileDoc,owner);
+        Error -> Error
     end;
 check_file_perms(FileName, UserDoc, FileDoc, rdwr) ->
     case check_file_perms(FileName, UserDoc, FileDoc, read) of

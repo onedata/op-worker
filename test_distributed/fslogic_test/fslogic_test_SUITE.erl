@@ -2052,6 +2052,7 @@ users_separation_test(Config) ->
   ?assertEqual(Attr4#fileattr.mtime, FM_Attrs#fileattributes.mtime),
   ?assertEqual(Attr4#fileattr.atime, FM_Attrs#fileattributes.atime),
 
+  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [Login ++ "/" ++ TestFile, Login, UID1])),
   {Status6, Answer6} = delete_file(Socket, TestFile),
   ?assertEqual("ok", Status6),
   ?assertEqual(list_to_atom(?VOK), Answer6),
@@ -2066,6 +2067,7 @@ users_separation_test(Config) ->
   ?assertEqual(Helper4, Helper8),
   ?assertEqual(Id4, Id8),
 
+  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [Login2 ++ "/" ++ TestFile, Login2, UID2])),
   {Status9, Answer9} = delete_file(Socket2, TestFile),
   ?assertEqual("ok", Status9),
   ?assertEqual(list_to_atom(?VOK), Answer9),
