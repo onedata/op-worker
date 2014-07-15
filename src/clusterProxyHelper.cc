@@ -115,6 +115,7 @@ int ClusterProxyHelper::sh_mknod(const char *path, mode_t mode, dev_t rdev)
 
     CreateFile msg;
     msg.set_file_id(string(path));
+    msg.set_mode(mode);
 
     return translateError(requestAtom(msg.GetDescriptor()->name(), msg.SerializeAsString()));
 }
