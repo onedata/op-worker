@@ -18,8 +18,8 @@ if [[ -z "$SETUP_DIR" ]]; then
     export SETUP_DIR="/tmp/onedata"
 fi
 
-if [[ -z "$CREATE_USER_IN_DB" ]]; then
-    export CREATE_USER_IN_DB="true"
+if [[ -z "$BAMBOO_CREATE_USER_IN_DB" ]]; then
+    export BAMBOO_CREATE_USER_IN_DB="true"
 fi
 
 # Load funcion defs
@@ -169,7 +169,7 @@ for i in `seq 1 $n_count`; do
 	ssh $lcnode "useradd $user_name 2> /dev/null || exit 0"
     done
 
-    if [[ "$CREATE_USER_IN_DB" == "true" ]]; then
+    if [[ "$BAMBOO_CREATE_USER_IN_DB" == "true" ]]; then
         cmm="$reg_run $node_name $user_name '$user_name@test.com' /tmp/tmp_cert.pem"
 
         info "Trying to register $user_name using cluster node $cnode (command: $cmm)"
