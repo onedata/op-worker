@@ -38,7 +38,7 @@
 namespace veil
 {
 
-class SimpleConnectionPool;
+namespace communication{ class Communicator; }
 
 namespace logging
 {
@@ -90,10 +90,10 @@ public:
 
     /**
      * Runs the message write loop in a separate thread.
-     * Sets the connection pool used by the writer to send logs to a cluster.
+     * Sets the communicator used by the writer to send logs to a cluster.
      * @param connectionPool The pool to be used by the writer.
      */
-    virtual void run(std::shared_ptr<SimpleConnectionPool> connectionPool);
+    virtual void run(std::shared_ptr<communication::Communicator> communicator);
 
     /**
      * Destructor.
@@ -127,7 +127,7 @@ private:
     void writeLoop();
     void dropExcessMessages();
 
-    std::shared_ptr<SimpleConnectionPool> m_connectionPool;
+    std::shared_ptr<communication::Communicator> m_communicator;
     const pid_t m_pid;
     const BufferSize m_maxBufferSize;
     const BufferSize m_bufferTrimSize;

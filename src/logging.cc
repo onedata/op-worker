@@ -7,9 +7,8 @@
 
 #include "logging.h"
 
-#include "communicationHandler.h"
+#include "communication/communicator.h"
 #include "helpers/storageHelperFactory.h"
-#include "simpleConnectionPool.h"
 
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/algorithm/string/predicate.hpp>
@@ -22,8 +21,6 @@
 #include <sstream>
 
 static constexpr std::chrono::seconds MAX_FLUSH_DELAY{10};
-static const std::string CENTRAL_LOG_MODULE_NAME("central_logger");
-static const std::string LOGGING_DECODER("logging");
 
 namespace veil
 {
@@ -53,7 +50,7 @@ RemoteLogWriter::RemoteLogWriter(const RemoteLogLevel initialThreshold,
 {
 }
 
-void RemoteLogWriter::run(std::shared_ptr<SimpleConnectionPool> connectionPool)
+void RemoteLogWriter::run(std::shared_ptr<communication::Communicator> communicator)
 {
     if(m_thread.joinable())
     {
@@ -61,7 +58,7 @@ void RemoteLogWriter::run(std::shared_ptr<SimpleConnectionPool> connectionPool)
         return;
     }
 
-    m_connectionPool = std::move(connectionPool);
+    m_communicator = std::move(communicator);
     m_thread = std::thread(&RemoteLogWriter::writeLoop, this);
 }
 
@@ -140,29 +137,18 @@ void RemoteLogWriter::writeLoop()
         if(m_stopWriteLoop)
             return;
 
-        auto connectionPool = m_connectionPool;
-        if(!connectionPool)
-            continue;
-
-        auto connection = connectionPool->selectConnection();
-        if(!connection)
+        if(!m_communicator)
             continue;
 
         protocol::communication_protocol::ClusterMsg clm;
-        clm.set_protocol_version(PROTOCOL_VERSION);
+        clm.set_protocol_version(communication::PROTOCOL_VERSION);
         clm.set_synch(false);
-        clm.set_module_name(CENTRAL_LOG_MODULE_NAME);
-        clm.set_message_decoder_name(LOGGING_DECODER);
+        clm.set_module_name(communication::CENTRAL_LOGGER_MODULE_NAME);
+        clm.set_message_decoder_name(communication::LOGGING_DECODER);
         clm.set_message_type(boost::algorithm::to_lower_copy(msg.GetDescriptor()->name()));
         msg.SerializeToString(clm.mutable_input());
 
-        try
-        {
-            connection->sendMessage(clm, IGNORE_ANSWER_MSG_ID);
-        }
-        catch(CommunicationHandler::ConnectionStatus)
-        {
-        }
+        m_communicator->send(clm);
     }
 }
 

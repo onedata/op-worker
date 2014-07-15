@@ -10,9 +10,10 @@
 
 
 #include "communication/communicationHandler.h"
-#include "communication/messages.h"
+#include "make_unique.h"
 #include "veilErrors.h"
 
+#include <chrono>
 #include <memory>
 #include <string>
 
@@ -21,11 +22,27 @@ namespace veil
 namespace communication
 {
 
+static constexpr int PROTOCOL_VERSION = 1;
+
+static constexpr const char
+    *FUSE_MESSAGES_DECODER          = "fuse_messages",
+    *COMMUNICATION_PROTOCOL_DECODER = "communication_protocol",
+    *LOGGING_DECODER                = "logging",
+    *REMOTE_FILE_MANAGEMENT_DECODER = "remote_file_management";
+
+static constexpr const char
+    *FSLOGIC_MODULE_NAME                = "fslogic",
+    *CENTRAL_LOGGER_MODULE_NAME         = "central_logger",
+    *REMOTE_FILE_MANAGEMENT_MODULE_NAME = "remote_files_manager";
+
+static constexpr std::chrono::seconds RECV_TIMEOUT{2000};
+
 class CertificateData;
 
 class Communicator
 {
     using Answer = protocol::communication_protocol::Answer;
+    using ClusterMsg = protocol::communication_protocol::ClusterMsg;
 
 public:
     Communicator(const unsigned int dataConnectionsNumber,
@@ -39,23 +56,14 @@ public:
 
     void setFuseId(std::string fuseId);
 
-    template<typename MsgType>
-    std::future<std::unique_ptr<Answer>> communicate(const MsgType &msg)
-    {
-        const auto clusterMsg = messages::create(msg);
-        const auto pool = messages::pool<MsgType>();
-        return m_communicationHandler.communicate(*clusterMsg, pool);
-    }
-
-    template<typename MsgType>
-    void send(const MsgType &msg)
-    {
-        const auto clusterMsg = messages::create(msg);
-        const auto pool = messages::pool<MsgType>();
-        return m_communicationHandler.send(*clusterMsg, pool);
-    }
+    void send(ClusterMsg &msg);
+    std::future<std::unique_ptr<Answer>> communicateAsync(ClusterMsg &msg);
+    std::unique_ptr<Answer> communicate(ClusterMsg &msg,
+                                        const std::chrono::milliseconds timeout = RECV_TIMEOUT);
 
 private:
+    CommunicationHandler::Pool poolType(const ClusterMsg &msg) const;
+
     const std::string m_uri;
     CommunicationHandler m_communicationHandler;
     std::string m_fuseId;

@@ -24,12 +24,7 @@
 namespace veil
 {
 
-static constexpr const char
-    *RFM_MODULE_NAME                = "remote_files_manager",
-    *RFM_DECODER                    = "remote_file_management",
-    *COMMUNICATION_PROTOCOL_DECODER = "communication_protocol";
-
-class SimpleConnectionPool;
+namespace communication{ class Communicator; }
 
 namespace helpers
 {
@@ -47,7 +42,7 @@ public:
      * This storage helper uses either 0 or 3 arguments. If no arguments are passed, default Veilhelpers connetion pooling will be used.
      * Otherwise first argument shall be cluster's hostname, second - cluster's port and third one - path to peer certificate.
      */
-    ClusterProxyHelper(std::shared_ptr<SimpleConnectionPool>,
+    ClusterProxyHelper(std::shared_ptr<communication::Communicator>,
                        const BufferLimits &limits, const ArgsMap &args);
     virtual ~ClusterProxyHelper() = default;
 
@@ -110,7 +105,7 @@ protected:
     virtual int doRead(const std::string &path, std::string &buf, size_t, off_t, ffi_type);                    ///< Real implementation of read operation.
 
 private:
-    const std::shared_ptr<SimpleConnectionPool> m_connectionPool;
+    const std::shared_ptr<communication::Communicator> m_communicator;
 };
 
 } // namespace helpers
