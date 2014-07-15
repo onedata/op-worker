@@ -22,14 +22,18 @@ namespace communication
 static constexpr int PROTOCOL_VERSION = 1;
 static constexpr const char
     *FUSE_MESSAGES          = "fuse_messages",
-    *COMMUNICATION_PROTOCOL = "communication_protocol";
+    *COMMUNICATION_PROTOCOL = "communication_protocol",
+    *LOGGING                = "logging",
+    *REMOTE_FILE_MANAGEMENT = "remote_file_management";
+
+static constexpr const char
+    *CENTRAL_LOGGER_MODULE_NAME     = "central_logger";
 
 class CertificateData;
 
 class Communicator
 {
     using Answer = protocol::communication_protocol::Answer;
-    using Message = protocol::communication_protocol::ClusterMsg;
 
 public:
     Communicator(const unsigned int dataConnectionsNumber,
@@ -38,6 +42,8 @@ public:
                  const bool verifyServerCertificate);
 
     void enablePushChannel(std::function<void(const Answer&)> callback);
+
+    bool sendHandshakeACK();
 
 private:
     //void registerPushChannel();

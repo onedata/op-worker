@@ -7,18 +7,26 @@
 
 #include "communication/communicator.h"
 
-#include "communication_protocol.pb.h"
 #include "communication/connection.h"
+#include "communication/messages.h"
 #include "communication/websocketConnectionPool.h"
-#include "fuse_messages.pb.h"
 #include "logging.h"
 #include "make_unique.h"
+#include "veilErrors.h"
 
 #include <boost/algorithm/string/case_conv.hpp>
 
-using boost::algorithm::to_lower_copy;
 using namespace veil::protocol::fuse_messages;
 using namespace veil::protocol::communication_protocol;
+
+namespace
+{
+std::string lower(std::string what)
+{
+    boost::algorithm::to_lower(what);
+    return std::move(what);
+}
+}
 
 namespace veil
 {
@@ -49,20 +57,28 @@ void Communicator::enablePushChannel(std::function<void(const Answer&)> callback
     m_communicationHandler.subscribe({std::move(pred), std::move(call)});
 
     // Prepare PUSH channel registration request message
-    Message msg;
     ChannelRegistration reg;
     reg.set_fuse_id(m_fuseId);
 
-    msg.set_module_name("fslogic");
-    msg.set_protocol_version(PROTOCOL_VERSION);
-    msg.set_message_type(to_lower_copy(reg.GetDescriptor()->name()));
-    msg.set_message_decoder_name(to_lower_copy(std::string{FUSE_MESSAGES}));
-    msg.set_answer_type(to_lower_copy(Atom::descriptor()->name()));
-    msg.set_answer_decoder_name(to_lower_copy(std::string{COMMUNICATION_PROTOCOL}));
-    msg.set_synch(true);
-    reg.SerializeToString(msg.mutable_input());
+    m_communicationHandler.addHandshake(*messages::create(reg),
+                                        CommunicationHandler::Pool::META);
+}
 
-    m_communicationHandler.addHandshake(msg, CommunicationHandler::Pool::META);
+bool Communicator::sendHandshakeACK()
+{
+    assert(!m_fuseId.empty());
+
+    LOG(INFO) << "Sending HandshakeAck with fuseId: '" << m_fuseId << "'";
+
+    // Build HandshakeAck message
+    HandshakeAck ack;
+    ack.set_fuse_id(m_fuseId);
+
+    // Send HandshakeAck to cluster
+    auto ans = m_communicationHandler.communicate(*messages::create(ack),
+                                                  CommunicationHandler::Pool::META);
+
+    return ans.get()->answer_status() == VOK;
 }
 
 } // namespace communication
