@@ -12,9 +12,9 @@
 
 % n2o API
 -module(page_cluster_logs).
+-include_lib("ctool/include/logging.hrl").
 -include("veil_modules/control_panel/common.hrl").
 -include("registered_names.hrl").
--include_lib("ctool/include/logging.hrl").
 
 % n2o API and comet
 -export([main/0, event/1, api_event/3, comet_loop/2]).
