@@ -101,7 +101,10 @@ void ConnectionPool::onError(Connection &connection)
 
 void ConnectionPool::addHandshake(std::function<std::string()> handshake)
 {
+    std::lock_guard<std::mutex> guard{m_connectionsMutex};
     m_handshakes.emplace_back(std::move(handshake));
+    for(const auto &connection: m_openConnections)
+        connection->send(handshake());
 }
 
 } // namespace communication

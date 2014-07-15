@@ -19,21 +19,32 @@ namespace veil
 namespace communication
 {
 
+static constexpr int PROTOCOL_VERSION = 1;
+static constexpr const char
+    *FUSE_MESSAGES          = "fuse_messages",
+    *COMMUNICATION_PROTOCOL = "communication_protocol";
+
 class CertificateData;
 
 class Communicator
 {
+    using Answer = protocol::communication_protocol::Answer;
+    using Message = protocol::communication_protocol::ClusterMsg;
+
 public:
     Communicator(const unsigned int dataConnectionsNumber,
                  const unsigned int metaConnectionsNumber,
                  std::shared_ptr<const CertificateData> certificateData,
                  const bool verifyServerCertificate);
 
+    void enablePushChannel(std::function<void(const Answer&)> callback);
+
 private:
-    void registerPushChannel(); // add a callback to be called in Pool on Connection::onOpen?
+    //void registerPushChannel();
 
     const std::string m_uri;
     CommunicationHandler m_communicationHandler;
+    std::string m_fuseId;
 };
 
 } // namespace communication
