@@ -40,6 +40,8 @@ public:
     void addHandshake(std::function<std::string()> handshake,
                       std::function<std::string()> goodbye);
 
+    void addHandshake(std::function<std::string()> handshake);
+
 protected:
     void addConnection();
     void onFail(Connection &connection);

@@ -46,7 +46,7 @@ public:
 
     void enablePushChannel(std::function<void(const Answer&)> callback);
 
-    bool sendHandshakeACK();
+    void enableHandshakeACK();
 
     void setFuseId(std::string fuseId);
 

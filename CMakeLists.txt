@@ -215,7 +215,7 @@ macro(run_test test_target)
   add_dependencies(cunit ${test_target}_runtest)
 endmacro()
 
-file(GLOB files ${TEST_SOURCES_DIR}/*_test.cc)
+file(GLOB_RECURSE files ${TEST_SOURCES_DIR}/*_test.cc)
 foreach(file ${files})
     get_filename_component(TEST_NAME ${file} NAME_WE)
     add_executable(${TEST_NAME} ${file} ${HELPER_TEST_HEADERS} $<TARGET_OBJECTS:testRunner>)

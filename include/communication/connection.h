@@ -26,10 +26,6 @@ public:
                std::function<void(Connection&)> onErrorCallback);
 
     virtual ~Connection();
-    Connection(Connection&&) = default;
-    Connection(const Connection&) = delete;
-    Connection &operator=(Connection&&) & = default;
-    Connection &operator=(const Connection&) = delete;
 
     virtual void send(const std::string &payload) = 0;
 

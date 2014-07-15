@@ -50,6 +50,14 @@ WebsocketConnection::WebsocketConnection(std::function<void(const std::string&)>
     endpoint.connect(connection);
 }
 
+WebsocketConnection::~WebsocketConnection()
+{
+    m_onErrorCallback = []{};
+
+    websocketpp::lib::error_code ec;
+    m_endpoint.close(m_connection, websocketpp::close::status::going_away, "");
+}
+
 void WebsocketConnection::send(const std::string &payload)
 {
     const auto connection = m_endpoint.get_con_from_hdl(m_connection);
@@ -61,13 +69,6 @@ void WebsocketConnection::send(const std::string &payload)
 
         if(ec); // TODO: throw UNDERLYING_LIB_ERROR;
     }
-}
-
-void WebsocketConnection::close()
-{
-    Connection::close();
-    websocketpp::lib::error_code ec;
-    m_endpoint.close(m_connection, websocketpp::close::status::going_away, "");
 }
 
 void WebsocketConnection::onMessage(message_ptr msg)

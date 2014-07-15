@@ -55,26 +55,26 @@ void Communicator::enablePushChannel(std::function<void(const Answer&)> callback
 
     const auto goodbyeMsg = createMessage(FSLOGIC_MODULE_NAME, true,
                                           protocol::communication_protocol::Atom::default_instance(),
-                                          reg);
+                                          close);
 
     m_communicationHandler->addHandshake(*handshakeMsg, *goodbyeMsg,
-                                        CommunicationHandler::Pool::META);
+                                         CommunicationHandler::Pool::META);
 }
 
-bool Communicator::sendHandshakeACK()
+void Communicator::enableHandshakeACK()
 {
-    assert(!m_fuseId.empty());
-
-    LOG(INFO) << "Sending HandshakeAck with fuseId: '" << m_fuseId << "'";
+    LOG(INFO) << "Enabling HandshakeAck with fuseId: '" << m_fuseId << "'";
 
     // Build HandshakeAck message
     protocol::fuse_messages::HandshakeAck ack;
     ack.set_fuse_id(m_fuseId);
 
-    const auto ans = communicate<protocol::communication_protocol::Atom>("", ack);
+    const auto handshakeMsg = createMessage("", true,
+                                            protocol::communication_protocol::Atom::default_instance(),
+                                            ack);
 
-    // Send HandshakeAck to cluster
-    return ans->answer_status() == VOK;
+    m_communicationHandler->addHandshake(*handshakeMsg, CommunicationHandler::Pool::META);
+    m_communicationHandler->addHandshake(*handshakeMsg, CommunicationHandler::Pool::DATA);
 }
 
 void Communicator::setFuseId(std::string fuseId)

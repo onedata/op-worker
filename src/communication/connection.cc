@@ -6,7 +6,7 @@
  */
 
 #include "communication/connection.h"
-
+#include <iostream>
 namespace veil
 {
 namespace communication
@@ -25,13 +25,12 @@ Connection::Connection(std::function<void(const std::string&)> onMessageCallback
 
 Connection::~Connection()
 {
-    close();
+    m_onMessageCallback = [](const std::string&){};
+    m_onFailCallback = m_onOpenCallback = m_onErrorCallback = []{};
 }
 
 void Connection::close()
 {
-    m_onMessageCallback = [](const std::string&){};
-    m_onFailCallback = m_onOpenCallback = m_onErrorCallback = []{};
 }
 
 } // namespace communication

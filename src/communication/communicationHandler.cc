@@ -68,6 +68,14 @@ void CommunicationHandler::addHandshake(const Message &handshake,
     pool->addHandshake(std::move(h), std::move(g));
 }
 
+void CommunicationHandler::addHandshake(const Message &handshake,
+                                        const Pool poolType)
+{
+    auto h = [=]{ auto m = handshake; m.set_message_id(nextId()); return m.SerializeAsString(); };
+    const auto &pool = poolType == Pool::DATA ? m_dataPool : m_metaPool;
+    pool->addHandshake(std::move(h));
+}
+
 CommunicationHandler::MsgId CommunicationHandler::nextId()
 {
     const MsgId m = ++m_nextMsgId;

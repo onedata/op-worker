@@ -44,11 +44,11 @@ public:
                         std::shared_ptr<const CertificateData> certificateData,
                         const bool verifyServerCertificate);
 
+    ~WebsocketConnection();
     WebsocketConnection(const WebsocketConnection&) = delete;
     WebsocketConnection &operator=(const WebsocketConnection&) = delete;
 
     void send(const std::string &payload) override;
-    void close() override;
 
 private:
     void onMessage(message_ptr msg);         ///< Incoming WebSocket message callback
