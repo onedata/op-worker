@@ -15,14 +15,6 @@
 %% API
 -export([initialize/1]).
 
-
-initialize(SpaceId) ->
-    case registry_spaces:get_space_info(SpaceId) of
-        {ok, #space_info{} = SpaceInfo} ->
-            initialize(SpaceInfo);
-        {error, Reason} ->
-            {error, Reason}
-    end;
 initialize(#space_info{uuid = SpaceId, name = SpaceName} = SpaceInfo) ->
     File = #file{type = ?DIR_TYPE, perms = 8#770, name = SpaceName, extensions = [{?file_space_info_extestion, SpaceInfo}]},
     case dao_lib:apply(vfs, save_file, [#veil_document{record = File, uuid = SpaceId}], 1) of
@@ -34,6 +26,13 @@ initialize(#space_info{uuid = SpaceId, name = SpaceName} = SpaceInfo) ->
             NewFile = #file{extensions = NewExt},
             {ok, _} = dao_lib:apply(vfs, save_file, [FileDoc#veil_document{record = NewFile}], 1),
             {ok, SpaceInfo};
+        {error, Reason} ->
+            {error, Reason}
+    end;
+initialize(SpaceId) ->
+    case registry_spaces:get_space_info(SpaceId) of
+        {ok, #space_info{} = SpaceInfo} ->
+            initialize(SpaceInfo);
         {error, Reason} ->
             {error, Reason}
     end.
