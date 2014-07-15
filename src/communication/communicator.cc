@@ -16,8 +16,7 @@
 
 #include <boost/algorithm/string/case_conv.hpp>
 
-using namespace veil::protocol::fuse_messages;
-using namespace veil::protocol::communication_protocol;
+using namespace veil::communication::messages;
 
 namespace
 {
@@ -58,9 +57,12 @@ void Communicator::enablePushChannel(std::function<void(const Answer&)> callback
 
     // Prepare PUSH channel registration request message
     ChannelRegistration reg;
+    ChannelClose close;
     reg.set_fuse_id(m_fuseId);
+    close.set_fuse_id(m_fuseId);
 
     m_communicationHandler.addHandshake(*messages::create(reg),
+                                        *messages::create(close),
                                         CommunicationHandler::Pool::META);
 }
 
@@ -75,10 +77,13 @@ bool Communicator::sendHandshakeACK()
     ack.set_fuse_id(m_fuseId);
 
     // Send HandshakeAck to cluster
-    auto ans = m_communicationHandler.communicate(*messages::create(ack),
-                                                  CommunicationHandler::Pool::META);
+    auto ans = communicate(ack);
+    return ans.get()->answer_status() == VOK; // TODO: timeouts
+}
 
-    return ans.get()->answer_status() == VOK;
+void Communicator::setFuseId(std::string fuseId)
+{
+    m_fuseId = std::move(fuseId);
 }
 
 } // namespace communication

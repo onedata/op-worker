@@ -59,7 +59,8 @@ public:
                                                      const Pool poolType);
 
     void subscribe(SubscriptionData data);
-    void addHandshake(const Message &handshake, const Pool poolType);
+    void addHandshake(const Message &handshake, const Message &goodbye,
+                      const Pool poolType);
 
 private:
     MsgId nextId();

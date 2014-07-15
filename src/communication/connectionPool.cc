@@ -38,6 +38,15 @@ ConnectionPool::ConnectionPool(const unsigned int connectionsNumber,
         addConnection();
 }
 
+ConnectionPool::~ConnectionPool()
+{
+    std::unique_lock<std::mutex> lock{m_connectionsMutex};
+
+    for(const auto &connection: m_openConnections)
+        for(const auto &goodbye: m_goodbyes)
+            connection->send(goodbye());
+}
+
 void ConnectionPool::send(const std::string &payload)
 {
     std::unique_lock<std::mutex> lock{m_connectionsMutex};
@@ -99,10 +108,12 @@ void ConnectionPool::onError(Connection &connection)
     m_openConnections.remove_if(std::bind(eq, p::_1, std::cref(connection)));
 }
 
-void ConnectionPool::addHandshake(std::function<std::string()> handshake)
+void ConnectionPool::addHandshake(std::function<std::string()> handshake,
+                                  std::function<std::string()> goodbye)
 {
     std::lock_guard<std::mutex> guard{m_connectionsMutex};
     m_handshakes.emplace_back(std::move(handshake));
+    m_goodbyes.emplace_back(std::move(goodbye));
     for(const auto &connection: m_openConnections)
         connection->send(handshake());
 }

@@ -7,6 +7,7 @@
 
 #include "communication/messages.h"
 
+#include "communication/communicationHandler.h"
 #include "make_unique.h"
 
 #include <boost/algorithm/string/case_conv.hpp>
@@ -55,7 +56,7 @@ std::unique_ptr<ClusterMsg> create(const ChannelRegistration &msg)
         FSLOGIC_MODULE_NAME,
         FUSE_MESSAGES_DECODER,
         COMMUNICATION_PROTOCOL_DECODER,
-        false,
+        true,
         msg
     );
 }
@@ -64,6 +65,17 @@ std::unique_ptr<ClusterMsg> create(const HandshakeAck &msg)
 {
     return createMsg(
         "",
+        FUSE_MESSAGES_DECODER,
+        COMMUNICATION_PROTOCOL_DECODER,
+        true,
+        msg
+    );
+}
+
+std::unique_ptr<ClusterMsg> create(const ChannelClose &msg)
+{
+    return createMsg(
+        FSLOGIC_MODULE_NAME,
         FUSE_MESSAGES_DECODER,
         COMMUNICATION_PROTOCOL_DECODER,
         true,

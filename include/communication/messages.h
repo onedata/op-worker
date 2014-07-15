@@ -10,11 +10,10 @@
 
 
 #include "communication_protocol.pb.h"
+#include "communicationHandler.h"
 #include "fuse_messages.pb.h"
 #include "logging.pb.h"
 #include "remote_file_management.pb.h"
-
-#include <google/protobuf/message.h>
 
 #include <memory>
 
@@ -24,6 +23,7 @@ namespace communication
 {
 namespace messages
 {
+
 static constexpr int PROTOCOL_VERSION = 1;
 static constexpr const char
     *FUSE_MESSAGES_DECODER          = "fuse_messages",
@@ -41,7 +41,20 @@ using namespace veil::protocol::logging;
 using namespace veil::protocol::remote_file_management;
 
 std::unique_ptr<ClusterMsg> create(const ChannelRegistration &msg);
+std::unique_ptr<ClusterMsg> create(const ChannelClose        &msg);
 std::unique_ptr<ClusterMsg> create(const HandshakeAck        &msg);
+
+template<class T>
+constexpr CommunicationHandler::Pool pool()
+{
+    return CommunicationHandler::Pool::META;
+}
+
+template<>
+constexpr CommunicationHandler::Pool pool<RemoteFileMangement>()
+{
+    return CommunicationHandler::Pool::DATA;
+}
 
 } // namespace messages
 } // namespace communication

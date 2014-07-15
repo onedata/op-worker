@@ -29,13 +29,16 @@ public:
     ConnectionPool(const unsigned int connectionsNumber,
                    std::string uri);
 
-    virtual ~ConnectionPool() = default;
+    virtual ~ConnectionPool();
+    ConnectionPool(ConnectionPool&&) = default;
+    ConnectionPool &operator=(ConnectionPool&&) & = default;
     ConnectionPool(const ConnectionPool&) = delete;
     ConnectionPool &operator=(const ConnectionPool&) = delete;
 
     void send(const std::string &payload);
     void setOnMessageCallback(std::function<void(const std::string&)> onMessageCallback);
-    void addHandshake(std::function<std::string()> handshake);
+    void addHandshake(std::function<std::string()> handshake,
+                      std::function<std::string()> goodbye);
 
 protected:
     void addConnection();
@@ -53,6 +56,7 @@ protected:
     std::list<std::unique_ptr<Connection>> m_futureConnections;
     std::list<std::unique_ptr<Connection>> m_openConnections;
     std::vector<std::function<std::string()>> m_handshakes;
+    std::vector<std::function<std::string()>> m_goodbyes;
 };
 
 } // namespace communication

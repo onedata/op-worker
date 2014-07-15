@@ -10,6 +10,8 @@
 
 
 #include "communication/communicationHandler.h"
+#include "communication/messages.h"
+#include "veilErrors.h"
 
 #include <memory>
 #include <string>
@@ -18,16 +20,6 @@ namespace veil
 {
 namespace communication
 {
-
-static constexpr int PROTOCOL_VERSION = 1;
-static constexpr const char
-    *FUSE_MESSAGES          = "fuse_messages",
-    *COMMUNICATION_PROTOCOL = "communication_protocol",
-    *LOGGING                = "logging",
-    *REMOTE_FILE_MANAGEMENT = "remote_file_management";
-
-static constexpr const char
-    *CENTRAL_LOGGER_MODULE_NAME     = "central_logger";
 
 class CertificateData;
 
@@ -45,9 +37,25 @@ public:
 
     bool sendHandshakeACK();
 
-private:
-    //void registerPushChannel();
+    void setFuseId(std::string fuseId);
 
+    template<typename MsgType>
+    std::future<std::unique_ptr<Answer>> communicate(const MsgType &msg)
+    {
+        const auto clusterMsg = messages::create(msg);
+        const auto pool = messages::pool<MsgType>();
+        return m_communicationHandler.communicate(*clusterMsg, pool);
+    }
+
+    template<typename MsgType>
+    void send(const MsgType &msg)
+    {
+        const auto clusterMsg = messages::create(msg);
+        const auto pool = messages::pool<MsgType>();
+        return m_communicationHandler.send(*clusterMsg, pool);
+    }
+
+private:
     const std::string m_uri;
     CommunicationHandler m_communicationHandler;
     std::string m_fuseId;
