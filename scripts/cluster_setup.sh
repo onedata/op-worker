@@ -19,8 +19,19 @@ if [[ -z "$SETUP_DIR" ]]; then
 fi
 
 if [[ -z "$BAMBOO_CREATE_USER_IN_DB" ]]; then
-    info "Exporting undefined variable BAMBOO_CREATE_USER_IN_DB"
-    export BAMBOO_CREATE_USER_IN_DB="true"
+    info "undefined variable BAMBOO_CREATE_USER_IN_DB"
+fi
+
+if [[ -z "$CREATE_USER_IN_DB" ]]; then
+    info "undefined variable CREATE_USER_IN_DB"
+fi
+
+if [[ -z "$create_user_in_db" ]]; then
+    info "undefined variable create_user_in_db"
+fi
+
+if [[ -z "$bamboo.create_user_in_db" ]]; then
+    info "undefined variable bamboo.create_user_in_db"
 fi
 
 # Load funcion defs
