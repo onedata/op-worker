@@ -222,6 +222,8 @@ function remove_db {
 function start_db {
     info "Starting DB..."
 
+    ssh $1 -tt "sed -i -e \"s/bind_address = [0-9\.]*/bind_address = 0.0.0.0/\" /opt/veil/files/database_node/etc/default.ini" || error "Cannot change db bind address on $1."
+
     ssh $1 "echo \"
         {what_to_do, manage_db}.
     \" > $SETUP_DIR/start_db.batch" 
@@ -305,7 +307,7 @@ function start_client {
 
     mount_cmd="PEER_CERTIFICATE_FILE=\"$S_DIR/peer.pem\" PATH=\$HOME:\$PATH veilFuse $2"
     if [[ "$group_id" != "" ]]; then
-      mount_cmd="FUSE_OPT_GROUP_ID=\"$group_id\" $mount_cmd"
+        mount_cmd="FUSE_OPT_GROUP_ID=\"$group_id\" $mount_cmd"
     fi
     if [[ "$cl_host" == "" ]]; then
         ssh $1 "$mount_cmd" || error "Cannot mount VeilFS on $1"
