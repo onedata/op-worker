@@ -32,10 +32,7 @@ class WebsocketConnection: public Connection
     using config_type = websocketpp::config::asio_tls_client;
     using endpoint_type = websocketpp::client<config_type>;
     using connection_ptr = endpoint_type::connection_ptr;
-    using context_type = boost::asio::ssl::context;
-    using context_ptr = std::shared_ptr<context_type>;
     using message_ptr = config_type::message_type::ptr;
-    using socket_type = websocketpp::transport::asio::tls_socket::connection::socket_type;
 
 public:
     WebsocketConnection(std::function<void(const std::string&)> onMessageCallback,
@@ -54,8 +51,6 @@ public:
     void close() override;
 
 private:
-    context_ptr onTLSInit();                 ///< On TLS init callback
-    void onSocketInit(socket_type &socket);  ///< On socket init callback
     void onMessage(message_ptr msg);         ///< Incoming WebSocket message callback
     void onOpen();                           ///< WebSocket connection opened
     void onClose();                          ///< WebSocket connection closed

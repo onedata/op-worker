@@ -36,8 +36,6 @@ WebsocketConnection::WebsocketConnection(std::function<void(const std::string&)>
     if(ec)
         return; // TODO
 
-    connection->set_tls_init_handler    (bind(&WebsocketConnection::onTLSInit, this));
-    connection->set_socket_init_handler (bind(&WebsocketConnection::onSocketInit, this, p::_2));
     connection->set_message_handler     (bind(&WebsocketConnection::onMessage, this, p::_2));
     connection->set_open_handler        (bind(&WebsocketConnection::onOpen, this));
     connection->set_close_handler       (bind(&WebsocketConnection::onClose, this));
@@ -70,42 +68,6 @@ void WebsocketConnection::close()
     Connection::close();
     websocketpp::lib::error_code ec;
     m_endpoint.close(m_connection, websocketpp::close::status::going_away, "");
-}
-
-WebsocketConnection::context_ptr WebsocketConnection::onTLSInit()
-{
-    try
-    {
-        auto ctx = std::make_shared<context_type>(boost::asio::ssl::context::sslv3);
-
-        ctx->set_options(boost::asio::ssl::context::default_workarounds |
-                         boost::asio::ssl::context::no_sslv2 |
-                         boost::asio::ssl::context::single_dh_use);
-
-        ctx->set_default_verify_paths();
-        ctx->set_verify_mode(m_verifyServerCertificate
-                             ? boost::asio::ssl::verify_peer
-                             : boost::asio::ssl::verify_none);
-
-        SSL_CTX *ssl_ctx = ctx->native_handle();
-        long mode = SSL_CTX_get_session_cache_mode(ssl_ctx);
-        mode |= SSL_SESS_CACHE_CLIENT;
-        SSL_CTX_set_session_cache_mode(ssl_ctx, mode);
-
-        return m_certificateData->initContext(ctx);
-
-    }
-    catch(boost::system::system_error &e)
-    {
-        LOG(ERROR) << "Cannot initialize TLS socket due to: " << e.what();
-    }
-
-    return {};
-}
-
-void WebsocketConnection::onSocketInit(socket_type &socket)
-{
-    socket.lowest_layer().set_option(boost::asio::ip::tcp::no_delay(true));
 }
 
 void WebsocketConnection::onMessage(message_ptr msg)

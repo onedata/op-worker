@@ -31,6 +31,9 @@ class WebsocketConnection;
 class WebsocketConnectionPool: public ConnectionPool
 {
     using endpoint_type = websocketpp::client<websocketpp::config::asio_tls_client>;
+    using socket_type = websocketpp::transport::asio::tls_socket::connection::socket_type;
+    using context_type = boost::asio::ssl::context;
+    using context_ptr = std::shared_ptr<context_type>;
 
 public:
     WebsocketConnectionPool(const unsigned int connectionsNumber,
@@ -48,6 +51,9 @@ protected:
     std::unique_ptr<Connection> createConnection() override;
 
 private:
+    context_ptr onTLSInit();                 ///< On TLS init callback
+    void onSocketInit(socket_type &socket);  ///< On socket init callback
+
     std::thread m_ioThread;
     endpoint_type m_endpoint;
     const std::shared_ptr<const CertificateData> m_certificateData;
