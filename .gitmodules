@@ -10,3 +10,6 @@
 [submodule "veilclient"]
 	path = veilclient
 	url = ssh://git@git.plgrid.pl:7999/vfs/veilclient.git
+[submodule "onepanel"]
+	path = onepanel
+	url = ssh://git@git.plgrid.pl:7999/vfs/onepanel.git

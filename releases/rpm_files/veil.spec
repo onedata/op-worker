@@ -52,15 +52,24 @@ Veil service - allows installation of veil cluster nodes.
 ./install_rpm $RPM_BUILD_ROOT %{_prefix}
 
 %post
+mkdir -p /opt/veil/nodes
+cp -r /opt/veil/files/onepanel_node /opt/veil/nodes/onepanel
+sed -i s/"-name .*"/"-name onepanel@"`hostname -f`/g `find /opt/veil/nodes/onepanel/releases -name vm.args`
 chkconfig --add veil
+chkconfig --add onepanel
+service onepanel start
 ln -sf %{_prefix}/setup /usr/bin/veil_setup
 ln -sf %{_prefix}/addusers /usr/bin/veil_addusers
+ln -sf %{_prefix}/onepanel_setup /usr/bin/onepanel_setup
 
 %preun
 service veil stop
+service onepanel stop
 chkconfig --del veil
+chkconfig --del onepanel
 rm -f /usr/bin/veil_setup
 rm -f /usr/bin/veil_addusers
+rm -f /usr/bin/onepanel_setup
 rm -rf %{_prefix}
 
 %clean
@@ -73,6 +82,7 @@ rm -rf %{_topdir}/BUILD/%{name}
 %defattr(-,root,root)
 %{_prefix}
 /etc/init.d/veil
+/etc/init.d/onepanel
 
 %changelog
 * Sun Aug 02 2013 Veil
