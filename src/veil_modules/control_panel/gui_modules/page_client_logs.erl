@@ -171,21 +171,32 @@ manage_clients_panel() ->
     CloseButton = #link{postback = hide_filters_popup, title = <<"Hide">>, class = <<"glyph-link">>,
         style = <<"position: absolute; top: 8px; right: 8px; z-index: 3;">>,
         body = #span{class = <<"fui-cross">>, style = <<"font-size: 20px;">>}},
-    {ClientList, {_, Identifiers}} = lists:mapfoldl(
-        fun({UserName, FuseID}, {Counter, Idents}) ->
-            {Row, Identifier} = client_row(<<"client_row_", (integer_to_binary(Counter))/binary>>, false, UserName, FuseID),
-            {Row, {Counter + 1, Idents ++ Identifier}}
-        end, {1, []}, get_connected_clients()),
-    ClientListBody = case ClientList of
-                         [] ->
-                             #tr{cells = [
-                                 #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"--">>},
-                                 #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"No clients are connected">>},
-                                 #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"">>}
-                             ]};
-                         _ ->
-                             ClientList
-                     end,
+
+    {ClientListBody, Identifiers} =
+        case get_connected_clients() of
+            empty ->
+                Row = #tr{cells = [
+                    #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"--">>},
+                    #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"No clients are connected">>},
+                    #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"">>}
+                ]},
+                {Row, []};
+            error ->
+                Row = #tr{cells = [
+                    #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"--">>},
+                    #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"Error: cannot list fuse sessions">>},
+                    #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"">>}
+                ]},
+                {Row, []};
+            Clients ->
+                {ClientList, {_, Ids}} = lists:mapfoldl(
+                    fun({UserName, FuseID}, {Counter, Idents}) ->
+                        {Row, Identifier} = client_row(<<"client_row_", (integer_to_binary(Counter))/binary>>, false, UserName, FuseID),
+                        {Row, {Counter + 1, Idents ++ Identifier}}
+                    end, {1, []}, get_connected_clients()),
+                {ClientList, Ids}
+        end,
+
     gui_jq:bind_enter_to_submit_button(<<"search_textbox">>, <<"search_button">>),
     [
         CloseButton,
@@ -285,19 +296,28 @@ filter_form(FilterType) ->
     ]}.
 
 
-% Listing available clients
+% Listing available clients - returns a list or one of two atoms: empty, error
 get_connected_clients() ->
-    {ok, List} = dao_lib:apply(dao_cluster, list_fuse_sessions, [{by_valid_to, ?INFINITY}], 1),
-    lists:foldl(
-        fun(#veil_document{uuid = UUID, record = #fuse_session{uid = UserID}} = SessionDoc, Acc) ->
-            case dao_cluster:check_session(SessionDoc) of
-                ok ->
-                    {ok, UserDoc} = user_logic:get_user({uuid, UserID}),
-                    Acc ++ [{user_logic:get_login(UserDoc), UUID}];
-                _ ->
-                    Acc
-            end
-        end, [], List).
+    try
+        {ok, List} = dao_lib:apply(dao_cluster, list_fuse_sessions, [{by_valid_to, ?INFINITY}], 1),
+        ClientList = lists:foldl(
+            fun(#veil_document{uuid = UUID, record = #fuse_session{uid = UserID}} = SessionDoc, Acc) ->
+                case dao_cluster:check_session(SessionDoc) of
+                    ok ->
+                        {ok, UserDoc} = user_logic:get_user({uuid, UserID}),
+                        Acc ++ [{user_logic:get_login(UserDoc), UUID}];
+                    _ ->
+                        Acc
+                end
+            end, [], List),
+        case ClientList of
+            [] -> empty;
+            _ -> ClientList
+        end
+    catch T:M ->
+        ?error_stacktrace("Cannot list fuse sessions: ~p:~p", [T, M]),
+        error
+    end.
 
 
 % Remebering which clients are selected on the list
