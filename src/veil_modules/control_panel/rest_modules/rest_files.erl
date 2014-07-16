@@ -51,7 +51,7 @@ methods_and_versions_info(Req) ->
 -spec exists(req(), binary(), binary()) -> {boolean(), req()}.
 %% ====================================================================
 exists(Req, _Version, Id) ->
-    Filepath = binary_to_list(Id),
+    Filepath = gui_str:binary_to_unicode_list(Id),
     Answer = case logical_files_manager:getfileattr(Filepath) of
                  {ok, Attr} ->
                      % File exists, cache retireved info so as not to ask DB later
@@ -88,7 +88,7 @@ get(Req, <<"1.0">>, Id) ->
                        erlang:put(file_type, dir),
                        "/";
                    Path ->
-                       binary_to_list(Path)
+                       gui_str:binary_to_unicode_list(Path)
                end,
     case erlang:get(file_type) of
         dir ->
@@ -99,7 +99,7 @@ get(Req, <<"1.0">>, Id) ->
             Size = Fileattr#fileattributes.size,
             StreamFun = file_download_handler:cowboy_file_stream_fun(FilePath, Size),
             NewReq = file_download_handler:content_disposition_attachment_headers(Req, filename:basename(FilePath)),
-            {Type, Subtype, _} = cow_mimetypes:all(gui_str:to_binary(FilePath)),
+            {Type, Subtype, _} = cow_mimetypes:all(Id),
             Mimetype = <<Type/binary, "/", Subtype/binary>>,
             {{stream, Size, StreamFun, Mimetype}, NewReq}
     end.
@@ -114,7 +114,7 @@ get(Req, <<"1.0">>, Id) ->
     Response :: ok | {body, binary()} | {stream, integer(), function()} | error | {error, binary()}.
 %% ====================================================================
 delete(Req, <<"1.0">>, Id) ->
-    Filepath = binary_to_list(Id),
+    Filepath = gui_str:binary_to_unicode_list(Id),
     Response = case erlang:get(file_type) of
                    dir ->
                        ErrorRec = ?report_warning(?error_dir_cannot_delete),
@@ -171,9 +171,10 @@ put(Req, <<"1.0">>, _Id, _Data) ->
     Response :: ok | {body, binary()} | {stream, integer(), function()} | error | {error, binary()}.
 %% ====================================================================
 handle_multipart_data(Req, _Version, Method, Id) ->
+    Filepath = gui_str:binary_to_unicode_list(Id),
     case Method of
-        <<"POST">> -> file_upload_handler:handle_rest_upload(Req, Id, false);
-        <<"PUT">> -> file_upload_handler:handle_rest_upload(Req, Id, true)
+        <<"POST">> -> file_upload_handler:handle_rest_upload(Req, Filepath, false);
+        <<"PUT">> -> file_upload_handler:handle_rest_upload(Req, Filepath, true)
     end.
 
 
@@ -194,7 +195,7 @@ list_dir_to_json(Path) ->
         DirList ->
             DirListBin = lists:map(
                 fun(Dir) ->
-                    list_to_binary(Dir)
+                    gui_str:unicode_list_to_binary(Dir)
                 end, DirList),
             Body = {array, DirListBin},
             {body, rest_utils:encode_to_json(Body)}
