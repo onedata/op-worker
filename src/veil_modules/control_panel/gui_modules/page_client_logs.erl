@@ -218,7 +218,7 @@ manage_clients_panel() ->
                 #table{id = <<"client_table">>, class = <<"table table-stripped">>, style = <<"margin-bottom: 0;">>,
                     header = [
                         #tr{cells = [
-                            #th{style = <<"border-color: rgb(82, 100, 118); position: relative;">>, body = [
+                            #th{style = <<"border-color: rgb(82, 100, 118);">>, body = [
                                 #link{postback = {toggle_clients, true, Identifiers}, title = <<"Hide">>, class = <<"glyph-link-gray">>,
                                     style = <<"position: absolute; top: 10px; left: 11px;">>,
                                     body = #span{class = <<"fui-checkbox-checked">>, style = <<"font-size: 20px;">>}
@@ -265,11 +265,13 @@ client_row(ID, Selected, UserName, FuseID) ->
         end,
     Identifier = [{ID, UserName, FuseID}],
     Row = #tr{class = RowClass, id = ID, cells = [
-        #td{style = <<"border-color: rgb(82, 100, 118); position: relative;">>, body = [
-            #link{id = <<"link_", ID/binary>>, postback = {toggle_clients, not Selected, Identifier}, title = <<"Toggle this client">>,
-                class = LinkClass, style = <<"position: absolute; top: 7px;">>,
-                body = #span{class = GlyphClass, style = <<"font-size: 20px;">>}
-            }]},
+        #td{style = <<"border-color: rgb(82, 100, 118);">>, body = [
+            #panel{style = <<"position: relative;">>, body = [
+                #link{id = <<"link_", ID/binary>>, postback = {toggle_clients, not Selected, Identifier}, title = <<"Toggle this client">>,
+                    class = LinkClass, style = <<"position: absolute; top: 0px;">>,
+                    body = #span{class = GlyphClass, style = <<"font-size: 20px;">>}
+                }]}
+        ]},
         #td{style = <<"border-color: rgb(82, 100, 118);">>, body = gui_str:unicode_list_to_binary(UserName)},
         #td{style = <<"border-color: rgb(82, 100, 118);">>, body = gui_str:unicode_list_to_binary(FuseID)}
     ]},
