@@ -680,12 +680,13 @@ create_dirs_at_storage(Root, SpacesInfo) ->
 create_dirs_at_storage(Root, SpacesInfo, Storage) ->
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
 
-    CreateTeamsDirs = fun(#space_info{name = Dir}, TmpAns) ->
+    CreateTeamsDirs = fun(#space_info{name = Dir} = SpaceInfo, TmpAns) ->
         DirName = filename:join(["", ?SPACES_BASE_DIR_NAME, Dir]),
+        storage_files_manager:mkdir(SHI, filename:join(["", ?SPACES_BASE_DIR_NAME])),
         Ans = storage_files_manager:mkdir(SHI, DirName),
         case Ans of
             SuccessAns when SuccessAns == ok orelse SuccessAns == {error, dir_or_file_exists} ->
-                Ans2 = storage_files_manager:chown(SHI, DirName, "", fslogic_spaces:map_to_grp_owner(Dir)),
+                Ans2 = storage_files_manager:chown(SHI, DirName, "", fslogic_spaces:map_to_grp_owner(SpaceInfo)),
                 Ans3 = storage_files_manager:chmod(SHI, DirName, 8#1750),
                 case {Ans2, Ans3} of
                     {ok, ok} ->

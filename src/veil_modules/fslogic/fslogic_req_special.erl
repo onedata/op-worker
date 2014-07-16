@@ -76,7 +76,7 @@ get_file_children(FullFileName, ROffset, RCount) ->
     ?debug("get_file_children(FullFileName ~p, ROffset: ~p, RCount: ~p)", [FullFileName, ROffset, RCount]),
 
     UserFilePath = fslogic_path:get_user_file_name(FullFileName),
-    TokenizedPath = string:tokens(UserFilePath, "/"),
+    TokenizedPath = filename:split(UserFilePath),
     {Num, Offset} =
         case {ROffset, TokenizedPath} of
             {0 = Off0, []} -> %% First iteration over "/" dir has to contain "groups" folder, so fetch `num - 1` files instead `num`

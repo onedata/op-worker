@@ -42,7 +42,7 @@
 get_space_file({uuid, UUID}) ->
     get_file({uuid, UUID});
 get_space_file(SpaceName) ->
-    get_file(filename:join(["", SpaceName])).
+    get_file(fslogic_path:absolute_join(filename:split(SpaceName))).
 
 %% ===================================================================
 %% File Descriptors Management
@@ -498,6 +498,8 @@ get_file_helper({uuid, UUID}, _View) ->
             {ok, Doc};
         {ok, #veil_document{}} ->
             {error, invalid_file_record};
+        {error, {not_found, _}} ->
+            throw(file_not_found);
         Other ->
             Other
     end;

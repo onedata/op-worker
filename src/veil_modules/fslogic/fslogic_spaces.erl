@@ -13,12 +13,13 @@
 -include("files_common.hrl").
 
 %% API
--export([initialize/1]).
+-export([initialize/1, map_to_grp_owner/1]).
 
 initialize(#space_info{uuid = SpaceId, name = SpaceName} = SpaceInfo) ->
     File = #file{type = ?DIR_TYPE, perms = 8#770, name = SpaceName, extensions = [{?file_space_info_extestion, SpaceInfo}]},
     case dao_lib:apply(vfs, save_file, [#veil_document{record = File, uuid = SpaceId}], 1) of
         {ok, _} ->
+            user_logic:create_dirs_at_storage(non, [SpaceInfo]),
             {ok, SpaceInfo};
         {error, confilct} ->
             {ok, #veil_document{record = #file{extensions = Ext} = File} = FileDoc} = dao_lib:apply(vfs, get_space_file),
@@ -36,3 +37,7 @@ initialize(SpaceId) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+
+map_to_grp_owner(#space_info{name = SpaceName}) ->
+    SpaceName.
