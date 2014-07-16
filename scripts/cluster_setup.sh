@@ -172,6 +172,9 @@ for i in `seq 1 $n_count`; do
 	ssh $lcnode "useradd $user_name 2> /dev/null || exit 0"
     done
 
+    echo "at end: env CREATE_USER_IN_DB: *$CREATE_USER_IN_DB*"
+    echo "is_equal_true: " `[[ "$CREATE_USER_IN_DB" == "true" ]] ; echo $?`
+
     if [[ "$CREATE_USER_IN_DB" == "true" ]]; then
         cmm="$reg_run $node_name $user_name '$user_name@test.com' /tmp/tmp_cert.pem"
 
