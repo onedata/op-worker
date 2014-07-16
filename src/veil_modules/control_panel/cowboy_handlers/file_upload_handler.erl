@@ -134,12 +134,14 @@ handle_upload_request(Req) ->
 %% parsing and writing its data to a file at specified path. Returns
 %% values conforming to rest_module_behaviour requirements.
 %% @end
+-spec handle_rest_upload(Req :: req(), Path :: string(), Overwrite :: boolean()) -> {ok, req()}.
+%% ====================================================================
 handle_rest_upload(Req, Path, Overwrite) ->
     case cowboy_req:parse_header(<<"content-length">>, Req) of
         {ok, Length, NewReq} when is_integer(Length) ->
-            case try_to_create_file(gui_str:binary_to_unicode_list(Path), Overwrite) of
+            case try_to_create_file(Path, Overwrite) of
                 ok ->
-                    case parse_rest_upload(NewReq, gui_str:binary_to_unicode_list(Path)) of
+                    case parse_rest_upload(NewReq, Path) of
                         {true, NewReq2} ->
                             {{body, rest_utils:success_reply(?success_file_uploaded)}, NewReq2};
                         {false, NewReq2} ->
