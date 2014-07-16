@@ -18,12 +18,9 @@ if [[ -z "$SETUP_DIR" ]]; then
     export SETUP_DIR="/tmp/onedata"
 fi
 
-info "env CREATE_USER_IN_DB: *$CREATE_USER_IN_DB*"
-
 if [[ -z "$CREATE_USER_IN_DB" ]]; then
     export CREATE_USER_IN_DB="true"
 fi
-info "env CREATE_USER_IN_DB: *$CREATE_USER_IN_DB*"
 
 # Load funcion defs
 source ./functions.sh || exit 1
