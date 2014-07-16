@@ -22,8 +22,6 @@
 -include_lib("veil_modules/dao/dao_types.hrl").
 -include("logging.hrl").
 
--define(NAMES_TABLE, "names_map").
-
 %% ====================================================================
 %% API
 %% ====================================================================
@@ -35,8 +33,6 @@
 %% File sharing
 -export([get_file_by_uuid/1, get_file_full_name_by_uuid/1, get_file_name_by_uuid/1, get_file_user_dependent_name_by_uuid/1]).
 -export([create_standard_share/1, create_share/2, get_share/1, remove_share/1]).
-
--export([get_ets_name/0]).
 
 %% ====================================================================
 %% Test API
@@ -117,7 +113,7 @@ rmdir(DirName) ->
   ErrorDetail :: term().
 %% ====================================================================
 mv(From, To) ->
-  Record = #renamefile{from_file_logic_name = From, to_file_logic_name  = To},
+  Record = #renamefile{from_file_logic_name = From, to_file_logic_name = To},
   {Status, TmpAns} = contact_fslogic(Record),
   case Status of
     ok ->
@@ -244,25 +240,25 @@ getfileattr(Message, Value) ->
 %% ====================================================================
 read(File, Offset, Size) ->
   {Response, Response2} = getfilelocation(File),
-      case Response of
-        ok ->
-          {Storage_helper_info, FileId} = Response2,
-          Res = storage_files_manager:read(Storage_helper_info, FileId, Offset, Size),
-          case Res of
-            {ok, _} ->
-              case event_production_enabled("read_event") of
-                true ->
-                  % TODO: add filePath
-                  ReadEvent = [{"type", "read_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"bytes", Size}],
-                  gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, ReadEvent}});
-                _ ->
-                  ok
-              end;
+  case Response of
+    ok ->
+      {Storage_helper_info, FileId} = Response2,
+      Res = storage_files_manager:read(Storage_helper_info, FileId, Offset, Size),
+      case Res of
+        {ok, _} ->
+          case event_production_enabled("read_event") of
+            true ->
+              % TODO: add filePath
+              ReadEvent = [{"type", "read_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"bytes", Size}],
+              gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, ReadEvent}});
             _ ->
               ok
-          end,
-          Res;
-        _ -> {Response, Response2}
+          end;
+        _ ->
+          ok
+      end,
+      Res;
+    _ -> {Response, Response2}
   end.
 
 %% write/2
@@ -438,19 +434,19 @@ create(File) ->
 %% ====================================================================
 truncate(File, Size) ->
   {Response, Response2} = getfilelocation(File),
-      case Response of
-        ok ->
-          {Storage_helper_info, FileId} = Response2,
-          Res = storage_files_manager:truncate(Storage_helper_info, FileId, Size),
-          case {Res, event_production_enabled("truncate_event")} of
-            {ok, true} ->
-              TruncateEvent = [{"type", "truncate_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", File}],
-              gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEvent}});
-            _ ->
-              ok
-          end,
-          Res;
-        _ -> {Response, Response2}
+  case Response of
+    ok ->
+      {Storage_helper_info, FileId} = Response2,
+      Res = storage_files_manager:truncate(Storage_helper_info, FileId, Size),
+      case {Res, event_production_enabled("truncate_event")} of
+        {ok, true} ->
+          TruncateEvent = [{"type", "truncate_event"}, {"user_dn", fslogic_context:get_user_dn()}, {"filePath", File}],
+          gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, TruncateEvent}});
+        _ ->
+          ok
+      end,
+      Res;
+    _ -> {Response, Response2}
   end.
 
 %% delete/1
@@ -467,41 +463,41 @@ truncate(File, Size) ->
 %% ====================================================================
 delete(File) ->
   {Response, Response2} = getfilelocation(File),
-      case Response of
+  case Response of
+    ok ->
+      {Storage_helper_info, FileId} = Response2,
+      TmpAns2 = storage_files_manager:delete(Storage_helper_info, FileId),
+
+      TmpAns2_2 = case TmpAns2 of
+                    {wrong_getatt_return_code, -2} -> ok;
+                    _ -> TmpAns2
+                  end,
+
+      case TmpAns2_2 of
         ok ->
-          {Storage_helper_info, FileId} = Response2,
-          TmpAns2 = storage_files_manager:delete(Storage_helper_info, FileId),
-
-          TmpAns2_2 = case TmpAns2 of
-            {wrong_getatt_return_code, -2} -> ok;
-            _ -> TmpAns2
-          end,
-
-          case TmpAns2_2 of
+          Record2 = #deletefile{file_logic_name = File},
+          {Status3, TmpAns3} = contact_fslogic(Record2),
+          case Status3 of
             ok ->
-              Record2 = #deletefile{file_logic_name = File},
-              {Status3, TmpAns3} = contact_fslogic(Record2),
-              case Status3 of
-                ok ->
-                  Response3 = TmpAns3#atom.value,
-                  case Response3 of
-                    ?VOK ->
-                      case event_production_enabled("rm_event") of
-                        true ->
-                          RmEvent = [{"type", "rm_event"}, {"user_dn", fslogic_context:get_user_dn()}],
-                          gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, RmEvent}});
-                        _ ->
-                          ok
-                      end,
-                      ok;
-                    _ -> {logical_file_system_error, Response3}
-                  end;
-                _ -> {Status3, TmpAns3}
+              Response3 = TmpAns3#atom.value,
+              case Response3 of
+                ?VOK ->
+                  case event_production_enabled("rm_event") of
+                    true ->
+                      RmEvent = [{"type", "rm_event"}, {"user_dn", fslogic_context:get_user_dn()}],
+                      gen_server:call(?Dispatcher_Name, {cluster_rengine, 1, {event_arrived, RmEvent}});
+                    _ ->
+                      ok
+                  end,
+                  ok;
+                _ -> {logical_file_system_error, Response3}
               end;
-            _ -> TmpAns2_2
+            _ -> {Status3, TmpAns3}
           end;
-        _ -> {Response, Response2}
-      end.
+        _ -> TmpAns2_2
+      end;
+    _ -> {Response, Response2}
+  end.
 
 %% change_file_perm/2
 %% ====================================================================
@@ -551,7 +547,7 @@ exists(FileName) ->
         {error, file_not_found} -> false;
         _ -> {Status, TmpAns}
       end;
-    _  -> {full_name_finding_error, File}
+    _ -> {full_name_finding_error, File}
   end.
 
 
@@ -591,14 +587,15 @@ contact_fslogic(Message, Value) ->
 
   try
     CallAns = case Message of
-      internal_call ->
-        UserID = fslogic_context:get_user_dn(),
-        case UserID of
-          undefined -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {internal_call, Value}});
-          _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, #veil_request{subject = UserID, request = {internal_call, Value}}})
-        end;
-      _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {Message, Value}})
-    end,
+                internal_call ->
+                  UserID = fslogic_context:get_user_dn(),
+                  case UserID of
+                    undefined -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {internal_call, Value}});
+                    _ ->
+                      gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, #veil_request{subject = UserID, request = {internal_call, Value}}})
+                  end;
+                _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {Message, Value}})
+              end,
 
     case CallAns of
       ok ->
@@ -649,7 +646,7 @@ get_file_user_dependent_name_by_uuid(UUID) ->
           {ok, FullPath};
         UserDN ->
           case dao_lib:apply(dao_users, get_user, [{dn, UserDN}], 1) of
-            {ok, #veil_document { record=#user { login=Login } } } ->
+            {ok, #veil_document{record = #user{login = Login}}} ->
               case string:str(FullPath, Login ++ "/") of
                 1 -> {ok, string:sub_string(FullPath, length(Login ++ "/") + 1)};
                 _ -> {ok, FullPath}
@@ -801,7 +798,7 @@ add_share(Share_info) ->
 %% ====================================================================
 %% @doc Gets info about share from db.
 %% @end
--spec get_share(Key:: {file, File :: uuid()} |
+-spec get_share(Key :: {file, File :: uuid()} |
 {user, User :: uuid()} |
 {uuid, UUID :: uuid()}) -> Result when
   Result :: {ok, Share_doc} | {ErrorGeneral, ErrorDetail},
@@ -834,7 +831,7 @@ get_share(Key) ->
 %% ====================================================================
 %% @doc Removes info about share from db.
 %% @end
--spec remove_share(Key:: {file, File :: uuid()} |
+-spec remove_share(Key :: {file, File :: uuid()} |
 {user, User :: uuid()} |
 {uuid, UUID :: uuid()}) -> Result when
   Result :: ok | {ErrorGeneral, ErrorDetail},
@@ -870,31 +867,23 @@ remove_share(Key) ->
   ErrorDetail :: term().
 %% ====================================================================
 getfilelocation(File) ->
-  EtsName = get_ets_name(),
-  CachedLocation = try
-    LookupAns = ets:lookup(EtsName, File),
-    case LookupAns of
-      [{File, {Location, ValidTo}}] ->
+  CachedLocation =
+    case get(File) of
+      {Location, ValidTo} ->
         {Megaseconds, Seconds, _Microseconds} = os:timestamp(),
-        Time = 1000000*Megaseconds + Seconds,
+        Time = 1000000 * Megaseconds + Seconds,
         case Time < ValidTo of
           true -> Location;
           false -> []
         end;
-      _ -> []
-    end
-  catch
-    _:_ ->
-      ?debug("Creating ets ~p for logical files manager cache", [EtsName]),
-      ets:new(EtsName, [named_table, set]),
-      []
-  end,
+      _ -> undefined
+    end,
   case CachedLocation of
-    [] ->
+    undefined ->
       {Status, TmpAns} = case File of
-        {uuid, UUID} -> contact_fslogic(getfilelocation_uuid, UUID);
-        _ -> contact_fslogic(#getfilelocation{file_logic_name = File})
-      end,
+                           {uuid, UUID} -> contact_fslogic(getfilelocation_uuid, UUID);
+                           _ -> contact_fslogic(#getfilelocation{file_logic_name = File})
+                         end,
       case Status of
         ok ->
           Response = TmpAns#filelocation.answer,
@@ -902,8 +891,8 @@ getfilelocation(File) ->
             ?VOK ->
               Storage_helper_info = #storage_helper_info{name = TmpAns#filelocation.storage_helper_name, init_args = TmpAns#filelocation.storage_helper_args},
               {Megaseconds2, Seconds2, _Microseconds2} = os:timestamp(),
-              Time2 = 1000000*Megaseconds2 + Seconds2,
-              ets:insert(EtsName, {File, {{Storage_helper_info, TmpAns#filelocation.file_id}, Time2 + TmpAns#filelocation.validity}}),
+              Time2 = 1000000 * Megaseconds2 + Seconds2,
+              put(File, {{Storage_helper_info, TmpAns#filelocation.file_id}, Time2 + TmpAns#filelocation.validity}),
               {ok, {Storage_helper_info, TmpAns#filelocation.file_id}};
             _ -> {logical_file_system_error, Response}
           end;
@@ -922,23 +911,14 @@ getfilelocation(File) ->
   Result :: integer().
 %% ====================================================================
 cache_size(File, BuffSize) ->
-  EtsName = get_ets_name(),
-  OldSize = try
-    LookupAns = ets:lookup(EtsName, {File, size}),
-    case LookupAns of
-      [{{File, size}, Size}] ->
+  OldSize =
+    case get({File, size}) of
+      Size when is_integer(Size) ->
         ?debug("Reading file size from cache, size: ~p", [Size]),
         Size;
       _ -> 0
-    end
-  catch
-    _:_ ->
-      ?debug("Creating ets ~p for logical files manager cache", [EtsName]),
-      ets:new(EtsName, [named_table, set]),
-      0
-  end,
-
-  ets:insert(EtsName, {{File, size}, OldSize + BuffSize}),
+    end,
+  put({File, size}, OldSize + BuffSize),
   OldSize.
 
 %% error_to_string/1
@@ -1001,10 +981,10 @@ doUploadTest(File, WriteFunNum, Size, Times) ->
   Bufs = generateData(Times, Size),
   ok = create(File),
 
-  {Megaseconds,Seconds,Microseconds} = erlang:now(),
+  {Megaseconds, Seconds, Microseconds} = erlang:now(),
   BytesWritten = lists:foldl(WriteFun, 0, Bufs),
-  {Megaseconds2,Seconds2,Microseconds2} = erlang:now(),
-  WriteTime = 1000000*1000000*(Megaseconds2-Megaseconds) + 1000000*(Seconds2-Seconds) + Microseconds2-Microseconds,
+  {Megaseconds2, Seconds2, Microseconds2} = erlang:now(),
+  WriteTime = 1000000 * 1000000 * (Megaseconds2 - Megaseconds) + 1000000 * (Seconds2 - Seconds) + Microseconds2 - Microseconds,
   {BytesWritten, WriteTime}.
 
 %% generateData/2
@@ -1015,7 +995,7 @@ doUploadTest(File, WriteFunNum, Size, Times) ->
   Result :: list().
 %% ====================================================================
 generateData(1, BufSize) -> [list_to_binary(generateRandomData(BufSize))];
-generateData(Size, BufSize) -> [list_to_binary(generateRandomData(BufSize)) | generateData(Size-1, BufSize)].
+generateData(Size, BufSize) -> [list_to_binary(generateRandomData(BufSize)) | generateData(Size - 1, BufSize)].
 
 %% generateRandomData/1
 %% ====================================================================
@@ -1025,18 +1005,8 @@ generateData(Size, BufSize) -> [list_to_binary(generateRandomData(BufSize)) | ge
   Result :: list().
 %% ====================================================================
 generateRandomData(1) -> [random:uniform(255)];
-generateRandomData(Size) -> [random:uniform(255) | generateRandomData(Size-1)].
+generateRandomData(Size) -> [random:uniform(255) | generateRandomData(Size - 1)].
 -endif.
-
-%% get_ets_name/0
-%% ====================================================================
-%% @doc Generates name of ets table for proc
-%% @end
--spec get_ets_name() -> Result when
-  Result :: atom().
-%% ====================================================================
-get_ets_name() ->
-  list_to_atom(?NAMES_TABLE ++ pid_to_list(self())).
 
 %% get_mode/1
 %% ====================================================================
@@ -1047,11 +1017,11 @@ get_ets_name() ->
 %% ====================================================================
 get_mode(FileName) ->
   TmpAns = case string:tokens(FileName, "/") of
-    [?GROUPS_BASE_DIR_NAME | _] ->
-      application:get_env(?APP_Name, new_group_file_logic_mode);
-    _ ->
-      application:get_env(?APP_Name, new_file_logic_mode)
-  end,
+             [?GROUPS_BASE_DIR_NAME | _] ->
+               application:get_env(?APP_Name, new_group_file_logic_mode);
+             _ ->
+               application:get_env(?APP_Name, new_file_logic_mode)
+           end,
   case TmpAns of
     undefined -> {error, undefined};
     _ -> TmpAns
