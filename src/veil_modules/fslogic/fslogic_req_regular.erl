@@ -19,21 +19,34 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([get_file_location/1, get_new_file_location/2, create_file_ack/1, file_not_used/1, renew_file_location/1]).
+-export([get_file_location/2, get_new_file_location/2, create_file_ack/1, file_not_used/1, renew_file_location/1]).
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
 
 
-%% get_file_location/1
+%% get_file_location/2
 %% ====================================================================
 %% @doc Gets file location (implicit file open operation).
 %% @end
--spec get_file_location(FullFileName :: string() | file_doc()) ->
+-spec get_file_location(File :: string() | file_doc(), OpenMode :: string()) ->
     #filelocation{} | no_return().
 %% ====================================================================
-get_file_location(FileDoc = #veil_document{record = #file{}}) ->
+get_file_location(FileDoc = #veil_document{record = #file{}},?UNSPECIFIED_MODE) ->
+    get_file_location(FileDoc,none,?UNSPECIFIED_MODE);
+get_file_location(FullFileName,OpenMode) when is_list(FullFileName) ->
+    {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
+    get_file_location(FileDoc,FullFileName,OpenMode).
+
+%% get_file_location/3
+%% ====================================================================
+%% @doc Gets file location (implicit file open operation).
+%% @end
+-spec get_file_location(FileDoc :: file_doc(), FullFileName :: string(), OpenMode :: string()) ->
+    #filelocation{} | no_return().
+%% ====================================================================
+get_file_location(FileDoc,FullFileName,OpenMode) ->
     Validity = ?LOCATION_VALIDITY,
     case FileDoc#veil_document.record#file.type of
         ?REG_TYPE -> ok;
@@ -42,7 +55,10 @@ get_file_location(FileDoc = #veil_document{record = #file{}}) ->
             throw(?VENOTSUP)
     end,
 
-    {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileDoc#veil_document.uuid, fslogic_context:get_fuse_id(), Validity),
+    {ok, UserDoc} = fslogic_objects:get_user(),
+    ok = fslogic_perms:check_file_perms(FullFileName,UserDoc,FileDoc,list_to_atom(OpenMode)),
+
+    {ok,_} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileDoc#veil_document.uuid, fslogic_context:get_fuse_id(), Validity),
 
     FileDesc = FileDoc#veil_document.record,
     FileLoc = fslogic_file:get_file_local_location(FileDesc),
@@ -51,11 +67,7 @@ get_file_location(FileDoc = #veil_document{record = #file{}}) ->
 
     {SH, File_id} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileLoc#file_location.file_id),
     #filelocation{storage_id = Storage#storage_info.id, file_id = File_id, validity = Validity,
-        storage_helper_name = SH#storage_helper_info.name, storage_helper_args = SH#storage_helper_info.init_args};
-get_file_location(FullFileName) ->
-    ?debug("get_file_location(FullFileName ~p)", [FullFileName]),
-    {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
-    get_file_location(FileDoc).
+        storage_helper_name = SH#storage_helper_info.name, storage_helper_args = SH#storage_helper_info.init_args}.
 
 
 %% get_new_file_location/2

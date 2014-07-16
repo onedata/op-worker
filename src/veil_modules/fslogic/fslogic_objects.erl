@@ -187,7 +187,6 @@ get_file_helper(ProtocolVersion, File, FuseID, Fun) ->
 -spec save_file_descriptor(ProtocolVersion :: term(), File :: record(), Validity :: integer()) -> Result when
     Result :: term().
 %% ====================================================================
-
 save_file_descriptor(ProtocolVersion, File, Validity) ->
     Descriptor = update_file_descriptor(File#veil_document.record, Validity),
     case dao_lib:apply(dao_vfs, save_descriptor, [File#veil_document{record = Descriptor}], ProtocolVersion) of
@@ -204,7 +203,6 @@ save_file_descriptor(ProtocolVersion, File, Validity) ->
 -spec save_file_descriptor(ProtocolVersion :: term(), Uuid::uuid(), FuseID :: string(), Validity :: integer()) -> Result when
     Result :: term().
 %% ====================================================================
-
 save_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
     case FuseID of
         ?CLUSTER_FUSE_ID -> {ok, ok};
@@ -217,7 +215,11 @@ save_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
                             save_new_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity);
                         1 ->
                             [VeilDoc | _] = TmpAns,
-                            save_file_descriptor(ProtocolVersion, VeilDoc, Validity);
+                            case save_file_descriptor(ProtocolVersion, VeilDoc, Validity) of
+                                {ok,Uid} -> {ok,Uid};
+                                {error, {save_file_descriptor, {conflict,_}}} -> {ok,VeilDoc#veil_document.uuid};
+                                Other -> Other
+                            end;
                         _Many ->
                             ?error("Error: to many file descriptors for file uuid: ~p", [Uuid]),
                             {error, "Error: too many file descriptors"}
@@ -233,7 +235,6 @@ save_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
 -spec save_new_file_descriptor(ProtocolVersion :: term(), Uuid::uuid(), FuseID :: string(), Validity :: integer()) -> Result when
     Result :: term().
 %% ====================================================================
-
 save_new_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
     Descriptor = update_file_descriptor(#file_descriptor{file = Uuid, fuse_id = FuseID}, Validity),
     case dao_lib:apply(dao_vfs, save_descriptor, [Descriptor], ProtocolVersion) of
@@ -249,7 +250,6 @@ save_new_file_descriptor(ProtocolVersion, Uuid, FuseID, Validity) ->
 -spec update_file_descriptor(Descriptor :: record(),  Validity :: integer()) -> Result when
     Result :: record().
 %% ====================================================================
-
 update_file_descriptor(Descriptor, Validity) ->
     {Megaseconds,Seconds, _Microseconds} = os:timestamp(),
     Time = 1000000*Megaseconds + Seconds,

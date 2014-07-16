@@ -32,8 +32,9 @@ body() ->
             #h3{body = <<"Error">>},
             #p{class = <<"login-info">>, style = <<"font-weight: bold;">>, body = Reason},
             #p{class = <<"login-info">>, body = Description},
-            #button{postback = to_login, class = <<"btn btn-warning btn-block">>, body = <<"Login page">>}
-        ]}
+            #button{postback = to_login, class = <<"btn btn-warning btn-block">>, body = <<"Main page">>}
+        ]},
+        gui_utils:cookie_policy_popup_body(?privacy_policy_url)
     ] ++ vcn_gui_utils:logotype_footer(120)}.
 
 event(init) -> ok;
@@ -65,10 +66,12 @@ id_to_reason_and_message(?error_user_content_not_logged_in) ->
 id_to_reason_and_message(?error_user_content_file_not_found) ->
     {<<"Invalid URL">>, <<"This URL doesn't point to any file.">>};
 
+id_to_reason_and_message(?error_user_permission_denied) ->
+    {<<"Permission denied">>, <<"You don't have permission to read this file.">>};
+
 id_to_reason_and_message(?error_shared_file_not_found) ->
     {<<"Invalid link">>,
         <<"Invalid link", "This link doesn't point to any shared file. This is because the file is no longer shared or the share has never existed.">>};
-
 
 id_to_reason_and_message(?error_internal_server_error) ->
     {<<"Internal server error">>,
