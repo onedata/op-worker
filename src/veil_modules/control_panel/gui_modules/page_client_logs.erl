@@ -193,7 +193,7 @@ manage_clients_panel() ->
                     fun({UserName, FuseID}, {Counter, Idents}) ->
                         {Row, Identifier} = client_row(<<"client_row_", (integer_to_binary(Counter))/binary>>, false, UserName, FuseID),
                         {Row, {Counter + 1, Idents ++ Identifier}}
-                    end, {1, []}, get_connected_clients()),
+                    end, {1, []}, Clients),
                 {ClientList, Ids}
         end,
 
@@ -205,7 +205,7 @@ manage_clients_panel() ->
                 #p{style = <<"margin-top: -5px; display: inline-block; margin-right: 170px;">>, body = <<"Change loglevels for chosen clients:">>},
                 #panel{class = <<"input-append">>, style = <<"margin-bottom: 10px;">>, body = [
                     #textbox{id = <<"search_textbox">>, class = <<"span2">>,
-                        style = <<"width: 150px;">>, placeholder = <<"Search">>},
+                        style = <<"width: 150px;">>, placeholder = <<"Search users">>},
                     #panel{class = <<"btn-group">>, body = [
                         #button{id = <<"search_button">>, class = <<"btn">>, type = <<"button">>,
                             actions = gui_jq:form_submit_action(<<"search_button">>, {search_clients, Identifiers}, <<"search_textbox">>),
@@ -214,7 +214,7 @@ manage_clients_panel() ->
                 ]}
             ]},
             #panel{id = <<"client_table_viewport">>, style = <<"width: 650px; min-height: 200px; max-height: 200px; overflow-y: scroll;",
-            "background-color: white; border-radius: 4px; border: 2px solid rgb(82, 100, 118); float: left;">>, body = [
+            "background-color: white; border-radius: 4px; border: 2px solid rgb(82, 100, 118); float: left; position: relative;">>, body = [
                 #table{id = <<"client_table">>, class = <<"table table-stripped">>, style = <<"margin-bottom: 0;">>,
                     header = [
                         #tr{cells = [
@@ -605,7 +605,7 @@ event({search_clients, ClientList}) ->
         Query ->
             {Select, Deselect} = lists:partition(
                 fun({_, UserName, _}) ->
-                    binary:match(UserName, Query) =/= nomatch
+                    binary:match(gui_str:unicode_list_to_binary(UserName), Query) =/= nomatch
                 end, ClientList),
             event({toggle_clients, true, Select}),
             event({toggle_clients, false, Deselect}),
