@@ -15,8 +15,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <openssl/evp.h>
-#include <openssl/err.h>
 
 using std::string;
 using namespace veil::protocol::communication_protocol;
@@ -27,14 +25,14 @@ using websocketpp::lib::bind;
 
 namespace veil {
 
-boost::recursive_mutex CommunicationHandler::m_instanceMutex;
-SSL_SESSION* CommunicationHandler::m_session = 0;
 
-CommunicationHandler::CommunicationHandler(const string &p_hostname, int p_port, cert_info_fun p_getCertInfo, const bool checkCertificate)
+CommunicationHandler::CommunicationHandler(const string &p_hostname, int p_port, cert_info_fun p_getCertInfo,const bool checkCertificate,
+                                           boost::shared_ptr<ws_client> endpoint)
     : m_checkCertificate(checkCertificate),
       m_hostname(p_hostname),
       m_port(p_port),
       m_getCertInfo(p_getCertInfo),
+      m_endpoint(std::move(endpoint)),
       m_connectStatus(CLOSED),
       m_currentMsgId(1),
       m_errorCount(0),
@@ -51,24 +49,8 @@ void CommunicationHandler::setCertFun(cert_info_fun p_getCertInfo)
 
 CommunicationHandler::~CommunicationHandler()
 {
-    closeConnection();
-
     DLOG(INFO) << "Destructing connection: " << this;
-    if(m_endpoint)
-    {
-        m_endpoint->stop();
-        m_endpoint.reset();
-    }
-
-    // Force exit worker threads
-    if(m_worker1.joinable() && !m_worker1.timed_join(boost::posix_time::milliseconds(200)) && m_worker1.native_handle()) {
-        pthread_cancel(m_worker1.native_handle());
-    }
-
-    if(m_worker2.joinable() && !m_worker2.timed_join(boost::posix_time::milliseconds(200)) && m_worker2.native_handle()) {
-        pthread_cancel(m_worker2.native_handle());
-    }
-
+    closeConnection();
     DLOG(INFO) << "Connection: " << this << " deleted";
 }
 
@@ -118,36 +100,7 @@ int CommunicationHandler::openConnection()
         return 0;
 
     m_connectStatus = TIMEOUT;
-
-    // Initialize ASIO
-    if(m_endpoint) { // If endpoint exists, then make sure that previous worker thread are stopped before we destroy that io_service
-        m_endpoint->stop();
-    }
-
-    // (re)Initialize endpoint (io_service)
     m_endpointConnection.reset();
-    m_endpoint.reset(new ws_client());
-    m_endpoint->clear_access_channels(websocketpp::log::alevel::all);
-    m_endpoint->clear_error_channels(websocketpp::log::elevel::all);
-    m_endpoint->init_asio(ec);
-
-    if(ec)
-    {
-        LOG(ERROR) << "Cannot initlize WebSocket endpoint";
-        return m_connectStatus;
-    }
-
-    // Register our handlers
-    m_endpoint->set_tls_init_handler(bind(&CommunicationHandler::onTLSInit, this, ::_1));
-    m_endpoint->set_socket_init_handler(bind(&CommunicationHandler::onSocketInit, this, ::_1, ::_2));    // On socket init
-    m_endpoint->set_message_handler(bind(&CommunicationHandler::onMessage, this, ::_1, ::_2));           // Incoming WebSocket message
-    m_endpoint->set_open_handler(bind(&CommunicationHandler::onOpen, this, ::_1));                       // WebSocket connection estabilished
-    m_endpoint->set_close_handler(bind(&CommunicationHandler::onClose, this, ::_1));                     // WebSocket connection closed
-    m_endpoint->set_fail_handler(bind(&CommunicationHandler::onFail, this, ::_1));
-    m_endpoint->set_ping_handler(bind(&CommunicationHandler::onPing, this, ::_1, ::_2));
-    m_endpoint->set_pong_handler(bind(&CommunicationHandler::onPong, this, ::_1, ::_2));
-    m_endpoint->set_pong_timeout_handler(bind(&CommunicationHandler::onPongTimeout, this, ::_1, ::_2));
-    m_endpoint->set_interrupt_handler(bind(&CommunicationHandler::onInterrupt, this, ::_1));
 
     string URL = string("wss://") + m_hostname + ":" + toString(m_port) + string(CLUSTER_URI_PATH);
     ws_client::connection_ptr con = m_endpoint->get_connection(URL, ec); // Initialize WebSocket handshake
@@ -159,24 +112,18 @@ int CommunicationHandler::openConnection()
         LOG(INFO) << "Trying to connect to: " << URL;
     }
 
-    {   unique_lock lock(m_instanceMutex);
-
-        if(m_session) {
-            socket_type &socket = con->get_socket();
-            SSL *ssl = socket.native_handle();
-            if(SSL_set_session(ssl, m_session) != 1) {
-                LOG(ERROR) << "Cannot set session.";
-            }
-        }
-    }
+    // Register our handlers
+    con->set_message_handler(bind(&CommunicationHandler::onMessage, this, ::_1, ::_2));           // Incoming WebSocket message
+    con->set_open_handler(bind(&CommunicationHandler::onOpen, this, ::_1));                       // WebSocket connection estabilished
+    con->set_close_handler(bind(&CommunicationHandler::onClose, this, ::_1));                     // WebSocket connection closed
+    con->set_fail_handler(bind(&CommunicationHandler::onFail, this, ::_1));
+    con->set_ping_handler(bind(&CommunicationHandler::onPing, this, ::_1, ::_2));
+    con->set_pong_handler(bind(&CommunicationHandler::onPong, this, ::_1, ::_2));
+    con->set_pong_timeout_handler(bind(&CommunicationHandler::onPongTimeout, this, ::_1, ::_2));
+    con->set_interrupt_handler(bind(&CommunicationHandler::onInterrupt, this, ::_1));
 
     m_endpoint->connect(con);
     m_endpointConnection = con;
-
-    // Start worker thread(s)
-    // Second worker should not be started if WebSocket client lib cannot handle full-duplex connections
-    m_worker1 = boost::thread(&ws_client::run, m_endpoint);
-    //m_worker2 = boost::thread(&ws_client::run, m_endpoint);
 
     // Wait for WebSocket handshake
     m_connectCond.timed_wait(lock, boost::posix_time::milliseconds(CONNECT_TIMEOUT));
@@ -195,16 +142,8 @@ int CommunicationHandler::openConnection()
         ++m_errorCount;
     }
 
-    if(m_connectStatus == CONNECTED) {
+    if(m_connectStatus == CONNECTED)
         m_lastConnectTime = helpers::utils::mtime<uint64_t>();
-        unique_lock lock(m_instanceMutex);
-        socket_type &socket = m_endpointConnection->get_socket();
-        SSL *ssl = socket.native_handle();
-        if(m_session) {
-            SSL_SESSION_free(m_session);
-        }
-        m_session = SSL_get1_session(ssl);
-    }
 
     return m_connectStatus;
 }
@@ -224,8 +163,6 @@ void CommunicationHandler::closeConnection()
         if(ec.value() == 0)
             m_connectCond.timed_wait(lock, boost::posix_time::milliseconds(CONNECT_TIMEOUT)); // Wait for connection to close
 
-        m_endpoint->stop(); // If connection failed to close, make sure that io_service refuses to send/receive any further messages at this point
-
         try {
             if(m_endpointConnection) {
                 LOG(INFO) << "WebSocket: Lowest layer socket closed.";
@@ -237,10 +174,6 @@ void CommunicationHandler::closeConnection()
             LOG(ERROR) << "WebSocket connection socket close error";
         }
     }
-
-    // Stop workers
-    m_worker1.timed_join(boost::posix_time::milliseconds(200));
-    m_worker2.timed_join(boost::posix_time::milliseconds(200));
 
     m_connectStatus = CLOSED;
 }
@@ -478,69 +411,6 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
     }
 
     return answer;
-}
-
-context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
-{
-    if (!m_getCertInfo) {
-        LOG(ERROR) << "Cannot get CertificateInfo due to null getter";
-        return context_ptr();
-    }
-
-    CertificateInfo certInfo = m_getCertInfo();
-
-    try {
-        context_ptr ctx(new boost::asio::ssl::context(boost::asio::ssl::context::sslv3));
-
-        ctx->set_options(boost::asio::ssl::context::default_workarounds |
-                         boost::asio::ssl::context::no_sslv2 |
-                         boost::asio::ssl::context::single_dh_use);
-
-        ctx->set_default_verify_paths();
-        ctx->set_verify_mode(m_checkCertificate
-                             ? boost::asio::ssl::verify_peer
-                             : boost::asio::ssl::verify_none);
-
-        SSL_CTX *ssl_ctx = ctx->native_handle();
-        long mode = SSL_CTX_get_session_cache_mode(ssl_ctx);
-        mode |= SSL_SESS_CACHE_CLIENT;
-        SSL_CTX_set_session_cache_mode(ssl_ctx, mode);
-
-        boost::asio::ssl::context_base::file_format file_format; // Certificate format
-        if(certInfo.cert_type == CertificateInfo::ASN1) {
-            file_format = boost::asio::ssl::context::asn1;
-        } else {
-            file_format = boost::asio::ssl::context::pem;
-        }
-
-        if(certInfo.cert_type == CertificateInfo::P12) {
-            LOG(ERROR) << "Unsupported certificate format: P12";
-            return context_ptr();
-        }
-
-        if(boost::asio::buffer_size(certInfo.chain_data) && boost::asio::buffer_size(certInfo.chain_data)) {
-            ctx->use_certificate_chain(certInfo.chain_data);
-            ctx->use_private_key(certInfo.key_data, file_format);
-        } else {
-            ctx->use_certificate_chain_file(certInfo.user_cert_path);
-            ctx->use_private_key_file(certInfo.user_key_path, file_format);
-        }
-
-        return ctx;
-
-    } catch (boost::system::system_error& e) {
-        LOG(ERROR) << "Cannot initialize TLS socket due to: " << e.what()
-                   << " with cert file: " << certInfo.user_cert_path << " and key file: "
-                   << certInfo.user_key_path;
-    }
-
-    return context_ptr();
-}
-
-void CommunicationHandler::onSocketInit(websocketpp::connection_hdl hdl,socket_type &socket)
-{
-    // Disable socket delay
-    socket.lowest_layer().set_option(boost::asio::ip::tcp::no_delay(true));
 }
 
 void CommunicationHandler::onMessage(websocketpp::connection_hdl hdl, message_ptr msg)
