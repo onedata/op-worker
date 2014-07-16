@@ -20,6 +20,9 @@
 %% export nodes' codes
 -export([perform_10_logs/1, get_lager_traces/0, check_console_loglevel_functionalities/0]).
 
+% Max time for the subscribing process to collect logs
+-define(logs_collection_timeout, 10000).
+
 all() -> [logging_test, init_and_cleanup_test].
 
 %% ====================================================================
@@ -192,7 +195,7 @@ check_logs(ExpectedLogNumber) ->
 
 count_logs(ErrorLoggerLogs, LagerLogs, Expected, StartTime) ->
     {CurrentTime, _} = statistics(wall_clock),
-    case CurrentTime - StartTime < 5000 of
+    case CurrentTime - StartTime < ?logs_collection_timeout of
         false ->
             {ErrorLoggerLogs, LagerLogs};
         true ->
