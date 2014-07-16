@@ -10,13 +10,8 @@
 %% ===================================================================
 
 -module(central_logger_test_SUITE).
--include("test_utils.hrl").
+-include("nodes_manager.hrl").
 -include("registered_names.hrl").
--include_lib("ctool/include/test/assertions.hrl").
--include_lib("ctool/include/test/test_node_starter.hrl").
-
-% TSubscribing process will wait up to this time for logs
--define(LOGS_COUNTING_TIME, 10000).
 
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
@@ -91,6 +86,7 @@ check_console_loglevel_functionalities() ->
 %% sets up lager traces and if it cleans up after termination
 
 init_and_cleanup_test(Config) ->
+    nodes_manager:check_start_assertions(Config),
 
     NodesUp = ?config(nodes, Config),
     [CCM, W] = NodesUp,
@@ -101,9 +97,9 @@ init_and_cleanup_test(Config) ->
     % Init cluster
     gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
     gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-    test_utils:wait_for_cluster_cast(),
+    nodes_manager:wait_for_cluster_cast(),
     gen_server:cast({global, ?CCM}, init_cluster),
-    test_utils:wait_for_cluster_init(),
+    nodes_manager:wait_for_cluster_init(),
 
     % Test logger's console loglevel switching functionalities
     ?assertEqual(ok, rpc:call(W, ?MODULE, check_console_loglevel_functionalities, [])),
@@ -128,7 +124,7 @@ init_and_cleanup_test(Config) ->
 
     % Terminate central_logger worker
     gen_server:cast({global, ?CCM}, {stop_worker, W, central_logger}),
-    test_utils:wait_for_cluster_cast(),
+    nodes_manager:wait_for_cluster_cast(),
 
     % Check if traces were reset to default
     TracesAfterCleanup = rpc:call(W, ?MODULE, get_lager_traces, []),
@@ -144,16 +140,18 @@ init_and_cleanup_test(Config) ->
 %% central_logger subscribing and log stream
 
 logging_test(Config) ->
+    nodes_manager:check_start_assertions(Config),
+
     NodesUp = ?config(nodes, Config),
     [CCM, W1, W2, W3, W4] = NodesUp,
 
     % Init cluster
     gen_server:cast({?Node_Manager_Name, CCM}, do_heart_beat),
     gen_server:cast({global, ?CCM}, {set_monitoring, on}),
-    test_utils:wait_for_cluster_cast(),
-    test_utils:wait_for_nodes_registration(length(NodesUp) - 1),
+    nodes_manager:wait_for_cluster_cast(),
+    nodes_manager:wait_for_nodes_registration(length(NodesUp) - 1),
     gen_server:cast({global, ?CCM}, init_cluster),
-    test_utils:wait_for_cluster_init(),
+    nodes_manager:wait_for_cluster_init(),
 
     % Subscribe for log stream
     Pid = self(),
@@ -194,7 +192,7 @@ check_logs(ExpectedLogNumber) ->
 
 count_logs(ErrorLoggerLogs, LagerLogs, Expected, StartTime) ->
     {CurrentTime, _} = statistics(wall_clock),
-    case CurrentTime - StartTime < ?LOGS_COUNTING_TIME of
+    case CurrentTime - StartTime < 5000 of
         false ->
             {ErrorLoggerLogs, LagerLogs};
         true ->
@@ -222,58 +220,62 @@ count_logs(ErrorLoggerLogs, LagerLogs, Expected, StartTime) ->
 %% ====================================================================
 
 init_per_testcase(logging_test, Config) ->
-    ?INIT_CODE_PATH, ?CLEAN_TEST_DIRS,
-    test_node_starter:start_deps_for_tester_node(),
+    ?INIT_DIST_TEST,
+    nodes_manager:start_deps_for_tester_node(),
 
-    Nodes = test_node_starter:start_test_nodes(5),
+    Nodes = nodes_manager:start_test_on_nodes(5),
     [CCM | _] = Nodes,
 
-    test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
+    StartLog = nodes_manager:start_app_on_nodes(Nodes,
         [[{node_type, ccm},
             {dispatcher_port, 5055},
             {ccm_nodes, [CCM]},
-            {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {heart_beat, 1}, {nif_prefix, './'}, {ca_dir, './cacerts/'}],
+            {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {heart_beat, 1}],
             [{node_type, worker},
                 {dispatcher_port, 5056},
                 {ccm_nodes, [CCM]},
-                {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {heart_beat, 1}, {nif_prefix, './'}, {ca_dir, './cacerts/'}],
+                {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {heart_beat, 1}],
             [{node_type, worker},
                 {dispatcher_port, 5057},
                 {ccm_nodes, [CCM]},
-                {dns_port, 1310}, {control_panel_port, 2310}, {control_panel_redirect_port, 1356}, {rest_port, 3310}, {heart_beat, 1}, {nif_prefix, './'}, {ca_dir, './cacerts/'}],
+                {dns_port, 1310}, {control_panel_port, 2310}, {control_panel_redirect_port, 1356}, {rest_port, 3310}, {heart_beat, 1}],
             [{node_type, worker},
                 {dispatcher_port, 5058},
                 {ccm_nodes, [CCM]},
-                {dns_port, 1311}, {control_panel_port, 2311}, {control_panel_redirect_port, 1357}, {rest_port, 3311}, {heart_beat, 1}, {nif_prefix, './'}, {ca_dir, './cacerts/'}],
+                {dns_port, 1311}, {control_panel_port, 2311}, {control_panel_redirect_port, 1357}, {rest_port, 3311}, {heart_beat, 1}],
             [{node_type, worker},
                 {dispatcher_port, 5059},
                 {ccm_nodes, [CCM]},
-                {dns_port, 1312}, {control_panel_port, 2312}, {control_panel_redirect_port, 1358}, {rest_port, 3312}, {heart_beat, 1}, {nif_prefix, './'}, {ca_dir, './cacerts/'}]]),
+                {dns_port, 1312}, {control_panel_port, 2312}, {control_panel_redirect_port, 1358}, {rest_port, 3312}, {heart_beat, 1}]]),
 
+    Assertions = [{false, lists:member(error, Nodes)}, {false, lists:member(error, StartLog)}],
+    lists:append([{nodes, Nodes}, {assertions, Assertions}], Config);
 
-    lists:append([{nodes, Nodes}], Config);
 
 init_per_testcase(init_and_cleanup_test, Config) ->
-    ?INIT_CODE_PATH, ?CLEAN_TEST_DIRS,
-    test_node_starter:start_deps_for_tester_node(),
+    ?INIT_DIST_TEST,
+    nodes_manager:start_deps_for_tester_node(),
 
-    Nodes = test_node_starter:start_test_nodes(2),
+    Nodes = nodes_manager:start_test_on_nodes(2),
     [CCM | _] = Nodes,
 
-    test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
+    StartLog = nodes_manager:start_app_on_nodes(Nodes,
         [[{node_type, ccm},
             {dispatcher_port, 5055},
             {ccm_nodes, [CCM]},
-            {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {initialization_time, 1}, {heart_beat, 1}, {nif_prefix, './'}, {ca_dir, './cacerts/'}],
+            {dns_port, 1308}, {control_panel_port, 2308}, {control_panel_redirect_port, 1354}, {rest_port, 3308}, {initialization_time, 1}, {heart_beat, 1}],
             [{node_type, worker},
                 {dispatcher_port, 5056},
                 {ccm_nodes, [CCM]},
-                {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {heart_beat, 1}, {nif_prefix, './'}, {ca_dir, './cacerts/'}]]),
+                {dns_port, 1309}, {control_panel_port, 2309}, {control_panel_redirect_port, 1355}, {rest_port, 3309}, {heart_beat, 1}]]),
 
+    Assertions = [{false, lists:member(error, Nodes)}, {false, lists:member(error, StartLog)}],
+    lists:append([{nodes, Nodes}, {assertions, Assertions}], Config).
 
-    lists:append([{nodes, Nodes}], Config).
 
 end_per_testcase(_, Config) ->
     Nodes = ?config(nodes, Config),
-    test_node_starter:stop_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes),
-    test_node_starter:stop_test_nodes(Nodes).
+    StopLog = nodes_manager:stop_app_on_nodes(Nodes),
+    StopAns = nodes_manager:stop_nodes(Nodes),
+    ?assertEqual(false, lists:member(error, StopLog)),
+    ?assertEqual(ok, StopAns).
