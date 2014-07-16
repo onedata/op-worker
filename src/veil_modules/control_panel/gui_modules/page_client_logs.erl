@@ -412,7 +412,7 @@ process_log(Counter, {Message, Timestamp, Severity, Metadata},
                                                false ->
                                                    skip;
                                                true ->
-                                                   gui_jq:wire(<<"$('html, body').animate({scrollTop: $(document).height()}, 50);">>)
+                                                   gui_jq:wire(<<"$('html, body').animate({scrollTop: $(document).height()}, 0);">>)
                                            end,
                                            gui_comet:flush(),
                                            {Counter + 1, PageState#page_state{first_log = NewFirstLog}}

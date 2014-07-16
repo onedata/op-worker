@@ -136,7 +136,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% dispatch_log/4
 %% ====================================================================
-%% @doc Adds proper metadata if and sends the log to central_logger.
+%% @doc Adds proper metadata and sends the log to central_logger.
 -spec dispatch_log(Message :: string(), Timestamp :: term(), Severity :: atom(), OldMetadata :: list()) -> Result when
     Result :: ok | central_logger_not_running.
 %% ====================================================================
