@@ -30,8 +30,9 @@ namespace veil {
 boost::recursive_mutex CommunicationHandler::m_instanceMutex;
 SSL_SESSION* CommunicationHandler::m_session = 0;
 
-CommunicationHandler::CommunicationHandler(const string &p_hostname, int p_port, cert_info_fun p_getCertInfo)
-    : m_hostname(p_hostname),
+CommunicationHandler::CommunicationHandler(const string &p_hostname, int p_port, cert_info_fun p_getCertInfo, const bool checkCertificate)
+    : m_checkCertificate(checkCertificate),
+      m_hostname(p_hostname),
       m_port(p_port),
       m_getCertInfo(p_getCertInfo),
       m_connectStatus(CLOSED),
@@ -496,7 +497,7 @@ context_ptr CommunicationHandler::onTLSInit(websocketpp::connection_hdl hdl)
                          boost::asio::ssl::context::single_dh_use);
 
         ctx->set_default_verify_paths();
-        ctx->set_verify_mode(helpers::config::checkCertificate.load()
+        ctx->set_verify_mode(m_checkCertificate
                              ? boost::asio::ssl::verify_peer
                              : boost::asio::ssl::verify_none);
 

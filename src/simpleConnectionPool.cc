@@ -22,10 +22,14 @@ using namespace std;
 
 namespace veil {
 
-SimpleConnectionPool::SimpleConnectionPool(const string &hostname, int port, cert_info_fun certInfoFun, int metaPoolSize, int dataPoolSize) :
-    m_hostname(hostname),
-    m_port(port),
-    m_getCertInfo(certInfoFun)
+SimpleConnectionPool::SimpleConnectionPool(const string &hostname, int port,
+                                           cert_info_fun certInfoFun,
+                                           const bool checkCertificate,
+                                           int metaPoolSize, int dataPoolSize)
+    : m_hostname(hostname)
+    , m_port(port)
+    , m_getCertInfo(certInfoFun)
+    , m_checkCertificate{checkCertificate}
 {
     m_connectionPools[META_POOL] = ConnectionPoolInfo(metaPoolSize);
     m_connectionPools[DATA_POOL] = ConnectionPoolInfo(dataPoolSize);
@@ -78,7 +82,7 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(Pool
 
         lock.unlock();
 
-        conn.reset(new CommunicationHandler(connectTo, m_port, m_getCertInfo));
+        conn.reset(new CommunicationHandler(connectTo, m_port, m_getCertInfo, m_checkCertificate));
         conn->setFuseID(m_fuseId);  // Set FuseID that shall be used by this connection as session ID
         if(m_pushCallback)                          // Set callback that shall be used for PUSH messages and error messages
             conn->setPushCallback(m_pushCallback);  // Note that this doesnt enable/register PUSH channel !

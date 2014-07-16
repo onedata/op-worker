@@ -15,6 +15,8 @@
 #include <string>
 #include "helpers/IStorageHelper.h"
 
+#include <boost/filesystem/path.hpp>
+
 namespace veil {
 namespace helpers {
 
@@ -25,7 +27,7 @@ namespace helpers {
 class DirectIOHelper : public IStorageHelper {
 
     public:
-        DirectIOHelper(std::vector<std::string>);               ///< This storage helper uses only the first element of args vector.
+        DirectIOHelper(const ArgsMap&);         ///< This storage helper uses only the first element of args vector.
                                                                 ///< It shall be ablosute path to diretory used by this storage helper as root mount point.
 
         int sh_getattr(const char *path, struct stat *stbuf) ;
@@ -67,6 +69,10 @@ class DirectIOHelper : public IStorageHelper {
         int sh_removexattr(const char *path, const char *name) ;
         #endif // HAVE_SETXATTR
 
+private:
+        boost::filesystem::path root(const boost::filesystem::path &path);
+
+        const boost::filesystem::path m_rootPath;
 };
 
 } // namespace helpers
