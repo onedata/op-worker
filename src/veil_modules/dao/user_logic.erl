@@ -278,10 +278,10 @@ get_teams(User) ->
 %% ====================================================================
 update_teams(#veil_document{record = UserInfo} = UserDoc, NewTeams) ->
     NewDoc = UserDoc#veil_document{record = UserInfo#user{teams = NewTeams}},
-    [create_space_dir(Team) || Team <- get_space_names(NewDoc)], %% Create team dirs in DB if they dont exist
+    [create_space_dir(SpaceInfo) || SpaceInfo <- get_spaces(NewDoc)], %% Create team dirs in DB if they dont exist
     case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
         {ok, UUID} ->
-            create_dirs_at_storage(non, get_space_names(NewDoc)),
+            create_dirs_at_storage(non, get_spaces(NewDoc)),
             dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
         {error, Reason} ->
           ?error("Cannot update user ~p teams: ~p", [UserInfo, Reason]),
@@ -738,11 +738,34 @@ get_spaces(UserQuery) ->
 create_space_dir(#space_info{uuid = SpaceId, name = SpaceName} = SpaceInfo) ->
     CTime = vcn_utils:time(),
 
-    case dao_lib:apply(dao_vfs, exist_file, ["/" ++ SpaceName], 1) of
+    GroupsBase = case dao_lib:apply(dao_vfs, exist_file, ["/" ++ ?SPACES_BASE_DIR_NAME], 1) of
+                     {ok, true} ->
+                         case dao_lib:apply(dao_vfs, get_file, ["/" ++ ?SPACES_BASE_DIR_NAME], 1) of
+                             {ok, #veil_document{uuid = UUID}} ->
+                                 UUID;
+                             {error, Reason} ->
+                                 ?error("Error while getting groups base dir: ~p", [Reason]),
+                                 error({error, Reason})
+                         end;
+                     {ok, false} ->
+                         GFile = #file{type = ?DIR_TYPE, name = ?SPACES_BASE_DIR_NAME, uid = "0", parent = "", perms = 8#755},
+                         GFileDoc = fslogic_meta:update_meta_attr(GFile, times, {CTime, CTime, CTime}),
+                         case dao_lib:apply(dao_vfs, save_new_file, ["/" ++ ?SPACES_BASE_DIR_NAME, GFileDoc], 1) of
+                             {ok, UUID} -> UUID;
+                             {error, Reason} ->
+                                 ?error("Error while creating groups base dir: ~p", [Reason]),
+                                 error({error, Reason})
+                         end;
+                     {error, Reason} ->
+                         ?error("Error while checking existence of groups base dir: ~p", [Reason]),
+                         error({error, Reason})
+                 end,
+
+    case dao_lib:apply(dao_vfs, exist_file, [fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, SpaceName])], 1) of
         {ok, true} ->
             {error, dir_exists};
         {ok, false} ->
-            TFile = #file{type = ?DIR_TYPE, name = SpaceName, uid = "0", gids = [SpaceName], perms = ?SpaceDirPerm, extensions = [{?file_space_info_extestion, SpaceInfo}]},
+            TFile = #file{parent = GroupsBase, type = ?DIR_TYPE, name = SpaceName, uid = "0", gids = [SpaceName], perms = ?SpaceDirPerm, extensions = [{?file_space_info_extestion, SpaceInfo}]},
             TFileDoc = fslogic_meta:update_meta_attr(TFile, times, {CTime, CTime, CTime}),
             dao_lib:apply(dao_vfs, save_file, [#veil_document{uuid = SpaceId, record = TFileDoc}], 1);
         Error ->

@@ -52,8 +52,11 @@ get_user_file_name(FullFileName) ->
 %% ====================================================================
 get_user_file_name(FullFileName, UserDoc) ->
     {ok, Tokens} = verify_file_name(FullFileName),
-
-    absolute_join(Tokens).
+    case Tokens of
+        [] -> "";
+        _ ->
+            filename:join(Tokens)
+    end.
 
 
 %% get_full_file_name/1
@@ -95,6 +98,7 @@ get_full_file_name(FileName, Request) ->
 
 get_full_file_name(FileName, Request, UserDocStatus, UserDoc) ->
     {ok, Tokens} = verify_file_name(FileName),
+    ?info("get_full_file_name ~p ~p", [FileName, Tokens]),
     VerifiedFileName = string:join(Tokens, "/"),
     case UserDocStatus of
         ok ->
@@ -102,10 +106,10 @@ get_full_file_name(FileName, Request, UserDocStatus, UserDoc) ->
                 ok ->
                     case Tokens of %% Map all /groups/* requests to root of the file system (i.e. dont add any prefix)
                         [?SPACES_BASE_DIR_NAME | SpaceTokens] ->
-                            {ok, absolute_join(SpaceTokens)};
+                            {ok, filename:join([?SPACES_BASE_DIR_NAME | SpaceTokens])};
                         _ ->
                             Root = get_user_root(UserDoc),
-                            {ok, absolute_join([Root | Tokens])}
+                            {ok, filename:join([?SPACES_BASE_DIR_NAME, Root] ++ Tokens)}
                     end;
                 _ -> {error, invalid_group_access}
             end;
@@ -115,7 +119,7 @@ get_full_file_name(FileName, Request, UserDocStatus, UserDoc) ->
 
 
 absolute_join(Tokens) ->
-    "/" ++ filename:join(Tokens).
+    filename:join(["/" | Tokens]).
 
 %% verify_file_name/1
 %% ====================================================================

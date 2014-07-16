@@ -793,7 +793,7 @@ check_access_type(File) ->
       case lists:nth(1, FileTokens) of
         "users" ->
           {ok, {user, lists:nth(2, FileTokens)}};
-        "groups" ->
+        ?SPACES_BASE_DIR_NAME ->
           {ok, {group, lists:nth(2, FileTokens)}};
         _ ->
           {error, wrong_path_format}

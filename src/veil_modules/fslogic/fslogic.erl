@@ -289,7 +289,8 @@ handle_fuse_message(Req = #createdir{dir_logic_name = FName, mode = Mode}) ->
 
 handle_fuse_message(Req = #getfilechildren{dir_logic_name = FName, offset = Offset, children_num = Count}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_req_special:get_file_children(FullFileName, Offset, Count);
+    {ok, UserPathTokens} = fslogic_path:verify_file_name(FName),
+    fslogic_req_special:get_file_children(FullFileName, UserPathTokens, Offset, Count);
 
 handle_fuse_message(Req = #deletefile{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
