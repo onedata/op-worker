@@ -179,7 +179,7 @@ public:
         NO_ERROR            = 0
     };
 
-    CommunicationHandler(const std::string &hostname, int port, cert_info_fun,const bool checkCertificate
+    CommunicationHandler(const std::string &hostname, int port, cert_info_fun, const bool checkCertificate,
                          boost::shared_ptr<ws_client> endpoint);
     virtual ~CommunicationHandler();
 

@@ -273,7 +273,7 @@ context_ptr SimpleConnectionPool::ConnectionPoolInfo::onTLSInit(websocketpp::con
                          boost::asio::ssl::context::single_dh_use);
 
         ctx->set_default_verify_paths();
-        ctx->set_verify_mode(helpers::config::checkCertificate.load()
+        ctx->set_verify_mode(m_checkCertificate
                              ? boost::asio::ssl::verify_peer
                              : boost::asio::ssl::verify_none);
 
