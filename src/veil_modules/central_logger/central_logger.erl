@@ -115,8 +115,10 @@ handle(_ProtocolVersion, LogMessage) when is_record(LogMessage, logmessage) ->
                undefined ->
                    "unknown";
                UserDN ->
-                   {ok, UserDoc} = user_logic:get_user({dn, UserDN}),
-                   user_logic:get_login(UserDoc)
+                   case user_logic:get_user({dn, UserDN}) of
+                       {ok, UserDoc} -> user_logic:get_login(UserDoc);
+                       _ -> "unknown"
+                   end
            end,
     FuseID = case fslogic_context:get_fuse_id() of
                  undefined ->
