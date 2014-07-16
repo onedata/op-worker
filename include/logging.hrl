@@ -12,8 +12,12 @@
 -ifndef(LOGGING_HRL).
 -define(LOGGING_HRL, 1).
 
-% List of available loglevels
--define(LOGLEVEL_LIST, [debug, info, notice, warning, error, critical, alert, emergency]).
+% List of available loglevels in cluster
+-define(CLUSTER_LOGLEVELS, [debug, info, notice, warning, error, critical, alert, emergency]).
+% Available loglevels in clients
+-define(CLIENT_LOGLEVELS, [debug, info, warning, error, fatal]).
+% Client loglevel to discard all logs
+-define(CLIENT_LOGLEVEL_NONE, none).
 
 %% ===================================================================
 % Macros that should be used in code for logging
@@ -105,7 +109,7 @@
 % Must be called from original function where the log is,
 % so that the process info makes sense
 -define(gather_metadata,
-    [{node, node()}, {pid, self()}, {line, ?LINE}] ++
+    [{pid, self()}, {line, ?LINE}] ++
         logger:parse_process_info(process_info(self(), current_function)) ++
         case fslogic_context:get_user_dn() of
             undefined -> [];
