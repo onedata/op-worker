@@ -254,7 +254,7 @@ get_xrds(URL) ->
 %% ====================================================================
 %% @doc
 %% Parses user's teams from XML to a list of strings. Returns an empty list
-%% for empty XML.
+%% for empty XML. NOTE! Returns a list of unicode strings.
 %% @end
 -spec parse_teams(string()) -> [string()].
 %% ====================================================================
@@ -266,7 +266,7 @@ parse_teams(XMLContent) ->
     #xmlElement{content = TeamList} = find_XML_node(teams, XML),
     lists:map(
         fun(#xmlElement{content = [#xmlText{value = Value}]}) ->
-            binary_to_list(unicode:characters_to_binary(Value, unicode))
+            Value
         end, TeamList).
 
 
