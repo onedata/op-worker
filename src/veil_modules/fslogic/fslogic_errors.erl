@@ -35,13 +35,13 @@ gen_error_code({error, Reason}) ->
 gen_error_code(file_not_found) ->
     {?VENOENT, no_details};
 gen_error_code({permission_denied, Details}) ->
-    {?VEPERM, {permission_denied, Details}};
+    {?VEACCES, {permission_denied, Details}};
 gen_error_code(user_not_found) ->
     {?VEPERM, user_not_found};
 gen_error_code(user_doc_not_found) ->
     {?VEPERM, user_doc_not_found};
 gen_error_code(invalid_group_access) ->
-    {?VEPERM, invalid_group_access};
+    {?VEACCES, invalid_group_access};
 gen_error_code(file_exists) ->
     {?VEEXIST, file_already_exists};
 

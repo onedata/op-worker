@@ -36,10 +36,11 @@ body() ->
                     body = <<"No session or session expired. Please log in.">>}},
                 #panel{class = <<"alert alert-success login-page">>, body = [
                     #h3{body = <<"Welcome to VeilFS">>},
-                    #p{class = <<"login-info">>, body = <<"Logging in is handled by <b>PL-Grid OpenID</b>.",
+                    #p{class = <<"login-info">>, body = <<"Logging in is handled by <b>PL-Grid OpenID</b>. ",
                     "You need to have an account and possibly VeilFS service enabled.">>},
                     #button{postback = login, class = <<"btn btn-primary btn-block">>, body = <<"Log in via PL-Grid OpenID">>}
-                ]}
+                ]},
+                gui_utils:cookie_policy_popup_body(?privacy_policy_url)
             ] ++ vcn_gui_utils:logotype_footer(120)
                 % Logout from PLGrid if there is no active session - the user might still have a session there
                 ++ [#p{body = <<"<iframe src=\"https://openid.plgrid.pl/logout\" style=\"display:none\"></iframe>">>}]}

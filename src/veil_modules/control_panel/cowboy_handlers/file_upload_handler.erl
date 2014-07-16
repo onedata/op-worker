@@ -107,7 +107,7 @@ handle_upload_request(Req) ->
                     {struct, [
                         {files, [
                             {struct, [
-                                {name, list_to_binary(OriginalFileName)}
+                                {name, OriginalFileName}
                             ]}
                         ]}
                     ]}),
@@ -137,9 +137,9 @@ handle_upload_request(Req) ->
 handle_rest_upload(Req, Path, Overwrite) ->
     case cowboy_req:parse_header(<<"content-length">>, Req) of
         {ok, Length, NewReq} when is_integer(Length) ->
-            case try_to_create_file(binary_to_list(Path), Overwrite) of
+            case try_to_create_file(gui_str:binary_to_unicode_list(Path), Overwrite) of
                 ok ->
-                    case parse_rest_upload(NewReq, binary_to_list(Path)) of
+                    case parse_rest_upload(NewReq, gui_str:binary_to_unicode_list(Path)) of
                         {true, NewReq2} ->
                             {{body, rest_utils:success_reply(?success_file_uploaded)}, NewReq2};
                         {false, NewReq2} ->
@@ -283,7 +283,7 @@ get_field_name(Headers) ->
     try
         ContentDispValue = proplists:get_value(<<"content-disposition">>, Headers),
         {"form-data", [], Params} = parse_header(ContentDispValue),
-        proplists:get_value("name", Params, "")
+        gui_str:to_binary(proplists:get_value("name", Params, ""))
     catch _:_ ->
         erlang:error({cannot_parse_field_name, Headers})
     end.
@@ -293,7 +293,7 @@ get_field_name(Headers) ->
 accumulate_body(Req, Acc) ->
     case cowboy_req:multipart_data(Req) of
         {end_of_part, NewReq} ->
-            {binary_to_list(Acc), NewReq};
+            {Acc, NewReq};
         {body, Binary, NewReq} ->
             accumulate_body(NewReq, <<Acc/binary, Binary/binary>>)
     end.
@@ -301,12 +301,12 @@ accumulate_body(Req, Acc) ->
 
 % Parses a portion of multipart data that holds file body
 parse_file(Req, Headers, Params) ->
-    TargetDir = case proplists:get_value("targetDir", Params) of
-                    undefined -> throw({"Error in parse_file", no_upload_target_specified});
+    TargetDir = case proplists:get_value(<<"targetDir">>, Params) of
+                    undefined -> throw("Error in parse_file - no upload target specified");
                     Path -> Path
                 end,
     OriginalFileName = get_file_name(Headers),
-    RequestedFullPath = filename:absname(OriginalFileName, TargetDir),
+    RequestedFullPath = gui_str:binary_to_unicode_list(filename:absname(OriginalFileName, TargetDir)),
     FullPath = ensure_unique_filename(RequestedFullPath, 0),
     NewReq = try
         stream_file_to_fslogic(Req, FullPath, get_upload_buffer_size())
@@ -391,7 +391,7 @@ get_file_name(Headers) ->
         ContentDispValue = proplists:get_value(<<"content-disposition">>, Headers),
         {"form-data", [], Params} = parse_header(ContentDispValue),
         Filename = proplists:get_value("filename", Params, ""),
-        Filename
+        gui_str:to_binary(Filename)
     catch _:_ ->
         erlang:error({cannot_parse_file_name, Headers})
     end.
