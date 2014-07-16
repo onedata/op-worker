@@ -18,17 +18,12 @@
 #include "communicationHandler.h"
 #include "veilErrors.h"
 
-<<<<<<< HEAD
-=======
 #include <atomic>
 #include <condition_variable>
-#include <ctime>
-#include <list>
 #include <memory>
 #include <mutex>
 #include <thread>
 
->>>>>>> 28e045a... VFS-711 Include condition_variable header where needed.
 #define DEFAULT_POOL_SIZE 2
 #define MAX_CONNECTION_ERROR_COUNT 5
 

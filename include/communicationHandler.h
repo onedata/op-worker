@@ -27,8 +27,6 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/unordered_map.hpp>
 
-
-
 // PB decoder name
 #define FUSE_MESSAGES "fuse_messages"
 #define COMMUNICATION_PROTOCOL "communication_protocol"
