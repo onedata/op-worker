@@ -43,7 +43,7 @@ public:
 
     class ConnectionPoolInfo {
     public:
-        ConnectionPoolInfo(cert_info_fun getCertInfo, unsigned int s = DEFAULT_POOL_SIZE);
+        ConnectionPoolInfo(cert_info_fun getCertInfo, unsigned int s = DEFAULT_POOL_SIZE, const bool checkCertificate = false);
         ~ConnectionPoolInfo();
 
         boost::shared_ptr<ws_client> endpoint = boost::make_shared<ws_client>();
@@ -52,6 +52,7 @@ public:
         unsigned int size;
 
     private:
+        const bool m_checkCertificate;
         context_ptr onTLSInit(websocketpp::connection_hdl hdl);
         void onSocketInit(websocketpp::connection_hdl hdl, socket_type &socket);
 
