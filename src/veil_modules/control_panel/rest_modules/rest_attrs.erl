@@ -50,7 +50,7 @@ methods_and_versions_info(Req) ->
 %% ====================================================================
 exists(Req, _Version, Id) ->
     try
-        Filepath = binary_to_list(Id),
+        Filepath = gui_str:binary_to_unicode_list(Id),
         {ok, Attr} = logical_files_manager:getfileattr(Filepath),
         % Remember file attrs for later use
         erlang:put(file_attr, Attr),
@@ -130,5 +130,19 @@ put(Req, <<"1.0">>, _Id, _Data) ->
 %% @end
 -spec map(#fileattributes{}) -> [{binary(), binary()}].
 %% ==================================================================== 
-map(Record) ->
-    rest_utils:map(Record, [mode, uid, gid, atime, mtime, ctime, type, size, uname, gname, links]).
+map(FileAttrs) ->
+    #fileattributes{mode = Mode, uid = Uid, gid = Gid, atime = Atime, mtime = Mtime, ctime = Ctime,
+        type = Type, size = Size, uname = Uname, gname = Gname, links = Links} = FileAttrs,
+    [
+        {<<"mode">>, Mode},
+        {<<"uid">>, Uid},
+        {<<"gid">>, Gid},
+        {<<"atime">>, Atime},
+        {<<"mtime">>, Mtime},
+        {<<"ctime">>, Ctime},
+        {<<"type">>, Type},
+        {<<"size">>, Size},
+        {<<"uname">>, gui_str:unicode_list_to_binary(Uname)},
+        {<<"gname">>, gui_str:unicode_list_to_binary(Gname)},
+        {<<"links">>, Links}
+    ].
