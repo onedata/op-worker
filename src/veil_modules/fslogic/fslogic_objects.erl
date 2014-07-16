@@ -169,7 +169,7 @@ get_file_helper(ProtocolVersion, File, FuseID, Fun) ->
             case fslogic_context:get_user_dn() of %% Internal call, allow all group access
                 undefined   -> dao_lib:apply(dao_vfs, Fun, [File], ProtocolVersion);
                 UserDN      -> %% Check if user has access to this group
-                    Teams = user_logic:get_team_names({dn, UserDN}),
+                    Teams = user_logic:get_space_names({dn, UserDN}),
                     case lists:member(GroupName, Teams) of %% Does the user belong to the group?
                         true  -> dao_lib:apply(dao_vfs, Fun, [File], ProtocolVersion);
                         false -> {error, file_not_found} %% Assume that this file does not exists

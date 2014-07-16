@@ -802,8 +802,8 @@ setup_ctx(File) ->
             fslogic_context:set_fs_user_ctx(UserName),
             case check_access_type(File) of
                 {ok, {group, GroupName}} ->
-                    SelectedGroup = [X || X <- user_logic:get_team_names(UserRec), GroupName =:= X],
-                    NewGroupCtx = SelectedGroup ++ user_logic:get_team_names(UserRec),
+                    SelectedGroup = [X || X <- user_logic:get_space_names(UserRec), GroupName =:= X],
+                    NewGroupCtx = SelectedGroup ++ user_logic:get_space_names(UserRec),
                     fslogic_context:set_fs_group_ctx(NewGroupCtx),
                     ok;
                 _ ->

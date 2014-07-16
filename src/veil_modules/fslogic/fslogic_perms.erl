@@ -109,7 +109,7 @@ assert_grp_access(UserDoc, Request, [?SPACES_BASE_DIR_NAME | Tail]) ->
 
     case TailCheck of
         ok ->
-            UserTeams = user_logic:get_team_names(UserDoc),
+            UserTeams = user_logic:get_space_names(UserDoc),
             [GroupName2 | _] = Tail,
             case lists:member(GroupName2, UserTeams) of
                 true    -> ok;

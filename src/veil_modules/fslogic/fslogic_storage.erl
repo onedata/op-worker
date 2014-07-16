@@ -248,10 +248,10 @@ get_fuse_group(FuseID) ->
 add_dirs_for_existing_users(Storage) ->
   case user_logic:list_all_users() of
     {ok, Users} ->
-      LoginsAndTeams = lists:map(fun(X) -> {user_logic:get_login(X), user_logic:get_team_names(X)} end, Users),
+      LoginsAndSpaces = lists:map(fun(X) -> {user_logic:get_login(X), user_logic:get_spaces(X)} end, Users),
       CreateDirs =
-        fun({Login, Teams}, TmpAns) ->
-          case user_logic:create_dirs_at_storage(Login, Teams, Storage) of
+        fun({Login, Spaces}, TmpAns) ->
+          case user_logic:create_dirs_at_storage(Login, Spaces, Storage) of
             ok ->
               TmpAns;
             Error ->
@@ -259,7 +259,7 @@ add_dirs_for_existing_users(Storage) ->
               Error
           end
         end,
-      lists:foldl(CreateDirs, ok, LoginsAndTeams);
+      lists:foldl(CreateDirs, ok, LoginsAndSpaces);
     {error, Error} ->
       ?error("Can not list all users, error: ~p", [Error]),
       {error, Error}

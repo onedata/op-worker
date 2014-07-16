@@ -27,7 +27,7 @@
 -export([get_dn_list/1, update_dn_list/2, get_unverified_dn_list/1, update_unverified_dn_list/2]).
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
--export([get_team_names/1]).
+-export([get_space_names/1]).
 -export([create_dirs_at_storage/3]).
 -export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/2]).
 
@@ -102,10 +102,10 @@ create_user(Login, Name, Teams, Email, DnList) ->
     {
         login = Login,
         name = Name,
-        teams = case Teams of
-                    Teams when is_list(Teams) -> Teams;
-                    _ -> []
-                end,
+%%         teams = case Teams of
+%%                     Teams when is_list(Teams) -> Teams;
+%%                     _ -> []
+%%                 end,
         email_list = case Email of
                          Email when is_list(Email) -> [Email];
                          _ -> []
@@ -121,35 +121,20 @@ create_user(Login, Name, Teams, Email, DnList) ->
     },
     {DaoAns, UUID} = dao_lib:apply(dao_users, save_user, [User], 1),
     try
-        erase(created_root_dir),
         case {DaoAns, QuotaAns} of
             {ok, ok} ->
                 GetUserAns = get_user({uuid, UUID}),
 
-                [create_team_dir(Team) || Team <- get_team_names(User)], %% Create team dirs in DB if they don't exist
+                [create_space_dir(Space) || Space <- get_space_names(User)], %% Create space dirs in DB if they don't exist
 
                 {GetUserFirstAns, UserRec} = GetUserAns,
                 case GetUserFirstAns of
                     ok ->
-                        RootAns = create_root(Login, UserRec#veil_document.uuid),
-                        case RootAns of
-                            {ok, RootUUID} ->
-                                put(created_root_dir, RootUUID),
-                                case create_dirs_at_storage(Login, get_team_names(User)) of
-                                    ok -> ok;
-                                    DirsError -> throw(DirsError)
-                                end,
-                                GetUserAns;
-                            {error, file_exists} ->
-                                ?warning("Root dir for user ~p already exists!", [Login]),
-                                case create_dirs_at_storage(Login, get_team_names(User)) of
-                                    ok -> ok;
-                                    DirsError2 -> throw(DirsError2)
-                                end,
-                                GetUserAns;
-                            _ ->
-                                throw(RootAns)
-                        end;
+                        case create_dirs_at_storage(Login, get_spaces(User)) of
+                            ok -> ok;
+                            DirsError -> throw(DirsError)
+                        end,
+                        GetUserAns;
                     _ ->
                         throw(GetUserAns)
                 end;
@@ -167,11 +152,6 @@ create_user(Login, Name, Teams, Email, DnList) ->
             case DaoAns of
                 ok ->
                     dao_lib:apply(dao_users, remove_user, [{uuid, UUID}], 1);
-                _ -> already_clean
-            end,
-            case get(created_root_dir) of
-                RootDir when is_list(RootDir) ->
-                    dao_lib:apply(dao_vfs, remove_file, [{uuid, RootDir}], 1);
                 _ -> already_clean
             end,
             Error
@@ -302,10 +282,10 @@ get_teams(User) ->
 %% ====================================================================
 update_teams(#veil_document{record = UserInfo} = UserDoc, NewTeams) ->
     NewDoc = UserDoc#veil_document{record = UserInfo#user{teams = NewTeams}},
-    [create_team_dir(Team) || Team <- get_team_names(NewDoc)], %% Create team dirs in DB if they dont exist
+    [create_space_dir(Team) || Team <- get_space_names(NewDoc)], %% Create team dirs in DB if they dont exist
     case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
         {ok, UUID} ->
-            create_dirs_at_storage(non, get_team_names(NewDoc)),
+            create_dirs_at_storage(non, get_space_names(NewDoc)),
             dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
         {error, Reason} ->
           ?error("Cannot update user ~p teams: ~p", [UserInfo, Reason]),
@@ -663,50 +643,29 @@ shortname_to_oid_code(Shortname) ->
         throw({unknown_shortname, Shortname})
     end.
 
-
-%% create_root/2
-%% ====================================================================
-%% @doc Creates root directory for user.
-%% @end
--spec create_root(Dir :: string(), Uid :: term()) -> {ok, uuid()} | {error, atom()}.
-%% ====================================================================
-create_root(Dir, Uid) ->
-    {ParentFound, ParentInfo} = fslogic_path:get_parent_and_name_from_path(Dir, 1),
-    case ParentFound of
-        ok ->
-            {FileName, Parent} = ParentInfo,
-            File = #file{type = ?DIR_TYPE, name = FileName, uid = Uid, parent = Parent#veil_document.uuid, perms = ?UserRootPerms},
-            CTime = vcn_utils:time(),
-            FileDoc = fslogic_meta:update_meta_attr(File, times, {CTime, CTime, CTime}),
-            dao_lib:apply(dao_vfs, save_new_file, [Dir, FileDoc], 1);
-        _ParentError ->
-          ?error("Cannot create root dir ~p for uid, error: ~p", [Dir, Uid, {parent_error, _ParentError}]),
-          {error,parent_error}
-    end.
-
 %% create_dirs_at_storage/2
 %% ====================================================================
 %% @doc Creates root dir for user and for its teams, on all storages
 %% @end
--spec create_dirs_at_storage(Root :: string(), Teams :: [string()]) -> ok | {error, Error} when
+-spec create_dirs_at_storage(Root :: string(), SpacesInfo :: [#space_info{}]) -> ok | {error, Error} when
     Error :: atom().
 %% ====================================================================
-create_dirs_at_storage(Root, Teams) ->
+create_dirs_at_storage(Root, SpacesInfo) ->
     {ListStatus, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], 1),
     case ListStatus of
         ok ->
-					StorageRecords = lists:map(fun(VeilDoc) -> VeilDoc#veil_document.record end, StorageList),
-					CreateDirs = fun(StorageRecord,TmpAns) ->
-						case create_dirs_at_storage(Root,Teams,StorageRecord) of
-							ok -> TmpAns;
-							Error ->
-							  ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, Teams}, Error]),
-							  Error
-						end
-					end,
-					lists:foldl(CreateDirs,ok , StorageRecords);
+            StorageRecords = lists:map(fun(VeilDoc) -> VeilDoc#veil_document.record end, StorageList),
+            CreateDirs = fun(StorageRecord,TmpAns) ->
+                case create_dirs_at_storage(Root,SpacesInfo,StorageRecord) of
+                    ok -> TmpAns;
+                    Error ->
+                      ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, SpacesInfo}, Error]),
+                      Error
+                end
+            end,
+            lists:foldl(CreateDirs,ok , StorageRecords);
         Error2 ->
-          ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, Teams}, {storage_listing_error, Error2}]),
+          ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, SpacesInfo}, {storage_listing_error, Error2}]),
           {error,storage_listing_error}
     end.
 
@@ -714,26 +673,27 @@ create_dirs_at_storage(Root, Teams) ->
 %% ====================================================================
 %% @doc Creates root dir for user and for its teams. Only on selected storage
 %% @end
--spec create_dirs_at_storage(Root :: string(), Teams :: [string()], Storage :: #storage_info{}) -> ok | {error, Error} when
+-spec create_dirs_at_storage(Root :: string(), SpacesInfo :: [#space_info{}], Storage :: #storage_info{}) -> ok | {error, Error} when
     Error :: atom().
 %% ====================================================================
-create_dirs_at_storage(Root, Teams, Storage) ->
+create_dirs_at_storage(Root, SpacesInfo, Storage) ->
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
 
-    CreateTeamsDirs = fun(Dir, TmpAns) ->
-        DirName = "groups/" ++ Dir,
+    CreateTeamsDirs = fun(#space_info{name = Dir}, TmpAns) ->
+        DirName = filename:join(["", ?SPACES_BASE_DIR_NAME, DirName]),
         Ans = storage_files_manager:mkdir(SHI, DirName),
         case Ans of
             SuccessAns when SuccessAns == ok orelse SuccessAns == {error, dir_or_file_exists} ->
-                Ans2 = storage_files_manager:chown(SHI, DirName, "", Dir),
-                Ans3 = storage_files_manager:chmod(SHI, DirName, 8#1730),
+                Ans2 = storage_files_manager:chown(SHI, DirName, "", fslogic_spaces:map_to_grp_owner(Dir)),
+                Ans3 = storage_files_manager:chmod(SHI, DirName, 8#1750),
                 case {Ans2, Ans3} of
                     {ok, ok} ->
                         TmpAns;
                     Error1 ->
                         ?error("Can not change owner of dir ~p using storage helper ~p due to ~p. Make sure group '~s' is defined in the system.",
                             [Dir, SHI#storage_helper_info.name, Error1, Dir]),
-                        {error, dir_chown_error}
+                        {error, dir_chown_error},
+                        TmpAns
                 end;
             _ ->
                 ?error("Can not create dir ~p using storage helper ~p. Make sure group '~s' is defined in the system.",
@@ -742,66 +702,7 @@ create_dirs_at_storage(Root, Teams, Storage) ->
         end
     end,
 
-    {RootDirAns, RootDirCreated} = case Root of
-                                       non ->
-                                           {ok, false};
-                                       _ ->
-                                           RootDirName = "users/" ++ Root,
-                                           Ans = storage_files_manager:mkdir(SHI, RootDirName),
-                                           case Ans of
-                                               ok ->
-                                                   %% Change only UID. Don't touch GID since group with name that equals user's name can be missing
-                                                   %% @todo: scan user groups and try to chown with first group name on the list (not critical)
-                                                   Ans3 = storage_files_manager:chown(SHI, RootDirName, Root, ""),
-                                                   Ans4 = storage_files_manager:chmod(SHI, RootDirName, 8#300),
-                                                   case {Ans3, Ans4} of
-                                                       {ok, ok} ->
-                                                           {ok, true};
-                                                       Error2 ->
-                                                           ?error("Can not change owner of dir ~p using storage helper ~p due to ~p. Make sure user '~s' is defined in the system.",
-                                                               [Root, SHI#storage_helper_info.name, Error2, Root]),
-                                                           {{error, dir_chown_error}, true}
-                                                   end;
-                                               {error, dir_or_file_exists} ->
-                                                   ?warning("User root dir ~p already exists", [RootDirName]),
-                                                   Ans3 = storage_files_manager:chown(SHI, RootDirName, Root, ""),
-                                                   Ans4 = storage_files_manager:chmod(SHI, RootDirName, 8#300),
-                                                   case {Ans3, Ans4} of
-                                                       {ok, ok} ->
-                                                           {ok, false};
-                                                       _ ->
-                                                           ?error("Can not change owner of dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
-                                                               [Root, SHI#storage_helper_info.name, Root]),
-                                                           {{error, dir_chown_error}, false}
-                                                   end;
-                                               _ ->
-                                                   ?error("Can not create dir ~p using storage helper ~p. Make sure user '~s' is defined in the system.",
-                                                       [Root, SHI#storage_helper_info.name, Root]),
-                                                   {{error, create_dir_error}, false}
-                                           end
-                                   end,
-
-    case RootDirAns of
-        ok ->
-            TeamDirsAns = lists:foldl(CreateTeamsDirs, ok, Teams),
-            case {TeamDirsAns, RootDirCreated} of
-                {ok, _} ->
-                    ok;
-                {TeamsError, true} ->
-                    storage_files_manager:delete_dir(SHI, "users/" ++ Root),
-                    TeamsError;
-                {TeamsError2, false} ->
-                    TeamsError2
-            end;
-        RootError ->
-            case RootDirCreated of
-                true ->
-                    storage_files_manager:delete_dir(SHI, "users/" ++ Root),
-                    RootError;
-                false ->
-                    RootError
-            end
-    end.
+    lists:foldl(CreateTeamsDirs, ok, SpacesInfo).
 
 %% get_team_names/1
 %% ====================================================================
@@ -809,15 +710,23 @@ create_dirs_at_storage(Root, Teams, Storage) ->
 %%      or query compatible with user_logic:get_user/1.
 %%      The method assumes that user exists therefore will fail with exception when it doesnt.
 %% @end
--spec get_team_names(UserQuery :: term()) -> [string()] | no_return().
+-spec get_space_names(UserQuery :: term()) -> [string()] | no_return().
 %% ====================================================================
-get_team_names(#veil_document{record = #user{} = User}) ->
-    get_team_names(User);
-get_team_names(#user{spaces = Spaces}) ->
-    [SpaceName || {ok, #space_info{name = SpaceName}} <- lists:map(fun(SpaceId) -> fslogic_objects:get_space(SpaceId) end, Spaces)];
-get_team_names(UserQuery) ->
+get_space_names(#veil_document{record = #user{} = User}) ->
+    get_space_names(User);
+get_space_names(#user{} = User) ->
+    [SpaceName || #space_info{name = SpaceName} <- get_spaces(User)];
+get_space_names(UserQuery) ->
     {ok, UserDoc} = user_logic:get_user(UserQuery),
-    get_team_names(UserDoc).
+    get_space_names(UserDoc).
+
+get_spaces(#veil_document{record = #user{} = User}) ->
+    get_spaces(User);
+get_spaces(#user{spaces = Spaces}) ->
+    [SpaceInfo || {ok, #space_info{}} = SpaceInfo <- lists:map(fun(SpaceId) -> fslogic_objects:get_space(SpaceId) end, Spaces)];
+get_spaces(UserQuery) ->
+    {ok, UserDoc} = user_logic:get_user(UserQuery),
+    get_spaces(UserDoc).
 
 
 %% create_team_dir/1
@@ -826,9 +735,9 @@ get_team_names(UserQuery) ->
 %%      Method will fail with exception error only when base group dir cannot be reached nor created.
 %%      Otherwise standard {ok, ...} and  {error, ...} tuples will be returned.
 %% @end
--spec create_team_dir(Dir :: string()) -> {ok, UUID :: uuid()} | {error, Reason :: any()} | no_return().
+-spec create_space_dir(Dir :: string()) -> {ok, UUID :: uuid()} | {error, Reason :: any()} | no_return().
 %% ====================================================================
-create_team_dir(TeamName) ->
+create_space_dir(TeamName) ->
     CTime = vcn_utils:time(),
     GroupsBase = case dao_lib:apply(dao_vfs, exist_file, ["/" ++ ?SPACES_BASE_DIR_NAME], 1) of
                      {ok, true} ->

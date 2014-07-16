@@ -127,7 +127,7 @@ get_files_number(Type, GroupName, ProtocolVersion) ->
 get_user_groups(UserDocStatus, UserDoc) ->
     case UserDocStatus of
         ok ->
-            {ok, user_logic:get_team_names(UserDoc)};
+            {ok, user_logic:get_space_names(UserDoc)};
         _ ->
             {error, UserDoc}
     end.
