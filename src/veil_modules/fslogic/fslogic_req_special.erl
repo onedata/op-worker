@@ -90,8 +90,9 @@ get_file_children(FullFileName, ROffset, RCount) ->
     {ok, TmpAns} = dao_lib:apply(dao_vfs, list_dir, [FullFileName, Num, Offset], fslogic_context:get_protocol_version()),
 
     Children = fslogic_utils:create_children_list(TmpAns),
+    UserRoot = fslogic_path:get_user_root(),
     case {ROffset, TokenizedPath} of
-        {0, []}    -> %% When asking about root, add virtual ?GROUPS_BASE_DIR_NAME entry
+        {0, [UserRoot]}    -> %% When asking about root, add virtual ?SPACES_BASE_DIR_NAME entry
             #filechildren{child_logic_name = Children ++ [?SPACES_BASE_DIR_NAME]}; %% Only for offset = 0
         {_, [?SPACES_BASE_DIR_NAME]} -> %% For group list query ignore DB result and generate list based on user's teams
             Teams = user_logic:get_space_names({dn, fslogic_context:get_user_dn()}),

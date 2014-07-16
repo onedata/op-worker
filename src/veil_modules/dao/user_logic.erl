@@ -27,7 +27,8 @@
 -export([get_dn_list/1, update_dn_list/2, get_unverified_dn_list/1, update_unverified_dn_list/2]).
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
--export([get_space_names/1]).
+-export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
+-export([get_space_names/1, create_space_dir/1]).
 -export([create_dirs_at_storage/3, create_dirs_at_storage/2]).
 -export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/2]).
 
@@ -120,7 +121,7 @@ create_user(Login, Name, Teams, Email, DnList) ->
             {ok, ok} ->
                 GetUserAns = get_user({uuid, UUID}),
 
-                [create_space_dir(Space) || Space <- get_space_names(User)], %% Create space dirs in DB if they don't exist
+                [create_space_dir(Space) || Space <- get_spaces(User)], %% Create space dirs in DB if they don't exist
 
                 {GetUserFirstAns, UserRec} = GetUserAns,
                 case GetUserFirstAns of
@@ -137,8 +138,8 @@ create_user(Login, Name, Teams, Email, DnList) ->
                 throw({error, {UUID, QuotaUUID}})
         end
     catch
-        _Type:Error ->
-            ?error("Creating user failed with error: ~p", [Error]),
+        Type:Error ->
+            ?error_stacktrace("Creating user failed with error: ~p", [Error]),
             case QuotaAns of
                 ok ->
                     dao_lib:apply(dao_users, remove_quota, [QuotaUUID], 1);
@@ -149,7 +150,7 @@ create_user(Login, Name, Teams, Email, DnList) ->
                     dao_lib:apply(dao_users, remove_user, [{uuid, UUID}], 1);
                 _ -> already_clean
             end,
-            Error
+            {error, {Type, Error}}
     end.
 
 
@@ -673,15 +674,16 @@ create_dirs_at_storage(Root, SpacesInfo) ->
 %% ====================================================================
 create_dirs_at_storage(Root, SpacesInfo, Storage) ->
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
+    fslogic_context:clear_user_dn(),
 
     CreateTeamsDirs = fun(#space_info{name = Dir} = SpaceInfo, TmpAns) ->
         DirName = filename:join(["", ?SPACES_BASE_DIR_NAME, Dir]),
-        storage_files_manager:mkdir(SHI, filename:join(["", ?SPACES_BASE_DIR_NAME])),
+        BaseAns = storage_files_manager:mkdir(SHI, filename:join(["", ?SPACES_BASE_DIR_NAME])),
         Ans = storage_files_manager:mkdir(SHI, DirName),
         case Ans of
             SuccessAns when SuccessAns == ok orelse SuccessAns == {error, dir_or_file_exists} ->
                 Ans2 = storage_files_manager:chown(SHI, DirName, "", fslogic_spaces:map_to_grp_owner(SpaceInfo)),
-                Ans3 = storage_files_manager:chmod(SHI, DirName, SpaceDirPerm),
+                Ans3 = storage_files_manager:chmod(SHI, DirName, ?SpaceDirPerm),
                 case {Ans2, Ans3} of
                     {ok, ok} ->
                         TmpAns;
@@ -691,9 +693,9 @@ create_dirs_at_storage(Root, SpacesInfo, Storage) ->
                         {error, dir_chown_error},
                         TmpAns
                 end;
-            _ ->
-                ?error("Can not create dir ~p using storage helper ~p. Make sure group '~s' is defined in the system.",
-                    [Dir, SHI#storage_helper_info.name, Dir]),
+            Error ->
+                ?error("Can not create dir ~p using storage ~p due to ~p. Make sure group '~s' is defined in the system.",
+                    [DirName, Storage, Error, fslogic_spaces:map_to_grp_owner(SpaceInfo)]),
                 {error, create_dir_error}
         end
     end,
@@ -719,13 +721,13 @@ get_space_names(UserQuery) ->
 get_spaces(#veil_document{record = #user{} = User}) ->
     get_spaces(User);
 get_spaces(#user{spaces = Spaces}) ->
-    [SpaceInfo || {ok, #space_info{}} = SpaceInfo <- lists:map(fun(SpaceId) -> fslogic_objects:get_space(SpaceId) end, Spaces)];
+    [SpaceInfo || {ok, #space_info{} = SpaceInfo}  <- lists:map(fun(SpaceId) -> fslogic_objects:get_space(SpaceId) end, Spaces)];
 get_spaces(UserQuery) ->
     {ok, UserDoc} = user_logic:get_user(UserQuery),
     get_spaces(UserDoc).
 
 
-%% create_team_dir/1
+%% create_space_dir/1
 %% ====================================================================
 %% @doc Creates directory (in DB) for given group/team name. If base group dir (/groups) doesnt exists, its created too.
 %%      Method will fail with exception error only when base group dir cannot be reached nor created.
@@ -733,38 +735,16 @@ get_spaces(UserQuery) ->
 %% @end
 -spec create_space_dir(Dir :: string()) -> {ok, UUID :: uuid()} | {error, Reason :: any()} | no_return().
 %% ====================================================================
-create_space_dir(TeamName) ->
+create_space_dir(#space_info{uuid = SpaceId, name = SpaceName} = SpaceInfo) ->
     CTime = vcn_utils:time(),
-    GroupsBase = case dao_lib:apply(dao_vfs, exist_file, ["/" ++ ?SPACES_BASE_DIR_NAME], 1) of
-                     {ok, true} ->
-                         case dao_lib:apply(dao_vfs, get_file, ["/" ++ ?SPACES_BASE_DIR_NAME], 1) of
-                             {ok, #veil_document{uuid = UUID}} ->
-                                 UUID;
-                             {error, Reason} ->
-                                 ?error("Error while getting groups base dir: ~p", [Reason]),
-                                 error({error, Reason})
-                         end;
-                     {ok, false} ->
-                         GFile = #file{type = ?DIR_TYPE, name = ?SPACES_BASE_DIR_NAME, uid = "0", parent = "", perms = 8#555},
-                         GFileDoc = fslogic_meta:update_meta_attr(GFile, times, {CTime, CTime, CTime}),
-                         case dao_lib:apply(dao_vfs, save_new_file, ["/" ++ ?SPACES_BASE_DIR_NAME, GFileDoc], 1) of
-                             {ok, UUID} -> UUID;
-                             {error, Reason} ->
-                                 ?error("Error while creating groups base dir: ~p", [Reason]),
-                                 error({error, Reason})
-                         end;
-                     {error, Reason} ->
-                         ?error("Error while checking existence of groups base dir: ~p", [Reason]),
-                         error({error, Reason})
-                 end,
 
-    case dao_lib:apply(dao_vfs, exist_file, ["/" ++ ?SPACES_BASE_DIR_NAME ++ "/" ++ TeamName], 1) of
+    case dao_lib:apply(dao_vfs, exist_file, ["/" ++ SpaceName], 1) of
         {ok, true} ->
             {error, dir_exists};
         {ok, false} ->
-            TFile = #file{type = ?DIR_TYPE, name = TeamName, uid = "0", gids = [TeamName], parent = GroupsBase, perms = ?SpaceDirPerm},
+            TFile = #file{type = ?DIR_TYPE, name = SpaceName, uid = "0", gids = [SpaceName], perms = ?SpaceDirPerm, extensions = [{?file_space_info_extestion, SpaceInfo}]},
             TFileDoc = fslogic_meta:update_meta_attr(TFile, times, {CTime, CTime, CTime}),
-            dao_lib:apply(dao_vfs, save_new_file, ["/" ++ ?SPACES_BASE_DIR_NAME ++ "/" ++ TeamName, TFileDoc], 1);
+            dao_lib:apply(dao_vfs, save_file, [#veil_document{uuid = SpaceId, record = TFileDoc}], 1);
         Error ->
             Error
     end.

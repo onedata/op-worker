@@ -17,12 +17,12 @@
 
 initialize(#space_info{uuid = SpaceId, name = SpaceName} = SpaceInfo) ->
     File = #file{type = ?DIR_TYPE, perms = 8#770, name = SpaceName, extensions = [{?file_space_info_extestion, SpaceInfo}]},
-    case dao_lib:apply(vfs, save_file, [#veil_document{record = File, uuid = SpaceId}], 1) of
+    case user_logic:create_space_dir(SpaceInfo) of
         {ok, _} ->
             user_logic:create_dirs_at_storage(non, [SpaceInfo]),
             {ok, SpaceInfo};
-        {error, confilct} ->
-            {ok, #veil_document{record = #file{extensions = Ext} = File} = FileDoc} = dao_lib:apply(vfs, get_space_file),
+        {error, dir_exists} ->
+            {ok, #veil_document{record = #file{extensions = Ext} = File} = FileDoc} = dao_lib:apply(dao_vfs, get_space_file, [{uuid, SpaceId}], 1),
             NewExt = lists:keyreplace(?file_space_info_extestion, 1, Ext, {?file_space_info_extestion, SpaceInfo}),
             NewFile = #file{extensions = NewExt},
             {ok, _} = dao_lib:apply(vfs, save_file, [FileDoc#veil_document{record = NewFile}], 1),

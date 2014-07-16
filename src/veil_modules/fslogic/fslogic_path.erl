@@ -53,13 +53,7 @@ get_user_file_name(FullFileName) ->
 get_user_file_name(FullFileName, UserDoc) ->
     {ok, Tokens} = verify_file_name(FullFileName),
 
-    UserRec = dao_lib:strip_wrappers(UserDoc),
-    UserName = UserRec#user.login,
-
-    case Tokens of
-        [UserName | UserTokens] -> "/" ++ string:join(UserTokens, "/");
-        _ -> "/" ++ string:join(Tokens, "/")
-    end.
+    absolute_join(Tokens).
 
 
 %% get_full_file_name/1

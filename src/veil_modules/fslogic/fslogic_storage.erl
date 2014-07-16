@@ -44,9 +44,7 @@ get_new_file_id(File, UserDoc, SHInfo, ProtocolVersion) ->
       {[?SPACES_BASE_DIR_NAME, GroupName | _], _} -> %% Group dir context
         {"/" ++ ?SPACES_BASE_DIR_NAME ++ "/" ++ GroupName, fslogic_utils:get_files_number(group, GroupName, ProtocolVersion)};
       {_, #veil_document{uuid = ?CLUSTER_USER_ID}} ->
-        {"/", fslogic_utils:get_files_number(user, UserDoc#veil_document.uuid, ProtocolVersion)};
-      _ ->
-        {"/users/" ++ fslogic_path:get_user_root(UserDoc), fslogic_utils:get_files_number(user, UserDoc#veil_document.uuid, ProtocolVersion)}
+        {"/", fslogic_utils:get_files_number(user, UserDoc#veil_document.uuid, ProtocolVersion)}
     end,
   File_id_beg =
     case CountStatus of
