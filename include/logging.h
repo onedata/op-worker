@@ -122,6 +122,7 @@ private:
     void pushMessage(const protocol::logging::LogMessage &msg);
     protocol::logging::LogMessage popMessage();
     void writeLoop();
+    bool sendNextMessage();
     void dropExcessMessages();
 
     const pid_t m_pid;

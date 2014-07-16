@@ -35,7 +35,7 @@ CommunicationHandler::CommunicationHandler(const string &p_hostname, int p_port,
       m_port(p_port),
       m_getCertInfo(p_getCertInfo),
       m_connectStatus(CLOSED),
-      m_currentMsgId(1),
+      m_nextMsgId(1),
       m_errorCount(0),
       m_isPushChannel(false),
       m_lastConnectTime(0)
@@ -319,7 +319,7 @@ void CommunicationHandler::closePushChannel()
     Answer ans = communicate(msg, 0);    // Send PUSH channel close request
 }
 
-int32_t CommunicationHandler::sendMessage(ClusterMsg& msg, int32_t msgId)
+int32_t CommunicationHandler::sendMessage(ClusterMsg& msg, MsgId msgId)
 {
     if(m_connectStatus != CONNECTED)
         throw static_cast<ConnectionStatus>(m_connectStatus);
@@ -344,7 +344,7 @@ int32_t CommunicationHandler::sendMessage(ClusterMsg& msg, int32_t msgId)
     return msgId;
 }
 
-int32_t CommunicationHandler::sendMessage(ClusterMsg& msg, int32_t msgId, ConnectionStatus &ec)
+int32_t CommunicationHandler::sendMessage(ClusterMsg& msg, MsgId msgId, ConnectionStatus &ec)
 {
     try
     {
@@ -359,14 +359,14 @@ int32_t CommunicationHandler::sendMessage(ClusterMsg& msg, int32_t msgId, Connec
     return 0;
 }
 
-int32_t CommunicationHandler::getMsgId()
+MsgId CommunicationHandler::getMsgId()
 {
-    unique_lock lock(m_msgIdMutex);
-    m_currentMsgId = (m_currentMsgId % MAX_GENERATED_MSG_ID) + 1;
-    return m_currentMsgId;
+    std::lock_guard<std::mutex> guard{m_msgIdMutex};
+    m_nextMsgId = (m_nextMsgId % MAX_GENERATED_MSG_ID) + 1;
+    return m_nextMsgId;
 }
 
-int CommunicationHandler::receiveMessage(Answer& answer, int32_t msgId, uint32_t timeout)
+int CommunicationHandler::receiveMessage(Answer& answer, MsgId msgId, uint32_t timeout)
 {
     unique_lock lock(m_receiveMutex);
 
@@ -547,6 +547,9 @@ void CommunicationHandler::onMessage(websocketpp::connection_hdl hdl, message_pt
     Answer answer;
 
     if(!answer.ParseFromString(msg->get_payload()))   // Ignore invalid answer
+        return;
+
+    if(answer.message_id() == IGNORE_ANSWER_MSG_ID)   // Ignore ignored answer
         return;
 
     if(answer.message_id() < 0) // PUSH message
