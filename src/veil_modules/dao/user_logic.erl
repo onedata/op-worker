@@ -28,18 +28,12 @@
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
 -export([get_space_names/1]).
--export([create_dirs_at_storage/3]).
+-export([create_dirs_at_storage/3, create_dirs_at_storage/2]).
 -export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/2]).
 
 -define(UserRootPerms, 8#600).
--define(TeamDirPerm, 8#1770).
+-define(SpaceDirPerm, 8#1770).
 
-%% ====================================================================
-%% Test API
-%% ====================================================================
--ifdef(TEST).
--export([create_dirs_at_storage/2]).
--endif.
 
 %% ====================================================================
 %% API functions
@@ -687,7 +681,7 @@ create_dirs_at_storage(Root, SpacesInfo, Storage) ->
         case Ans of
             SuccessAns when SuccessAns == ok orelse SuccessAns == {error, dir_or_file_exists} ->
                 Ans2 = storage_files_manager:chown(SHI, DirName, "", fslogic_spaces:map_to_grp_owner(SpaceInfo)),
-                Ans3 = storage_files_manager:chmod(SHI, DirName, 8#1750),
+                Ans3 = storage_files_manager:chmod(SHI, DirName, SpaceDirPerm),
                 case {Ans2, Ans3} of
                     {ok, ok} ->
                         TmpAns;
@@ -768,7 +762,7 @@ create_space_dir(TeamName) ->
         {ok, true} ->
             {error, dir_exists};
         {ok, false} ->
-            TFile = #file{type = ?DIR_TYPE, name = TeamName, uid = "0", gids = [TeamName], parent = GroupsBase, perms = ?TeamDirPerm},
+            TFile = #file{type = ?DIR_TYPE, name = TeamName, uid = "0", gids = [TeamName], parent = GroupsBase, perms = ?SpaceDirPerm},
             TFileDoc = fslogic_meta:update_meta_attr(TFile, times, {CTime, CTime, CTime}),
             dao_lib:apply(dao_vfs, save_new_file, ["/" ++ ?SPACES_BASE_DIR_NAME ++ "/" ++ TeamName, TFileDoc], 1);
         Error ->

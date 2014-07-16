@@ -26,7 +26,7 @@ get_space_info(SpaceId) ->
         {ok, Response} ->
             ?info("Resp: ~p", [Response]),
             #{<<"name">> := SpaceName} = Response,
-            {ok, #space_info{uuid = SpaceId, name = SpaceName}};
+            {ok, #space_info{uuid = SpaceId, name = binary_to_list(SpaceName)}};
         {error, Reason} ->
             {error, Reason}
     end.
