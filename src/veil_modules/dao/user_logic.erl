@@ -680,7 +680,7 @@ create_dirs_at_storage(Root, SpacesInfo, Storage) ->
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
 
     CreateTeamsDirs = fun(#space_info{name = Dir}, TmpAns) ->
-        DirName = filename:join(["", ?SPACES_BASE_DIR_NAME, DirName]),
+        DirName = filename:join(["", ?SPACES_BASE_DIR_NAME, Dir]),
         Ans = storage_files_manager:mkdir(SHI, DirName),
         case Ans of
             SuccessAns when SuccessAns == ok orelse SuccessAns == {error, dir_or_file_exists} ->
