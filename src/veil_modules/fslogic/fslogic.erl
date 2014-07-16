@@ -263,9 +263,9 @@ handle_fuse_message(Req = #getfileattr{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_generic:get_file_attr(FullFileName);
 
-handle_fuse_message(Req = #getfilelocation{file_logic_name = FName}) ->
+handle_fuse_message(Req = #getfilelocation{file_logic_name = FName, open_mode = OpenMode}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_req_regular:get_file_location(FullFileName);
+    fslogic_req_regular:get_file_location(FullFileName,OpenMode);
 
 handle_fuse_message(Req = #getnewfilelocation{file_logic_name = FName, mode = Mode}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
@@ -336,5 +336,5 @@ handle_custom_request({getfileattr, UUID}) ->
 
 handle_custom_request({getfilelocation, UUID}) ->
     {ok, FileDoc} = dao_lib:apply(dao_vfs, get_file, [{uuid, UUID}], fslogic_context:get_protocol_version()),
-    fslogic_req_regular:get_file_location(FileDoc).
+    fslogic_req_regular:get_file_location(FileDoc,?UNSPECIFIED_MODE).
 

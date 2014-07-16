@@ -448,7 +448,7 @@ encode_answer_record(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker
                                            end
                                        catch
                                            Type:Error ->
-                                               ?error("Ranch handler error during encoding worker answer: ~p:~p, answer type: ~s, decoder ~s, worker answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Worker_Answer]),
+                                               ?error("Ranch handler error during encoding worker answer: ~p:~p, answer type: ~p, decoder ~p, worker answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Worker_Answer]),
                                                #answer{answer_status = "worker_answer_encoding_error", message_id = MsgId}
                                        end
                                end;
@@ -457,7 +457,7 @@ encode_answer_record(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker
                                #answer{answer_status = atom_to_list(Main_Answer2), message_id = MsgId}
                            catch
                                Type:Error ->
-                                   ?error("Ranch handler error during encoding main answer: ~p:~p, main answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Main_Answer2]),
+                                   ?error("Ranch handler error during encoding main answer: ~p:~p, answer type: ~p, decoder ~p, main answer ~p", [Type, Error, AnswerType, Answer_decoder_name, Main_Answer2]),
                                    #answer{answer_status = "main_answer_encoding_error", message_id = MsgId}
                            end
                    end,

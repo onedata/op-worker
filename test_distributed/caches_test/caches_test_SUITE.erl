@@ -53,8 +53,8 @@ worker_code() ->
 
 cache_loop() ->
   receive
-    {clear_sipmle_cache, LoopTime, Fun, StrongCacheConnection} ->
-      worker_host:clear_sipmle_cache(LoopTime, Fun, StrongCacheConnection),
+    {clear_simple_cache, LoopTime, Fun, StrongCacheConnection} ->
+      worker_host:clear_simple_cache(LoopTime, Fun, StrongCacheConnection),
       cache_loop();
     stop_cache -> ok
   end.

@@ -227,17 +227,22 @@ top_menu(ActiveTabID) ->
 top_menu(ActiveTabID, SubMenuBody) ->
     % Tab, that will be displayed optionally
     PageCaptions =
-        case can_view_logs() of
-            false -> [];
-            true -> [{logs_tab, #li{body = [
-                #link{style = <<"padding: 18px;">>, url = <<"/logs">>, body = <<"Logs">>}
-            ]}}]
-        end ++
         case can_view_monitoring() of
             false -> [];
             true -> [{monitoring_tab, #li{body = [
                 #link{style = <<"padding: 18px;">>, url = <<"/monitoring">>, body = <<"Monitoring">>}
             ]}}]
+        end ++
+        case can_view_logs() of
+            false -> [];
+            true -> [
+                {cluster_logs_tab, #li{body = [
+                    #link{style = <<"padding: 18px;">>, url = <<"/cluster_logs">>, body = <<"Cluster logs">>}
+                ]}},
+                {client_logs_tab, #li{body = [
+                    #link{style = <<"padding: 18px;">>, url = <<"/client_logs">>, body = <<"Client logs">>}
+                ]}}
+            ]
         end,
     % Define menu items with ids, so that proper tab can be made active via function parameter
     % see old_menu_captions()
@@ -254,7 +259,7 @@ top_menu(ActiveTabID, SubMenuBody) ->
     MenuIcons =
         [
             {manage_account_tab, #li{body = #link{style = <<"padding: 18px;">>, title = <<"Manage account">>,
-                url = <<"/manage_account">>, body = [gui_str:to_binary(get_user_fullname()), #span{class = <<"fui-user">>,
+                url = <<"/manage_account">>, body = [gui_str:unicode_list_to_binary(get_user_fullname()), #span{class = <<"fui-user">>,
                     style = <<"margin-left: 10px;">>}]}}},
             %{contact_support_tab, #li { body=#link{ style="padding: 18px;", title="Contact & Support",
             %    url="/contact_support", body=#span{ class="fui-question" } } } },
@@ -280,14 +285,16 @@ top_menu(ActiveTabID, SubMenuBody) ->
             end
         end, MenuIcons),
 
-    #panel{class = <<"navbar navbar-fixed-top">>, body = [
-        #panel{class = <<"navbar-inner">>, style = <<"border-bottom: 2px solid gray;">>, body = [
-            #panel{class = <<"container">>, body = [
-                #list{class = <<"nav pull-left">>, body = MenuCaptionsProcessed},
-                #list{class = <<"nav pull-right">>, body = MenuIconsProcessed}
+    [
+        #panel{class = <<"navbar navbar-fixed-top">>, body = [
+            #panel{class = <<"navbar-inner">>, style = <<"border-bottom: 2px solid gray;">>, body = [
+                #panel{class = <<"container">>, body = [
+                    #list{class = <<"nav pull-left">>, body = MenuCaptionsProcessed},
+                    #list{class = <<"nav pull-right">>, body = MenuIconsProcessed}
+                ]}
             ]}
-        ]}
-    ] ++ SubMenuBody}.
+        ] ++ SubMenuBody}
+    ] ++ gui_utils:cookie_policy_popup_body(?privacy_policy_url).
 
 
 %% logotype_footer/1

@@ -6,14 +6,15 @@
 %% @end
 %% ===================================================================
 %% @doc: This file contains n2o website code.
-%% The page (available for admins only) allows live viewing of logs in the system.
+%% The page (available for admins only) allows live viewing of cluster logs in the system.
 %% @end
 %% ===================================================================
 
--module(page_logs).
+% n2o API
+-module(page_cluster_logs).
+-include_lib("ctool/include/logging.hrl").
 -include("veil_modules/control_panel/common.hrl").
 -include("registered_names.hrl").
--include_lib("ctool/include/logging.hrl").
 
 % n2o API and comet
 -export([main/0, event/1, api_event/3, comet_loop/2]).
@@ -32,9 +33,10 @@
 }).
 
 % Widths of columns
--define(SEVERITY_COLUMN_WIDTH, "width: 90px;").
--define(TIME_COLUMN_WIDTH, "width: 180px;").
--define(METADATA_COLUMN_WIDTH, "width: 300px;").
+-define(SEVERITY_COLUMN_STYLE, "width: 90px; padding: 6px 12px;").
+-define(TIME_COLUMN_STYLE, "width: 180px; padding: 6px 12px;").
+-define(MESSAGE_COLUMN_STYLE, "padding: 6px 12px;").
+-define(METADATA_COLUMN_STYLE, "width: 300px; padding: 6px 12px;").
 
 % Prefixes used to generate IDs for logs
 -define(COLLAPSED_LOG_ROW_ID_PREFIX, "clr").
@@ -61,14 +63,14 @@ main() ->
 
 
 %% Page title
-title() -> <<"Logs">>.
+title() -> <<"Cluster logs">>.
 
 
 % This will be placed instead of [[[body()]]] tag in template
 body() ->
     gui_jq:register_escape_event("escape_pressed"),
     _Body = [
-        vcn_gui_utils:top_menu(logs_tab, logs_submenu()),
+        vcn_gui_utils:top_menu(cluster_logs_tab, logs_submenu()),
         #panel{style = <<"margin-top: 122px; z-index: -1;">>, body = main_table()},
         footer_popup()
     ].
@@ -131,10 +133,10 @@ main_table() ->
         style = <<"border-radius: 0; margin-bottom: 0; table-layout: fixed; width: 100%;">>,
         body = [
             #tr{cells = [
-                #th{body = <<"Severity">>, style = <<?SEVERITY_COLUMN_WIDTH>>},
-                #th{body = <<"Time">>, style = <<?TIME_COLUMN_WIDTH>>},
-                #th{body = <<"Message">>},
-                #th{body = <<"Metadata">>, style = <<?METADATA_COLUMN_WIDTH>>}
+                #th{body = <<"Severity">>, style = <<?SEVERITY_COLUMN_STYLE>>},
+                #th{body = <<"Time">>, style = <<?TIME_COLUMN_STYLE>>},
+                #th{body = <<"Message">>, style = <<?MESSAGE_COLUMN_STYLE>>},
+                #th{body = <<"Metadata">>, style = <<?METADATA_COLUMN_STYLE>>}
             ]}
         ]}.
 
@@ -194,38 +196,46 @@ comet_loop_init() ->
 
 % Comet loop - waits for new logs, updates the page and repeats. Handles messages that change logging preferences.
 comet_loop(Counter, PageState = #page_state{first_log = FirstLog, auto_scroll = AutoScroll}) ->
-    try
-        receive
-            {log, Log} ->
-                {NewCounter, NewPageState} = process_log(Counter, Log, PageState),
-                ?MODULE:comet_loop(NewCounter, NewPageState);
-            toggle_auto_scroll ->
-                ?MODULE:comet_loop(Counter, PageState#page_state{auto_scroll = not AutoScroll});
-            clear_all_logs ->
-                remove_old_logs(Counter, FirstLog, 0),
-                ?MODULE:comet_loop(Counter, PageState#page_state{first_log = Counter});
-            {set_loglevel, Loglevel} ->
-                ?MODULE:comet_loop(Counter, PageState#page_state{loglevel = Loglevel});
-            {set_max_logs, MaxLogs} ->
-                NewFirstLog = remove_old_logs(Counter, FirstLog, MaxLogs),
-                ?MODULE:comet_loop(Counter, PageState#page_state{max_logs = MaxLogs, first_log = NewFirstLog});
-            {set_filter, FilterName, Filter} ->
-                ?MODULE:comet_loop(Counter, set_filter(PageState, FilterName, Filter));
-            display_error ->
-                catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}}),
-                gui_jq:insert_bottom(<<"main_table">>, comet_error()),
-                gui_comet:flush();
-            {'EXIT', _, _Reason} ->
-                catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}});
-            Other ->
-                ?debug("Unrecognized comet message in page_logs: ~p", [Other]),
-                ?MODULE:comet_loop(Counter, PageState)
-        end
-    catch _Type:_Msg ->
-        ?error_stacktrace("Error in page_logs comet_loop - ~p: ~p", [_Type, _Msg]),
-        catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, self()}}),
-        gui_jq:insert_bottom(<<"main_table">>, comet_error()),
-        gui_comet:flush()
+    Result =
+        try
+            receive
+                {log, Log} ->
+                    {NCounter, NPageState} = process_log(Counter, Log, PageState),
+                    {NCounter, NPageState};
+                toggle_auto_scroll ->
+                    {Counter, PageState#page_state{auto_scroll = not AutoScroll}};
+                clear_all_logs ->
+                    remove_old_logs(Counter, FirstLog, 0),
+                    {Counter, PageState#page_state{first_log = Counter}};
+                {set_loglevel, Loglevel} ->
+                    {Counter, PageState#page_state{loglevel = Loglevel}};
+                {set_max_logs, MaxLogs} ->
+                    NewFirstLog = remove_old_logs(Counter, FirstLog, MaxLogs),
+                    {Counter, PageState#page_state{max_logs = MaxLogs, first_log = NewFirstLog}};
+                {set_filter, FilterName, Filter} ->
+                    {Counter, set_filter(PageState, FilterName, Filter)};
+                display_error ->
+                    catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, client, self()}}),
+                    gui_jq:insert_bottom(<<"main_table">>, comet_error()),
+                    gui_comet:flush(),
+                    error;
+                {'EXIT', _, _Reason} ->
+                    catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, client, self()}}),
+                    error;
+                Other ->
+                    ?debug("Unrecognized comet message in page_logs: ~p", [Other]),
+                    {Counter, PageState}
+            end
+        catch _Type:_Msg ->
+            ?error_stacktrace("Error in page_logs comet_loop - ~p: ~p", [_Type, _Msg]),
+            catch gen_server:call(?Dispatcher_Name, {central_logger, 1, {unsubscribe, client, self()}}),
+            gui_jq:insert_bottom(<<"main_table">>, comet_error()),
+            gui_comet:flush(),
+            error
+        end,
+    case Result of
+        error -> ok; % Comet process terminates
+        {NewCounter, NewState} -> ?MODULE:comet_loop(NewCounter, NewState)
     end.
 
 
@@ -287,22 +297,21 @@ render_row(Counter, {Message, Timestamp, Severity, Metadata}) ->
 
     CollapsedRow = #tr{class = <<"log_row">>, id = CollapsedId,
         actions = gui_jq:postback_action(CollapsedId, {toggle_log, Counter, true}), cells = [
-            #td{body = format_severity(Severity), style = <<?SEVERITY_COLUMN_WIDTH>>},
-            #td{body = format_time(Timestamp), style = <<?TIME_COLUMN_WIDTH>>},
-            #td{body = gui_str:to_binary(Message), style = <<"text-wrap:normal; word-wrap:break-word; white-space: nowrap; overflow: hidden;">>},
-            #td{body = CollapsedMetadata, style = <<?METADATA_COLUMN_WIDTH, "white-space: nowrap; overflow: hidden;">>}
+            #td{body = format_severity(Severity), style = <<?SEVERITY_COLUMN_STYLE>>},
+            #td{body = format_time(Timestamp), style = <<?TIME_COLUMN_STYLE>>},
+            #td{body = gui_str:to_binary(Message), style = <<?MESSAGE_COLUMN_STYLE, " text-wrap:normal; word-wrap:break-word; white-space: nowrap; overflow: hidden;">>},
+            #td{body = CollapsedMetadata, style = <<?METADATA_COLUMN_STYLE, "white-space: nowrap; overflow: hidden;">>}
         ]},
 
     ExpandedRow = #tr{class = <<"log_row">>, style = <<"background-color: rgba(26, 188, 156, 0.05);">>, id = ExpandedId,
         actions = gui_jq:postback_action(ExpandedId, {toggle_log, Counter, false}), cells = [
-            #td{body = format_severity(Severity), style = <<?SEVERITY_COLUMN_WIDTH>>},
-            #td{body = format_time(Timestamp), style = <<?TIME_COLUMN_WIDTH>>},
-            #td{body = gui_str:to_binary(Message), style = <<"text-wrap:normal; word-wrap:break-word;">>},
-            #td{body = ExpandedMetadata, style = <<?METADATA_COLUMN_WIDTH>>}
+            #td{body = format_severity(Severity), style = <<?SEVERITY_COLUMN_STYLE>>},
+            #td{body = format_time(Timestamp), style = <<?TIME_COLUMN_STYLE>>},
+            #td{body = gui_str:to_binary(Message), style = <<?MESSAGE_COLUMN_STYLE, " text-wrap:normal; word-wrap:break-word;">>},
+            #td{body = ExpandedMetadata, style = <<?METADATA_COLUMN_STYLE>>}
         ]},
 
     [CollapsedRow, ExpandedRow].
-
 
 % Render the body of loglevel dropdown, so it highlights the current choice
 loglevel_dropdown_body(Active) ->
@@ -315,7 +324,7 @@ loglevel_dropdown_body(Active) ->
             ID = <<"loglevel_li_", (atom_to_binary(Loglevel, latin1))/binary>>,
             #li{id = ID, actions = gui_jq:postback_action(ID, {set_loglevel, Loglevel}),
                 class = Class, body = #link{body = atom_to_binary(Loglevel, latin1)}}
-        end, ?LOGLEVEL_LIST).
+        end, ?CLUSTER_LOGLEVELS).
 
 
 % Render the body of max logs dropdown, so it highlights the current choice
@@ -335,11 +344,11 @@ max_logs_dropdown_body(Active) ->
 % Render a row in table informing about error in comet loop
 comet_error() ->
     _TableRow = #tr{cells = [
-        #td{body = <<"Error">>, style = <<?SEVERITY_COLUMN_WIDTH, "color: red;">>},
-        #td{body = format_time(now()), style = <<?TIME_COLUMN_WIDTH, "color: red;">>},
+        #td{body = <<"Error">>, style = <<?SEVERITY_COLUMN_STYLE, "color: red;">>},
+        #td{body = format_time(now()), style = <<?TIME_COLUMN_STYLE, "color: red;">>},
         #td{body = <<"There has been an error in comet process. Please refresh the page.">>,
-            style = <<"body-wrap:normal; word-wrap:break-word; white-space: nowrap; overflow: hidden; color: red;">>},
-        #td{body = <<"">>, style = <<?METADATA_COLUMN_WIDTH, "color: red;">>}
+            style = <<?MESSAGE_COLUMN_STYLE, " body-wrap:normal; word-wrap:break-word; white-space: nowrap; overflow: hidden; color: red;">>},
+        #td{body = <<"">>, style = <<?METADATA_COLUMN_STYLE, "color: red;">>}
     ]}.
 
 
@@ -374,8 +383,8 @@ format_time(Timestamp) ->
 % Format metadata in logs, for collapsed and expanded logs
 format_metadata(Tags) ->
     Collapsed = case lists:keyfind(node, 1, Tags) of
-                    {Key, Value} ->
-                        <<"<b>", (gui_str:to_binary(Key))/binary, ":</b> ", (gui_str:to_binary(Value))/binary, " ...">>;
+                    {node, Value} ->
+                        <<"<b>node:</b> ", (gui_str:to_binary(Value))/binary, " ...">>;
                     _ ->
                         <<"<b>unknown node</b> ...">>
                 end,
@@ -412,7 +421,7 @@ event(init) ->
     {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init() end),
     put(comet_pid, Pid),
     % Subscribe for logs at central_logger
-    case gen_server:call(?Dispatcher_Name, {central_logger, 1, {subscribe, Pid}}) of
+    case gen_server:call(?Dispatcher_Name, {central_logger, 1, {subscribe, cluster, Pid}}) of
         ok -> ok;
         Other ->
             ?error("central_logger is unreachable. RPC call returned: ~p", [Other]),
@@ -510,7 +519,7 @@ event({toggle_filter, FilterName}) ->
 
 % Update patricular filter
 event({update_filter, FilterName}) ->
-    Filter = gui_ctx:form_param(gui_str:to_list(get_filter_textbox(FilterName))),
+    Filter = gui_ctx:postback_param(get_filter_textbox(FilterName)),
     case Filter of
         <<"">> ->
             put(filters, set_filter(get(filters), FilterName, undefined)),
@@ -536,7 +545,7 @@ event(generate_logs) ->
         fun(Severity) ->
             Message = lists:flatten(lists:duplicate(10, io_lib:format("~.36B", [random:uniform(98 * 567 * 456 * 235 * 232 * 3465 * 23552 * 3495 * 43534 * 345436 * 45)]))),
             lager:log(Severity, Metadata, Message)
-        end, ?LOGLEVEL_LIST).
+        end, ?CLUSTER_LOGLEVELS).
 
 
 % =====================

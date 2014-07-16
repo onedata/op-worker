@@ -120,7 +120,7 @@ groups_permissions_test(Config) ->
 
   {Status4, Answer4} = rename_file(Socket2, TestFile, TestFileNewName),
   ?assertEqual("ok", Status4),
-  ?assertEqual(list_to_atom(?VEPERM), Answer4),
+  ?assertEqual(list_to_atom(?VEACCES), Answer4),
 
   {Status5, Answer5} = rename_file(Socket, TestFile, TestFileNewName),
   ?assertEqual("ok", Status5),
@@ -128,7 +128,7 @@ groups_permissions_test(Config) ->
 
   {Status6, Answer6} = change_file_perms(Socket2, TestFileNewName, 8#400),
   ?assertEqual("ok", Status6),
-  ?assertEqual(list_to_atom(?VEPERM), Answer6),
+  ?assertEqual(list_to_atom(?VEACCES), Answer6),
 
   {Status7, Answer7} = change_file_perms(Socket, TestFileNewName, 8#400),
   ?assertEqual("ok", Status7),
@@ -136,11 +136,11 @@ groups_permissions_test(Config) ->
 
   {Status8, Answer8} = chown(Socket2, TestFileNewName, 0, Login2),
   ?assertEqual("ok", Status8),
-  ?assertEqual(list_to_atom(?VEPERM), Answer8),
+  ?assertEqual(list_to_atom(?VEACCES), Answer8),
 
   {Status9, Answer9} = chown(Socket, TestFileNewName, 0, Login2),
   ?assertEqual("ok", Status9),
-  ?assertEqual(list_to_atom(?VEPERM), Answer9),
+  ?assertEqual(list_to_atom(?VEACCES), Answer9),
 
   {GetFileAns, FileDoc} = rpc:call(FSLogicNode, dao_vfs, get_file, [TestFileNewName]),
   ?assertEqual(ok, GetFileAns),
@@ -162,7 +162,7 @@ groups_permissions_test(Config) ->
 
   {Status10, Answer10} = delete_file(Socket, TestFileNewName),
   ?assertEqual("ok", Status10),
-  ?assertEqual(list_to_atom(?VEPERM), Answer10),
+  ?assertEqual(list_to_atom(?VEACCES), Answer10),
 
   {Status11, Answer11} = delete_file(Socket2, TestFileNewName),
   ?assertEqual("ok", Status11),
@@ -170,11 +170,11 @@ groups_permissions_test(Config) ->
 
   {Status12, _, _, _, AnswerOpt12} = create_file(Socket, TestFile2),
   ?assertEqual("ok", Status12),
-  ?assertEqual(?VEPERM, AnswerOpt12),
+  ?assertEqual(?VEACCES, AnswerOpt12),
 
   {Status13, _, _, _, AnswerOpt13} = create_file(Socket, TestFile3),
   ?assertEqual("ok", Status13),
-  ?assertEqual(?VEPERM, AnswerOpt13),
+  ?assertEqual(?VEACCES, AnswerOpt13),
 
 
 
@@ -198,7 +198,7 @@ groups_permissions_test(Config) ->
 
   {Status16, _, _, _, AnswerOpt16} = create_file(Socket, TestDirFile),
   ?assertEqual("ok", Status16),
-  ?assertEqual(?VEPERM, AnswerOpt16),
+  ?assertEqual(?VEACCES, AnswerOpt16),
 
   {Status17, _, _, _, AnswerOpt17} = create_file(Socket2, TestDirFile),
   ?assertEqual("ok", Status17),
@@ -210,7 +210,7 @@ groups_permissions_test(Config) ->
 
   {Status18, Answer18} = mkdir(Socket, TestDirDir),
   ?assertEqual("ok", Status18),
-  ?assertEqual(list_to_atom(?VEPERM), Answer18),
+  ?assertEqual(list_to_atom(?VEACCES), Answer18),
 
   {Status19, Answer19} = mkdir(Socket2, TestDirDir),
   ?assertEqual("ok", Status19),
@@ -218,7 +218,7 @@ groups_permissions_test(Config) ->
 
   {Status20, Answer20} = create_link(Socket, LinkName, TestDirFile),
   ?assertEqual("ok", Status20),
-  ?assertEqual(list_to_atom(?VEPERM), Answer20),
+  ?assertEqual(list_to_atom(?VEACCES), Answer20),
 
   {Status21, Answer21} = create_link(Socket2, LinkName, TestDirFile),
   ?assertEqual("ok", Status21),
@@ -234,7 +234,7 @@ groups_permissions_test(Config) ->
 
   {Status24, Answer24} = rename_file(Socket, TestDirFile, TestFile4),
   ?assertEqual("ok", Status24),
-  ?assertEqual(list_to_atom(?VEPERM), Answer24),
+  ?assertEqual(list_to_atom(?VEACCES), Answer24),
 
   {Status25, Answer25} = rename_file(Socket2, TestDirFile, TestFile4),
   ?assertEqual("ok", Status25),
@@ -242,7 +242,7 @@ groups_permissions_test(Config) ->
 
   {Status26, Answer26} = rename_file(Socket, TestFile4, TestDirFile),
   ?assertEqual("ok", Status26),
-  ?assertEqual(list_to_atom(?VEPERM), Answer26),
+  ?assertEqual(list_to_atom(?VEACCES), Answer26),
 
   {Status27, Answer27} = rename_file(Socket2, TestFile4, TestDirFile),
   ?assertEqual("ok", Status27),
@@ -521,22 +521,22 @@ groups_test(Config) ->
 
     %% Test not allowed operations
     {"ok", A2} = mkdir(Socket1, "/groups/test"),
-    ?assertEqual(eperm, A2),
+    ?assertEqual(eacces, A2),
 
     {"ok", A3} = delete_file(Socket1, "/groups"),
-    ?assertEqual(eperm, A3),
+    ?assertEqual(eacces, A3),
 
     {"ok", A10} = delete_file(Socket1, "/groups/" ++ ?TEST_GROUP),
-    ?assertEqual(eperm, A10),
+    ?assertEqual(eacces, A10),
 
     {"ok", A11} = delete_file(Socket1, "/groups/" ++ ?TEST_GROUP2),
-    ?assertEqual(eperm, A11),
+    ?assertEqual(eacces, A11),
 
     {"ok", A4} = rename_file(Socket1, "/groups/" ++ ?TEST_GROUP2, "/test"),
-    ?assertEqual(eperm, A4),
+    ?assertEqual(eacces, A4),
 
     {"ok", A5} = rename_file(Socket1, "/groups", "/test"),
-    ?assertEqual(eperm, A5),
+    ?assertEqual(eacces, A5),
 
     {"ok", ok} = mkdir(Socket1, "/test"), %% Test dir
     {"ok", _, _, _, "ok"} = create_file(Socket1, "/file"), %% Test file
@@ -545,31 +545,31 @@ groups_test(Config) ->
     ?assertEqual(list_to_atom(?VOK), CreationAckAnswerOpt),
 
     {"ok", A6} = rename_file(Socket1, "/test", "/groups/test"),
-    ?assertEqual(eperm, A6),
+    ?assertEqual(eacces, A6),
 
     {"ok", A14} = rename_file(Socket1, "/file", "/groups/test"),
-    ?assertEqual(eperm, A14),
+    ?assertEqual(eacces, A14),
 
     {"ok", A7} = change_file_perms(Socket1, "/groups", 8#555),
-    ?assertEqual(eperm, A7),
+    ?assertEqual(eacces, A7),
 
     {"ok", A8} = change_file_perms(Socket1, "/groups/" ++ ?TEST_GROUP, 8#555),
-    ?assertEqual(eperm, A8),
+    ?assertEqual(eacces, A8),
 
     {"ok", A9} = change_file_perms(Socket1, "/groups/" ++ ?TEST_GROUP2, 8#555),
-    ?assertEqual(eperm, A9),
+    ?assertEqual(eacces, A9),
 
     {"ok", A12} = chown(Socket1, "/groups/" ++ ?TEST_GROUP2, 500, ?TEST_USER),
-    ?assertEqual(eperm, A12),
+    ?assertEqual(eacces, A12),
 
     {"ok", A13} = chown(Socket1, "/groups", 500, ?TEST_USER),
-    ?assertEqual(eperm, A13),
+    ?assertEqual(eacces, A13),
 
     {"ok",  _, _, _, A15} = create_file(Socket1, "/groups/file"),
-    ?assertEqual(eperm, list_to_atom(A15)),
+    ?assertEqual(eacces, list_to_atom(A15)),
 
     {"ok", A16} = create_link(Socket1, "/groups/file", "link"),
-    ?assertEqual(eperm, A16),
+    ?assertEqual(eacces, A16),
 
 
     %% Test groups visibility
@@ -2001,7 +2001,7 @@ users_separation_test(Config) ->
   %% chown test
   {Status23, Answer23} = chown(Socket, TestFile, 77777, "unknown"),
   ?assertEqual("ok", Status23),
-  ?assertEqual(list_to_atom(?VEPERM), Answer23),
+  ?assertEqual(list_to_atom(?VEACCES), Answer23),
 
   ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [Login ++ "/" ++ TestFile, Login2, 0])),
 %%   {Status24, Answer24} = chown(Socket, TestFile, 0, Login2),
@@ -2052,6 +2052,7 @@ users_separation_test(Config) ->
   ?assertEqual(Attr4#fileattr.mtime, FM_Attrs#fileattributes.mtime),
   ?assertEqual(Attr4#fileattr.atime, FM_Attrs#fileattributes.atime),
 
+  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [Login ++ "/" ++ TestFile, Login, UID1])),
   {Status6, Answer6} = delete_file(Socket, TestFile),
   ?assertEqual("ok", Status6),
   ?assertEqual(list_to_atom(?VOK), Answer6),
@@ -2066,6 +2067,7 @@ users_separation_test(Config) ->
   ?assertEqual(Helper4, Helper8),
   ?assertEqual(Id4, Id8),
 
+  ?assertEqual(ok, rpc:call(FSLogicNode, logical_files_manager, chown, [Login2 ++ "/" ++ TestFile, Login2, UID2])),
   {Status9, Answer9} = delete_file(Socket2, TestFile),
   ?assertEqual("ok", Status9),
   ?assertEqual(list_to_atom(?VOK), Answer9),

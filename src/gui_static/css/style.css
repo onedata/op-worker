@@ -94,15 +94,48 @@
 
 a.glyph-link
 {
-	color: rgb(82, 100, 118);
+    color: rgb(82, 100, 118);
 }
 
-a.glyph-link:hover 
+a.glyph-link:focus
 {
-	color: rgb(26, 188, 156) !important;
-	text-decoration: none;
-	background-color: transparent !important;
-	z-index: 1;
+    color: rgb(82, 100, 118) !important;
+}
+
+a.glyph-link:hover
+{
+    color: rgb(26, 188, 156) !important;
+    text-decoration: none;
+    background-color: transparent !important;
+    z-index: 1;
+}
+
+a.glyph-link-gray
+{
+    color: rgb(189, 195, 199);
+}
+
+a.glyph-link-gray:focus
+{
+    color: rgb(189, 195, 199) !important;
+}
+
+a.glyph-link-gray:hover
+{
+    color: rgb(26, 188, 156) !important;
+    text-decoration: none;
+    background-color: transparent !important;
+    z-index: 1;
+}
+
+a.glyph-link-active
+{
+    color: rgb(22, 160, 133)
+}
+
+a.glyph-link-active:focus
+{
+    color: rgb(22, 160, 133) !important;
 }
 
 a:focus
