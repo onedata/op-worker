@@ -1,3 +1,4 @@
+#!/bin/sh
 #####################################################################
 #  @author Rafal Slota
 #  @copyright (C): 2014 ACK CYFRONET AGH
@@ -15,6 +16,10 @@ fi
 
 if [[ -z "$SETUP_DIR" ]]; then
     export SETUP_DIR="/tmp/onedata"
+fi
+
+if [[ -z "$CREATE_USER_IN_DB" ]]; then
+    export CREATE_USER_IN_DB="true"
 fi
 
 # Load funcion defs
@@ -164,15 +169,17 @@ for i in `seq 1 $n_count`; do
 	ssh $lcnode "useradd $user_name 2> /dev/null || exit 0"
     done
 
-    cmm="$reg_run $node_name $user_name '$user_name@test.com' /tmp/tmp_cert.pem"
+    if [[ "$CREATE_USER_IN_DB" == "true" ]]; then
+        cmm="$reg_run $node_name $user_name '$user_name@test.com' /tmp/tmp_cert.pem"
 
-    info "Trying to register $user_name using cluster node $cnode (command: $cmm)"
-    
-    scp $cert tmp_cert.pem
-    scp tmp_cert.pem $cnode:/tmp/
+        info "Trying to register $user_name using cluster node $cnode (command: $cmm)"
 
-    ssh $cnode "$cmm"
-    
+        scp $cert tmp_cert.pem
+        scp tmp_cert.pem $cnode:/tmp/
+
+        ssh $cnode "$cmm"
+    fi
+
 done
 
 exit 0
