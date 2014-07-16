@@ -16,7 +16,7 @@
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("files_common.hrl").
 -include("veil_modules/dao/dao_types.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([normalize_file_type/2]).

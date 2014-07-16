@@ -17,7 +17,7 @@
 -include("communication_protocol_pb.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% ====================================================================
 %% API
@@ -95,10 +95,11 @@ cleanup() ->
 %% ====================================================================
 handle_message(Record) when is_record(Record, createfile) ->
     FileId = Record#createfile.file_id,
+    Mode = Record#createfile.mode,
     SH_And_ID = get_helper_and_id(FileId, fslogic_context:get_protocol_version()),
     case SH_And_ID of
     {Storage_helper_info, File} ->
-        TmpAns = storage_files_manager:create(Storage_helper_info, File),
+        TmpAns = storage_files_manager:create(Storage_helper_info, File,Mode),
             case TmpAns of
                 ok -> #atom{value = ?VOK};
                 {_, ErrorCode} when is_integer(ErrorCode) ->

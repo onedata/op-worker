@@ -14,7 +14,7 @@
 
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([get_fuse_id/0, set_fuse_id/1, get_user_dn/0, set_user_dn/1, clear_user_dn/0, set_protocol_version/1, get_protocol_version/0, get_user_id/0]).

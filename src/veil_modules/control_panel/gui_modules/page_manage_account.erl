@@ -21,6 +21,7 @@
 -define(mail_validation_regexp,
     <<"^[a-z0-9!#$%&'*+\\/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+\\/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$">>).
 
+
 %% Template points to the template file, which will be filled with content
 main() ->
     case vcn_gui_utils:maybe_redirect(true, false, false, true) of
@@ -140,8 +141,10 @@ team_list_body(Userdoc) ->
     Teams = user_logic:get_teams(Userdoc),
     _Body = case lists:map(
         fun(Team) ->
+            TeamBin = gui_str:unicode_list_to_binary(Team),
+            TeamFormatted = gui_str:html_encode(re:replace(TeamBin, <<"\\(">>, <<" (">>, [global, {return, binary}])),
             #li{style = <<"font-size: 18px; padding: 5px 0;">>,
-                body = gui_str:html_encode(gui_str:unicode_list_to_binary(re:replace(Team, "\\(", " (", [global, {return, list}])))}
+                body = TeamFormatted}
         end, Teams) of
                 [] -> #p{body = <<"none">>};
                 List -> #list{style= <<"margin-top: -3px;">>,numbered = true, body = List}

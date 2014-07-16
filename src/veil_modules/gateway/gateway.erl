@@ -13,7 +13,7 @@
 -module(gateway).
 -behaviour(worker_plugin_behaviour).
 
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% ====================================================================
 %% API functions

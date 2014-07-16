@@ -69,17 +69,15 @@ subscriber_process_loop(ReceivedLogs) ->
 	ThisNode = node(),
 	receive
 		{Pid, subscribe} ->
-			central_logger:handle(1, {subscribe, self()}),
+			central_logger:handle(1, {subscribe, cluster, self()}),
 			Pid ! done,
 			subscriber_process_loop(ReceivedLogs);
 		{Pid, unsubscribe} ->
-			central_logger:handle(1, {unsubscribe, self()}),
+			central_logger:handle(1, {unsubscribe, cluster, self()}),
 			Pid ! done,
 			subscriber_process_loop(ReceivedLogs);
-		{log, {"log", _, info, [{node, ThisNode}]}} ->
+		{log, {"log", _, info, _}} ->
 			subscriber_process_loop(ReceivedLogs + 1);
-		{log, _} ->
-			subscriber_process_loop(ReceivedLogs);
 		{Pid, get_log_count} ->
 			Pid ! ReceivedLogs,
 			finished;
@@ -92,7 +90,7 @@ wait_for_pids(N) -> receive done -> wait_for_pids(N - 1) end.
 
 send_n_logs(N) when N =:= 0 -> finished;
 send_n_logs(N) -> 
-	central_logger:handle(1, {dispatch_log, "log", erlang:now(), info, [{node, node()}]}),
+	central_logger:handle(1, {dispatch_log, "log", erlang:now(), info, []}),
 	send_n_logs(N - 1).
 
 -endif.

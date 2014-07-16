@@ -5,14 +5,21 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This file contains list of communiques that can be processed.
+%% @doc: This file contains list of communicates that can be processed.
 %% @end
 %% ===================================================================
 
+-ifndef(MESSAGES_WHITE_LIST_HRL).
+-define(MESSAGES_WHITE_LIST_HRL, 1).
+
 %% white lists defined as lists of pairs {user_type, white_list_for_user_type}
 -define(MessagesWhiteList, [
-  {standard_user, [fusemessage, remotefilemangement, channelregistration, channelclose, atom, handshakerequest, handshakeack, eventmessage]},
-  {developer, [fusemessage, remotefilemangement, channelregistration, channelclose, atom, handshakerequest, handshakeack, eventmessage]}
+  {standard_user, [
+      fusemessage, remotefilemangement, channelregistration, channelclose, atom,
+      handshakerequest, handshakeack, eventmessage, logmessage]},
+  {developer, [
+      fusemessage, remotefilemangement, channelregistration, channelclose, atom,
+      handshakerequest, handshakeack, eventmessage, logmessage]}
 ]).
 -define(AtomsWhiteList, [
   {standard_user, [ping, event_producer_config_request, is_write_enabled, ack]},
@@ -23,3 +30,5 @@
 %% List of messages that needs FuseId to be present in connection state prior to process them.
 %% If FuseId is not set and one of those messages arrive, cluster will immediately send error.
 -define(SessionDependentMessages, [fusemessage, channelregistration, channelclose]).
+
+-endif.

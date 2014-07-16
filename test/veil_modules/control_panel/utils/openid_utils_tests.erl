@@ -12,8 +12,7 @@
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
--include_lib("include/veil_modules/control_panel/openid_utils.hrl").
--include_lib("include/logging.hrl").
+-include_lib("veil_modules/control_panel/openid_utils.hrl").
 
 -define(mock_xrds_file,
     "<?xml version=\"1.0\" encoding=\"UTF-8\"?>

@@ -12,7 +12,7 @@
 -module(page_monitoring).
 -include("veil_modules/control_panel/common.hrl").
 -include("registered_names.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 % n2o API and comet
 -export([main/0, event/1, comet_loop/2]).

@@ -16,7 +16,7 @@
 -include("fuse_messages_pb.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao_types.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([get_file_location/2, get_new_file_location/2, create_file_ack/1, file_not_used/1, renew_file_location/1]).

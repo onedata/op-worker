@@ -7,6 +7,10 @@
 
 #include "term_translator.h"
 
+#include "helpers/storageHelperFactory.h"
+
+#include <utility>
+
 namespace veil
 {
 namespace cluster
@@ -22,70 +26,56 @@ namespace cluster
 std::string get_string(ErlNifEnv* env, ERL_NIF_TERM term)
 {
     char str[MAX_STRING_SIZE];
-    if(enif_get_string(env, term, str, MAX_STRING_SIZE, ERL_NIF_LATIN1))
-        return str;
-    else
-        return "";
+    return enif_get_string(env, term, str, MAX_STRING_SIZE, ERL_NIF_LATIN1)
+            ? str : "";
 }
 
 std::string get_atom(ErlNifEnv* env, ERL_NIF_TERM term)
 {
     char str[MAX_STRING_SIZE];
-    if(enif_get_atom(env, term, str, MAX_STRING_SIZE, ERL_NIF_LATIN1))
-        return str;
-    else
-        return "";
+    return enif_get_atom(env, term, str, MAX_STRING_SIZE, ERL_NIF_LATIN1)
+            ? str : "";
 }
 
-std::vector<std::string> get_str_vector(ErlNifEnv* env, ERL_NIF_TERM term)
+helpers::IStorageHelper::ArgsMap get_args(ErlNifEnv* env, ERL_NIF_TERM term)
 {
-    std::vector<std::string> v;
-    ERL_NIF_TERM list, head, tail;
+    helpers::IStorageHelper::ArgsMap args;
 
-    if(!enif_is_list(env, term) || enif_is_empty_list(env, term))
-        return v;
+    if(enif_is_list(env, term) && !enif_is_empty_list(env, term))
+    {
+        int i = 0;
+        ERL_NIF_TERM list, head, tail;
+        for(list = term; enif_get_list_cell(env, list, &head, &tail); list = tail)
+            args.emplace(helpers::srvArg(i), get_string(env, head));
+    }
 
-    for(list = term; enif_get_list_cell(env, list, &head, &tail); list = tail)
-        v.push_back(get_string(env, head));
-
-    return v;
+    return std::move(args);
 }
 
 bool is_int(ErlNifEnv* env, ERL_NIF_TERM term)
 {
     ErlNifSInt64 num;
-    if(enif_get_int64(env, term, &num))
-        return true;
-    else 
-        return false;
+    return enif_get_int64(env, term, &num);
 }
 
 ErlNifSInt64 get_int(ErlNifEnv* env, ERL_NIF_TERM term)
 {
     ErlNifSInt64 num;
-    if(enif_get_int64(env, term, &num))
-        return num;
-    else 
-        return 0;
+    return enif_get_int64(env, term, &num) ? num : 0;
 }
 
 ErlNifUInt64 get_uint(ErlNifEnv* env, ERL_NIF_TERM term)
 {
     ErlNifUInt64 num;
-    if(enif_get_uint64(env, term, &num))
-        return num;
-    else 
-        return 0;
+    return enif_get_uint64(env, term, &num) ? num : 0;
 }
 
 bool check_common_args(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
     if(argc < 2)
         return false;
-    if(get_string(env, argv[0]) == "" || !enif_is_list(env, argv[1]))
-        return false;
 
-    return true;
+    return !get_string(env, argv[0]).empty() && enif_is_list(env, argv[1]);
 }
 
 struct fuse_file_info get_ffi(ErlNifEnv* env, ERL_NIF_TERM term)

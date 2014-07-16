@@ -12,7 +12,7 @@
 
 -module(page_validate_login).
 -include("veil_modules/control_panel/common.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 % n2o API
 -export([main/0, event/1]).

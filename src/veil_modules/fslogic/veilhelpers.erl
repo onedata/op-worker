@@ -14,7 +14,7 @@
 
 -include("veil_modules/dao/dao_vfs.hrl").
 -include_lib("registered_names.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 -export([exec/2, exec/3, exec/4, exec/5]).
 %% ===================================================================

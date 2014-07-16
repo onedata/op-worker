@@ -15,7 +15,7 @@
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% API

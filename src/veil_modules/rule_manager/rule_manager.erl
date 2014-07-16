@@ -13,9 +13,9 @@
 
 -module(rule_manager).
 -behaviour(worker_plugin_behaviour).
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include("registered_names.hrl").
--include("veil_modules/dao/dao_helper.hrl").
+-include_lib("dao/include/dao_helper.hrl").
 -include("veil_modules/dao/dao.hrl").
 -include("veil_modules/cluster_rengine/cluster_rengine.hrl").
 
@@ -197,7 +197,7 @@ generate_tree_name() ->
 
 %% Helper function for fetching rows from view
 fetch_rows(ViewName, QueryArgs) ->
-  case dao:list_records(ViewName, QueryArgs) of
+  case dao_records:list_records(ViewName, QueryArgs) of
     {ok, #view_result{rows = Rows}} ->
       Rows;
     Error ->

@@ -12,7 +12,7 @@
 
 -module(vcn_gui_utils).
 -include("veil_modules/control_panel/common.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 % Functions connected with user's session
 -export([get_user_dn/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0, can_view_monitoring/0]).
@@ -235,9 +235,14 @@ top_menu(ActiveTabID, SubMenuBody) ->
         end ++
         case can_view_logs() of
             false -> [];
-            true -> [{logs_tab, #li{body = [
-                #link{style = <<"padding: 18px;">>, url = <<"/logs">>, body = <<"Logs">>}
-            ]}}]
+            true -> [
+                {cluster_logs_tab, #li{body = [
+                    #link{style = <<"padding: 18px;">>, url = <<"/cluster_logs">>, body = <<"Cluster logs">>}
+                ]}},
+                {client_logs_tab, #li{body = [
+                    #link{style = <<"padding: 18px;">>, url = <<"/client_logs">>, body = <<"Client logs">>}
+                ]}}
+            ]
         end,
     % Define menu items with ids, so that proper tab can be made active via function parameter
     % see old_menu_captions()

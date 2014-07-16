@@ -15,7 +15,7 @@
 -include_lib("xmerl/include/xmerl.hrl").
 -include_lib("n2o/include/wf.hrl").
 -include("veil_modules/control_panel/openid_utils.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 
 %% ====================================================================
@@ -154,18 +154,18 @@ retrieve_user_info() ->
                 <<"openid.", X/binary>>
             end, SignedParamsNoPrefix),
 
-        Login = get_signed_param(<<?openid_login_key>>, SignedParams),
+        Login = get_signed_param(<<?openid_login_key>>, SignedParams, unicode),
         % Login must be retrieved from OpenID, other info is not mandatory.
         case Login of
             [] -> throw(login_undefined);
             _ -> ok
         end,
-        Name = get_signed_param(<<?openid_name_key>>, SignedParams),
-        Teams = parse_teams(get_signed_param(<<?openid_teams_key>>, SignedParams)),
-        Email = get_signed_param(<<?openid_email_key>>, SignedParams),
-        DN1 = get_signed_param(<<?openid_dn1_key>>, SignedParams),
-        DN2 = get_signed_param(<<?openid_dn2_key>>, SignedParams),
-        DN3 = get_signed_param(<<?openid_dn3_key>>, SignedParams),
+        Name = get_signed_param(<<?openid_name_key>>, SignedParams, unicode),
+        Teams = parse_teams(get_signed_param(<<?openid_teams_key>>, SignedParams, utf8)),
+        Email = get_signed_param(<<?openid_email_key>>, SignedParams, unicode),
+        DN1 = get_signed_param(<<?openid_dn1_key>>, SignedParams, unicode),
+        DN2 = get_signed_param(<<?openid_dn2_key>>, SignedParams, unicode),
+        DN3 = get_signed_param(<<?openid_dn3_key>>, SignedParams, unicode),
         DnList = lists:filter(
             fun(X) ->
                 (X /= [])
@@ -191,13 +191,18 @@ retrieve_user_info() ->
 %% get_signed_param/2
 %% ====================================================================
 %% @doc
-%% Retrieves given request parameter, but only if it was signed by the provider
+%% Retrieves given request parameter, but only if it was signed by the provider.
+%% Returns the param in desired encoding (unicode or utf8).
 %% @end
--spec get_signed_param(binary(), [binary()]) -> string().
+-spec get_signed_param(binary(), [binary()], unicode | utf8) -> string().
 %% ====================================================================
-get_signed_param(ParamName, SignedParams) ->
+get_signed_param(ParamName, SignedParams, Encoding) ->
+    CoversionFun = case Encoding of
+                       unicode -> fun(X) -> gui_str:binary_to_unicode_list(X) end;
+                       utf8 -> fun(X) -> gui_str:to_list(X) end
+                   end,
     case lists:member(ParamName, SignedParams) of
-        true -> gui_str:binary_to_unicode_list(gui_str:to_binary(gui_ctx:url_param(ParamName)));
+        true -> CoversionFun(gui_str:to_binary(gui_ctx:url_param(ParamName)));
         false -> []
     end.
 
@@ -249,7 +254,7 @@ get_xrds(URL) ->
 %% ====================================================================
 %% @doc
 %% Parses user's teams from XML to a list of strings. Returns an empty list
-%% for empty XML.
+%% for empty XML. NOTE! Returns a list of unicode strings.
 %% @end
 -spec parse_teams(string()) -> [string()].
 %% ====================================================================
@@ -261,7 +266,7 @@ parse_teams(XMLContent) ->
     #xmlElement{content = TeamList} = find_XML_node(teams, XML),
     lists:map(
         fun(#xmlElement{content = [#xmlText{value = Value}]}) ->
-            binary_to_list(unicode:characters_to_binary(Value, unicode))
+            Value
         end, TeamList).
 
 
