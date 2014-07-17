@@ -33,8 +33,8 @@ SimpleConnectionPool::SimpleConnectionPool(const string &hostname, int port,
     , m_getCertInfo(certInfoFun)
     , m_checkCertificate{checkCertificate}
 {
-    m_connectionPools.emplace(META_POOL, std::unique_ptr<ConnectionPoolInfo>(new ConnectionPoolInfo(certInfoFun, metaPoolSize, checkCertificate)));
-    m_connectionPools.emplace(DATA_POOL, std::unique_ptr<ConnectionPoolInfo>(new ConnectionPoolInfo(certInfoFun, dataPoolSize, checkCertificate)));
+    m_connectionPools.emplace(META_POOL, std::unique_ptr<ConnectionPoolInfo>(new ConnectionPoolInfo(certInfoFun, checkCertificate, metaPoolSize)));
+    m_connectionPools.emplace(DATA_POOL, std::unique_ptr<ConnectionPoolInfo>(new ConnectionPoolInfo(certInfoFun, checkCertificate, dataPoolSize)));
 }
 
 void SimpleConnectionPool::resetAllConnections(PoolType type)
@@ -220,10 +220,10 @@ list<string> SimpleConnectionPool::dnsQuery(const string &hostname)
     return lst;
 }
 
-SimpleConnectionPool::ConnectionPoolInfo::ConnectionPoolInfo(cert_info_fun getCertInfo, unsigned int s, const bool checkCertificate)
+SimpleConnectionPool::ConnectionPoolInfo::ConnectionPoolInfo(cert_info_fun getCertInfo, const bool checkCertificate, unsigned int s)
     : size(s)
-    , m_checkCertificate(checkCertificate)
     , m_getCertInfo{std::move(getCertInfo)}
+    , m_checkCertificate(checkCertificate)
 {
     LOG(INFO) << "Initializing a WebSocket endpoint";
     websocketpp::lib::error_code ec;

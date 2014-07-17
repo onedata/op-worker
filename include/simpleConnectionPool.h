@@ -41,9 +41,11 @@ public:
         DATA_POOL       ///< Connection for file data
     };
 
-    class ConnectionPoolInfo {
+ class ConnectionPoolInfo
+    {
     public:
-        ConnectionPoolInfo(cert_info_fun getCertInfo, unsigned int s = DEFAULT_POOL_SIZE, const bool checkCertificate = false);
+        ConnectionPoolInfo(cert_info_fun getCertInfo, bool checkCertificate,
+                           unsigned int s = DEFAULT_POOL_SIZE);
         ~ConnectionPoolInfo();
 
         boost::shared_ptr<ws_client> endpoint = boost::make_shared<ws_client>();
@@ -52,12 +54,12 @@ public:
         unsigned int size;
 
     private:
-        const bool m_checkCertificate;
         context_ptr onTLSInit(websocketpp::connection_hdl hdl);
         void onSocketInit(websocketpp::connection_hdl hdl, socket_type &socket);
 
         cert_info_fun m_getCertInfo;
         boost::thread m_ioWorker;
+        const bool    m_checkCertificate;
     };
 
     SimpleConnectionPool(const std::string &hostname, int port, cert_info_fun, const bool checkCertificate = false, int metaPoolSize = DEFAULT_POOL_SIZE, int dataPoolSize = DEFAULT_POOL_SIZE);
