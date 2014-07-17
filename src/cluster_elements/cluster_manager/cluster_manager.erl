@@ -748,7 +748,7 @@ check_cluster_state(State) ->
                                      end
                                  end;
                                false ->
-                                 ?info("Worker: ~s will be stopped at node", [MaxModule, MaxNode]),
+                                 ?info("Worker: ~s will be stopped at node: ~s", [MaxModule, MaxNode]),
                                  {WorkerStopped, TmpState2} = stop_worker(MaxNode, MaxModule, State),
                                  case WorkerStopped of
                                    ok ->
