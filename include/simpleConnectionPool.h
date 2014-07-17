@@ -19,6 +19,12 @@
 #include "communicationHandler.h"
 #include "veilErrors.h"
 
+#include <atomic>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
+#include <thread>
+
 #define DEFAULT_POOL_SIZE 2
 #define MAX_CONNECTION_ERROR_COUNT 5
 
@@ -35,9 +41,11 @@ public:
         DATA_POOL       ///< Connection for file data
     };
 
-    class ConnectionPoolInfo {
+    class ConnectionPoolInfo
+    {
     public:
-        ConnectionPoolInfo(cert_info_fun getCertInfo, unsigned int s = DEFAULT_POOL_SIZE);
+        ConnectionPoolInfo(cert_info_fun getCertInfo, bool checkCertificate,
+                           unsigned int s = DEFAULT_POOL_SIZE);
         ~ConnectionPoolInfo();
 
         boost::shared_ptr<ws_client> endpoint = boost::make_shared<ws_client>();
@@ -51,9 +59,10 @@ public:
 
         cert_info_fun m_getCertInfo;
         boost::thread m_ioWorker;
+        const bool    m_checkCertificate;
     };
 
-    SimpleConnectionPool(const std::string &hostname, int port, cert_info_fun, int metaPoolSize = DEFAULT_POOL_SIZE, int dataPoolSize = DEFAULT_POOL_SIZE);
+    SimpleConnectionPool(const std::string &hostname, int port, cert_info_fun, const bool checkCertificate = false, int metaPoolSize = DEFAULT_POOL_SIZE, int dataPoolSize = DEFAULT_POOL_SIZE);
     virtual ~SimpleConnectionPool() = default;
 
     virtual void setPoolSize(PoolType type, unsigned int);                  ///< Sets size of connection pool. Default for each pool is: 2
@@ -112,6 +121,7 @@ protected:
 
 private:
     boost::atomic<error::Error> m_lastError;
+    const bool m_checkCertificate;
 };
 
 } // namespace veil

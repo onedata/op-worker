@@ -25,9 +25,11 @@ using websocketpp::lib::bind;
 
 namespace veil {
 
+
 CommunicationHandler::CommunicationHandler(const string &p_hostname, int p_port, cert_info_fun p_getCertInfo,
-                                           boost::shared_ptr<ws_client> endpoint)
-    : m_hostname(p_hostname),
+                                           boost::shared_ptr<ws_client> endpoint,const bool checkCertificate)
+    : m_checkCertificate(checkCertificate),
+      m_hostname(p_hostname),
       m_port(p_port),
       m_getCertInfo(p_getCertInfo),
       m_endpoint(std::move(endpoint)),

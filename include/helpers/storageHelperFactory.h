@@ -8,14 +8,19 @@
 #ifndef STORAGE_HELPER_FACTORY_H
 #define STORAGE_HELPER_FACTORY_H
 
-#include <memory>
-#include <string>
-#include <vector>
-#include <boost/shared_ptr.hpp>
 #include "helpers/IStorageHelper.h"
+
 #include "simpleConnectionPool.h"
-#include <boost/thread/thread_time.hpp>
+
+#include <boost/any.hpp>
 #include <boost/atomic.hpp>
+#include <boost/shared_ptr.hpp>
+#include <boost/thread/thread_time.hpp>
+
+#include <memory>
+#include <vector>
+#include <string>
+#include <unordered_map>
 
 #define PROTOCOL_VERSION 1
 
@@ -23,34 +28,21 @@
 namespace veil {
 namespace helpers {
 
-namespace config {
+    std::string srvArg(const int argno);
 
-    extern unsigned int clusterPort;
-    extern std::string  proxyCert;
-    extern std::string  clusterHostname;
-    extern boost::atomic<bool> checkCertificate;
+    struct BufferLimits
+    {
+        BufferLimits(const size_t wgl = 0, const size_t rgl = 0, const size_t wfl = 0,
+               const size_t rfl = 0, const size_t pbs = 4 * 1024);
 
-    namespace {
-        extern boost::shared_ptr<SimpleConnectionPool> connectionPool;
-    }
+        const size_t writeBufferGlobalSizeLimit;
+        const size_t readBufferGlobalSizeLimit;
 
-    void setConnectionPool(boost::shared_ptr<SimpleConnectionPool> pool);
-    boost::shared_ptr<SimpleConnectionPool> getConnectionPool();
+        const size_t writeBufferPerFileSizeLimit;
+        const size_t readBufferPerFileSizeLimit;
 
-namespace buffers {
-
-    extern size_t writeBufferGlobalSizeLimit;
-    extern size_t readBufferGlobalSizeLimit;
-
-    extern size_t writeBufferPerFileSizeLimit;
-    extern size_t readBufferPerFileSizeLimit;
-
-    extern size_t preferedBlockSize;
-
-} // namespace buffers
-
-
-} // namespace config
+        const size_t preferedBlockSize;
+    };
 
 namespace utils {
 
@@ -80,19 +72,24 @@ namespace utils {
  * Factory providing objects of requested storage helpers.
  */
 class StorageHelperFactory {
+public:
+    StorageHelperFactory() = default;
+    StorageHelperFactory(boost::shared_ptr<SimpleConnectionPool> connectionPool,
+                         const BufferLimits &limits);
+    virtual ~StorageHelperFactory() = default;
 
-    public:
+    /**
+     * Produces storage helper object.
+     * @param sh Name of storage helper that has to be returned.
+     * @param args Arguments vector passed as argument to storge helper's constructor.
+     * @return Pointer to storage helper object along with its ownership.
+     */
+    virtual boost::shared_ptr<IStorageHelper> getStorageHelper(const std::string &sh,
+                                                               const IStorageHelper::ArgsMap &args);
 
-        StorageHelperFactory();
-        virtual ~StorageHelperFactory();
-
-        /**
-         * Produces storage helper object.
-         * @param sh Name of storage helper that has to be returned.
-         * @param args Arguments vector passed as argument to storge helper's constructor.
-         * @return Pointer to storage helper object along with its ownership.
-         */
-        virtual boost::shared_ptr<IStorageHelper> getStorageHelper(const std::string &sh, const std::vector<std::string> &args);
+private:
+    const boost::shared_ptr<SimpleConnectionPool> m_connectionPool;
+    const BufferLimits m_limits;
 };
 
 } // namespace helpers

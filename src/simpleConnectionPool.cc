@@ -24,13 +24,17 @@ using namespace std;
 
 namespace veil {
 
-SimpleConnectionPool::SimpleConnectionPool(const string &hostname, int port, cert_info_fun certInfoFun, int metaPoolSize, int dataPoolSize) :
-    m_hostname(hostname),
-    m_port(port),
-    m_getCertInfo(certInfoFun)
+SimpleConnectionPool::SimpleConnectionPool(const string &hostname, int port,
+                                           cert_info_fun certInfoFun,
+                                           const bool checkCertificate,
+                                           int metaPoolSize, int dataPoolSize)
+    : m_hostname(hostname)
+    , m_port(port)
+    , m_getCertInfo(certInfoFun)
+    , m_checkCertificate{checkCertificate}
 {
-    m_connectionPools.emplace(META_POOL, std::unique_ptr<ConnectionPoolInfo>(new ConnectionPoolInfo(certInfoFun, metaPoolSize)));
-    m_connectionPools.emplace(DATA_POOL, std::unique_ptr<ConnectionPoolInfo>(new ConnectionPoolInfo(certInfoFun, dataPoolSize)));
+    m_connectionPools.emplace(META_POOL, std::unique_ptr<ConnectionPoolInfo>(new ConnectionPoolInfo(certInfoFun, checkCertificate, metaPoolSize)));
+    m_connectionPools.emplace(DATA_POOL, std::unique_ptr<ConnectionPoolInfo>(new ConnectionPoolInfo(certInfoFun, checkCertificate, dataPoolSize)));
 }
 
 void SimpleConnectionPool::resetAllConnections(PoolType type)
@@ -78,7 +82,7 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(Pool
 
         lock.unlock();
 
-        conn.reset(new CommunicationHandler(connectTo, m_port, m_getCertInfo, poolInfo.endpoint));
+        conn.reset(new CommunicationHandler(connectTo, m_port, m_getCertInfo, poolInfo.endpoint, m_checkCertificate));
         conn->setFuseID(m_fuseId);  // Set FuseID that shall be used by this connection as session ID
         if(m_pushCallback)                          // Set callback that shall be used for PUSH messages and error messages
             conn->setPushCallback(m_pushCallback);  // Note that this doesnt enable/register PUSH channel !
@@ -216,9 +220,10 @@ list<string> SimpleConnectionPool::dnsQuery(const string &hostname)
     return lst;
 }
 
-SimpleConnectionPool::ConnectionPoolInfo::ConnectionPoolInfo(cert_info_fun getCertInfo, unsigned int s)
+SimpleConnectionPool::ConnectionPoolInfo::ConnectionPoolInfo(cert_info_fun getCertInfo, const bool checkCertificate, unsigned int s)
     : size(s)
     , m_getCertInfo{std::move(getCertInfo)}
+    , m_checkCertificate(checkCertificate)
 {
     LOG(INFO) << "Initializing a WebSocket endpoint";
     websocketpp::lib::error_code ec;
@@ -269,7 +274,7 @@ context_ptr SimpleConnectionPool::ConnectionPoolInfo::onTLSInit(websocketpp::con
                          boost::asio::ssl::context::single_dh_use);
 
         ctx->set_default_verify_paths();
-        ctx->set_verify_mode(helpers::config::checkCertificate.load()
+        ctx->set_verify_mode(m_checkCertificate
                              ? boost::asio::ssl::verify_peer
                              : boost::asio::ssl::verify_none);
 

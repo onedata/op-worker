@@ -9,6 +9,16 @@
 #ifndef COMMUNICATION_HANDLER_H
 #define COMMUNICATION_HANDLER_H
 
+#include "communication_protocol.pb.h"
+#include "veilErrors.h"
+
+#include <websocketpp/client.hpp>
+#include <websocketpp/config/asio_client.hpp>
+
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <memory>
 #include <mutex>
 #include <numeric>
 #include <string>
@@ -16,10 +26,6 @@
 #include <boost/thread.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/unordered_map.hpp>
-#include <websocketpp/config/asio_client.hpp>
-#include <websocketpp/client.hpp>
-#include "communication_protocol.pb.h"
-#include "veilErrors.h"
 
 // PB decoder name
 #define FUSE_MESSAGES "fuse_messages"
@@ -109,6 +115,7 @@ class CommunicationHandler
 {
 private:
     boost::atomic<error::Error> m_lastError;
+    const bool m_checkCertificate;
 
 protected:
 
@@ -173,7 +180,7 @@ public:
     };
 
     CommunicationHandler(const std::string &hostname, int port, cert_info_fun,
-                         boost::shared_ptr<ws_client> endpoint);
+                         boost::shared_ptr<ws_client> endpoint, const bool checkCertificate);
     virtual ~CommunicationHandler();
 
     virtual void setCertFun(cert_info_fun certFun);                         ///< Setter for function that returns CommunicationHandler::CertificateInfo struct.
