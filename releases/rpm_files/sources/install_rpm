@@ -15,4 +15,8 @@ do
 	    mkdir -p $1/etc/init.d
 		install -m 0700 $FILE $1/etc/init.d/veil
 	fi
+	if [[ $FILE == "files/onepanel_node/scripts/onepanel_init_d" ]]; then
+		mkdir -p $1/etc/init.d
+		install -m 0700 $FILE $1/etc/init.d/onepanel
+	fi
 done
