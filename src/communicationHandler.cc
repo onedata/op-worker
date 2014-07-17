@@ -473,7 +473,7 @@ void CommunicationHandler::onFail(websocketpp::connection_hdl hdl)
         const int verifyResult =
             SSL_get_verify_result(conn->get_socket().native_handle());
 
-        if(verifyResult != 0)
+        if(verifyResult != 0 && m_checkCertificate)
         {
             LOG(ERROR) << "Server certificate verification failed." <<
                           " OpenSSL error " << verifyResult;
