@@ -275,7 +275,7 @@ start_deps() ->
     fun(Key) ->
         case Key of
             error_logger_hwm ->
-                % Disable error_logger high water mark
+                % Disable error_logger high water mark during tests
                 application:set_env(lager, error_logger_hwm, undefined);
             _ ->
                 application:set_env(lager, Key, proplists:get_value(Key, Config))
