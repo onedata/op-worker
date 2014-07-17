@@ -622,9 +622,10 @@ get_node_stats(TimeWindow) ->
                      short -> application:get_env(?APP_Name, short_monitoring_time_window);
                      medium -> application:get_env(?APP_Name, medium_monitoring_time_window);
                      long -> application:get_env(?APP_Name, long_monitoring_time_window);
+                     _ when is_integer(TimeWindow) -> {ok, TimeWindow};
                      _ ->
                        ?warning("Wrong statistics time window: ~p", [TimeWindow]),
-                       {ok, TimeWindow}
+                       application:get_env(?APP_Name, short_monitoring_time_window)
                    end,
   {MegaSecs, Secs, _} = erlang:now(),
   EndTime = 1000000 * MegaSecs + Secs,
