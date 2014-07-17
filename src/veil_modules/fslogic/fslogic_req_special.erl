@@ -18,7 +18,7 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([create_dir/2, get_file_children/3, create_link/2, get_link/1]).
+-export([create_dir/2, get_file_children/4, create_link/2, get_link/1]).
 
 %% ====================================================================
 %% API functions
@@ -69,14 +69,16 @@ create_dir(FullFileName, Mode) ->
 %% ====================================================================
 %% @doc Lists directory. Start with ROffset entity and limit returned list to RCount size.
 %% @end
--spec get_file_children(FullFileName :: string(), ROffset :: non_neg_integer(), RCount :: non_neg_integer()) ->
+-spec get_file_children(FullFileName :: string(), UserPathTokens :: [string()], ROffset :: non_neg_integer(), RCount :: non_neg_integer()) ->
     #filechildren{} | no_return().
 %% ====================================================================
-get_file_children(FullFileName, ROffset, RCount) ->
+get_file_children(FullFileName, UserPathTokens, ROffset, RCount) ->
     ?debug("get_file_children(FullFileName ~p, ROffset: ~p, RCount: ~p)", [FullFileName, ROffset, RCount]),
 
-    UserFilePath = fslogic_path:get_user_file_name(FullFileName),
-    TokenizedPath = string:tokens(UserFilePath, "/"),
+    TokenizedPath = UserPathTokens,
+
+    ?info("LS: ~p ~p ~p", [FullFileName, UserPathTokens, TokenizedPath]),
+
     {Num, Offset} =
         case {ROffset, TokenizedPath} of
             {0 = Off0, []} -> %% First iteration over "/" dir has to contain "groups" folder, so fetch `num - 1` files instead `num`
@@ -90,15 +92,19 @@ get_file_children(FullFileName, ROffset, RCount) ->
     {ok, TmpAns} = dao_lib:apply(dao_vfs, list_dir, [FullFileName, Num, Offset], fslogic_context:get_protocol_version()),
 
     Children = fslogic_utils:create_children_list(TmpAns),
+
     case {ROffset, TokenizedPath} of
-        {0, []}    -> %% When asking about root, add virtual ?GROUPS_BASE_DIR_NAME entry
+        {0, []}    -> %% When asking about root, add virtual ?SPACES_BASE_DIR_NAME entry
             #filechildren{child_logic_name = Children ++ [?SPACES_BASE_DIR_NAME]}; %% Only for offset = 0
         {_, [?SPACES_BASE_DIR_NAME]} -> %% For group list query ignore DB result and generate list based on user's teams
+
             Teams = user_logic:get_space_names({dn, fslogic_context:get_user_dn()}),
+            ?info("wut2? ~p ~p", [{ROffset, TokenizedPath}, Teams]),
             {_Head, Tail} = lists:split(min(Offset, length(Teams)), Teams),
             {Ret, _} = lists:split(min(Num, length(Tail)), Tail),
             #filechildren{child_logic_name = Ret};
-        _ ->
+        Other ->
+            ?info("wut3? ~p ~p", [{ROffset, TokenizedPath}, Other]),
             #filechildren{child_logic_name = Children}
     end.
 

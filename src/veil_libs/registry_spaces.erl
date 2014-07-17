@@ -26,7 +26,7 @@ get_space_info(SpaceId) ->
         {ok, Response} ->
             ?info("Resp: ~p", [Response]),
             #{<<"name">> := SpaceName} = Response,
-            {ok, #space_info{uuid = SpaceId, name = SpaceName}};
+            {ok, #space_info{uuid = SpaceId, name = binary_to_list(SpaceName)}};
         {error, Reason} ->
             {error, Reason}
     end.
@@ -42,8 +42,8 @@ request(Method, URI, Body) ->
     URL = "https://globalregistry.org:8443/" ++ URI,
     case ibrowse:send_req(URL, [{"Content-Type", "application/json"}], Method, Body,
             [{ssl_options, [{verify, verify_none}, {certfile, get_provider_cert_path()}, {keyfile, get_provider_key_path()}]}]) of
-        {ok, 200, _, Response} -> {ok, jiffy:decode(Response)};
-        {ok, 404, _, _} -> {error, not_found};
+        {ok, "200", _, Response} -> {ok, jiffy:decode(Response, [return_maps])};
+        {ok, "404", _, _} -> {error, not_found};
         {ok, Status, _, _} -> {error, {invalid_status, Status}};
         {error, Reason} -> {error, Reason}
     end.

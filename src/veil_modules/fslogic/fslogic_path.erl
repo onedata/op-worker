@@ -18,7 +18,7 @@
 %% API
 -export([get_user_file_name/1, get_user_file_name/2]).
 -export([get_full_file_name/1, get_full_file_name/2, get_full_file_name/4]).
--export([verify_file_name/1]).
+-export([verify_file_name/1, absolute_join/1]).
 -export([strip_path_leaf/1, basename/1]).
 -export([get_parent_and_name_from_path/2]).
 -export([get_user_root/0, get_user_root/2, get_user_root/1]).
@@ -52,13 +52,10 @@ get_user_file_name(FullFileName) ->
 %% ====================================================================
 get_user_file_name(FullFileName, UserDoc) ->
     {ok, Tokens} = verify_file_name(FullFileName),
-
-    UserRec = dao_lib:strip_wrappers(UserDoc),
-    UserName = UserRec#user.login,
-
     case Tokens of
-        [UserName | UserTokens] -> "/" ++ string:join(UserTokens, "/");
-        _ -> "/" ++ string:join(Tokens, "/")
+        [] -> "";
+        _ ->
+            filename:join(Tokens)
     end.
 
 
@@ -101,17 +98,18 @@ get_full_file_name(FileName, Request) ->
 
 get_full_file_name(FileName, Request, UserDocStatus, UserDoc) ->
     {ok, Tokens} = verify_file_name(FileName),
-    VerifiedFileName = filename:join(Tokens),
+    ?info("get_full_file_name ~p ~p", [FileName, Tokens]),
+    VerifiedFileName = string:join(Tokens, "/"),
     case UserDocStatus of
         ok ->
             case fslogic_perms:assert_group_access(UserDoc, Request, VerifiedFileName) of
                 ok ->
                     case Tokens of %% Map all /groups/* requests to root of the file system (i.e. dont add any prefix)
                         [?SPACES_BASE_DIR_NAME | SpaceTokens] ->
-                            {ok, filename:join(SpaceTokens)};
+                            {ok, filename:join([?SPACES_BASE_DIR_NAME | SpaceTokens])};
                         _ ->
                             Root = get_user_root(UserDoc),
-                            {ok, filename:join([Root | Tokens])}
+                            {ok, filename:join([?SPACES_BASE_DIR_NAME, Root] ++ Tokens)}
                     end;
                 _ -> {error, invalid_group_access}
             end;
@@ -119,6 +117,9 @@ get_full_file_name(FileName, Request, UserDocStatus, UserDoc) ->
             {error, {user_doc_not_found, UserDoc}}
     end.
 
+
+absolute_join(Tokens) ->
+    filename:join(["/" | Tokens]).
 
 %% verify_file_name/1
 %% ====================================================================
@@ -197,7 +198,7 @@ get_user_root(#veil_document{record = UserRec}) ->
 get_user_root(#user{spaces = []}) ->
     throw(no_spaces);
 get_user_root(#user{spaces = [PrimarySpaceId | _]}) ->
-    {ok, #space_info{name = SpaceName}} = fslogic_object:get_space(PrimarySpaceId),
+    {ok, #space_info{name = SpaceName}} = fslogic_objects:get_space(PrimarySpaceId),
     SpaceName.
 
 

@@ -136,12 +136,12 @@ get_fs_user_ctx() ->
 
 %% set_fs_group_ctx/1
 %% ====================================================================
-%% @doc Sets user's group names that shall be used for file system permissions checks.
+%% @doc Sets user's group-id that shall be used for file system permissions checks.
 %% @end
--spec set_fs_group_ctx(GName :: [string()]) -> OldValue :: term().
+-spec set_fs_group_ctx(GroupID :: [integer()]) -> OldValue :: term().
 %% ====================================================================
-set_fs_group_ctx(GNames) ->
-    put(fsctx_gname, GNames).
+set_fs_group_ctx(GroupID) ->
+    put(fsctx_gname, GroupID).
 
 
 %% get_fs_group_ctx/0
@@ -149,14 +149,14 @@ set_fs_group_ctx(GNames) ->
 %% @doc Gets user's group list that is used for file system permissions checks.
 %%      If the is no context set, "root" group is returned.
 %% @end
--spec get_fs_group_ctx() -> Groups when
-    Groups :: [string()].
+-spec get_fs_group_ctx() -> GroupID when
+    GroupID :: integer().
 %% ====================================================================
 get_fs_group_ctx() ->
     case get(fsctx_gname) of
         undefined ->
-            ["root"];
-        GName -> GName
+            [-1];
+        GroupID -> GroupID
     end.
 
 %% ====================================================================

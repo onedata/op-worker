@@ -69,7 +69,7 @@ check_file_perms(FileName, UserDoc, FileDoc, rdwr) ->
 check_file_perms(FileName, UserDoc, #veil_document{record = #file{uid = FileOwnerUid, perms = FilePerms}}, CheckType) -> %check read/write/execute perms
     UserUid = UserDoc#veil_document.uuid,
     FileGroup = get_group(FileName),
-    UserGroups = user_logic:get_team_names(UserDoc#veil_document.record),
+    UserGroups = user_logic:get_space_names(UserDoc#veil_document.record),
 
     UserOwnsFile = UserUid=:=FileOwnerUid,
     UserGroupOwnsFile = lists:member(FileGroup,UserGroups),
@@ -168,7 +168,7 @@ has_permission(execute, FilePerms, _, _) ->
 get_group(File) ->
     FileTokens = string:tokens(File, "/"),
     case lists:nth(1, FileTokens) of
-        "groups" ->
+        ?SPACES_BASE_DIR_NAME ->
             lists:nth(2, FileTokens);
         _ ->
             none
