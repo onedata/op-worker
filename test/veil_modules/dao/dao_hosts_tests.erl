@@ -51,9 +51,7 @@ setup() ->
     application:set_env(?APP_Name, rrd_steps, [1,24,168,720,8760]),
     application:set_env(?APP_Name, rrd_size, 7200),
     node_manager:start_link(test_worker),
-    {ok, _} = worker_host:start_link(dao, [], 10),
-    meck:unload(net_adm),
-    meck:unload(rpc).
+    {ok, _} = worker_host:start_link(dao, [], 10).
 
 teardown({ok, Pid}) ->
     node_manager:stop(),
