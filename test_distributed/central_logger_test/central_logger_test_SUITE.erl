@@ -15,15 +15,15 @@
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_node_starter.hrl").
 
-% TSubscribing process will wait up to this time for logs
--define(LOGS_COUNTING_TIME, 10000).
-
 %% export for ct
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([init_and_cleanup_test/1, logging_test/1]).
 
 %% export nodes' codes
 -export([perform_10_logs/1, get_lager_traces/0, check_console_loglevel_functionalities/0]).
+
+% Max time for the subscribing process to collect logs
+-define(logs_collection_timeout, 10000).
 
 all() -> [logging_test, init_and_cleanup_test].
 
@@ -194,7 +194,7 @@ check_logs(ExpectedLogNumber) ->
 
 count_logs(ErrorLoggerLogs, LagerLogs, Expected, StartTime) ->
     {CurrentTime, _} = statistics(wall_clock),
-    case CurrentTime - StartTime < ?LOGS_COUNTING_TIME of
+    case CurrentTime - StartTime < ?logs_collection_timeout of
         false ->
             {ErrorLoggerLogs, LagerLogs};
         true ->
