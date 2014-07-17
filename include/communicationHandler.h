@@ -48,8 +48,9 @@ static constexpr uint32_t RECV_TIMEOUT = 2000;
 /// Path on which cluster listenes for websocket connections
 static constexpr const char *CLUSTER_URI_PATH = "/veilclient";
 
-static constexpr unsigned int MAX_GENERATED_MSG_ID = std::numeric_limits<unsigned int>::max() / 2;
-static constexpr unsigned int IGNORE_ANSWER_MSG_ID = MAX_GENERATED_MSG_ID + 1;
+using MsgId = decltype(veil::protocol::communication_protocol::ClusterMsg::default_instance().message_id());
+static constexpr MsgId MAX_GENERATED_MSG_ID = std::numeric_limits<MsgId>::max() - 1;
+static constexpr MsgId IGNORE_ANSWER_MSG_ID = MAX_GENERATED_MSG_ID + 1;
 
 using ws_client     = websocketpp::client<websocketpp::config::asio_tls_client>;
 using message_ptr   = websocketpp::config::asio_tls_client::message_type::ptr;
@@ -126,16 +127,15 @@ protected:
     std::thread                 m_worker1;
     std::thread                 m_worker2;
     volatile int                m_connectStatus;    ///< Current connection status
-    volatile unsigned int       m_currentMsgId;     ///< Next messageID to be used
+    MsgId                       m_nextMsgId;        ///< Next messageID to be used
     volatile unsigned int       m_errorCount;       ///< How many connection errors were cought
     volatile bool               m_isPushChannel;
     std::string                 m_fuseID;           ///< Current fuseID for PUSH channel (if any)
-    static SSL_SESSION*         m_session;
 
     std::recursive_mutex        m_connectMutex;
     std::recursive_mutex        m_reconnectMutex;
     std::condition_variable_any m_connectCond;
-    std::recursive_mutex        m_msgIdMutex;
+    std::mutex                  m_msgIdMutex;
     std::recursive_mutex        m_receiveMutex;
     std::condition_variable_any m_receiveCond;
     static std::recursive_mutex m_instanceMutex;
@@ -146,8 +146,6 @@ protected:
     push_callback m_pushCallback;
 
     // WebSocket++ callbacks
-    context_ptr onTLSInit(websocketpp::connection_hdl hdl);                 ///< On TLS init callback
-    void onSocketInit(websocketpp::connection_hdl hdl, socket_type &socket);///< On socket init callback
     void onMessage(websocketpp::connection_hdl hdl, message_ptr msg);       ///< Incoming WebSocket message callback
     void onOpen(websocketpp::connection_hdl hdl);                           ///< WebSocket connection opened
     void onClose(websocketpp::connection_hdl hdl);                          ///< WebSocket connection closed
@@ -179,7 +177,8 @@ public:
         NO_ERROR            = 0
     };
 
-    CommunicationHandler(const std::string &hostname, int port, cert_info_fun, const bool checkCertificate);
+    CommunicationHandler(const std::string &hostname, int port, cert_info_fun,
+                         std::shared_ptr<ws_client> endpoint, const bool checkCertificate);
     virtual ~CommunicationHandler();
 
     virtual void setCertFun(cert_info_fun certFun);                         ///< Setter for function that returns CommunicationHandler::CertificateInfo struct.
@@ -193,21 +192,21 @@ public:
 
     virtual unsigned int   getErrorCount();                                 ///< Returns how many communication errors were found
 
-    virtual int32_t     getMsgId();                                         ///< Get next message id. Thread safe. All subsequents calls returns next integer value.
+    virtual MsgId       getMsgId();                                         ///< Get next message id. Thread safe. All subsequents calls returns next integer value.
     virtual int         openConnection();                                   ///< Opens WebSoscket connection. Returns 0 on success, non-zero otherwise.
     virtual void        closeConnection();                                  ///< Closes active connection.
 
     /// Sends ClusterMsg using current WebSocket session. Will fail if there isn't one. No throw version.
     /// @param ec error code (CommunicationHandler::ConnectionStatus)
     /// @return message ID that shall be used to receive response
-    virtual int32_t     sendMessage(protocol::communication_protocol::ClusterMsg& message, int32_t msgID, ConnectionStatus &ec);
+    virtual int32_t     sendMessage(protocol::communication_protocol::ClusterMsg& message, MsgId msgID, ConnectionStatus &ec);
 
     /// Sends ClusterMsg using current WebSocket session. Will fail if there isn't one. Throws CommunicationHandler::ConnectionStatus on error.
     /// @return message ID that shall be used to receive response
-    virtual int32_t     sendMessage(protocol::communication_protocol::ClusterMsg& message, int32_t msgID = 0);
+    virtual int32_t     sendMessage(protocol::communication_protocol::ClusterMsg& message, MsgId msgID = 0);
 
     /// Receives Answer using current WebSocket session. Will fail if there isn't one.
-    virtual int         receiveMessage(protocol::communication_protocol::Answer& answer, int32_t msgID, uint32_t timeout = RECV_TIMEOUT);
+    virtual int         receiveMessage(protocol::communication_protocol::Answer& answer, MsgId msgID, uint32_t timeout = RECV_TIMEOUT);
 
     /**
      * Sends ClusterMsg and receives answer. Same as running CommunicationHandler::sendMessage and CommunicationHandler::receiveMessage

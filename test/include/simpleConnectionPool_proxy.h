@@ -24,14 +24,14 @@ public:
     std::shared_ptr<veil::CommunicationHandler> newConnection(SimpleConnectionPool::PoolType type) override
     {
         auto conn = std::make_shared<MockCommunicationHandler>();
-        m_connectionPools[type].connections.emplace_front(conn, time(NULL) + 20000);
+        m_connectionPools.at(type)->connections.emplace_front(conn, time(NULL) + 20000);
 
         return conn;
     }
 
     void addConnection(SimpleConnectionPool::PoolType type, std::shared_ptr<veil::CommunicationHandler> conn)
     {
-        m_connectionPools[type].connections.emplace_back(conn, time(NULL) + 20000);
+        m_connectionPools.at(type)->connections.emplace_back(conn, time(NULL) + 20000);
     }
 
     std::list<std::string> dnsQuery(const std::string &hostname) override

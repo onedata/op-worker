@@ -20,8 +20,6 @@
 namespace veil
 {
 
-class CommunicationHandler;
-
 constexpr int DEFAULT_POOL_SIZE = 2;
 constexpr int MAX_CONNECTION_ERROR_COUNT = 5;
 
@@ -37,18 +35,29 @@ public:
         DATA_POOL       ///< Connection for file data
     };
 
-    struct ConnectionPoolInfo {
+    class ConnectionPoolInfo
+    {
+    public:
+        ConnectionPoolInfo(cert_info_fun getCertInfo, bool checkCertificate,
+                           unsigned int s = DEFAULT_POOL_SIZE);
+        ~ConnectionPoolInfo();
 
-        ConnectionPoolInfo(unsigned int s) : currWorkers(0), size(s) {}
-        ConnectionPoolInfo() : size(DEFAULT_POOL_SIZE) {}
-
+        std::shared_ptr<ws_client> endpoint = std::make_shared<ws_client>();
         connection_pool_t connections;
-        int currWorkers;
+        int currWorkers = 0;
         unsigned int size;
+
+    private:
+        context_ptr onTLSInit(websocketpp::connection_hdl hdl);
+        void onSocketInit(websocketpp::connection_hdl hdl, socket_type &socket);
+
+        cert_info_fun m_getCertInfo;
+        std::thread   m_ioWorker;
+        const bool    m_checkCertificate;
     };
 
     SimpleConnectionPool(const std::string &hostname, int port, cert_info_fun, const bool checkCertificate = false, int metaPoolSize = DEFAULT_POOL_SIZE, int dataPoolSize = DEFAULT_POOL_SIZE);
-    virtual ~SimpleConnectionPool();
+    virtual ~SimpleConnectionPool() = default;
 
     virtual void setPoolSize(PoolType type, unsigned int);                  ///< Sets size of connection pool. Default for each pool is: 2
     virtual void setPushCallback(const std::string &fuseId, push_callback); ///< Sets fuseID and callback function that will be registered for
@@ -81,7 +90,7 @@ protected:
 
     std::recursive_mutex      m_access;
     std::condition_variable   m_accessCond;
-    std::map<PoolType, ConnectionPoolInfo>  m_connectionPools;                      ///< Connection pool. @see SimpleConnectionPool::selectConnection
+    std::map<PoolType, std::unique_ptr<ConnectionPoolInfo>>  m_connectionPools;     ///< Connection pool. @see SimpleConnectionPool::selectConnection
     std::list<std::string> m_hostnamePool;
 
     virtual std::shared_ptr<CommunicationHandler> newConnection(PoolType type);     ///< Creates new active connection and adds it to connection pool. Convenience method for testing (makes connection mocking easier)
