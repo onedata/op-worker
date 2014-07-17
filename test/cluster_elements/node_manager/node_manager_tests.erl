@@ -57,7 +57,8 @@ node_type_test() ->
   node_manager:start_link(test_worker),
   NodeType = gen_server:call(?Node_Manager_Name, getNodeType),
   ?assert(NodeType =:= worker),
-  node_manager:stop().
+  node_manager:stop(),
+  meck:unload(veil_cluster_node_app).
 
 %% This test checks if node manager is able to register in ccm.
 heart_beat_test() ->
@@ -164,7 +165,8 @@ get_interface_stats_test() ->
   ActualInterfaceStats = node_manager:get_interface_stats("eth0", "rx_bytes"),
   ?assert(meck:validate(file)),
   ?assertEqual(ok, meck:unload(file)),
-  ?assertEqual(ExpectedInterfaceStats, ActualInterfaceStats).
+  ?assertEqual(ExpectedInterfaceStats, ActualInterfaceStats),
+  meck:unload(file).
 
 get_single_core_cpu_stats_test() ->
   SampleFile = create_sample_cpu_stats_file(1),
@@ -176,7 +178,8 @@ get_single_core_cpu_stats_test() ->
   ActualCpuStats = node_manager:get_cpu_stats([{<<"core0">>, 0, 0}, {<<"cpu">>, 0, 0}]),
   ?assert(meck:validate(file)),
   ?assertEqual(ok, meck:unload(file)),
-  ?assertEqual(ExpectedCpuStats, ActualCpuStats).
+  ?assertEqual(ExpectedCpuStats, ActualCpuStats),
+  meck:unload(file).
 
 get_multi_core_cpu_stats_test() ->
   SampleFile = create_sample_cpu_stats_file(4),
@@ -190,7 +193,8 @@ get_multi_core_cpu_stats_test() ->
     {<<"core0">>, 0, 0}, {<<"cpu">>, 0, 0}]),
   ?assert(meck:validate(file)),
   ?assertEqual(ok, meck:unload(file)),
-  ?assertEqual(ExpectedCpuStats, ActualCpuStats).
+  ?assertEqual(ExpectedCpuStats, ActualCpuStats),
+  meck:unload(file).
 
 calculate_ports_transfer_test() ->
   PortsStats = [{p1, 100, 40}, {p2, 300, 100}, {p3, 100, 200}],
@@ -208,7 +212,8 @@ get_memory_stats_test() ->
   ActualMemoryStats = node_manager:get_memory_stats(),
   ?assert(meck:validate(file)),
   ?assertEqual(ok, meck:unload(file)),
-  ?assertEqual(ExpectedMemoryStats, ActualMemoryStats).
+  ?assertEqual(ExpectedMemoryStats, ActualMemoryStats),
+  meck:unload(file).
 
 is_valid_name_test() ->
   ?assert(node_manager:is_valid_name("azAZ09_", 12)),
