@@ -171,21 +171,32 @@ manage_clients_panel() ->
     CloseButton = #link{postback = hide_filters_popup, title = <<"Hide">>, class = <<"glyph-link">>,
         style = <<"position: absolute; top: 8px; right: 8px; z-index: 3;">>,
         body = #span{class = <<"fui-cross">>, style = <<"font-size: 20px;">>}},
-    {ClientList, {_, Identifiers}} = lists:mapfoldl(
-        fun({UserName, FuseID}, {Counter, Idents}) ->
-            {Row, Identifier} = client_row(<<"client_row_", (integer_to_binary(Counter))/binary>>, false, UserName, FuseID),
-            {Row, {Counter + 1, Idents ++ Identifier}}
-        end, {1, []}, get_connected_clients()),
-    ClientListBody = case ClientList of
-                         [] ->
-                             #tr{cells = [
-                                 #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"--">>},
-                                 #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"No clients are connected">>},
-                                 #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"">>}
-                             ]};
-                         _ ->
-                             ClientList
-                     end,
+
+    {ClientListBody, Identifiers} =
+        case get_connected_clients() of
+            empty ->
+                Row = #tr{cells = [
+                    #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"--">>},
+                    #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"No clients are connected">>},
+                    #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"">>}
+                ]},
+                {Row, []};
+            error ->
+                Row = #tr{cells = [
+                    #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"--">>},
+                    #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"Error: cannot list fuse sessions">>},
+                    #td{style = <<"border-color: rgb(82, 100, 118);">>, body = <<"">>}
+                ]},
+                {Row, []};
+            Clients ->
+                {ClientList, {_, Ids}} = lists:mapfoldl(
+                    fun({UserName, FuseID}, {Counter, Idents}) ->
+                        {Row, Identifier} = client_row(<<"client_row_", (integer_to_binary(Counter))/binary>>, false, UserName, FuseID),
+                        {Row, {Counter + 1, Idents ++ Identifier}}
+                    end, {1, []}, Clients),
+                {ClientList, Ids}
+        end,
+
     gui_jq:bind_enter_to_submit_button(<<"search_textbox">>, <<"search_button">>),
     [
         CloseButton,
@@ -194,7 +205,7 @@ manage_clients_panel() ->
                 #p{style = <<"margin-top: -5px; display: inline-block; margin-right: 170px;">>, body = <<"Change loglevels for chosen clients:">>},
                 #panel{class = <<"input-append">>, style = <<"margin-bottom: 10px;">>, body = [
                     #textbox{id = <<"search_textbox">>, class = <<"span2">>,
-                        style = <<"width: 150px;">>, placeholder = <<"Search">>},
+                        style = <<"width: 150px;">>, placeholder = <<"Search users">>},
                     #panel{class = <<"btn-group">>, body = [
                         #button{id = <<"search_button">>, class = <<"btn">>, type = <<"button">>,
                             actions = gui_jq:form_submit_action(<<"search_button">>, {search_clients, Identifiers}, <<"search_textbox">>),
@@ -203,11 +214,11 @@ manage_clients_panel() ->
                 ]}
             ]},
             #panel{id = <<"client_table_viewport">>, style = <<"width: 650px; min-height: 200px; max-height: 200px; overflow-y: scroll;",
-            "background-color: white; border-radius: 4px; border: 2px solid rgb(82, 100, 118); float: left;">>, body = [
+            "background-color: white; border-radius: 4px; border: 2px solid rgb(82, 100, 118); float: left; position: relative;">>, body = [
                 #table{id = <<"client_table">>, class = <<"table table-stripped">>, style = <<"margin-bottom: 0;">>,
                     header = [
                         #tr{cells = [
-                            #th{style = <<"border-color: rgb(82, 100, 118); position: relative;">>, body = [
+                            #th{style = <<"border-color: rgb(82, 100, 118);">>, body = [
                                 #link{postback = {toggle_clients, true, Identifiers}, title = <<"Hide">>, class = <<"glyph-link-gray">>,
                                     style = <<"position: absolute; top: 10px; left: 11px;">>,
                                     body = #span{class = <<"fui-checkbox-checked">>, style = <<"font-size: 20px;">>}
@@ -254,11 +265,13 @@ client_row(ID, Selected, UserName, FuseID) ->
         end,
     Identifier = [{ID, UserName, FuseID}],
     Row = #tr{class = RowClass, id = ID, cells = [
-        #td{style = <<"border-color: rgb(82, 100, 118); position: relative;">>, body = [
-            #link{id = <<"link_", ID/binary>>, postback = {toggle_clients, not Selected, Identifier}, title = <<"Toggle this client">>,
-                class = LinkClass, style = <<"position: absolute; top: 7px;">>,
-                body = #span{class = GlyphClass, style = <<"font-size: 20px;">>}
-            }]},
+        #td{style = <<"border-color: rgb(82, 100, 118);">>, body = [
+            #panel{style = <<"position: relative;">>, body = [
+                #link{id = <<"link_", ID/binary>>, postback = {toggle_clients, not Selected, Identifier}, title = <<"Toggle this client">>,
+                    class = LinkClass, style = <<"position: absolute; top: 0px;">>,
+                    body = #span{class = GlyphClass, style = <<"font-size: 20px;">>}
+                }]}
+        ]},
         #td{style = <<"border-color: rgb(82, 100, 118);">>, body = gui_str:unicode_list_to_binary(UserName)},
         #td{style = <<"border-color: rgb(82, 100, 118);">>, body = gui_str:unicode_list_to_binary(FuseID)}
     ]},
@@ -285,19 +298,28 @@ filter_form(FilterType) ->
     ]}.
 
 
-% Listing available clients
+% Listing available clients - returns a list or one of two atoms: empty, error
 get_connected_clients() ->
-    {ok, List} = dao_lib:apply(dao_cluster, list_fuse_sessions, [{by_valid_to, ?INFINITY}], 1),
-    lists:foldl(
-        fun(#veil_document{uuid = UUID, record = #fuse_session{uid = UserID}} = SessionDoc, Acc) ->
-            case dao_cluster:check_session(SessionDoc) of
-                ok ->
-                    {ok, UserDoc} = user_logic:get_user({uuid, UserID}),
-                    Acc ++ [{user_logic:get_login(UserDoc), UUID}];
-                _ ->
-                    Acc
-            end
-        end, [], List).
+    try
+        {ok, List} = dao_lib:apply(dao_cluster, list_fuse_sessions, [{by_valid_to, ?INFINITY}], 1),
+        ClientList = lists:foldl(
+            fun(#veil_document{uuid = UUID, record = #fuse_session{uid = UserID}} = SessionDoc, Acc) ->
+                case dao_cluster:check_session(SessionDoc) of
+                    ok ->
+                        {ok, UserDoc} = user_logic:get_user({uuid, UserID}),
+                        Acc ++ [{user_logic:get_login(UserDoc), UUID}];
+                    _ ->
+                        Acc
+                end
+            end, [], List),
+        case ClientList of
+            [] -> empty;
+            _ -> ClientList
+        end
+    catch T:M ->
+        ?error_stacktrace("Cannot list fuse sessions: ~p:~p", [T, M]),
+        error
+    end.
 
 
 % Remebering which clients are selected on the list
@@ -390,7 +412,7 @@ process_log(Counter, {Message, Timestamp, Severity, Metadata},
                                                false ->
                                                    skip;
                                                true ->
-                                                   gui_jq:wire(<<"$('html, body').animate({scrollTop: $(document).height()}, 50);">>)
+                                                   gui_jq:wire(<<"$('html, body').animate({scrollTop: $(document).height()}, 0);">>)
                                            end,
                                            gui_comet:flush(),
                                            {Counter + 1, PageState#page_state{first_log = NewFirstLog}}
@@ -585,7 +607,7 @@ event({search_clients, ClientList}) ->
         Query ->
             {Select, Deselect} = lists:partition(
                 fun({_, UserName, _}) ->
-                    binary:match(UserName, Query) =/= nomatch
+                    binary:match(gui_str:unicode_list_to_binary(UserName), Query) =/= nomatch
                 end, ClientList),
             event({toggle_clients, true, Select}),
             event({toggle_clients, false, Deselect}),
