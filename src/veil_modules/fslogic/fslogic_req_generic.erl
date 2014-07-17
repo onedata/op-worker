@@ -172,14 +172,14 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
 
     %% Get file links
     Links = case Type of
-                "DIR" -> case dao_lib:apply(dao_vfs, count_subdirs, [{uuid, FileUUID}], fslogic_context:get_protocol_version()) of
-                             {ok, Sum} -> Sum + 2;
-                             _Other ->
-                                 ?error("Error: can not get number of links for file: ~s", [File]),
-                                 -1
-                         end;
-                "REG" -> 1;
-                _ -> -1
+                "DIR" ->
+                    case dao_lib:apply(dao_vfs, count_subdirs, [{uuid, FileUUID}], fslogic_context:get_protocol_version()) of
+                         {ok, Sum} -> Sum + 2;
+                         _Other ->
+                             ?error("Error: can not get number of links for file: ~s", [File]),
+                             0
+                     end;
+                _ -> 1
             end,
 
     #fileattr{answer = ?VOK, mode = File#file.perms, atime = ATime, ctime = CTime, mtime = MTime,
