@@ -21,6 +21,7 @@
 #include <numeric>
 #include <sstream>
 
+static constexpr std::chrono::seconds AFTER_FAIL_DELAY(2);
 static constexpr std::chrono::seconds MAX_FLUSH_DELAY{10};
 static const std::string CENTRAL_LOG_MODULE_NAME("central_logger");
 static const std::string LOGGING_DECODER("logging");
@@ -136,33 +137,43 @@ void RemoteLogWriter::writeLoop()
 {
     while(!m_stopWriteLoop)
     {
-        const protocol::logging::LogMessage msg = popMessage();
-        if(m_stopWriteLoop)
-            return;
+        if(!sendNextMessage())
+            std::this_thread::sleep_for(AFTER_FAIL_DELAY);
+    }
+}
 
-        auto connectionPool = m_connectionPool;
-        if(!connectionPool)
-            continue;
+bool RemoteLogWriter::sendNextMessage()
+{
+    const protocol::logging::LogMessage msg = popMessage();
+    if(m_stopWriteLoop)
+        return true;
 
-        auto connection = connectionPool->selectConnection();
-        if(!connection)
-            continue;
+    auto connectionPool = m_connectionPool;
+    if(!connectionPool)
+        return false;
 
-        protocol::communication_protocol::ClusterMsg clm;
-        clm.set_protocol_version(PROTOCOL_VERSION);
-        clm.set_synch(false);
-        clm.set_module_name(CENTRAL_LOG_MODULE_NAME);
-        clm.set_message_decoder_name(LOGGING_DECODER);
-        clm.set_message_type(boost::algorithm::to_lower_copy(msg.GetDescriptor()->name()));
-        msg.SerializeToString(clm.mutable_input());
+    auto connection = connectionPool->selectConnection();
+    if(!connection)
+        return false;
 
-        try
-        {
-            connection->sendMessage(clm, IGNORE_ANSWER_MSG_ID);
-        }
-        catch(CommunicationHandler::ConnectionStatus)
-        {
-        }
+    protocol::communication_protocol::ClusterMsg clm;
+    clm.set_protocol_version(PROTOCOL_VERSION);
+    clm.set_synch(false);
+    clm.set_module_name(CENTRAL_LOG_MODULE_NAME);
+    clm.set_message_decoder_name(LOGGING_DECODER);
+    clm.set_message_type(boost::algorithm::to_lower_copy(msg.GetDescriptor()->name()));
+    clm.set_answer_type(boost::algorithm::to_lower_copy(protocol::communication_protocol::Atom::descriptor()->name()));
+    clm.set_answer_decoder_name(COMMUNICATION_PROTOCOL);
+    msg.SerializeToString(clm.mutable_input());
+
+    try
+    {
+        connection->sendMessage(clm, IGNORE_ANSWER_MSG_ID);
+        return true;
+    }
+    catch(CommunicationHandler::ConnectionStatus)
+    {
+        return false;
     }
 }
 

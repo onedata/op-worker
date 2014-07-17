@@ -19,7 +19,7 @@ class MockCommunicationHandler: public veil::CommunicationHandler
 {
 public:
     MockCommunicationHandler()
-        : CommunicationHandler{"host", 5555, std::bind(&MockCommunicationHandler::getCertInfo, this), false}
+        : CommunicationHandler{"host", 5555, std::bind(&MockCommunicationHandler::getCertInfo, this), {}, false}
     {
     };
 
