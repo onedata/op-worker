@@ -6,15 +6,14 @@
  */
 
 #include "communicationHandler.h"
+
 #include "fuse_messages.pb.h"
-#include "logging.h"
 #include "helpers/storageHelperFactory.h"
-#include <google/protobuf/descriptor.h>
-#include <iostream>
+#include "logging.h"
+#include "simpleConnectionPool.h"
+
+#include <chrono>
 #include <string>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 
 using std::string;
 using namespace veil::protocol::communication_protocol;
@@ -23,11 +22,13 @@ using websocketpp::lib::placeholders::_1;
 using websocketpp::lib::placeholders::_2;
 using websocketpp::lib::bind;
 
-namespace veil {
+namespace veil
+{
 
-
-CommunicationHandler::CommunicationHandler(const string &p_hostname, int p_port, cert_info_fun p_getCertInfo,
-                                           boost::shared_ptr<ws_client> endpoint,const bool checkCertificate)
+CommunicationHandler::CommunicationHandler(const string &p_hostname, int p_port,
+                                           cert_info_fun p_getCertInfo,
+                                           std::shared_ptr<ws_client> endpoint,
+                                           const bool checkCertificate)
     : m_checkCertificate(checkCertificate),
       m_hostname(p_hostname),
       m_port(p_port),
@@ -36,8 +37,7 @@ CommunicationHandler::CommunicationHandler(const string &p_hostname, int p_port,
       m_connectStatus(CLOSED),
       m_nextMsgId(1),
       m_errorCount(0),
-      m_isPushChannel(false),
-      m_lastConnectTime(0)
+      m_isPushChannel(false)
 {
 }
 
@@ -102,7 +102,7 @@ int CommunicationHandler::openConnection()
     m_connectStatus = TIMEOUT;
     m_endpointConnection.reset();
 
-    string URL = string("wss://") + m_hostname + ":" + toString(m_port) + string(CLUSTER_URI_PATH);
+    string URL = string("wss://") + m_hostname + ":" + std::to_string(m_port) + string(CLUSTER_URI_PATH);
     ws_client::connection_ptr con = m_endpoint->get_connection(URL, ec); // Initialize WebSocket handshake
     if(ec.value() != 0) {
         LOG(ERROR) << "Cannot connect to " << URL << " due to: " << ec.message();
@@ -126,7 +126,7 @@ int CommunicationHandler::openConnection()
     m_endpointConnection = con;
 
     // Wait for WebSocket handshake
-    m_connectCond.timed_wait(lock, boost::posix_time::milliseconds(CONNECT_TIMEOUT));
+    m_connectCond.wait_for(lock, CONNECT_TIMEOUT);
 
     LOG(INFO) << "Connection to " << URL << " status: " << m_connectStatus;
 
@@ -143,7 +143,7 @@ int CommunicationHandler::openConnection()
     }
 
     if(m_connectStatus == CONNECTED)
-        m_lastConnectTime = helpers::utils::mtime<uint64_t>();
+        m_lastConnectTime = std::chrono::system_clock::now();
 
     return m_connectStatus;
 }
@@ -161,7 +161,7 @@ void CommunicationHandler::closeConnection()
         websocketpp::lib::error_code ec;
         m_endpoint->close(m_endpointConnection, websocketpp::close::status::normal, string("reset_by_peer"), ec); // Initialize WebSocket cloase operation
         if(ec.value() == 0)
-            m_connectCond.timed_wait(lock, boost::posix_time::milliseconds(CONNECT_TIMEOUT)); // Wait for connection to close
+            m_connectCond.wait_for(lock, CONNECT_TIMEOUT); // Wait for connection to close
 
         try {
             if(m_endpointConnection) {
@@ -304,18 +304,20 @@ int CommunicationHandler::receiveMessage(Answer& answer, MsgId msgId, uint32_t t
 {
     unique_lock lock(m_receiveMutex);
 
-    uint64_t timeoutTime = helpers::utils::mtime<uint64_t>() + timeout;
+    const auto timeoutTime = std::chrono::steady_clock::now() +
+            std::chrono::milliseconds{timeout};
 
     // Incoming message should be in inbox. Wait for it
     while(m_incomingMessages.find(msgId) == m_incomingMessages.end()) {
-        uint64_t currTime = helpers::utils::mtime<uint64_t>();
+        const auto currTime = std::chrono::steady_clock::now();
 
         if(m_connectStatus != CONNECTED) {
             ++m_errorCount;
             return -2;
         }
 
-        if(currTime >= timeoutTime || !m_receiveCond.timed_wait(lock, boost::posix_time::milliseconds(timeoutTime - currTime))) {
+        if(currTime >= timeoutTime ||
+           m_receiveCond.wait_for(lock, timeoutTime - currTime) == std::cv_status::timeout) {
             ++m_errorCount;
             return -1;
         }
@@ -350,7 +352,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
         {
             if(retry > 0)
             {
-                uint64_t lastConnectTime = m_lastConnectTime;
+                auto lastConnectTime = m_lastConnectTime;
 
                 LOG(WARNING) << "Sening message to cluster failed, trying to reconnect and retry";
                 unique_lock guard(m_reconnectMutex);
@@ -376,7 +378,7 @@ Answer CommunicationHandler::communicate(ClusterMsg& msg, uint8_t retry, uint32_
         {
             if(retry > 0)
             {
-                uint64_t lastConnectTime = m_lastConnectTime;
+                auto lastConnectTime = m_lastConnectTime;
 
                 LOG(WARNING) << "Receiving response from cluster failed, trying to reconnect and retry";
                 unique_lock guard(m_reconnectMutex);

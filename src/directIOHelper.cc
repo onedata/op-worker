@@ -8,38 +8,35 @@
 #ifdef linux
 /* For pread()/pwrite()/utimensat() */
 #define _XOPEN_SOURCE 700
-#endif /* linux */
-
-#include <fuse.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <errno.h>
-#include <sys/time.h>
-#ifdef HAVE_SETXATTR
-#include <sys/xattr.h>
-#endif
+#endif // linux
 
 #include "directIOHelper.h"
 
 #include "helpers/storageHelperFactory.h"
 
-#include <climits>
-#include <iostream>
+#include <boost/any.hpp>
 
+#include <dirent.h>
+#include <errno.h>
+#include <fuse.h>
+#include <sys/stat.h>
+#ifdef HAVE_SETXATTR
+#include <sys/xattr.h>
+#endif
+
+#include <string>
 
 using namespace std;
 
-namespace veil {
-namespace helpers {
+namespace veil
+{
+namespace helpers
+{
 
 namespace
 {
-inline boost::filesystem::path extractPath(const IStorageHelper::ArgsMap &args) {
+inline boost::filesystem::path extractPath(const IStorageHelper::ArgsMap &args)
+{
     const auto arg = srvArg(0);
     return args.count(arg)
             ? boost::any_cast<std::string>(args.at(arg)).substr(0, PATH_MAX)
@@ -277,8 +274,8 @@ int DirectIOHelper::sh_fallocate(const char *path, int mode,
 
 #ifdef HAVE_SETXATTR
 /* xattr operations are optional and can safely be left unimplemented */
-int DirectIOHelper::sh_setxattr(const char *path, const char *name, const char *value,
-            size_t size, int flags)
+int DirectIOHelper::sh_setxattr(const char *path, const char *name,
+                                const char *value, size_t size, int flags)
 {
     return lsetxattr(root(path).c_str(), name, value, size, flags) == -1 ? -errno : 0;
 }

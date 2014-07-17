@@ -6,21 +6,20 @@
  */
 
 #include "simpleConnectionPool.h"
+
 #include "communicationHandler.h"
 #include "logging.h"
-#include <netinet/in.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <iterator>
-#include <algorithm>
-#include <boost/thread/thread_time.hpp>
-#include <exception>
 #include "helpers/storageHelperFactory.h"
 
-using namespace boost;
+#include <sys/socket.h>
+#include <netdb.h>
+
+#include <algorithm>
+#include <exception>
+#include <functional>
+
 using namespace std;
+using namespace std::placeholders;
 
 namespace veil {
 
@@ -43,12 +42,12 @@ void SimpleConnectionPool::resetAllConnections(PoolType type)
     setPoolSize(type, m_connectionPools.at(type)->size); // Force connection reinitialization
 }
 
-boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(PoolType type)
+std::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(PoolType type)
 {
-    boost::unique_lock< boost::recursive_mutex > lock(m_access);
+    std::unique_lock<std::recursive_mutex> lock(m_access);
 
     ConnectionPoolInfo &poolInfo = *m_connectionPools.at(type);
-    boost::shared_ptr<CommunicationHandler> conn;
+    std::shared_ptr<CommunicationHandler> conn;
 
     CounterRAII sc(poolInfo.currWorkers);
 
@@ -82,7 +81,7 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(Pool
 
         lock.unlock();
 
-        conn.reset(new CommunicationHandler(connectTo, m_port, m_getCertInfo, poolInfo.endpoint, m_checkCertificate));
+        conn = std::make_shared<CommunicationHandler>(connectTo, m_port, m_getCertInfo, poolInfo.endpoint, m_checkCertificate);
         conn->setFuseID(m_fuseId);  // Set FuseID that shall be used by this connection as session ID
         if(m_pushCallback)                          // Set callback that shall be used for PUSH messages and error messages
             conn->setPushCallback(m_pushCallback);  // Note that this doesnt enable/register PUSH channel !
@@ -110,10 +109,10 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::newConnection(Pool
     return conn;
 }
 
-boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(PoolType type)
+std::shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(PoolType type)
 {
-    boost::unique_lock< boost::recursive_mutex > lock(m_access);
-    boost::shared_ptr<CommunicationHandler> conn;
+    std::unique_lock<std::recursive_mutex> lock(m_access);
+    std::shared_ptr<CommunicationHandler> conn;
 
     ConnectionPoolInfo &poolInfo = *m_connectionPools.at(type);
 
@@ -139,7 +138,7 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(P
         LOG(INFO) << "Connection pool (" << type << " is to small (" << poolInfo.connections.size() << " connections - expected: " << poolInfo.size << "). Opening new connection...";
 
         if(poolInfo.connections.size() > 0) {
-            boost::thread t = boost::thread(boost::bind(&SimpleConnectionPool::newConnection, shared_from_this(), type));
+            auto t = std::thread(&SimpleConnectionPool::newConnection, shared_from_this(), type);
             t.detach();
         }
         else
@@ -158,7 +157,7 @@ boost::shared_ptr<CommunicationHandler> SimpleConnectionPool::selectConnection(P
     return conn;
 }
 
-void SimpleConnectionPool::releaseConnection(boost::shared_ptr<CommunicationHandler> conn)
+void SimpleConnectionPool::releaseConnection(std::shared_ptr<CommunicationHandler> conn)
 {
     return;
 }
@@ -170,13 +169,13 @@ error::Error SimpleConnectionPool::getLastError() const
 
 void SimpleConnectionPool::setPoolSize(PoolType type, unsigned int s)
 {
-    boost::unique_lock< boost::recursive_mutex > lock(m_access);
+    std::unique_lock< std::recursive_mutex > lock(m_access);
     m_connectionPools.at(type)->size = s;
 
     // Insert new connections to pool if needed (async)
     long toStart = m_connectionPools.at(type)->size - m_connectionPools.at(type)->connections.size();
     while(toStart-- > 0) {
-        boost::thread t = boost::thread(boost::bind(&SimpleConnectionPool::newConnection, shared_from_this(), type));
+        auto t = std::thread(&SimpleConnectionPool::newConnection, shared_from_this(), type);
         t.detach();
     }
 }
@@ -189,7 +188,7 @@ void SimpleConnectionPool::setPushCallback(const string &fuseId, push_callback h
 
 list<string> SimpleConnectionPool::dnsQuery(const string &hostname)
 {
-    boost::unique_lock< boost::recursive_mutex > lock(m_access);
+    std::unique_lock< std::recursive_mutex > lock(m_access);
 
     list<string> lst;
     struct addrinfo *result;
@@ -220,10 +219,12 @@ list<string> SimpleConnectionPool::dnsQuery(const string &hostname)
     return lst;
 }
 
-SimpleConnectionPool::ConnectionPoolInfo::ConnectionPoolInfo(cert_info_fun getCertInfo, const bool checkCertificate, unsigned int s)
+SimpleConnectionPool::ConnectionPoolInfo::ConnectionPoolInfo(cert_info_fun getCertInfo,
+                                                             bool checkCertificate,
+                                                             unsigned int s)
     : size(s)
     , m_getCertInfo{std::move(getCertInfo)}
-    , m_checkCertificate(checkCertificate)
+    , m_checkCertificate{checkCertificate}
 {
     LOG(INFO) << "Initializing a WebSocket endpoint";
     websocketpp::lib::error_code ec;
@@ -239,7 +240,7 @@ SimpleConnectionPool::ConnectionPoolInfo::ConnectionPoolInfo(cert_info_fun getCe
     }
 
     // Start worker thread
-    m_ioWorker = boost::thread(&ws_client::run, endpoint);
+    m_ioWorker = std::thread(&ws_client::run, endpoint);
 
     endpoint->set_tls_init_handler(bind(&ConnectionPoolInfo::onTLSInit, this, ::_1));
     endpoint->set_socket_init_handler(bind(&ConnectionPoolInfo::onSocketInit, this, ::_1, ::_2));
@@ -267,7 +268,7 @@ context_ptr SimpleConnectionPool::ConnectionPoolInfo::onTLSInit(websocketpp::con
     CertificateInfo certInfo = m_getCertInfo();
 
     try {
-        context_ptr ctx(new boost::asio::ssl::context(boost::asio::ssl::context::sslv3));
+        context_ptr ctx = std::make_shared<boost::asio::ssl::context>(boost::asio::ssl::context::sslv3);
 
         ctx->set_options(boost::asio::ssl::context::default_workarounds |
                          boost::asio::ssl::context::no_sslv2 |
@@ -278,14 +279,19 @@ context_ptr SimpleConnectionPool::ConnectionPoolInfo::onTLSInit(websocketpp::con
                              ? boost::asio::ssl::verify_peer
                              : boost::asio::ssl::verify_none);
 
+        SSL_CTX *ssl_ctx = ctx->native_handle();
+        long mode = SSL_CTX_get_session_cache_mode(ssl_ctx);
+        mode |= SSL_SESS_CACHE_CLIENT;
+        SSL_CTX_set_session_cache_mode(ssl_ctx, mode);
+
         boost::asio::ssl::context_base::file_format file_format; // Certificate format
-        if(certInfo.cert_type == CertificateInfo::ASN1) {
+        if(certInfo.cert_type == CertificateInfo::CertificateType::ASN1) {
             file_format = boost::asio::ssl::context::asn1;
         } else {
             file_format = boost::asio::ssl::context::pem;
         }
 
-        if(certInfo.cert_type == CertificateInfo::P12) {
+        if(certInfo.cert_type == CertificateInfo::CertificateType::P12) {
             LOG(ERROR) << "Unsupported certificate format: P12";
             return context_ptr();
         }

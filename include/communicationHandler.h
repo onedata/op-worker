@@ -5,9 +5,9 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
+#ifndef VEILHELPERS_COMMUNICATION_HANDLER_H
+#define VEILHELPERS_COMMUNICATION_HANDLER_H
 
-#ifndef COMMUNICATION_HANDLER_H
-#define COMMUNICATION_HANDLER_H
 
 #include "communication_protocol.pb.h"
 #include "veilErrors.h"
@@ -22,55 +22,51 @@
 #include <mutex>
 #include <numeric>
 #include <string>
-#include <boost/atomic.hpp>
-#include <boost/thread.hpp>
-#include <boost/shared_ptr.hpp>
-#include <boost/unordered_map.hpp>
+#include <thread>
+#include <unordered_map>
+
+namespace veil
+{
+
+static constexpr int PROTOCOL_VERSION = 1;
 
 // PB decoder name
-#define FUSE_MESSAGES "fuse_messages"
-#define COMMUNICATION_PROTOCOL "communication_protocol"
+static constexpr const char
+    *FUSE_MESSAGES          = "fuse_messages",
+    *COMMUNICATION_PROTOCOL = "communication_protocol";
 
 /// How many re-attampts has to be made by CommunicationHandler::communicate
 /// before returning error.
-#define RECONNECT_COUNT 1
+static constexpr int RECONNECT_COUNT = 1;
 
 /// Timout for WebSocket handshake
-#define CONNECT_TIMEOUT 5000
+static constexpr std::chrono::seconds CONNECT_TIMEOUT{5};
 
 /// Message receive default timeout
-#define RECV_TIMEOUT 2000
+static constexpr uint32_t RECV_TIMEOUT = 2000;
 
 /// Path on which cluster listenes for websocket connections
-#define CLUSTER_URI_PATH "/veilclient"
+static constexpr const char *CLUSTER_URI_PATH = "/veilclient";
 
 using MsgId = decltype(veil::protocol::communication_protocol::ClusterMsg::default_instance().message_id());
 static constexpr MsgId MAX_GENERATED_MSG_ID = std::numeric_limits<MsgId>::max() - 1;
 static constexpr MsgId IGNORE_ANSWER_MSG_ID = MAX_GENERATED_MSG_ID + 1;
 
-typedef websocketpp::client<websocketpp::config::asio_tls_client>       ws_client;
-typedef websocketpp::config::asio_tls_client::message_type::ptr         message_ptr;
-typedef boost::asio::ssl::stream<boost::asio::ip::tcp::socket>          socket_type;
+using ws_client     = websocketpp::client<websocketpp::config::asio_tls_client>;
+using message_ptr   = websocketpp::config::asio_tls_client::message_type::ptr;
+using socket_type   = boost::asio::ssl::stream<boost::asio::ip::tcp::socket>;
+using context_ptr   = websocketpp::lib::shared_ptr<boost::asio::ssl::context>;
 
-typedef websocketpp::lib::shared_ptr<boost::asio::ssl::context>         context_ptr;
-typedef boost::function<void(const veil::protocol::communication_protocol::Answer)>    push_callback;
-typedef boost::unique_lock<boost::recursive_mutex> unique_lock;
-
-template<typename T>
-std::string toString(T in) {
-    std::ostringstream ss;
-    ss << in;
-    return ss.str();
-}
-
-namespace veil {
-
+using push_callback = std::function<void(const veil::protocol::communication_protocol::Answer)>;
+using unique_lock   = std::unique_lock<std::recursive_mutex>;
 
 /// CertificateInfo provides information about certificate configuration
 /// including: certificate type, certificate paths and / or certificate
 /// internal buffers pointing to certs loaded into program memory.
-struct CertificateInfo {
-    enum CertificateType {
+struct CertificateInfo
+{
+    enum class CertificateType
+    {
         PEM,
         P12,
         ASN1
@@ -86,24 +82,24 @@ struct CertificateInfo {
     /// Construct CertificateInfo using file paths
     CertificateInfo(std::string         p_user_cert_path,
                     std::string         p_user_key_path,
-                    CertificateType     p_cert_type = PEM)
-      : user_cert_path(p_user_cert_path),
-        user_key_path(p_user_key_path),
-        cert_type(p_cert_type)
+                    CertificateType     p_cert_type = CertificateType::PEM)
+        : user_cert_path(p_user_cert_path)
+        , user_key_path(p_user_key_path)
+        , cert_type(p_cert_type)
     {
     }
 
     /// Construct CertificateInfo using memeory buffers
     CertificateInfo(boost::asio::const_buffer chain_buff, boost::asio::const_buffer key_buff)
-      : cert_type(PEM),
-        chain_data(chain_buff),
-        key_data(key_buff)
+        : cert_type(CertificateType::PEM)
+        , chain_data(chain_buff)
+        , key_data(key_buff)
     {
     }
 };
 
 // getter for CertificateInfo struct
-typedef boost::function<CertificateInfo()> cert_info_fun;
+using cert_info_fun = std::function<CertificateInfo()>;
 
 /**
  * The CommunicationHandler class.
@@ -114,7 +110,7 @@ typedef boost::function<CertificateInfo()> cert_info_fun;
 class CommunicationHandler
 {
 private:
-    boost::atomic<error::Error> m_lastError;
+    std::atomic<error::Error> m_lastError;
     const bool m_checkCertificate;
 
 protected:
@@ -124,10 +120,9 @@ protected:
     cert_info_fun               m_getCertInfo;
 
     // Container that gathers all incoming messages
-    boost::unordered_map<long long, std::string> m_incomingMessages;
+    std::unordered_map<long long, std::string> m_incomingMessages;
 
-    // Boost based internals
-    boost::shared_ptr<ws_client>                  m_endpoint;
+    std::shared_ptr<ws_client>  m_endpoint;
     ws_client::connection_ptr   m_endpointConnection;
     volatile int                m_connectStatus;    ///< Current connection status
     MsgId                       m_nextMsgId;        ///< Next messageID to be used
@@ -135,14 +130,14 @@ protected:
     volatile bool               m_isPushChannel;
     std::string                 m_fuseID;           ///< Current fuseID for PUSH channel (if any)
 
-    boost::recursive_mutex      m_connectMutex;
-    boost::recursive_mutex      m_reconnectMutex;
-    boost::condition_variable_any   m_connectCond;
+    std::recursive_mutex        m_connectMutex;
+    std::recursive_mutex        m_reconnectMutex;
+    std::condition_variable_any m_connectCond;
     std::mutex                  m_msgIdMutex;
-    boost::recursive_mutex      m_receiveMutex;
-    boost::condition_variable_any   m_receiveCond;
+    std::recursive_mutex        m_receiveMutex;
+    std::condition_variable_any m_receiveCond;
 
-    uint64_t                    m_lastConnectTime;
+    std::chrono::time_point<std::chrono::system_clock> m_lastConnectTime;
 
     /// Callback function which shall be called for every cluster PUSH message
     push_callback m_pushCallback;
@@ -180,7 +175,7 @@ public:
     };
 
     CommunicationHandler(const std::string &hostname, int port, cert_info_fun,
-                         boost::shared_ptr<ws_client> endpoint, const bool checkCertificate);
+                         std::shared_ptr<ws_client> endpoint, const bool checkCertificate);
     virtual ~CommunicationHandler();
 
     virtual void setCertFun(cert_info_fun certFun);                         ///< Setter for function that returns CommunicationHandler::CertificateInfo struct.
@@ -228,4 +223,5 @@ public:
 
 } // namespace veil
 
-#endif // COMMUNICATION_HANDLER_H
+
+#endif // VEILHELPERS_COMMUNICATION_HANDLER_H

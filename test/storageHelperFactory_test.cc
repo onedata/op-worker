@@ -5,24 +5,21 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#include "testCommonH.h"
+#include "connectionPool_mock.h"
 #include "helpers/storageHelperFactory.h"
 
-#include "connectionPool_mock.h"
-
-#include <boost/make_shared.hpp>
+#include <gtest/gtest.h>
 
 #include <memory>
 
-INIT_AND_RUN_ALL_TESTS(); // TEST RUNNER !
+using namespace veil;
+using namespace veil::helpers;
 
-// TEST definitions below
-
-
-TEST(StorageHelperFactoryTest, ObjectBuild) {
-    StorageHelperFactory factory(boost::make_shared<MockConnectionPool>(), BufferLimits{});
+TEST(StorageHelperFactoryTest, ObjectBuild)
+{
+    StorageHelperFactory factory(std::make_shared<MockConnectionPool>(), BufferLimits{});
 
     EXPECT_NE((IStorageHelper*)0, factory.getStorageHelper("DirectIO", IStorageHelper::ArgsMap{}).get());
-   
+
     EXPECT_EQ((IStorageHelper*)0, factory.getStorageHelper("not existing", IStorageHelper::ArgsMap{}).get());
 }

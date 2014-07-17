@@ -6,21 +6,19 @@
  */
 
 #include "helpers/storageHelperFactory.h"
-#include "directIOHelper.h"
+
 #include "clusterProxyHelper.h"
-#include "communicationHandler.h"
+#include "directIOHelper.h"
 
-#include <boost/algorithm/string.hpp>
-#include <boost/lexical_cast.hpp>
+#include <boost/algorithm/string/case_conv.hpp>
 
-using namespace boost;
-using namespace std;
-
-namespace veil {
-namespace helpers {
+namespace veil
+{
+namespace helpers
+{
 
 BufferLimits::BufferLimits(const size_t wgl, const size_t rgl, const size_t wfl,
-               const size_t rfl, const size_t pbs)
+                           const size_t rfl, const size_t pbs)
     : writeBufferGlobalSizeLimit{wgl}
     , readBufferGlobalSizeLimit{rgl}
     , writeBufferPerFileSizeLimit{wfl}
@@ -31,36 +29,34 @@ BufferLimits::BufferLimits(const size_t wgl, const size_t rgl, const size_t wfl,
 
 namespace utils {
 
-    string tolower(string input) {
+    std::string tolower(std::string input) {
         boost::algorithm::to_lower(input);
-        return input;
+        return std::move(input);
     }
 
 } // namespace utils
 
-StorageHelperFactory::StorageHelperFactory(boost::shared_ptr<SimpleConnectionPool> connectionPool,
+StorageHelperFactory::StorageHelperFactory(std::shared_ptr<SimpleConnectionPool> connectionPool,
                                            const BufferLimits &limits)
     : m_connectionPool{std::move(connectionPool)}
     , m_limits{limits}
 {
 }
 
-
-boost::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(const string &sh_name,
-                                                                         const IStorageHelper::ArgsMap &args) {
+std::shared_ptr<IStorageHelper> StorageHelperFactory::getStorageHelper(const std::string &sh_name,
+                                                                       const IStorageHelper::ArgsMap &args) {
     if(sh_name == "DirectIO")
-        return boost::shared_ptr<IStorageHelper>(new DirectIOHelper(args));
-    else if(sh_name == "ClusterProxy")
-        return boost::shared_ptr<IStorageHelper>(new ClusterProxyHelper(m_connectionPool, m_limits, args));
-    else
-    {
-        return boost::shared_ptr<IStorageHelper>();
-    }
+        return std::make_shared<DirectIOHelper>(args);
+
+    if(sh_name == "ClusterProxy")
+        return std::make_shared<ClusterProxyHelper>(m_connectionPool, m_limits, args);
+
+    return {};
 }
 
-string srvArg(const int argno)
+std::string srvArg(const int argno)
 {
-    return "srv_arg" + boost::lexical_cast<std::string>(argno);
+    return "srv_arg" + std::to_string(argno);
 }
 
 } // namespace helpers

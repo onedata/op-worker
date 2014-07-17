@@ -1,11 +1,21 @@
+/**
+ * @file fileCache.cc
+ * @author Rafal Slota
+ * @copyright (C) 2013 ACK CYFRONET AGH
+ * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
+ */
+
 #include "fileCache.h"
+
 #include "logging.h"
-#include "helpers/storageHelperFactory.h"
 
-#define MAX_BLOCK_SIZE 10
+#include <chrono>
+#include <iostream>
 
-namespace veil {
-namespace helpers {
+namespace veil
+{
+namespace helpers
+{
 
 using namespace std;
 
@@ -17,18 +27,14 @@ FileCache::FileCache(uint32_t blockSize, bool isBuffer)
 {
 }
 
-FileCache::~FileCache()
-{
-}
-
 bool FileCache::readData(off_t offset, size_t size, std::string &buff)
 {
-    boost::unique_lock<boost::recursive_mutex> guard(m_fileBlocksMutex);
+    std::unique_lock<std::recursive_mutex> guard(m_fileBlocksMutex);
 
     discardExpired();
     buff.resize(0);
 
-    multiset<block_ptr>::const_iterator it = m_fileBlocks.upper_bound(block_ptr(new FileBlock(offset)));
+    auto it = m_fileBlocks.upper_bound(std::make_shared<FileBlock>(offset));
 
     if(it == m_fileBlocks.begin())
         return false;
@@ -49,7 +55,7 @@ bool FileCache::readData(off_t offset, size_t size, std::string &buff)
 
 bool FileCache::writeData(off_t offset, const std::string &buff)
 {
-    boost::unique_lock<boost::recursive_mutex> guard(m_fileBlocksMutex);
+    std::unique_lock<std::recursive_mutex> guard(m_fileBlocksMutex);
 
     discardExpired();
 
@@ -72,7 +78,7 @@ void FileCache::debugPrint()
 
 block_ptr FileCache::removeOldestBlock()
 {
-    boost::unique_lock<boost::recursive_mutex> guard(m_fileBlocksMutex);
+    std::unique_lock<std::recursive_mutex> guard(m_fileBlocksMutex);
 
     if(m_blockExpire.empty())
         return block_ptr();
@@ -91,7 +97,7 @@ block_ptr FileCache::removeOldestBlock()
 
 bool FileCache::insertBlock(const FileBlock &block)
 {
-    boost::unique_lock<boost::recursive_mutex> guard(m_fileBlocksMutex);
+    std::unique_lock<std::recursive_mutex> guard(m_fileBlocksMutex);
 
     discardExpired();
 
@@ -101,7 +107,7 @@ bool FileCache::insertBlock(const FileBlock &block)
     // repeat while the is still data to save
     do
     {
-        multiset<block_ptr>::iterator it = m_fileBlocks.upper_bound(block_ptr(new FileBlock(offset)));
+        auto it = m_fileBlocks.upper_bound(std::make_shared<FileBlock>(offset));
         multiset<block_ptr>::iterator next;
         if(it != m_fileBlocks.begin())
             --it;
@@ -116,7 +122,7 @@ bool FileCache::insertBlock(const FileBlock &block)
             if( ((*it)->offset + (*it)->size() <= static_cast<size_t>(offset)) || ((*it)->offset > offset) )
             {
                 size_t tmpSize = next == m_fileBlocks.end() ? cBuff.size() : min((size_t)((*next)->offset - offset ), cBuff.size());
-                block_ptr tmp = block_ptr(new FileBlock(offset, cBuff.substr(0, tmpSize)));
+                block_ptr tmp = std::make_shared<FileBlock>(offset, cBuff.substr(0, tmpSize));
 
                 cBuff = cBuff.substr(tmpSize);
                 offset += tmpSize;
@@ -141,7 +147,7 @@ bool FileCache::insertBlock(const FileBlock &block)
         // Whole current data block does not overlap with older ones
         if(it == m_fileBlocks.end())
         {
-            block_ptr tmp = block_ptr(new FileBlock(offset, cBuff));
+            block_ptr tmp = std::make_shared<FileBlock>(offset, cBuff);
             forceInsertBlock(tmp, it);
 
             cBuff = "";
@@ -152,9 +158,15 @@ bool FileCache::insertBlock(const FileBlock &block)
     return true;
 }
 
+template<typename clock_t>
+static uint64_t milliseconds(std::chrono::time_point<clock_t> point)
+{
+    return std::chrono::duration_cast<std::chrono::milliseconds>(point.time_since_epoch()).count();
+}
+
 void FileCache::forceInsertBlock(block_ptr block, std::multiset<block_ptr>::iterator whereTo)
 {
-    boost::unique_lock<boost::recursive_mutex> guard(m_fileBlocksMutex);
+    std::unique_lock<std::recursive_mutex> guard(m_fileBlocksMutex);
 
     // This method asumes that given block does not overlap at all with others
     // This is where block merging thakes place
@@ -164,7 +176,9 @@ void FileCache::forceInsertBlock(block_ptr block, std::multiset<block_ptr>::iter
 
     // Set expiration time if it isn't set yet
     if(block->valid_to == 0)
-        block->valid_to = m_isBuffer ? ++m_curBlockNo : utils::mtime<uint64_t>() + 5000;
+        block->valid_to = m_isBuffer
+                ? ++m_curBlockNo
+                : milliseconds(std::chrono::steady_clock::now() + std::chrono::seconds{5});
 
     multiset<block_ptr>::iterator it, next, origNext, tmp;
     it = next = origNext = m_fileBlocks.insert(whereTo, block);
@@ -211,13 +225,13 @@ void FileCache::forceInsertBlock(block_ptr block, std::multiset<block_ptr>::iter
 
 size_t FileCache::byteSize()
 {
-    boost::unique_lock<boost::recursive_mutex> guard(m_fileBlocksMutex);
+    std::unique_lock<std::recursive_mutex> guard(m_fileBlocksMutex);
     return m_byteSize;
 }
 
 size_t FileCache::blockCount()
 {
-    boost::unique_lock<boost::recursive_mutex> guard(m_fileBlocksMutex);
+    std::unique_lock<std::recursive_mutex> guard(m_fileBlocksMutex);
     return m_fileBlocks.size();
 }
 
@@ -227,12 +241,12 @@ void FileCache::discardExpired()
     if(m_isBuffer)
         return;
 
-    boost::unique_lock<boost::recursive_mutex> guard(m_fileBlocksMutex);
+    std::unique_lock<std::recursive_mutex> guard(m_fileBlocksMutex);
     while(!m_blockExpire.empty())
     {
         block_ptr tmp = *m_blockExpire.begin();
 
-        if(tmp->valid_to > utils::mtime<uint64_t>())
+        if(tmp->valid_to > milliseconds(std::chrono::steady_clock::now()))
             break;
 
         m_blockExpire.erase(tmp);

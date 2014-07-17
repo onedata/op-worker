@@ -5,38 +5,33 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
+#ifndef VEILHELPERS_SIMPLE_CONNECTION_POOL_H
+#define VEILHELPERS_SIMPLE_CONNECTION_POOL_H
 
-#ifndef SIMPLE_CONNECTION_POOL_H
-#define SIMPLE_CONNECTION_POOL_H
 
-#include <boost/make_shared.hpp>
-#include <boost/thread.hpp>
-#include <list>
-#include <ctime>
-#include <boost/shared_ptr.hpp>
-#include <boost/enable_shared_from_this.hpp>
-#include <boost/atomic.hpp>
 #include "communicationHandler.h"
-#include "veilErrors.h"
 
 #include <atomic>
 #include <condition_variable>
+#include <list>
 #include <memory>
 #include <mutex>
 #include <thread>
 
-#define DEFAULT_POOL_SIZE 2
-#define MAX_CONNECTION_ERROR_COUNT 5
+namespace veil
+{
 
-namespace veil {
+constexpr int DEFAULT_POOL_SIZE = 2;
+constexpr int MAX_CONNECTION_ERROR_COUNT = 5;
 
-typedef std::list<std::pair<boost::shared_ptr<CommunicationHandler>, time_t> > connection_pool_t;
+using connection_pool_t = std::list<std::pair<std::shared_ptr<CommunicationHandler>, time_t>>;
 
-class SimpleConnectionPool : public boost::enable_shared_from_this<SimpleConnectionPool>
+class SimpleConnectionPool : public std::enable_shared_from_this<SimpleConnectionPool>
 {
 public:
 
-    enum PoolType {
+    enum PoolType
+    {
         META_POOL = 0,  ///< Connection for meta data
         DATA_POOL       ///< Connection for file data
     };
@@ -48,7 +43,7 @@ public:
                            unsigned int s = DEFAULT_POOL_SIZE);
         ~ConnectionPoolInfo();
 
-        boost::shared_ptr<ws_client> endpoint = boost::make_shared<ws_client>();
+        std::shared_ptr<ws_client> endpoint = std::make_shared<ws_client>();
         connection_pool_t connections;
         int currWorkers = 0;
         unsigned int size;
@@ -58,7 +53,7 @@ public:
         void onSocketInit(websocketpp::connection_hdl hdl, socket_type &socket);
 
         cert_info_fun m_getCertInfo;
-        boost::thread m_ioWorker;
+        std::thread   m_ioWorker;
         const bool    m_checkCertificate;
     };
 
@@ -76,10 +71,10 @@ public:
      * This method uses simple round-robin selection for all connections in pool.
      * It also creates new instances of CommunicationHandler if needed.
      */
-    virtual boost::shared_ptr<CommunicationHandler> selectConnection(PoolType = META_POOL);
-    virtual void releaseConnection(boost::shared_ptr<CommunicationHandler> conn);       ///< Returns CommunicationHandler's pointer ownership back to connection pool.
-                                                                                        ///< @deprecated Since selectConnection does not pass connection ownership, this
-                                                                                        ///< method is useless, so it does nothing.
+    virtual std::shared_ptr<CommunicationHandler> selectConnection(PoolType = META_POOL);
+    virtual void releaseConnection(std::shared_ptr<CommunicationHandler> conn);       ///< Returns CommunicationHandler's pointer ownership back to connection pool.
+                                                                                      ///< @deprecated Since selectConnection does not pass connection ownership, this
+                                                                                      ///< method is useless, so it does nothing.
 
     /**
      * @returns Last error encountered while creating or managing connections.
@@ -94,12 +89,12 @@ protected:
 
     push_callback        m_pushCallback;
 
-    boost::recursive_mutex      m_access;
-    boost::condition_variable   m_accessCond;
-    std::map<PoolType, std::unique_ptr<ConnectionPoolInfo>>  m_connectionPools;                      ///< Connection pool. @see SimpleConnectionPool::selectConnection
+    std::recursive_mutex      m_access;
+    std::condition_variable   m_accessCond;
+    std::map<PoolType, std::unique_ptr<ConnectionPoolInfo>>  m_connectionPools;     ///< Connection pool. @see SimpleConnectionPool::selectConnection
     std::list<std::string> m_hostnamePool;
 
-    virtual boost::shared_ptr<CommunicationHandler> newConnection(PoolType type);   ///< Creates new active connection and adds it to connection pool. Convenience method for testing (makes connection mocking easier)
+    virtual std::shared_ptr<CommunicationHandler> newConnection(PoolType type);     ///< Creates new active connection and adds it to connection pool. Convenience method for testing (makes connection mocking easier)
     virtual std::list<std::string> dnsQuery(const std::string &hostname);           ///< Fetch IP list from DNS for given hostname.
 
     /// Increments givent int while constructing and deincrement while destructing.
@@ -107,7 +102,7 @@ protected:
         int &c;
 
         CounterRAII(int &c)
-          : c(c)
+            : c(c)
         {
             ++c;
         }
@@ -120,11 +115,11 @@ protected:
     };
 
 private:
-    boost::atomic<error::Error> m_lastError;
+    std::atomic<error::Error> m_lastError;
     const bool m_checkCertificate;
 };
 
 } // namespace veil
 
-#endif // SIMPLE_CONNECTION_POOL_H
 
+#endif // VEILHELPERS_SIMPLE_CONNECTION_POOL_H
