@@ -122,14 +122,11 @@ protected:
     // Boost based internals
     boost::shared_ptr<ws_client>                  m_endpoint;
     ws_client::connection_ptr   m_endpointConnection;
-    boost::thread               m_worker1;
-    boost::thread               m_worker2;
     volatile int                m_connectStatus;    ///< Current connection status
     MsgId                       m_nextMsgId;        ///< Next messageID to be used
     volatile unsigned int       m_errorCount;       ///< How many connection errors were cought
     volatile bool               m_isPushChannel;
     std::string                 m_fuseID;           ///< Current fuseID for PUSH channel (if any)
-    static SSL_SESSION*         m_session;
 
     boost::recursive_mutex      m_connectMutex;
     boost::recursive_mutex      m_reconnectMutex;
@@ -137,7 +134,6 @@ protected:
     std::mutex                  m_msgIdMutex;
     boost::recursive_mutex      m_receiveMutex;
     boost::condition_variable_any   m_receiveCond;
-    static boost::recursive_mutex m_instanceMutex;
 
     uint64_t                    m_lastConnectTime;
 
@@ -145,8 +141,6 @@ protected:
     push_callback m_pushCallback;
 
     // WebSocket++ callbacks
-    context_ptr onTLSInit(websocketpp::connection_hdl hdl);                 ///< On TLS init callback
-    void onSocketInit(websocketpp::connection_hdl hdl, socket_type &socket);///< On socket init callback
     void onMessage(websocketpp::connection_hdl hdl, message_ptr msg);       ///< Incoming WebSocket message callback
     void onOpen(websocketpp::connection_hdl hdl);                           ///< WebSocket connection opened
     void onClose(websocketpp::connection_hdl hdl);                          ///< WebSocket connection closed
@@ -178,7 +172,8 @@ public:
         NO_ERROR            = 0
     };
 
-    CommunicationHandler(const std::string &hostname, int port, cert_info_fun);
+    CommunicationHandler(const std::string &hostname, int port, cert_info_fun,
+                         boost::shared_ptr<ws_client> endpoint);
     virtual ~CommunicationHandler();
 
     virtual void setCertFun(cert_info_fun certFun);                         ///< Setter for function that returns CommunicationHandler::CertificateInfo struct.

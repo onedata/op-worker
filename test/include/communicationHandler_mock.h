@@ -17,7 +17,7 @@ using namespace veil::protocol::communication_protocol;
 class MockCommunicationHandler
     : public CommunicationHandler {
 public:
-    MockCommunicationHandler() : CommunicationHandler("host", 5555, boost::bind(&MockCommunicationHandler::getCertInfo, this)) {};
+    MockCommunicationHandler() : CommunicationHandler("host", 5555, boost::bind(&MockCommunicationHandler::getCertInfo, this), boost::shared_ptr<ws_client>()) {};
     ~MockCommunicationHandler() {};
 
     int openConnection() {
