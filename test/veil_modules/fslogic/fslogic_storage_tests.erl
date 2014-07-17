@@ -65,8 +65,7 @@ get_mount_points_test() ->
   ?assert(meck:validate(file)),
   ?assertEqual(ok, meck:unload(file)),
   ?assertEqual(ExpectedMountPoints, ActualMountPoints),
-  file:delete(?TEST_PROC_MOUNTS),
-  meck:unload(file).
+  file:delete(?TEST_PROC_MOUNTS).
 
 get_relative_path_test() ->
   ?assertEqual({ok, "path"}, fslogic_storage:get_relative_path("/base", "/base/path")),

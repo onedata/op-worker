@@ -165,8 +165,7 @@ get_interface_stats_test() ->
   ActualInterfaceStats = node_manager:get_interface_stats("eth0", "rx_bytes"),
   ?assert(meck:validate(file)),
   ?assertEqual(ok, meck:unload(file)),
-  ?assertEqual(ExpectedInterfaceStats, ActualInterfaceStats),
-  meck:unload(file).
+  ?assertEqual(ExpectedInterfaceStats, ActualInterfaceStats).
 
 get_single_core_cpu_stats_test() ->
   SampleFile = create_sample_cpu_stats_file(1),
@@ -178,8 +177,7 @@ get_single_core_cpu_stats_test() ->
   ActualCpuStats = node_manager:get_cpu_stats([{<<"core0">>, 0, 0}, {<<"cpu">>, 0, 0}]),
   ?assert(meck:validate(file)),
   ?assertEqual(ok, meck:unload(file)),
-  ?assertEqual(ExpectedCpuStats, ActualCpuStats),
-  meck:unload(file).
+  ?assertEqual(ExpectedCpuStats, ActualCpuStats).
 
 get_multi_core_cpu_stats_test() ->
   SampleFile = create_sample_cpu_stats_file(4),
@@ -193,8 +191,7 @@ get_multi_core_cpu_stats_test() ->
     {<<"core0">>, 0, 0}, {<<"cpu">>, 0, 0}]),
   ?assert(meck:validate(file)),
   ?assertEqual(ok, meck:unload(file)),
-  ?assertEqual(ExpectedCpuStats, ActualCpuStats),
-  meck:unload(file).
+  ?assertEqual(ExpectedCpuStats, ActualCpuStats).
 
 calculate_ports_transfer_test() ->
   PortsStats = [{p1, 100, 40}, {p2, 300, 100}, {p3, 100, 200}],
@@ -212,8 +209,7 @@ get_memory_stats_test() ->
   ActualMemoryStats = node_manager:get_memory_stats(),
   ?assert(meck:validate(file)),
   ?assertEqual(ok, meck:unload(file)),
-  ?assertEqual(ExpectedMemoryStats, ActualMemoryStats),
-  meck:unload(file).
+  ?assertEqual(ExpectedMemoryStats, ActualMemoryStats).
 
 is_valid_name_test() ->
   ?assert(node_manager:is_valid_name("azAZ09_", 12)),
