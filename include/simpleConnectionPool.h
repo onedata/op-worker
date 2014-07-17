@@ -41,7 +41,7 @@ public:
         DATA_POOL       ///< Connection for file data
     };
 
- class ConnectionPoolInfo
+    class ConnectionPoolInfo
     {
     public:
         ConnectionPoolInfo(cert_info_fun getCertInfo, bool checkCertificate,
