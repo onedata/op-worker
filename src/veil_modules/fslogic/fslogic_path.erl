@@ -98,7 +98,6 @@ get_full_file_name(FileName, Request) ->
 
 get_full_file_name(FileName, Request, UserDocStatus, UserDoc) ->
     {ok, Tokens} = verify_file_name(FileName),
-    ?info("get_full_file_name ~p ~p", [FileName, Tokens]),
     VerifiedFileName = string:join(Tokens, "/"),
     case UserDocStatus of
         ok ->

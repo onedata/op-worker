@@ -37,7 +37,6 @@ get_space(#file{extensions = Ext}) ->
 get_space(#space_info{} = SpaceInfo) ->
     {ok, SpaceInfo};
 get_space(SpaceId) ->
-    ?info("get_space ~p", [SpaceId]),
     case dao_lib:apply(vfs, get_space_file, [{uuid, SpaceId}], 1) of
         {ok, #veil_document{record = #file{} = File}} ->
             get_space(File);

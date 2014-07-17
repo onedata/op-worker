@@ -77,8 +77,6 @@ get_file_children(FullFileName, UserPathTokens, ROffset, RCount) ->
 
     TokenizedPath = UserPathTokens,
 
-    ?info("LS: ~p ~p ~p", [FullFileName, UserPathTokens, TokenizedPath]),
-
     {Num, Offset} =
         case {ROffset, TokenizedPath} of
             {0 = Off0, []} -> %% First iteration over "/" dir has to contain "groups" folder, so fetch `num - 1` files instead `num`
@@ -99,12 +97,10 @@ get_file_children(FullFileName, UserPathTokens, ROffset, RCount) ->
         {_, [?SPACES_BASE_DIR_NAME]} -> %% For group list query ignore DB result and generate list based on user's teams
 
             Teams = user_logic:get_space_names({dn, fslogic_context:get_user_dn()}),
-            ?info("wut2? ~p ~p", [{ROffset, TokenizedPath}, Teams]),
             {_Head, Tail} = lists:split(min(Offset, length(Teams)), Teams),
             {Ret, _} = lists:split(min(Num, length(Tail)), Tail),
             #filechildren{child_logic_name = Ret};
         Other ->
-            ?info("wut3? ~p ~p", [{ROffset, TokenizedPath}, Other]),
             #filechildren{child_logic_name = Children}
     end.
 
