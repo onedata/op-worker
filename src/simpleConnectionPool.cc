@@ -222,8 +222,8 @@ list<string> SimpleConnectionPool::dnsQuery(const string &hostname)
 
 SimpleConnectionPool::ConnectionPoolInfo::ConnectionPoolInfo(cert_info_fun getCertInfo, unsigned int s, const bool checkCertificate)
     : size(s)
-    , m_getCertInfo{std::move(getCertInfo)}
     , m_checkCertificate(checkCertificate)
+    , m_getCertInfo{std::move(getCertInfo)}
 {
     LOG(INFO) << "Initializing a WebSocket endpoint";
     websocketpp::lib::error_code ec;
