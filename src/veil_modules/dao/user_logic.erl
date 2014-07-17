@@ -28,7 +28,7 @@
 -export([rdn_sequence_to_dn_string/1, extract_dn_from_cert/1, invert_dn_string/1]).
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
 -export([shortname_to_oid_code/1, oid_code_to_shortname/1]).
--export([get_space_names/1, create_space_dir/1]).
+-export([get_space_names/1, create_space_dir/1, get_spaces/1]).
 -export([create_dirs_at_storage/3, create_dirs_at_storage/2]).
 -export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/2]).
 
