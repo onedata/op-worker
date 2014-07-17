@@ -123,12 +123,12 @@ create_user(Login, Name, Teams, Email, DnList) ->
                 lists:foreach(
                     fun(#space_info{} = SP) ->
                         case fslogic_spaces:initialize(SP) of
-                            {ok, _} ->
-                                {ok, _} = GetUserAns;
+                            {ok, _} -> ok;
                             {error, Reason} ->
                                 throw(Reason)
                         end
-                    end, get_spaces(User));
+                    end, get_spaces(User)),
+                {ok, _} = GetUserAns;
             _ ->
                 throw({error, {UUID, QuotaUUID}})
         end

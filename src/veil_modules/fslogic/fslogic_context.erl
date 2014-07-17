@@ -156,6 +156,8 @@ get_fs_group_ctx() ->
     case get(fsctx_gname) of
         undefined ->
             [-1];
+        [] ->
+            [-1];
         GroupID -> GroupID
     end.
 
