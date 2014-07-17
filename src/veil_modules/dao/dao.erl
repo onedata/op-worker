@@ -39,6 +39,9 @@
 -export([save_record/1, exist_record/1, get_record/1, remove_record/1, list_records/2, set_db/1]).
 -export([doc_to_term/1,init_storage/0]).
 
+%% For integration tests
+-export([set_db/0]).
+
 %% ===================================================================
 %% Behaviour callback functions
 %% ===================================================================
@@ -54,13 +57,7 @@ init({Args, {init_status, undefined}}) ->
     ets:new(db_host_store, [named_table, public, bag, {read_concurrency, true}]),
     init({Args, {init_status, table_initialized}});
 init({_Args, {init_status, table_initialized}}) -> %% Final stage of initialization. ETS table was initialized
-    case application:get_env(veil_cluster_node, db_nodes) of
-        {ok, Nodes} when is_list(Nodes) ->
-            [dao_hosts:insert(Node) || Node <- Nodes, is_atom(Node)],
-            catch dao_update:setup_views(get_db_structure());
-        _ ->
-            ?warning("There are no DB hosts given in application env variable.")
-    end,
+    set_db(),
 
     ProcFun = fun(ProtocolVersion, {Target, Method, Args}) ->
       handle(ProtocolVersion, {Target, Method, Args})
@@ -639,3 +636,19 @@ init_storage() ->
       ?error("Error during storage init: ~p:~p", [Type, Error]),
       {error, Error}
   end.
+
+
+%% set_db/0
+%% ====================================================================
+%% @doc Gets list of db nodes from env and inserts them to dao_hosts
+%% @end
+-spec set_db() -> ok | {error, Error :: term()}.
+%% ====================================================================
+set_db() ->
+    case application:get_env(veil_cluster_node, db_nodes) of
+        {ok, Nodes} when is_list(Nodes) ->
+            [dao_hosts:insert(Node) || Node <- Nodes, is_atom(Node)],
+            catch dao_update:setup_views(get_db_structure());
+        _ ->
+            ?warning("There are no DB hosts given in application env variable.")
+    end.

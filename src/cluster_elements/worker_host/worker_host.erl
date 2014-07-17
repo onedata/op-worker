@@ -186,11 +186,26 @@ handle_call({update_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM,
       ?warning("update_sub_proc: ~p, not_exists", [{Name, Cache}]),
       {reply, not_exists, State};
     OldSubProcTuple ->
-      WithoutOldSubProc = lists:delete(OldSubProcTuple, State#host_state.sub_procs),
-      SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache) ++ WithoutOldSubProc,
-      NewState = upgrade_sub_proc_list(SubProcList, RM, DM, Cache, State),
-      ?info("update_sub_proc: ~p, ok", [{Name, Cache}]),
-      {reply, ok, NewState}
+        {_, _, SubProcPid} = proplists:get_value(Name, State#host_state.sub_procs),
+        SubProcPid ! {sub_proc_management, self(), stop},
+        case is_process_alive(SubProcPid) of
+          false ->
+            WithoutOldSubProc = lists:delete(OldSubProcTuple, State#host_state.sub_procs),
+            SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache) ++ WithoutOldSubProc,
+            NewState = upgrade_sub_proc_list(SubProcList, RM, DM, Cache, State),
+            {reply, ok, NewState};
+          true ->
+            receive
+                sub_proc_stopped ->
+                    WithoutOldSubProc2 = lists:delete(OldSubProcTuple, State#host_state.sub_procs),
+                    SubProcList2 = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache) ++ WithoutOldSubProc2,
+                    NewState2 = upgrade_sub_proc_list(SubProcList2, RM, DM, Cache, State),
+                    {reply, ok, NewState2}
+            after
+                1000 ->
+                    {reply, cannot_stop_old_proc, State}
+            end
+        end
   end;
 
 handle_call({update_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM}, _From, State) ->
@@ -198,15 +213,33 @@ handle_call({update_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM}
 
 %% Register sub_proc, may overwrite existing for the same Name.
 handle_call({register_or_update_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, Cache}, _From, State) ->
-  SubProcList = case lists:keyfind(Name, 1, State#host_state.sub_procs) of
-    false -> worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache) ++ State#host_state.sub_procs;
+    case lists:keyfind(Name, 1, State#host_state.sub_procs) of
+        false ->
+            SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache) ++ State#host_state.sub_procs,
+            NewState = upgrade_sub_proc_list(SubProcList, RM, DM, Cache, State),
+            {reply, ok, NewState};
     OldSubProcTuple ->
-      WithoutOldSubProc = lists:delete(OldSubProcTuple, State#host_state.sub_procs),
-      worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache) ++ WithoutOldSubProc
-  end,
-  NewState = upgrade_sub_proc_list(SubProcList, RM, DM, Cache, State),
-  ?info("register_or_update_sub_proc: ~p, ok", [{Name, Cache}]),
-  {reply, ok, NewState};
+        {_, _, SubProcPid} = proplists:get_value(Name, State#host_state.sub_procs),
+        SubProcPid ! {sub_proc_management, self(), stop},
+        case is_process_alive(SubProcPid) of
+          false ->
+            WithoutOldSubProc = lists:delete(OldSubProcTuple, State#host_state.sub_procs),
+            SubProcList = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache) ++ WithoutOldSubProc,
+            NewState = upgrade_sub_proc_list(SubProcList, RM, DM, Cache, State),
+            {reply, ok, NewState};
+          true ->
+            receive
+                sub_proc_stopped ->
+                    WithoutOldSubProc2 = lists:delete(OldSubProcTuple, State#host_state.sub_procs),
+                    SubProcList2 = worker_host:generate_sub_proc_list(Name, MaxDepth, MaxWidth, ProcFun, MapFun, Cache) ++ WithoutOldSubProc2,
+                    NewState2 = upgrade_sub_proc_list(SubProcList2, RM, DM, Cache, State),
+                    {reply, ok, NewState2}
+            after
+                1000 ->
+                    {reply, cannot_stop_old_proc, State}
+            end
+        end
+    end;
 
 handle_call({register_or_update_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM}, _From, State) ->
   handle_call({register_or_update_sub_proc, Name, MaxDepth, MaxWidth, ProcFun, MapFun, RM, DM, non}, _From, State);
@@ -697,6 +730,11 @@ sub_proc(Name, CacheName, ProcType, SubProcDepth, MaxDepth, MaxWidth, WaitFrom, 
     {sub_proc_management, stop} ->
       ?debug("Stoping sub proc ~p", [Name]),
       del_sub_procs(ets:first(Name), Name);
+
+    {sub_proc_management, ReturnPid, stop} ->
+      del_sub_procs(ets:first(Name), Name),
+      ets:delete(CacheName),
+      ReturnPid ! sub_proc_stopped;
 
     {sub_proc_management, ReturnPid, clear_cache} ->
       case CacheName of

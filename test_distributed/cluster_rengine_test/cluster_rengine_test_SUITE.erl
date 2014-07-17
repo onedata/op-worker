@@ -393,7 +393,7 @@ subscribe_for_write_events(Node, ProcessingMethod, EventHandler, ProcessingConfi
 
   receive
     ok -> ok
-  after 400 ->
+  after 2000 ->
     ?assert(false)
   end,
 

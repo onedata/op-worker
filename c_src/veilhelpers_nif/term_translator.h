@@ -8,10 +8,13 @@
 #ifndef TERM_TRANSLATOR_H
 #define TERM_TRANSLATOR_H 1
 
-#include "erl_nif.h"
+#include "helpers/IStorageHelper.h"
+
+#include <erl_nif.h>
 #include <fuse.h>
 #include <fcntl.h>
 #include <unistd.h>
+
 #include <vector>
 #include <string>
 
@@ -29,7 +32,7 @@ namespace cluster
 
 std::string get_string(ErlNifEnv* env, ERL_NIF_TERM term);                      // Term to string
 std::string get_atom(ErlNifEnv* env, ERL_NIF_TERM term);                        // Term to atom (as string)
-std::vector<std::string> get_str_vector(ErlNifEnv* env, ERL_NIF_TERM term);     // Term to vector<string>
+helpers::IStorageHelper::ArgsMap get_args(ErlNifEnv* env, ERL_NIF_TERM term);   // Term to ArgsMap
 bool is_int(ErlNifEnv* env, ERL_NIF_TERM term);                                 // Checks if term is an int
 ErlNifSInt64 get_int(ErlNifEnv* env, ERL_NIF_TERM term);                        // Term to int64
 ErlNifUInt64 get_uint(ErlNifEnv* env, ERL_NIF_TERM term);                       // Term to uint64
