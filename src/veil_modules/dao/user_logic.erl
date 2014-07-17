@@ -716,7 +716,7 @@ get_space_names(UserQuery) ->
 get_spaces(#veil_document{record = #user{} = User}) ->
     get_spaces(User);
 get_spaces(#user{spaces = Spaces}) ->
-    [SpaceInfo || {ok, #space_info{} = SpaceInfo}  <- lists:map(fun(SpaceId) -> fslogic_objects:get_space(SpaceId) end, Spaces)];
+    [SpaceInfo || {ok, #space_info{} = SpaceInfo}  <- lists:map(fun(SpaceId) -> fslogic_objects:get_space({uuid, SpaceId}) end, Spaces)];
 get_spaces(UserQuery) ->
     {ok, UserDoc} = user_logic:get_user(UserQuery),
     get_spaces(UserDoc).
@@ -760,7 +760,7 @@ create_space_dir(#space_info{uuid = SpaceId, name = SpaceName} = SpaceInfo) ->
         {ok, true} ->
             {error, dir_exists};
         {ok, false} ->
-            TFile = #file{parent = GroupsBase, type = ?DIR_TYPE, name = SpaceName, uid = "0", gids = [SpaceName], perms = ?SpaceDirPerm, extensions = [{?file_space_info_extestion, SpaceInfo}]},
+            TFile = #file{parent = GroupsBase, type = ?DIR_TYPE, name = SpaceName, uid = "0", perms = ?SpaceDirPerm, extensions = [{?file_space_info_extestion, SpaceInfo}]},
             TFileDoc = fslogic_meta:update_meta_attr(TFile, times, {CTime, CTime, CTime}),
             dao_lib:apply(dao_vfs, save_file, [#veil_document{uuid = SpaceId, record = TFileDoc}], 1);
         Error ->

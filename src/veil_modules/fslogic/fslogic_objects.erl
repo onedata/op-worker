@@ -36,7 +36,7 @@ get_space(#file{extensions = Ext}) ->
     get_space(SpaceInfo);
 get_space(#space_info{} = SpaceInfo) ->
     {ok, SpaceInfo};
-get_space(SpaceId) ->
+get_space({uuid, SpaceId}) ->
     case dao_lib:apply(vfs, get_space_file, [{uuid, SpaceId}], 1) of
         {ok, #veil_document{record = #file{} = File}} ->
             get_space(File);
@@ -45,7 +45,10 @@ get_space(SpaceId) ->
         {error, Reason} ->
             ?warning("Unknown space ~p", [SpaceId]),
             {error, {unknown_space_error, Reason}}
-    end.
+    end;
+get_space(SpaceName) ->
+    {ok, FileDoc} = dao_lib:apply(vfs, get_space_file, [filename:join(?SPACES_BASE_DIR_NAME, SpaceName)], 1),
+    get_space(FileDoc).
 
 
 

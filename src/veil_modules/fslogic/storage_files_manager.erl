@@ -181,7 +181,7 @@ chmod(Storage_helper_info, File, Mode) ->
   ErrorDetail :: term().
 %% ====================================================================
 chown(Storage_helper_info, File, User, Group) when is_integer(User), is_integer(Group) ->
-    ok = setup_ctx(File),
+    %% ok = setup_ctx(File),
     ErrorCode = veilhelpers:exec(chown, Storage_helper_info, [File, User, Group]),
     case ErrorCode of
         0 -> ok;

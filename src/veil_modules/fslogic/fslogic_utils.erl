@@ -18,7 +18,7 @@
 %% API
 -export([create_children_list/1, create_children_list/2, get_user_id_from_system/1]).
 -export([get_sh_and_id/3, get_files_number/3]).
--export([get_group_owner/1, get_user_groups/2]).
+-export([get_space_info_for_path/1, get_user_groups/2]).
 -export([random_ascii_lowercase_sequence/1]).
 
 
@@ -83,18 +83,23 @@ random_ascii_lowercase_sequence(Length) ->
     lists:foldl(fun(_, Acc) -> [random:uniform(26) + 96 | Acc] end, [], lists:seq(1, Length)).
 
 
-%% get_group_owner/1
+%% get_space_owner/1
 %% ====================================================================
 %% @doc Convinience method that returns list of group name(s) that are considered as default owner of file
 %%      created with given path. E.g. when path like "/groups/gname/file1" is passed, the method will
 %%      return ["gname"].
 %% @end
--spec get_group_owner(FileBasePath :: string()) -> [string()].
+-spec get_space_info_for_path(FileBasePath :: string()) -> [string()].
 %% ====================================================================
-get_group_owner(FileBasePath) ->
-    case string:tokens(FileBasePath, "/") of
-        [?SPACES_BASE_DIR_NAME, GroupName | _] -> [GroupName];
-        _ -> []
+get_space_info_for_path(FileBasePath) ->
+    case filename:split(FileBasePath) of
+        [?SPACES_BASE_DIR_NAME, SpaceName | _] ->
+            case fslogic_objects:get_space(SpaceName) of
+                {ok, #space_info{} = SP} -> {ok, SP};
+                {error, Reason} ->
+                    {error, {invalid_space_path, Reason}}
+            end;
+        _ -> {ok, #space_info{name = "root", uuid = ""}}
     end.
 
 

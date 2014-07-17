@@ -197,7 +197,7 @@ get_user_root(#veil_document{record = UserRec}) ->
 get_user_root(#user{spaces = []}) ->
     throw(no_spaces);
 get_user_root(#user{spaces = [PrimarySpaceId | _]}) ->
-    {ok, #space_info{name = SpaceName}} = fslogic_objects:get_space(PrimarySpaceId),
+    {ok, #space_info{name = SpaceName}} = fslogic_objects:get_space({uuid, PrimarySpaceId}),
     SpaceName.
 
 

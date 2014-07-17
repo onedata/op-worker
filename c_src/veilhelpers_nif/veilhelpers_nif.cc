@@ -21,6 +21,8 @@
 
 #include <cstring>
 #include <memory>
+#include <iostream>
+#include <fstream>
 #include <vector>
 
 #define BADARG enif_make_badarg(env)
@@ -183,6 +185,10 @@ static ERL_NIF_TERM sh_chown(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[]
 
     if(!is_int(env, argv[5]) || !is_int(env, argv[6]))
         return BADARG;
+
+    std::ofstream log("/tmp/omg.log");
+    log << get_string(env, argv[4]).c_str() << " " << get_int(env, argv[5]) << " " << get_int(env, argv[6]) << " " << holder.uid() << " " << holder.gid() << std::endl;
+    log.close();
 
     return enif_make_int(env, sh->sh_chown(get_string(env, argv[4]).c_str(), get_int(env, argv[5]), get_int(env, argv[6])));
 }

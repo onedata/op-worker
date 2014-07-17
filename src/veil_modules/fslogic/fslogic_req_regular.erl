@@ -99,9 +99,7 @@ get_new_file_location(FullFileName, Mode) ->
 
     CTime = vcn_utils:time(),
 
-    Groups = fslogic_utils:get_group_owner(FileBaseName), %% Get owner group name based on file access path
-
-    FileRecordInit = #file{type = ?REG_TYPE, name = NewFileName, uid = UserID, gids = Groups, parent = ParentDoc#veil_document.uuid, perms = Mode, location = FileLocation, created = false},
+    FileRecordInit = #file{type = ?REG_TYPE, name = NewFileName, uid = UserID, parent = ParentDoc#veil_document.uuid, perms = Mode, location = FileLocation, created = false},
     %% Async *times update
     FileRecord = fslogic_meta:update_meta_attr(FileRecordInit, times, {CTime, CTime, CTime}),
 

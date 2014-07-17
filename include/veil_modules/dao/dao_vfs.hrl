@@ -19,7 +19,7 @@
 %% Files' locks. Designed for use within #file record (`locks` field).
 -record(file_lock, {type = ?REG_TYPE, uid = "", sid = "", pid = 0, offset = 0, size = 0}).
 %% Veil File
--record(file, {type = 1, name = "", uid = "", gids = [], perms = 0, parent = "", ref_file = "", location = #file_location{}, locks = [], meta_doc, created = true, extensions = []}).
+-record(file, {type = 1, name = "", uid = "", perms = 0, parent = "", ref_file = "", location = #file_location{}, locks = [], meta_doc, created = true, extensions = []}).
 
 -define(file_space_info_extestion, space_info).
 -record(space_info, {uuid = "", name = ""}).

@@ -45,9 +45,7 @@ create_dir(FullFileName, Mode) ->
 
     {ok, UserId} = fslogic_context:get_user_id(),
 
-    Groups = fslogic_utils:get_group_owner(fslogic_path:get_user_file_name(FullFileName)), %% Get owner group name based on file access path
-
-    FileInit = #file{type = ?DIR_TYPE, name = NewFileName, uid = UserId, gids = Groups, parent = ParentDoc#veil_document.uuid, perms = Mode},
+    FileInit = #file{type = ?DIR_TYPE, name = NewFileName, uid = UserId, parent = ParentDoc#veil_document.uuid, perms = Mode},
     %% Async *times update
     CTime = vcn_utils:time(),
     File = fslogic_meta:update_meta_attr(FileInit, times, {CTime, CTime, CTime}),
@@ -127,9 +125,7 @@ create_link(FullFileName, LinkValue) ->
 
     {ok, UserId} = fslogic_context:get_user_id(),
 
-    Groups = fslogic_utils:get_group_owner(UserFilePath), %% Get owner group name based on file access path
-
-    LinkDocInit = #file{type = ?LNK_TYPE, name = NewFileName, uid = UserId, gids = Groups, ref_file = LinkValue, parent = ParentDoc#veil_document.uuid},
+    LinkDocInit = #file{type = ?LNK_TYPE, name = NewFileName, uid = UserId, ref_file = LinkValue, parent = ParentDoc#veil_document.uuid},
     CTime = vcn_utils:time(),
     LinkDoc = fslogic_meta:update_meta_attr(LinkDocInit, times, {CTime, CTime, CTime}),
 
