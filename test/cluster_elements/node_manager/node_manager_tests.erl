@@ -57,7 +57,8 @@ node_type_test() ->
   node_manager:start_link(test_worker),
   NodeType = gen_server:call(?Node_Manager_Name, getNodeType),
   ?assert(NodeType =:= worker),
-  node_manager:stop().
+  node_manager:stop(),
+  meck:unload(veil_cluster_node_app).
 
 %% This test checks if node manager is able to register in ccm.
 heart_beat_test() ->
