@@ -116,24 +116,19 @@ create_user(Login, Name, Teams, Email, DnList) ->
         quota_doc = QuotaUUID
     },
     {DaoAns, UUID} = dao_lib:apply(dao_users, save_user, [User], 1),
+    GetUserAns = get_user({uuid, UUID}),
     try
         case {DaoAns, QuotaAns} of
             {ok, ok} ->
-                GetUserAns = get_user({uuid, UUID}),
-
-                [create_space_dir(Space) || Space <- get_spaces(User)], %% Create space dirs in DB if they don't exist
-
-                {GetUserFirstAns, UserRec} = GetUserAns,
-                case GetUserFirstAns of
-                    ok ->
-                        case create_dirs_at_storage(Login, get_spaces(User)) of
-                            ok -> ok;
-                            DirsError -> throw(DirsError)
-                        end,
-                        GetUserAns;
-                    _ ->
-                        throw(GetUserAns)
-                end;
+                lists:foreach(
+                    fun(#space_info{} = SP) ->
+                        case fslogic_spaces:initialize(SP) of
+                            {ok, _} ->
+                                {ok, _} = GetUserAns;
+                            {error, Reason} ->
+                                throw(Reason)
+                        end
+                    end, get_spaces(User));
             _ ->
                 throw({error, {UUID, QuotaUUID}})
         end
@@ -678,12 +673,12 @@ create_dirs_at_storage(Root, SpacesInfo, Storage) ->
 
     CreateTeamsDirs = fun(#space_info{name = Dir} = SpaceInfo, TmpAns) ->
         DirName = filename:join(["", ?SPACES_BASE_DIR_NAME, Dir]),
-        BaseAns = storage_files_manager:mkdir(SHI, filename:join(["", ?SPACES_BASE_DIR_NAME])),
+        storage_files_manager:mkdir(SHI, filename:join(["", ?SPACES_BASE_DIR_NAME])),
         Ans = storage_files_manager:mkdir(SHI, DirName),
         case Ans of
             SuccessAns when SuccessAns == ok orelse SuccessAns == {error, dir_or_file_exists} ->
-                Ans2 = storage_files_manager:chown(SHI, DirName, "", fslogic_spaces:map_to_grp_owner(SpaceInfo)),
-                Ans3 = storage_files_manager:chmod(SHI, DirName, ?SpaceDirPerm),
+                Ans2 = storage_files_manager:chown(SHI, DirName, -1, fslogic_spaces:map_to_grp_owner(SpaceInfo)),
+                Ans3 = storage_files_manager:chmod(SHI, DirName, 8#1730),
                 case {Ans2, Ans3} of
                     {ok, ok} ->
                         TmpAns;
@@ -694,7 +689,7 @@ create_dirs_at_storage(Root, SpacesInfo, Storage) ->
                         TmpAns
                 end;
             Error ->
-                ?error("Can not create dir ~p using storage ~p due to ~p. Make sure group '~s' is defined in the system.",
+                ?error("Can not create dir ~p using storage ~p due to ~p. Make sure group ~p is defined in the system.",
                     [DirName, Storage, Error, fslogic_spaces:map_to_grp_owner(SpaceInfo)]),
                 {error, create_dir_error}
         end

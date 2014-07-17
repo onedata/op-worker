@@ -815,10 +815,17 @@ setup_ctx(File) ->
         {ok, #veil_document{record = #user{login = UserName} = UserRec}} ->
             fslogic_context:set_fs_user_ctx(UserName),
             case check_access_type(File) of
-                {ok, {group, GroupName}} ->
-                    SelectedGroup = [X || X <- user_logic:get_space_names(UserRec), GroupName =:= X],
-                    NewGroupCtx = SelectedGroup ++ user_logic:get_space_names(UserRec),
-                    fslogic_context:set_fs_group_ctx(NewGroupCtx),
+                {ok, {group, SpaceName}} ->
+                    UserSpaces = user_logic:get_spaces(UserRec),
+                    SelectedSpace = [SP || #space_info{name = X} = SP <- UserSpaces, SpaceName =:= X],
+                    GIDs =
+                        case SelectedSpace of
+                            [] ->
+                                fslogic_spaces:map_to_grp_owner(UserSpaces);
+                            [#space_info{} = SpaceInfo] ->
+                                [fslogic_spaces:map_to_grp_owner(SpaceInfo)] ++ fslogic_spaces:map_to_grp_owner(UserSpaces)
+                        end,
+                    fslogic_context:set_fs_group_ctx(GIDs),
                     ok;
                 _ ->
                     fslogic_context:set_fs_group_ctx([]),
