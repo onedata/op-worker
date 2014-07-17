@@ -124,8 +124,6 @@ protected:
 
     std::shared_ptr<ws_client>  m_endpoint;
     ws_client::connection_ptr   m_endpointConnection;
-    std::thread                 m_worker1;
-    std::thread                 m_worker2;
     volatile int                m_connectStatus;    ///< Current connection status
     MsgId                       m_nextMsgId;        ///< Next messageID to be used
     volatile unsigned int       m_errorCount;       ///< How many connection errors were cought
@@ -138,7 +136,6 @@ protected:
     std::mutex                  m_msgIdMutex;
     std::recursive_mutex        m_receiveMutex;
     std::condition_variable_any m_receiveCond;
-    static std::recursive_mutex m_instanceMutex;
 
     std::chrono::time_point<std::chrono::system_clock> m_lastConnectTime;
 

@@ -9,11 +9,13 @@
 
 #include "communicationHandler.h"
 #include "logging.h"
+#include "helpers/storageHelperFactory.h"
 
 #include <sys/socket.h>
 #include <netdb.h>
 
 #include <algorithm>
+#include <exception>
 #include <functional>
 
 using namespace std;
