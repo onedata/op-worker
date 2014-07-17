@@ -1,1 +1,2 @@
 -name ccm1@veildev_136.local -main_ccm ccm1@veildev_136.local -db_nodes db@veildev_227.local -storage_config_path "/root/veilcluster/storage.cfg"
+
