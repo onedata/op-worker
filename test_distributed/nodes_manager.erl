@@ -272,8 +272,14 @@ start_deps() ->
   {ok, [Data]} = file:consult("sys.config"),
   Config = proplists:get_value(lager, Data),
   lists:foreach(
-    fun(Key) -> 
-      application:set_env(lager, Key, proplists:get_value(Key, Config)) 
+    fun(Key) ->
+        case Key of
+            error_logger_hwm ->
+                % Disable error_logger high water mark
+                application:set_env(lager, error_logger_hwm, undefined);
+            _ ->
+                application:set_env(lager, Key, proplists:get_value(Key, Config))
+        end
     end, proplists:get_keys(Config)),
   lager:start(),
 
