@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <exception>
 #include <future>
 
 static constexpr std::chrono::seconds WAIT_FOR_CONNECTION{5}; // TODO: check this in current trunk
@@ -31,11 +32,12 @@ namespace communication
 
 ConnectionPool::ConnectionPool(const unsigned int connectionsNumber,
                                std::string uri)
-    : m_connectionsNumber{connectionsNumber}
-    , m_uri{std::move(uri)}
+    : m_uri{std::move(uri)}
+    , m_connectionsNumber{connectionsNumber}
 {
-    for(auto i = 0u; i < m_connectionsNumber; ++i)
-        addConnection();
+    if(connectionsNumber == 0)
+        throw std::invalid_argument{"Cannot create a ConnectionPool instance"
+                                    " with 0 connections"};
 }
 
 ConnectionPool::~ConnectionPool()
@@ -50,12 +52,7 @@ ConnectionPool::~ConnectionPool()
 void ConnectionPool::send(const std::string &payload)
 {
     std::unique_lock<std::mutex> lock{m_connectionsMutex};
-    for(auto i = m_futureConnections.size() + m_openConnections.size();
-        i < m_connectionsNumber; ++i)
-    {
-        addConnection();
-    }
-
+    addConnections();
     if(!m_connectionOpened.wait_for(lock, WAIT_FOR_CONNECTION,
                                     [&]{ return !m_openConnections.empty(); }))
         return; // TODO: exception?
@@ -69,11 +66,6 @@ void ConnectionPool::send(const std::string &payload)
 void ConnectionPool::setOnMessageCallback(std::function<void(const std::string&)> onMessageCallback)
 {
     m_onMessageCallback = std::move(onMessageCallback);
-}
-
-void ConnectionPool::addConnection()
-{
-    m_futureConnections.emplace_back(createConnection());
 }
 
 void ConnectionPool::onFail(Connection &connection)
@@ -124,6 +116,15 @@ void ConnectionPool::addHandshake(std::function<std::string ()> handshake)
     m_handshakes.emplace_back(std::move(handshake));
     for(const auto &connection: m_openConnections)
         connection->send(handshake());
+}
+
+void ConnectionPool::addConnections()
+{
+    for(auto i = m_futureConnections.size() + m_openConnections.size();
+        i < m_connectionsNumber; ++i)
+    {
+        m_futureConnections.emplace_back(createConnection());
+    }
 }
 
 } // namespace communication

@@ -30,10 +30,6 @@ public:
                    std::string uri);
 
     virtual ~ConnectionPool();
-    ConnectionPool(ConnectionPool&&) = default;
-    ConnectionPool &operator=(ConnectionPool&&) & = default;
-    ConnectionPool(const ConnectionPool&) = delete;
-    ConnectionPool &operator=(const ConnectionPool&) = delete;
 
     void send(const std::string &payload);
     void setOnMessageCallback(std::function<void(const std::string&)> onMessageCallback);
@@ -43,16 +39,18 @@ public:
     void addHandshake(std::function<std::string()> handshake);
 
 protected:
-    void addConnection();
+    void addConnections();
     void onFail(Connection &connection);
     void onOpen(Connection &connection);
     void onError(Connection &connection);
 
     virtual std::unique_ptr<Connection> createConnection() = 0;
 
-    const unsigned int m_connectionsNumber;
-    const std::string m_uri;
     std::function<void(const std::string&)> m_onMessageCallback = [](const std::string&){};
+    const std::string m_uri;
+
+private:
+    const unsigned int m_connectionsNumber;
     std::mutex m_connectionsMutex;
     std::condition_variable m_connectionOpened;
     std::list<std::unique_ptr<Connection>> m_futureConnections;
