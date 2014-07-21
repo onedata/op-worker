@@ -304,7 +304,7 @@ set_db() ->
     case application:get_env(veil_cluster_node, db_nodes) of
         {ok, Nodes} when is_list(Nodes) ->
             [dao_hosts:insert(Node) || Node <- Nodes, is_atom(Node)],
-            catch dao_update:setup_views(get_db_structure());
+            catch dao_setup:setup_views(?DATABASE_DESIGN_STRUCTURE);
         _ ->
             ?warning("There are no DB hosts given in application env variable.")
     end.
