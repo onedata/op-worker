@@ -12,6 +12,7 @@
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("include/veil_modules/control_panel/common.hrl").
 -include_lib("include/veil_modules/control_panel/openid_utils.hrl").
 -include_lib("include/logging.hrl").
 
@@ -37,7 +38,8 @@
     "openid.sreg.required=nickname,email,fullname&openid.ns.ext1=http://openid.net/srv/ax/1.0&openid.ext1.mode=fetch_request&",
     "openid.ext1.type.dn1=http://openid.plgrid.pl/certificate/dn1&openid.ext1.type.dn2=http://openid.plgrid.pl/certificate/dn2&",
     "openid.ext1.type.dn3=http://openid.plgrid.pl/certificate/dn3&openid.ext1.type.teams=http://openid.plgrid.pl/userTeamsXML&",
-    "openid.ext1.if_available=dn1,dn2,dn3,teams">>).
+    "openid.ext1.type.POSTresponse=http://openid.plgrid.pl/POSTresponse&",
+    "openid.ext1.if_available=dn1,dn2,dn3,teams,POSTresponse">>).
 
 
 % These tests check reactions to theoretical responses when requesting 
@@ -137,11 +139,15 @@ validate_login_test_() ->
 parameter_processing_test_() ->
     {foreach,
         fun() ->
+            meck:new(cowboy_req),
+            meck:new(wf_context),
             meck:new(wf),
             meck:new(gui_utils),
             meck:new(lager)
         end,
         fun(_) ->
+            meck:unload(cowboy_req),
+            meck:unload(wf_context),
             meck:unload(wf),
             meck:unload(gui_utils),
             meck:unload(lager)
@@ -155,9 +161,10 @@ parameter_processing_test_() ->
                     "ns.ext1,ns.sreg,ext1.mode,ext1.type.dn1,ext1.value.dn1,ext1.type.teams,",
                     "ext1.value.teams,sreg.nickname,sreg.email,sreg.fullname">>}
                 ],
-                meck:expect(wf, q,
-                    fun(Key) ->
-                        proplists:get_value(Key, FullKeyValueList)
+                meck:expect(wf_context, context, fun() -> #context{req = []} end),
+                meck:expect(cowboy_req, body_qs,
+                    fun(_) ->
+                        {ok, FullKeyValueList, []}
                     end),
 
                 meck:expect(wf, url_encode, fun(Key) -> Key end),
@@ -170,38 +177,46 @@ parameter_processing_test_() ->
                 Server = binary_to_list(proplists:get_value(<<"openid.op_endpoint">>, FullKeyValueList)),
                 ?assertEqual({Server, gui_str:to_list(FullCorrectRequest)}, openid_utils:prepare_validation_parameters()),
                 ?assert(meck:validate(gui_utils)),
+                ?assert(meck:validate(cowboy_req)),
+                ?assert(meck:validate(wf_context)),
                 ?assert(meck:validate(wf))
             end},
 
             {"Missing 'signed' parameter case",
                 fun() ->
-                    meck:expect(wf, q,
-                        fun(<<"openid.signed">>) -> undefined;
-                            (<<"openid.op_endpoint">>) -> undefined
+                    meck:expect(wf_context, context, fun() -> #context{req = []} end),
+                    meck:expect(cowboy_req, body_qs,
+                        fun(_) ->
+                            {ok, [], []}
                         end),
                     meck:expect(lager, log, fun(error, _, _) -> ok end),
 
                     ?assertEqual({error, invalid_request},
                         openid_utils:prepare_validation_parameters()),
-                    ?assert(meck:validate(wf)),
+                    ?assert(meck:validate(cowboy_req)),
+                    ?assert(meck:validate(wf_context)),
                     ?assert(meck:validate(lager))
                 end},
 
             {"Missing parameters case",
                 fun() ->
-                    meck:expect(wf, q,
-                        fun(<<"openid.signed">>) ->
-                            <<"op_endpoint,claimed_id,identity,return_to,response_nonce,assoc_handle,",
-                            "ns.ext1,ns.sreg,ext1.mode,ext1.type.dn1,ext1.value.dn1,ext1.type.teams,",
-                            "ext1.value.teams,sreg.nickname,sreg.email,sreg.fullname">>;
-                            (<<"openid.op_endpoint">>) -> <<"serverAddress">>
+                    meck:expect(wf_context, context, fun() -> #context{req = []} end),
+                    meck:expect(cowboy_req, body_qs,
+                        fun(_) ->
+                            {ok, [
+                                {<<"openid.signed">>, <<"op_endpoint,claimed_id,identity,return_to,response_nonce,assoc_handle,",
+                                "ns.ext1,ns.sreg,ext1.mode,ext1.type.dn1,ext1.value.dn1,ext1.type.teams,",
+                                "ext1.value.teams,sreg.nickname,sreg.email,sreg.fullname">>},
+                                {<<"openid.op_endpoint">>, <<"serverAddress">>}
+                            ], []}
                         end),
                     meck:expect(lager, log, fun(error, _, _) -> ok end),
-                    meck:expect(wf, q, fun(_) -> [] end),
                     meck:expect(wf, url_encode, fun(Key) -> Key end),
 
                     ?assertEqual({error, invalid_request},
                         openid_utils:prepare_validation_parameters()),
+                    ?assert(meck:validate(cowboy_req)),
+                    ?assert(meck:validate(wf_context)),
                     ?assert(meck:validate(wf)),
                     ?assert(meck:validate(lager))
                 end},
@@ -211,11 +226,13 @@ parameter_processing_test_() ->
                     KeyValueList = lists:zip(user_info_keys(), user_info_values()) ++ [
                         {<<"openid.signed">>, <<"op_endpoint,claimed_id,identity,return_to,response_nonce,assoc_handle,",
                         "ns.ext1,ns.sreg,ext1.mode,ext1.type.dn1,ext1.value.dn1,ext1.type.dn2,ext1.value.dn2,ext1.type.dn3,",
-                        "ext1.value.dn3,ext1.type.teams,ext1.value.teams,sreg.nickname,sreg.email,sreg.fullname">>}
+                        "ext1.value.dn3,ext1.type.teams,ext1.value.teams,ext1.type.POSTresponse,ext1.value.POSTresponse,",
+                        "sreg.nickname,sreg.email,sreg.fullname">>}
                     ],
-                    meck:expect(wf, q,
-                        fun(Key) ->
-                            proplists:get_value(Key, KeyValueList)
+                    meck:expect(wf_context, context, fun() -> #context{req = []} end),
+                    meck:expect(cowboy_req, body_qs,
+                        fun(_) ->
+                            {ok, KeyValueList, []}
                         end),
 
                     CorrectResult =
@@ -231,24 +248,22 @@ parameter_processing_test_() ->
                         fun(Key) ->
                             ?assertEqual(proplists:get_value(Key, Result), proplists:get_value(Key, CorrectResult))
                         end, [login, name, teams, email, dn_list]),
-                    ?assert(meck:validate(wf))
+                    ?assert(meck:validate(wf_context)),
+                    ?assert(meck:validate(cowboy_req))
                 end},
 
             {"User info - undefined DN case",
                 fun() ->
-                    KeyValueList = lists:zip(user_info_keys(), user_info_values()) ++ [
+                    KeyValueList = lists:zip(user_info_keys() -- [<<?openid_dn1_key>>, <<?openid_dn3_key>>],
+                        user_info_values() -- [<<"dn1">>, <<"dn3">>]) ++ [
                         {<<"openid.signed">>, <<"op_endpoint,claimed_id,identity,return_to,response_nonce,assoc_handle,",
                         "ns.ext1,ns.sreg,ext1.mode,ext1.type.dn1,ext1.value.dn1,ext1.type.dn2,ext1.value.dn2,ext1.type.dn3,",
                         "ext1.value.dn3,ext1.type.teams,ext1.value.teams,sreg.nickname,sreg.email,sreg.fullname">>}
                     ],
-                    meck:expect(wf, q,
-                        fun(Key) ->
-                            case Key of
-                            % Only dn2 is defined
-                                <<?openid_dn1_key>> -> undefined;
-                                <<?openid_dn3_key>> -> undefined;
-                                OtherKey -> proplists:get_value(OtherKey, KeyValueList)
-                            end
+                    meck:expect(wf_context, context, fun() -> #context{req = []} end),
+                    meck:expect(cowboy_req, body_qs,
+                        fun(_) ->
+                            {ok, KeyValueList, []}
                         end),
 
                     CorrectResult =
@@ -265,6 +280,8 @@ parameter_processing_test_() ->
                         fun(Key) ->
                             ?assertEqual(proplists:get_value(Key, Result), proplists:get_value(Key, CorrectResult))
                         end, [login, name, teams, email, dn_list]),
+                    ?assert(meck:validate(cowboy_req)),
+                    ?assert(meck:validate(wf_context)),
                     ?assert(meck:validate(wf))
                 end}
         ]}.
@@ -290,6 +307,8 @@ openid_keys() ->
         <<"openid.ext1.value.dn1">>,
         <<"openid.ext1.type.teams">>,
         <<"openid.ext1.value.teams">>,
+        <<"openid.ext1.type.POSTresponse">>,
+        <<"openid.ext1.value.POSTresponse">>,
         <<"openid.sreg.nickname">>,
         <<"openid.sreg.email">>,
         <<"openid.sreg.fullname">>,
@@ -300,7 +319,7 @@ openid_keys() ->
 % Values are whatever, its important if they were all used.
 % With exception of endpoint
 openid_values() ->
-    [<<"https://openid.plgrid.pl/server">> | lists:map(fun(X) -> integer_to_binary(X) end, lists:seq(1, 16))].
+    [<<"https://openid.plgrid.pl/server">> | lists:map(fun(X) -> integer_to_binary(X) end, lists:seq(1, 18))].
 
 
 % Used in "Retrieve user info" test, names of keys

@@ -69,7 +69,6 @@ event(login) ->
                     gui_jq:update(<<"error_message">>, <<"Unable to reach OpenID Provider. Please try again later.">>),
                     gui_jq:fade_in(<<"error_message">>, 300);
                 URL ->
-                    ?dump(URL),
                     gui_jq:redirect(URL)
             end
     end;
