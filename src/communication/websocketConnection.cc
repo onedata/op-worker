@@ -8,6 +8,7 @@
 #include "communication/websocketConnection.h"
 
 #include "communication/certificateData.h"
+#include "communication/exception.h"
 #include "logging.h"
 
 namespace veil
@@ -34,7 +35,7 @@ WebsocketConnection::WebsocketConnection(std::function<void(const std::string&)>
     websocketpp::lib::error_code ec;
     auto connection = endpoint.get_connection(uri, ec);
     if(ec)
-        return; // TODO
+        throw ConnectionError{"Cannot connect to the endpoint: " + ec.message()};
 
     connection->set_message_handler     (bind(&WebsocketConnection::onMessage, this, p::_2));
     connection->set_open_handler        (bind(&WebsocketConnection::onOpen, this));
@@ -61,14 +62,16 @@ WebsocketConnection::~WebsocketConnection()
 void WebsocketConnection::send(const std::string &payload)
 {
     const auto connection = m_endpoint.get_con_from_hdl(m_connection);
-    if(connection) // TODO
-    {
-        websocketpp::lib::error_code ec;
-        m_endpoint.send(connection, payload,
-                       websocketpp::frame::opcode::binary, ec);
+    if(!connection)
+        throw std::logic_error{"WebsocketConnection instance has no associated"
+                               "connection."};
 
-        if(ec); // TODO: throw UNDERLYING_LIB_ERROR;
-    }
+    websocketpp::lib::error_code ec;
+    m_endpoint.send(connection, payload,
+                    websocketpp::frame::opcode::binary, ec);
+
+    if(ec)
+        throw SendError{"Error queuing message: " + ec.message()};
 }
 
 void WebsocketConnection::onMessage(message_ptr msg)

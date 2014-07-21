@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_CERTIFICATE_DATA_H
-#define VEILHELPERS_CERTIFICATE_DATA_H
+#ifndef VEILHELPERS_COMMUNICATION_CERTIFICATE_DATA_H
+#define VEILHELPERS_COMMUNICATION_CERTIFICATE_DATA_H
 
 
 #include <boost/asio/buffer.hpp>
@@ -77,4 +77,4 @@ private:
 } // namespace veil
 
 
-#endif // VEILHELPERS_CERTIFICATE_DATA_H
+#endif // VEILHELPERS_COMMUNICATION_CERTIFICATE_DATA_H

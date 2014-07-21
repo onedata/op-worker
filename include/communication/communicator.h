@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_COMMUNICATOR_H
-#define VEILHELPERS_COMMUNICATOR_H
+#ifndef VEILHELPERS_COMMUNICATION_COMMUNICATOR_H
+#define VEILHELPERS_COMMUNICATION_COMMUNICATOR_H
 
 
 #include "communication/communicationHandler.h"
@@ -97,4 +97,4 @@ private:
 } // namespace veil
 
 
-#endif // VEILHELPERS_COMMUNICATOR_H
+#endif // VEILHELPERS_COMMUNICATION_COMMUNICATOR_H

@@ -197,9 +197,16 @@ TEST_F(ConnectionPoolTest, shouldDropConnectionsOnOpenFailure)
 
 TEST_F(ConnectionPoolTest, shouldRecreateConnectionsOnSend)
 {
-    std::uniform_int_distribution<unsigned int> droppedDis{1, connectionNumber};
+    std::uniform_int_distribution<unsigned int> droppedDis{1, connectionNumber - 1};
     auto dropConnections = droppedDis(gen);
     initConnections();
+
+    for(auto i = 0u; i < dropConnections; ++i)
+    {
+        auto c = connectionPool->createdConnections.back();
+        connectionPool->createdConnections.pop_back();
+        c->m_onFailCallback();
+    }
 
     connectionPool->send("");
 

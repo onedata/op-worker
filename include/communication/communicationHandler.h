@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_COMMUNICATION_HANDLER_H
-#define VEILHELPERS_COMMUNICATION_HANDLER_H
+#ifndef VEILHELPERS_COMMUNICATION_COMMUNICATION_HANDLER_H
+#define VEILHELPERS_COMMUNICATION_COMMUNICATION_HANDLER_H
 
 
 #include "communication_protocol.pb.h"
@@ -79,4 +79,4 @@ private:
 } // namespace veil
 
 
-#endif // VEILHELPERS_COMMUNICATION_HANDLER_H
+#endif // VEILHELPERS_COMMUNICATION_COMMUNICATION_HANDLER_H

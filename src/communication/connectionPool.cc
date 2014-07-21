@@ -8,6 +8,7 @@
 #include "communication/connectionPool.h"
 
 #include "communication/connection.h"
+#include "communication/exception.h"
 
 #include <algorithm>
 #include <cassert>
@@ -55,7 +56,7 @@ void ConnectionPool::send(const std::string &payload)
     addConnections();
     if(!m_connectionOpened.wait_for(lock, WAIT_FOR_CONNECTION,
                                     [&]{ return !m_openConnections.empty(); }))
-        return; // TODO: exception?
+        throw SendError{"No open connections available."};
 
     m_openConnections.front()->send(payload);
 

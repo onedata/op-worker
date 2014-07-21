@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_CONNECTION_H
-#define VEILHELPERS_CONNECTION_H
+#ifndef VEILHELPERS_COMMUNICATION_CONNECTION_H
+#define VEILHELPERS_COMMUNICATION_CONNECTION_H
 
 
 #include <functional>
@@ -42,4 +42,4 @@ protected:
 } // namespace veil
 
 
-#endif // VEILHELPERS_CONNECTION_H
+#endif // VEILHELPERS_COMMUNICATION_CONNECTION_H

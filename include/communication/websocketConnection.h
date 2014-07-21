@@ -5,8 +5,8 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#ifndef VEILHELPERS_WEBSOCKET_CONNECTION_H
-#define VEILHELPERS_WEBSOCKET_CONNECTION_H
+#ifndef VEILHELPERS_COMMUNICATION_WEBSOCKET_CONNECTION_H
+#define VEILHELPERS_COMMUNICATION_WEBSOCKET_CONNECTION_H
 
 
 #include "connection.h"
@@ -70,4 +70,4 @@ private:
 } // namespace veil
 
 
-#endif // VEILHELPERS_WEBSOCKET_CONNECTION_H
+#endif // VEILHELPERS_COMMUNICATION_WEBSOCKET_CONNECTION_H
