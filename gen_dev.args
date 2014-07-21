@@ -1,1 +1,1 @@
--name ccm1@127.0.0.1 -main_ccm ccm1@127.0.0.1 -opt_ccms ccm2@127.0.0.1 -db_nodes db@127.0.0.1 -storage_config_path "/root/veilcluster/storage.cfg"
+-name ccm1@127.0.0.1 -main_ccm ccm1@127.0.0.1 -db_nodes db@veildev_56.local -storage_config_path "/root/veilcluster/storage.cfg"

@@ -12,6 +12,7 @@
 
 -module(page_login).
 -include("veil_modules/control_panel/common.hrl").
+-include("logging.hrl").
 
 % n2o API
 -export([main/0, event/1]).
@@ -68,6 +69,7 @@ event(login) ->
                     gui_jq:update(<<"error_message">>, <<"Unable to reach OpenID Provider. Please try again later.">>),
                     gui_jq:fade_in(<<"error_message">>, 300);
                 URL ->
+                    ?dump(URL),
                     gui_jq:redirect(URL)
             end
     end;
