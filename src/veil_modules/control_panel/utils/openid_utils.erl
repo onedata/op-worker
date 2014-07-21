@@ -99,7 +99,6 @@ prepare_validation_parameters() ->
         {gui_str:to_list(EndpointURL), gui_str:to_list(ValidationRequestBody)}
 
     catch Type:Message ->
-        ?dump([Type, Message, erlang:get_stacktrace()]),
         ?error_stacktrace("Failed to process login validation request - ~p: ~p", [Type, Message]),
         {error, invalid_request}
     end.

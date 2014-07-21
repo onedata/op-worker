@@ -41,6 +41,11 @@
     "openid.ext1.type.POSTresponse=http://openid.plgrid.pl/POSTresponse&",
     "openid.ext1.if_available=dn1,dn2,dn3,teams,POSTresponse">>).
 
+-define(mock_signed_params, {<<"openid.signed">>, <<"op_endpoint,claimed_id,identity,return_to,response_nonce,assoc_handle,",
+"ns.ext1,ns.sreg,ext1.mode,ext1.type.dn1,ext1.value.dn1,ext1.type.dn2,ext1.value.dn2,ext1.type.dn3,",
+"ext1.value.dn3,ext1.type.teams,ext1.value.teams,ext1.type.POSTresponse,ext1.value.POSTresponse,",
+"sreg.nickname,sreg.email,sreg.fullname">>}).
+
 
 % These tests check reactions to theoretical responses when requesting 
 % endpoint information from OpenID provider.
@@ -156,11 +161,7 @@ parameter_processing_test_() ->
             fun() ->
                 meck:expect(gui_utils, https_get, fun(_, _) -> {ok, <<?mock_xrds_file>>} end),
                 KeyValueList = lists:zip(openid_keys(), openid_values()),
-                FullKeyValueList = KeyValueList ++ [
-                    {<<"openid.signed">>, <<"op_endpoint,claimed_id,identity,return_to,response_nonce,assoc_handle,",
-                    "ns.ext1,ns.sreg,ext1.mode,ext1.type.dn1,ext1.value.dn1,ext1.type.teams,",
-                    "ext1.value.teams,sreg.nickname,sreg.email,sreg.fullname">>}
-                ],
+                FullKeyValueList = KeyValueList ++ [?mock_signed_params],
                 meck:expect(wf_context, context, fun() -> #context{req = []} end),
                 meck:expect(cowboy_req, body_qs,
                     fun(_) ->
@@ -204,9 +205,7 @@ parameter_processing_test_() ->
                     meck:expect(cowboy_req, body_qs,
                         fun(_) ->
                             {ok, [
-                                {<<"openid.signed">>, <<"op_endpoint,claimed_id,identity,return_to,response_nonce,assoc_handle,",
-                                "ns.ext1,ns.sreg,ext1.mode,ext1.type.dn1,ext1.value.dn1,ext1.type.teams,",
-                                "ext1.value.teams,sreg.nickname,sreg.email,sreg.fullname">>},
+                                ?mock_signed_params,
                                 {<<"openid.op_endpoint">>, <<"serverAddress">>}
                             ], []}
                         end),
@@ -224,10 +223,7 @@ parameter_processing_test_() ->
             {"User info correctness",
                 fun() ->
                     KeyValueList = lists:zip(user_info_keys(), user_info_values()) ++ [
-                        {<<"openid.signed">>, <<"op_endpoint,claimed_id,identity,return_to,response_nonce,assoc_handle,",
-                        "ns.ext1,ns.sreg,ext1.mode,ext1.type.dn1,ext1.value.dn1,ext1.type.dn2,ext1.value.dn2,ext1.type.dn3,",
-                        "ext1.value.dn3,ext1.type.teams,ext1.value.teams,ext1.type.POSTresponse,ext1.value.POSTresponse,",
-                        "sreg.nickname,sreg.email,sreg.fullname">>}
+                        ?mock_signed_params
                     ],
                     meck:expect(wf_context, context, fun() -> #context{req = []} end),
                     meck:expect(cowboy_req, body_qs,
@@ -255,11 +251,7 @@ parameter_processing_test_() ->
             {"User info - undefined DN case",
                 fun() ->
                     KeyValueList = lists:zip(user_info_keys() -- [<<?openid_dn1_key>>, <<?openid_dn3_key>>],
-                        user_info_values() -- [<<"dn1">>, <<"dn3">>]) ++ [
-                        {<<"openid.signed">>, <<"op_endpoint,claimed_id,identity,return_to,response_nonce,assoc_handle,",
-                        "ns.ext1,ns.sreg,ext1.mode,ext1.type.dn1,ext1.value.dn1,ext1.type.dn2,ext1.value.dn2,ext1.type.dn3,",
-                        "ext1.value.dn3,ext1.type.teams,ext1.value.teams,sreg.nickname,sreg.email,sreg.fullname">>}
-                    ],
+                        user_info_values() -- [<<"dn1">>, <<"dn3">>]) ++ [?mock_signed_params],
                     meck:expect(wf_context, context, fun() -> #context{req = []} end),
                     meck:expect(cowboy_req, body_qs,
                         fun(_) ->
@@ -305,6 +297,10 @@ openid_keys() ->
         <<"openid.ext1.mode">>,
         <<"openid.ext1.type.dn1">>,
         <<"openid.ext1.value.dn1">>,
+        <<"openid.ext1.type.dn2">>,
+        <<"openid.ext1.value.dn2">>,
+        <<"openid.ext1.type.dn3">>,
+        <<"openid.ext1.value.dn3">>,
         <<"openid.ext1.type.teams">>,
         <<"openid.ext1.value.teams">>,
         <<"openid.ext1.type.POSTresponse">>,
@@ -319,7 +315,7 @@ openid_keys() ->
 % Values are whatever, its important if they were all used.
 % With exception of endpoint
 openid_values() ->
-    [<<"https://openid.plgrid.pl/server">> | lists:map(fun(X) -> integer_to_binary(X) end, lists:seq(1, 18))].
+    [<<"https://openid.plgrid.pl/server">> | lists:map(fun(X) -> integer_to_binary(X) end, lists:seq(1, 22))].
 
 
 % Used in "Retrieve user info" test, names of keys
