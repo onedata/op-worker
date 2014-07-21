@@ -123,7 +123,7 @@ validate_openid_login({EndpointURL, ValidationRequestBody}) ->
         case Response of
             <<?valid_auth_info>> -> ok;
             _ ->
-                ?alert("Security breach attempt spotted. Invalid redirect URL contained:~n~p", [gui_ctx:get_request_params()]),
+                ?alert("Security breach attempt spotted. Invalid redirect URL contained:~n~p", [gui_ctx:form_params()]),
                 {error, auth_invalid}
         end
 
