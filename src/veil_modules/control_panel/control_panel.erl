@@ -125,7 +125,8 @@ init(_Args) ->
     {ok, RestPort} = application:get_env(veil_cluster_node, rest_port),
     RestDispatch = [
         {'_', [
-            {"/rest/:version/[...]", rest_handler, []}
+            {"/rest/:version/[...]", rest_handler, []},
+            {"/cdmi/[...]", cdmi_filepath_handler, []}
         ]}
     ],
     % Start the listener for REST handler
