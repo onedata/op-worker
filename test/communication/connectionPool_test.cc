@@ -251,3 +251,29 @@ TEST_F(ConnectionPoolTest, shouldDistributeMessagesEvenlyAcrossConnections)
     for(auto i = 0u; i < connectionNumber * 3; ++i)
         connectionPool->send(message);
 }
+
+// TODO:
+//TEST_F(ConnectionPoolTest, shouldCallHandhakeOnAllOpenConnectionsOnHandshakeAddition)
+//{
+//    initConnections();
+//}
+
+//TEST_F(ConnectionPoolTest, shouldCallHandhakeOnConnectionOpen)
+//{
+//    initConnections();
+//}
+
+//TEST_F(ConnectionPoolTest, shouldCallGoodbyeOnConnectionClose)
+//{
+//    initConnections();
+//}
+
+//TEST_F(ConnectionPoolTest, shouldCallHandshakesInFIFOOrder)
+//{
+//    initConnections();
+//}
+
+//TEST_F(ConnectionPoolTest, shouldCallGoodbyesInFIFOOrder)
+//{
+//    initConnections();
+//}

@@ -31,12 +31,11 @@ public:
 
     virtual ~ConnectionPool();
 
-    void send(const std::string &payload);
-    void setOnMessageCallback(std::function<void(const std::string&)> onMessageCallback);
-    void addHandshake(std::function<std::string()> handshake,
-                      std::function<std::string()> goodbye);
-
-    void addHandshake(std::function<std::string()> handshake);
+    virtual void send(const std::string &payload);
+    virtual void setOnMessageCallback(std::function<void(const std::string&)> onMessageCallback);
+    virtual void addHandshake(std::function<std::string()> handshake);
+    virtual void addHandshake(std::function<std::string()> handshake,
+                              std::function<std::string()> goodbye);
 
 protected:
     void addConnections();

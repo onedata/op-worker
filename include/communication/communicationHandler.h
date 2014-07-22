@@ -52,6 +52,8 @@ public:
     CommunicationHandler(std::unique_ptr<ConnectionPool> dataPool,
                          std::unique_ptr<ConnectionPool> metaPool);
 
+    CommunicationHandler(CommunicationHandler&&) = delete;
+    CommunicationHandler &operator=(CommunicationHandler&&) = delete;
     CommunicationHandler(const CommunicationHandler&) = delete;
     CommunicationHandler &operator=(const CommunicationHandler&) = delete;
 

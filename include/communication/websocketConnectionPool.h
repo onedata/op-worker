@@ -42,10 +42,6 @@ public:
                             const bool verifyServerCertificate);
 
     ~WebsocketConnectionPool();
-    WebsocketConnectionPool(WebsocketConnectionPool&&) = default;
-    WebsocketConnectionPool &operator=(WebsocketConnectionPool&&) & = default;
-    WebsocketConnectionPool(const WebsocketConnectionPool&) = delete;
-    WebsocketConnectionPool &operator=(const WebsocketConnectionPool&) = delete;
 
 protected:
     std::unique_ptr<Connection> createConnection() override;

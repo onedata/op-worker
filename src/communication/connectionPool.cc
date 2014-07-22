@@ -48,6 +48,9 @@ ConnectionPool::~ConnectionPool()
     for(const auto &connection: m_openConnections)
         for(const auto &goodbye: m_goodbyes)
             connection->send(goodbye());
+
+    m_futureConnections.clear();
+    m_openConnections.clear();
 }
 
 void ConnectionPool::send(const std::string &payload)

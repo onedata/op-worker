@@ -44,6 +44,11 @@ public:
     Communicator(std::unique_ptr<CommunicationHandler> communicationHandler,
                  std::string uri);
 
+    Communicator(Communicator&&) = delete;
+    Communicator &operator=(Communicator&&) = delete;
+    Communicator(const Communicator&) = delete;
+    Communicator &operator=(const Communicator&) = delete;
+
     void enablePushChannel(std::function<void(const Answer&)> callback);
 
     void enableHandshakeACK();

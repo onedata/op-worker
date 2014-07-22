@@ -103,10 +103,10 @@ void CommunicationHandler::onMessage(const std::string &payload)
     }
 }
 
-CommunicationHandler::SubscriptionData::SubscriptionData(std::function<bool(const Answer&)> predicate,
-                                                         std::function<bool(const Answer&)> callback)
-    : predicate{std::move(predicate)}
-    , callback{std::move(callback)}
+CommunicationHandler::SubscriptionData::SubscriptionData(std::function<bool(const CommunicationHandler::Answer&)> predicate,
+                                                         std::function<bool(const CommunicationHandler::Answer&)> callback)
+    : predicate(std::move(predicate))
+    , callback(std::move(callback))
 {
 }
 

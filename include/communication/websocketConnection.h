@@ -45,8 +45,6 @@ public:
                         const bool verifyServerCertificate);
 
     ~WebsocketConnection();
-    WebsocketConnection(const WebsocketConnection&) = delete;
-    WebsocketConnection &operator=(const WebsocketConnection&) = delete;
 
     void send(const std::string &payload) override;
 
