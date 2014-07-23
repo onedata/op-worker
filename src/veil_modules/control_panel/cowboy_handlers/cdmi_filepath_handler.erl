@@ -17,10 +17,13 @@
 -include("veil_modules/control_panel/rest_messages.hrl").
 -include("veil_modules/control_panel/common.hrl").
 
+-define(default_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]).
+
 -record(state, {
     method = <<"GET">> :: binary(),
     filepath = undefined :: binary(),
-    attributes = undefined :: #fileattributes{}
+    attributes = undefined :: #fileattributes{},
+    opts = ?default_dir_opts :: [binary()]
 }).
 
 %% API
@@ -52,11 +55,12 @@ rest_init(Req, _Opts) ->
         ok ->
             {Method, _} = cowboy_req:method(Req),
             {PathInfo, _} = cowboy_req:path_info(Req),
+            {RawOpts,_} = cowboy_req:qs(Req),
             Path = case PathInfo == [] of
                      true -> "/";
                      false -> gui_str:binary_to_unicode_list(rest_utils:join_to_path(PathInfo))
                  end,
-            {ok, Req, #state{method = Method, filepath = Path}};
+            {ok, Req, #state{method = Method, filepath = Path, opts = parse_opts(RawOpts) }};
         Error -> {ok,Req,Error}
     end.
 
@@ -119,8 +123,8 @@ resource_exists(Req, #state{filepath = Filepath} = State) ->
 %% @end
 -spec get_dir(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-get_dir(Req, #state{attributes = #fileattributes{type = "DIR"}} = State) ->
-    DirCdmi = prepare_container_ans(State,[<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]),
+get_dir(Req, #state{opts = Opts, attributes = #fileattributes{type = "DIR"}} = State) ->
+    DirCdmi = prepare_container_ans(State,Opts),
     Response = rest_utils:encode_to_json({struct, DirCdmi}),
     {Response, Req, State}.
 
@@ -178,6 +182,12 @@ delete_resource(Req, #state{filepath = Filepath, attributes = #fileattributes{ty
 %% ====================================================================
 
 
+%% prepare_container_ans/2
+%% ====================================================================
+%% @doc Prepares json formatted answer with field names from given list of binaries
+%% @end
+-spec prepare_container_ans(#state{}, [FieldName :: binary()]) -> [{FieldName :: binary(), Value :: term()}].
+%% ====================================================================
 prepare_container_ans(_State,[]) ->
     [];
 
@@ -193,12 +203,28 @@ prepare_container_ans(#state{filepath = <<"/">>} = State,[<<"parentURI">> | Tail
 prepare_container_ans(#state{filepath = Filepath} = State,[<<"parentURI">> | Tail]) ->
     [{<<"parentURI">>, list_to_binary(fslogic_path:strip_path_leaf(Filepath))} | prepare_container_ans(State, Tail)];
 
-prepare_container_ans(#state{filepath = Filepath} = State,[<<"completionStatus">> | Tail]) ->
+prepare_container_ans(State,[<<"completionStatus">> | Tail]) ->
     [{<<"completionStatus">>, <<"Complete">>} | prepare_container_ans(State, Tail)];
 
-prepare_container_ans(#state{filepath = Filepath} = State,[<<"metadata">> | Tail]) ->
+prepare_container_ans(State,[<<"metadata">> | Tail]) -> %todo extract metadata
     [{<<"metadata">>, <<>>} | prepare_container_ans(State, Tail)];
 
 prepare_container_ans(#state{filepath = Filepath} = State,[<<"children">> | Tail]) ->
-    [{<<"children">>, [list_to_binary(Path) || Path <- rest_utils:list_dir(Filepath)]} | prepare_container_ans(State, Tail)].
+    [{<<"children">>, [list_to_binary(Path) || Path <- rest_utils:list_dir(Filepath)]} | prepare_container_ans(State, Tail)];
 
+prepare_container_ans(#state{filepath = Filepath} = State,[Other | Tail]) ->
+    [{Other, <<>>} | prepare_container_ans(State, Tail)].
+
+%% parse_opts/1
+%% ====================================================================
+%% @doc Parses given cowboy 'qs' opts (all that appears after '?' in url), splitting
+%% them by ';' separator ignoring additional values after ':',
+%% i. e. input: binary("aaa;bbb:1-2;ccc") will return [binary(aaa),binary(bbb),binary(ccc)]
+%% @end
+-spec parse_opts(binary()) -> [binary()].
+%% ====================================================================
+parse_opts(<<>>) ->
+  ?default_dir_opts;
+parse_opts(RawOpts) ->
+  Opts = binary:split(RawOpts,<<";">>,[global]),
+  [hd(binary:split(Opt,<<":">>)) || Opt <- Opts]. %todo handle 'value:something' format

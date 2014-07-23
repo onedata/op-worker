@@ -24,7 +24,7 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 %% -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 
--export([list_dir_test/1]).
+-export([list_dir_test/1,create_dir_test/1]).
 
 all() -> [list_dir_test,create_dir_test].
 
@@ -52,8 +52,18 @@ list_dir_test(_Config) ->
 
     %list /nonexisting_dir
     {Code3, _Headers3, _Response3} = do_request("nonexisting_dir/", get, [], []),
-    ?assertEqual("404",Code3).
+    ?assertEqual("404",Code3),
 
+    %list only children and name of /dir
+    {Code4, _Headers4, Response4} = do_request(?Test_dir_name ++ "/?children;objectName", get, [], []),
+    ?assertEqual("200", Code4),
+    {struct,CdmiPesponse4} = mochijson2:decode(Response4),
+    ?assertEqual(<<"dir/">>, proplists:get_value(<<"objectName">>,CdmiPesponse4)),
+    ?assertEqual([<<"file.txt">>], proplists:get_value(<<"children">>,CdmiPesponse4)),
+    ?assertEqual(2,length(CdmiPesponse4)).
+
+create_dir_test(_Config) ->
+    ok.
 
 %% ====================================================================
 %% SetUp and TearDown functions
@@ -64,7 +74,7 @@ init_per_testcase(_,Config) ->
     DN = ?config(dn,Config),
     [CCM] = ?config(nodes,Config),
     Cert = ?config(cert,Config),
-    StorageUUID = setup_user_in_db(DN,CCM),
+    StorageUUID = ?config(storage_uuid,Config),
 
     put(ccm,CCM),
     put(dn,DN),
@@ -73,7 +83,7 @@ init_per_testcase(_,Config) ->
 
     ibrowse:start(),
 
-    Config ++ [{storage_uuid, StorageUUID}].
+    Config.
 
 end_per_testcase(_,_Config) ->
     ibrowse:stop().
@@ -104,8 +114,9 @@ init_per_suite(Config) ->
     ibrowse:start(),
     Cert = ?COMMON_FILE("peer.pem"),
     DN = get_dn_from_cert(Cert,CCM),
+    StorageUUID = setup_user_in_db(DN,CCM),
 
-    lists:append([{nodes, Nodes},{dn,DN},{cert,Cert}], Config).
+    lists:append([{nodes, Nodes},{dn,DN},{cert,Cert},{storage_uuid, StorageUUID}], Config).
 
 end_per_suite(Config) ->
     Nodes = ?config(nodes, Config),
