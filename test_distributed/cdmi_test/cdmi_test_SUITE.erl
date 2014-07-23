@@ -26,13 +26,14 @@
 
 -export([list_dir_test/1]).
 
-all() -> [list_dir_test].
+all() -> [list_dir_test,create_dir_test].
 
 %% ====================================================================
 %% Test functions
 %% ====================================================================
 
 list_dir_test(_Config) ->
+    % list /dir
     {Code1, Headers1, Response1} = do_request(?Test_dir_name, get, [], []),
     ?assertEqual("200", Code1),
     ?assertEqual(proplists:get_value("content-type", Headers1), "application/cdmi-container"),
@@ -42,12 +43,16 @@ list_dir_test(_Config) ->
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse1)),
     ?assertEqual([<<"file.txt">>], proplists:get_value(<<"children">>,CdmiPesponse1)),
 
+    %list /
     {Code2, _Headers2, Response2} = do_request([], get, [], []),
     ?assertEqual("200", Code2),
     {struct,CdmiPesponse2} = mochijson2:decode(Response2),
     ?assertEqual(<<"/">>, proplists:get_value(<<"objectName">>,CdmiPesponse2)),
-    ?assertEqual([<<"dir">>,<<"groups">>], proplists:get_value(<<"children">>,CdmiPesponse2)).
+    ?assertEqual([<<"dir">>,<<"groups">>], proplists:get_value(<<"children">>,CdmiPesponse2)),
 
+    %list /nonexisting_dir
+    {Code3, _Headers3, _Response3} = do_request("nonexisting_dir/", get, [], []),
+    ?assertEqual("404",Code3).
 
 
 %% ====================================================================
