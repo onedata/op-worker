@@ -36,7 +36,19 @@ list_dir_test(_Config) ->
     {Code1, Headers1, Response1} = do_request(?Test_dir_name, get, [], []),
     ?assertEqual("200", Code1),
     ?assertEqual(proplists:get_value("content-type", Headers1), "application/cdmi-container"),
-    ?assertEqual("{\"objectType\":\"application/cdmi-container\",\"metadata\":[],\"children\":[\""++?Test_file_name++"\"]}",Response1).
+    {struct,CdmiPesponse1} = mochijson2:decode(Response1),
+    ?assertEqual(<<"application/cdmi-container">>, proplists:get_value(<<"objectType">>,CdmiPesponse1)),
+    ?assertEqual(<<"dir/">>, proplists:get_value(<<"objectName">>,CdmiPesponse1)),
+    ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse1)),
+    ?assertEqual([<<"file.txt">>], proplists:get_value(<<"children">>,CdmiPesponse1)),
+
+    {Code2, _Headers2, Response2} = do_request([], get, [], []),
+    ?assertEqual("200", Code2),
+    {struct,CdmiPesponse2} = mochijson2:decode(Response2),
+    ?assertEqual(<<"/">>, proplists:get_value(<<"objectName">>,CdmiPesponse2)),
+    ?assertEqual([<<"dir">>,<<"groups">>], proplists:get_value(<<"children">>,CdmiPesponse2)).
+
+
 
 %% ====================================================================
 %% SetUp and TearDown functions

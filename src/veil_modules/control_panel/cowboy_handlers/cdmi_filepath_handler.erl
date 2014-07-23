@@ -119,12 +119,8 @@ resource_exists(Req, #state{filepath = Filepath} = State) ->
 %% @end
 -spec get_dir(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-get_dir(Req, #state{filepath = Filepath, attributes = #fileattributes{type = "DIR"}} = State) ->
-    DirCdmi = [
-        {<<"objectType">>, <<"application/cdmi-container">>},
-        {<<"metadata">>, []},
-        {<<"children">> , [list_to_binary(Path) || Path <- rest_utils:list_dir(Filepath)]}
-    ],
+get_dir(Req, #state{attributes = #fileattributes{type = "DIR"}} = State) ->
+    DirCdmi = prepare_container_ans(State,[<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]),
     Response = rest_utils:encode_to_json({struct, DirCdmi}),
     {Response, Req, State}.
 
@@ -180,3 +176,29 @@ delete_resource(Req, #state{filepath = Filepath, attributes = #fileattributes{ty
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+
+
+prepare_container_ans(_State,[]) ->
+    [];
+
+prepare_container_ans(State,[<<"objectType">> | Tail]) ->
+    [{<<"objectType">>, <<"application/cdmi-container">>} | prepare_container_ans(State, Tail)];
+
+prepare_container_ans(#state{filepath = Filepath} = State,[<<"objectName">> | Tail]) ->
+    [{<<"objectName">>, list_to_binary([filename:basename(Filepath),"/"])} | prepare_container_ans(State, Tail)];
+
+prepare_container_ans(#state{filepath = <<"/">>} = State,[<<"parentURI">> | Tail]) ->
+    [{<<"parentURI">>, <<>>} | prepare_container_ans(State, Tail)];
+
+prepare_container_ans(#state{filepath = Filepath} = State,[<<"parentURI">> | Tail]) ->
+    [{<<"parentURI">>, list_to_binary(fslogic_path:strip_path_leaf(Filepath))} | prepare_container_ans(State, Tail)];
+
+prepare_container_ans(#state{filepath = Filepath} = State,[<<"completionStatus">> | Tail]) ->
+    [{<<"completionStatus">>, <<"Complete">>} | prepare_container_ans(State, Tail)];
+
+prepare_container_ans(#state{filepath = Filepath} = State,[<<"metadata">> | Tail]) ->
+    [{<<"metadata">>, <<>>} | prepare_container_ans(State, Tail)];
+
+prepare_container_ans(#state{filepath = Filepath} = State,[<<"children">> | Tail]) ->
+    [{<<"children">>, [list_to_binary(Path) || Path <- rest_utils:list_dir(Filepath)]} | prepare_container_ans(State, Tail)].
+
