@@ -39,10 +39,13 @@ class Communicator
 {
     using Answer = protocol::communication_protocol::Answer;
     using ClusterMsg = protocol::communication_protocol::ClusterMsg;
+    using Atom = veil::protocol::communication_protocol::Atom;
 
 public:
     Communicator(std::unique_ptr<CommunicationHandler> communicationHandler,
                  std::string uri);
+
+    virtual ~Communicator() = default;
 
     Communicator(Communicator&&) = delete;
     Communicator &operator=(Communicator&&) = delete;
@@ -51,21 +54,22 @@ public:
 
     void enablePushChannel(std::function<void(const Answer&)> callback);
 
-    void enableHandshakeACK();
+    void enableHandshakeAck();
 
     void setFuseId(std::string fuseId);
 
+    // TODO: The module could be an enum (there's a finite number of modules)
     virtual void send(const std::string &module,
                       const google::protobuf::Message &msg);
 
-    template<typename AnswerType> std::future<std::unique_ptr<Answer>>
+    template<typename AnswerType = Atom> std::future<std::unique_ptr<Answer>>
     communicateAsync(const std::string &module,
                      const google::protobuf::Message &msg)
     {
         return communicateAsync(module, msg, AnswerType::default_instance());
     }
 
-    template<typename AnswerType> std::unique_ptr<Answer>
+    template<typename AnswerType = Atom> std::unique_ptr<Answer>
     communicate(const std::string &module,
                 const google::protobuf::Message &msg,
                 const std::chrono::milliseconds timeout = RECV_TIMEOUT)

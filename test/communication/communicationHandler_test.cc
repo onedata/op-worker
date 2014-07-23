@@ -9,6 +9,7 @@
 
 #include "communication/connection.h"
 #include "communication/connectionPool.h"
+#include "communication/connectionPool_mock.h"
 #include "make_unique.h"
 #include "testCommon.h"
 
@@ -24,25 +25,6 @@
 
 using namespace ::testing;
 using namespace std::placeholders;
-
-struct ConnectionPoolMock: public veil::communication::ConnectionPool
-{
-    ConnectionPoolMock()
-        : veil::communication::ConnectionPool{1, "uri"}
-    {
-        ON_CALL(*this, setOnMessageCallback(_)).WillByDefault(SaveArg<0>(&onMessageCallback));
-    }
-
-    std::function<void(const std::string&)> onMessageCallback;
-
-    MOCK_METHOD1(send, void(const std::string&));
-    MOCK_METHOD1(setOnMessageCallback, void(std::function<void(const std::string&)>));
-    MOCK_METHOD1(addHandshake, void(std::function<std::string()> handshake));
-    MOCK_METHOD2(addHandshake, void(std::function<std::string()> handshake,
-                                    std::function<std::string()> goodbye));
-
-    MOCK_METHOD0(createConnection, std::unique_ptr<veil::communication::Connection>());
-};
 
 struct CommunicationHandlerTest: public ::testing::Test
 {

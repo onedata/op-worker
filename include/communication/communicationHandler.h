@@ -52,19 +52,21 @@ public:
     CommunicationHandler(std::unique_ptr<ConnectionPool> dataPool,
                          std::unique_ptr<ConnectionPool> metaPool);
 
+    virtual ~CommunicationHandler() = default;
+
     CommunicationHandler(CommunicationHandler&&) = delete;
     CommunicationHandler &operator=(CommunicationHandler&&) = delete;
     CommunicationHandler(const CommunicationHandler&) = delete;
     CommunicationHandler &operator=(const CommunicationHandler&) = delete;
 
-    void send(Message &message, const Pool poolType);
-    std::future<std::unique_ptr<Answer>> communicate(Message &message,
-                                                     const Pool poolType);
+    virtual void send(Message &message, const Pool poolType);
+    virtual std::future<std::unique_ptr<Answer>> communicate(Message &message,
+                                                             const Pool poolType);
 
-    void subscribe(SubscriptionData data);
-    void addHandshake(const Message &handshake, const Pool poolType);
-    void addHandshake(const Message &handshake, const Message &goodbye,
-                      const Pool poolType);
+    virtual void subscribe(SubscriptionData data);
+    virtual void addHandshake(const Message &handshake, const Pool poolType);
+    virtual void addHandshake(const Message &handshake, const Message &goodbye,
+                              const Pool poolType);
 
 private:
     MsgId nextId();

@@ -39,8 +39,8 @@ void Communicator::enablePushChannel(std::function<void(const Answer&)> callback
 
     LOG(INFO) << "Sending registerPushChannel request with FuseId: " << m_fuseId;
 
-    const auto pred = [](const Answer &ans){ return ans.message_id() < 0; };
-    const auto call = [=](const Answer &ans){ callback(ans); return true; };
+    auto pred = [](const Answer &ans){ return ans.message_id() < 0; };
+    auto call = [=](const Answer &ans){ callback(ans); return true; };
     m_communicationHandler->subscribe({std::move(pred), std::move(call)});
 
     // Prepare PUSH channel registration request message
@@ -50,18 +50,16 @@ void Communicator::enablePushChannel(std::function<void(const Answer&)> callback
     close.set_fuse_id(m_fuseId);
 
     const auto handshakeMsg = createMessage(FSLOGIC_MODULE_NAME, true,
-                                            protocol::communication_protocol::Atom::default_instance(),
-                                            reg);
+                                            Atom::default_instance(), reg);
 
     const auto goodbyeMsg = createMessage(FSLOGIC_MODULE_NAME, true,
-                                          protocol::communication_protocol::Atom::default_instance(),
-                                          close);
+                                          Atom::default_instance(), close);
 
     m_communicationHandler->addHandshake(*handshakeMsg, *goodbyeMsg,
                                          CommunicationHandler::Pool::META);
 }
 
-void Communicator::enableHandshakeACK()
+void Communicator::enableHandshakeAck()
 {
     LOG(INFO) << "Enabling HandshakeAck with fuseId: '" << m_fuseId << "'";
 
@@ -70,8 +68,7 @@ void Communicator::enableHandshakeACK()
     ack.set_fuse_id(m_fuseId);
 
     const auto handshakeMsg = createMessage("", true,
-                                            protocol::communication_protocol::Atom::default_instance(),
-                                            ack);
+                                            Atom::default_instance(), ack);
 
     m_communicationHandler->addHandshake(*handshakeMsg, CommunicationHandler::Pool::META);
     m_communicationHandler->addHandshake(*handshakeMsg, CommunicationHandler::Pool::DATA);
@@ -85,7 +82,9 @@ void Communicator::setFuseId(std::string fuseId)
 void Communicator::send(const std::string &module,
                         const google::protobuf::Message &msg)
 {
-    auto cmsg = createMessage(module, false, Answer::default_instance(), msg);
+    auto cmsg = createMessage(module, false,
+                              veil::protocol::communication_protocol::Atom::default_instance(),
+                              msg);
     m_communicationHandler->send(*cmsg, poolType(msg));
 }
 
@@ -151,10 +150,10 @@ Communicator::createMessage(const std::string &module,
 CommunicationHandler::Pool Communicator::poolType(const google::protobuf::Message &msg) const
 {
     static const std::unordered_set<std::string> dataPoolMessages{
-        protocol::remote_file_management::RemoteFileMangement::descriptor()->full_name()
+        describe(*protocol::remote_file_management::RemoteFileMangement::descriptor()).second
     };
 
-    return dataPoolMessages.count(msg.GetDescriptor()->full_name())
+    return dataPoolMessages.count(describe(*msg.GetDescriptor()).second)
             ? CommunicationHandler::Pool::DATA
             : CommunicationHandler::Pool::META;
 }
