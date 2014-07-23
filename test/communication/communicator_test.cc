@@ -21,10 +21,14 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <random>
 #include <memory>
+#include <mutex>
 #include <numeric>
 #include <string>
+#include <thread>
 
 using namespace ::testing;
 using namespace std::placeholders;
@@ -34,6 +38,9 @@ struct CommunicationHandlerMock: public veil::communication::CommunicationHandle
     using Message = veil::protocol::communication_protocol::ClusterMsg;
     using Answer = veil::protocol::communication_protocol::Answer;
 
+    bool autoFulfillPromise = true;
+    std::unique_ptr<std::promise<std::unique_ptr<Answer>>> promise;
+
     CommunicationHandlerMock()
         : CommunicationHandler{std::make_unique<NiceMock<ConnectionPoolMock>>(),
                                std::make_unique<NiceMock<ConnectionPoolMock>>()}
@@ -42,10 +49,15 @@ struct CommunicationHandlerMock: public veil::communication::CommunicationHandle
 
     std::future<std::unique_ptr<Answer>> communicate(Message &msg, const Pool pool) override
     {
-        std::promise<std::unique_ptr<Answer>> promise;
+        promise = std::make_unique<std::promise<std::unique_ptr<Answer>>>();
         communicateMock(msg, pool);
-        promise.set_value({});
-        return promise.get_future();
+        if(autoFulfillPromise)
+        {
+            auto value = std::make_unique<Answer>(Answer{});
+            promise->set_value(std::move(value));
+        }
+
+        return promise->get_future();
     }
 
     MOCK_METHOD2(send, void(Message&, const Pool));
@@ -281,18 +293,58 @@ TEST_F(CommunicatorTest, shouldAskForAtomAnswerByDefault)
     ASSERT_EQ("communication_protocol", wrapper.answer_decoder_name());
 }
 
-// TODO
 TEST_F(CommunicatorTest, shouldWaitForAnswerOnCommunicate)
 {
+    handlerMock->autoFulfillPromise = false;
+    std::atomic<bool> communicationDone{false};
+    std::condition_variable statusChanged;
 
+    auto fulfilPromise = [&]{
+        std::this_thread::sleep_for(std::chrono::milliseconds{250});
+        ASSERT_FALSE(communicationDone);
+        handlerMock->promise->set_value({});
+
+        std::mutex m;
+        std::unique_lock<std::mutex> lock{m};
+        statusChanged.wait_for(lock, std::chrono::seconds{5}, [&]{ return communicationDone.load(); });
+        ASSERT_TRUE(communicationDone);
+    };
+
+    veil::protocol::fuse_messages::ChannelRegistration msg;
+    msg.set_fuse_id(fuseId);
+
+    std::thread t{fulfilPromise};
+    communicator->communicate(randomString(), msg, std::chrono::seconds{20});
+    communicationDone = true;
+    statusChanged.notify_one();
+
+    t.join();
 }
 
 TEST_F(CommunicatorTest, shouldReturnEmptyMessageOnCommunicateFailure)
 {
+    handlerMock->autoFulfillPromise = false;
 
+    veil::protocol::fuse_messages::ChannelRegistration msg;
+    msg.set_fuse_id(fuseId);
+    auto ans = communicator->communicate(randomString(), msg, std::chrono::seconds{0});
+
+    ASSERT_FALSE(ans->has_answer_status());
+    ASSERT_FALSE(ans->has_error_description());
+    ASSERT_FALSE(ans->has_message_id());
+    ASSERT_FALSE(ans->has_message_type());
+    ASSERT_FALSE(ans->has_worker_answer());
 }
 
 TEST_F(CommunicatorTest, shouldReturnAFullfilableFutureOnCommunicateAsync)
 {
+    handlerMock->autoFulfillPromise = false;
 
+    veil::protocol::fuse_messages::ChannelRegistration msg;
+    msg.set_fuse_id(fuseId);
+    auto future = communicator->communicateAsync(randomString(), msg);
+
+    ASSERT_EQ(std::future_status::timeout, future.wait_for(std::chrono::seconds{0}));
+    handlerMock->promise->set_value({});
+    ASSERT_EQ(std::future_status::ready, future.wait_for(std::chrono::seconds{0}));
 }
