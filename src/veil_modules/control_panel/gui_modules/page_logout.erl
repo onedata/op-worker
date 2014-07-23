@@ -25,20 +25,21 @@ title() -> <<"Logout page">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    ?debug("User ~p logged out", [gui_ctx:get_user_id()]),
-    gui_ctx:clear_session(),
-    #panel{style = <<"position: relative;">>, body =
-    [
-        #panel{class = <<"alert alert-success login-page">>, body = [
-            #h3{class = <<"">>, body = <<"Logout successful">>},
-            #p{class = <<"login-info">>, body = <<"Come back soon.">>},
-            #button{postback = to_login, class = <<"btn btn-primary btn-block">>, body = <<"Login page">>}
-        ]},
-        gui_utils:cookie_policy_popup_body(?privacy_policy_url)
-    ]
-    ++ vcn_gui_utils:logotype_footer(120)
-        ++ [#p{body = <<"<iframe src=\"https://openid.plgrid.pl/logout\" style=\"display:none\"></iframe>">>}]
-    }.
+    wf:redirect(<<?global_registry_hostname, "/logout">>).
+%%     ?debug("User ~p logged out", [gui_ctx:get_user_id()]),
+%%     gui_ctx:clear_session(),
+%%     #panel{style = <<"position: relative;">>, body =
+%%     [
+%%         #panel{class = <<"alert alert-success login-page">>, body = [
+%%             #h3{class = <<"">>, body = <<"Logout successful">>},
+%%             #p{class = <<"login-info">>, body = <<"Come back soon.">>},
+%%             #button{postback = to_login, class = <<"btn btn-primary btn-block">>, body = <<"Login page">>}
+%%         ]},
+%%         gui_utils:cookie_policy_popup_body(?privacy_policy_url)
+%%     ]
+%%     ++ vcn_gui_utils:logotype_footer(120)
+%%         ++ [#p{body = <<"<iframe src=\"https://openid.plgrid.pl/logout\" style=\"display:none\"></iframe>">>}]
+%%     }.
 
 event(init) -> ok;
 event(to_login) -> gui_jq:redirect_to_login(false);

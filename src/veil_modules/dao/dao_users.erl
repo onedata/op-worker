@@ -172,6 +172,9 @@ exist_user_in_db({Key, Value}) ->
                                 [dao_helper:name(Value)], include_docs = true}};
                             unverified_dn ->
                                 {?USER_BY_UNVERIFIED_DN_VIEW, #view_query_args{keys =
+                                [dao_helper:name(Value)], include_docs = true}};
+                            global_id ->
+                                {?USER_BY_GLOBAL_ID_VIEW, #view_query_args{keys =
                                 [dao_helper:name(Value)], include_docs = true}}
                         end,
     case dao_records:list_records(View, QueryArgs) of
@@ -212,6 +215,9 @@ get_user_from_db({Key, Value}) ->
                                 [dao_helper:name(Value)], include_docs = true}};
                             unverified_dn ->
                                 {?USER_BY_UNVERIFIED_DN_VIEW, #view_query_args{keys =
+                                [dao_helper:name(Value)], include_docs = true}};
+                            global_id ->
+                                {?USER_BY_GLOBAL_ID_VIEW, #view_query_args{keys =
                                 [dao_helper:name(Value)], include_docs = true}}
                         end,
 

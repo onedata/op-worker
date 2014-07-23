@@ -50,26 +50,27 @@ body() ->
 event(init) -> ok;
 % Login event handling
 event(login) ->
-    % Collect redirect param if present
-    RedirectParam = case gui_ctx:url_param(<<"x">>) of
-                        undefined -> <<"">>;
-                        Val -> <<"?x=", Val/binary>>
-                    end,
-    % Resolve hostname, which was requested by a client
-    Hostname = gui_ctx:get_requested_hostname(),
-    case Hostname of
-        undefined ->
-            gui_jq:update(<<"error_message">>, <<"Cannot establish requested hostname. Please contact the site administrator.">>),
-            gui_jq:fade_in(<<"error_message">>, 300);
-        Host ->
-            % Get redirect URL and redirect to OpenID login
-            case openid_utils:get_login_url(Host, RedirectParam) of
-                {error, _} ->
-                    gui_jq:update(<<"error_message">>, <<"Unable to reach OpenID Provider. Please try again later.">>),
-                    gui_jq:fade_in(<<"error_message">>, 300);
-                URL ->
-                    gui_jq:redirect(URL)
-            end
-    end;
+    wf:redirect(<<?global_registry_hostname>>);
+%%     % Collect redirect param if present
+%%     RedirectParam = case gui_ctx:url_param(<<"x">>) of
+%%                         undefined -> <<"">>;
+%%                         Val -> <<"?x=", Val/binary>>
+%%                     end,
+%%     % Resolve hostname, which was requested by a client
+%%     Hostname = gui_ctx:get_requested_hostname(),
+%%     case Hostname of
+%%         undefined ->
+%%             gui_jq:update(<<"error_message">>, <<"Cannot establish requested hostname. Please contact the site administrator.">>),
+%%             gui_jq:fade_in(<<"error_message">>, 300);
+%%         Host ->
+%%             % Get redirect URL and redirect to OpenID login
+%%             case openid_utils:get_login_url(Host, RedirectParam) of
+%%                 {error, _} ->
+%%                     gui_jq:update(<<"error_message">>, <<"Unable to reach OpenID Provider. Please try again later.">>),
+%%                     gui_jq:fade_in(<<"error_message">>, 300);
+%%                 URL ->
+%%                     gui_jq:redirect(URL)
+%%             end
+%%     end;
 
 event(terminate) -> ok.

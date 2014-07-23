@@ -16,6 +16,9 @@
 -include_lib("ctool/include/gui/common.hrl").
 -include_lib("dao/include/common.hrl").
 
+% Global Registry hostname
+-define(global_registry_hostname, "https://onedata.org").
+
 % Relative suffix of GUI address, leading to shared files
 -define(shared_files_download_path, "/share/").
 
@@ -46,6 +49,7 @@
 -define(error_openid_login_error, openid_login_error).
 -define(error_login_dir_creation_error, login_dir_creation_error).
 -define(error_login_dir_chown_error, login_dir_chown_error).
+-define(error_authentication, error_authentication).
 
 % Custom upload element
 -record(veil_upload, {?ELEMENT_BASE(veil_upload),

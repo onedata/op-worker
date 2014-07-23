@@ -113,74 +113,81 @@ main_table() ->
                 body = #p{style = <<"margin: -3px 0 0;">>, body = gui_str:unicode_list_to_binary(user_logic:get_name(UserDoc))}}
         ]},
 
-        #tr{cells = [
-            #td{style = <<"padding: 15px; vertical-align: top;">>,
-                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Teams">>}},
-            #td{style = <<"padding: 15px; vertical-align: top;">>,
-                body = team_list_body(UserDoc)}
-        ]},
+%%         #tr{cells = [
+%%             #td{style = <<"padding: 15px; vertical-align: top;">>,
+%%                 body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Teams">>}},
+%%             #td{style = <<"padding: 15px; vertical-align: top;">>,
+%%                 body = team_list_body(UserDoc)}
+%%         ]},
 
-        #tr{cells = [
-            #td{style = <<"padding: 15px; vertical-align: top;">>,
-                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"E-mails">>}},
-            #td{style = <<"padding: 15px; vertical-align: top;">>,
-                body = email_list_body(UserDoc)}
-        ]},
+%%         #tr{cells = [
+%%             #td{style = <<"padding: 15px; vertical-align: top;">>,
+%%                 body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"E-mails">>}},
+%%             #td{style = <<"padding: 15px; vertical-align: top;">>,
+%%                 body = email_list_body(UserDoc)}
+%%         ]},
 
         #tr{cells = [
             #td{style = <<"padding: 15px; vertical-align: top;">>,
                 body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"Certificates&#8217 DNs">>}},
             #td{style = <<"padding: 15px; vertical-align: top;">>,
                 body = dn_list_body(UserDoc)}
+        ]},
+
+        #tr{cells = [
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"OAuth / OpenID">>}},
+            #td{style = <<"padding: 15px; vertical-align: top;">>,
+                body = #link{style = <<"font-size: 18px;">>, body = <<"Authorization preferences">>, url = <<?global_registry_hostname, "/manage_account">>}}
         ]}
     ]}.
 
 
-% HTML list with teams printed
-team_list_body(Userdoc) ->
-    Teams = user_logic:get_teams(Userdoc),
-    _Body = case lists:map(
-        fun(Team) ->
-            TeamBin = gui_str:unicode_list_to_binary(Team),
-            TeamFormatted = gui_str:html_encode(re:replace(TeamBin, <<"\\(">>, <<" (">>, [global, {return, binary}])),
-            #li{style = <<"font-size: 18px; padding: 5px 0;">>,
-                body = TeamFormatted}
-        end, Teams) of
-                [] -> #p{body = <<"none">>};
-                List -> #list{style= <<"margin-top: -3px;">>,numbered = true, body = List}
-            end.
-
-
-% HTML list with emails printed
-email_list_body(UserDoc) ->
-    {CurrentEmails, _} = lists:mapfoldl(
-        fun(Email, Acc) ->
-            Body = #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
-            [
-                gui_str:html_encode(gui_str:unicode_list_to_binary(Email)),
-                #link{id = <<"remove_email_button", (integer_to_binary(Acc))/binary>>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
-                    postback = {action, update_email, [UserDoc, {remove, Email}]}, body =
-                    #span{class = <<"fui-cross">>, style = <<"font-size: 16px;">>}}
-            ]}},
-            {Body, Acc + 1}
-        end, 1, user_logic:get_email_list(UserDoc)),
-    NewEmail = [
-        #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
-            #link{id = <<"add_email_button">>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
-                postback = {action, show_email_adding, [true]}, body =
-                #span{class = <<"fui-plus">>, style = <<"font-size: 16px; position: relative;">>}},
-            #textbox{id = <<"new_email_textbox">>, class = <<"flat">>, body = <<"">>, style = <<"display: none;">>,
-                placeholder = <<"New email address">>},
-            #link{id = <<"new_email_submit">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
-                actions = gui_jq:form_submit_action(<<"new_email_submit">>, {action, update_email, [UserDoc, {add, submitted}]}, <<"new_email_textbox">>),
-                body = #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
-            #link{id = <<"new_email_cancel">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
-                postback = {action, show_email_adding, [false]}, body =
-                #span{class = <<"fui-cross-inverted">>, style = <<"font-size: 20px;">>}}
-        ]}
-    ],
-    gui_jq:bind_enter_to_submit_button(<<"new_email_textbox">>, <<"new_email_submit">>),
-    #list{style= <<"margin-top: -3px;">>,numbered = true, body = CurrentEmails ++ NewEmail}.
+%% % HTML list with teams printed
+%% team_list_body(Userdoc) ->
+%%     Teams = user_logic:get_teams(Userdoc),
+%%     _Body = case lists:map(
+%%         fun(Team) ->
+%%             TeamBin = gui_str:unicode_list_to_binary(Team),
+%%             TeamFormatted = gui_str:html_encode(re:replace(TeamBin, <<"\\(">>, <<" (">>, [global, {return, binary}])),
+%%             #li{style = <<"font-size: 18px; padding: 5px 0;">>,
+%%                 body = TeamFormatted}
+%%         end, Teams) of
+%%                 [] -> #p{body = <<"none">>};
+%%                 List -> #list{style= <<"margin-top: -3px;">>,numbered = true, body = List}
+%%             end.
+%%
+%%
+%% % HTML list with emails printed
+%% email_list_body(UserDoc) ->
+%%     {CurrentEmails, _} = lists:mapfoldl(
+%%         fun(Email, Acc) ->
+%%             Body = #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = #span{body =
+%%             [
+%%                 gui_str:html_encode(gui_str:unicode_list_to_binary(Email)),
+%%                 #link{id = <<"remove_email_button", (integer_to_binary(Acc))/binary>>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
+%%                     postback = {action, update_email, [UserDoc, {remove, Email}]}, body =
+%%                     #span{class = <<"fui-cross">>, style = <<"font-size: 16px;">>}}
+%%             ]}},
+%%             {Body, Acc + 1}
+%%         end, 1, user_logic:get_email_list(UserDoc)),
+%%     NewEmail = [
+%%         #li{style = <<"font-size: 18px; padding: 5px 0;">>, body = [
+%%             #link{id = <<"add_email_button">>, class = <<"glyph-link">>, style = <<"margin-left: 10px;">>,
+%%                 postback = {action, show_email_adding, [true]}, body =
+%%                 #span{class = <<"fui-plus">>, style = <<"font-size: 16px; position: relative;">>}},
+%%             #textbox{id = <<"new_email_textbox">>, class = <<"flat">>, body = <<"">>, style = <<"display: none;">>,
+%%                 placeholder = <<"New email address">>},
+%%             #link{id = <<"new_email_submit">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
+%%                 actions = gui_jq:form_submit_action(<<"new_email_submit">>, {action, update_email, [UserDoc, {add, submitted}]}, <<"new_email_textbox">>),
+%%                 body = #span{class = <<"fui-check-inverted">>, style = <<"font-size: 20px;">>}},
+%%             #link{id = <<"new_email_cancel">>, class = <<"glyph-link">>, style = <<"display: none; margin-left: 10px;">>,
+%%                 postback = {action, show_email_adding, [false]}, body =
+%%                 #span{class = <<"fui-cross-inverted">>, style = <<"font-size: 20px;">>}}
+%%         ]}
+%%     ],
+%%     gui_jq:bind_enter_to_submit_button(<<"new_email_textbox">>, <<"new_email_submit">>),
+%%     #list{style= <<"margin-top: -3px;">>,numbered = true, body = CurrentEmails ++ NewEmail}.
 
 
 % HTML list with DNs printed
