@@ -9,13 +9,12 @@
 
 #include "communication/connection.h"
 #include "communication/connectionPool.h"
-
 #include "make_unique.h"
+#include "testCommon.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <chrono>
 #include <functional>
 #include <memory>
@@ -68,17 +67,6 @@ struct CommunicationHandlerTest: public ::testing::Test
 
 veil::protocol::communication_protocol::ClusterMsg randomMessage()
 {
-    std::random_device rd;
-    std::mt19937 gen{rd()};
-
-    auto randomInt = [&]{ return std::uniform_int_distribution<>{1, 50}(gen); };
-    auto randomString = [&]{
-        std::uniform_int_distribution<char> dis{'a', 'z'};
-        std::string str;
-        std::generate_n(std::back_inserter(str), randomInt(), [&]{ return dis(gen); });
-        return std::move(str);
-    };
-
     veil::protocol::communication_protocol::ClusterMsg message;
     message.set_answer_decoder_name(randomString());
     message.set_answer_type(randomString());
@@ -94,9 +82,6 @@ veil::protocol::communication_protocol::ClusterMsg randomMessage()
 
 CommunicationHandlerTest::Pool randomPool()
 {
-    std::random_device rd;
-    std::mt19937 gen{rd()};
-
     return std::bernoulli_distribution{0.5}(gen)
         ? CommunicationHandlerTest::Pool::META
         : CommunicationHandlerTest::Pool::DATA;

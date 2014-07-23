@@ -5,22 +5,26 @@
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
 
-#include "communication/connection.h"
 #include "communication/connectionPool.h"
 
+#include "communication_protocol.pb.h"
+#include "communication/connection.h"
+#include "communication/exception.h"
 #include "make_unique.h"
+#include "testCommon.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <atomic>
+#include <condition_variable>
 #include <functional>
+#include <future>
 #include <memory>
-#include <random>
+#include <mutex>
 #include <string>
 #include <thread>
-#include <future>
 
 using namespace ::testing;
 using namespace std::placeholders;
@@ -28,6 +32,7 @@ using namespace std::placeholders;
 struct ConnectionMock: public veil::communication::Connection
 {
     static std::atomic<unsigned int> openConnections;
+    static std::condition_variable connectionOpened;
 
     ConnectionMock(std::function<void(const std::string&)> onMessageCallback,
                    std::function<void(Connection&)> onFailCallback,
@@ -37,6 +42,7 @@ struct ConnectionMock: public veil::communication::Connection
                                           onOpenCallback, onErrorCallback}
     {
         ++openConnections;
+        connectionOpened.notify_all();
     }
 
     ~ConnectionMock()
@@ -56,6 +62,7 @@ private:
     std::thread thread;
 };
 decltype(ConnectionMock::openConnections) ConnectionMock::openConnections{0};
+decltype(ConnectionMock::connectionOpened) ConnectionMock::connectionOpened;
 
 struct ConnectionPoolProxy: public veil::communication::ConnectionPool
 {
@@ -71,7 +78,7 @@ struct ConnectionPoolProxy: public veil::communication::ConnectionPool
     MOCK_METHOD0(createConnection, std::unique_ptr<veil::communication::Connection>());
     std::unique_ptr<veil::communication::Connection> createConnection_impl()
     {
-        auto c = new ConnectionMock{
+        auto c = new NiceMock<ConnectionMock>{
             m_onMessageCallback,
             std::bind(&ConnectionPoolProxy::onFail, this, _1),
             std::bind(&ConnectionPoolProxy::onOpen, this, _1),
@@ -88,19 +95,14 @@ struct ConnectionPoolTest: public ::testing::Test
     std::string uri;
     unsigned int connectionNumber;
 
-    std::random_device rd;
-    std::mt19937 gen{rd()};
-    std::uniform_int_distribution<unsigned int> intDis{1, 15};
-    std::uniform_int_distribution<char> charDis{'a', 'z'};
-
     MOCK_METHOD1(onMessage, void(const std::string&));
 
     ConnectionPoolTest()
     {
-        std::generate_n(std::back_inserter(uri), intDis(gen), [&]{return charDis(gen);});
-        connectionNumber = intDis(gen);
+        uri = randomString();
+        connectionNumber = randomInt();
 
-        connectionPool = std::make_unique<ConnectionPoolProxy>(connectionNumber, uri);
+        connectionPool = std::make_unique<NiceMock<ConnectionPoolProxy>>(connectionNumber, uri);
         ON_CALL(*connectionPool, createConnection()).WillByDefault(
                     Invoke(connectionPool.get(), &ConnectionPoolProxy::createConnection_impl));
 
@@ -137,8 +139,7 @@ TEST_F(ConnectionPoolTest, shouldThrowExceptionWhenCreatedWith0Connections)
 
 TEST_F(ConnectionPoolTest, shouldCallOnMessageCallbackOnReceivedMessage)
 {
-    std::string message;
-    std::generate_n(std::back_inserter(message), intDis(gen), [&]{return charDis(gen);});
+    std::string message = randomString();
 
     initConnections();
     EXPECT_CALL(*this, onMessage(message)).Times(1);
@@ -147,10 +148,9 @@ TEST_F(ConnectionPoolTest, shouldCallOnMessageCallbackOnReceivedMessage)
 
 TEST_F(ConnectionPoolTest, shouldDoNothingOnReceiveWhenReceiveMessageIsUnset)
 {
-    std::string message;
-    std::generate_n(std::back_inserter(message), intDis(gen), [&]{return charDis(gen);});
+    std::string message = randomString();
 
-    connectionPool = std::make_unique<ConnectionPoolProxy>(connectionNumber, uri);
+    connectionPool = std::make_unique<NiceMock<ConnectionPoolProxy>>(connectionNumber, uri);
     ON_CALL(*connectionPool, createConnection()).WillByDefault(
                 Invoke(connectionPool.get(), &ConnectionPoolProxy::createConnection_impl));
 
@@ -163,11 +163,10 @@ TEST_F(ConnectionPoolTest, shouldDoNothingOnReceiveWhenReceiveMessageIsUnset)
 
 TEST_F(ConnectionPoolTest, shouldDropConnectionsOnError)
 {
-    std::uniform_int_distribution<unsigned int> droppedDis{1, connectionNumber};
-    auto dropConnections = droppedDis(gen);
+    auto dropConnections = randomInt(1, connectionNumber);
     initConnections();
 
-    for(auto i = 0u; i < dropConnections; ++i)
+    for(auto i = 0; i < dropConnections; ++i)
     {
         auto c = connectionPool->createdConnections.back();
         connectionPool->createdConnections.pop_back();
@@ -179,11 +178,10 @@ TEST_F(ConnectionPoolTest, shouldDropConnectionsOnError)
 
 TEST_F(ConnectionPoolTest, shouldDropConnectionsOnOpenFailure)
 {
-    std::uniform_int_distribution<unsigned int> droppedDis{1, connectionNumber};
-    auto dropConnections = droppedDis(gen);
+    auto dropConnections = randomInt(1, connectionNumber);
     connectionPool->addConnections();
 
-    for(auto i = 0u; i < dropConnections; ++i)
+    for(auto i = 0; i < dropConnections; ++i)
     {
         auto c = connectionPool->createdConnections.back();
         connectionPool->createdConnections.pop_back();
@@ -197,11 +195,10 @@ TEST_F(ConnectionPoolTest, shouldDropConnectionsOnOpenFailure)
 
 TEST_F(ConnectionPoolTest, shouldRecreateConnectionsOnSend)
 {
-    std::uniform_int_distribution<unsigned int> droppedDis{1, connectionNumber - 1};
-    auto dropConnections = droppedDis(gen);
+    auto dropConnections = randomInt(1, connectionNumber - 1);
     initConnections();
 
-    for(auto i = 0u; i < dropConnections; ++i)
+    for(auto i = 0; i < dropConnections; ++i)
     {
         auto c = connectionPool->createdConnections.back();
         connectionPool->createdConnections.pop_back();
@@ -213,17 +210,68 @@ TEST_F(ConnectionPoolTest, shouldRecreateConnectionsOnSend)
     ASSERT_EQ(connectionNumber, ConnectionMock::openConnections);
 }
 
-//TEST_F(ConnectionPoolTest, shouldWaitOnSendUntilConnectionIsAvailable)
-//{
-//    connectionPool->send("");
-//}
+TEST_F(ConnectionPoolTest, shouldRecreateAllConnectionsOnSend)
+{
+    initConnections();
+
+    for(auto &c: connectionPool->createdConnections)
+        c->m_onErrorCallback();
+
+    connectionPool->createdConnections.clear();
+
+    ASSERT_EQ(0, ConnectionMock::openConnections);
+
+    auto openConnections = [&]{
+        std::mutex m;
+        std::unique_lock<std::mutex> lock{m};
+        const auto res = ConnectionMock::connectionOpened.wait_for(lock,
+                            std::chrono::seconds{5},
+                            [&]{ return ConnectionMock::openConnections == connectionNumber; });
+
+        ASSERT_TRUE(res);
+
+        for(auto &c: connectionPool->createdConnections)
+            c->m_onOpenCallback();
+    };
+
+    std::thread t{openConnections};
+    connectionPool->send("");
+    t.join();
+
+    ASSERT_EQ(connectionNumber, ConnectionMock::openConnections);
+}
+
+TEST_F(ConnectionPoolTest, shouldWaitOnSendUntilConnectionIsAvailable)
+{
+    std::atomic<bool> sent{false};
+
+    auto openConnections = [&]{
+        std::mutex m;
+        std::unique_lock<std::mutex> lock{m};
+        const auto res = ConnectionMock::connectionOpened.wait_for(lock,
+                            std::chrono::seconds{5},
+                            [&]{ return ConnectionMock::openConnections == connectionNumber; });
+
+        ASSERT_TRUE(res);
+        ASSERT_FALSE(sent);
+
+        for(auto &c: connectionPool->createdConnections)
+            c->m_onOpenCallback();
+    };
+
+    std::thread t{openConnections};
+
+    ASSERT_NO_THROW(connectionPool->send(""));
+    sent = true;
+
+    t.join();
+}
 
 ACTION_P(Increment, counter) { ++*counter; }
 
 TEST_F(ConnectionPoolTest, shouldPassMessageToOneOfItsConnections)
 {
-    std::string message;
-    std::generate_n(std::back_inserter(message), intDis(gen), [&]{return charDis(gen);});
+    std::string message = randomString();
 
     std::atomic<unsigned int> sentMessages{0};
     initConnections();
@@ -231,7 +279,7 @@ TEST_F(ConnectionPoolTest, shouldPassMessageToOneOfItsConnections)
     for(auto &c: connectionPool->createdConnections)
         EXPECT_CALL(*c, send(message)).WillRepeatedly(Increment(&sentMessages));
 
-    for(auto i = 1u; i <= intDis(gen); ++i)
+    for(auto i = 1, toSend = randomInt(); i <= toSend; ++i)
     {
         connectionPool->send(message);
         ASSERT_EQ(i, sentMessages);
@@ -240,8 +288,7 @@ TEST_F(ConnectionPoolTest, shouldPassMessageToOneOfItsConnections)
 
 TEST_F(ConnectionPoolTest, shouldDistributeMessagesEvenlyAcrossConnections)
 {
-    std::string message;
-    std::generate_n(std::back_inserter(message), intDis(gen), [&]{return charDis(gen);});
+    std::string message = randomString();
 
     initConnections();
 
@@ -252,28 +299,92 @@ TEST_F(ConnectionPoolTest, shouldDistributeMessagesEvenlyAcrossConnections)
         connectionPool->send(message);
 }
 
-// TODO:
-//TEST_F(ConnectionPoolTest, shouldCallHandhakeOnAllOpenConnectionsOnHandshakeAddition)
-//{
-//    initConnections();
-//}
+TEST_F(ConnectionPoolTest, shouldCallHandhakeOnAllOpenConnectionsOnHandshakeAddition)
+{
+    std::string handshake = randomString();
+    std::string handshake2 = randomString();
+    initConnections();
 
-//TEST_F(ConnectionPoolTest, shouldCallHandhakeOnConnectionOpen)
-//{
-//    initConnections();
-//}
+    for(auto &c: connectionPool->createdConnections)
+    {
+        EXPECT_CALL(*c, send(handshake));
+        EXPECT_CALL(*c, send(handshake2));
+    }
 
-//TEST_F(ConnectionPoolTest, shouldCallGoodbyeOnConnectionClose)
-//{
-//    initConnections();
-//}
+    connectionPool->addHandshake([&]{ return handshake; }, []{ return "goodbye"; });
+    connectionPool->addHandshake([&]{ return handshake2; });
 
-//TEST_F(ConnectionPoolTest, shouldCallHandshakesInFIFOOrder)
-//{
-//    initConnections();
-//}
+    for(auto &c: connectionPool->createdConnections)
+        Mock::VerifyAndClearExpectations(c);
+}
 
-//TEST_F(ConnectionPoolTest, shouldCallGoodbyesInFIFOOrder)
-//{
-//    initConnections();
-//}
+TEST_F(ConnectionPoolTest, shouldCallHandhakeOnConnectionOpen)
+{
+    std::string handshake = randomString();
+    connectionPool->addConnections();
+
+    for(auto &c: connectionPool->createdConnections)
+        EXPECT_CALL(*c, send(_)).Times(0);
+
+    connectionPool->addHandshake([&]{ return handshake; });
+
+    for(auto &c: connectionPool->createdConnections)
+    {
+        Mock::VerifyAndClearExpectations(c);
+        EXPECT_CALL(*c, send(handshake));
+        c->m_onOpenCallback();
+    }
+}
+
+TEST_F(ConnectionPoolTest, shouldCallGoodbyeOnConnectionClose)
+{
+    std::string handshake = randomString();
+    std::string goodbye = randomString();
+    initConnections();
+
+    connectionPool->addHandshake([&]{ return handshake; }, [&]{ return goodbye; });
+
+    for(auto &c: connectionPool->createdConnections)
+        EXPECT_CALL(*c, send(goodbye));
+
+    connectionPool.reset();
+}
+
+TEST_F(ConnectionPoolTest, shouldCallHandshakesInFIFOOrder)
+{
+    std::string handshake = randomString();
+    std::string handshake2 = randomString();
+    connectionPool->addConnections();
+
+    connectionPool->addHandshake([&]{ return handshake; });
+    connectionPool->addHandshake([&]{ return handshake2; });
+
+    for(auto &c: connectionPool->createdConnections)
+    {
+        InSequence s;
+        EXPECT_CALL(*c, send(handshake));
+        EXPECT_CALL(*c, send(handshake2));
+    }
+
+    for(auto &c: connectionPool->createdConnections)
+        c->m_onOpenCallback();
+}
+
+TEST_F(ConnectionPoolTest, shouldCallGoodbyesInLIFOOrder)
+{
+    std::string goodbye = randomString();
+    std::string goodbye2 = randomString();
+    initConnections();
+
+    connectionPool->addHandshake([]{ return "handshake"; }, [&]{ return goodbye; });
+    connectionPool->addHandshake([]{ return "handshake"; }, [&]{ return goodbye2; });
+
+    for(auto &c: connectionPool->createdConnections)
+    {
+        InSequence s;
+        EXPECT_CALL(*c, send(goodbye2));
+        EXPECT_CALL(*c, send(goodbye));
+    }
+
+    connectionPool.reset();
+}

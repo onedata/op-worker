@@ -10,6 +10,7 @@
 
 
 #include <condition_variable>
+#include <deque>
 #include <functional>
 #include <list>
 #include <memory>
@@ -55,7 +56,7 @@ private:
     std::list<std::unique_ptr<Connection>> m_futureConnections;
     std::list<std::unique_ptr<Connection>> m_openConnections;
     std::vector<std::function<std::string()>> m_handshakes;
-    std::vector<std::function<std::string()>> m_goodbyes;
+    std::deque<std::function<std::string()>> m_goodbyes;
 };
 
 } // namespace communication

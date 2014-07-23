@@ -108,18 +108,22 @@ void ConnectionPool::addHandshake(std::function<std::string()> handshake,
                                   std::function<std::string()> goodbye)
 {
     std::lock_guard<std::mutex> guard{m_connectionsMutex};
-    m_goodbyes.emplace_back(std::move(goodbye));
-    m_handshakes.emplace_back(std::move(handshake));
+
     for(const auto &connection: m_openConnections)
         connection->send(handshake());
+
+    m_handshakes.emplace_back(std::move(handshake));
+    m_goodbyes.emplace_front(std::move(goodbye));
 }
 
 void ConnectionPool::addHandshake(std::function<std::string ()> handshake)
 {
     std::lock_guard<std::mutex> guard{m_connectionsMutex};
-    m_handshakes.emplace_back(std::move(handshake));
+
     for(const auto &connection: m_openConnections)
         connection->send(handshake());
+
+    m_handshakes.emplace_back(std::move(handshake));
 }
 
 void ConnectionPool::addConnections()
