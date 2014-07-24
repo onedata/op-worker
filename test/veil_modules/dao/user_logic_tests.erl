@@ -113,7 +113,7 @@ signing_in_test_() ->
                     % Possible info gathered from OpenID provider
                     NewUserInfoProplist =
                         [
-                            global_id = "global_id",
+                            {global_id, "global_id"},
                             {login, "new_user"},
                             {name, "New User"},
                             {teams, ["New team(team desc)", "Another team(another desc)"]},
@@ -218,6 +218,7 @@ signing_in_test_() ->
                     meck:expect(dao_lib, apply,
                         fun(dao_users, get_user, [Key], _) ->
                             case Key of
+                                {global_id, "global_id"} -> {ok, ExistingUser};
                                 {login, "existing_user"} -> {ok, ExistingUser};
                                 {uuid, "uuid_after_teams"} -> {ok, UserWithUpdatedTeams};
                                 {uuid, "uuid_after_emails"} -> {ok, UserWithUpdatedEmailList};
