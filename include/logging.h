@@ -125,6 +125,7 @@ private:
     void pushMessage(const protocol::logging::LogMessage &msg);
     protocol::logging::LogMessage popMessage();
     void writeLoop();
+    bool sendNextMessage();
     void dropExcessMessages();
 
     std::shared_ptr<communication::Communicator> m_communicator;

@@ -65,6 +65,7 @@ ACTION_P(SaveMsg, msg)
 
 TEST_F(ClusterProxyHelperTest, read)
 {
+    ::google::protobuf::LogSilencer silencer; //silence protobuf error logs for this testcase, to test malformatted msg processing
     FileData resp;
     Answer answer;
     std::string sbuf;
@@ -107,6 +108,7 @@ TEST_F(ClusterProxyHelperTest, read)
 
 TEST_F(ClusterProxyHelperTest, write)
 {
+    ::google::protobuf::LogSilencer silencer; //silence protobuf error logs for this testcase, to test malformatted msg processing
     WriteInfo resp;
     Answer answer;
     char str[] = {0, 1, 45, 34, 0, 0, 0, 34, 56, 2};

@@ -8,6 +8,7 @@
 #include "logging.h"
 
 #include "communication/communicator.h"
+#include "communication/exception.h"
 #include "helpers/storageHelperFactory.h"
 
 #include <boost/algorithm/string/case_conv.hpp>
@@ -20,6 +21,7 @@
 #include <numeric>
 #include <sstream>
 
+static constexpr std::chrono::seconds AFTER_FAIL_DELAY(2);
 static constexpr std::chrono::seconds MAX_FLUSH_DELAY{10};
 
 namespace veil
@@ -133,15 +135,30 @@ void RemoteLogWriter::writeLoop()
 {
     while(!m_stopWriteLoop)
     {
-        const protocol::logging::LogMessage msg = popMessage();
-        if(m_stopWriteLoop)
-            return;
+        if(!sendNextMessage())
+            std::this_thread::sleep_for(AFTER_FAIL_DELAY);
+    }
+}
 
-        if(!m_communicator)
-            continue;
+bool RemoteLogWriter::sendNextMessage()
+{
+    const protocol::logging::LogMessage msg = popMessage();
+    if(m_stopWriteLoop)
+        return true;
 
+    if(!m_communicator)
+        return false;
+
+    try
+    {
         m_communicator->send(communication::CENTRAL_LOGGER_MODULE_NAME, msg);
     }
+    catch(communication::Exception&)
+    {
+        return false;
+    }
+
+    return true;
 }
 
 void RemoteLogWriter::dropExcessMessages()
