@@ -39,6 +39,7 @@ public:
                               std::function<std::string()> goodbye);
 
 protected:
+    void close();
     void addConnections();
     void onFail(Connection &connection);
     void onOpen(Connection &connection);

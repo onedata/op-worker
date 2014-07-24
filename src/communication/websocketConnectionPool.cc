@@ -52,6 +52,7 @@ WebsocketConnectionPool::WebsocketConnectionPool(const unsigned int connectionsN
 WebsocketConnectionPool::~WebsocketConnectionPool()
 {
     m_endpoint.stop_perpetual();
+    close();
     m_ioThread.join();
 }
 

@@ -43,14 +43,7 @@ ConnectionPool::ConnectionPool(const unsigned int connectionsNumber,
 
 ConnectionPool::~ConnectionPool()
 {
-    std::unique_lock<std::mutex> lock{m_connectionsMutex};
-
-    for(const auto &connection: m_openConnections)
-        for(const auto &goodbye: m_goodbyes)
-            connection->send(goodbye());
-
-    m_futureConnections.clear();
-    m_openConnections.clear();
+    close();
 }
 
 void ConnectionPool::send(const std::string &payload)
@@ -114,6 +107,18 @@ void ConnectionPool::addHandshake(std::function<std::string()> handshake,
 
     m_handshakes.emplace_back(std::move(handshake));
     m_goodbyes.emplace_front(std::move(goodbye));
+}
+
+void ConnectionPool::close()
+{
+    std::unique_lock<std::mutex> lock{m_connectionsMutex};
+
+    for(const auto &connection: m_openConnections)
+        for(const auto &goodbye: m_goodbyes)
+            connection->send(goodbye());
+
+    m_futureConnections.clear();
+    m_openConnections.clear();
 }
 
 void ConnectionPool::addHandshake(std::function<std::string ()> handshake)
