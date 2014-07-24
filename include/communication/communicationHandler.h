@@ -59,6 +59,8 @@ public:
     CommunicationHandler(const CommunicationHandler&) = delete;
     CommunicationHandler &operator=(const CommunicationHandler&) = delete;
 
+    virtual void reply(const Answer &originalMsg, Message &replyMsg,
+                       const Pool poolType);
     virtual void send(Message &message, const Pool poolType);
     virtual std::future<std::unique_ptr<Answer>> communicate(Message &message,
                                                              const Pool poolType);

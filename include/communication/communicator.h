@@ -58,6 +58,9 @@ public:
 
     void setFuseId(std::string fuseId);
 
+    virtual void reply(const Answer &originalMsg, const std::string &module,
+                       const google::protobuf::Message &msg);
+
     // TODO: The module could be an enum (there's a finite number of modules)
     virtual void send(const std::string &module,
                       const google::protobuf::Message &msg);

@@ -60,6 +60,7 @@ struct CommunicationHandlerMock: public veil::communication::CommunicationHandle
         return promise->get_future();
     }
 
+    MOCK_METHOD3(reply, void(const Answer&, Message&, const Pool));
     MOCK_METHOD2(send, void(Message&, const Pool));
     MOCK_METHOD2(communicateMock, void(Message&, const Pool));
     MOCK_METHOD1(subscribe, void(SubscriptionData));
@@ -347,4 +348,31 @@ TEST_F(CommunicatorTest, shouldReturnAFullfilableFutureOnCommunicateAsync)
     ASSERT_EQ(std::future_status::timeout, future.wait_for(std::chrono::seconds{0}));
     handlerMock->promise->set_value({});
     ASSERT_EQ(std::future_status::ready, future.wait_for(std::chrono::seconds{0}));
+}
+
+TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnReply)
+{
+    std::string module = randomString();
+
+    veil::protocol::fuse_messages::ChannelClose msg;
+    msg.set_fuse_id(fuseId);
+
+    veil::protocol::communication_protocol::Answer replyTo;
+    replyTo.set_message_id(randomInt());
+
+    veil::protocol::communication_protocol::ClusterMsg wrapper;
+    EXPECT_CALL(*handlerMock, reply(_, _, _)).WillOnce(SaveArg<1>(&wrapper));
+    communicator->reply(replyTo, module, msg);
+
+    ASSERT_EQ("channelclose", wrapper.message_type());
+    ASSERT_EQ("fuse_messages", wrapper.message_decoder_name());
+    ASSERT_EQ("atom", wrapper.answer_type());
+    ASSERT_EQ("communication_protocol", wrapper.answer_decoder_name());
+    ASSERT_EQ(module, wrapper.module_name());
+    ASSERT_FALSE(wrapper.synch());
+    ASSERT_TRUE(wrapper.has_protocol_version());
+
+    decltype(msg) sentMsg;
+    ASSERT_TRUE(sentMsg.ParseFromString(wrapper.input()));
+    ASSERT_EQ(msg.SerializeAsString(), sentMsg.SerializeAsString());
 }

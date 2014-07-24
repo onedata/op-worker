@@ -81,6 +81,28 @@ TEST_F(CommunicationHandlerTest, shouldSetOnMessageCallbackOnPools)
                 std::move(dataPool), std::move(metaPool));
 }
 
+TEST_F(CommunicationHandlerTest, shouldCallSendOnAppropriatePoolOnReply)
+{
+    auto dataMsg = randomMessage();
+    auto metaMsg = randomMessage();
+
+    std::string sentDataMessage;
+    std::string sentMetaMessage;
+
+    EXPECT_CALL(*dataPool, send(_)).WillOnce(SaveArg<0>(&sentDataMessage));
+    EXPECT_CALL(*metaPool, send(_)).WillOnce(SaveArg<0>(&sentMetaMessage));
+
+    veil::protocol::communication_protocol::Answer replyTo;
+    replyTo.set_message_id(0);
+
+    communicationHandler->reply(replyTo, dataMsg, Pool::DATA);
+    communicationHandler->reply(replyTo, metaMsg, Pool::META);
+
+    ASSERT_EQ(dataMsg.SerializeAsString(), sentDataMessage);
+    ASSERT_EQ(metaMsg.SerializeAsString(), sentMetaMessage);
+}
+
+
 TEST_F(CommunicationHandlerTest, shouldCallSendOnAppropriatePoolOnSend)
 {
     auto dataMsg = randomMessage();
@@ -286,7 +308,6 @@ TEST_F(CommunicationHandlerTest, shouldGenerateIdsForHandshakeAndGoodbyeMessages
     checkMessageGenerator(goodbyeGenerator, originalGoodbye);
 }
 
-
 TEST_F(CommunicationHandlerTest, shouldGenerateIdsForHandshakeMessages)
 {
     auto poolType = randomPool();
@@ -300,4 +321,20 @@ TEST_F(CommunicationHandlerTest, shouldGenerateIdsForHandshakeMessages)
     communicationHandler->addHandshake(originalHandshake, poolType);
 
     checkMessageGenerator(handshakeGenerator, originalHandshake);
+}
+
+TEST_F(CommunicationHandlerTest, shouldReplyWithProperMessageId)
+{
+    auto poolType = randomPool();
+    auto msg = randomMessage();
+
+    veil::protocol::communication_protocol::Answer replyTo;
+    for(auto attempts = randomInt(100, 1000); attempts >= 0; --attempts)
+    {
+        auto msgId = randomInt(-1000, 1000);
+        replyTo.set_message_id(msgId);
+        communicationHandler->reply(replyTo, msg, poolType);
+
+        ASSERT_EQ(msgId, msg.message_id());
+    }
 }

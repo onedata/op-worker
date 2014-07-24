@@ -29,6 +29,14 @@ CommunicationHandler::CommunicationHandler(std::unique_ptr<ConnectionPool> dataP
     m_metaPool->setOnMessageCallback(std::bind(&CommunicationHandler::onMessage, this, p::_1));
 }
 
+void CommunicationHandler::reply(const Answer &originalMsg,
+                                 Message &replyMsg, const Pool poolType)
+{
+    const auto &pool = poolType == Pool::DATA ? m_dataPool : m_metaPool;
+    replyMsg.set_message_id(originalMsg.message_id());
+    pool->send(replyMsg.SerializeAsString());
+}
+
 void
 CommunicationHandler::send(Message &message, const Pool poolType)
 {

@@ -79,6 +79,15 @@ void Communicator::setFuseId(std::string fuseId)
     m_fuseId = std::move(fuseId);
 }
 
+void Communicator::reply(const Answer &originalMsg, const std::string &module,
+                         const google::protobuf::Message &msg)
+{
+    auto cmsg = createMessage(module, false,
+                              veil::protocol::communication_protocol::Atom::default_instance(),
+                              msg);
+    m_communicationHandler->reply(originalMsg, *cmsg, poolType(msg));
+}
+
 void Communicator::send(const std::string &module,
                         const google::protobuf::Message &msg)
 {
