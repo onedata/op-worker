@@ -29,6 +29,7 @@ namespace communication
 Communicator::Communicator(std::unique_ptr<CommunicationHandler> communicationHandler)
     : m_communicationHandler{std::move(communicationHandler)}
 {
+    setupHandshakeAck();
 }
 
 void Communicator::setupPushChannels(std::function<void(const Answer&)> callback)
@@ -96,6 +97,7 @@ void Communicator::setFuseId(std::string fuseId)
 {
     LOG(INFO) << "Setting fuseId for communication: '" << fuseId << '"';
     m_fuseId = std::move(fuseId);
+    setupHandshakeAck();
 }
 
 void Communicator::reply(const Answer &originalMsg, const std::string &module,
