@@ -36,8 +36,8 @@ struct CommunicationHandlerTest: public ::testing::Test
 
     CommunicationHandlerTest()
     {
-        auto dataPoolPtr = std::make_unique<ConnectionPoolMock>();
-        auto metaPoolPtr = std::make_unique<ConnectionPoolMock>();
+        auto dataPoolPtr = std::make_unique<NiceMock<ConnectionPoolMock>>();
+        auto metaPoolPtr = std::make_unique<NiceMock<ConnectionPoolMock>>();
 
         dataPool = dataPoolPtr.get();
         metaPool = metaPoolPtr.get();
@@ -76,8 +76,8 @@ CommunicationHandlerTest::Pool randomPool()
 
 TEST_F(CommunicationHandlerTest, shouldSetOnMessageCallbackOnPools)
 {
-    auto dataPool = std::make_unique<ConnectionPoolMock>();
-    auto metaPool = std::make_unique<ConnectionPoolMock>();
+    auto dataPool = std::make_unique<NiceMock<ConnectionPoolMock>>();
+    auto metaPool = std::make_unique<NiceMock<ConnectionPoolMock>>();
 
     EXPECT_CALL(*dataPool, setOnMessageCallback(_));
     EXPECT_CALL(*metaPool, setOnMessageCallback(_));
@@ -217,38 +217,8 @@ TEST_F(CommunicationHandlerTest, shouldCallSubscribedCallbackOnPredicateFulfilme
     EXPECT_EQ(512, answerGiven.message_id());
 }
 
-TEST_F(CommunicationHandlerTest, shouldUnsubscribeWhenCallbackReturnsFalse)
-{
-    int predicateCalled = 0;
-    auto pred = [&](const veil::protocol::communication_protocol::Answer &ans) {
-        ++predicateCalled;
-        return true;
-    };
-
-    int callbackCalled = 0;
-    auto callback = [&](const veil::protocol::communication_protocol::Answer &ans) {
-        return ++callbackCalled < 100;
-    };
-
-    communicationHandler->subscribe(
-                veil::communication::CommunicationHandler::SubscriptionData{pred, callback});
-
-    for(int i = 0; i < 1000; ++i)
-    {
-        veil::protocol::communication_protocol::Answer answer;
-        answer.set_answer_status("answer status");
-        answer.set_message_id(i);
-
-        auto pool = randomPool() == CommunicationHandlerTest::Pool::META ? metaPool : dataPool;
-        pool->onMessageCallback(answer.SerializeAsString());
-    }
-
-    EXPECT_EQ(100, callbackCalled);
-    EXPECT_EQ(100, predicateCalled);
-}
-
 TEST_F(CommunicationHandlerTest, shouldPassHandshakeAndGoodbyeToDataPool)
-{    
+{
     EXPECT_CALL(*dataPool, addHandshake(_, _));
     communicationHandler->addHandshake(randomHandshake, randomHandshake, Pool::DATA);
 }
@@ -310,7 +280,8 @@ TEST_F(CommunicationHandlerTest, shouldGenerateIdsForHandshakeAndGoodbyeMessages
 
     EXPECT_CALL(*pool, addHandshake(_, _)).WillOnce(
                 DoAll(SaveArg<0>(&handshakeGenerator),
-                      SaveArg<1>(&goodbyeGenerator)));
+                      SaveArg<1>(&goodbyeGenerator),
+                      Return([]{})));
 
     communicationHandler->addHandshake(originalHandshake, originalGoodbye, poolType);
 
@@ -329,11 +300,37 @@ TEST_F(CommunicationHandlerTest, shouldGenerateIdsForHandshakeMessages)
 
     std::function<std::string()> handshakeGenerator;
 
-    EXPECT_CALL(*pool, addHandshake(_)).WillOnce(SaveArg<0>(&handshakeGenerator));
+    EXPECT_CALL(*pool, addHandshake(_)).WillOnce(
+                DoAll(SaveArg<0>(&handshakeGenerator), Return([]{})));
 
     communicationHandler->addHandshake(originalHandshake, poolType);
 
     checkMessageGenerator(handshakeGenerator, originalHandshakeMsg);
+}
+
+TEST_F(CommunicationHandlerTest, shouldReturnHandshakeRemovalFunctionOnHandshakeAdd)
+{
+    const auto poolType = randomPool();
+    auto pool = poolType == Pool::META ? metaPool : dataPool;
+
+    const auto handshakeFun = [=]{
+        return std::make_unique<veil::protocol::communication_protocol::ClusterMsg>(randomMessage());
+    };
+
+    bool removeCalled = false;
+    bool remove2Called = false;
+
+    EXPECT_CALL(*pool, addHandshake(_)).WillOnce(Return([&]{ removeCalled = true; }));
+    EXPECT_CALL(*pool, addHandshake(_, _)).WillOnce(Return([&]{ remove2Called = true; }));
+
+    auto remove = communicationHandler->addHandshake(handshakeFun, poolType);
+    auto remove2 = communicationHandler->addHandshake(handshakeFun, handshakeFun, poolType);
+
+    remove();
+    remove2();
+
+    EXPECT_TRUE(removeCalled);
+    EXPECT_TRUE(remove2Called);
 }
 
 TEST_F(CommunicationHandlerTest, shouldReplyWithProperMessageId)

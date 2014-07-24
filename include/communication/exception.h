@@ -28,6 +28,12 @@ public:
     using Exception::Exception;
 };
 
+class ReceiveError: public Exception
+{
+public:
+    using Exception::Exception;
+};
+
 class ConnectionError: public Exception
 {
 public:

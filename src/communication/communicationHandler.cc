@@ -60,29 +60,30 @@ CommunicationHandler::communicate(Message &message, const Pool poolType)
     return std::move(future);
 }
 
-void CommunicationHandler::subscribe(SubscriptionData data)
+std::function<void()> CommunicationHandler::subscribe(SubscriptionData data)
 {
-    m_subscriptions.emplace_front(std::move(data));
+    auto it = m_subscriptions.emplace(m_subscriptions.begin(), std::move(data));
+    return [=]{ m_subscriptions.erase(it); };
 }
 
-void CommunicationHandler::addHandshake(std::function<std::unique_ptr<Message>()> handshake,
-                                        std::function<std::unique_ptr<Message>()> goodbye,
-                                        const Pool poolType)
+std::function<void()> CommunicationHandler::addHandshake(std::function<std::unique_ptr<Message>()> handshake,
+                                                         std::function<std::unique_ptr<Message>()> goodbye,
+                                                         const Pool poolType)
 {
     auto h = [=]{ auto m = handshake(); m->set_message_id(nextId()); return m->SerializeAsString(); };
     auto g = [=]{ auto m = goodbye(); m->set_message_id(nextId()); return m->SerializeAsString(); };
 
     const auto &pool = poolType == Pool::DATA ? m_dataPool : m_metaPool;
-    pool->addHandshake(std::move(h), std::move(g));
+    return pool->addHandshake(std::move(h), std::move(g));
 }
 
-void CommunicationHandler::addHandshake(std::function<std::unique_ptr<Message>()> handshake,
-                                        const Pool poolType)
+std::function<void()> CommunicationHandler::addHandshake(std::function<std::unique_ptr<Message>()> handshake,
+                                                         const Pool poolType)
 {
     auto h = [=]{ auto m = handshake(); m->set_message_id(nextId()); return m->SerializeAsString(); };
 
     const auto &pool = poolType == Pool::DATA ? m_dataPool : m_metaPool;
-    pool->addHandshake(std::move(h));
+    return pool->addHandshake(std::move(h));
 }
 
 CommunicationHandler::MsgId CommunicationHandler::nextId()
@@ -96,13 +97,9 @@ void CommunicationHandler::onMessage(const std::string &payload)
     auto answer = std::make_unique<Answer>();
     answer->ParsePartialFromString(payload);
 
-    for(auto it = m_subscriptions.begin(); it != m_subscriptions.end();)
-    {
-        if(it->predicate(*answer) && !it->callback(*answer))
-            it = m_subscriptions.erase(it);
-        else
-            ++it;
-    }
+    for(const auto &sub: m_subscriptions)
+        if(sub.predicate(*answer))
+            sub.callback(*answer);
 
     const auto it = m_promises.find(answer->message_id());
     if(it != m_promises.end())
@@ -112,8 +109,8 @@ void CommunicationHandler::onMessage(const std::string &payload)
     }
 }
 
-CommunicationHandler::SubscriptionData::SubscriptionData(std::function<bool(const CommunicationHandler::Answer&)> predicate,
-                                                         std::function<bool(const CommunicationHandler::Answer&)> callback)
+CommunicationHandler::SubscriptionData::SubscriptionData(std::function<bool(const Answer&)> predicate,
+                                                         std::function<void(const Answer&)> callback)
     : predicate(std::move(predicate))
     , callback(std::move(callback))
 {

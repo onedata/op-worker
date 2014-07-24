@@ -219,7 +219,7 @@ TEST_F(ConnectionPoolTest, shouldRecreateAllConnectionsOnSend)
 
     connectionPool->createdConnections.clear();
 
-    ASSERT_EQ(0, ConnectionMock::openConnections);
+    ASSERT_EQ(0u, ConnectionMock::openConnections);
 
     auto openConnections = [&]{
         std::mutex m;
@@ -279,7 +279,7 @@ TEST_F(ConnectionPoolTest, shouldPassMessageToOneOfItsConnections)
     for(auto &c: connectionPool->createdConnections)
         EXPECT_CALL(*c, send(message)).WillRepeatedly(Increment(&sentMessages));
 
-    for(auto i = 1, toSend = randomInt(); i <= toSend; ++i)
+    for(unsigned int i = 1, toSend = randomInt(); i <= toSend; ++i)
     {
         connectionPool->send(message);
         ASSERT_EQ(i, sentMessages);
@@ -334,6 +334,41 @@ TEST_F(ConnectionPoolTest, shouldCallHandhakeOnConnectionOpen)
         EXPECT_CALL(*c, send(handshake));
         c->m_onOpenCallback();
     }
+}
+
+TEST_F(ConnectionPoolTest, shouldReturnAFunctionToDeregisterHandshake)
+{
+    for(auto &c: connectionPool->createdConnections)
+        EXPECT_CALL(*c, send(_)).Times(0);
+
+    auto remove = connectionPool->addHandshake([&]{ return randomString(); });
+    auto remove2 = connectionPool->addHandshake([&]{ return randomString(); },
+                                                [&]{ return randomString(); });
+
+    remove();
+    remove2();
+
+    for(auto &c: connectionPool->createdConnections)
+        c->m_onOpenCallback();
+}
+
+TEST_F(ConnectionPoolTest, shouldCallGoodbyeOnDeregisteringHandshake)
+{
+    const auto goodbye = randomString();
+
+    auto remove = connectionPool->addHandshake([&]{ return randomString(); },
+                                               [&]{ return goodbye; });
+
+    for(auto &c: connectionPool->createdConnections)
+    {
+        c->m_onOpenCallback();
+        EXPECT_CALL(*c, send(goodbye));
+    }
+
+    remove();
+
+    for(auto &c: connectionPool->createdConnections)
+        Mock::VerifyAndClearExpectations(c);
 }
 
 TEST_F(ConnectionPoolTest, shouldCallGoodbyeOnConnectionClose)

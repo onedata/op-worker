@@ -53,9 +53,9 @@ public:
     Communicator(const Communicator&) = delete;
     Communicator &operator=(const Communicator&) = delete;
 
-    void enablePushChannel(std::function<void(const Answer&)> callback);
+    void setupPushChannels(std::function<void(const Answer&)> callback);
 
-    void enableHandshakeAck();
+    void setupHandshakeAck();
 
     void setFuseId(std::string fuseId);
 

@@ -10,12 +10,10 @@
 
 
 #include <condition_variable>
-#include <deque>
 #include <functional>
 #include <list>
 #include <memory>
 #include <mutex>
-#include <vector>
 
 namespace veil
 {
@@ -34,9 +32,9 @@ public:
 
     virtual void send(const std::string &payload);
     virtual void setOnMessageCallback(std::function<void(const std::string&)> onMessageCallback);
-    virtual void addHandshake(std::function<std::string()> handshake);
-    virtual void addHandshake(std::function<std::string()> handshake,
-                              std::function<std::string()> goodbye);
+    virtual std::function<void()> addHandshake(std::function<std::string()> handshake);
+    virtual std::function<void()> addHandshake(std::function<std::string()> handshake,
+                                               std::function<std::string()> goodbye);
 
 protected:
     void close();
@@ -56,8 +54,8 @@ private:
     std::condition_variable m_connectionOpened;
     std::list<std::unique_ptr<Connection>> m_futureConnections;
     std::list<std::unique_ptr<Connection>> m_openConnections;
-    std::vector<std::function<std::string()>> m_handshakes;
-    std::deque<std::function<std::string()>> m_goodbyes;
+    std::list<std::function<std::string()>> m_handshakes;
+    std::list<std::function<std::string()>> m_goodbyes;
 };
 
 } // namespace communication

@@ -37,10 +37,10 @@ public:
     struct SubscriptionData
     {
         SubscriptionData(std::function<bool(const Answer&)> predicate,
-                         std::function<bool(const Answer&)> callback);
+                         std::function<void(const Answer&)> callback);
 
         const std::function<bool(const Answer&)> predicate;
-        const std::function<bool(const Answer&)> callback;
+        const std::function<void(const Answer&)> callback;
     };
 
     enum class Pool
@@ -65,12 +65,12 @@ public:
     virtual std::future<std::unique_ptr<Answer>> communicate(Message &message,
                                                              const Pool poolType);
 
-    virtual void subscribe(SubscriptionData data);
-    virtual void addHandshake(std::function<std::unique_ptr<Message>()> handshake,
-                              const Pool poolType);
-    virtual void addHandshake(std::function<std::unique_ptr<Message>()> handshake,
-                              std::function<std::unique_ptr<Message>()> goodbye,
-                              const Pool poolType);
+    virtual std::function<void()> subscribe(SubscriptionData data);
+    virtual std::function<void()> addHandshake(std::function<std::unique_ptr<Message>()> handshake,
+                                               const Pool poolType);
+    virtual std::function<void()> addHandshake(std::function<std::unique_ptr<Message>()> handshake,
+                                               std::function<std::unique_ptr<Message>()> goodbye,
+                                               const Pool poolType);
 
 private:
     MsgId nextId();

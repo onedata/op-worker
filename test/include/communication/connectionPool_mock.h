@@ -21,17 +21,22 @@ struct ConnectionPoolMock: public veil::communication::ConnectionPool
     ConnectionPoolMock()
         : veil::communication::ConnectionPool{1, "uri"}
     {
-        ON_CALL(*this, setOnMessageCallback(::testing::_)).
-                WillByDefault(::testing::SaveArg<0>(&onMessageCallback));
+        using namespace ::testing;
+
+        ON_CALL(*this, setOnMessageCallback(_)).
+                WillByDefault(SaveArg<0>(&onMessageCallback));
+
+        ON_CALL(*this, addHandshake(_)).WillByDefault(Return([]{}));
+        ON_CALL(*this, addHandshake(_, _)).WillByDefault(Return([]{}));
     }
 
     std::function<void(const std::string&)> onMessageCallback;
 
     MOCK_METHOD1(send, void(const std::string&));
     MOCK_METHOD1(setOnMessageCallback, void(std::function<void(const std::string&)>));
-    MOCK_METHOD1(addHandshake, void(std::function<std::string()> handshake));
-    MOCK_METHOD2(addHandshake, void(std::function<std::string()> handshake,
-                                    std::function<std::string()> goodbye));
+    MOCK_METHOD1(addHandshake, std::function<void()>(std::function<std::string()> handshake));
+    MOCK_METHOD2(addHandshake, std::function<void()>(std::function<std::string()> handshake,
+                                                     std::function<std::string()> goodbye));
 
     MOCK_METHOD0(createConnection, std::unique_ptr<veil::communication::Connection>());
 };

@@ -8,7 +8,7 @@
 #include "communication/communicator.h"
 
 #include "communication/connection.h"
-#include "communication/websocketConnectionPool.h"
+#include "communication/exception.h"
 #include "fuse_messages.pb.h"
 #include "logging.h"
 #include "make_unique.h"
@@ -31,44 +31,65 @@ Communicator::Communicator(std::unique_ptr<CommunicationHandler> communicationHa
 {
 }
 
-void Communicator::enablePushChannel(std::function<void(const Answer&)> callback)
+void Communicator::setupPushChannels(std::function<void(const Answer&)> callback)
 {
-    LOG(INFO) << "Sending registerPushChannel request with FuseId: " << m_fuseId;
+    LOG(INFO) << "Setting up push channels with fuseId: '" << m_fuseId << "'";
 
+    // First close the push channel that was already opened on the connection
+    static std::function<void()> deregisterPushChannel;
+    if(deregisterPushChannel)
+        deregisterPushChannel();
+
+    // Subscribe for push messages (negative message id)
     auto pred = [](const Answer &ans){ return ans.message_id() < 0; };
-    auto call = [=](const Answer &ans){ callback(ans); return true; };
-    m_communicationHandler->subscribe({std::move(pred), std::move(call)});
+    auto unsubscribe = m_communicationHandler->subscribe({std::move(pred),
+                                                          std::move(callback)});
 
-    // Prepare PUSH channel registration request message
-    auto handshake = [&]{
+    const auto fuseId = m_fuseId;
+
+    auto handshake = [this, fuseId]{
+        LOG(INFO) << "Opening a push channel with fuseId: '" << fuseId << "'";
         protocol::fuse_messages::ChannelRegistration reg;
-        reg.set_fuse_id(m_fuseId);
+        reg.set_fuse_id(fuseId);
         return createMessage(FSLOGIC_MODULE_NAME, true, Atom::default_instance(), reg);
     };
 
-    auto goodbye = [&]{
+    auto goodbye = [this, fuseId]{
+        LOG(INFO) << "Closing the push channel with fuseId: '" << fuseId << "'";
         protocol::fuse_messages::ChannelClose close;
-        close.set_fuse_id(m_fuseId);
+        close.set_fuse_id(fuseId);
         return createMessage(FSLOGIC_MODULE_NAME, true, Atom::default_instance(), close);
     };
 
-    m_communicationHandler->addHandshake(std::move(handshake), std::move(goodbye),
-                                         CommunicationHandler::Pool::META);
+    auto remove = m_communicationHandler->addHandshake(std::move(handshake),
+                                                       std::move(goodbye),
+                                                       CommunicationHandler::Pool::META);
+
+    deregisterPushChannel = [=]{ unsubscribe(); remove(); };
 }
 
-void Communicator::enableHandshakeAck()
+void Communicator::setupHandshakeAck()
 {
     LOG(INFO) << "Enabling HandshakeAck with fuseId: '" << m_fuseId << "'";
 
+    // First remove the previous Ack message
+    static std::function<void()> removeHandshakeAck;
+    if(removeHandshakeAck)
+        removeHandshakeAck();
+
+    const auto fuseId = m_fuseId;
+
     // Build HandshakeAck message
-    auto handshake = [&]{
+    auto handshake = [this, fuseId]{
+        LOG(INFO) << "Sending HandshakeAck with fuseId: '" << fuseId << "'";
         protocol::fuse_messages::HandshakeAck ack;
-        ack.set_fuse_id(m_fuseId);
+        ack.set_fuse_id(fuseId);
         return createMessage("", true, Atom::default_instance(), ack);
     };
 
-    m_communicationHandler->addHandshake(std::move(handshake), CommunicationHandler::Pool::META);
-    m_communicationHandler->addHandshake(std::move(handshake), CommunicationHandler::Pool::DATA);
+    auto removeMeta = m_communicationHandler->addHandshake(handshake, CommunicationHandler::Pool::META);
+    auto removeData = m_communicationHandler->addHandshake(handshake, CommunicationHandler::Pool::DATA);
+    removeHandshakeAck = [=]{ removeMeta(); removeData(); };
 }
 
 void Communicator::setFuseId(std::string fuseId)
@@ -111,8 +132,12 @@ Communicator::communicate(const std::string &module,
 {
     auto cmsg = createMessage(module, true, ans, msg);
     auto future = m_communicationHandler->communicate(*cmsg, poolType(msg));
-    return future.wait_for(timeout) == std::future_status::ready
-            ? future.get() : std::make_unique<Answer>();
+
+    if(future.wait_for(timeout) != std::future_status::ready)
+        throw ReceiveError{"timeout of " + std::to_string(timeout.count()) +
+                          " milliseconds exceeded"};
+
+    return future.get();
 }
 
 std::pair<std::string, std::string>

@@ -37,13 +37,25 @@ ConnectionPool::ConnectionPool(const unsigned int connectionsNumber,
     , m_connectionsNumber{connectionsNumber}
 {
     if(connectionsNumber == 0)
-        throw std::invalid_argument{"Cannot create a ConnectionPool instance"
+        throw std::invalid_argument{"cannot create a ConnectionPool instance"
                                     " with 0 connections"};
 }
 
 ConnectionPool::~ConnectionPool()
 {
     close();
+}
+
+void ConnectionPool::close()
+{
+    std::unique_lock<std::mutex> lock{m_connectionsMutex};
+
+    for(const auto &connection: m_openConnections)
+        for(const auto &goodbye: m_goodbyes)
+            connection->send(goodbye());
+
+    m_futureConnections.clear();
+    m_openConnections.clear();
 }
 
 void ConnectionPool::send(const std::string &payload)
@@ -97,38 +109,41 @@ void ConnectionPool::onError(Connection &connection)
     m_openConnections.remove_if(std::bind(eq, p::_1, std::cref(connection)));
 }
 
-void ConnectionPool::addHandshake(std::function<std::string()> handshake,
-                                  std::function<std::string()> goodbye)
+std::function<void()> ConnectionPool::addHandshake(std::function<std::string()> handshake,
+                                                   std::function<std::string()> goodbye)
 {
     std::lock_guard<std::mutex> guard{m_connectionsMutex};
 
     for(const auto &connection: m_openConnections)
         connection->send(handshake());
 
-    m_handshakes.emplace_back(std::move(handshake));
-    m_goodbyes.emplace_front(std::move(goodbye));
+    auto handshakeIt = m_handshakes.emplace(m_handshakes.end(), std::move(handshake));
+    auto goodbyeIt = m_goodbyes.emplace(m_goodbyes.begin(), std::move(goodbye));
+
+    return [&, handshakeIt, goodbyeIt]{
+        std::lock_guard<std::mutex> guard{m_connectionsMutex};
+
+        for(const auto &connection: m_openConnections)
+            connection->send((*goodbyeIt)());
+
+        m_handshakes.erase(handshakeIt);
+        m_goodbyes.erase(goodbyeIt);
+    };
 }
 
-void ConnectionPool::close()
-{
-    std::unique_lock<std::mutex> lock{m_connectionsMutex};
-
-    for(const auto &connection: m_openConnections)
-        for(const auto &goodbye: m_goodbyes)
-            connection->send(goodbye());
-
-    m_futureConnections.clear();
-    m_openConnections.clear();
-}
-
-void ConnectionPool::addHandshake(std::function<std::string ()> handshake)
+std::function<void()> ConnectionPool::addHandshake(std::function<std::string()> handshake)
 {
     std::lock_guard<std::mutex> guard{m_connectionsMutex};
 
     for(const auto &connection: m_openConnections)
         connection->send(handshake());
 
-    m_handshakes.emplace_back(std::move(handshake));
+    auto it = m_handshakes.emplace(m_handshakes.end(), std::move(handshake));
+
+    return [&, it]{
+        std::lock_guard<std::mutex> guard{m_connectionsMutex};
+        m_handshakes.erase(it);
+    };
 }
 
 void ConnectionPool::addConnections()
