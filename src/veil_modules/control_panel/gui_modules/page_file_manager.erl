@@ -818,7 +818,7 @@ path_navigator_body(WorkingDirectory) ->
                         body = gui_str:html_encode(Element)},
                     {Link, {PathToElement, Counter + 1}}
                 end, {<<"">>, 1}, lists:sublist(PathElements, length(PathElements) - 1)),
-            [FirstLink | LinkList] ++ [lists:last(PathElements)]
+            [FirstLink | LinkList] ++ [gui_str:html_encode(lists:last(PathElements))]
     end.
 
 
