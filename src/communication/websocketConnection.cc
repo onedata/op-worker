@@ -56,7 +56,7 @@ WebsocketConnection::~WebsocketConnection()
     m_onErrorCallback = []{};
 
     websocketpp::lib::error_code ec;
-    m_endpoint.close(m_connection, websocketpp::close::status::going_away, "");
+    m_endpoint.close(m_connection, websocketpp::close::status::going_away, "", ec);
 }
 
 void WebsocketConnection::send(const std::string &payload)
