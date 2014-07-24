@@ -29,7 +29,9 @@ static constexpr int PROTOCOL_VERSION = 1;
 static constexpr const char
     *FSLOGIC_MODULE_NAME                = "fslogic",
     *CENTRAL_LOGGER_MODULE_NAME         = "central_logger",
-    *REMOTE_FILE_MANAGEMENT_MODULE_NAME = "remote_files_manager";
+    *REMOTE_FILE_MANAGEMENT_MODULE_NAME = "remote_files_manager",
+    *RULE_MANAGER_MODULE_NAME           = "rule_manager",
+    *CLUSTER_RENGINE_MODULE_NAME        = "cluster_rengine";
 
 static constexpr std::chrono::seconds RECV_TIMEOUT{2};
 
