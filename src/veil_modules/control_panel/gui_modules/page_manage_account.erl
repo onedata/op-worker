@@ -95,6 +95,7 @@ maybe_display_helper_message() ->
 
 % Snippet generating account management table
 main_table() ->
+    {ok, GlobalRegistryHostname} = application:get_env(veil_cluster_node, global_registry_hostname),
     {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
     maybe_display_dn_message(UserDoc),
     maybe_display_verify_dn_message(UserDoc),
@@ -139,7 +140,7 @@ main_table() ->
             #td{style = <<"padding: 15px; vertical-align: top;">>,
                 body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"OAuth / OpenID">>}},
             #td{style = <<"padding: 15px; vertical-align: top;">>,
-                body = #link{style = <<"font-size: 18px;">>, body = <<"Authorization preferences">>, url = <<?global_registry_hostname, "/manage_account">>}}
+                body = #link{style = <<"font-size: 18px;">>, body = <<"Authorization preferences">>, url = list_to_binary(GlobalRegistryHostname ++ "/manage_account")}}
         ]}
     ]}.
 
@@ -237,7 +238,7 @@ dn_list_body(UserDoc) ->
                 #span{class = <<"fui-cross-inverted">>, style = <<"font-size: 20px;">>}}
         ]}
     ],
-    #list{style= <<"margin-top: -3px;">>,numbered = true, body = CurrentDNs ++ UnverifiedDNs ++ NewDN}.
+    #list{style = <<"margin-top: -3px;">>, numbered = true, body = CurrentDNs ++ UnverifiedDNs ++ NewDN}.
 
 
 % Postback event handling

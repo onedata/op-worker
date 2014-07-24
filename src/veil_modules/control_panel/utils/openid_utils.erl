@@ -38,6 +38,7 @@ validate_login() ->
 
         KeyFile = application:get_env(veil_cluster_node, global_registry_provider_key_file, undefined),
         CertFile = application:get_env(veil_cluster_node, global_registry_provider_ca_cert_file, undefined),
+        {ok, GlobalRegistryHostname} = application:get_env(veil_cluster_node, global_registry_hostname),
         Opts = case {KeyFile, CertFile} of
                    {KeyF, CertF} when KeyF =:= undefined orelse CertF =:= undefined ->
                        error(no_certs_in_env);
@@ -45,7 +46,7 @@ validate_login() ->
                        [{ssl_options, [{keyfile, atom_to_list(KeyF)}, {certfile, atom_to_list(CertF)}]}]
                end,
 
-        Body = case ibrowse:send_req(?global_registry_hostname ++ ":8443/openid/token", [{"content-type", "application/json"}], post,
+        Body = case ibrowse:send_req(GlobalRegistryHostname ++ ":8443/openid/token", [{"content-type", "application/json"}], post,
             "{\"code\":\"" ++ binary_to_list(AuthorizationCode) ++ "\", \"grant_type\":\"authorization_code\"}", Opts) of
                    {ok, "200", _, RespBody} ->
                        RespBody;

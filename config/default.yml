@@ -306,6 +306,12 @@ veil_cluster_node_env:
         "\'certs/grpkey.pem\'"
       erlang_term: "'certs/grpkey.pem'"
 
+  - parameter:
+      name: global_registry_hostname
+      description: Global Registry hostname.
+      value: |
+        "\'https://onedata.org\'"
+      erlang_term: "'https://onedata.org'"
 
   # Files management
   - parameter:

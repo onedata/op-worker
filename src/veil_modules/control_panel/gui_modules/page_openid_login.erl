@@ -6,7 +6,8 @@
 %% @end
 %% ===================================================================
 %% @doc: This file contains n2o website code.
-%% The page is displayed when client asks for not existing resource.
+%% This page performs authentication of users that are redirected
+%% from the Global Registry.
 %% @end
 %% ===================================================================
 

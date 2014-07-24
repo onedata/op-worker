@@ -16,9 +16,6 @@
 -include_lib("ctool/include/gui/common.hrl").
 -include_lib("dao/include/common.hrl").
 
-% Global Registry hostname
--define(global_registry_hostname, "https://onedata.org").
-
 % Relative suffix of GUI address, leading to shared files
 -define(shared_files_download_path, "/share/").
 

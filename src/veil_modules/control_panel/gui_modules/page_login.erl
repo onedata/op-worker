@@ -29,7 +29,8 @@ body() ->
             gui_jq:redirect(<<"/">>),
             [];
         false ->
-            gui_jq:redirect(<<?global_registry_hostname>>),
+            {ok, GlobalRegistryHostname} = application:get_env(veil_cluster_node, global_registry_hostname),
+            gui_jq:redirect(list_to_binary(GlobalRegistryHostname)),
             []
     end.
 
