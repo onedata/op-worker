@@ -79,7 +79,7 @@ groups_permissions_test(Config) ->
   Name = "user1 user1",
   Teams = [Team],
   Email = "user1@email.net",
-  {CreateUserAns, UserDoc1} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+  {CreateUserAns, UserDoc1} = rpc:call(FSLogicNode, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
 
   {ReadFileAns2, PemBin2} = file:read_file(Cert2),
@@ -93,7 +93,7 @@ groups_permissions_test(Config) ->
   Login2 = ?TEST_USER2,
   Name2 = "user2 user2",
   Email2 = "user2@email.net",
-  {CreateUserAns2, UserDoc2} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, [Team, Team2], Email2, DnList2]),
+  {CreateUserAns2, UserDoc2} = rpc:call(FSLogicNode, user_logic, create_user, ["global_id2", Login2, Name2, [Team, Team2], Email2, DnList2]),
   ?assertEqual(ok, CreateUserAns2),
 
   %% Connect to cluster
@@ -493,7 +493,7 @@ groups_test(Config) ->
 
         Name = "user1 user1",
         Email = "user1@email.net",
-        {CreateUserAns, #veil_document{uuid = _UserID1}} = rpc:call(Node, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+        {CreateUserAns, #veil_document{uuid = _UserID1}} = rpc:call(Node, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList]),
         ?assertEqual(ok, CreateUserAns),
         DnList
     end,
@@ -735,7 +735,7 @@ user_file_counting_test(Config) ->
   Name = "user1 user1",
   Teams = [?TEST_GROUP],
   Email = "user1@email.net",
-  {CreateUserAns, #veil_document{uuid = UserID1}} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+  {CreateUserAns, #veil_document{uuid = UserID1}} = rpc:call(FSLogicNode, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
 
   {ReadFileAns2, PemBin2} = file:read_file(Cert2),
@@ -750,7 +750,7 @@ user_file_counting_test(Config) ->
   Name2 = "user2 user2",
   Teams2 = [?TEST_GROUP2],
   Email2 = "user2@email.net",
-  {CreateUserAns2, #veil_document{uuid = UserID2}} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
+  {CreateUserAns2, #veil_document{uuid = UserID2}} = rpc:call(FSLogicNode, user_logic, create_user, ["global_id2", Login2, Name2, Teams2, Email2, DnList2]),
   ?assertEqual(ok, CreateUserAns2),
 
   rpc:call(FSLogicNode, fslogic_utils, get_files_number, [user, "not_existing_id", 1]),
@@ -876,7 +876,7 @@ user_file_size_test(Config) ->
 
     Name = "user1 user1",
     Email = "user1@email.net",
-    {CreateUserAns, #veil_document{uuid = UserID}} = rpc:call(Node, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+    {CreateUserAns, #veil_document{uuid = UserID}} = rpc:call(Node, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList]),
     ?assertEqual(ok, CreateUserAns),
     {DnList, UserID}
   end,
@@ -1115,7 +1115,7 @@ user_creation_test(Config) ->
   ?assertEqual(ok, ConvertAns),
   DnList = [DN],
 
-  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
 
   ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/users/" ++ Login)),
@@ -1208,7 +1208,7 @@ user_creation_test(Config) ->
   ?assertEqual(ok, ConvertAns2),
   DnList2 = [DN2],
 
-  {CreateUserAns2, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
+  {CreateUserAns2, _} = rpc:call(FSLogicNode, user_logic, create_user, ["global_id2", Login2, Name2, Teams2, Email2, DnList2]),
   ?assertEqual(ok, CreateUserAns2),
 
   ?assertEqual(dir, files_tester:file_exists_storage(?TEST_ROOT ++ "/users/" ++ Login)),
@@ -1357,7 +1357,7 @@ dir_mv_test(Config) ->
   Name = "user1 user1",
   Teams = [?TEST_GROUP],
   Email = "user1@email.net",
-  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
 
   {ConAns, Socket} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}, auto_handshake]),
@@ -1433,7 +1433,7 @@ file_sharing_test(Config) ->
   Name = "user1 user1",
   Teams = [?TEST_GROUP],
   Email = "user1@email.net",
-  {CreateUserAns, User_Doc} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+  {CreateUserAns, User_Doc} = rpc:call(FSLogicNode, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
   fslogic_context:set_user_dn(DN),
 
@@ -1606,7 +1606,7 @@ fuse_requests_test(Config) ->
   Name = "user1 user1",
   Teams = [?TEST_GROUP],
   Email = "user1@email.net",
-  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
 
   %% Connect to cluster
@@ -1915,7 +1915,7 @@ users_separation_test(Config) ->
   Name = "user1 user1",
   Teams = [?TEST_GROUP],
   Email = "user1@email.net",
-  {CreateUserAns, #veil_document{uuid = UserID1}} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+  {CreateUserAns, #veil_document{uuid = UserID1}} = rpc:call(FSLogicNode, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
 
   {ReadFileAns2, PemBin2} = file:read_file(Cert2),
@@ -1930,7 +1930,7 @@ users_separation_test(Config) ->
   Name2 = "user2 user2",
   Teams2 = [?TEST_GROUP2],
   Email2 = "user2@email.net",
-  {CreateUserAns2, #veil_document{uuid = UserID2}} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
+  {CreateUserAns2, #veil_document{uuid = UserID2}} = rpc:call(FSLogicNode, user_logic, create_user, ["global_id2", Login2, Name2, Teams2, Email2, DnList2]),
   ?assertEqual(ok, CreateUserAns2),
 
   %% Open connections

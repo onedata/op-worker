@@ -187,7 +187,7 @@ veil_handshake_test(Config) ->
     Name = "user1 user1",
     Teams = [TeamName],
     Email = "user1@email.net",
-    {CreateUserAns, _} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+    {CreateUserAns, _} = rpc:call(CCM, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList]),
     ?assertEqual(ok, CreateUserAns)
   end,
   %% END Add user

@@ -291,6 +291,28 @@ veil_cluster_node_env:
       value: 2592000 # 30 days in seconds
 
 
+  # Global Registry interfacing
+  - parameter:
+      name: global_registry_provider_ca_cert_file
+      description: Path to .pem file containing the certificate signed by global registry CA, used for authorizing requests to it.
+      value: |
+        "\'certs/grpcert.pem\'"
+      erlang_term: "'certs/grpcert.pem'"
+
+  - parameter:
+      name: global_registry_provider_key_file
+      description: Path to .pem file containing the private key to the grpcert.
+      value: |
+        "\'certs/grpkey.pem\'"
+      erlang_term: "'certs/grpkey.pem'"
+
+  - parameter:
+      name: global_registry_hostname
+      description: Global Registry hostname.
+      value: |
+        "\'https://onedata.org\'"
+      erlang_term: "'https://onedata.org'"
+
   # Files management
   - parameter:
       name: new_file_logic_mode

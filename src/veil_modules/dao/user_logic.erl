@@ -21,7 +21,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([sign_in/1, create_user/5, get_user/1, remove_user/1, list_all_users/0]).
+-export([sign_in/1, create_user/6, get_user/1, remove_user/1, list_all_users/0]).
 -export([get_login/1, get_name/1, get_teams/1, update_teams/2]).
 -export([get_email_list/1, update_email_list/2, get_role/1, update_role/2]).
 -export([get_dn_list/1, update_dn_list/2, get_unverified_dn_list/1, update_unverified_dn_list/2]).
@@ -58,23 +58,27 @@
     Result :: {string(), user_doc()}.
 %% ====================================================================
 sign_in(Proplist) ->
+    GlobalId = case proplists:get_value(global_id, Proplist, "") of
+                   "" -> throw(no_global_id_specified);
+                   GID -> GID
+               end,
     Login = proplists:get_value(login, Proplist, ""),
     Name = proplists:get_value(name, Proplist, ""),
     Teams = proplists:get_value(teams, Proplist, []),
-    Email = proplists:get_value(email, Proplist, ""),
+    Emails = proplists:get_value(emails, Proplist, []),
     DnList = proplists:get_value(dn_list, Proplist, []),
 
-    User = case get_user({login, Login}) of
+    User = case get_user({global_id, GlobalId}) of
                {ok, ExistingUser} ->
-                   synchronize_user_info(ExistingUser, Teams, Email, DnList);
+                   synchronize_user_info(ExistingUser, Teams, Emails, DnList);
                {error, user_not_found} ->
-                    case create_user(Login, Name, Teams, Email, DnList) of
-						{ok, NewUser} ->
-							NewUser;
-	                    {error,Error} ->
-                        ?error("Sign in error: ~p", [Error]),
-							throw(Error)
-	               end;
+                   case create_user(GlobalId, Login, Name, Teams, Emails, DnList) of
+                       {ok, NewUser} ->
+                           NewUser;
+                       {error, Error} ->
+                           ?error("Sign in error: ~p", [Error]),
+                           throw(Error)
+                   end;
     %% Code below is only for development purposes (connection to DB is not required)
                Error ->
                    throw(Error)
@@ -87,20 +91,22 @@ sign_in(Proplist) ->
 %% @doc
 %% Creates a user in the DB.
 %% @end
--spec create_user(Login, Name, Teams, Email, DnList) -> Result when
+-spec create_user(GlobalId, Login, Name, Teams, Email, DnList) -> Result when
+    GlobalId :: string(),
     Login :: string(),
     Name :: string(),
     Teams :: string(),
-    Email :: string(),
+    Email :: [string()],
     DnList :: [string()],
     Result :: {ok, user_doc()} | {error, any()}.
 %% ====================================================================
-create_user(Login, Name, Teams, Email, DnList) ->
-  ?debug("Creating user: ~p", [{Login, Name, Teams, Email, DnList}]),
-	Quota = #quota{},
+create_user(GlobalId, Login, Name, Teams, Email, DnList) ->
+    ?debug("Creating user: ~p", [{GlobalId, Login, Name, Teams, Email, DnList}]),
+    Quota = #quota{},
     {QuotaAns, QuotaUUID} = dao_lib:apply(dao_users, save_quota, [Quota], 1),
     User = #user
     {
+        global_id = GlobalId,
         login = Login,
         name = Name,
         teams = case Teams of
@@ -108,7 +114,7 @@ create_user(Login, Name, Teams, Email, DnList) ->
                     _ -> []
                 end,
         email_list = case Email of
-                         Email when is_list(Email) -> [Email];
+                         List when is_list(List) -> List;
                          _ -> []
                      end,
 
@@ -309,8 +315,8 @@ update_teams(#veil_document{record = UserInfo} = UserDoc, NewTeams) ->
             create_dirs_at_storage(non, get_team_names(NewDoc)),
             dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
         {error, Reason} ->
-          ?error("Cannot update user ~p teams: ~p", [UserInfo, Reason]),
-          {error, Reason}
+            ?error("Cannot update user ~p teams: ~p", [UserInfo, Reason]),
+            {error, Reason}
     end.
 
 %% get_email_list/1
@@ -341,8 +347,8 @@ update_email_list(#veil_document{record = UserInfo} = UserDoc, NewEmailList) ->
     case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
         {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
         {error, Reason} ->
-          ?error("Cannot update user ~p emails: ~p", [UserInfo, Reason]),
-          {error, Reason}
+            ?error("Cannot update user ~p emails: ~p", [UserInfo, Reason]),
+            {error, Reason}
     end.
 
 
@@ -374,8 +380,8 @@ update_dn_list(#veil_document{record = UserInfo} = UserDoc, NewDnList) ->
     case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
         {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
         {error, Reason} ->
-          ?error("Cannot update user ~p dn_list: ~p", [UserInfo, Reason]),
-          {error, Reason}
+            ?error("Cannot update user ~p dn_list: ~p", [UserInfo, Reason]),
+            {error, Reason}
     end.
 
 
@@ -444,8 +450,8 @@ update_role(#veil_document{record = UserInfo} = UserDoc, NewRole) ->
     case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
         {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
         {error, Reason} ->
-          ?error("Cannot update user ~p role: ~p", [UserInfo, Reason]),
-          {error, Reason}
+            ?error("Cannot update user ~p role: ~p", [UserInfo, Reason]),
+            {error, Reason}
     end;
 
 update_role(Key, NewRole) ->
@@ -456,8 +462,8 @@ update_role(Key, NewRole) ->
             case dao_lib:apply(dao_users, save_user, [NewDoc], 1) of
                 {ok, UUID} -> dao_lib:apply(dao_users, get_user, [{uuid, UUID}], 1);
                 {error, Reason} ->
-                  ?error("Cannot update user ~p role: ~p", [Key, Reason]),
-                  {error, Reason}
+                    ?error("Cannot update user ~p role: ~p", [Key, Reason]),
+                    {error, Reason}
             end;
         Other -> Other
     end.
@@ -488,17 +494,17 @@ get_quota(User) ->
     Result :: {ok, quota()} | {error, any()}.
 %% ====================================================================
 update_quota(User, NewQuota) ->
-  Quota = dao_lib:apply(dao_users, get_quota, [User#veil_document.record#user.quota_doc], 1),
-  case Quota of
-    {ok, QuotaDoc} ->
-      NewQuotaDoc = QuotaDoc#veil_document{record = NewQuota},
-      dao_lib:apply(dao_users, save_quota, [NewQuotaDoc], 1);
-    {error, Error} ->
-      ?error("Cannot update user ~p quota: ~p", [User, {get_quota_error, Error}]),
-      {error, {get_quota_error, Error}};
-    Other ->
-      Other
-  end.
+    Quota = dao_lib:apply(dao_users, get_quota, [User#veil_document.record#user.quota_doc], 1),
+    case Quota of
+        {ok, QuotaDoc} ->
+            NewQuotaDoc = QuotaDoc#veil_document{record = NewQuota},
+            dao_lib:apply(dao_users, save_quota, [NewQuotaDoc], 1);
+        {error, Error} ->
+            ?error("Cannot update user ~p quota: ~p", [User, {get_quota_error, Error}]),
+            {error, {get_quota_error, Error}};
+        Other ->
+            Other
+    end.
 
 %% get_files_size/2
 %% ====================================================================
@@ -596,14 +602,14 @@ invert_dn_string(DNString) ->
 %% This function synchronizes data from database with the information
 %% received from OpenID provider.
 %% @end
--spec synchronize_user_info(User, Teams, Email, DnList) -> Result when
+-spec synchronize_user_info(User, Teams, Emails, DnList) -> Result when
     User :: user_doc(),
     Teams :: string(),
-    Email :: string(),
+    Emails :: [string()],
     DnList :: [string()],
     Result :: user_doc().
 %% ====================================================================
-synchronize_user_info(User, Teams, Email, DnList) ->
+synchronize_user_info(User, Teams, Emails, DnList) ->
     %% Actual updates will probably happen so rarely, that there is no need to scoop those 3 DB updates into one.
     User2 = case (get_teams(User) =:= Teams) or (Teams =:= []) of
                 true -> User;
@@ -612,12 +618,16 @@ synchronize_user_info(User, Teams, Email, DnList) ->
                     NewUser
             end,
 
-    User3 = case lists:member(Email, get_email_list(User2)) or (Email =:= "") of
-                true -> User2;
+    User3 =
+        lists:foldl(fun(Email, UserDoc) ->
+            case lists:member(Email, get_email_list(UserDoc)) or (Email =:= "") of
+                true ->
+                    UserDoc;
                 false ->
                     {ok, NewUser2} = update_email_list(User2, get_email_list(User2) ++ [Email]),
                     NewUser2
-            end,
+            end
+        end, User2, Emails),
 
     NewDns = lists:filter(
         fun(X) ->
@@ -681,8 +691,8 @@ create_root(Dir, Uid) ->
             FileDoc = fslogic_meta:update_meta_attr(File, times, {CTime, CTime, CTime}),
             dao_lib:apply(dao_vfs, save_new_file, [Dir, FileDoc], 1);
         _ParentError ->
-          ?error("Cannot create root dir ~p for uid, error: ~p", [Dir, Uid, {parent_error, _ParentError}]),
-          {error,parent_error}
+            ?error("Cannot create root dir ~p for uid, error: ~p", [Dir, Uid, {parent_error, _ParentError}]),
+            {error, parent_error}
     end.
 
 %% create_dirs_at_storage/2
@@ -696,19 +706,19 @@ create_dirs_at_storage(Root, Teams) ->
     {ListStatus, StorageList} = dao_lib:apply(dao_vfs, list_storage, [], 1),
     case ListStatus of
         ok ->
-					StorageRecords = lists:map(fun(VeilDoc) -> VeilDoc#veil_document.record end, StorageList),
-					CreateDirs = fun(StorageRecord,TmpAns) ->
-						case create_dirs_at_storage(Root,Teams,StorageRecord) of
-							ok -> TmpAns;
-							Error ->
-							  ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, Teams}, Error]),
-							  Error
-						end
-					end,
-					lists:foldl(CreateDirs,ok , StorageRecords);
+            StorageRecords = lists:map(fun(VeilDoc) -> VeilDoc#veil_document.record end, StorageList),
+            CreateDirs = fun(StorageRecord, TmpAns) ->
+                case create_dirs_at_storage(Root, Teams, StorageRecord) of
+                    ok -> TmpAns;
+                    Error ->
+                        ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, Teams}, Error]),
+                        Error
+                end
+            end,
+            lists:foldl(CreateDirs, ok, StorageRecords);
         Error2 ->
-          ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, Teams}, {storage_listing_error, Error2}]),
-          {error,storage_listing_error}
+            ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, Teams}, {storage_listing_error, Error2}]),
+            {error, storage_listing_error}
     end.
 
 %% create_dirs_at_storage/3
