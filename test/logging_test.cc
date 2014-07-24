@@ -74,7 +74,7 @@ struct RemoteLogWriterFixture: public ::testing::Test
         std::atomic<bool> messageSent(false);
         veil::protocol::logging::LogMessage sentMessage;
 
-        EXPECT_CALL(*mockCommunicator, send(_, _))
+        EXPECT_CALL(*mockCommunicator, send(_, _, _))
                 .WillOnce(DoAll(SaveMessage(&sentMessage), Assign(&messageSent, true)));
 
         logWriter.buffer(level, fileName, line, timestamp, message);
@@ -185,9 +185,9 @@ TEST_F(RemoteLogWriterFixture, ShouldDropMessagesAfterExceedingMaxBufferSize)
     veil::protocol::logging::LogMessage sentMessage;
 
     // Note: gmock satisfies expectations in reverse order
-    EXPECT_CALL(*mockCommunicator, send(_, _))
+    EXPECT_CALL(*mockCommunicator, send(_, _, _))
             .WillOnce(DoAll(SaveMessage(&sentMessage), Assign(&messageSent, true)));
-    EXPECT_CALL(*mockCommunicator, send(_, _))
+    EXPECT_CALL(*mockCommunicator, send(_, _, _))
             .Times(5).RetiresOnSaturation();
 
     writer.run(mockCommunicator);

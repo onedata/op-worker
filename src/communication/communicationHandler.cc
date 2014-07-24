@@ -9,6 +9,7 @@
 
 #include "communication/connection.h"
 #include "communication/connectionPool.h"
+#include "communication/exception.h"
 #include "logging.h"
 #include "make_unique.h"
 
@@ -34,27 +35,26 @@ CommunicationHandler::CommunicationHandler(std::unique_ptr<ConnectionPool> dataP
 }
 
 void CommunicationHandler::reply(const Answer &originalMsg,
-                                 Message &replyMsg, const Pool poolType)
+                                 Message &replyMsg, const Pool poolType,
+                                 const unsigned int retries)
 {
-    const auto &pool = poolType == Pool::DATA ? m_dataPool : m_metaPool;
     replyMsg.set_message_id(originalMsg.message_id());
-    pool->send(replyMsg.SerializeAsString());
+    sendWithRetry(replyMsg, poolType, retries);
 }
 
 void
-CommunicationHandler::send(Message &message, const Pool poolType)
+CommunicationHandler::send(Message &message, const Pool poolType,
+                           const unsigned int retries)
 {
-    const auto &pool = poolType == Pool::DATA ? m_dataPool : m_metaPool;
     message.set_message_id(nextId());
-    pool->send(message.SerializeAsString());
+    sendWithRetry(message, poolType, retries);
 }
 
 std::future<std::unique_ptr<CommunicationHandler::Answer>>
-CommunicationHandler::communicate(Message &message, const Pool poolType)
+CommunicationHandler::communicate(Message &message, const Pool poolType,
+                                  const unsigned int retries)
 {
     std::lock_guard<std::mutex> guard{m_promisesMutex};
-
-    const auto &pool = poolType == Pool::DATA ? m_dataPool : m_metaPool;
     message.set_message_id(nextId());
 
     std::promise<std::unique_ptr<CommunicationHandler::Answer>> promise;
@@ -77,8 +77,7 @@ CommunicationHandler::communicate(Message &message, const Pool poolType)
             m_promises.erase(m_promises.begin());
     }
 
-    pool->send(message.SerializeAsString());
-
+    sendWithRetry(message, poolType, retries);
     return std::move(future);
 }
 
@@ -97,6 +96,26 @@ std::function<void()> CommunicationHandler::addHandshake(std::function<std::uniq
 
     const auto &pool = poolType == Pool::DATA ? m_dataPool : m_metaPool;
     return pool->addHandshake(std::move(h), std::move(g));
+}
+
+void CommunicationHandler::sendWithRetry(const google::protobuf::Message &message,
+                                         const Pool poolType, const int retries)
+{
+    const auto &pool = poolType == Pool::DATA ? m_dataPool : m_metaPool;
+    try
+    {
+        pool->send(message.SerializeAsString());
+    }
+    catch(SendError &e)
+    {
+        LOG(WARNING) << "Error sending message: " << e.what();
+        if(retries)
+        {
+            LOG(WARNING) << "   retrying...";
+            sendWithRetry(message, poolType, retries - 1);
+        }
+        else throw e;
+    }
 }
 
 std::function<void()> CommunicationHandler::addHandshake(std::function<std::unique_ptr<Message>()> handshake,

@@ -9,13 +9,14 @@
 
 #include "communication/connection.h"
 #include "communication/exception.h"
+#include "logging.h"
 
 #include <algorithm>
 #include <cassert>
 #include <exception>
 #include <future>
 
-static constexpr std::chrono::seconds WAIT_FOR_CONNECTION{5}; // TODO: check this in current trunk
+static constexpr std::chrono::seconds WAIT_FOR_CONNECTION{5};
 
 namespace
 {
@@ -52,7 +53,7 @@ void ConnectionPool::close()
 
     for(const auto &connection: m_openConnections)
         for(const auto &goodbye: m_goodbyes)
-            connection->send(goodbye());
+            sendHandshakeMessage(*connection, goodbye());
 
     m_futureConnections.clear();
     m_openConnections.clear();
@@ -64,7 +65,7 @@ void ConnectionPool::send(const std::string &payload)
     addConnections();
     if(!m_connectionOpened.wait_for(lock, WAIT_FOR_CONNECTION,
                                     [&]{ return !m_openConnections.empty(); }))
-        throw SendError{"No open connections available."};
+        throw ConnectionError{"no open connections available."};
 
     m_openConnections.front()->send(payload);
 
@@ -96,7 +97,7 @@ void ConnectionPool::onOpen(Connection &connection)
     assert(it != m_futureConnections.cend());
 
     for(const auto &handshake: m_handshakes)
-        (*it)->send(handshake());
+        sendHandshakeMessage(**it, handshake());
 
     m_openConnections.splice(m_openConnections.begin(), m_futureConnections, it);
     m_connectionOpened.notify_all();
@@ -109,22 +110,35 @@ void ConnectionPool::onError(Connection &connection)
     m_openConnections.remove_if(std::bind(eq, p::_1, std::cref(connection)));
 }
 
+void ConnectionPool::sendHandshakeMessage(Connection &conn,
+                                          const std::string &payload)
+{
+    try
+    {
+        conn.send(payload);
+    }
+    catch(Exception &e)
+    {
+        LOG(ERROR) << "Error sending handshake message: " << e.what();
+    }
+}
+
 std::function<void()> ConnectionPool::addHandshake(std::function<std::string()> handshake,
                                                    std::function<std::string()> goodbye)
 {
     std::lock_guard<std::mutex> guard{m_connectionsMutex};
 
     for(const auto &connection: m_openConnections)
-        connection->send(handshake());
+        sendHandshakeMessage(*connection, handshake());
 
     auto handshakeIt = m_handshakes.emplace(m_handshakes.end(), std::move(handshake));
     auto goodbyeIt = m_goodbyes.emplace(m_goodbyes.begin(), std::move(goodbye));
 
-    return [&, handshakeIt, goodbyeIt]{
+    return [=]{
         std::lock_guard<std::mutex> guard{m_connectionsMutex};
 
         for(const auto &connection: m_openConnections)
-            connection->send((*goodbyeIt)());
+            sendHandshakeMessage(*connection, (*goodbyeIt)());
 
         m_handshakes.erase(handshakeIt);
         m_goodbyes.erase(goodbyeIt);
@@ -136,11 +150,11 @@ std::function<void()> ConnectionPool::addHandshake(std::function<std::string()> 
     std::lock_guard<std::mutex> guard{m_connectionsMutex};
 
     for(const auto &connection: m_openConnections)
-        connection->send(handshake());
+        sendHandshakeMessage(*connection, handshake());
 
     auto it = m_handshakes.emplace(m_handshakes.end(), std::move(handshake));
 
-    return [&, it]{
+    return [=]{
         std::lock_guard<std::mutex> guard{m_connectionsMutex};
         m_handshakes.erase(it);
     };
@@ -148,10 +162,17 @@ std::function<void()> ConnectionPool::addHandshake(std::function<std::string()> 
 
 void ConnectionPool::addConnections()
 {
-    for(auto i = m_futureConnections.size() + m_openConnections.size();
-        i < m_connectionsNumber; ++i)
+    try
     {
-        m_futureConnections.emplace_back(createConnection());
+        for(auto i = m_futureConnections.size() + m_openConnections.size();
+            i < m_connectionsNumber; ++i)
+        {
+            m_futureConnections.emplace_back(createConnection());
+        }
+    }
+    catch(ConnectionError &e)
+    {
+        LOG(WARNING) << "Some or all connections couldn't be created: " << e.what();
     }
 }
 

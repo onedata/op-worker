@@ -100,8 +100,8 @@ TEST_F(CommunicationHandlerTest, shouldCallSendOnAppropriatePoolOnReply)
     veil::protocol::communication_protocol::Answer replyTo;
     replyTo.set_message_id(0);
 
-    communicationHandler->reply(replyTo, dataMsg, Pool::DATA);
-    communicationHandler->reply(replyTo, metaMsg, Pool::META);
+    communicationHandler->reply(replyTo, dataMsg, Pool::DATA, 0);
+    communicationHandler->reply(replyTo, metaMsg, Pool::META, 0);
 
     ASSERT_EQ(dataMsg.SerializeAsString(), sentDataMessage);
     ASSERT_EQ(metaMsg.SerializeAsString(), sentMetaMessage);
@@ -119,8 +119,8 @@ TEST_F(CommunicationHandlerTest, shouldCallSendOnAppropriatePoolOnSend)
     EXPECT_CALL(*dataPool, send(_)).WillOnce(SaveArg<0>(&sentDataMessage));
     EXPECT_CALL(*metaPool, send(_)).WillOnce(SaveArg<0>(&sentMetaMessage));
 
-    communicationHandler->send(dataMsg, Pool::DATA);
-    communicationHandler->send(metaMsg, Pool::META);
+    communicationHandler->send(dataMsg, Pool::DATA, 0);
+    communicationHandler->send(metaMsg, Pool::META, 0);
 
     ASSERT_EQ(dataMsg.SerializeAsString(), sentDataMessage);
     ASSERT_EQ(metaMsg.SerializeAsString(), sentMetaMessage);
@@ -131,7 +131,7 @@ TEST_F(CommunicationHandlerTest, shouldSetMessageIdOnSend)
     auto dataMsg = randomMessage();
 
     ASSERT_FALSE(dataMsg.has_message_id());
-    communicationHandler->send(dataMsg, randomPool());
+    communicationHandler->send(dataMsg, randomPool(), 0);
     ASSERT_TRUE(dataMsg.has_message_id());
 }
 
@@ -139,10 +139,10 @@ TEST_F(CommunicationHandlerTest, shouldSetIncrementingMessageIds)
 {
     auto dataMsg = randomMessage();
 
-    communicationHandler->send(dataMsg, randomPool());
+    communicationHandler->send(dataMsg, randomPool(), 0);
     auto msgId = dataMsg.message_id();
 
-    communicationHandler->send(dataMsg, randomPool());
+    communicationHandler->send(dataMsg, randomPool(), 0);
     ASSERT_GT(dataMsg.message_id(), msgId);
 }
 
@@ -157,8 +157,8 @@ TEST_F(CommunicationHandlerTest, shouldCallSendOnAppropriatePoolOnCommunicate)
     EXPECT_CALL(*dataPool, send(_)).WillOnce(SaveArg<0>(&sentDataMessage));
     EXPECT_CALL(*metaPool, send(_)).WillOnce(SaveArg<0>(&sentMetaMessage));
 
-    communicationHandler->communicate(dataMsg, Pool::DATA);
-    communicationHandler->communicate(metaMsg, Pool::META);
+    communicationHandler->communicate(dataMsg, Pool::DATA, 0);
+    communicationHandler->communicate(metaMsg, Pool::META, 0);
 
     ASSERT_EQ(dataMsg.SerializeAsString(), sentDataMessage);
     ASSERT_EQ(metaMsg.SerializeAsString(), sentMetaMessage);
@@ -170,7 +170,7 @@ TEST_F(CommunicationHandlerTest, shouldFulfilAPromiseOnResultMessage)
     auto pool = poolType == Pool::META ? metaPool : dataPool;
     auto dataMsg = randomMessage();
 
-    auto future = communicationHandler->communicate(dataMsg, randomPool());
+    auto future = communicationHandler->communicate(dataMsg, randomPool(), 0);
     auto messageId = dataMsg.message_id();
 
     veil::protocol::communication_protocol::Answer answer;
@@ -343,7 +343,7 @@ TEST_F(CommunicationHandlerTest, shouldReplyWithProperMessageId)
     {
         auto msgId = randomInt(-1000, 1000);
         replyTo.set_message_id(msgId);
-        communicationHandler->reply(replyTo, msg, poolType);
+        communicationHandler->reply(replyTo, msg, poolType, 0);
 
         ASSERT_EQ(msgId, msg.message_id());
     }

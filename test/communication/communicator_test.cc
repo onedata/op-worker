@@ -8,9 +8,8 @@
 #include "communication/communicator.h"
 
 #include "communication_protocol.pb.h"
-#include "communication/communicationHandler.h"
+#include "communication/communicationHandler_mock.h"
 #include "communication/connection.h"
-#include "communication/connectionPool_mock.h"
 #include "communication/exception.h"
 #include "fuse_messages.pb.h"
 #include "logging.pb.h"
@@ -35,58 +34,17 @@
 using namespace ::testing;
 using namespace std::placeholders;
 
-struct CommunicationHandlerMock: public veil::communication::CommunicationHandler
-{
-    using Message = veil::protocol::communication_protocol::ClusterMsg;
-    using Answer = veil::protocol::communication_protocol::Answer;
-
-    bool autoFulfillPromise = true;
-    std::unique_ptr<std::promise<std::unique_ptr<Answer>>> promise;
-
-    CommunicationHandlerMock()
-        : CommunicationHandler{std::make_unique<NiceMock<ConnectionPoolMock>>(),
-                               std::make_unique<NiceMock<ConnectionPoolMock>>()}
-    {
-        ON_CALL(*this, subscribe(_)).WillByDefault(Return([]{}));
-        ON_CALL(*this, addHandshake(_, _)).WillByDefault(Return([]{}));
-        ON_CALL(*this, addHandshake(_, _, _)).WillByDefault(Return([]{}));
-    }
-
-    std::future<std::unique_ptr<Answer>> communicate(Message &msg, const Pool pool) override
-    {
-        promise = std::make_unique<std::promise<std::unique_ptr<Answer>>>();
-        communicateMock(msg, pool);
-        if(autoFulfillPromise)
-        {
-            auto value = std::make_unique<Answer>(Answer{});
-            promise->set_value(std::move(value));
-        }
-
-        return promise->get_future();
-    }
-
-    MOCK_METHOD3(reply, void(const Answer&, Message&, const Pool));
-    MOCK_METHOD2(send, void(Message&, const Pool));
-    MOCK_METHOD2(communicateMock, void(Message&, const Pool));
-    MOCK_METHOD1(subscribe, std::function<void()>(SubscriptionData));
-    MOCK_METHOD2(addHandshake, std::function<void()>(std::function<std::unique_ptr<CommunicationHandlerMock::Message>()>,
-                                                     const Pool));
-    MOCK_METHOD3(addHandshake, std::function<void()>(std::function<std::unique_ptr<CommunicationHandlerMock::Message>()>,
-                                                     std::function<std::unique_ptr<CommunicationHandlerMock::Message>()>,
-                                                     const Pool));
-};
-
 struct CommunicatorTest: public ::testing::Test
 {
     std::unique_ptr<veil::communication::Communicator> communicator;
-    CommunicationHandlerMock *handlerMock;
+    MockCommunicationHandler *handlerMock;
     std::string fuseId;
 
     CommunicatorTest()
     {
         fuseId = randomString();
 
-        auto p = std::make_unique<NiceMock<CommunicationHandlerMock>>();
+        auto p = std::make_unique<NiceMock<MockCommunicationHandler>>();
         handlerMock = p.get();
 
         communicator = std::make_unique<veil::communication::Communicator>(
@@ -98,8 +56,8 @@ struct CommunicatorTest: public ::testing::Test
 
 TEST_F(CommunicatorTest, shouldAddHandshakeAndGoodbyeOnSetupPushChannels)
 {
-    std::function<std::unique_ptr<CommunicationHandlerMock::Message>()> addedHandshake;
-    std::function<std::unique_ptr<CommunicationHandlerMock::Message>()> addedGoodbye;
+    std::function<std::unique_ptr<MockCommunicationHandler::Message>()> addedHandshake;
+    std::function<std::unique_ptr<MockCommunicationHandler::Message>()> addedGoodbye;
 
     EXPECT_CALL(*handlerMock, addHandshake(_, _, veil::communication::CommunicationHandler::Pool::META)).
             WillOnce(DoAll(SaveArg<0>(&addedHandshake), SaveArg<1>(&addedGoodbye),
@@ -125,17 +83,17 @@ ACTION_P2(SaveFunctions, predicate, callback)
 
 TEST_F(CommunicatorTest, shouldSubscribeForPushMessagesOnEnablePushChannel)
 {
-    std::function<bool(const CommunicationHandlerMock::Answer&)> subscribedPredicate;
-    std::function<void(const CommunicationHandlerMock::Answer&)> subscribedCallback;
+    std::function<bool(const MockCommunicationHandler::Answer&)> subscribedPredicate;
+    std::function<void(const MockCommunicationHandler::Answer&)> subscribedCallback;
 
     EXPECT_CALL(*handlerMock, subscribe(_))
             .WillOnce(DoAll(SaveFunctions(&subscribedPredicate, &subscribedCallback),
                             Return([]{})));
 
-    communicator->setupPushChannels([](const CommunicationHandlerMock::Answer&){});
+    communicator->setupPushChannels([](const MockCommunicationHandler::Answer&){});
 
     std::bernoulli_distribution dis{0.5};
-    CommunicationHandlerMock::Answer answer;
+    MockCommunicationHandler::Answer answer;
 
     for(int i = randomInt(100, 1000); i >= 0; --i)
     {
@@ -155,13 +113,13 @@ TEST_F(CommunicatorTest, shouldSubscribeForPushMessagesOnEnablePushChannel)
 
 TEST_F(CommunicatorTest, shouldAddHandshakeOnSetupHandshakeACK)
 {
-    std::function<std::unique_ptr<CommunicationHandlerMock::Message>()> addedMetaHandshake;
-    std::function<std::unique_ptr<CommunicationHandlerMock::Message>()> addedDataHandshake;
+    std::function<std::unique_ptr<MockCommunicationHandler::Message>()> addedMetaHandshake;
+    std::function<std::unique_ptr<MockCommunicationHandler::Message>()> addedDataHandshake;
 
-    EXPECT_CALL(*handlerMock, addHandshake(_, CommunicationHandlerMock::Pool::META)).
+    EXPECT_CALL(*handlerMock, addHandshake(_, MockCommunicationHandler::Pool::META)).
             WillOnce(DoAll(SaveArg<0>(&addedMetaHandshake), Return([]{})));
 
-    EXPECT_CALL(*handlerMock, addHandshake(_, CommunicationHandlerMock::Pool::DATA)).
+    EXPECT_CALL(*handlerMock, addHandshake(_, MockCommunicationHandler::Pool::DATA)).
             WillOnce(DoAll(SaveArg<0>(&addedDataHandshake), Return([]{})));
 
     communicator->setupHandshakeAck();
@@ -181,15 +139,15 @@ TEST_F(CommunicatorTest, shouldCallDataPoolOnSendingRemoteFileManagementMessages
     msg.set_file_id(randomString());
     msg.set_perms(666);
 
-    EXPECT_CALL(*handlerMock, send(_, CommunicationHandlerMock::Pool::DATA));
+    EXPECT_CALL(*handlerMock, send(_, MockCommunicationHandler::Pool::DATA, _));
     communicator->send(randomString(), msg);
     Mock::VerifyAndClearExpectations(handlerMock);
 
-    EXPECT_CALL(*handlerMock, communicateMock(_, CommunicationHandlerMock::Pool::DATA));
-    communicator->communicate<veil::protocol::communication_protocol::Atom>(randomString(), msg, std::chrono::milliseconds{0});
+    EXPECT_CALL(*handlerMock, communicateMock(_, MockCommunicationHandler::Pool::DATA));
+    communicator->communicate<veil::protocol::communication_protocol::Atom>(randomString(), msg, 0, std::chrono::milliseconds{0});
     Mock::VerifyAndClearExpectations(handlerMock);
 
-    EXPECT_CALL(*handlerMock, communicateMock(_, CommunicationHandlerMock::Pool::DATA));
+    EXPECT_CALL(*handlerMock, communicateMock(_, MockCommunicationHandler::Pool::DATA));
     communicator->communicateAsync<veil::protocol::communication_protocol::Atom>(randomString(), msg);
 }
 
@@ -199,15 +157,15 @@ TEST_F(CommunicatorTest, shouldCallDataPoolOnSendingOtherMessages)
     veil::protocol::fuse_messages::ChannelClose msg;
     msg.set_fuse_id(fuseId);
 
-    EXPECT_CALL(*handlerMock, send(_, CommunicationHandlerMock::Pool::META));
+    EXPECT_CALL(*handlerMock, send(_, MockCommunicationHandler::Pool::META, _));
     communicator->send(randomString(), msg);
     Mock::VerifyAndClearExpectations(handlerMock);
 
-    EXPECT_CALL(*handlerMock, communicateMock(_, CommunicationHandlerMock::Pool::META));
-    communicator->communicate<veil::protocol::communication_protocol::Atom>(randomString(), msg, std::chrono::milliseconds{0});
+    EXPECT_CALL(*handlerMock, communicateMock(_, MockCommunicationHandler::Pool::META));
+    communicator->communicate<veil::protocol::communication_protocol::Atom>(randomString(), msg, 0, std::chrono::milliseconds{0});
     Mock::VerifyAndClearExpectations(handlerMock);
 
-    EXPECT_CALL(*handlerMock, communicateMock(_, CommunicationHandlerMock::Pool::META));
+    EXPECT_CALL(*handlerMock, communicateMock(_, MockCommunicationHandler::Pool::META));
     communicator->communicateAsync<veil::protocol::communication_protocol::Atom>(randomString(), msg);
 }
 
@@ -220,7 +178,7 @@ TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnSend)
     msg.set_message_type(randomString());
 
     veil::protocol::communication_protocol::ClusterMsg wrapper;
-    EXPECT_CALL(*handlerMock, send(_, _)).WillOnce(SaveArg<0>(&wrapper));
+    EXPECT_CALL(*handlerMock, send(_, _, _)).WillOnce(SaveArg<0>(&wrapper));
     communicator->send(module, msg);
 
     ASSERT_EQ("remotefilemangement", wrapper.message_type());
@@ -246,7 +204,7 @@ TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnCommunicate)
 
     veil::protocol::communication_protocol::ClusterMsg wrapper;
     EXPECT_CALL(*handlerMock, communicateMock(_, _)).WillOnce(SaveArg<0>(&wrapper));
-    communicator->communicate<veil::protocol::fuse_messages::ChannelClose>(module, msg, std::chrono::milliseconds{0});
+    communicator->communicate<veil::protocol::fuse_messages::ChannelClose>(module, msg, 0, std::chrono::milliseconds{0});
 
     ASSERT_EQ("createdir", wrapper.message_type());
     ASSERT_EQ("fuse_messages", wrapper.message_decoder_name());
@@ -323,7 +281,7 @@ TEST_F(CommunicatorTest, shouldWaitForAnswerOnCommunicate)
     msg.set_fuse_id(fuseId);
 
     std::thread t{fulfilPromise};
-    communicator->communicate(randomString(), msg, std::chrono::seconds{20});
+    communicator->communicate(randomString(), msg, 0, std::chrono::seconds{20});
     communicationDone = true;
     statusChanged.notify_one();
 
@@ -337,7 +295,7 @@ TEST_F(CommunicatorTest, shouldThrowOnCommunicateReceiveTimeout)
     veil::protocol::fuse_messages::ChannelRegistration msg;
     msg.set_fuse_id(fuseId);
 
-    ASSERT_THROW(communicator->communicate(randomString(), msg, std::chrono::seconds{0}),
+    ASSERT_THROW(communicator->communicate(randomString(), msg, 0, std::chrono::seconds{0}),
                  veil::communication::ReceiveError);
 }
 
@@ -365,7 +323,7 @@ TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnReply)
     replyTo.set_message_id(randomInt());
 
     veil::protocol::communication_protocol::ClusterMsg wrapper;
-    EXPECT_CALL(*handlerMock, reply(_, _, _)).WillOnce(SaveArg<1>(&wrapper));
+    EXPECT_CALL(*handlerMock, reply(_, _, _, _)).WillOnce(SaveArg<1>(&wrapper));
     communicator->reply(replyTo, module, msg);
 
     ASSERT_EQ("channelclose", wrapper.message_type());
@@ -440,21 +398,20 @@ TEST_F(CommunicatorTest, shouldReplaceHandshakeOnSetupHandshakeAck)
     std::function<std::unique_ptr<ClusterMsg>()> metaHandshake;
     std::function<std::unique_ptr<ClusterMsg>()> dataHandshake;
 
-    EXPECT_CALL(*handlerMock, addHandshake(_, CommunicationHandlerMock::Pool::META)).
+    EXPECT_CALL(*handlerMock, addHandshake(_, MockCommunicationHandler::Pool::META)).
             WillOnce(DoAll(SaveArg<0>(&metaHandshake), Return([]{})));
-    EXPECT_CALL(*handlerMock, addHandshake(_, CommunicationHandlerMock::Pool::META)).
+    EXPECT_CALL(*handlerMock, addHandshake(_, MockCommunicationHandler::Pool::META)).
             WillOnce(Return([&]{ ++removeCalled; })).RetiresOnSaturation();
 
-    EXPECT_CALL(*handlerMock, addHandshake(_, CommunicationHandlerMock::Pool::DATA)).
+    EXPECT_CALL(*handlerMock, addHandshake(_, MockCommunicationHandler::Pool::DATA)).
             WillOnce(DoAll(SaveArg<0>(&dataHandshake), Return([]{})));
-    EXPECT_CALL(*handlerMock, addHandshake(_, CommunicationHandlerMock::Pool::DATA)).
+    EXPECT_CALL(*handlerMock, addHandshake(_, MockCommunicationHandler::Pool::DATA)).
             WillOnce(Return([&]{ ++removeCalled; })).RetiresOnSaturation();
 
     communicator->setupHandshakeAck();
 
     const auto expectedFuseId = randomString();
-    communicator->setFuseId(expectedFuseId);
-    communicator->setupHandshakeAck();
+    communicator->setFuseId(expectedFuseId); // calls setupHandshakeAck
 
     ASSERT_EQ(2, removeCalled);
 

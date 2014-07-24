@@ -8,6 +8,7 @@
 #include "clusterProxyHelper.h"
 
 #include "communication/communicator.h"
+#include "communication/exception.h"
 #include "logging.h"
 #include "make_unique.h"
 #include "remote_file_management.pb.h"
@@ -37,31 +38,54 @@ template<typename AnswerType>
 string ClusterProxyHelper::requestMessage(const google::protobuf::Message &msg,
                                           const std::chrono::milliseconds timeout)
 {
-    const auto answer = m_communicator->communicate<AnswerType>(
-                communication::REMOTE_FILE_MANAGEMENT_MODULE_NAME, *wrap(msg), timeout);
+    try
+    {
+        const auto answer = m_communicator->communicate<AnswerType>(
+                    communication::REMOTE_FILE_MANAGEMENT_MODULE_NAME, *wrap(msg), 2, timeout);
+        return answer->worker_answer();
+    }
+    catch(communication::Exception &e)
+    {
+        LOG(WARNING) << "Communication error: " << e.what();
+    }
 
-    return answer->worker_answer();
+    return {};
 }
 
 template<typename AnswerType>
 string ClusterProxyHelper::requestMessage(const google::protobuf::Message &msg)
 {
-    const auto answer = m_communicator->communicate<AnswerType>(
-                communication::REMOTE_FILE_MANAGEMENT_MODULE_NAME, *wrap(msg));
+    try
+    {
+        const auto answer = m_communicator->communicate<AnswerType>(
+                    communication::REMOTE_FILE_MANAGEMENT_MODULE_NAME, *wrap(msg), 2);
+        return answer->worker_answer();
+    }
+    catch(communication::Exception &e)
+    {
+        LOG(WARNING) << "Communication error: " << e.what();
+    }
 
-    return answer->worker_answer();
+    return {};
 }
 
 string ClusterProxyHelper::requestAtom(const google::protobuf::Message &msg)
 {
-    const auto answer = m_communicator->communicate<Atom>(
-                communication::REMOTE_FILE_MANAGEMENT_MODULE_NAME, *wrap(msg));
-
-    Atom atom;
-    if(answer->has_worker_answer())
+    try
     {
-        atom.ParseFromString(answer->worker_answer());
-        return atom.value();
+        const auto answer = m_communicator->communicate<Atom>(
+                    communication::REMOTE_FILE_MANAGEMENT_MODULE_NAME, *wrap(msg), 2);
+
+        Atom atom;
+        if(answer->has_worker_answer())
+        {
+            atom.ParseFromString(answer->worker_answer());
+            return atom.value();
+        }
+    }
+    catch(communication::Exception &e)
+    {
+        LOG(WARNING) << "Communication error: " << e.what();
     }
 
     return {};

@@ -60,37 +60,43 @@ public:
     void setFuseId(std::string fuseId);
 
     virtual void reply(const Answer &originalMsg, const std::string &module,
-                       const google::protobuf::Message &msg);
+                       const google::protobuf::Message &msg,
+                       const unsigned int retries = 0);
 
     // TODO: The module could be an enum (there's a finite number of modules)
     virtual void send(const std::string &module,
-                      const google::protobuf::Message &msg);
+                      const google::protobuf::Message &msg,
+                      const unsigned int retries = 0);
 
     template<typename AnswerType = Atom> std::future<std::unique_ptr<Answer>>
     communicateAsync(const std::string &module,
-                     const google::protobuf::Message &msg)
+                     const google::protobuf::Message &msg,
+                     const unsigned int retries = 0)
     {
-        return communicateAsync(module, msg, AnswerType::default_instance());
+        return communicateAsync(module, msg, AnswerType::default_instance(), retries);
     }
 
     template<typename AnswerType = Atom> std::unique_ptr<Answer>
     communicate(const std::string &module,
                 const google::protobuf::Message &msg,
+                const unsigned int retries = 0,
                 const std::chrono::milliseconds timeout = RECV_TIMEOUT)
     {
-        return communicate(module, msg, AnswerType::default_instance(), timeout);
+        return communicate(module, msg, AnswerType::default_instance(), retries, timeout);
     }
 
 protected:
     virtual std::future<std::unique_ptr<Answer>>
     communicateAsync(const std::string &module,
                      const google::protobuf::Message &msg,
-                     const google::protobuf::Message &ans);
+                     const google::protobuf::Message &ans,
+                     const unsigned int retries);
 
     virtual std::unique_ptr<Answer>
     communicate(const std::string &module,
                 const google::protobuf::Message &msg,
                 const google::protobuf::Message &ans,
+                const unsigned int retries,
                 const std::chrono::milliseconds timeout);
 
 private:
@@ -103,6 +109,8 @@ private:
 
     std::unique_ptr<CommunicationHandler> m_communicationHandler;
     std::string m_fuseId;
+    std::function<void()> m_removeHandshakeAck;
+    std::function<void()> m_deregisterPushChannel;
 };
 
 } // namespace communication

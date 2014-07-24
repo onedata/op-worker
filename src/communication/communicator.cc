@@ -37,9 +37,8 @@ void Communicator::setupPushChannels(std::function<void(const Answer&)> callback
     LOG(INFO) << "Setting up push channels with fuseId: '" << m_fuseId << "'";
 
     // First close the push channel that was already opened on the connection
-    static std::function<void()> deregisterPushChannel;
-    if(deregisterPushChannel)
-        deregisterPushChannel();
+    if(m_deregisterPushChannel)
+        m_deregisterPushChannel();
 
     // Subscribe for push messages (negative message id)
     auto pred = [](const Answer &ans){ return ans.message_id() < 0; };
@@ -66,7 +65,7 @@ void Communicator::setupPushChannels(std::function<void(const Answer&)> callback
                                                        std::move(goodbye),
                                                        CommunicationHandler::Pool::META);
 
-    deregisterPushChannel = [=]{ unsubscribe(); remove(); };
+    m_deregisterPushChannel = [=]{ unsubscribe(); remove(); };
 }
 
 void Communicator::setupHandshakeAck()
@@ -74,9 +73,8 @@ void Communicator::setupHandshakeAck()
     LOG(INFO) << "Setting up HandshakeAck with fuseId: '" << m_fuseId << "'";
 
     // First remove the previous Ack message
-    static std::function<void()> removeHandshakeAck;
-    if(removeHandshakeAck)
-        removeHandshakeAck();
+    if(m_removeHandshakeAck)
+        m_removeHandshakeAck();
 
     const auto fuseId = m_fuseId;
 
@@ -90,7 +88,7 @@ void Communicator::setupHandshakeAck()
 
     auto removeMeta = m_communicationHandler->addHandshake(handshake, CommunicationHandler::Pool::META);
     auto removeData = m_communicationHandler->addHandshake(handshake, CommunicationHandler::Pool::DATA);
-    removeHandshakeAck = [=]{ removeMeta(); removeData(); };
+    m_removeHandshakeAck = [=]{ removeMeta(); removeData(); };
 }
 
 void Communicator::setFuseId(std::string fuseId)
@@ -101,40 +99,44 @@ void Communicator::setFuseId(std::string fuseId)
 }
 
 void Communicator::reply(const Answer &originalMsg, const std::string &module,
-                         const google::protobuf::Message &msg)
+                         const google::protobuf::Message &msg,
+                         const unsigned int retries)
 {
     auto cmsg = createMessage(module, false,
                               veil::protocol::communication_protocol::Atom::default_instance(),
                               msg);
-    m_communicationHandler->reply(originalMsg, *cmsg, poolType(msg));
+    m_communicationHandler->reply(originalMsg, *cmsg, poolType(msg), retries);
 }
 
 void Communicator::send(const std::string &module,
-                        const google::protobuf::Message &msg)
+                        const google::protobuf::Message &msg,
+                        const unsigned int retries)
 {
     auto cmsg = createMessage(module, false,
                               veil::protocol::communication_protocol::Atom::default_instance(),
                               msg);
-    m_communicationHandler->send(*cmsg, poolType(msg));
+    m_communicationHandler->send(*cmsg, poolType(msg), retries);
 }
 
 std::future<std::unique_ptr<Communicator::Answer>>
 Communicator::communicateAsync(const std::string &module,
                                const google::protobuf::Message &msg,
-                               const google::protobuf::Message &ans)
+                               const google::protobuf::Message &ans,
+                               const unsigned int retries)
 {
     auto cmsg = createMessage(module, false, ans, msg);
-    return m_communicationHandler->communicate(*cmsg, poolType(msg));
+    return m_communicationHandler->communicate(*cmsg, poolType(msg), retries);
 }
 
 std::unique_ptr<Communicator::Answer>
 Communicator::communicate(const std::string &module,
                           const google::protobuf::Message &msg,
                           const google::protobuf::Message &ans,
+                          const unsigned int retries,
                           const std::chrono::milliseconds timeout)
 {
     auto cmsg = createMessage(module, true, ans, msg);
-    auto future = m_communicationHandler->communicate(*cmsg, poolType(msg));
+    auto future = m_communicationHandler->communicate(*cmsg, poolType(msg), retries);
 
     if(future.wait_for(timeout) != std::future_status::ready)
         throw ReceiveError{"timeout of " + std::to_string(timeout.count()) +

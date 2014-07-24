@@ -49,6 +49,8 @@ protected:
     const std::string m_uri;
 
 private:
+    void sendHandshakeMessage(Connection &conn, const std::string &payload);
+
     const unsigned int m_connectionsNumber;
     std::mutex m_connectionsMutex;
     std::condition_variable m_connectionOpened;

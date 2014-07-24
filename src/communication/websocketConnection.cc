@@ -35,7 +35,7 @@ WebsocketConnection::WebsocketConnection(std::function<void(const std::string&)>
     websocketpp::lib::error_code ec;
     auto connection = endpoint.get_connection(uri, ec);
     if(ec)
-        throw ConnectionError{"Cannot connect to the endpoint: " + ec.message()};
+        throw ConnectionError{"cannot connect to the endpoint '" + uri + "': " + ec.message()};
 
     connection->set_message_handler     (bind(&WebsocketConnection::onMessage, this, p::_2));
     connection->set_open_handler        (bind(&WebsocketConnection::onOpen, this));
@@ -63,7 +63,7 @@ void WebsocketConnection::send(const std::string &payload)
 {
     const auto connection = m_endpoint.get_con_from_hdl(m_connection);
     if(!connection)
-        throw std::logic_error{"WebsocketConnection instance has no associated"
+        throw std::logic_error{"websocketConnection instance has no associated"
                                "connection."};
 
     websocketpp::lib::error_code ec;
@@ -71,7 +71,7 @@ void WebsocketConnection::send(const std::string &payload)
                     websocketpp::frame::opcode::binary, ec);
 
     if(ec)
-        throw SendError{"Error queuing message: " + ec.message()};
+        throw SendError{"error queuing message: " + ec.message()};
 }
 
 void WebsocketConnection::onMessage(message_ptr msg)
