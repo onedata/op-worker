@@ -716,6 +716,7 @@ get_space_names(UserQuery) ->
 get_spaces(#veil_document{record = #user{} = User}) ->
     get_spaces(User);
 get_spaces(#user{spaces = Spaces}) ->
+%    ?info("Spaces: ~p", [lists:map(fun(SpaceId) -> fslogic_objects:get_space({uuid, SpaceId}) end, Spaces)]),
     [SpaceInfo || {ok, #space_info{} = SpaceInfo}  <- lists:map(fun(SpaceId) -> fslogic_objects:get_space({uuid, SpaceId}) end, Spaces)];
 get_spaces(UserQuery) ->
     {ok, UserDoc} = user_logic:get_user(UserQuery),

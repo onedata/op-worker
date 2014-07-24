@@ -11,6 +11,7 @@
 
 -include("veil_modules/dao/dao.hrl").
 -include("files_common.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([initialize/1, map_to_grp_owner/1]).
@@ -42,6 +43,7 @@ initialize(SpaceId) ->
         {ok, #space_info{} = SpaceInfo} ->
             initialize(SpaceInfo);
         {error, Reason} ->
+            ?error("Cannot fetch data for space ~p due to: ~p", [SpaceId, Reason]),
             {error, Reason}
     end.
 

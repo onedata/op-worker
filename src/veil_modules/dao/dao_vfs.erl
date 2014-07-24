@@ -501,7 +501,7 @@ get_file_helper({uuid, UUID}, _View) ->
         {error, {not_found, _}} ->
             throw(file_not_found);
         Other ->
-            Other
+            {error, Other}
     end;
 get_file_helper(Path, View) ->
   get_file_helper(file_path_analyze(Path), View).

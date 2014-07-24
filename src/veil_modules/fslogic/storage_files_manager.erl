@@ -408,7 +408,7 @@ create(Storage_helper_info, File, Mode) ->
           end;
         {error, 'NIF_not_loaded'} -> ErrorCode2;
         _ ->
-%%               ?error("Can not create file ~p, code: ~p, helper info: ~p, mode: ~p", [File, ErrorCode2, Storage_helper_info, Mode bor ?S_IFREG]),
+          ?error("Can not create file ~p, code: ~p, helper info: ~p, mode: ~p, CTX: ~p / ~p", [File, ErrorCode2, Storage_helper_info, Mode bor ?S_IFREG, fslogic_context:get_fs_user_ctx(), fslogic_context:get_fs_group_ctx()]),
           {wrong_mknod_return_code, ErrorCode2}
       end
   end.
