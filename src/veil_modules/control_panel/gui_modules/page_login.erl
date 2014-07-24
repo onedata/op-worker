@@ -30,7 +30,7 @@ body() ->
             [];
         false ->
             {ok, GlobalRegistryHostname} = application:get_env(veil_cluster_node, global_registry_hostname),
-            gui_jq:redirect(list_to_binary(GlobalRegistryHostname)),
+            gui_jq:redirect(atom_to_binary(GlobalRegistryHostname, latin1)),
             []
     end.
 

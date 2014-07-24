@@ -140,7 +140,8 @@ main_table() ->
             #td{style = <<"padding: 15px; vertical-align: top;">>,
                 body = #label{class = <<"label label-large label-inverse">>, style = <<"cursor: auto;">>, body = <<"OAuth / OpenID">>}},
             #td{style = <<"padding: 15px; vertical-align: top;">>,
-                body = #link{style = <<"font-size: 18px;">>, body = <<"Authorization preferences">>, url = list_to_binary(GlobalRegistryHostname ++ "/manage_account")}}
+                body = #link{style = <<"font-size: 18px;">>, body = <<"Authorization preferences">>,
+                    url = <<(atom_to_binary(GlobalRegistryHostname, latin1))/binary, "/manage_account">>}}
         ]}
     ]}.
 

@@ -27,7 +27,7 @@ title() -> <<"Logout page">>.
 body() ->
     gui_ctx:clear_session(),
     {ok, GlobalRegistryHostname} = application:get_env(veil_cluster_node, global_registry_hostname),
-    gui_jq:redirect(list_to_binary(GlobalRegistryHostname ++ "/logout")).
+    gui_jq:redirect(<<(atom_to_binary(GlobalRegistryHostname, latin1))/binary, "/logout">>).
 
 event(init) -> ok;
 event(to_login) -> gui_jq:redirect_to_login(false);
