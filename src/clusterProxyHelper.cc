@@ -9,8 +9,10 @@
 
 #include "communication/communicator.h"
 #include "logging.h"
+#include "make_unique.h"
 #include "remote_file_management.pb.h"
 
+#include <boost/algorithm/string/case_conv.hpp>
 #include <boost/any.hpp>
 
 #include <functional>
@@ -23,12 +25,20 @@ using namespace veil::protocol::communication_protocol;
 namespace veil {
 namespace helpers {
 
+std::unique_ptr<RemoteFileMangement> wrap(const google::protobuf::Message &msg)
+{
+    auto wrapper = std::make_unique<RemoteFileMangement>();
+    wrapper->set_message_type(boost::algorithm::to_lower_copy(msg.GetDescriptor()->name()));
+    msg.SerializeToString(wrapper->mutable_input());
+    return std::move(wrapper);
+}
+
 template<typename AnswerType>
 string ClusterProxyHelper::requestMessage(const google::protobuf::Message &msg,
                                           const std::chrono::milliseconds timeout)
 {
     const auto answer = m_communicator->communicate<AnswerType>(
-                communication::REMOTE_FILE_MANAGEMENT_MODULE_NAME, msg, timeout);
+                communication::REMOTE_FILE_MANAGEMENT_MODULE_NAME, *wrap(msg), timeout);
 
     return answer->worker_answer();
 }
@@ -37,7 +47,7 @@ template<typename AnswerType>
 string ClusterProxyHelper::requestMessage(const google::protobuf::Message &msg)
 {
     const auto answer = m_communicator->communicate<AnswerType>(
-                communication::REMOTE_FILE_MANAGEMENT_MODULE_NAME, msg);
+                communication::REMOTE_FILE_MANAGEMENT_MODULE_NAME, *wrap(msg));
 
     return answer->worker_answer();
 }
@@ -45,7 +55,7 @@ string ClusterProxyHelper::requestMessage(const google::protobuf::Message &msg)
 string ClusterProxyHelper::requestAtom(const google::protobuf::Message &msg)
 {
     const auto answer = m_communicator->communicate<Atom>(
-                communication::REMOTE_FILE_MANAGEMENT_MODULE_NAME, msg);
+                communication::REMOTE_FILE_MANAGEMENT_MODULE_NAME, *wrap(msg));
 
     Atom atom;
     if(answer->has_worker_answer())
@@ -79,6 +89,7 @@ int ClusterProxyHelper::sh_mknod(const char *path, mode_t mode, dev_t rdev)
 
     CreateFile msg;
     msg.set_file_id(string(path));
+    msg.set_mode(mode);
 
     return translateError(requestAtom(msg));
 }

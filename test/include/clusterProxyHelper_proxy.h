@@ -21,8 +21,6 @@ public:
     {
     }
 
-    using veil::helpers::ClusterProxyHelper::requestMessage;
-    using veil::helpers::ClusterProxyHelper::requestAtom;
     using veil::helpers::ClusterProxyHelper::doWrite;
     using veil::helpers::ClusterProxyHelper::doRead;
 };
