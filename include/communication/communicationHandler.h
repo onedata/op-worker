@@ -17,8 +17,9 @@
 #include <functional>
 #include <future>
 #include <list>
+#include <map>
 #include <memory>
-#include <unordered_map>
+#include <mutex>
 
 namespace veil
 {
@@ -79,7 +80,8 @@ private:
     const std::unique_ptr<ConnectionPool> m_dataPool;
     const std::unique_ptr<ConnectionPool> m_metaPool;
     std::atomic<MsgId> m_nextMsgId{0};
-    std::unordered_map<MsgId, std::promise<std::unique_ptr<Answer>>> m_promises;
+    std::map<MsgId, std::promise<std::unique_ptr<Answer>>> m_promises;
+    std::mutex m_promisesMutex;
     std::list<SubscriptionData> m_subscriptions;
 };
 

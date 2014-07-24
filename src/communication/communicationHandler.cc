@@ -9,10 +9,14 @@
 
 #include "communication/connection.h"
 #include "communication/connectionPool.h"
+#include "logging.h"
 #include "make_unique.h"
 
 #include <functional>
 #include <numeric>
+
+static constexpr unsigned int MAX_PENDING_PROMISES = 10000;
+static constexpr unsigned int PENDING_PROMISES_CUTOFF = 5000;
 
 namespace veil
 {
@@ -48,12 +52,30 @@ CommunicationHandler::send(Message &message, const Pool poolType)
 std::future<std::unique_ptr<CommunicationHandler::Answer>>
 CommunicationHandler::communicate(Message &message, const Pool poolType)
 {
+    std::lock_guard<std::mutex> guard{m_promisesMutex};
+
     const auto &pool = poolType == Pool::DATA ? m_dataPool : m_metaPool;
     message.set_message_id(nextId());
 
     std::promise<std::unique_ptr<CommunicationHandler::Answer>> promise;
     auto future = promise.get_future();
-    m_promises.emplace(message.message_id(), std::move(promise));
+    m_promises[message.message_id()] = std::move(promise);
+
+    if(m_promises.size() >= MAX_PENDING_PROMISES)
+    {
+        LOG(WARNING) << "Pending message promises number exceeded " <<
+                        MAX_PENDING_PROMISES << ". Cleaning up.";
+
+        // Cleanup messages starting with the oldest: starting from the ones
+        // with higher ID than the last sent message, and finishing with the
+        // ones with lowest IDs if any still need cleaning up.
+        auto it = m_promises.upper_bound(message.message_id());
+        while(it != m_promises.end() && m_promises.size() > PENDING_PROMISES_CUTOFF)
+            it = m_promises.erase(it);
+
+        while(m_promises.size() > PENDING_PROMISES_CUTOFF)
+            m_promises.erase(m_promises.begin());
+    }
 
     pool->send(message.SerializeAsString());
 
@@ -94,6 +116,8 @@ CommunicationHandler::MsgId CommunicationHandler::nextId()
 
 void CommunicationHandler::onMessage(const std::string &payload)
 {
+    std::lock_guard<std::mutex> guard{m_promisesMutex};
+
     auto answer = std::make_unique<Answer>();
     answer->ParsePartialFromString(payload);
 

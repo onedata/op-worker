@@ -70,7 +70,7 @@ void Communicator::setupPushChannels(std::function<void(const Answer&)> callback
 
 void Communicator::setupHandshakeAck()
 {
-    LOG(INFO) << "Enabling HandshakeAck with fuseId: '" << m_fuseId << "'";
+    LOG(INFO) << "Setting up HandshakeAck with fuseId: '" << m_fuseId << "'";
 
     // First remove the previous Ack message
     static std::function<void()> removeHandshakeAck;
@@ -94,6 +94,7 @@ void Communicator::setupHandshakeAck()
 
 void Communicator::setFuseId(std::string fuseId)
 {
+    LOG(INFO) << "Setting fuseId for communication: '" << fuseId << '"';
     m_fuseId = std::move(fuseId);
 }
 
