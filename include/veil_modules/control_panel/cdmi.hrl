@@ -1,13 +1,12 @@
-%%%-------------------------------------------------------------------
-%%% @author lichon
-%%% @copyright (C) 2014, <COMPANY>
-%%% @doc
-%%%
-%%% @end
-%%% Created : 24. Jul 2014 12:43
-%%%-------------------------------------------------------------------
--author("lichon").
-
--define(ok_no_content_code, 204).
+%% ===================================================================
+%% @author Tomasz Lichon
+%% @copyright (C): 2014 ACK CYFRONET AGH
+%% This software is released under the MIT license
+%% cited in 'LICENSE.txt'.
+%% @end
+%% ===================================================================
+%% @doc This file contains common macros and records for cdmi protocol handlers
+%% @end
+%% ===================================================================
 
 -define(error_forbidden_code, 403).
