@@ -79,6 +79,7 @@ basic_test_() ->
             {"convinience_functions",
                 fun() ->
                     ExistingUser = #veil_document{record = #user{
+                        global_id = "global_id",
                         login = "existing_user",
                         name = "Existing User",
                         teams = "Existing team",
@@ -112,6 +113,7 @@ signing_in_test_() ->
                     % Possible info gathered from OpenID provider
                     NewUserInfoProplist =
                         [
+                            global_id = "global_id",
                             {login, "new_user"},
                             {name, "New User"},
                             {teams, ["New team(team desc)", "Another team(another desc)"]},
@@ -120,6 +122,7 @@ signing_in_test_() ->
                         ],
                     % New user record that should be generated from above
                     NewUser = #user{
+                        global_id = "global_id",
                         login = "new_user",
                         name = "New User",
                         teams = ["New team(team desc)", "Another team(another desc)"],
@@ -166,6 +169,7 @@ signing_in_test_() ->
                 fun() ->
                     % Existing record in database
                     ExistingUser = #veil_document{record = #user{
+                        global_id = "global_id",
                         login = "existing_user",
                         name = "Existing User",
                         teams = ["Existing team"],
@@ -175,6 +179,7 @@ signing_in_test_() ->
                     % Possible info gathered from OpenID provider
                     ExistingUserInfoProplist =
                         [
+                            {global_id, "global_id"},
                             {login, "existing_user"},
                             {name, "Existing User"},
                             {teams, ["Updated team"]},
@@ -183,6 +188,7 @@ signing_in_test_() ->
                         ],
                     % User record after updating teams
                     UserWithUpdatedTeams = #veil_document{record = #user{
+                        global_id = "global_id",
                         login = "existing_user",
                         name = "Existing User",
                         teams = ["Updated team"],
@@ -191,6 +197,7 @@ signing_in_test_() ->
                     }},
                     % User record after updating emails
                     UserWithUpdatedEmailList = #veil_document{record = #user{
+                        global_id = "global_id",
                         login = "existing_user",
                         name = "Existing User",
                         teams = ["Updated team"],
@@ -199,6 +206,7 @@ signing_in_test_() ->
                     }},
                     % How should user end up after synchronization
                     SynchronizedUser = #veil_document{record = #user{
+                        global_id = "global_id",
                         login = "existing_user",
                         name = "Existing User",
                         teams = ["Updated team"],
