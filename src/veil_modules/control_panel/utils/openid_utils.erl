@@ -27,8 +27,10 @@
 %% @doc
 %% Authenticates a user via Global Registry.
 %% Should be called from n2o page rendering context.
+%% Upon error, returns predefined error id, which can be user to redirect
+%% the user to error page.
 %% @end
--spec validate_login() -> ok | {error, Reason :: no_certs_in_env | token_invalid | unknown}.
+-spec validate_login() -> ok | {error, PredefinedErrorID :: atom()}.
 %% ====================================================================
 validate_login() ->
     try
@@ -48,7 +50,7 @@ validate_login() ->
                    {ok, "200", _, RespBody} ->
                        RespBody;
                    _ ->
-                       token_invalid
+                       throw(token_invalid)
                end,
 
         {struct, JSONProplist} = mochijson2:decode(Body),
@@ -70,24 +72,30 @@ validate_login() ->
             {emails, Emails},
             {dn_list, []}
         ],
-        {Login, UserDoc} = user_logic:sign_in(LoginProplist),
-        gui_ctx:create_session(),
-        gui_ctx:set_user_id(Login),
-        vcn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),
-        vcn_gui_utils:set_user_role(user_logic:get_role(UserDoc)),
-        ?debug("User ~p logged in", [Login]),
-        ok
+        try
+            gui_ctx:clear_session(),
+            {Login, UserDoc} = user_logic:sign_in(LoginProplist),
+            gui_ctx:create_session(),
+            gui_ctx:set_user_id(Login),
+            vcn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),
+            vcn_gui_utils:set_user_role(user_logic:get_role(UserDoc)),
+            ?debug("User ~p logged in", [Login]),
+            ok
+        catch
+            throw:dir_creation_error ->
+                ?error_stacktrace("Error in validate_login - ~p:~p", [throw, dir_creation_error]),
+                {error, ?error_login_dir_creation_error};
+            throw:dir_chown_error ->
+                ?error_stacktrace("Error in validate_login - ~p:~p", [throw, dir_chown_error]),
+                {error, ?error_login_dir_chown_error};
+            T:M ->
+                ?error_stacktrace("Error in validate_login - ~p:~p", [T, M]),
+                {error, ?error_internal_server_error}
+        end
     catch
         Type:Message ->
             ?error_stacktrace("Cannot validate login ~p:~p", [Type, Message]),
-            case {Type, Message} of
-                {error, no_certs_in_env} ->
-                    {error, no_certs_in_env};
-                {error, token_invalid} ->
-                    {error, token_invalid};
-                _ ->
-                    {error, unknown}
-            end
+            {error, ?error_authentication}
     end.
 
 

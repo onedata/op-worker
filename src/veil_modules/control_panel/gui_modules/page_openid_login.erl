@@ -27,8 +27,8 @@ body() ->
         ok ->
             gui_jq:redirect_from_login(),
             <<"">>;
-        {error, _} ->
-            page_error:redirect_with_error(?error_authentication),
+        {error, ErrorID} ->
+            page_error:redirect_with_error(ErrorID),
             <<"">>
     end.
 
