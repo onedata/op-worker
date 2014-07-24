@@ -26,10 +26,8 @@ namespace veil
 namespace communication
 {
 
-Communicator::Communicator(std::unique_ptr<CommunicationHandler> communicationHandler,
-                           std::string uri)
-    : m_uri{std::move(uri)}
-    , m_communicationHandler{std::move(communicationHandler)}
+Communicator::Communicator(std::unique_ptr<CommunicationHandler> communicationHandler)
+    : m_communicationHandler{std::move(communicationHandler)}
 {
 }
 

@@ -22,7 +22,7 @@ class MockCommunicator: public veil::communication::Communicator
 
 public:
     MockCommunicator()
-        : veil::communication::Communicator{{}, {}}
+        : veil::communication::Communicator{{}}
     {
     }
 

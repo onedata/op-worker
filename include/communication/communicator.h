@@ -44,8 +44,7 @@ class Communicator
     using Atom = veil::protocol::communication_protocol::Atom;
 
 public:
-    Communicator(std::unique_ptr<CommunicationHandler> communicationHandler,
-                 std::string uri);
+    Communicator(std::unique_ptr<CommunicationHandler> communicationHandler);
 
     virtual ~Communicator() = default;
 
@@ -102,7 +101,6 @@ private:
                                               const google::protobuf::Message &msg) const;
     CommunicationHandler::Pool poolType(const google::protobuf::Message &msg) const;
 
-    const std::string m_uri;
     std::unique_ptr<CommunicationHandler> m_communicationHandler;
     std::string m_fuseId;
 };

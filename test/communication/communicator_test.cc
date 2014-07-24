@@ -72,19 +72,17 @@ struct CommunicatorTest: public ::testing::Test
 {
     std::unique_ptr<veil::communication::Communicator> communicator;
     CommunicationHandlerMock *handlerMock;
-    std::string uri;
     std::string fuseId;
 
     CommunicatorTest()
     {
-        uri = randomString();
         fuseId = randomString();
 
         auto p = std::make_unique<NiceMock<CommunicationHandlerMock>>();
         handlerMock = p.get();
 
         communicator = std::make_unique<veil::communication::Communicator>(
-                    std::move(p), uri);
+                    std::move(p));
 
         communicator->setFuseId(fuseId);
     }
