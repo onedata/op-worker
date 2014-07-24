@@ -65,21 +65,22 @@ void CommunicationHandler::subscribe(SubscriptionData data)
     m_subscriptions.emplace_front(std::move(data));
 }
 
-void CommunicationHandler::addHandshake(const Message &handshake,
-                                        const Message &goodbye,
+void CommunicationHandler::addHandshake(std::function<std::unique_ptr<Message>()> handshake,
+                                        std::function<std::unique_ptr<Message>()> goodbye,
                                         const Pool poolType)
 {
-    auto h = [=]{ auto m = handshake; m.set_message_id(nextId()); return m.SerializeAsString(); };
-    auto g = [=]{ auto m = goodbye; m.set_message_id(nextId()); return m.SerializeAsString(); };
+    auto h = [=]{ auto m = handshake(); m->set_message_id(nextId()); return m->SerializeAsString(); };
+    auto g = [=]{ auto m = goodbye(); m->set_message_id(nextId()); return m->SerializeAsString(); };
 
     const auto &pool = poolType == Pool::DATA ? m_dataPool : m_metaPool;
     pool->addHandshake(std::move(h), std::move(g));
 }
 
-void CommunicationHandler::addHandshake(const Message &handshake,
+void CommunicationHandler::addHandshake(std::function<std::unique_ptr<Message>()> handshake,
                                         const Pool poolType)
 {
-    auto h = [=]{ auto m = handshake; m.set_message_id(nextId()); return m.SerializeAsString(); };
+    auto h = [=]{ auto m = handshake(); m->set_message_id(nextId()); return m->SerializeAsString(); };
+
     const auto &pool = poolType == Pool::DATA ? m_dataPool : m_metaPool;
     pool->addHandshake(std::move(h));
 }

@@ -64,8 +64,11 @@ struct CommunicationHandlerMock: public veil::communication::CommunicationHandle
     MOCK_METHOD2(send, void(Message&, const Pool));
     MOCK_METHOD2(communicateMock, void(Message&, const Pool));
     MOCK_METHOD1(subscribe, void(SubscriptionData));
-    MOCK_METHOD2(addHandshake, void(const Message&, const Pool));
-    MOCK_METHOD3(addHandshake, void(const Message&, const Message&, const Pool));
+    MOCK_METHOD2(addHandshake, void(std::function<std::unique_ptr<CommunicationHandlerMock::Message>()>,
+                                    const Pool));
+    MOCK_METHOD3(addHandshake, void(std::function<std::unique_ptr<CommunicationHandlerMock::Message>()>,
+                                    std::function<std::unique_ptr<CommunicationHandlerMock::Message>()>,
+                                    const Pool));
 };
 
 struct CommunicatorTest: public ::testing::Test
@@ -90,8 +93,8 @@ struct CommunicatorTest: public ::testing::Test
 
 TEST_F(CommunicatorTest, shouldAddHandshakeAndGoodbyeOnEnablePushChannel)
 {
-    CommunicationHandlerMock::Message addedHandshake;
-    CommunicationHandlerMock::Message addedGoodbye;
+    std::function<std::unique_ptr<CommunicationHandlerMock::Message>()> addedHandshake;
+    std::function<std::unique_ptr<CommunicationHandlerMock::Message>()> addedGoodbye;
 
     EXPECT_CALL(*handlerMock, addHandshake(_, _, veil::communication::CommunicationHandler::Pool::META)).
             WillOnce(DoAll(SaveArg<0>(&addedHandshake), SaveArg<1>(&addedGoodbye)));
@@ -101,10 +104,10 @@ TEST_F(CommunicatorTest, shouldAddHandshakeAndGoodbyeOnEnablePushChannel)
     veil::protocol::fuse_messages::ChannelRegistration reg;
     veil::protocol::fuse_messages::ChannelClose close;
 
-    ASSERT_TRUE(reg.ParseFromString(addedHandshake.input()));
+    ASSERT_TRUE(reg.ParseFromString(addedHandshake()->input()));
     ASSERT_EQ(fuseId, reg.fuse_id());
 
-    ASSERT_TRUE(close.ParseFromString(addedGoodbye.input()));
+    ASSERT_TRUE(close.ParseFromString(addedGoodbye()->input()));
     ASSERT_EQ(fuseId, close.fuse_id());
 }
 
@@ -145,8 +148,8 @@ TEST_F(CommunicatorTest, shouldSubscribeForPushMessagesOnEnablePushChannel)
 
 TEST_F(CommunicatorTest, shouldAddHandshakeOnEnableHandshakeACK)
 {
-    CommunicationHandlerMock::Message addedMetaHandshake;
-    CommunicationHandlerMock::Message addedDataHandshake;
+    std::function<std::unique_ptr<CommunicationHandlerMock::Message>()> addedMetaHandshake;
+    std::function<std::unique_ptr<CommunicationHandlerMock::Message>()> addedDataHandshake;
 
     EXPECT_CALL(*handlerMock, addHandshake(_, CommunicationHandlerMock::Pool::META)).
             WillOnce(SaveArg<0>(&addedMetaHandshake));
@@ -157,10 +160,10 @@ TEST_F(CommunicatorTest, shouldAddHandshakeOnEnableHandshakeACK)
     communicator->enableHandshakeAck();
 
     veil::protocol::fuse_messages::HandshakeAck ack;
-    ASSERT_TRUE(ack.ParseFromString(addedMetaHandshake.input()));
+    ASSERT_TRUE(ack.ParseFromString(addedMetaHandshake()->input()));
     ASSERT_EQ(fuseId, ack.fuse_id());
 
-    ASSERT_TRUE(ack.ParseFromString(addedDataHandshake.input()));
+    ASSERT_TRUE(ack.ParseFromString(addedDataHandshake()->input()));
     ASSERT_EQ(fuseId, ack.fuse_id());
 }
 

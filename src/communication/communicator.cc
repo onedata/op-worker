@@ -33,8 +33,6 @@ Communicator::Communicator(std::unique_ptr<CommunicationHandler> communicationHa
 
 void Communicator::enablePushChannel(std::function<void(const Answer&)> callback)
 {
-    assert(!m_fuseId.empty());
-
     LOG(INFO) << "Sending registerPushChannel request with FuseId: " << m_fuseId;
 
     auto pred = [](const Answer &ans){ return ans.message_id() < 0; };
@@ -42,18 +40,19 @@ void Communicator::enablePushChannel(std::function<void(const Answer&)> callback
     m_communicationHandler->subscribe({std::move(pred), std::move(call)});
 
     // Prepare PUSH channel registration request message
-    protocol::fuse_messages::ChannelRegistration reg;
-    protocol::fuse_messages::ChannelClose close;
-    reg.set_fuse_id(m_fuseId);
-    close.set_fuse_id(m_fuseId);
+    auto handshake = [&]{
+        protocol::fuse_messages::ChannelRegistration reg;
+        reg.set_fuse_id(m_fuseId);
+        return createMessage(FSLOGIC_MODULE_NAME, true, Atom::default_instance(), reg);
+    };
 
-    const auto handshakeMsg = createMessage(FSLOGIC_MODULE_NAME, true,
-                                            Atom::default_instance(), reg);
+    auto goodbye = [&]{
+        protocol::fuse_messages::ChannelClose close;
+        close.set_fuse_id(m_fuseId);
+        return createMessage(FSLOGIC_MODULE_NAME, true, Atom::default_instance(), close);
+    };
 
-    const auto goodbyeMsg = createMessage(FSLOGIC_MODULE_NAME, true,
-                                          Atom::default_instance(), close);
-
-    m_communicationHandler->addHandshake(*handshakeMsg, *goodbyeMsg,
+    m_communicationHandler->addHandshake(std::move(handshake), std::move(goodbye),
                                          CommunicationHandler::Pool::META);
 }
 
@@ -62,14 +61,14 @@ void Communicator::enableHandshakeAck()
     LOG(INFO) << "Enabling HandshakeAck with fuseId: '" << m_fuseId << "'";
 
     // Build HandshakeAck message
-    protocol::fuse_messages::HandshakeAck ack;
-    ack.set_fuse_id(m_fuseId);
+    auto handshake = [&]{
+        protocol::fuse_messages::HandshakeAck ack;
+        ack.set_fuse_id(m_fuseId);
+        return createMessage("", true, Atom::default_instance(), ack);
+    };
 
-    const auto handshakeMsg = createMessage("", true,
-                                            Atom::default_instance(), ack);
-
-    m_communicationHandler->addHandshake(*handshakeMsg, CommunicationHandler::Pool::META);
-    m_communicationHandler->addHandshake(*handshakeMsg, CommunicationHandler::Pool::DATA);
+    m_communicationHandler->addHandshake(std::move(handshake), CommunicationHandler::Pool::META);
+    m_communicationHandler->addHandshake(std::move(handshake), CommunicationHandler::Pool::DATA);
 }
 
 void Communicator::setFuseId(std::string fuseId)

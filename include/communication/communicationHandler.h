@@ -66,8 +66,10 @@ public:
                                                              const Pool poolType);
 
     virtual void subscribe(SubscriptionData data);
-    virtual void addHandshake(const Message &handshake, const Pool poolType);
-    virtual void addHandshake(const Message &handshake, const Message &goodbye,
+    virtual void addHandshake(std::function<std::unique_ptr<Message>()> handshake,
+                              const Pool poolType);
+    virtual void addHandshake(std::function<std::unique_ptr<Message>()> handshake,
+                              std::function<std::unique_ptr<Message>()> goodbye,
                               const Pool poolType);
 
 private:

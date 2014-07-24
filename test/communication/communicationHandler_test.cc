@@ -62,6 +62,11 @@ veil::protocol::communication_protocol::ClusterMsg randomMessage()
     return message;
 }
 
+std::unique_ptr<veil::protocol::communication_protocol::ClusterMsg> randomHandshake()
+{
+    return std::make_unique<veil::protocol::communication_protocol::ClusterMsg>(randomMessage());
+};
+
 CommunicationHandlerTest::Pool randomPool()
 {
     return std::bernoulli_distribution{0.5}(gen)
@@ -243,27 +248,27 @@ TEST_F(CommunicationHandlerTest, shouldUnsubscribeWhenCallbackReturnsFalse)
 }
 
 TEST_F(CommunicationHandlerTest, shouldPassHandshakeAndGoodbyeToDataPool)
-{
+{    
     EXPECT_CALL(*dataPool, addHandshake(_, _));
-    communicationHandler->addHandshake(randomMessage(), randomMessage(), Pool::DATA);
+    communicationHandler->addHandshake(randomHandshake, randomHandshake, Pool::DATA);
 }
 
 TEST_F(CommunicationHandlerTest, shouldPassHandshakeAndGoodbyeToMetaPool)
 {
     EXPECT_CALL(*metaPool, addHandshake(_, _));
-    communicationHandler->addHandshake(randomMessage(), randomMessage(), Pool::META);
+    communicationHandler->addHandshake(randomHandshake, randomHandshake, Pool::META);
 }
 
 TEST_F(CommunicationHandlerTest, shouldPassHandshakeToDataPool)
 {
     EXPECT_CALL(*dataPool, addHandshake(_));
-    communicationHandler->addHandshake(randomMessage(), Pool::DATA);
+    communicationHandler->addHandshake(randomHandshake, Pool::DATA);
 }
 
 TEST_F(CommunicationHandlerTest, shouldPassHandshakeToMetaPool)
 {
     EXPECT_CALL(*metaPool, addHandshake(_));
-    communicationHandler->addHandshake(randomMessage(), Pool::META);
+    communicationHandler->addHandshake(randomHandshake, Pool::META);
 }
 
 void checkMessageGenerator(const std::function<std::string()> &gen,
@@ -290,10 +295,15 @@ void checkMessageGenerator(const std::function<std::string()> &gen,
 
 TEST_F(CommunicationHandlerTest, shouldGenerateIdsForHandshakeAndGoodbyeMessages)
 {
+    using veil::protocol::communication_protocol::ClusterMsg;
+
     auto poolType = randomPool();
     auto pool = poolType == Pool::META ? metaPool : dataPool;
-    auto originalHandshake = randomMessage();
-    auto originalGoodbye = randomMessage();
+    auto originalHandshakeMsg = randomMessage();
+    auto originalGoodbyeMsg = randomMessage();
+
+    auto originalHandshake = [&]{ return std::make_unique<ClusterMsg>(originalHandshakeMsg); };
+    auto originalGoodbye = [&]{ return std::make_unique<ClusterMsg>(originalGoodbyeMsg); };
 
     std::function<std::string()> handshakeGenerator;
     std::function<std::string()> goodbyeGenerator;
@@ -304,15 +314,18 @@ TEST_F(CommunicationHandlerTest, shouldGenerateIdsForHandshakeAndGoodbyeMessages
 
     communicationHandler->addHandshake(originalHandshake, originalGoodbye, poolType);
 
-    checkMessageGenerator(handshakeGenerator, originalHandshake);
-    checkMessageGenerator(goodbyeGenerator, originalGoodbye);
+    checkMessageGenerator(handshakeGenerator, originalHandshakeMsg);
+    checkMessageGenerator(goodbyeGenerator, originalGoodbyeMsg);
 }
 
 TEST_F(CommunicationHandlerTest, shouldGenerateIdsForHandshakeMessages)
 {
+    using veil::protocol::communication_protocol::ClusterMsg;
+
     auto poolType = randomPool();
     auto pool = poolType == Pool::META ? metaPool : dataPool;
-    auto originalHandshake = randomMessage();
+    auto originalHandshakeMsg = randomMessage();
+    auto originalHandshake = [&]{ return std::make_unique<ClusterMsg>(originalHandshakeMsg); };
 
     std::function<std::string()> handshakeGenerator;
 
@@ -320,7 +333,7 @@ TEST_F(CommunicationHandlerTest, shouldGenerateIdsForHandshakeMessages)
 
     communicationHandler->addHandshake(originalHandshake, poolType);
 
-    checkMessageGenerator(handshakeGenerator, originalHandshake);
+    checkMessageGenerator(handshakeGenerator, originalHandshakeMsg);
 }
 
 TEST_F(CommunicationHandlerTest, shouldReplyWithProperMessageId)
