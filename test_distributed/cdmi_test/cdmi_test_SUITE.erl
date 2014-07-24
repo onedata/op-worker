@@ -24,16 +24,16 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 %% -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 
--export([list_dir_test/1,create_dir_test/1]).
+-export([list_dir_test/1,create_dir_test/1,delete_dir_test/1]).
 
-all() -> [list_dir_test,create_dir_test].
+all() -> [list_dir_test,create_dir_test,delete_dir_test].
 
 %% ====================================================================
 %% Test functions
 %% ====================================================================
 
 list_dir_test(_Config) ->
-    % list /dir
+    %%------ list basic dir --------
     {Code1, Headers1, Response1} = do_request(?Test_dir_name, get, [], []),
     ?assertEqual("200", Code1),
     ?assertEqual(proplists:get_value("content-type", Headers1), "application/cdmi-container"),
@@ -42,28 +42,70 @@ list_dir_test(_Config) ->
     ?assertEqual(<<"dir/">>, proplists:get_value(<<"objectName">>,CdmiPesponse1)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse1)),
     ?assertEqual([<<"file.txt">>], proplists:get_value(<<"children">>,CdmiPesponse1)),
+    %%------------------------------
 
-    %list /
+    %%------ list root dir ---------
     {Code2, _Headers2, Response2} = do_request([], get, [], []),
     ?assertEqual("200", Code2),
     {struct,CdmiPesponse2} = mochijson2:decode(Response2),
     ?assertEqual(<<"/">>, proplists:get_value(<<"objectName">>,CdmiPesponse2)),
     ?assertEqual([<<"dir">>,<<"groups">>], proplists:get_value(<<"children">>,CdmiPesponse2)),
+    %%------------------------------
 
-    %list /nonexisting_dir
+    %%--- list nonexisting dir -----
     {Code3, _Headers3, _Response3} = do_request("nonexisting_dir/", get, [], []),
     ?assertEqual("404",Code3),
+    %%------------------------------
 
-    %list only children and name of /dir
+    %%-- selective params list -----
     {Code4, _Headers4, Response4} = do_request(?Test_dir_name ++ "/?children;objectName", get, [], []),
     ?assertEqual("200", Code4),
     {struct,CdmiPesponse4} = mochijson2:decode(Response4),
     ?assertEqual(<<"dir/">>, proplists:get_value(<<"objectName">>,CdmiPesponse4)),
     ?assertEqual([<<"file.txt">>], proplists:get_value(<<"children">>,CdmiPesponse4)),
     ?assertEqual(2,length(CdmiPesponse4)).
+    %%------------------------------
 
 create_dir_test(_Config) ->
     ok.
+
+delete_dir_test(_Config) ->
+    DirName = "/toDelete/",
+    ChildDirName = "/toDelete/child/",
+    GroupsDirName = "/groups/",
+
+    %%----- basic delete -----------
+    create_dir(DirName),
+    ?assert(object_exists(DirName)),
+
+    {Code3, _Headers3, _Response3} = do_request(DirName, delete, [], []),
+    ?assertEqual("204",Code3),
+
+    ?assert(not object_exists(DirName)),
+    %%------------------------------
+
+    %%------ recursive delete ------
+    create_dir(DirName),
+    ?assert(object_exists(DirName)),
+    create_dir(ChildDirName),
+    ?assert(object_exists(ChildDirName)),
+
+    {Code4, _Headers4, _Response4} = do_request(DirName, delete, [], []),
+    ?assertEqual("204",Code4),
+
+    ?assert(not object_exists(DirName)),
+    ?assert(not object_exists(ChildDirName)),
+    %%------------------------------
+
+    %%----- delete group dir -------
+    ?assert(object_exists(GroupsDirName)),
+
+    {Code5, _Headers5, _Response5} = do_request(GroupsDirName, delete, [], []),
+    ?assertEqual("403",Code5),
+
+    ?assert(object_exists(GroupsDirName)).
+    %%------------------------------
+
 
 %% ====================================================================
 %% SetUp and TearDown functions
@@ -126,6 +168,28 @@ end_per_suite(Config) ->
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+
+object_exists(Path) ->
+    DN=get(dn),
+    Ans = rpc_call_node(fun() ->
+        fslogic_context:set_user_dn(DN),
+        logical_files_manager:getfileattr(Path)
+    end),
+    case Ans of
+        {ok,_} -> true;
+        _ -> false
+    end.
+
+create_dir(Path) ->
+    DN=get(dn),
+    Ans = rpc_call_node(fun() ->
+        fslogic_context:set_user_dn(DN),
+        logical_files_manager:mkdir(Path)
+    end),
+    ?assertEqual(ok, Ans).
+
+rpc_call_node(F) ->
+    rpc:call(get(ccm), erlang, apply, [F, [] ]).
 
 get_dn_from_cert(Cert,CCM) ->
     {Ans2, PemBin} = file:read_file(Cert),

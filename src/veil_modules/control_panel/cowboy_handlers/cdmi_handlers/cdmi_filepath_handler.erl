@@ -16,6 +16,7 @@
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/control_panel/rest_messages.hrl").
 -include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/control_panel/cdmi.hrl").
 
 -define(default_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]).
 
@@ -109,10 +110,7 @@ content_types_provided(Req, State) ->
 resource_exists(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:getfileattr(Filepath) of
         {ok, Attr} -> {true, Req, State#state{attributes = Attr}};
-        _ ->
-            ErrorRec = ?report_warning(?error_not_found, [Filepath]),
-            Req2 = cowboy_req:set_resp_body(rest_utils:error_reply(ErrorRec), Req),
-            {false, Req2, State}
+        _ -> {false, Req, State}
     end.
 
 
@@ -165,16 +163,22 @@ content_types_accepted(Req, State) ->
 %% @end
 -spec delete_resource(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-delete_resource(Req, #state{attributes = #fileattributes{type = "DIR"}} = State) ->
-    ErrorRec = ?report_warning(?error_dir_cannot_delete),
-    {false, cowboy_req:set_resp_body(rest_utils:error_reply(ErrorRec),Req), State};
+delete_resource(Req, #state{filepath = Filepath, attributes = #fileattributes{type = "DIR"}} = State) ->
+    case is_group_dir(Filepath) of
+        false ->
+            fs_remove_dir(Filepath),
+            {true, Req,State};
+        true ->
+            {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
+            {halt, Req2, State}
+    end;
 delete_resource(Req, #state{filepath = Filepath, attributes = #fileattributes{type = "REG"}} = State) ->
     case logical_files_manager:delete(Filepath) of
        ok ->
-           {true, cowboy_req:set_resp_body(rest_utils:success_reply(?success_file_deleted),Req), State};
+           {true, Req, State};
        _ ->
-           ErrorRec = ?report_error(?error_reg_file_cannot_delete, [Filepath]),
-           {false, cowboy_req:set_resp_body(rest_utils:error_reply(ErrorRec),Req),State}
+           {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
+           {halt, Req2 ,State}
     end.
 
 %% ====================================================================
@@ -190,29 +194,21 @@ delete_resource(Req, #state{filepath = Filepath, attributes = #fileattributes{ty
 %% ====================================================================
 prepare_container_ans(_State,[]) ->
     [];
-
 prepare_container_ans(State,[<<"objectType">> | Tail]) ->
     [{<<"objectType">>, <<"application/cdmi-container">>} | prepare_container_ans(State, Tail)];
-
 prepare_container_ans(#state{filepath = Filepath} = State,[<<"objectName">> | Tail]) ->
     [{<<"objectName">>, list_to_binary([filename:basename(Filepath),"/"])} | prepare_container_ans(State, Tail)];
-
 prepare_container_ans(#state{filepath = <<"/">>} = State,[<<"parentURI">> | Tail]) ->
     [{<<"parentURI">>, <<>>} | prepare_container_ans(State, Tail)];
-
 prepare_container_ans(#state{filepath = Filepath} = State,[<<"parentURI">> | Tail]) ->
     [{<<"parentURI">>, list_to_binary(fslogic_path:strip_path_leaf(Filepath))} | prepare_container_ans(State, Tail)];
-
 prepare_container_ans(State,[<<"completionStatus">> | Tail]) ->
     [{<<"completionStatus">>, <<"Complete">>} | prepare_container_ans(State, Tail)];
-
 prepare_container_ans(State,[<<"metadata">> | Tail]) -> %todo extract metadata
     [{<<"metadata">>, <<>>} | prepare_container_ans(State, Tail)];
-
 prepare_container_ans(#state{filepath = Filepath} = State,[<<"children">> | Tail]) ->
     [{<<"children">>, [list_to_binary(Path) || Path <- rest_utils:list_dir(Filepath)]} | prepare_container_ans(State, Tail)];
-
-prepare_container_ans(#state{filepath = Filepath} = State,[Other | Tail]) ->
+prepare_container_ans(State,[Other | Tail]) ->
     [{Other, <<>>} | prepare_container_ans(State, Tail)].
 
 %% parse_opts/1
@@ -228,3 +224,74 @@ parse_opts(<<>>) ->
 parse_opts(RawOpts) ->
   Opts = binary:split(RawOpts,<<";">>,[global]),
   [hd(binary:split(Opt,<<":">>)) || Opt <- Opts]. %todo handle 'value:something' format
+
+%% fs_remove/1
+%% ====================================================================
+%% @doc Removes given file/dir from filesystem and db. In case of dir, it's
+%% done recursively.
+%% @end
+-spec fs_remove(Path :: string()) -> Result when
+Result :: ok | {ErrorGeneral :: atom(), ErrorDetail::term()}.
+%% ====================================================================
+fs_remove(Path) ->
+  {ok, FA} = logical_files_manager:getfileattr(Path),
+  case FA#fileattributes.type of
+    "DIR" -> fs_remove_dir(Path);
+    "REG" -> logical_files_manager:delete(Path)
+  end.
+
+%% fs_remove_dir/1
+%% ====================================================================
+%% @doc Removes given dir with all files and subdirectories.
+%% @end
+-spec fs_remove_dir(DirPath :: string()) -> Result when
+    Result :: ok | {ErrorGeneral :: atom(), ErrorDetail::term()}.
+%% ====================================================================
+fs_remove_dir(DirPath) ->
+  case is_group_dir(DirPath) of
+    true -> ok;
+    false ->
+      ItemList = fs_list_dir(DirPath),
+      lists:foreach(fun(Item) -> fs_remove(filename:join(DirPath,Item)) end, ItemList),
+      logical_files_manager:rmdir(DirPath)
+  end.
+
+%% fs_list_dir/1
+%% ====================================================================
+%% @doc @equiv fs_list_dir(Dir, 0, 10, [])
+-spec fs_list_dir(Dir :: string()) -> [string()].
+%% ====================================================================
+fs_list_dir(Dir) ->
+  fs_list_dir(Dir, 0, 10, []).
+
+%% fs_list_dir/4
+%% ====================================================================
+%% @doc Lists all childrens of given dir, starting from offset and with initial
+%% chunk size set to 'Count'
+-spec fs_list_dir(Dir :: string(), Offset :: integer(), Count :: integer(), Result :: [string()]) -> [string()].
+%% ====================================================================
+fs_list_dir(Path, Offset, Count, Result) ->
+  case logical_files_manager:ls(Path, Count, Offset) of
+    {ok, FileList} ->
+      case length(FileList) of
+        Count -> fs_list_dir(Path, Offset + Count, Count * 10, Result ++ FileList);
+        _ -> Result ++ FileList
+      end;
+    _ ->
+      {error, not_a_dir}
+  end.
+
+%% is_group_dir/1
+%% ====================================================================
+%% @doc Returns true when Path points to group directory (or groups root directory)
+-spec is_group_dir(Path :: string()) -> boolean().
+%% ====================================================================
+is_group_dir(Path) ->
+  case Path of
+    "/groups" -> true;
+    [$/,$g,$r,$o,$u,$p,$s | Rest] -> case length(string:tokens(Rest, "/")) of
+                             1 -> true;
+                             _ -> false
+                           end;
+    _ -> false
+  end.
