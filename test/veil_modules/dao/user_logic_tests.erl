@@ -31,6 +31,7 @@ basic_test_() ->
                     meck:expect(dao_lib, apply,
                         fun(dao_users, get_user, [Key], _) ->
                             case Key of
+                                {global_id, GID} when is_list(GID) -> {ok, #veil_document{record = #user{}}};
                                 {login, Login} when is_list(Login) -> {ok, #veil_document{record = #user{}}};
                                 {email, Email} when is_list(Email) -> {ok, #veil_document{record = #user{}}};
                                 {uuid, UUID} when is_list(UUID) -> {ok, #veil_document{record = #user{}}};
@@ -38,6 +39,7 @@ basic_test_() ->
                                 _ -> {error, reason}
                             end
                         end),
+                    ?assertEqual({ok, #veil_document{record = #user{}}}, user_logic:get_user({global_id, "a"})),
                     ?assertEqual({ok, #veil_document{record = #user{}}}, user_logic:get_user({login, "a"})),
                     ?assertEqual({ok, #veil_document{record = #user{}}}, user_logic:get_user({email, "a"})),
                     ?assertEqual({ok, #veil_document{record = #user{}}}, user_logic:get_user({uuid, "a"})),
@@ -51,6 +53,7 @@ basic_test_() ->
                     meck:expect(dao_lib, apply,
                         fun(dao_users, remove_user, [Key], _) ->
                             case Key of
+                                {global_id, GID} when is_list(GID) -> ok;
                                 {login, Login} when is_list(Login) -> ok;
                                 {email, Email} when is_list(Email) -> ok;
                                 {uuid, UUID} when is_list(UUID) -> ok;
@@ -59,6 +62,7 @@ basic_test_() ->
                             end;
                             (dao_users, get_user, [Key], _) ->
                                 case Key of
+                                    {global_id, GID} when is_list(GID) -> {ok, #veil_document{record = #user{}}};
                                     {login, Login} when is_list(Login) -> {ok, #veil_document{record = #user{}}};
                                     {email, Email} when is_list(Email) -> {ok, #veil_document{record = #user{}}};
                                     {uuid, UUID} when is_list(UUID) -> {ok, #veil_document{record = #user{}}};
@@ -68,6 +72,7 @@ basic_test_() ->
                             (dao_vfs, remove_file, _, _) -> ok;
                             (dao_users, remove_quota, _, _) -> ok
                         end),
+                    ?assertEqual(ok, user_logic:remove_user({global_id, "global_id"})),
                     ?assertEqual(ok, user_logic:remove_user({login, "login"})),
                     ?assertEqual(ok, user_logic:remove_user({email, "email"})),
                     ?assertEqual(ok, user_logic:remove_user({uuid, "uuid"})),
@@ -117,7 +122,7 @@ signing_in_test_() ->
                             {login, "new_user"},
                             {name, "New User"},
                             {teams, ["New team(team desc)", "Another team(another desc)"]},
-                            {email, "new@email.com"},
+                            {emails, ["new@email.com"]},
                             {dn_list, ["O=new-dn"]}
                         ],
                     % New user record that should be generated from above
@@ -137,6 +142,7 @@ signing_in_test_() ->
                         fun
                             (dao_users, get_user, [Key], _) ->
                                 case Key of
+                                    {global_id, "global_id"} -> {error, user_not_found};
                                     {login, "new_user"} -> {error, user_not_found};
                                     {uuid, "uuid"} -> {ok, NewUserRecord}
                                 end;
@@ -183,7 +189,7 @@ signing_in_test_() ->
                             {login, "existing_user"},
                             {name, "Existing User"},
                             {teams, ["Updated team"]},
-                            {email, "some.other@email.com"},
+                            {emails, ["some.other@email.com"]},
                             {dn_list, ["O=new-dn"]}
                         ],
                     % User record after updating teams
@@ -226,6 +232,7 @@ signing_in_test_() ->
                             end;
                             (dao_users, save_user, [UserDoc], _) ->
                                 case UserDoc of
+                                    ExistingUser -> {ok, "uuid_of_existing_user"};
                                     UserWithUpdatedTeams -> {ok, "uuid_after_teams"};
                                     UserWithUpdatedEmailList -> {ok, "uuid_after_emails"};
                                     SynchronizedUser -> {ok, "uuid_after_synchronization"};
