@@ -98,7 +98,7 @@ fuse_ack_routing_test(Config) ->
   Name = "user1 user1",
   Teams = ["user1 team"],
   Email = "user1@email.net",
-  {CreateUserAns, UserDoc} = rpc:call(Worker1, user_logic, create_user, [Login, Name, Teams, Email, DnList], 2000),
+  {CreateUserAns, UserDoc} = rpc:call(Worker1, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList], 2000),
   ?assertEqual(ok, CreateUserAns),
   %% END Add user
 
@@ -319,7 +319,7 @@ fuse_session_cleanup_test(Config) ->
         Name = "user1 user1",
         Teams = [TeamName],
         Email = "user1@email.net",
-        {CreateUserAns, _} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+        {CreateUserAns, _} = rpc:call(CCM, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList]),
         ?assertEqual(ok, CreateUserAns)
     end,
     %% END Add user
@@ -523,7 +523,7 @@ callbacks_test(Config) ->
   Name = "user1 user1",
   Teams = ["user1 team"],
   Email = "user1@email.net",
-  {CreateUserAns, _} = rpc:call(Worker1, user_logic, create_user, [Login, Name, Teams, Email, DnList], 2000),
+  {CreateUserAns, _} = rpc:call(Worker1, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList], 2000),
   ?assertEqual(ok, CreateUserAns),
   %% END Add user
 

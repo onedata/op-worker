@@ -70,7 +70,7 @@ permissions_test(Config) ->
   Name = "user1 user1",
   Teams1 = [Team1],
   Email = "user1@email.net",
-  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams1, Email, DnList]),
+  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, ["global_id", Login, Name, Teams1, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
 
   {ReadFileAns2, PemBin2} = file:read_file(Cert2),
@@ -85,7 +85,7 @@ permissions_test(Config) ->
   Name2 = "user2 user2",
   Teams2 = [Team1],
   Email2 = "user2@email.net",
-  {CreateUserAns2, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
+  {CreateUserAns2, _} = rpc:call(FSLogicNode, user_logic, create_user, ["global_id2", Login2, Name2, Teams2, Email2, DnList2]),
   ?assertEqual(ok, CreateUserAns2),
 
   %% Get FuseId
@@ -325,7 +325,7 @@ storage_helpers_management_test(Config) ->
   Team1 = ?TEST_GROUP,
   Teams = [Team1],
   Email = "user1@email.net",
-  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
 
   {ok, Socket1} = wss:connect(Host, Port, [{certfile, Cert}, {cacertfile, Cert}]),
@@ -411,7 +411,7 @@ helper_requests_test(Config) ->
   Team1 = ?TEST_GROUP,
   Teams1 = [Team1],
   Email = "user1@email.net",
-  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, [Login, Name, Teams1, Email, DnList]),
+  {CreateUserAns, _} = rpc:call(FSLogicNode, user_logic, create_user, ["global_id", Login, Name, Teams1, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
 
   {ReadFileAns2, PemBin2} = file:read_file(Cert2),
@@ -428,7 +428,7 @@ helper_requests_test(Config) ->
   Team2 = "user2 team",
   Teams2 = [Team2],
   Email2 = "user2@email.net",
-  CreateUserAns2 = rpc:call(FSLogicNode, user_logic, create_user, [Login2, Name2, Teams2, Email2, DnList2]),
+  CreateUserAns2 = rpc:call(FSLogicNode, user_logic, create_user, ["global_id2", Login2, Name2, Teams2, Email2, DnList2]),
   ?assertEqual({error,dir_chown_error}, CreateUserAns2),
 
   %% Get FuseId
