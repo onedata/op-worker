@@ -73,7 +73,6 @@ validate_login() ->
             {dn_list, []}
         ],
         try
-            gui_ctx:clear_session(),
             {Login, UserDoc} = user_logic:sign_in(LoginProplist),
             gui_ctx:create_session(),
             gui_ctx:set_user_id(Login),
@@ -83,12 +82,15 @@ validate_login() ->
             ok
         catch
             throw:dir_creation_error ->
+                gui_ctx:clear_session(),
                 ?error_stacktrace("Error in validate_login - ~p:~p", [throw, dir_creation_error]),
                 {error, ?error_login_dir_creation_error};
             throw:dir_chown_error ->
+                gui_ctx:clear_session(),
                 ?error_stacktrace("Error in validate_login - ~p:~p", [throw, dir_chown_error]),
                 {error, ?error_login_dir_chown_error};
             T:M ->
+                gui_ctx:clear_session(),
                 ?error_stacktrace("Error in validate_login - ~p:~p", [T, M]),
                 {error, ?error_internal_server_error}
         end
