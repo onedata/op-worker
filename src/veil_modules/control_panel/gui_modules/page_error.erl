@@ -100,5 +100,8 @@ id_to_reason_and_message(?error_login_dir_creation_error) ->
 id_to_reason_and_message(?error_login_dir_chown_error) -> {<<"User creation error">>,
     <<"Server could not change owner of user directories. Please contact the site administrator if the problem persists.">>};
 
+id_to_reason_and_message(?error_authentication) -> {<<"Authentication error">>,
+    <<"Server could not authenticate you. Please try again to log in or contact the site administrator if the problem persists.">>};
+
 id_to_reason_and_message(_) ->
     {<<"Unknown">>, <<"No description">>}.

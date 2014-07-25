@@ -181,7 +181,7 @@ callbacks_test(Config) ->
   TeamName = "user1 team",
   Teams = [TeamName],
   Email = "user1@email.net",
-  {CreateUserAns, _} = rpc:call(Worker1, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+  {CreateUserAns, _} = rpc:call(Worker1, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList]),
   ?assertEqual(ok, CreateUserAns),
   %% END Add user
 

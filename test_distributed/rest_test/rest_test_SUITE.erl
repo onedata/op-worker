@@ -371,7 +371,7 @@ setup_user_in_db(DN) ->
 
     {Ans1, StorageUUID} = rpc:call(CCM, fslogic_storage, insert_storage, [?SH, ?ARG_TEST_ROOT]),
     ?assertEqual(ok, Ans1),
-    {Ans5, _} = rpc:call(CCM, user_logic, create_user, [Login, Name, Teams, Email, DnList]),
+    {Ans5, _} = rpc:call(CCM, user_logic, create_user, ["global_id", Login, Name, Teams, Email, DnList]),
     ?assertEqual(ok, Ans5),
 
     fslogic_context:set_user_dn(DN),

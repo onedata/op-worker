@@ -46,6 +46,7 @@
 -define(error_openid_login_error, openid_login_error).
 -define(error_login_dir_creation_error, login_dir_creation_error).
 -define(error_login_dir_chown_error, login_dir_chown_error).
+-define(error_authentication, error_authentication).
 
 % Custom upload element
 -record(veil_upload, {?ELEMENT_BASE(veil_upload),
