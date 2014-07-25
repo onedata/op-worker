@@ -24,9 +24,9 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 %% -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 
--export([list_dir_test/1,create_dir_test/1,delete_dir_test/1]).
+-export([list_dir_test/1,create_dir_test/1,delete_dir_test/1,delete_file_test/1]).
 
-all() -> [list_dir_test,create_dir_test,delete_dir_test].
+all() -> [list_dir_test,create_dir_test,delete_dir_test,delete_file_test].
 
 %% ====================================================================
 %% Test functions
@@ -105,6 +105,31 @@ delete_dir_test(_Config) ->
 
     ?assert(object_exists(GroupsDirName)).
     %%------------------------------
+
+delete_file_test(_Config) ->
+    FileName = "/toDelete",
+    GroupFileName = "/groups/veilfstestgroup/groupFile",
+
+    %%----- basic delete -----------
+    create_file(FileName),
+    ?assert(object_exists(FileName)),
+
+    {Code3, _Headers3, _Response3} = do_request(FileName, delete, [], []),
+    ?assertEqual("204",Code3),
+
+    ?assert(not object_exists(FileName)),
+    %%------------------------------
+
+    %%----- delete group file ------
+    create_file(GroupFileName),
+    ?assert(object_exists(GroupFileName)),
+
+    {Code5, _Headers5, _Response5} = do_request(GroupFileName, delete, [], []),
+    ?assertEqual("204",Code5),
+
+    ?assert(not object_exists(GroupFileName)).
+    %%------------------------------
+
 
 
 %% ====================================================================
@@ -185,6 +210,14 @@ create_dir(Path) ->
     Ans = rpc_call_node(fun() ->
         fslogic_context:set_user_dn(DN),
         logical_files_manager:mkdir(Path)
+    end),
+    ?assertEqual(ok, Ans).
+
+create_file(Path) ->
+    DN=get(dn),
+    Ans = rpc_call_node(fun() ->
+        fslogic_context:set_user_dn(DN),
+        logical_files_manager:create(Path)
     end),
     ?assertEqual(ok, Ans).
 

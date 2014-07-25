@@ -73,8 +73,6 @@ rest_init(Req, _Opts) ->
 %% @end
 -spec allowed_methods(req(), #state{} | {error, term()}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
-allowed_methods(Req, State) ->
-    {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, State};
 % Some errors could have been detected in do_init/2. If so, State contains
 % an {error, Type} tuple. These errors shall be handled here,
 % because cowboy doesn't allow returning errors in rest_init.
@@ -83,7 +81,9 @@ allowed_methods(Req, {error, Type}) ->
                  path_invalid -> rest_utils:reply_with_error(Req, warning, ?error_path_invalid, []);
                  {user_unknown, DnString} -> rest_utils:reply_with_error(Req, error, ?error_user_unknown, [DnString])
              end,
-    {halt, NewReq, error}.
+    {halt, NewReq, error};
+allowed_methods(Req, State) ->
+    {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, State}.
 
 %% content_types_provided/2
 %% ====================================================================
