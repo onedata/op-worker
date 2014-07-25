@@ -37,7 +37,7 @@ WebsocketConnectionPool::WebsocketConnectionPool(const unsigned int connectionsN
     using websocketpp::lib::bind;
     namespace p = websocketpp::lib::placeholders;
 
-#ifndef NDEBUG
+#ifdef NDEBUG
     m_endpoint.clear_access_channels(websocketpp::log::alevel::all);
     m_endpoint.clear_error_channels(websocketpp::log::elevel::all);
 #endif
@@ -47,7 +47,7 @@ WebsocketConnectionPool::WebsocketConnectionPool(const unsigned int connectionsN
 
     m_ioThread = std::thread{&endpoint_type::run, &m_endpoint};
 
-    m_endpoint.set_tls_init_handler   (bind(&WebsocketConnectionPool::onTLSInit, this));
+    m_endpoint.set_tls_init_handler(bind(&WebsocketConnectionPool::onTLSInit, this));
     m_endpoint.set_socket_init_handler(bind(&WebsocketConnectionPool::onSocketInit, this, p::_2));
 }
 

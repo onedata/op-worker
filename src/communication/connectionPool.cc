@@ -61,8 +61,10 @@ void ConnectionPool::send(const std::string &payload)
     std::unique_lock<std::mutex> lock{m_connectionsMutex};
     addConnections();
 
-    if(!m_connectionOpened.wait_for(lock, WAIT_FOR_CONNECTION,
-                                    [&]{ return !m_openConnections.empty(); }))
+    m_connectionStatusChanged.wait_for(lock, WAIT_FOR_CONNECTION,
+            [&]{ return !m_openConnections.empty() || m_futureConnections.empty(); });
+
+    if(m_openConnections.empty())
     {
         const auto error = takeConnectionError();
 
@@ -96,6 +98,8 @@ void ConnectionPool::onFail(Connection &connection, std::exception_ptr exception
         std::lock_guard<std::mutex> guard{m_connectionErrorMutex};
         m_connectionError = exception;
     }
+
+    m_connectionStatusChanged.notify_all();
 }
 
 void ConnectionPool::onOpen(Connection &connection)
@@ -113,7 +117,7 @@ void ConnectionPool::onOpen(Connection &connection)
         sendHandshakeMessage(**it, handshake());
 
     m_openConnections.splice(m_openConnections.begin(), m_futureConnections, it);
-    m_connectionOpened.notify_all();
+    m_connectionStatusChanged.notify_all();
 }
 
 void ConnectionPool::onError(Connection &connection)
@@ -121,6 +125,8 @@ void ConnectionPool::onError(Connection &connection)
     namespace p = std::placeholders;
     std::lock_guard<std::mutex> guard{m_connectionsMutex};
     m_openConnections.remove_if(std::bind(eq, p::_1, std::cref(connection)));
+
+    m_connectionStatusChanged.notify_all();
 }
 
 std::exception_ptr ConnectionPool::takeConnectionError()
@@ -193,7 +199,7 @@ void ConnectionPool::addConnections()
     }
     catch(ConnectionError &e)
     {
-        LOG(WARNING) << "Some or all connections couldn't be created: " << e.what();
+        LOG(ERROR) << "Some or all connections couldn't be created: " << e.what();
     }
 }
 

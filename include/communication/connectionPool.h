@@ -58,7 +58,7 @@ private:
 
     const unsigned int m_connectionsNumber;
     std::mutex m_connectionsMutex;
-    std::condition_variable m_connectionOpened;
+    std::condition_variable m_connectionStatusChanged;
     std::list<std::unique_ptr<Connection>> m_futureConnections;
     std::list<std::unique_ptr<Connection>> m_openConnections;
     std::list<std::function<std::string()>> m_handshakes;

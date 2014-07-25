@@ -24,7 +24,8 @@ WebsocketConnection::WebsocketConnection(std::function<void(const std::string&)>
                                          const std::string &uri,
                                          std::shared_ptr<const CertificateData> certificateData,
                                          const bool verifyServerCertificate)
-    : Connection{std::move(onMessageCallback), std::move(onFailCallback), std::move(onOpenCallback), std::move(onErrorCallback)}
+    : Connection{std::move(onMessageCallback), std::move(onFailCallback),
+                 std::move(onOpenCallback), std::move(onErrorCallback)}
     , m_endpoint(endpoint)
     , m_certificateData{std::move(certificateData)}
     , m_verifyServerCertificate{verifyServerCertificate}
@@ -32,10 +33,13 @@ WebsocketConnection::WebsocketConnection(std::function<void(const std::string&)>
     using websocketpp::lib::bind;
     namespace p = websocketpp::lib::placeholders;
 
+    LOG(INFO) << "Opening connection to '" << uri << "'";
+
     websocketpp::lib::error_code ec;
     auto connection = endpoint.get_connection(uri, ec);
     if(ec)
-        throw ConnectionError{"cannot connect to the endpoint '" + uri + "': " + ec.message()};
+        throw ConnectionError{"cannot connect to the endpoint '" + uri + "': " +
+                              ec.message()};
 
     connection->set_message_handler     (bind(&WebsocketConnection::onMessage, this, p::_2));
     connection->set_open_handler        (bind(&WebsocketConnection::onOpen, this));
@@ -86,6 +90,10 @@ void WebsocketConnection::onOpen()
 
 void WebsocketConnection::onClose()
 {
+    const auto conn = m_endpoint.get_con_from_hdl(m_connection);
+    if(conn)
+        LOG(WARNING) << "Connection closed: " << conn->get_ec().message();
+
     m_onErrorCallback();
 }
 
@@ -100,9 +108,16 @@ void WebsocketConnection::onFail()
                 SSL_get_verify_result(conn->get_socket().native_handle());
 
             if(verifyResult != 0 && m_verifyServerCertificate)
-                throw InvalidServerCertificate{"Server certificate verification "
-                                               "failed.  OpenSSL error: " +
-                                               std::to_string(verifyResult)};
+            {
+                InvalidServerCertificate e{"OpenSSL error: " + std::to_string(verifyResult)};
+                LOG(WARNING) << "Server certificate verification failed." <<
+                                "OpenSSL error: " << e.what();
+                throw e;
+            }
+
+            ConnectionError e{conn->get_ec().message()};
+            LOG(WARNING) << "Connection failed: " << e.what();
+            throw e;
         }
     }
     catch(Exception&)
