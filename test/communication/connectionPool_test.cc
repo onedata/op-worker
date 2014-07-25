@@ -11,7 +11,7 @@
 #include "communication/connection.h"
 #include "communication/exception.h"
 #include "make_unique.h"
-#include "testCommon.h"
+#include "testUtils.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>

@@ -1,9 +1,13 @@
 /**
- * @file testCommon.h
+ * @file testUtils.h
  * @author Konrad Zemek
  * @copyright (C) 2014 ACK CYFRONET AGH
  * @copyright This software is released under the MIT license cited in 'LICENSE.txt'
  */
+
+#ifndef VEILHELPERS_TEST_UTILS_H
+#define VEILHELPERS_TEST_UTILS_H
+
 
 #include <algorithm>
 #include <functional>
@@ -36,3 +40,6 @@ std::string randomString()
 }
 
 }
+
+
+#endif // VEILHELPERS_TEST_UTILS_H

@@ -15,7 +15,7 @@
 #include "logging.pb.h"
 #include "make_unique.h"
 #include "remote_file_management.pb.h"
-#include "testCommon.h"
+#include "testUtils.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>

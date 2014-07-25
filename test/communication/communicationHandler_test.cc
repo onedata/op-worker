@@ -11,7 +11,7 @@
 #include "communication/connectionPool.h"
 #include "communication/connectionPool_mock.h"
 #include "make_unique.h"
-#include "testCommon.h"
+#include "testUtils.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
