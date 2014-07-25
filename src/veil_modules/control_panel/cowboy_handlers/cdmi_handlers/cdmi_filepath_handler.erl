@@ -18,18 +18,20 @@
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/control_panel/cdmi.hrl").
 
--define(default_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]).
+-define(default_get_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]).
+-define(default_post_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]).
 
 -record(state, {
     method = <<"GET">> :: binary(),
     filepath = undefined :: binary(),
     attributes = undefined :: #fileattributes{},
-    opts = ?default_dir_opts :: [binary()]
+    opts = [] :: [binary()],
+    body = [] :: list()
 }).
 
-%% API
--export([init/3, rest_init/2, resource_exists/2, allowed_methods/2, content_types_provided/2, get_dir/2, get_file/2]).
--export([content_types_accepted/2, delete_resource/2]).
+%% Callbacks
+-export([init/3, rest_init/2, resource_exists/2, allowed_methods/2, content_types_provided/2,content_types_accepted/2, delete_resource/2]).
+-export([put_dir/2, put_file/2, get_dir/2, get_file/2]).
 
 %% init/3
 %% ====================================================================
@@ -57,11 +59,12 @@ rest_init(Req, _Opts) ->
             {Method, _} = cowboy_req:method(Req),
             {PathInfo, _} = cowboy_req:path_info(Req),
             {RawOpts,_} = cowboy_req:qs(Req),
+            {ok,RawBody,_} = cowboy_req:body(Req),
             Path = case PathInfo == [] of
                      true -> "/";
                      false -> gui_str:binary_to_unicode_list(rest_utils:join_to_path(PathInfo))
                  end,
-            {ok, Req, #state{method = Method, filepath = Path, opts = parse_opts(RawOpts) }};
+            {ok, Req, #state{method = Method, filepath = Path, opts = parse_opts(RawOpts), body = parse_body(RawBody) }};
         Error -> {ok,Req,Error}
     end.
 
@@ -100,8 +103,7 @@ resource_exists(Req, #state{filepath = Filepath} = State) ->
 %% content_types_provided/2
 %% ====================================================================
 %% @doc Cowboy callback function
-%% Returns content types that can be provided. "application/json" is default.
-%% It can be changed later by gui_utils:cowboy_ensure_header/3.
+%% Returns content types that can be provided.
 %% @end
 -spec content_types_provided(req(), #state{}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
@@ -119,9 +121,11 @@ content_types_provided(Req, State) ->
 -spec get_dir(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 get_dir(Req, #state{opts = Opts, attributes = #fileattributes{type = "DIR"}} = State) ->
-    DirCdmi = prepare_container_ans(State,Opts),
+    DirCdmi = prepare_container_ans(State,case Opts of [] -> ?default_get_dir_opts; _ -> Opts end),
     Response = rest_utils:encode_to_json({struct, DirCdmi}),
-    {Response, Req, State}.
+    {Response, Req, State};
+get_dir(_Req, _State) -> %todo handle non-dir
+    ok.
 
 %% get_file/2
 %% ====================================================================
@@ -148,21 +152,34 @@ get_file(Req, #state{filepath = Filepath, attributes = #fileattributes{type = "R
 %% ====================================================================
 content_types_accepted(Req, State) ->
     {[
-        {<<"application/cdmi-container">>, post_dir},
-        {<<"application/cdmi-object">>,post_file}
+        {<<"application/cdmi-container">>, put_dir},
+        {<<"application/cdmi-object">>,put_file}
     ], Req, State}.
 
-post_dir(Req, State) ->
-    ok.
+put_dir(Req, #state{filepath = Filepath, body = Body} = State) ->
+    case logical_files_manager:mkdir(Filepath) of
+        ok -> %todo check given body
+            Response = rest_utils:encode_to_json({struct, prepare_container_ans(State,?default_post_dir_opts)}),
+            Req2 = cowboy_req:set_resp_body(Response,Req),
+            {true,Req2,State};
+        {error, dir_exists} ->
+            {ok,Req2} = cowboy_req:reply(?error_conflict_code,Req),
+            {halt, Req2, State};
+        {logical_file_system_error,"enoent"} ->
+            {ok,Req2} = cowboy_req:reply(?error_not_found_code,Req),
+            {halt, Req2, State};
+        _ ->
+            {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
+            {halt, Req2, State}
+    end.
 
-post_file(Req,State) ->
+put_file(Req,State) ->
     ok.
 
 %% delete_resource/2
 %% ====================================================================
 %% @doc Cowboy callback function
 %% Handles DELETE requests.
-%% Will call delete/2 from rest_module_behaviour.
 %% @end
 -spec delete_resource(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
@@ -222,10 +239,25 @@ prepare_container_ans(State,[Other | Tail]) ->
 -spec parse_opts(binary()) -> [binary()].
 %% ====================================================================
 parse_opts(<<>>) ->
-  ?default_dir_opts;
+    ?default_get_dir_opts;
 parse_opts(RawOpts) ->
-  Opts = binary:split(RawOpts,<<";">>,[global]),
-  [hd(binary:split(Opt,<<":">>)) || Opt <- Opts]. %todo handle 'value:something' format
+    Opts = binary:split(RawOpts,<<";">>,[global]),
+    [hd(binary:split(Opt,<<":">>)) || Opt <- Opts]. %todo handle 'value:something' format
+
+%% parse_body/1
+%% ====================================================================
+%% @doc Parses json request body to erlang proplist format.
+%% @end
+-spec parse_body(binary()) -> list().
+%% ====================================================================
+parse_body(RawBody) ->
+    case gui_str:binary_to_unicode_list(RawBody) of
+        "" -> [];
+        NonEmptyBody ->
+            ct:print("todecode: ~p",[NonEmptyBody]),
+            {struct,Ans} = rest_utils:decode_from_json(gui_str:binary_to_unicode_list(NonEmptyBody)),
+            Ans
+    end.
 
 %% fs_remove/1
 %% ====================================================================
@@ -236,11 +268,11 @@ parse_opts(RawOpts) ->
 Result :: ok | {ErrorGeneral :: atom(), ErrorDetail::term()}.
 %% ====================================================================
 fs_remove(Path) ->
-  {ok, FA} = logical_files_manager:getfileattr(Path),
-  case FA#fileattributes.type of
-    "DIR" -> fs_remove_dir(Path);
-    "REG" -> logical_files_manager:delete(Path)
-  end.
+    {ok, FA} = logical_files_manager:getfileattr(Path),
+    case FA#fileattributes.type of
+        "DIR" -> fs_remove_dir(Path);
+        "REG" -> logical_files_manager:delete(Path)
+    end.
 
 %% fs_remove_dir/1
 %% ====================================================================
@@ -250,13 +282,13 @@ fs_remove(Path) ->
     Result :: ok | {ErrorGeneral :: atom(), ErrorDetail::term()}.
 %% ====================================================================
 fs_remove_dir(DirPath) ->
-  case is_group_dir(DirPath) of
-    true -> ok;
-    false ->
-      ItemList = fs_list_dir(DirPath),
-      lists:foreach(fun(Item) -> fs_remove(filename:join(DirPath,Item)) end, ItemList),
-      logical_files_manager:rmdir(DirPath)
-  end.
+    case is_group_dir(DirPath) of
+        true -> ok;
+        false ->
+            ItemList = fs_list_dir(DirPath),
+            lists:foreach(fun(Item) -> fs_remove(filename:join(DirPath,Item)) end, ItemList),
+            logical_files_manager:rmdir(DirPath)
+    end.
 
 %% fs_list_dir/1
 %% ====================================================================
@@ -264,7 +296,7 @@ fs_remove_dir(DirPath) ->
 -spec fs_list_dir(Dir :: string()) -> [string()].
 %% ====================================================================
 fs_list_dir(Dir) ->
-  fs_list_dir(Dir, 0, 10, []).
+    fs_list_dir(Dir, 0, 10, []).
 
 %% fs_list_dir/4
 %% ====================================================================
@@ -273,15 +305,15 @@ fs_list_dir(Dir) ->
 -spec fs_list_dir(Dir :: string(), Offset :: integer(), Count :: integer(), Result :: [string()]) -> [string()].
 %% ====================================================================
 fs_list_dir(Path, Offset, Count, Result) ->
-  case logical_files_manager:ls(Path, Count, Offset) of
-    {ok, FileList} ->
-      case length(FileList) of
-        Count -> fs_list_dir(Path, Offset + Count, Count * 10, Result ++ FileList);
-        _ -> Result ++ FileList
-      end;
-    _ ->
-      {error, not_a_dir}
-  end.
+    case logical_files_manager:ls(Path, Count, Offset) of
+        {ok, FileList} ->
+            case length(FileList) of
+                Count -> fs_list_dir(Path, Offset + Count, Count * 10, Result ++ FileList);
+                _ -> Result ++ FileList
+            end;
+        _ ->
+            {error, not_a_dir}
+    end.
 
 %% is_group_dir/1
 %% ====================================================================
@@ -289,11 +321,11 @@ fs_list_dir(Path, Offset, Count, Result) ->
 -spec is_group_dir(Path :: string()) -> boolean().
 %% ====================================================================
 is_group_dir(Path) ->
-  case Path of
-    "/groups" -> true;
-    [$/,$g,$r,$o,$u,$p,$s | Rest] -> case length(string:tokens(Rest, "/")) of
-                             1 -> true;
-                             _ -> false
-                           end;
-    _ -> false
-  end.
+    case Path of
+        "/groups" -> true;
+        [$/,$g,$r,$o,$u,$p,$s | Rest] -> case length(string:tokens(Rest, "/")) of
+                                             1 -> true;
+                                             _ -> false
+                                         end;
+        _ -> false
+    end.

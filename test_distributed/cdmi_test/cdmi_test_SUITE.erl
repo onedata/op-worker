@@ -67,7 +67,53 @@ list_dir_test(_Config) ->
     %%------------------------------
 
 create_dir_test(_Config) ->
-    ok.
+    DirName = "/toCreate/",
+    MissingParentName="/unknown/",
+    DirWithoutParentName = filename:join(MissingParentName,"dir/"),
+
+    %%---- missing content type ----
+    ?assert(not object_exists(DirName)),
+
+    {Code1, _Headers1, _Response1} = do_request(DirName, put, [], []),
+    ?assertEqual("415",Code1),
+
+    ?assert(not object_exists(DirName)),
+    %%------------------------------
+
+    %%------ basic create ----------
+    ?assert(not object_exists(DirName)),
+
+    RequestHeaders2 = [{"content-type", "application/cdmi-container"}],
+    {Code2, _Headers2, Response2} = do_request(DirName, put, RequestHeaders2, []),
+    ?assertEqual("201",Code2),
+    {struct,CdmiPesponse2} = mochijson2:decode(Response2),
+    ?assertEqual(<<"application/cdmi-container">>, proplists:get_value(<<"objectType">>,CdmiPesponse2)),
+    ?assertEqual(<<"toCreate/">>, proplists:get_value(<<"objectName">>,CdmiPesponse2)),
+    ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>,CdmiPesponse2)),
+    ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse2)),
+    ?assertEqual([], proplists:get_value(<<"children">>,CdmiPesponse2)),
+
+    ?assert(object_exists(DirName)),
+    %%------------------------------
+
+    %%----- creation conflict ------
+    ?assert(object_exists(DirName)),
+
+    RequestHeaders3 = [{"content-type", "application/cdmi-container"}],
+    {Code3, _Headers3, _Response3} = do_request(DirName, put, RequestHeaders3, []),
+    ?assertEqual("409",Code3),
+
+    ?assert(object_exists(DirName)),
+    %%------------------------------
+
+    %%----- missing parent ---------
+    ?assert(not object_exists(MissingParentName)),
+
+    RequestHeaders4 = [{"content-type", "application/cdmi-container"}],
+    {Code4, _Headers4, _Response4} = do_request(DirWithoutParentName, put, RequestHeaders4, []),
+     ?assertEqual("404",Code4).
+
+    %%------------------------------
 
 delete_dir_test(_Config) ->
     DirName = "/toDelete/",
@@ -78,8 +124,8 @@ delete_dir_test(_Config) ->
     create_dir(DirName),
     ?assert(object_exists(DirName)),
 
-    {Code3, _Headers3, _Response3} = do_request(DirName, delete, [], []),
-    ?assertEqual("204",Code3),
+    {Code1, _Headers1, _Response1} = do_request(DirName, delete, [], []),
+    ?assertEqual("204",Code1),
 
     ?assert(not object_exists(DirName)),
     %%------------------------------
@@ -90,8 +136,8 @@ delete_dir_test(_Config) ->
     create_dir(ChildDirName),
     ?assert(object_exists(ChildDirName)),
 
-    {Code4, _Headers4, _Response4} = do_request(DirName, delete, [], []),
-    ?assertEqual("204",Code4),
+    {Code2, _Headers2, _Response2} = do_request(DirName, delete, [], []),
+    ?assertEqual("204",Code2),
 
     ?assert(not object_exists(DirName)),
     ?assert(not object_exists(ChildDirName)),
@@ -100,8 +146,8 @@ delete_dir_test(_Config) ->
     %%----- delete group dir -------
     ?assert(object_exists(GroupsDirName)),
 
-    {Code5, _Headers5, _Response5} = do_request(GroupsDirName, delete, [], []),
-    ?assertEqual("403",Code5),
+    {Code3, _Headers3, _Response3} = do_request(GroupsDirName, delete, [], []),
+    ?assertEqual("403",Code3),
 
     ?assert(object_exists(GroupsDirName)).
     %%------------------------------

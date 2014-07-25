@@ -10,3 +10,5 @@
 %% ===================================================================
 
 -define(error_forbidden_code, 403).
+-define(error_not_found_code, 404).
+-define(error_conflict_code, 409).
