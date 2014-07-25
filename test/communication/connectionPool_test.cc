@@ -35,7 +35,7 @@ struct ConnectionMock: public veil::communication::Connection
     static std::condition_variable connectionOpened;
 
     ConnectionMock(std::function<void(const std::string&)> onMessageCallback,
-                   std::function<void(Connection&)> onFailCallback,
+                   std::function<void(Connection&, std::exception_ptr)> onFailCallback,
                    std::function<void(Connection&)> onOpenCallback,
                    std::function<void(Connection&)> onErrorCallback)
         : veil::communication::Connection{onMessageCallback, onFailCallback,
@@ -80,7 +80,7 @@ struct ConnectionPoolProxy: public veil::communication::ConnectionPool
     {
         auto c = new NiceMock<ConnectionMock>{
             m_onMessageCallback,
-            std::bind(&ConnectionPoolProxy::onFail, this, _1),
+            std::bind(&ConnectionPoolProxy::onFail, this, _1, _2),
             std::bind(&ConnectionPoolProxy::onOpen, this, _1),
             std::bind(&ConnectionPoolProxy::onError, this, _1)};
 
@@ -179,7 +179,7 @@ TEST_F(ConnectionPoolTest, shouldDropConnectionsOnOpenFailure)
     {
         auto c = connectionPool->createdConnections.back();
         connectionPool->createdConnections.pop_back();
-        c->m_onFailCallback();
+        c->m_onFailCallback({});
     }
     for(auto &c: connectionPool->createdConnections)
         c->m_onOpenCallback();
@@ -196,7 +196,7 @@ TEST_F(ConnectionPoolTest, shouldRecreateConnectionsOnSend)
     {
         auto c = connectionPool->createdConnections.back();
         connectionPool->createdConnections.pop_back();
-        c->m_onFailCallback();
+        c->m_onFailCallback({});
     }
 
     connectionPool->send("");

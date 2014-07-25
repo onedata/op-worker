@@ -60,14 +60,24 @@ void ConnectionPool::send(const std::string &payload)
 {
     std::unique_lock<std::mutex> lock{m_connectionsMutex};
     addConnections();
+
     if(!m_connectionOpened.wait_for(lock, WAIT_FOR_CONNECTION,
                                     [&]{ return !m_openConnections.empty(); }))
-        throw ConnectionError{"no open connections available."};
+    {
+        const auto error = takeConnectionError();
+
+        if(error)
+            std::rethrow_exception(error);
+
+        throw ConnectionError{"no open connections available"};
+    }
 
     m_openConnections.front()->send(payload);
 
     m_openConnections.splice(m_openConnections.end(), m_openConnections,
                              m_openConnections.begin());
+
+    takeConnectionError();
 }
 
 void ConnectionPool::setOnMessageCallback(std::function<void(const std::string&)> onMessageCallback)
@@ -75,11 +85,17 @@ void ConnectionPool::setOnMessageCallback(std::function<void(const std::string&)
     m_onMessageCallback = std::move(onMessageCallback);
 }
 
-void ConnectionPool::onFail(Connection &connection)
+void ConnectionPool::onFail(Connection &connection, std::exception_ptr exception)
 {
     namespace p = std::placeholders;
     std::lock_guard<std::mutex> guard{m_connectionsMutex};
     m_futureConnections.remove_if(std::bind(eq, p::_1, std::cref(connection)));
+
+    if(exception)
+    {
+        std::lock_guard<std::mutex> guard{m_connectionErrorMutex};
+        m_connectionError = exception;
+    }
 }
 
 void ConnectionPool::onOpen(Connection &connection)
@@ -105,6 +121,14 @@ void ConnectionPool::onError(Connection &connection)
     namespace p = std::placeholders;
     std::lock_guard<std::mutex> guard{m_connectionsMutex};
     m_openConnections.remove_if(std::bind(eq, p::_1, std::cref(connection)));
+}
+
+std::exception_ptr ConnectionPool::takeConnectionError()
+{
+    std::lock_guard<std::mutex> guard{m_connectionErrorMutex};
+    const auto error = m_connectionError;
+    m_connectionError = std::exception_ptr{};
+    return error;
 }
 
 void ConnectionPool::sendHandshakeMessage(Connection &conn,

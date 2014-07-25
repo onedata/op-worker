@@ -11,6 +11,8 @@
 #include "logging.h"
 #include "make_unique.h"
 
+#include <openssl/ssl.h>
+
 #include <chrono>
 #include <functional>
 #include <future>
@@ -94,11 +96,12 @@ void WebsocketConnectionPool::onSocketInit(socket_type &socket)
 
 std::unique_ptr<Connection> WebsocketConnectionPool::createConnection()
 {
+    using namespace std::placeholders;
     return std::make_unique<WebsocketConnection>(
                 m_onMessageCallback,
-                std::bind(&WebsocketConnectionPool::onFail, this, std::placeholders::_1),
-                std::bind(&WebsocketConnectionPool::onOpen, this, std::placeholders::_1),
-                std::bind(&WebsocketConnectionPool::onError, this, std::placeholders::_1),
+                std::bind(&WebsocketConnectionPool::onFail, this, _1, _2),
+                std::bind(&WebsocketConnectionPool::onOpen, this, _1),
+                std::bind(&WebsocketConnectionPool::onError, this, _1),
                 m_endpoint, m_uri, m_certificateData, m_verifyServerCertificate);
 }
 

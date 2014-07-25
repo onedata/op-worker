@@ -11,10 +11,13 @@
 
 #include "connection.h"
 
+#include "exception.h"
+
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_client.hpp>
 #include <websocketpp/connection.hpp>
 
+#include <exception>
 #include <memory>
 #include <string>
 
@@ -27,6 +30,12 @@ namespace communication
 
 class CertificateData;
 
+class InvalidServerCertificate: public ConnectionError
+{
+public:
+    using ConnectionError::ConnectionError;
+};
+
 class WebsocketConnection: public Connection
 {
     using config_type = websocketpp::config::asio_tls_client;
@@ -36,7 +45,7 @@ class WebsocketConnection: public Connection
 
 public:
     WebsocketConnection(std::function<void(const std::string&)> onMessageCallback,
-                        std::function<void(Connection&)> onFailCallback,
+                        std::function<void(Connection&, std::exception_ptr)> onFailCallback,
                         std::function<void(Connection&)> onOpenCallback,
                         std::function<void(Connection&)> onErrorCallback,
                         endpoint_type &endpoint,

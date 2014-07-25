@@ -60,7 +60,7 @@ TEST_F(ConnectionTest, shouldBindItselfToOnFailCallback)
     const auto isTheConnection = std::bind(identityEqual, _1, std::cref(*connection));
 
     EXPECT_CALL(*this, onFail(Truly(isTheConnection)));
-    connection->m_onFailCallback();
+    connection->m_onFailCallback({});
 }
 
 TEST_F(ConnectionTest, shouldBindItselfToOnOpenCallback)

@@ -9,6 +9,7 @@
 #define VEILHELPERS_COMMUNICATION_CONNECTION_H
 
 
+#include <exception>
 #include <functional>
 #include <memory>
 
@@ -21,7 +22,7 @@ class Connection
 {
 public:
     Connection(std::function<void(const std::string&)> onMessageCallback,
-               std::function<void(Connection&)> onFailCallback,
+               std::function<void(Connection&, std::exception_ptr)> onFailCallback,
                std::function<void(Connection&)> onOpenCallback,
                std::function<void(Connection&)> onErrorCallback);
 
@@ -30,10 +31,8 @@ public:
     virtual void send(const std::string &payload) = 0;
 
 protected:
-    virtual void close();
-
     std::function<void(const std::string&)> m_onMessageCallback;
-    std::function<void()> m_onFailCallback;
+    std::function<void(std::exception_ptr)> m_onFailCallback;
     std::function<void()> m_onOpenCallback;
     std::function<void()> m_onErrorCallback;
 };

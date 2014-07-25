@@ -17,7 +17,7 @@ namespace communication
 {
 
 WebsocketConnection::WebsocketConnection(std::function<void(const std::string&)> onMessageCallback,
-                                         std::function<void(Connection&)> onFailCallback,
+                                         std::function<void(Connection&, std::exception_ptr)> onFailCallback,
                                          std::function<void(Connection&)> onOpenCallback,
                                          std::function<void(Connection&)> onErrorCallback,
                                          endpoint_type &endpoint,
@@ -63,8 +63,8 @@ void WebsocketConnection::send(const std::string &payload)
 {
     const auto connection = m_endpoint.get_con_from_hdl(m_connection);
     if(!connection)
-        throw std::logic_error{"websocketConnection instance has no associated"
-                               "connection."};
+        throw SendError{"websocketConnection instance has no associated asio "
+                        "connection."};
 
     websocketpp::lib::error_code ec;
     m_endpoint.send(connection, payload,
@@ -91,7 +91,27 @@ void WebsocketConnection::onClose()
 
 void WebsocketConnection::onFail()
 {
-    m_onFailCallback();
+    try
+    {
+        const auto conn = m_endpoint.get_con_from_hdl(m_connection);
+        if(conn)
+        {
+            const int verifyResult =
+                SSL_get_verify_result(conn->get_socket().native_handle());
+
+            if(verifyResult != 0 && m_verifyServerCertificate)
+                throw InvalidServerCertificate{"Server certificate verification "
+                                               "failed.  OpenSSL error: " +
+                                               std::to_string(verifyResult)};
+        }
+    }
+    catch(Exception&)
+    {
+        m_onFailCallback(std::current_exception());
+        return;
+    }
+
+    m_onFailCallback({});
 }
 
 bool WebsocketConnection::onPing(std::string)

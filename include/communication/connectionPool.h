@@ -10,6 +10,7 @@
 
 
 #include <condition_variable>
+#include <exception>
 #include <functional>
 #include <list>
 #include <memory>
@@ -21,6 +22,7 @@ namespace communication
 {
 
 class Connection;
+class ConnectionError;
 
 class ConnectionPool
 {
@@ -39,7 +41,7 @@ public:
 protected:
     void close();
     void addConnections();
-    void onFail(Connection &connection);
+    void onFail(Connection &connection, std::exception_ptr exception);
     void onOpen(Connection &connection);
     void onError(Connection &connection);
 
@@ -47,8 +49,11 @@ protected:
 
     std::function<void(const std::string&)> m_onMessageCallback = [](const std::string&){};
     const std::string m_uri;
+    std::mutex m_connectionErrorMutex;
+    std::exception_ptr m_connectionError;
 
 private:
+    std::exception_ptr takeConnectionError();
     void sendHandshakeMessage(Connection &conn, const std::string &payload);
 
     const unsigned int m_connectionsNumber;

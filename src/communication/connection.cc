@@ -6,31 +6,30 @@
  */
 
 #include "communication/connection.h"
-#include <iostream>
+
+using namespace std::placeholders;
+
 namespace veil
 {
 namespace communication
 {
 
 Connection::Connection(std::function<void(const std::string&)> onMessageCallback,
-                       std::function<void(Connection&)> onFailCallback,
+                       std::function<void(Connection&, std::exception_ptr)> onFailCallback,
                        std::function<void(Connection&)> onOpenCallback,
                        std::function<void(Connection&)> onErrorCallback)
     : m_onMessageCallback{std::move(onMessageCallback)}
 {
-    m_onFailCallback = [=]{ onFailCallback(*this); };
-    m_onOpenCallback = [=]{ onOpenCallback(*this); };
-    m_onErrorCallback = [=]{ onErrorCallback(*this); };
+    m_onFailCallback = std::bind(onFailCallback, std::ref(*this), _1);
+    m_onOpenCallback = std::bind(onOpenCallback, std::ref(*this));
+    m_onErrorCallback = std::bind(onErrorCallback, std::ref(*this));
 }
 
 Connection::~Connection()
 {
     m_onMessageCallback = [](const std::string&){};
-    m_onFailCallback = m_onOpenCallback = m_onErrorCallback = []{};
-}
-
-void Connection::close()
-{
+    m_onOpenCallback = m_onErrorCallback = []{};
+    m_onFailCallback = [](std::exception_ptr){};
 }
 
 } // namespace communication
