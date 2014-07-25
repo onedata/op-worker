@@ -9,6 +9,7 @@
 
 #include "communication/connection.h"
 #include "communication/exception.h"
+#include "communication/websocketConnectionPool.h"
 #include "fuse_messages.pb.h"
 #include "logging.h"
 #include "make_unique.h"
@@ -192,6 +193,24 @@ CommunicationHandler::Pool Communicator::poolType(const google::protobuf::Messag
     return dataPoolMessages.count(describe(*msg.GetDescriptor()).second)
             ? CommunicationHandler::Pool::DATA
             : CommunicationHandler::Pool::META;
+}
+
+std::shared_ptr<Communicator> createWebsocketCommunicator(unsigned int dataPoolSize,
+                                                          unsigned int metaPoolSize,
+                                                          std::string uri,
+                                                          std::shared_ptr<const CertificateData> certificateData,
+                                                          const bool verifyServerCertificate)
+{
+    auto dataPool = std::make_unique<WebsocketConnectionPool>(
+                dataPoolSize, uri, certificateData, verifyServerCertificate);
+
+    auto metaPool = std::make_unique<WebsocketConnectionPool>(
+                metaPoolSize, uri, certificateData, verifyServerCertificate);
+
+    auto communicationHandler = std::make_unique<CommunicationHandler>(
+                std::move(dataPool), std::move(metaPool));
+
+    return std::make_shared<Communicator>(std::move(communicationHandler));
 }
 
 } // namespace communication

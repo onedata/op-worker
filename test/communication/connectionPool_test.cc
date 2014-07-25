@@ -131,12 +131,6 @@ TEST_F(ConnectionPoolTest, shouldCloseAllConnectionsOnDestruction)
     ASSERT_EQ(0u, ConnectionMock::openConnections);
 }
 
-TEST_F(ConnectionPoolTest, shouldThrowExceptionWhenCreatedWith0Connections)
-{
-    auto createConnectionPool = [&]{ ConnectionPoolProxy{0u, uri}; };
-    EXPECT_THROW(createConnectionPool(), std::invalid_argument);
-}
-
 TEST_F(ConnectionPoolTest, shouldCallOnMessageCallbackOnReceivedMessage)
 {
     std::string message = randomString();

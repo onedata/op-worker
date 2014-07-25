@@ -113,6 +113,12 @@ private:
     std::function<void()> m_deregisterPushChannel;
 };
 
+std::shared_ptr<Communicator> createWebsocketCommunicator(unsigned int dataPoolSize,
+                                                          unsigned int metaPoolSize,
+                                                          std::string uri,
+                                                          std::shared_ptr<const CertificateData> certificateData,
+                                                          const bool verifyServerCertificate);
+
 } // namespace communication
 } // namespace veil
 

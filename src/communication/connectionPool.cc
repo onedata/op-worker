@@ -37,9 +37,6 @@ ConnectionPool::ConnectionPool(const unsigned int connectionsNumber,
     : m_uri{std::move(uri)}
     , m_connectionsNumber{connectionsNumber}
 {
-    if(connectionsNumber == 0)
-        throw std::invalid_argument{"cannot create a ConnectionPool instance"
-                                    " with 0 connections"};
 }
 
 ConnectionPool::~ConnectionPool()
