@@ -131,7 +131,7 @@ handle(ProtocolVersion, Record) when is_record(Record, fusemessage) ->
     fslogic_context:set_fuse_id(get(fuse_id)),
     fslogic_context:set_protocol_version(ProtocolVersion),
 
-    fslogic_runner(fun handle_fuse_message/1, RequestType, RequestBody);
+    fslogic_runner(fun maybe_handle_fuse_message/1, RequestType, RequestBody);
 
 handle(ProtocolVersion, {internal_call, Record}) ->
     fslogic_context:set_fuse_id(?CLUSTER_FUSE_ID),
@@ -164,6 +164,13 @@ handle(_ProtocolVersion, _Msg) ->
   ?warning("Wrong request: ~p", [_Msg]),
   wrong_request.
 
+
+maybe_handle_fuse_message(RequestBody) ->
+    PathCtx = extract_logical_path(RequestBody),
+    AbsolutePathCtx = fslogic_path:get_full_file_name(PathCtx),
+    {ok, #space_info{} = SpaceInfo} = fslogic_utils:get_space_info_for_path(AbsolutePathCtx),
+
+    handle_fuse_message(RequestBody).
 
 %% handle_test/2
 %% ====================================================================
@@ -329,7 +336,6 @@ handle_fuse_message(_Req = #testchannel{answer_delay_in_ms = Interval, answer_me
     timer:apply_after(Interval, gen_server, cast, [?MODULE, {asynch, fslogic_context:get_protocol_version(), {answer_test_message, fslogic_context:get_fuse_id(), Answer}}]),
     #atom{value = "ok"}.
 
-
 %% Custom internal request handlers
 handle_custom_request({getfileattr, UUID}) ->
     {ok, FileDoc} = fslogic_objects:get_file({uuid, UUID}),
@@ -339,3 +345,45 @@ handle_custom_request({getfilelocation, UUID}) ->
     {ok, FileDoc} = dao_lib:apply(dao_vfs, get_file, [{uuid, UUID}], fslogic_context:get_protocol_version()),
     fslogic_req_regular:get_file_location(FileDoc,?UNSPECIFIED_MODE).
 
+
+%% %% extract_logical_path/1
+%% %% ====================================================================
+%% %% @doc Convinience method that returns logical file path for the operation.
+%% %% @end
+%% -spec extract_logical_path(Record :: tuple()) -> string() | no_return().
+%% %% ====================================================================
+extract_logical_path(#getfileattr{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#getfilelocation{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#deletefile{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#renamefile{from_file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#getnewfilelocation{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#filenotused{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#renewfilelocation{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#getfilechildren{dir_logic_name = Path}) ->
+    Path;
+extract_logical_path(#createdir{dir_logic_name = Path}) ->
+    Path;
+extract_logical_path(#getlink{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#createlink{from_file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#changefileowner{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#changefilegroup{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#changefileperms{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#updatetimes{file_logic_name = Path}) ->
+    Path;
+extract_logical_path(#testchannel{}) ->
+    "/";
+extract_logical_path(Record) ->
+    ?error("Unsupported record: ~p", [element(1, Record)]),
+    throw({unsupported_record, element(1, Record)}).

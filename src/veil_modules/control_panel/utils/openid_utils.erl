@@ -74,7 +74,7 @@ validate_login() ->
             {dn_list, []}
         ],
         try
-            {Login, UserDoc} = user_logic:sign_in(LoginProplist),
+            {Login, UserDoc} = user_logic:sign_in(LoginProplist, AuthorizationCode),
             gui_ctx:create_session(),
             gui_ctx:set_user_id(Login),
             vcn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),

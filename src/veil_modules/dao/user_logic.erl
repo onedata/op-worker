@@ -21,7 +21,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([sign_in/1, create_user/6, get_user/1, remove_user/1, list_all_users/0]).
+-export([sign_in/2, create_user/6, get_user/1, remove_user/1, list_all_users/0]).
 -export([get_login/1, get_name/1, get_teams/1, update_teams/2]).
 -export([get_email_list/1, update_email_list/2, get_role/1, update_role/2]).
 -export([get_dn_list/1, update_dn_list/2, get_unverified_dn_list/1, update_unverified_dn_list/2]).
@@ -48,11 +48,11 @@
 %% If the user already exists, synchronization is made between document
 %% in the database and info received from OpenID provider.
 %% @end
--spec sign_in(Proplist) -> Result when
+-spec sign_in(Proplist, AuthorizationCode :: binary()) -> Result when
     Proplist :: list(),
     Result :: {string(), user_doc()}.
 %% ====================================================================
-sign_in(Proplist) ->
+sign_in(Proplist, AuthorizationCode) ->
     GlobalId = case proplists:get_value(global_id, Proplist, "") of
                    "" -> throw(no_global_id_specified);
                    GID -> GID
@@ -63,9 +63,12 @@ sign_in(Proplist) ->
     Emails = proplists:get_value(emails, Proplist, []),
     DnList = proplists:get_value(dn_list, Proplist, []),
 
+    ?info("Login with token: ~p", [AuthorizationCode]),
+
     User = case get_user({global_id, GlobalId}) of
                {ok, ExistingUser} ->
-                   synchronize_user_info(ExistingUser, Teams, Emails, DnList);
+                   User1 = synchronize_user_info(ExistingUser, Teams, Emails, DnList),
+                   synchronize_spaces_info(User1, AuthorizationCode);
                {error, user_not_found} ->
                    case create_user(GlobalId, Login, Name, Teams, Emails, DnList) of
                        {ok, NewUser} ->
@@ -169,6 +172,17 @@ get_user({rdnSequence, RDNSequence}) ->
 
 get_user(Key) ->
     dao_lib:apply(dao_users, get_user, [Key], 1).
+
+
+synchronize_spaces_info(#veil_document{record = UserRec} = UserDoc, AuthorizationCode) ->
+    case global_registry:user_request(AuthorizationCode, get, "user/spaces") of
+        {ok, Spaces} ->
+            ?info("Synchronized spaces: ~p", [Spaces]),
+            UserDoc;
+        {error, Reason} ->
+            ?error("Cannot synchronize user's (~p) spaces due to: ~p", [UserDoc#veil_document.uuid, Reason]),
+            UserDoc
+    end.
 
 
 %% remove_user/1
