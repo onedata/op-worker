@@ -65,7 +65,6 @@ rest_init(Req, _Opts) ->
         Error -> {ok,Req,Error}
     end.
 
-
 %% allowed_methods/2
 %% ====================================================================
 %% @doc Cowboy callback function
@@ -85,21 +84,6 @@ allowed_methods(Req, {error, Type}) ->
 allowed_methods(Req, State) ->
     {[<<"PUT">>, <<"GET">>, <<"DELETE">>], Req, State}.
 
-%% content_types_provided/2
-%% ====================================================================
-%% @doc Cowboy callback function
-%% Returns content types that can be provided. "application/json" is default.
-%% It can be changed later by gui_utils:cowboy_ensure_header/3.
-%% @end
--spec content_types_provided(req(), #state{}) -> {[binary()], req(), #state{}}.
-%% ====================================================================
-content_types_provided(Req, State) ->
-    {[
-        {<<"application/cdmi-container">>, get_dir},
-        {<<"application/cdmi-object">>,get_file}
-    ], Req, State}.
-
-
 %% resource_exists/2
 %% ====================================================================
 %% @doc Cowboy callback function
@@ -113,6 +97,19 @@ resource_exists(Req, #state{filepath = Filepath} = State) ->
         _ -> {false, Req, State}
     end.
 
+%% content_types_provided/2
+%% ====================================================================
+%% @doc Cowboy callback function
+%% Returns content types that can be provided. "application/json" is default.
+%% It can be changed later by gui_utils:cowboy_ensure_header/3.
+%% @end
+-spec content_types_provided(req(), #state{}) -> {[binary()], req(), #state{}}.
+%% ====================================================================
+content_types_provided(Req, State) ->
+    {[
+        {<<"application/cdmi-container">>, get_dir},
+        {<<"application/cdmi-object">>,get_file}
+    ], Req, State}.
 
 %% get_dir/2
 %% ====================================================================
@@ -141,7 +138,6 @@ get_file(Req, #state{filepath = Filepath, attributes = #fileattributes{type = "R
     Req3 = gui_utils:cowboy_ensure_header(<<"content-type">>, Mimetype, NewReq),
     {{stream, Size, StreamFun}, Req3, State}. %todo return proper cdmi value
 
-
 %% content_types_accepted/2
 %% ====================================================================
 %% @doc Cowboy callback function
@@ -152,8 +148,15 @@ get_file(Req, #state{filepath = Filepath, attributes = #fileattributes{type = "R
 %% ====================================================================
 content_types_accepted(Req, State) ->
     {[
-        {{<<"application">>, <<"json">>, '*'}, handle_json_data}
+        {<<"application/cdmi-container">>, post_dir},
+        {<<"application/cdmi-object">>,post_file}
     ], Req, State}.
+
+post_dir(Req, State) ->
+    ok.
+
+post_file(Req,State) ->
+    ok.
 
 %% delete_resource/2
 %% ====================================================================
@@ -184,7 +187,6 @@ delete_resource(Req, #state{filepath = Filepath, attributes = #fileattributes{ty
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
-
 
 %% prepare_container_ans/2
 %% ====================================================================
