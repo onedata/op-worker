@@ -100,6 +100,7 @@ protected:
     std::string       m_proxyCert;
     std::string       m_clusterHostname;
     BufferAgent       m_bufferAgent;
+    std::string       m_spaceId;
 
     virtual protocol::communication_protocol::Answer sendClusterMessage(protocol::communication_protocol::ClusterMsg &msg, uint32_t timeout = 0);      ///< Sends ClusterMsg to cluster and receives Answer. This function handles connection selection and its releasing.
     virtual protocol::communication_protocol::ClusterMsg commonClusterMsgSetup(std::string inputType, std::string& inputData);   ///< Setups commonly used fields in ClusterMsg for RemoteFileManagement.

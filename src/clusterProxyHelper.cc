@@ -30,6 +30,7 @@ ClusterMsg ClusterProxyHelper::commonClusterMsgSetup(string inputType, string &i
     RemoteFileMangement rfm;
     rfm.set_message_type(utils::tolower(inputType));
     rfm.set_input(inputData);
+    rfm.set_space_id(m_spaceId);
 
     ClusterMsg clm;
     clm.set_protocol_version(PROTOCOL_VERSION);
@@ -374,6 +375,11 @@ ClusterProxyHelper::ClusterProxyHelper(std::shared_ptr<SimpleConnectionPool> con
 
     m_clusterPort = args.count("cluster_port") ?
                 boost::any_cast<unsigned int>(args.at("cluster_port")) : 0;
+
+    const auto arg = srvArg(0);
+    m_spaceId = args.count(arg)
+                    ? boost::any_cast<std::string>(args.at(arg))
+                    : string();
 }
 
 } // namespace helpers
