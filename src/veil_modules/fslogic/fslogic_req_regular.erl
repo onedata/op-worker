@@ -74,7 +74,7 @@ get_file_location(FileDoc, FullFileName, OpenMode, ForceClusterProxy) ->
 
     {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, FileLoc#file_location.storage_id}),
 
-    {SH, File_id} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileLoc#file_location.file_id, ForceClusterProxy),
+    {SH, File_id} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileLoc#file_location.file_id, <<>>, ForceClusterProxy),
     #filelocation{storage_id = Storage#storage_info.id, file_id = File_id, validity = Validity,
         storage_helper_name = SH#storage_helper_info.name, storage_helper_args = SH#storage_helper_info.init_args}.
 
@@ -127,14 +127,14 @@ get_new_file_location(FullFileName, Mode, ForceClusterProxy) ->
             ExistingWFileLocation= ExistingWFileRecord#file.location,
 
             {ok, #veil_document{record = ExistingWFileStorage}} = fslogic_objects:get_storage({uuid, ExistingWFileLocation#file_location.storage_id}),
-            {SH, File_id2} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), ExistingWFileStorage, ExistingWFileLocation#file_location.file_id, ForceClusterProxy),
+            {SH, File_id2} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), ExistingWFileStorage, ExistingWFileLocation#file_location.file_id, <<>>, ForceClusterProxy),
             #storage_helper_info{name = ExistingWFileStorageSHName, init_args = ExistingWFileStorageSHArgs} = SH,
             #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = ExistingWFileStorageSHName, storage_helper_args = ExistingWFileStorageSHArgs};
         {ok, FileUUID} ->
             fslogic_meta:update_parent_ctime(FileBaseName, CTime),
             {ok, _} = fslogic_objects:save_file_descriptor(fslogic_context:get_protocol_version(), FileUUID, fslogic_context:get_fuse_id(), Validity),
 
-            {SH, File_id2} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileId, ForceClusterProxy),
+            {SH, File_id2} = fslogic_utils:get_sh_and_id(fslogic_context:get_fuse_id(), Storage, FileId, <<>>, ForceClusterProxy),
             #storage_helper_info{name = SHName, init_args = SHArgs} = SH,
             #filelocation{storage_id = Storage#storage_info.id, file_id = File_id2, validity = Validity, storage_helper_name = SHName, storage_helper_args = SHArgs}
     end.
