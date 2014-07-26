@@ -149,7 +149,8 @@ public:
     /**
      * Adds a handhshake and goodbye message to be sent once through each
      * connection open and opened on the pool.
-     * The goodbye message will be sent on closing the connections.
+     * The goodbye message will be sent on closing the connections or on
+     * cancellation of the handshake.
      * @param handshake A function returning the handshake message to be sent.
      * The message returned by the function will not be cached.
      * @param goodbye A function returning the goodbye message to be sent.

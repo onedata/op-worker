@@ -20,6 +20,7 @@ namespace communication
 
 /**
  * The Connection class represents a single network-style connection.
+ * This class resides on the lowest layer of the communication module.
  */
 class Connection
 {
@@ -59,7 +60,7 @@ protected:
     /**
      * The @p onFailCallback callback set in @c Connection::Connection(),
      * bound to *this.
-     * @param exceptionPtr The exception to set as a possible reason for
+     * @param exception An exception to set as a possible reason for
      * communication failure.
      */
     std::function<void(std::exception_ptr)> m_onFailCallback;
