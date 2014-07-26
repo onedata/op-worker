@@ -30,12 +30,20 @@ namespace communication
 
 class CertificateData;
 
+/**
+ * An @c veil::communication::ConnectionError specialization for connection
+ * errors occuring due to invalid server certificate.
+ */
 class InvalidServerCertificate: public ConnectionError
 {
 public:
     using ConnectionError::ConnectionError;
 };
 
+/**
+ * The WebsocketConnection class is a @c veil::communication::Connection
+ * specialization for TLS WebSocket++ based connections.
+ */
 class WebsocketConnection: public Connection
 {
     using config_type = websocketpp::config::asio_tls_client;
@@ -44,28 +52,55 @@ class WebsocketConnection: public Connection
     using message_ptr = config_type::message_type::ptr;
 
 public:
-    WebsocketConnection(std::function<void(const std::string&)> onMessageCallback,
-                        std::function<void(Connection&, std::exception_ptr)> onFailCallback,
-                        std::function<void(Connection&)> onOpenCallback,
-                        std::function<void(Connection&)> onErrorCallback,
-                        endpoint_type &endpoint,
-                        const std::string &uri,
-                        std::shared_ptr<const CertificateData> certificateData,
-                        const bool verifyServerCertificate);
+    /**
+     * Constructor.
+     * @param onMessageCallback Callback to be called on received message.
+     * @param onFailCallback Callback to be called on connection open failure.
+     * @param onOpenCallback Callback to be called on connection open.
+     * @param onErrorCallback Callback to be called on open connection's error.
+     * @param endpoint A reference to an ASIO endpoint.
+     * @param uri Server's URI to connect to.
+     * @param certificateData Certificate data to use for SSL authentication.
+     * @param verifyServerCertificate Determines whether to verify server's
+     * certificate.
+     */
+    WebsocketConnection(
+            std::function<void(const std::string&)> onMessageCallback,
+            std::function<void(Connection&, std::exception_ptr)> onFailCallback,
+            std::function<void(Connection&)> onOpenCallback,
+            std::function<void(Connection&)> onErrorCallback,
+            endpoint_type &endpoint,
+            const std::string &uri,
+            std::shared_ptr<const CertificateData> certificateData,
+            const bool verifyServerCertificate);
 
+    /**
+     * Destructor.
+     * Closes the connection.
+     */
     ~WebsocketConnection();
 
+    /**
+     * Sends a message through the connection.
+     * @param payload The message to send.
+     */
     void send(const std::string &payload) override;
 
 private:
-    void onMessage(message_ptr msg);         ///< Incoming WebSocket message callback
-    void onOpen();                           ///< WebSocket connection opened
-    void onClose();                          ///< WebSocket connection closed
-    void onFail();                           ///< WebSocket connection failed callback. This can proc only before CommunicationHandler::onOpen
-    bool onPing(std::string);                ///< Ping received callback
-    void onPong(std::string);                ///< Pong received callback
-    void onPongTimeout(std::string);         ///< Cluaster failed to respond on ping message
-    void onInterrupt();                      ///< WebSocket connection was interuped
+    /**
+     * @defgroup WebSocket++ handlers.
+     * @see websocketpp::transport::asio::tls_socket::connection
+     * @{
+     */
+    void onMessage(message_ptr msg);
+    void onOpen();
+    void onClose();
+    void onFail();
+    bool onPing(std::string);
+    void onPong(std::string);
+    void onPongTimeout(std::string);
+    void onInterrupt();
+    /**@}*/
 
     endpoint_type &m_endpoint;
     const std::shared_ptr<const CertificateData> m_certificateData;

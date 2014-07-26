@@ -32,10 +32,11 @@ public:
      * @param onOpenCallback Callback to be called on connection open.
      * @param onErrorCallback Callback to be called on open connection's error.
      */
-    Connection(std::function<void(const std::string&)> onMessageCallback,
-               std::function<void(Connection&, std::exception_ptr)> onFailCallback,
-               std::function<void(Connection&)> onOpenCallback,
-               std::function<void(Connection&)> onErrorCallback);
+    Connection(
+            std::function<void(const std::string&)> onMessageCallback,
+            std::function<void(Connection&, std::exception_ptr)> onFailCallback,
+            std::function<void(Connection&)> onOpenCallback,
+            std::function<void(Connection&)> onErrorCallback);
 
     /**
      * Destructor.
@@ -44,7 +45,7 @@ public:
     virtual ~Connection();
 
     /**
-     * Send a message through the connection.
+     * Sends a message through the connection.
      * @param payload The message to send.
      */
     virtual void send(const std::string &payload) = 0;

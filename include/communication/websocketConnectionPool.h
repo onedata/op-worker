@@ -28,6 +28,10 @@ namespace communication
 
 class WebsocketConnection;
 
+/**
+ * A @c veil::communication::ConnectionPool specialization for managing
+ * TLS WebSocket++ based connections.
+ */
 class WebsocketConnectionPool: public ConnectionPool
 {
     using endpoint_type = websocketpp::client<websocketpp::config::asio_tls_client>;
@@ -36,19 +40,45 @@ class WebsocketConnectionPool: public ConnectionPool
     using context_ptr = std::shared_ptr<context_type>;
 
 public:
-    WebsocketConnectionPool(const unsigned int connectionsNumber,
-                            std::string uri,
-                            std::shared_ptr<const CertificateData> certificateData,
-                            const bool verifyServerCertificate);
+    /**
+     * Constructor.
+     * Starts an underlying ASIO endpoint with a worker thread.
+     * @param connectionsNumber Number of connections that should be maintained
+     * by this pool.
+     * @param uri Server's URI to connect to.
+     * @param certificateData Certificate data to use for SSL authentication.
+     * @param verifyServerCertificate Determines whether to verify server's
+     * certificate.
+     */
+    WebsocketConnectionPool(
+            const unsigned int connectionsNumber,
+            std::string uri,
+            std::shared_ptr<const CertificateData> certificateData,
+            const bool verifyServerCertificate);
 
+    /**
+     * Destructor.
+     * Stops the underlying ASIO endpoint and the worker thread and closes
+     * maintained connections.
+     */
     ~WebsocketConnectionPool();
 
 protected:
+    /**
+     * Creates a new instance of @c veil::communication::WebsocketConnection .
+     * @return A new instance of @c WebsocketConnection .
+     */
     std::unique_ptr<Connection> createConnection() override;
 
 private:
-    context_ptr onTLSInit();                 ///< On TLS init callback
-    void onSocketInit(socket_type &socket);  ///< On socket init callback
+    /**
+     * @defgroup WebSocket++ handlers.
+     * @see websocketpp::transport::asio::tls_socket::endpoint
+     * @{
+     */
+    context_ptr onTLSInit();
+    void onSocketInit(socket_type &socket);
+    /**@}*/
 
     std::thread m_ioThread;
     endpoint_type m_endpoint;

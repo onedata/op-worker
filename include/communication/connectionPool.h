@@ -28,6 +28,9 @@ class ConnectionError;
  * The ConnectionPool class is responsible for managing and maintaining
  * connections.
  * It provides an interface over the whole pool.
+ * @note All of the callback methods (including onMessageCallback set by
+ * @c setOnMessageCallback() ) need to be called by a different thread of
+ * execution than the thread that manages ConnectionPool instance.
  */
 class ConnectionPool
 {
