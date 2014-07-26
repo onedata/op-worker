@@ -7,6 +7,8 @@
 
 #include "communication/certificateData.h"
 
+#include <cassert>
+
 namespace veil
 {
 namespace communication
@@ -17,7 +19,7 @@ CertificateData::CertificateData(KeyFormat keyFormat)
 {
 }
 
-boost::asio::ssl::context_base::file_format CertificateData::keyFormat() const
+boost::asio::ssl::context_base::file_format CertificateData::keyFormat() const noexcept
 {
     switch(m_keyFormat)
     {
@@ -26,6 +28,8 @@ boost::asio::ssl::context_base::file_format CertificateData::keyFormat() const
         case KeyFormat::PEM:
             return boost::asio::ssl::context_base::file_format::pem;
     }
+
+    assert(false);
 }
 
 FilesystemCertificate::FilesystemCertificate(std::string certPath,
@@ -61,8 +65,6 @@ InMemoryCertificate::initContext(std::shared_ptr<boost::asio::ssl::context> ctx)
     ctx->use_private_key(m_keyData, keyFormat());
     return std::move(ctx);
 }
-
-
 
 } // namespace communication
 } // namespace veil
