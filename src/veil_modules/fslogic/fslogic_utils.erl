@@ -17,7 +17,7 @@
 
 %% API
 -export([create_children_list/1, create_children_list/2, get_user_id_from_system/1]).
--export([get_sh_and_id/3, get_files_number/3]).
+-export([get_sh_and_id/3, get_sh_and_id/4, get_sh_and_id/5, get_files_number/3]).
 -export([get_group_owner/1, get_user_groups/2]).
 -export([random_ascii_lowercase_sequence/1]).
 
@@ -37,11 +37,22 @@
     NewFileId :: string().
 %% ====================================================================
 get_sh_and_id(FuseID, Storage, File_id) ->
-    SHI = fslogic_storage:get_sh_for_fuse(FuseID, Storage),
+    get_sh_and_id(FuseID, Storage, File_id, <<>>).
+get_sh_and_id(FuseID, Storage, File_id, SpaceId) ->
+    get_sh_and_id(FuseID, Storage, File_id, SpaceId, false).
+get_sh_and_id(FuseID, Storage, File_id, SpaceId, ForceClusterProxy) ->
+    SHI =
+        case ForceClusterProxy orelse fslogic_context:is_global_fuse_id(FuseID) of
+            true ->
+                #storage_helper_info{name = "ClusterProxy", init_args = []};
+            false ->
+                fslogic_storage:get_sh_for_fuse(FuseID, Storage)
+        end,
     #storage_helper_info{name = SHName, init_args = _SHArgs} = SHI,
     case SHName =:= "ClusterProxy" of
         true ->
-            {SHI, integer_to_list(Storage#storage_info.id) ++ ?REMOTE_HELPER_SEPARATOR ++ File_id};
+            {SHI#storage_helper_info{init_args = [binary_to_list(vcn_utils:ensure_binary(SpaceId))]},
+                    integer_to_list(Storage#storage_info.id) ++ ?REMOTE_HELPER_SEPARATOR ++ File_id};
         false -> {SHI, File_id}
     end.
 
