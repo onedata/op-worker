@@ -41,7 +41,7 @@ string ClusterProxyHelper::requestMessage(const google::protobuf::Message &msg,
     try
     {
         const auto answer = m_communicator->communicate<AnswerType>(
-                    communication::REMOTE_FILE_MANAGEMENT_MODULE_NAME, *wrap(msg), 2, timeout);
+                    communication::ServerModule::REMOTE_FILES_MANAGER, *wrap(msg), 2, timeout);
         return answer->worker_answer();
     }
     catch(communication::Exception &e)
@@ -58,7 +58,7 @@ string ClusterProxyHelper::requestMessage(const google::protobuf::Message &msg)
     try
     {
         const auto answer = m_communicator->communicate<AnswerType>(
-                    communication::REMOTE_FILE_MANAGEMENT_MODULE_NAME, *wrap(msg), 2);
+                    communication::ServerModule::REMOTE_FILES_MANAGER, *wrap(msg), 2);
         return answer->worker_answer();
     }
     catch(communication::Exception &e)
@@ -74,7 +74,7 @@ string ClusterProxyHelper::requestAtom(const google::protobuf::Message &msg)
     try
     {
         const auto answer = m_communicator->communicate<Atom>(
-                    communication::REMOTE_FILE_MANAGEMENT_MODULE_NAME, *wrap(msg), 2);
+                    communication::ServerModule::REMOTE_FILES_MANAGER, *wrap(msg), 2);
 
         Atom atom;
         if(answer->has_worker_answer())

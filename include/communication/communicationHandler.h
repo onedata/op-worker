@@ -60,10 +60,14 @@ public:
         SubscriptionData(std::function<bool(const Answer&)> predicate,
                          std::function<void(const Answer&)> callback);
 
-        /// The stored predicate.
+        /**
+         * The stored predicate.
+         */
         const std::function<bool(const Answer&)> predicate;
 
-        /// The stored callback.
+        /**
+         * The stored callback.
+         */
         const std::function<void(const Answer&)> callback;
     };
 
@@ -96,7 +100,7 @@ public:
      * @param originalMsg The message to reply to.
      * @param replyMsg The reply to be sent.
      * @param poolType Type of a pool through which the reply should be sent.
-     * @param retries Number of replies in case of sending error.
+     * @param retries Number of retries in case of sending error.
      */
     virtual void reply(const Answer &originalMsg, Message &replyMsg,
                        const Pool poolType, const unsigned int retries);

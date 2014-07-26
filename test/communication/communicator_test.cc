@@ -39,10 +39,12 @@ struct CommunicatorTest: public ::testing::Test
     std::unique_ptr<veil::communication::Communicator> communicator;
     MockCommunicationHandler *handlerMock;
     std::string fuseId;
+    veil::communication::ServerModule randomModule;
 
     CommunicatorTest()
     {
         fuseId = randomString();
+        randomModule = veil::communication::ServerModule::CLUSTER_RENGINE;
 
         auto p = std::make_unique<NiceMock<MockCommunicationHandler>>();
         handlerMock = p.get();
@@ -140,15 +142,15 @@ TEST_F(CommunicatorTest, shouldCallDataPoolOnSendingRemoteFileManagementMessages
     msg.set_perms(666);
 
     EXPECT_CALL(*handlerMock, send(_, MockCommunicationHandler::Pool::DATA, _));
-    communicator->send(randomString(), msg);
+    communicator->send(randomModule, msg);
     Mock::VerifyAndClearExpectations(handlerMock);
 
     EXPECT_CALL(*handlerMock, communicateMock(_, MockCommunicationHandler::Pool::DATA));
-    communicator->communicate<veil::protocol::communication_protocol::Atom>(randomString(), msg, 0, std::chrono::milliseconds{0});
+    communicator->communicate(randomModule, msg, 0, std::chrono::milliseconds{0});
     Mock::VerifyAndClearExpectations(handlerMock);
 
     EXPECT_CALL(*handlerMock, communicateMock(_, MockCommunicationHandler::Pool::DATA));
-    communicator->communicateAsync<veil::protocol::communication_protocol::Atom>(randomString(), msg);
+    communicator->communicateAsync(randomModule, msg);
 }
 
 
@@ -158,20 +160,20 @@ TEST_F(CommunicatorTest, shouldCallDataPoolOnSendingOtherMessages)
     msg.set_fuse_id(fuseId);
 
     EXPECT_CALL(*handlerMock, send(_, MockCommunicationHandler::Pool::META, _));
-    communicator->send(randomString(), msg);
+    communicator->send(randomModule, msg);
     Mock::VerifyAndClearExpectations(handlerMock);
 
     EXPECT_CALL(*handlerMock, communicateMock(_, MockCommunicationHandler::Pool::META));
-    communicator->communicate<veil::protocol::communication_protocol::Atom>(randomString(), msg, 0, std::chrono::milliseconds{0});
+    communicator->communicate(randomModule, msg, 0, std::chrono::milliseconds{0});
     Mock::VerifyAndClearExpectations(handlerMock);
 
     EXPECT_CALL(*handlerMock, communicateMock(_, MockCommunicationHandler::Pool::META));
-    communicator->communicateAsync<veil::protocol::communication_protocol::Atom>(randomString(), msg);
+    communicator->communicateAsync(randomModule, msg);
 }
 
 TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnSend)
 {
-    std::string module = randomString();
+    std::string module = veil::communication::toString(randomModule);
 
     veil::protocol::remote_file_management::RemoteFileMangement msg;
     msg.set_input(randomString());
@@ -179,7 +181,7 @@ TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnSend)
 
     veil::protocol::communication_protocol::ClusterMsg wrapper;
     EXPECT_CALL(*handlerMock, send(_, _, _)).WillOnce(SaveArg<0>(&wrapper));
-    communicator->send(module, msg);
+    communicator->send(randomModule, msg);
 
     ASSERT_EQ("remotefilemangement", wrapper.message_type());
     ASSERT_EQ("remote_file_management", wrapper.message_decoder_name());
@@ -196,7 +198,7 @@ TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnSend)
 
 TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnCommunicate)
 {
-    std::string module = randomString();
+    std::string module = veil::communication::toString(randomModule);
 
     veil::protocol::fuse_messages::CreateDir msg;
     msg.set_dir_logic_name(randomString());
@@ -204,7 +206,7 @@ TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnCommunicate)
 
     veil::protocol::communication_protocol::ClusterMsg wrapper;
     EXPECT_CALL(*handlerMock, communicateMock(_, _)).WillOnce(SaveArg<0>(&wrapper));
-    communicator->communicate<veil::protocol::fuse_messages::ChannelClose>(module, msg, 0, std::chrono::milliseconds{0});
+    communicator->communicate<veil::protocol::fuse_messages::ChannelClose>(randomModule, msg, 0, std::chrono::milliseconds{0});
 
     ASSERT_EQ("createdir", wrapper.message_type());
     ASSERT_EQ("fuse_messages", wrapper.message_decoder_name());
@@ -221,14 +223,14 @@ TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnCommunicate)
 
 TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnCommunicateAsync)
 {
-    std::string module = randomString();
+    std::string module = veil::communication::toString(randomModule);
 
     veil::protocol::logging::ChangeRemoteLogLevel msg;
     msg.set_level(veil::protocol::logging::INFO);
 
     veil::protocol::communication_protocol::ClusterMsg wrapper;
     EXPECT_CALL(*handlerMock, communicateMock(_, _)).WillOnce(SaveArg<0>(&wrapper));
-    communicator->communicateAsync<veil::protocol::remote_file_management::DeleteFileAtStorage>(module, msg);
+    communicator->communicateAsync<veil::protocol::remote_file_management::DeleteFileAtStorage>(randomModule, msg);
 
     ASSERT_EQ("changeremoteloglevel", wrapper.message_type());
     ASSERT_EQ("logging", wrapper.message_decoder_name());
@@ -251,11 +253,11 @@ TEST_F(CommunicatorTest, shouldAskForAtomAnswerByDefault)
     veil::protocol::communication_protocol::ClusterMsg wrapper;
     EXPECT_CALL(*handlerMock, communicateMock(_, _)).WillRepeatedly(SaveArg<0>(&wrapper));
 
-    communicator->communicate(randomString(), msg);
+    communicator->communicate(randomModule, msg);
     ASSERT_EQ("atom", wrapper.answer_type());
     ASSERT_EQ("communication_protocol", wrapper.answer_decoder_name());
 
-    communicator->communicateAsync(randomString(), msg);
+    communicator->communicateAsync(randomModule, msg);
     ASSERT_EQ("atom", wrapper.answer_type());
     ASSERT_EQ("communication_protocol", wrapper.answer_decoder_name());
 }
@@ -281,7 +283,7 @@ TEST_F(CommunicatorTest, shouldWaitForAnswerOnCommunicate)
     msg.set_fuse_id(fuseId);
 
     std::thread t{fulfilPromise};
-    communicator->communicate(randomString(), msg, 0, std::chrono::seconds{20});
+    communicator->communicate(randomModule, msg, 0, std::chrono::seconds{20});
     communicationDone = true;
     statusChanged.notify_one();
 
@@ -295,7 +297,7 @@ TEST_F(CommunicatorTest, shouldThrowOnCommunicateReceiveTimeout)
     veil::protocol::fuse_messages::ChannelRegistration msg;
     msg.set_fuse_id(fuseId);
 
-    ASSERT_THROW(communicator->communicate(randomString(), msg, 0, std::chrono::seconds{0}),
+    ASSERT_THROW(communicator->communicate(randomModule, msg, 0,std::chrono::seconds{0}),
                  veil::communication::ReceiveError);
 }
 
@@ -305,7 +307,7 @@ TEST_F(CommunicatorTest, shouldReturnAFullfilableFutureOnCommunicateAsync)
 
     veil::protocol::fuse_messages::ChannelRegistration msg;
     msg.set_fuse_id(fuseId);
-    auto future = communicator->communicateAsync(randomString(), msg);
+    auto future = communicator->communicateAsync(randomModule, msg);
 
     ASSERT_EQ(std::future_status::timeout, future.wait_for(std::chrono::seconds{0}));
     handlerMock->promise->set_value({});
@@ -314,7 +316,7 @@ TEST_F(CommunicatorTest, shouldReturnAFullfilableFutureOnCommunicateAsync)
 
 TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnReply)
 {
-    std::string module = randomString();
+    std::string module = veil::communication::toString(randomModule);
 
     veil::protocol::fuse_messages::ChannelClose msg;
     msg.set_fuse_id(fuseId);
@@ -324,7 +326,7 @@ TEST_F(CommunicatorTest, shouldWrapAndPassMessagesOnReply)
 
     veil::protocol::communication_protocol::ClusterMsg wrapper;
     EXPECT_CALL(*handlerMock, reply(_, _, _, _)).WillOnce(SaveArg<1>(&wrapper));
-    communicator->reply(replyTo, module, msg);
+    communicator->reply(replyTo, randomModule, msg);
 
     ASSERT_EQ("channelclose", wrapper.message_type());
     ASSERT_EQ("fuse_messages", wrapper.message_decoder_name());

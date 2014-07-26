@@ -151,7 +151,7 @@ bool RemoteLogWriter::sendNextMessage()
 
     try
     {
-        m_communicator->send(communication::CENTRAL_LOGGER_MODULE_NAME, msg);
+        m_communicator->send(communication::ServerModule::CENTRAL_LOGGER, msg);
     }
     catch(communication::Exception&)
     {

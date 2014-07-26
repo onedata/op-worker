@@ -47,19 +47,20 @@ void Communicator::setupPushChannels(std::function<void(const Answer&)> callback
                                                           std::move(callback)});
 
     const auto fuseId = m_fuseId;
+    const auto fslogic = toString(ServerModule::FSLOGIC);
 
-    auto handshake = [this, fuseId]{
+    auto handshake = [=]{
         LOG(INFO) << "Opening a push channel with fuseId: '" << fuseId << "'";
         protocol::fuse_messages::ChannelRegistration reg;
         reg.set_fuse_id(fuseId);
-        return createMessage(FSLOGIC_MODULE_NAME, true, Atom::default_instance(), reg);
+        return createMessage(fslogic, true, Atom::default_instance(), reg);
     };
 
-    auto goodbye = [this, fuseId]{
+    auto goodbye = [=]{
         LOG(INFO) << "Closing the push channel with fuseId: '" << fuseId << "'";
         protocol::fuse_messages::ChannelClose close;
         close.set_fuse_id(fuseId);
-        return createMessage(FSLOGIC_MODULE_NAME, true, Atom::default_instance(), close);
+        return createMessage(fslogic, true, Atom::default_instance(), close);
     };
 
     auto remove = m_communicationHandler->addHandshake(std::move(handshake),
@@ -99,21 +100,22 @@ void Communicator::setFuseId(std::string fuseId)
     setupHandshakeAck();
 }
 
-void Communicator::reply(const Answer &originalMsg, const std::string &module,
+void Communicator::reply(const Answer &originalMsg, const ServerModule module,
                          const google::protobuf::Message &msg,
                          const unsigned int retries)
 {
-    auto cmsg = createMessage(module, false,
+    auto cmsg = createMessage(toString(module), false,
                               veil::protocol::communication_protocol::Atom::default_instance(),
                               msg);
+
     m_communicationHandler->reply(originalMsg, *cmsg, poolType(msg), retries);
 }
 
-void Communicator::send(const std::string &module,
+void Communicator::send(const ServerModule module,
                         const google::protobuf::Message &msg,
                         const unsigned int retries)
 {
-    auto cmsg = createMessage(module, false,
+    auto cmsg = createMessage(toString(module), false,
                               veil::protocol::communication_protocol::Atom::default_instance(),
                               msg);
     m_communicationHandler->send(*cmsg, poolType(msg), retries);
