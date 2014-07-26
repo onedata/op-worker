@@ -11,6 +11,7 @@
 
 %% API
 -export([provider_request/2, provider_request/3, user_request/3, user_request/4]).
+-export([get_provider_cert_path/0]).
 
 provider_request(Method, URI) ->
     request(Method, URI, <<"">>, []).
@@ -22,8 +23,8 @@ user_request(Token, Method, URI) ->
     user_request(Token, Method, URI, <<"">>).
 
 user_request(Token, Method, URI, Body) ->
-    request(Method, URI, Body, [{"authorization", Token}]).
-
+    TokenBin = vcn_utils:ensure_binary(Token),
+    request(Method, URI, Body, [{"authorization", binary_to_list(<<"Bearer ", TokenBin/binary>>)}]).
 
 
 request(Method, URI, Body, Headers) ->
@@ -41,3 +42,4 @@ get_provider_cert_path() ->
 
 get_provider_key_path() ->
     "./certs/grpkey.pem".
+

@@ -167,10 +167,31 @@ handle(_ProtocolVersion, _Msg) ->
 
 maybe_handle_fuse_message(RequestBody) ->
     PathCtx = extract_logical_path(RequestBody),
-    AbsolutePathCtx = fslogic_path:get_full_file_name(PathCtx),
-    {ok, #space_info{} = SpaceInfo} = fslogic_utils:get_space_info_for_path(AbsolutePathCtx),
+    {ok, AbsolutePathCtx} = fslogic_path:get_full_file_name(PathCtx),
+    {ok, #space_info{uuid = SpaceId, name = SpaceName, providers = Providers}} = fslogic_utils:get_space_info_for_path(AbsolutePathCtx),
 
-    handle_fuse_message(RequestBody).
+    Self = cluster_manager_lib:get_provider_id(),
+
+%%     {ok, Providers} =
+%%         case SpaceId of
+%%             "" ->
+%%                 {ok, [Self]};
+%%             _ ->
+%%                 registry_spaces:get_space_providers(SpaceId)
+%%         end,
+
+    ?info("Space for request: ~p, providers: ~p (current ~p)", [SpaceName, Providers, Self]),
+
+    case lists:member(Self, Providers) of
+        true ->
+            handle_fuse_message(RequestBody);
+        false ->
+            [RerouteToProvider | _] = Providers,
+            {ok, #{<<"urls">> := URLs}} = registry_providers:get_provider_info(RerouteToProvider),
+            ?info("Reroute to: ~p", [URLs]),
+            provider_proxy:communicate({RerouteToProvider, URLs}, fslogic_context:get_access_token(), fslogic_context:get_fuse_id(),
+                #fusemessage{input = RequestBody, message_type = atom_to_list(element(1, RequestBody))})
+    end.
 
 %% handle_test/2
 %% ====================================================================

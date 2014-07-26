@@ -4,15 +4,13 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 25. Jul 2014 15:36
+%%% Created : 26. Jul 2014 03:07
 %%%-------------------------------------------------------------------
--module(cluster_maneger_lib).
+-module(provider_proxy).
 -author("RoXeon").
 
 %% API
--export([get_provider_id/0]).
+-export([communicate/4]).
 
-
-get_provider_id() ->
-    global_registry:provider_request(get, "provider").
-
+communicate({ProviderId, [URL | _]}, AccessToken, FuseId, Message) ->
+    ok.

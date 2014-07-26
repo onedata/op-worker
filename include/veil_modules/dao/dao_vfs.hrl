@@ -22,7 +22,7 @@
 -record(file, {type = 1, name = "", uid = "", perms = 0, parent = "", ref_file = "", location = #file_location{}, locks = [], meta_doc, created = true, extensions = []}).
 
 -define(file_space_info_extestion, space_info).
--record(space_info, {uuid = "", name = ""}).
+-record(space_info, {uuid = "", name = "", providers = []}).
 
 %% Those record contains meta data for file which UUID match #file_meta.file field
 -record(file_tag, {key = "", value = []}).

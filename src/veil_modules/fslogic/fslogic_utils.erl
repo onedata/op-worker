@@ -94,12 +94,13 @@ random_ascii_lowercase_sequence(Length) ->
 get_space_info_for_path(FileBasePath) ->
     case filename:split(FileBasePath) of
         [?SPACES_BASE_DIR_NAME, SpaceName | _] ->
+            ?debug("Attempting to fetch space ~p while resolving file path ~p", [SpaceName, FileBasePath]),
             case fslogic_objects:get_space(SpaceName) of
                 {ok, #space_info{} = SP} -> {ok, SP};
                 {error, Reason} ->
                     {error, {invalid_space_path, Reason}}
             end;
-        _ -> {ok, #space_info{name = "root", uuid = ""}}
+        _ -> {ok, #space_info{name = "root", uuid = "", providers = [cluster_manager_lib:get_provider_id()]}}
     end.
 
 

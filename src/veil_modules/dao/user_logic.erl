@@ -52,7 +52,7 @@
     Proplist :: list(),
     Result :: {string(), user_doc()}.
 %% ====================================================================
-sign_in(Proplist, AuthorizationCode) ->
+sign_in(Proplist, AccessToken) ->
     GlobalId = case proplists:get_value(global_id, Proplist, "") of
                    "" -> throw(no_global_id_specified);
                    GID -> GID
@@ -63,16 +63,16 @@ sign_in(Proplist, AuthorizationCode) ->
     Emails = proplists:get_value(emails, Proplist, []),
     DnList = proplists:get_value(dn_list, Proplist, []),
 
-    ?info("Login with token: ~p", [AuthorizationCode]),
+    ?info("Login with token: ~p", [AccessToken]),
 
     User = case get_user({global_id, GlobalId}) of
                {ok, ExistingUser} ->
                    User1 = synchronize_user_info(ExistingUser, Teams, Emails, DnList),
-                   synchronize_spaces_info(User1, AuthorizationCode);
+                   synchronize_spaces_info(User1, AccessToken);
                {error, user_not_found} ->
                    case create_user(GlobalId, Login, Name, Teams, Emails, DnList) of
                        {ok, NewUser} ->
-                           NewUser;
+                           synchronize_spaces_info(NewUser, AccessToken);
                        {error, Error} ->
                            ?error("Sign in error: ~p", [Error]),
                            throw(Error)
@@ -174,11 +174,29 @@ get_user(Key) ->
     dao_lib:apply(dao_users, get_user, [Key], 1).
 
 
-synchronize_spaces_info(#veil_document{record = UserRec} = UserDoc, AuthorizationCode) ->
-    case global_registry:user_request(AuthorizationCode, get, "user/spaces") of
-        {ok, Spaces} ->
-            ?info("Synchronized spaces: ~p", [Spaces]),
-            UserDoc;
+synchronize_spaces_info(#veil_document{record = UserRec} = UserDoc, AccessToken) ->
+    case global_registry:user_request(AccessToken, get, "user/spaces") of
+        {ok, #{<<"spaces">> := Spaces}} ->
+            Spaces1 = [binary_to_list(SpaceL) || SpaceL <- Spaces],
+            ?info("Synchronized spaces: ~p", [Spaces1]),
+            NewSpaces =
+                case UserRec#user.spaces of
+                    [] -> Spaces1;
+                    [MainSpace | _] ->
+                        {MainSpace1, Rest} = lists:partition(fun(Elem) -> Elem =:= MainSpace end, Spaces1),
+                        MainSpace1 ++ Rest
+                end,
+
+            ?info("New spaces: ~p", [NewSpaces]),
+
+            UserDoc1 = UserDoc#veil_document{record = UserRec#user{spaces = NewSpaces}},
+            case dao_lib:apply(dao_users, save_user, [UserDoc1], 1) of
+                {ok, _} ->
+                    UserDoc1;
+                {error, Reason} ->
+                    ?error("Cannot save user (wile syncing spaces) due to: ~p", [Reason]),
+                    UserDoc
+            end;
         {error, Reason} ->
             ?error("Cannot synchronize user's (~p) spaces due to: ~p", [UserDoc#veil_document.uuid, Reason]),
             UserDoc

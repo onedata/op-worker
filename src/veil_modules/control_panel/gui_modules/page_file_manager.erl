@@ -211,8 +211,12 @@ event(init) ->
             skip;
         true ->
             UserID = vcn_gui_utils:get_user_dn(),
+            {UserGID, AccessToken} = gui_ctx:get_access_token(),
+
+            ?info("FM set_access_token: ~p ~p", [{UserGID, AccessToken}, gui_ctx:get_access_token()]),
+
             Hostname = gui_ctx:get_requested_hostname(),
-            {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init(UserID, Hostname) end),
+            {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init(UserID, UserGID, AccessToken, Hostname) end),
             put(comet_pid, Pid)
     end;
 
@@ -242,9 +246,11 @@ event({action, Fun, Args}) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Comet loop and functions evaluated by comet
-comet_loop_init(UserId, RequestedHostname) ->
+comet_loop_init(UserId, UserGID, UserAccessToken, RequestedHostname) ->
     % Initialize page state
     fslogic_context:set_user_dn(UserId),
+    fslogic_context:set_access_token(UserGID, UserAccessToken),
+
     set_requested_hostname(RequestedHostname),
     set_working_directory(<<"/">>),
     set_selected_items([]),

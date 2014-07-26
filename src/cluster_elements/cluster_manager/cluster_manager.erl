@@ -465,7 +465,7 @@ handle_cast({worker_answer, cluster_state, Response}, State) ->
                {ok, SavedState} ->
                  ?debug("State read from DB: ~p", [SavedState]),
                  merge_state(State, SavedState);
-               {error, {not_found, missing}} ->
+               {error, {not_found, _}} ->
                  save_state(),
                  State#cm_state{state_loaded = true};
                Error ->

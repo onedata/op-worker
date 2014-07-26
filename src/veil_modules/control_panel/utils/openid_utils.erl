@@ -50,13 +50,16 @@ validate_login() ->
             "{\"code\":\"" ++ binary_to_list(AuthorizationCode) ++ "\", \"grant_type\":\"authorization_code\"}", Opts) of
                    {ok, "200", _, RespBody} ->
                        RespBody;
-                   _ ->
+                   Error ->
+                       ?error("Cannot authorize user login due to: ~p", [Error]),
                        throw(token_invalid)
                end,
 
         {struct, JSONProplist} = mochijson2:decode(Body),
         IDToken = proplists:get_value(<<"id_token">>, JSONProplist),
         [_Header, Payload, _Signature] = binary:split(IDToken, <<".">>, [global]),
+        AccessToken = proplists:get_value(<<"access_token">>, JSONProplist),
+
         {struct, Proplist} = mochijson2:decode(base64decode(Payload)),
 
         GlobalID = gui_str:binary_to_unicode_list(proplists:get_value(<<"sub">>, Proplist)),
@@ -74,9 +77,13 @@ validate_login() ->
             {dn_list, []}
         ],
         try
-            {Login, UserDoc} = user_logic:sign_in(LoginProplist, AuthorizationCode),
+            {Login, UserDoc} = user_logic:sign_in(LoginProplist, AccessToken),
             gui_ctx:create_session(),
             gui_ctx:set_user_id(Login),
+            gui_ctx:set_access_token(GlobalID, AccessToken),
+
+            ?info("GUI set_access_token: ~p ~p", [{GlobalID, AccessToken}, gui_ctx:get_access_token()]),
+
             vcn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),
             vcn_gui_utils:set_user_role(user_logic:get_role(UserDoc)),
             ?debug("User ~p logged in", [Login]),

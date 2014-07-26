@@ -19,10 +19,18 @@
 %% API
 -export([get_fuse_id/0, set_fuse_id/1, get_user_dn/0, set_user_dn/1, clear_user_dn/0, set_protocol_version/1, get_protocol_version/0, get_user_id/0]).
 -export([set_fs_user_ctx/1, get_fs_user_ctx/0, set_fs_group_ctx/1, get_fs_group_ctx/0]).
+-export([get_access_token/0, set_access_token/2]).
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
+
+
+get_access_token() ->
+    get(access_token).
+
+set_access_token(UserGlobalId, AccessToken) ->
+    put(access_token, {UserGlobalId, AccessToken}).
 
 %% get_user_dn/0
 %% ====================================================================
