@@ -17,7 +17,7 @@
 
 %% API
 -export([create_children_list/1, create_children_list/2, get_user_id_from_system/1]).
--export([get_sh_and_id/3, get_files_number/3]).
+-export([get_sh_and_id/3, get_sh_and_id/4, get_sh_and_id/5, get_files_number/3]).
 -export([get_space_info_for_path/1, get_user_groups/2]).
 -export([random_ascii_lowercase_sequence/1]).
 
@@ -37,8 +37,10 @@
     NewFileId :: string().
 %% ====================================================================
 get_sh_and_id(FuseID, Storage, File_id) ->
-    get_sh_and_id(FuseID, Storage, File_id, false, <<>>).
-get_sh_and_id(FuseID, Storage, File_id, ForceClusterProxy, SpaceId) ->
+    get_sh_and_id(FuseID, Storage, File_id, <<>>).
+get_sh_and_id(FuseID, Storage, File_id, SpaceId) ->
+    get_sh_and_id(FuseID, Storage, File_id, SpaceId, false).
+get_sh_and_id(FuseID, Storage, File_id, SpaceId, ForceClusterProxy) ->
     SHI =
         case ForceClusterProxy orelse fslogic_context:is_global_fuse_id(FuseID) of
             true ->
