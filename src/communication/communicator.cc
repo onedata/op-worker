@@ -161,6 +161,9 @@ Communicator::describe(const google::protobuf::Descriptor &desc) const
     boost::algorithm::to_lower(*nameIt);
     boost::algorithm::to_lower(*decoderIt);
 
+    DLOG(INFO) << "Describing '" << desc.full_name() << "' message with " <<
+                  "type: '" << *nameIt << "', decoder: '" << *decoderIt << "'";
+
     return {std::move(*nameIt), std::move(*decoderIt)};
 }
 
@@ -203,6 +206,12 @@ std::shared_ptr<Communicator> createWebsocketCommunicator(unsigned int dataPoolS
                                                           std::shared_ptr<const CertificateData> certificateData,
                                                           const bool verifyServerCertificate)
 {
+    LOG(INFO) << "Creating a WebSocket++ based Communicator instance with " <<
+                 dataPoolSize << " data pool connections, " << metaPoolSize <<
+                 " metadata pool connections. Connecting to " << uri << "with "
+                 "certificate verification " <<
+                 (verifyServerCertificate ? "enabled" : "disabled") << ".";
+
     auto dataPool = std::make_unique<WebsocketConnectionPool>(
                 dataPoolSize, uri, certificateData, verifyServerCertificate);
 

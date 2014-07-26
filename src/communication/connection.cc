@@ -7,6 +7,8 @@
 
 #include "communication/connection.h"
 
+#include "logging.h"
+
 using namespace std::placeholders;
 
 namespace veil
@@ -20,6 +22,7 @@ Connection::Connection(std::function<void(const std::string&)> onMessageCallback
                        std::function<void(Connection&)> onErrorCallback)
     : m_onMessageCallback{std::move(onMessageCallback)}
 {
+    DLOG(INFO) << "Creating connection " << this;
     m_onFailCallback = std::bind(onFailCallback, std::ref(*this), _1);
     m_onOpenCallback = std::bind(onOpenCallback, std::ref(*this));
     m_onErrorCallback = std::bind(onErrorCallback, std::ref(*this));
@@ -27,6 +30,7 @@ Connection::Connection(std::function<void(const std::string&)> onMessageCallback
 
 Connection::~Connection()
 {
+    DLOG(INFO) << "Destroying connection " << this;
     m_onMessageCallback = [](const std::string&){};
     m_onOpenCallback = m_onErrorCallback = []{};
     m_onFailCallback = [](std::exception_ptr){};

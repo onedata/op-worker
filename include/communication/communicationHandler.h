@@ -167,7 +167,7 @@ public:
 private:
     MsgId nextId();
     void sendWithRetry(const google::protobuf::Message &message,
-                       const Pool poolType, const int retries);
+                       const Pool poolType, const unsigned int retries);
     void onMessage(const std::string &payload);
 
     const std::unique_ptr<ConnectionPool> m_dataPool;

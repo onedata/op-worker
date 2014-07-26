@@ -53,8 +53,13 @@ WebsocketConnectionPool::WebsocketConnectionPool(const unsigned int connectionsN
 
 WebsocketConnectionPool::~WebsocketConnectionPool()
 {
+    LOG(INFO) << "Destroying WebSocket++ connection pool.";
+
     m_endpoint.stop_perpetual();
     close();
+
+    LOG(INFO) << "Joining WebSocket++ endpoint worker thread.";
+
     m_ioThread.join();
 }
 
@@ -83,7 +88,7 @@ WebsocketConnectionPool::context_ptr WebsocketConnectionPool::onTLSInit()
     }
     catch(boost::system::system_error &e)
     {
-        LOG(ERROR) << "Cannot initialize TLS socket due to: " << e.what();
+        LOG(WARNING) << "Cannot initialize TLS socket due to: " << e.what();
     }
 
     return {};

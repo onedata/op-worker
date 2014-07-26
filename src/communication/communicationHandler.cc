@@ -38,6 +38,10 @@ void CommunicationHandler::reply(const Answer &originalMsg,
                                  Message &replyMsg, const Pool poolType,
                                  const unsigned int retries)
 {
+    DLOG(INFO) << "Replying to message (id: " << originalMsg.message_id() <<
+                  ")" << " with '" << replyMsg.message_type() << "' through " <<
+                  (poolType == Pool::DATA ? "data" : "metadata") << " pool";
+
     replyMsg.set_message_id(originalMsg.message_id());
     sendWithRetry(replyMsg, poolType, retries);
 }
@@ -46,6 +50,9 @@ void
 CommunicationHandler::send(Message &message, const Pool poolType,
                            const unsigned int retries)
 {
+    DLOG(INFO) << "Sending '" << message.message_type() << "' through " <<
+                  (poolType == Pool::DATA ? "data" : "metadata") << " pool";
+
     message.set_message_id(nextId());
     sendWithRetry(message, poolType, retries);
 }
@@ -54,6 +61,10 @@ std::future<std::unique_ptr<CommunicationHandler::Answer>>
 CommunicationHandler::communicate(Message &message, const Pool poolType,
                                   const unsigned int retries)
 {
+    DLOG(INFO) << "Sending '" << message.message_type() << "' through " <<
+                  (poolType == Pool::DATA ? "data" : "metadata") << " pool. " <<
+                  "Expecting '" << message.answer_type() << "'";
+
     std::lock_guard<std::mutex> guard{m_promisesMutex};
     message.set_message_id(nextId());
 
@@ -99,7 +110,8 @@ std::function<void()> CommunicationHandler::addHandshake(std::function<std::uniq
 }
 
 void CommunicationHandler::sendWithRetry(const google::protobuf::Message &message,
-                                         const Pool poolType, const int retries)
+                                         const Pool poolType,
+                                         const unsigned int retries)
 {
     const auto &pool = poolType == Pool::DATA ? m_dataPool : m_metaPool;
     try
@@ -149,6 +161,11 @@ void CommunicationHandler::onMessage(const std::string &payload)
     {
         it->second.set_value(std::move(answer));
         m_promises.erase(it);
+    }
+    else
+    {
+        LOG(INFO) << "Received an unwarranted message from the server: '" <<
+                     payload.substr(0, 40) << "' (message trimmed to 40 chars)";
     }
 }
 

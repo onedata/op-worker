@@ -67,7 +67,7 @@ void WebsocketConnection::send(const std::string &payload)
 {
     const auto connection = m_endpoint.get_con_from_hdl(m_connection);
     if(!connection)
-        throw SendError{"websocketConnection instance has no associated asio "
+        throw SendError{"websocketConnection instance has no associated ASIO "
                         "connection."};
 
     websocketpp::lib::error_code ec;
@@ -93,6 +93,8 @@ void WebsocketConnection::onClose()
     const auto conn = m_endpoint.get_con_from_hdl(m_connection);
     if(conn)
         LOG(WARNING) << "Connection closed: " << conn->get_ec().message();
+    else
+        LOG(WARNING) << "Connection has no associated ASIO connection.";
 
     m_onErrorCallback();
 }
@@ -119,6 +121,8 @@ void WebsocketConnection::onFail()
             LOG(WARNING) << "Connection failed: " << e.what();
             throw e;
         }
+        else
+            LOG(WARNING) << "Connection has no associated ASIO connection.";
     }
     catch(Exception&)
     {
@@ -144,6 +148,12 @@ void WebsocketConnection::onPongTimeout(std::string)
 
 void WebsocketConnection::onInterrupt()
 {
+    const auto conn = m_endpoint.get_con_from_hdl(m_connection);
+    if(conn)
+        LOG(WARNING) << "Connection interrupted: " << conn->get_ec().message();
+    else
+        LOG(WARNING) << "Connection has no associated ASIO connection.";
+
     m_onErrorCallback();
 }
 

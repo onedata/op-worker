@@ -60,7 +60,7 @@ protected:
      * @return The keyFormat value given in constructor, translated to
      * @c boost::asio::ssl::context_base::file_format type.
      */
-    boost::asio::ssl::context_base::file_format keyFormat() const noexcept;
+    boost::asio::ssl::context_base::file_format keyFormat() const;
 
 private:
     const KeyFormat m_keyFormat;

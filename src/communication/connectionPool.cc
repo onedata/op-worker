@@ -48,6 +48,9 @@ void ConnectionPool::close()
 {
     std::unique_lock<std::mutex> lock{m_connectionsMutex};
 
+    DLOG(INFO) << "Sending "  << m_goodbyes.size() << " goodbye messages " <<
+                  "through " << m_openConnections.size() << " connections.";
+
     for(const auto &connection: m_openConnections)
         for(const auto &goodbye: m_goodbyes)
             sendHandshakeMessage(*connection, goodbye());
@@ -89,6 +92,8 @@ void ConnectionPool::setOnMessageCallback(std::function<void(const std::string&)
 
 void ConnectionPool::onFail(Connection &connection, std::exception_ptr exception)
 {
+    DLOG(WARNING) << "onFail called for connection " << &connection;
+
     namespace p = std::placeholders;
     std::lock_guard<std::mutex> guard{m_connectionsMutex};
     m_futureConnections.remove_if(std::bind(eq, p::_1, std::cref(connection)));
@@ -104,6 +109,8 @@ void ConnectionPool::onFail(Connection &connection, std::exception_ptr exception
 
 void ConnectionPool::onOpen(Connection &connection)
 {
+    DLOG(WARNING) << "onOpen called for connection " << &connection;
+
     namespace p = std::placeholders;
     std::lock_guard<std::mutex> guard{m_connectionsMutex};
 
@@ -122,6 +129,8 @@ void ConnectionPool::onOpen(Connection &connection)
 
 void ConnectionPool::onError(Connection &connection)
 {
+    DLOG(WARNING) << "onError called for connection " << &connection;
+
     namespace p = std::placeholders;
     std::lock_guard<std::mutex> guard{m_connectionsMutex};
     m_openConnections.remove_if(std::bind(eq, p::_1, std::cref(connection)));

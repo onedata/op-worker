@@ -7,7 +7,7 @@
 
 #include "communication/certificateData.h"
 
-#include <cassert>
+#include <exception>
 
 namespace veil
 {
@@ -19,7 +19,7 @@ CertificateData::CertificateData(KeyFormat keyFormat)
 {
 }
 
-boost::asio::ssl::context_base::file_format CertificateData::keyFormat() const noexcept
+boost::asio::ssl::context_base::file_format CertificateData::keyFormat() const
 {
     switch(m_keyFormat)
     {
@@ -29,7 +29,7 @@ boost::asio::ssl::context_base::file_format CertificateData::keyFormat() const n
             return boost::asio::ssl::context_base::file_format::pem;
     }
 
-    assert(false);
+    throw std::logic_error{"invalid keyformat instance"};
 }
 
 FilesystemCertificate::FilesystemCertificate(std::string certPath,
