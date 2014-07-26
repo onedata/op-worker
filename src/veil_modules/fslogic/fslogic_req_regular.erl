@@ -41,7 +41,7 @@ get_file_location(FileDoc = #veil_document{record = #file{}}, ?UNSPECIFIED_MODE)
 %% ====================================================================
 %% @doc Gets file location (implicit file open operation). Allows to force-select ClusterProxy helper.
 %% @end
--spec get_file_location(File :: string() | file_doc(), OpenMode :: string()) ->
+-spec get_file_location(File :: string() | file_doc(), OpenMode :: string(), ForceClusterProxy :: boolean()) ->
     #filelocation{} | no_return().
 %% ====================================================================
 get_file_location(FullFileName, OpenMode, ForceClusterProxy) when is_list(FullFileName) ->
