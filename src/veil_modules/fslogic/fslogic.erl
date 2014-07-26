@@ -403,8 +403,5 @@ extract_logical_path(#changefileperms{file_logic_name = Path}) ->
     Path;
 extract_logical_path(#updatetimes{file_logic_name = Path}) ->
     Path;
-extract_logical_path(#testchannel{}) ->
-    "/";
-extract_logical_path(Record) ->
-    ?error("Unsupported record: ~p", [element(1, Record)]),
-    throw({unsupported_record, element(1, Record)}).
+extract_logical_path(_) ->
+    "/".

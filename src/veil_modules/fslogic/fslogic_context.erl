@@ -20,6 +20,7 @@
 -export([get_fuse_id/0, set_fuse_id/1, get_user_dn/0, set_user_dn/1, clear_user_dn/0, set_protocol_version/1, get_protocol_version/0, get_user_id/0]).
 -export([set_fs_user_ctx/1, get_fs_user_ctx/0, set_fs_group_ctx/1, get_fs_group_ctx/0]).
 -export([get_access_token/0, set_access_token/2]).
+-export([gen_global_fuse_id/2, read_global_fuse_id/1, is_global_fuse_id/1]).
 
 %% ====================================================================
 %% API functions
@@ -168,6 +169,20 @@ get_fs_group_ctx() ->
             [-1];
         GroupID -> GroupID
     end.
+
+gen_global_fuse_id(ProviderId, FuseId) ->
+    ProviderId1 = vcn_utils:ensure_binary(ProviderId),
+    FuseId1 = vcn_utils:ensure_binary(FuseId),
+    <<ProviderId1/binary, "::", FuseId1/binary>>.
+
+read_global_fuse_id(GlobalFuseId) ->
+    GlobalFuseId1 = vcn_utils:ensure_binary(GlobalFuseId),
+    [ProviderId, FuseId] = binary:split(GlobalFuseId1, <<"::">>),
+    {ProviderId, FuseId}.
+
+is_global_fuse_id(GlobalFuseId) ->
+    GlobalFuseId1 = vcn_utils:ensure_binary(GlobalFuseId),
+    length(binary:split(GlobalFuseId1, <<"::">>)) =:= 2.
 
 %% ====================================================================
 %% Internal functions

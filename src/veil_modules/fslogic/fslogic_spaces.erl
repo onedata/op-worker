@@ -52,7 +52,7 @@ map_to_grp_owner([]) ->
 map_to_grp_owner([SpaceInfo | T]) ->
     [map_to_grp_owner(SpaceInfo)] ++ map_to_grp_owner(T);
 map_to_grp_owner(#space_info{name = SpaceName, uuid = SpaceId}) ->
-    case os:cmd("getent group " ++ SpaceName ++ " | cut -d: -f3") -- [10, 13] of
+    case os:cmd("getent group \"" ++ SpaceName ++ "\" | cut -d: -f3") -- [10, 13] of
         "" ->
             <<GID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, SpaceId),
             70000 + GID0 rem 1000000;
