@@ -79,13 +79,12 @@ init() ->
 
 get_provider_id(#'OTPCertificate'{} = Cert) ->
     #'OTPCertificate'{tbsCertificate =
-    #'TBSCertificate'{subject = {rdnSequence, Attrs}}} = Cert,
+    #'OTPTBSCertificate'{subject = {rdnSequence, Attrs}}} = Cert,
 
     [ProviderId] = lists:filtermap(fun([Attribute]) ->
         case Attribute#'AttributeTypeAndValue'.type of
             ?'id-at-commonName' ->
-                Value = Attribute#'AttributeTypeAndValue'.value,
-                {_, Id} = public_key:der_decode('X520CommonName', Value),
+                {_, Id} = Attribute#'AttributeTypeAndValue'.value,
                 {true, vcn_utils:ensure_binary(Id)};
             _ -> false
         end
@@ -96,13 +95,12 @@ get_provider_id(#'OTPCertificate'{} = Cert) ->
 
 is_provider(#'OTPCertificate'{} = Cert) ->
     #'OTPCertificate'{tbsCertificate =
-    #'TBSCertificate'{subject = {rdnSequence, Attrs}}} = Cert,
+    #'OTPTBSCertificate'{subject = {rdnSequence, Attrs}}} = Cert,
 
     [OU] = lists:filtermap(fun([Attribute]) ->
         case Attribute#'AttributeTypeAndValue'.type of
             ?'id-at-organizationalUnitName' ->
-                Value = Attribute#'AttributeTypeAndValue'.value,
-                {_, Id} = public_key:der_decode('X520OrganizationalUnitName', Value),
+                {_, Id} = Attribute#'AttributeTypeAndValue'.value,
                 {true, vcn_utils:ensure_binary(Id)};
             _ -> false
         end
