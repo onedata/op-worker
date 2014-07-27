@@ -44,7 +44,7 @@ protocol_buffers_test() ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 22, input = PingBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
 
-  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type} = ws_handler:decode_protocol_buffer(MessageBytes, standard_user),
+  {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type} = ws_handler:decode_clustermsg_pb(MessageBytes, standard_user),
   ?assert(Synch),
   ?assert(Msg =:= ping),
   ?assert(Task =:= module),
@@ -70,7 +70,7 @@ protocol_buffers_wrong_request_test() ->
   PongBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_atom(Pong)),
 
   Ans = try
-    ws_handler:decode_protocol_buffer(some_atom, standard_user),
+    ws_handler:decode_clustermsg_pb(some_atom, standard_user),
     ok
   catch
     wrong_message_format -> wrong_message_format;
@@ -83,7 +83,7 @@ protocol_buffers_wrong_request_test() ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 33, input = PingBytes},
   MessageBytes = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message)),
   Ans2 = try
-    ws_handler:decode_protocol_buffer(MessageBytes, standard_user),
+    ws_handler:decode_clustermsg_pb(MessageBytes, standard_user),
     ok
   catch
     {wrong_internal_message_type, 33} -> wrong_internal_message_type;
@@ -96,7 +96,7 @@ protocol_buffers_wrong_request_test() ->
   answer_decoder_name = "communication_protocol", synch = true, protocol_version = 1, message_id = 44, input = PongBytes},
   MessageBytes2 = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(Message2)),
   Ans3 = try
-    ws_handler:decode_protocol_buffer(MessageBytes2, standard_user),
+    ws_handler:decode_clustermsg_pb(MessageBytes2, standard_user),
     ok
          catch
            {message_not_supported, 44} -> message_not_supported;

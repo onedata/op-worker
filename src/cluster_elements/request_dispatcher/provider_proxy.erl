@@ -45,7 +45,10 @@ reroute_pull_message({ProviderId, [URL | _]}, AccessToken, FuseId, Message) ->
 
     CLMBin = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(ClusterMessage)),
 
-    AnswerBin = communicate_bin({ProviderId, URL}, CLMBin),
+    ProviderMsg = #providermsg{message_type = "clustermsg", input = CLMBin, fuse_id = vcn_utils:ensure_binary(FuseId)},
+    PRMBin = erlang:iolist_to_binary(communication_protocol_pb:encode_providermsg(ProviderMsg)),
+
+    AnswerBin = communicate_bin({ProviderId, URL}, PRMBin),
     #answer{answer_status = AnswerStatus, worker_answer = WorkerAnswer} = communication_protocol_pb:decode_answer(AnswerBin),
     ?info("Answer0: ~p ~p", [AnswerStatus, WorkerAnswer]),
     case AnswerStatus of
