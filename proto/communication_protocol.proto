@@ -10,6 +10,7 @@ message ClusterMsg {
     required int32 protocol_version = 7;
     optional int32 message_id = 8 [default = 0];
     optional bytes input = 9;
+    optional bytes access_token = 10;
 }
 
 message Answer {
