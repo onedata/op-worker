@@ -32,7 +32,7 @@ get_provider_id(#'Certificate'{} = Cert) ->
             ?'id-at-commonName' ->
                 Value = Attribute#'AttributeTypeAndValue'.value,
                 {_, Id} = public_key:der_decode('X520CommonName', Value),
-                {true, binary:list_to_bin(Id)};
+                {true, vcn_utils:ensure_binary(Id)};
             _ -> false
         end
     end, Attrs),

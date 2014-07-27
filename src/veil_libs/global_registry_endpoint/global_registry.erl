@@ -11,7 +11,7 @@
 
 %% API
 -export([provider_request/2, provider_request/3, user_request/3, user_request/4]).
--export([get_provider_cert_path/0]).
+-export([get_provider_cert_path/0, get_provider_key_path/0]).
 
 provider_request(Method, URI) ->
     request(Method, URI, <<"">>, []).

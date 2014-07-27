@@ -19,6 +19,7 @@
 -include("fuse_messages_pb.hrl").
 -include("communication_protocol_pb.hrl").
 -include("registered_names.hrl").
+-include("cluster_elements/request_dispatcher/gsi_handler.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% ====================================================================
@@ -190,7 +191,7 @@ maybe_handle_fuse_message(RequestBody) ->
             {ok, #{<<"urls">> := URLs}} = registry_providers:get_provider_info(RerouteToProvider),
             ?info("Reroute to: ~p", [URLs]),
             provider_proxy:communicate({RerouteToProvider, URLs}, fslogic_context:get_access_token(), fslogic_context:get_fuse_id(),
-                #fusemessage{input = RequestBody, message_type = atom_to_list(element(1, RequestBody))})
+                get(orig_msg))
     end.
 
 %% handle_test/2

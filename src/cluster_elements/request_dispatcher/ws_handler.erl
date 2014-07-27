@@ -126,7 +126,7 @@ websocket_handle({Type, Data}, Req, State) ->
 %% Internal websocket_handle method implementation
 %% Handle Handshake request - FUSE ID negotiation
 handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
-    #handshakerequest{hostname = Hostname, variable = Vars, cert_confirmation = CertConfirmation} = HReq, MsgId, Answer_type},
+    #handshakerequest{hostname = Hostname, variable = Vars, cert_confirmation = CertConfirmation} = HReq, MsgId, Answer_type, MsgBytes},
     #hander_state{peer_dn = DnString} = State) ->
     ?debug("Handshake request: ~p", [HReq]),
     NewFuseId = genFuseId(HReq),
@@ -177,7 +177,7 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
     {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #handshakeresponse{fuse_id = NewFuseId})}, Req, NewState};
 
 %% Handle HandshakeACK message - set FUSE ID used in this session, register connection
-handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type}, #hander_state{peer_dn = DnString} = State) ->
+handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type, MsgBytes}, #hander_state{peer_dn = DnString} = State) ->
     UID = %% Fetch user's ID
     case dao_lib:apply(dao_users, get_user, [{dn, DnString}], ProtocolVersion) of
         {ok, #veil_document{uuid = UID1}} ->
@@ -215,7 +215,7 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
     end;
 
 %% Handle other messages
-handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type}, #hander_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID} = State) ->
+handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, MsgBytes} = CLM, #hander_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID} = State) ->
     %% Check if received message requires FuseId
     MsgType = case Msg of
                   M0 when is_tuple(M0) -> erlang:element(1, M0); %% Record
@@ -232,7 +232,7 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                       #veil_request{subject = DnString, request = #callback{fuse = FuseID, pid = self(), node = node(), action = channelregistration}};
                   CallbackMsg2 when is_record(CallbackMsg2, channelclose) ->
                       #veil_request{subject = DnString, request = #callback{fuse = FuseID, pid = self(), node = node(), action = channelclose}};
-                  _ -> #veil_request{subject = DnString, request = Msg, fuse_id = FuseID}
+                  _ -> #veil_request{subject = DnString, request = Msg, fuse_id = FuseID, original_message = CLM}
               end,
 
     case Synch of
@@ -243,6 +243,8 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                 case Ans of
                     ok ->
                         receive
+                            {worker_answer, MsgId, #message_reroute{} = RerouteInfo} ->
+                                provider_proxy:communicate(RerouteInfo, CLM);
                             {worker_answer, MsgId, Ans2} ->
                                 {reply, {binary, encode_answer(Ans, MsgId, Answer_type, Answer_decoder_name, Ans2)}, Req, State}
                         after DispatcherTimeout ->
@@ -371,7 +373,7 @@ decode_protocol_buffer(MsgBytes, DN) ->
 
     TranslatedMsg = records_translator:translate(Msg, Message_decoder_name),
     case checkMessage(TranslatedMsg, DN) of
-        true -> {Synch, list_to_atom(ModuleName), Answer_decoder_name, Prot_version, TranslatedMsg, MsgId, Answer_type};
+        true -> {Synch, list_to_atom(ModuleName), Answer_decoder_name, Prot_version, TranslatedMsg, MsgId, Answer_type, Bytes};
         false -> throw({message_not_supported, MsgId})
     end.
 

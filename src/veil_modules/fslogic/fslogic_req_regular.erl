@@ -56,6 +56,7 @@ get_file_location(FullFileName, OpenMode, ForceClusterProxy) when is_list(FullFi
     #filelocation{} | no_return().
 %% ====================================================================
 get_file_location(FileDoc, FullFileName, OpenMode, ForceClusterProxy) ->
+    ?error("get_file_location(~p, ~p, ~p, ~p)", [FileDoc, FullFileName, OpenMode, ForceClusterProxy]),
     Validity = ?LOCATION_VALIDITY,
     case FileDoc#veil_document.record#file.type of
         ?REG_TYPE -> ok;
