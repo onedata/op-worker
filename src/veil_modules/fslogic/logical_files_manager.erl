@@ -592,7 +592,7 @@ contact_fslogic(Message, Value) ->
                   case UserID of
                     undefined -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {internal_call, Value}});
                     _ ->
-                      gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, #veil_request{subject = UserID, request = {internal_call, Value}}})
+                      gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, #veil_request{access_token = fslogic_context:get_access_token(), subject = UserID, request = {internal_call, Value}}})
                   end;
                 _ -> gen_server:call(?Dispatcher_Name, {fslogic, 1, self(), MsgId, {Message, Value}})
               end,

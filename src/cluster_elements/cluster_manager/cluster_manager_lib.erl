@@ -10,6 +10,7 @@
 -author("RoXeon").
 
 -include_lib("public_key/include/public_key.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([get_provider_id/0]).
@@ -18,24 +19,7 @@
 get_provider_id() ->
     {ok, Bin} = file:read_file(global_registry:get_provider_cert_path()),
     [{_, PeerCertDer, _} | _] = public_key:pem_decode(Bin),
-    PeerCert = public_key:pkix_decode_cert(PeerCertDer, plain),
+    PeerCert = public_key:pkix_decode_cert(PeerCertDer, otp),
 
-    get_provider_id(PeerCert).
-
-
-get_provider_id(#'Certificate'{} = Cert) ->
-    #'Certificate'{tbsCertificate =
-    #'TBSCertificate'{subject = {rdnSequence, Attrs}}} = Cert,
-
-    [ProviderId] = lists:filtermap(fun([Attribute]) ->
-        case Attribute#'AttributeTypeAndValue'.type of
-            ?'id-at-commonName' ->
-                Value = Attribute#'AttributeTypeAndValue'.value,
-                {_, Id} = public_key:der_decode('X520CommonName', Value),
-                {true, vcn_utils:ensure_binary(Id)};
-            _ -> false
-        end
-    end, Attrs),
-
-    ProviderId.
+    gsi_handler:get_provider_id(PeerCert).
 

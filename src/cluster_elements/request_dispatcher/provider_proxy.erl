@@ -15,13 +15,22 @@
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([communicate/4]).
+-export([communicate/3]).
 
-communicate({ProviderId, [URL | _]}, AccessToken, FuseId, {Synch, Task, AnswerDecoderName, ProtocolVersion, Msg, MsgId, AnswerType, MsgBytes}) ->
-    ClusterMessage =
-        #clustermsg{synch = Synch, protocol_version = ProtocolVersion, module_name = Task, message_id = 0,
-                    answer_decoder_name = AnswerDecoderName, answer_type = AnswerType, input = MsgBytes, access_token = AccessToken,
-                    message_decoder_name = get_message_decoder(Msg), message_type = get_message_type(Msg)},
+-export([
+    init/2,
+    websocket_handle/3,
+    websocket_info/3,
+    websocket_terminate/3,
+    connect/3, send/2, recv/2, close/1,
+    handshakeInit/3, handshakeAck/2
+]).
+
+communicate({ProviderId, [URL | _]}, AccessToken, FuseId) ->
+    ClusterMessage = none,
+%%         #clustermsg{synch = Synch, protocol_version = ProtocolVersion, module_name = Task, message_id = 0,
+%%                     answer_decoder_name = AnswerDecoderName, answer_type = AnswerType, input = MsgBytes, access_token = AccessToken,
+%%                     message_decoder_name = get_message_decoder(Msg), message_type = get_message_type(Msg)},
     CLMBin = communication_protocol_pb:encode_clustermessage(ClusterMessage),
 
     communicate_bin({ProviderId, URL}, CLMBin).
@@ -57,14 +66,6 @@ get_message_decoder(Msg) ->
     ?error("Cannot get decoder for message of unknown type: ~p", [get_message_type(Msg)]),
     throw(unknown_decoder).
 
--export([
-    init/2,
-    websocket_handle/3,
-    websocket_info/3,
-    websocket_terminate/3,
-    connect/3, send/2, recv/2, close/1,
-    handshakeInit/3, handshakeAck/2
-]).
 
 %% ====================================================================
 %% Behaviour callback functions

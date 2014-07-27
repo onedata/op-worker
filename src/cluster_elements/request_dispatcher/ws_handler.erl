@@ -26,7 +26,7 @@
 -include_lib("public_key/include/public_key.hrl").
 
 %% Holds state of websocket connection. peer_dn field contains DN of certificate of connected peer.
--record(hander_state, {peer_dn, peer_serial, dispatcher_timeout, fuse_id = "", connection_id = ""}).
+-record(hander_state, {peer_dn, peer_serial, dispatcher_timeout, fuse_id = "", connection_id = "", peer_type = user, provider_id = <<>>, access_token = <<>>}).
 
 %% ====================================================================
 %% API
@@ -75,11 +75,8 @@ websocket_init(TransportName, Req, _Opts) ->
                     [DER || [DER] <- ets:match(gsi_state, {{ca, '_'}, '$1', '_'})],         %% cluster CA store
                     [DER || [DER] <- ets:match(gsi_state, {{crl, '_'}, '$1', '_'})]]) of    %% cluster CRL store
                 {ok, 1} ->
-                    {ok, EEC} = gsi_handler:find_eec_cert(OtpCert, Certs, gsi_handler:is_proxy_certificate(OtpCert)),
-                    ?debug("Peer connected using certificate with subject: ~p ~n", [gsi_handler:proxy_subject(EEC)]),
-                    {rdnSequence, Rdn} = gsi_handler:proxy_subject(EEC),
-                    {ok, DnString} = user_logic:rdn_sequence_to_dn_string(Rdn),
-                    {ok, Req, #hander_state{peer_dn = DnString, peer_serial = Serial, dispatcher_timeout = DispatcherTimeout}};
+                    InitCtx = #hander_state{peer_serial = Serial, dispatcher_timeout = DispatcherTimeout},
+                    {ok, Req, setup_connection(InitCtx, OtpCert, Certs, gsi_handler:is_provider(OtpCert))};
                 {ok, 0, Errno} ->
                     ?info("Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
                     {shutdown, Req};
@@ -94,6 +91,17 @@ websocket_init(TransportName, Req, _Opts) ->
             ?error("Peer was conected but cerificate chain was not found. Please check if GSI validation is enabled."),
             {shutdown, Req}
     end.
+
+setup_connection(InitCtx, OtpCert, Certs, false) ->
+    {ok, EEC} = gsi_handler:find_eec_cert(OtpCert, Certs, gsi_handler:is_proxy_certificate(OtpCert)),
+    ?debug("Peer connected using certificate with subject: ~p ~n", [gsi_handler:proxy_subject(EEC)]),
+    {rdnSequence, Rdn} = gsi_handler:proxy_subject(EEC),
+    {ok, DnString} = user_logic:rdn_sequence_to_dn_string(Rdn),
+    InitCtx#hander_state{peer_dn = DnString, peer_type = user};
+setup_connection(InitCtx, OtpCert, _Certs, true) ->
+    ProviderId = get_provider_id(OtpCert),
+    ?info("Provider ~p connected.", [ProviderId]),
+    InitCtx#hander_state{provider_id = ProviderId, peer_type = provider}.
 
 %% websocket_handle/3
 %% ====================================================================
@@ -126,7 +134,12 @@ websocket_handle({Type, Data}, Req, State) ->
 %% Internal websocket_handle method implementation
 %% Handle Handshake request - FUSE ID negotiation
 handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
-    #handshakerequest{hostname = Hostname, variable = Vars, cert_confirmation = CertConfirmation} = HReq, MsgId, Answer_type, MsgBytes},
+    #handshakerequest{hostname = Hostname, variable = Vars} = HReq, MsgId, Answer_type, AccessToken},
+    #hander_state{peer_type = provider, provider_id = ProviderId} = State) ->
+    NewState = State,
+    {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #handshakeresponse{fuse_id = binary_to_list( ProviderId )})}, Req, NewState};
+handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
+    #handshakerequest{hostname = Hostname, variable = Vars, cert_confirmation = CertConfirmation} = HReq, MsgId, Answer_type, AccessToken},
     #hander_state{peer_dn = DnString} = State) ->
     ?debug("Handshake request: ~p", [HReq]),
     NewFuseId = genFuseId(HReq),
@@ -177,7 +190,9 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
     {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #handshakeresponse{fuse_id = NewFuseId})}, Req, NewState};
 
 %% Handle HandshakeACK message - set FUSE ID used in this session, register connection
-handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type, MsgBytes}, #hander_state{peer_dn = DnString} = State) ->
+handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = _NewFuseId}, MsgId, Answer_type, AccessToken}, #hander_state{peer_type = provider, provider_id = ProviderId} = State) ->
+    {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req, State#hander_state{fuse_id = binary_to_list(ProviderId)}};
+handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type, AccessToken}, #hander_state{peer_dn = DnString} = State) ->
     UID = %% Fetch user's ID
     case dao_lib:apply(dao_users, get_user, [{dn, DnString}], ProtocolVersion) of
         {ok, #veil_document{uuid = UID1}} ->
@@ -215,7 +230,7 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
     end;
 
 %% Handle other messages
-handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, MsgBytes} = CLM, #hander_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID} = State) ->
+handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, AccessToken} = CLM, #hander_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID} = State) ->
     %% Check if received message requires FuseId
     MsgType = case Msg of
                   M0 when is_tuple(M0) -> erlang:element(1, M0); %% Record
@@ -232,7 +247,7 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
                       #veil_request{subject = DnString, request = #callback{fuse = FuseID, pid = self(), node = node(), action = channelregistration}};
                   CallbackMsg2 when is_record(CallbackMsg2, channelclose) ->
                       #veil_request{subject = DnString, request = #callback{fuse = FuseID, pid = self(), node = node(), action = channelclose}};
-                  _ -> #veil_request{subject = DnString, request = Msg, fuse_id = FuseID, original_message = CLM}
+                  _ -> #veil_request{subject = DnString, request = Msg, fuse_id = FuseID, access_token = {<<>>, AccessToken}}
               end,
 
     case Synch of
@@ -363,7 +378,7 @@ decode_protocol_buffer(MsgBytes, DN) ->
                    end,
 
     #clustermsg{module_name = ModuleName, message_type = Message_type, message_decoder_name = Message_decoder_name, answer_type = Answer_type,
-        answer_decoder_name = Answer_decoder_name, synch = Synch, protocol_version = Prot_version, message_id = MsgId, input = Bytes} = DecodedBytes,
+        answer_decoder_name = Answer_decoder_name, synch = Synch, protocol_version = Prot_version, message_id = MsgId, input = Bytes, access_token = AccessToken} = DecodedBytes,
 
     Msg = try
         erlang:apply(list_to_atom(Message_decoder_name ++ "_pb"), list_to_atom("decode_" ++ Message_type), [Bytes])
@@ -373,7 +388,7 @@ decode_protocol_buffer(MsgBytes, DN) ->
 
     TranslatedMsg = records_translator:translate(Msg, Message_decoder_name),
     case checkMessage(TranslatedMsg, DN) of
-        true -> {Synch, list_to_atom(ModuleName), Answer_decoder_name, Prot_version, TranslatedMsg, MsgId, Answer_type, Bytes};
+        true -> {Synch, list_to_atom(ModuleName), Answer_decoder_name, Prot_version, TranslatedMsg, MsgId, Answer_type, AccessToken};
         false -> throw({message_not_supported, MsgId})
     end.
 

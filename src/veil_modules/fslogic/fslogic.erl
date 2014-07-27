@@ -181,7 +181,7 @@ maybe_handle_fuse_message(RequestBody) ->
 %%                 registry_spaces:get_space_providers(SpaceId)
 %%         end,
 
-    ?info("Space for request: ~p, providers: ~p (current ~p)", [SpaceName, Providers, Self]),
+    ?info("Space for request: ~p, providers: ~p (current ~p). AccessToken: ~p", [SpaceName, Providers, Self, fslogic_context:get_access_token()]),
 
     case lists:member(Self, Providers) of
         true ->
@@ -190,8 +190,7 @@ maybe_handle_fuse_message(RequestBody) ->
             [RerouteToProvider | _] = Providers,
             {ok, #{<<"urls">> := URLs}} = registry_providers:get_provider_info(RerouteToProvider),
             ?info("Reroute to: ~p", [URLs]),
-            provider_proxy:communicate({RerouteToProvider, URLs}, fslogic_context:get_access_token(), fslogic_context:get_fuse_id(),
-                get(orig_msg))
+            provider_proxy:communicate({RerouteToProvider, URLs}, fslogic_context:get_access_token(), fslogic_context:get_fuse_id())
     end.
 
 %% handle_test/2
