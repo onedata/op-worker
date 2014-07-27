@@ -21,6 +21,12 @@ message Answer {
     optional string error_description = 5;
 }
 
+message ProviderMsg {
+    required string message_type = 1;
+    required bytes input = 2;
+    optional bytes fuse_id = 1; 
+}
+
 message Atom {
     required string value = 1;
 }
