@@ -17,8 +17,11 @@
 %% API
 -export([communicate/4]).
 
-communicate({ProviderId, [URL | _]}, AccessToken, FuseId, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, MsgBytes}) ->
-    ClusterMessage = prepare_message(Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, MsgBytes),
+communicate({ProviderId, [URL | _]}, AccessToken, FuseId, {Synch, Task, AnswerDecoderName, ProtocolVersion, Msg, MsgId, AnswerType, MsgBytes}) ->
+    ClusterMessage =
+        #clustermsg{synch = Synch, protocol_version = ProtocolVersion, module_name = Task, message_id = 0,
+                    answer_decoder_name = AnswerDecoderName, answer_type = AnswerType, input = MsgBytes, access_token = AccessToken,
+                    message_decoder_name = get_message_decoder(Msg), message_type = get_message_type(Msg)},
     CLMBin = communication_protocol_pb:encode_clustermessage(ClusterMessage),
 
     communicate_bin({ProviderId, URL}, CLMBin).
