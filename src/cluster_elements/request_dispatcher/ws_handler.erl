@@ -99,7 +99,7 @@ setup_connection(InitCtx, OtpCert, Certs, false) ->
     {ok, DnString} = user_logic:rdn_sequence_to_dn_string(Rdn),
     InitCtx#hander_state{peer_dn = DnString, peer_type = user};
 setup_connection(InitCtx, OtpCert, _Certs, true) ->
-    ProviderId = get_provider_id(OtpCert),
+    ProviderId = gsi_handler:get_provider_id(OtpCert),
     ?info("Provider ~p connected.", [ProviderId]),
     InitCtx#hander_state{provider_id = ProviderId, peer_type = provider}.
 
