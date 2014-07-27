@@ -20,6 +20,7 @@
 
 -define(default_get_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]).
 -define(default_post_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]).
+-define(default_post_file_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>]).
 
 -record(state, {
     method = <<"GET">> :: binary(),
@@ -54,7 +55,7 @@ init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 %% ====================================================================
 rest_init(Req, _Opts) ->
     {ok,DnString} = rest_utils:verify_peer_cert(Req),
-    case rest_utils:prepare_context(DnString) of
+    case rest_utils:prepare_context(DnString) of %todo check all required request header/body fields
         ok ->
             {Method, _} = cowboy_req:method(Req),
             {PathInfo, _} = cowboy_req:path_info(Req),
@@ -156,7 +157,13 @@ content_types_accepted(Req, State) ->
         {<<"application/cdmi-object">>,put_file}
     ], Req, State}.
 
-put_dir(Req, #state{filepath = Filepath, body = Body} = State) ->
+%% put_dir/2
+%% ====================================================================
+%% @doc Callback function for cdmi container PUT operation (create dir)
+%% @end
+-spec put_dir(req(), #state{}) -> {term(), req(), #state{}}.
+%% ====================================================================
+put_dir(Req, #state{filepath = Filepath, body = _Body} = State) ->
     case logical_files_manager:mkdir(Filepath) of
         ok -> %todo check given body
             Response = rest_utils:encode_to_json({struct, prepare_container_ans(State,?default_post_dir_opts)}),
@@ -173,8 +180,35 @@ put_dir(Req, #state{filepath = Filepath, body = Body} = State) ->
             {halt, Req2, State}
     end.
 
-put_file(Req,State) ->
-    ok.
+%% put_file/2
+%% ====================================================================
+%% @doc Callback function for cdmi data object PUT operation (create file)
+%% @end
+-spec put_file(req(), #state{}) -> {term(), req(), #state{}}.
+%% ====================================================================
+put_file(Req,#state{filepath = Filepath, body = Body} = State) ->
+    ValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>,Body,<<"utf-8">>),  %todo check given body opts, store given mimetype
+    Value = proplists:get_value(<<"value">>,Body,<<"">>),
+    case logical_files_manager:create(Filepath) of
+        ok ->
+            RawValue = case ValueTransferEncoding of
+                <<"base64">> -> base64:decode(Value);
+                <<"utf-8">> -> Value
+            end,
+            case logical_files_manager:write(Filepath,RawValue) of
+                Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
+                    Response = rest_utils:encode_to_json({struct, prepare_object_ans(State,?default_post_file_opts)}),
+                    Req2 = cowboy_req:set_resp_body(Response, Req),
+                    {true,Req2,State};
+                _Error ->
+                    logical_files_manager:delete(Filepath),
+                    {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
+                    {halt, Req2, State}
+            end;
+        _Error -> %todo handle common errors
+            {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
+            {halt, Req2, State}
+    end.
 
 %% delete_resource/2
 %% ====================================================================
@@ -230,6 +264,34 @@ prepare_container_ans(#state{filepath = Filepath} = State,[<<"children">> | Tail
 prepare_container_ans(State,[Other | Tail]) ->
     [{Other, <<>>} | prepare_container_ans(State, Tail)].
 
+%% prepare_object_ans/2
+%% ====================================================================
+%% @doc Prepares json formatted answer with field names from given list of binaries
+%% @end
+-spec prepare_object_ans(#state{}, [FieldName :: binary()]) -> [{FieldName :: binary(), Value :: term()}].
+%% ====================================================================
+prepare_object_ans(_State,[]) ->
+    [];
+prepare_object_ans(State,[<<"objectType">> | Tail]) ->
+    [{<<"objectType">>, <<"application/cdmi-object">>} | prepare_object_ans(State, Tail)];
+prepare_object_ans(#state{filepath = Filepath} = State,[<<"objectName">> | Tail]) ->
+    [{<<"objectName">>, list_to_binary(filename:basename(Filepath))} | prepare_object_ans(State, Tail)];
+prepare_object_ans(#state{filepath = <<"/">>} = State,[<<"parentURI">> | Tail]) ->
+    [{<<"parentURI">>, <<>>} | prepare_object_ans(State, Tail)];
+prepare_object_ans(#state{filepath = Filepath} = State,[<<"parentURI">> | Tail]) ->
+    [{<<"parentURI">>, list_to_binary(fslogic_path:strip_path_leaf(Filepath))} | prepare_object_ans(State, Tail)];
+prepare_object_ans(State,[<<"completionStatus">> | Tail]) ->
+    [{<<"completionStatus">>, <<"Complete">>} | prepare_object_ans(State, Tail)];
+prepare_object_ans(#state{filepath = Filepath} = State,[<<"mimetype">> | Tail]) ->
+    {Type, Subtype, _} = cow_mimetypes:all(gui_str:to_binary(Filepath)),
+    [{<<"mimetype">>, <<Type/binary, "/", Subtype/binary>>} | prepare_object_ans(State, Tail)];
+prepare_object_ans(State,[<<"metadata">> | Tail]) -> %todo extract metadata
+    [{<<"metadata">>, <<>>} | prepare_object_ans(State, Tail)];
+prepare_object_ans(State,[<<"valuetransferencoding">> | Tail]) -> %todo extract metadata
+    [{<<"valuetransferencoding">>, <<"base64">>} | prepare_object_ans(State, Tail)];
+prepare_object_ans(State,[Other | Tail]) ->
+    [{Other, <<>>} | prepare_object_ans(State, Tail)].
+
 %% parse_opts/1
 %% ====================================================================
 %% @doc Parses given cowboy 'qs' opts (all that appears after '?' in url), splitting
@@ -254,7 +316,6 @@ parse_body(RawBody) ->
     case gui_str:binary_to_unicode_list(RawBody) of
         "" -> [];
         NonEmptyBody ->
-            ct:print("todecode: ~p",[NonEmptyBody]),
             {struct,Ans} = rest_utils:decode_from_json(gui_str:binary_to_unicode_list(NonEmptyBody)),
             Ans
     end.

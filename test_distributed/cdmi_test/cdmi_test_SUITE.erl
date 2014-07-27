@@ -15,6 +15,7 @@
 -include("registered_names.hrl").
 -include_lib("ctool/include/test/assertions.hrl").
 -include_lib("ctool/include/test/test_node_starter.hrl").
+-include("veil_modules/fslogic/fslogic.hrl").
 
 -define(SH, "DirectIO").
 -define(Test_dir_name, "dir").
@@ -24,9 +25,9 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 %% -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 
--export([list_dir_test/1,create_dir_test/1,delete_dir_test/1,delete_file_test/1]).
+-export([list_dir_test/1, create_dir_test/1, create_file_test/1, delete_dir_test/1, delete_file_test/1]).
 
-all() -> [list_dir_test,create_dir_test,delete_dir_test,delete_file_test].
+all() -> [list_dir_test,create_dir_test,create_file_test,delete_dir_test,delete_file_test].
 
 %% ====================================================================
 %% Test functions
@@ -111,8 +112,29 @@ create_dir_test(_Config) ->
 
     RequestHeaders4 = [{"content-type", "application/cdmi-container"}],
     {Code4, _Headers4, _Response4} = do_request(DirWithoutParentName, put, RequestHeaders4, []),
-     ?assertEqual("404",Code4).
+    ?assertEqual("404",Code4).
+    %%------------------------------
 
+create_file_test(_Config) ->
+    ToCreate = "file.txt",
+    FileContent = <<"File content!">>,
+
+    %%-------- basic create --------
+    ?assert(not object_exists(ToCreate)),
+
+    RequestHeaders1 = [{"content-type", "application/cdmi-object"}],
+    RequestBody1 = [{<<"value">>, FileContent}],
+    RawRequestBody1 = rest_utils:encode_to_json(RequestBody1),
+    {Code1, _Headers1, Response1} = do_request(ToCreate, put, RequestHeaders1, RawRequestBody1),
+    ?assertEqual("201",Code1),
+    {struct,CdmiPesponse1} = mochijson2:decode(Response1),
+    ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>,CdmiPesponse1)),
+    ?assertEqual(<<"file.txt">>, proplists:get_value(<<"objectName">>,CdmiPesponse1)),
+    ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>,CdmiPesponse1)),
+    ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse1)),
+
+    ?assert(object_exists(ToCreate)),
+    ?assertEqual(FileContent,get_file_content(ToCreate)).
     %%------------------------------
 
 delete_dir_test(_Config) ->
@@ -205,7 +227,7 @@ init_per_suite(Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    [CCM] = Nodes = test_node_starter:start_test_nodes(1),
+    [CCM] = Nodes = test_node_starter:start_test_nodes(1,true),
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
         [[{node_type, ccm_test},
@@ -266,6 +288,24 @@ create_file(Path) ->
         logical_files_manager:create(Path)
     end),
     ?assertEqual(ok, Ans).
+
+get_file_content(Path) ->
+    DN=get(dn),
+
+    rpc_call_node(fun() ->
+        GetFile = fun F(Filename, Size, BytesSent, BufferSize, Ans) ->
+            {ok, BytesRead} = logical_files_manager:read(Filename, BytesSent, BufferSize),
+            NewSent = BytesSent + size(BytesRead),
+            if
+                NewSent =:= Size -> <<Ans/binary,BytesRead/binary>>;
+                true -> F(Filename, Size, NewSent, BufferSize,<<Ans/binary,BytesRead/binary>>)
+            end
+        end,
+
+        fslogic_context:set_user_dn(DN),
+        {ok,Attr} = logical_files_manager:getfileattr(Path),
+        GetFile(Path,Attr#fileattributes.size,0,10,<<>>)
+    end).
 
 rpc_call_node(F) ->
     rpc:call(get(ccm), erlang, apply, [F, [] ]).
