@@ -191,6 +191,7 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
 
 %% Handle HandshakeACK message - set FUSE ID used in this session, register connection
 handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = _NewFuseId}, MsgId, Answer_type, AccessToken}, #hander_state{peer_type = provider, provider_id = ProviderId} = State) ->
+    ?info("HandshakeACK for provider: ~p", [binary_to_list(ProviderId)]),
     {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req, State#hander_state{fuse_id = binary_to_list(ProviderId)}};
 handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type, AccessToken}, #hander_state{peer_dn = DnString} = State) ->
     UID = %% Fetch user's ID

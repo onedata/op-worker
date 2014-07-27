@@ -190,7 +190,8 @@ maybe_handle_fuse_message(RequestBody) ->
             [RerouteToProvider | _] = Providers,
             {ok, #{<<"urls">> := URLs}} = registry_providers:get_provider_info(RerouteToProvider),
             ?info("Reroute to: ~p", [URLs]),
-            provider_proxy:communicate({RerouteToProvider, URLs}, fslogic_context:get_access_token(), fslogic_context:get_fuse_id())
+            provider_proxy:reroute_pull_message({RerouteToProvider, URLs}, fslogic_context:get_access_token(),
+                fslogic_context:get_fuse_id(), #fusemessage{input = RequestBody, message_type = atom_to_list(element(1, RequestBody))})
     end.
 
 %% handle_test/2
