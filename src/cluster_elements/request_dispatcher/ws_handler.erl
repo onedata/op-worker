@@ -76,7 +76,7 @@ websocket_init(TransportName, Req, _Opts) ->
                     [DER || [DER] <- ets:match(gsi_state, {{crl, '_'}, '$1', '_'})]]) of    %% cluster CRL store
                 {ok, 1} ->
                     InitCtx = #hander_state{peer_serial = Serial, dispatcher_timeout = DispatcherTimeout},
-                    {ok, Req, setup_connection(InitCtx, OtpCert, Certs, gsi_handler:is_provider(OtpCert))};
+                    {ok, Req, setup_connection(InitCtx, OtpCert, Certs, auth_handler:is_provider(OtpCert))};
                 {ok, 0, Errno} ->
                     ?info("Peer ~p was rejected due to ~p error code", [OtpCert#'OTPCertificate'.tbsCertificate#'OTPTBSCertificate'.subject, Errno]),
                     {shutdown, Req};
@@ -133,7 +133,9 @@ websocket_handle({binary, Data}, Req, #hander_state{peer_dn = DnString, peer_typ
         {cert_confirmation_required, UserLogin, MsgId2} -> {reply, {binary, encode_answer(cert_confirmation_required, MsgId2, UserLogin)}, Req, State};
         {cert_denied_by_user, MsgId2}                   -> {reply, {binary, encode_answer(cert_denied_by_user, MsgId2)}, Req, State};
         {AtomError, MsgId2} when is_atom(AtomError)     -> {reply, {binary, encode_answer(AtomError, MsgId2)}, Req, State};
-        _:_ -> {reply, {binary, encode_answer(ws_handler_error)}, Req, State}
+        _:Reason ->
+            ?error_stacktrace("WSHandler failed due to: ~p", [Reason]),
+            {reply, {binary, encode_answer(ws_handler_error)}, Req, State}
     end;
 websocket_handle({Type, Data}, Req, State) ->
     ?warning("Unknown WebSocket request. Type: ~p, Payload: ~p", [Type, Data]),
@@ -234,9 +236,9 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
 handle(Req, {push, FuseID, {Msg, MsgId} = CLM}, #hander_state{peer_type = provider} = State) ->
     ?info("Got push msg: ~p", [Msg]),
     {reply, {binary, encode_answer(ok, MsgId)}, Req, State};
-handle(Req, {pull, FuseID, CLM}, #hander_state{peer_type = provider} = State) ->
+handle(Req, {pull, FuseID, CLM}, #hander_state{peer_type = provider, provider_id = ProviderId} = State) ->
     ?info("Got pull msg: ~p from ~p", [CLM, FuseID]),
-    handle(Req, CLM, State#hander_state{fuse_id = FuseID});
+    handle(Req, CLM, State#hander_state{fuse_id = vcn_utils:ensure_list( fslogic_context:gen_global_fuse_id(ProviderId, FuseID) )});
 handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, {GlobalId, TokenHash}} = CLM,
         #hander_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID,
                       access_token = SessionAccessToken, user_global_id = SessionUserGID} = State) ->
@@ -251,13 +253,22 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
         {FID, _} when is_list(FID) -> ok                               % FuseId is present
     end,
 
+    ?info("Session: ~p ~p", [SessionUserGID, SessionAccessToken]),
+    ?info("CTX for msg: ~p ~p", [GlobalId, TokenHash]),
+
     {UserGID, AccessToken} =
-        case SessionUserGID =/= undefined orelse not registry_openid:client_verify(GlobalId, TokenHash) of
+        try SessionUserGID =/= undefined orelse not registry_openid:client_verify(GlobalId, TokenHash) of
             true ->
                 {SessionUserGID, SessionAccessToken};
             _ ->
                 auth_handler:get_access_token(GlobalId)
+        catch
+            Reason ->
+                ?error("Cannot verify user (~p) authentication due to: ~p", [GlobalId, Reason]),
+                throw({unable_to_authenticate, MsgId})
         end,
+
+    ?info("CTX1 for msg: ~p ~p", [UserGID, AccessToken]),
 
     Request = case Msg of
                   CallbackMsg when is_record(CallbackMsg, channelregistration) ->
@@ -494,6 +505,7 @@ encode_answer(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer
     Result :: binary().
 %% ====================================================================
 encode_answer(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer, ErrorDescription) ->
+    ?info("Encoding answer ~p ~p ~p ~p ~p ~p", [Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer, ErrorDescription]),
     Message = encode_answer_record(Main_Answer, MsgId, AnswerType, Answer_decoder_name, Worker_Answer, ErrorDescription),
     erlang:iolist_to_binary(communication_protocol_pb:encode_answer(Message)).
 

@@ -20,7 +20,7 @@
     login = "",
     name = "",
     teams = [],
-    spaces = ["spaceId-1", "spaceId-2", "spaceId-3", "spaceId-4"],
+    spaces = [],
     email_list = [],
     dn_list = [],
     unverified_dn_list = [],

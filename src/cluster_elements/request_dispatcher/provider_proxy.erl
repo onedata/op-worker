@@ -80,7 +80,7 @@ communicate_bin({ProviderId, URL}, PRMBin) ->
     end.
 
 access_token_hash(_GlobalId, AccessToken) ->
-    crypto:hash(AccessToken, sha512).
+    crypto:hash(sha512, AccessToken).
 
 
 encode(#fusemessage{input = Input, message_type = MType} = FM) ->

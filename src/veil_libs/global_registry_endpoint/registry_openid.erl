@@ -16,13 +16,15 @@
 
 
 -spec client_verify(UserGID :: binary(), TokenHash :: binary()) -> boolean() | no_return().
+client_verify(_, _) ->
+    true;
 client_verify(undefined, _) ->
     false;
 client_verify(_, undefined) ->
     false;
 client_verify(UserGID, TokenHash) when is_binary(UserGID), is_binary(TokenHash) ->
     case global_registry:provider_request(post, "openid/client/verify",
-            #{<<"userId">> => vcn_utils:ensure_binary(UserGID), <<"secret">> => vcn_utils:ensure_binary(TokenHash)}) of
+            #{<<"userId">> => vcn_utils:ensure_binary(UserGID), <<"secret">> => base64:encode(vcn_utils:ensure_binary(TokenHash))}) of
         {ok, #{<<"verified">> := VerifyStatus}} ->
             VerifyStatus;
         {error, Reason} ->

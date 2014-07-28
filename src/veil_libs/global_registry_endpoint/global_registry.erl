@@ -9,6 +9,8 @@
 -module(global_registry).
 -author("Rafal Slota").
 
+-include_lib("ctool/include/logging.hrl").
+
 %% API
 -export([provider_request/2, provider_request/3, user_request/3, user_request/4]).
 -export([get_provider_cert_path/0, get_provider_key_path/0]).
@@ -29,10 +31,13 @@ user_request(Token, Method, URN, Body) ->
 
 request(Method, URN, Body, Headers) when is_binary(Body) ->
     {ok, URL} = application:get_env(veil_cluster_node, global_registry_hostname),
-    URI = "https://" ++ vcn_utils:ensure_list(URL) ++ "8443/" ++ vcn_utils:ensure_list(URN),
+    URI = vcn_utils:ensure_list(URL) ++ ":8443/" ++ vcn_utils:ensure_list(URN),
+    ?info("Quering ~p", [URI]),
     case ibrowse:send_req(URI, [{"Content-Type", "application/json"}] ++ Headers, Method, Body,
         [{ssl_options, [{verify, verify_none}, {certfile, get_provider_cert_path()}, {keyfile, get_provider_key_path()}]}]) of
-        {ok, "200", _, Response} -> {ok, jiffy:decode(Response, [return_maps])};
+        {ok, [$2 | _], _, Response} ->
+            ?info("REST Response: ~p", [Response]),
+            {ok, jiffy:decode(Response, [return_maps])};
         {ok, "404", _, _} -> {error, not_found};
         {ok, Status, _, _} -> {error, {invalid_status, Status}};
         {error, Reason} -> {error, Reason}
