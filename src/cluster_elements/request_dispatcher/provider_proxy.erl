@@ -46,12 +46,12 @@ reroute_pull_message({ProviderId, [URL | _]}, AccessToken, FuseId, Message) ->
     ?info("1 ~p", [FuseId]),
 
     CLMBin = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(ClusterMessage)),
-    ?info("2"),
+
     ProviderMsg = #providermsg{message_type = "clustermsg", input = CLMBin, fuse_id = vcn_utils:ensure_binary(FuseId)},
     PRMBin = erlang:iolist_to_binary(communication_protocol_pb:encode_providermsg(ProviderMsg)),
-    ?info("3 ~p ~p", [PRMBin, ProviderMsg]),
+
     AnswerBin = communicate_bin({ProviderId, URL}, PRMBin),
-    ?info("4"),
+
     #answer{answer_status = AnswerStatus, worker_answer = WorkerAnswer} = communication_protocol_pb:decode_answer(AnswerBin),
     ?info("Answer0: ~p ~p", [AnswerStatus, WorkerAnswer]),
     case AnswerStatus of
@@ -66,17 +66,13 @@ reroute_pull_message({ProviderId, [URL | _]}, AccessToken, FuseId, Message) ->
 
 
 communicate_bin({ProviderId, URL}, PRMBin) ->
-    ?info("3.1"),
     {ok, Socket} = connect(URL, 5555, [{certfile, global_registry:get_provider_cert_path()}, {keyfile, global_registry:get_provider_key_path()}]),
-    ?info("3.2"),
     send(Socket, PRMBin),
-    ?info("3.3"),
     case recv(Socket, 5000) of
         {ok, Data} ->
             ?info("Received data from ~p: ~p", [ProviderId, Data]),
             Data;
         {error, Reason} ->
-            ?info("3.4 ~p", [Reason]),
             ?error("Could not receive response from provider ~p due to ~p", [ProviderId, Reason]),
             throw(Reason)
     end.
