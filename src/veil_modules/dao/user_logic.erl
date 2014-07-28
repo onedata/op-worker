@@ -745,12 +745,12 @@ create_dirs_at_storage(Root, SpacesInfo, Storage) ->
 %%      or query compatible with user_logic:get_user/1.
 %%      The method assumes that user exists therefore will fail with exception when it doesnt.
 %% @end
--spec get_space_names(UserQuery :: term()) -> [binary()] | no_return().
+-spec get_space_names(UserQuery :: term()) -> [string()] | no_return().
 %% ====================================================================
 get_space_names(#veil_document{record = #user{} = User}) ->
     get_space_names(User);
 get_space_names(#user{} = User) ->
-    [SpaceName || #space_info{name = SpaceName} <- get_spaces(User)];
+    [unicode:characters_to_list(SpaceName) || #space_info{name = SpaceName} <- get_spaces(User)];
 get_space_names(UserQuery) ->
     {ok, UserDoc} = user_logic:get_user(UserQuery),
     get_space_names(UserDoc).
