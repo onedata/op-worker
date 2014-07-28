@@ -169,7 +169,7 @@ handle(_ProtocolVersion, _Msg) ->
 maybe_handle_fuse_message(RequestBody) ->
     PathCtx = extract_logical_path(RequestBody),
     {ok, AbsolutePathCtx} = fslogic_path:get_full_file_name(PathCtx),
-    {ok, #space_info{uuid = SpaceId, name = SpaceName, providers = Providers}} = fslogic_utils:get_space_info_for_path(AbsolutePathCtx),
+    {ok, #space_info{space_id = SpaceId, name = SpaceName, providers = Providers}} = fslogic_utils:get_space_info_for_path(AbsolutePathCtx),
 
     Self = cluster_manager_lib:get_provider_id(),
 

@@ -47,7 +47,7 @@ get_space({uuid, SpaceId}) ->
             {error, {unknown_space_error, Reason}}
     end;
 get_space(SpaceName) ->
-    {ok, FileDoc} = dao_lib:apply(vfs, get_space_file, [filename:join(?SPACES_BASE_DIR_NAME, SpaceName)], 1),
+    {ok, FileDoc} = dao_lib:apply(vfs, get_space_file, [filename:join(?SPACES_BASE_DIR_NAME, unicode:characters_to_list(SpaceName))], 1),
     get_space(FileDoc).
 
 

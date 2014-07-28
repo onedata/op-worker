@@ -23,21 +23,21 @@
 
 get_space_info(SpaceId, {UserGID, AccessToken}) ->
     ?info("get_space_info ~p ~p", [SpaceId, {UserGID, AccessToken}]),
-    get_space_info(global_registry:user_request(AccessToken, get, "spaces/" ++ SpaceId));
+    get_space_info(global_registry:user_request(AccessToken, get, <<"spaces/", (vcn_utils:ensure_binary(SpaceId))/binary>>));
 get_space_info(SpaceId, _) ->
-    get_space_info(global_registry:provider_request(get, "spaces/" ++ SpaceId)).
+    get_space_info(global_registry:provider_request(get, <<"spaces/", (vcn_utils:ensure_binary(SpaceId))/binary>>)).
 get_space_info({ok, Response}) ->
     ?info("Resp: ~p", [Response]),
     #{<<"name">> := SpaceName, <<"spaceId">> := SpaceId0} = Response,
-    SpaceId = binary_to_list(SpaceId0),
+    SpaceId = vcn_utils:ensure_binary(SpaceId0),
     {ok, Providers} = registry_spaces:get_space_providers(SpaceId),
-    {ok, #space_info{uuid = SpaceId, name = unicode:characters_to_list(SpaceName), providers = Providers}};
+    {ok, #space_info{space_id = SpaceId, name = SpaceName, providers = Providers}};
 get_space_info({error, Reason}) ->
     {error, Reason}.
 
 
 get_space_providers(SpaceId) ->
-    case global_registry:provider_request(get, "spaces/" ++ SpaceId ++ "/providers") of
+    case global_registry:provider_request(get, <<"spaces/", (vcn_utils:ensure_binary(SpaceId))/binary, "/providers">>) of
         {ok, Response} ->
             ?info("Resp: ~p", [Response]),
             #{<<"providers">> := Providers} = Response,

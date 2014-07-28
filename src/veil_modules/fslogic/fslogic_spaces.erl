@@ -16,7 +16,7 @@
 %% API
 -export([initialize/1, map_to_grp_owner/1]).
 
-initialize(#space_info{uuid = SpaceId, name = SpaceName} = SpaceInfo) ->
+initialize(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
     case user_logic:create_space_dir(SpaceInfo) of
         {ok, SpaceUUID} ->
             try user_logic:create_dirs_at_storage(non, [SpaceInfo]) of
@@ -51,8 +51,8 @@ map_to_grp_owner([]) ->
     [];
 map_to_grp_owner([SpaceInfo | T]) ->
     [map_to_grp_owner(SpaceInfo)] ++ map_to_grp_owner(T);
-map_to_grp_owner(#space_info{name = SpaceName, uuid = SpaceId}) ->
-    case os:cmd("getent group \"" ++ SpaceName ++ "\" | cut -d: -f3") -- [10, 13] of
+map_to_grp_owner(#space_info{name = SpaceName, space_id = SpaceId}) ->
+    case os:cmd("getent group \"" ++ unicode:characters_to_list(SpaceName) ++ "\" | cut -d: -f3") -- [10, 13] of
         "" ->
             <<GID0:16/big-unsigned-integer-unit:8>> = crypto:hash(md5, SpaceId),
             70000 + GID0 rem 1000000;

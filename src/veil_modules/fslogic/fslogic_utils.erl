@@ -111,7 +111,7 @@ get_space_info_for_path(FileBasePath) ->
                 {error, Reason} ->
                     {error, {invalid_space_path, Reason}}
             end;
-        _ -> {ok, #space_info{name = "root", uuid = "", providers = [cluster_manager_lib:get_provider_id()]}}
+        _ -> {ok, #space_info{name = "root", space_id = "", providers = [cluster_manager_lib:get_provider_id()]}}
     end.
 
 

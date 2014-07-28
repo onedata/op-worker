@@ -12,6 +12,6 @@
 -define(DAO_SPACES_HRL, 1).
 
 -define(file_space_info_extestion, space_info).
--record(space_info, {uuid = "", name = "", providers = []}).
+-record(space_info, {space_id = "", name = "", providers = []}).
 
 -endif.
