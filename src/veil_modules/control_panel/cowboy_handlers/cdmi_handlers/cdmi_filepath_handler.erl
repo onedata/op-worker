@@ -18,9 +18,10 @@
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/control_panel/cdmi.hrl").
 
--define(default_get_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]).
--define(default_post_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]).
--define(default_post_file_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>]).
+-define(default_get_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]). %todo add childrenrange
+-define(default_get_file_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>,<<"value">>]).
+-define(default_post_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]). %todo add childrenrange
+-define(default_post_file_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>]). %todo add valuerange
 
 -record(state, {
     method = <<"GET">> :: binary(),
@@ -108,7 +109,7 @@ resource_exists(Req, #state{filepath = Filepath} = State) ->
 %% @end
 -spec content_types_provided(req(), #state{}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
-content_types_provided(Req, State) ->
+content_types_provided(Req, State) -> %todo handle non-cdmi types
     {[
         {<<"application/cdmi-container">>, get_dir},
         {<<"application/cdmi-object">>,get_file}
@@ -125,8 +126,9 @@ get_dir(Req, #state{opts = Opts, attributes = #fileattributes{type = "DIR"}} = S
     DirCdmi = prepare_container_ans(State,case Opts of [] -> ?default_get_dir_opts; _ -> Opts end),
     Response = rest_utils:encode_to_json({struct, DirCdmi}),
     {Response, Req, State};
-get_dir(_Req, _State) -> %todo handle non-dir
-    ok.
+get_dir(Req, State) -> %given uri points to file, return 404
+    {ok,Req2} = cowboy_req:reply(?error_not_found_code,Req),
+    {halt, Req2, State}.
 
 %% get_file/2
 %% ====================================================================
@@ -135,13 +137,28 @@ get_dir(_Req, _State) -> %todo handle non-dir
 %% @end
 -spec get_file(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-get_file(Req, #state{filepath = Filepath, attributes = #fileattributes{type = "REG", size = Size}} = State) ->
-    StreamFun = file_download_handler:cowboy_file_stream_fun(Filepath, Size),
-    NewReq = file_download_handler:content_disposition_attachment_headers(Req, filename:basename(Filepath)),
-    {Type, Subtype, _} = cow_mimetypes:all(gui_str:to_binary(Filepath)),
-    Mimetype = <<Type/binary, "/", Subtype/binary>>,
-    Req3 = gui_utils:cowboy_ensure_header(<<"content-type">>, Mimetype, NewReq),
-    {{stream, Size, StreamFun}, Req3, State}. %todo return proper cdmi value
+get_file(Req, #state{opts = Opts, attributes = #fileattributes{type = "REG"}} = State) ->
+    DirCdmi = prepare_object_ans(State,case Opts of [] -> ?default_get_file_opts; _ -> Opts end),
+    case proplists:get_value(<<"value">>, DirCdmi) of
+        {range, Range} ->
+            Encoding = proplists:get_value(<<"valuetransferencoding">>, DirCdmi),
+            case read_file(State,Range,Encoding) of
+                {ok,Data} ->
+                    DirCdmiWithValue = lists:append(proplists:delete(<<"value">>,DirCdmi), [{<<"value">>,Data}]),
+                    Response = rest_utils:encode_to_json({struct, DirCdmiWithValue}),
+                    {Response, Req, State};
+                Error ->
+                    ?error("Reading cdmi object end up with error: ~p", [Error]),
+                    {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
+                    {halt, Req2, State}
+            end;
+        undefined ->
+            Response = rest_utils:encode_to_json({struct, DirCdmi}),
+            {Response, Req, State}
+    end;
+get_file(Req, State) -> %given uri points to dir, return 404
+    {ok,Req2} = cowboy_req:reply(?error_not_found_code,Req),
+    {halt, Req2, State}.
 
 %% content_types_accepted/2
 %% ====================================================================
@@ -186,7 +203,7 @@ put_dir(Req, #state{filepath = Filepath, body = _Body} = State) ->
 %% @end
 -spec put_file(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-put_file(Req,#state{filepath = Filepath, body = Body} = State) ->
+put_file(Req,#state{filepath = Filepath, body = Body} = State) -> %todo handle writing in chunks
     ValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>,Body,<<"utf-8">>),  %todo check given body opts, store given mimetype
     Value = proplists:get_value(<<"value">>,Body,<<>>),
     case logical_files_manager:create(Filepath) of
@@ -292,8 +309,10 @@ prepare_object_ans(#state{filepath = Filepath} = State,[<<"mimetype">> | Tail]) 
     [{<<"mimetype">>, <<Type/binary, "/", Subtype/binary>>} | prepare_object_ans(State, Tail)];
 prepare_object_ans(State,[<<"metadata">> | Tail]) -> %todo extract metadata
     [{<<"metadata">>, <<>>} | prepare_object_ans(State, Tail)];
-prepare_object_ans(State,[<<"valuetransferencoding">> | Tail]) -> %todo extract metadata
-    [{<<"valuetransferencoding">>, <<"base64">>} | prepare_object_ans(State, Tail)];
+prepare_object_ans(State,[<<"value">> | Tail]) ->
+    [{<<"valuetransferencoding">>, <<"base64">>},{<<"value">>, {range, default}} | prepare_object_ans(State, Tail)];
+prepare_object_ans(State,[{<<"value">>,From,To} | Tail]) ->
+    [{<<"valuetransferencoding">>, <<"base64">>},{<<"value">>, {range, {From,To}}} | prepare_object_ans(State, Tail)];
 prepare_object_ans(State,[Other | Tail]) ->
     [{Other, <<>>} | prepare_object_ans(State, Tail)].
 
@@ -306,10 +325,20 @@ prepare_object_ans(State,[Other | Tail]) ->
 -spec parse_opts(binary()) -> [binary()].
 %% ====================================================================
 parse_opts(<<>>) ->
-    ?default_get_dir_opts;
+    [];
 parse_opts(RawOpts) ->
     Opts = binary:split(RawOpts,<<";">>,[global]),
-    [hd(binary:split(Opt,<<":">>)) || Opt <- Opts]. %todo handle 'value:something' format
+    lists:map(
+        fun(Opt) ->
+            case binary:split(Opt,<<":">>) of
+                [SimpleOpt] -> SimpleOpt;
+                [SimpleOpt, Range] ->
+                    [From,To] = binary:split(Range,<<"-">>),
+                    {SimpleOpt, binary_to_integer(From), binary_to_integer(To)}
+            end
+        end,
+        Opts
+    ).
 
 %% parse_body/1
 %% ====================================================================
@@ -324,6 +353,19 @@ parse_body(RawBody) ->
             {struct,Ans} = rest_utils:decode_from_json(gui_str:binary_to_unicode_list(NonEmptyBody)),
             Ans
     end.
+
+
+read_file(#state{attributes = Attrs} = State,default,Encoding) ->
+    read_file(State,{0,Attrs#fileattributes.size},Encoding);
+read_file(State,Range,<<"base64">>) ->
+    case read_file(State,Range,<<"utf-8">>) of
+        {ok,Data} -> {ok,base64:encode(Data)};
+        Error -> Error
+    end;
+read_file(#state{filepath = Path},{From,To},<<"utf-8">>) ->
+    logical_files_manager:read(Path,From, To-From).
+
+
 
 %% fs_remove/1
 %% ====================================================================

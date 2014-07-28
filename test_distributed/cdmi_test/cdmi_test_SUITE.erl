@@ -25,9 +25,9 @@
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2]).
 %% -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 
--export([list_dir_test/1, create_dir_test/1, create_file_test/1, delete_dir_test/1, delete_file_test/1]).
+-export([list_dir_test/1,get_file_test/1 , create_dir_test/1, create_file_test/1, delete_dir_test/1, delete_file_test/1]).
 
-all() -> [list_dir_test,create_dir_test,create_file_test,delete_dir_test,delete_file_test].
+all() -> [list_dir_test, get_file_test, create_dir_test, create_file_test, delete_dir_test, delete_file_test].
 
 %% ====================================================================
 %% Test functions
@@ -65,6 +65,31 @@ list_dir_test(_Config) ->
     ?assertEqual(<<"dir/">>, proplists:get_value(<<"objectName">>,CdmiPesponse4)),
     ?assertEqual([<<"file.txt">>], proplists:get_value(<<"children">>,CdmiPesponse4)),
     ?assertEqual(2,length(CdmiPesponse4)).
+    %%------------------------------
+
+get_file_test(_Config) ->
+    FileName = "/toRead.txt",
+    FileContent = <<"Some content...">>,
+
+    %%-------- basic read ----------
+    create_file(FileName),
+    ?assert(object_exists(FileName)),
+    write_to_file(FileName,FileContent),
+    ?assertEqual(FileContent,get_file_content(FileName)),
+
+    RequestHeaders1 = [{"accept", "application/cdmi-object"}],
+    {Code1, _Headers1, Response1} = do_request(FileName, get, RequestHeaders1, []),
+    ?assertEqual("200",Code1),
+    {struct,CdmiPesponse1} = mochijson2:decode(Response1),
+    ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>,CdmiPesponse1)),
+    ?assertEqual(<<"toRead.txt">>, proplists:get_value(<<"objectName">>,CdmiPesponse1)),
+    ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>,CdmiPesponse1)),
+    ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse1)),
+    ?assertEqual(<<"base64">>, proplists:get_value(<<"valuetransferencoding">>,CdmiPesponse1)),
+    ?assertEqual(FileContent, base64:decode(proplists:get_value(<<"value">>,CdmiPesponse1))),
+
+    ?assert(object_exists(FileName)),
+    ?assertEqual(FileContent,get_file_content(FileName)).
     %%------------------------------
 
 create_dir_test(_Config) ->
@@ -270,7 +295,7 @@ init_per_suite(Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    [CCM] = Nodes = test_node_starter:start_test_nodes(1,true),
+    [CCM] = Nodes = test_node_starter:start_test_nodes(1),
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
         [[{node_type, ccm_test},
@@ -348,6 +373,14 @@ get_file_content(Path) ->
         fslogic_context:set_user_dn(DN),
         {ok,Attr} = logical_files_manager:getfileattr(Path),
         GetFile(Path,Attr#fileattributes.size,0,10,<<>>)
+    end).
+
+write_to_file(Path,Data) ->
+    DN=get(dn),
+
+    rpc_call_node(fun() ->
+        fslogic_context:set_user_dn(DN),
+        logical_files_manager:write(Path,Data)
     end).
 
 rpc_call_node(F) ->
