@@ -121,6 +121,8 @@ websocket_handle({binary, Data}, Req, #hander_state{peer_dn = DnString, peer_typ
                 user     -> decode_clustermsg_pb(Data, DnString)
             end,
 
+        ?info("Received request: ~p", [Request]),
+
         handle(Req, Request, State) %% Decode ClusterMsg and handle it
     catch
         wrong_message_format                            -> {reply, {binary, encode_answer(wrong_message_format)}, Req, State};
@@ -139,11 +141,6 @@ websocket_handle({Type, Data}, Req, State) ->
 
 %% Internal websocket_handle method implementation
 %% Handle Handshake request - FUSE ID negotiation
-handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
-    #handshakerequest{hostname = Hostname, variable = Vars} = HReq, MsgId, Answer_type, AccessToken},
-    #hander_state{peer_type = provider, provider_id = ProviderId} = State) ->
-    NewState = State,
-    {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #handshakeresponse{fuse_id = binary_to_list( ProviderId )})}, Req, NewState};
 handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
     #handshakerequest{hostname = Hostname, variable = Vars, cert_confirmation = CertConfirmation} = HReq, MsgId, Answer_type, AccessToken},
     #hander_state{peer_dn = DnString} = State) ->
@@ -196,9 +193,6 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
     {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #handshakeresponse{fuse_id = NewFuseId})}, Req, NewState};
 
 %% Handle HandshakeACK message - set FUSE ID used in this session, register connection
-handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = _NewFuseId}, MsgId, Answer_type, AccessToken}, #hander_state{peer_type = provider, provider_id = ProviderId} = State) ->
-    ?info("HandshakeACK for provider: ~p", [binary_to_list(ProviderId)]),
-    {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req, State#hander_state{fuse_id = binary_to_list(ProviderId)}};
 handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type, AccessToken}, #hander_state{peer_dn = DnString} = State) ->
     UID = %% Fetch user's ID
     case dao_lib:apply(dao_users, get_user, [{dn, DnString}], ProtocolVersion) of
@@ -237,11 +231,12 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
     end;
 
 %% Handle other messages
-handle(Req, {pull, {Msg, MsgId} = CLM}, #hander_state{peer_type = provider} = State) ->
-    ?info("Got pull msg: ~p", [Msg]),
+handle(Req, {push, {Msg, MsgId} = CLM}, #hander_state{peer_type = provider} = State) ->
+    ?info("Got push msg: ~p", [Msg]),
     {reply, {binary, encode_answer(ok, MsgId)}, Req, State};
-handle(Req, {push, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, AccessToken} = CLM}, #hander_state{peer_type = provider} = State) ->
-    handle(Req, CLM, State);
+handle(Req, {pull, FuseID, CLM}, #hander_state{peer_type = provider} = State) ->
+    ?info("Got pull msg: ~p from ~p", [CLM, FuseID]),
+    handle(Req, CLM, State#hander_state{fuse_id = FuseID});
 handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, AccessToken} = CLM, #hander_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID} = State) ->
     %% Check if received message requires FuseId
     MsgType = case Msg of
@@ -435,9 +430,10 @@ decode_providermsg_pb(MsgBytes, DN) ->
                    end,
 
     #providermsg{message_type = MsgType, input = Input, fuse_id = FuseID} = DecodedBytes,
+    ?info("FuseID from providermsg: ~p", [FuseID]),
     case MsgType of
         "clustermsg" ->
-            {pull, decode_clustermsg_pb(Input, DN)};
+            {pull, case FuseID of undefined -> "cluster_fid"; _ -> FuseID end, decode_clustermsg_pb(Input, DN)};
         "answer" ->
             {push, decode_answer_pb(Input, DN)}
     end.
