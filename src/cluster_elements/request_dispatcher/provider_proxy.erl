@@ -37,10 +37,12 @@ reroute_pull_message({ProviderId, [URL | _]}, {GlobalID, AccessToken}, FuseId, M
     {AnswerDecoderName, AnswerType} = records_translator:get_answer_decoder_and_type(Message),
     MsgBytes = encode(Message),
 
+    TokenHash = access_token_hash(GlobalID, AccessToken),
+
     ClusterMessage =
         #clustermsg{synch = true, protocol_version = 1, module_name = a2l(TargetModule), message_id = 0,
                     answer_decoder_name = a2l(AnswerDecoderName), answer_type = a2l(AnswerType), input = MsgBytes,
-                    access_token = vcn_utils:ensure_binary(AccessToken),
+                    token_hash = TokenHash, global_user_id = GlobalID,
                     message_decoder_name = a2l(get_message_decoder(Message)), message_type = a2l(get_message_type(Message))},
 
     ?info("1 ~p", [FuseId]),
@@ -76,6 +78,9 @@ communicate_bin({ProviderId, URL}, PRMBin) ->
             ?error("Could not receive response from provider ~p due to ~p", [ProviderId, Reason]),
             throw(Reason)
     end.
+
+access_token_hash(_GlobalId, AccessToken) ->
+    crypto:hash(AccessToken, sha512).
 
 
 encode(#fusemessage{input = Input, message_type = MType} = FM) ->

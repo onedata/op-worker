@@ -181,7 +181,8 @@ maybe_handle_fuse_message(RequestBody) ->
 %%                 registry_spaces:get_space_providers(SpaceId)
 %%         end,
 
-    ?info("Space for request: ~p, providers: ~p (current ~p). AccessToken: ~p", [SpaceName, Providers, Self, fslogic_context:get_access_token()]),
+    ?info("Space for request: ~p, providers: ~p (current ~p). AccessToken: ~p, ~p, FullName: ~p",
+        [SpaceName, Providers, Self, fslogic_context:get_access_token(), RequestBody, AbsolutePathCtx]),
 
     case lists:member(Self, Providers) of
         true ->

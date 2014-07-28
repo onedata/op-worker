@@ -21,5 +21,5 @@ get_provider_id() ->
     [{_, PeerCertDer, _} | _] = public_key:pem_decode(Bin),
     PeerCert = public_key:pkix_decode_cert(PeerCertDer, otp),
 
-    gsi_handler:get_provider_id(PeerCert).
+    auth_handler:get_provider_id(PeerCert).
 

@@ -19,7 +19,6 @@
 -deprecated([proxy_subject/1]).
 
 -export([init/0, verify_callback/3, load_certs/1, update_crls/1, proxy_subject/1, call/3, is_proxy_certificate/1, find_eec_cert/3, get_ca_certs/0, strip_self_signed_ca/1, get_ciphers/0]).
--export([is_provider/1, get_provider_id/1]).
 %% ===================================================================
 %% API
 %% ===================================================================
@@ -75,37 +74,6 @@ init() ->
     end,
 
     ok.
-
-
-get_provider_id(#'OTPCertificate'{} = Cert) ->
-    #'OTPCertificate'{tbsCertificate =
-    #'OTPTBSCertificate'{subject = {rdnSequence, Attrs}}} = Cert,
-
-    [ProviderId] = lists:filtermap(fun([Attribute]) ->
-        case Attribute#'AttributeTypeAndValue'.type of
-            ?'id-at-commonName' ->
-                {_, Id} = Attribute#'AttributeTypeAndValue'.value,
-                {true, vcn_utils:ensure_binary(Id)};
-            _ -> false
-        end
-    end, Attrs),
-
-    ProviderId.
-
-
-is_provider(#'OTPCertificate'{} = Cert) ->
-    #'OTPCertificate'{tbsCertificate =
-    #'OTPTBSCertificate'{subject = {rdnSequence, Attrs}}} = Cert,
-
-    [OU] = lists:filtermap(fun([Attribute]) ->
-        case Attribute#'AttributeTypeAndValue'.type of
-            ?'id-at-organizationalUnitName' ->
-                {_, Id} = Attribute#'AttributeTypeAndValue'.value,
-                {true, vcn_utils:ensure_binary(Id)};
-            _ -> false
-        end
-    end, Attrs),
-    <<"Providers">> =:= OU.
 
 %% get_ca_certs/0
 %% ====================================================================

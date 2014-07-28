@@ -13,29 +13,32 @@
 -export([provider_request/2, provider_request/3, user_request/3, user_request/4]).
 -export([get_provider_cert_path/0, get_provider_key_path/0]).
 
-provider_request(Method, URI) ->
-    request(Method, URI, <<"">>, []).
+provider_request(Method, URN) ->
+    request(Method, URN, <<"">>, []).
 
-provider_request(Method, URI, Body) ->
-    request(Method, URI, Body, []).
+provider_request(Method, URN, Body) ->
+    request(Method, URN, Body, []).
 
-user_request(Token, Method, URI) ->
-    user_request(Token, Method, URI, <<"">>).
+user_request(Token, Method, URN) ->
+    user_request(Token, Method, URN, <<"">>).
 
-user_request(Token, Method, URI, Body) ->
+user_request(Token, Method, URN, Body) ->
     TokenBin = vcn_utils:ensure_binary(Token),
-    request(Method, URI, Body, [{"authorization", binary_to_list(<<"Bearer ", TokenBin/binary>>)}]).
+    request(Method, URN, Body, [{"authorization", binary_to_list(<<"Bearer ", TokenBin/binary>>)}]).
 
 
-request(Method, URI, Body, Headers) ->
-    URL = "https://globalregistry.org:8443/" ++ vcn_utils:ensure_list(URI),
-    case ibrowse:send_req(URL, [{"Content-Type", "application/json"}] ++ Headers, Method, Body,
+request(Method, URN, Body, Headers) when is_binary(Body) ->
+    {ok, URL} = application:get_env(veil_cluster_node, global_registry_hostname),
+    URI = "https://" ++ vcn_utils:ensure_list(URL) ++ "8443/" ++ vcn_utils:ensure_list(URN),
+    case ibrowse:send_req(URI, [{"Content-Type", "application/json"}] ++ Headers, Method, Body,
         [{ssl_options, [{verify, verify_none}, {certfile, get_provider_cert_path()}, {keyfile, get_provider_key_path()}]}]) of
         {ok, "200", _, Response} -> {ok, jiffy:decode(Response, [return_maps])};
         {ok, "404", _, _} -> {error, not_found};
         {ok, Status, _, _} -> {error, {invalid_status, Status}};
         {error, Reason} -> {error, Reason}
-    end.
+    end;
+request(Method, URN, Body, Headers) ->
+    request(Method, URN, jiffy:encode(Body), Headers).
 
 get_provider_cert_path() ->
     "./certs/grpcert.pem".

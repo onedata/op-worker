@@ -67,10 +67,10 @@ sign_in(Proplist, AccessToken) ->
 
     User = case get_user({global_id, GlobalId}) of
                {ok, ExistingUser} ->
-                   User1 = synchronize_user_info(ExistingUser, Teams, Emails, DnList),
+                   User1 = synchronize_user_info(ExistingUser, Teams, Emails, DnList, AccessToken),
                    synchronize_spaces_info(User1, AccessToken);
                {error, user_not_found} ->
-                   case create_user(GlobalId, Login, Name, Teams, Emails, DnList) of
+                   case create_user(GlobalId, Login, Name, Teams, Emails, DnList, AccessToken) of
                        {ok, NewUser} ->
                            synchronize_spaces_info(NewUser, AccessToken);
                        {error, Error} ->
@@ -99,6 +99,8 @@ sign_in(Proplist, AccessToken) ->
     Result :: {ok, user_doc()} | {error, any()}.
 %% ====================================================================
 create_user(GlobalId, Login, Name, Teams, Email, DnList) ->
+    create_user(GlobalId, Login, Name, Teams, Email, DnList, <<>>).
+create_user(GlobalId, Login, Name, Teams, Email, DnList, AccessToken) ->
     ?debug("Creating user: ~p", [{GlobalId, Login, Name, Teams, Email, DnList}]),
     Quota = #quota{},
     {QuotaAns, QuotaUUID} = dao_lib:apply(dao_users, save_quota, [Quota], 1),
@@ -122,7 +124,9 @@ create_user(GlobalId, Login, Name, Teams, Email, DnList) ->
                       List when is_list(List) -> [Login | List];
                       _ -> [Login]
                   end,
-        quota_doc = QuotaUUID
+        quota_doc = QuotaUUID,
+
+        access_token = AccessToken
     },
     {DaoAns, UUID} = dao_lib:apply(dao_users, save_user, [User], 1),
     GetUserAns = get_user({uuid, UUID}),
@@ -611,11 +615,15 @@ invert_dn_string(DNString) ->
     Result :: user_doc().
 %% ====================================================================
 synchronize_user_info(User, Teams, Emails, DnList) ->
+    synchronize_user_info(User, Teams, Emails, DnList, <<>>).
+synchronize_user_info(User, Teams, Emails, DnList, AccessToken) ->
     %% Actual updates will probably happen so rarely, that there is no need to scoop those 3 DB updates into one.
-    User2 = case (get_teams(User) =:= Teams) or (Teams =:= []) of
-                true -> User;
+    User1 = update_access_token(User, AccessToken),
+
+    User2 = case (get_teams(User1) =:= Teams) or (Teams =:= []) of
+                true -> User1;
                 false ->
-                    {ok, NewUser} = update_teams(User, Teams),
+                    {ok, NewUser} = update_teams(User1, Teams),
                     NewUser
             end,
 
@@ -644,6 +652,9 @@ synchronize_user_info(User, Teams, Emails, DnList) ->
                     NewUser4
             end,
     User4.
+
+update_access_token(#veil_document{record = #user{} = User} = UserDoc, AccessToken) ->
+    UserDoc#veil_document{record = User#user{access_token = AccessToken}}.
 
 
 %% oid_code_to_shortname/1

@@ -46,10 +46,9 @@ validate_login() ->
                        [{ssl_options, [{keyfile, atom_to_list(KeyF)}, {certfile, atom_to_list(CertF)}]}]
                end,
 
-        ?info("Query to: ~p",[atom_to_list(GlobalRegistryHostname) ++ ":8443/openid/token"]),
-
+        %% OMG KONDZIU Body = case ibrowse:send_req(atom_to_list(GlobalRegistryHostname) ++ ":8443/openid/provider/tokens", [{"content-type", "application/json"}], post,
         Body = case ibrowse:send_req(atom_to_list(GlobalRegistryHostname) ++ ":8443/openid/token", [{"content-type", "application/json"}], post,
-            "{\"code\":\"" ++ binary_to_list(AuthorizationCode) ++ "\", \"grant_type\":\"authorization_code\"}", Opts) of
+        "{\"code\":\"" ++ binary_to_list(AuthorizationCode) ++ "\", \"grant_type\":\"authorization_code\"}", Opts) of
                    {ok, "200", _, RespBody} ->
                        RespBody;
                    Error ->
