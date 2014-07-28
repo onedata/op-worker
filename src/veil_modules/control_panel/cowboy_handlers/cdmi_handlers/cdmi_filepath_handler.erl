@@ -21,19 +21,19 @@
 -define(default_get_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]). %todo add childrenrange
 -define(default_get_file_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>,<<"valuetransferencoding">>,<<"valuerange">>,<<"value">>]).
 -define(default_post_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]). %todo add childrenrange
--define(default_post_file_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>]). %todo add valuerange
+-define(default_post_file_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>]).
 
 -record(state, {
     method = <<"GET">> :: binary(),
     filepath = undefined :: binary(),
+    filetype = undefined :: dir | reg,
     attributes = undefined :: #fileattributes{},
-    opts = [] :: [binary()],
-    body = [] :: list()
+    opts = [] :: [binary()]
 }).
 
 %% Callbacks
 -export([init/3, rest_init/2, resource_exists/2, allowed_methods/2, content_types_provided/2,content_types_accepted/2, delete_resource/2]).
--export([put_dir/2, put_file/2, get_dir/2, get_file/2]).
+-export([put_dir/2, put_cdmi_file/2, put_noncdmi_file/2, get_dir/2, get_file/2]).
 
 %% init/3
 %% ====================================================================
@@ -54,19 +54,23 @@ init(_, _, _) -> {upgrade, protocol, cowboy_rest}.
 %% @end
 -spec rest_init(req(), term()) -> {ok, req(), term()} | {shutdown, req()}.
 %% ====================================================================
-rest_init(Req, _Opts) ->
+rest_init(Req, []) ->
+    case binary:last(Req#http_req.path) =:= $/ of
+        true -> rest_init(Req, [dir]);
+        false -> rest_init(Req, [reg])
+    end;
+rest_init(Req, [Type]) ->
     {ok,DnString} = rest_utils:verify_peer_cert(Req),
     case rest_utils:prepare_context(DnString) of %todo check all required request header/body fields
         ok ->
             {Method, _} = cowboy_req:method(Req),
             {PathInfo, _} = cowboy_req:path_info(Req),
             {RawOpts,_} = cowboy_req:qs(Req),
-            {ok,RawBody,_} = cowboy_req:body(Req),
             Path = case PathInfo == [] of
                      true -> "/";
                      false -> gui_str:binary_to_unicode_list(rest_utils:join_to_path(PathInfo))
                  end,
-            {ok, Req, #state{method = Method, filepath = Path, opts = parse_opts(RawOpts), body = parse_body(RawBody) }};
+            {ok, Req, #state{method = Method, filepath = Path,filetype = Type, opts = parse_opts(RawOpts)}};
         Error -> {ok,Req,Error}
     end.
 
@@ -96,9 +100,14 @@ allowed_methods(Req, State) ->
 %% @end
 -spec resource_exists(req(), #state{}) -> {boolean(), req(), #state{}}.
 %% ====================================================================
-resource_exists(Req, #state{filepath = Filepath} = State) ->
+resource_exists(Req, #state{filepath = Filepath, filetype = dir} = State) ->
     case logical_files_manager:getfileattr(Filepath) of
-        {ok, Attr} -> {true, Req, State#state{attributes = Attr}};
+        {ok, #fileattributes{type = "DIR"} = Attr} -> {true, Req, State#state{attributes = Attr}};
+        _ -> {false, Req, State}
+    end;
+resource_exists(Req, #state{filepath = Filepath, filetype = reg} = State) ->
+    case logical_files_manager:getfileattr(Filepath) of
+        {ok, #fileattributes{type = "REG"} = Attr} -> {true, Req, State#state{attributes = Attr}};
         _ -> {false, Req, State}
     end.
 
@@ -109,9 +118,12 @@ resource_exists(Req, #state{filepath = Filepath} = State) ->
 %% @end
 -spec content_types_provided(req(), #state{}) -> {[binary()], req(), #state{}}.
 %% ====================================================================
-content_types_provided(Req, State) -> %todo handle non-cdmi types
+content_types_provided(Req, #state{filetype = dir} = State) -> %todo handle non-cdmi types
     {[
-        {<<"application/cdmi-container">>, get_dir},
+        {<<"application/cdmi-container">>, get_dir}
+    ], Req, State};
+content_types_provided(Req, State) ->
+    {[
         {<<"application/cdmi-object">>,get_file}
     ], Req, State}.
 
@@ -122,13 +134,10 @@ content_types_provided(Req, State) -> %todo handle non-cdmi types
 %% @end
 -spec get_dir(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-get_dir(Req, #state{opts = Opts, attributes = #fileattributes{type = "DIR"}} = State) ->
+get_dir(Req, #state{opts = Opts} = State) ->
     DirCdmi = prepare_container_ans(case Opts of [] -> ?default_get_dir_opts; _ -> Opts end,State),
     Response = rest_utils:encode_to_json({struct, DirCdmi}),
-    {Response, Req, State};
-get_dir(Req, State) -> %given uri points to file, return 404
-    {ok,Req2} = cowboy_req:reply(?error_not_found_code,Req),
-    {halt, Req2, State}.
+    {Response, Req, State}.
 
 %% get_file/2
 %% ====================================================================
@@ -137,7 +146,7 @@ get_dir(Req, State) -> %given uri points to file, return 404
 %% @end
 -spec get_file(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-get_file(Req, #state{opts = Opts, attributes = #fileattributes{type = "REG"}} = State) ->
+get_file(Req, #state{opts = Opts} = State) ->
     DirCdmi = prepare_object_ans(case Opts of [] -> ?default_get_file_opts; _ -> Opts end, State),
     case proplists:get_value(<<"value">>, DirCdmi) of
         {range, Range} ->
@@ -155,10 +164,7 @@ get_file(Req, #state{opts = Opts, attributes = #fileattributes{type = "REG"}} = 
         undefined ->
             Response = rest_utils:encode_to_json({struct, DirCdmi}),
             {Response, Req, State}
-    end;
-get_file(Req, State) -> %given uri points to dir, return 404
-    {ok,Req2} = cowboy_req:reply(?error_not_found_code,Req),
-    {halt, Req2, State}.
+    end.
 
 %% content_types_accepted/2
 %% ====================================================================
@@ -168,10 +174,14 @@ get_file(Req, State) -> %given uri points to dir, return 404
 %% @end
 -spec content_types_accepted(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
+content_types_accepted(Req, #state{filetype = dir} = State) -> %todo handle noncdmi dir put
+    {[
+        {<<"application/cdmi-container">>, put_dir}
+    ], Req, State};
 content_types_accepted(Req, State) ->
     {[
-        {<<"application/cdmi-container">>, put_dir},
-        {<<"application/cdmi-object">>,put_file}
+        {<<"application/cdmi-object">>,put_cdmi_file},
+        {<<"application/binary">> ,put_noncdmi_file}
     ], Req, State}.
 
 %% put_dir/2
@@ -180,7 +190,7 @@ content_types_accepted(Req, State) ->
 %% @end
 -spec put_dir(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-put_dir(Req, #state{filepath = Filepath, body = _Body} = State) ->
+put_dir(Req, #state{filepath = Filepath} = State) ->
     case logical_files_manager:mkdir(Filepath) of
         ok -> %todo check given body
             Response = rest_utils:encode_to_json({struct, prepare_container_ans(?default_post_dir_opts,State)}),
@@ -197,21 +207,47 @@ put_dir(Req, #state{filepath = Filepath, body = _Body} = State) ->
             {halt, Req2, State}
     end.
 
-%% put_file/2
+%% put_cdmi_file/2
 %% ====================================================================
-%% @doc Callback function for cdmi data object PUT operation (create file)
+%% @doc Callback function for cdmi data object PUT operation with cdmi body
+%% content type. It parses body as JSON string and gets cdmi data to create file.
 %% @end
--spec put_file(req(), #state{}) -> {term(), req(), #state{}}.
+-spec put_cdmi_file(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-put_file(Req,#state{filepath = Filepath, body = Body} = State) -> %todo handle writing in chunks
+put_cdmi_file(Req,State) -> %todo handle writing in chunks
+    {ok,RawBody,_} = cowboy_req:body(Req),
+    Body = parse_body(RawBody),
     ValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>,Body,<<"utf-8">>),  %todo check given body opts, store given mimetype
     Value = proplists:get_value(<<"value">>,Body,<<>>),
+    RawValue = case ValueTransferEncoding of
+        <<"base64">> -> base64:decode(Value);
+        <<"utf-8">> -> Value
+    end,
+    put_file(Req,State,RawValue).
+
+%% put_noncdmi_file/2
+%% ====================================================================
+%% @doc Callback function for cdmi data object PUT operation with non-cdmi
+%% body content-type. In that case we treat whole body as file content.
+%% @end
+-spec put_noncdmi_file(req(), #state{}) -> {term(), req(), #state{}}.
+%% ====================================================================
+put_noncdmi_file(Req,State) ->
+    ct:print("noncdmi!"),
+    {ok,Body,_} = cowboy_req:body(Req),
+    put_file(Req,State,Body).
+
+%% put_file/3
+%% ====================================================================
+%% @doc Final step of object put operation. It creates file and fills
+%% it with given data, returning proper cdmi error codes if something
+%% unexpected happens
+%% @end
+-spec put_file(req(), #state{},binary()) -> {term(), req(), #state{}}.
+%% ====================================================================
+put_file(Req,#state{filepath = Filepath} =State,RawValue) ->
     case logical_files_manager:create(Filepath) of
         ok ->
-            RawValue = case ValueTransferEncoding of
-                <<"base64">> -> base64:decode(Value);
-                <<"utf-8">> -> Value
-            end,
             case logical_files_manager:write(Filepath,RawValue) of
                 Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
                     Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_post_file_opts,State)}),
@@ -239,7 +275,7 @@ put_file(Req,#state{filepath = Filepath, body = Body} = State) -> %todo handle w
 %% @end
 -spec delete_resource(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-delete_resource(Req, #state{filepath = Filepath, attributes = #fileattributes{type = "DIR"}} = State) ->
+delete_resource(Req, #state{filepath = Filepath, filetype = dir} = State) ->
     case is_group_dir(Filepath) of
         false ->
             fs_remove_dir(Filepath),
@@ -248,7 +284,7 @@ delete_resource(Req, #state{filepath = Filepath, attributes = #fileattributes{ty
             {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
             {halt, Req2, State}
     end;
-delete_resource(Req, #state{filepath = Filepath, attributes = #fileattributes{type = "REG"}} = State) ->
+delete_resource(Req, #state{filepath = Filepath, filetype = reg} = State) ->
     case logical_files_manager:delete(Filepath) of
        ok ->
            {true, Req, State};

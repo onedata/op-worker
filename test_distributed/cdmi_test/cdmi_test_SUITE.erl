@@ -35,7 +35,7 @@ all() -> [list_dir_test, get_file_test, create_dir_test, create_file_test, delet
 
 list_dir_test(_Config) ->
     %%------ list basic dir --------
-    {Code1, Headers1, Response1} = do_request(?Test_dir_name, get, [], []),
+    {Code1, Headers1, Response1} = do_request(?Test_dir_name++"/", get, [], []),
     ?assertEqual("200", Code1),
     ?assertEqual(proplists:get_value("content-type", Headers1), "application/cdmi-container"),
     {struct,CdmiPesponse1} = mochijson2:decode(Response1),
@@ -115,7 +115,7 @@ get_file_test(_Config) ->
 create_dir_test(_Config) ->
     DirName = "/toCreate/",
     MissingParentName="/unknown/",
-    DirWithoutParentName = filename:join(MissingParentName,"dir/"),
+    DirWithoutParentName = filename:join(MissingParentName,"dir")++"/",
 
     %%---- missing content type ----
     ?assert(not object_exists(DirName)),
@@ -163,7 +163,8 @@ create_dir_test(_Config) ->
 create_file_test(_Config) ->
     ToCreate = "file.txt",
     ToCreate2 = filename:join(["groups",?TEST_GROUP,"file1.txt"]),
-    ToCreate3 = "file2",
+    ToCreate4 = "file2",
+    ToCreate5 = "file3",
     FileContent = <<"File content!">>,
 
     %%-------- basic create --------
@@ -215,14 +216,25 @@ create_file_test(_Config) ->
     %%------------------------------
 
     %%------- create empty ---------
-    ?assert(not object_exists(ToCreate3)),
+    ?assert(not object_exists(ToCreate4)),
 
     RequestHeaders4 = [{"content-type", "application/cdmi-object"}],
-    {Code4, _Headers4, _Response4} = do_request(ToCreate3, put, RequestHeaders4, []),
+    {Code4, _Headers4, _Response4} = do_request(ToCreate4, put, RequestHeaders4, []),
     ?assertEqual("201",Code4),
 
-    ?assert(object_exists(ToCreate3)),
-    ?assertEqual(<<>>,get_file_content(ToCreate3)).
+    ?assert(object_exists(ToCreate4)),
+    ?assertEqual(<<>>,get_file_content(ToCreate4)),
+    %%------------------------------
+
+    %%------ create noncdmi --------
+    ?assert(not object_exists(ToCreate5)),
+
+    RequestHeaders5 = [{"content-type", "application/binary"}],
+    {Code5, _Headers5, _Response5} = do_request(ToCreate5, put, RequestHeaders5, FileContent),
+    ?assertEqual("201",Code5),
+
+    ?assert(object_exists(ToCreate5)),
+    ?assertEqual(FileContent,get_file_content(ToCreate5)).
     %%------------------------------
 
 delete_dir_test(_Config) ->
@@ -315,7 +327,7 @@ init_per_suite(Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    [CCM] = Nodes = test_node_starter:start_test_nodes(1),
+    [CCM] = Nodes = test_node_starter:start_test_nodes(1,true),
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
         [[{node_type, ccm_test},
