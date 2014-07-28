@@ -170,6 +170,8 @@ get_fs_group_ctx() ->
         GroupID -> GroupID
     end.
 
+gen_global_fuse_id(_, undefined) ->
+    undefined;
 gen_global_fuse_id(ProviderId, FuseId) ->
     ProviderId1 = vcn_utils:ensure_binary(ProviderId),
     FuseId1 = vcn_utils:ensure_binary(FuseId),

@@ -92,7 +92,7 @@ encode(#remotefilemangement{input = Input, message_type = MType} = RFM) ->
     ?info("Message o encode0: ~p", [Input]),
     RFMBin = erlang:iolist_to_binary(erlang:apply(remote_file_management_pb, encoder_method(MType), [Input])),
     ?info("Message o encode1: ~p", [RFM#remotefilemangement{input = RFMBin}]),
-    erlang:iolist_to_binary(remote_file_management_pb:encode_fusemessage(RFM#remotefilemangement{input = RFMBin, message_type = a2l(MType)})).
+    erlang:iolist_to_binary(remote_file_management_pb:encode_remotefilemangement(RFM#remotefilemangement{input = RFMBin, message_type = a2l(MType)})).
 
 
 
