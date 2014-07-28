@@ -65,6 +65,7 @@ handle(_ProtocolVersion, get_version) ->
 
 handle(ProtocolVersion, Record) when is_record(Record, remotefilemangement) ->
     RequestBody = Record#remotefilemangement.input,
+    ?info("RFM req: ~p", [RequestBody]),
     RequestType = element(1, RequestBody),
 
     fslogic_context:set_protocol_version(ProtocolVersion),

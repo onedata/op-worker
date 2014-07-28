@@ -65,6 +65,8 @@ sign_in(Proplist, AccessToken) ->
 
     ?info("Login with token: ~p", [AccessToken]),
 
+    fslogic_context:set_access_token(GlobalId, AccessToken),
+
     User = case get_user({global_id, GlobalId}) of
                {ok, ExistingUser} ->
                    User1 = synchronize_user_info(ExistingUser, Teams, Emails, DnList, AccessToken),

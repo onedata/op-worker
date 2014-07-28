@@ -195,7 +195,7 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
     {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #handshakeresponse{fuse_id = NewFuseId})}, Req, NewState};
 
 %% Handle HandshakeACK message - set FUSE ID used in this session, register connection
-handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type, AccessToken}, #hander_state{peer_dn = DnString} = State) ->
+handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type, {_GlobalId, _TokenHash}}, #hander_state{peer_dn = DnString} = State) ->
     {UID, AccessToken, UserGID} = %% Fetch user's ID
         case dao_lib:apply(dao_users, get_user, [{dn, DnString}], ProtocolVersion) of
             {ok, #veil_document{uuid = UID1, record = #user{access_token = AccessToken1, global_id = UserGID1}}} ->
@@ -273,9 +273,11 @@ handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answ
 
     Request = case Msg of
                   CallbackMsg when is_record(CallbackMsg, channelregistration) ->
-                      #veil_request{subject = DnString, request = #callback{fuse = FuseID, pid = self(), node = node(), action = channelregistration}};
+                      #veil_request{subject = DnString, request =
+                        #callback{fuse = FuseID, pid = self(), node = node(), action = channelregistration}, access_token = {UserGID, AccessToken}};
                   CallbackMsg2 when is_record(CallbackMsg2, channelclose) ->
-                      #veil_request{subject = DnString, request = #callback{fuse = FuseID, pid = self(), node = node(), action = channelclose}};
+                      #veil_request{subject = DnString, request =
+                        #callback{fuse = FuseID, pid = self(), node = node(), action = channelclose}, access_token = {UserGID, AccessToken}};
                   _ -> #veil_request{subject = DnString, request = Msg, fuse_id = FuseID, access_token = {UserGID, AccessToken}}
               end,
 

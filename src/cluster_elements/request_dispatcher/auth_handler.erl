@@ -50,7 +50,7 @@ is_provider(#'OTPCertificate'{} = Cert) ->
     #'OTPCertificate'{tbsCertificate =
     #'OTPTBSCertificate'{subject = {rdnSequence, Attrs}}} = Cert,
 
-    [OU] = lists:filtermap(fun([Attribute]) ->
+    OU = lists:filtermap(fun([Attribute]) ->
         case Attribute#'AttributeTypeAndValue'.type of
             ?'id-at-organizationalUnitName' ->
                 {_, Id} = Attribute#'AttributeTypeAndValue'.value,
@@ -58,4 +58,4 @@ is_provider(#'OTPCertificate'{} = Cert) ->
             _ -> false
         end
     end, Attrs),
-    <<"Providers">> =:= OU.
+    [<<"Providers">>] =:= OU.

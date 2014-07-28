@@ -47,7 +47,7 @@ translate(Record, DecoderName) when is_tuple(Record) ->
       catch
         _:_ ->
           ?warning("Can not translate record: ~p, using decoder: ~p", [Record, DecoderName]),
-          RecordList
+            RecordList
       end;
     false -> RecordList
   end,
