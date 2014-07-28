@@ -20,7 +20,7 @@
     login = "",
     name = "",
     teams = [],
-    spaces = ["spaceId-1", "spaceId-2", "spaceId-3", "spaceId-4"],
+    spaces = [],
     email_list = [],
     dn_list = [],
     unverified_dn_list = [],
@@ -40,22 +40,22 @@
 
 %% Mapping of erlang macros to DN string attributes
 -define(oid_code_to_shortname_mapping,
-	[
-		{?'id-at-name', "name"},
-		{?'id-at-surname', "SN"},
-		{?'id-at-givenName', "GN"},
-		{?'id-at-initials', "initials"},
-		{?'id-at-generationQualifier', "generationQualifier"},
-		{?'id-at-commonName', "CN"},
-		{?'id-at-localityName', "L"},
-		{?'id-at-stateOrProvinceName', "ST"},
-		{?'id-at-organizationName', "O"},
-		{?'id-at-organizationalUnitName', "OU"},
-		{?'id-at-title', "title"},
-		{?'id-at-dnQualifier', "dnQualifier"},
-		{?'id-at-countryName', "C"},
-		{?'id-at-serialNumber', "serialNumber"},
-		{?'id-at-pseudonym', "pseudonym"}
-	]).
+    [
+        {?'id-at-name', "name"},
+        {?'id-at-surname', "SN"},
+        {?'id-at-givenName', "GN"},
+        {?'id-at-initials', "initials"},
+        {?'id-at-generationQualifier', "generationQualifier"},
+        {?'id-at-commonName', "CN"},
+        {?'id-at-localityName', "L"},
+        {?'id-at-stateOrProvinceName', "ST"},
+        {?'id-at-organizationName', "O"},
+        {?'id-at-organizationalUnitName', "OU"},
+        {?'id-at-title', "title"},
+        {?'id-at-dnQualifier', "dnQualifier"},
+        {?'id-at-countryName', "C"},
+        {?'id-at-serialNumber', "serialNumber"},
+        {?'id-at-pseudonym', "pseudonym"}
+    ]).
 
 -endif.

@@ -31,6 +31,7 @@
 -export([get_space_names/1, create_space_dir/1, get_spaces/1]).
 -export([create_dirs_at_storage/3, create_dirs_at_storage/2]).
 -export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/2]).
+-export([synchronize_spaces_info/2]).
 
 -define(UserRootPerms, 8#600).
 -define(SpaceDirPerm, 8#1770).

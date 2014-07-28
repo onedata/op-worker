@@ -5,7 +5,8 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: This file contains n2o website code
+%% @doc: This file contains n2o website code.
+%% The page allows for viewing online cluster monitoring.
 %% @end
 %% ===================================================================
 
@@ -581,5 +582,8 @@ event(add_chart) ->
     get(comet_pid) ! add_chart;
 
 event({delete_chart, Id}) ->
-    get(comet_pid) ! {delete_chart, Id}.
+    get(comet_pid) ! {delete_chart, Id};
+
+event(terminate) ->
+    ok.
 

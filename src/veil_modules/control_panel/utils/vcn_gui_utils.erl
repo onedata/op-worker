@@ -253,6 +253,9 @@ top_menu(ActiveTabID, SubMenuBody) ->
             ]}},
             {shared_files_tab, #li{body = [
                 #link{style = <<"padding: 18px;">>, url = <<"/shared_files">>, body = <<"Shared files">>}
+            ]}},
+            {spaces_tab, #li{body = [
+                #link{style = <<"padding: 18px;">>, url = <<"/spaces">>, body = <<"Spaces">>}
             ]}}
         ] ++ PageCaptions,
 
