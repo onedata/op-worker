@@ -104,10 +104,6 @@ get_answer_decoder_and_type(#fusemessage{input = #testchannel{}}) ->
     {communication_protocol, atom};
 get_answer_decoder_and_type(#fusemessage{input = #createfileack{}}) ->
     {communication_protocol, atom};
-get_answer_decoder_and_type(#fusemessage{input = #getfileattr{}}) ->
-    {fuse_messages, fileattr};
-get_answer_decoder_and_type(#fusemessage{input = #getfileattr{}}) ->
-    {fuse_messages, fileattr};
 
 get_answer_decoder_and_type(#remotefilemangement{}) ->
     {remotefilemangement, 'TODO'};

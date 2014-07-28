@@ -17,9 +17,7 @@
 -export([get_access_token/1]).
 -export([is_provider/1, get_provider_id/1]).
 
--spec get_access_token(UserGlobalId) ->
-    {UserGlobalId, AccessToken} | {undefined, undefined}
-    when UserGlobalId, AccessToken :: binary() | undefined.
+-spec get_access_token(UserGlobalId :: binary()) -> {UserGlobalId :: binary(), AccessToken :: binary()} | {undefined, undefined}.
 get_access_token(undefined) ->
     {undefined, undefined};
 get_access_token(GlobalId) ->

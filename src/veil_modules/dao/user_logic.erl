@@ -192,6 +192,8 @@ synchronize_spaces_info(#veil_document{record = UserRec} = UserDoc, AccessToken)
 
             ?info("New spaces: ~p", [NewSpaces]),
 
+            [fslogic_spaces:initialize(SpaceId) || SpaceId <- NewSpaces],
+
             UserDoc1 = UserDoc#veil_document{record = UserRec#user{spaces = NewSpaces}},
             case dao_lib:apply(dao_users, save_user, [UserDoc1], 1) of
                 {ok, _} ->
