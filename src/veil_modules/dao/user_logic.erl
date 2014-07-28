@@ -714,7 +714,8 @@ create_dirs_at_storage(Root, SpacesInfo, Storage) ->
     SHI = fslogic_storage:get_sh_for_fuse(?CLUSTER_FUSE_ID, Storage),
     fslogic_context:clear_user_dn(),
 
-    CreateTeamsDirs = fun(#space_info{name = Dir} = SpaceInfo, TmpAns) ->
+    CreateTeamsDirs = fun(#space_info{name = SpaceName} = SpaceInfo, TmpAns) ->
+        Dir = unicode:characters_to_list(SpaceName),
         DirName = filename:join(["", ?SPACES_BASE_DIR_NAME, Dir]),
         storage_files_manager:mkdir(SHI, filename:join(["", ?SPACES_BASE_DIR_NAME])),
         Ans = storage_files_manager:mkdir(SHI, DirName),
@@ -746,7 +747,7 @@ create_dirs_at_storage(Root, SpacesInfo, Storage) ->
 %%      or query compatible with user_logic:get_user/1.
 %%      The method assumes that user exists therefore will fail with exception when it doesnt.
 %% @end
--spec get_space_names(UserQuery :: term()) -> [string()] | no_return().
+-spec get_space_names(UserQuery :: term()) -> [binary()] | no_return().
 %% ====================================================================
 get_space_names(#veil_document{record = #user{} = User}) ->
     get_space_names(User);
@@ -774,8 +775,10 @@ get_spaces(UserQuery) ->
 %% @end
 -spec create_space_dir(Dir :: string()) -> {ok, UUID :: uuid()} | {error, Reason :: any()} | no_return().
 %% ====================================================================
-create_space_dir(#space_info{uuid = SpaceId, name = SpaceName} = SpaceInfo) ->
+create_space_dir(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
     CTime = vcn_utils:time(),
+
+    SpaceDirName = unicode:characters_to_list(SpaceName),
 
     GroupsBase = case dao_lib:apply(dao_vfs, exist_file, ["/" ++ ?SPACES_BASE_DIR_NAME], 1) of
                      {ok, true} ->
@@ -800,11 +803,11 @@ create_space_dir(#space_info{uuid = SpaceId, name = SpaceName} = SpaceInfo) ->
                          error({error, Reason})
                  end,
 
-    case dao_lib:apply(dao_vfs, exist_file, [fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, SpaceName])], 1) of
+    case dao_lib:apply(dao_vfs, exist_file, [fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, SpaceDirName])], 1) of
         {ok, true} ->
             {error, dir_exists};
         {ok, false} ->
-            TFile = #file{parent = GroupsBase, type = ?DIR_TYPE, name = SpaceName, uid = "0", perms = ?SpaceDirPerm, extensions = [{?file_space_info_extestion, SpaceInfo}]},
+            TFile = #file{parent = GroupsBase, type = ?DIR_TYPE, name = SpaceDirName, uid = "0", perms = ?SpaceDirPerm, extensions = [{?file_space_info_extestion, SpaceInfo}]},
             TFileDoc = fslogic_meta:update_meta_attr(TFile, times, {CTime, CTime, CTime}),
             dao_lib:apply(dao_vfs, save_file, [#veil_document{uuid = SpaceId, record = TFileDoc}], 1);
         Error ->

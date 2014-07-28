@@ -9,13 +9,11 @@
 -module(registry_spaces).
 -author("RoXeon").
 
--include("veil_modules/dao/dao_vfs.hrl").
--include_lib("veil_modules/dao/dao.hrl").
--include_lib("veil_modules/dao/dao_types.hrl").
 -include_lib("ctool/include/logging.hrl").
+-include("veil_modules/dao/dao_vfs.hrl").
 
 %% API
--export([get_user_spaces/1, get_space_info/2, get_space_providers/1]).
+-export([get_space_info/2, get_space_providers/1]).
 
 
 %% ====================================================================
@@ -33,23 +31,21 @@ get_user_spaces({UserGID, AccessToken}) ->
 
 get_space_info(SpaceId, {UserGID, AccessToken}) ->
     ?info("get_space_info ~p ~p", [SpaceId, {UserGID, AccessToken}]),
-    get_space_info(global_registry:user_request(AccessToken, get, "spaces/" ++ SpaceId));
+    get_space_info(global_registry:user_request(AccessToken, get, <<"spaces/", (vcn_utils:ensure_binary(SpaceId))/binary>>));
 get_space_info(SpaceId, _) ->
-    get_space_info(global_registry:provider_request(get, "spaces/" ++ SpaceId)).
+    get_space_info(global_registry:provider_request(get, <<"spaces/", (vcn_utils:ensure_binary(SpaceId))/binary>>)).
 get_space_info({ok, Response}) ->
     ?info("Resp: ~p", [Response]),
     #{<<"name">> := SpaceName, <<"spaceId">> := SpaceId0} = Response,
-    SpaceId = binary_to_list(SpaceId0),
+    SpaceId = vcn_utils:ensure_binary(SpaceId0),
     {ok, Providers} = registry_spaces:get_space_providers(SpaceId),
-    A = {ok, #space_info{uuid = SpaceId, name = unicode:characters_to_list(SpaceName), providers = Providers}},
-    ?info("A =====> ~p", [A]),
-    A;
+    {ok, #space_info{space_id = SpaceId, name = unicode:characters_to_list(SpaceName), providers = Providers}};
 get_space_info({error, Reason}) ->
     {error, Reason}.
 
 
 get_space_providers(SpaceId) ->
-    case global_registry:provider_request(get, "spaces/" ++ SpaceId ++ "/providers") of
+    case global_registry:provider_request(get, <<"spaces/", (vcn_utils:ensure_binary(SpaceId))/binary, "/providers">>) of
         {ok, Response} ->
             ?info("Resp: ~p", [Response]),
             #{<<"providers">> := Providers} = Response,

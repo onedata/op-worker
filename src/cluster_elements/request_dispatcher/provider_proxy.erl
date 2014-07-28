@@ -11,11 +11,12 @@
 
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").
+-include("veil_modules/fslogic/fslogic.hrl").
 -include("remote_file_management_pb.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% API
--export([communicate/3]).
+-export([reroute_pull_message/4]).
 
 -export([
     init/2,
@@ -26,19 +27,47 @@
     handshakeInit/3, handshakeAck/2
 ]).
 
-communicate({ProviderId, [URL | _]}, AccessToken, FuseId) ->
-    ClusterMessage = none,
-%%         #clustermsg{synch = Synch, protocol_version = ProtocolVersion, module_name = Task, message_id = 0,
-%%                     answer_decoder_name = AnswerDecoderName, answer_type = AnswerType, input = MsgBytes, access_token = AccessToken,
-%%                     message_decoder_name = get_message_decoder(Msg), message_type = get_message_type(Msg)},
-    CLMBin = communication_protocol_pb:encode_clustermessage(ClusterMessage),
+reroute_pull_message({ProviderId, [URL | _]}, AccessToken, FuseId, Message) ->
+    TargetModule =
+        case Message of
+            #fusemessage{}              -> fslogic;
+            #remotefilemangement{}      -> remote_files_manager
+        end,
 
-    communicate_bin({ProviderId, URL}, CLMBin).
+    {AnswerDecoderName, AnswerType} = records_translator:get_answer_decoder_and_type(Message),
+    MsgBytes = encode(Message),
+
+    ClusterMessage =
+        #clustermsg{synch = true, protocol_version = 1, module_name = a2l(TargetModule), message_id = 0,
+                    answer_decoder_name = a2l(AnswerDecoderName), answer_type = a2l(AnswerType), input = MsgBytes,
+                    access_token = vcn_utils:ensure_binary(AccessToken),
+                    message_decoder_name = a2l(get_message_decoder(Message)), message_type = a2l(get_message_type(Message))},
+
+    ?info("1 ~p", [FuseId]),
+
+    CLMBin = erlang:iolist_to_binary(communication_protocol_pb:encode_clustermsg(ClusterMessage)),
+
+    ProviderMsg = #providermsg{message_type = "clustermsg", input = CLMBin, fuse_id = vcn_utils:ensure_binary(FuseId)},
+    PRMBin = erlang:iolist_to_binary(communication_protocol_pb:encode_providermsg(ProviderMsg)),
+
+    AnswerBin = communicate_bin({ProviderId, URL}, PRMBin),
+
+    #answer{answer_status = AnswerStatus, worker_answer = WorkerAnswer} = communication_protocol_pb:decode_answer(AnswerBin),
+    ?info("Answer0: ~p ~p", [AnswerStatus, WorkerAnswer]),
+    case AnswerStatus of
+        ?VOK ->
+            Answer = erlang:apply(pb_module(AnswerDecoderName), decoder_method(AnswerType), [WorkerAnswer]),
+            ?info("Answer1: ~p", [Answer]),
+            Answer;
+        InvalidStatus ->
+            ?error("Cannot reroute message ~p due to invalid answer status: ~p", [get_message_type(Message), InvalidStatus]),
+            throw({invalid_status, InvalidStatus})
+    end.
 
 
-communicate_bin({ProviderId, URL}, CLMBin) ->
+communicate_bin({ProviderId, URL}, PRMBin) ->
     {ok, Socket} = connect(URL, 5555, [{certfile, global_registry:get_provider_cert_path()}, {keyfile, global_registry:get_provider_key_path()}]),
-    send(Socket, CLMBin),
+    send(Socket, PRMBin),
     case recv(Socket, 5000) of
         {ok, Data} ->
             ?info("Received data from ~p: ~p", [ProviderId, Data]),
@@ -47,6 +76,15 @@ communicate_bin({ProviderId, URL}, CLMBin) ->
             ?error("Could not receive response from provider ~p due to ~p", [ProviderId, Reason]),
             throw(Reason)
     end.
+
+
+encode(#fusemessage{input = Input, message_type = MType} = FM) ->
+    ?info("Message o encode0: ~p", [Input]),
+    FMBin = erlang:iolist_to_binary(erlang:apply(fuse_messages_pb, encoder_method(MType), [Input])),
+    ?info("Message o encode1: ~p", [FM#fusemessage{input = FMBin}]),
+    erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FM#fusemessage{input = FMBin, message_type = a2l(MType)}));
+encode(#remotefilemangement{}) ->
+    <<>>.
 
 prepare_message(Synch, Task, AnswerDecoderName, ProtocolVersion, Msg, MsgId, AnswerType, MsgBytes) ->
     #clustermsg{synch = Synch, protocol_version = ProtocolVersion, module_name = Task, message_id = 0,
@@ -114,7 +152,7 @@ connect(Host, Port, Opts) ->
     ssl:start(),
     Opts1 = Opts -- [auto_handshake],
     Monitored =
-        case websocket_client:start_link("wss://" ++ Host ++ ":" ++ integer_to_list(Port) ++ "/veilclient" , ?MODULE, [self()], Opts1 ++ [{reuse_sessions, false}]) of
+        case websocket_client:start_link("wss://" ++ ensure_list(Host) ++ ":" ++ integer_to_list(Port) ++ "/veilclient" , ?MODULE, [self()], Opts1 ++ [{reuse_sessions, false}]) of
             {ok, Proc}      -> erlang:monitor(process, Proc), Proc;
             {error, Error}  -> self() ! {error, Error}, ok;
             Error1          -> self() ! {error, Error1}, ok
@@ -222,3 +260,34 @@ flush_errors() ->
     after 0 ->
         ok
     end.
+
+
+encoder_method(MType) when is_atom(MType) ->
+    encoder_method(atom_to_list(MType));
+encoder_method(MType) when is_list(MType) ->
+    list_to_atom("encode_" ++ MType).
+
+decoder_method(MType) when is_atom(MType) ->
+    decoder_method(atom_to_list(MType));
+decoder_method(MType) when is_list(MType) ->
+    list_to_atom("decode_" ++ MType).
+
+
+pb_module(ModuleName) ->
+    list_to_atom(ensure_list(ModuleName) ++ "_pb").
+
+
+a2l(Atom) when is_atom(Atom) ->
+    atom_to_list(Atom);
+a2l(List) when is_list(List) ->
+    List.
+
+ensure_list(Binary) when is_binary(Binary) ->
+    binary_to_list(Binary);
+ensure_list(Atom) when is_atom(Atom) ->
+    atom_to_list(Atom);
+ensure_list(Num) when is_integer(Num) ->
+    integer_to_list(Num);
+ensure_list(List) when is_list(List) ->
+    List.
+

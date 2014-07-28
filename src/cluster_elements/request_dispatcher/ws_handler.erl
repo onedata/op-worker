@@ -38,7 +38,7 @@
 -export([websocket_terminate/3]).
 
 -ifdef(TEST).
--export([decode_protocol_buffer/2, encode_answer/2, encode_answer/3, encode_answer/5, encode_answer/6, checkMessage/2]).
+-export([decode_clustermsg_pb/2, encode_answer/2, encode_answer/3, encode_answer/5, encode_answer/6, checkMessage/2]).
 -endif.
 
 %% ====================================================================
@@ -113,9 +113,17 @@ setup_connection(InitCtx, OtpCert, _Certs, true) ->
     Req :: term(),
     State :: #hander_state{}.
 %% ====================================================================
-websocket_handle({binary, Data}, Req, #hander_state{peer_dn = DnString} = State) ->
+websocket_handle({binary, Data}, Req, #hander_state{peer_dn = DnString, peer_type = PeerType} = State) ->
     try
-        handle(Req, decode_protocol_buffer(Data, DnString), State) %% Decode ClusterMsg and handle it
+        Request =
+            case PeerType of
+                provider -> decode_providermsg_pb(Data, DnString);
+                user     -> decode_clustermsg_pb(Data, DnString)
+            end,
+
+        ?info("Received request: ~p", [Request]),
+
+        handle(Req, Request, State) %% Decode ClusterMsg and handle it
     catch
         wrong_message_format                            -> {reply, {binary, encode_answer(wrong_message_format)}, Req, State};
         {wrong_internal_message_type, MsgId2}           -> {reply, {binary, encode_answer(wrong_internal_message_type, MsgId2)}, Req, State};
@@ -133,11 +141,6 @@ websocket_handle({Type, Data}, Req, State) ->
 
 %% Internal websocket_handle method implementation
 %% Handle Handshake request - FUSE ID negotiation
-handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
-    #handshakerequest{hostname = Hostname, variable = Vars} = HReq, MsgId, Answer_type, AccessToken},
-    #hander_state{peer_type = provider, provider_id = ProviderId} = State) ->
-    NewState = State,
-    {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #handshakeresponse{fuse_id = binary_to_list( ProviderId )})}, Req, NewState};
 handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
     #handshakerequest{hostname = Hostname, variable = Vars, cert_confirmation = CertConfirmation} = HReq, MsgId, Answer_type, AccessToken},
     #hander_state{peer_dn = DnString} = State) ->
@@ -190,8 +193,6 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
     {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #handshakeresponse{fuse_id = NewFuseId})}, Req, NewState};
 
 %% Handle HandshakeACK message - set FUSE ID used in this session, register connection
-handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = _NewFuseId}, MsgId, Answer_type, AccessToken}, #hander_state{peer_type = provider, provider_id = ProviderId} = State) ->
-    {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req, State#hander_state{fuse_id = binary_to_list(ProviderId)}};
 handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type, AccessToken}, #hander_state{peer_dn = DnString} = State) ->
     UID = %% Fetch user's ID
     case dao_lib:apply(dao_users, get_user, [{dn, DnString}], ProtocolVersion) of
@@ -230,6 +231,12 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
     end;
 
 %% Handle other messages
+handle(Req, {push, {Msg, MsgId} = CLM}, #hander_state{peer_type = provider} = State) ->
+    ?info("Got push msg: ~p", [Msg]),
+    {reply, {binary, encode_answer(ok, MsgId)}, Req, State};
+handle(Req, {pull, FuseID, CLM}, #hander_state{peer_type = provider} = State) ->
+    ?info("Got pull msg: ~p from ~p", [CLM, FuseID]),
+    handle(Req, CLM, State#hander_state{fuse_id = FuseID});
 handle(Req, {Synch, Task, Answer_decoder_name, ProtocolVersion, Msg, MsgId, Answer_type, AccessToken} = CLM, #hander_state{peer_dn = DnString, dispatcher_timeout = DispatcherTimeout, fuse_id = FuseID} = State) ->
     %% Check if received message requires FuseId
     MsgType = case Msg of
@@ -362,7 +369,7 @@ encode_and_send({ResponsePid, Message, MessageDecoder, MsgID}, MessageIdForClien
 %% decode_protocol_buffer/2
 %% ====================================================================
 %% @doc Decodes the message using protocol buffers records_translator.
--spec decode_protocol_buffer(MsgBytes :: binary(), DN :: string()) -> Result when
+-spec decode_clustermsg_pb(MsgBytes :: binary(), DN :: string()) -> Result when
     Result :: {Synch, ModuleName, Msg, MsgId, Answer_type},
     Synch :: boolean(),
     ModuleName :: atom(),
@@ -370,7 +377,7 @@ encode_and_send({ResponsePid, Message, MessageDecoder, MsgID}, MessageIdForClien
     MsgId :: integer(),
     Answer_type :: string().
 %% ====================================================================
-decode_protocol_buffer(MsgBytes, DN) ->
+decode_clustermsg_pb(MsgBytes, DN) ->
     DecodedBytes = try
         communication_protocol_pb:decode_clustermsg(MsgBytes)
                    catch
@@ -390,6 +397,45 @@ decode_protocol_buffer(MsgBytes, DN) ->
     case checkMessage(TranslatedMsg, DN) of
         true -> {Synch, list_to_atom(ModuleName), Answer_decoder_name, Prot_version, TranslatedMsg, MsgId, Answer_type, AccessToken};
         false -> throw({message_not_supported, MsgId})
+    end.
+
+
+decode_answer_pb(MsgBytes, DN) ->
+    DecodedBytes = try
+        communication_protocol_pb:decode_answer(MsgBytes)
+                   catch
+                       _:_ -> throw(wrong_message_format)
+                   end,
+
+    #answer{message_type = MsgType, worker_answer = Input, message_id = MsgId} = DecodedBytes,
+    ?info("Decoding answer ~p", [DecodedBytes]),
+
+    Msg = try
+        erlang:apply(fuse_messages_pb, list_to_atom("decode_" ++ MsgType), [Input])
+          catch
+              _:_ -> throw({wrong_internal_message_type, MsgId})
+          end,
+
+    TranslatedMsg = records_translator:translate(Msg, "fuse_messages"),
+    case checkMessage(TranslatedMsg, DN) of
+        true -> {TranslatedMsg, MsgId};
+        false -> throw({message_not_supported, MsgId})
+    end.
+
+decode_providermsg_pb(MsgBytes, DN) ->
+    DecodedBytes = try
+        communication_protocol_pb:decode_providermsg(MsgBytes)
+                   catch
+                       _:_ -> throw(wrong_message_format)
+                   end,
+
+    #providermsg{message_type = MsgType, input = Input, fuse_id = FuseID} = DecodedBytes,
+    ?info("FuseID from providermsg: ~p", [FuseID]),
+    case MsgType of
+        "clustermsg" ->
+            {pull, case FuseID of undefined -> "cluster_fid"; _ -> FuseID end, decode_clustermsg_pb(Input, DN)};
+        "answer" ->
+            {push, decode_answer_pb(Input, DN)}
     end.
 
 

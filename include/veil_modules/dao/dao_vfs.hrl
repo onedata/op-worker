@@ -13,6 +13,7 @@
 -define(DAO_VFS_HRL, 1).
 
 -include_lib("files_common.hrl").
+-include("veil_modules/dao/dao_spaces.hrl").
 
 %% Files' location (storage helper id and its relative file ID). Designed for use within #file record (`location` filed).
 -record(file_location, {storage_id = "", file_id = ""}).
@@ -20,9 +21,6 @@
 -record(file_lock, {type = ?REG_TYPE, uid = "", sid = "", pid = 0, offset = 0, size = 0}).
 %% Veil File
 -record(file, {type = 1, name = "", uid = "", perms = 0, parent = "", ref_file = "", location = #file_location{}, locks = [], meta_doc, created = true, extensions = []}).
-
--define(file_space_info_extestion, space_info).
--record(space_info, {uuid = "", name = "", providers = []}).
 
 %% Those record contains meta data for file which UUID match #file_meta.file field
 -record(file_tag, {key = "", value = []}).

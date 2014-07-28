@@ -13,12 +13,14 @@
 
 -module(records_translator).
 -include("communication_protocol_pb.hrl").
+-include("remote_file_management_pb.hrl").
+-include("fuse_messages_pb.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 %% ====================================================================
 %% API
 %% ====================================================================
--export([translate/2, translate_to_record/1]).
+-export([translate/2, translate_to_record/1, get_answer_decoder_and_type/1]).
 
 %% ====================================================================
 %% API functions
@@ -66,3 +68,48 @@ translate_to_record(Value) when is_atom(Value) ->
 
 translate_to_record(Value) ->
   Value.
+
+
+get_answer_decoder_and_type(#fusemessage{input = #getfileattr{}}) ->
+    {fuse_messages, fileattr};
+get_answer_decoder_and_type(#fusemessage{input = #getfilelocation{}}) ->
+    {fuse_messages, filelocation};
+get_answer_decoder_and_type(#fusemessage{input = #getnewfilelocation{}}) ->
+    {fuse_messages, filelocation};
+get_answer_decoder_and_type(#fusemessage{input = #filenotused{}}) ->
+    {communication_protocol, atom};
+get_answer_decoder_and_type(#fusemessage{input = #renamefile{}}) ->
+    {communication_protocol, atom};
+get_answer_decoder_and_type(#fusemessage{input = #deletefile{}}) ->
+    {communication_protocol, atom};
+get_answer_decoder_and_type(#fusemessage{input = #createdir{}}) ->
+    {communication_protocol, atom};
+get_answer_decoder_and_type(#fusemessage{input = #changefileowner{}}) ->
+    {communication_protocol, atom};
+get_answer_decoder_and_type(#fusemessage{input = #changefilegroup{}}) ->
+    {communication_protocol, atom};
+get_answer_decoder_and_type(#fusemessage{input = #changefileperms{}}) ->
+    {communication_protocol, atom};
+get_answer_decoder_and_type(#fusemessage{input = #updatetimes{}}) ->
+    {communication_protocol, atom};
+get_answer_decoder_and_type(#fusemessage{input = #createlink{}}) ->
+    {communication_protocol, atom};
+get_answer_decoder_and_type(#fusemessage{input = #renewfilelocation{}}) ->
+    {fuse_messages, filelocationvalidity};
+get_answer_decoder_and_type(#fusemessage{input = #getfilechildren{}}) ->
+    {fuse_messages, filechildren};
+get_answer_decoder_and_type(#fusemessage{input = #getlink{}}) ->
+    {fuse_messages, linkinfo};
+get_answer_decoder_and_type(#fusemessage{input = #testchannel{}}) ->
+    {communication_protocol, atom};
+get_answer_decoder_and_type(#fusemessage{input = #createfileack{}}) ->
+    {communication_protocol, atom};
+get_answer_decoder_and_type(#fusemessage{input = #getfileattr{}}) ->
+    {fuse_messages, fileattr};
+get_answer_decoder_and_type(#fusemessage{input = #getfileattr{}}) ->
+    {fuse_messages, fileattr};
+
+get_answer_decoder_and_type(#remotefilemangement{}) ->
+    {remotefilemangement, 'TODO'};
+get_answer_decoder_and_type(Unk) ->
+    throw({unknown_message, Unk}).
