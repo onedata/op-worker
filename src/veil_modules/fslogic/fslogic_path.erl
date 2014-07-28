@@ -198,7 +198,7 @@ get_user_root(#user{spaces = []}) ->
     throw(no_spaces);
 get_user_root(#user{spaces = [PrimarySpaceId | _]}) ->
     {ok, #space_info{name = SpaceName}} = fslogic_objects:get_space({uuid, PrimarySpaceId}),
-    vcn_utils:ensure_list(SpaceName).
+    unicode:characters_to_list(SpaceName).
 
 
 %% get_user_root/2
