@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author RoXeon
+%%% @author Rafal Slota
 %%% @copyright (C) 2014, <COMPANY>
 %%% @doc
 %%%
@@ -7,7 +7,7 @@
 %%% Created : 26. Jul 2014 03:07
 %%%-------------------------------------------------------------------
 -module(provider_proxy).
--author("RoXeon").
+-author("Rafal Slota").
 
 -include("communication_protocol_pb.hrl").
 -include("fuse_messages_pb.hrl").

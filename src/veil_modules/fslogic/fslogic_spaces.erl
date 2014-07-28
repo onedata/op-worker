@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author RoXeon
+%%% @author Rafal Slota
 %%% @copyright (C) 2014, <COMPANY>
 %%% @doc
 %%%
@@ -7,7 +7,7 @@
 %%% Created : 15. Jul 2014 13:46
 %%%-------------------------------------------------------------------
 -module(fslogic_spaces).
--author("RoXeon").
+-author("Rafal Slota").
 
 -include("veil_modules/dao/dao.hrl").
 -include("files_common.hrl").

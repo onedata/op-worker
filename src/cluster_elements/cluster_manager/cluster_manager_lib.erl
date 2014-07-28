@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author RoXeon
+%%% @author Rafal Slota
 %%% @copyright (C) 2014, <COMPANY>
 %%% @doc
 %%%
@@ -7,7 +7,7 @@
 %%% Created : 25. Jul 2014 15:36
 %%%-------------------------------------------------------------------
 -module(cluster_manager_lib).
--author("RoXeon").
+-author("Rafal Slota").
 
 -include_lib("public_key/include/public_key.hrl").
 -include_lib("ctool/include/logging.hrl").

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author RoXeon
+%%% @author Rafal Slota
 %%% @copyright (C) 2014, <COMPANY>
 %%% @doc
 %%%
@@ -7,7 +7,7 @@
 %%% Created : 14. Jul 2014 23:56
 %%%-------------------------------------------------------------------
 -module(registry_spaces).
--author("RoXeon").
+-author("Rafal Slota").
 
 -include_lib("ctool/include/logging.hrl").
 -include("veil_modules/dao/dao_vfs.hrl").

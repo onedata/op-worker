@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author RoXeon
+%%% @author Rafal Slota
 %%% @copyright (C) 2014, <COMPANY>
 %%% @doc
 %%%
@@ -7,7 +7,7 @@
 %%% Created : 28. Jul 2014 18:18
 %%%-------------------------------------------------------------------
 -module(registry_openid).
--author("RoXeon").
+-author("Rafal Slota").
 
 -include_lib("ctool/include/logging.hrl").
 

@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author RoXeon
+%%% @author Rafal Slota
 %%% @copyright (C) 2014, <COMPANY>
 %%% @doc
 %%%
@@ -7,7 +7,7 @@
 %%% Created : 25. Jul 2014 15:36
 %%%-------------------------------------------------------------------
 -module(global_registry).
--author("RoXeon").
+-author("Rafal Slota").
 
 %% API
 -export([provider_request/2, provider_request/3, user_request/3, user_request/4]).

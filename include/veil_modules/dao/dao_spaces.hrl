@@ -1,12 +1,12 @@
 %%%-------------------------------------------------------------------
-%%% @author RoXeon
+%%% @author Rafal Slota
 %%% @copyright (C) 2014, <COMPANY>
 %%% @doc
 %%%
 %%% @end
 %%% Created : 28. Jul 2014 11:15
 %%%-------------------------------------------------------------------
--author("RoXeon").
+-author("Rafal Slota").
 
 -ifndef(DAO_SPACES_HRL).
 -define(DAO_SPACES_HRL, 1).

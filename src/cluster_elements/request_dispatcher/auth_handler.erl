@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% @author RoXeon
+%%% @author Rafal Slota
 %%% @copyright (C) 2014, <COMPANY>
 %%% @doc
 %%%
@@ -7,7 +7,7 @@
 %%% Created : 28. Jul 2014 17:47
 %%%-------------------------------------------------------------------
 -module(auth_handler).
--author("RoXeon").
+-author("Rafal Slota").
 
 -include_lib("public_key/include/public_key.hrl").
 -include("veil_modules/dao/dao.hrl").
