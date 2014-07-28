@@ -71,25 +71,45 @@ get_file_test(_Config) ->
     FileName = "/toRead.txt",
     FileContent = <<"Some content...">>,
 
-    %%-------- basic read ----------
     create_file(FileName),
     ?assert(object_exists(FileName)),
     write_to_file(FileName,FileContent),
     ?assertEqual(FileContent,get_file_content(FileName)),
 
+    %%-------- basic read ----------
     RequestHeaders1 = [{"accept", "application/cdmi-object"}],
     {Code1, _Headers1, Response1} = do_request(FileName, get, RequestHeaders1, []),
     ?assertEqual("200",Code1),
     {struct,CdmiPesponse1} = mochijson2:decode(Response1),
+
     ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>,CdmiPesponse1)),
     ?assertEqual(<<"toRead.txt">>, proplists:get_value(<<"objectName">>,CdmiPesponse1)),
     ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>,CdmiPesponse1)),
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse1)),
     ?assertEqual(<<"base64">>, proplists:get_value(<<"valuetransferencoding">>,CdmiPesponse1)),
+    ?assertEqual(<<"0-14">>, proplists:get_value(<<"valuerange">>,CdmiPesponse1)),
     ?assertEqual(FileContent, base64:decode(proplists:get_value(<<"value">>,CdmiPesponse1))),
+    %%------------------------------
 
-    ?assert(object_exists(FileName)),
-    ?assertEqual(FileContent,get_file_content(FileName)).
+    %%-- selective params read -----
+    RequestHeaders2 = [{"accept", "application/cdmi-object"}],
+    {Code2, _Headers2, Response2} = do_request(FileName++"?parentURI;completionStatus", get, RequestHeaders2, []),
+    ?assertEqual("200",Code2),
+    {struct,CdmiPesponse2} = mochijson2:decode(Response2),
+
+    ?assertEqual(<<"/">>, proplists:get_value(<<"parentURI">>,CdmiPesponse2)),
+    ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse2)),
+    ?assertEqual(2, length(CdmiPesponse2)),
+    %%------------------------------
+
+    %%--- selective value read -----
+    RequestHeaders3 = [{"accept", "application/cdmi-object"}],
+    {Code3, _Headers3, Response3} = do_request(FileName++"?value:1-3;valuerange", get, RequestHeaders3, []),
+    ?assertEqual("200",Code3),
+    {struct,CdmiPesponse3} = mochijson2:decode(Response3),
+
+    ?assertEqual(<<"1-3">>, proplists:get_value(<<"valuerange">>,CdmiPesponse3)),
+    ?assertEqual(<<"ome">>, base64:decode(proplists:get_value(<<"value">>,CdmiPesponse3))). % 1-3 from FileContent = <<"Some content...">>
     %%------------------------------
 
 create_dir_test(_Config) ->

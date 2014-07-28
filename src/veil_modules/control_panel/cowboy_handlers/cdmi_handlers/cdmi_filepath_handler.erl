@@ -19,7 +19,7 @@
 -include("veil_modules/control_panel/cdmi.hrl").
 
 -define(default_get_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]). %todo add childrenrange
--define(default_get_file_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>,<<"value">>]).
+-define(default_get_file_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>,<<"valuetransferencoding">>,<<"valuerange">>,<<"value">>]).
 -define(default_post_dir_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"children">>]). %todo add childrenrange
 -define(default_post_file_opts, [<<"objectType">>, <<"objectName">>, <<"parentURI">>, <<"completionStatus">>, <<"metadata">>, <<"mimetype">>]). %todo add valuerange
 
@@ -141,7 +141,7 @@ get_file(Req, #state{opts = Opts, attributes = #fileattributes{type = "REG"}} = 
     DirCdmi = prepare_object_ans(State,case Opts of [] -> ?default_get_file_opts; _ -> Opts end),
     case proplists:get_value(<<"value">>, DirCdmi) of
         {range, Range} ->
-            Encoding = proplists:get_value(<<"valuetransferencoding">>, DirCdmi),
+            Encoding = <<"base64">>, %todo send also utf-8 when possible
             case read_file(State,Range,Encoding) of
                 {ok,Data} ->
                     DirCdmiWithValue = lists:append(proplists:delete(<<"value">>,DirCdmi), [{<<"value">>,Data}]),
@@ -309,10 +309,19 @@ prepare_object_ans(#state{filepath = Filepath} = State,[<<"mimetype">> | Tail]) 
     [{<<"mimetype">>, <<Type/binary, "/", Subtype/binary>>} | prepare_object_ans(State, Tail)];
 prepare_object_ans(State,[<<"metadata">> | Tail]) -> %todo extract metadata
     [{<<"metadata">>, <<>>} | prepare_object_ans(State, Tail)];
+prepare_object_ans(State,[<<"valuetransferencoding">> | Tail]) ->
+    [{<<"valuetransferencoding">>, <<"base64">>} | prepare_object_ans(State, Tail)];
 prepare_object_ans(State,[<<"value">> | Tail]) ->
-    [{<<"valuetransferencoding">>, <<"base64">>},{<<"value">>, {range, default}} | prepare_object_ans(State, Tail)];
+    [{<<"value">>, {range, default}} | prepare_object_ans(State, Tail)];
 prepare_object_ans(State,[{<<"value">>,From,To} | Tail]) ->
-    [{<<"valuetransferencoding">>, <<"base64">>},{<<"value">>, {range, {From,To}}} | prepare_object_ans(State, Tail)];
+    [{<<"value">>, {range, {From,To}}} | prepare_object_ans(State, Tail)];
+prepare_object_ans(#state{opts = Opts,attributes = Attrs} = State,[<<"valuerange">> | Tail]) ->
+    case lists:keyfind(<<"value">>,1,Opts) of
+        {<<"value">>,From,To} ->
+            [{<<"valuerange">>, iolist_to_binary([integer_to_binary(From),<<"-">>,integer_to_binary(To)])} | prepare_object_ans(State, Tail)];
+        _ ->
+            [{<<"valuerange">>, iolist_to_binary([<<"0-">>,integer_to_binary(Attrs#fileattributes.size-1)])} | prepare_object_ans(State, Tail)]
+    end;
 prepare_object_ans(State,[Other | Tail]) ->
     [{Other, <<>>} | prepare_object_ans(State, Tail)].
 
@@ -356,14 +365,14 @@ parse_body(RawBody) ->
 
 
 read_file(#state{attributes = Attrs} = State,default,Encoding) ->
-    read_file(State,{0,Attrs#fileattributes.size},Encoding);
+    read_file(State,{0,Attrs#fileattributes.size-1},Encoding); %default range shuold remain consistent with parse_object_ans/2 valuerange clause
 read_file(State,Range,<<"base64">>) ->
     case read_file(State,Range,<<"utf-8">>) of
         {ok,Data} -> {ok,base64:encode(Data)};
         Error -> Error
     end;
 read_file(#state{filepath = Path},{From,To},<<"utf-8">>) ->
-    logical_files_manager:read(Path,From, To-From).
+    logical_files_manager:read(Path,From, To-From+1).
 
 
 
