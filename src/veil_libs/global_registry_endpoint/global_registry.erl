@@ -28,7 +28,7 @@ user_request(Token, Method, URI, Body) ->
 
 
 request(Method, URI, Body, Headers) ->
-    URL = "https://globalregistry.org:8443/" ++ vcn_utils:ensure_list(URI),
+    URL = "https://onedata.org:8443/" ++ vcn_utils:ensure_list(URI),
     case ibrowse:send_req(URL, [{"Content-Type", "application/json"}] ++ Headers, Method, Body,
         [{ssl_options, [{verify, verify_none}, {certfile, get_provider_cert_path()}, {keyfile, get_provider_key_path()}]}]) of
         {ok, "200", _, Response} -> {ok, jiffy:decode(Response, [return_maps])};

@@ -11,11 +11,12 @@
 %% ===================================================================
 
 -module(page_spaces).
+-include("veil_modules/dao/dao_spaces.hrl").
 -include("veil_modules/control_panel/common.hrl").
 -include_lib("ctool/include/logging.hrl").
 
 % n2o API and comet
--export([main/0, event/1, comet_loop/1]).
+-export([main/0, event/1, api_event/3, comet_loop/1]).
 
 %% Common page CCS styles
 -define(MESSAGE_STYLE, <<"position: fixed; width: 100%; top: 120px; z-index: 1; display: none;">>).
@@ -34,8 +35,6 @@
 -define(STATE, state).
 -record(?STATE, {}).
 
--record(space_info, {uuid = "", name = "", providers = []}).
-
 %% ====================================================================
 %% API functions
 %% ====================================================================
@@ -51,7 +50,7 @@ main() ->
         true ->
             #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, custom()}]}
     end.
 
 
@@ -61,6 +60,15 @@ main() ->
 -spec title() -> binary().
 %% ====================================================================
 title() -> <<"Spaces">>.
+
+
+%% custom/0
+%% ====================================================================
+%% @doc This will be placed instead of {{custom}} tag in template.
+-spec custom() -> binary().
+%% ====================================================================
+custom() ->
+    <<"<script src='/js/bootbox.min.js' type='text/javascript' charset='utf-8'></script>">>.
 
 
 %% body/0
@@ -242,31 +250,9 @@ space_row_collapsed(SpaceId, RowId) ->
         [
             #td{
                 style = ?CONTENT_COLUMN_STYLE,
-                body = #p{body = Name}
-%%                 #table{
-%%                     style = ?TABLE_STYLE,
-%%                     body = [
-%%                         #tr{
-%%                             cells = [
-%%                                 #td{
-%%                                     style = ?DESCRIPTION_STYLE,
-%%                                     body = #label{
-%%                                         style = ?LABEL_STYLE,
-%%                                         class = <<"label label-large label-inverse">>,
-%%                                         body = <<"Name">>
-%%                                     }
-%%                                 },
-%%                                 #td{
-%%                                     style = ?MAIN_STYLE,
-%%                                     body = #p{
-%%                                         style = ?PARAGRAPH_STYLE,
-%%                                         body = Name
-%%                                     }
-%%                                 }
-%%                             ]
-%%                         }
-%%                     ]
-%%                 }
+                body = #p{
+                    body = <<"<b>", Name/binary, "</b> ( ", SpaceId/binary, " )">>
+                }
             },
             #td{
                 id = SpinnerId,
@@ -451,6 +437,39 @@ message(Id, Message) ->
     gui_jq:fade_in(Id, 300).
 
 
+%% dialog_popup/3
+%% ====================================================================
+%% @doc Displays custom dialog popup.
+-spec dialog_popup(Title :: binary(), Message :: binary(), Script :: binary()) -> binary().
+%% ====================================================================
+dialog_popup(Title, Message, Script) ->
+    gui_jq:wire(<<"var box = bootbox.dialog({
+        title: '", Title/binary, "',
+        message: '", Message/binary, "',
+        buttons: {
+            'Cancel': {
+                className: 'cancel'
+            },
+            'OK': {
+                className: 'btn-primary confirm',
+                callback: function() {", Script/binary, "}
+            }
+        }
+    });">>).
+
+
+%% bind_key_to_click/2
+%% ====================================================================
+%% @doc Makes any keypresses of given key to click on selected class.
+%% @end
+-spec bind_key_to_click(KeyCode :: binary(), TargetID :: binary()) -> string().
+%% ====================================================================
+bind_key_to_click(KeyCode, TargetID) ->
+    Script = <<"$(document).bind('keydown', function (e){",
+    "if (e.which == ", KeyCode/binary, ") { e.preventDefault(); $('", TargetID/binary, "').click(); } });">>,
+    gui_jq:wire(Script, false).
+
+
 %% spinner/0
 %% ====================================================================
 %% @doc Renders spinner GIF.
@@ -512,8 +531,39 @@ comet_loop(#?STATE{} = State) ->
 %% ====================================================================
 event(init) ->
     gui_jq:update(<<"spaces">>, spaces_table_collapsed(<<"spaces">>)),
+    gui_jq:wire(#api{name = "createSpace", tag = "createSpace"}, false),
+    gui_jq:wire(#api{name = "joinSpace", tag = "joinSpace"}, false),
+    bind_key_to_click(<<"13">>, <<"button.confirm">>),
     {ok, Pid} = gui_comet:spawn(fun() -> comet_loop(#?STATE{}) end),
     put(?COMET_PID, Pid);
+
+event(create_space) ->
+    ?info("Create space."),
+    Title = <<"Create Space">>,
+    Message = <<"<div style=\"margin: 0 auto; width: 80%;\">",
+    "<p id=\"create_space_alert\" style=\"width: 100%; color: red; font-size: medium; text-align: center; display: none;\"></p>",
+    "<input id=\"create_space_name\" type=\"text\" style=\"width: 100%;\" placeholder=\"Name\">",
+    "</div>">>,
+    Script = <<"var alert = $(\"#create_space_alert\");",
+    "var token = $.trim($(\"#create_space_token\").val());",
+    "if(token.length == 0) { alert.html(\"Please provide Space token.\"); alert.fadeIn(300); return false; }",
+    "else { createSpace([token]); return true; }">>,
+    dialog_popup(Title, Message, Script),
+    gui_jq:wire(<<"box.on('shown',function(){ $(\"#create_space_name\").focus(); });">>);
+
+event(join_space) ->
+    ?info("Join Space"),
+    Title = <<"Join Space">>,
+    Message = <<"<div style=\"margin: 0 auto; width: 80%;\">",
+    "<p id=\"join_space_alert\" style=\"width: 100%; color: red; font-size: medium; text-align: center; display: none;\"></p>",
+    "<input id=\"join_space_token\" type=\"text\" style=\"width: 100%;\" placeholder=\"Token\">",
+    "</div>">>,
+    Script = <<"var alert = $(\"#join_space_alert\");",
+    "var token = $.trim($(\"#join_space_token\").val());",
+    "if(token.length == 0) { alert.html(\"Please provide Space token.\"); alert.fadeIn(300); return false; }",
+    "else { joinSpace([token]); return true; }">>,
+    dialog_popup(Title, Message, Script),
+    gui_jq:wire(<<"box.on('shown',function(){ $(\"#join_space_token\").focus(); });">>);
 
 event({spaces_table_collapse, TableId, SpinnerId}) ->
     get(?COMET_PID) ! {spaces_table_collapse, TableId},
@@ -545,3 +595,20 @@ event({close_message, MessageId}) ->
 
 event(terminate) ->
     ok.
+
+%% api_event/3
+%% ====================================================================
+%% @doc Handles page events.
+-spec api_event(Name :: string(), Args :: string(), Req :: string()) -> no_return().
+%% ====================================================================
+api_event("createSpace", Args, _) ->
+    [Token] = mochijson2:decode(Args),
+    ?info("Create space: ~p", [Token]);
+%%     get(?COMET_PID) ! {create_space, Name, Token, <<"space_", (integer_to_binary(Id + 1))/binary>>},
+%%     gui_jq:prop(<<"create_space_button">>, <<"disabled">>, <<"disabled">>);
+
+api_event("joinSpace", Args, _) ->
+    [Token] = mochijson2:decode(Args),
+    ?info("Join space: ~p", [Token]).
+%%     get(?COMET_PID) ! {support_space, Token, <<"space_", (integer_to_binary(Id + 1))/binary>>},
+%%     gui_jq:prop(<<"support_space_button">>, <<"disabled">>, <<"disabled">>);

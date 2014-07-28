@@ -10,10 +10,11 @@
 -author("RoXeon").
 
 -include_lib("ctool/include/logging.hrl").
+-include("veil_modules/dao/dao_types.hrl").
 -include("veil_modules/dao/dao_vfs.hrl").
 
 %% API
--export([get_space_info/2, get_space_providers/1]).
+-export([get_user_spaces/1, get_space_info/2, get_space_providers/1]).
 
 
 %% ====================================================================
@@ -39,7 +40,7 @@ get_space_info({ok, Response}) ->
     #{<<"name">> := SpaceName, <<"spaceId">> := SpaceId0} = Response,
     SpaceId = vcn_utils:ensure_binary(SpaceId0),
     {ok, Providers} = registry_spaces:get_space_providers(SpaceId),
-    {ok, #space_info{space_id = SpaceId, name = unicode:characters_to_list(SpaceName), providers = Providers}};
+    {ok, #space_info{space_id = SpaceId, name = SpaceName, providers = Providers}};
 get_space_info({error, Reason}) ->
     {error, Reason}.
 
