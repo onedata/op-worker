@@ -188,7 +188,7 @@ put_dir(Req, #state{filepath = Filepath, body = _Body} = State) ->
 %% ====================================================================
 put_file(Req,#state{filepath = Filepath, body = Body} = State) ->
     ValueTransferEncoding = proplists:get_value(<<"valuetransferencoding">>,Body,<<"utf-8">>),  %todo check given body opts, store given mimetype
-    Value = proplists:get_value(<<"value">>,Body,<<"">>),
+    Value = proplists:get_value(<<"value">>,Body,<<>>),
     case logical_files_manager:create(Filepath) of
         ok ->
             RawValue = case ValueTransferEncoding of
@@ -200,7 +200,8 @@ put_file(Req,#state{filepath = Filepath, body = Body} = State) ->
                     Response = rest_utils:encode_to_json({struct, prepare_object_ans(State,?default_post_file_opts)}),
                     Req2 = cowboy_req:set_resp_body(Response, Req),
                     {true,Req2,State};
-                _Error ->
+                Error ->
+                    ?error("Writing to cdmi object end up with error: ~p", [Error]),
                     logical_files_manager:delete(Filepath),
                     {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
                     {halt, Req2, State}

@@ -117,6 +117,7 @@ create_dir_test(_Config) ->
 
 create_file_test(_Config) ->
     ToCreate = "file.txt",
+    ToCreate2 = filename:join(["groups",?TEST_GROUP,"file1.txt"]),
     FileContent = <<"File content!">>,
 
     %%-------- basic create --------
@@ -134,7 +135,25 @@ create_file_test(_Config) ->
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse1)),
 
     ?assert(object_exists(ToCreate)),
-    ?assertEqual(FileContent,get_file_content(ToCreate)).
+    ?assertEqual(FileContent,get_file_content(ToCreate)),
+    %%------------------------------
+
+    %%------ base64 create ---------
+    ?assert(not object_exists(ToCreate2)),
+
+    RequestHeaders2 = [{"content-type", "application/cdmi-object"}],
+    RequestBody2 = [{<<"valuetransferencoding">>,<<"base64">>},{<<"value">>, base64:encode(FileContent)}],
+    RawRequestBody2 = rest_utils:encode_to_json(RequestBody2),
+    {Code2, _Headers2, Response2} = do_request(ToCreate2, put, RequestHeaders2, RawRequestBody2),
+    ?assertEqual("201",Code2),
+    {struct,CdmiPesponse2} = mochijson2:decode(Response2),
+    ?assertEqual(<<"application/cdmi-object">>, proplists:get_value(<<"objectType">>,CdmiPesponse2)),
+    ?assertEqual(<<"file1.txt">>, proplists:get_value(<<"objectName">>,CdmiPesponse2)),
+    ?assertEqual(<<"/groups/veilfstestgroup">>, proplists:get_value(<<"parentURI">>,CdmiPesponse2)),
+    ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse2)),
+
+    ?assert(object_exists(ToCreate2)),
+    ?assertEqual(FileContent,get_file_content(ToCreate2)).
     %%------------------------------
 
 delete_dir_test(_Config) ->
@@ -227,7 +246,7 @@ init_per_suite(Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    [CCM] = Nodes = test_node_starter:start_test_nodes(1,true),
+    [CCM] = Nodes = test_node_starter:start_test_nodes(1),
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
         [[{node_type, ccm_test},
