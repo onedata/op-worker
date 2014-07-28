@@ -118,6 +118,7 @@ create_dir_test(_Config) ->
 create_file_test(_Config) ->
     ToCreate = "file.txt",
     ToCreate2 = filename:join(["groups",?TEST_GROUP,"file1.txt"]),
+    ToCreate3 = "file2",
     FileContent = <<"File content!">>,
 
     %%-------- basic create --------
@@ -153,7 +154,30 @@ create_file_test(_Config) ->
     ?assertEqual(<<"Complete">>, proplists:get_value(<<"completionStatus">>,CdmiPesponse2)),
 
     ?assert(object_exists(ToCreate2)),
-    ?assertEqual(FileContent,get_file_content(ToCreate2)).
+    ?assertEqual(FileContent,get_file_content(ToCreate2)),
+    %%------------------------------
+
+    %%----- create conflict --------
+    ?assert(object_exists(ToCreate)),
+
+    RequestHeaders3 = [{"content-type", "application/cdmi-object"}],
+    RequestBody3 = [{<<"value">>, FileContent}],
+    RawRequestBody3 = rest_utils:encode_to_json(RequestBody3),
+    {Code3, _Headers3, _Response3} = do_request(ToCreate, put, RequestHeaders3, RawRequestBody3),
+    ?assertEqual("409",Code3),
+
+    ?assert(object_exists(ToCreate)),
+    %%------------------------------
+
+    %%------- create empty ---------
+    ?assert(not object_exists(ToCreate3)),
+
+    RequestHeaders4 = [{"content-type", "application/cdmi-object"}],
+    {Code4, _Headers4, _Response4} = do_request(ToCreate3, put, RequestHeaders4, []),
+    ?assertEqual("201",Code4),
+
+    ?assert(object_exists(ToCreate3)),
+    ?assertEqual(<<>>,get_file_content(ToCreate3)).
     %%------------------------------
 
 delete_dir_test(_Config) ->
@@ -246,7 +270,7 @@ init_per_suite(Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    [CCM] = Nodes = test_node_starter:start_test_nodes(1),
+    [CCM] = Nodes = test_node_starter:start_test_nodes(1,true),
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
         [[{node_type, ccm_test},

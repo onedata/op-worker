@@ -206,7 +206,11 @@ put_file(Req,#state{filepath = Filepath, body = Body} = State) ->
                     {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
                     {halt, Req2, State}
             end;
-        _Error -> %todo handle common errors
+        {error, file_exists} ->
+            {ok,Req2} = cowboy_req:reply(?error_conflict_code,Req),
+            {halt, Req2, State};
+        Error -> %todo handle common errors
+            ?error("Creating cdmi object end up with error: ~p", [Error]),
             {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
             {halt, Req2, State}
     end.
