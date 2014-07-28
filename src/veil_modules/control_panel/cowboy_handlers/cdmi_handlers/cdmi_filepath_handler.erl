@@ -123,7 +123,7 @@ content_types_provided(Req, State) -> %todo handle non-cdmi types
 -spec get_dir(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 get_dir(Req, #state{opts = Opts, attributes = #fileattributes{type = "DIR"}} = State) ->
-    DirCdmi = prepare_container_ans(State,case Opts of [] -> ?default_get_dir_opts; _ -> Opts end),
+    DirCdmi = prepare_container_ans(case Opts of [] -> ?default_get_dir_opts; _ -> Opts end,State),
     Response = rest_utils:encode_to_json({struct, DirCdmi}),
     {Response, Req, State};
 get_dir(Req, State) -> %given uri points to file, return 404
@@ -138,7 +138,7 @@ get_dir(Req, State) -> %given uri points to file, return 404
 -spec get_file(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
 get_file(Req, #state{opts = Opts, attributes = #fileattributes{type = "REG"}} = State) ->
-    DirCdmi = prepare_object_ans(State,case Opts of [] -> ?default_get_file_opts; _ -> Opts end),
+    DirCdmi = prepare_object_ans(case Opts of [] -> ?default_get_file_opts; _ -> Opts end, State),
     case proplists:get_value(<<"value">>, DirCdmi) of
         {range, Range} ->
             Encoding = <<"base64">>, %todo send also utf-8 when possible
@@ -183,7 +183,7 @@ content_types_accepted(Req, State) ->
 put_dir(Req, #state{filepath = Filepath, body = _Body} = State) ->
     case logical_files_manager:mkdir(Filepath) of
         ok -> %todo check given body
-            Response = rest_utils:encode_to_json({struct, prepare_container_ans(State,?default_post_dir_opts)}),
+            Response = rest_utils:encode_to_json({struct, prepare_container_ans(?default_post_dir_opts,State)}),
             Req2 = cowboy_req:set_resp_body(Response,Req),
             {true,Req2,State};
         {error, dir_exists} ->
@@ -214,7 +214,7 @@ put_file(Req,#state{filepath = Filepath, body = Body} = State) -> %todo handle w
             end,
             case logical_files_manager:write(Filepath,RawValue) of
                 Bytes when is_integer(Bytes) andalso Bytes == byte_size(RawValue) ->
-                    Response = rest_utils:encode_to_json({struct, prepare_object_ans(State,?default_post_file_opts)}),
+                    Response = rest_utils:encode_to_json({struct, prepare_object_ans(?default_post_file_opts,State)}),
                     Req2 = cowboy_req:set_resp_body(Response, Req),
                     {true,Req2,State};
                 Error ->
@@ -265,65 +265,65 @@ delete_resource(Req, #state{filepath = Filepath, attributes = #fileattributes{ty
 %% ====================================================================
 %% @doc Prepares json formatted answer with field names from given list of binaries
 %% @end
--spec prepare_container_ans(#state{}, [FieldName :: binary()]) -> [{FieldName :: binary(), Value :: term()}].
+-spec prepare_container_ans([FieldName :: binary()],#state{}) -> [{FieldName :: binary(), Value :: term()}].
 %% ====================================================================
-prepare_container_ans(_State,[]) ->
+prepare_container_ans([],_State) ->
     [];
-prepare_container_ans(State,[<<"objectType">> | Tail]) ->
-    [{<<"objectType">>, <<"application/cdmi-container">>} | prepare_container_ans(State, Tail)];
-prepare_container_ans(#state{filepath = Filepath} = State,[<<"objectName">> | Tail]) ->
-    [{<<"objectName">>, list_to_binary([filename:basename(Filepath),"/"])} | prepare_container_ans(State, Tail)];
-prepare_container_ans(#state{filepath = <<"/">>} = State,[<<"parentURI">> | Tail]) ->
-    [{<<"parentURI">>, <<>>} | prepare_container_ans(State, Tail)];
-prepare_container_ans(#state{filepath = Filepath} = State,[<<"parentURI">> | Tail]) ->
-    [{<<"parentURI">>, list_to_binary(fslogic_path:strip_path_leaf(Filepath))} | prepare_container_ans(State, Tail)];
-prepare_container_ans(State,[<<"completionStatus">> | Tail]) ->
-    [{<<"completionStatus">>, <<"Complete">>} | prepare_container_ans(State, Tail)];
-prepare_container_ans(State,[<<"metadata">> | Tail]) -> %todo extract metadata
-    [{<<"metadata">>, <<>>} | prepare_container_ans(State, Tail)];
-prepare_container_ans(#state{filepath = Filepath} = State,[<<"children">> | Tail]) ->
-    [{<<"children">>, [list_to_binary(Path) || Path <- rest_utils:list_dir(Filepath)]} | prepare_container_ans(State, Tail)];
-prepare_container_ans(State,[Other | Tail]) ->
-    [{Other, <<>>} | prepare_container_ans(State, Tail)].
+prepare_container_ans([<<"objectType">> | Tail],State) ->
+    [{<<"objectType">>, <<"application/cdmi-container">>} | prepare_container_ans(Tail,State)];
+prepare_container_ans([<<"objectName">> | Tail],#state{filepath = Filepath} = State) ->
+    [{<<"objectName">>, list_to_binary([filename:basename(Filepath),"/"])} | prepare_container_ans(Tail,State)];
+prepare_container_ans([<<"parentURI">> | Tail],#state{filepath = <<"/">>} = State) ->
+    [{<<"parentURI">>, <<>>} | prepare_container_ans(Tail,State)];
+prepare_container_ans([<<"parentURI">> | Tail],#state{filepath = Filepath} = State) ->
+    [{<<"parentURI">>, list_to_binary(fslogic_path:strip_path_leaf(Filepath))} | prepare_container_ans(Tail,State)];
+prepare_container_ans([<<"completionStatus">> | Tail], State) ->
+    [{<<"completionStatus">>, <<"Complete">>} | prepare_container_ans(Tail,State)];
+prepare_container_ans([<<"metadata">> | Tail],State) -> %todo extract metadata
+    [{<<"metadata">>, <<>>} | prepare_container_ans(Tail,State)];
+prepare_container_ans([<<"children">> | Tail],#state{filepath = Filepath} = State) ->
+    [{<<"children">>, [list_to_binary(Path) || Path <- rest_utils:list_dir(Filepath)]} | prepare_container_ans(Tail,State)];
+prepare_container_ans([Other | Tail],State) ->
+    [{Other, <<>>} | prepare_container_ans(Tail,State)].
 
 %% prepare_object_ans/2
 %% ====================================================================
 %% @doc Prepares json formatted answer with field names from given list of binaries
 %% @end
--spec prepare_object_ans(#state{}, [FieldName :: binary()]) -> [{FieldName :: binary(), Value :: term()}].
+-spec prepare_object_ans([FieldName :: binary()], #state{}) -> [{FieldName :: binary(), Value :: term()}].
 %% ====================================================================
-prepare_object_ans(_State,[]) ->
+prepare_object_ans([], _State) ->
     [];
-prepare_object_ans(State,[<<"objectType">> | Tail]) ->
-    [{<<"objectType">>, <<"application/cdmi-object">>} | prepare_object_ans(State, Tail)];
-prepare_object_ans(#state{filepath = Filepath} = State,[<<"objectName">> | Tail]) ->
-    [{<<"objectName">>, list_to_binary(filename:basename(Filepath))} | prepare_object_ans(State, Tail)];
-prepare_object_ans(#state{filepath = <<"/">>} = State,[<<"parentURI">> | Tail]) ->
-    [{<<"parentURI">>, <<>>} | prepare_object_ans(State, Tail)];
-prepare_object_ans(#state{filepath = Filepath} = State,[<<"parentURI">> | Tail]) ->
-    [{<<"parentURI">>, list_to_binary(fslogic_path:strip_path_leaf(Filepath))} | prepare_object_ans(State, Tail)];
-prepare_object_ans(State,[<<"completionStatus">> | Tail]) ->
-    [{<<"completionStatus">>, <<"Complete">>} | prepare_object_ans(State, Tail)];
-prepare_object_ans(#state{filepath = Filepath} = State,[<<"mimetype">> | Tail]) ->
+prepare_object_ans([<<"objectType">> | Tail], State) ->
+    [{<<"objectType">>, <<"application/cdmi-object">>} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"objectName">> | Tail], #state{filepath = Filepath} = State) ->
+    [{<<"objectName">>, list_to_binary(filename:basename(Filepath))} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"parentURI">> | Tail], #state{filepath = <<"/">>} = State) ->
+    [{<<"parentURI">>, <<>>} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"parentURI">> | Tail], #state{filepath = Filepath} = State) ->
+    [{<<"parentURI">>, list_to_binary(fslogic_path:strip_path_leaf(Filepath))} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"completionStatus">> | Tail], State) ->
+    [{<<"completionStatus">>, <<"Complete">>} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"mimetype">> | Tail], #state{filepath = Filepath} = State) ->
     {Type, Subtype, _} = cow_mimetypes:all(gui_str:to_binary(Filepath)),
-    [{<<"mimetype">>, <<Type/binary, "/", Subtype/binary>>} | prepare_object_ans(State, Tail)];
-prepare_object_ans(State,[<<"metadata">> | Tail]) -> %todo extract metadata
-    [{<<"metadata">>, <<>>} | prepare_object_ans(State, Tail)];
-prepare_object_ans(State,[<<"valuetransferencoding">> | Tail]) ->
-    [{<<"valuetransferencoding">>, <<"base64">>} | prepare_object_ans(State, Tail)];
-prepare_object_ans(State,[<<"value">> | Tail]) ->
-    [{<<"value">>, {range, default}} | prepare_object_ans(State, Tail)];
-prepare_object_ans(State,[{<<"value">>,From,To} | Tail]) ->
-    [{<<"value">>, {range, {From,To}}} | prepare_object_ans(State, Tail)];
-prepare_object_ans(#state{opts = Opts,attributes = Attrs} = State,[<<"valuerange">> | Tail]) ->
+    [{<<"mimetype">>, <<Type/binary, "/", Subtype/binary>>} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"metadata">> | Tail], State) -> %todo extract metadata
+    [{<<"metadata">>, <<>>} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"valuetransferencoding">> | Tail], State) ->
+    [{<<"valuetransferencoding">>, <<"base64">>} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"value">> | Tail], State) ->
+    [{<<"value">>, {range, default}} | prepare_object_ans(Tail, State)];
+prepare_object_ans([{<<"value">>,From,To} | Tail], State) ->
+    [{<<"value">>, {range, {From,To}}} | prepare_object_ans(Tail, State)];
+prepare_object_ans([<<"valuerange">> | Tail], #state{opts = Opts,attributes = Attrs} = State) ->
     case lists:keyfind(<<"value">>,1,Opts) of
         {<<"value">>,From,To} ->
-            [{<<"valuerange">>, iolist_to_binary([integer_to_binary(From),<<"-">>,integer_to_binary(To)])} | prepare_object_ans(State, Tail)];
+            [{<<"valuerange">>, iolist_to_binary([integer_to_binary(From),<<"-">>,integer_to_binary(To)])} | prepare_object_ans(Tail, State)];
         _ ->
-            [{<<"valuerange">>, iolist_to_binary([<<"0-">>,integer_to_binary(Attrs#fileattributes.size-1)])} | prepare_object_ans(State, Tail)]
+            [{<<"valuerange">>, iolist_to_binary([<<"0-">>,integer_to_binary(Attrs#fileattributes.size-1)])} | prepare_object_ans(Tail, State)]
     end;
-prepare_object_ans(State,[Other | Tail]) ->
-    [{Other, <<>>} | prepare_object_ans(State, Tail)].
+prepare_object_ans([Other | Tail], State) ->
+    [{Other, <<>>} | prepare_object_ans(Tail, State)].
 
 %% parse_opts/1
 %% ====================================================================
@@ -363,7 +363,19 @@ parse_body(RawBody) ->
             Ans
     end.
 
-
+%% read_file/3
+%% ====================================================================
+%% @doc Reads given range of bytes (defaults to whole file) from file (obtained from state filepath), result is
+%% encoded according to 'Encoding' argument
+%% @end
+-spec read_file(State :: #state{}, Range, Encoding ) -> Result when
+    Range :: default | {From  :: integer(), To :: integer()},
+    Encoding :: binary(),
+    Result :: {ok, Bytes} | {ErrorGeneral, ErrorDetail},
+    Bytes :: binary(),
+    ErrorGeneral :: atom(),
+    ErrorDetail :: term().
+%% ====================================================================
 read_file(#state{attributes = Attrs} = State,default,Encoding) ->
     read_file(State,{0,Attrs#fileattributes.size-1},Encoding); %default range shuold remain consistent with parse_object_ans/2 valuerange clause
 read_file(State,Range,<<"base64">>) ->
