@@ -688,18 +688,18 @@ create_dirs_at_storage(Root, SpacesInfo) ->
     case ListStatus of
         ok ->
             StorageRecords = lists:map(fun(VeilDoc) -> VeilDoc#veil_document.record end, StorageList),
-            CreateDirs = fun(StorageRecord, TmpAns) ->
-                case create_dirs_at_storage(Root, SpacesInfo, StorageRecord) of
+            CreateDirs = fun(StorageRecord,TmpAns) ->
+                case create_dirs_at_storage(Root,SpacesInfo,StorageRecord) of
                     ok -> TmpAns;
                     Error ->
-                        ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, SpacesInfo}, Error]),
-                        Error
+                      ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, SpacesInfo}, Error]),
+                      Error
                 end
             end,
-            lists:foldl(CreateDirs, ok, StorageRecords);
+            lists:foldl(CreateDirs,ok , StorageRecords);
         Error2 ->
-            ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, SpacesInfo}, {storage_listing_error, Error2}]),
-            {error, storage_listing_error}
+          ?error("Cannot create dirs ~p at storage, error: ~p", [{Root, SpacesInfo}, {storage_listing_error, Error2}]),
+          {error,storage_listing_error}
     end.
 
 %% create_dirs_at_storage/3
@@ -746,12 +746,12 @@ create_dirs_at_storage(Root, SpacesInfo, Storage) ->
 %%      or query compatible with user_logic:get_user/1.
 %%      The method assumes that user exists therefore will fail with exception when it doesnt.
 %% @end
--spec get_space_names(UserQuery :: term()) -> [binary()] | no_return().
+-spec get_space_names(UserQuery :: term()) -> [string()] | no_return().
 %% ====================================================================
 get_space_names(#veil_document{record = #user{} = User}) ->
     get_space_names(User);
 get_space_names(#user{} = User) ->
-    [SpaceName || #space_info{name = SpaceName} <- get_spaces(User)];
+    [unicode:characters_to_list(SpaceName) || #space_info{name = SpaceName} <- get_spaces(User)];
 get_space_names(UserQuery) ->
     {ok, UserDoc} = user_logic:get_user(UserQuery),
     get_space_names(UserDoc).
@@ -760,8 +760,7 @@ get_spaces(#veil_document{record = #user{} = User}) ->
     get_spaces(User);
 get_spaces(#user{spaces = Spaces}) ->
 %    ?info("Spaces: ~p", [lists:map(fun(SpaceId) -> fslogic_objects:get_space({uuid, SpaceId}) end, Spaces)]),
-    [SpaceInfo || {ok, #space_info{} = SpaceInfo} <- lists:map(fun(SpaceId) ->
-        fslogic_objects:get_space({uuid, SpaceId}) end, Spaces)];
+    [SpaceInfo || {ok, #space_info{} = SpaceInfo}  <- lists:map(fun(SpaceId) -> fslogic_objects:get_space({uuid, SpaceId}) end, Spaces)];
 get_spaces(UserQuery) ->
     {ok, UserDoc} = user_logic:get_user(UserQuery),
     get_spaces(UserDoc).
@@ -777,8 +776,6 @@ get_spaces(UserQuery) ->
 %% ====================================================================
 create_space_dir(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
     CTime = vcn_utils:time(),
-
-    ?info("=====> OMG: ~p", [SpaceInfo]),
 
     SpaceDirName = unicode:characters_to_list(SpaceName),
 
