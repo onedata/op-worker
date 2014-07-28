@@ -88,13 +88,11 @@ encode(#fusemessage{input = Input, message_type = MType} = FM) ->
     FMBin = erlang:iolist_to_binary(erlang:apply(fuse_messages_pb, encoder_method(MType), [Input])),
     ?info("Message o encode1: ~p", [FM#fusemessage{input = FMBin}]),
     erlang:iolist_to_binary(fuse_messages_pb:encode_fusemessage(FM#fusemessage{input = FMBin, message_type = a2l(MType)}));
-encode(#remotefilemangement{}) ->
-    <<>>.
-
-prepare_message(Synch, Task, AnswerDecoderName, ProtocolVersion, Msg, MsgId, AnswerType, MsgBytes) ->
-    #clustermsg{synch = Synch, protocol_version = ProtocolVersion, module_name = Task, message_id = 0,
-                answer_decoder_name = AnswerDecoderName, answer_type = AnswerType, input = MsgBytes,
-                message_decoder_name = get_message_decoder(Msg), message_type = get_message_type(Msg)}.
+encode(#remotefilemangement{input = Input, message_type = MType} = RFM) ->
+    ?info("Message o encode0: ~p", [Input]),
+    RFMBin = erlang:iolist_to_binary(erlang:apply(remote_file_management_pb, encoder_method(MType), [Input])),
+    ?info("Message o encode1: ~p", [RFM#remotefilemangement{input = RFMBin}]),
+    erlang:iolist_to_binary(remote_file_management_pb:encode_fusemessage(RFM#remotefilemangement{input = RFMBin, message_type = a2l(MType)})).
 
 
 

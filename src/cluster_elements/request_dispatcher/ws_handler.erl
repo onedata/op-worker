@@ -196,14 +196,14 @@ handle(Req, {_, _, Answer_decoder_name, ProtocolVersion,
 
 %% Handle HandshakeACK message - set FUSE ID used in this session, register connection
 handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{fuse_id = NewFuseId}, MsgId, Answer_type, AccessToken}, #hander_state{peer_dn = DnString} = State) ->
-    UID = %% Fetch user's ID
-    case dao_lib:apply(dao_users, get_user, [{dn, DnString}], ProtocolVersion) of
-        {ok, #veil_document{uuid = UID1}} ->
-            UID1;
-        {error, Error} ->
-            ?error("VeilClient handshake failed. User ~p data is not available due to DAO error: ~p", [DnString, Error]),
-            throw({no_user_found_error, Error, MsgId})
-    end,
+    {UID, AccessToken, UserGID} = %% Fetch user's ID
+        case dao_lib:apply(dao_users, get_user, [{dn, DnString}], ProtocolVersion) of
+            {ok, #veil_document{uuid = UID1, record = #user{access_token = AccessToken1, global_id = UserGID1}}} ->
+                {UID1, AccessToken1, UserGID1};
+            {error, Error} ->
+                ?error("VeilClient handshake failed. User ~p data is not available due to DAO error: ~p", [DnString, Error]),
+                throw({no_user_found_error, Error, MsgId})
+        end,
 
     %% Fetch session data (using FUSE ID)
     case dao_lib:apply(dao_cluster, get_fuse_session, [NewFuseId], ProtocolVersion) of
@@ -222,7 +222,8 @@ handle(Req, {_Synch, _Task, Answer_decoder_name, ProtocolVersion, #handshakeack{
 
             %% Session data found, and its user ID matches -> send OK status and update current connection state
             ?debug("User ~p assigned FUSE ID ~p to the connection (PID: ~p)", [DnString, NewFuseId, self()]),
-            {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req, State#hander_state{fuse_id = NewFuseId, connection_id = ConnID}};
+            {reply, {binary, encode_answer(ok, MsgId, Answer_type, Answer_decoder_name, #atom{value = ?VOK})}, Req,
+                        State#hander_state{fuse_id = NewFuseId, connection_id = ConnID, access_token = AccessToken, user_global_id = UserGID}};
         {ok, #veil_document{record = #fuse_session{uid = OtherUID}}} ->
             %% Current user does not match session owner
             ?warning("User ~p tried to access someone else's session (fuse ID: ~p, session owner UID: ~p)", [DnString, NewFuseId, OtherUID]),

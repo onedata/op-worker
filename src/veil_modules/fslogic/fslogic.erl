@@ -191,8 +191,17 @@ maybe_handle_fuse_message(RequestBody) ->
             [RerouteToProvider | _] = Providers,
             {ok, #{<<"urls">> := URLs}} = registry_providers:get_provider_info(RerouteToProvider),
             ?info("Reroute to: ~p", [URLs]),
-            provider_proxy:reroute_pull_message({RerouteToProvider, URLs}, fslogic_context:get_access_token(),
-                fslogic_context:get_fuse_id(), #fusemessage{input = RequestBody, message_type = atom_to_list(element(1, RequestBody))})
+            try
+                provider_proxy:reroute_pull_message({RerouteToProvider, URLs}, fslogic_context:get_access_token(),
+                    fslogic_context:get_fuse_id(), #fusemessage{input = RequestBody, message_type = atom_to_list(element(1, RequestBody))})
+            catch
+                Type:Reason ->
+                    ?error_stacktrace("Unable to process remote fslogic request to provider ~p due to: ~p", [RerouteToProvider, {Type, Reason}]),
+                    case fslogic_remote:local_clean_postprocess(Reason, RequestBody) of
+                        undefined -> throw({unable_to_reroute_message, Reason});
+                        LocalResponse -> LocalResponse
+                    end
+            end
     end.
 
 %% handle_test/2

@@ -105,7 +105,17 @@ get_answer_decoder_and_type(#fusemessage{input = #testchannel{}}) ->
 get_answer_decoder_and_type(#fusemessage{input = #createfileack{}}) ->
     {communication_protocol, atom};
 
-get_answer_decoder_and_type(#remotefilemangement{}) ->
-    {remotefilemangement, 'TODO'};
+get_answer_decoder_and_type(#remotefilemangement{input = #createfile{}}) ->
+    {communication_protocol, atom};
+get_answer_decoder_and_type(#remotefilemangement{input = #deletefileatstorage{}}) ->
+    {communication_protocol, atom};
+get_answer_decoder_and_type(#remotefilemangement{input = #truncatefile{}}) ->
+    {communication_protocol, atom};
+get_answer_decoder_and_type(#remotefilemangement{input = #changepermsatstorage{}}) ->
+    {communication_protocol, atom};
+get_answer_decoder_and_type(#remotefilemangement{input = #readfile{}}) ->
+    {remote_file_management, filedata};
+get_answer_decoder_and_type(#remotefilemangement{input = #writefile{}}) ->
+    {remote_file_management, writeinfo};
 get_answer_decoder_and_type(Unk) ->
     throw({unknown_message, Unk}).
