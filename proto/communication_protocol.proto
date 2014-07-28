@@ -10,7 +10,8 @@ message ClusterMsg {
     required int32 protocol_version = 7;
     optional int32 message_id = 8 [default = 0];
     optional bytes input = 9;
-    optional bytes access_token = 10;
+    optional bytes global_user_id = 10;
+    optional bytes token_hash = 11;
 }
 
 message Answer {
@@ -24,7 +25,7 @@ message Answer {
 message ProviderMsg {
     required string message_type = 1;
     required bytes input = 2;
-    optional bytes fuse_id = 1; 
+    optional bytes fuse_id = 3;
 }
 
 message Atom {
