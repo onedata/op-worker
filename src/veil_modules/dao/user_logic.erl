@@ -177,13 +177,12 @@ get_user(Key) ->
 synchronize_spaces_info(#veil_document{record = UserRec} = UserDoc, AccessToken) ->
     case global_registry:user_request(AccessToken, get, "user/spaces") of
         {ok, #{<<"spaces">> := Spaces}} ->
-            Spaces1 = [binary_to_list(SpaceL) || SpaceL <- Spaces],
-            ?info("Synchronized spaces: ~p", [Spaces1]),
+            ?info("Synchronized spaces: ~p", [Spaces]),
             NewSpaces =
                 case UserRec#user.spaces of
-                    [] -> Spaces1;
+                    [] -> Spaces;
                     [MainSpace | _] ->
-                        {MainSpace1, Rest} = lists:partition(fun(Elem) -> Elem =:= MainSpace end, Spaces1),
+                        {MainSpace1, Rest} = lists:partition(fun(Elem) -> Elem =:= MainSpace end, Spaces),
                         MainSpace1 ++ Rest
                 end,
 
@@ -776,6 +775,8 @@ get_spaces(UserQuery) ->
 %% ====================================================================
 create_space_dir(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) ->
     CTime = vcn_utils:time(),
+
+    ?info("OMG ~p", [SpaceName]),
 
     SpaceDirName = unicode:characters_to_list(SpaceName),
 

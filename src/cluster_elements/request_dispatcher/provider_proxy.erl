@@ -27,7 +27,7 @@
     handshakeInit/3, handshakeAck/2
 ]).
 
-reroute_pull_message({ProviderId, [URL | _]}, AccessToken, FuseId, Message) ->
+reroute_pull_message({ProviderId, [URL | _]}, {GlobalID, AccessToken}, FuseId, Message) ->
     TargetModule =
         case Message of
             #fusemessage{}              -> fslogic;
