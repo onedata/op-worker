@@ -6,6 +6,7 @@
 %% @end
 %% ===================================================================
 %% @doc: This file contains n2o website code
+%% The page allows for viewing online cluster monitoring.
 %% @end
 %% ===================================================================
 
@@ -15,14 +16,14 @@
 -include_lib("ctool/include/logging.hrl").
 
 % n2o API and comet
--export([main/0, event/1, comet_loop/2]).
+-export([main/0, event/1, comet_loop/1]).
 
 -define(TIME_RANGES, [<<"last 5 minutes">>, <<"last 15 minutes">>, <<"last hour">>, <<"last 24 hours">>, <<"last 7 days">>, <<"last 30 days">>, <<"last 365 days">>]).
 -define(SUMMARY_CHART_TYPES, [<<"CPU utilization">>, <<"memory usage">>, <<"network throughput">>, <<"network transfer">>, <<"Erlang ports transfer">>, <<"storage IO transfer">>]).
 -define(HOST_CHART_TYPES, [<<"CPU utilization">>, <<"memory usage">>, <<"network throughput">>, <<"network transfer">>, <<"Erlang ports transfer">>]).
 -define(GEN_SERVER_TIMEOUT, 5000).
 
--record(page_state, {nodes, node, time_range, chart_type, charts = []}).
+-record(page_state, {counter, nodes, node, time_range, chart_type, charts = []}).
 -record(chart, {id, node, time_range, type, update_period}).
 
 %% main/0
@@ -120,10 +121,13 @@ monitoring_submenu() ->
 %% comet_loop/1
 %% ====================================================================
 %% @doc Adds, updates and removes monitoring charts. Handles messages that change chart preferences.
--spec comet_loop(Counter :: integer(), PageState :: #page_state{}) -> no_return().
+-spec comet_loop(PageState :: #page_state{}) -> no_return().
 %% ====================================================================
-comet_loop(Counter, #page_state{nodes = Nodes, node = Node, time_range = TimeRange, chart_type = ChartType, charts = Charts} = PageState) ->
-    try
+comet_loop({error, Reason}) ->
+    {error, Reason};
+
+comet_loop(#page_state{counter = Counter, nodes = Nodes, node = Node, time_range = TimeRange, chart_type = ChartType, charts = Charts} = PageState) ->
+    NewPageState = try
         receive
             {set_node, NewNode, ChartTypes} ->
                 case lists:member(ChartType, ChartTypes) of
@@ -133,13 +137,13 @@ comet_loop(Counter, #page_state{nodes = Nodes, node = Node, time_range = TimeRan
                 gui_jq:update(<<"host_label">>, <<"Host: <b>", (get_hostname(NewNode))/binary, "</b>">>),
                 gui_jq:update(<<"host_dropdown">>, host_dropdown_body(NewNode, Nodes)),
                 gui_comet:flush(),
-                ?MODULE:comet_loop(Counter, PageState#page_state{node = NewNode});
+                PageState#page_state{node = NewNode};
 
             {set_time_range, NewTimeRange} ->
                 gui_jq:update(<<"time_range_label">>, <<"Time range: <b>", NewTimeRange/binary, "</b>">>),
                 gui_jq:update(<<"time_range_dropdown">>, time_range_dropdown_body(NewTimeRange)),
                 gui_comet:flush(),
-                ?MODULE:comet_loop(Counter, PageState#page_state{time_range = NewTimeRange});
+                PageState#page_state{time_range = NewTimeRange};
 
             {set_chart_type, NewChartType, ChartTypes} ->
                 case NewChartType of
@@ -148,7 +152,7 @@ comet_loop(Counter, #page_state{nodes = Nodes, node = Node, time_range = TimeRan
                 end,
                 gui_jq:update(<<"chart_type_dropdown">>, chart_type_dropdown_body(NewChartType, ChartTypes)),
                 gui_comet:flush(),
-                ?MODULE:comet_loop(Counter, PageState#page_state{chart_type = NewChartType});
+                PageState#page_state{chart_type = NewChartType};
 
             add_chart ->
                 gui_jq:remove(<<"error_message">>),
@@ -161,15 +165,16 @@ comet_loop(Counter, #page_state{nodes = Nodes, node = Node, time_range = TimeRan
                                     {ok, Chart} ->
                                         reset_dropdowns(Nodes),
                                         erlang:send_after(1000 * Chart#chart.update_period, self(), {update_chart, Counter}),
-                                        ?MODULE:comet_loop(Counter + 1, PageState#page_state{node = undefined, time_range = undefined, chart_type = undefined, charts = [{Counter, Chart} | Charts]});
+                                        PageState#page_state{counter = Counter + 1, node = undefined, time_range = undefined, chart_type = undefined, charts = [{Counter, Chart} | Charts]};
                                     _ ->
-                                        error_message(<<"There has been an error during chart creation. Please try again.">>)
+                                        error_message(<<"There has been an error during chart creation. Please try again.">>),
+                                        PageState
                                 end;
-                            _ -> error_message(<<"Chart already added.">>)
+                            _ -> error_message(<<"Chart already added.">>),
+                                PageState
                         end;
-                    _ -> ok
-                end,
-                ?MODULE:comet_loop(Counter, PageState);
+                    _ -> PageState
+                end;
 
             {update_chart, Id} ->
                 try
@@ -183,18 +188,20 @@ comet_loop(Counter, #page_state{nodes = Nodes, node = Node, time_range = TimeRan
                 catch
                     _:Error -> ?error("Can not update chart ~p: ~p", [Id, Error])
                 end,
-                ?MODULE:comet_loop(Counter, PageState);
+                PageState;
 
             {delete_chart, Id} ->
                 gui_jq:wire(<<"deleteChart(\"", (integer_to_binary(Id))/binary, "\");">>),
                 gui_comet:flush(),
-                ?MODULE:comet_loop(Counter, PageState#page_state{charts = proplists:delete(Id, Charts)})
+                PageState#page_state{charts = proplists:delete(Id, Charts)}
 
         end
-    catch Type:Msg ->
-        ?debug_stacktrace("~p ~p", [Type, Msg]),
-        error_message(<<"There has been an error in comet process. Please refresh the page.">>)
-    end.
+                   catch Type:Msg ->
+                       ?debug_stacktrace("~p ~p", [Type, Msg]),
+                       error_message(<<"There has been an error in comet process. Please refresh the page.">>),
+                       {error, Msg}
+                   end,
+    ?MODULE:comet_loop(NewPageState).
 
 
 %% error_message/1
@@ -203,8 +210,8 @@ comet_loop(Counter, #page_state{nodes = Nodes, node = Node, time_range = TimeRan
 -spec error_message(Message :: binary()) -> ok.
 %% ====================================================================
 error_message(Message) ->
-    Error = #panel{id = <<"error_message">>, style = <<"width: 100%; margin-bottom: 0px;">>, class = <<"dialog dialog-danger">>, body = [Message]},
-    gui_jq:insert_before("main_table", Error),
+    Error = #panel{id = <<"error_message">>, style = <<"width: 100%; margin-bottom: 0px;">>, class = <<"dialog dialog-danger">>, body = Message},
+    gui_jq:insert_before(<<"main_table">>, Error),
     gui_comet:flush().
 
 
@@ -562,7 +569,7 @@ value_to_list(_) ->
 %% ====================================================================
 event(init) ->
     Nodes = get_nodes(),
-    {ok, Pid} = gui_comet:spawn(fun() -> comet_loop(1, #page_state{nodes = Nodes}) end),
+    {ok, Pid} = gui_comet:spawn(fun() -> comet_loop(#page_state{counter = 1, nodes = Nodes}) end),
     put(comet_pid, Pid);
 
 event({set_node, summary}) ->
@@ -581,5 +588,8 @@ event(add_chart) ->
     get(comet_pid) ! add_chart;
 
 event({delete_chart, Id}) ->
-    get(comet_pid) ! {delete_chart, Id}.
+    get(comet_pid) ! {delete_chart, Id};
+
+event(terminate) ->
+    ok.
 
