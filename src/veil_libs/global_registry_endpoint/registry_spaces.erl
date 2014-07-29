@@ -14,21 +14,12 @@
 -include("veil_modules/dao/dao_vfs.hrl").
 
 %% API
--export([get_user_spaces/1, get_space_info/2, get_space_providers/1]).
+-export([get_space_info/2, get_space_providers/1]).
 
 
 %% ====================================================================
 %% API functions
 %% ====================================================================
-
-get_user_spaces({UserGID, AccessToken}) ->
-    case user_logic:get_user({global_id, UserGID}) of
-        {ok, UserDoc} ->
-            #veil_document{record = #user{spaces = Spaces}} = user_logic:synchronize_spaces_info(UserDoc, AccessToken),
-            {ok, Spaces};
-        {error, Reason} ->
-            {error, Reason}
-    end.
 
 get_space_info(SpaceId, {UserGID, AccessToken}) ->
     ?info("get_space_info ~p ~p", [SpaceId, {UserGID, AccessToken}]),
