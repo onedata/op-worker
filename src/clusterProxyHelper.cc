@@ -46,7 +46,7 @@ string ClusterProxyHelper::requestMessage(const google::protobuf::Message &msg,
         return answer->worker_answer();
     }
     catch(communication::Exception &e)
-{
+    {
         LOG(WARNING) << "Communication error: " << e.what();
     }
 
@@ -61,9 +61,9 @@ string ClusterProxyHelper::requestMessage(const google::protobuf::Message &msg)
         const auto answer = m_communicator->communicate<AnswerType>(
                     communication::ServerModule::REMOTE_FILES_MANAGER, *wrap(msg), 2);
         return answer->worker_answer();
-}
+    }
     catch(communication::Exception &e)
-{
+    {
         LOG(WARNING) << "Communication error: " << e.what();
     }
 
@@ -73,19 +73,19 @@ string ClusterProxyHelper::requestMessage(const google::protobuf::Message &msg)
 string ClusterProxyHelper::requestAtom(const google::protobuf::Message &msg)
 {
     try
-{
+    {
         const auto answer = m_communicator->communicate<Atom>(
                     communication::ServerModule::REMOTE_FILES_MANAGER, *wrap(msg), 2);
 
-    Atom atom;
+        Atom atom;
         if(answer->has_worker_answer())
         {
             atom.ParseFromString(answer->worker_answer());
-        return atom.value();
+            return atom.value();
+        }
     }
-}
     catch(communication::Exception &e)
-{
+    {
         LOG(WARNING) << "Communication error: " << e.what();
     }
 
