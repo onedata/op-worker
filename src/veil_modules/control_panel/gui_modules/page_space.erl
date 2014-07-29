@@ -118,10 +118,14 @@ space(#space_info{space_id = SpaceId, name = Name}) ->
             class = <<"dialog dialog-danger">>
         },
         #panel{
-            style = <<"margin-bottom: 50px;">>,
+            style = <<"margin-bottom: 100px;">>,
             body = [
+                #h6{
+                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 160px; width: 150px;">>,
+                    body = <<"Manage Space">>
+                },
                 #table{
-                    style = <<"margin: 0 auto; width: 50%; margin-top: 160px; margin-bottom: 30px; border-spacing: 1em;
+                    style = <<"margin: 0 auto; width: 50%; margin-top: 30px; border-spacing: 1em;
                     border-width: 0; border-collapse: inherit;">>,
                     body = lists:map(fun({Description, Main}) ->
                         #tr{
@@ -150,7 +154,7 @@ space(#space_info{space_id = SpaceId, name = Name}) ->
                 },
                 #table{
                     class = <<"table table-bordered table-striped">>,
-                    style = <<"width: 50%; margin: 0 auto; margin-top: 30px; margin-bottom: 30px; table-layout: fixed;">>,
+                    style = <<"width: 50%; margin: 0 auto; margin-top: 30px; table-layout: fixed;">>,
                     body = #tbody{
                         id = <<"providers">>,
                         body = #tr{
@@ -167,9 +171,18 @@ space(#space_info{space_id = SpaceId, name = Name}) ->
                         }
                     }
                 },
+                #panel{
+                    style = <<"margin: 0 auto; width: 50%; margin-top: 30px; text-align: center;">>,
+                    body = #button{
+                        id = <<"request_support">>,
+                        postback = {request_support, SpaceId},
+                        class = <<"btn btn-primary">>,
+                        body = <<"Request support">>
+                    }
+                },
                 #table{
                     class = <<"table table-bordered table-striped">>,
-                    style = <<"width: 50%; margin: 0 auto; margin-top: 30px; margin-bottom: 30px; table-layout: fixed;">>,
+                    style = <<"width: 50%; margin: 0 auto; margin-top: 30px; table-layout: fixed;">>,
                     body = #tbody{
                         id = <<"users">>,
                         body = #tr{
@@ -186,9 +199,18 @@ space(#space_info{space_id = SpaceId, name = Name}) ->
                         }
                     }
                 },
+                #panel{
+                    style = <<"margin: 0 auto; width: 50%; margin-top: 30px; text-align: center;">>,
+                    body = #button{
+                        id = <<"invite_user">>,
+                        postback = {invite_user, SpaceId},
+                        class = <<"btn btn-primary">>,
+                        body = <<"Invite user">>
+                    }
+                },
                 #table{
                     class = <<"table table-bordered table-striped">>,
-                    style = <<"width: 50%; margin: 0 auto; margin-top: 30px; margin-bottom: 30px; table-layout: fixed;">>,
+                    style = <<"width: 50%; margin: 0 auto; margin-top: 30px; table-layout: fixed;">>,
                     body = #tbody{
                         id = <<"groups">>,
                         body = #tr{
@@ -875,6 +897,24 @@ spinner() ->
     }.
 
 
+%% alert_popup/3
+%% ====================================================================
+%% @doc Displays custom alert popup.
+-spec alert_popup(Title :: binary(), Message :: binary(), Script :: binary()) -> binary().
+%% ====================================================================
+alert_popup(Title, Message, Script) ->
+    gui_jq:wire(<<"var box = bootbox.dialog({
+        title: '", Title/binary, "',
+        message: '", Message/binary, "',
+        buttons: {
+            'OK': {
+                className: 'btn-primary confirm',
+                callback: function() {", Script/binary, "}
+            }
+        }
+    });">>).
+
+
 %% comet_loop/1
 %% ====================================================================
 %% @doc Handles space management actions.
@@ -887,6 +927,34 @@ comet_loop({error, Reason}) ->
 comet_loop(#?STATE{} = State) ->
     NewState = try
         receive
+            {request_support, SpaceId} ->
+                case gr_adapter:request_support(SpaceId, gui_ctx:get_access_token()) of
+                    {ok, Token} ->
+                        Message = <<"Give underlying token to any Provider that is willing to support your Space.",
+                        "<input type=\"text\" style=\"margin-top: 1em; width: 80%;\" value=\"", Token/binary, "\">">>,
+                        alert_popup(<<"Request support">>, Message, <<"return true;">>),
+                        gui_comet:flush();
+                    _ ->
+                        message(<<"error_message">>, <<"Cannot get Space support token.<br>Please try again later.">>)
+                end,
+                gui_jq:hide(<<"main_spinner">>),
+                gui_comet:flush(),
+                State;
+
+            {invite_user, SpaceId} ->
+                case gr_adapter:invite_user(SpaceId, gui_ctx:get_access_token()) of
+                    {ok, Token} ->
+                        Message = <<"Give underlying token to any User that is willing to join your Space.",
+                        "<input type=\"text\" style=\"margin-top: 1em; width: 80%;\" value=\"", Token/binary, "\">">>,
+                        alert_popup(<<"Invite user">>, Message, <<"return true;">>),
+                        gui_comet:flush();
+                    _ ->
+                        message(<<"error_message">>, <<"Cannot get Space invitation token.<br>Please try again later.">>)
+                end,
+                gui_jq:hide(<<"main_spinner">>),
+                gui_comet:flush(),
+                State;
+
             {providers_table_collapse, SpaceId} ->
                 gui_jq:update(<<"providers">>, providers_table_collapsed(SpaceId)),
                 gui_comet:flush(),
@@ -1015,6 +1083,14 @@ event({group_row_collapse, SpaceId, GroupId, RowId, SpinnerId}) ->
 event({group_row_expand, SpaceId, GroupId, RowId, SpinnerId}) ->
     get(?COMET_PID) ! {group_row_expand, SpaceId, GroupId, RowId},
     gui_jq:update(SpinnerId, spinner());
+
+event({request_support, SpaceId}) ->
+    get(?COMET_PID) ! {request_support, SpaceId},
+    gui_jq:show(<<"main_spinner">>);
+
+event({invite_user, SpaceId}) ->
+    get(?COMET_PID) ! {invite_user, SpaceId},
+    gui_jq:show(<<"main_spinner">>);
 
 event(terminate) ->
     ok.

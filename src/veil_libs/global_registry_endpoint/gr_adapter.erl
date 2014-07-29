@@ -16,9 +16,9 @@
 %% API
 -export([send_req/3, send_req/4, send_req/5]).
 -export([set_default_space/2, join_space/2, leave_space/2, create_space/2, delete_space/2]).
--export([get_space_info/2, get_user_spaces/1]).
+-export([get_space_info/2, get_user_spaces/1, request_support/2]).
 -export([get_space_providers/2, get_provider_details/3]).
--export([get_space_users/2, get_user_details/3]).
+-export([get_space_users/2, get_user_details/3, invite_user/2]).
 -export([get_space_groups/2, get_group_details/3]).
 
 %% send_req/2
@@ -244,5 +244,31 @@ get_group_details(SpaceId, GroupId, {UserGID, AccessToken}) ->
     catch
         _:Reason ->
             ?error("Cannot get provider's details for user with ID ~p: ~p", [GroupId, Reason]),
+            {error, Reason}
+    end.
+
+request_support(SpaceId, {UserGID, AccessToken}) ->
+    try
+        Uri = "/spaces/" ++ binary_to_list(SpaceId) ++ "/providers/token",
+        {ok, "200", _ResHeaders, ResBody} = send_req(Uri, get, {UserGID, AccessToken}),
+        Token = proplists:get_value(<<"token">>, mochijson2:decode(ResBody, [{format, proplist}])),
+        true = (Token =/= undefiend),
+        {ok, Token}
+    catch
+        _:Reason ->
+            ?error("Cannot get support token for Space ~p: ~p", [SpaceId, Reason]),
+            {error, Reason}
+    end.
+
+invite_user(SpaceId, {UserGID, AccessToken}) ->
+    try
+        Uri = "/spaces/" ++ binary_to_list(SpaceId) ++ "/users/token",
+        {ok, "200", _ResHeaders, ResBody} = send_req(Uri, get, {UserGID, AccessToken}),
+        Token = proplists:get_value(<<"token">>, mochijson2:decode(ResBody, [{format, proplist}])),
+        true = (Token =/= undefiend),
+        {ok, Token}
+    catch
+        _:Reason ->
+            ?error("Cannot get support token for Space ~p: ~p", [SpaceId, Reason]),
             {error, Reason}
     end.
