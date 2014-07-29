@@ -32,6 +32,7 @@ all() -> [list_dir_test, get_file_test, create_dir_test, create_file_test, delet
 %% Test functions
 %% ====================================================================
 
+% Tests cdmi container GET request (also refered as LIST)
 list_dir_test(_Config) ->
     %%------ list basic dir --------
 
@@ -71,6 +72,11 @@ list_dir_test(_Config) ->
     ?assertEqual(2,length(CdmiPesponse4)).
     %%------------------------------
 
+% Tests cdmi object GET request. Request can be done without cdmi header (in that case
+% file conent is returned as response body), or with cdmi header (the response
+% contains json string of type: application/cdmi-object, and we can specify what
+% parameters we need by listing then as ';' separated list after '?' in URL ),
+%  )
 get_file_test(_Config) ->
     FileName = "/toRead.txt",
     FileContent = <<"Some content...">>,
@@ -123,6 +129,8 @@ get_file_test(_Config) ->
     ?assertEqual(binary_to_list(FileContent), Response4).
     %%------------------------------
 
+% Tests dir creation (cdmi container PUT), remember that every container URI ends
+% with '/'
 create_dir_test(_Config) ->
     DirName = "/toCreate/",
     MissingParentName="/unknown/",
@@ -171,6 +179,8 @@ create_dir_test(_Config) ->
     ?assertEqual("404",Code4).
     %%------------------------------
 
+% Tests file creation (cdmi object PUT), It can be done with cdmi header (when file data is provided as cdmi-object
+% json string), or without (when we treat request body as new file content)
 create_file_test(_Config) ->
     ToCreate = "file.txt",
     ToCreate2 = filename:join(["groups",?TEST_GROUP,"file1.txt"]),
@@ -248,6 +258,7 @@ create_file_test(_Config) ->
     ?assertEqual(FileContent,get_file_content(ToCreate5)).
     %%------------------------------
 
+% Tests cdmi container DELETE requests
 delete_dir_test(_Config) ->
     DirName = "/toDelete/",
     ChildDirName = "/toDelete/child/",
@@ -288,6 +299,7 @@ delete_dir_test(_Config) ->
     ?assert(object_exists(GroupsDirName)).
     %%------------------------------
 
+% Tests cdmi object DELETE requests
 delete_file_test(_Config) ->
     FileName = "/toDelete",
     GroupFileName = "/groups/veilfstestgroup/groupFile",
