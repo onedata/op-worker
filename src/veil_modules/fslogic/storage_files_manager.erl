@@ -805,7 +805,7 @@ setup_ctx(File) ->
             case check_access_type(File) of
                 {ok, {group, SpaceName}} ->
                     UserSpaces = user_logic:get_spaces(UserRec),
-                    SelectedSpace = [SP || #space_info{name = X} = SP <- UserSpaces, SpaceName =:= X],
+                    SelectedSpace = [SP || #space_info{name = X} = SP <- UserSpaces, vcn_utils:ensure_binary(SpaceName) =:= X],
                     GIDs =
                         case SelectedSpace of
                             [] ->

@@ -70,8 +70,9 @@ exec(UserName, GroupId, Method, SHInfo = #storage_helper_info{}, Args) ->
     {error, Reason :: term()} | Response when Response :: term().
 %% ====================================================================
 exec(UserName, GroupId, Method, Args) when is_atom(Method), is_list(Args) ->
-%%     ?info("veilhelpers:exec with args: ~p ~p", [Method, Args]),
     Args1 = [UserName, GroupId] ++ Args,
+    ?debug("VeilHelpers Storage CTX ~p ~p", [UserName, GroupId]),
+    ?debug("veilhelpers:exec with args: ~p ~p", [Method, Args1]),
     case gsi_handler:call(veilhelpers_nif, Method, Args1) of
         {error, 'NIF_not_loaded'} ->
             ok = load_veilhelpers(),
