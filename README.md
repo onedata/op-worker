@@ -10,7 +10,8 @@ The goal of VeilProtocol is provision of a protocol between VeilCluster (self-sc
 
 Getting Started
 ---------------
-VeilClient is NOT a standalone project. It shouldn't be built separately. It should be build only with VeilCluster or VeilClient.
+
+VeilProtocol is NOT a standalone project. It shouldn't be built separately. It should be build only with VeilCluster or VeilClient.
 
 Support
 -------
