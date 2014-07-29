@@ -106,16 +106,11 @@ get_protocol_version() ->
     ErrorDesc :: atom.
 %% ====================================================================
 get_user_id() ->
-    UserDN = get_user_dn(),
-    case UserDN of
-        undefined -> {ok, ?CLUSTER_USER_ID};
-        DN ->
-            case fslogic_objects:get_user({dn, DN}) of
-                {ok, #veil_document{uuid = UID}} -> {ok, UID};
-                Error ->
-                  ?error("Cannot get user id, error: ~p", [Error]),
-                  Error
-            end
+    case fslogic_objects:get_user() of
+        {ok, #veil_document{uuid = UID}} -> {ok, UID};
+        Error ->
+          ?error("Cannot get user id, error: ~p", [Error]),
+          Error
     end.
 
 
