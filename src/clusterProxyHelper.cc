@@ -26,12 +26,12 @@ using namespace veil::protocol::communication_protocol;
 namespace veil {
 namespace helpers {
 
-std::unique_ptr<RemoteFileMangement> wrap(const google::protobuf::Message &msg)
+std::unique_ptr<RemoteFileMangement> wrap(const google::protobuf::Message &msg, const std::string spaceId)
 {
     auto wrapper = std::make_unique<RemoteFileMangement>();
     wrapper->set_message_type(boost::algorithm::to_lower_copy(msg.GetDescriptor()->name()));
     msg.SerializeToString(wrapper->mutable_input());
-    wrapper->set_space_id(m_spaceId);
+    wrapper->set_space_id(spaceId);
     return std::move(wrapper);
 }
 
@@ -42,7 +42,7 @@ string ClusterProxyHelper::requestMessage(const google::protobuf::Message &msg,
     try
     {
         const auto answer = m_communicator->communicate<AnswerType>(
-                    communication::ServerModule::REMOTE_FILES_MANAGER, *wrap(msg), 2, timeout);
+                    communication::ServerModule::REMOTE_FILES_MANAGER, *wrap(msg, m_spaceId), 2, timeout);
         return answer->worker_answer();
     }
     catch(communication::Exception &e)
@@ -59,7 +59,7 @@ string ClusterProxyHelper::requestMessage(const google::protobuf::Message &msg)
     try
     {
         const auto answer = m_communicator->communicate<AnswerType>(
-                    communication::ServerModule::REMOTE_FILES_MANAGER, *wrap(msg), 2);
+                    communication::ServerModule::REMOTE_FILES_MANAGER, *wrap(msg, m_spaceId), 2);
         return answer->worker_answer();
     }
     catch(communication::Exception &e)
@@ -75,7 +75,7 @@ string ClusterProxyHelper::requestAtom(const google::protobuf::Message &msg)
     try
     {
         const auto answer = m_communicator->communicate<Atom>(
-                    communication::ServerModule::REMOTE_FILES_MANAGER, *wrap(msg), 2);
+                    communication::ServerModule::REMOTE_FILES_MANAGER, *wrap(msg, m_spaceId), 2);
 
         Atom atom;
         if(answer->has_worker_answer())
