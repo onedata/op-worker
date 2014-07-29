@@ -13,7 +13,7 @@
 
 -include("remote_file_management_pb.hrl").
 -include("communication_protocol_pb.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 
 %% API

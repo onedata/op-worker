@@ -12,7 +12,7 @@
 
 -module(vcn_gui_utils).
 -include("veil_modules/control_panel/common.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 % Functions connected with user's session
 -export([get_user_dn/0, storage_defined/0, dn_and_storage_defined/0, can_view_logs/0, can_view_monitoring/0]).

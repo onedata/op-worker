@@ -13,7 +13,7 @@
 -module(page_file_manager).
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 % n2o API
 -export([main/0, event/1, api_event/3]).
@@ -818,7 +818,7 @@ path_navigator_body(WorkingDirectory) ->
                         body = gui_str:html_encode(Element)},
                     {Link, {PathToElement, Counter + 1}}
                 end, {<<"">>, 1}, lists:sublist(PathElements, length(PathElements) - 1)),
-            [FirstLink | LinkList] ++ [lists:last(PathElements)]
+            [FirstLink | LinkList] ++ [gui_str:html_encode(lists:last(PathElements))]
     end.
 
 

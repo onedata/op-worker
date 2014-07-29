@@ -13,7 +13,7 @@
 -behaviour(ranch_protocol).
 
 -include("registered_names.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% ====================================================================
 %% API

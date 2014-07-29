@@ -183,26 +183,6 @@ veil_cluster_node_env:
       erlang_term: |
           [1,24,168,720,8760]
 
-  # LOGGING
-  - parameter:
-      name: current_loglevel
-      description: |
-        Current loglevel in the cluster. Logs with lower importance will be completely discarded
-        Available loglevels are 0-7, respectively: debug, info, notice, warning, error, critical, alert, emergency
-      value: 1
-
-  - parameter:
-      name: default_loglevel
-      description: |
-        Used to reset loglevel to default.
-        Available loglevels are 0-7, respectively: debug, info, notice, warning, error, critical, alert, emergency
-      value: 1
-
-  - parameter:
-      name: include_stacktrace
-      description: Determines whether the stacktrace should be included in logs (those that could contain it)
-      value: true
-
 
   # DISPATCHER
   - parameter:
@@ -301,13 +281,6 @@ veil_cluster_node_env:
       value: 1048576
 
   - parameter:
-      name: root_cacert_file
-      description: Path to .pem or .crt file containing CA certs installed on the system.
-      value: |
-        "\'/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem\'"
-      erlang_term: "'/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem'"
-
-  - parameter:
       name: control_panel_sessions_clearing_period
       description: Period between automatic deletion of expired session tokens, in seconds.
       value: 86400 # one day in seconds
@@ -317,6 +290,28 @@ veil_cluster_node_env:
       description: Cookies time to live - expiration date will be set this many seconds from time of creation (in seconds).
       value: 2592000 # 30 days in seconds
 
+
+  # Global Registry interfacing
+  - parameter:
+      name: global_registry_provider_ca_cert_file
+      description: Path to .pem file containing the certificate signed by global registry CA, used for authorizing requests to it.
+      value: |
+        "\'certs/grpcert.pem\'"
+      erlang_term: "'certs/grpcert.pem'"
+
+  - parameter:
+      name: global_registry_provider_key_file
+      description: Path to .pem file containing the private key to the grpcert.
+      value: |
+        "\'certs/grpkey.pem\'"
+      erlang_term: "'certs/grpkey.pem'"
+
+  - parameter:
+      name: global_registry_hostname
+      description: Global Registry hostname.
+      value: |
+        "\'https://onedata.org\'"
+      erlang_term: "'https://onedata.org'"
 
   # Files management
   - parameter:

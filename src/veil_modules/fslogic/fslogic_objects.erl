@@ -16,7 +16,7 @@
 -include("veil_modules/dao/dao.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao_types.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% API
 -export([get_file/1, get_waiting_file/1, get_file/3, get_waiting_file/3]).

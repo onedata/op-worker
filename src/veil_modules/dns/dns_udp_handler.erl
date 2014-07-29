@@ -11,7 +11,7 @@
 
 -module(dns_udp_handler).
 -include("registered_names.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% ====================================================================
 %% API

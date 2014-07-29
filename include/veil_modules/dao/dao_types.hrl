@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: DAO types definitions
+%% @doc DAO types definitions
 %% @end
 %% ===================================================================
 
@@ -37,6 +37,7 @@
 -type user_info() :: #user{}.
 -type user_doc() :: #veil_document{record :: #user{}}.
 -type user_key() :: {login, Login :: string()} |
+                    {global_id, GlobalID :: string()} |
                     {email, Email :: string()} |
                     {uuid, UUID :: uuid()} |
                     {dn, DN :: string()} |

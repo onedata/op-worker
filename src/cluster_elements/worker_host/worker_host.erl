@@ -17,7 +17,7 @@
 -include("records.hrl").
 -include("registered_names.hrl").
 -include("cluster_elements/request_dispatcher/gsi_handler.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 -include("veil_modules/dao/dao_types.hrl").
 
 -define(BORTER_CHILD_WAIT_TIME, 10000).
@@ -29,7 +29,7 @@
 %% API
 %% ====================================================================
 -export([start_link/3, stop/1, start_sub_proc/5, start_sub_proc/6, generate_sub_proc_list/1, generate_sub_proc_list/5, generate_sub_proc_list/6, send_to_user/4, send_to_user_with_ack/5, send_to_fuses_with_ack/4]).
--export([create_permanent_cache/1, create_permanent_cache/2, create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_simple_cache/3]).
+-export([create_permanent_cache/1, create_permanent_cache/2, create_simple_cache/1, create_simple_cache/3, create_simple_cache/4, create_simple_cache/5, register_simple_cache/5, clear_cache/1, synch_cache_clearing/1, clear_sub_procs_cache/1, clear_simple_cache/3]).
 
 %% ====================================================================
 %% Test API
@@ -1130,7 +1130,7 @@ create_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPi
     [_ | _]     -> ok
   end,
 
-  register_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPid).
+  worker_host:register_simple_cache(Name, CacheLoop, ClearFun, StrongCacheConnection, ClearingPid).
 
 %% register_simple_cache/5
 %% ====================================================================
@@ -1312,7 +1312,7 @@ get_cache_name(SupProcName) ->
   CacheLoop :: integer() | atom().
 %% ====================================================================
 register_sub_proc_simple_cache(Name, CacheLoop, ClearFun, ClearingPid) ->
-  RegAns = register_simple_cache({sub_proc_cache, Name}, CacheLoop, ClearFun, false, ClearingPid),
+  RegAns = worker_host:register_simple_cache({sub_proc_cache, Name}, CacheLoop, ClearFun, false, ClearingPid),
   case RegAns of
     ok ->
       ok;

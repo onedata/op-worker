@@ -5,7 +5,7 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc: dao_users header
+%% @doc dao_users header
 %% @end
 %% ===================================================================
 
@@ -16,6 +16,7 @@
 
 %% This record defines a user and is handled as a database document
 -record(user, {
+    global_id = "",
     login = "",
     name = "",
     teams = [],

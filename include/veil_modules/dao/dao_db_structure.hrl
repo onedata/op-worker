@@ -13,7 +13,7 @@
 -ifndef(DAO_DB_STRUCTURE_HRL).
 -define(DAO_DB_STRUCTURE_HRL, 1).
 
--include("veil_modules/dao/common.hrl").
+-include_lib("dao/include/common.hrl").
 
 %% ====================================================================
 %% DB definitions
@@ -43,6 +43,7 @@
 -define(FILE_META_BY_TIMES, #view_info{name = "file_meta_by_times", db_name = ?FILES_DB_NAME, version = 1}).
 -define(FILES_BY_META_DOC, #view_info{name = "files_by_meta_doc", db_name = ?FILES_DB_NAME, version = 1}).
 
+-define(USER_BY_GLOBAL_ID_VIEW, #view_info{name = "user_by_global_id", db_name = ?USERS_DB_NAME, version = 1}).
 -define(USER_BY_EMAIL_VIEW, #view_info{name = "user_by_email", db_name = ?USERS_DB_NAME, version = 1}).
 -define(USER_BY_LOGIN_VIEW, #view_info{name = "user_by_login", db_name = ?USERS_DB_NAME, version = 1}).
 -define(USER_BY_DN_VIEW, #view_info{name = "user_by_dn", db_name = ?USERS_DB_NAME, version = 1}).
@@ -64,16 +65,30 @@
 
 %% List of all used databases :: [string()]
 -define(DB_LIST, [?SYSTEM_DB_NAME, ?FILES_DB_NAME, ?DESCRIPTORS_DB_NAME, ?USERS_DB_NAME]).
+
 %% List of all used views :: [#view_info]
 -define(VIEW_LIST, [?FILE_TREE_VIEW, ?WAITING_FILES_TREE_VIEW, ?FILE_SUBDIRS_VIEW, ?FD_BY_FILE_VIEW, ?FD_BY_EXPIRED_BEFORE_VIEW, ?ALL_STORAGE_VIEW,
     ?FILES_BY_UID_AND_FILENAME, ?FILE_META_BY_TIMES, ?FILES_BY_META_DOC,
-    ?USER_BY_EMAIL_VIEW, ?USER_BY_LOGIN_VIEW, ?USER_BY_DN_VIEW, ?USER_BY_UNVERIFIED_DN_VIEW, ?USER_BY_UID_VIEW, ?STORAGE_BY_ID_VIEW,
-    ?SHARE_BY_FILE_VIEW, ?SHARE_BY_USER_VIEW, ?USER_FILES_NUMBER_VIEW, ?USER_FILES_SIZE_VIEW, ?GROUP_FILES_NUMBER_VIEW,
+    ?USER_BY_GLOBAL_ID_VIEW, ?USER_BY_EMAIL_VIEW, ?USER_BY_LOGIN_VIEW, ?USER_BY_DN_VIEW, ?USER_BY_UNVERIFIED_DN_VIEW, ?USER_BY_UID_VIEW,
+    ?STORAGE_BY_ID_VIEW, ?SHARE_BY_FILE_VIEW, ?SHARE_BY_USER_VIEW, ?USER_FILES_NUMBER_VIEW, ?USER_FILES_SIZE_VIEW, ?GROUP_FILES_NUMBER_VIEW,
     ?FUSE_CONNECTIONS_VIEW, ?EXPIRED_FUSE_SESSIONS_VIEW, ?FUSE_SESSIONS_BY_USER_ID_VIEW]).
-
 
 %% Default database name
 -define(DEFAULT_DB, lists:nth(1, ?DB_LIST)).
 
+
+%% Do not try to read this macro (3 nested list comprehensions). All it does is:
+%% Create an list containing #db_info structures base on ?DB_LIST
+%% Inside every #db_info, list of #design_info is created based on views list (?VIEW_LIST)
+%% Inside every #design_info, list of #view_info is created based on views list (?VIEW_LIST)
+%% Such structural representation of views, makes it easier to initialize views in DBMS
+%% WARNING: Do not evaluate this macro anywhere but dao:init/cleanup because it's
+%% potentially slow - O(db_count * view_count^2)
+-define(DATABASE_DESIGN_STRUCTURE, [#db_info{name = DbName,
+                                        designs = [#design_info{name = dao_utils:get_versioned_view_name(ViewName, Vsn),
+                                                views = [ViewInfo || #view_info{name = ViewName1, db_name = DbName2} = ViewInfo <- ?VIEW_LIST,
+                                                    DbName2 == DbName, ViewName1 == ViewName]
+                                            } || #view_info{db_name = DbName1, name = ViewName, version = Vsn} <- ?VIEW_LIST, DbName1 == DbName]
+                                        } || DbName <- ?DB_LIST]).
 
 -endif.

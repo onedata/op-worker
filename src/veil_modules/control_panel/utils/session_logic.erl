@@ -12,9 +12,8 @@
 
 -module(session_logic).
 -behaviour(session_logic_behaviour).
--include_lib("stdlib/include/ms_transform.hrl").
 -include("veil_modules/control_panel/common.hrl").
--include("logging.hrl").
+-include_lib("ctool/include/logging.hrl").
 
 %% session_logic_behaviour API
 -export([init/0, cleanup/0]).
@@ -147,7 +146,7 @@ clear_expired_sessions() ->
 
 %% get_cookie_ttl/0
 %% ====================================================================
-%% @doc Retrieves default cookies' time to live from env.
+%% @doc Returns cookies time to live in seconds.
 %% @end
 -spec get_cookie_ttl() -> integer() | no_return().
 %% ====================================================================
