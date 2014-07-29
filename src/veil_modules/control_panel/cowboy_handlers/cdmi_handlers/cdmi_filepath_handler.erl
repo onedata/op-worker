@@ -317,7 +317,7 @@ delete_resource(Req, #state{filepath = Filepath, filetype = reg} = State) ->
 
 %% prepare_container_ans/2
 %% ====================================================================
-%% @doc Prepares json formatted answer with field names from given list of binaries
+%% @doc Prepares proplist formatted answer with field names from given list of binaries
 %% @end
 -spec prepare_container_ans([FieldName :: binary()],#state{}) -> [{FieldName :: binary(), Value :: term()}].
 %% ====================================================================
@@ -342,7 +342,7 @@ prepare_container_ans([Other | Tail],State) ->
 
 %% prepare_object_ans/2
 %% ====================================================================
-%% @doc Prepares json formatted answer with field names from given list of binaries
+%% @doc Prepares proplist formatted answer with field names from given list of binaries
 %% @end
 -spec prepare_object_ans([FieldName :: binary()], #state{}) -> [{FieldName :: binary(), Value :: term()}].
 %% ====================================================================
@@ -382,10 +382,10 @@ prepare_object_ans([Other | Tail], State) ->
 %% parse_opts/1
 %% ====================================================================
 %% @doc Parses given cowboy 'qs' opts (all that appears after '?' in url), splitting
-%% them by ';' separator ignoring additional values after ':',
-%% i. e. input: binary("aaa;bbb:1-2;ccc") will return [binary(aaa),binary(bbb),binary(ccc)]
+%% them by ';' separator and handling range values,
+%% i. e. input: binary("aaa;bbb:1-2;ccc") will return [binary(aaa),{binary(bbb),1,2},binary(ccc)]
 %% @end
--spec parse_opts(binary()) -> [binary()].
+-spec parse_opts(binary()) -> [binary() | {binary(), From ::integer(), To :: integer()}].
 %% ====================================================================
 parse_opts(<<>>) ->
     [];
