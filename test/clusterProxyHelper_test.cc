@@ -43,17 +43,11 @@ protected:
     virtual void SetUp() {
         mockPool.reset(new MockConnectionPool());
         mockConnection.reset(new MockCommunicationHandler());
-        proxy.reset(new ProxyClusterProxyHelper(vector<string>()));
+        proxy.reset(new ProxyClusterProxyHelper(mockPool, IStorageHelper::ArgsMap{}));
 
-        config::setConnectionPool(mockPool);
         EXPECT_CALL(*mockPool, selectConnection(_)).WillRepeatedly(Return(mockConnection));
         EXPECT_CALL(*mockPool, releaseConnection(_)).WillRepeatedly(Return());
     }
-
-    virtual void TearDown() {
-        config::setConnectionPool(boost::shared_ptr<SimpleConnectionPool>());
-    }
-
 };
 
 
@@ -293,6 +287,7 @@ TEST_F(ClusterProxyHelperTest, mknod)
 
     CreateFile subMsg;
     subMsg.set_file_id("file_id");
+    subMsg.set_mode(0755);
     
     rfm.set_input(subMsg.SerializeAsString());
     rfm.set_message_type(tolower(subMsg.GetDescriptor()->name()));

@@ -12,6 +12,10 @@
 #include <fcntl.h>
 #include <fuse.h>
 
+#include <boost/any.hpp>
+
+#include <unordered_map>
+
 namespace veil {
 namespace helpers {
 
@@ -22,6 +26,8 @@ namespace helpers {
  */
 class IStorageHelper {
 	public:
+        using ArgsMap = std::unordered_map<std::string, boost::any>;
+
         virtual ~IStorageHelper() {};
 
         virtual int sh_getattr(const char *path, struct stat *stbuf) = 0;

@@ -22,6 +22,7 @@
 #include <numeric>
 #include <sstream>
 
+static const boost::chrono::seconds AFTER_FAIL_DELAY(2);
 static const boost::posix_time::seconds MAX_FLUSH_DELAY(10);
 static const std::string CENTRAL_LOG_MODULE_NAME("central_logger");
 static const std::string LOGGING_DECODER("logging");
@@ -53,8 +54,9 @@ RemoteLogWriter::RemoteLogWriter(const RemoteLogLevel initialThreshold,
 {
 }
 
-void RemoteLogWriter::run()
+void RemoteLogWriter::run(boost::shared_ptr<SimpleConnectionPool> connectionPool)
 {
+    m_connectionPool = std::move(connectionPool);
     if(m_thread.get_id() == Thread().get_id()) // Not-a-Thread
     {
         Thread thread(boost::thread(&RemoteLogWriter::writeLoop, this));
@@ -126,31 +128,41 @@ void RemoteLogWriter::writeLoop()
 {
     while(true)
     {
-        const protocol::logging::LogMessage msg = popMessage();
+        if(!sendNextMessage())
+            boost::this_thread::sleep_for(AFTER_FAIL_DELAY);
+    }
+}
 
-        boost::shared_ptr<SimpleConnectionPool> connectionPool = helpers::config::getConnectionPool();
-        if(!connectionPool)
-            continue;
+bool RemoteLogWriter::sendNextMessage()
+{
+    const protocol::logging::LogMessage msg = popMessage();
 
-        boost::shared_ptr<CommunicationHandler> connection = connectionPool->selectConnection();
-        if(!connection)
-            continue;
+    boost::shared_ptr<SimpleConnectionPool> connectionPool = m_connectionPool;
+    if(!connectionPool)
+        return false;
 
-        protocol::communication_protocol::ClusterMsg clm;
-        clm.set_protocol_version(PROTOCOL_VERSION);
-        clm.set_synch(false);
-        clm.set_module_name(CENTRAL_LOG_MODULE_NAME);
-        clm.set_message_decoder_name(LOGGING_DECODER);
-        clm.set_message_type(boost::algorithm::to_lower_copy(msg.GetDescriptor()->name()));
-        msg.SerializeToString(clm.mutable_input());
+    boost::shared_ptr<CommunicationHandler> connection = connectionPool->selectConnection();
+    if(!connection)
+        return false;
 
-        try
-        {
-            connection->sendMessage(clm, IGNORE_ANSWER_MSG_ID);
-        }
-        catch(CommunicationHandler::ConnectionStatus)
-        {
-        }
+    protocol::communication_protocol::ClusterMsg clm;
+    clm.set_protocol_version(PROTOCOL_VERSION);
+    clm.set_synch(false);
+    clm.set_module_name(CENTRAL_LOG_MODULE_NAME);
+    clm.set_message_decoder_name(LOGGING_DECODER);
+    clm.set_message_type(boost::algorithm::to_lower_copy(msg.GetDescriptor()->name()));
+    clm.set_answer_type(boost::algorithm::to_lower_copy(protocol::communication_protocol::Atom::descriptor()->name()));
+    clm.set_answer_decoder_name(COMMUNICATION_PROTOCOL);
+    msg.SerializeToString(clm.mutable_input());
+
+    try
+    {
+        connection->sendMessage(clm, IGNORE_ANSWER_MSG_ID);
+        return true;
+    }
+    catch(CommunicationHandler::ConnectionStatus)
+    {
+        return false;
     }
 }
 
@@ -196,22 +208,14 @@ void RemoteLogSink::send(google::LogSeverity severity,
                      std::string(message, message_len));
 }
 
-std::atomic<RemoteLogSink*> _logSink{nullptr};
-std::atomic<RemoteLogSink*> _debugLogSink{nullptr};
+std::weak_ptr<RemoteLogSink> _logSink;
+std::weak_ptr<RemoteLogSink> _debugLogSink;
 
-void setLogSinks(RemoteLogSink *logSink, RemoteLogSink *debugLogSink)
+void setLogSinks(const std::shared_ptr<RemoteLogSink> &logSink,
+                 const std::shared_ptr<RemoteLogSink> &debugLogSink)
 {
-    static auto del = [](RemoteLogSink *p){ _logSink = nullptr; delete p; };
-    static auto debugDel = [](RemoteLogSink *p){ _debugLogSink = nullptr; delete p; };
-
-    static std::unique_ptr<RemoteLogSink, decltype(del)> s_logSink{nullptr, del};
-    static std::unique_ptr<RemoteLogSink, decltype(debugDel)> s_debugLogSink{nullptr, debugDel};
-
-    s_logSink.reset(logSink);
-    s_debugLogSink.reset(debugLogSink);
-
-    _logSink = s_logSink.get();
-    _debugLogSink = s_debugLogSink.get();
+    _logSink = logSink;
+    _debugLogSink = debugLogSink;
 }
 
 } // namespace logging

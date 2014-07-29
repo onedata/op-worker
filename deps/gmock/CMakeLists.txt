@@ -12,6 +12,7 @@ if(${GMOCK_FIND_LIBRARY} MATCHES GMOCK_FIND_LIBRARY-NOTFOUND OR ${GTEST_FIND_LIB
     ExternalProject_Add(gmock
         PREFIX "${CMAKE_CURRENT_BINARY_DIR}"
         SVN_REPOSITORY http://googlemock.googlecode.com/svn/trunk/
+        SVN_REVISION -r 476
         INSTALL_COMMAND ""
         UPDATE_COMMAND ""
         CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}

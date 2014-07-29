@@ -26,7 +26,7 @@
 
 #ifndef NDEBUG
 #   undef DLOG
-#   define DLOG(severity) LOG_TO_SINK(veil::logging::_debugLogSink, severity)
+#   define DLOG(severity) LOG_TO_SINK(veil::logging::_debugLogSink.lock().get(), severity)
 #   define DLOG_TO_SINK(sink, severity) LOG_TO_SINK(sink, severity)
 #else
 #   define DLOG_TO_SINK(sink, severity) \
@@ -34,10 +34,13 @@
 #endif
 
 #undef LOG
-#define LOG(severity) LOG_TO_SINK(veil::logging::_logSink, severity)
+#define LOG(severity) LOG_TO_SINK(veil::logging::_logSink.lock().get(), severity)
 
 namespace veil
 {
+
+class SimpleConnectionPool;
+
 namespace logging
 {
 
@@ -50,8 +53,8 @@ typedef protocol::logging::LogLevel RemoteLogLevel;
 class RemoteLogWriter;
 class RemoteLogSink;
 
-extern std::atomic<RemoteLogSink*> _logSink;
-extern std::atomic<RemoteLogSink*> _debugLogSink;
+extern std::weak_ptr<RemoteLogSink> _logSink;
+extern std::weak_ptr<RemoteLogSink> _debugLogSink;
 
 /**
  * Sets RemoteLogSink objects used for logging normal and debug messages.
@@ -59,7 +62,7 @@ extern std::atomic<RemoteLogSink*> _debugLogSink;
  * @param logSink The new log sink.
  * @param debugLogSink The new debug log sink.
  */
-extern void setLogSinks(RemoteLogSink *logSink, RemoteLogSink *debugLogSink);
+extern void setLogSinks(const std::shared_ptr<RemoteLogSink> &logSink, const std::shared_ptr<RemoteLogSink> &debugLogSink);
 
 /**
  * The RemoteLogWriter class is responsible for sending log messages to a
@@ -89,8 +92,10 @@ public:
 
     /**
      * Runs the message write loop in a separate thread.
+     * Sets the connection pool used by the writer to send logs to a cluster.
+     * @param connectionPool The pool to be used by the writer.
      */
-    virtual void run();
+    virtual void run(boost::shared_ptr<SimpleConnectionPool> connectionPool);
 
     /**
      * Destructor.
@@ -122,8 +127,10 @@ private:
     void pushMessage(const protocol::logging::LogMessage &msg);
     protocol::logging::LogMessage popMessage();
     void writeLoop();
+    bool sendNextMessage();
     void dropExcessMessages();
 
+    boost::shared_ptr<SimpleConnectionPool> m_connectionPool;
     const pid_t m_pid;
     const BufferSize m_maxBufferSize;
     const BufferSize m_bufferTrimSize;

@@ -64,7 +64,7 @@ void FileCache::debugPrint()
     multiset<block_ptr>::iterator it = m_fileBlocks.begin();
     while(it != m_fileBlocks.end())
     {
-        printf("\t Offset: %ld, Size: %lu, Data: %s, valid_to: %lu\n", (*it)->offset, (*it)->size(), (*it)->data.c_str(), (*it)->valid_to);
+        printf("\t Offset: %lld, Size: %lu, Data: %s, valid_to: %llu\n", (long long int) (*it)->offset, (*it)->size(), (*it)->data.c_str(), (long long unsigned int) (*it)->valid_to);
         ++it;
     }
 }
