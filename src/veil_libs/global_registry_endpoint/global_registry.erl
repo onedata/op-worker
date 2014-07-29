@@ -26,6 +26,7 @@ user_request(Token, Method, URN) ->
 
 user_request(Token, Method, URN, Body) ->
     TokenBin = vcn_utils:ensure_binary(Token),
+    ?info("user_request with access token ~p", [Token]),
     request(Method, URN, Body, [{"authorization", binary_to_list(<<"Bearer ", TokenBin/binary>>)}]).
 
 

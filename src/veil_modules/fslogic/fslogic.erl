@@ -169,7 +169,7 @@ handle(_ProtocolVersion, _Msg) ->
 maybe_handle_fuse_message(RequestBody) ->
     PathCtx = extract_logical_path(RequestBody),
     {ok, AbsolutePathCtx} = fslogic_path:get_full_file_name(PathCtx),
-    {ok, #space_info{name = SpaceName, providers = Providers}} = fslogic_utils:get_space_info_for_path(AbsolutePathCtx),
+    {ok, #space_info{name = SpaceName, providers = Providers} = SpaceInfo} = fslogic_utils:get_space_info_for_path(AbsolutePathCtx),
 
     Self = cluster_manager_lib:get_provider_id(),
 
@@ -189,7 +189,7 @@ maybe_handle_fuse_message(RequestBody) ->
             catch
                 Type:Reason ->
                     ?error_stacktrace("Unable to process remote fslogic request to provider ~p due to: ~p", [RerouteToProvider, {Type, Reason}]),
-                    case fslogic_remote:local_clean_postprocess(Reason, RequestBody) of
+                    case fslogic_remote:local_clean_postprocess(SpaceInfo, Reason, RequestBody) of
                         undefined -> throw({unable_to_reroute_message, Reason});
                         LocalResponse -> LocalResponse
                     end
