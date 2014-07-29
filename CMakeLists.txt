@@ -117,7 +117,7 @@ PROTOBUF_GENERATE_CPP(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
 # Setup sources
-file(GLOB HELPER_SOURCES "src/[a-zA-Z]*.cc")
+file(GLOB_RECURSE HELPER_SOURCES src/*.cc include/*.h)
 
 # Setup compile flags
 if(${PREFER_STATIC_LINK}) # Try to link libstdc++.a
@@ -201,6 +201,7 @@ include_directories(${GMOCK_INCLUDE_DIR})
 set(TEST_SOURCES_DIR "test")
 include_directories(${TEST_SOURCES_DIR}/include)
 
+file(GLOB_RECURSE HELPER_TEST_HEADERS ${TEST_SOURCES_DIR}/include/*.h)
 add_library(testRunner OBJECT ${TEST_SOURCES_DIR}/testRunner.cc)
 add_dependencies(testRunner glog gmock gtest)
 
@@ -214,10 +215,10 @@ macro(run_test test_target)
   add_dependencies(cunit ${test_target}_runtest)
 endmacro()
 
-file(GLOB files ${TEST_SOURCES_DIR}/*_test.cc)
+file(GLOB_RECURSE files ${TEST_SOURCES_DIR}/*_test.cc)
 foreach(file ${files})
     get_filename_component(TEST_NAME ${file} NAME_WE)
-    add_executable(${TEST_NAME} ${file} $<TARGET_OBJECTS:testRunner>)
+    add_executable(${TEST_NAME} ${file} ${HELPER_TEST_HEADERS} $<TARGET_OBJECTS:testRunner>)
     add_dependencies(${TEST_NAME} gmock gtest veilhelpers veilprotocol)
     target_link_libraries(${TEST_NAME}
         ${GTEST_LIBRARIES}
