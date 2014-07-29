@@ -33,7 +33,7 @@
 
 %% Callbacks
 -export([init/3, rest_init/2, resource_exists/2, allowed_methods/2, content_types_provided/2,content_types_accepted/2, delete_resource/2]).
--export([put_dir/2, put_cdmi_file/2, put_noncdmi_file/2, get_dir/2, get_file/2]).
+-export([put_dir/2, put_cdmi_file/2, put_noncdmi_file/2, get_dir/2, get_cdmi_file/2, get_noncdmi_file/2]).
 
 %% init/3
 %% ====================================================================
@@ -124,7 +124,8 @@ content_types_provided(Req, #state{filetype = dir} = State) -> %todo handle non-
     ], Req, State};
 content_types_provided(Req, State) ->
     {[
-        {<<"application/cdmi-object">>,get_file}
+        {<<"application/binary">>, get_noncdmi_file},
+        {<<"application/cdmi-object">>,get_cdmi_file}
     ], Req, State}.
 
 %% get_dir/2
@@ -139,14 +140,30 @@ get_dir(Req, #state{opts = Opts} = State) ->
     Response = rest_utils:encode_to_json({struct, DirCdmi}),
     {Response, Req, State}.
 
-%% get_file/2
+%% get_noncdmi_file/2
 %% ====================================================================
 %% @doc Cowboy callback function
-%% Handles GET requests for directory.
+%% Handles GET requests for file, returning file content as response body.
 %% @end
--spec get_file(req(), #state{}) -> {term(), req(), #state{}}.
+-spec get_noncdmi_file(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-get_file(Req, #state{opts = Opts} = State) ->
+get_noncdmi_file(Req,State) ->
+    case read_file(State,default,<<"utf-8">>) of
+        {ok,Data} -> {Data, Req, State};
+        Error ->
+            ?error("Reading cdmi object end up with error: ~p", [Error]),
+            {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
+            {halt, Req2, State}
+    end.
+
+%% get_cdmi_file/2
+%% ====================================================================
+%% @doc Cowboy callback function
+%% Handles GET requests for file, returning cdmi-object content type.
+%% @end
+-spec get_cdmi_file(req(), #state{}) -> {term(), req(), #state{}}.
+%% ====================================================================
+get_cdmi_file(Req, #state{opts = Opts} = State) ->
     DirCdmi = prepare_object_ans(case Opts of [] -> ?default_get_file_opts; _ -> Opts end, State),
     case proplists:get_value(<<"value">>, DirCdmi) of
         {range, Range} ->

@@ -109,7 +109,14 @@ get_file_test(_Config) ->
     {struct,CdmiPesponse3} = mochijson2:decode(Response3),
 
     ?assertEqual(<<"1-3">>, proplists:get_value(<<"valuerange">>,CdmiPesponse3)),
-    ?assertEqual(<<"ome">>, base64:decode(proplists:get_value(<<"value">>,CdmiPesponse3))). % 1-3 from FileContent = <<"Some content...">>
+    ?assertEqual(<<"ome">>, base64:decode(proplists:get_value(<<"value">>,CdmiPesponse3))), % 1-3 from FileContent = <<"Some content...">>
+    %%------------------------------
+
+    %%------- noncdmi read --------
+    {Code4, _Headers4, Response4} = do_request(FileName, get, [], []),
+    ?assertEqual("200",Code4),
+
+    ?assertEqual(binary_to_list(FileContent), Response4).
     %%------------------------------
 
 create_dir_test(_Config) ->
@@ -327,7 +334,7 @@ init_per_suite(Config) ->
     ?INIT_CODE_PATH,?CLEAN_TEST_DIRS,
     test_node_starter:start_deps_for_tester_node(),
 
-    [CCM] = Nodes = test_node_starter:start_test_nodes(1,true),
+    [CCM] = Nodes = test_node_starter:start_test_nodes(1),
 
     test_node_starter:start_app_on_nodes(?APP_Name, ?VEIL_DEPS, Nodes,
         [[{node_type, ccm_test},
