@@ -28,6 +28,7 @@
     filepath = undefined :: binary(),
     filetype = undefined :: dir | reg,
     attributes = undefined :: #fileattributes{},
+    cdmi_version = undefined :: undefined | binary(),
     opts = [] :: [binary()]
 }).
 
@@ -66,11 +67,12 @@ rest_init(Req, [Type]) ->
             {Method, _} = cowboy_req:method(Req),
             {PathInfo, _} = cowboy_req:path_info(Req),
             {RawOpts,_} = cowboy_req:qs(Req),
+            {CdmiVersion, _} = cowboy_req:header(<<"x-cdmi-specification-version">>, Req),
             Path = case PathInfo == [] of
                      true -> "/";
                      false -> gui_str:binary_to_unicode_list(rest_utils:join_to_path(PathInfo))
                  end,
-            {ok, Req, #state{method = Method, filepath = Path,filetype = Type, opts = parse_opts(RawOpts)}};
+            {ok, Req, #state{method = Method, filepath = Path,filetype = Type, opts = parse_opts(RawOpts),cdmi_version = CdmiVersion}};
         Error -> {ok,Req,Error}
     end.
 
@@ -118,9 +120,12 @@ content_types_provided(Req, #state{filetype = dir} = State) -> %todo handle non-
     {[
         {<<"application/cdmi-container">>, get_dir}
     ], Req, State};
-content_types_provided(Req, State) ->
+content_types_provided(Req, #state{filetype = reg, cdmi_version = undefined} = State) ->
     {[
-        {<<"application/binary">>, get_noncdmi_file},
+        {<<"application/binary">>, get_noncdmi_file}
+    ], Req, State};
+content_types_provided(Req, #state{filetype = reg} = State) ->
+    {[
         {<<"application/cdmi-object">>,get_cdmi_file}
     ], Req, State}.
 
@@ -190,10 +195,13 @@ content_types_accepted(Req, #state{filetype = dir} = State) -> %todo handle nonc
     {[
         {<<"application/cdmi-container">>, put_dir}
     ], Req, State};
-content_types_accepted(Req, State) ->
+content_types_accepted(Req, #state{filetype = reg, cdmi_version = undefined} = State) ->
     {[
-        {<<"application/cdmi-object">>,put_cdmi_file},
         {<<"application/binary">> ,put_noncdmi_file}
+    ], Req, State};
+content_types_accepted(Req, #state{filetype = reg} = State) ->
+    {[
+        {<<"application/cdmi-object">>,put_cdmi_file}
     ], Req, State}.
 
 %% put_dir/2

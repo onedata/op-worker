@@ -34,7 +34,9 @@ all() -> [list_dir_test, get_file_test, create_dir_test, create_file_test, delet
 
 list_dir_test(_Config) ->
     %%------ list basic dir --------
-    {Code1, Headers1, Response1} = do_request(?Test_dir_name++"/", get, [], []),
+
+    RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code1, Headers1, Response1} = do_request(?Test_dir_name++"/", get, RequestHeaders1, []),
     ?assertEqual("200", Code1),
     ?assertEqual(proplists:get_value("content-type", Headers1), "application/cdmi-container"),
     {struct,CdmiPesponse1} = mochijson2:decode(Response1),
@@ -45,7 +47,8 @@ list_dir_test(_Config) ->
     %%------------------------------
 
     %%------ list root dir ---------
-    {Code2, _Headers2, Response2} = do_request([], get, [], []),
+    RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code2, _Headers2, Response2} = do_request([], get, RequestHeaders2, []),
     ?assertEqual("200", Code2),
     {struct,CdmiPesponse2} = mochijson2:decode(Response2),
     ?assertEqual(<<"/">>, proplists:get_value(<<"objectName">>,CdmiPesponse2)),
@@ -53,12 +56,14 @@ list_dir_test(_Config) ->
     %%------------------------------
 
     %%--- list nonexisting dir -----
-    {Code3, _Headers3, _Response3} = do_request("nonexisting_dir/", get, [], []),
+    RequestHeaders3 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code3, _Headers3, _Response3} = do_request("nonexisting_dir/", get, RequestHeaders3, []),
     ?assertEqual("404",Code3),
     %%------------------------------
 
     %%-- selective params list -----
-    {Code4, _Headers4, Response4} = do_request(?Test_dir_name ++ "/?children;objectName", get, [], []),
+    RequestHeaders4 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code4, _Headers4, Response4} = do_request(?Test_dir_name ++ "/?children;objectName", get, RequestHeaders4, []),
     ?assertEqual("200", Code4),
     {struct,CdmiPesponse4} = mochijson2:decode(Response4),
     ?assertEqual(<<"dir/">>, proplists:get_value(<<"objectName">>,CdmiPesponse4)),
@@ -76,7 +81,7 @@ get_file_test(_Config) ->
     ?assertEqual(FileContent,get_file_content(FileName)),
 
     %%-------- basic read ----------
-    RequestHeaders1 = [{"accept", "application/cdmi-object"}],
+    RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
     {Code1, _Headers1, Response1} = do_request(FileName, get, RequestHeaders1, []),
     ?assertEqual("200",Code1),
     {struct,CdmiPesponse1} = mochijson2:decode(Response1),
@@ -91,7 +96,7 @@ get_file_test(_Config) ->
     %%------------------------------
 
     %%-- selective params read -----
-    RequestHeaders2 = [{"accept", "application/cdmi-object"}],
+    RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.2"}],
     {Code2, _Headers2, Response2} = do_request(FileName++"?parentURI;completionStatus", get, RequestHeaders2, []),
     ?assertEqual("200",Code2),
     {struct,CdmiPesponse2} = mochijson2:decode(Response2),
@@ -102,7 +107,7 @@ get_file_test(_Config) ->
     %%------------------------------
 
     %%--- selective value read -----
-    RequestHeaders3 = [{"accept", "application/cdmi-object"}],
+    RequestHeaders3 = [{"X-CDMI-Specification-Version", "1.0.2"}],
     {Code3, _Headers3, Response3} = do_request(FileName++"?value:1-3;valuerange", get, RequestHeaders3, []),
     ?assertEqual("200",Code3),
     {struct,CdmiPesponse3} = mochijson2:decode(Response3),
@@ -135,7 +140,7 @@ create_dir_test(_Config) ->
     %%------ basic create ----------
     ?assert(not object_exists(DirName)),
 
-    RequestHeaders2 = [{"content-type", "application/cdmi-container"}],
+    RequestHeaders2 = [{"content-type", "application/cdmi-container"},{"X-CDMI-Specification-Version", "1.0.2"}],
     {Code2, _Headers2, Response2} = do_request(DirName, put, RequestHeaders2, []),
     ?assertEqual("201",Code2),
     {struct,CdmiPesponse2} = mochijson2:decode(Response2),
@@ -151,7 +156,7 @@ create_dir_test(_Config) ->
     %%----- creation conflict ------
     ?assert(object_exists(DirName)),
 
-    RequestHeaders3 = [{"content-type", "application/cdmi-container"}],
+    RequestHeaders3 = [{"content-type", "application/cdmi-container"},{"X-CDMI-Specification-Version", "1.0.2"}],
     {Code3, _Headers3, _Response3} = do_request(DirName, put, RequestHeaders3, []),
     ?assertEqual("409",Code3),
 
@@ -161,7 +166,7 @@ create_dir_test(_Config) ->
     %%----- missing parent ---------
     ?assert(not object_exists(MissingParentName)),
 
-    RequestHeaders4 = [{"content-type", "application/cdmi-container"}],
+    RequestHeaders4 = [{"content-type", "application/cdmi-container"},{"X-CDMI-Specification-Version", "1.0.2"}],
     {Code4, _Headers4, _Response4} = do_request(DirWithoutParentName, put, RequestHeaders4, []),
     ?assertEqual("404",Code4).
     %%------------------------------
@@ -176,7 +181,7 @@ create_file_test(_Config) ->
     %%-------- basic create --------
     ?assert(not object_exists(ToCreate)),
 
-    RequestHeaders1 = [{"content-type", "application/cdmi-object"}],
+    RequestHeaders1 = [{"content-type", "application/cdmi-object"},{"X-CDMI-Specification-Version", "1.0.2"}],
     RequestBody1 = [{<<"value">>, FileContent}],
     RawRequestBody1 = rest_utils:encode_to_json(RequestBody1),
     {Code1, _Headers1, Response1} = do_request(ToCreate, put, RequestHeaders1, RawRequestBody1),
@@ -194,7 +199,7 @@ create_file_test(_Config) ->
     %%------ base64 create ---------
     ?assert(not object_exists(ToCreate2)),
 
-    RequestHeaders2 = [{"content-type", "application/cdmi-object"}],
+    RequestHeaders2 = [{"content-type", "application/cdmi-object"},{"X-CDMI-Specification-Version", "1.0.2"}],
     RequestBody2 = [{<<"valuetransferencoding">>,<<"base64">>},{<<"value">>, base64:encode(FileContent)}],
     RawRequestBody2 = rest_utils:encode_to_json(RequestBody2),
     {Code2, _Headers2, Response2} = do_request(ToCreate2, put, RequestHeaders2, RawRequestBody2),
@@ -212,7 +217,7 @@ create_file_test(_Config) ->
     %%----- create conflict --------
     ?assert(object_exists(ToCreate)),
 
-    RequestHeaders3 = [{"content-type", "application/cdmi-object"}],
+    RequestHeaders3 = [{"content-type", "application/cdmi-object"},{"X-CDMI-Specification-Version", "1.0.2"}],
     RequestBody3 = [{<<"value">>, FileContent}],
     RawRequestBody3 = rest_utils:encode_to_json(RequestBody3),
     {Code3, _Headers3, _Response3} = do_request(ToCreate, put, RequestHeaders3, RawRequestBody3),
@@ -224,7 +229,7 @@ create_file_test(_Config) ->
     %%------- create empty ---------
     ?assert(not object_exists(ToCreate4)),
 
-    RequestHeaders4 = [{"content-type", "application/cdmi-object"}],
+    RequestHeaders4 = [{"content-type", "application/cdmi-object"},{"X-CDMI-Specification-Version", "1.0.2"}],
     {Code4, _Headers4, _Response4} = do_request(ToCreate4, put, RequestHeaders4, []),
     ?assertEqual("201",Code4),
 
@@ -252,7 +257,8 @@ delete_dir_test(_Config) ->
     create_dir(DirName),
     ?assert(object_exists(DirName)),
 
-    {Code1, _Headers1, _Response1} = do_request(DirName, delete, [], []),
+    RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code1, _Headers1, _Response1} = do_request(DirName, delete, RequestHeaders1, []),
     ?assertEqual("204",Code1),
 
     ?assert(not object_exists(DirName)),
@@ -264,7 +270,8 @@ delete_dir_test(_Config) ->
     create_dir(ChildDirName),
     ?assert(object_exists(ChildDirName)),
 
-    {Code2, _Headers2, _Response2} = do_request(DirName, delete, [], []),
+    RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code2, _Headers2, _Response2} = do_request(DirName, delete, RequestHeaders2, []),
     ?assertEqual("204",Code2),
 
     ?assert(not object_exists(DirName)),
@@ -274,7 +281,8 @@ delete_dir_test(_Config) ->
     %%----- delete group dir -------
     ?assert(object_exists(GroupsDirName)),
 
-    {Code3, _Headers3, _Response3} = do_request(GroupsDirName, delete, [], []),
+    RequestHeaders3 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code3, _Headers3, _Response3} = do_request(GroupsDirName, delete, RequestHeaders3, []),
     ?assertEqual("403",Code3),
 
     ?assert(object_exists(GroupsDirName)).
@@ -288,8 +296,9 @@ delete_file_test(_Config) ->
     create_file(FileName),
     ?assert(object_exists(FileName)),
 
-    {Code3, _Headers3, _Response3} = do_request(FileName, delete, [], []),
-    ?assertEqual("204",Code3),
+    RequestHeaders1 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code1, _Headers1, _Response1} = do_request(FileName, delete, RequestHeaders1, []),
+    ?assertEqual("204",Code1),
 
     ?assert(not object_exists(FileName)),
     %%------------------------------
@@ -298,8 +307,9 @@ delete_file_test(_Config) ->
     create_file(GroupFileName),
     ?assert(object_exists(GroupFileName)),
 
-    {Code5, _Headers5, _Response5} = do_request(GroupFileName, delete, [], []),
-    ?assertEqual("204",Code5),
+    RequestHeaders2 = [{"X-CDMI-Specification-Version", "1.0.2"}],
+    {Code2, _Headers2, _Response2} = do_request(GroupFileName, delete, RequestHeaders2, []),
+    ?assertEqual("204",Code2),
 
     ?assert(not object_exists(GroupFileName)).
     %%------------------------------
