@@ -59,7 +59,7 @@ title() -> <<"Monitoring">>.
 %% ====================================================================
 body() ->
     [
-        vcn_gui_utils:top_menu(monitoring_tab, monitoring_submenu()),
+        vcn_gui_utils:top_menu(administration_tab, monitoring_submenu()),
         #panel{style = <<"position: relative; margin-top: 122px; margin-bottom: 0px">>, body = [
             #table{id = <<"main_table">>, class = <<"table table-stripped">>, style = <<"width: 100%;">>}
         ]}

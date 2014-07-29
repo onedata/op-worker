@@ -58,7 +58,7 @@ body() ->
         #panel{id = <<"spinner">>, style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>, body = [
             #image{image = <<"/images/spinner.gif">>}
         ]},
-        vcn_gui_utils:top_menu(file_manager_tab, manager_submenu()),
+        vcn_gui_utils:top_menu(data_tab, manager_submenu()),
         manager_workspace(),
         footer_popup()
     ],

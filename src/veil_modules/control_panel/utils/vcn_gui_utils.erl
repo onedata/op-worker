@@ -225,39 +225,52 @@ top_menu(ActiveTabID) ->
 -spec top_menu(ActiveTabID :: any(), SubMenuBody :: any()) -> list().
 %% ====================================================================
 top_menu(ActiveTabID, SubMenuBody) ->
-    % Tab, that will be displayed optionally
-    PageCaptions =
-        case can_view_monitoring() of
-            false -> [];
-            true -> [{monitoring_tab, #li{body = [
-                #link{style = <<"padding: 18px;">>, url = <<"/monitoring">>, body = <<"Monitoring">>}
-            ]}}]
-        end ++
-        case can_view_logs() of
-            false -> [];
-            true -> [
-                {cluster_logs_tab, #li{body = [
-                    #link{style = <<"padding: 18px;">>, url = <<"/cluster_logs">>, body = <<"Cluster logs">>}
-                ]}},
-                {client_logs_tab, #li{body = [
-                    #link{style = <<"padding: 18px;">>, url = <<"/client_logs">>, body = <<"Client logs">>}
-                ]}}
-            ]
-        end,
-    % Define menu items with ids, so that proper tab can be made active via function parameter
-    % see old_menu_captions()
+    CanViewLogs = can_view_logs(),
+    LogsCaptions = case CanViewLogs of
+                       true -> [
+                           #li{body = #link{url = "/cluster_logs", body = "Cluster logs"}},
+                           #li{body = #link{url = "/client_logs", body = "Client logs"}}
+                       ];
+                       _ -> []
+                   end,
+
+    CanViewMonitoring = can_view_monitoring(),
+    MonitoringCaption = case CanViewMonitoring of
+                            true -> [#li{body = #link{url = "/monitoring", body = "Monitoring"}}];
+                            _ -> []
+                        end,
+
+
     MenuCaptions =
         [
-            {file_manager_tab, #li{body = [
-                #link{style = <<"padding: 18px;">>, url = <<"/file_manager">>, body = <<"File manager">>}
-            ]}},
-            {shared_files_tab, #li{body = [
-                #link{style = <<"padding: 18px;">>, url = <<"/shared_files">>, body = <<"Shared files">>}
+            {brand_tab, #li{body = #link{style = <<"padding: 18px;">>, url = "/",
+                body = [
+                    #span{class = <<"fui-home">>},
+                    #b{style = <<"font-size: x-large;">>, body = <<"OneData">>}
+                ]}
+            }},
+            {data_tab, #li{body = [
+                #link{style = "padding: 18px;", body = "Data"},
+                #list{style = "top: 37px;", body = [
+                    #li{body = #link{url = "/file_manager", body = "File manager"}},
+                    #li{body = #link{url = "/shared_files", body = "Shared files"}}
+                ]}
             ]}},
             {spaces_tab, #li{body = [
-                #link{style = <<"padding: 18px;">>, url = <<"/spaces">>, body = <<"Spaces">>}
+                #link{style = "padding: 18px;", body = "Spaces"},
+                #list{style = "top: 37px;", body = [
+                    #li{body = #link{url = "/spaces", body = "Settings"}},
+                    #li{body = #link{url = "/tokens", body = "Tokens"}}
+                ]}
             ]}}
-        ] ++ PageCaptions,
+        ] ++ case CanViewLogs orelse CanViewMonitoring of
+                 true ->
+                     [{administration_tab, #li{body = [
+                         #link{style = "padding: 18px;", body = "Administration"},
+                         #list{style = "top: 37px;", body = LogsCaptions ++ MonitoringCaption}
+                     ]}}];
+                 _ -> []
+             end,
 
     MenuIcons =
         [
