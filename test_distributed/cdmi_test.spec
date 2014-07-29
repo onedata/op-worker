@@ -5,7 +5,8 @@
 %% cited in 'LICENSE.txt'.
 %% @end
 %% ===================================================================
-%% @doc:
+%% @doc This file is specification of cdmi test. The test can be found
+%% in cdmi_test directory. The test description can be found in cdmi_test_SUITE.erl file.
 %% @end
 %% ===================================================================
 

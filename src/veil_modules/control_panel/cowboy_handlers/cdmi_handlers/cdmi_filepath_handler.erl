@@ -6,7 +6,7 @@
 %% @end
 %% ===================================================================
 %% @doc This is a cowboy handler module, implementing cowboy_rest interface.
-%% It handles CDMI requests by routing them to proper cdmi module.
+%% It handles cdmi object/container PUT, GET and DELETE requests
 %% @end
 %% ===================================================================
 -module(cdmi_filepath_handler).
