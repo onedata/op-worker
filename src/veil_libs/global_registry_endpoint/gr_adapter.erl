@@ -16,7 +16,7 @@
 %% API
 -export([send_req/3, send_req/4, send_req/5]).
 -export([set_default_space/2, join_space/2, leave_space/2, create_space/2, delete_space/2]).
--export([get_space_info/2, get_user_spaces/1, request_support/2]).
+-export([get_space_info/2, get_user_spaces/1, request_support/2, change_space_name/3]).
 -export([get_space_providers/2, get_provider_details/3]).
 -export([get_space_users/2, get_user_details/3, invite_user/2]).
 -export([get_space_groups/2, get_group_details/3]).
@@ -269,6 +269,18 @@ invite_user(SpaceId, {UserGID, AccessToken}) ->
         {ok, Token}
     catch
         _:Reason ->
-            ?error("Cannot get support token for Space ~p: ~p", [SpaceId, Reason]),
+            ?error("Cannot get invitation token for Space ~p: ~p", [SpaceId, Reason]),
+            {error, Reason}
+    end.
+
+change_space_name(SpaceId, Name, {UserGID, AccessToken}) ->
+    try
+        Uri = "/spaces/" ++ binary_to_list(SpaceId),
+        Body = iolist_to_binary(mochijson2:encode({struct, [{<<"name">>, Name}]})),
+        {ok, "204", _ResHeaders, _ResBody} = send_req(Uri, patch, Body, {UserGID, AccessToken}),
+        ok
+    catch
+        _:Reason ->
+            ?error("Cannot change Space name for Space with ID ~p: ~p", [SpaceId, Reason]),
             {error, Reason}
     end.

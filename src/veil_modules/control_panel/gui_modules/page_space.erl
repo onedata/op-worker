@@ -26,7 +26,7 @@
 -record(?STATE, {spaceId}).
 
 %% Common page CCS styles
--define(MESSAGE_STYLE, <<"position: fixed; width: 100%; top: 120px; z-index: 1; display: none;">>).
+-define(MESSAGE_STYLE, <<"position: fixed; width: 100%; top: 55px; z-index: 1; display: none;">>).
 -define(CONTENT_COLUMN_STYLE, <<"padding-right: 0">>).
 -define(NAVIGATION_COLUMN_STYLE, <<"border-left-width: 0; width: 20px; padding-left: 0;">>).
 -define(DESCRIPTION_STYLE, <<"border-width: 0; text-align: right; width: 10%; padding-left: 0; padding-right: 0;">>).
@@ -121,13 +121,13 @@ space(#space_info{space_id = SpaceId, name = Name}) ->
             style = <<"margin-bottom: 100px;">>,
             body = [
                 #h6{
-                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 160px; width: 150px;">>,
+                    style = <<"font-size: x-large; margin: 0 auto; margin-top: 160px; width: 152px;">>,
                     body = <<"Manage Space">>
                 },
                 #table{
                     style = <<"margin: 0 auto; width: 50%; margin-top: 30px; border-spacing: 1em;
                     border-width: 0; border-collapse: inherit;">>,
-                    body = lists:map(fun({Description, Main}) ->
+                    body = lists:map(fun({Description, MainId, Main}) ->
                         #tr{
                             cells = [
                                 #td{
@@ -139,17 +139,15 @@ space(#space_info{space_id = SpaceId, name = Name}) ->
                                     }
                                 },
                                 #td{
+                                    id = MainId,
                                     style = ?MAIN_STYLE,
-                                    body = #p{
-                                        style = ?PARAGRAPH_STYLE,
-                                        body = Main
-                                    }
+                                    body = Main
                                 }
                             ]
                         }
                     end, [
-                        {<<"Space Name">>, Name},
-                        {<<"Space ID">>, SpaceId}
+                        {<<"Space Name">>, <<"space_name">>, space_name(SpaceId, Name)},
+                        {<<"Space ID">>, <<"">>, #p{style = ?PARAGRAPH_STYLE, body = SpaceId}}
                     ])
                 },
                 #table{
@@ -228,6 +226,67 @@ space(#space_info{space_id = SpaceId, name = Name}) ->
                     }
                 }
             ]
+        }
+    ].
+
+
+%% space_name/2
+%% ====================================================================
+%% @doc Renders editable Space name.
+-spec space_name(SpaceId :: binary(), Name :: binary()) -> Result when
+    Result :: #span{}.
+%% ====================================================================
+space_name(SpaceId, Name) ->
+    #span{
+        style = <<"font-size: large;">>,
+        body = [
+            Name,
+            #link{
+                title = <<"Edit">>,
+                style = <<"margin-left: 1em;">>,
+                class = <<"glyph-link">>,
+                postback = {change_space_name, SpaceId, Name},
+                body = #span{
+                    class = <<"fui-new">>
+                }
+            }
+        ]
+    }.
+
+
+%% change_space_name/2
+%% ====================================================================
+%% @doc Renders change space_name input field.
+-spec change_space_name(SpaceId :: binary(), Name :: binary()) -> Result when
+    Result :: list().
+%% ====================================================================
+change_space_name(SpaceId, Name) ->
+    [
+        #textbox{
+            id = <<"new_space_name_textbox">>,
+            class = <<"span">>,
+            placeholder = <<"New Space name">>
+        },
+        #link{
+            id = <<"new_space_name_submit">>,
+            class = <<"glyph-link">>,
+            style = <<"margin-left: 1em;">>,
+            title = <<"Submit">>,
+            actions = gui_jq:form_submit_action(<<"new_space_name_submit">>, {submit_new_space_name, SpaceId, Name}, <<"new_space_name_textbox">>),
+            body = #span{
+                class = <<"fui-check-inverted">>,
+                style = <<"font-size: large;">>
+            }
+        },
+        #link{
+            class = <<"glyph-link">>,
+            style = <<"margin-left: 10px;">>,
+            title = <<"Cancel">>,
+            postback = {cancel_new_space_name_submit, SpaceId, Name},
+            body = #span{
+                class = <<"fui-cross-inverted">>,
+                style = <<"font-size: large;">>
+            }
         }
     ].
 
@@ -915,6 +974,18 @@ alert_popup(Title, Message, Script) ->
     });">>).
 
 
+%% bind_key_to_click/2
+%% ====================================================================
+%% @doc Makes any keypresses of given key to click on selected class.
+%% @end
+-spec bind_key_to_click(KeyCode :: binary(), TargetID :: binary()) -> string().
+%% ====================================================================
+bind_key_to_click(KeyCode, TargetID) ->
+    Script = <<"$(document).bind('keydown', function (e){",
+    "if (e.which == ", KeyCode/binary, ") { e.preventDefault(); $('", TargetID/binary, "').click(); } });">>,
+    gui_jq:wire(Script, false).
+
+
 %% comet_loop/1
 %% ====================================================================
 %% @doc Handles space management actions.
@@ -1032,6 +1103,7 @@ event(init) ->
     SpaceId = gui_str:to_binary(gui_ctx:url_param(<<"id">>)),
     {ok, Pid} = gui_comet:spawn(fun() -> comet_loop(#?STATE{spaceId = SpaceId}) end),
     put(?COMET_PID, Pid),
+    bind_key_to_click(<<"13">>, <<"button.confirm">>),
     gui_jq:update(<<"providers">>, providers_table_collapsed(SpaceId)),
     gui_jq:update(<<"users">>, users_table_collapsed(SpaceId)),
     gui_jq:update(<<"groups">>, groups_table_collapsed(SpaceId));
@@ -1091,6 +1163,35 @@ event({request_support, SpaceId}) ->
 event({invite_user, SpaceId}) ->
     get(?COMET_PID) ! {invite_user, SpaceId},
     gui_jq:show(<<"main_spinner">>);
+
+event({change_space_name, SpaceId, Name}) ->
+    gui_jq:update(<<"space_name">>, change_space_name(SpaceId, Name)),
+    gui_jq:bind_enter_to_submit_button(<<"new_space_name_textbox">>, <<"new_space_name_submit">>),
+    gui_jq:focus(<<"new_space_name_textbox">>);
+
+event({cancel_new_space_name_submit, SpaceId, Name}) ->
+    gui_jq:update(<<"space_name">>, space_name(SpaceId, Name));
+
+event({submit_new_space_name, SpaceId, Name}) ->
+    NewUsername = gui_ctx:postback_param(<<"new_space_name_textbox">>),
+    {UserGID, AccessToken} = gui_ctx:get_access_token(),
+    case user_logic:get_user({global_id, UserGID}) of
+        {ok, UserDoc} ->
+            case gr_adapter:change_space_name(SpaceId, NewUsername, gui_ctx:get_access_token()) of
+                ok ->
+                    user_logic:synchronize_spaces_info(UserDoc, AccessToken),
+                    gui_jq:update(<<"space_name">>, space_name(SpaceId, NewUsername));
+                _ ->
+                    message(<<"error_message">>, <<"Cannot change Space name.">>),
+                    gui_jq:update(<<"space_name">>, space_name(SpaceId, Name))
+            end;
+        _ ->
+            message(<<"error_message">>, <<"Cannot change Space name.">>),
+            gui_jq:update(<<"space_name">>, space_name(SpaceId, Name))
+    end;
+
+event({close_message, MessageId}) ->
+    gui_jq:hide(MessageId);
 
 event(terminate) ->
     ok.
