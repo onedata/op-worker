@@ -67,8 +67,8 @@ veil_attach_upload_handle_dragdrop = function (form, input) {
                 $(CURRENT_LEFT_BAR_ID).css("width", (100 - prog) + "%");
 
                 // Paint a tag yellow, but only the first one found
-                if ($(PENDING_FILES_LIST_ID).find("span[filename=\"" + data.files[0].name + "\"][status=in_progress]").length == 0) {
-                    $($(PENDING_FILES_LIST_ID).find("span[filename=\"" + data.files[0].name + "\"][status=added]")[0])
+                if ($(PENDING_FILES_LIST_ID).find("span[filename=\"" + data.files[0].name.split('\\').join('') + "\"][status=in_progress]").length == 0) {
+                    $($(PENDING_FILES_LIST_ID).find("span[filename=\"" + data.files[0].name.split('\\').join('') + "\"][status=added]")[0])
                         .attr("status", "in_progress")
                         .css("background-color", YELLOW_TAG_COLOUR);
                 }
@@ -81,7 +81,7 @@ veil_attach_upload_handle_dragdrop = function (form, input) {
             always: function (e, data) {
             },
             fail: function (e, data, options) {
-                $(findTagByFilename(data.files[0].name)).
+                $(findTagByFilename(data.files[0].name.split('\\').join(''))).
                     css("background-color", RED_TAG_COLOUR).
                     attr("status", "error");
                 veil_increment_pending_upload_counter(form, -1);
@@ -92,7 +92,7 @@ veil_attach_upload_handle_dragdrop = function (form, input) {
                     // Let's add the visual list of pending files
                     $(PENDING_FILES_LIST_ID)
                         .append($("<span></span>")
-                            .attr("filename", f.name)
+                            .attr("filename", f.name.split('\\').join(''))
                             .attr("status", "added")
                             .css("background-color", "rgb(189, 195, 199)")
                             .addClass("tag")
@@ -106,7 +106,8 @@ veil_attach_upload_handle_dragdrop = function (form, input) {
             done: function (e, data) {
                 $(CURRENT_DONE_BAR_ID).css("width", "0%");
                 $(CURRENT_LEFT_BAR_ID).css("width", "100%");
-                $(findTagByFilename(data.result.files[0].name)).
+                console.log(data.result.files[0].name.split('\\').join(''));
+                $(findTagByFilename(data.result.files[0].name.split('\\').join(''))).
                     css("background-color", GREEN_TAG_COLOUR).
                     attr("status", "success");
                 veil_increment_pending_upload_counter(form, -1);
@@ -147,6 +148,7 @@ veil_alert_unfinished_files = function (form) {
     var files = $(PENDING_FILES_LIST_ID).find("span.tag[status='error']");
     if (files.length > 0) {
         var filenames = $(files).get().map(function (f) {
+            $(f).attr("status", "error_reported");
             return $(f).text()
         }).join("\r\n");
         alert("There was an error uploading the following file(s):\r\n" + filenames + "\r\n\r\nPlease try again.");

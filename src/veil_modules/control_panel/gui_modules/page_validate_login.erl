@@ -11,20 +11,22 @@
 %% ===================================================================
 
 -module(page_validate_login).
--compile(export_all).
 -include("veil_modules/control_panel/common.hrl").
 -include("logging.hrl").
 
+% n2o API
+-export([main/0, event/1]).
+
 %% Template points to the template file, which will be filled with content
-main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}.
+main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
 
 %% Page title
 title() -> <<"Login page">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    case gui_utils:user_logged_in() of
-        true -> wf:redirect(<<"/">>);
+    case gui_ctx:user_logged_in() of
+        true -> gui_jq:redirect(<<"/">>);
         false ->
             LoginMessage = case openid_utils:prepare_validation_parameters() of
                                {error, invalid_request} -> {error, invalid_request};
@@ -34,44 +36,42 @@ body() ->
 
             case LoginMessage of
                 {error, invalid_request} ->
-                    page_error:redirect_with_error("Invalid request",
-                        "Error occured while processing this authentication request.");
+                    page_error:redirect_with_error(?error_openid_invalid_request);
 
                 {error, auth_invalid} ->
-                    page_error:redirect_with_error("Invalid request",
-                        "OpenID Provider denied the authenticity of this login request.");
+                    page_error:redirect_with_error(?error_openid_auth_invalid);
 
                 {error, no_connection} ->
-                    page_error:redirect_with_error("Connection problem",
-                        "Unable to reach OpenID Provider.");
+                    page_error:redirect_with_error(?error_openid_no_connection);
 
                 ok ->
                     try
                         case openid_utils:retrieve_user_info() of
                             {error, invalid_request} ->
-                                page_error:redirect_with_error("Login error",
-                                    "Could not process OpenID response. Please contact the site administrator if the problem persists.");
+                                page_error:redirect_with_error(?error_openid_login_error);
                             {ok, Proplist} ->
                                 {Login, UserDoc} = user_logic:sign_in(Proplist),
-                                wf:user(Login),
-                                wf:session(user_doc, UserDoc),
-                                gui_utils:redirect_from_login()
+                                gui_ctx:create_session(),
+                                gui_ctx:set_user_id(Login),
+                                vcn_gui_utils:set_user_fullname(user_logic:get_name(UserDoc)),
+                                vcn_gui_utils:set_user_role(user_logic:get_role(UserDoc)),
+                                gui_jq:redirect_from_login(),
+                                ?debug("User ~p logged in", [Login])
                         end
                     catch
                         throw:dir_creation_error ->
                             ?error_stacktrace("Error in validate_login - ~p:~p", [throw, dir_creation_error]),
-                            page_error:redirect_with_error("User creation error",
-                                "Server could not create user directories. Please contact the site administrator if the problem persists.");
+                            page_error:redirect_with_error(?error_login_dir_creation_error);
                         throw:dir_chown_error ->
                             ?error_stacktrace("Error in validate_login - ~p:~p", [throw, dir_chown_error]),
-                            page_error:redirect_with_error("User creation error",
-                                "Server could not change owner of user directories. Please contact the site administrator if the problem persists.");
+                            page_error:redirect_with_error(?error_login_dir_chown_error);
                         Type:Message ->
                             ?error_stacktrace("Error in validate_login - ~p:~p", [Type, Message]),
-                            page_error:redirect_with_error("Internal server error",
-                                "Server encountered an unexpected error. Please contact the site administrator if the problem persists.")
+                            page_error:redirect_with_error(?error_internal_server_error)
                     end
-            end
+            end,
+            <<"">>
     end.
 
-event(init) -> ok.
+event(init) -> ok;
+event(terminate) -> ok.

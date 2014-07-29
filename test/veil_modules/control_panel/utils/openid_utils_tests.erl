@@ -12,6 +12,7 @@
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("include/veil_modules/control_panel/common.hrl").
 -include_lib("include/veil_modules/control_panel/openid_utils.hrl").
 -include_lib("include/logging.hrl").
 
@@ -37,7 +38,13 @@
     "openid.sreg.required=nickname,email,fullname&openid.ns.ext1=http://openid.net/srv/ax/1.0&openid.ext1.mode=fetch_request&",
     "openid.ext1.type.dn1=http://openid.plgrid.pl/certificate/dn1&openid.ext1.type.dn2=http://openid.plgrid.pl/certificate/dn2&",
     "openid.ext1.type.dn3=http://openid.plgrid.pl/certificate/dn3&openid.ext1.type.teams=http://openid.plgrid.pl/userTeamsXML&",
-    "openid.ext1.if_available=dn1,dn2,dn3,teams">>).
+    "openid.ext1.type.POSTresponse=http://openid.plgrid.pl/POSTresponse&",
+    "openid.ext1.if_available=dn1,dn2,dn3,teams,POSTresponse">>).
+
+-define(mock_signed_params, {<<"openid.signed">>, <<"op_endpoint,claimed_id,identity,return_to,response_nonce,assoc_handle,",
+"ns.ext1,ns.sreg,ext1.mode,ext1.type.dn1,ext1.value.dn1,ext1.type.dn2,ext1.value.dn2,ext1.type.dn3,",
+"ext1.value.dn3,ext1.type.teams,ext1.value.teams,ext1.type.POSTresponse,ext1.value.POSTresponse,",
+"sreg.nickname,sreg.email,sreg.fullname">>}).
 
 
 % These tests check reactions to theoretical responses when requesting 
@@ -45,36 +52,36 @@
 get_url_test_() ->
     {foreach,
         fun() ->
-            meck:new(ibrowse),
+            meck:new(gui_utils),
             meck:new(lager)
         end,
         fun(_) ->
-            ok = meck:unload(ibrowse),
+            ok = meck:unload(gui_utils),
             ok = meck:unload(lager)
         end,
         [
             {"URL correctness",
                 fun() ->
-                    meck:expect(ibrowse, send_req, fun(_, _, _) -> {ok, "200", [], ?mock_xrds_file} end),
+                    meck:expect(gui_utils, https_get, fun(_, _) -> {ok, <<?mock_xrds_file>>} end),
                     ?assertEqual(?correct_request_url, openid_utils:get_login_url(<<?hostname>>, <<?redirect_params>>)),
-                    ?assert(meck:validate(ibrowse))
+                    ?assert(meck:validate(gui_utils))
                 end},
 
             {"No 200 code case",
                 fun() ->
-                    meck:expect(ibrowse, send_req, fun(_, _, _) -> {ok, "404", [], []} end),
+                    meck:expect(gui_utils, https_get, fun(_, _) -> {error, nxdomain} end),
                     meck:expect(lager, log, fun(error, _, _) -> ok end),
                     ?assertEqual({error, endpoint_unavailable}, openid_utils:get_login_url(<<?hostname>>, <<?redirect_params>>)),
-                    ?assert(meck:validate(ibrowse)),
+                    ?assert(meck:validate(gui_utils)),
                     ?assert(meck:validate(lager))
                 end},
 
             {"Connection refused case",
                 fun() ->
-                    meck:expect(ibrowse, send_req, fun(_, _, _) -> {error, econnrefused} end),
+                    meck:expect(gui_utils, https_get, fun(_, _) -> {error, econnrefused} end),
                     meck:expect(lager, log, fun(error, _, _) -> ok end),
                     ?assertEqual({error, endpoint_unavailable}, openid_utils:get_login_url(<<?hostname>>, <<?redirect_params>>)),
-                    ?assert(meck:validate(ibrowse)),
+                    ?assert(meck:validate(gui_utils)),
                     ?assert(meck:validate(lager))
                 end}
         ]}.
@@ -84,46 +91,49 @@ get_url_test_() ->
 validate_login_test_() ->
     {foreach,
         fun() ->
-            meck:new(ibrowse),
+            meck:new(gui_ctx),
+            meck:new(gui_utils),
             meck:new(lager)
         end,
         fun(_) ->
-            meck:unload(ibrowse),
+            meck:unload(gui_ctx),
+            meck:unload(gui_utils),
             meck:unload(lager)
         end,
         [
             {"Login valid case",
                 fun() ->
-                    meck:expect(ibrowse, send_req, fun("mock", _, post, "me") -> {ok, "200", [], ?valid_auth_info} end),
+                    meck:expect(gui_utils, https_post, fun("mock", _, "me") -> {ok, <<?valid_auth_info>>} end),
                     ?assertEqual(ok, openid_utils:validate_openid_login({"mock", "me"})),
-                    ?assert(meck:validate(ibrowse))
+                    ?assert(meck:validate(gui_utils))
                 end},
 
             {"Login invalid case",
                 fun() ->
-                    meck:expect(ibrowse, send_req, fun("mock", _, post, "me") ->
-                        {ok, "200", [], "is_valid: false\n"} end),
+                    meck:expect(gui_utils, https_post, fun("mock", _, "me") -> {ok, <<"is_valid: false\n">>} end),
+                    meck:expect(gui_ctx, get_request_params, fun() -> [] end),
                     meck:expect(lager, log, fun(alert, _, _) -> ok end),
                     ?assertEqual({error, auth_invalid}, openid_utils:validate_openid_login({"mock", "me"})),
-                    ?assert(meck:validate(ibrowse)),
+                    ?assert(meck:validate(gui_utils)),
+                    ?assert(meck:validate(gui_ctx)),
                     ?assert(meck:validate(lager))
                 end},
 
             {"No 200 code case",
                 fun() ->
-                    meck:expect(ibrowse, send_req, fun("mock", _, post, "me") -> {ok, "404", [], []} end),
+                    meck:expect(gui_utils, https_post, fun("mock", _, "me") -> {error, nxdomain} end),
                     meck:expect(lager, log, fun(error, _, _) -> ok end),
                     ?assertEqual({error, no_connection}, openid_utils:validate_openid_login({"mock", "me"})),
-                    ?assert(meck:validate(ibrowse)),
+                    ?assert(meck:validate(gui_utils)),
                     ?assert(meck:validate(lager))
                 end},
 
             {"Connection refused case",
                 fun() ->
-                    meck:expect(ibrowse, send_req, fun("mock", _, post, "me") -> {error, econnrefused} end),
+                    meck:expect(gui_utils, https_post, fun("mock", _, "me") -> {error, econnrefused} end),
                     meck:expect(lager, log, fun(error, _, _) -> ok end),
                     ?assertEqual({error, no_connection}, openid_utils:validate_openid_login({"mock", "me"})),
-                    ?assert(meck:validate(ibrowse)),
+                    ?assert(meck:validate(gui_utils)),
                     ?assert(meck:validate(lager))
                 end}
         ]}.
@@ -134,76 +144,91 @@ validate_login_test_() ->
 parameter_processing_test_() ->
     {foreach,
         fun() ->
+            meck:new(cowboy_req),
+            meck:new(wf_context),
             meck:new(wf),
+            meck:new(gui_utils),
             meck:new(lager)
         end,
         fun(_) ->
+            meck:unload(cowboy_req),
+            meck:unload(wf_context),
             meck:unload(wf),
+            meck:unload(gui_utils),
             meck:unload(lager)
         end,
         [{"POST request body correctness",
             fun() ->
+                meck:expect(gui_utils, https_get, fun(_, _) -> {ok, <<?mock_xrds_file>>} end),
                 KeyValueList = lists:zip(openid_keys(), openid_values()),
-                FullKeyValueList = KeyValueList ++ [
-                    {<<"openid.signed">>, <<"op_endpoint,claimed_id,identity,return_to,response_nonce,assoc_handle,",
-                    "ns.ext1,ns.sreg,ext1.mode,ext1.type.dn1,ext1.value.dn1,ext1.type.teams,",
-                    "ext1.value.teams,sreg.nickname,sreg.email,sreg.fullname">>}
-                ],
-                meck:expect(wf, q,
-                    fun(Key) ->
-                        proplists:get_value(Key, FullKeyValueList)
+                FullKeyValueList = KeyValueList ++ [?mock_signed_params],
+                meck:expect(wf_context, context, fun() -> #context{req = []} end),
+                meck:expect(cowboy_req, body_qs,
+                    fun(_) ->
+                        {ok, FullKeyValueList, []}
                     end),
 
                 meck:expect(wf, url_encode, fun(Key) -> Key end),
-                CorrectRequest = ?openid_check_authentication_mode ++
-                    lists:foldl(
-                        fun({Key, Value}, Acc) ->
-                            Acc ++ "&" ++ binary_to_list(Key) ++ "=" ++ binary_to_list(Value)
-                        end, "", FullKeyValueList),
+                CorrectRequest = lists:foldl(
+                    fun({Key, Value}, Acc) ->
+                        Param = gui_str:url_encode(gui_str:to_list(Value)),
+                        <<Acc/binary, "&", Key/binary, "=", Param/binary>>
+                    end, <<"">>, FullKeyValueList),
+                FullCorrectRequest = <<?openid_check_authentication_mode, CorrectRequest/binary>>,
                 Server = binary_to_list(proplists:get_value(<<"openid.op_endpoint">>, FullKeyValueList)),
-                ?assertEqual({Server, CorrectRequest}, openid_utils:prepare_validation_parameters()),
+                ?assertEqual({Server, gui_str:to_list(FullCorrectRequest)}, openid_utils:prepare_validation_parameters()),
+                ?assert(meck:validate(gui_utils)),
+                ?assert(meck:validate(cowboy_req)),
+                ?assert(meck:validate(wf_context)),
                 ?assert(meck:validate(wf))
             end},
 
             {"Missing 'signed' parameter case",
                 fun() ->
-                    meck:expect(wf, q,
-                        fun(<<"openid.signed">>) -> undefined;
-                            (<<"openid.op_endpoint">>) -> undefined
+                    meck:expect(wf_context, context, fun() -> #context{req = []} end),
+                    meck:expect(cowboy_req, body_qs,
+                        fun(_) ->
+                            {ok, [], []}
                         end),
                     meck:expect(lager, log, fun(error, _, _) -> ok end),
 
                     ?assertEqual({error, invalid_request},
                         openid_utils:prepare_validation_parameters()),
-                    ?assert(meck:validate(wf)),
+                    ?assert(meck:validate(cowboy_req)),
+                    ?assert(meck:validate(wf_context)),
                     ?assert(meck:validate(lager))
                 end},
 
             {"Missing parameters case",
                 fun() ->
-                    meck:expect(wf, q,
-                        fun(<<"openid.signed">>) ->
-                            <<"op_endpoint,claimed_id,identity,return_to,response_nonce,assoc_handle,",
-                            "ns.ext1,ns.sreg,ext1.mode,ext1.type.dn1,ext1.value.dn1,ext1.type.teams,",
-                            "ext1.value.teams,sreg.nickname,sreg.email,sreg.fullname">>;
-                            (<<"openid.op_endpoint">>) -> <<"serverAddress">>
+                    meck:expect(wf_context, context, fun() -> #context{req = []} end),
+                    meck:expect(cowboy_req, body_qs,
+                        fun(_) ->
+                            {ok, [
+                                ?mock_signed_params,
+                                {<<"openid.op_endpoint">>, <<"serverAddress">>}
+                            ], []}
                         end),
                     meck:expect(lager, log, fun(error, _, _) -> ok end),
-                    meck:expect(wf, q, fun(_) -> [] end),
                     meck:expect(wf, url_encode, fun(Key) -> Key end),
 
                     ?assertEqual({error, invalid_request},
                         openid_utils:prepare_validation_parameters()),
+                    ?assert(meck:validate(cowboy_req)),
+                    ?assert(meck:validate(wf_context)),
                     ?assert(meck:validate(wf)),
                     ?assert(meck:validate(lager))
                 end},
 
             {"User info correctness",
                 fun() ->
-                    KeyValueList = lists:zip(user_info_keys(), user_info_values()),
-                    meck:expect(wf, q,
-                        fun(Key) ->
-                            proplists:get_value(Key, KeyValueList)
+                    KeyValueList = lists:zip(user_info_keys(), user_info_values()) ++ [
+                        ?mock_signed_params
+                    ],
+                    meck:expect(wf_context, context, fun() -> #context{req = []} end),
+                    meck:expect(cowboy_req, body_qs,
+                        fun(_) ->
+                            {ok, KeyValueList, []}
                         end),
 
                     CorrectResult =
@@ -219,20 +244,18 @@ parameter_processing_test_() ->
                         fun(Key) ->
                             ?assertEqual(proplists:get_value(Key, Result), proplists:get_value(Key, CorrectResult))
                         end, [login, name, teams, email, dn_list]),
-                    ?assert(meck:validate(wf))
+                    ?assert(meck:validate(wf_context)),
+                    ?assert(meck:validate(cowboy_req))
                 end},
 
             {"User info - undefined DN case",
                 fun() ->
-                    KeyValueList = lists:zip(user_info_keys(), user_info_values()),
-                    meck:expect(wf, q,
-                        fun(Key) ->
-                            case Key of
-                            % Only dn2 is defined
-                                <<?openid_dn1_key>> -> undefined;
-                                <<?openid_dn3_key>> -> undefined;
-                                OtherKey -> proplists:get_value(OtherKey, KeyValueList)
-                            end
+                    KeyValueList = lists:zip(user_info_keys() -- [<<?openid_dn1_key>>, <<?openid_dn3_key>>],
+                        user_info_values() -- [<<"dn1">>, <<"dn3">>]) ++ [?mock_signed_params],
+                    meck:expect(wf_context, context, fun() -> #context{req = []} end),
+                    meck:expect(cowboy_req, body_qs,
+                        fun(_) ->
+                            {ok, KeyValueList, []}
                         end),
 
                     CorrectResult =
@@ -249,6 +272,8 @@ parameter_processing_test_() ->
                         fun(Key) ->
                             ?assertEqual(proplists:get_value(Key, Result), proplists:get_value(Key, CorrectResult))
                         end, [login, name, teams, email, dn_list]),
+                    ?assert(meck:validate(cowboy_req)),
+                    ?assert(meck:validate(wf_context)),
                     ?assert(meck:validate(wf))
                 end}
         ]}.
@@ -272,8 +297,14 @@ openid_keys() ->
         <<"openid.ext1.mode">>,
         <<"openid.ext1.type.dn1">>,
         <<"openid.ext1.value.dn1">>,
+        <<"openid.ext1.type.dn2">>,
+        <<"openid.ext1.value.dn2">>,
+        <<"openid.ext1.type.dn3">>,
+        <<"openid.ext1.value.dn3">>,
         <<"openid.ext1.type.teams">>,
         <<"openid.ext1.value.teams">>,
+        <<"openid.ext1.type.POSTresponse">>,
+        <<"openid.ext1.value.POSTresponse">>,
         <<"openid.sreg.nickname">>,
         <<"openid.sreg.email">>,
         <<"openid.sreg.fullname">>,
@@ -282,8 +313,9 @@ openid_keys() ->
 
 % Used in "assert POST request body correctness" test
 % Values are whatever, its important if they were all used.
+% With exception of endpoint
 openid_values() ->
-    lists:map(fun(X) -> integer_to_binary(X) end, lists:seq(1, 17)).
+    [<<"https://openid.plgrid.pl/server">> | lists:map(fun(X) -> integer_to_binary(X) end, lists:seq(1, 22))].
 
 
 % Used in "Retrieve user info" test, names of keys
@@ -321,5 +353,19 @@ user_info_processed_values() ->
         "dn2",
         "dn3"
     ].
+
+
+to_list(undefined) -> [];
+to_list(Term) when is_list(Term) -> Term;
+to_list(Term) when is_binary(Term) -> binary_to_list(Term);
+to_list(Term) ->
+    try
+        wf:to_list(Term)
+    catch _:_ ->
+        lists:flatten(io_lib:format("~p", [Term]))
+    end.
+
+to_binary(Term) when is_binary(Term) -> Term;
+to_binary(Term) -> list_to_binary(to_list(Term)).
 
 -endif.

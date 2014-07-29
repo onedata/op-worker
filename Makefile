@@ -58,6 +58,7 @@ upgrade:
 	./rebar generate-upgrade previous_release=${PREV}
 
 rpm: deps generate
+	make -C onepanel rel
 	./releases/rpm_files/create_rpm
 
 
@@ -116,16 +117,14 @@ start_node_console:
 	./releases/test_cluster/$(node)/bin/veil_cluster_node console
 
 ### Basho-Bench build (used by CI)
-basho_bench: deps compile
+basho_bench: deps 
+	@cp -R veilprotocol/proto ${BASHO_BENCH_DIR}/src
 	cp ${STRESS_TESTS_SRC_DIR}/**/*.erl ${BASHO_BENCH_DIR}/src
 	cp ${DIST_TESTS_SRC_DIR}/wss.erl ${BASHO_BENCH_DIR}/src
 	@mkdir -p ${BASHO_BENCH_DIR}/tests
 	@mkdir -p ${BASHO_BENCH_DIR}/ebin
 	@cp ${STRESS_TESTS_SRC_DIR}/**/*.config ${BASHO_BENCH_DIR}/tests
-	@cp -R include/* ${BASHO_BENCH_DIR}/include/
-	@cp -R deps/protobuffs/ebin/* ${BASHO_BENCH_DIR}/ebin/
-	@cp -R deps/websocket_client/ebin/* ${BASHO_BENCH_DIR}/ebin/
-	@cp -R ebin/* ${BASHO_BENCH_DIR}/ebin/
+	@cp -R include/* ${BASHO_BENCH_DIR}/include
 	cd ${BASHO_BENCH_DIR} && make all
 	@cp ${STRESS_TESTS_SRC_DIR}/*.escript ${BASHO_BENCH_DIR}/
 	@cp ${STRESS_TESTS_SRC_DIR}/*.py ${BASHO_BENCH_DIR}/

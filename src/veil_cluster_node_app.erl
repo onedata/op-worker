@@ -11,9 +11,10 @@
 %% ===================================================================
 
 -module(veil_cluster_node_app).
-
 -behaviour(application).
+
 -include("registered_names.hrl").
+-include("logging.hrl").
 
 %% Application callbacks
 -export([start/2, stop/1]).
@@ -38,14 +39,16 @@
                 | term().
 %% ====================================================================
 start(_StartType, _StartArgs) ->
-	case its_ccm() orelse ports_ok() of
+	Ans = case its_ccm() orelse ports_ok() of
 		true ->
 			{ok, NodeType} = application:get_env(?APP_Name, node_type),
 			fprof:start(), %% Start fprof server. It doesnt do enything unless it's used.
 			veil_cluster_node_sup:start_link(NodeType);
 		false ->
 			{error, "Not all ports are free"}
-	end.
+	end,
+	?info("Application start at node: ~p. Start result: ~p.", [node(), Ans]),
+	Ans.
 
 
 %% stop/1
@@ -74,7 +77,7 @@ get_env(Name) ->
 		{ok,Value} ->
 			{ok,Value};
 		undefined ->
-			lager:error("Could not get '~p' environment variable.",[Name]),
+			?error("Could not get '~p' environment variable.",[Name]),
 			io:format(standard_error, "Could not get '~p' environment variable.~n",[Name]),
 			{error,undefined}
 	end.
@@ -135,7 +138,7 @@ ports_are_free(Port)->
 			gen_tcp:close(Socket),
 			true;
 		error ->
-			lager:error("Port ~w is in use, error: ~p. Starting aborted. ~n", [Port,Socket]),
+			?error("Port ~p is in use, error: ~p. Starting aborted. ~n", [Port,Socket]),
 			io:format(standard_error, "Port ~w is in use. Starting aborted.~n", [Port]),
 			false
 	end.

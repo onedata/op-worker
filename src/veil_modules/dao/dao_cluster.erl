@@ -22,7 +22,7 @@
 
 %% API - FUSE session
 -export([get_fuse_session/1, get_fuse_session/2, save_fuse_session/1, remove_fuse_session/1, close_fuse_session/1, list_fuse_sessions/1, get_sessions_by_user/1]).
--export([clear_sessions/0]).
+-export([check_session/1, clear_sessions/0]).
 
 %% API - FUSE connections
 -export([get_connection_info/1, save_connection_info/1, remove_connection_info/1, close_connection/1, list_connection_info/1]).
@@ -229,7 +229,7 @@ close_fuse_session(FuseId) ->
 %% ====================================================================
 %% @doc Lists fuse_session records using given select condition.
 %%      Current implementeation supports fallowing selects:
-%%          {by_valid_to, Time} - select all records whose 'valid_to' field is <= Time
+%%          {by_valid_to, Time} - select all records whose 'valid_to' field is less or equal to Time
 %% Should not be used directly, use {@link dao:handle/2} instead.
 %% @end
 -spec list_fuse_sessions({by_valid_to, Time :: non_neg_integer()}) ->
@@ -394,7 +394,7 @@ clear_sessions(Sessions) ->
                     save_fuse_session(NewDoc), %% Save updated document
                     ok;
                 {Pid, {error, Reason1}} -> %% Connection is broken, remove it
-                    ?info("FUSE Session ~p is broken (~p). Invalidating...", [SessID, Reason1]),
+                    ?warning("FUSE Session ~p is broken (~p). Invalidating...", [SessID, Reason1]),
                     close_fuse_session(SessID),
                     session_closed
             after 60000 ->

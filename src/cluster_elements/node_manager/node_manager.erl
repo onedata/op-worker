@@ -40,7 +40,8 @@
 %% jako stan (jak teraz) czy jako ets i ewentualnie przejść na ets
 -ifdef(TEST).
 -export([get_callback/2, addCallback/3, delete_callback/3]).
--export([calculate_network_stats/3, get_interface_stats/2, get_cpu_stats/1, calculate_ports_transfer/4, get_memory_stats/0]).
+-export([calculate_network_stats/3, get_interface_stats/2, get_cpu_stats/1, calculate_ports_transfer/4,
+  get_memory_stats/0, is_valid_name/1, is_valid_name/2, is_valid_character/1]).
 -endif.
 
 %% ====================================================================
@@ -110,7 +111,8 @@ init([Type]) when Type =:= worker; Type =:= ccm; Type =:= ccm_test ->
           {cacerts, gsi_handler:strip_self_signed_ca(gsi_handler:get_ca_certs())},
           {keyfile, atom_to_list(CertFile)},
           {password, ""},
-          {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}}
+          {verify, verify_peer}, {verify_fun, {fun gsi_handler:verify_callback/3, []}},
+          {ciphers, gsi_handler:get_ciphers()}
         ],
         [
           {env, [{dispatch, Dispatch}]}
@@ -170,19 +172,15 @@ handle_call(get_ccm_connection_status, _From, State) ->
   {reply, State#node_state.ccm_con_status, State};
 
 handle_call({get_node_stats, TimeWindow}, _From, State) ->
-  Reply = get_node_stats(TimeWindow, default),
-  {reply, Reply, State};
-
-handle_call({get_node_stats_json, TimeWindow}, _From, State) ->
-  Reply = get_node_stats(TimeWindow, json),
+  Reply = get_node_stats(TimeWindow),
   {reply, Reply, State};
 
 handle_call({get_node_stats, StartTime, EndTime}, _From, State) ->
   Reply = get_node_stats(StartTime, EndTime),
   {reply, Reply, State};
 
-handle_call({get_node_stats_json, StartTime, EndTime}, _From, State) ->
-  Reply = get_node_stats(StartTime, EndTime, json),
+handle_call({get_node_stats, StartTime, EndTime, Columns}, _From, State) ->
+  Reply = get_node_stats(StartTime, EndTime, Columns),
   {reply, Reply, State};
 
 handle_call(get_fuses_list, _From, State) ->
@@ -214,7 +212,11 @@ handle_call({clear_cache, Cache}, _From, State) ->
 handle_call(check, _From, State) ->
   {reply, ok, State};
 
+handle_call({check_storage, FilePath, Content}, _From, State) ->
+  {reply, fslogic_storage:check_storage_on_node(FilePath, Content), State};
+
 handle_call(_Request, _From, State) ->
+  ?warning("Wrong call: ~p", [_Request]),
   {reply, wrong_request, State}.
 
 %% handle_cast/2
@@ -264,7 +266,7 @@ handle_cast({delete_callback_by_pid, Pid}, State) ->
           gen_server:call({global, ?CCM}, {delete_callback, Fuse, node(), Pid}, 2000)
         catch
           _:_ ->
-            lager:error("delete_callback - error during contact with CCM"),
+            ?error("delete_callback - error during contact with CCM"),
             error
         end
       end)
@@ -277,42 +279,56 @@ handle_cast({register_simple_cache, Cache, ReturnPid}, State) ->
                 true -> Caches;
                 false -> [Cache | Caches]
               end,
+  ?info("simple_cache_registered: ~p", [Cache]),
   ReturnPid ! simple_cache_registered,
   {noreply, State#node_state{simple_caches = NewCaches}};
 
-handle_cast({start_load_logging, Path}, State) ->
+handle_cast({start_load_logging, Path}, #node_state{load_logging_fd = undefined} = State) ->
   ?info("Start load logging on node: ~p", [node()]),
   {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
   {MegaSecs, Secs, MicroSecs} = erlang:now(),
   StartTime = MegaSecs * 1000000 + Secs + MicroSecs / 1000000,
-  case file:open(Path ++ "/load_log.csv", [write]) of
+  case file:open(Path, [write]) of
     {ok, Fd} ->
-      NodeStats = get_node_stats(0, default),
-      Header = string:join(["elapsed", "window" | lists:map(fun({Name, _}) ->
-        binary_to_list(Name) end, NodeStats)], ", ") ++ "\n",
-      io:fwrite(Fd, Header, []),
-      erlang:send_after(Interval * 1000, self(), {timer, {log_load, StartTime, StartTime}}),
-      {noreply, State#node_state{load_logging_fd = Fd}};
+      case get_node_stats(short) of
+        NodeStats when is_list(NodeStats) ->
+          Header = string:join(["elapsed", "window" | lists:map(fun({Name, _}) ->
+            Name
+          end, NodeStats)], ", ") ++ "\n",
+          io:fwrite(Fd, Header, []),
+          erlang:send_after(Interval * 1000, self(), {timer, {log_load, StartTime, StartTime}}),
+          {noreply, State#node_state{load_logging_fd = Fd}};
+        Other ->
+          ?error("Can not get node stats: ~p", [Other]),
+          {noreply, State}
+      end;
     _ -> {noreply, State}
   end;
+handle_cast({start_load_logging, _}, State) ->
+  ?warning("Load logging already started on node: ~p", [node()]),
+  {noreply, State};
 
-handle_cast({log_load, StartTime, PrevTime}, State) ->
+handle_cast({log_load, _, _}, #node_state{load_logging_fd = undefined} = State) ->
+  ?warning("Can not log load: file descriptor is undefined."),
+  {noreply, State};
+handle_cast({log_load, StartTime, PrevTime}, #node_state{load_logging_fd = Fd} = State) ->
   {ok, Interval} = application:get_env(?APP_Name, node_load_logging_period),
   {MegaSecs, Secs, MicroSecs} = erlang:now(),
   CurrTime = MegaSecs * 1000000 + Secs + MicroSecs / 1000000,
-  spawn(fun() -> log_load(State#node_state.load_logging_fd, StartTime, PrevTime, CurrTime) end),
+  spawn(fun() -> log_load(Fd, StartTime, PrevTime, CurrTime) end),
   erlang:send_after(Interval * 1000, self(), {timer, {log_load, StartTime, CurrTime}}),
   {noreply, State};
 
-handle_cast(stop_load_logging, State) ->
+handle_cast(stop_load_logging, #node_state{load_logging_fd = undefined} = State) ->
+  ?warning("Load logging already stopped on node: ~p", [node()]),
+  {noreply, State};
+handle_cast(stop_load_logging, #node_state{load_logging_fd = Fd} = State) ->
   ?info("Stop load logging on node: ~p", [node()]),
-  case State#node_state.load_logging_fd of
-    undefined -> ok;
-    Fd -> file:close(Fd)
-  end,
+  file:close(Fd),
   {noreply, State#node_state{load_logging_fd = undefined}};
 
 handle_cast({notify_lfm, EventType, Enabled}, State) ->
+  ?debug("notify_lfm message: ~p", [{EventType, Enabled}]),
   case Enabled of
     true -> ets:insert(?LFM_EVENT_PRODUCTION_ENABLED_ETS, {EventType, true});
     _ -> ets:delete(?LFM_EVENT_PRODUCTION_ENABLED_ETS, EventType)
@@ -320,6 +336,7 @@ handle_cast({notify_lfm, EventType, Enabled}, State) ->
   {noreply, State};
 
 handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
+  ?debug("update_user_write_enabled message: ~p", [{UserDn, Enabled}]),
   case Enabled of
     false -> ets:insert(?WRITE_DISABLED_USERS, {UserDn, true});
     _ -> ets:delete(?WRITE_DISABLED_USERS, UserDn)
@@ -327,6 +344,7 @@ handle_cast({update_user_write_enabled, UserDn, Enabled}, State) ->
   {noreply, State};
 
 handle_cast({node_for_ack, MsgID, Node}, State) ->
+  ?debug("Node for ack chosen: ~p", [{MsgID, Node}]),
   ets:insert(?ACK_HANDLERS, {{chosen_node, MsgID}, Node}),
   {ok, Interval} = application:get_env(veil_cluster_node, callback_ack_time),
   Pid = self(),
@@ -343,6 +361,7 @@ handle_cast({update_ports_stats, PortsStats}, State) ->
   {noreply, State#node_state{ports_stats = PortsStats}};
 
 handle_cast(_Msg, State) ->
+  ?warning("Wrong cast: ~p", [_Msg]),
   {noreply, State}.
 
 %% handle_info/2
@@ -361,15 +380,16 @@ handle_info({timer, Msg}, State) ->
   {noreply, State};
 
 handle_info({delete_node_for_ack, MsgID}, State) ->
+  ?debug("Node for ack deleted: ~p", [MsgID]),
   ets:delete(?ACK_HANDLERS, {chosen_node, MsgID}),
   {noreply, State};
 
 handle_info({nodedown, _Node}, State) ->
-  lager:error("Connection to CCM lost"),
+  ?error("Connection to CCM lost"),
   {noreply, State#node_state{ccm_con_status = not_connected}};
 
 handle_info(_Info, State) ->
-  ?error("Error: wrong info: ~p", [_Info]),
+  ?warning("Wrong info: ~p", [_Info]),
   {noreply, State}.
 
 
@@ -434,7 +454,7 @@ heart_beat(Conn_status, State) ->
     _ -> erlang:send_after(500, self(), {timer, do_heart_beat})
   end,
 
-  lager:info([{mod, ?MODULE}], "Heart beat on node: ~p: sent; connection: ~p, old conn_status: ~p,  state_num: ~b, callback_num: ~b,  disp dispatcher_state: ~b, callbacks_state: ~b",
+  ?debug("Heart beat on node: ~p: sent; connection: ~p, old conn_status: ~p,  state_num: ~b, callback_num: ~b,  disp dispatcher_state: ~b, callbacks_state: ~b",
     [node(), New_conn_status, Conn_status, State#node_state.state_num, State#node_state.callbacks_num, State#node_state.dispatcher_state, State#node_state.callbacks_state]),
   State#node_state{ccm_con_status = New_conn_status}.
 
@@ -445,7 +465,7 @@ heart_beat(Conn_status, State) ->
   NewStatus :: term().
 %% ====================================================================
 heart_beat_response(New_state_num, CallbacksNum, State) ->
-  lager:info([{mod, ?MODULE}], "Heart beat on node: ~p: answered, new state_num: ~b, new callback_num: ~b", [node(), New_state_num, CallbacksNum]),
+  ?debug("Heart beat on node: ~p: answered, new state_num: ~b, new callback_num: ~b", [node(), New_state_num, CallbacksNum]),
 
   case (New_state_num == State#node_state.state_num) of
     true -> ok;
@@ -453,6 +473,7 @@ heart_beat_response(New_state_num, CallbacksNum, State) ->
       %% TODO find a method which do not force clearing of all simple caches at all nodes when only one worker/node is added/deleted
       %% Now all caches are canceled because we do not know if state number change is connected with network problems (so cache of node may be not valid)
       %% TODO during refactoring integrate simple and permanent cache (cache clearing can be triggered as CacheCheckFun)
+      ?debug("Simple caches cleared"),
       clear_simple_caches(State#node_state.simple_caches)
   end,
 
@@ -473,7 +494,9 @@ heart_beat_response(New_state_num, CallbacksNum, State) ->
 update_dispatcher(New_state_num, CallbacksNum, Type) ->
   case Type =:= ccm of
     true -> ok;
-    false -> gen_server:cast(?Dispatcher_Name, {update_state, New_state_num, CallbacksNum})
+    false ->
+      ?debug("Message sent to update dispatcher, state and callbacks num: ~p", [{New_state_num, CallbacksNum}]),
+      gen_server:cast(?Dispatcher_Name, {update_state, New_state_num, CallbacksNum})
   end.
 
 %% init_net_connection/1
@@ -493,11 +516,16 @@ init_net_connection([Node | Nodes]) ->
       pong ->
         erlang:monitor_node(Node, true),
         global:sync(),
+        ?debug("Connection to nodes ~p initialized", [Nodes]),
         ok;
-      pang -> init_net_connection(Nodes)
+      pang ->
+        ?error("Cannot connect to node ~p", [Node]),
+        init_net_connection(Nodes)
     end
   catch
-    _:_ -> error
+    E1:E2 ->
+      ?error("Error ~p:~p during initialization of cennection to nodes: ~p", [E1, E2, Nodes]),
+      error
   end.
 
 %% check_vsn/0
@@ -528,18 +556,18 @@ check_vsn([{Application, _Description, Vsn} | Apps]) ->
 %% ====================================================================
 %% @doc Writes node load to file
 -spec log_load(Fd :: pid(), StartTime :: integer(), PrevTime :: integer(), CurrTime :: integer()) -> Result when
-  Result :: ok.
+  Result :: ok | {error, Reason :: term()}.
 %% ====================================================================
 log_load(Fd, StartTime, PrevTime, CurrTime) ->
-  case Fd of
-    undefined -> ok;
-    _ ->
-      NodeStats = get_node_stats(short, default),
-      Values = [CurrTime - StartTime, CurrTime - PrevTime | lists:map(fun({_, Value}) ->
-        Value end, NodeStats)],
+  case get_node_stats(short) of
+    NodeStats when is_list(NodeStats) ->
+      Values = [CurrTime - StartTime, CurrTime - PrevTime | lists:map(fun({_, Value}) -> Value end, NodeStats)],
       Format = string:join(lists:duplicate(length(Values), "~.6f"), ", ") ++ "\n",
       io:fwrite(Fd, Format, Values),
-      ok
+      ok;
+    Other ->
+      ?error("Can not get node stats: ~p", [Other]),
+      {error, Other}
   end.
 
 %% create_node_stats_rrd/1
@@ -549,10 +577,12 @@ log_load(Fd, StartTime, PrevTime, CurrTime) ->
   Result :: ok | {error, Error :: term()}.
 %% ====================================================================
 create_node_stats_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkStats, ports_stats = PortsStats}) ->
+  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   {ok, Period} = application:get_env(?APP_Name, node_monitoring_period),
   {ok, Steps} = application:get_env(?APP_Name, rrd_steps),
+  {ok, RRDSize} = application:get_env(?APP_Name, rrd_size),
   Heartbeat = 2 * Period,
-  RRASize = round(60 * 60 / Period), % one hour in seconds devided by monitoring period
+  RRASize = round(RRDSize / Period),
   BinaryPeriod = integer_to_binary(Period),
   BinaryHeartbeat = integer_to_binary(Heartbeat),
   RRASizeBinary = integer_to_binary(RRASize),
@@ -570,12 +600,13 @@ create_node_stats_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkS
   RRAs = lists:map(fun(Step) -> BinaryStep = integer_to_binary(Step),
     <<"RRA:AVERAGE:0.5:", BinaryStep/binary, ":", RRASizeBinary/binary>> end, Steps),
 
-  case rrderlang:create(?Node_Stats_RRD_Name, Options, DSs, RRAs) of
+  case gen_server:call(?RrdErlang_Name, {create, ?Node_Stats_RRD_Name, Options, DSs, RRAs}, Timeout) of
     {error, Error} ->
       ?error("Can not create node stats RRD: ~p", [Error]),
       {error, Error};
     _ ->
       gen_server:cast(?Node_Manager_Name, monitor_node),
+      ?debug("Node RRD created"),
       ok
   end.
 
@@ -583,38 +614,38 @@ create_node_stats_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkS
 %% ====================================================================
 %% @doc Get statistics about node load
 %% TimeWindow - time in seconds since now, that defines interval for which statistics will be fetched
--spec get_node_stats(TimeWindow :: short | medium | long | integer(), Format :: default | json) -> Result when
-  Result :: [{Name :: atom(), Value :: float()}] | {error, term()}.
+-spec get_node_stats(TimeWindow :: short | medium | long | integer()) -> Result when
+  Result :: [{Name :: string(), Value :: float()}] | {error, term()}.
 %% ====================================================================
-get_node_stats(TimeWindow, Format) ->
+get_node_stats(TimeWindow) ->
   {ok, Interval} = case TimeWindow of
                      short -> application:get_env(?APP_Name, short_monitoring_time_window);
                      medium -> application:get_env(?APP_Name, medium_monitoring_time_window);
                      long -> application:get_env(?APP_Name, long_monitoring_time_window);
-                     _ -> {ok, TimeWindow}
+                     _ when is_integer(TimeWindow) -> {ok, TimeWindow};
+                     _ ->
+                       ?warning("Wrong statistics time window: ~p", [TimeWindow]),
+                       application:get_env(?APP_Name, short_monitoring_time_window)
                    end,
   {MegaSecs, Secs, _} = erlang:now(),
   EndTime = 1000000 * MegaSecs + Secs,
   StartTime = EndTime - Interval,
-  get_node_stats(StartTime, EndTime, Format).
+  get_node_stats(StartTime, EndTime).
 
-%% get_node_stats/3
+%% get_node_stats/2
 %% ====================================================================
 %% @doc Get statistics about node load
-%% StartTime. EndTime - time in seconds since epoch (1970-01-01), that defines interval
+%% StartTime, EndTime - time in seconds since epoch (1970-01-01), that defines interval
 %% for which statistics will be fetched
--spec get_node_stats(StartTime :: integer(), EndTime :: integer(), Format :: default | json) -> Result when
+-spec get_node_stats(StartTime :: integer(), EndTime :: integer()) -> Result when
   Result :: [{Name :: string(), Value :: float()}] | {error, term()}.
 %% ====================================================================
-get_node_stats(StartTime, EndTime, Format) ->
+get_node_stats(StartTime, EndTime) ->
+  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   BinaryStartTime = integer_to_binary(StartTime),
   BinaryEndTime = integer_to_binary(EndTime),
   Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
-  FetchFunction = case Format of
-                    json -> fun rrderlang:fetch_json/3;
-                    _ -> fun rrderlang:fetch/3
-                  end,
-  case FetchFunction(?Node_Stats_RRD_Name, Options, <<"AVERAGE">>) of
+  case gen_server:call(?RrdErlang_Name, {fetch, ?Node_Stats_RRD_Name, Options, <<"AVERAGE">>}, Timeout) of
     {ok, {Header, Data}} ->
       HeaderList = lists:map(fun(Elem) -> binary_to_list(Elem) end, Header),
       HeaderLen = length(Header),
@@ -635,6 +666,25 @@ get_node_stats(StartTime, EndTime, Format) ->
       Other
   end.
 
+%% get_node_stats/3
+%% ====================================================================
+%% @doc Fetch specified columns from node statistics Round Robin Database.
+-spec get_node_stats(StartTime :: integer(), EndTime :: integer(), Columns) -> Result when
+  Columns :: all | {name, [binary()]} | {starts_with, [binary()]} | {index, [integer()]},
+  Result :: {ok, {Header, Body}} | {error, Error :: term()},
+  Header :: [ColumnNames :: binary()],
+  Body :: [Row],
+  Row :: [{Timestamp, Values}],
+  Timestamp :: integer(),
+  Values :: [integer() | float()].
+%% ====================================================================
+get_node_stats(StartTime, EndTime, Columns) ->
+  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
+  BinaryStartTime = integer_to_binary(StartTime),
+  BinaryEndTime = integer_to_binary(EndTime),
+  Options = <<"--start ", BinaryStartTime/binary, " --end ", BinaryEndTime/binary>>,
+  gen_server:call(?RrdErlang_Name, {fetch, ?Node_Stats_RRD_Name, Options, <<"AVERAGE">>, Columns}, Timeout).
+
 %% save_node_stats_to_rrd/1
 %% ====================================================================
 %% @doc Saves node stats to Round Robin Database
@@ -642,12 +692,13 @@ get_node_stats(StartTime, EndTime, Format) ->
   Result :: ok | {error, Error :: term()}.
 %% ====================================================================
 save_node_stats_to_rrd(#node_state{cpu_stats = CpuStats, network_stats = NetworkStats, ports_stats = PortsStats}) ->
+  {ok, Timeout} = application:get_env(?APP_Name, rrd_timeout),
   {MegaSecs, Secs, _} = erlang:now(),
-  Timestamp = MegaSecs * 1000000 + Secs,
+  Timestamp = integer_to_binary(MegaSecs * 1000000 + Secs),
   Stats = get_cpu_stats(CpuStats) ++ get_memory_stats() ++ get_network_stats(NetworkStats) ++
     get_ports_stats(PortsStats),
   Values = lists:map(fun({_, Value}) -> Value end, Stats),
-  case rrderlang:update(?Node_Stats_RRD_Name, <<>>, Values, Timestamp) of
+  case gen_server:call(?RrdErlang_Name, {update, ?Node_Stats_RRD_Name, <<>>, Values, Timestamp}, Timeout) of
     {error, Error} ->
       ?error("Can not save node stats to RRD: ~p", [Error]),
       {error, Error};
@@ -667,6 +718,9 @@ get_network_stats(NetworkStats) ->
   Dir = "/sys/class/net/",
   case file:list_dir(Dir) of
     {ok, Interfaces} ->
+      ValidInterfaces = lists:filter(fun(Interface) ->
+        is_valid_name(Interface, 11)
+      end, Interfaces),
       CurrentNetworkStats = lists:foldl(
         fun(Interface, Stats) -> [
           {<<"net_rx_b_", (list_to_binary(Interface))/binary>>, get_interface_stats(Interface, "rx_bytes")},
@@ -674,7 +728,7 @@ get_network_stats(NetworkStats) ->
           {<<"net_rx_pps_", (list_to_binary(Interface))/binary>>, get_interface_stats(Interface, "rx_packets") / Period},
           {<<"net_tx_pps_", (list_to_binary(Interface))/binary>>, get_interface_stats(Interface, "tx_packets") / Period} |
           Stats
-        ] end, [], Interfaces),
+        ] end, [], ValidInterfaces),
       gen_server:cast(?Node_Manager_Name, {update_network_stats, CurrentNetworkStats}),
       calculate_network_stats(CurrentNetworkStats, NetworkStats, []);
     _ -> []
@@ -743,10 +797,16 @@ read_cpu_stats(Fd, Stats) ->
                "" -> <<"cpu">>;
                _ -> <<"core", (list_to_binary(ID))/binary>>
              end,
-      [User, Nice, System | Rest] = lists:map(fun(Value) -> list_to_integer(Value) end, Values),
-      WorkJiffies = User + Nice + System,
-      TotalJiffies = WorkJiffies + lists:foldl(fun(Value, Sum) -> Value + Sum end, 0, Rest),
-      read_cpu_stats(Fd, [{Name, WorkJiffies, TotalJiffies} | Stats]);
+      case is_valid_name(Name, 0) of
+        true ->
+          [User, Nice, System | Rest] = lists:map(fun(Value) -> list_to_integer(Value) end, Values),
+          WorkJiffies = User + Nice + System,
+          TotalJiffies = WorkJiffies + lists:foldl(fun(Value, Sum) -> Value + Sum end, 0, Rest),
+          read_cpu_stats(Fd, [{Name, WorkJiffies, TotalJiffies} | Stats]);
+        _ -> read_cpu_stats(Fd, Stats)
+      end;
+    {ok, _} ->
+      read_cpu_stats(Fd, Stats);
     _ ->
       file:close(Fd),
       Stats
@@ -827,6 +887,53 @@ read_memory_stats(Fd, MemFree, MemTotal, Counter) ->
     _ -> read_memory_stats(Fd, MemFree, MemTotal, Counter)
   end.
 
+%% is_valid_name/2
+%% ====================================================================
+%% @doc Checks whether string contains only following characters a-zA-Z0-9_
+%% and with some prefix is not longer than 19 characters. This is a requirement
+%% for a valid column name in Round Robin Database.
+-spec is_valid_name(Name :: string() | binary(), PrefixLength :: integer()) -> Result when
+  Result :: true | false.
+%% ====================================================================
+is_valid_name(Name, PrefixLength) when is_list(Name) ->
+  case length(Name) =< 19 - PrefixLength of
+    true -> is_valid_name(Name);
+    _ -> false
+  end;
+is_valid_name(Name, PrefixLength) when is_binary(Name) ->
+  is_valid_name(binary_to_list(Name), PrefixLength);
+is_valid_name(_, _) ->
+  false.
+
+%% is_valid_name/1
+%% ====================================================================
+%% @doc Checks whether string contains only following characters a-zA-Z0-9_
+-spec is_valid_name(Name :: string() | binary()) -> Result when
+  Result :: true | false.
+%% ====================================================================
+is_valid_name([]) ->
+  false;
+is_valid_name([Character]) ->
+  is_valid_character(Character);
+is_valid_name([Character | Characters]) ->
+  is_valid_character(Character) andalso is_valid_name(Characters);
+is_valid_name(Name) when is_binary(Name) ->
+  is_valid_name(binary_to_list(Name));
+is_valid_name(_) ->
+  false.
+
+%% is_valid_character/1
+%% ====================================================================
+%% @doc Checks whether character belongs to a-zA-Z0-9_ range
+-spec is_valid_character(Character :: char()) -> Result when
+  Result :: true | false.
+%% ====================================================================
+is_valid_character($_) -> true;
+is_valid_character(Character) when Character >= $0 andalso Character =< $9 -> true;
+is_valid_character(Character) when Character >= $A andalso Character =< $Z -> true;
+is_valid_character(Character) when Character >= $a andalso Character =< $z -> true;
+is_valid_character(_) -> false.
+
 %% get_callback/2
 %% ====================================================================
 %% @doc Gets callback to fuse (if there are more than one callback it
@@ -874,6 +981,7 @@ get_all_callbacks(Fuse, State) ->
 %% ====================================================================
 addCallback(State, FuseId, Pid) ->
   NewCallbacks = update_pid_list(FuseId, Pid, State#node_state.callbacks, []),
+  ?debug("Callback added: ~p", [{FuseId, Pid}]),
   State#node_state{callbacks = NewCallbacks}.
 
 %% update_pid_list/4
@@ -918,6 +1026,7 @@ choose_callback([Callback | L1], L2) ->
 %% ====================================================================
 delete_callback(State, FuseId, Pid) ->
   {NewCallbacks, DeleteAns} = delete_pid_from_list(FuseId, Pid, State#node_state.callbacks, []),
+  ?debug("Deleting callback, ans ~p", [DeleteAns]),
   {State#node_state{callbacks = NewCallbacks}, DeleteAns}.
 
 %% delete_pid_from_list/4
@@ -983,6 +1092,7 @@ get_fuse_by_callback_pid_helper(Pid, [{F, {CList1, CList2}} | T]) ->
 -spec clear_simple_caches(Caches :: list()) -> ok.
 %% ====================================================================
 clear_simple_caches(Caches) ->
+  ?debug("Clearing caches: ~p", [Caches]),
   lists:foreach(fun
     ({sub_proc_cache, Cache}) ->
       worker_host:clear_sub_procs_cache(Cache);
@@ -998,38 +1108,38 @@ clear_simple_caches(Caches) ->
 %% ====================================================================
 clear_cache(Cache, Caches) ->
   Method = case Cache of
-    CacheName when is_atom(CacheName) ->
-      {Cache, all, Cache};
-    {permanent_cache, CacheName2} ->
-      {Cache, all, CacheName2};
-    {permanent_cache, CacheName3, _} ->
-      {Cache, all, CacheName3};
-    {sub_proc_cache, SubProcCache} ->
-      {Cache, sub_proc, SubProcCache};
-    {{sub_proc_cache, SubProcCache2}, SubProcKey} ->
-      {{sub_proc_cache, SubProcCache2}, sub_proc, {SubProcCache2, SubProcKey}};
-    {{permanent_cache, CacheName4}, Keys} when is_list(Keys) ->
-      {{permanent_cache, CacheName4}, list, {CacheName4, Keys}};
-    {{permanent_cache, CacheName5}, Key} ->
-      {{permanent_cache, CacheName5}, simple, {CacheName5, Key}};
-    {{permanent_cache, CacheName6, _}, Keys2} when is_list(Keys2) ->
-      {{permanent_cache, CacheName6}, list, {CacheName6, Keys2}};
-    {{permanent_cache, CacheName7, _}, Key2} ->
-      {{permanent_cache, CacheName7}, simple, {CacheName7, Key2}};
-    {CacheName8, Keys3} when is_list(Keys3) ->
-      {CacheName8, list, {CacheName8, Keys3}};
-    {CacheName9, Key3} ->
-      {CacheName9, simple, {CacheName9, Key3}};
-    [] ->
-      ok;
-    [H | T] ->
-      Ans1 = clear_cache(H, Caches),
-      Ans2 = clear_cache(T, Caches),
-      case {Ans1, Ans2} of
-        {ok, ok} -> ok;
-        _ -> error
-      end
-  end,
+             CacheName when is_atom(CacheName) ->
+               {Cache, all, Cache};
+             {permanent_cache, CacheName2} ->
+               {Cache, all, CacheName2};
+             {permanent_cache, CacheName3, _} ->
+               {Cache, all, CacheName3};
+             {sub_proc_cache, SubProcCache} ->
+               {Cache, sub_proc, SubProcCache};
+             {{sub_proc_cache, SubProcCache2}, SubProcKey} ->
+               {{sub_proc_cache, SubProcCache2}, sub_proc, {SubProcCache2, SubProcKey}};
+             {{permanent_cache, CacheName4}, Keys} when is_list(Keys) ->
+               {{permanent_cache, CacheName4}, list, {CacheName4, Keys}};
+             {{permanent_cache, CacheName5}, Key} ->
+               {{permanent_cache, CacheName5}, simple, {CacheName5, Key}};
+             {{permanent_cache, CacheName6, _}, Keys2} when is_list(Keys2) ->
+               {{permanent_cache, CacheName6}, list, {CacheName6, Keys2}};
+             {{permanent_cache, CacheName7, _}, Key2} ->
+               {{permanent_cache, CacheName7}, simple, {CacheName7, Key2}};
+             {CacheName8, Keys3} when is_list(Keys3) ->
+               {CacheName8, list, {CacheName8, Keys3}};
+             {CacheName9, Key3} ->
+               {CacheName9, simple, {CacheName9, Key3}};
+             [] ->
+               ok;
+             [H | T] ->
+               Ans1 = clear_cache(H, Caches),
+               Ans2 = clear_cache(T, Caches),
+               case {Ans1, Ans2} of
+                 {ok, ok} -> ok;
+                 _ -> error
+               end
+           end,
   case Method of
     {CName, ClearingMethod, ClearingMethodAttr} ->
       case lists:member(CName, Caches) of

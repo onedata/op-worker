@@ -143,14 +143,6 @@ veil_cluster_node_env:
       value: 900
 
   - parameter:
-      name: rrd_steps
-      description: Defines how many primary data points are used to build a consolidated data point which then goes into the archive
-      value: |
-          ["1","24","168","720","8760"] # 1 hour, 1 day, 7 days, 30 days, 365 days
-      erlang_term: |
-          [1,24,168,720,8760]
-
-  - parameter:
       name: nif_prefix
       description: Prefix to c_lib directory containing NIF libs
       value: |
@@ -164,6 +156,32 @@ veil_cluster_node_env:
           ["control_panel_port","control_panel_redirect_port","dns_port","dispatcher_port","rest_port"]
       erlang_term: |
           [control_panel_port,control_panel_redirect_port,dns_port,dispatcher_port,rest_port]
+
+  - parameter:
+      name: storage_config_name
+      description: Name of storage configuration file used by client during automatic storage detection
+      value: |
+          "\'vfs_storage.info\'"
+      erlang_term: "'vfs_storage.info'"
+
+  # RRDERLANG
+  - parameter:
+      name: rrd_timeout
+      description: Time in ms after which rrderlang answers with error
+      value: 5000
+
+  - parameter:
+      name: rrd_size
+      description: Defines how many primary data points - divided by monitoring period - are collected
+      value: 7200
+
+  - parameter:
+      name: rrd_steps
+      description: Defines how many primary data points are used to build a consolidated data point which then goes into the archive
+      value: |
+          ["1","24","168","720","8760"] # 1 hour, 1 day, 7 days, 30 days, 365 days
+      erlang_term: |
+          [1,24,168,720,8760]
 
   # LOGGING
   - parameter:
@@ -282,6 +300,23 @@ veil_cluster_node_env:
       description: Buffer size used to stream file from a client
       value: 1048576
 
+  - parameter:
+      name: root_cacert_file
+      description: Path to .pem or .crt file containing CA certs installed on the system.
+      value: |
+        "\'/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem\'"
+      erlang_term: "'/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem'"
+
+  - parameter:
+      name: control_panel_sessions_clearing_period
+      description: Period between automatic deletion of expired session tokens, in seconds.
+      value: 86400 # one day in seconds
+
+  - parameter:
+      name: control_panel_sessions_cookie_ttl
+      description: Cookies time to live - expiration date will be set this many seconds from time of creation (in seconds).
+      value: 2592000 # 30 days in seconds
+
 
   # Files management
   - parameter:
@@ -291,8 +326,8 @@ veil_cluster_node_env:
 
   - parameter:
       name: new_group_file_logic_mode
-      description: Default mode for new file (mode stored in db) inside groups directory (8#660)
-      value: 432
+      description: Default mode for new file (mode stored in db) inside groups directory (8#640)
+      value: 416
 
   - parameter:
       name: new_file_storage_mode
@@ -301,13 +336,13 @@ veil_cluster_node_env:
 
   - parameter:
       name: new_group_file_storage_mode
-      description: Default mode for new file at storage system inside groups directory (8#660)
-      value: 432
+      description: Default mode for new file at storage system inside groups directory (8#640)
+      value: 416
 
   - parameter:
       name: new_dir_storage_mode
-      description: Default mode for new directory at storage system (8#330)
-      value: 216
+      description: Default mode for new directory at storage system (8#1330)
+      value: 728
 
 
   # DNS

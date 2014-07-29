@@ -6,14 +6,13 @@
 %% @end
 %% ===================================================================
 %% @doc: This is a simple library used to establish an OpenID authentication.
-%% It needs n2o and ibrowse to run.
+%% It needs n2o context to run.
 %% @end
 %% ===================================================================
 
 -module(openid_utils).
 
 -include_lib("xmerl/include/xmerl.hrl").
--include_lib("ibrowse/include/ibrowse.hrl").
 -include_lib("n2o/include/wf.hrl").
 -include("veil_modules/control_panel/openid_utils.hrl").
 -include("logging.hrl").
@@ -51,6 +50,7 @@ get_login_url(HostName, RedirectParams) ->
         "&", ?openid_ext1_type_dn2,
         "&", ?openid_ext1_type_dn3,
         "&", ?openid_ext1_type_teams,
+        "&", ?openid_ext1_post_response,
         "&", ?openid_ext1_if_available>>
     catch Type:Message ->
         ?error_stacktrace("Unable to resolve OpenID Provider endpoint - ~p: ~p", [Type, Message]),
@@ -70,8 +70,13 @@ get_login_url(HostName, RedirectParams) ->
 %% ====================================================================
 prepare_validation_parameters() ->
     try
+        POSTParams = gui_ctx:form_params(),
+        % Make sure received endpoint is really the PLGrid endpoint
+        EndpointURL = proplists:get_value(<<?openid_op_endpoint_key>>, POSTParams),
+        true = (discover_op_endpoint(?xrds_url) =:= EndpointURL),
+
         % 'openid.signed' contains parameters that must be contained in validation request
-        SignedArgsNoPrefix = binary:split(wf:q(<<?openid_signed_key>>), <<",">>, [global]),
+        SignedArgsNoPrefix = binary:split(proplists:get_value(<<?openid_signed_key>>, POSTParams), <<",">>, [global]),
         % Add 'openid.' prefix to all parameters
         % And add 'openid.sig' and 'openid.signed' params which are required for validation
         SignedArgs = lists:map(
@@ -82,17 +87,16 @@ prepare_validation_parameters() ->
         % Create a POST request body
         RequestParameters = lists:foldl(
             fun(Key, Acc) ->
-                Value = case wf:q(Key) of
-                            undefined -> throw("Value for " ++ gui_utils:to_list(Key) ++ " not found");
+                Value = case proplists:get_value(Key, POSTParams) of
+                            undefined -> throw("Value for " ++ gui_str:to_list(Key) ++ " not found");
                             Val -> Val
                         end,
                 % Safely URL-decode params
-                Param = gui_utils:to_binary(wf:url_encode(gui_utils:to_list(Value))),
+                Param = gui_str:url_encode(Value),
                 <<Acc/binary, "&", Key/binary, "=", Param/binary>>
             end, <<"">>, SignedArgs),
         ValidationRequestBody = <<?openid_check_authentication_mode, RequestParameters/binary>>,
-        EndpointURL = wf:q(<<?openid_op_endpoint_key>>),
-        {gui_utils:to_list(EndpointURL), gui_utils:to_list(ValidationRequestBody)}
+        {gui_str:to_list(EndpointURL), gui_str:to_list(ValidationRequestBody)}
 
     catch Type:Message ->
         ?error_stacktrace("Failed to process login validation request - ~p: ~p", [Type, Message]),
@@ -115,12 +119,11 @@ prepare_validation_parameters() ->
 %% ====================================================================
 validate_openid_login({EndpointURL, ValidationRequestBody}) ->
     try
-        Raw = ibrowse:send_req(EndpointURL, [{content_type, "application/x-www-form-urlencoded"}], post, ValidationRequestBody),
-        {ok, 200, _, Response} = normalise_response(Raw),
+        {ok, Response} = gui_utils:https_post(EndpointURL, [{"Content-Type", "application/x-www-form-urlencoded"}], ValidationRequestBody),
         case Response of
-            ?valid_auth_info -> ok;
+            <<?valid_auth_info>> -> ok;
             _ ->
-                ?alert("Security breach attempt spotted. Invalid redirect URL contained:~n~p", [gui_utils:get_request_params()]),
+                ?alert("Security breach attempt spotted. Invalid redirect URL contained:~n~p", [gui_ctx:form_params()]),
                 {error, auth_invalid}
         end
 
@@ -144,18 +147,28 @@ validate_openid_login({EndpointURL, ValidationRequestBody}) ->
 %% ====================================================================
 retrieve_user_info() ->
     try
-        Login = gui_utils:to_list(wf:q(<<?openid_login_key>>)),
+        POSTParams = gui_ctx:form_params(),
+        % Check which params were signed by PLGrid
+        SignedParamsNoPrefix = binary:split(proplists:get_value(<<?openid_signed_key>>, POSTParams), <<",">>, [global]),
+        % Add 'openid.' prefix to all parameters
+        % And add 'openid.sig' and 'openid.signed' params which are required for validation
+        SignedParams = lists:map(
+            fun(X) ->
+                <<"openid.", X/binary>>
+            end, SignedParamsNoPrefix),
+
+        Login = get_signed_param(<<?openid_login_key>>, POSTParams, SignedParams, unicode),
         % Login must be retrieved from OpenID, other info is not mandatory.
         case Login of
             [] -> throw(login_undefined);
             _ -> ok
         end,
-        Name = gui_utils:to_list(wf:q(<<?openid_name_key>>)),
-        Teams = parse_teams(gui_utils:to_list(wf:q(<<?openid_teams_key>>))),
-        Email = gui_utils:to_list(wf:q(<<?openid_email_key>>)),
-        DN1 = gui_utils:to_list(wf:q(<<?openid_dn1_key>>)),
-        DN2 = gui_utils:to_list(wf:q(<<?openid_dn2_key>>)),
-        DN3 = gui_utils:to_list(wf:q(<<?openid_dn3_key>>)),
+        Name = get_signed_param(<<?openid_name_key>>, POSTParams, SignedParams, unicode),
+        Teams = parse_teams(get_signed_param(<<?openid_teams_key>>, POSTParams, SignedParams, utf8)),
+        Email = get_signed_param(<<?openid_email_key>>, POSTParams, SignedParams, unicode),
+        DN1 = get_signed_param(<<?openid_dn1_key>>, POSTParams, SignedParams, unicode),
+        DN2 = get_signed_param(<<?openid_dn2_key>>, POSTParams, SignedParams, unicode),
+        DN3 = get_signed_param(<<?openid_dn3_key>>, POSTParams, SignedParams, unicode),
         DnList = lists:filter(
             fun(X) ->
                 (X /= [])
@@ -169,7 +182,7 @@ retrieve_user_info() ->
         ]}
     catch Type:Message ->
         ?error_stacktrace("Failed to retrieve user info - ~p: ~p~nOpenID redirect args were:~n~p",
-            [Type, Message, gui_utils:get_request_params()]),
+            [Type, Message, gui_ctx:get_request_params()]),
         {error, invalid_request}
     end.
 
@@ -177,6 +190,26 @@ retrieve_user_info() ->
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
+
+%% get_signed_param/2
+%% ====================================================================
+%% @doc
+%% Retrieves given request parameter, but only if it was signed by the provider.
+%% Returns the param in desired encoding (unicode or utf8).
+%% @end
+-spec get_signed_param(ParamName :: binary(), POSTParams :: [{Key :: binary(), Value :: binary()}],
+    SignedParams :: [binary()], Encoding :: unicode | utf8) -> string().
+%% ====================================================================
+get_signed_param(ParamName, POSTParams, SignedParams, Encoding) ->
+    CoversionFun = case Encoding of
+                       unicode -> fun(X) -> gui_str:binary_to_unicode_list(X) end;
+                       utf8 -> fun(X) -> gui_str:to_list(X) end
+                   end,
+    case lists:member(ParamName, SignedParams) of
+        true -> CoversionFun(proplists:get_value(ParamName, POSTParams, <<"">>));
+        false -> []
+    end.
+
 
 %% discover_op_endpoint/1
 %% ====================================================================
@@ -212,81 +245,20 @@ xml_extract_value(KeyName, Xml) ->
 -spec get_xrds(string()) -> string().
 %% ====================================================================
 get_xrds(URL) ->
-    % Maximum redirection count = 5
-    {ok, 200, _, Body} = get_xrds(URL, 5),
-    Body.
-
-
-%% get_xrds/2
-%% ====================================================================
-%% @doc
-%% Downloads xrds file performing GET on provided URL. Supports redirects.
-%% @end
--spec get_xrds(string(), integer()) -> string().
-%% ====================================================================
-get_xrds(URL, Redirects) ->
     ReqHeaders =
         [
             {"Accept", "application/xrds+xml;level=1, */*"},
             {"Connection", "close"}
         ],
-    ResponseRaw = ibrowse:send_req(URL, ReqHeaders, get),
-    Response = normalise_response(ResponseRaw),
-    case Response of
-        {ok, Rcode, RespHeaders, _Body} when Rcode > 300 andalso Rcode < 304 andalso Redirects > 0 ->
-            case get_redirect_url(URL, RespHeaders) of
-                undefined -> Response;
-                URL -> Response;
-                NewURL -> get_xrds(NewURL, Redirects - 1)
-            end;
-        Response -> Response
-    end.
-
-
-%% get_redirect_url/1
-%% ====================================================================
-%% @doc
-%% Retrieves redirect URL from a HTTP response.
-%% @end
--spec get_redirect_url(string(), list()) -> string().
-%% ====================================================================
-get_redirect_url(OldURL, Headers) ->
-    Location = proplists:get_value("location", Headers),
-    case Location of
-        "http://" ++ _ -> Location;
-        "https://" ++ _ -> Location;
-        [$/ | _] = Location ->
-            #url{protocol = Protocol, host = Host, port = Port} = ibrowse_lib:parse_url(OldURL),
-            PortFrag = case {Protocol, Port} of
-                           {http, 80} -> "";
-                           {https, 443} -> "";
-                           _ -> ":" ++ integer_to_list(Port)
-                       end,
-            atom_to_list(Protocol) ++ "://" ++ Host ++ PortFrag ++ Location;
-        _ -> undefined
-    end.
-
-
-%% normalise_response/1
-%% ====================================================================
-%% @doc
-%% Standarizes HTTP response, e.g. transforms header names to lower case.
-%% @end
--spec normalise_response({ok, string(), list(), list()}) -> {ok, integer(), list(), list()}.
-%% ====================================================================
-normalise_response({ok, RcodeList, Headers, Body}) ->
-    RcodeInt = list_to_integer(RcodeList),
-    LowHeaders = [{string:to_lower(K), V} || {K, V} <- Headers],
-    {ok, RcodeInt, LowHeaders, Body};
-
-normalise_response(X) -> X.
+    {ok, XRDS} = gui_utils:https_get(URL, ReqHeaders),
+    binary_to_list(XRDS).
 
 
 %% parse_teams/1
 %% ====================================================================
 %% @doc
 %% Parses user's teams from XML to a list of strings. Returns an empty list
-%% for empty XML.
+%% for empty XML. NOTE! Returns a list of unicode strings.
 %% @end
 -spec parse_teams(string()) -> [string()].
 %% ====================================================================
@@ -298,7 +270,7 @@ parse_teams(XMLContent) ->
     #xmlElement{content = TeamList} = find_XML_node(teams, XML),
     lists:map(
         fun(#xmlElement{content = [#xmlText{value = Value}]}) ->
-            binary_to_list(unicode:characters_to_binary(Value, unicode))
+            Value
         end, TeamList).
 
 

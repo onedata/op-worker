@@ -30,8 +30,9 @@
 %% Physical files organization management (to better organize files on storage;
 %% the user does not see results of these operations)
 -export([mkdir/2, mv/3, delete_dir/2, chmod/3, chown/4]).
+
 %% Physical files access (used to create temporary copies for remote files)
--export([read/4, write/4, write/3, create/2, truncate/3, delete/2, ls/0]).
+-export([read/4, write/4, write/3, create/2, create/3, truncate/3, delete/2, ls/0]).
 
 %% Helper functions
 -export([check_perms/2, check_perms/3]).
@@ -98,7 +99,7 @@ mkdir(Storage_helper_info, Dir) ->
               end;
             {error, 'NIF_not_loaded'} -> ErrorCode2;
             _ ->
-              lager:error("Can not create dir %p, code: %p, helper info: %p, mode: %p%n", [Dir, ErrorCode2, Storage_helper_info, NewDirStorageMode]),
+%%               ?error("Can not create dir %p, code: %p, helper info: %p, mode: %p%n", [Dir, ErrorCode2, Storage_helper_info, NewDirStorageMode]),
               {wrong_mkdir_return_code, ErrorCode2}
           end
       end;
@@ -115,14 +116,14 @@ mkdir(Storage_helper_info, Dir) ->
   ErrorDetail :: term().
 %% ====================================================================
 mv(_Storage_helper_info, From, From) ->
-    ok;
+  ok;
 mv(Storage_helper_info, From, To) ->
   ErrorCode = veilhelpers:exec(rename, Storage_helper_info, [From, To]),
   case ErrorCode of
     0 -> ok;
     {error, 'NIF_not_loaded'} -> ErrorCode;
     _ ->
-      lager:error("Can not move file from ~p to ~p, code: ~p, helper info: ~p", [From, To, ErrorCode, Storage_helper_info]),
+%%       ?error("Can not move file from ~p to ~p, code: ~p, helper info: ~p", [From, To, ErrorCode, Storage_helper_info]),
       {wrong_rename_return_code, ErrorCode}
   end.
 
@@ -163,6 +164,7 @@ delete_dir(Storage_helper_info, File) ->
   ErrorDetail :: term().
 %% ====================================================================
 chmod(Storage_helper_info, File, Mode) ->
+  ok = setup_ctx(File),
   ErrorCode = veilhelpers:exec(chmod, Storage_helper_info, [File, Mode]),
   case ErrorCode of
     0 -> ok;
@@ -179,11 +181,12 @@ chmod(Storage_helper_info, File, Mode) ->
   ErrorDetail :: term().
 %% ====================================================================
 chown(Storage_helper_info, File, User, Group) when is_integer(User), is_integer(Group) ->
-    ErrorCode = veilhelpers:exec(chown, Storage_helper_info, [File, User, Group]),
-    case ErrorCode of
-        0 -> ok;
-        _ -> {error, ErrorCode}
-    end;
+  ok = setup_ctx(File),
+  ErrorCode = veilhelpers:exec(chown, Storage_helper_info, [File, User, Group]),
+  case ErrorCode of
+    0 -> ok;
+    _ -> {error, ErrorCode}
+  end;
 chown(Storage_helper_info, File, User, Group) ->
   ErrorCode = veilhelpers:exec(chown_name, Storage_helper_info, [File, User, Group]),
   case ErrorCode of
@@ -208,6 +211,7 @@ chown(Storage_helper_info, File, User, Group) ->
   ErrorDetail :: term().
 %% ====================================================================
 read(Storage_helper_info, File, Offset, Size) ->
+  ok = setup_ctx(File),
   {ErrorCode, CValue} = get_cached_value(File, size, Storage_helper_info),
   case ErrorCode of
     ok ->
@@ -239,7 +243,7 @@ read(Storage_helper_info, File, Offset, Size) ->
                   end;
                 _ -> {FlagCode, Flag}
               end;
-            true  -> {error, file_too_small}
+            true -> {error, file_too_small}
           end;
         false -> {error, not_regular_file}
       end;
@@ -260,30 +264,31 @@ read(Storage_helper_info, File, Offset, Size) ->
   ErrorDetail :: term().
 %% ====================================================================
 write(Storage_helper_info, File, Offset, Buf) ->
+  ok = setup_ctx(File),
   {ErrorCode, Stat} = get_cached_value(File, is_reg, Storage_helper_info),
   case ErrorCode of
     ok ->
       case Stat of
         true ->
-              {FlagCode, Flag} = get_cached_value(File, o_wronly, Storage_helper_info),
-              case FlagCode of
-                ok ->
-                  {ErrorCode2, FFI} = veilhelpers:exec(open, Storage_helper_info, [File, #st_fuse_file_info{flags = Flag}]),
-                  case ErrorCode2 of
-                    0 ->
-                      BytesWritten = write_bytes(Storage_helper_info, File, Offset, Buf, FFI),
+          {FlagCode, Flag} = get_cached_value(File, o_wronly, Storage_helper_info),
+          case FlagCode of
+            ok ->
+              {ErrorCode2, FFI} = veilhelpers:exec(open, Storage_helper_info, [File, #st_fuse_file_info{flags = Flag}]),
+              case ErrorCode2 of
+                0 ->
+                  BytesWritten = write_bytes(Storage_helper_info, File, Offset, Buf, FFI),
 
-                      ErrorCode3 = veilhelpers:exec(release, Storage_helper_info, [File, FFI]),
-                      case ErrorCode3 of
-                        0 -> BytesWritten;
-                        {error, 'NIF_not_loaded'} -> ErrorCode3;
-                        _ -> {wrong_release_return_code, ErrorCode3}
-                      end;
-                    error -> {ErrorCode, FFI};
-                    _ -> {wrong_open_return_code, ErrorCode2}
+                  ErrorCode3 = veilhelpers:exec(release, Storage_helper_info, [File, FFI]),
+                  case ErrorCode3 of
+                    0 -> BytesWritten;
+                    {error, 'NIF_not_loaded'} -> ErrorCode3;
+                    _ -> {wrong_release_return_code, ErrorCode3}
                   end;
-                _ -> {FlagCode, Flag}
+                error -> {ErrorCode, FFI};
+                _ -> {wrong_open_return_code, ErrorCode2}
               end;
+            _ -> {FlagCode, Flag}
+          end;
         false -> {error, not_regular_file}
       end;
     error -> {ErrorCode, Stat};
@@ -303,6 +308,7 @@ write(Storage_helper_info, File, Offset, Buf) ->
   ErrorDetail :: term().
 %% ====================================================================
 write(Storage_helper_info, File, Buf) ->
+  ok = setup_ctx(File),
   {ErrorCode, CValue} = get_cached_value(File, size, Storage_helper_info),
   case ErrorCode of
     ok ->
@@ -336,7 +342,7 @@ write(Storage_helper_info, File, Buf) ->
 
 %% create/2
 %% ====================================================================
-%% @doc Creates file (operates only on storage). First it checks if file
+%% @doc Creates file with default mode (operates only on storage). First it checks if file
 %% exists. If not, it creates file.
 %% @end
 -spec create(Storage_helper_info :: record(), File :: string()) -> Result when
@@ -345,52 +351,66 @@ write(Storage_helper_info, File, Buf) ->
   ErrorDetail :: term().
 %% ====================================================================
 create(Storage_helper_info, File) ->
+  ok = setup_ctx(File),
   {ModeStatus, NewFileStorageMode} = get_mode(File),
   case ModeStatus of
-    ok ->
-      {ErrorCode, Stat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
-      case ErrorCode of
-        0 -> {error, file_exists};
-        error -> {ErrorCode, Stat};
-        _ ->
-          ErrorCode2 = veilhelpers:exec(mknod, Storage_helper_info, [File, NewFileStorageMode bor ?S_IFREG, 0]),
-          case ErrorCode2 of
-            0 ->
-              ErrorCode3 = veilhelpers:exec(truncate, Storage_helper_info, [File, 0]),
-              case ErrorCode3 of
-                0 ->
-                  derive_gid_from_parent(Storage_helper_info, File),
-
-                  UserID = fslogic_context:get_user_dn(),
-
-                  case UserID of
-                    undefined -> ok;
-                    _ ->
-                      {GetUserAns, User} = user_logic:get_user({dn, UserID}),
-                      case GetUserAns of
-                        ok ->
-                          UserRecord = User#veil_document.record,
-                          Login = UserRecord#user.login,
-                          ChownAns = chown(Storage_helper_info, File, Login, ""),
-                          case ChownAns of
-                            ok ->
-                              ok;
-                            _ ->
-                              {cannot_change_file_owner, ChownAns}
-                          end;
-                        _ -> {cannot_change_file_owner, get_user_error}
-                      end
-                  end;
-                {error, 'NIF_not_loaded'} -> ErrorCode3;
-                _ -> {wrong_truncate_return_code, ErrorCode3}
-              end;
-            {error, 'NIF_not_loaded'} -> ErrorCode2;
-            _ ->
-              lager:error("Can not create file %p, code: %p, helper info: %p, mode: %p%n", [File, ErrorCode2, Storage_helper_info, NewFileStorageMode bor ?S_IFREG]),
-              {wrong_mknod_return_code, ErrorCode2}
-          end
-      end;
+    ok -> create(Storage_helper_info, File, NewFileStorageMode);
     _ -> {error, cannot_get_file_mode}
+  end.
+
+%% create/3
+%% ====================================================================
+%% @doc Creates file with given mode (operates only on storage). First it checks if file
+%% exists. If not, it creates file.
+%% @end
+-spec create(Storage_helper_info :: record(), File :: string(), Mode :: integer()) -> Result when
+  Result :: ok | {ErrorGeneral, ErrorDetail},
+  ErrorGeneral :: atom(),
+  ErrorDetail :: term().
+%% ====================================================================
+create(Storage_helper_info, File, Mode) ->
+  ok = setup_ctx(File),
+  {ErrorCode, Stat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
+  case ErrorCode of
+    0 -> {error, file_exists};
+    error -> {ErrorCode, Stat};
+    _ ->
+      ErrorCode2 = veilhelpers:exec(mknod, Storage_helper_info, [File, Mode bor ?S_IFREG, 0]),
+      case ErrorCode2 of
+        0 ->
+          ErrorCode3 = veilhelpers:exec(truncate, Storage_helper_info, [File, 0]),
+          case ErrorCode3 of
+            0 ->
+              derive_gid_from_parent(Storage_helper_info, File),
+
+              UserID = fslogic_context:get_user_dn(),
+
+              case UserID of
+                undefined -> ok;
+                _ ->
+                  {GetUserAns, User} = user_logic:get_user({dn, UserID}),
+                  case GetUserAns of
+                    ok ->
+                      UserRecord = User#veil_document.record,
+                      Login = UserRecord#user.login,
+                      ChownAns = chown(Storage_helper_info, File, Login, ""),
+                      case ChownAns of
+                        ok ->
+                          ok;
+                        _ ->
+                          {cannot_change_file_owner, ChownAns}
+                      end;
+                    _ -> {cannot_change_file_owner, get_user_error}
+                  end
+              end;
+            {error, 'NIF_not_loaded'} -> ErrorCode3;
+            _ -> {wrong_truncate_return_code, ErrorCode3}
+          end;
+        {error, 'NIF_not_loaded'} -> ErrorCode2;
+        _ ->
+%%               ?error("Can not create file ~p, code: ~p, helper info: ~p, mode: ~p", [File, ErrorCode2, Storage_helper_info, Mode bor ?S_IFREG]),
+          {wrong_mknod_return_code, ErrorCode2}
+      end
   end.
 
 %% truncate/3
@@ -404,6 +424,7 @@ create(Storage_helper_info, File) ->
   ErrorDetail :: term().
 %% ====================================================================
 truncate(Storage_helper_info, File, Size) ->
+  ok = setup_ctx(File),
   {ErrorCode, Stat} = get_cached_value(File, is_reg, Storage_helper_info),
   case ErrorCode of
     ok ->
@@ -413,7 +434,8 @@ truncate(Storage_helper_info, File, Size) ->
           case ErrorCode2 of
             0 -> ok;
             {error, 'NIF_not_loaded'} -> ErrorCode2;
-            _ -> {wrong_truncate_return_code, ErrorCode2}
+            _ ->
+              {wrong_truncate_return_code, ErrorCode2}
           end;
         false -> {error, not_regular_file}
       end;
@@ -432,6 +454,7 @@ truncate(Storage_helper_info, File, Size) ->
   ErrorDetail :: term().
 %% ====================================================================
 delete(Storage_helper_info, File) ->
+  ok = setup_ctx(File),
   {ErrorCode, Stat} = get_cached_value(File, is_reg, Storage_helper_info),
   case ErrorCode of
     ok ->
@@ -518,10 +541,8 @@ write_bytes(Storage_helper_info, File, Offset, Buf, FFI) ->
       end;
     {error, 'NIF_not_loaded'} -> ErrorCode;
     _ ->
-      lager:error("Write bytes error - wrong code: ~p", [ErrorCode]),
       {error, {wrong_write_return_code, ErrorCode}}
   end.
-
 
 
 %% get_cached_value/3
@@ -536,78 +557,67 @@ write_bytes(Storage_helper_info, File, Offset, Buf, FFI) ->
 %% ====================================================================
 get_cached_value(File, ValueName, Storage_helper_info) ->
   ValType = case ValueName of
-    is_reg -> file_stats;
-    is_dir -> file_stats;
-    grp_wr -> file_stats;
-    owner -> file_stats;
-    o_wronly -> flag;
-    o_rdonly -> flag;
-    size -> size
-  end,
+              is_reg -> file_stats;
+              is_dir -> file_stats;
+              grp_wr -> file_stats;
+              owner -> file_stats;
+              o_wronly -> flag;
+              o_rdonly -> flag;
+              size -> size
+            end,
 
-  EtsName = logical_files_manager:get_ets_name(),
-  CachedValue = try
-    LookupAns = case ValType of
-      file_stats -> ets:lookup(EtsName, {File, ValueName});
-      flag -> ets:lookup(EtsName, {Storage_helper_info, ValueName});
-      size -> ets:lookup(EtsName, test_key)   %% check if table exists
+  CachedValue =
+    case ValType of
+      file_stats -> get({File, ValueName});
+      flag -> get({Storage_helper_info, ValueName});
+      size -> get(test_key)   %% check if table exists
     end,
-    case LookupAns of
-      [{{_, ValueName}, Value}] ->
-        Value;
-      _ -> []
-    end
-  catch
-    _:_ ->
-      ets:new(EtsName, [named_table, set]),
-      []
-  end,
 
   case CachedValue of
-    [] ->
+    undefined ->
       case ValType of
         file_stats ->
-          {ErrorCode, Stat} = case ets:lookup(EtsName, {File, stats}) of
-            [{{_, stats}, StatsValue}] ->
-              {0, StatsValue};
-            _ ->
-              {TmpErrorCode, TmpStat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
-              case TmpErrorCode of
-                0 ->
-                  ets:insert(EtsName, {{File, stats}, TmpStat});
-                _ ->
-                  ok
-              end,
-              {TmpErrorCode, TmpStat}
-          end,
+          {ErrorCode, Stat} = case get({File, stats}) of
+                                undefined ->
+                                  {TmpErrorCode, TmpStat} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
+                                  case TmpErrorCode of
+                                    0 ->
+                                      put({File, stats}, TmpStat);
+                                    _ ->
+                                      ok
+                                  end,
+                                  {TmpErrorCode, TmpStat};
+                                StatsValue ->
+                                  {0, StatsValue}
+                              end,
           case ErrorCode of
             0 ->
               ReturnValue = case ValueName of
-                grp_wr ->
-                  case Stat#st_stat.st_mode band ?WR_GRP_PERM of
-                    0 -> false;
-                    _ -> true
-                  end;
-                owner ->
-                  integer_to_list(Stat#st_stat.st_uid);
-                _ ->
-                  veilhelpers:exec(ValueName, Storage_helper_info, [Stat#st_stat.st_mode])
-              end,
-              ets:insert(EtsName, {{File, ValueName}, ReturnValue}),
+                              grp_wr ->
+                                case Stat#st_stat.st_mode band ?WR_GRP_PERM of
+                                  0 -> false;
+                                  _ -> true
+                                end;
+                              owner ->
+                                integer_to_list(Stat#st_stat.st_uid);
+                              _ ->
+                                veilhelpers:exec(ValueName, Storage_helper_info, [Stat#st_stat.st_mode])
+                            end,
+              put({File, ValueName}, ReturnValue),
               {ok, ReturnValue};
             error -> {ErrorCode, Stat};
             _ -> {wrong_getatt_return_code, ErrorCode}
           end;
         flag ->
           ReturnValue2 = veilhelpers:exec(get_flag, Storage_helper_info, [ValueName]),
-          ets:insert(EtsName, {{Storage_helper_info, ValueName}, ReturnValue2}),
+          put({Storage_helper_info, ValueName}, ReturnValue2),
           {ok, ReturnValue2};
         size ->
           {ErrorCode2, Stat2} = veilhelpers:exec(getattr, Storage_helper_info, [File]),
           case ErrorCode2 of
             0 ->
               ReturnValue3 = veilhelpers:exec(is_reg, Storage_helper_info, [Stat2#st_stat.st_mode]),
-              ets:insert(EtsName, {{File, is_reg}, ReturnValue3}),
+              put({File, is_reg}, ReturnValue3),
               {ok, {ReturnValue3, Stat2#st_stat.st_size}};
             error -> {ErrorCode2, Stat2};
             _ -> {wrong_getatt_return_code, ErrorCode2}
@@ -632,6 +642,7 @@ check_perms(File, Storage_helper_info) ->
 %% check_perms/3
 %% ====================================================================
 %% @doc Checks if the user has permission to modify file (e,g. change owner).
+%%      @todo: remove this function. Currently this functionality is provided by operating system via veilhelpers
 %% @end
 -spec check_perms(File :: string(), Storage_helper_info :: record(), CheckType :: boolean()) -> Result when
   Result :: {ok, Value} | {ErrorGeneral, ErrorDetail},
@@ -639,64 +650,69 @@ check_perms(File, Storage_helper_info) ->
   ErrorGeneral :: atom(),
   ErrorDetail :: atom().
 %% ====================================================================
-check_perms(File, Storage_helper_info, CheckType) ->
-  {AccessTypeStatus, AccessAns} = check_access_type(File),
-  case AccessTypeStatus of
-    ok ->
-      {AccesType, AccessName} = AccessAns,
-      case AccesType of
-        user ->
-          {UsrStatus, UserRoot} = fslogic_path:get_user_root(),
-          case UsrStatus of
-            ok ->
-              [CleanUserRoot | _] = string:tokens(UserRoot, "/"),
-              {ok, CleanUserRoot =:= AccessName};
-            _ -> {error, can_not_get_user_root}
-          end;
-        group ->
-          {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
-          {UsrStatus2, UserGroups} = fslogic_utils:get_user_groups(UserDocStatus, UserDoc),
-          case UsrStatus2 of
-            ok ->
-              case lists:member(AccessName, UserGroups) of
-                true ->
-                  case CheckType of
-                    read ->
-                      {ok, true};
-                    _ ->
-                      {Status, CheckOk} = case CheckType of
-                                            write -> get_cached_value(File, grp_wr, Storage_helper_info);
-                                            _ -> {ok, false} %perms
-                                          end,
-                      case Status of
-                        ok ->
-                          case CheckOk of
-                            true -> {ok, true};
-                            false ->
-                              UserRecord = UserDoc#veil_document.record,
-                              IdFromSystem = fslogic_utils:get_user_id_from_system(UserRecord#user.login),
-                              IdFromSystem2 = string:substr(IdFromSystem, 1, length(IdFromSystem) - 1),
-                              {OwnWrStatus, Own} = get_cached_value(File, owner, Storage_helper_info),
-                              case OwnWrStatus of
-                                ok ->
-                                  {ok, IdFromSystem2 =:= Own};
-                                _ ->
-                                  {error, can_not_check_file_owner}
-                              end
-                          end;
-                        _ ->
-                          {error, can_not_check_grp_perms}
-                      end
-                  end;
-                false ->
-                  {ok, false}
-              end;
-            _ -> {error, can_not_get_user_groups}
-          end
-      end;
-    _ ->
-      {AccessTypeStatus, AccessAns}
-  end.
+check_perms(_File, _Storage_helper_info, _CheckType) ->
+  {ok, true}.
+%%   {AccessTypeStatus, AccessAns} = check_access_type(File),
+%%   case AccessTypeStatus of
+%%     ok ->
+%%       {AccesType, AccessName} = AccessAns,
+%%       case AccesType of
+%%         user ->
+%%           {UsrStatus, UserRoot} = fslogic_path:get_user_root(),
+%%           case UsrStatus of
+%%             ok ->
+%%               {ok, UserDoc} = fslogic_objects:get_user(),
+%%               fslogic_context:set_fs_user_ctx(UserDoc#veil_document.record#user.login),
+%%               [CleanUserRoot | _] = string:tokens(UserRoot, "/"),
+%%               {ok, CleanUserRoot =:= AccessName};
+%%             _ -> {error, can_not_get_user_root}
+%%           end;
+%%         group ->
+%%           {UserDocStatus, UserDoc} = fslogic_objects:get_user(),
+%%           {UsrStatus2, UserGroups} = fslogic_utils:get_user_groups(UserDocStatus, UserDoc),
+%%           case UsrStatus2 of
+%%             ok ->
+%%               fslogic_context:set_fs_user_ctx(UserDoc#veil_document.record#user.login),
+%%               case lists:member(AccessName, UserGroups) of
+%%                 true ->
+%%                   fslogic_context:set_fs_group_ctx(AccessName),
+%%                   case CheckType of
+%%                     read ->
+%%                       {ok, true};
+%%                     _ ->
+%%                       {Status, CheckOk} = case CheckType of
+%%                                             write -> get_cached_value(File, grp_wr, Storage_helper_info);
+%%                                             _ -> {ok, false} %perms
+%%                                           end,
+%%                       case Status of
+%%                         ok ->
+%%                           case CheckOk of
+%%                             true -> {ok, true};
+%%                             false ->
+%%                               UserRecord = UserDoc#veil_document.record,
+%%                               IdFromSystem = fslogic_utils:get_user_id_from_system(UserRecord#user.login),
+%%                               IdFromSystem2 = string:substr(IdFromSystem, 1, length(IdFromSystem) - 1),
+%%                               {OwnWrStatus, Own} = get_cached_value(File, owner, Storage_helper_info),
+%%                               case OwnWrStatus of
+%%                                 ok ->
+%%                                   {ok, IdFromSystem2 =:= Own};
+%%                                 _ ->
+%%                                   {error, can_not_check_file_owner}
+%%                               end
+%%                           end;
+%%                         _ ->
+%%                           {error, can_not_check_grp_perms}
+%%                       end
+%%                   end;
+%%                 false ->
+%%                   {ok, false}
+%%               end;
+%%             _ -> {error, can_not_get_user_groups}
+%%           end
+%%       end;
+%%     _ ->
+%%       {AccessTypeStatus, AccessAns}
+%%   end.
 
 %% ====================================================================
 %% Internal functions
@@ -731,11 +747,11 @@ get_mode(File) ->
   case AccessTypeStatus of
     ok ->
       TmpAns = case AccesType of
-        {user, _} ->
-          application:get_env(?APP_Name, new_file_storage_mode);
-        {group, _} ->
-          application:get_env(?APP_Name, new_group_file_storage_mode)
-      end,
+                 {user, _} ->
+                   application:get_env(?APP_Name, new_file_storage_mode);
+                 {group, _} ->
+                   application:get_env(?APP_Name, new_group_file_storage_mode)
+               end,
       case TmpAns of
         undefined -> {error, undefined};
         _ -> TmpAns
@@ -772,4 +788,29 @@ check_access_type(File) ->
       end;
     false ->
       {error, too_short_path}
+  end.
+
+
+%% setup_ctx/1
+%% ====================================================================
+%% @doc Setups user filesystem context (uid and gid for veilhelpers)
+%%      based on current fslogic user context and access path (group name -> primary GID)
+%% @end
+-spec setup_ctx(File :: string()) -> ok | {error, no_user}.
+%% ====================================================================
+setup_ctx(File) ->
+  case fslogic_objects:get_user() of
+    {ok, #veil_document{record = #user{login = UserName} = UserRec}} ->
+      fslogic_context:set_fs_user_ctx(UserName),
+      case check_access_type(File) of
+        {ok, {group, GroupName}} ->
+          SelectedGroup = [X || X <- user_logic:get_team_names(UserRec), GroupName =:= X],
+          NewGroupCtx = SelectedGroup ++ user_logic:get_team_names(UserRec),
+          fslogic_context:set_fs_group_ctx(NewGroupCtx),
+          ok;
+        _ ->
+          fslogic_context:set_fs_group_ctx([]),
+          ok
+      end;
+    _ -> {error, no_user}
   end.

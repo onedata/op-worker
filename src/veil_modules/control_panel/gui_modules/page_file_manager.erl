@@ -11,10 +11,18 @@
 %% ===================================================================
 
 -module(page_file_manager).
--compile(export_all).
 -include("veil_modules/control_panel/common.hrl").
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("logging.hrl").
+
+% n2o API
+-export([main/0, event/1, api_event/3]).
+% Postback functions and other
+-export([get_requested_hostname/0, comet_loop/1]).
+-export([clear_manager/0, clear_workspace/0, sort_toggle/1, sort_reverse/0, navigate/1, up_one_level/0]).
+-export([toggle_view/1, select_item/1, select_all/0, deselect_all/0, clear_clipboard/0, put_to_clipboard/1, paste_from_clipboard/0]).
+-export([rename_item/2, create_directory/1, remove_selected/0, search/1, show_popup/1, hide_popup/0, path_navigator_body/1]).
+-export([fs_mkdir/1, fs_remove/1, fs_remove_dir/1, fs_mv/2, fs_mv/3, fs_copy/2, fs_create_share/1]).
 
 
 % How often should comet process check for changes in current dir
@@ -24,18 +32,19 @@
 % Item is either a file or a dir represented in manager
 -record(item, {
     id = <<"">>,
-    path = "/",
+    path = <<"/">>,
+    basename = <<"">>,
     is_shared = false,
     attr = #fileattributes{}}).
 
 
 %% Check if user is logged in and has dn defined.
 main() ->
-    case gui_utils:maybe_redirect(true, true, true, true) of
+    case vcn_gui_utils:maybe_redirect(true, true, true, true) of
         true ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}]};
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
         false ->
-            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, custom()}]}
     end.
 
 
@@ -44,19 +53,20 @@ title() -> <<"File manager">>.
 
 %% This will be placed in the template instead of {{body}} tag
 body() ->
-    reset_wire_accumulator(),
-    gui_utils:register_escape_event("escape_pressed"),
+    gui_jq:register_escape_event("escape_pressed"),
     Body = [
-        #panel{id = <<"spinner">>, class = <<"spinner">>, style = <<"position: absolute; top: 15px; left: 17px; z-index: 1234;">>, body = [
+        #panel{id = <<"spinner">>, style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px;">>, body = [
             #image{image = <<"/images/spinner.gif">>}
         ]},
-        gui_utils:top_menu(file_manager_tab, manager_submenu()),
+        vcn_gui_utils:top_menu(file_manager_tab, manager_submenu()),
         manager_workspace(),
         footer_popup()
     ],
-    do_wiring(),
     Body.
 
+%% This will be placed in the template instead of {{custom}} tag
+custom() ->
+    <<"<script src='/js/veil_upload.js' type='text/javascript' charset='utf-8'></script>">>.
 
 % Submenu that will be glued below the top menu
 manager_submenu() ->
@@ -64,17 +74,17 @@ manager_submenu() ->
         #panel{class = <<"navbar-inner">>, style = <<"padding-top: 10px;">>, body = [
             #panel{class = <<"container">>, style = <<"position: relative; overflow: hidden;">>, body = [
                 #list{class = <<"nav">>, body =
-                tool_button_and_dummy("tb_up_one_level", <<"Up one level">>, <<"padding: 10px 7px 10px 15px;">>,
+                tool_button_and_dummy(<<"tb_up_one_level">>, <<"Up one level">>, <<"padding: 10px 7px 10px 15px;">>,
                     <<"fui-arrow-left">>, {action, up_one_level})},
                 #panel{class = <<"breadcrumb-text breadcrumb-background">>, style = <<"overflow: hidden; margin-left: 15px;">>, body = [
-                    #p{id = <<"path_navigator">>, class = <<"breadcrumb-content">>, body = <<"~/">>}%path_navigator_body("/")}
+                    #p{id = <<"path_navigator">>, class = <<"breadcrumb-content">>, body = <<"~/">>}
                 ]},
                 #panel{class = <<"control-group">>, style = <<"position: absolute; right: 15px; top: 0;">>, body = [
                     #panel{class = <<"input-append">>, style = <<"; margin-bottom: 0px;">>, body = [
-                        #textbox{id = wire_enter("search_textbox", "search_button"), class = <<"span2">>,
+                        #textbox{id = wire_enter(<<"search_textbox">>, <<"search_button">>), class = <<"span2">>,
                             style = <<"width: 220px;">>, placeholder = <<"Search">>},
                         #panel{class = <<"btn-group">>, body = [
-                            #button{id = wire_click("search_button", ["search_textbox"], {action, search, [{q, "search_textbox"}]}),
+                            #button{id = wire_click(<<"search_button">>, {action, search, [{query_value, <<"search_textbox">>}]}, <<"search_textbox">>),
                                 class = <<"btn">>, type = <<"button">>, body = #span{class = <<"fui-search">>}}
                         ]}
                     ]}
@@ -84,27 +94,27 @@ manager_submenu() ->
         #panel{class = <<"navbar-inner">>, style = <<"border-bottom: 1px solid gray; padding-bottom: 5px;">>, body = [
             #panel{class = <<"container">>, body = [
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
-                tool_button("tb_create_dir", <<"Create directory">>, <<"padding: 18px 14px;">>,
+                tool_button(<<"tb_create_dir">>, <<"Create directory">>, <<"padding: 18px 14px;">>,
                     <<"fui-folder">>, {action, show_popup, [create_directory]}) ++
-                    tool_button("tb_upload_files", <<"Upload file(s)">>, <<"padding: 18px 14px;">>,
+                    tool_button(<<"tb_upload_files">>, <<"Upload file(s)">>, <<"padding: 18px 14px;">>,
                         <<"fui-plus-inverted">>, {action, show_popup, [file_upload]}) ++
-                    tool_button_and_dummy("tb_share_file", <<"Share">>, <<"padding: 18px 14px;">>,
+                    tool_button_and_dummy(<<"tb_share_file">>, <<"Share">>, <<"padding: 18px 14px;">>,
                         <<"fui-link">>, {action, show_popup, [share_file]})
 
                 },
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
-                tool_button_and_dummy("tb_rename", <<"Rename">>, <<"padding: 18px 14px;">>,
+                tool_button_and_dummy(<<"tb_rename">>, <<"Rename">>, <<"padding: 18px 14px;">>,
                     <<"fui-new">>, {action, show_popup, [rename_item]}) ++
-                tool_button_and_dummy("tb_remove", <<"Remove">>, <<"padding: 18px 14px;">>,
+                tool_button_and_dummy(<<"tb_remove">>, <<"Remove">>, <<"padding: 18px 14px;">>,
                     <<"fui-trash">>, {action, show_popup, [remove_selected]})
                 },
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
-                tool_button_and_dummy("tb_cut", <<"Cut">>, <<"padding: 18px 14px;">>,
+                tool_button_and_dummy(<<"tb_cut">>, <<"Cut">>, <<"padding: 18px 14px;">>,
                     <<"fui-window">>, {action, put_to_clipboard, [cut]}) ++
-                %tool_button_and_dummy("tb_copy", "Copy", "padding: 18px 14px;",
-                %    "fui-windows", {action, put_to_clipboard, [copy]}) ++
+                %tool_button_and_dummy(<<"tb_copy">>, <<"Copy">>, <<"padding: 18px 14px;">>,
+                %    <<"fui-windows">>, {action, put_to_clipboard, [copy]}) ++
 
-                [#li{id = wire_click("tb_paste", {action, paste_from_clipboard}), body = #link{title = <<"Paste">>, style = <<"padding: 18px 14px;">>,
+                [#li{id = wire_click(<<"tb_paste">>, {action, paste_from_clipboard}), body = #link{title = <<"Paste">>, style = <<"padding: 18px 14px;">>,
                     body = #span{class = <<"fui-upload">>, body = #span{id = <<"clipboard_size_label">>, class = <<"iconbar-unread">>,
                         style = <<"right: -12px; top: -10px; background-color: rgb(26, 188, 156);">>,
                         body = <<"0">>}}}},
@@ -112,30 +122,30 @@ manager_submenu() ->
                         body = #span{style = <<"color: rgb(200, 200, 200);">>, class = <<"fui-upload">>}}}]
                 },
                 #list{class = <<"nav">>, style = <<"margin-right: 30px;">>, body =
-                tool_button_and_dummy("tb_select_all", <<"Select all">>, <<"padding: 18px 14px;">>,
+                tool_button_and_dummy(<<"tb_select_all">>, <<"Select all">>, <<"padding: 18px 14px;">>,
                     <<"fui-checkbox-checked">>, {action, select_all}) ++
-                tool_button_and_dummy("tb_deselect_all", <<"Deselect all">>, <<"padding: 18px 14px;">>,
+                tool_button_and_dummy(<<"tb_deselect_all">>, <<"Deselect all">>, <<"padding: 18px 14px;">>,
                     <<"fui-checkbox-unchecked">>, {action, deselect_all})
                 },
 
                 #panel{class = <<"btn-toolbar pull-right no-margin">>, style = <<"padding: 12px 15px; overflow: hidden;">>, body = [
                     #panel{class = <<"btn-group no-margin">>, body = [
-                        #link{id = wire_click("list_view_button", {action, toggle_view, [list]}),
-                            title = "List view", class = <<"btn btn-small btn-inverse">>,
+                        #link{id = wire_click(<<"list_view_button">>, {action, toggle_view, [list]}),
+                            title = <<"List view">>, class = <<"btn btn-small btn-inverse">>,
                             body = #span{class = <<"fui-list-columned">>}},
-                        #link{id = wire_click("grid_view_button", {action, toggle_view, [grid]}),
-                            title = "Grid view", class = <<"btn btn-small btn-inverse">>,
+                        #link{id = wire_click(<<"grid_view_button">>, {action, toggle_view, [grid]}),
+                            title = <<"Grid view">>, class = <<"btn btn-small btn-inverse">>,
                             body = #span{class = <<"fui-list-small-thumbnails">>}}
                     ]}
                 ]},
 
                 #panel{class = <<"btn-group pull-right">>, style = <<"margin: 12px 15px">>, body = [
-                    "<i class=\"dropdown-arrow dropdown-arrow-inverse\"></i>",
-                    #button{id = wire_click("button_sort_reverse", {action, sort_reverse}), title = "Reverse sorting",
-                        class = <<"btn btn-inverse btn-small">>, body = "Sort"},
-                    #button{title = "Sort by", class = <<"btn btn-inverse btn-small dropdown-toggle">>,
+                    <<"<i class=\"dropdown-arrow dropdown-arrow-inverse\"></i>">>,
+                    #button{id = wire_click(<<"button_sort_reverse">>, {action, sort_reverse}), title = <<"Reverse sorting">>,
+                        class = <<"btn btn-inverse btn-small">>, body = <<"Sort">>},
+                    #button{title = <<"Sort by">>, class = <<"btn btn-inverse btn-small dropdown-toggle">>,
                         data_fields = [{<<"data-toggle">>, <<"dropdown">>}], body = #span{class = <<"caret">>}},
-                    #list{id = sort_dropdown, class = <<"dropdown-menu dropdown-inverse">>, body = []}
+                    #list{id = <<"sort_dropdown">>, class = <<"dropdown-menu dropdown-inverse">>, body = []}
                 ]}
             ]}
         ]}
@@ -166,7 +176,7 @@ tool_button(ID, Title, Style, Icon, Postback) ->
 tool_button_and_dummy(ID, Title, Style, Icon, Postback) ->
     tool_button(ID, Title, Style, Icon, Postback) ++
     [
-        #li{id = ID ++ "_dummy", class = <<"disabled hidden">>, body = #link{title = Title, style = Style,
+        #li{id = <<ID/binary, "_dummy">>, class = <<"disabled hidden">>, body = #link{title = Title, style = Style,
             body = #span{style = <<"color: rgb(200, 200, 200);">>, class = Icon}}}
     ].
 
@@ -175,46 +185,19 @@ tool_button_and_dummy(ID, Title, Style, Icon, Postback) ->
 %% Wiring postbacks. Thanks to this wrapper every time a postback is initiated,
 %% there will be spinner showing up in 150ms. It gets hidden when reply is received.
 wire_click(ID, Tag) ->
-    put(to_wire, get(to_wire) ++ [{ID, ID, #event{type = click, target = ID, postback = Tag}, true}]),
+    gui_jq:wire(gui_jq:postback_action(ID, Tag)),
+    gui_jq:bind_element_click(ID, <<"function(e) { $('#spinner').delay(150).show(); }">>),
     ID.
 
-wire_click(ID, Source, Tag) ->
-    put(to_wire, get(to_wire) ++ [{ID, ID, #event{type = click, target = ID, source = Source, postback = Tag}, true}]),
+wire_click(ID, Tag, Source) ->
+    gui_jq:wire(gui_jq:form_submit_action(ID, Tag, Source)),
+    gui_jq:bind_element_click(ID, <<"function(e) { $('#spinner').delay(150).show(); }">>),
     ID.
 
 wire_enter(ID, ButtonToClickID) ->
     % No need to show the spinner, as this only performs a click on a submit button
-    put(to_wire, get(to_wire) ++ [gui_utils:script_for_enter_submission(ID, ButtonToClickID)]),
+    gui_jq:bind_enter_to_submit_button(ID, ButtonToClickID),
     ID.
-
-wire_event(TriggerID, TargetID, Event) ->
-    put(to_wire, get(to_wire) ++ [{TriggerID, TargetID, Event, false}]),
-    TriggerID.
-
-wire_script(Script) ->
-    put(to_wire, get(to_wire) ++ [Script]).
-
-
-% Wiring should be done after emiting elements that are getting wired.
-% wire_xxx() will accumulate wiring clauses, and do_wiring will flush it.
-do_wiring() ->
-    lists:foreach(
-        fun({TriggerID, TargetID, Event, ShowSpinner}) ->
-            case ShowSpinner of
-                false ->
-                    skip;
-                true ->
-                    wf:wire(gui_utils:script_to_bind_element_click(TriggerID, "$('#spinner').show(150);"))
-            end,
-            wf:wire(TriggerID, TargetID, Event);
-            (Script) ->
-                wf:wire(Script)
-        end, get(to_wire)),
-    reset_wire_accumulator().
-
-% This should be called to init accumulation of wire clauses
-reset_wire_accumulator() ->
-    put(to_wire, []).
 
 
 %% Handling events
@@ -223,15 +206,19 @@ api_event("escape_pressed", _, _) ->
 
 
 event(init) ->
-    case gui_utils:user_logged_in() and gui_utils:dn_and_storage_defined() of
+    case gui_ctx:user_logged_in() and vcn_gui_utils:dn_and_storage_defined() of
         false ->
             skip;
         true ->
-            UserID = gui_utils:get_user_dn(),
-            Hostname = gui_utils:get_requested_hostname(),
-            {ok, Pid} = gui_utils:comet(fun() -> comet_loop_init(UserID, Hostname) end),
+            UserID = vcn_gui_utils:get_user_dn(),
+            Hostname = gui_ctx:get_requested_hostname(),
+            {ok, Pid} = gui_comet:spawn(fun() -> comet_loop_init(UserID, Hostname) end),
             put(comet_pid, Pid)
     end;
+
+
+event(terminate) ->
+    ok;
 
 
 event({action, Fun}) ->
@@ -242,15 +229,15 @@ event({action, Fun, Args}) ->
     NewArgs = lists:map(
         fun(Arg) ->
             case Arg of
-                {q, FieldName} ->
+                {query_value, FieldName} ->
                     % This tuple means, that element with id=FieldName has to be queried
                     % and the result be put in function args
-                    gui_utils:to_list(wf:q(FieldName));
+                    gui_ctx:postback_param(FieldName);
                 Other ->
                     Other
             end
         end, Args),
-    gui_utils:apply_or_redirect(erlang, send, [get(comet_pid), {action, Fun, NewArgs}], true).
+    vcn_gui_utils:apply_or_redirect(erlang, send, [get(comet_pid), {action, Fun, NewArgs}], true).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -259,7 +246,7 @@ comet_loop_init(UserId, RequestedHostname) ->
     % Initialize page state
     fslogic_context:set_user_dn(UserId),
     set_requested_hostname(RequestedHostname),
-    set_working_directory("/"),
+    set_working_directory(<<"/">>),
     set_selected_items([]),
     set_display_style(list),
     set_displayed_file_attributes([size, atime, mtime]),
@@ -270,62 +257,61 @@ comet_loop_init(UserId, RequestedHostname) ->
     set_item_list_rev(item_list_md5(get_item_list())),
     set_clipboard_items([]),
     set_clipboard_type(none),
-    reset_wire_accumulator(),
     refresh_workspace(),
-    do_wiring(),
-    wf:wire(#jquery{target = "spinner", method = ["hide"]}),
-    gui_utils:flush(),
+    gui_jq:hide(<<"spinner">>),
+    gui_comet:flush(),
 
     % Enter comet loop for event processing and autorefreshing
     comet_loop(false).
 
 
 comet_loop(IsUploadInProgress) ->
-    try
-        receive
-            {action, Fun, Args} ->
-                case IsUploadInProgress of
-                    true ->
-                        wf:wire(#alert{text = "Please wait for the upload to finish."}), gui_utils:flush();
-                    false ->
-                        reset_wire_accumulator(),
-                        erlang:apply(?MODULE, Fun, Args),
-                        do_wiring()
+    NewIsUploadInProgress =
+        try
+            receive
+                {action, Fun, Args} ->
+                    case IsUploadInProgress of
+                        true ->
+                            gui_jq:wire(#alert{text = <<"Please wait for the upload to finish.">>}), gui_comet:flush();
+                        false ->
+                            erlang:apply(?MODULE, Fun, Args)
+                    end,
+                    gui_jq:hide(<<"spinner">>),
+                    gui_comet:flush(),
+                    IsUploadInProgress;
+                upload_started ->
+                    true;
+                upload_finished ->
+                    false;
+                Other ->
+                    ?debug("Unrecognized comet message in page_file_manager: ~p", [Other]),
+                    IsUploadInProgress
+
+            after ?AUTOREFRESH_PERIOD ->
+                % Refresh file list if it has changed
+                CurrentItemList = fs_list_dir(get_working_directory()),
+                CurrentMD5 = item_list_md5(CurrentItemList),
+                case get_item_list_rev() of
+                    CurrentMD5 ->
+                        skip;
+                    _ ->
+                        set_item_list(CurrentItemList),
+                        set_item_list_rev(CurrentMD5),
+                        refresh_workspace(),
+                        gui_comet:flush()
                 end,
-                wf:wire(#jquery{target = "spinner", method = ["hide"]}),
-                gui_utils:flush(),
-                comet_loop(IsUploadInProgress);
-            upload_started ->
-                comet_loop(true);
-            upload_finished ->
-                comet_loop(false);
-            Other ->
-                ?debug("Unrecognized comet message in page_file_manager: ~p", [Other]),
-                comet_loop(IsUploadInProgress)
+                IsUploadInProgress
+            end
 
-        after ?AUTOREFRESH_PERIOD ->
-            % Refresh file list if it has changed
-            CurrentItemList = fs_list_dir(get_working_directory()),
-            CurrentMD5 = item_list_md5(CurrentItemList),
-            case get_item_list_rev() of
-                CurrentMD5 ->
-                    skip;
-                _ ->
-                    reset_wire_accumulator(),
-                    set_item_list(CurrentItemList),
-                    set_item_list_rev(CurrentMD5),
-                    refresh_workspace(),
-                    do_wiring(),
-                    gui_utils:flush()
-            end,
-            comet_loop(IsUploadInProgress)
-        end
-
-    catch Type:Message ->
-        ?error_stacktrace("Error in file_manager comet_loop - ~p:~p", [Type, Message]),
-        page_error:redirect_with_error(<<"Internal server error">>,
-            <<"Server encountered an unexpected error. Please contact the site administrator if the problem persists.">>),
-        gui_utils:flush()
+        catch Type:Message ->
+            ?error_stacktrace("Error in file_manager comet_loop - ~p:~p", [Type, Message]),
+            page_error:redirect_with_error(?error_internal_server_error),
+            gui_comet:flush(),
+            error
+        end,
+    case NewIsUploadInProgress of
+        error -> ok; % Comet process will terminate
+        _ -> ?MODULE:comet_loop(NewIsUploadInProgress)
     end.
 
 
@@ -333,7 +319,7 @@ comet_loop(IsUploadInProgress) ->
 %% Event handling
 clear_manager() ->
     hide_popup(),
-    gui_utils:update("path_navigator", path_navigator_body(get_working_directory())),
+    gui_jq:update(<<"path_navigator">>, path_navigator_body(get_working_directory())),
     clear_workspace().
 
 
@@ -351,14 +337,14 @@ refresh_workspace() ->
                   list -> list_view_body();
                   grid -> grid_view_body()
               end,
-    gui_utils:update("manager_workspace", NewBody).
+    gui_jq:update(<<"manager_workspace">>, NewBody).
 
 
 sort_item_list() ->
     AllItems = get_item_list(),
-    {ItemList, GroupsDir} = lists:partition(
+    {ItemList, GroupsDirList} = lists:partition(
         fun(I) ->
-            item_path(I) /= "/groups"
+            item_path(I) /= <<"/groups">>
         end, AllItems),
     Attr = get_sort_by(),
     SortAscending = get_sort_ascending(),
@@ -387,7 +373,7 @@ sort_item_list() ->
                           Dirs ++ Files;
                       _ -> Result
                   end,
-    set_item_list(GroupsDir ++ FinalResult).
+    set_item_list(GroupsDirList ++ FinalResult).
 
 
 sort_toggle(Type) ->
@@ -408,16 +394,16 @@ sort_reverse() ->
 refresh_tool_buttons() ->
     % View toggling buttons
     {EnableID, DisableID} = case get_display_style() of
-                                list -> {"list_view_button", "grid_view_button"};
-                                grid -> {"grid_view_button", "list_view_button"}
+                                list -> {<<"list_view_button">>, <<"grid_view_button">>};
+                                grid -> {<<"grid_view_button">>, <<"list_view_button">>}
                             end,
-    wf:wire(#jquery{target = EnableID, method = ["addClass"], args = ["\"active\""]}),
-    wf:wire(#jquery{target = DisableID, method = ["removeClass"], args = ["\"active\""]}),
+    gui_jq:add_class(EnableID, <<"active">>),
+    gui_jq:remove_class(DisableID, <<"active">>),
 
     % Sort dropdown
     DropdownBody = case get_display_style() of
                        grid ->
-                           #li{id = wire_click("grid_sort_by_name", {action, sort_toggle, [name]}),
+                           #li{id = wire_click(<<"grid_sort_by_name">>, {action, sort_toggle, [name]}),
                                class = <<"active">>, body = #link{body = <<"Name">>}};
                        list ->
                            lists:foldl(
@@ -426,39 +412,39 @@ refresh_tool_buttons() ->
                                                Attr -> <<"active">>;
                                                _ -> <<"">>
                                            end,
-                                   Acc ++ [#li{id = wire_click("list_sort_by_" ++ gui_utils:to_list(Attr), {action, sort_toggle, [Attr]}),
+                                   Acc ++ [#li{id = wire_click(<<"list_sort_by_", (atom_to_binary(Attr, latin1))/binary>>, {action, sort_toggle, [Attr]}),
                                        class = Class, body = #link{body = attr_to_name(Attr)}}]
                                end, [], [name | get_displayed_file_attributes()])
                    end,
-    gui_utils:update(sort_dropdown, DropdownBody),
+    gui_jq:update(<<"sort_dropdown">>, DropdownBody),
 
     Count = length(get_selected_items()),
     NFiles = length(get_item_list()),
-    IsDir = try item_is_dir(item_find(lists:nth(1, get_selected_items()))) catch _:_ -> false end,
-    enable_tool_button("tb_up_one_level", get_working_directory() /= "/"),
-    enable_tool_button("tb_share_file", (Count =:= 1) andalso (not IsDir)),
-    enable_tool_button("tb_rename", Count =:= 1),
-    enable_tool_button("tb_remove", Count > 0),
-    enable_tool_button("tb_cut", Count > 0),
-    enable_tool_button("tb_copy", false),
-    enable_tool_button("tb_paste", length(get_clipboard_items()) > 0),
-    gui_utils:update("clipboard_size_label", integer_to_list(length(get_clipboard_items()))),
-    enable_tool_button("tb_select_all", Count < NFiles),
-    enable_tool_button("tb_deselect_all", Count > 0).
+    IsDir = try item_is_dir(item_find(element(1, lists:nth(1, get_selected_items())))) catch _:_ -> false end,
+    enable_tool_button(<<"tb_up_one_level">>, get_working_directory() /= <<"/">>),
+    enable_tool_button(<<"tb_share_file">>, (Count =:= 1) andalso (not IsDir)),
+    enable_tool_button(<<"tb_rename">>, Count =:= 1),
+    enable_tool_button(<<"tb_remove">>, Count > 0),
+    enable_tool_button(<<"tb_cut">>, Count > 0),
+    enable_tool_button(<<"tb_copy">>, false),
+    enable_tool_button(<<"tb_paste">>, length(get_clipboard_items()) > 0),
+    gui_jq:update(<<"clipboard_size_label">>, integer_to_binary(length(get_clipboard_items()))),
+    enable_tool_button(<<"tb_select_all">>, Count < NFiles),
+    enable_tool_button(<<"tb_deselect_all">>, Count > 0).
 
 
 enable_tool_button(ID, Flag) ->
     case Flag of
         true ->
-            wf:wire(#jquery{target = ID, method = ["removeClass"], args = ["\"hidden\""]}),
-            wf:wire(#jquery{target = ID ++ "_dummy", method = ["addClass"], args = ["\"hidden\""]}),
-            wf:wire(#jquery{target = ID, method = ["show"], args = ["0"]}),
-            wf:wire(#jquery{target = ID ++ "_dummy", method = ["hide"], args = ["0"]});
+            gui_jq:remove_class(ID, <<"hidden">>),
+            gui_jq:add_class(<<ID/binary, "_dummy">>, <<"hidden">>),
+            gui_jq:show(ID),
+            gui_jq:hide(<<ID/binary, "_dummy">>);
         false ->
-            wf:wire(#jquery{target = ID, method = ["addClass"], args = ["\"hidden\""]}),
-            wf:wire(#jquery{target = ID ++ "_dummy", method = ["removeClass"], args = ["\"hidden\""]}),
-            wf:wire(#jquery{target = ID, method = ["hide"], args = ["0"]}),
-            wf:wire(#jquery{target = ID ++ "_dummy", method = ["show"], args = ["0"]})
+            gui_jq:add_class(ID, <<"hidden">>),
+            gui_jq:remove_class(<<ID/binary, "_dummy">>, <<"hidden">>),
+            gui_jq:hide(ID),
+            gui_jq:show(<<ID/binary, "_dummy">>)
     end.
 
 
@@ -484,13 +470,14 @@ select_item(Path) ->
             skip;
         Item ->
             SelectedItems = get_selected_items(),
-            case lists:member(Path, SelectedItems) of
+            Basename = item_basename(Item),
+            case lists:member({Path, Basename}, SelectedItems) of
                 false ->
-                    set_selected_items(SelectedItems ++ [Path]),
-                    wf:wire(#jquery{target = item_id(Item), method = ["addClass"], args = ["\"selected-item\""]});
+                    set_selected_items(SelectedItems ++ [{Path, Basename}]),
+                    gui_jq:add_class(item_id(Item), <<"selected-item">>);
                 true ->
-                    set_selected_items(SelectedItems -- [Path]),
-                    wf:wire(#jquery{target = item_id(Item), method = ["removeClass"], args = ["\"selected-item\""]})
+                    set_selected_items(SelectedItems -- [{Path, Basename}]),
+                    gui_jq:remove_class(item_id(Item), <<"selected-item">>)
             end
     end,
     refresh_tool_buttons().
@@ -500,8 +487,8 @@ select_all() ->
     set_selected_items([]),
     lists:foreach(
         fun(Item) ->
-            set_selected_items(get_selected_items() ++ [item_path(Item)]),
-            wf:wire(#jquery{target = item_id(Item), method = ["addClass"], args = ["\"selected-item\""]})
+            set_selected_items(get_selected_items() ++ [{item_path(Item), item_basename(Item)}]),
+            gui_jq:add_class(item_id(Item), <<"selected-item">>)
         end, get_item_list()),
     refresh_tool_buttons().
 
@@ -509,7 +496,7 @@ select_all() ->
 deselect_all() ->
     lists:foreach(
         fun(Item) ->
-            wf:wire(#jquery{target = item_id(Item), method = ["removeClass"], args = ["\"selected-item\""]})
+            gui_jq:remove_class(item_id(Item), <<"selected-item">>)
         end, get_item_list()),
     set_selected_items([]),
     refresh_tool_buttons().
@@ -528,13 +515,34 @@ put_to_clipboard(Type) ->
 
 
 paste_from_clipboard() ->
-    lists:foreach(
-        fun(Path) ->
+    ErrorMessage = lists:foldl(
+        fun({Path, Basename}, Acc) ->
             case get_clipboard_type() of
-                cut -> fs_mv(Path, get_working_directory());
-                copy -> fs_copy(Path, get_working_directory())
+                cut ->
+                    case fs_mv(Path, get_working_directory()) of
+                        ok ->
+                            Acc;
+                        {logical_file_system_error, "eperm"} ->
+                            <<Acc/binary, "Unable to move ", Basename/binary, " - insufficient permissions.\r\n">>;
+                        {logical_file_system_error, "eexist"} ->
+                            <<Acc/binary, "Unable to move ", Basename/binary, " - file exists.\r\n">>;
+                        {logical_file_system_error, "eacces"} ->
+                            <<Acc/binary, "Unable to move ", Basename/binary, " - insufficient permissions.\r\n">>;
+                        _ ->
+                            <<Acc/binary, "Unable to move ", Basename/binary, " - error occured.\r\n">>
+                    end;
+                copy ->
+                    % Not yet implemented
+                    fs_copy(Path, get_working_directory()),
+                    Acc
             end
-        end, get_clipboard_items()),
+        end, <<"">>, get_clipboard_items()),
+    case ErrorMessage of
+        <<"">> ->
+            ok;
+        _ ->
+            gui_jq:wire(#alert{text = ErrorMessage})
+    end,
     clear_clipboard(),
     clear_workspace().
 
@@ -547,14 +555,19 @@ rename_item(OldPath, NewName) ->
         OldName -> hide_popup();
         _ ->
             NewPath = filename:absname(NewName, get_working_directory()),
-            case item_find(NewPath) of
-                undefined ->
-                    fs_mv(OldPath, get_working_directory(), NewName),
+            case fs_mv(OldPath, get_working_directory(), NewName) of
+                ok ->
                     clear_clipboard(),
                     clear_manager(),
                     select_item(NewPath);
+                {logical_file_system_error, "eperm"} ->
+                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - insufficient permissions.">>});
+                {logical_file_system_error, "eexist"} ->
+                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - file exists.">>});
+                {logical_file_system_error, "eacces"} ->
+                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - insufficient permissions.">>});
                 _ ->
-                    wf:wire(#alert{text = NewName ++ " already exists."})
+                    gui_jq:wire(#alert{text = <<"Unable to rename ", (gui_str:to_binary(OldName))/binary, " - error occured.">>})
             end
     end.
 
@@ -572,9 +585,9 @@ create_directory(Name) ->
                 _ ->
                     case item_find(FullPath) of
                         undefined ->
-                            wf:wire(#alert{text = "Cannot create directory - disallowed name."});
+                            gui_jq:wire(#alert{text = <<"Cannot create directory - disallowed name.">>});
                         _ ->
-                            wf:wire(#alert{text = "Cannot create directory - file exists."})
+                            gui_jq:wire(#alert{text = <<"Cannot create directory - file exists.">>})
                     end,
                     hide_popup()
             end
@@ -584,7 +597,7 @@ create_directory(Name) ->
 remove_selected() ->
     SelectedItems = get_selected_items(),
     lists:foreach(
-        fun(Path) ->
+        fun({Path, _}) ->
             fs_remove(Path)
         end, SelectedItems),
     clear_clipboard(),
@@ -593,14 +606,14 @@ remove_selected() ->
 
 search(SearchString) ->
     case SearchString of
-        [] -> skip;
-        undefined -> skip;
+        <<"">> ->
+            deselect_all();
         _ ->
             deselect_all(),
             lists:foreach(
                 fun(Item) ->
-                    case string:str(item_basename(Item), SearchString) of
-                        0 -> skip;
+                    case binary:match(item_basename(Item), SearchString) of
+                        nomatch -> skip;
                         _ -> select_item(item_path(Item))
                     end
                 end, get_item_list())
@@ -615,127 +628,152 @@ show_popup(Type) ->
                 Body = [
                     #p{body = <<"Create directory">>},
                     #form{class = <<"control-group">>, body = [
-                        #textbox{id = wire_enter("create_dir_textbox", "create_dir_submit"), class = <<"flat">>,
+                        #textbox{id = wire_enter(<<"create_dir_textbox">>, <<"create_dir_submit">>), class = <<"flat">>,
                             style = <<"width: 350px;">>, placeholder = <<"New directory name">>},
                         #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>,
-                            id = wire_click("create_dir_submit", ["create_dir_textbox"], {action, create_directory, [{q, "create_dir_textbox"}]})}
+                            id = wire_click(<<"create_dir_submit">>,
+                                {action, create_directory, [{query_value, <<"create_dir_textbox">>}]},
+                                <<"create_dir_textbox">>)}
                     ]}
                 ],
-                {Body, "$('#create_dir_textbox').focus();", {action, hide_popup}};
+                {Body, <<"$('#create_dir_textbox').focus();">>, {action, hide_popup}};
 
             rename_item ->
-                Filename = filename:basename(lists:nth(1, get_selected_items())),
-                SelectionLength = case string:rchr(Filename, $.) - 1 of
-                                      -1 -> length(Filename);
-                                      Val -> Val
-                                  end,
-                OldLocation = lists:nth(1, get_selected_items()),
-                Body = [
-                    #p{body = <<"Rename <b>", (gui_utils:to_binary(Filename))/binary, "</b>">>},
-                    #form{class = <<"control-group">>, body = [
-                        #textbox{id = wire_enter("new_name_textbox", "new_name_submit"), class = <<"flat">>,
-                            style = <<"width: 350px;">>, placeholder = <<"New name">>, value = gui_utils:to_binary(Filename),
-                            data_fields = [{<<"onfocus">>, <<"this.select(); this.selAll=1;">>}]},
-                        #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>,
-                            id = wire_click("new_name_submit", ["new_name_textbox"], {action, rename_item, [OldLocation, {q, "new_name_textbox"}]})}
-                    ]}
-                ],
-                FocusScript = wf:f("$('#new_name_textbox').focus();
-                if (typeof $('#new_name_textbox').selectionStart != \"undefined\")
-                {
-                    $('#new_name_textbox').selectionStart = ~B;
-                    $('#new_name_textbox').selectionEnd = ~B;
-                }
-                else if (document.selection && document.selection.createRange)
-                {
-                    // IE branch
-                    $('#new_name_textbox').select();
-                    var range = document.selection.createRange();
-                    range.collapse(true);
-                    range.moveEnd(\"character\", ~B);
-                    range.moveStart(\"character\", ~B);
-                    range.select();
-                }", [0, SelectionLength, 0, SelectionLength]),
-                {Body, FocusScript, {action, hide_popup}};
+                case fs_has_perms(get_working_directory(), write) of
+                    false ->
+                        gui_jq:wire(#alert{text = <<"You need write permissions in this directory to rename files.">>}),
+                        {[], undefined, undefined};
+                    true ->
+                        case length(get_selected_items()) =:= 1 of
+                            false ->
+                                {[], undefined, undefined};
+                            _ ->
+                                [{OldLocation, Filename}] = get_selected_items(),
+                                SelectionLength = byte_size(filename:rootname(Filename)),
+                                Body = [
+                                    #p{body = <<"Rename <b>", (gui_str:html_encode(Filename))/binary, "</b>">>},
+                                    #form{class = <<"control-group">>, body = [
+                                        #textbox{id = wire_enter(<<"new_name_textbox">>, <<"new_name_submit">>), class = <<"flat">>,
+                                            style = <<"width: 350px;">>, placeholder = <<"New name">>, value = gui_str:html_encode(Filename)},
+
+                                        #button{class = <<"btn btn-success btn-wide">>, body = <<"Ok">>,
+                                            id = wire_click(<<"new_name_submit">>,
+                                                {action, rename_item, [OldLocation, {query_value, <<"new_name_textbox">>}]},
+                                                <<"new_name_textbox">>)}
+                                    ]}
+                                ],
+
+                                FocusScript = <<"setTimeout(function() { ",
+                                "document.getElementById('new_name_textbox').focus(); ",
+                                "if( $('#new_name_textbox').createTextRange ) { ",
+                                "var selRange = $('#new_name_textbox').createTextRange(); ",
+                                "selRange.collapse(true); ",
+                                "selRange.moveStart('character', 0); ",
+                                "selRange.moveEnd('character', ", (integer_to_binary(SelectionLength))/binary, "); ",
+                                "selRange.select(); ",
+                                "} else if( document.getElementById('new_name_textbox').setSelectionRange ) { ",
+                                "document.getElementById('new_name_textbox').setSelectionRange(0, ", (integer_to_binary(SelectionLength))/binary, "); ",
+                                "} else if( $('#new_name_textbox').selectionStart ) { ",
+                                "$('#new_name_textbox').selectionStart = 0; ",
+                                "$('#new_name_textbox').selectionEnd = ", (integer_to_binary(SelectionLength))/binary, "; ",
+                                "} }, 1); ">>,
+
+                                {Body, FocusScript, {action, hide_popup}}
+                        end
+                end;
 
             share_file ->
-                Path = lists:nth(1, get_selected_items()),
-                Filename = filename:basename(lists:nth(1, get_selected_items())),
-                {Status, ShareID} = case fs_get_share_by_filepath(Path) of
-                                        {ok, #veil_document{uuid = UUID}} ->
-                                            {exists, gui_utils:to_binary(UUID)};
-                                        _ ->
-                                            {ok, ID} = fs_create_share(Path),
-                                            {new, gui_utils:to_binary(ID)}
-                                    end,
-                clear_workspace(),
-                select_item(Path),
-                AddressPrefix = <<"https://", (get_requested_hostname())/binary, ?shared_files_download_path>>,
-                Body = [
-                    case Status of
-                        exists ->
-                            #p{body = <<"<b>", (gui_utils:to_binary(Filename))/binary,
-                            "</b> is already shared. Visit <b>Shared files</b> tab for more.">>};
-                        new ->
-                            #p{body = <<"<b>", (gui_utils:to_binary(Filename))/binary,
-                            "</b> successfully shared. Visit <b>Shared files</b> tab for more.">>}
-                    end,
-                    #form{class = <<"control-group">>, body = [
-                        #textbox{id = wire_enter("shared_link_textbox", "shared_link_submit"), class = "flat", style = "width: 700px;",
-                            value = <<AddressPrefix/binary, ShareID/binary>>, placeholder = "Download link"},
-                        #button{id = wire_click("shared_link_submit", {action, hide_popup}),
-                            class = <<"btn btn-success btn-wide">>, body = <<"Ok">>}
-                    ]}
-                ],
-                {Body, "$('#shared_link_textbox').focus(); $('#shared_link_textbox').select();", {action, hide_popup}};
+                case length(get_selected_items()) of
+                    1 ->
+                        [{Path, Filename}] = get_selected_items(),
+                        {Status, ShareID} = case fs_get_share_uuid_by_filepath(Path) of
+                                                undefined -> {new, fs_create_share(Path)};
+                                                UUID -> {exists, UUID}
+                                            end,
+                        clear_workspace(),
+                        select_item(Path),
+                        AddressPrefix = <<"https://", (get_requested_hostname())/binary, ?shared_files_download_path>>,
+                        Body = [
+                            case Status of
+                                exists ->
+                                    #p{body = <<"<b>", (gui_str:html_encode(Filename))/binary,
+                                    "</b> is already shared. Visit <b>Shared files</b> tab for more.">>};
+                                new ->
+                                    #p{body = <<"<b>", (gui_str:html_encode(Filename))/binary,
+                                    "</b> successfully shared. Visit <b>Shared files</b> tab for more.">>}
+                            end,
+                            #form{class = <<"control-group">>, body = [
+                                #textbox{id = wire_enter(<<"shared_link_textbox">>, <<"shared_link_submit">>), class = <<"flat">>, style = <<"width: 700px;">>,
+                                    value = gui_str:html_encode(<<AddressPrefix/binary, ShareID/binary>>), placeholder = <<"Download link">>},
+                                #button{id = wire_click(<<"shared_link_submit">>, {action, hide_popup}),
+                                    class = <<"btn btn-success btn-wide">>, body = <<"Ok">>}
+                            ]}
+                        ],
+                        {Body, <<"$('#shared_link_textbox').focus(); $('#shared_link_textbox').select();">>, {action, hide_popup}};
+                    _ ->
+                        {[], undefined, undefined}
+                end;
 
             file_upload ->
-                Body = [
-                    #veil_upload{subscriber_pid = self(), target_dir = get_working_directory()}
-                ],
-                {Body, undefined, {action, clear_manager}};
+                case fs_has_perms(get_working_directory(), write) of
+                    true ->
+                        Body = [
+                            #veil_upload{subscriber_pid = self(), target_dir = get_working_directory()}
+                        ],
+                        {Body, undefined, {action, clear_manager}};
+                    false ->
+                        gui_jq:wire(#alert{text = <<"You need write permissions in this directory to upload files.">>}),
+                        {[], undefined, undefined}
+                end;
 
             remove_selected ->
                 {_FB, _S, _A} =
-                    case get_selected_items() of
-                        [] -> {[], undefined, undefined};
-                        Paths ->
-                            {NumFiles, NumDirs} = lists:foldl(
-                                fun(Path, {NFiles, NDirs}) ->
-                                    case item_is_dir(item_find(Path)) of
-                                        true -> {NFiles, NDirs + 1};
-                                        false -> {NFiles + 1, NDirs}
-                                    end
-                                end, {0, 0}, Paths),
-                            FilesString = if
-                                              (NumFiles =:= 1) ->
-                                                  <<"<b>", (integer_to_binary(NumFiles))/binary, " file</b>">>;
-                                              (NumFiles > 1) ->
-                                                  <<"<b>", (integer_to_binary(NumFiles))/binary, " files</b>">>;
-                                              true -> <<"">>
-                                          end,
-                            DirsString = if
-                                             (NumDirs =:= 1) ->
-                                                 <<"<b>", (integer_to_binary(NumDirs))/binary, " directory</b> and all its content">>;
-                                             (NumDirs > 1) ->
-                                                 <<"<b>", (integer_to_binary(NumDirs))/binary, " directories</b> and all their content">>;
-                                             true -> <<"">>
-                                         end,
-                            Punctuation = if
-                                              (FilesString /= <<"">>) and (DirsString /= <<"">>) ->
-                                                  <<", ">>;
-                                              true -> <<"">>
-                                          end,
-                            Body = [
-                                #p{body = <<"Remove ", FilesString/binary, Punctuation/binary, DirsString/binary, "?">>},
-                                #form{class = <<"control-group">>, body = [
-                                    #button{id = wire_click("ok_button", {action, remove_selected}),
-                                        class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
-                                    #button{id = wire_click("cancel_button", {action, hide_popup}),
-                                        class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>}
-                                ]}
-                            ],
-                            {Body, "$('#ok_button').focus();", {action, hide_popup}}
+                    case fs_has_perms(get_working_directory(), write) of
+                        false ->
+                            gui_jq:wire(#alert{text = <<"You need write permissions in this directory to delete files.">>}),
+                            {[], undefined, undefined};
+                        true ->
+                            case get_selected_items() of
+                                [] ->
+                                    {[], undefined, undefined};
+                                Paths ->
+                                    {NumFiles, NumDirs} = lists:foldl(
+                                        fun({Path, _}, {NFiles, NDirs}) ->
+                                            case item_is_dir(item_find(Path)) of
+                                                true -> {NFiles, NDirs + 1};
+                                                false -> {NFiles + 1, NDirs}
+                                            end
+                                        end, {0, 0}, Paths),
+                                    FilesString = if
+                                                      (NumFiles =:= 1) ->
+                                                          <<"<b>", (integer_to_binary(NumFiles))/binary, " file</b>">>;
+                                                      (NumFiles > 1) ->
+                                                          <<"<b>", (integer_to_binary(NumFiles))/binary, " files</b>">>;
+                                                      true -> <<"">>
+                                                  end,
+                                    DirsString = if
+                                                     (NumDirs =:= 1) ->
+                                                         <<"<b>", (integer_to_binary(NumDirs))/binary, " directory</b> and all its content">>;
+                                                     (NumDirs > 1) ->
+                                                         <<"<b>", (integer_to_binary(NumDirs))/binary, " directories</b> and all their content">>;
+                                                     true -> <<"">>
+                                                 end,
+                                    Punctuation = if
+                                                      (FilesString /= <<"">>) and (DirsString /= <<"">>) ->
+                                                          <<", ">>;
+                                                      true -> <<"">>
+                                                  end,
+                                    Body = [
+                                        #p{body = <<"Remove ", FilesString/binary, Punctuation/binary, DirsString/binary, "?">>},
+                                        #form{class = <<"control-group">>, body = [
+                                            #button{id = wire_click(<<"ok_button">>, {action, remove_selected}),
+                                                class = <<"btn btn-success btn-wide">>, body = <<"Ok">>},
+                                            #button{id = wire_click(<<"cancel_button">>, {action, hide_popup}),
+                                                class = <<"btn btn-danger btn-wide">>, body = <<"Cancel">>}
+                                        ]}
+                                    ],
+                                    {Body, <<"$('#ok_button').focus();">>, {action, hide_popup}}
+                            end
                     end;
 
             _ ->
@@ -744,40 +782,42 @@ show_popup(Type) ->
     case FooterBody of
         [] -> skip;
         _ ->
-            CloseButton = #link{id = wire_click("close_button", CloseButtonAction), title = <<"Hide">>, class = <<"glyph-link">>,
+            CloseButton = #link{id = wire_click(<<"close_button">>, CloseButtonAction), title = <<"Hide">>, class = <<"glyph-link">>,
                 style = <<"position: absolute; top: 8px; right: 8px; z-index: 3;">>,
                 body = #span{class = <<"fui-cross">>, style = <<"font-size: 20px;">>}},
-            gui_utils:update("footer_popup", [CloseButton | FooterBody]),
-            wf:wire(#jquery{target = "footer_popup", method = ["removeClass"], args = ["\"hidden\""]}),
-            wf:wire(#jquery{target = "footer_popup", method = ["slideDown"], args = ["200"]})
+            gui_jq:update(<<"footer_popup">>, [CloseButton | FooterBody]),
+            gui_jq:remove_class(<<"footer_popup">>, <<"hidden">>),
+            gui_jq:slide_down(<<"footer_popup">>, 200)
     end,
     case Script of
-        undefined -> skip;
-        Script -> wf:wire(Script)
+        undefined ->
+            ok;
+        _ ->
+            gui_jq:wire(Script, false)
     end.
 
 
 % Hides the footer popup
 hide_popup() ->
-    gui_utils:update("footer_popup", []),
-    wf:wire(#jquery{target = "footer_popup", method = ["addClass"], args = ["\"hidden\""]}),
-    wf:wire(#jquery{target = "footer_popup", method = ["slideUp"], args = ["200"]}).
+    gui_jq:update(<<"footer_popup">>, []),
+    gui_jq:add_class(<<"footer_popup">>, <<"hidden">>),
+    gui_jq:slide_up(<<"footer_popup">>, 200).
 
 
 % Render path navigator
 path_navigator_body(WorkingDirectory) ->
     case WorkingDirectory of
-        "/" -> wf:f("~~", []);
+        <<"/">> -> gui_str:format_bin("~~", []);
         _ ->
-            FirstLink = #link{id = wire_click("nav_top", {action, navigate, ["/"]}), body = <<"~">>},
-            PathElements = string:tokens(WorkingDirectory, "/"),
+            FirstLink = #link{id = wire_click(<<"nav_top">>, {action, navigate, [<<"/">>]}), body = <<"~">>},
+            [<<"">> | PathElements] = binary:split(WorkingDirectory, <<"/">>, [global]),
             {LinkList, _} = lists:mapfoldl(
                 fun(Element, {CurrentPath, Counter}) ->
-                    PathToElement = CurrentPath ++ "/" ++ Element,
-                    Link = #link{id = wire_click("nav_" ++ integer_to_list(Counter), {action, navigate, [PathToElement]}),
-                        body = gui_utils:to_binary(Element)},
+                    PathToElement = <<CurrentPath/binary, "/", Element/binary>>,
+                    Link = #link{id = wire_click(<<"nav_", (integer_to_binary(Counter))/binary>>, {action, navigate, [PathToElement]}),
+                        body = gui_str:html_encode(Element)},
                     {Link, {PathToElement, Counter + 1}}
-                end, {"/", 1}, lists:sublist(PathElements, length(PathElements) - 1)),
+                end, {<<"">>, 1}, lists:sublist(PathElements, length(PathElements) - 1)),
             [FirstLink | LinkList] ++ [lists:last(PathElements)]
     end.
 
@@ -787,10 +827,10 @@ grid_view_body() ->
     {Tiles, _} = lists:mapfoldl(
         fun(Item, Counter) ->
             FullPath = item_path(Item),
-            Filename = gui_utils:to_binary(item_basename(Item)),
+            Basename = item_basename(Item),
             ImageStyle = case get_clipboard_type() of
                              cut ->
-                                 case lists:member(FullPath, get_clipboard_items()) of
+                                 case lists:member({FullPath, Basename}, get_clipboard_items()) of
                                      true -> <<"opacity:0.3; filter:alpha(opacity=30);">>;
                                      _ -> <<"">>
                                  end;
@@ -809,7 +849,7 @@ grid_view_body() ->
 
             LinkID = <<"grid_item_", (integer_to_binary(Counter))/binary>>,
             % Item won't hightlight if the link is clicked.
-            wire_script(wf:f("$('.wfid_~s').click(function(e) { e.stopPropagation();});", [LinkID])),
+            gui_jq:bind_element_click(LinkID, <<"function(e) { e.stopPropagation(); }">>),
             Tile = #panel{
                 id = wire_click(item_id(Item), {action, select_item, [FullPath]}),
                 style = <<"width: 100px; height: 116px; overflow:hidden; position: relative; margin: 0; padding: 5px 10px; display: inline-block;">>,
@@ -820,7 +860,8 @@ grid_view_body() ->
                                        #image{style = ImageStyle, image = ImageUrl}
                                    ]},
                                    #panel{style = <<"margin: 5px auto 0; text-align: center; word-wrap: break-word;">>, body = [
-                                       #link{title = Filename, id = wire_click(LinkID, {action, navigate, [FullPath]}), body = Filename}
+                                       #link{title = gui_str:html_encode(Basename), id = wire_click(LinkID, {action, navigate, [FullPath]}),
+                                           body = gui_str:html_encode(Basename)}
                                    ]}
                                ];
                            false ->
@@ -838,8 +879,8 @@ grid_view_body() ->
                                        ]}
                                    ]},
                                    #panel{style = <<"margin: 5px auto 0; text-align: center; word-wrap: break-word;">>, body = [
-                                       #link{title = Filename, id = LinkID, body = Filename, target = <<"_blank">>,
-                                           url = <<?user_content_download_path, "/", (gui_utils:to_binary(wf:url_encode(FullPath)))/binary>>}
+                                       #link{title = gui_str:html_encode(Basename), id = LinkID, body = gui_str:html_encode(Basename), target = <<"_blank">>,
+                                           url = <<?user_content_download_path, "/", (gui_str:url_encode(FullPath))/binary>>}
                                    ]}
                                ]
                        end
@@ -859,10 +900,10 @@ list_view_body() ->
     CellWidth = <<"width: ", (integer_to_binary(round(90 * (2 + NumAttr) / NumAttr)))/binary, "px;">>,
     HeaderTable = [
         #table{class = <<"no-margin table">>, style = <<"position: fixed; top: 173px; z-index: 10;",
-        "background: white; border: 2px solid #bbbdc0; border-collapse: collapse;">>, body = [
+        "background: white; border: 2px solid #bbbdc0; border-collapse: collapse;">>, header = [
             #tr{cells =
             [
-                #th{style = <<"border: 2px solid #aaacae;color: rgb(64, 89, 116);">>, body = <<"Name">>}
+                #th{style = <<"border: 2px solid #aaacae; color: rgb(64, 89, 116);">>, body = <<"Name">>}
             ] ++
             lists:map(
                 fun(Attr) ->
@@ -873,7 +914,7 @@ list_view_body() ->
         ]}
     ],
     DirUpRow = case get_working_directory() of
-                   "/" -> [];
+                   <<"/">> -> [];
                    Path ->
                        PrevDir = filename:dirname(filename:absname(Path)),
                        Item = item_new(PrevDir),
@@ -882,12 +923,12 @@ list_view_body() ->
                                #td{style = <<"vertical-align: middle;">>, body = #span{style = <<"word-wrap: break-word;">>,
                                    class = <<"table-cell">>, body = [
                                        #panel{style = <<"display: inline-block; vertical-align: middle;">>, body = [
-                                           #link{id = wire_click("prev_dir_link_image", {action, navigate, [PrevDir]}), body = [
+                                           #link{id = wire_click(<<"prev_dir_link_image">>, {action, navigate, [PrevDir]}), body = [
                                                #image{class = <<"list-icon">>, image = <<"/images/folder32.png">>}
                                            ]}
                                        ]},
                                        #panel{style = <<"max-width: 230px; word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
-                                           #link{id = wire_click("prev_dir_link_text", {action, navigate, [PrevDir]}), body = <<"..&nbsp;&nbsp;&nbsp;">>}
+                                           #link{id = wire_click(<<"prev_dir_link_text">>, {action, navigate, [PrevDir]}), body = <<"..&nbsp;&nbsp;&nbsp;">>}
                                        ]}
                                    ]}}] ++
                            lists:map(
@@ -900,10 +941,10 @@ list_view_body() ->
     {TableRows, _} = lists:mapfoldl(
         fun(Item, Counter) ->
             FullPath = item_path(Item),
-            Filename = gui_utils:to_binary(item_basename(Item)),
+            Basename = item_basename(Item),
             ImageStyle = case get_clipboard_type() of
                              cut ->
-                                 case lists:member(FullPath, get_clipboard_items()) of
+                                 case lists:member({FullPath, Basename}, get_clipboard_items()) of
                                      true -> <<"opacity:0.3; filter:alpha(opacity=30);">>;
                                      _ -> <<"">>
                                  end;
@@ -921,10 +962,10 @@ list_view_body() ->
 
             LinkID = <<"list_item_", (integer_to_binary(Counter))/binary>>,
             % Item won't hightlight if the link is clicked.
-            wire_script(wf:f("$('#~s').click(function(e) { e.stopPropagation(); });", [LinkID])),
+            gui_jq:bind_element_click(LinkID, <<"function(e) { e.stopPropagation(); }">>),
             ImageID = <<"image_", (integer_to_binary(Counter))/binary>>,
             % Image won't hightlight if the image is clicked.
-            wire_script(wf:f("$('#~s').click(function(e) { e.stopPropagation();});", [ImageID])),
+            gui_jq:bind_element_click(ImageID, <<"function(e) { e.stopPropagation(); }">>),
             TableRow = #tr{
                 id = wire_click(item_id(Item), {action, select_item, [FullPath]}),
                 cells = [
@@ -938,7 +979,7 @@ list_view_body() ->
                                     ]},
                                     #panel{class = <<"filename_row">>,
                                         style = <<"max-width: 400px; word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
-                                            #link{id = wire_click(LinkID, {action, navigate, [FullPath]}), body = Filename}
+                                            #link{id = wire_click(LinkID, {action, navigate, [FullPath]}), body = gui_str:html_encode(Basename)}
                                         ]}
                                 ]}};
                         false ->
@@ -950,14 +991,14 @@ list_view_body() ->
                             #td{body = #span{class = <<"table-cell">>, body = [
                                 #panel{style = <<"display: inline-block; vertical-align: middle; position: relative;">>, body = [
                                     #link{id = ImageID, target = <<"_blank">>,
-                                        url = <<?user_content_download_path, "/", (gui_utils:to_binary(wf:url_encode(FullPath)))/binary>>, body = [
+                                        url = <<?user_content_download_path, "/", (gui_str:url_encode(FullPath))/binary>>, body = [
                                             ShareIcon,
                                             #image{class = <<"list-icon">>, style = ImageStyle, image = ImageUrl}
                                         ]}
                                 ]},
                                 #panel{class = <<"filename_row">>, style = <<"word-wrap: break-word; display: inline-block;vertical-align: middle;">>, body = [
-                                    #link{id = LinkID, body = Filename, target = <<"_blank">>,
-                                        url = <<?user_content_download_path, "/", (gui_utils:to_binary(wf:url_encode(FullPath)))/binary>>}
+                                    #link{id = LinkID, body = gui_str:html_encode(Basename), target = <<"_blank">>,
+                                        url = <<?user_content_download_path, "/", (gui_str:url_encode(FullPath))/binary>>}
                                 ]}
                             ]}}
                     end
@@ -971,8 +1012,8 @@ list_view_body() ->
         end, 1, get_item_list()),
     % Set filename containers width
     ContentWithoutFilename = 100 + (51 + round(90 * (2 + NumAttr) / NumAttr)) * NumAttr, % 51 is padding + border
-    wire_script(wf:f("window.onresize = function(e) { $('.filename_row').css('max-width', '' +
-            ($(window).width() - ~B) + 'px'); }; $(window).resize();", [ContentWithoutFilename])),
+    gui_jq:wire(<<"window.onresize = function(e) { $('.filename_row').css('max-width', ",
+    "'' +($(window).width() - ", (integer_to_binary(ContentWithoutFilename))/binary, ") + 'px'); }; $(window).resize();">>),
     [
         HeaderTable,
         #table{id = <<"main_table">>, class = <<"table table-bordered">>,
@@ -992,11 +1033,16 @@ item_new(FullPath) ->
                    "DIR" -> FA#fileattributes{size = -1};
                    _ -> FA
                end,
-    IsShared = case fs_get_share_by_filepath(FullPath) of
-                   {ok, _} -> true;
-                   _ -> false
+    IsShared = case fs_get_share_uuid_by_filepath(FullPath) of
+                   undefined -> false;
+                   _ -> true
                end,
-    #item{id = <<"item_", (get_item_counter())/binary>>, path = FullPath, is_shared = IsShared, attr = FileAttr}.
+    #item{id = <<"item_", (get_item_counter())/binary>>,
+        path = gui_str:unicode_list_to_binary(FullPath),
+        basename = gui_str:unicode_list_to_binary(filename:basename(FullPath)),
+        is_shared = IsShared,
+        attr = FileAttr
+    }.
 
 item_find(Path) ->
     case lists:keyfind(Path, 3, get_item_list()) of
@@ -1016,13 +1062,10 @@ item_id(#item{id = ID}) ->
 item_path(#item{path = Path}) ->
     Path.
 
-item_basename(#item{path = Path}) ->
-    filename:basename(Path).
+item_basename(#item{basename = Basename}) ->
+    Basename.
 
-item_dirname(#item{path = Path}) ->
-    filename:dirname(Path).
-
-item_attr(name, Item) -> item_basename(Item);
+item_attr(name, Item) -> gui_str:binary_to_unicode_list(item_basename(Item));
 item_attr(mode, #item{attr = #fileattributes{mode = Value}}) -> Value;
 item_attr(uid, #item{attr = #fileattributes{uid = Value}}) -> Value;
 item_attr(gid, #item{attr = #fileattributes{gid = Value}}) -> Value;
@@ -1034,16 +1077,16 @@ item_attr(size, #item{attr = #fileattributes{size = Value}}) -> Value;
 item_attr(uname, #item{attr = #fileattributes{uname = Value}}) -> Value;
 item_attr(gname, #item{attr = #fileattributes{gname = Value}}) -> Value.
 
-item_attr_value(name, Item) -> gui_utils:to_binary(item_basename(Item));
-item_attr_value(mode, Item) -> gui_utils:to_binary(lists:flatten(io_lib:format("~.8B", [item_attr(mode, Item)])));
-item_attr_value(uname, Item) -> gui_utils:to_binary(item_attr(uname, Item));
-item_attr_value(atime, Item) -> gui_utils:to_binary(time_to_string(item_attr(atime, Item)));
-item_attr_value(mtime, Item) -> gui_utils:to_binary(time_to_string(item_attr(mtime, Item)));
-item_attr_value(ctime, Item) -> gui_utils:to_binary(time_to_string(item_attr(ctime, Item)));
+item_attr_value(name, Item) -> gui_str:to_binary(item_basename(Item));
+item_attr_value(mode, Item) -> gui_str:to_binary(lists:flatten(io_lib:format("~.8B", [item_attr(mode, Item)])));
+item_attr_value(uname, Item) -> gui_str:to_binary(item_attr(uname, Item));
+item_attr_value(atime, Item) -> gui_str:to_binary(time_to_string(item_attr(atime, Item)));
+item_attr_value(mtime, Item) -> gui_str:to_binary(time_to_string(item_attr(mtime, Item)));
+item_attr_value(ctime, Item) -> gui_str:to_binary(time_to_string(item_attr(ctime, Item)));
 item_attr_value(size, Item) ->
     case item_is_dir(Item) of
         true -> <<"">>;
-        false -> gui_utils:to_binary(size_to_printable(item_attr(size, Item)))
+        false -> size_to_printable(item_attr(size, Item))
     end.
 
 attr_to_name(name) -> <<"Name">>;
@@ -1061,7 +1104,7 @@ time_to_string(Time) ->
         [YY, MM, DD, Hour, Min, Sec]).
 
 size_to_printable(Size) ->
-    size_to_printable(Size, ["B", "KB", "MB", "GB", "TB"]).
+    gui_str:to_binary(size_to_printable(Size, ["B", "KB", "MB", "GB", "TB"])).
 
 size_to_printable(Size, [Current | Bigger]) ->
     case Size > 1024 of
@@ -1083,11 +1126,11 @@ item_list_md5(ItemList) ->
 
 is_group_dir(Path) ->
     case Path of
-        "/groups" -> true;
-        "/groups" ++ Rest -> case string:rstr(Rest, "/") of
-                                 1 -> true;
-                                 _ -> false
-                             end;
+        <<"/groups">> -> true;
+        <<"/groups", Rest>> -> case length(binary:split(Rest, <<"/">>, [global])) of
+                                   2 -> true;
+                                   _ -> false
+                               end;
         _ -> false
     end.
 
@@ -1095,15 +1138,16 @@ is_group_dir(Path) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% logical_files_manager interfacing
 fs_get_attributes(Path) ->
-    {ok, FileAttr} = logical_files_manager:getfileattr(Path),
+    {ok, FileAttr} = logical_files_manager:getfileattr(gui_str:binary_to_unicode_list(Path)),
     FileAttr.
 
 
 fs_mkdir(Path) ->
-    logical_files_manager:mkdir(Path).
+    logical_files_manager:mkdir(gui_str:binary_to_unicode_list(Path)).
 
 
-fs_remove(Path) ->
+fs_remove(BinPath) ->
+    Path = gui_str:binary_to_unicode_list(BinPath),
     Item = item_new(Path),
     case item_is_dir(Item) of
         true -> fs_remove_dir(Path);
@@ -1111,7 +1155,8 @@ fs_remove(Path) ->
     end.
 
 
-fs_remove_dir(DirPath) ->
+fs_remove_dir(BinDirPath) ->
+    DirPath = gui_str:binary_to_unicode_list(BinDirPath),
     case is_group_dir(DirPath) of
         true ->
             skip;
@@ -1125,7 +1170,8 @@ fs_remove_dir(DirPath) ->
     end.
 
 
-fs_list_dir(Dir) ->
+fs_list_dir(BinDir) ->
+    Dir = gui_str:binary_to_unicode_list(BinDir),
     DirContent = fs_list_dir(Dir, 0, 10, []),
     _ItemList = lists:foldl(
         fun(File, Acc) ->
@@ -1137,7 +1183,8 @@ fs_list_dir(Dir) ->
         end, [], DirContent).
 
 
-fs_list_dir(Path, Offset, Count, Result) ->
+fs_list_dir(BinPath, Offset, Count, Result) ->
+    Path = gui_str:binary_to_unicode_list(BinPath),
     case logical_files_manager:ls(Path, Count, Offset) of
         {ok, FileList} ->
             case length(FileList) of
@@ -1148,45 +1195,47 @@ fs_list_dir(Path, Offset, Count, Result) ->
             {error, not_a_dir}
     end.
 
-fs_mv(Path, TargetDir) ->
+fs_mv(BinPath, TargetDirBin) ->
+    Path = gui_str:binary_to_unicode_list(BinPath),
+    TargetDir = gui_str:binary_to_unicode_list(TargetDirBin),
     fs_mv(Path, TargetDir, filename:basename(Path)).
 
-fs_mv(Path, TargetDir, TargetName) ->
+fs_mv(BinPath, TargetDirBin, TargetNameBin) ->
+    Path = gui_str:binary_to_unicode_list(BinPath),
+    TargetDir = gui_str:binary_to_unicode_list(TargetDirBin),
+    TargetName = gui_str:binary_to_unicode_list(TargetNameBin),
     TargetPath = filename:absname(TargetName, TargetDir),
     case Path of
-        TargetPath -> ok;
+        TargetPath ->
+            ok;
         _ ->
-            case logical_files_manager:mv(Path, TargetPath) of
-                ok -> ok;
-                _ -> wf:wire(#alert{text = "Unable to move " ++ TargetName ++
-                    ". File exists."})
-            end
+            logical_files_manager:mv(Path, TargetPath)
     end.
 
 
 fs_copy(_Path, _TargetPath) ->
     throw(not_yet_implemented).
 
-fs_unique_filename(RequestedPath, 0) ->
-    case item_find(RequestedPath) of
-        undefined -> RequestedPath;
-        _ -> fs_unique_filename(RequestedPath, 1)
-    end;
+fs_create_share(Filepath) ->
+    {ok, ID} = logical_files_manager:create_standard_share(gui_str:binary_to_unicode_list(Filepath)),
+    gui_str:to_binary(ID).
 
-fs_unique_filename(RequestedPath, Counter) ->
-    Ext = filename:extension(RequestedPath),
-    Rootname = filename:rootname(RequestedPath),
-    NewName = lists:flatten(io_lib:format("~s(~B)~s", [Rootname, Counter, Ext])),
-    case item_find(NewName) of
-        undefined -> NewName;
-        _ -> fs_unique_filename(RequestedPath, Counter + 1)
+fs_get_share_uuid_by_filepath(Filepath) ->
+    case logical_files_manager:get_share({file, gui_str:binary_to_unicode_list(Filepath)}) of
+        {ok, #veil_document{uuid = UUID}} ->
+            gui_str:to_binary(UUID);
+        _ ->
+            undefined
     end.
 
-fs_create_share(Filepath) ->
-    logical_files_manager:create_standard_share(Filepath).
-
-fs_get_share_by_filepath(Filepath) ->
-    logical_files_manager:get_share({file, Filepath}).
+fs_has_perms(Path, CheckType) ->
+    {ok, FullFilePath} = fslogic_path:get_full_file_name(gui_str:binary_to_unicode_list(Path)),
+    {ok, FileDoc} = fslogic_objects:get_file(FullFilePath),
+    {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
+    case fslogic_perms:check_file_perms(FullFilePath, UserDoc, FileDoc, CheckType) of
+        ok -> true;
+        _ -> false
+    end.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -1197,6 +1246,7 @@ get_requested_hostname() -> get(rh).
 set_working_directory(Dir) -> put(wd, Dir).
 get_working_directory() -> get(wd).
 
+% Holds a list o tuples {FilePath, FileName}
 set_selected_items(List) -> put(sel_items, List).
 get_selected_items() -> get(sel_items).
 
@@ -1218,6 +1268,7 @@ get_item_list() -> get(item_list).
 set_item_list_rev(MD5) -> put(item_list_rev, MD5).
 get_item_list_rev() -> get(item_list_rev).
 
+% Holds a list o tuples {FilePath, FileName}
 set_clipboard_items(List) -> put(clipboard_items, List).
 get_clipboard_items() -> get(clipboard_items).
 

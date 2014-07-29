@@ -19,8 +19,8 @@
 -define(TEST_ROOT, "/tmp/veilfs/"). %% Root of test filesystem
 -define(SH2, "ClusterProxy").
 
-perms_test_() ->
-  {foreach, fun setup/0, fun teardown/1, [fun check_perms_user_file/0, fun check_perms_read_group_file/0, fun check_perms_group_perms_file/0, fun check_perms_group_write_file/0]}.
+%% perms_test_() ->
+%%   {foreach, fun setup/0, fun teardown/1, [fun check_perms_user_file/0, fun check_perms_read_group_file/0, fun check_perms_group_perms_file/0, fun check_perms_group_write_file/0]}.
 
 setup() ->
   meck:new([fslogic, veilhelpers, fslogic_utils, fslogic_objects]).
@@ -72,6 +72,7 @@ file_name_cache_test() ->
 check_perms_user_file() ->
   SHInfo = #storage_helper_info{name = ?SH, init_args = [?TEST_ROOT]},
 
+  meck:expect(fslogic_objects, get_user, fun() -> {ok, #veil_document{record = #user{login = "testuser"}}} end),
   meck:expect(fslogic_path, get_user_root, fun() -> {ok, "testuser"} end),
   ?assertEqual({ok, true}, storage_files_manager:check_perms("users/testuser/somefile", SHInfo)),
 
@@ -116,13 +117,12 @@ check_perms_group_perms_file() ->
   meck:expect(fslogic_objects, get_user, fun() -> {ok, #veil_document{record = #user{login = "testuser2"}}} end),
   ?assertEqual({ok, false}, storage_files_manager:check_perms("groups/testgroup/somefile", SHInfo, perms)),
 
-  EtsName = logical_files_manager:get_ets_name(),
-  ets:delete(EtsName),
+  erlang:erase(),
   meck:expect(fslogic_objects, get_user, fun() -> {ok, #veil_document{record = #user{login = "testuser"}}} end),
   meck:expect(veilhelpers, exec, fun(getattr, _, _) -> {0, #st_stat{st_uid = 1001}} end),
   ?assertEqual({ok, false}, storage_files_manager:check_perms("groups/testgroup/somefile", SHInfo, perms)),
 
-  ets:delete(EtsName),
+  erlang:erase(),
   meck:expect(veilhelpers, exec, fun(getattr, _, _) -> {2, #st_stat{st_uid = 1000}} end),
   ?assertEqual({error, can_not_check_file_owner}, storage_files_manager:check_perms("groups/testgroup/somefile", SHInfo, perms)),
 
@@ -132,10 +132,11 @@ check_perms_group_perms_file() ->
   ?assert(meck:validate(veilhelpers)).
 
 %% Tests if wrong format of path is found correctly
-wrong_path_format_test() ->
-  SHInfo = #storage_helper_info{name = ?SH, init_args = [?TEST_ROOT]},
-  ?assertEqual({error, wrong_path_format}, storage_files_manager:check_perms(?TEST_ROOT ++ "something/testuser/somefile", SHInfo)),
-  ?assertEqual({error, too_short_path}, storage_files_manager:check_perms("something", SHInfo)).
+%% @todo: remove this test when storage_files_manager:check_perms gets permanently removed
+%% wrong_path_format_test() ->
+%%   SHInfo = #storage_helper_info{name = ?SH, init_args = [?TEST_ROOT]},
+%%   ?assertEqual({error, wrong_path_format}, storage_files_manager:check_perms(?TEST_ROOT ++ "something/testuser/somefile", SHInfo)),
+%%   ?assertEqual({error, too_short_path}, storage_files_manager:check_perms("something", SHInfo)).
 
 %% Tests if write permissions in groups dir are checked correctly
 check_perms_group_write_file() ->
@@ -146,8 +147,7 @@ check_perms_group_write_file() ->
   meck:expect(veilhelpers, exec, fun(getattr, _, _) -> {0, #st_stat{st_uid = 1000, st_mode = 8#660}} end),
   ?assertEqual({ok, true}, storage_files_manager:check_perms("groups/testgroup/somefile", SHInfo)),
 
-  EtsName = logical_files_manager:get_ets_name(),
-  ets:delete(EtsName),
+  erlang:erase(),
   meck:expect(fslogic_utils, get_user_id_from_system, fun
     ("testuser") -> "1000\n";
     (_) -> "error\n"
@@ -155,11 +155,11 @@ check_perms_group_write_file() ->
   meck:expect(veilhelpers, exec, fun(getattr, _, _) -> {0, #st_stat{st_uid = 1000, st_mode = 8#640}} end),
   ?assertEqual({ok, true}, storage_files_manager:check_perms("groups/testgroup/somefile", SHInfo)),
 
-  ets:delete(EtsName),
+  erlang:erase(),
   meck:expect(veilhelpers, exec, fun(getattr, _, _) -> {0, #st_stat{st_uid = 1001, st_mode = 8#640}} end),
   ?assertEqual({ok, false}, storage_files_manager:check_perms("groups/testgroup/somefile", SHInfo)),
 
-  ets:delete(EtsName),
+  erlang:erase(),
   meck:expect(veilhelpers, exec, fun(getattr, _, _) -> {2, #st_stat{st_uid = 1000, st_mode = 8#660}} end),
   ?assertEqual({error, can_not_check_grp_perms}, storage_files_manager:check_perms("groups/testgroup/somefile", SHInfo)),
 

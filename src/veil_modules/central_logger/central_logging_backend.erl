@@ -136,19 +136,16 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% dispatch_log/4
 %% ====================================================================
-%% @doc Adds proper tags if they don't exist and sends the log to central_logger.
+%% @doc Adds proper metadata and sends the log to central_logger.
 -spec dispatch_log(Message :: string(), Timestamp :: term(), Severity :: atom(), OldMetadata :: list()) -> Result when
     Result :: ok | central_logger_not_running.
 %% ====================================================================
 dispatch_log(Message, Timestamp, Severity, OldMetadata) ->
     Metadata = case OldMetadata of
-                   [] ->
-                       [{node, node()}, {source, unknown}];
                    [{pid, Pid}] ->
-                       [{node, node()}, {source, error_logger}, {pid, Pid}];
+                       [{node, node()}, {pid, Pid}];
                    OldMetadata2 ->
-                       % Make sure node metadata is at the beginning
-                       [{node, node()} | lists:keydelete(node, 1, OldMetadata2)]
+                       [{node, node()} | OldMetadata2]
                end,
     try
         gen_server:call(?Dispatcher_Name, {central_logger, 1, {dispatch_log, Message, Timestamp, Severity, Metadata}})

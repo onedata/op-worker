@@ -13,6 +13,7 @@
 
 -include("veil_modules/dao/dao.hrl").
 -include("registered_names.hrl").
+-include("logging.hrl").
 
 %% API
 -export([wrap_record/1, strip_wrappers/1, apply/4, apply/5]).
@@ -83,7 +84,7 @@ apply(Module, {asynch, Method}, Args, ProtocolVersion, _Timeout) ->
             {error, worker_not_found}
     catch
         Type:Error ->
-            lager:error("Cannot make a call to request_dispatcher on node ~p Reason: ~p", [dao, node(), {Type, Error}]),
+            ?error("Cannot make a call to request_dispatcher on node ~p Reason: ~p", [node(), {Type, Error}]),
             {error, {Type, Error}}
     end;
 apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout) ->
@@ -98,13 +99,14 @@ apply(Module, {synch, Method}, Args, ProtocolVersion, Timeout) ->
             receive
                 {worker_answer, MsgID, Resp} -> Resp
             after Timeout ->
+                ?warning("Cannot receive answer - timeout"),
                 {error, timeout}
             end;
         worker_not_found ->
             {error, worker_not_found}
     catch
         Type:Error ->
-            lager:error("Cannot make a call to request_dispatcher on node ~p Reason: ~p", [dao, node(), {Type, Error}]),
+            ?error("Cannot make a call to request_dispatcher on node ~p Reason: ~p", [node(), {Type, Error}]),
             {error, {Type, Error}}
     end;
 apply(Module, Method, Args, ProtocolVersion, Timeout) ->

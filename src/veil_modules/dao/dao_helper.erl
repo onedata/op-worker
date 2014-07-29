@@ -12,8 +12,7 @@
 
 -include_lib("veil_modules/dao/dao.hrl").
 -include_lib("veil_modules/dao/dao_helper.hrl").
-
--define(ADMIN_USER_CTX, {user_ctx, #user_ctx{roles = [<<"_admin">>]}}).
+-include("logging.hrl").
 
 -ifdef(TEST).
 -compile([export_all]).
@@ -62,7 +61,9 @@ list_dbs(Prefix) ->
 %% ====================================================================
 get_doc_count(DbName) ->
     case normalize_return_term(call(get_doc_count, [name(DbName)])) of
-        {error, {exit_error, database_does_not_exist}} -> {error, database_does_not_exist};
+        {error, {exit_error, database_does_not_exist}} ->
+          ?warning("Cannot get_doc_count for not existing db: ~p", [DbName]),
+          {error, database_does_not_exist};
         Other -> Other
     end.
 
@@ -82,7 +83,9 @@ get_doc_count(DbName) ->
 %% ====================================================================
 get_db_info(DbName) ->
     case normalize_return_term(call(get_db_info, [name(DbName)])) of
-        {error, {exit_error, database_does_not_exist}} -> {error, database_does_not_exist};
+        {error, {exit_error, database_does_not_exist}} ->
+          ?warning("Cannot get_db_info for not existing db: ~p", [DbName]),
+          {error, database_does_not_exist};
         Other -> Other
     end.
 
@@ -127,7 +130,9 @@ delete_db(DbName) ->
 %% ====================================================================
 delete_db(DbName, Opts) ->
     case normalize_return_term(call(delete_db, [name(DbName), Opts])) of
-        {error, {exit_error, database_does_not_exist}} -> {error, database_does_not_exist};
+        {error, {exit_error, database_does_not_exist}} ->
+          ?warning("Cannot delete_db for not existing db: ~p", [DbName]),
+          {error, database_does_not_exist};
         Other -> Other
     end.
 
@@ -246,6 +251,8 @@ open_design_doc(DbName, DesignName) ->
 -spec create_view(DbName :: string(), DesignName :: string(), ViewName :: string(), Map :: string(), Reduce :: string(), DesignVersion :: integer()) ->
     [ok | {error, term()}].
 %% ====================================================================
+create_view(_DbName, _Doc = #doc{}, _ViewName, "", _Reduce, _DesignVersion) ->
+    {error, no_map_source};
 create_view(DbName, Doc = #doc{}, ViewName, Map, Reduce, DesignVersion) ->
     {MapRd, MapRdValue} =
         case Reduce of

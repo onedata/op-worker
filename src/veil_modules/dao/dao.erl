@@ -36,8 +36,11 @@
 -export([init/1, handle/2, cleanup/0]).
 
 %% API
--export([save_record/1, exist_record/1, get_record/1, remove_record/1, list_records/2, load_view_def/2, set_db/1]).
+-export([save_record/1, exist_record/1, get_record/1, remove_record/1, list_records/2, set_db/1]).
 -export([doc_to_term/1,init_storage/0]).
+
+%% For integration tests
+-export([set_db/0]).
 
 %% ===================================================================
 %% Behaviour callback functions
@@ -54,13 +57,7 @@ init({Args, {init_status, undefined}}) ->
     ets:new(db_host_store, [named_table, public, bag, {read_concurrency, true}]),
     init({Args, {init_status, table_initialized}});
 init({_Args, {init_status, table_initialized}}) -> %% Final stage of initialization. ETS table was initialized
-    case application:get_env(veil_cluster_node, db_nodes) of
-        {ok, Nodes} when is_list(Nodes) ->
-            [dao_hosts:insert(Node) || Node <- Nodes, is_atom(Node)],
-            catch setup_views(?DATABASE_DESIGN_STRUCTURE);
-        _ ->
-            lager:warning("There are no DB hosts given in application env variable.")
-    end,
+    set_db(),
 
     ProcFun = fun(ProtocolVersion, {Target, Method, Args}) ->
       handle(ProtocolVersion, {Target, Method, Args})
@@ -112,11 +109,17 @@ init(Args) ->
             case Cache3 of
               ok ->
                 init({Args, {init_status, ets:info(db_host_store)}});
-              _ -> throw({error, {users_cache_error, Cache3}})
+              _ ->
+                ?error("Dao initialization error: ~p", [{users_cache_error, Cache3}]),
+                throw({error, {users_cache_error, Cache3}})
             end;
-          _ -> throw({error, {storage_cache_error, Cache2}})
+          _ ->
+            ?error("Dao initialization error: ~p", [{users_cache_error, Cache2}]),
+            throw({error, {storage_cache_error, Cache2}})
         end;
-      _ -> throw({error, {dao_fuse_cache_error, Cache1}})
+      _ ->
+        ?error("Dao initialization error: ~p", [{users_cache_error, Cache1}]),
+        throw({error, {dao_fuse_cache_error, Cache1}})
     end.
 
 %% handle/2
@@ -149,7 +152,7 @@ handle(ProtocolVersion, healthcheck) ->
 		ok ->
 			ok;
 		_ ->
-			lager:error("Healthchecking database filed with error: ~p",Msg),
+			?error("Healthchecking database filed with error: ~p", [Msg]),
 			{error,db_healthcheck_failed}
 	end;
 
@@ -157,6 +160,7 @@ handle(_ProtocolVersion, get_version) ->
   node_manager:check_vsn();
 
 handle(ProtocolVersion, {Target, Method, Args}) when is_atom(Target), is_atom(Method), is_list(Args) ->
+    ?debug("Dao action: ~p", [{Target, Method, Args}]),
     put(protocol_version, ProtocolVersion), %% Some sub-modules may need it to communicate with DAO' gen_server
     Module =
         case atom_to_list(Target) of
@@ -166,23 +170,23 @@ handle(ProtocolVersion, {Target, Method, Args}) when is_atom(Target), is_atom(Me
         end,
     try apply(Module, Method, Args) of
         {error, Err} ->
-            lager:error("Handling ~p:~p with args ~p returned error: ~p", [Module, Method, Args, Err]),
+            ?error("Handling ~p:~p with args ~p returned error: ~p", [Module, Method, Args, Err]),
             {error, Err};
         {ok, Response} -> {ok, Response};
         ok -> ok;
         Other ->
-            lager:error("Handling ~p:~p with args ~p returned unknown response: ~p", [Module, Method, Args, Other]),
+            ?error("Handling ~p:~p with args ~p returned unknown response: ~p", [Module, Method, Args, Other]),
             {error, Other}
     catch
         error:{badmatch, {error, Err}} -> {error, Err};
         _Type:Error ->
-%%             lager:error("Handling ~p:~p with args ~p interrupted by exception: ~p:~p ~n ~p", [Module, Method, Args, Type, Error, erlang:get_stacktrace()]),
+%%             ?error("Handling ~p:~p with args ~p interrupted by exception: ~p:~p ~n ~p", [Module, Method, Args, Type, Error, erlang:get_stacktrace()]),
             {error, Error}
     end;
 handle(ProtocolVersion, {Method, Args}) when is_atom(Method), is_list(Args) ->
     handle(ProtocolVersion, {cluster, Method, Args});
 handle(_ProtocolVersion, _Request) ->
-    lager:error("Unknown request ~p (protocol ver.: ~p)", [_Request, _ProtocolVersion]),
+    ?warning("Unknown request ~p (protocol ver.: ~p)", [_Request, _ProtocolVersion]),
     {error, wrong_args}.
 
 %% cleanup/0
@@ -199,6 +203,22 @@ cleanup() ->
 %% API functions
 %% ===================================================================
 
+%% get_db_structure/0
+%% ====================================================================
+%% @doc Getter for currently used database structure.
+-spec get_db_structure() -> [DBs :: #db_info{}].
+%% ====================================================================
+get_db_structure() ->
+    ?DATABASE_DESIGN_STRUCTURE.
+
+
+%% get_all_views/0
+%% ====================================================================
+%% @doc Getter for currently used view declarations.
+-spec get_all_views() -> [Views :: #view_info{}].
+%% ====================================================================
+get_all_views() ->
+    ?VIEW_LIST.
 
 %% save_record/1
 %% ====================================================================
@@ -222,7 +242,7 @@ save_record(#veil_document{uuid = Id, rev_info = RevInfo, record = Rec, force_up
     if
         Valid -> ok;
         true ->
-            lager:error("Cannot save record: ~p because it's not supported", [Rec]),
+            ?error("Cannot save record: ~p because it's not supported", [Rec]),
             throw(unsupported_record)
     end,
     Revs =
@@ -322,7 +342,7 @@ remove_record(Id) when is_list(Id) ->
 -spec list_records(ViewInfo :: #view_info{}, QueryArgs :: #view_query_args{}) ->
     {ok, QueryResult :: #view_result{}} | {error, term()}.
 %% ====================================================================
-list_records(#view_info{name = ViewName, design = DesignName, db_name = DbName}, QueryArgs) ->
+list_records(#view_info{name = ViewName, db_name = DbName, version = ViewVersion}, QueryArgs) ->
     FormatKey =  %% Recursive lambda:
     fun(F, K) when is_list(K) -> [F(F, X) || X <- K];
       (_F, K) when is_binary(K) -> binary_to_list(K);
@@ -333,8 +353,7 @@ list_records(#view_info{name = ViewName, design = DesignName, db_name = DbName},
       #veil_document{record = doc_to_term({D}), uuid = binary_to_list(Id), rev_info = dao_helper:revision(RevInfo)};
       (_) -> none
     end,
-
-        case dao_helper:query_view(DbName, DesignName, ViewName, QueryArgs) of
+        case dao_helper:query_view(DbName, dao_utils:get_versioned_view_name(ViewName, ViewVersion), dao_utils:get_versioned_view_name(ViewName, ViewVersion), QueryArgs) of
             {ok, [{total_and_offset, Total, Offset} | Rows]} ->
               FormattedRows =
                 [#view_row{id = binary_to_list(Id), key = FormatKey(FormatKey, Key), value = Value, doc = FormatDoc(Doc)}
@@ -348,7 +367,7 @@ list_records(#view_info{name = ViewName, design = DesignName, db_name = DbName},
               {ok, #view_result{total = length(Rows2), offset = 0, rows = FormattedRows2}};
           {error, _} = E -> throw(E);
             Other ->
-                lager:error("dao_helper:query_view has returned unknown query result: ~p", [Other]),
+                ?error("dao_helper:query_view has returned unknown query result: ~p", [Other]),
                 throw({unknown_query_result, Other})
         end.
 
@@ -378,74 +397,6 @@ get_db() ->
             DbName;
         _ ->
             ?DEFAULT_DB
-    end.
-
-%% setup_views/1
-%% ====================================================================
-%% @doc Creates or updates design documents
-%% @end
--spec setup_views(DesignStruct :: list()) -> ok.
-%% ====================================================================
-setup_views(DesignStruct) ->
-    DesignFun = fun(#design_info{name = Name, views = ViewList}, DbName) ->  %% Foreach design document
-            LastCTX = %% Calculate MD5 sum of current views (read from files)
-                lists:foldl(fun(#view_info{name = ViewName}, CTX) ->
-                            crypto:hash_update(CTX, load_view_def(ViewName, map) ++ load_view_def(ViewName, reduce))
-                        end, crypto:hash_init(md5), ViewList),
-
-            LocalVersion = dao_helper:name(integer_to_list(binary:decode_unsigned(crypto:hash_final(LastCTX)), 16)),
-            NewViewList =
-                case dao_helper:open_design_doc(DbName, Name) of
-                    {ok, #doc{body = Body}} -> %% Design document exists, so lets calculate MD5 sum of its views
-                        ViewsField = dao_json:get_field(Body, "views"),
-                        DbViews = [ dao_json:get_field(ViewsField, ViewName) || #view_info{name = ViewName} <- ViewList ],
-                        EmptyString = fun(Str) when is_binary(Str) -> binary_to_list(Str); %% Helper function converting non-string value to empty string
-                                         (_) -> "" end,
-                        VStrings = [ EmptyString(dao_json:get_field(V, "map")) ++ EmptyString(dao_json:get_field(V, "reduce")) || {L}=V <- DbViews, is_list(L)],
-                        LastCTX1 = lists:foldl(fun(VStr, CTX) -> crypto:hash_update(CTX, VStr) end, crypto:hash_init(md5), VStrings),
-                        DbVersion = dao_helper:name(integer_to_list(binary:decode_unsigned(crypto:hash_final(LastCTX1)), 16)),
-                        case DbVersion of %% Compare DbVersion with LocalVersion
-                            LocalVersion ->
-                                lager:info("DB version of design ~p is ~p and matches local version. Design is up to date", [Name, LocalVersion]),
-                                [];
-                            _Other ->
-                                lager:info("DB version of design ~p is ~p and does not match ~p. Rebuilding design document", [Name, _Other, LocalVersion]),
-                                ViewList
-                        end;
-                    _ ->
-                        lager:info("Design document ~p in DB ~p not exists. Creating...", [Name, DbName]),
-                        ViewList
-                end,
-
-            lists:map(fun(#view_info{name = ViewName}) -> %% Foreach view
-                case dao_helper:create_view(DbName, Name, ViewName, load_view_def(ViewName, map), load_view_def(ViewName, reduce), LocalVersion) of
-                    ok ->
-                        lager:info("View ~p in design ~p, DB ~p has been created.", [ViewName, Name, DbName]);
-                    _Err ->
-                        lager:error("View ~p in design ~p, DB ~p creation failed. Error: ~p", [ViewName, Name, DbName, _Err])
-                end
-            end, NewViewList),
-            DbName
-        end,
-
-    DbFun = fun(#db_info{name = Name, designs = Designs}) -> %% Foreach database
-            dao_helper:create_db(Name, []),
-            lists:foldl(DesignFun, Name, Designs)
-        end,
-
-    lists:map(DbFun, DesignStruct),
-    ok.
-
-%% load_view_def/2
-%% ====================================================================
-%% @doc Loads view definition from file.
-%% @end
--spec load_view_def(Name :: string(), Type :: map | reduce) -> string().
-%% ====================================================================
-load_view_def(Name, Type) ->
-    case file:read_file(?VIEW_DEF_LOCATION ++ Name ++ (case Type of map -> ?MAP_DEF_SUFFIX; reduce -> ?REDUCE_DEF_SUFFIX end)) of
-        {ok, Data} -> binary_to_list(Data);
-        _ -> ""
     end.
 
 %% is_valid_record/1
@@ -520,7 +471,7 @@ term_to_doc(Field) when is_tuple(Field) ->
     {_, {Ret}} = lists:foldl(FoldFun, {1, InitObj}, LField),
     {lists:reverse(Ret)};
 term_to_doc(Field) ->
-    lager:error("Cannot convert term to document because field: ~p is not supported", [Field]),
+    ?error("Cannot convert term to document because field: ~p is not supported", [Field]),
     throw({unsupported_field, Field}).
 
 
@@ -611,71 +562,93 @@ cache_guard() ->
 -spec init_storage() -> ok | {error, Error :: term()}.
 %% ====================================================================
 init_storage() ->
-	try
-		%get storage config file path
-		GetEnvResult = application:get_env(veil_cluster_node,storage_config_path),
-		case GetEnvResult of
-			{ok,_} -> ok;
-			undefined ->
-				lager:error("Could not get 'storage_config_path' environment variable"),
-				throw(get_env_error)
-		end,
-		{ok,StorageFilePath} = GetEnvResult,
+  try
+    %get storage config file path
+    GetEnvResult = application:get_env(veil_cluster_node, storage_config_path),
+    case GetEnvResult of
+      {ok, _} -> ok;
+      undefined ->
+        ?error("Could not get 'storage_config_path' environment variable"),
+        throw(get_env_error)
+    end,
+    {ok, StorageFilePath} = GetEnvResult,
 
-		%get storage list from db
-		{Status1,ListStorageValue} = dao_lib:apply(dao_vfs, list_storage, [],1),
-		case Status1 of
-			ok -> ok;
-			error ->
-				lager:error("Could not list existing storages"),
-				throw(ListStorageValue)
-		end,
-		ActualDbStorages = [X#veil_document.record || X <- ListStorageValue],
+    %get storage list from db
+    {Status1, ListStorageValue} = dao_lib:apply(dao_vfs, list_storage, [], 1),
+    case Status1 of
+      ok -> ok;
+      error ->
+        ?error("Could not list existing storages"),
+        throw(ListStorageValue)
+    end,
+    ActualDbStorages = [X#veil_document.record || X <- ListStorageValue],
 
-		case ActualDbStorages of
-			[] -> %db empty, insert storage
-				%read from file
-				{Status2,FileConsultValue} = file:consult(StorageFilePath),
-				case Status2 of
-					ok -> ok;
-					error ->
-						lager:error("Could not read storage config file"),
-						throw(FileConsultValue)
-				end,
-				[StoragePreferences] = FileConsultValue,
+    case ActualDbStorages of
+      [] -> %db empty, insert storage
+        %read from file
+        {Status2, FileConsultValue} = file:consult(StorageFilePath),
+        case Status2 of
+          ok -> ok;
+          error ->
+            ?error("Could not read storage config file"),
+            throw(FileConsultValue)
+        end,
 
-				%parse storage preferences
-				UserPreferenceToGroupInfo = fun (GroupPreference) ->
-					case GroupPreference of
-						[{name,cluster_fuse_id},{root,Root}] ->
-							#fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}};
-						[{name,Name},{root,Root}] ->
-							#fuse_group_info{name = Name, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}}
-					end
-				end,
-				FuseGroups=try
-					lists:map(UserPreferenceToGroupInfo,StoragePreferences)
-				catch
-					_Type:Err ->
-						lager:error("Wrong format of storage config file"),
-						throw(Err)
-				end,
+        %parse storage preferences
+        UserPreferenceToGroupInfo = fun(GroupPreference) ->
+          case GroupPreference of
+            [{name, cluster_fuse_id}, {root, Root}] ->
+              #fuse_group_info{name = ?CLUSTER_FUSE_ID, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}};
+            [{name, Name}, {root, Root}] ->
+              #fuse_group_info{name = Name, storage_helper = #storage_helper_info{name = "DirectIO", init_args = [Root]}}
+          end
+        end,
 
-				%create storage
-				{Status3, Value} = apply(fslogic_storage, insert_storage, ["ClusterProxy", [], FuseGroups]),
-				case Status3 of
-					ok ->
-						ok;
-					error ->
-						lager:error("Error during inserting storage to db"),
-						throw(Value)
-				end;
+        InsertStorageAnswers = lists:map(fun(StoragePreferences) ->
+          FuseGroups = try
+            lists:map(UserPreferenceToGroupInfo, StoragePreferences)
+                       catch
+                         _Type:Err ->
+                           ?error("Wrong format of storage config file"),
+                           Err
+                       end,
 
-			_NotEmptyList -> %db not empty
-				ok
-		end
-	catch
-		Type:Error ->
-			lager:error("Error during storage init: ~p:~p",[Type,Error]),
-			{error,Error}
-	end.
+          %create storage
+          {Status3, Value} = apply(fslogic_storage, insert_storage, ["ClusterProxy", [], FuseGroups]),
+          case Status3 of
+            ok ->
+              ok;
+            error ->
+              ?error("Error during inserting storage to db"),
+              Value
+          end
+        end, FileConsultValue),
+        case lists:all(fun(InsertStorageAnswer) -> InsertStorageAnswer =:= ok end, InsertStorageAnswers) of
+          true -> ok;
+          _ -> {error, InsertStorageAnswers}
+        end;
+
+      _NotEmptyList -> %db not empty
+        ok
+    end
+  catch
+    Type:Error ->
+      ?error("Error during storage init: ~p:~p", [Type, Error]),
+      {error, Error}
+  end.
+
+
+%% set_db/0
+%% ====================================================================
+%% @doc Gets list of db nodes from env and inserts them to dao_hosts
+%% @end
+-spec set_db() -> ok | {error, Error :: term()}.
+%% ====================================================================
+set_db() ->
+    case application:get_env(veil_cluster_node, db_nodes) of
+        {ok, Nodes} when is_list(Nodes) ->
+            [dao_hosts:insert(Node) || Node <- Nodes, is_atom(Node)],
+            catch dao_update:setup_views(get_db_structure());
+        _ ->
+            ?warning("There are no DB hosts given in application env variable.")
+    end.

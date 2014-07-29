@@ -24,7 +24,7 @@
 %% ====================================================================
 %% API
 %% ====================================================================
--export([init/1, handle/2, cleanup/0]).
+-export([init/1, handle/2, cleanup/0, fslogic_runner/4]).
 
 %% ====================================================================
 %% API functions
@@ -95,6 +95,7 @@ handle(ProtocolVersion, {delete_old_descriptors_test, Time}) ->
   handle_test(ProtocolVersion, {delete_old_descriptors_test, Time});
 
 handle(ProtocolVersion, {update_user_files_size_view, Pid}) ->
+  ?debug("Updating user file sizes for pid: ~p", [Pid]),
   fslogic_meta:update_user_files_size_view(ProtocolVersion),
   {ok, Interval} = application:get_env(veil_cluster_node, user_files_size_view_update_period),
   erlang:send_after(Interval * 1000, Pid, {timer, {asynch, 1, {update_user_files_size_view, Pid}}}),
@@ -137,19 +138,22 @@ handle(ProtocolVersion, {internal_call, Record}) ->
     handle(ProtocolVersion, #fusemessage{input = Record, message_type = atom_to_list(vcn_utils:record_type(Record))});
 
 handle(_ProtocolVersion, Record) when is_record(Record, callback) ->
+  ?debug("Callback request handled: ~p", [Record]),
   Answer = case Record#callback.action of
     channelregistration ->
       try
         gen_server:call({global, ?CCM}, {addCallback, Record#callback.fuse, Record#callback.node, Record#callback.pid}, 1000)
       catch
-        _:_ ->
+        E1:E2 ->
+          ?error("Callback request ~p error: ~p", [Record, {E1, E2}]),
           error
       end;
     channelclose ->
       try
         gen_server:call({global, ?CCM}, {delete_callback, Record#callback.fuse, Record#callback.node, Record#callback.pid}, 1000)
       catch
-        _:_ ->
+        E3:E4 ->
+          ?error("Callback request ~p error: ~p", [Record, {E3, E4}]),
           error
       end
   end,
@@ -157,6 +161,7 @@ handle(_ProtocolVersion, Record) when is_record(Record, callback) ->
 
 %% Handle requests that have wrong structure.
 handle(_ProtocolVersion, _Msg) ->
+  ?warning("Wrong request: ~p", [_Msg]),
   wrong_request.
 
 
@@ -195,6 +200,15 @@ cleanup() ->
 -spec fslogic_runner(Method :: function(), RequestType :: atom(), RequestBody :: term()) -> Response :: term().
 %% ====================================================================
 fslogic_runner(Method, RequestType, RequestBody) when is_function(Method) ->
+    fslogic_runner(Method, RequestType, RequestBody, fslogic_errors).
+
+%% fslogic_runner/4
+%% ====================================================================
+%% @doc Runs Method(RequestBody) while catching errors and translating them with
+%%      given ErrorHandler module. ErrorHandler module has to export at least gen_error_message/2 (see fslogic_errors:gen_error_message/1).
+-spec fslogic_runner(Method :: function(), RequestType :: atom(), RequestBody :: term(), ErrorHandler :: atom()) -> Response :: term().
+%% ====================================================================
+fslogic_runner(Method, RequestType, RequestBody, ErrorHandler) when is_function(Method) ->
     try
         ?debug("Processing request (type ~p): ~p", [RequestType, RequestBody]),
         Method(RequestBody)
@@ -203,23 +217,23 @@ fslogic_runner(Method, RequestType, RequestBody) when is_function(Method) ->
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
             %% Manually thrown error, normal interrupt case.
             ?debug_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
-            fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
+            ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
         error:{badmatch, {error, Reason}} ->
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
             %% Bad Match assertion - something went wrong, but it could be expected.
             ?warning("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
             ?debug_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
-            fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
+            ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
         error:{case_clause, {error, Reason}} ->
             {ErrorCode, ErrorDetails} = fslogic_errors:gen_error_code(Reason),
             %% Bad Match assertion - something went seriously wrong and we should know about it.
             ?error_stacktrace("Cannot process request ~p due to error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
-            fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
+            ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode));
         error:UnkError ->
             {ErrorCode, ErrorDetails} = {?VEREMOTEIO, UnkError},
             %% Bad Match assertion - something went horribly wrong. This should not happen.
             ?error_stacktrace("Cannot process request ~p due to unknown error: ~p (code: ~p)", [RequestBody, ErrorDetails, ErrorCode]),
-            fslogic_errors:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode))
+            ErrorHandler:gen_error_message(RequestType, fslogic_errors:normalize_error_code(ErrorCode))
     end.
 
 %% handle_fuse_message/1
@@ -249,9 +263,9 @@ handle_fuse_message(Req = #getfileattr{file_logic_name = FName}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
     fslogic_req_generic:get_file_attr(FullFileName);
 
-handle_fuse_message(Req = #getfilelocation{file_logic_name = FName}) ->
+handle_fuse_message(Req = #getfilelocation{file_logic_name = FName, open_mode = OpenMode}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
-    fslogic_req_regular:get_file_location(FullFileName);
+    fslogic_req_regular:get_file_location(FullFileName,OpenMode);
 
 handle_fuse_message(Req = #getnewfilelocation{file_logic_name = FName, mode = Mode}) ->
     {ok, FullFileName} = fslogic_path:get_full_file_name(FName, vcn_utils:record_type(Req)),
@@ -322,5 +336,5 @@ handle_custom_request({getfileattr, UUID}) ->
 
 handle_custom_request({getfilelocation, UUID}) ->
     {ok, FileDoc} = dao_lib:apply(dao_vfs, get_file, [{uuid, UUID}], fslogic_context:get_protocol_version()),
-    fslogic_req_regular:get_file_location(FileDoc).
+    fslogic_req_regular:get_file_location(FileDoc,?UNSPECIFIED_MODE).
 

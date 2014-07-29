@@ -11,11 +11,13 @@
 %% ===================================================================
 
 -module(page_404).
--compile(export_all).
 -include("veil_modules/control_panel/common.hrl").
 
+% n2o API
+-export([main/0, event/1]).
+
 %% Template points to the template file, which will be filled with content
-main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}]}.
+main() -> #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, <<"">>}]}.
 
 %% Page title
 title() -> <<"Error 404">>.
@@ -26,9 +28,11 @@ body() ->
         #panel{class = <<"alert alert-danger login-page">>, body = [
             #h3{body = <<"Error 404">>},
             #p{class = <<"login-info">>, body = <<"Requested page could not be found on the server.">>},
-            #button{postback = to_login, class = <<"btn btn-warning btn-block">>, body = <<"Login page">>}
-        ]}
-    ] ++ gui_utils:logotype_footer(120)}.
+            #button{postback = to_login, class = <<"btn btn-warning btn-block">>, body = <<"Main page">>}
+        ]},
+        gui_utils:cookie_policy_popup_body(?privacy_policy_url)
+    ] ++ vcn_gui_utils:logotype_footer(120)}.
 
 event(init) -> ok;
-event(to_login) -> gui_utils:redirect_to_login(false).
+event(to_login) -> gui_jq:redirect_to_login(false);
+event(terminate) -> ok.

@@ -38,7 +38,7 @@ update_times(FullFileName, ATime, MTime, CTime) ->
     ?debug("update_times(FullFileName: ~p, ATime: ~p, MTime: ~p, CTime: ~p)", [FullFileName, ATime, MTime, CTime]),
     case FullFileName of
         [?PATH_SEPARATOR] ->
-            lager:warning("Trying to update times for root directory. FuseID: ~p. Aborting.", [fslogic_context:get_fuse_id()]),
+            ?warning("Trying to update times for root directory. FuseID: ~p. Aborting.", [fslogic_context:get_fuse_id()]),
             throw(invalid_updatetimes_request);
         _ -> ok
     end,
@@ -75,19 +75,19 @@ change_file_owner(FullFileName, NewUID, NewUName) ->
             {ok, #veil_document{record = #user{}, uuid = UID}} ->
                 File#file{uid = UID};
             {error, user_not_found} ->
-                lager:warning("chown: cannot find user with name ~p. lTrying UID (~p) lookup...", [NewUName, NewUID]),
+                ?warning("chown: cannot find user with name ~p. lTrying UID (~p) lookup...", [NewUName, NewUID]),
                 case dao_lib:apply(dao_users, get_user, [{uuid, integer_to_list(NewUID)}], fslogic_context:get_protocol_version()) of
                     {ok, #veil_document{record = #user{}, uuid = UID1}} ->
                         File#file{uid = UID1};
                     {error, {not_found, missing}} ->
-                        lager:warning("chown: cannot find user with uid ~p", [NewUID]),
+                        ?warning("chown: cannot find user with uid ~p", [NewUID]),
                         throw(?VEINVAL);
                     {error, Reason1} ->
-                        lager:error("chown: cannot find user with uid ~p due to error: ~p", [NewUID, Reason1]),
+                        ?error("chown: cannot find user with uid ~p due to error: ~p", [NewUID, Reason1]),
                         throw(?VEREMOTEIO)
                 end;
             {error, Reason1} ->
-                lager:error("chown: cannot find user with uid ~p due to error: ~p", [NewUID, Reason1]),
+                ?error("chown: cannot find user with uid ~p due to error: ~p", [NewUID, Reason1]),
                 throw(?VEREMOTEIO)
         end,
     NewFile1 = fslogic_meta:update_meta_attr(NewFile, ctime, vcn_utils:time()),
@@ -120,14 +120,22 @@ change_file_group(_FullFileName, _GID, _GName) ->
 change_file_perms(FullFileName, Perms) ->
     ?debug("change_file_perms(FullFileName: ~p, Perms: ~p)", [FullFileName, Perms]),
     {ok, UserDoc} = fslogic_objects:get_user(),
-    {ok, #veil_document{record = #file{} = File} = FileDoc} = fslogic_objects:get_file(FullFileName),
+    {ok, #veil_document{record = #file{perms = ActualPerms, location = #file_location{storage_id = StorageId, file_id = FileId}} = File} = FileDoc} =
+        fslogic_objects:get_file(FullFileName),
 
-    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc),
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, owner),
 
     NewFile = fslogic_meta:update_meta_attr(File, ctime, vcn_utils:time()),
     NewFile1 = FileDoc#veil_document{record = NewFile#file{perms = Perms}},
-
     {ok, _} = fslogic_objects:save_file(NewFile1),
+
+    case (ActualPerms == Perms orelse StorageId == []) of
+        true -> ok;
+        false ->
+            {ok, #veil_document{record = Storage}} = fslogic_objects:get_storage({uuid, StorageId}),
+            {SH, File_id} = fslogic_utils:get_sh_and_id(?CLUSTER_FUSE_ID, Storage, FileId),
+            storage_files_manager:chmod(SH, File_id, Perms)
+    end,
 
     #atom{value = ?VOK}.
 
@@ -161,7 +169,7 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
             {ok, #veil_document{record = FMeta}} ->
                 {FMeta#file_meta.ctime, FMeta#file_meta.mtime, FMeta#file_meta.atime, FMeta#file_meta.size};
             {error, Error} ->
-                lager:warning("Cannot fetch file_meta for file (uuid ~p) due to error: ~p", [FileUUID, Error]),
+                ?warning("Cannot fetch file_meta for file (uuid ~p) due to error: ~p", [FileUUID, Error]),
                 {0, 0, 0, 0}
         end,
 
@@ -170,7 +178,7 @@ get_file_attr(FileDoc = #veil_document{record = #file{}}) ->
                 "DIR" -> case dao_lib:apply(dao_vfs, count_subdirs, [{uuid, FileUUID}], fslogic_context:get_protocol_version()) of
                              {ok, Sum} -> Sum + 2;
                              _Other ->
-                                 lager:error([{mod, ?MODULE}], "Error: can not get number of links for file: ~s", [File]),
+                                 ?error("Error: can not get number of links for file: ~s", [File]),
                                  -1
                          end;
                 "REG" -> 1;
@@ -201,7 +209,7 @@ delete_file(FullFileName) ->
     {ok, FileDoc} = fslogic_objects:get_file(FullFileName),
     {ok, UserDoc} = fslogic_objects:get_user(),
 
-    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc),
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, FileDoc, delete),
 
     FileDesc = FileDoc#veil_document.record,
     {ok, ChildrenTmpAns} =
@@ -218,7 +226,7 @@ delete_file(FullFileName) ->
             fslogic_meta:update_parent_ctime(fslogic_path:get_user_file_name(FullFileName), vcn_utils:time()),
             #atom{value = ?VOK};
         _Other ->
-            lager:error([{mod, ?MODULE}], "Error: can not remove directory (it's not empty): ~s", [FullFileName]),
+            ?error("Error: can not remove directory (it's not empty): ~s", [FullFileName]),
             #atom{value = ?VENOTEMPTY}
     end.
 
@@ -235,12 +243,12 @@ rename_file(FullFileName, FullNewFileName) ->
     {ok, UserDoc} = fslogic_objects:get_user(),
     {ok, #veil_document{record = #file{} = OldFile} = OldDoc} = fslogic_objects:get_file(FullFileName),
 
-    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, OldDoc),
+    ok = fslogic_perms:check_file_perms(FullFileName, UserDoc, OldDoc, delete),
 
     %% Check if destination file exists
     case fslogic_objects:get_file(FullNewFileName) of
         {ok, #veil_document{}} ->
-            lager:warning("Destination file already exists: ~p", [FullFileName]),
+            ?warning("Destination file already exists: ~p", [FullFileName]),
             throw(?VEEXIST);
         {error, file_not_found} ->
             ok
@@ -250,7 +258,7 @@ rename_file(FullFileName, FullNewFileName) ->
 
     case (OldFile#file.type =:= ?DIR_TYPE) and (string:str(NewDir, FullFileName) == 1) of
         true ->
-            lager:warning("Moving dir ~p to its child: ~p", [FullFileName, NewDir]),
+            ?warning("Moving dir ~p to its child: ~p", [FullFileName, NewDir]),
             throw(?VEREMOTEIO);
         false -> ok
     end,
@@ -261,7 +269,6 @@ rename_file(FullFileName, FullNewFileName) ->
     {ok, OldParentDoc} = fslogic_objects:get_file(OldDir),
 
     ok = fslogic_perms:check_file_perms(NewDir, UserDoc, NewParentDoc, write),
-    ok = fslogic_perms:check_file_perms(OldDir, UserDoc, OldParentDoc, write),
 
     MoveOnStorage =
         fun(#file{type = ?REG_TYPE}) -> %% Returns new file record with updated file_id field or throws excpetion
@@ -307,10 +314,10 @@ rename_file(FullFileName, FullNewFileName) ->
         case {string:tokens(fslogic_path:get_user_file_name(FullFileName), "/"), string:tokens(fslogic_path:get_user_file_name(FullNewFileName), "/")} of
             {_, [?GROUPS_BASE_DIR_NAME, _InvalidTarget]} -> %% Moving into ?GROUPS_BASE_DIR_NAME dir is not allowed
                 ?info("Attempt to move file to base group directory. Query: ~p", [stub]),
-                throw(?VEPERM);
+                throw(?VEACCES);
             {[?GROUPS_BASE_DIR_NAME, _InvalidSource], _} -> %% Moving from ?GROUPS_BASE_DIR_NAME dir is not allowed
                 ?info("Attemt to move base group directory. Query: ~p", [stub]),
-                throw(?VEPERM);
+                throw(?VEACCES);
 
             {[?GROUPS_BASE_DIR_NAME, X | _FromF0], [?GROUPS_BASE_DIR_NAME, X | _ToF0]} -> %% Local (group dir) move, no storage actions are required
                 OldFile;

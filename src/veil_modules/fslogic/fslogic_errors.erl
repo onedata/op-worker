@@ -17,7 +17,7 @@
 -include("veil_modules/fslogic/fslogic.hrl").
 
 %% API
--export([gen_error_message/2, normalize_error_code/1, gen_error_code/1]).
+-export([gen_error_message/2, normalize_error_code/1, gen_error_code/1, posix_to_veilerror/1]).
 
 %% ====================================================================
 %% API functions
@@ -35,13 +35,13 @@ gen_error_code({error, Reason}) ->
 gen_error_code(file_not_found) ->
     {?VENOENT, no_details};
 gen_error_code({permission_denied, Details}) ->
-    {?VEPERM, {permission_denied, Details}};
+    {?VEACCES, {permission_denied, Details}};
 gen_error_code(user_not_found) ->
     {?VEPERM, user_not_found};
 gen_error_code(user_doc_not_found) ->
     {?VEPERM, user_doc_not_found};
 gen_error_code(invalid_group_access) ->
-    {?VEPERM, invalid_group_access};
+    {?VEACCES, invalid_group_access};
 gen_error_code(file_exists) ->
     {?VEEXIST, file_already_exists};
 
@@ -121,6 +121,34 @@ normalize_error_code(ErrorCode) when is_atom(ErrorCode) ->
     atom_to_list(ErrorCode);
 normalize_error_code(ErrorCode) when is_list(ErrorCode) ->
     ErrorCode.
+
+
+%% posix_to_veilerror/1
+%% ====================================================================
+%% @doc Translates POSIX error code to internal fslogic_error().
+-spec posix_to_veilerror(POSIXErrorCode :: integer()) -> ErrorCode :: fslogic_error().
+%% ====================================================================
+posix_to_veilerror(POSIX) when POSIX < 0 -> %% All error codes are currently negative, so translate accordingly
+    posix_to_veilerror(-POSIX);
+posix_to_veilerror(1) ->
+    ?VEPERM;
+posix_to_veilerror(2) ->
+    ?VENOENT;
+posix_to_veilerror(17) ->
+    ?VEEXIST;
+posix_to_veilerror(13) ->
+    ?VEACCES;
+posix_to_veilerror(122) ->
+    ?VEDQUOT;
+posix_to_veilerror(22) ->
+    ?VEINVAL;
+posix_to_veilerror(39) ->
+    ?VENOTEMPTY;
+posix_to_veilerror(95) ->
+    ?VENOTSUP;
+posix_to_veilerror(_Unkwn) ->
+    ?VEREMOTEIO.
+
 
 %% ====================================================================
 %% Internal functions

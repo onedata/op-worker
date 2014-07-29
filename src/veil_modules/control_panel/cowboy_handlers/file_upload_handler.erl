@@ -85,9 +85,8 @@ handle_upload_request(Req) ->
             SessHandler = proplists:get_value(session, Context1#context.handlers),
             {ok, St, Context2} = SessHandler:init([], Context1),
             wf_context:context(Context2),
-            UserID = wf:session(user_doc),
-            true = (UserID /= undefined),
-            fslogic_context:set_user_dn(lists:nth(1, user_logic:get_dn_list(UserID))),
+            {ok, UserDoc} = user_logic:get_user({login, gui_ctx:get_user_id()}),
+            fslogic_context:set_user_dn(lists:nth(1, user_logic:get_dn_list(UserDoc))),
             {St, Context2, SessHandler}
         catch T1:M1 ->
             ?warning("Cannot establish session context for user content request - ~p:~p", [T1, M1]),
@@ -108,7 +107,7 @@ handle_upload_request(Req) ->
                     {struct, [
                         {files, [
                             {struct, [
-                                {name, list_to_binary(OriginalFileName)}
+                                {name, OriginalFileName}
                             ]}
                         ]}
                     ]}),
@@ -135,12 +134,14 @@ handle_upload_request(Req) ->
 %% parsing and writing its data to a file at specified path. Returns
 %% values conforming to rest_module_behaviour requirements.
 %% @end
+-spec handle_rest_upload(Req :: req(), Path :: string(), Overwrite :: boolean()) -> {ok, req()}.
+%% ====================================================================
 handle_rest_upload(Req, Path, Overwrite) ->
     case cowboy_req:parse_header(<<"content-length">>, Req) of
         {ok, Length, NewReq} when is_integer(Length) ->
-            case try_to_create_file(binary_to_list(Path), Overwrite) of
+            case try_to_create_file(Path, Overwrite) of
                 ok ->
-                    case parse_rest_upload(NewReq, binary_to_list(Path)) of
+                    case parse_rest_upload(NewReq, Path) of
                         {true, NewReq2} ->
                             {{body, rest_utils:success_reply(?success_file_uploaded)}, NewReq2};
                         {false, NewReq2} ->
@@ -148,6 +149,7 @@ handle_rest_upload(Req, Path, Overwrite) ->
                             {{error, rest_utils:error_reply(ErrorRec)}, NewReq2}
                     end;
                 {error, _Error} ->
+                    ?error("Cannot upload file due to: ~p", [_Error]),
                     ErrorRec = ?report_error(?error_upload_cannot_create),
                     {{error, rest_utils:error_reply(ErrorRec)}, NewReq}
             end;
@@ -283,7 +285,7 @@ get_field_name(Headers) ->
     try
         ContentDispValue = proplists:get_value(<<"content-disposition">>, Headers),
         {"form-data", [], Params} = parse_header(ContentDispValue),
-        proplists:get_value("name", Params, "")
+        gui_str:to_binary(proplists:get_value("name", Params, ""))
     catch _:_ ->
         erlang:error({cannot_parse_field_name, Headers})
     end.
@@ -293,7 +295,7 @@ get_field_name(Headers) ->
 accumulate_body(Req, Acc) ->
     case cowboy_req:multipart_data(Req) of
         {end_of_part, NewReq} ->
-            {binary_to_list(Acc), NewReq};
+            {Acc, NewReq};
         {body, Binary, NewReq} ->
             accumulate_body(NewReq, <<Acc/binary, Binary/binary>>)
     end.
@@ -301,12 +303,12 @@ accumulate_body(Req, Acc) ->
 
 % Parses a portion of multipart data that holds file body
 parse_file(Req, Headers, Params) ->
-    TargetDir = case proplists:get_value("targetDir", Params) of
-                    undefined -> throw({"Error in parse_file", no_upload_target_specified});
+    TargetDir = case proplists:get_value(<<"targetDir">>, Params) of
+                    undefined -> throw("Error in parse_file - no upload target specified");
                     Path -> Path
                 end,
     OriginalFileName = get_file_name(Headers),
-    RequestedFullPath = filename:absname(OriginalFileName, TargetDir),
+    RequestedFullPath = gui_str:binary_to_unicode_list(filename:absname(OriginalFileName, TargetDir)),
     FullPath = ensure_unique_filename(RequestedFullPath, 0),
     NewReq = try
         stream_file_to_fslogic(Req, FullPath, get_upload_buffer_size())
@@ -391,7 +393,7 @@ get_file_name(Headers) ->
         ContentDispValue = proplists:get_value(<<"content-disposition">>, Headers),
         {"form-data", [], Params} = parse_header(ContentDispValue),
         Filename = proplists:get_value("filename", Params, ""),
-        Filename
+        gui_str:to_binary(Filename)
     catch _:_ ->
         erlang:error({cannot_parse_file_name, Headers})
     end.

@@ -14,9 +14,11 @@
 
 -include("veil_modules/fslogic/fslogic.hrl").
 -include("veil_modules/dao/dao.hrl").
+-include("logging.hrl").
 
 %% API
 -export([get_fuse_id/0, set_fuse_id/1, get_user_dn/0, set_user_dn/1, clear_user_dn/0, set_protocol_version/1, get_protocol_version/0, get_user_id/0]).
+-export([set_fs_user_ctx/1, get_fs_user_ctx/0, set_fs_group_ctx/1, get_fs_group_ctx/0]).
 
 %% ====================================================================
 %% API functions
@@ -101,8 +103,60 @@ get_user_id() ->
         DN ->
             case fslogic_objects:get_user({dn, DN}) of
                 {ok, #veil_document{uuid = UID}} -> {ok, UID};
-                Error -> Error
+                Error ->
+                  ?error("Cannot get user id, error: ~p", [Error]),
+                  Error
             end
+    end.
+
+
+%% set_fs_user_ctx/1
+%% ====================================================================
+%% @doc Sets user name that shall be used for file system permissions checks.
+%% @end
+-spec set_fs_user_ctx(UName :: string()) -> OldValue :: term().
+%% ====================================================================
+set_fs_user_ctx(UName) ->
+    put(fsctx_uname, UName).
+
+
+%% get_fs_user_ctx/0
+%% ====================================================================
+%% @doc Gets user name that is used for the file system permissions checks.
+%% @end
+-spec get_fs_user_ctx() -> UserName :: string().
+%% ====================================================================
+get_fs_user_ctx() ->
+    case get(fsctx_uname) of
+        undefined ->
+            "root";
+        UName -> UName
+    end.
+
+
+%% set_fs_group_ctx/1
+%% ====================================================================
+%% @doc Sets user's group names that shall be used for file system permissions checks.
+%% @end
+-spec set_fs_group_ctx(GName :: [string()]) -> OldValue :: term().
+%% ====================================================================
+set_fs_group_ctx(GNames) ->
+    put(fsctx_gname, GNames).
+
+
+%% get_fs_group_ctx/0
+%% ====================================================================
+%% @doc Gets user's group list that is used for file system permissions checks.
+%%      If the is no context set, "root" group is returned.
+%% @end
+-spec get_fs_group_ctx() -> Groups when
+    Groups :: [string()].
+%% ====================================================================
+get_fs_group_ctx() ->
+    case get(fsctx_gname) of
+        undefined ->
+            ["root"];
+        GName -> GName
     end.
 
 %% ====================================================================

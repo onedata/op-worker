@@ -272,16 +272,22 @@ start_deps() ->
   {ok, [Data]} = file:consult("sys.config"),
   Config = proplists:get_value(lager, Data),
   lists:foreach(
-    fun(Key) -> 
-      application:set_env(lager, Key, proplists:get_value(Key, Config)) 
+    fun(Key) ->
+        case Key of
+            error_logger_hwm ->
+                % Disable error_logger high water mark during tests
+                application:set_env(lager, error_logger_hwm, undefined);
+            _ ->
+                application:set_env(lager, Key, proplists:get_value(Key, Config))
+        end
     end, proplists:get_keys(Config)),
   lager:start(),
 
 
   ssl:start(),
   application:start(ranch),
+  application:start(cowlib),
   application:start(cowboy),
-  application:start(mimetypes),
   application:start(ibrowse),
   application:start(rrderlang),
   application:load(?APP_Name).
@@ -298,9 +304,9 @@ stop_deps() ->
   application:stop(crypto),
   application:stop(public_key),
   application:stop(cowboy),
+  application:stop(cowlib),
   application:stop(lager),
   application:stop(sasl),
-  application:stop(mimetypes),
   application:stop(ibrowse),
   application:stop(rrderlang),
   application:unload(?APP_Name).

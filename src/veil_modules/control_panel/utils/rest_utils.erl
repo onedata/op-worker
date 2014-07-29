@@ -32,7 +32,7 @@
 -spec map(record(), [atom()]) -> [tuple()].
 %% ====================================================================
 map(RecordToMap, Fields) ->
-    Y = [try N = lists:nth(1, B), if is_number(N) -> wf:to_binary(B); true -> B end catch _:_ -> B end
+    Y = [try N = lists:nth(1, B), if is_number(N) -> gui_str:to_binary(B); true -> B end catch _:_ -> B end
         || B <- tl(tuple_to_list(RecordToMap))],
     lists:zip(Fields, Y).
 
@@ -53,11 +53,11 @@ unmap([], RecordTuple, _) ->
     RecordTuple;
 
 unmap([{KeyBin, Val} | Proplist], RecordTuple, Fields) ->
-    Key = wf:to_atom(KeyBin),
+    Key = binary_to_atom(KeyBin, latin1),
     Value = case Val of
                 I when is_integer(I) -> Val;
                 A when is_atom(A) -> Val;
-                _ -> gui_utils:to_list(Val)
+                _ -> gui_str:to_list(Val)
             end,
     Index = string:str(Fields, [Key]) + 1,
     true = (Index > 1),
@@ -67,7 +67,7 @@ unmap([{KeyBin, Val} | Proplist], RecordTuple, Fields) ->
 %% encode_to_json/1
 %% ====================================================================
 %% @doc Convinience function that convert an erlang term to JSON, producing
-%% binary result.
+%% binary result. The output is in UTF8 encoding.
 %%
 %% Possible terms, can be nested:
 %% {struct, Props} - Props is a structure as a proplist, e.g.: [{id, 13}, {message, "mess"}]
@@ -77,7 +77,8 @@ unmap([{KeyBin, Val} | Proplist], RecordTuple, Fields) ->
 -spec encode_to_json(term()) -> binary().
 %% ====================================================================
 encode_to_json(Term) ->
-    iolist_to_binary(mochijson2:encode(Term)).
+    Encoder = mochijson2:encoder([{utf8, true}]),
+    iolist_to_binary(Encoder(Term)).
 
 
 %% decode_from_json/1

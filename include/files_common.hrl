@@ -20,24 +20,28 @@
 -define(LNK_TYPE, 2).
 
 %% File permissions defines
+
 %% User
 -define(RD_USR_PERM, 8#400).
 -define(WR_USR_PERM, 8#200).
 -define(EX_USR_PERM, 8#100).
 -define(RW_USR_PERM, ?RD_USR_PERM bor ?WR_USR_PERM).
 -define(RWE_USR_PERM, ?RD_USR_PERM bor ?WR_USR_PERM bor ?EX_USR_PERM).
+
 %% Group
 -define(RD_GRP_PERM, 8#40).
 -define(WR_GRP_PERM, 8#20).
 -define(EX_GRP_PERM, 8#10).
 -define(RW_GRP_PERM, ?RD_GRP_PERM bor ?WR_GRP_PERM).
 -define(RWE_GRP_PERM, ?RD_GRP_PERM bor ?WR_GRP_PERM bor ?EX_GRP_PERM).
+
 %% Others
 -define(RD_OTH_PERM, 8#4).
 -define(WR_OTH_PERM, 8#2).
 -define(EX_OTH_PERM, 8#1).
 -define(RW_OTH_PERM, ?RD_OTH_PERM bor ?WR_OTH_PERM).
 -define(RWE_OTH_PERM, ?RD_OTH_PERM bor ?WR_OTH_PERM bor ?EX_OTH_PERM).
+
 %% All
 -define(RD_ALL_PERM, ?RD_USR_PERM bor ?RD_GRP_PERM bor ?RD_OTH_PERM).
 -define(WR_ALL_PERM, ?WR_USR_PERM bor ?WR_GRP_PERM bor ?WR_OTH_PERM).

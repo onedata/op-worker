@@ -31,44 +31,44 @@ veilhelpers_test_() ->
         ]}.
 
 getattr() -> 
-    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:getattr("test", ["arg"], "path")).
+    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:getattr("root", "root", "test", ["arg"], "path")).
 
 access() -> 
-    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:access("test", ["arg"], "path", 0)).
+    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:access("root", "root", "test", ["arg"], "path", 0)).
 
 mknod() -> 
-    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:mknod("test", ["arg"], "path", 0, 0)).
+    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:mknod("root", "root", "test", ["arg"], "path", 0, 0)).
 
 unlink() -> 
-    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:unlink("test", ["arg"], "path")).
+    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:unlink("root", "root", "test", ["arg"], "path")).
 
 rename() -> 
-    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:rename("test", ["arg"], "path", "path2")).
+    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:rename("root", "root", "test", ["arg"], "path", "path2")).
 
 chmod() -> 
-    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:chmod("test", ["arg"], "path", 0)).
+    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:chmod("root", "root", "test", ["arg"], "path", 0)).
 
 chown() -> 
-    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:chown("test", ["arg"], "path", 0, 0)).
+    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:chown("root", "root", "test", ["arg"], "path", 0, 0)).
 
 truncate() -> 
-    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:truncate("test", ["arg"], "path", 0)).
+    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:truncate("root", "root", "test", ["arg"], "path", 0)).
 
 open() -> 
-    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:open("test", ["arg"], "path", none)).
+    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:open("root", "root", "test", ["arg"], "path", none)).
 
 read() -> 
-    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:read("test", ["arg"], "path", 0, 0, none)).
+    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:read("root", "root", "test", ["arg"], "path", 0, 0, none)).
 
 write() -> 
-    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:write("test", ["arg"], "path", <<"buff">>, 0, none)).
+    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:write("root", "root", "test", ["arg"], "path", <<"buff">>, 0, none)).
 
 statfs() -> 
-    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:statfs("test", ["arg"], "path")).
+    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:statfs("root", "root", "test", ["arg"], "path")).
 
 release() -> 
-    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:release("test", ["arg"], "path", none)).
+    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:release("root", "root", "test", ["arg"], "path", none)).
 
 fsync() -> 
-    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:fsync("test", ["arg"], "path", 0, none)).
+    ?assertNot({error, 'NIF_not_loaded'} == veilhelpers_nif:fsync("root", "root", "test", ["arg"], "path", 0, none)).
 
