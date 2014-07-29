@@ -32,9 +32,6 @@
 -export([create_dirs_at_storage/3, create_dirs_at_storage/2]).
 -export([get_quota/1, update_quota/2, get_files_size/2, quota_exceeded/2]).
 
--define(UserRootPerms, 8#600).
--define(SpaceDirPerm, 8#1770).
-
 
 %% ====================================================================
 %% API functions

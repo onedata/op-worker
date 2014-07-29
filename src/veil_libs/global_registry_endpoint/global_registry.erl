@@ -14,6 +14,7 @@
 %% API
 -export([provider_request/2, provider_request/3, user_request/3, user_request/4]).
 -export([get_provider_cert_path/0, get_provider_key_path/0]).
+-export([try_user_request/3, try_user_request/4]).
 
 provider_request(Method, URN) ->
     request(Method, URN, <<"">>, []).
@@ -21,13 +22,25 @@ provider_request(Method, URN) ->
 provider_request(Method, URN, Body) ->
     request(Method, URN, Body, []).
 
+user_request({_GlobalId, Token}, Method, URN) ->
+    user_request(Token, Method, URN);
 user_request(Token, Method, URN) ->
     user_request(Token, Method, URN, <<"">>).
 
+user_request({_GlobalId, Token}, Method, URN, Body) ->
+    user_request(Token, Method, URN, Body);
 user_request(Token, Method, URN, Body) ->
     TokenBin = vcn_utils:ensure_binary(Token),
     ?info("user_request with access token ~p", [Token]),
     request(Method, URN, Body, [{"authorization", binary_to_list(<<"Bearer ", TokenBin/binary>>)}]).
+
+try_user_request(Token, Method, URN) ->
+    try_user_request(Token, Method, URN, <<"">>).
+
+try_user_request(undefined, Method, URN, Body) ->
+    provider_request(Method, URN, Body);
+try_user_request(Token, Method, URN, Body) ->
+    user_request(Token, Method, URN, Body).
 
 
 request(Method, URN, Body, Headers) when is_binary(Body) ->

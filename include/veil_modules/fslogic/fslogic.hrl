@@ -97,4 +97,7 @@
 %% Maximum time (in ms) after which document conflict resolution shall occur
 -define(MAX_SLEEP_TIME_CONFLICT_RESOLUTION, 100).
 
+-define(UserRootPerms, 8#600).
+-define(SpaceDirPerm, 8#1770).
+
 -endif.
