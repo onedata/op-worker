@@ -17,6 +17,9 @@
 -export([send_req/3, send_req/4, send_req/5]).
 -export([set_default_space/2, join_space/2, leave_space/2, create_space/2, delete_space/2]).
 -export([get_space_info/2, get_user_spaces/1]).
+-export([get_space_providers/2, get_provider_details/3]).
+-export([get_space_users/2, get_user_details/3]).
+-export([get_space_groups/2, get_group_details/3]).
 
 %% send_req/2
 %% ====================================================================
@@ -137,7 +140,7 @@ get_space_info(SpaceId, {UserGID, AccessToken}) ->
         List = mochijson2:decode(ResBody, [{format, proplist}]),
         Name = proplists:get_value(<<"name">>, List),
         true = (Name =/= undefiend),
-        {ok, #space_info{name = Name}}
+        {ok, #space_info{space_id = SpaceId, name = Name}}
     catch
         _:Reason ->
             ?error("Cannot get details of Space with ID ~p: ~p", [SpaceId, Reason]),
@@ -151,5 +154,95 @@ get_user_spaces({UserGID, AccessToken}) ->
             #veil_document{record = #user{spaces = Spaces}} = user_logic:synchronize_spaces_info(UserDoc, AccessToken),
             {ok, Spaces};
         {error, Reason} ->
+            {error, Reason}
+    end.
+
+
+get_space_providers(SpaceId, {UserGID, AccessToken}) ->
+    try
+        Uri = "/spaces/" ++ binary_to_list(SpaceId) ++ "/providers",
+        {ok, "200", _ResHeaders, ResBody} = send_req(Uri, get, {UserGID, AccessToken}),
+        List = mochijson2:decode(ResBody, [{format, proplist}]),
+        Providers = proplists:get_value(<<"providers">>, List),
+        true = (Providers =/= undefiend),
+        {ok, Providers}
+    catch
+        _:Reason ->
+            ?error("Cannot get providers of Space with ID ~p: ~p", [SpaceId, Reason]),
+            {error, Reason}
+    end.
+
+
+get_provider_details(SpaceId, ProviderId, {UserGID, AccessToken}) ->
+    try
+        Uri = "/spaces/" ++ binary_to_list(SpaceId) ++ "/providers/" ++ binary_to_list(ProviderId),
+        {ok, "200", _ResHeaders, ResBody} = send_req(Uri, get, {UserGID, AccessToken}),
+        List = mochijson2:decode(ResBody, [{format, proplist}]),
+        Urls = proplists:get_value(<<"urls">>, List),
+        true = (Urls =/= undefiend),
+        RedirectionPoint = proplists:get_value(<<"redirectionPoint">>, List),
+        true = (RedirectionPoint =/= undefiend),
+        {ok, {ProviderId, Urls, RedirectionPoint}}
+    catch
+        _:Reason ->
+            ?error("Cannot get provider's details for provider with ID ~p: ~p", [ProviderId, Reason]),
+            {error, Reason}
+    end.
+
+
+get_space_users(SpaceId, {UserGID, AccessToken}) ->
+    try
+        Uri = "/spaces/" ++ binary_to_list(SpaceId) ++ "/users",
+        {ok, "200", _ResHeaders, ResBody} = send_req(Uri, get, {UserGID, AccessToken}),
+        List = mochijson2:decode(ResBody, [{format, proplist}]),
+        Users = proplists:get_value(<<"users">>, List),
+        true = (Users =/= undefiend),
+        {ok, Users}
+    catch
+        _:Reason ->
+            ?error("Cannot get users of Space with ID ~p: ~p", [SpaceId, Reason]),
+            {error, Reason}
+    end.
+
+
+get_user_details(SpaceId, UserId, {UserGID, AccessToken}) ->
+    try
+        Uri = "/spaces/" ++ binary_to_list(SpaceId) ++ "/users/" ++ binary_to_list(UserId),
+        {ok, "200", _ResHeaders, ResBody} = send_req(Uri, get, {UserGID, AccessToken}),
+        Name = proplists:get_value(<<"name">>, mochijson2:decode(ResBody, [{format, proplist}])),
+        true = (Name =/= undefiend),
+        {ok, {UserId, Name}}
+    catch
+        _:Reason ->
+            ?error("Cannot get provider's details for user with ID ~p: ~p", [UserId, Reason]),
+            {error, Reason}
+    end.
+
+
+get_space_groups(SpaceId, {UserGID, AccessToken}) ->
+    try
+        Uri = "/spaces/" ++ binary_to_list(SpaceId) ++ "/groups",
+        {ok, "200", _ResHeaders, ResBody} = send_req(Uri, get, {UserGID, AccessToken}),
+        List = mochijson2:decode(ResBody, [{format, proplist}]),
+        Groups = proplists:get_value(<<"groups">>, List),
+        true = (Groups =/= undefiend),
+        {ok, Groups}
+    catch
+        _:Reason ->
+            ?error("Cannot get users of Space with ID ~p: ~p", [SpaceId, Reason]),
+            {error, Reason}
+    end.
+
+
+get_group_details(SpaceId, GroupId, {UserGID, AccessToken}) ->
+    try
+        Uri = "/spaces/" ++ binary_to_list(SpaceId) ++ "/groups/" ++ binary_to_list(GroupId),
+        {ok, "200", _ResHeaders, ResBody} = send_req(Uri, get, {UserGID, AccessToken}),
+        Name = proplists:get_value(<<"name">>, mochijson2:decode(ResBody, [{format, proplist}])),
+        true = (Name =/= undefiend),
+        {ok, {GroupId, Name}}
+    catch
+        _:Reason ->
+            ?error("Cannot get provider's details for user with ID ~p: ~p", [GroupId, Reason]),
             {error, Reason}
     end.

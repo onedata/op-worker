@@ -1,13 +1,1020 @@
-%%%-------------------------------------------------------------------
-%%% @author krzysztof
-%%% @copyright (C) 2014, <COMPANY>
-%%% @doc
-%%%
-%%% @end
-%%% Created : 27. Jul 2014 6:50 PM
-%%%-------------------------------------------------------------------
--module(page_space).
--author("krzysztof").
+% ===================================================================
+%% @author Krzysztof Trzepla
+%% @copyright (C): 2014 ACK CYFRONET AGH
+%% This software is released under the MIT license
+%% cited in 'LICENSE.txt'.
+%% @end
+%% ===================================================================
+%% @doc: This file contains n2o website code.
+%% The page allows user to manage his Space.
+%% @end
+%% ===================================================================
 
-%% API
--export([]).
+-module(page_space).
+-include("veil_modules/control_panel/common.hrl").
+-include("veil_modules/dao/dao_spaces.hrl").
+-include_lib("ctool/include/logging.hrl").
+
+% n2o API and comet
+-export([main/0, event/1, comet_loop/1]).
+
+%% Comet process pid
+-define(COMET_PID, comet_pid).
+
+%% Comet process state
+-define(STATE, state).
+-record(?STATE, {spaceId}).
+
+%% Common page CCS styles
+-define(MESSAGE_STYLE, <<"position: fixed; width: 100%; top: 120px; z-index: 1; display: none;">>).
+-define(CONTENT_COLUMN_STYLE, <<"padding-right: 0">>).
+-define(NAVIGATION_COLUMN_STYLE, <<"border-left-width: 0; width: 20px; padding-left: 0;">>).
+-define(DESCRIPTION_STYLE, <<"border-width: 0; text-align: right; width: 10%; padding-left: 0; padding-right: 0;">>).
+-define(MAIN_STYLE, <<"border-width: 0;  text-align: left; padding-left: 1em; width: 90%;">>).
+-define(LABEL_STYLE, <<"margin: 0 auto;">>).
+-define(PARAGRAPH_STYLE, <<"margin: 0 auto;">>).
+-define(TABLE_STYLE, <<"border-width: 0; width: 100%; border-collapse: inherit;">>).
+
+%% ====================================================================
+%% API functions
+%% ====================================================================
+
+
+%% main/0
+%% ====================================================================
+%% @doc Template points to the template file, which will be filled with content.
+-spec main() -> #dtl{}.
+%% ====================================================================
+main() ->
+    case vcn_gui_utils:maybe_redirect(true, false, false, true) of
+        true ->
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, <<"">>}, {body, <<"">>}, {custom, <<"">>}]};
+        false ->
+            #dtl{file = "bare", app = veil_cluster_node, bindings = [{title, title()}, {body, body()}, {custom, custom()}]}
+    end.
+
+
+%% title/0
+%% ====================================================================
+%% @doc Page title.
+-spec title() -> binary().
+%% ====================================================================
+title() -> <<"Manage Space">>.
+
+
+%% custom/0
+%% ====================================================================
+%% @doc This will be placed instead of {{custom}} tag in template.
+-spec custom() -> binary().
+%% ====================================================================
+custom() ->
+    <<"<script src='/js/bootbox.min.js' type='text/javascript' charset='utf-8'></script>">>.
+
+
+%% body/0
+%% ====================================================================
+%% @doc This will be placed instead of {{body}} tag in template.
+-spec body() -> [#panel{}].
+%% ====================================================================
+body() ->
+    case gui_ctx:url_param(<<"id">>) of
+        undefined ->
+            page_error:redirect_with_error(?error_space_not_found),
+            [];
+        Id ->
+            SpaceId = gui_str:to_binary(Id),
+            case gr_adapter:get_space_info(SpaceId, gui_ctx:get_access_token()) of
+                {ok, SpaceInfo} -> space(SpaceInfo);
+                _ ->
+                    page_error:redirect_with_error(?error_space_permission_denied),
+                    []
+            end
+    end.
+
+
+%% space/1
+%% ====================================================================
+%% @doc Renders Space settings.
+-spec space(SpaceInfo :: #space_info{}) -> [#panel{}].
+%% ====================================================================
+space(#space_info{space_id = SpaceId, name = Name}) ->
+    [
+        #panel{
+            id = <<"main_spinner">>,
+            style = <<"position: absolute; top: 12px; left: 17px; z-index: 1234; width: 32px; display: none;">>,
+            body = #image{
+                image = <<"/images/spinner.gif">>
+            }
+        },
+        vcn_gui_utils:top_menu(spaces_tab),
+        #panel{
+            id = <<"ok_message">>,
+            style = ?MESSAGE_STYLE,
+            class = <<"dialog dialog-success">>
+        },
+        #panel{
+            id = <<"error_message">>,
+            style = ?MESSAGE_STYLE,
+            class = <<"dialog dialog-danger">>
+        },
+        #panel{
+            style = <<"margin-bottom: 50px;">>,
+            body = [
+                #table{
+                    style = <<"margin: 0 auto; width: 50%; margin-top: 160px; margin-bottom: 30px; border-spacing: 1em;
+                    border-width: 0; border-collapse: inherit;">>,
+                    body = lists:map(fun({Description, Main}) ->
+                        #tr{
+                            cells = [
+                                #td{
+                                    style = ?DESCRIPTION_STYLE,
+                                    body = #label{
+                                        style = ?LABEL_STYLE,
+                                        class = <<"label label-large label-inverse">>,
+                                        body = Description
+                                    }
+                                },
+                                #td{
+                                    style = ?MAIN_STYLE,
+                                    body = #p{
+                                        style = ?PARAGRAPH_STYLE,
+                                        body = Main
+                                    }
+                                }
+                            ]
+                        }
+                    end, [
+                        {<<"Space Name">>, Name},
+                        {<<"Space ID">>, SpaceId}
+                    ])
+                },
+                #table{
+                    class = <<"table table-bordered table-striped">>,
+                    style = <<"width: 50%; margin: 0 auto; margin-top: 30px; margin-bottom: 30px; table-layout: fixed;">>,
+                    body = #tbody{
+                        id = <<"providers">>,
+                        body = #tr{
+                            cells = [
+                                #th{
+                                    style = <<"font-size: large;">>,
+                                    body = <<"Providers">>
+                                },
+                                #th{
+                                    style = ?NAVIGATION_COLUMN_STYLE,
+                                    body = spinner()
+                                }
+                            ]
+                        }
+                    }
+                },
+                #table{
+                    class = <<"table table-bordered table-striped">>,
+                    style = <<"width: 50%; margin: 0 auto; margin-top: 30px; margin-bottom: 30px; table-layout: fixed;">>,
+                    body = #tbody{
+                        id = <<"users">>,
+                        body = #tr{
+                            cells = [
+                                #th{
+                                    style = <<"font-size: large;">>,
+                                    body = <<"Users">>
+                                },
+                                #th{
+                                    style = ?NAVIGATION_COLUMN_STYLE,
+                                    body = spinner()
+                                }
+                            ]
+                        }
+                    }
+                },
+                #table{
+                    class = <<"table table-bordered table-striped">>,
+                    style = <<"width: 50%; margin: 0 auto; margin-top: 30px; margin-bottom: 30px; table-layout: fixed;">>,
+                    body = #tbody{
+                        id = <<"groups">>,
+                        body = #tr{
+                            cells = [
+                                #th{
+                                    style = <<"font-size: large;">>,
+                                    body = <<"Groups">>
+                                },
+                                #th{
+                                    style = ?NAVIGATION_COLUMN_STYLE,
+                                    body = spinner()
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
+    ].
+
+
+%% providers_table_collapsed/2
+%% ====================================================================
+%% @doc Renders collapsed providers table for given Space.
+-spec providers_table_collapsed(SpaceId :: binary()) -> Result when
+    Result :: [#tr{}].
+%% ====================================================================
+providers_table_collapsed(SpaceId) ->
+    SpinnerId = <<"providers_spinner">>,
+    Header = #tr{
+        cells = [
+            #th{
+                style = <<"font-size: large;">>,
+                body = <<"Providers">>
+            },
+            #th{
+                id = SpinnerId,
+                style = ?NAVIGATION_COLUMN_STYLE,
+                body = expand_button(<<"Expand All">>, {providers_table_expand, SpaceId, SpinnerId})
+            }
+        ]
+    },
+    try
+        {ok, ProviderIds} = gr_adapter:get_space_providers(SpaceId, gui_ctx:get_access_token()),
+        Rows = lists:map(fun({ProviderId, Counter}) ->
+            RowId = <<"provider_", (integer_to_binary(Counter))/binary>>,
+            #tr{
+                id = RowId,
+                cells = provider_row_collapsed(SpaceId, ProviderId, RowId)
+            }
+        end, lists:zip(ProviderIds, tl(lists:seq(0, length(ProviderIds))))),
+        [Header | Rows]
+    catch
+        _:_ ->
+            message(<<"error_message">>, <<"Cannot fetch Space providers.<br>Please try again later.">>),
+            [Header]
+    end.
+
+
+%% providers_table_expanded/1
+%% ====================================================================
+%% @doc Renders expanded providers table for given Space.
+-spec providers_table_expanded(SpaceId :: binary()) -> Result when
+    Result :: [#tr{}].
+%% ====================================================================
+providers_table_expanded(SpaceId) ->
+    SpinnerId = <<"providers_spinner">>,
+    Header = #tr{
+        cells = [
+            #th{
+                style = <<"font-size: large;">>,
+                body = <<"Providers">>
+            },
+            #th{
+                id = SpinnerId,
+                style = ?NAVIGATION_COLUMN_STYLE,
+                body = collapse_button(<<"Collapse All">>, {providers_table_collapse, SpaceId, SpinnerId})
+            }
+        ]
+    },
+    try
+        {ok, ProviderIds} = gr_adapter:get_space_providers(SpaceId, gui_ctx:get_access_token()),
+        Rows = lists:map(fun({ProviderId, Counter}) ->
+            RowId = <<"provider_", (integer_to_binary(Counter))/binary>>,
+            #tr{
+                id = RowId,
+                cells = provider_row_expanded(SpaceId, ProviderId, RowId)
+            }
+        end, lists:zip(ProviderIds, tl(lists:seq(0, length(ProviderIds))))),
+        [Header | Rows]
+    catch
+        _:_ ->
+            message(<<"error_message">>, <<"Cannot fetch Space providers.<br>Please try again later.">>),
+            [Header]
+    end.
+
+
+%% provider_row_collapsed/3
+%% ====================================================================
+%% @doc Renders collapsed provider row for given Space.
+-spec provider_row_collapsed(SpaceId :: binary(), ProviderId :: binary(), RowId :: binary()) -> Result when
+    Result :: [#td{}].
+%% ====================================================================
+provider_row_collapsed(SpaceId, ProviderId, RowId) ->
+    SpinnerId = <<RowId/binary, "_spinner">>,
+    [
+        #td{
+            style = ?CONTENT_COLUMN_STYLE,
+            body = #table{
+                style = ?TABLE_STYLE,
+                body = [
+                    #tr{
+                        cells = [
+                            #td{
+                                style = ?DESCRIPTION_STYLE,
+                                body = #label{
+                                    style = ?LABEL_STYLE,
+                                    class = <<"label label-large label-inverse">>,
+                                    body = <<"Provider ID">>
+                                }
+                            },
+                            #td{
+                                style = ?MAIN_STYLE,
+                                body = #p{
+                                    style = ?PARAGRAPH_STYLE,
+                                    body = ProviderId
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        #td{
+            id = SpinnerId,
+            style = ?NAVIGATION_COLUMN_STYLE,
+            body = expand_button({provider_row_expand, SpaceId, ProviderId, RowId, SpinnerId})
+        }
+    ].
+
+
+%% provider_row_expanded/3
+%% ====================================================================
+%% @doc Renders expanded provider row for given Space.
+-spec provider_row_expanded(SpaceId :: binary(), ProviderId :: binary(), RowId :: binary()) -> Result when
+    Result :: [#td{}].
+%% ====================================================================
+provider_row_expanded(SpaceId, ProviderId, RowId) ->
+    try
+        {ok, {_, Urls, RedirectionPoint}} =
+            gr_adapter:get_provider_details(SpaceId, ProviderId, gui_ctx:get_access_token()),
+        SpinnerId = <<RowId/binary, "_spinner">>,
+        [
+            #td{
+                style = ?CONTENT_COLUMN_STYLE,
+                body = [
+                    #table{
+                        style = ?TABLE_STYLE,
+                        body = [
+                            #tr{
+                                cells = [
+                                    #td{
+                                        style = ?DESCRIPTION_STYLE,
+                                        body = #label{
+                                            style = ?LABEL_STYLE,
+                                            class = <<"label label-large label-inverse">>,
+                                            body = <<"Provider ID">>
+                                        }
+                                    },
+                                    #td{
+                                        style = ?MAIN_STYLE,
+                                        body = #p{
+                                            style = ?PARAGRAPH_STYLE,
+                                            body = ProviderId
+                                        }
+                                    }
+                                ]
+                            },
+                            #tr{
+                                cells = [
+                                    #td{
+                                        style = <<(?DESCRIPTION_STYLE)/binary, " vertical-align: top;">>,
+                                        body = #label{
+                                            style = ?LABEL_STYLE,
+                                            class = <<"label label-large label-inverse">>,
+                                            body = <<"URLs">>
+                                        }
+                                    },
+                                    #td{
+                                        style = ?MAIN_STYLE,
+                                        body = #list{
+                                            style = <<"list-style-type: none; margin: 0 auto;">>,
+                                            body = lists:map(fun(Url) ->
+                                                #li{body = #p{
+                                                    style = ?PARAGRAPH_STYLE,
+                                                    body = Url}
+                                                }
+                                            end, Urls)
+                                        }
+                                    }
+                                ]
+                            },
+                            #tr{
+                                cells = [
+                                    #td{
+                                        style = ?DESCRIPTION_STYLE,
+                                        body = #label{
+                                            style = ?LABEL_STYLE,
+                                            class = <<"label label-large label-inverse">>,
+                                            body = <<"Redirection point">>
+                                        }
+                                    },
+                                    #td{
+                                        style = ?MAIN_STYLE,
+                                        body = #p{
+                                            style = ?PARAGRAPH_STYLE,
+                                            body = RedirectionPoint
+                                        }
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            #td{
+                id = SpinnerId,
+                style = ?NAVIGATION_COLUMN_STYLE,
+                body = collapse_button({provider_row_collapse, SpaceId, ProviderId, RowId, SpinnerId})
+            }
+        ]
+    catch
+        _:_ ->
+            message(<<"error_message">>, <<"Cannot fetch Space provider details.<br>Please try again later.">>),
+            provider_row_collapsed(SpaceId, ProviderId, RowId)
+    end.
+
+
+%% users_table_collapsed/2
+%% ====================================================================
+%% @doc Renders collapsed users table for given Space.
+-spec users_table_collapsed(SpaceId :: binary()) -> Result when
+    Result :: [#tr{}].
+%% ====================================================================
+users_table_collapsed(SpaceId) ->
+    SpinnerId = <<"users_spinner">>,
+    Header = #tr{
+        cells = [
+            #th{
+                style = <<"font-size: large;">>,
+                body = <<"Users">>
+            },
+            #th{
+                id = SpinnerId,
+                style = ?NAVIGATION_COLUMN_STYLE,
+                body = expand_button(<<"Expand All">>, {users_table_expand, SpaceId, SpinnerId})
+            }
+        ]
+    },
+    try
+        {ok, UserIds} = gr_adapter:get_space_users(SpaceId, gui_ctx:get_access_token()),
+        Rows = lists:map(fun({UserId, Counter}) ->
+            RowId = <<"user_", (integer_to_binary(Counter))/binary>>,
+            #tr{
+                id = RowId,
+                cells = user_row_collapsed(SpaceId, UserId, RowId)
+            }
+        end, lists:zip(UserIds, tl(lists:seq(0, length(UserIds))))),
+        [Header | Rows]
+    catch
+        _:_ ->
+            message(<<"error_message">>, <<"Cannot fetch Space users.<br>Please try again later.">>),
+            [Header]
+    end.
+
+
+%% users_table_expanded/1
+%% ====================================================================
+%% @doc Renders expanded users table for given Space.
+-spec users_table_expanded(SpaceId :: binary()) -> Result when
+    Result :: [#tr{}].
+%% ====================================================================
+users_table_expanded(SpaceId) ->
+    SpinnerId = <<"users_spinner">>,
+    Header = #tr{
+        cells = [
+            #th{
+                style = <<"font-size: large;">>,
+                body = <<"Users">>
+            },
+            #th{
+                id = SpinnerId,
+                style = ?NAVIGATION_COLUMN_STYLE,
+                body = collapse_button(<<"Collapse All">>, {users_table_collapse, SpaceId, SpinnerId})
+            }
+        ]
+    },
+    try
+        {ok, UserIds} = gr_adapter:get_space_users(SpaceId, gui_ctx:get_access_token()),
+        Rows = lists:map(fun({UserId, Counter}) ->
+            RowId = <<"user_", (integer_to_binary(Counter))/binary>>,
+            #tr{
+                id = RowId,
+                cells = user_row_expanded(SpaceId, UserId, RowId)
+            }
+        end, lists:zip(UserIds, tl(lists:seq(0, length(UserIds))))),
+        [Header | Rows]
+    catch
+        _:_ ->
+            message(<<"error_message">>, <<"Cannot fetch Space users.<br>Please try again later.">>),
+            [Header]
+    end.
+
+
+%% user_row_collapsed/3
+%% ====================================================================
+%% @doc Renders collapsed user row for given Space.
+-spec user_row_collapsed(SpaceId :: binary(), UserId :: binary(), RowId :: binary()) -> Result when
+    Result :: [#td{}].
+%% ====================================================================
+user_row_collapsed(SpaceId, UserId, RowId) ->
+    try
+        {ok, {_, Name}} = gr_adapter:get_user_details(SpaceId, UserId, gui_ctx:get_access_token()),
+        SpinnerId = <<RowId/binary, "_spinner">>,
+        [
+            #td{
+                style = ?CONTENT_COLUMN_STYLE,
+                body = #table{
+                    style = ?TABLE_STYLE,
+                    body = lists:map(fun({Description, Main}) ->
+                        #tr{
+                            cells = [
+                                #td{
+                                    style = ?DESCRIPTION_STYLE,
+                                    body = #label{
+                                        style = ?LABEL_STYLE,
+                                        class = <<"label label-large label-inverse">>,
+                                        body = Description
+                                    }
+                                },
+                                #td{
+                                    style = ?MAIN_STYLE,
+                                    body = #p{
+                                        style = ?PARAGRAPH_STYLE,
+                                        body = Main
+                                    }
+                                }
+                            ]
+                        }
+                    end, [{<<"Name">>, Name}])
+                }
+            },
+            #td{
+                id = SpinnerId,
+                style = ?NAVIGATION_COLUMN_STYLE,
+                body = expand_button({user_row_expand, SpaceId, UserId, RowId, SpinnerId})
+            }
+        ]
+    catch
+        _:_ ->
+            message(<<"error_message">>, <<"Cannot fetch Space user details.<br>Please try again later.">>),
+            []
+    end.
+
+
+%% user_row_expanded/3
+%% ====================================================================
+%% @doc Renders expanded user row for given Space.
+-spec user_row_expanded(SpaceId :: binary(), UserId :: binary(), RowId :: binary()) -> Result when
+    Result :: [#td{}].
+%% ====================================================================
+user_row_expanded(SpaceId, UserId, RowId) ->
+    try
+        {ok, {_, Name}} = gr_adapter:get_user_details(SpaceId, UserId, gui_ctx:get_access_token()),
+        SpinnerId = <<RowId/binary, "_spinner">>,
+        [
+            #td{
+                style = ?CONTENT_COLUMN_STYLE,
+                body = #table{
+                    style = ?TABLE_STYLE,
+                    body = lists:map(fun({Description, Main}) ->
+                        #tr{
+                            cells = [
+                                #td{
+                                    style = ?DESCRIPTION_STYLE,
+                                    body = #label{
+                                        style = ?LABEL_STYLE,
+                                        class = <<"label label-large label-inverse">>,
+                                        body = Description
+                                    }
+                                },
+                                #td{
+                                    style = ?MAIN_STYLE,
+                                    body = #p{
+                                        style = ?PARAGRAPH_STYLE,
+                                        body = Main
+                                    }
+                                }
+                            ]
+                        }
+                    end, [{<<"Name">>, Name}, {<<"User ID">>, UserId}])
+                }
+            },
+            #td{
+                id = SpinnerId,
+                style = ?NAVIGATION_COLUMN_STYLE,
+                body = collapse_button({user_row_collapse, SpaceId, UserId, RowId, SpinnerId})
+            }
+        ]
+    catch
+        _:_ ->
+            message(<<"error_message">>, <<"Cannot fetch Space user details.<br>Please try again later.">>),
+            []
+    end.
+
+
+%% groups_table_collapsed/2
+%% ====================================================================
+%% @doc Renders collapsed groups table for given Space.
+-spec groups_table_collapsed(SpaceId :: binary()) -> Result when
+    Result :: [#tr{}].
+%% ====================================================================
+groups_table_collapsed(SpaceId) ->
+    SpinnerId = <<"groups_spinner">>,
+    Header = #tr{
+        cells = [
+            #th{
+                style = <<"font-size: large;">>,
+                body = <<"Groups">>
+            },
+            #th{
+                id = SpinnerId,
+                style = ?NAVIGATION_COLUMN_STYLE,
+                body = expand_button(<<"Expand All">>, {groups_table_expand, SpaceId, SpinnerId})
+            }
+        ]
+    },
+    try
+        {ok, GroupIds} = gr_adapter:get_space_groups(SpaceId, gui_ctx:get_access_token()),
+        Rows = lists:map(fun({GroupId, Counter}) ->
+            RowId = <<"group_", (integer_to_binary(Counter))/binary>>,
+            #tr{
+                id = RowId,
+                cells = group_row_collapsed(SpaceId, GroupId, RowId)
+            }
+        end, lists:zip(GroupIds, tl(lists:seq(0, length(GroupIds))))),
+        [Header | Rows]
+    catch
+        _:_ ->
+            message(<<"error_message">>, <<"Cannot fetch Space groups.<br>Please try again later.">>),
+            [Header]
+    end.
+
+
+%% groups_table_expanded/1
+%% ====================================================================
+%% @doc Renders expanded groups table for given Space.
+-spec groups_table_expanded(SpaceId :: binary()) -> Result when
+    Result :: [#tr{}].
+%% ====================================================================
+groups_table_expanded(SpaceId) ->
+    SpinnerId = <<"groups_spinner">>,
+    Header = #tr{
+        cells = [
+            #th{
+                style = <<"font-size: large;">>,
+                body = <<"Groups">>
+            },
+            #th{
+                id = SpinnerId,
+                style = ?NAVIGATION_COLUMN_STYLE,
+                body = collapse_button(<<"Collapse All">>, {groups_table_collapse, SpaceId, SpinnerId})
+            }
+        ]
+    },
+    try
+        {ok, GroupIds} = gr_adapter:get_space_groups(SpaceId, gui_ctx:get_access_token()),
+        Rows = lists:map(fun({GroupId, Counter}) ->
+            RowId = <<"group_", (integer_to_binary(Counter))/binary>>,
+            #tr{
+                id = RowId,
+                cells = group_row_expanded(SpaceId, GroupId, RowId)
+            }
+        end, lists:zip(GroupIds, tl(lists:seq(0, length(GroupIds))))),
+        [Header | Rows]
+    catch
+        _:_ ->
+            message(<<"error_message">>, <<"Cannot fetch Space groups.<br>Please try again later.">>),
+            [Header]
+    end.
+
+
+%% group_row_collapsed/3
+%% ====================================================================
+%% @doc Renders collapsed group row for given Space.
+-spec group_row_collapsed(SpaceId :: binary(), GroupId :: binary(), RowId :: binary()) -> Result when
+    Result :: [#td{}].
+%% ====================================================================
+group_row_collapsed(SpaceId, GroupId, RowId) ->
+    try
+        {ok, {_, Name}} = gr_adapter:get_group_details(SpaceId, GroupId, gui_ctx:get_access_token()),
+        SpinnerId = <<RowId/binary, "_spinner">>,
+        [
+            #td{
+                style = ?CONTENT_COLUMN_STYLE,
+                body = #table{
+                    style = ?TABLE_STYLE,
+                    body = lists:map(fun({Description, Main}) ->
+                        #tr{
+                            cells = [
+                                #td{
+                                    style = ?DESCRIPTION_STYLE,
+                                    body = #label{
+                                        style = ?LABEL_STYLE,
+                                        class = <<"label label-large label-inverse">>,
+                                        body = Description
+                                    }
+                                },
+                                #td{
+                                    style = ?MAIN_STYLE,
+                                    body = #p{
+                                        style = ?PARAGRAPH_STYLE,
+                                        body = Main
+                                    }
+                                }
+                            ]
+                        }
+                    end, [{<<"Name">>, Name}])
+                }
+            },
+            #td{
+                id = SpinnerId,
+                style = ?NAVIGATION_COLUMN_STYLE,
+                body = expand_button({group_row_expand, SpaceId, GroupId, RowId, SpinnerId})
+            }
+        ]
+    catch
+        _:_ ->
+            message(<<"error_message">>, <<"Cannot fetch Space group details.<br>Please try again later.">>),
+            []
+    end.
+
+
+%% group_row_expanded/3
+%% ====================================================================
+%% @doc Renders expanded group row for given Space.
+-spec group_row_expanded(SpaceId :: binary(), GroupId :: binary(), RowId :: binary()) -> Result when
+    Result :: [#td{}].
+%% ====================================================================
+group_row_expanded(SpaceId, GroupId, RowId) ->
+    try
+        {ok, {_, Name}} = gr_adapter:get_group_details(SpaceId, GroupId, gui_ctx:get_access_token()),
+        SpinnerId = <<RowId/binary, "_spinner">>,
+        [
+            #td{
+                style = ?CONTENT_COLUMN_STYLE,
+                body = #table{
+                    style = ?TABLE_STYLE,
+                    body = lists:map(fun({Description, Main}) ->
+                        #tr{
+                            cells = [
+                                #td{
+                                    style = ?DESCRIPTION_STYLE,
+                                    body = #label{
+                                        style = ?LABEL_STYLE,
+                                        class = <<"label label-large label-inverse">>,
+                                        body = Description
+                                    }
+                                },
+                                #td{
+                                    style = ?MAIN_STYLE,
+                                    body = #p{
+                                        style = ?PARAGRAPH_STYLE,
+                                        body = Main
+                                    }
+                                }
+                            ]
+                        }
+                    end, [{<<"Name">>, Name}, {<<"Group ID">>, GroupId}])
+                }
+            },
+            #td{
+                id = SpinnerId,
+                style = ?NAVIGATION_COLUMN_STYLE,
+                body = collapse_button({group_row_collapse, SpaceId, GroupId, RowId, SpinnerId})
+            }
+        ]
+    catch
+        _:_ ->
+            message(<<"error_message">>, <<"Cannot fetch Space group details.<br>Please try again later.">>),
+            []
+    end.
+
+
+%% collapse_button/1
+%% ====================================================================
+%% @doc Renders collapse button.
+-spec collapse_button(Postback :: term()) -> Result when
+    Result :: #link{}.
+%% ====================================================================
+collapse_button(Postback) ->
+    collapse_button(<<"Collapse">>, Postback).
+
+
+%% collapse_button/2
+%% ====================================================================
+%% @doc Renders collapse button.
+-spec collapse_button(Title :: binary(), Postback :: term()) -> Result when
+    Result :: #link{}.
+%% ====================================================================
+collapse_button(Title, Postback) ->
+    #link{
+        title = Title,
+        class = <<"glyph-link">>,
+        postback = Postback,
+        body = #span{
+            style = <<"font-size: large; vertical-align: top;">>,
+            class = <<"fui-triangle-up">>
+        }
+    }.
+
+
+%% expand_button/1
+%% ====================================================================
+%% @doc Renders expand button.
+-spec expand_button(Postback :: term()) -> Result when
+    Result :: #link{}.
+%% ====================================================================
+expand_button(Postback) ->
+    expand_button(<<"Expand">>, Postback).
+
+
+%% expand_button/2
+%% ====================================================================
+%% @doc Renders expand button.
+-spec expand_button(Title :: binary(), Postback :: term()) -> Result when
+    Result :: #link{}.
+%% ====================================================================
+expand_button(Title, Postback) ->
+    #link{
+        title = Title,
+        class = <<"glyph-link">>,
+        postback = Postback,
+        body = #span{
+            style = <<"font-size: large;  vertical-align: top;">>,
+            class = <<"fui-triangle-down">>
+        }
+    }.
+
+
+%% message/3
+%% ====================================================================
+%% @doc Renders a message in given element and allows to hide this message.
+-spec message(Id :: binary(), Message :: binary()) -> Result when
+    Result :: ok.
+%% ====================================================================
+message(Id, Message) ->
+    Body = [
+        Message,
+        #link{
+            title = <<"Close">>,
+            style = <<"position: absolute; right: 1em; top: 1em;">>,
+            class = <<"glyph-link">>,
+            postback = {close_message, Id},
+            body = #span{
+                class = <<"fui-cross">>
+            }
+        }
+    ],
+    gui_jq:update(Id, Body),
+    gui_jq:fade_in(Id, 300).
+
+
+%% spinner/0
+%% ====================================================================
+%% @doc Renders spinner GIF.
+-spec spinner() -> Result when
+    Result :: #image{}.
+%% ====================================================================
+spinner() ->
+    #image{
+        image = <<"/images/spinner.gif">>,
+        style = <<"width: 1.5em;">>
+    }.
+
+
+%% comet_loop/1
+%% ====================================================================
+%% @doc Handles space management actions.
+-spec comet_loop(State :: #?STATE{}) -> Result when
+    Result :: {error, Reason :: term()}.
+%% ====================================================================
+comet_loop({error, Reason}) ->
+    {error, Reason};
+
+comet_loop(#?STATE{} = State) ->
+    NewState = try
+        receive
+            {providers_table_collapse, SpaceId} ->
+                gui_jq:update(<<"providers">>, providers_table_collapsed(SpaceId)),
+                gui_comet:flush(),
+                State;
+
+            {providers_table_expand, SpaceId} ->
+                gui_jq:update(<<"providers">>, providers_table_expanded(SpaceId)),
+                gui_comet:flush(),
+                State;
+
+            {provider_row_collapse, SpaceId, ProviderId, RowId} ->
+                gui_jq:update(RowId, provider_row_collapsed(SpaceId, ProviderId, RowId)),
+                gui_comet:flush(),
+                State;
+
+            {provider_row_expand, SpaceId, ProviderId, RowId} ->
+                gui_jq:update(RowId, provider_row_expanded(SpaceId, ProviderId, RowId)),
+                gui_comet:flush(),
+                State;
+
+            {users_table_collapse, SpaceId} ->
+                gui_jq:update(<<"users">>, users_table_collapsed(SpaceId)),
+                gui_comet:flush(),
+                State;
+
+            {users_table_expand, SpaceId} ->
+                gui_jq:update(<<"users">>, users_table_expanded(SpaceId)),
+                gui_comet:flush(),
+                State;
+
+            {user_row_collapse, SpaceId, UserId, RowId} ->
+                gui_jq:update(RowId, user_row_collapsed(SpaceId, UserId, RowId)),
+                gui_comet:flush(),
+                State;
+
+            {user_row_expand, SpaceId, UserId, RowId} ->
+                gui_jq:update(RowId, user_row_expanded(SpaceId, UserId, RowId)),
+                gui_comet:flush(),
+                State;
+
+            {groups_table_collapse, SpaceId} ->
+                gui_jq:update(<<"groups">>, groups_table_collapsed(SpaceId)),
+                gui_comet:flush(),
+                State;
+
+            {groups_table_expand, SpaceId} ->
+                gui_jq:update(<<"groups">>, groups_table_expanded(SpaceId)),
+                gui_comet:flush(),
+                State;
+
+            {group_row_collapse, SpaceId, GroupId, RowId} ->
+                gui_jq:update(RowId, group_row_collapsed(SpaceId, GroupId, RowId)),
+                gui_comet:flush(),
+                State;
+
+            {group_row_expand, SpaceId, GroupId, RowId} ->
+                gui_jq:update(RowId, group_row_expanded(SpaceId, GroupId, RowId)),
+                gui_comet:flush(),
+                State
+        end
+               catch Type:Reason ->
+                   ?error("Comet process exception: ~p:~p", [Type, Reason]),
+                   message(<<"error_message">>, <<"There has been an error in comet process. Please refresh the page.">>),
+                   {error, Reason}
+               end,
+    ?MODULE:comet_loop(NewState).
+
+
+%% event/1
+%% ====================================================================
+%% @doc Handles page events.
+-spec event(Event :: term()) -> no_return().
+%% ====================================================================
+event(init) ->
+    SpaceId = gui_str:to_binary(gui_ctx:url_param(<<"id">>)),
+    {ok, Pid} = gui_comet:spawn(fun() -> comet_loop(#?STATE{spaceId = SpaceId}) end),
+    put(?COMET_PID, Pid),
+    gui_jq:update(<<"providers">>, providers_table_collapsed(SpaceId)),
+    gui_jq:update(<<"users">>, users_table_collapsed(SpaceId)),
+    gui_jq:update(<<"groups">>, groups_table_collapsed(SpaceId));
+
+event({providers_table_collapse, SpaceId, SpinnerId}) ->
+    get(?COMET_PID) ! {providers_table_collapse, SpaceId},
+    gui_jq:update(SpinnerId, spinner());
+
+event({providers_table_expand, SpaceId, SpinnerId}) ->
+    get(?COMET_PID) ! {providers_table_expand, SpaceId},
+    gui_jq:update(SpinnerId, spinner());
+
+event({provider_row_collapse, SpaceId, ProviderId, RowId, SpinnerId}) ->
+    get(?COMET_PID) ! {provider_row_collapse, SpaceId, ProviderId, RowId},
+    gui_jq:update(SpinnerId, spinner());
+
+event({provider_row_expand, SpaceId, ProviderId, RowId, SpinnerId}) ->
+    get(?COMET_PID) ! {provider_row_expand, SpaceId, ProviderId, RowId},
+    gui_jq:update(SpinnerId, spinner());
+
+event({users_table_collapse, SpaceId, SpinnerId}) ->
+    get(?COMET_PID) ! {users_table_collapse, SpaceId},
+    gui_jq:update(SpinnerId, spinner());
+
+event({users_table_expand, SpaceId, SpinnerId}) ->
+    get(?COMET_PID) ! {users_table_expand, SpaceId},
+    gui_jq:update(SpinnerId, spinner());
+
+event({user_row_collapse, SpaceId, UserId, RowId, SpinnerId}) ->
+    get(?COMET_PID) ! {user_row_collapse, SpaceId, UserId, RowId},
+    gui_jq:update(SpinnerId, spinner());
+
+event({user_row_expand, SpaceId, UserId, RowId, SpinnerId}) ->
+    get(?COMET_PID) ! {user_row_expand, SpaceId, UserId, RowId},
+    gui_jq:update(SpinnerId, spinner());
+
+event({groups_table_collapse, SpaceId, SpinnerId}) ->
+    get(?COMET_PID) ! {groups_table_collapse, SpaceId},
+    gui_jq:update(SpinnerId, spinner());
+
+event({groups_table_expand, SpaceId, SpinnerId}) ->
+    get(?COMET_PID) ! {groups_table_expand, SpaceId},
+    gui_jq:update(SpinnerId, spinner());
+
+event({group_row_collapse, SpaceId, GroupId, RowId, SpinnerId}) ->
+    get(?COMET_PID) ! {group_row_collapse, SpaceId, GroupId, RowId},
+    gui_jq:update(SpinnerId, spinner());
+
+event({group_row_expand, SpaceId, GroupId, RowId, SpinnerId}) ->
+    get(?COMET_PID) ! {group_row_expand, SpaceId, GroupId, RowId},
+    gui_jq:update(SpinnerId, spinner());
+
+event(terminate) ->
+    ok.

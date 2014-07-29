@@ -101,7 +101,7 @@ body() ->
             class = <<"dialog dialog-danger">>
         },
         #panel{
-            style = <<"position: relative; margin-top: 200px; margin-bottom: 0px; margin-bottom: 50px;">>,
+            style = <<"position: relative; margin-top: 200px; margin-bottom: 50px;">>,
             body = #table{
                 class = <<"table table-bordered table-striped">>,
                 style = <<"width: 50%; margin: 0 auto; table-layout: fixed;">>,
