@@ -1,7 +1,7 @@
 VeilProtocol 1.0
 ===========
 
-VeilProtocol 1.0 is a part of VeilFS 1.0. VeilFS 1.0 is a system that provides a unified and efficient access to data stored at various storage systems in one site. VeilProtocol that contains definition of protocol between VeilCluster and VeilClient.
+VeilProtocol 1.0 is a part of VeilFS 1.0. VeilFS 1.0 is a system that provides a unified and efficient access to data stored at various storage systems in one site. VeilProtocol contains definition of protocol between VeilCluster and VeilClient.
 
 Issue Summary
 -----
