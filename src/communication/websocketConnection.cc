@@ -57,22 +57,37 @@ WebsocketConnection::WebsocketConnection(std::function<void(const std::string&)>
 
 WebsocketConnection::~WebsocketConnection()
 {
+    websocketpp::lib::error_code ec;
+    const auto conn = m_endpoint.get_con_from_hdl(m_connection, ec);
+
     m_onErrorCallback = []{};
 
-    websocketpp::lib::error_code ec;
-    m_endpoint.close(m_connection, websocketpp::close::status::going_away, "", ec);
+    if(ec)
+        LOG(WARNING) << "Error retrieving connection pointer: " << ec.message();
+    else if(!conn)
+        LOG(WARNING) << "Connection has no associated ASIO connection.";
+    else
+    {
+        conn->set_close_handler(nullptr);
+        m_endpoint.close(m_connection, websocketpp::close::status::going_away, "", ec);
+        if(ec)
+            LOG(WARNING) << "Error closing connection: " << ec.message();
+    }
 }
 
 void WebsocketConnection::send(const std::string &payload)
 {
-    const auto connection = m_endpoint.get_con_from_hdl(m_connection);
-    if(!connection)
+    websocketpp::lib::error_code ec;
+    const auto conn = m_endpoint.get_con_from_hdl(m_connection, ec);
+
+    if(ec)
+        throw SendError{"error retrieving connection pointer: " + ec.message()};
+
+    if(!conn)
         throw SendError{"websocketConnection instance has no associated ASIO "
                         "connection."};
 
-    websocketpp::lib::error_code ec;
-    m_endpoint.send(connection, payload,
-                    websocketpp::frame::opcode::binary, ec);
+    m_endpoint.send(conn, payload, websocketpp::frame::opcode::binary, ec);
 
     if(ec)
         throw SendError{"error queuing message: " + ec.message()};
@@ -90,11 +105,15 @@ void WebsocketConnection::onOpen()
 
 void WebsocketConnection::onClose()
 {
-    const auto conn = m_endpoint.get_con_from_hdl(m_connection);
-    if(conn)
-        LOG(WARNING) << "Connection closed: " << conn->get_ec().message();
-    else
+    websocketpp::lib::error_code ec;
+    const auto conn = m_endpoint.get_con_from_hdl(m_connection, ec);
+
+    if(ec)
+        LOG(WARNING) << "Error retrieving connection pointer: " << ec.message();
+    else if(!conn)
         LOG(WARNING) << "Connection has no associated ASIO connection.";
+    else
+        LOG(WARNING) << "Connection closed: " << conn->get_ec().message();
 
     m_onErrorCallback();
 }
@@ -103,8 +122,18 @@ void WebsocketConnection::onFail()
 {
     try
     {
-        const auto conn = m_endpoint.get_con_from_hdl(m_connection);
-        if(conn)
+        websocketpp::lib::error_code ec;
+        const auto conn = m_endpoint.get_con_from_hdl(m_connection, ec);
+
+        if(ec)
+        {
+            LOG(WARNING) << "Error retrieving connection pointer: " << ec.message();
+        }
+        else if(!conn)
+        {
+            LOG(WARNING) << "Connection has no associated ASIO connection.";
+        }
+        else
         {
             const int verifyResult =
                 SSL_get_verify_result(conn->get_socket().native_handle());
@@ -121,8 +150,6 @@ void WebsocketConnection::onFail()
             LOG(WARNING) << "Connection failed: " << e.what();
             throw e;
         }
-        else
-            LOG(WARNING) << "Connection has no associated ASIO connection.";
     }
     catch(Exception&)
     {
@@ -148,11 +175,15 @@ void WebsocketConnection::onPongTimeout(std::string)
 
 void WebsocketConnection::onInterrupt()
 {
-    const auto conn = m_endpoint.get_con_from_hdl(m_connection);
-    if(conn)
-        LOG(WARNING) << "Connection interrupted: " << conn->get_ec().message();
-    else
+    websocketpp::lib::error_code ec;
+    const auto conn = m_endpoint.get_con_from_hdl(m_connection, ec);
+
+    if(ec)
+        LOG(WARNING) << "Error retrieving connection pointer: " << ec.message();
+    else if(!conn)
         LOG(WARNING) << "Connection has no associated ASIO connection.";
+    else
+        LOG(WARNING) << "Connection interrupted: " << conn->get_ec().message();
 
     m_onErrorCallback();
 }
