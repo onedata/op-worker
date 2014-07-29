@@ -177,7 +177,7 @@ get_user(Key) ->
     dao_lib:apply(dao_users, get_user, [Key], 1).
 
 
-synchronize_spaces_info(#veil_document{record = UserRec#user{global_id = GlobalId}} = UserDoc, AccessToken) ->
+synchronize_spaces_info(#veil_document{record = #user{global_id = GlobalId} = UserRec} = UserDoc, AccessToken) ->
     case global_registry:user_request(AccessToken, get, "user/spaces") of
         {ok, #{<<"spaces">> := Spaces}} ->
             ?info("Synchronized spaces: ~p", [Spaces]),
