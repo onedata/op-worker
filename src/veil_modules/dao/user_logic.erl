@@ -815,7 +815,7 @@ create_space_dir(#space_info{space_id = SpaceId, name = SpaceName} = SpaceInfo) 
                          error({error, Reason})
                  end,
 
-    case dao_lib:apply(dao_vfs, exist_file, [fslogic_path:absolute_join([?SPACES_BASE_DIR_NAME, SpaceDirName])], 1) of
+    case dao_lib:apply(dao_vfs, exist_file, [{uuid, SpaceId}], 1) of
         {ok, true} ->
             {error, dir_exists};
         {ok, false} ->
