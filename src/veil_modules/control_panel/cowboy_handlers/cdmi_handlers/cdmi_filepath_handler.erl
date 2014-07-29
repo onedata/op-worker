@@ -147,14 +147,13 @@ get_dir(Req, #state{opts = Opts} = State) ->
 %% @end
 -spec get_noncdmi_file(req(), #state{}) -> {term(), req(), #state{}}.
 %% ====================================================================
-get_noncdmi_file(Req,State) ->
-    case read_file(State,default,<<"utf-8">>) of
-        {ok,Data} -> {Data, Req, State};
-        Error ->
-            ?error("Reading cdmi object end up with error: ~p", [Error]),
-            {ok,Req2} = cowboy_req:reply(?error_forbidden_code,Req),
-            {halt, Req2, State}
-    end.
+get_noncdmi_file(Req,#state{filepath = Filepath, attributes = #fileattributes{size = Size}} = State) ->
+    StreamFun = file_download_handler:cowboy_file_stream_fun(Filepath, Size),
+    NewReq = file_download_handler:content_disposition_attachment_headers(Req, filename:basename(Filepath)),
+    {Type, Subtype, _} = cow_mimetypes:all(list_to_binary(Filepath)),
+    ContentType = <<Type/binary, "/", Subtype/binary>>,
+    Req2 = gui_utils:cowboy_ensure_header(<<"content-type">>, ContentType, NewReq),
+    {{stream, Size, StreamFun}, Req2, State}.
 
 %% get_cdmi_file/2
 %% ====================================================================
