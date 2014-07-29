@@ -485,20 +485,6 @@ dialog_popup(Title, Message, Script) ->
     });">>).
 
 
-%% confirm_popup/2
-%% ====================================================================
-%% @doc Displays confirm popup.
--spec confirm_popup(Message :: binary(), Script :: binary()) -> binary().
-%% ====================================================================
-confirm_popup(Message, Script) ->
-    gui_jq:wire(<<"bootbox.confirm(
-        '", Message/binary, "',
-        function(result) {
-            if(result) {", Script/binary, "}
-        }
-    );">>).
-
-
 %% bind_key_to_click/2
 %% ====================================================================
 %% @doc Makes any keypresses of given key to click on selected class.
@@ -613,7 +599,7 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
                 NewState =
                     case gr_adapter:leave_space(SpaceId, gui_ctx:get_access_token()) of
                         ok ->
-                            message(<<"ok_message">>, <<"Space: <b>", SpaceName/binary, "</b> is no longer supported.">>),
+                            message(<<"ok_message">>, <<"Space: <b>", SpaceName/binary, "</b> left successfully.">>),
                             gui_jq:remove(RowId),
                             case SpaceRows of
                                 [{SpaceId, _}, {NextSpaceId, NextSpaceRow} | RestSpaceRows] ->
@@ -705,8 +691,10 @@ comet_loop(#?STATE{counter = Counter, expanded = Expanded, space_rows = SpaceRow
 -spec event(Event :: term()) -> no_return().
 %% ====================================================================
 event(init) ->
+    ?info("Init!!!!!"),
     case gr_adapter:get_user_spaces(gui_ctx:get_access_token()) of
         {ok, SpaceIds} ->
+            ?info("Spaces: ~p", [SpaceIds]),
             gui_jq:wire(#api{name = "createSpace", tag = "createSpace"}, false),
             gui_jq:wire(#api{name = "joinSpace", tag = "joinSpace"}, false),
             gui_jq:wire(#api{name = "leaveSpace", tag = "leaveSpace"}, false),
@@ -718,6 +706,7 @@ event(init) ->
             {ok, Pid} = gui_comet:spawn(fun() ->
                 comet_loop(#?STATE{counter = length(SpaceIds) + 1, space_rows = SpaceRows})
             end),
+            ?info("Pid: ~p", [Pid]),
             Pid ! render_spaces_table,
             put(?COMET_PID, Pid);
         _ ->
@@ -760,12 +749,12 @@ event({set_default_space, SpaceName, SpaceId, RowId, OptionId}) ->
 event({leave_space, SpaceName, SpaceId, RowId, OptionId}) ->
     Message = <<"Are you sure you want to leave Space:<br><b>", SpaceName/binary, " ( ", SpaceId/binary, " ) </b>?">>,
     Script = <<"leaveSpace(['", SpaceName/binary, "','", SpaceId/binary, "','", RowId/binary, "','", OptionId/binary, "']);">>,
-    confirm_popup(Message, Script);
+    dialog_popup(<<"Leave Space">>, Message, Script);
 
 event({delete_space, SpaceName, SpaceId, RowId, OptionId}) ->
     Message = <<"Are you sure you want to delete Space:<br><b>", SpaceName/binary, " ( ", SpaceId/binary, " ) </b>?">>,
     Script = <<"deleteSpace(['", SpaceName/binary, "','", SpaceId/binary, "','", RowId/binary, "','", OptionId/binary, "']);">>,
-    confirm_popup(Message, Script);
+    dialog_popup(<<"Delete Space">>, Message, Script);
 
 event({spaces_table_collapse, OptionId}) ->
     get(?COMET_PID) ! spaces_table_collapse,
